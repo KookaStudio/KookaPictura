@@ -37,6 +37,7 @@ LayerRow convert(const ::pictura::LayerRow& row)
     out.vectorMaskLinked = row.vector_mask_linked;
     out.vectorMaskDisabled = row.vector_mask_disabled;
     out.hasAdjustment = row.has_adjustment;
+    out.adjustmentKind = row.adjustment_kind;
     out.expandable = row.expandable;
     out.childCount = row.child_count;
     out.linked = row.linked;

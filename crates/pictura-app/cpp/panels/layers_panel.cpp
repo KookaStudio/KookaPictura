@@ -1,5 +1,7 @@
 #include "layers_panel.h"
 
+#include "fill_layer_editor.h"
+
 #include "api/layers_api.h"
 #include "dialogs.h"
 
@@ -19,6 +21,7 @@
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
@@ -136,6 +139,7 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     expandNewEffects_ = session.layersExpandNewEffects;
     addCopyOnDuplicate_ = session.layersAddCopyOnDuplicate;
     useDefaultMasksOnFill_ = session.layersUseDefaultMasksOnFill;
+    addMaskByDefault_ = session.layersAddMaskByDefault;
     thumbEntireDocument_ = thumbContents_ == 0;
 
     filterBar_ = new LayerFilterBar(body);
@@ -304,35 +308,27 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     auto* menu = new QMenu(addButton);
     // The engine catalogue's fill kinds, a separator, then its layer
     // adjustments. Each fill keeps its own command.
-    for (const AdjustmentKind& entry : adjustmentCatalogue()) {
-        if (!entry.fill) {
-            continue;
+    QAction* solidFill = menu->addAction(tr("Solid Color…"));
+    connect(solidFill, &QAction::triggered, this, [this] {
+        if (view_) {
+            const QColor fg = colors_ ? colors_->foreground() : QColor(Qt::black);
+            createFillLayerFromDialog(*view_, QStringLiteral("solid-color"), fg, this, false);
         }
-        QAction* action = menu->addAction(entry.title + QStringLiteral("…"));
-        if (entry.kind == QLatin1String("solid-color")) {
-            // CS6 fills with the current foreground colour, read when the
-            // command runs.
-            connect(action, &QAction::triggered, this, [this] {
-                if (!view_) {
-                    return;
-                }
-                const QColor fg = colors_ ? colors_->foreground() : QColor(Qt::black);
-                view_->add_solid_fill(fg.rgba());
-            });
-        } else if (entry.kind == QLatin1String("gradient")) {
-            connect(action, &QAction::triggered, this, [this] {
-                if (view_) {
-                    view_->add_gradient_fill();
-                }
-            });
-        } else {
-            // ponytail: pattern authoring needs a pattern preset/library and a
-            // picker; the engine renders a PtFl layer but has no encoder or
-            // pattern source.
-            action->setEnabled(false);
-            action->setToolTip(tr("Pattern Fill — not implemented yet"));
+    });
+    QAction* gradientFill = menu->addAction(tr("Gradient…"));
+    connect(gradientFill, &QAction::triggered, this, [this] {
+        if (view_) {
+            const QColor fg = colors_ ? colors_->foreground() : QColor(Qt::black);
+            createFillLayerFromDialog(*view_, QStringLiteral("gradient"), fg, this, false);
         }
-    }
+    });
+    patternFill_ = menu->addAction(tr("Pattern…"));
+    connect(patternFill_, &QAction::triggered, this, [this] {
+        if (view_) {
+            const QColor fg = colors_ ? colors_->foreground() : QColor(Qt::black);
+            createFillLayerFromDialog(*view_, QStringLiteral("pattern"), fg, this, false);
+        }
+    });
     menu->addSeparator();
     for (const AdjustmentKind& entry : adjustmentCatalogue()) {
         if (entry.fill || !entry.layer) {
@@ -501,8 +497,14 @@ void LayersPanel::setView(PictureView* view)
     rememberedGeneration_ = view ? view->document_generation() : 0;
     model_->setView(view);
     tree_->setDragSource(view);
+    if (patternFill_) {
+        const bool hasPatterns = view_ && layer_has_patterns(*view_);
+        patternFill_->setEnabled(hasPatterns);
+        patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
+    }
     if (view_) {
-        set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_);
+        set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_,
+                                 addMaskByDefault_);
         // One queued refresh per burst of changes; a synchronous refresh
         // before it runs (New Layer from the panel) consumes it.
         viewConnection_ = connect(view_, &PictureView::changed, this, [this] {
@@ -560,6 +562,7 @@ void LayersPanel::refresh()
             row.clipping = source.clipping;
             row.hasMask = source.hasMask;
             row.hasAdjustment = source.hasAdjustment;
+            row.adjustmentKind = source.adjustmentKind;
             row.expandable = source.expandable;
             row.childCount = source.childCount;
             row.linked = source.linked;
@@ -982,10 +985,29 @@ void LayersPanel::openPanelOptions()
         delegate_->setThumbnailSize(kThumbSizePx.at(thumbSizeIndex_));
     }
     persistOptions();
+    if (patternFill_) {
+        const bool hasPatterns = view_ && layer_has_patterns(*view_);
+        patternFill_->setEnabled(hasPatterns);
+        patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
+    }
     if (view_) {
-        set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_);
+        set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_,
+                                 addMaskByDefault_);
     }
     refresh();
+}
+
+void LayersPanel::setAddMaskByDefault(bool on)
+{
+    if (addMaskByDefault_ == on) {
+        return;
+    }
+    addMaskByDefault_ = on;
+    if (view_) {
+        set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_,
+                                 addMaskByDefault_);
+    }
+    persistOptions();
 }
 
 void LayersPanel::persistOptions()
@@ -996,6 +1018,7 @@ void LayersPanel::persistOptions()
     state.layersExpandNewEffects = expandNewEffects_;
     state.layersAddCopyOnDuplicate = addCopyOnDuplicate_;
     state.layersUseDefaultMasksOnFill = useDefaultMasksOnFill_;
+    state.layersAddMaskByDefault = addMaskByDefault_;
     state.schemaVersion = 3;
     pictura::saveSession(state);
 }

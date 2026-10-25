@@ -158,6 +158,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("LayerLockAllInGroup", "layer.lock.allInGroup"),
     ("LayerNewFillSolidColor", "layer.new.fill.solidColor"),
     ("LayerNewFillGradient", "layer.new.fill.gradient"),
+    ("LayerNewFillPattern", "layer.new.fill.layer.pattern"),
     ("LayerContentOptions", "layer.contentOptions"),
     ("LayerRasterizeFillContent", "layer.rasterize.fillContent"),
     ("LayerRasterizeType", "layer.rasterize.type"),

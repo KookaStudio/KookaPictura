@@ -35,8 +35,10 @@ public:
 
     LayerNewSpec spec() const;
 
-    // Run the dialog modally; returns true and fills `out` on OK.
-    static bool get(bool group, QWidget* parent, LayerNewSpec* out);
+    // Run the dialog modally; returns true and fills `out` on OK. `defaultName`
+    // seeds the name edit (used by the fill-layer flows).
+    static bool get(bool group, QWidget* parent, LayerNewSpec* out,
+                    const QString& defaultName = {});
 
     // Run the name-and-color-only dialog modally.
     static bool getNameColor(QWidget* parent, const QString& defaultName, LayerNewSpec* out);

@@ -8,6 +8,8 @@
 
 #include <QtTest/QtTest>
 
+#include "api/layers_api.h"
+
 #include "frame.h"
 #include "image_view.h"
 #include "mask_display_options_dialog.h"
@@ -16,6 +18,7 @@
 #include "session.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
@@ -46,6 +49,8 @@ private slots:
     void vectorMaskMenu();
     void trashDeletesTheVectorMask();
     void trashActsOnTheSelectedRow();
+    void groupMaskThumbnailActivates();
+    void groupMaskPaintRoundTrip();
 
 private:
     // A white `side`² document with a rasterized fill layer selected; returns
@@ -88,7 +93,13 @@ QString LayersMaskCommandsTest::fillLayer(int side)
     }
     pictura::PictureView* view = frame.activeView();
     const QString path = view ? view->add_solid_fill(0xff2244aau) : QString();
-    if (path.isEmpty() || !view->rasterize_fill_content(path)) {
+    if (path.isEmpty()) {
+        return {};
+    }
+    // The fill's automatic default mask would make the mask-command tests
+    // refuse Add Layer Mask; remove it so the fixture starts unmasked.
+    pictura::layer_mask_delete_path(*view, path);
+    if (!view->rasterize_fill_content(path)) {
         return {};
     }
     frame.selectLayerPath(path);
@@ -255,6 +266,7 @@ void LayersMaskCommandsTest::refineMaskOnAFillLayer()
     pictura::PictureView* view = frame.activeView();
     const QString path = view->add_solid_fill(0xff2244aau);
     QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_mask_delete_path(*view, path));
     frame.selectLayerPath(path);
     QVERIFY(view->select_rect(0, 0, 32, 64, QStringLiteral("new"), 0.0));
     QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-selection")));
@@ -283,6 +295,7 @@ void LayersMaskCommandsTest::applyNeedsAPixelLayer()
     pictura::PictureView* view = frame.activeView();
     const QString fill = view->add_solid_fill(0xff2244aau);
     QVERIFY(!fill.isEmpty());
+    QVERIFY(pictura::layer_mask_delete_path(*view, fill));
     frame.selectLayerPath(fill);
     QVERIFY(pictura::layer_mask_add_path(*view, fill, QStringLiteral("hide-all")));
     QCoreApplication::processEvents();
@@ -524,6 +537,66 @@ void LayersMaskCommandsTest::trashActsOnTheSelectedRow()
     QCOMPARE(view->layer_count(), layers);
     QVERIFY2(!pictura::vector_mask_present_path(*view, path), "the selected layer's vector mask");
     QVERIFY(pictura::layer_mask_present_path(*view, path));
+}
+
+void LayersMaskCommandsTest::groupMaskThumbnailActivates()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("GroupMask"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+    const QString group = view->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    const QString child = view->add_layer_in(group);
+    QVERIFY(!child.isEmpty());
+    panel_->setView(view);
+    panel_->refresh();
+    pictura::select_layer_path(*view, group);
+    QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
+    panel_->refresh();
+
+    const auto snap = pictura::layers_api::snapshot(*view, 24, false);
+    auto row = pictura::layers_api::LayerRow{};
+    for (const auto& candidate : snap.rows) {
+        if (candidate.path == group) {
+            row = candidate;
+        }
+    }
+    QVERIFY(row.hasMask);
+    QVERIFY2(!row.maskThumbnail.isNull(), "a group mask has a document-sized thumbnail");
+    panel_->refresh();
+    QCoreApplication::processEvents();
+    const bool clicked = panel_->clickMaskThumbnailForTest(group);
+    QTest::qWait(50);
+    QVERIFY2(clicked, "the group mask thumbnail is clickable");
+    QCOMPARE(pictura::mask_edit_target_get(*view), group);
+}
+
+void LayersMaskCommandsTest::groupMaskPaintRoundTrip()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("GroupMaskPaint"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+    const QString group = view->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    QVERIFY(!view->add_layer_in(group).isEmpty());
+    panel_->setView(view);
+    panel_->refresh();
+    pictura::select_layer_path(*view, group);
+    QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
+    panel_->refresh();
+    QVERIFY(pictura::mask_edit_target_set(*view, group));
+    QCOMPARE(pictura::mask_edit_target_get(*view), group);
+    const auto snap = pictura::layers_api::snapshot(*view, 24, false);
+    auto row = pictura::layers_api::LayerRow{};
+    for (const auto& candidate : snap.rows) {
+        if (candidate.path == group) {
+            row = candidate;
+        }
+    }
+    QVERIFY(row.hasMask);
+    QVERIFY(!row.maskThumbnail.isNull());
 }
 
 QTEST_MAIN(LayersMaskCommandsTest)

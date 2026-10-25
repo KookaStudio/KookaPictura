@@ -136,9 +136,13 @@ bool LayerNewDialog::getNameColor(QWidget* parent, const QString& defaultName, L
     return true;
 }
 
-bool LayerNewDialog::get(bool group, QWidget* parent, LayerNewSpec* out)
+bool LayerNewDialog::get(bool group, QWidget* parent, LayerNewSpec* out,
+                         const QString& defaultName)
 {
     LayerNewDialog dialog(group, parent);
+    if (!defaultName.isEmpty()) {
+        dialog.nameEdit_->setText(defaultName);
+    }
     if (runDialog(dialog, parent) != QDialog::Accepted) {
         return false;
     }

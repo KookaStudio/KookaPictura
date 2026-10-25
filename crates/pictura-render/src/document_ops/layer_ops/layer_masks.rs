@@ -45,24 +45,38 @@ pub fn add_layer_mask(
     kind: LayerMaskKind,
     selection: Option<&LayerMask>,
 ) -> bool {
+    let doc_rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
     if layer.mask.is_some() {
         return false;
     }
+    // A group has no content rectangle of its own, and an adjustment or fill
+    // layer may carry a zero-area rect; both take a document-sized mask.
+    let content_rect = if layer.is_group || layer.rect.width() <= 0 || layer.rect.height() <= 0 {
+        doc_rect
+    } else {
+        layer.rect
+    };
     let (rect, data, default_color) = match kind {
-        LayerMaskKind::RevealAll => (layer.rect, vec![255; area(layer.rect)], 255),
-        LayerMaskKind::HideAll => (layer.rect, vec![0; area(layer.rect)], 0),
+        LayerMaskKind::RevealAll => (content_rect, vec![255; area(content_rect)], 255),
+        LayerMaskKind::HideAll => (content_rect, vec![0; area(content_rect)], 0),
         LayerMaskKind::FromTransparency => {
-            let pixels = area(layer.rect);
+            let pixels = area(content_rect);
             let data = layer
                 .channels
                 .iter()
                 .find(|channel| channel.id == -1)
                 .map(|channel| channel.data.as_slice().to_vec())
+                .filter(|data| data.len() == pixels)
                 .unwrap_or_else(|| vec![255; pixels]);
-            (layer.rect, data, 255)
+            (content_rect, data, 255)
         }
         LayerMaskKind::RevealSelection => {
             let Some(selection) = selection else {
@@ -390,6 +404,67 @@ mod tests {
             LayerMaskKind::RevealAll,
             None
         ));
+    }
+
+    #[test]
+    fn add_layer_mask_group_is_document_sized() {
+        let mut group = doc(4, 3);
+        group.layers[0].is_group = true;
+        group.layers[0].rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        };
+        assert!(add_layer_mask(
+            &mut group,
+            "0",
+            LayerMaskKind::RevealAll,
+            None
+        ));
+        let mask = group.layers[0].mask.as_ref().unwrap();
+        assert_eq!(mask.rect, full(4, 3));
+        let data = mask.data.as_ref().unwrap();
+        assert_eq!(data.len(), 12);
+        assert!(data.iter().all(|&v| v == 255));
+
+        let mut hidden = doc(4, 3);
+        hidden.layers[0].is_group = true;
+        hidden.layers[0].rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        };
+        assert!(add_layer_mask(
+            &mut hidden,
+            "0",
+            LayerMaskKind::HideAll,
+            None
+        ));
+        let mask = hidden.layers[0].mask.as_ref().unwrap();
+        assert_eq!(mask.rect, full(4, 3));
+        assert!(mask.data.as_ref().unwrap().iter().all(|&v| v == 0));
+    }
+
+    #[test]
+    fn a_zero_rect_layer_mask_is_document_sized() {
+        let mut doc = doc(4, 3);
+        doc.layers[0].rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        };
+        assert!(add_layer_mask(
+            &mut doc,
+            "0",
+            LayerMaskKind::RevealAll,
+            None
+        ));
+        let mask = doc.layers[0].mask.as_ref().unwrap();
+        assert_eq!(mask.rect, full(4, 3));
+        assert_eq!(mask.data.as_ref().unwrap().len(), 12);
     }
 
     #[test]

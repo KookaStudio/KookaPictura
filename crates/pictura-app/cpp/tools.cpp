@@ -525,28 +525,12 @@ QColor ToolController::background() const { return background_; }
 void ToolController::setBackground(const QColor& color)
 {
     background_ = color;
-    // A mask pair is for painting coverage, not for document chrome: keep the
-    // canvas backdrop on the image pair while a mask is the edit target.
-    if (!maskActive_) {
-        updateCanvasBackdrop();
-    }
     emit colorsChanged();
 }
 
 void ToolController::setMaskActive(bool mask)
 {
     maskActive_ = mask;
-}
-
-void ToolController::updateCanvasBackdrop()
-{
-    if (!canvas_) {
-        return;
-    }
-    PictureView* v = view();
-    const bool background =
-        v && v->has_document() && v->layer_kind(0) == QStringLiteral("background");
-    canvas_->setCanvasBackdrop(background_, background);
 }
 
 void ToolController::adjustBrushSize(int delta) { paint_->setSize(paint_->size() + delta); }
@@ -624,7 +608,6 @@ void ToolController::bindCanvas(ImageView* canvas)
         if (!transformSessionActive()) {
             refreshCursor();
         }
-        updateCanvasBackdrop();
         if (ToolHandler* h = registry_.forTool(active_)) {
             h->onDocumentRefreshed(*this);
         }
@@ -654,7 +637,6 @@ void ToolController::bindCanvas(ImageView* canvas)
     // resizes it.
     connect(canvas_, &ImageView::zoomChanged, this, [this](double) { refreshBrushOutline(); });
     applyToolPolicy();
-    updateCanvasBackdrop();
     if (ToolHandler* h = registry_.forTool(active_)) {
         h->onDocumentRefreshed(*this);
     }

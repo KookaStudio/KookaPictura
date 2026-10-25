@@ -3,6 +3,10 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QTimer>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QDialog>
+
 #include "api/layers_api.h"
 
 #include <memory>
@@ -206,7 +210,19 @@ void LayerCommandsTest::solidFillCommandUsesForeground()
     QVERIFY(registry->action(id) != nullptr);
     registry->refresh();
     QVERIFY2(registry->action(id)->isEnabled(), "enabled with a document open");
+    QTimer timer;
+    QObject::connect(&timer, &QTimer::timeout, [] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (dialog && dialog->isVisible()) {
+                dialog->accept();
+                return;
+            }
+        }
+    });
+    timer.start(10);
     QVERIFY(registry->dispatch(id));
+    timer.stop();
     QCOMPARE(view->sample_argb(0, 0), 0xff2266ccu);
 }
 

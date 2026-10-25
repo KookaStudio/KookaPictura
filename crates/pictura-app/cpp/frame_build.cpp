@@ -2,6 +2,10 @@
 
 #include "api/document_api.h"
 #include "color_picker_dialog.h"
+#include "fill_layer_editor.h"
+#include "command_ids.h"
+
+#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
 #include "fonts.h"
 #include "panels/actions_engine_bridge.h"
 #include "panels/actions_panel.h"
@@ -35,6 +39,21 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
 
     layersPanel_ = new LayersPanel(colorState_, this);
     layersPanel_->setObjectName(QStringLiteral("layersPanel"));
+    connect(layersPanel_, &LayersPanel::editContentRequested, this, [this](const QString& path) {
+        PictureView* view = activeView();
+        // A content-thumbnail double-click may target a row that is not
+        // current; make it current before the editor or Properties runs.
+        if (layersPanel_ && !path.isEmpty() && view) {
+            layersPanel_->selectPaths(QStringList{path}, path);
+        }
+        if (view && layer_is_editable_fill(*view, path)) {
+            openFillLayerEditor(*view, path, this);
+            return;
+        }
+        if (registry_) {
+            registry_->dispatch(QString::fromLatin1(command_ids::LayerContentOptions));
+        }
+    });
 
     historyPanel_ = new HistoryPanel(this);
     historyPanel_->setObjectName(QStringLiteral("historyPanel"));
@@ -99,18 +118,12 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
         }
         layersPanel_->performPanelMenuAction(QStringLiteral("adjustment:") + kind);
     });
-    // Fill icons reuse the Layer > New Fill Layer commands; Pattern stays inert
-    // (its menu row has no handler).
+    // Fill icons are the quick-add path: create with defaults, then open the
+    // type editor on the new layer.
     connect(adjustmentsPanel_, &AdjustmentsPanel::fillRequested, this,
             [this](const QString& type) {
-        if (type == QLatin1String("pattern") || !registry_) {
-            return;
-        }
-        const char* id = type == QLatin1String("solid-color")
-            ? command_ids::LayerNewFillSolidColor
-            : command_ids::LayerNewFillGradient;
-        if (QAction* action = registry_->action(QString::fromLatin1(id))) {
-            action->trigger();
+        if (PictureView* view = activeView()) {
+            createFillLayerFromDialog(*view, type, foregroundColor(), this, false);
         }
     });
 

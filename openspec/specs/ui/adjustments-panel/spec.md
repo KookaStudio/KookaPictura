@@ -35,40 +35,64 @@ Clicking an adjustment icon SHALL create an adjustment layer of that kind throug
 
 ### Requirement: Panel menu preserved
 
-The Adjustments panel menu SHALL keep its existing rows (the sixteen adjustment kinds in CS6 order, Add Mask by Default, Clip to Layer) and SHALL remain a working alternative create path. The menu rows use the existing hyphenated row texts (`Brightness-Contrast`, `Hue-Saturation`); the grid labels are the CS6 display names and need not match the row texts verbatim.
+The Adjustments panel menu SHALL keep its existing rows (the sixteen adjustment
+kinds in CS6 order, Add Mask by Default, Clip to Layer) and SHALL remain a
+working alternative create path. The menu rows use the existing hyphenated row
+texts (`Brightness-Contrast`, `Hue-Saturation`); the grid labels are the CS6
+display names and need not match the row texts verbatim. **Add Mask by Default
+SHALL be an enabled checkable preference** whose state reflects the session and
+whose toggle governs whether a newly created adjustment layer receives a mask.
+`Clip to Layer` SHALL remain a checkable row.
 
 #### Scenario: Panel menu still lists the adjustment kinds
 
 - **WHEN** the Adjustments panel menu is opened
 - **THEN** it lists Brightness-Contrast, Levels, Curves, Exposure, Vibrance, Hue-Saturation, Color Balance, Black & White, Photo Filter, Channel Mixer, Color Lookup, Invert, Posterize, Threshold, Gradient Map, Selective Color, Add Mask by Default, and Clip to Layer, in that order
 
-### Requirement: Fill icons route to the fill-layer commands
+#### Scenario: Add Mask by Default is a working toggle [adj_add_mask_default_toggle]
 
-Clicking the Solid Color or Gradient icon SHALL invoke the existing New Fill Layer command for that type. The Pattern icon SHALL remain inert while the Pattern fill command is unimplemented, matching the Layer menu.
+- **WHEN** the user toggles Add Mask by Default in the Adjustments panel menu
+- **THEN** the row's check state follows the preference and the next created adjustment layer honors it
+
+### Requirement: Fill icons route to the fill-layer editors
+
+Clicking the Solid Color, Gradient, or Pattern icon SHALL create a fill layer
+of that type with the current defaults and then open its type editor, leaving
+the default layer in place if the editor is cancelled. The Pattern icon SHALL be
+enabled when the open document contains at least one pattern resource and
+disabled with a "No patterns are loaded" reason when it contains none, matching
+the Layer menu.
 
 #### Scenario: Solid Color icon opens the solid-color flow
 
 - **WHEN** the Solid Color icon is clicked
-- **THEN** the Solid Color fill-layer command is dispatched
+- **THEN** a Solid Color fill layer is created with the default content and its editor opens
 
 #### Scenario: Pattern icon is inert
 
-- **WHEN** the Pattern icon is clicked
-- **THEN** no layer is created and no command is dispatched
+- **WHEN** the open document contains no pattern resources and the Pattern icon is clicked
+- **THEN** no layer is created, no command is dispatched, and the icon is disabled with the no-patterns reason
+
+#### Scenario: Pattern follows the document's patterns [adj_pattern_icon]
+
+- **WHEN** the Pattern icon is shown for a document with patterns and for one without
+- **THEN** it is enabled and opens the Pattern Fill editor on the first, and disabled with the no-patterns reason on the second
 
 ### Requirement: Grid enablement follows the document
 
-Without an open document, the grid SHALL be disabled. With a document open, grid entries SHALL be enabled, except the inert Pattern entry which remains disabled.
+Without an open document, the grid SHALL be disabled. With a document open, grid
+entries SHALL be enabled, except the Pattern entry, which SHALL be enabled only
+when the document contains pattern resources.
 
 #### Scenario: No document disables the grid
 
-- **WHEN** no document is open and the Adjustments panel is displayed
-- **THEN** every grid entry is disabled and clicking one does nothing
+- **WHEN** no document is open
+- **THEN** every grid entry is disabled
 
 #### Scenario: A document enables the grid
 
 - **WHEN** a document is open
-- **THEN** the grid entries are enabled except the inert Pattern entry
+- **THEN** every grid entry is enabled except Pattern when the document has no pattern resources
 
 ### Requirement: Narrow panel layout
 
@@ -78,3 +102,29 @@ When the panel is too narrow to fit all entries on one row, the grid SHALL wrap 
 
 - **WHEN** the panel width is reduced below the width of one full row
 - **THEN** entries flow onto additional rows and all nineteen entries remain visible and clickable
+
+### Requirement: Adjustment mask defaults
+
+The system SHALL provide an `Add Mask by Default` preference, defaulting to
+enabled and persisted in the session store. When it is enabled, a newly created
+adjustment layer SHALL receive a layer mask: the active selection's mask when a
+selection exists, otherwise a white document-sized mask. When it is disabled,
+the new adjustment layer SHALL have no mask. After a successful creation with a
+mask, the new layer's mask SHALL become the view's mask edit target, with mask
+solo mode off, so painting and filling edit the mask immediately; without a
+mask, the layer thumbnail SHALL be the active target.
+
+#### Scenario: A selection becomes the adjustment mask [adj_mask_from_selection]
+
+- **WHEN** Add Mask by Default is enabled, a selection is active, and an adjustment layer is created
+- **THEN** the layer carries a mask built from the selection and that mask is the active target
+
+#### Scenario: No selection creates a white adjustment mask [adj_mask_white]
+
+- **WHEN** Add Mask by Default is enabled, no selection is active, and an adjustment layer is created
+- **THEN** the layer carries a white document-sized mask and that mask is the active target, not mask solo mode
+
+#### Scenario: Disabling the preference creates no mask [adj_mask_off]
+
+- **WHEN** Add Mask by Default is disabled and an adjustment layer is created
+- **THEN** the layer has no mask and its layer thumbnail is the active target

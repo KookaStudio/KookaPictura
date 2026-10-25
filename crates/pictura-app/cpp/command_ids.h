@@ -158,6 +158,7 @@ inline constexpr char LayerLockLayersPosition[] = "layer.lock.layers.position";
 inline constexpr char LayerLockAllInGroup[] = "layer.lock.allInGroup";
 inline constexpr char LayerNewFillSolidColor[] = "layer.new.fill.solidColor";
 inline constexpr char LayerNewFillGradient[] = "layer.new.fill.gradient";
+inline constexpr char LayerNewFillPattern[] = "layer.new.fill.layer.pattern";
 inline constexpr char LayerContentOptions[] = "layer.contentOptions";
 inline constexpr char LayerRasterizeFillContent[] = "layer.rasterize.fillContent";
 inline constexpr char LayerRasterizeType[] = "layer.rasterize.type";

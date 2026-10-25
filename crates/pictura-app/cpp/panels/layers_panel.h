@@ -12,6 +12,7 @@
 
 #include <functional>
 
+class QAction;
 class QComboBox;
 class QColor;
 class QDialog;
@@ -191,6 +192,8 @@ public:
     // Alt-click the mask thumbnail of `path`'s row as a user would (the mask
     // solo toggle); false when the row shows no mask.
     bool altClickMaskThumbnailForTest(const QString& path);
+    // Ctrl-click the mask thumbnail: load its coverage as a selection.
+    bool ctrlClickMaskThumbnailForTest(const QString& path);
     // Alt+Shift-click the mask thumbnail (the rubylith overlay toggle); false
     // when the row shows no mask.
     bool altShiftClickMaskThumbnailForTest(const QString& path);
@@ -260,7 +263,14 @@ public:
     bool rowHasBlendIfForTest(const QString& path) const;
     QRect rowBlendIfRectForTest(const QString& path) const;
     QStringList rowMenuTextsForPathForTest(const QString& path);
+    int rowMenuSeparatorCountForPathForTest(const QString& path);
+    bool rowMenuHasAdjacentSeparatorsForPathForTest(const QString& path);
+    QString rowMenuToolTipForPathForTest(const QString& path, const QString& text);
+    bool doubleClickThumbnailForTest(const QString& path);
+    bool doubleClickMaskForTest(const QString& path);
     bool rowMenuEnabledForPathForTest(const QString& path, const QString& text);
+    // Build the row menu and trigger the action with `text`.
+    bool triggerRowMenuActionForPathForTest(const QString& path, const QString& text);
     bool performRowActionForTest(const QString& id, const QString& path);
     // The mask-thumbnail context menu: its item texts/enabled states, and a
     // direct run of one command by its action id (test seam).
@@ -285,6 +295,10 @@ public:
     // Phase D: run a wired Layers per-widget menu entry by its action id.
     // Returns false for ids this panel does not own.
     bool performPanelMenuAction(const QString& actionId);
+
+    // Adjustments panel "Add Mask by Default" preference (session-persisted).
+    bool addMaskByDefault() const { return addMaskByDefault_; }
+    void setAddMaskByDefault(bool on);
 
     // Open the New Layer / New Group / Group from Layers dialogs. The frame's
     // Layer > New menu and the panel's Alt-click route here; no-op without a view.
@@ -317,6 +331,9 @@ signals:
     // A smart-object contents command chosen from a row's context menu, to be
     // run by the frame on `path`: `edit`, `replace`, or `export`.
     void smartObjectContentsRequested(const QString& action, const QString& path);
+    // A row-menu content edit (Edit Adjustment…), to be run by the frame's
+    // Layer Content Options path on the now-current layer.
+    void editContentRequested(const QString& path);
     // The rubylith overlay or its display options changed; the frame re-renders
     // the overlay.
     void maskDisplayChanged();
@@ -381,6 +398,9 @@ private:
     bool confirmDeleteVectorMask();
     void populateRowMenu(QMenu& menu, const QString& path, int color, const QString& kind,
                          bool shape = false, bool smart = false);
+    void populateBackgroundMenu(QMenu& menu, const QString& path);
+    // CS6's type-only rows (orientation, anti-aliasing, text kind, warp).
+    void addTypeRows(QMenu& menu, const QString& path, bool& emitted);
     bool performRowAction(const QString& id, const QString& path);
     void showEyeMenu(const QPoint& pos, const QModelIndex& index);
     void showMaskThumbMenu(const QPoint& pos, const QModelIndex& index);
@@ -433,6 +453,7 @@ private:
     // The six actionable strip buttons. Link is excluded because it stays
     // disabled until its operation exists.
     QList<QToolButton*> stripButtons_;
+    QAction* patternFill_ = nullptr;
     std::function<bool(QDialog&)> dialogDriver_;
     QStringList rememberedTarget_;
     QString rememberedAnchor_;
@@ -450,6 +471,7 @@ private:
     bool expandNewEffects_ = true;
     bool addCopyOnDuplicate_ = true;
     bool useDefaultMasksOnFill_ = true;
+    bool addMaskByDefault_ = true;
     bool syncing_ = false;
     PendingPreview pendingPreview_;
     PendingPreview gesture_;

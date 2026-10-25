@@ -533,3 +533,44 @@ fn fixture_gradient_fill_decodes_params_and_ramp() {
         );
     }
 }
+
+fn has_descriptor_item(data: &[u8], key: &[u8]) -> bool {
+    let Ok(DescValue::Object { items, .. }) = pictura_codec::read_descriptor(data) else {
+        return false;
+    };
+    items.iter().any(|(item_key, _)| item_key.as_slice() == key)
+}
+
+#[test]
+fn encode_gradient_fill_params_round_trips() {
+    let source = GradientFillParams {
+        stops: bw_stops().to_vec(),
+        reverse: true,
+        kind: GradientKind::Radial,
+        angle_deg: 45.0,
+        scale: 60.0,
+    };
+    let data = crate::encode_gradient_fill_params(&source);
+    assert_eq!(
+        decode_adjustment(&data),
+        Some(Adjustment::GradientFill(source))
+    );
+}
+
+#[test]
+fn encode_gradient_fill_params_omits_defaults() {
+    let source = GradientFillParams {
+        stops: bw_stops().to_vec(),
+        reverse: false,
+        kind: GradientKind::Linear,
+        angle_deg: 0.0,
+        scale: 100.0,
+    };
+    let data = crate::encode_gradient_fill_params(&source);
+    assert!(!has_descriptor_item(&data.data, b"Rvrs"));
+    assert!(!has_descriptor_item(&data.data, b"Scl "));
+    assert_eq!(
+        decode_adjustment(&data),
+        Some(Adjustment::GradientFill(source))
+    );
+}

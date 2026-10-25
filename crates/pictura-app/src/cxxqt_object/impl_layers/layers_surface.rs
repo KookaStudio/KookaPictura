@@ -31,13 +31,14 @@ pub mod ffi {
     extern "Rust" {
 
         /// Apply the CS6 Layers Panel Options that gate bridge behaviour:
-        /// `add_copy` (name a duplicate `"<name> copy"`) and
-        /// `use_default_masks` (a fill/adjustment layer created with a
-        /// selection takes it as a mask).
+        /// `add_copy` (name a duplicate `"<name> copy"`), `use_default_masks`
+        /// (a fill layer created with a selection takes it as a mask), and
+        /// `add_mask_by_default` (a new adjustment layer gets a mask).
         fn set_layers_panel_options(
             view: Pin<&mut PictureView>,
             add_copy: bool,
             use_default_masks: bool,
+            add_mask_by_default: bool,
         );
 
         /// Apply the full lock set to every descendant of the group at
@@ -56,10 +57,12 @@ fn set_layers_panel_options(
     mut view: Pin<&mut PictureView>,
     add_copy: bool,
     use_default_masks: bool,
+    add_mask_by_default: bool,
 ) {
     let mut rust = view.as_mut().rust_mut();
     rust.add_copy = add_copy;
     rust.use_default_masks = use_default_masks;
+    rust.add_mask_by_default = add_mask_by_default;
 }
 
 fn lock_group_layers_run(mut view: Pin<&mut PictureView>, group_path: &QString) -> i32 {

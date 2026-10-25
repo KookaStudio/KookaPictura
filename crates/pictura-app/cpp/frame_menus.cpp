@@ -1,4 +1,8 @@
 #include "frame_includes.h"
+
+#include "fill_layer_editor.h"
+
+#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "api/type_api.h"
 
@@ -731,27 +735,35 @@ void PicturaMainWindow::registerHandlers()
             && !selectedLayerPaths().isEmpty();
     });
 
-    // Solid-color fill creation in the current foreground colour.
+    // Fill creation: New Layer dialog -> the type editor -> one creation.
     registry_->setHandler(command_ids::LayerNewFillSolidColor, [this]() {
-        PictureView* view = activeView();
-        if (!view) {
-            return;
+        if (PictureView* view = activeView()) {
+            createFillLayerFromDialog(*view, QStringLiteral("solid-color"), foregroundColor(),
+                                      this, true);
         }
-        const QColor fg = foregroundColor();
-        view->add_solid_fill(fg.rgba());
     });
     registry_->setEnabledProvider(command_ids::LayerNewFillSolidColor,
                                   [this]() { return activeView() && activeView()->has_document(); });
 
-    // Gradient fill creation: a fixed black-to-white Linear fill at angle 0.
     registry_->setHandler(command_ids::LayerNewFillGradient, [this]() {
-        PictureView* view = activeView();
-        if (view) {
-            view->add_gradient_fill();
+        if (PictureView* view = activeView()) {
+            createFillLayerFromDialog(*view, QStringLiteral("gradient"), foregroundColor(), this,
+                                      true);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerNewFillGradient,
                                   [this]() { return activeView() && activeView()->has_document(); });
+
+    registry_->setHandler(command_ids::LayerNewFillPattern, [this]() {
+        if (PictureView* view = activeView()) {
+            createFillLayerFromDialog(*view, QStringLiteral("pattern"), foregroundColor(), this,
+                                      true);
+        }
+    });
+    registry_->setEnabledProvider(command_ids::LayerNewFillPattern, [this]() {
+        PictureView* view = activeView();
+        return view && view->has_document() && layer_has_patterns(*view);
+    });
 
     // Rasterize. Fill Content and Type each need a current layer of that kind;
     // Layer tries type then fill; All Layers needs a document. Shape/Vector

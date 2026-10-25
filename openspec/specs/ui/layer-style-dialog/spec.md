@@ -18,7 +18,9 @@ that page and switch the effect on. Every control SHALL write its value live,
 recompositing the canvas without a history state. OK SHALL record one "Layer
 Style" state when anything changed and none otherwise; Cancel, Escape and the
 close box SHALL drop every live edit. The Pattern Overlay page SHALL offer the
-built-in patterns in a Pattern menu.
+built-in patterns in a Pattern menu. A group SHALL open on Blending Options;
+its effect rows SHALL be visible but disabled until the compositor renders group
+effects.
 
 #### Scenario: Opening on an effect and cancelling
 
@@ -85,3 +87,15 @@ canvas also takes the wheel and a middle-button pan while it is open.
 
 - **WHEN** the Layer Style dialog runs and Ctrl+= is pressed in it
 - **THEN** the canvas zoom increases
+
+### Requirement: Group Blending Options
+
+The Layer Style dialog SHALL open for a group when the row menu's Blending
+Options… is chosen. It SHALL open on the Blending Options page. The ten effect
+rows SHALL remain visible but disabled, with a not-implemented tooltip, until the
+compositor renders group effects.
+
+#### Scenario: A group opens Blending Options only
+
+- **WHEN** Blending Options… is chosen for a group
+- **THEN** the dialog opens on page 0 and every effect row is disabled

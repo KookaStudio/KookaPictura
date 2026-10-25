@@ -107,9 +107,7 @@ fn with_layer<T>(
 }
 
 fn layer_style_can_edit(view: &PictureView, path: &QString) -> bool {
-    with_layer(view, path, pictura_render::copy_layer_style)
-        .flatten()
-        .is_some()
+    with_layer(view, path, |layer| !layer.background).unwrap_or(false)
 }
 
 fn layer_style_has(view: &PictureView, path: &QString) -> bool {

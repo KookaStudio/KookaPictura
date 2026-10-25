@@ -11,17 +11,19 @@ linking one, plus the PSD link-flag semantics the Layers panel needs.
 The system SHALL create a raster layer mask for a target layer from a
 `LayerMaskKind` of Reveal All, Hide All, Reveal Selection, Hide Selection, or
 From Transparency. A mask created for Reveal All, Hide All, or From Transparency
-SHALL be sized to the layer's content rectangle; a selection-driven mask SHALL be
-sized to the supplied selection's rectangle. The reveal variants SHALL produce
-maximal coverage (255 inside the mask rectangle) and the hide variants SHALL
-produce minimal coverage (0 inside it), with the region outside the mask
-rectangle contributing the mask's default color so the result is reveal-everything
-or hide-everything respectively. Creation SHALL be refused, leaving the document
-and history unchanged, when the target layer already has a mask or when the path
-does not resolve. A refused creation SHALL report failure and a created mask
-SHALL report success. A successful creation SHALL make the new mask the view's
-mask edit target, so the brush, fill, and filters write its coverage at once; a
-refused creation SHALL leave the target unchanged.
+SHALL be sized to the layer's content rectangle, except that a mask created for
+a group target or for a layer with a zero-area content rectangle SHALL be sized
+to the document rectangle; a selection-driven mask SHALL be sized to the
+supplied selection's rectangle. The reveal variants SHALL
+produce maximal coverage (255 inside the mask rectangle) and the hide variants
+SHALL produce minimal coverage (0 inside it), with the region outside the mask
+rectangle contributing the mask's default color so the result is
+reveal-everything or hide-everything respectively. Creation SHALL be refused,
+leaving the document and history unchanged, when the target layer already has a
+mask or when the path does not resolve. A refused creation SHALL report failure
+and a created mask SHALL report success. A successful creation SHALL make the
+new mask the view's mask edit target, so the brush, fill, and filters write its
+coverage at once; a refused creation SHALL leave the target unchanged.
 
 #### Scenario: Reveal All creates a full mask
 
@@ -52,6 +54,11 @@ refused creation SHALL leave the target unchanged.
 
 - **WHEN** a layer-mask operation targets a path that does not resolve
 - **THEN** the operation is refused and the document is unchanged
+
+#### Scenario: A group mask is document-sized [lm_group_mask_document]
+
+- **WHEN** Reveal All is applied to a group with children and to an empty group
+- **THEN** each group gains a document-sized mask with a non-empty thumbnail, and painting or filling the mask changes its coverage
 
 ### Requirement: Selection-driven mask variants
 
@@ -217,16 +224,16 @@ SHALL report failure and leave the document unchanged.
 
 The bridge SHALL expose a per-view mask edit target naming the layer whose raster
 mask is the current edit target, empty when no mask is active. Setting the target
-SHALL require a path that resolves to a layer carrying a raster mask and SHALL
-otherwise refuse; clearing SHALL always succeed. The target SHALL be independent
-of the document's pixels, SHALL record no history, and SHALL read back empty once
-the layer or its mask no longer resolves. `pictura_render` SHALL expose
-`mask_document(doc, path)` returning the mask as a mask-sized grayscale document
-(its coverage replicated across the layer's colour channels, opacity locked) and
-`write_mask_back(doc, path, edited, region)` copying the edited document's colour
-plane into the real mask over `region`, materialising a data-less mask from its
-default colour first. A missing mask, a zero-sized mask rectangle, or a malformed
-edited document SHALL refuse both.
+SHALL require a path that resolves to a layer carrying a raster mask, including
+a group, and SHALL otherwise refuse; clearing SHALL always succeed. The target
+SHALL be independent of the document's pixels, SHALL record no history, and
+SHALL read back empty once the layer or its mask no longer resolves.
+`pictura_render` SHALL expose `mask_document(doc, path)` returning the mask as a
+mask-sized grayscale document (its coverage replicated across the layer's colour
+channels, opacity locked) and `write_mask_back(doc, path, edited, region)`
+copying the edited document's colour plane into the real mask over `region`,
+materialising a data-less mask from its default colour first. A missing mask, a
+zero-sized mask rectangle, or a malformed edited document SHALL refuse both.
 
 #### Scenario: Activating and clearing the target
 
@@ -247,6 +254,11 @@ edited document SHALL refuse both.
 
 - **WHEN** the target names a layer whose mask is then deleted
 - **THEN** the target reads back empty
+
+#### Scenario: A group mask round-trips through the adapter [lm_group_mask_edit]
+
+- **WHEN** a group's document-sized mask is targeted, its mask document is edited, and the edit is written back
+- **THEN** the group's mask coverage carries the edit and the composite follows it
 
 ### Requirement: Painting, filling, and filtering the active mask
 
@@ -431,3 +443,34 @@ both the layer's pixels and the mask's coverage unchanged.
   press starts
 - **THEN** the press is refused with a visible message, no history state is
   recorded, and neither the layer's RGB nor the mask coverage changes
+
+### Requirement: Mask thumbnail activation routes edits to coverage
+
+Clicking a raster mask thumbnail SHALL activate the clicked row, make that row's
+mask the edit target, and keep the target after the selection model settles.
+The Brush, Pencil, and Eraser SHALL then write mask coverage rather than the
+layer's pixels.
+
+Ctrl-clicking a raster mask thumbnail SHALL load the mask coverage as the pixel
+selection and SHALL NOT toggle the row's membership in the layer selection.
+
+An active mask target SHALL be a valid target for Image > Adjustments and filters
+regardless of the owning layer kind, including fill, adjustment, and group rows.
+
+#### Scenario: A non-active row's mask becomes the target
+
+- **WHEN** another row is active and the user clicks a masked row's mask thumbnail
+- **THEN** the clicked row becomes active, its mask becomes the edit target, and
+  a brush stroke changes mask coverage instead of layer pixels
+
+#### Scenario: Ctrl-click loads the mask selection
+
+- **WHEN** the user Ctrl-clicks a raster mask thumbnail
+- **THEN** the mask's white coverage becomes the pixel selection and the layer
+  selection is unchanged
+
+#### Scenario: Ctrl-I inverts a fill mask
+
+- **WHEN** a fill's raster mask is the edit target and the user presses Ctrl-I
+- **THEN** the mask coverage is inverted in one `Invert` state and the fill
+  pixels are untouched

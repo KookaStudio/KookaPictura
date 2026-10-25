@@ -550,9 +550,6 @@ signals:
 
 private:
     void applyToolPolicy();
-    // Push the canvas backdrop (background colour when a Background layer
-    // exists, else the transparency tile) to the active canvas.
-    void updateCanvasBackdrop();
     static bool isSelectionTool(ToolId id);
     // The selection tools that also offer a canvas menu (the seven ids; the
     // marquee handler serves rectangular and elliptical).

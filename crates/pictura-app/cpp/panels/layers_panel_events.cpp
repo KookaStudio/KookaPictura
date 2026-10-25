@@ -170,6 +170,22 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     syncEditTarget();
                 }
                 const QRect maskThumb = delegate_->maskThumbRect(vr, index);
+                const auto selectRow = [&] {
+                    // Do it before setting the mask target: the selection model
+                    // emits current/selection changes, and `set_layer_target`
+                    // drops a mask target that does not match the new anchor.
+                    tree_->selectionModel()->select(index,
+                                                    QItemSelectionModel::ClearAndSelect);
+                    tree_->setCurrentIndex(index);
+                };
+                if (!maskThumb.isEmpty() && maskThumb.contains(pos)
+                    && mouse->modifiers().testFlag(Qt::ControlModifier)) {
+                    // Ctrl-click loads the mask coverage as a selection; it must
+                    // not fall through to the tree's Ctrl-click row toggle.
+                    selectRow();
+                    view_->mask_selection(rowPath, QStringLiteral("new"));
+                    return true;
+                }
                 const Qt::KeyboardModifiers rubylith = Qt::AltModifier | Qt::ShiftModifier;
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)
                     && (mouse->modifiers() & rubylith) == rubylith) {
@@ -177,7 +193,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     // display only, so it leaves the edit target alone, but it
                     // selects the row: the overlay belongs to the current layer
                     // and ends when that changes (syncMaskSolo).
-                    tree_->setCurrentIndex(index);
+                    selectRow();
                     mask_overlay_toggle(*view_, rowPath);
                     emit maskDisplayChanged();
                     return true;
@@ -186,17 +202,15 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     setActiveThumb(rowPath, 1);
                     const bool alt = mouse->modifiers().testFlag(Qt::AltModifier);
                     const bool shift = mouse->modifiers().testFlag(Qt::ShiftModifier);
+                    selectRow();
                     if (shift) {
                         // Toggling the enabled bit keeps any solo on this mask:
                         // the solo shows the mask's stored coverage, not what the
                         // mask does to the layer (see ui/mask-solo-view).
                         layer_mask_set_enabled_path(*view_, rowPath,
                                                     index.data(MaskDisabledRole).toBool());
-                        return false;
+                        return true;
                     }
-                    // The target belongs to the active layer, so select the row
-                    // first (its selection sets the active layer).
-                    tree_->setCurrentIndex(index);
                     mask_edit_target_set(*view_, rowPath);
                     if (alt) {
                         // Alt toggles the mask solo view on this thumbnail; a
@@ -209,7 +223,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     // Any other mask-thumb click restores the composite.
                     mask_solo_set(*view_, QString());
                     refresh();
-                    return false;
+                    return true;
                 }
                 const QRect linkGlyph = delegate_->linkGlyphRect(vr, index);
                 if (!linkGlyph.isEmpty() && linkGlyph.contains(pos)) {
@@ -221,6 +235,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 const QRect vectorThumb = delegate_->vectorMaskThumbRect(vr, index);
                 if (!vectorThumb.isEmpty() && vectorThumb.contains(pos)) {
                     // The vector mask becomes the target; drop any raster target.
+                    selectRow();
                     mask_edit_target_set(*view_, QString());
                     mask_solo_set(*view_, QString());
                     syncEditTarget();
@@ -228,9 +243,8 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     if (mouse->modifiers() & Qt::ShiftModifier) {
                         vector_mask_set_enabled_path(
                             *view_, rowPath, index.data(VectorMaskDisabledRole).toBool());
-                        return true;
                     }
-                    return false;
+                    return true;
                 }
                 const QRect vectorLink = delegate_->vectorLinkGlyphRect(vr, index);
                 if (!vectorLink.isEmpty() && vectorLink.contains(pos)) {
@@ -351,6 +365,15 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
                 const QString path = pathForProxyIndex(index);
+                // An adjustment or fill content thumbnail opens its editor;
+                // the mask/vector thumbnails above keep their own actions.
+                const QRect contentThumb = delegate_->thumbRect(rowRect, index);
+                if (!contentThumb.isEmpty() && contentThumb.contains(pos)
+                    && index.data(HasAdjustmentRole).toBool()
+                    && !index.data(LayerRowShapeRole).toBool()) {
+                    emit editContentRequested(path);
+                    return true;
+                }
                 if (index.data(KindRole).toString() == QLatin1String("background")) {
                     // A control keeps its own action; any other content-band
                     // double-click converts the Background through the dialog.

@@ -14,6 +14,7 @@
 #include "refine_edge_dialog.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
 
 #include <QtWidgets/QCheckBox>
@@ -95,6 +96,9 @@ bool RefineEdgeTest::setupRedSquare()
     }
     // A raster pixel layer so the Layer Mask output has an active layer to write.
     const QString path = view_->add_solid_fill(0xffff0000u);
+    if (!path.isEmpty()) {
+        pictura::layer_mask_delete_path(*view_, path);
+    }
     if (path.isEmpty() || !view_->rasterize_fill_content(path)) {
         return false;
     }
@@ -202,6 +206,9 @@ void RefineEdgeTest::previewMatchesCommitWithinProxyTolerance()
     view_ = window_->activeView();
     QVERIFY(view_);
     const QString path = view_->add_solid_fill(0xffff0000u);
+    if (!path.isEmpty()) {
+        pictura::layer_mask_delete_path(*view_, path);
+    }
     QVERIFY(!path.isEmpty());
     QVERIFY(view_->rasterize_fill_content(path));
     window_->selectLayerPath(path);

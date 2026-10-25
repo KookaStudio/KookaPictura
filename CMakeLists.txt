@@ -313,7 +313,9 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/curves_dialog.cpp
     crates/pictura-app/cpp/canvas_size_dialog.cpp
     crates/pictura-app/cpp/exposure_dialog.cpp
+    crates/pictura-app/cpp/fill_layer_editor.cpp
     crates/pictura-app/cpp/gradient_editor_dialog.cpp
+    crates/pictura-app/cpp/gradient_fill_dialog.cpp
     crates/pictura-app/cpp/gradient_map_dialog.cpp
     crates/pictura-app/cpp/gradient_noise_page.cpp
     crates/pictura-app/cpp/hue_saturation_dialog.cpp
@@ -416,8 +418,10 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/layers_filter_bar.cpp
     crates/pictura-app/cpp/panels/layers_panel_actions.cpp
     crates/pictura-app/cpp/panels/layers_panel_menu.cpp
+    crates/pictura-app/cpp/panels/layers_panel_type_menu.cpp
     crates/pictura-app/cpp/panels/layers_panel_mask_menu.cpp
     crates/pictura-app/cpp/panels/layers_panel_test.cpp
+    crates/pictura-app/cpp/panels/layers_panel_test_extra.cpp
     crates/pictura-app/cpp/panels/layers_panel_test_solo.cpp
     crates/pictura-app/cpp/panels/percent_field.cpp
     crates/pictura-app/cpp/panels/numeric_field.cpp
@@ -540,6 +544,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/tool_hint_bar.cpp
     crates/pictura-app/cpp/new_document_dialog.cpp
     crates/pictura-app/cpp/layer_new_dialog.cpp
+    crates/pictura-app/cpp/pattern_fill_dialog.cpp
     crates/pictura-app/cpp/dialog_chrome.cpp
     crates/pictura-app/cpp/dialogs.cpp
     crates/pictura-app/cpp/keyboard_shortcuts_dialog.cpp

@@ -273,6 +273,9 @@ void ChannelsPanelTest::maskChannelRow()
     QCOMPARE(panel_->maskRowIndexForTest(), -1);
 
     const QString layer = view_->add_solid_fill(0xff2244aau);
+    if (!layer.isEmpty()) {
+        pictura::layer_mask_delete_path(*view_, layer);
+    }
     QVERIFY(!layer.isEmpty());
     QVERIFY(view_->rasterize_fill_content(layer));
     window_->selectLayerPath(layer);

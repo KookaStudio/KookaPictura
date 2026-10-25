@@ -194,7 +194,7 @@ layer.smart.filter.delete.filter.mask	Layer/Smart Filter/Delete Filter Mask	Dele
 layer.smartFilters.clear	Layer/Smart Filter/Clear Smart Filters	Clear Smart Filters		1	0
 layer.new.fill.solidColor	Layer/New Fill Layer/Solid Color…	Solid Color…		1	0
 layer.new.fill.gradient	Layer/New Fill Layer/Gradient…	Gradient…		1	0
-layer.new.fill.layer.pattern	Layer/New Fill Layer/Pattern…	Pattern…		0	0
+layer.new.fill.layer.pattern	Layer/New Fill Layer/Pattern…	Pattern…		1	0
 layer.new.adjustment.layer.brightnesscontrast	Layer/New Adjustment Layer/Brightness/Contrast	Brightness/Contrast		0	0
 layer.new.adjustment.layer.levels	Layer/New Adjustment Layer/Levels	Levels		0	0
 layer.new.adjustment.layer.curves	Layer/New Adjustment Layer/Curves	Curves		0	0

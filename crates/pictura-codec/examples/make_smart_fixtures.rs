@@ -6,24 +6,31 @@
 //! cargo run -p pictura-codec --example make_smart_fixtures
 //! ```
 //!
-//! Both fixtures mirror the structure the old reference files carried, but every
-//! byte is authored here by `pictura-codec` itself:
+//! The first two fixtures mirror the structure the old reference files carried,
+//! but every byte is authored here by `pictura-codec` itself:
 //!
 //! - `test_with_smart_object01.psd`: layer `Layer 1` with one embedded smart
 //!   object and no smart filter.
 //! - `test_with_smart_object02.psd`: layer `Layer 1 copy` with the same
 //!   embedded smart object plus one Camera Raw smart filter (`filterID 2683`).
+//! - `layers_panel_smoke.psd`: one document with every row kind the Layers
+//!   panel exercises: Background, pixel, group, adjustment, solid fill, type,
+//!   and smart object.
 //!
 //! The embedded payload is a minimal version-2 `8BPS` document (`write_psb`), so
 //! the fixtures stay a few KB; the output is deterministic.
 
 use std::path::Path;
 
-use pictura_codec::{encode_pictura_raw_fltr, write_descriptor, write_psb, write_psd};
+use pictura_codec::{
+    author_type_tool, encode_pictura_raw_fltr, encode_type_tool, read_psd, write_descriptor,
+    write_psb, write_psd, DescValue,
+};
 use pictura_core::{
-    BitDepth, CameraCalibration, Channel, ColorMode, CrsSettings, Detail, Document, Effects, Hsl,
-    Layer, Lens, PicturaRawSettings, PsdRect, RawMode, SmartFilter, SmartObject, SmartObjectKind,
-    SplitToning, ToneCurve,
+    AdjustmentData, BitDepth, BlendMode, CameraCalibration, Channel, ColorMode, CrsSettings,
+    Detail, Document, Effects, Hsl, Layer, LayerBlock, LayerMask, LayerStack, Lens, LockFlags,
+    PicturaRawSettings, PsdRect, RawMode, SmartFilter, SmartObject, SmartObjectKind, SplitToning,
+    ToneCurve, TypeSpec,
 };
 
 const EMBEDDED_FILENAME: &str = "Layer 1.psb";
@@ -71,6 +78,252 @@ fn smart_layer(name: &str, payload: Vec<u8>, smart_filters: Vec<SmartFilter>) ->
         }),
         ..Default::default()
     }
+}
+
+const SMOKE_SIZE: u32 = 64;
+
+fn full_rect() -> PsdRect {
+    PsdRect {
+        top: 0,
+        left: 0,
+        bottom: SMOKE_SIZE as i32,
+        right: SMOKE_SIZE as i32,
+    }
+}
+
+fn pixel_layer(name: &str, rect: PsdRect, rgb: [u8; 3], alpha: u8) -> Layer {
+    let width = rect.width().max(0) as usize;
+    let height = rect.height().max(0) as usize;
+    let plane = width * height;
+    Layer {
+        name: name.to_string(),
+        rect,
+        channels: vec![
+            Channel {
+                id: 0,
+                data: vec![rgb[0]; plane].into(),
+            },
+            Channel {
+                id: 1,
+                data: vec![rgb[1]; plane].into(),
+            },
+            Channel {
+                id: 2,
+                data: vec![rgb[2]; plane].into(),
+            },
+            Channel {
+                id: -1,
+                data: vec![alpha; plane].into(),
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+fn background_layer() -> Layer {
+    let mut layer = pixel_layer("Background", full_rect(), [42, 48, 58], 255);
+    layer.background = true;
+    layer.channels.retain(|channel| channel.id >= 0);
+    layer
+}
+
+fn group_layer(name: &str, children: Vec<Layer>) -> Layer {
+    Layer {
+        name: name.to_string(),
+        blend: BlendMode::PassThrough,
+        children: LayerStack::from_layers(children),
+        is_group: true,
+        ..Default::default()
+    }
+}
+
+fn default_mask() -> LayerMask {
+    LayerMask {
+        rect: full_rect(),
+        default_color: 255,
+        disabled: false,
+        flags: 1,
+        data: Some(vec![255u8; (SMOKE_SIZE * SMOKE_SIZE) as usize].into()),
+        ..Default::default()
+    }
+}
+
+fn adjustment_layer(name: &str, key: [u8; 4], data: Vec<u8>) -> Layer {
+    Layer {
+        name: name.to_string(),
+        rect: full_rect(),
+        mask: Some(default_mask()),
+        adjustment: Some(AdjustmentData { key, data }),
+        ..Default::default()
+    }
+}
+
+/// The standard `SoCo` solid-color fill descriptor, with no alpha.
+fn solid_fill_data(rgb: [u8; 3]) -> Vec<u8> {
+    let color = DescValue::Object {
+        name: String::new(),
+        class_id: b"RGBC".to_vec(),
+        items: [b"Rd  ", b"Grn ", b"Bl  "]
+            .into_iter()
+            .zip(rgb)
+            .map(|(key, value)| (key.to_vec(), DescValue::Double(value as f64)))
+            .collect(),
+    };
+    write_descriptor(&DescValue::Object {
+        name: String::new(),
+        class_id: b"SoCo".to_vec(),
+        items: vec![(b"Clr ".to_vec(), color)],
+    })
+}
+
+fn smoke_type_layer() -> Layer {
+    let rect = PsdRect {
+        top: 16,
+        left: 8,
+        bottom: 40,
+        right: 32,
+    };
+    let width = rect.width() as usize;
+    let height = rect.height() as usize;
+    let spec = TypeSpec {
+        origin: (rect.left as f64, rect.top as f64),
+        ..TypeSpec::new("Type", "Liberation Sans", 18.0)
+    };
+    let tool = author_type_tool(&spec, [0.0, 0.0, 24.0, 24.0], None, None);
+
+    let mut alpha = vec![0u8; width * height];
+    let mut opaque = |x: usize, y: usize| alpha[y * width + x] = 255;
+    for y in 2..6 {
+        for x in 2..22 {
+            opaque(x, y);
+        }
+    }
+    for y in 2..22 {
+        for x in 10..14 {
+            opaque(x, y);
+        }
+    }
+    let white = vec![255u8; width * height];
+    Layer {
+        name: "Type".to_string(),
+        rect,
+        lock: LockFlags::default()
+            .with(LockFlags::TRANSPARENCY, true)
+            .with(LockFlags::PIXELS, true),
+        channels: vec![
+            Channel {
+                id: 0,
+                data: white.clone().into(),
+            },
+            Channel {
+                id: 1,
+                data: white.clone().into(),
+            },
+            Channel {
+                id: 2,
+                data: white.into(),
+            },
+            Channel {
+                id: -1,
+                data: alpha.into(),
+            },
+        ],
+        extra_blocks: vec![LayerBlock {
+            key: *b"TySh",
+            data: encode_type_tool(&tool),
+        }],
+        ..Default::default()
+    }
+}
+
+fn smoke_smart_layer(payload: Vec<u8>) -> Layer {
+    let mut layer = pixel_layer(
+        "Smart Object",
+        PsdRect {
+            top: 32,
+            left: 32,
+            bottom: 48,
+            right: 48,
+        },
+        [230, 120, 40],
+        255,
+    );
+    layer.smart_object = Some(SmartObject {
+        kind: SmartObjectKind::Embedded,
+        payload: Some(payload),
+        filename: EMBEDDED_FILENAME.to_string(),
+        filetype: *b"8BPB",
+        creator: *b"8BIM",
+        ..Default::default()
+    });
+    layer
+}
+
+fn smoke_document(payload: Vec<u8>) -> Document {
+    let mut doc = Document::new(SMOKE_SIZE, SMOKE_SIZE, ColorMode::Rgb, BitDepth::Eight);
+    for y in 0..SMOKE_SIZE as usize {
+        for x in 0..SMOKE_SIZE as usize {
+            let shade = if (x / 8 + y / 8) % 2 == 0 { 196 } else { 168 };
+            let at = (y * SMOKE_SIZE as usize + x) * 3;
+            doc.composite.data[at..at + 3].copy_from_slice(&[shade, shade, shade]);
+        }
+    }
+    doc.layers = LayerStack::from_layers(vec![
+        background_layer(),
+        pixel_layer(
+            "Pixel Layer",
+            PsdRect {
+                top: 4,
+                left: 4,
+                bottom: 28,
+                right: 28,
+            },
+            [220, 60, 60],
+            255,
+        ),
+        group_layer(
+            "Group",
+            vec![pixel_layer(
+                "Group Child",
+                PsdRect {
+                    top: 36,
+                    left: 8,
+                    bottom: 52,
+                    right: 24,
+                },
+                [60, 190, 90],
+                255,
+            )],
+        ),
+        adjustment_layer("Invert", *b"nvrt", Vec::new()),
+        adjustment_layer("Solid Fill", *b"SoCo", solid_fill_data([50, 90, 220])),
+        smoke_type_layer(),
+        smoke_smart_layer(payload),
+    ]);
+    doc
+}
+
+fn verify_smoke(bytes: &[u8]) {
+    let doc = read_psd(bytes).expect("smoke fixture reads");
+    assert_eq!(doc.layers.len(), 7, "one row per smoke kind");
+    assert!(doc.layers[0].background, "bottom row is a Background");
+    assert_eq!(doc.layers[1].channels.len(), 4, "pixel row");
+    assert!(doc.layers[2].is_group(), "group row");
+    assert_eq!(doc.layers[2].children.len(), 1, "group child");
+    assert_eq!(
+        doc.layers[3].adjustment.as_ref().map(|a| a.key),
+        Some(*b"nvrt"),
+        "adjustment row"
+    );
+    assert!(doc.layers[3].mask.is_some(), "adjustment default mask");
+    assert_eq!(
+        doc.layers[4].adjustment.as_ref().map(|a| a.key),
+        Some(*b"SoCo"),
+        "fill row"
+    );
+    assert!(doc.layers[4].mask.is_some(), "fill default mask");
+    assert!(doc.layers[5].is_type(), "type row");
+    assert!(doc.layers[6].smart_object.is_some(), "smart object row");
 }
 
 /// The Camera Raw `Fltr` options the tests assert on: every modeled tab, plus a
@@ -272,15 +525,19 @@ fn main() {
             "test_with_smart_object02.psd",
             document(smart_layer(
                 "Layer 1 copy",
-                payload,
+                payload.clone(),
                 vec![camera_raw_filter()],
             )),
         ),
+        ("layers_panel_smoke.psd", smoke_document(payload)),
     ];
 
     for (name, doc) in fixtures {
         let path = assets.join(name);
         let bytes = write_psd(&doc).expect("fixture writes");
+        if name == "layers_panel_smoke.psd" {
+            verify_smoke(&bytes);
+        }
         std::fs::write(&path, &bytes).expect("fixture writes to disk");
         println!("wrote {} ({} bytes)", path.display(), bytes.len());
     }

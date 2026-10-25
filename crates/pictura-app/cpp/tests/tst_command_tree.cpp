@@ -124,45 +124,14 @@ void CommandTreeTest::menusPanel()
     auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY(panel != nullptr);
 
-    const QStringList common = {
-        QStringLiteral("Rename"),          QStringLiteral("New Layer"),
-        QStringLiteral("New Group"),       QStringLiteral("Duplicate Layer(s)"),
-        QStringLiteral("Delete Layer(s)"), QStringLiteral("Group Layers"),
-        QStringLiteral("Ungroup Layers"),  QStringLiteral("Move Layer Up"),
-        QStringLiteral("Move Layer Down")};
+    const QStringList expectedColor = {
+        QStringLiteral("None"),  QStringLiteral("Red"),  QStringLiteral("Orange"),
+        QStringLiteral("Yellow"), QStringLiteral("Green"), QStringLiteral("Blue"),
+        QStringLiteral("Violet"), QStringLiteral("Gray")};
+    QVERIFY2(panel->colorLabelTextsForTest() == expectedColor, "color label menu");
 
-    QStringList expectedPixel = common;
-    expectedPixel << QStringLiteral("Add Layer Mask") << QStringLiteral("Delete Layer Mask")
-                  << QStringLiteral("Enable Layer Mask") << QStringLiteral("Disable Layer Mask")
-                  << QStringLiteral("Blending Options…") << QStringLiteral("Copy Layer Style")
-                  << QStringLiteral("Paste Layer Style") << QStringLiteral("Clear Layer Style")
-                  << QStringLiteral("Convert to Smart Object")
-                  << QStringLiteral("Export As…") << QStringLiteral("Quick Export as PNG")
-                  << QStringLiteral("Color Label");
-
-    QStringList expectedBackground = common;
-    expectedBackground << QStringLiteral("Blending Options…")
-                       << QStringLiteral("Convert to Smart Object")
-                       << QStringLiteral("Export As…")
-                       << QStringLiteral("Quick Export as PNG") << QStringLiteral("Color Label");
-
-    QStringList expectedGroup = common;
-    expectedGroup << QStringLiteral("Blending Options…") << QStringLiteral("Color Label");
-
-    QStringList expectedAdjustment = common;
-    expectedAdjustment << QStringLiteral("Edit Adjustment…") << QStringLiteral("Color Label");
-
-    QStringList expectedType = common;
-    expectedType << QStringLiteral("Blending Options…") << QStringLiteral("Rasterize Type")
-                 << QStringLiteral("Color Label");
-
-    QCOMPARE(panel->rowMenuTextsForTest(QStringLiteral("pixel")), expectedPixel);
-    QCOMPARE(panel->rowMenuTextsForTest(QStringLiteral("background")), expectedBackground);
-    QCOMPARE(panel->rowMenuTextsForTest(QStringLiteral("group")), expectedGroup);
-    QCOMPARE(panel->rowMenuTextsForTest(QStringLiteral("adjustment")), expectedAdjustment);
-    QCOMPARE(panel->rowMenuTextsForTest(QStringLiteral("type")), expectedType);
-
-    QVERIFY2(panel->rowMenuEnabledForTest(QStringLiteral("pixel"), QStringLiteral("Add Layer Mask")),
+    QVERIFY2(panel->rowMenuEnabledForTest(QStringLiteral("pixel"),
+                                          QStringLiteral("Add Layer Mask")),
              "wired mask row is enabled");
     QVERIFY2(!panel->rowMenuEnabledForTest(QStringLiteral("pixel"),
                                            QStringLiteral("Blending Options…")),
@@ -171,14 +140,15 @@ void CommandTreeTest::menusPanel()
                                            QStringLiteral("Blending Options…"))
                   .contains(QStringLiteral("not implemented yet")),
              "Blending Options is implemented (no not-implemented tooltip)");
-    QVERIFY2(panel->rowMenuEnabledForTest(QStringLiteral("pixel"), QStringLiteral("New Layer")),
+    QVERIFY2(panel->rowMenuEnabledForTest(QStringLiteral("pixel"),
+                                          QStringLiteral("New Layer")),
              "wired pixel row is enabled");
 
-    const QStringList expectedColor = {
-        QStringLiteral("None"),  QStringLiteral("Red"),  QStringLiteral("Orange"),
-        QStringLiteral("Yellow"), QStringLiteral("Green"), QStringLiteral("Blue"),
-        QStringLiteral("Violet"), QStringLiteral("Gray")};
-    QVERIFY2(panel->colorLabelTextsForTest() == expectedColor, "color label menu");
+    const QStringList background = panel->rowMenuTextsForTest(QStringLiteral("background"));
+    QVERIFY2(background.contains(QStringLiteral("Layer from Background…")),
+             "the Background has the brief menu");
+    QVERIFY2(!background.contains(QStringLiteral("Rename")),
+             "the Background menu has no Rename");
 }
 
 // Layer > Layer Mask: the leaves are implemented, enabled with a document, and

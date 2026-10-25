@@ -93,6 +93,7 @@ struct LayerRowNode {
     bool vectorMaskLinked = false;
     bool vectorMaskDisabled = false;
     bool hasAdjustment = false;
+    QString adjustmentKind;
     bool expandable = false;
     int childCount = 0;
     bool linked = false;
@@ -148,6 +149,7 @@ enum LayerRole {
     ClipBaseRole,
     HasMaskRole,
     HasAdjustmentRole,
+    AdjustmentKindRole,
     ExpandableRole,
     ChildCountRole,
     ThumbnailRole,
@@ -314,6 +316,8 @@ public:
             return row.hasMask;
         case HasAdjustmentRole:
             return row.hasAdjustment;
+        case AdjustmentKindRole:
+            return row.adjustmentKind;
         case ExpandableRole:
             return row.expandable;
         case ChildCountRole:

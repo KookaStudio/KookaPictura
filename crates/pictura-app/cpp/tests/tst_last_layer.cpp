@@ -1,5 +1,5 @@
 // A document keeps its last layer (#670): with one layer left, the Layers
-// panel's trash, the row menu's Delete Layer(s), and Layer > Delete > Layer are
+// panel's trash, the row menu's Delete Layer, and Layer > Delete > Layer are
 // greyed out, and a delete that slips through (the Delete key) is refused, so
 // the canvas never shows a stale image with no layers behind it.
 
@@ -60,7 +60,7 @@ void LastLayerTest::theLastLayerCannotBeDeleted()
     registry->refresh();
     QCOMPARE(view->layer_count(), 2);
     QVERIFY(panel->deleteButtonEnabledForTest());
-    QVERIFY(panel->rowMenuEnabledForPathForTest(extra, QStringLiteral("Delete Layer(s)")));
+    QVERIFY(panel->rowMenuEnabledForPathForTest(extra, QStringLiteral("Delete Layer")));
     QVERIFY(deleteCommand->isEnabled());
 
     panel->clickDeleteButtonForTest();
@@ -73,7 +73,7 @@ void LastLayerTest::theLastLayerCannotBeDeleted()
     const QString last = panel->currentPath();
     QVERIFY(!last.isEmpty());
     QVERIFY2(!panel->deleteButtonEnabledForTest(), "trash greyed out");
-    QVERIFY2(!panel->rowMenuEnabledForPathForTest(last, QStringLiteral("Delete Layer(s)")),
+    QVERIFY2(!panel->rowMenuEnabledForPathForTest(last, QStringLiteral("Delete Layer")),
              "row menu greyed out");
     QVERIFY2(!deleteCommand->isEnabled(), "Layer > Delete > Layer greyed out");
 
