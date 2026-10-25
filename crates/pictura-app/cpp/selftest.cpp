@@ -2491,8 +2491,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const QString childB = anatomyView->add_layer_in(anatomyGroup);
         const QString anatomyNested = anatomyView->add_group_in(anatomyGroup);
         const QString nestedChild = anatomyView->add_layer_in(anatomyNested);
-        // No layer target: the adjustment lands on top, pinning the projection
-        // order. The anchored-creation rule is covered by tst_layers_panel_bundle.
+        // No layer target: the adjustment lands on top; anchored creation is tested elsewhere.
         pictura::clear_layer_target(*anatomyView);
         anatomyView->add_adjustment(QStringLiteral("invert"));
         anatomyPanel->setView(anatomyView);
