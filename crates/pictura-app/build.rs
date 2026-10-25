@@ -147,6 +147,7 @@ fn main() {
                 "src/cxxqt_object.rs",
                 "src/decode_bridge.rs",
                 "src/cxxqt_object/actions_engine.rs",
+                "src/cxxqt_object/adjustment_catalogue.rs",
                 "src/cxxqt_object/adjustment_edit.rs",
                 "src/cxxqt_object/align.rs",
                 "src/cxxqt_object/annotations.rs",

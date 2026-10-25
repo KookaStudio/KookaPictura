@@ -81,18 +81,19 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
 
     auto* densityRow = new QHBoxLayout;
     densityRow->addWidget(new QLabel(QStringLiteral("Density:"), this));
+    const ParamSpec densityRange = spec(QStringLiteral("density"));
     auto* density = new QSpinBox(this);
     density->setObjectName(QStringLiteral("density"));
-    density->setRange(1, 100);
+    density->setRange(qRound(densityRange.min), qRound(densityRange.max));
     density->setSuffix(QStringLiteral(" %"));
     density->setFixedWidth(kFieldWidth);
-    density->setValue(qRound(param(QStringLiteral("density"), 25.0)));
+    density->setValue(qRound(param(QStringLiteral("density"), densityRange.defaultValue)));
     densityRow->addWidget(density);
     densityRow->addStretch(1);
     left->addLayout(densityRow);
     auto* slider = new QSlider(Qt::Horizontal, this);
     slider->setObjectName(QStringLiteral("densitySlider"));
-    slider->setRange(1, 100);
+    slider->setRange(density->minimum(), density->maximum());
     slider->setValue(density->value());
     left->addWidget(slider);
 

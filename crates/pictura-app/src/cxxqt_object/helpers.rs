@@ -21,83 +21,57 @@ pub(super) fn adjustment_layer(kind: &str, mask: Option<LayerMask>) -> Option<La
         identity_cube, GradientMapParams, GradientStop, SelectiveColorMethod, SelectiveRange,
     };
 
-    let (name, data): (&str, AdjustmentData) = match kind {
-        "invert" => ("Invert", encode_invert()),
-        "posterize" => ("Posterize", encode_posterize(4)),
-        "threshold" => ("Threshold", encode_threshold(128)),
-        "brightness-contrast" => ("Brightness/Contrast", encode_brightness_contrast(20, 0)),
-        "hue-saturation" => ("Hue/Saturation", encode_hue_saturation(30, 0, 0)),
-        "photo-filter" => (
-            "Photo Filter",
-            encode_photo_filter([255, 180, 80], 25.0, true),
+    let data: AdjustmentData = match kind {
+        "invert" => encode_invert(),
+        "posterize" => encode_posterize(4),
+        "threshold" => encode_threshold(128),
+        "brightness-contrast" => encode_brightness_contrast(20, 0),
+        "hue-saturation" => encode_hue_saturation(30, 0, 0),
+        "photo-filter" => encode_photo_filter([255, 180, 80], 25.0, true),
+        "gradient-map" => encode_gradient_map(
+            &GradientMapParams {
+                stops: vec![
+                    GradientStop {
+                        location: 0,
+                        color: [0, 0, 0],
+                    },
+                    GradientStop {
+                        location: 4096,
+                        color: [255, 255, 255],
+                    },
+                ],
+                reverse: false,
+                transparency: Vec::new(),
+            },
+            false,
         ),
-        "gradient-map" => (
-            "Gradient Map",
-            encode_gradient_map(
-                &GradientMapParams {
-                    stops: vec![
-                        GradientStop {
-                            location: 0,
-                            color: [0, 0, 0],
-                        },
-                        GradientStop {
-                            location: 4096,
-                            color: [255, 255, 255],
-                        },
-                    ],
-                    reverse: false,
-                    transparency: Vec::new(),
-                },
-                false,
-            ),
+        "color-balance" => encode_color_balance([0.0; 3], [0.0; 3], [0.0; 3], true),
+        "channel-mixer" => encode_channel_mixer(
+            false,
+            [100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0],
+            [0.0, 0.0, 100.0],
+            [0.0; 3],
         ),
-        "color-balance" => (
-            "Color Balance",
-            encode_color_balance([0.0; 3], [0.0; 3], [0.0; 3], true),
+        "selective-color" => encode_selective_color(
+            SelectiveColorMethod::Relative,
+            &[SelectiveRange::default(); 9],
         ),
-        "channel-mixer" => (
-            "Channel Mixer",
-            encode_channel_mixer(
-                false,
-                [100.0, 0.0, 0.0],
-                [0.0, 100.0, 0.0],
-                [0.0, 0.0, 100.0],
-                [0.0; 3],
-            ),
-        ),
-        "selective-color" => (
-            "Selective Color",
-            encode_selective_color(
-                SelectiveColorMethod::Relative,
-                &[SelectiveRange::default(); 9],
-            ),
-        ),
-        "color-lookup" => (
-            "Color Lookup",
-            encode_color_lookup(&identity_cube(), "Identity.CUBE"),
-        ),
-        "levels" => (
-            "Levels",
-            pictura_render::default_adjustment_block("levels", [0, 0, 0], [255, 255, 255])?,
-        ),
-        "curves" => (
-            "Curves",
-            pictura_render::default_adjustment_block("curves", [0, 0, 0], [255, 255, 255])?,
-        ),
-        "exposure" => (
-            "Exposure",
-            pictura_render::default_adjustment_block("exposure", [0, 0, 0], [255, 255, 255])?,
-        ),
-        "vibrance" => (
-            "Vibrance",
-            pictura_render::default_adjustment_block("vibrance", [0, 0, 0], [255, 255, 255])?,
-        ),
-        "black-white" => (
-            "Black & White",
-            pictura_render::default_adjustment_block("black-white", [0, 0, 0], [255, 255, 255])?,
-        ),
+        "color-lookup" => encode_color_lookup(&identity_cube(), "Identity.CUBE"),
+        "levels" => pictura_render::default_adjustment_block("levels", [0, 0, 0], [255, 255, 255])?,
+        "curves" => pictura_render::default_adjustment_block("curves", [0, 0, 0], [255, 255, 255])?,
+        "exposure" => {
+            pictura_render::default_adjustment_block("exposure", [0, 0, 0], [255, 255, 255])?
+        }
+        "vibrance" => {
+            pictura_render::default_adjustment_block("vibrance", [0, 0, 0], [255, 255, 255])?
+        }
+        "black-white" => {
+            pictura_render::default_adjustment_block("black-white", [0, 0, 0], [255, 255, 255])?
+        }
         _ => return None,
     };
+    let name = pictura_render::adjustment_entry(kind)?.title;
 
     Some(Layer {
         name: name.into(),
@@ -911,27 +885,14 @@ mod tests {
 
     #[test]
     fn adjustment_layer_covers_every_kind_and_rejects_unknown() {
-        const KINDS: [&str; 16] = [
-            "invert",
-            "posterize",
-            "threshold",
-            "brightness-contrast",
-            "levels",
-            "curves",
-            "exposure",
-            "vibrance",
-            "hue-saturation",
-            "color-balance",
-            "black-white",
-            "photo-filter",
-            "channel-mixer",
-            "selective-color",
-            "color-lookup",
-            "gradient-map",
-        ];
-        for kind in KINDS {
+        let layers = pictura_render::ADJUSTMENT_CATALOGUE
+            .iter()
+            .filter(|entry| !entry.fill && entry.layer != pictura_render::LayerEntry::None);
+        for entry in layers {
+            let kind = entry.kind;
             let layer = adjustment_layer(kind, None).unwrap_or_else(|| panic!("{kind} should map"));
             assert!(layer.adjustment.is_some(), "{kind} carries adjustment data");
+            assert_eq!(layer.name, entry.title);
         }
         assert!(adjustment_layer("bogus", None).is_none());
     }

@@ -50,6 +50,7 @@ private slots:
     void cr_identifiers_stable() { pictura::test::crIdentifiersStable(*window_); }
     void cr_rust_only() { pictura::test::crRustOnly(); }
     void cr_list_commands() { pictura::test::crListCommands(*window_); }
+    void imageAdjustmentsMenuFollowsCatalogue() { pictura::test::imageAdjustmentsFollowCatalogue(*window_); }
     void menusPanel();
     void layerMaskMenu();
     void vectorMaskMenu();

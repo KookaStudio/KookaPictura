@@ -48,6 +48,39 @@ QByteArray block(const char* kind)
     return QByteArray(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
 }
 
+// Each (field, page key) of `kind`'s dialog takes its range, default and
+// decimals from the engine layout's page for a fresh block.
+void verifyRanges(pictura::PictureView* view, const char* kind,
+                  const QList<QPair<QString, QString>>& fields)
+{
+    const QByteArray opening = block(kind);
+    const QStringList page = pictura::image_adjustment_page(::rust::Slice<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(opening.constData()), std::size_t(opening.size())));
+    const auto dialog =
+        pictura::makeAdjustmentDialog(QString::fromLatin1(kind), view, opening, QRect());
+    for (const auto& [name, key] : fields) {
+        const auto spec = pictura::AdjustmentDialog::paramSpec(page, key);
+        QVERIFY2(spec.valid, qPrintable(QStringLiteral("%1 page has %2").arg(kind, key)));
+        const QString what = QStringLiteral("%1.%2").arg(QLatin1String(kind), name);
+        if (auto* spin = dialog->findChild<QSpinBox*>(name)) {
+            QVERIFY2(spin->minimum() == qRound(spec.min) && spin->maximum() == qRound(spec.max),
+                     qPrintable(what));
+            QVERIFY2(spin->value() == qRound(spec.defaultValue), qPrintable(what));
+            QCOMPARE(spec.decimals, 0);
+        } else if (auto* real = dialog->findChild<QDoubleSpinBox*>(name)) {
+            QVERIFY2(qFuzzyCompare(real->minimum(), spec.min)
+                         && qFuzzyCompare(real->maximum(), spec.max),
+                     qPrintable(what));
+            QVERIFY2(qFuzzyCompare(1.0 + real->value(), 1.0 + spec.defaultValue),
+                     qPrintable(what));
+            QVERIFY2(real->decimals() == spec.decimals, qPrintable(what));
+        } else {
+            QFAIL(qPrintable(QStringLiteral("no field ") + what));
+        }
+    }
+    dialog->reject();
+}
+
 } // namespace
 
 class ImageAdjustmentsTest : public QObject {
@@ -75,6 +108,8 @@ private slots:
     void hdrToningPresetsPopulateControls();
     void hdrToningRefusedApplyDoesNotAccept();
     void directCommandsRespectTheSelection();
+    void genericDialogRangesMatchLayout();
+    void handLaidDialogRangesMatchLayout();
 
 private:
     // Open a 20x20 opaque image of `color` (it becomes the Background).
@@ -785,6 +820,57 @@ void ImageAdjustmentsTest::directCommandsRespectTheSelection()
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Equalize"));
     // Two greys spread to the ends of the range.
     QCOMPARE(qGray(view_->composite_argb(15, 5)), 255);
+}
+
+// The generic slider dialogs' ranges come from the engine layout (#272).
+void ImageAdjustmentsTest::genericDialogRangesMatchLayout()
+{
+    QVERIFY(openImage(QColor(100, 100, 100)));
+    const auto same = [](std::initializer_list<const char*> keys) {
+        QList<QPair<QString, QString>> out;
+        for (const char* key : keys) {
+            out.append({QLatin1String(key), QLatin1String(key)});
+        }
+        return out;
+    };
+    verifyRanges(view_, "brightness-contrast", same({"brightness", "contrast"}));
+    verifyRanges(view_, "vibrance", same({"vibrance", "saturation"}));
+    const QByteArray bc = block("brightness-contrast");
+    const QStringList page = pictura::image_adjustment_page(::rust::Slice<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(bc.constData()), std::size_t(bc.size())));
+    const auto spec = pictura::AdjustmentDialog::paramSpec(page, QStringLiteral("brightness"));
+    QCOMPARE(spec.min, -150.0);
+    QCOMPARE(spec.max, 150.0);
+}
+
+// Every non-exempt numeric control of the hand-laid dialogs takes its range,
+// default and decimals from the engine layout. Exempt: the coupled Levels
+// input points, the Curves point fields, and the Black & White tint.
+void ImageAdjustmentsTest::handLaidDialogRangesMatchLayout()
+{
+    QVERIFY(openImage(QColor(100, 100, 100)));
+    const auto same = [](std::initializer_list<const char*> keys) {
+        QList<QPair<QString, QString>> out;
+        for (const char* key : keys) {
+            out.append({QLatin1String(key), QLatin1String(key)});
+        }
+        return out;
+    };
+    verifyRanges(view_, "exposure", same({"exposure", "offset", "gamma"}));
+    verifyRanges(view_, "hue-saturation", same({"hue", "saturation", "lightness"}));
+    verifyRanges(view_, "color-balance",
+                 {{QStringLiteral("cyanRed"), QStringLiteral("midtones.cyanRed")},
+                  {QStringLiteral("magentaGreen"), QStringLiteral("midtones.magentaGreen")},
+                  {QStringLiteral("yellowBlue"), QStringLiteral("midtones.yellowBlue")}});
+    verifyRanges(view_, "black-white",
+                 same({"reds", "yellows", "greens", "cyans", "blues", "magentas"}));
+    verifyRanges(view_, "photo-filter", same({"density"}));
+    verifyRanges(view_, "channel-mixer",
+                 {{QStringLiteral("red"), QStringLiteral("0.red")},
+                  {QStringLiteral("green"), QStringLiteral("0.green")},
+                  {QStringLiteral("blue"), QStringLiteral("0.blue")},
+                  {QStringLiteral("constant"), QStringLiteral("0.constant")}});
+    verifyRanges(view_, "levels", same({"gamma", "outputBlack", "outputWhite"}));
 }
 
 QTEST_MAIN(ImageAdjustmentsTest)

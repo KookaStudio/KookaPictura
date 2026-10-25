@@ -18,19 +18,17 @@ namespace pictura {
 
 namespace {
 
+// The rows; each range and precision is the engine layout's for its key.
 struct Field {
     const char* label;
     const char* key;
-    double min;
-    double max;
-    int decimals;
     const char* eyedropper;
 };
 
 constexpr Field kFields[] = {
-    {"Exposure:", "exposure", -20.0, 20.0, 2, "Sample in image to set black point"},
-    {"Offset:", "offset", -0.5, 0.5, 4, "Sample in image to set gray point"},
-    {"Gamma Correction:", "gamma", 0.01, 9.99, 2, "Sample in image to set white point"},
+    {"Exposure:", "exposure", "Sample in image to set black point"},
+    {"Offset:", "offset", "Sample in image to set gray point"},
+    {"Gamma Correction:", "gamma", "Sample in image to set white point"},
 };
 
 struct Preset {
@@ -97,7 +95,8 @@ ExposureDialog::ExposureDialog(PictureView* view, const QByteArray& block, const
     for (int row = 0; row < int(std::size(kFields)); ++row) {
         const Field& field = kFields[row];
         const QString key = QLatin1String(field.key);
-        const double scale = std::pow(10.0, field.decimals);
+        const ParamSpec range = spec(key);
+        const double scale = std::pow(10.0, range.decimals);
         auto* label = new QLabel(QLatin1String(field.label), this);
         label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         const bool gamma = key == QLatin1String("gamma");
@@ -109,16 +108,16 @@ ExposureDialog::ExposureDialog(PictureView* view, const QByteArray& block, const
         if (gamma) {
             slider->setRange(0, kGammaSteps);
         } else {
-            slider->setRange(qRound(field.min * scale), qRound(field.max * scale));
+            slider->setRange(qRound(range.min * scale), qRound(range.max * scale));
         }
         auto* spin = new QDoubleSpinBox(this);
         spin->setObjectName(key);
-        spin->setRange(field.min, field.max);
-        spin->setDecimals(field.decimals);
+        spin->setRange(range.min, range.max);
+        spin->setDecimals(range.decimals);
         spin->setSingleStep(1.0 / scale);
         spin->setFixedWidth(kFieldWidth);
         spin->setKeyboardTracking(false);
-        spin->setValue(param(key, gamma ? 1.0 : 0.0));
+        spin->setValue(param(key, range.defaultValue));
         slider->setValue(toSlider(spin->value()));
         auto* eyedropper = new QToolButton(this);
         eyedropper->setIcon(icon(QStringLiteral("tool.eyedropper")));

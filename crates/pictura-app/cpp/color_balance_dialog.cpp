@@ -44,13 +44,13 @@ ColorBalanceDialog::ColorBalanceDialog(PictureView* view, const QByteArray& bloc
     layout->addLayout(toneRow);
     layout->addSpacing(4);
 
-    addRampRow(layout, QStringLiteral("Cyan · Red"), kKeys[0], -100, 100,
+    addRampRow(layout, QStringLiteral("Cyan · Red"), kKeys[0],
                {QColor(0, 200, 220), QColor(130, 130, 130), QColor(230, 40, 40)});
     layout->addSpacing(6);
-    addRampRow(layout, QStringLiteral("Magenta · Green"), kKeys[1], -100, 100,
+    addRampRow(layout, QStringLiteral("Magenta · Green"), kKeys[1],
                {QColor(220, 40, 200), QColor(130, 130, 130), QColor(40, 190, 60)});
     layout->addSpacing(6);
-    addRampRow(layout, QStringLiteral("Yellow · Blue"), kKeys[2], -100, 100,
+    addRampRow(layout, QStringLiteral("Yellow · Blue"), kKeys[2],
                {QColor(225, 210, 30), QColor(130, 130, 130), QColor(50, 70, 220)});
     layout->addSpacing(8);
 

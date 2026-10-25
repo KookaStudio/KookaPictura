@@ -602,7 +602,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/canvas_scrollbars.h
     crates/pictura-app/cpp/canvas_ruler.h
     crates/pictura-app/cpp/icons.h
-    crates/pictura-app/cpp/layer_adjustments.h
+    crates/pictura-app/cpp/adjustment_catalogue.cpp
+    crates/pictura-app/cpp/adjustment_catalogue.h
     crates/pictura-app/cpp/svg_icon_engine.h
     crates/pictura-app/cpp/file_drop_router.h
     crates/pictura-app/cpp/frame.h

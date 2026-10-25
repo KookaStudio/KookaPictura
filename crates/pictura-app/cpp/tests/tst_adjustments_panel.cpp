@@ -1,12 +1,16 @@
 #include <QtTest/QtTest>
 #include "api/layers_api.h"
 
+#include "adjustment_catalogue.h"
 #include "frame.h"
 #include "panels/adjustments_panel.h"
 #include "panels/layers_panel.h"
+#include "panels/panel_group.h"
 #include "panels/properties_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
+#include <QtGui/QAction>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QScrollBar>
 #include <QtWidgets/QToolButton>
@@ -29,6 +33,8 @@ private slots:
     void noDocumentDisablesGrid();
     void documentEnablesGrid();
     void narrowPanelWrapsGrid();
+    void tilesAndMenuFollowCatalogue();
+    void layersPanelAdjustmentMenuFollowsCatalogue();
 
 private:
     pictura::AdjustmentsPanel* panel() const;
@@ -259,6 +265,91 @@ void AdjustmentsPanelTest::narrowPanelWrapsGrid()
     panel()->resize(60, 400);
     QCoreApplication::processEvents();
     QVERIFY(scroll->horizontalScrollBar()->maximum() > 0);
+}
+
+// The tiles and the panel flyout's adjustment rows are the engine catalogue's
+// (#272): tile ids and icons in catalogue order, the flyout's hyphenated
+// labels, a tile click adding its kind, and Pattern inert.
+void AdjustmentsPanelTest::tilesAndMenuFollowCatalogue()
+{
+    QVERIFY(newDocument());
+    QVERIFY(panel());
+    QStringList tiles;
+    QStringList menuRows;
+    for (const pictura::AdjustmentKind& entry : pictura::adjustmentCatalogue()) {
+        if (!entry.panelIcon.isEmpty()) {
+            tiles << entry.kind;
+        }
+        if (!entry.panelMenu.isEmpty()) {
+            menuRows << entry.panelMenu;
+        }
+    }
+    QCOMPARE(panel()->buttonIdsForTest(), tiles);
+    QCOMPARE(tiles.size(), 19);
+    QCOMPARE(tiles.first(), QStringLiteral("solid-color"));
+    for (const QString& kind : tiles) {
+        QCOMPARE(panel()->buttonByIdForTest(kind)->property("iconId").toString(),
+                 QStringLiteral("adjustments.") + kind);
+    }
+    const QStringList texts = pictura::PanelGroup::menuTextsForPanel(QStringLiteral("adjustmentsPanel"));
+    QCOMPARE(texts.mid(0, menuRows.size()), menuRows);
+    QCOMPARE(texts.first(), QStringLiteral("Brightness-Contrast"));
+    QCOMPARE(texts.mid(menuRows.size()),
+             (QStringList{QStringLiteral("Add Mask by Default"), QStringLiteral("Clip to Layer")}));
+
+    pictura::PictureView* view = window_->activeView();
+    const int before = pictura::layers_api::rowCount(*view);
+    panel()->buttonByIdForTest(QStringLiteral("threshold"))->click();
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
+    panel()->buttonByIdForTest(QStringLiteral("pattern"))->click();
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
+}
+
+// The Layers panel's New Fill/Adjustment menu: the catalogue's fills, then its
+// layer adjustments with their ellipses, and an entry adds its layer.
+void AdjustmentsPanelTest::layersPanelAdjustmentMenuFollowsCatalogue()
+{
+    QVERIFY(newDocument());
+    auto* layers = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(layers);
+    auto* button = layers->findChild<QToolButton*>(QStringLiteral("layersStripFillAdjustment"));
+    QVERIFY(button && button->menu());
+    QStringList expected;
+    for (const pictura::AdjustmentKind& entry : pictura::adjustmentCatalogue()) {
+        if (entry.fill) {
+            expected << entry.title + QStringLiteral("\u2026");
+        }
+    }
+    for (const pictura::AdjustmentKind& entry : pictura::adjustmentCatalogue()) {
+        if (!entry.fill && entry.layer) {
+            expected << (entry.layerEllipsis ? entry.title + QStringLiteral("\u2026") : entry.title);
+        }
+    }
+    QStringList shown;
+    QAction* levels = nullptr;
+    QAction* pattern = nullptr;
+    for (QAction* action : button->menu()->actions()) {
+        if (action->isSeparator()) {
+            continue;
+        }
+        shown << action->text();
+        if (action->text() == QStringLiteral("Levels\u2026")) {
+            levels = action;
+        } else if (action->text() == QStringLiteral("Pattern\u2026")) {
+            pattern = action;
+        }
+    }
+    QCOMPARE(shown, expected);
+    QCOMPARE(shown.size(), 19);
+    QVERIFY(pattern && !pattern->isEnabled());
+    QVERIFY(levels != nullptr);
+    pictura::PictureView* view = window_->activeView();
+    const int before = pictura::layers_api::rowCount(*view);
+    levels->trigger();
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
 }
 
 QTEST_MAIN(AdjustmentsPanelTest)

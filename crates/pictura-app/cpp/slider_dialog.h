@@ -20,8 +20,6 @@ public:
     struct Row {
         QString label;
         QString key;
-        int min;
-        int max;
     };
 
     SliderDialog(PictureView* view, const QByteArray& block, const QRect& visible,

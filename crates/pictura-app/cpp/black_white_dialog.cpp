@@ -83,7 +83,7 @@ BlackWhiteDialog::BlackWhiteDialog(PictureView* view, const QByteArray& block,
 
     for (const Channel& channel : kChannels) {
         QSpinBox* spin =
-            addRampRow(layout, QLatin1String(channel.label), QLatin1String(channel.key), -200, 300,
+            addRampRow(layout, QLatin1String(channel.label), QLatin1String(channel.key),
                        {Qt::black, channel.color}, QStringLiteral(" %"));
         connect(spin, &QSpinBox::valueChanged, this, &BlackWhiteDialog::markCustom);
         layout->addSpacing(4);

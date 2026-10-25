@@ -1,5 +1,6 @@
 #include "adjustments_panel.h"
 
+#include "adjustment_catalogue.h"
 #include "icons.h"
 
 #include <QtCore/QSize>
@@ -12,31 +13,6 @@
 #include <QtWidgets/QWidget>
 
 namespace pictura {
-
-const AdjustmentsPanel::Entry AdjustmentsPanel::kEntries[19] = {
-    // Fill-layer types first, mirroring Layer > New Fill Layer and the Layers
-    // panel's New Fill/Adjustment menu.
-    {"solid-color", "Solid Color", "adjustments.solid-color", true},
-    {"gradient", "Gradient", "adjustments.gradient", true},
-    {"pattern", "Pattern", "adjustments.pattern", true},
-    // The sixteen adjustments in CS6 panel order, matching the panel menu rows.
-    {"brightness-contrast", "Brightness/Contrast", "adjustments.brightness-contrast", false},
-    {"levels", "Levels", "adjustments.levels", false},
-    {"curves", "Curves", "adjustments.curves", false},
-    {"exposure", "Exposure", "adjustments.exposure", false},
-    {"vibrance", "Vibrance", "adjustments.vibrance", false},
-    {"hue-saturation", "Hue/Saturation", "adjustments.hue-saturation", false},
-    {"color-balance", "Color Balance", "adjustments.color-balance", false},
-    {"black-white", "Black & White", "adjustments.black-white", false},
-    {"photo-filter", "Photo Filter", "adjustments.photo-filter", false},
-    {"channel-mixer", "Channel Mixer", "adjustments.channel-mixer", false},
-    {"color-lookup", "Color Lookup", "adjustments.color-lookup", false},
-    {"invert", "Invert", "adjustments.invert", false},
-    {"posterize", "Posterize", "adjustments.posterize", false},
-    {"threshold", "Threshold", "adjustments.threshold", false},
-    {"gradient-map", "Gradient Map", "adjustments.gradient-map", false},
-    {"selective-color", "Selective Color", "adjustments.selective-color", false},
-};
 
 AdjustmentsPanel::AdjustmentsPanel(QWidget* parent)
     : QWidget(parent)
@@ -51,9 +27,15 @@ AdjustmentsPanel::AdjustmentsPanel(QWidget* parent)
     grid->setSpacing(1);
     grid->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
 
+    // The engine catalogue's tiles: the fill types first, then the sixteen
+    // adjustments in CS6 panel order.
     constexpr int kColumns = 5;
-    for (int i = 0; i < 19; ++i) {
-        QToolButton* button = makeButton(kEntries[i]);
+    for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+        if (entry.panelIcon.isEmpty()) {
+            continue;
+        }
+        const int i = buttons_.size();
+        QToolButton* button = makeButton(entry);
         buttons_.append(button);
         grid->addWidget(button, i / kColumns, i % kColumns);
     }
@@ -64,18 +46,19 @@ AdjustmentsPanel::AdjustmentsPanel(QWidget* parent)
     outer->addWidget(scroll);
 }
 
-QToolButton* AdjustmentsPanel::makeButton(const Entry& entry)
+QToolButton* AdjustmentsPanel::makeButton(const AdjustmentKind& entry)
 {
     auto* button = new QToolButton(this);
-    button->setObjectName(QStringLiteral("adjustmentsButton_") + QString::fromLatin1(entry.id));
-    button->setIcon(pictura::icon(QString::fromLatin1(entry.iconId)));
+    button->setObjectName(QStringLiteral("adjustmentsButton_") + entry.kind);
+    button->setIcon(pictura::icon(entry.panelIcon));
+    button->setProperty("iconId", entry.panelIcon);
     button->setIconSize(QSize(24, 24));
     button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    button->setToolTip(QString::fromUtf8(entry.label));
+    button->setToolTip(entry.title);
     button->setAutoRaise(true);
     button->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     if (entry.fill) {
-        connect(button, &QToolButton::clicked, this, [this, id = QString::fromLatin1(entry.id)] {
+        connect(button, &QToolButton::clicked, this, [this, id = entry.kind] {
             if (id == QLatin1String("pattern")) {
                 return;
             }
@@ -83,7 +66,7 @@ QToolButton* AdjustmentsPanel::makeButton(const Entry& entry)
         });
     } else {
         connect(button, &QToolButton::clicked, this,
-                [this, id = QString::fromLatin1(entry.id)] { emit adjustmentRequested(id); });
+                [this, id = entry.kind] { emit adjustmentRequested(id); });
     }
     return button;
 }

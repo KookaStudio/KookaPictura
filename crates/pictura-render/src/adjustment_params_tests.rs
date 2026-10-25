@@ -253,3 +253,19 @@ fn reset_restores_every_default() {
     let note = adjustment_editor(&encode_invert()).unwrap();
     assert!(note.params.is_empty() && note.note.is_some());
 }
+
+#[test]
+fn exposure_specs_carry_the_dialog_precision() {
+    let block = crate::default_adjustment_block("exposure", [0; 3], [255; 3]).unwrap();
+    let editor = adjustment_editor(&block).unwrap();
+    let spec = |key: &str| {
+        let param = editor.params.iter().find(|p| p.key == key).unwrap();
+        match param.kind {
+            ParamKind::Slider { min, max, decimals } => (min, max, decimals),
+            _ => panic!("{key} is a slider"),
+        }
+    };
+    assert_eq!(spec("exposure"), (-20.0, 20.0, 2));
+    assert_eq!(spec("offset"), (-0.5, 0.5, 4));
+    assert_eq!(spec("gamma"), (0.01, 9.99, 2));
+}

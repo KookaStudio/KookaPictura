@@ -11,7 +11,7 @@
 #include "layers_panel_internal.h"
 
 #include "icons.h"
-#include "layer_adjustments.h"
+#include "adjustment_catalogue.h"
 #include "percent_field.h"
 #include "pictura_debug_timing.h"
 #include "session.h"
@@ -302,31 +302,45 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     addButton->setPopupMode(QToolButton::InstantPopup);
     addButton->setToolTip(tr("New Fill / Adjustment Layer"));
     auto* menu = new QMenu(addButton);
-    // CS6 fills with the current foreground colour, read when the command runs.
-    QAction* solidFill = menu->addAction(tr("Solid Color…"));
-    connect(solidFill, &QAction::triggered, this, [this] {
-        if (!view_) {
-            return;
+    // The engine catalogue's fill kinds, a separator, then its layer
+    // adjustments. Each fill keeps its own command.
+    for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+        if (!entry.fill) {
+            continue;
         }
-        const QColor fg = colors_ ? colors_->foreground() : QColor(Qt::black);
-        view_->add_solid_fill(fg.rgba());
-    });
-    QAction* gradientFill = menu->addAction(tr("Gradient…"));
-    connect(gradientFill, &QAction::triggered, this, [this] {
-        if (view_) {
-            view_->add_gradient_fill();
+        QAction* action = menu->addAction(entry.title + QStringLiteral("…"));
+        if (entry.kind == QLatin1String("solid-color")) {
+            // CS6 fills with the current foreground colour, read when the
+            // command runs.
+            connect(action, &QAction::triggered, this, [this] {
+                if (!view_) {
+                    return;
+                }
+                const QColor fg = colors_ ? colors_->foreground() : QColor(Qt::black);
+                view_->add_solid_fill(fg.rgba());
+            });
+        } else if (entry.kind == QLatin1String("gradient")) {
+            connect(action, &QAction::triggered, this, [this] {
+                if (view_) {
+                    view_->add_gradient_fill();
+                }
+            });
+        } else {
+            // ponytail: pattern authoring needs a pattern preset/library and a
+            // picker; the engine renders a PtFl layer but has no encoder or
+            // pattern source.
+            action->setEnabled(false);
+            action->setToolTip(tr("Pattern Fill — not implemented yet"));
         }
-    });
-    // ponytail: pattern authoring needs a pattern preset/library and a picker;
-    // the engine renders a PtFl layer but has no encoder or pattern source.
-    QAction* patternFill = menu->addAction(tr("Pattern…"));
-    patternFill->setEnabled(false);
-    patternFill->setToolTip(tr("Pattern Fill — not implemented yet"));
+    }
     menu->addSeparator();
-    for (const LayerAdjustment& entry : kLayerAdjustments) {
-        const QString leaf = QString::fromUtf8(entry.leaf);
-        QAction* action = menu->addAction(entry.ellipsis ? leaf + QStringLiteral("…") : leaf);
-        const QString kind = QString::fromLatin1(entry.kind);
+    for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+        if (entry.fill || !entry.layer) {
+            continue;
+        }
+        QAction* action =
+            menu->addAction(entry.layerEllipsis ? entry.title + QStringLiteral("…") : entry.title);
+        const QString kind = entry.kind;
         connect(action, &QAction::triggered, this, [this, kind] {
             if (view_) {
                 view_->add_adjustment(kind);

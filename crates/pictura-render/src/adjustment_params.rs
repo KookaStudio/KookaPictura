@@ -116,6 +116,17 @@ fn slider(key: &str, label: &str, field: Field, (min, max): (f64, f64), default:
     }
 }
 
+/// `spec` shown with `decimals` places instead of its field's default.
+fn with_decimals(spec: Spec, decimals: u8) -> Spec {
+    match spec.kind {
+        ParamKind::Slider { min, max, .. } => Spec {
+            kind: ParamKind::Slider { min, max, decimals },
+            ..spec
+        },
+        _ => spec,
+    }
+}
+
 fn check(key: &str, label: &str, field: Field, default: bool) -> Spec {
     Spec {
         key: key.into(),
@@ -200,7 +211,8 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment) -> Option<Layout> {
             "Exposure",
             vec![
                 slider("exposure", "Exposure", F32(2), (-20.0, 20.0), 0.0),
-                slider("offset", "Offset", F32(6), (-0.5, 0.5), 0.0),
+                // CS6 shows Offset to four places ("0.0000").
+                with_decimals(slider("offset", "Offset", F32(6), (-0.5, 0.5), 0.0), 4),
                 slider("gamma", "Gamma Correction", F32(10), (0.01, 9.99), 1.0),
             ],
         ),

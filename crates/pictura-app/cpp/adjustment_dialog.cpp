@@ -1,5 +1,7 @@
 #include "adjustment_dialog.h"
 
+#include <QtCore/QDebug>
+
 #include "api/document_api.h"
 #include "dialogs.h"
 #include "image_view.h"
@@ -154,6 +156,21 @@ QStringList AdjustmentDialog::page() const
     return image_adjustment_page(slice(block_));
 }
 
+AdjustmentDialog::ParamSpec AdjustmentDialog::paramSpec(const QStringList& page,
+                                                        const QString& key)
+{
+    // slider \t key \t label \t group \t value \t default \t min \t max \t decimals
+    for (const QString& row : page) {
+        const QStringList cells = row.split(QLatin1Char('\t'));
+        if (cells.size() > 8 && cells[0] == QLatin1String("slider") && cells[1] == key) {
+            return {cells[6].toDouble(), cells[7].toDouble(), cells[5].toDouble(),
+                    cells[8].toInt(), true};
+        }
+    }
+    qWarning("adjustment page has no slider %s", qPrintable(key));
+    return {};
+}
+
 double AdjustmentDialog::param(const QString& key, double fallback) const
 {
     for (const QString& row : page()) {
@@ -248,9 +265,12 @@ QVBoxLayout* AdjustmentDialog::buttonColumn(const QStringList& extra)
 }
 
 QSpinBox* AdjustmentDialog::addStackedRow(QGridLayout* grid, int row, const QString& label,
-                                          const QString& key, int min, int max, int indent,
+                                          const QString& key, int indent,
                                           const QList<QColor>& ramp, const QString& suffix)
 {
+    const ParamSpec range = spec(paramKey(key));
+    const int min = qRound(range.min);
+    const int max = qRound(range.max);
     auto* text = new QLabel(label, this);
     text->setIndent(indent);
     auto* spin = new QSpinBox(this);
@@ -275,9 +295,12 @@ QSpinBox* AdjustmentDialog::addStackedRow(QGridLayout* grid, int row, const QStr
 }
 
 QSpinBox* AdjustmentDialog::addRampRow(QVBoxLayout* layout, const QString& label,
-                                       const QString& key, int min, int max,
-                                       const QList<QColor>& ramp, const QString& suffix)
+                                       const QString& key, const QList<QColor>& ramp,
+                                       const QString& suffix)
 {
+    const ParamSpec range = spec(paramKey(key));
+    const int min = qRound(range.min);
+    const int max = qRound(range.max);
     auto* head = new QHBoxLayout;
     head->addWidget(new QLabel(label, this));
     head->addStretch(1);
@@ -440,15 +463,15 @@ std::unique_ptr<AdjustmentDialog> makeAdjustmentDialog(const QString& kind, Pict
         dialog = std::make_unique<SliderDialog>(
             view, block, visible, QStringLiteral("Brightness/Contrast"),
             QVector<SliderDialog::Row>{
-                {QStringLiteral("Brightness:"), QStringLiteral("brightness"), -150, 150},
-                {QStringLiteral("Contrast:"), QStringLiteral("contrast"), -50, 100}},
+                {QStringLiteral("Brightness:"), QStringLiteral("brightness")},
+                {QStringLiteral("Contrast:"), QStringLiteral("contrast")}},
             QStringList{QStringLiteral("Auto")}, parent);
     } else if (kind == QLatin1String("vibrance")) {
         dialog = std::make_unique<SliderDialog>(
             view, block, visible, QStringLiteral("Vibrance"),
             QVector<SliderDialog::Row>{
-                {QStringLiteral("Vibrance:"), QStringLiteral("vibrance"), -100, 100},
-                {QStringLiteral("Saturation:"), QStringLiteral("saturation"), -100, 100}},
+                {QStringLiteral("Vibrance:"), QStringLiteral("vibrance")},
+                {QStringLiteral("Saturation:"), QStringLiteral("saturation")}},
             QStringList{}, parent);
     } else if (kind == QLatin1String("exposure")) {
         dialog = std::make_unique<ExposureDialog>(view, block, visible, parent);
