@@ -364,6 +364,28 @@ impl Stroke {
         })
     }
 
+    /// Start a Mixer Brush stroke. `sampled` as for [`Stroke::begin_focus`].
+    pub fn begin_mixer(
+        doc: &Document,
+        path: &str,
+        cfg: StrokeConfig,
+        options: MixerOptions,
+        reservoir: Rgba,
+        sampled: Option<RgbaImage>,
+    ) -> Result<Stroke, PaintError> {
+        let mut stroke =
+            Stroke::begin_kind(doc, path, cfg, StrokeKind::Mixer { options, reservoir })?;
+        let rect = stroke.rect;
+        if let Some(PerDab {
+            engine: DabEngine::Mixer(mixer),
+            ..
+        }) = stroke.per_dab.as_mut()
+        {
+            mixer.sampled = sampled.map(|s| layer_local(&s, rect));
+        }
+        Ok(stroke)
+    }
+
     /// Start a Smudge stroke; `cfg.color` is the Finger Painting colour.
     /// `sampled` as for [`Stroke::begin_focus`]. 8-bit documents only.
     pub fn begin_smudge(

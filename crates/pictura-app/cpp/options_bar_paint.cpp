@@ -239,7 +239,8 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
 // CS6's Mixer Brush bar: the brush tip, the Current Brush Load swatch (Load /
 // Clean), the after-stroke Load and Clean toggles, the Wet/Load/Mix preset
 // menu, Wet, Load, Mix, Flow, and Sample All Layers.
-// ponytail: Sample All Layers and Load Solid Colors Only are not wired.
+// ponytail: Load Solid Colors Only is not wired (#540); the CC bar's icon
+// toggles, 0% field and brush angle are not modelled.
 QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
 {
     auto* page = new QWidget(stack_);
@@ -329,9 +330,12 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
     }
 
     auto* sampleAll = new QCheckBox(QStringLiteral("Sample All Layers"), page);
-    sampleAll->setToolTip(QStringLiteral("Sample All Layers: not implemented yet"));
-    sampleAll->setEnabled(false);
+    sampleAll->setObjectName(QStringLiteral("optionsMixerSampleAll"));
+    sampleAll->setToolTip(QStringLiteral("Pick up colour from all visible layers"));
+    sampleAll->setChecked(initial.sampleAllLayers);
     layout->addWidget(sampleAll);
+    connect(sampleAll, &QCheckBox::toggled, this,
+            [update](bool on) { update([on](MixerOptions& o) { o.sampleAllLayers = on; }); });
 
     // Load and Mix do nothing on a dry canvas: a dry brush neither runs out nor
     // mixes, so they grey out rather than look effective.
@@ -381,41 +385,6 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
         spins[2]->setValue(p.mix);
         followWet(p.wet);
     });
-
-    NumericField* opacity = new NumericField(
-        QStringLiteral("Opacity"),
-        numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
-                      QStringLiteral("optionsMixerOpacity")),
-        page);
-    opacity->setValue(controller_ ? paint_->opacity() : 100);
-    layout->addWidget(opacity);
-
-    auto* mode = addCombo(layout, page, QStringLiteral("Mode:"),
-                          QStringLiteral("optionsMixerMode"),
-                          {"Normal", "Dissolve", "Behind", "Clear", "Multiply"});
-    const auto syncPaint = [this, opacity, mode]() {
-        if (!controller_) {
-            return;
-        }
-        opacity->setValue(paint_->opacity());
-        const QString current = paint_->mode();
-        for (int i = 0; i < mode->count(); ++i) {
-            if (mode->itemText(i).toLower() == current) {
-                const QSignalBlocker block(mode);
-                mode->setCurrentIndex(i);
-                break;
-            }
-        }
-    };
-    if (controller_) {
-        syncPaint();
-        connect(opacity, &NumericField::valueChanged, this,
-                [this](double v) { paint_->setOpacity(qRound(v)); });
-        connect(mode, &QComboBox::currentIndexChanged, this, [this, mode](int) {
-            paint_->setMode(mode->currentText().toLower());
-        });
-        connect(controller_, &ToolController::paintSettingsChanged, this, syncPaint);
-    }
 
     if (controller_) {
         load->setIcon(reservoirIcon(mixer_->get().reservoir));

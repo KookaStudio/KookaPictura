@@ -16,7 +16,11 @@
 //! carries it.
 //!
 //! Behavioural parity only: Adobe's mixing and dry-out math is closed; the
-//! consumption and pickup rates below are photorust's.
+//! consumption and pickup rates below are photorust's, and no Photoshop CC
+//! reference exists to check them against. Known limits: the load is one flat
+//! colour (no sampled variation), the pickup is a tip-weighted mean rather
+//! than Adobe's bristle model, and the Wet/Load/Mix/Flow presets carry
+//! photorust's values.
 //!
 //! Ported from photorust's `core/src/mixer.rs`
 //! (<https://github.com/perfecto25/photorust>).
@@ -69,6 +73,10 @@ pub(crate) struct MixerBrush {
     paint: f32,
     /// A transparency lock: colour may change, coverage may not.
     preserve_alpha: bool,
+    /// Sample All Layers: the layer-local composite the pickup reads.
+    // ponytail: a snapshot taken at the press, so earlier dabs of the same
+    // stroke do not show in the pickup; Sample All Layers off reads them live.
+    pub(crate) sampled: Option<RgbaImage>,
 }
 
 impl MixerBrush {
@@ -78,6 +86,7 @@ impl MixerBrush {
             reservoir: [reservoir.r, reservoir.g, reservoir.b, reservoir.a],
             paint: options.load.clamp(0.0, 1.0),
             preserve_alpha,
+            sampled: None,
         }
     }
 
@@ -107,7 +116,7 @@ impl MixerBrush {
 
         // The pickup is the tip-weighted average under the dab, so the tool
         // blends rather than clones.
-        let pickup = average_under(img, region, tip);
+        let pickup = average_under(self.sampled.as_ref().unwrap_or(img), region, tip);
         // Dry paints the reservoir as it is; wet paint is thinned with the
         // canvas in the Mix ratio, sliding to pure canvas as the load runs out.
         let canvas_share = if wet <= 0.0 {
@@ -349,6 +358,46 @@ mod tests {
         assert!(
             carried.g > carried.r,
             "the reservoir kept its own paint: {carried:?}"
+        );
+    }
+
+    #[test]
+    fn sample_all_layers_picks_up_from_the_composite() {
+        let mut img = image(32, 32, |_, _| WHITE);
+        let blue = [20, 20, 220, 255];
+        let mut m = MixerBrush::new(opts(1.0, 1.0, 1.0), rgba(WHITE), false);
+        m.sampled = Some(image(32, 32, |_, _| blue));
+        m.dab(&mut img, &brush(), 16.0, 16.0);
+        let px = img.get(16, 16);
+        assert!(
+            px[2] > px[0] + 10,
+            "the composite was not picked up: {px:?}"
+        );
+        assert!(m.reservoir().b > m.reservoir().r, "{:?}", m.reservoir());
+
+        let mut img = image(32, 32, |_, _| WHITE);
+        let mut m = MixerBrush::new(opts(1.0, 1.0, 1.0), rgba(WHITE), false);
+        m.dab(&mut img, &brush(), 16.0, 16.0);
+        assert_eq!(img.get(16, 16), WHITE, "the layer alone stays a pure smear");
+    }
+
+    #[test]
+    fn preset_strokes_hold_their_documented_ordering() {
+        let band = |x: i32, _| if x < 20 { [20, 20, 220, 255] } else { WHITE };
+        let drag_red = |wet: f32, load: f32, mix: f32| {
+            let mut img = image(64, 32, band);
+            let mut m = MixerBrush::new(opts(wet, load, mix), rgba([220, 20, 20, 255]), false);
+            drag(&mut img, &mut m, 10..40);
+            img.get(30, 16)
+        };
+        let dry = drag_red(0.0, 0.5, 0.0);
+        let moist = drag_red(0.5, 0.5, 0.6);
+        let wet = drag_red(1.0, 1.0, 1.0);
+        assert_eq!(dry, [220, 20, 20, 255], "Dry lays the reservoir down");
+        assert!(moist[2] > dry[2], "Moist picks up no canvas: {moist:?}");
+        assert!(
+            wet[2] as u32 + 2 >= wet[0] as u32,
+            "Very Wet kept the brush's red: {wet:?}"
         );
     }
 

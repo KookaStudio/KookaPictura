@@ -165,8 +165,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       handling (#538)
 - [ ] Merged and composite History Brush sources, and Edit ▸ Fill ▸ History
       (#539)
-- [ ] Mixer Brush Sample All Layers, Load Solid Colors Only, and keyboard
-      shortcuts (#540)
+- [x] Mixer Brush Sample All Layers (#911)
+- [ ] Mixer Brush Load Solid Colors Only and keyboard shortcuts (#540)
 - [x] Type on path and area type (#683)
 - [x] Warp text (#684)
 - [x] Gamma blend and missing-font handling (#685)
