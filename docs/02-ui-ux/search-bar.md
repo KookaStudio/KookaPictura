@@ -163,7 +163,7 @@ What a new feature needs in order to be found:
 | You add… | Found automatically? | What to do |
 |---|---|---|
 | A menu command | Yes | Register it in the command registry as usual. |
-| A tool | Yes | Add its `ToolId` and its `kToolTable` row; it runs once `implemented` is true. |
+| A tool | Yes | Add its `ToolId` and its row in the engine tool catalogue (`pictura_script::tool_catalogue`); it runs once `implemented` is true. |
 | A panel | Yes, once it has a Window > Panels toggle | Add it to `panelToggles()` (its menu toggle needs that anyway). |
 | A Preferences page | No | Add the page to the list in `buildSearchIndex()`. |
 | A panel or options-bar control | No | Add a row to `searchControls()`: container and control object names, the tool whose options page holds it (or none), the breadcrumb, and extra keywords. `tst_search_bar::curatedControlsExist` fails if a row names a widget that does not exist. |
