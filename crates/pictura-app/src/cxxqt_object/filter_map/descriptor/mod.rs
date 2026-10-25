@@ -46,6 +46,7 @@ pub(crate) enum DialogKind {
     Liquify = 6,
     AdaptiveWideAngle = 7,
     VanishingPoint = 8,
+    LensCorrection = 9,
 }
 
 pub(crate) struct FilterParam {

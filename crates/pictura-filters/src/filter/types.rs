@@ -3,11 +3,11 @@ use std::sync::Arc;
 use crate::{
     AwaParams, BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap,
     DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType,
-    HalftoneType, HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting,
-    LiquifyMesh, MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
-    ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, SpinPin,
-    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, VpEdit, WaveType,
-    WindMethod, ZigZagStyle,
+    HalftoneType, HdrToningParams, IrisPin, IrisShape, LensCorrectionParams, LensType,
+    LightDirection, Lighting, LiquifyMesh, MezzotintType, NoiseDistribution, PathMotion, PolarKind,
+    Quality, RadialMethod, ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
+    SpherizeMode, SpinPin, SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin,
+    TonalFade, VpEdit, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -249,6 +249,10 @@ pub enum Filter {
     /// The Adaptive Wide Angle workspace's correction and constraints.
     AdaptiveWideAngle {
         params: AwaParams,
+    },
+    /// The Lens Correction dialog's profile and Custom settings.
+    LensCorrection {
+        params: LensCorrectionParams,
     },
     /// A Vanishing Point session's committed edit (its rendered grids).
     VanishingPoint {

@@ -1,0 +1,14 @@
+# Bundled lens profiles. See profile.rs for the format.
+#
+# A synthetic profile for a fictitious camera, so the Auto Correction path
+# runs end to end; its coefficients are invented, not measured. Real
+# profiles need provenance-clean calibration data (CONTRIBUTING.md).
+
+[profile]
+name = ACME 50mm (synthetic test profile)
+make = ACME Cameras
+model = ACME One
+lens = ACME 50mm f/1.8
+distortion = -0.08 0 0
+ca = 1.0004 1 0.9996
+vignette = -0.3 0 0

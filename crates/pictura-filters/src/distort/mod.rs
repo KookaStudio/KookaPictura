@@ -5,6 +5,7 @@
 pub mod adaptive_wide_angle;
 mod diffuse_glow;
 mod glass;
+pub mod lens_correction;
 pub mod liquify;
 mod ripples;
 pub mod vanishing_point;

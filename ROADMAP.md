@@ -296,7 +296,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       line and polygon constraints, EXIF focal-length prefill
 - [ ] Adaptive Wide Angle Auto and lens profiles, Panorama, Smart Filter
       re-edit (#891)
-- [ ] Lens Correction (#347)
+- [x] Lens Correction (#347): Remove Distortion, three fringe sliders,
+      Vignette, Vertical/Horizontal Perspective, Angle and Scale; Edge fill
+      and Auto Scale; Straighten, Remove Distortion and Move Grid tools;
+      EXIF profile search over an in-tree profile format
+- [ ] Lens Correction lens-profile database and sub-profiles (#932)
+- [ ] Lens Correction Save/Load Settings and Set Lens Default (#933)
+- [ ] Lens Correction as a Smart Filter (#934)
 - [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
       Grid Size, related planes torn off at 90° with Angle, Render Grids
 - [x] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste

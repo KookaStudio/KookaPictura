@@ -124,11 +124,7 @@ fn every_wired_filter_has_a_definition() {
             "wired filter '{id}' has no command definition"
         );
     }
-    for unwired in [
-        "filter.lens.correction",
-        "filter.extract",
-        "filter.video.de.interlace",
-    ] {
+    for unwired in ["filter.extract", "filter.video.de.interlace"] {
         assert!(
             pictura_script::command::definition(unwired).is_none(),
             "unwired filter '{unwired}' must stay unimplemented"

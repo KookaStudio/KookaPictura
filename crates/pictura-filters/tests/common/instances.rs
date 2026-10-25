@@ -246,6 +246,13 @@ pub fn all() -> Vec<Filter> {
         Filter::AdaptiveWideAngle {
             params: AwaParams::default(),
         },
+        Filter::LensCorrection {
+            params: LensCorrectionParams {
+                distortion: 30.0,
+                edge: LensEdge::Extension,
+                ..Default::default()
+            },
+        },
         Filter::VanishingPoint {
             edit: Arc::new(VpEdit::default()),
         },

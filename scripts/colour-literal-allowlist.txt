@@ -83,6 +83,9 @@ crates/pictura-app/cpp/frame.cpp  QColor(128, 128, 128)  # pending conversion (t
 crates/pictura-app/cpp/lens_flare_dialog.cpp  QColor(0x14, 0x14, 0x14)  # pending conversion (theme-family)
 crates/pictura-app/cpp/lens_flare_dialog.cpp  QColor(0x2b, 0x2b, 0x2b)  # pending conversion (theme-family)
 crates/pictura-app/cpp/lens_flare_dialog.cpp  QColor(255, 255, 255)  # pending conversion (theme-family)
+crates/pictura-app/cpp/lens_correction_canvas.cpp  QColor(0xa8, 0xa8, 0xa8)  # data: CS6 workspace ground
+crates/pictura-app/cpp/lens_correction_canvas.cpp  QColor(0xcc, 0xcc, 0xcc)  # data: transparency checkerboard
+crates/pictura-app/cpp/lens_correction_canvas.h  QColor(128, 128, 128)  # data: CS6 default grid colour
 crates/pictura-app/cpp/options_bar_shape.cpp  QColor(0x40, 0x40, 0x40)  # pending conversion (theme-family)
 crates/pictura-app/cpp/panels/layers_panel.cpp  QColor(153, 153, 153)  # pending conversion (theme-family)
 crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(0x20, 0x20, 0x20)  # pending conversion (theme-family)

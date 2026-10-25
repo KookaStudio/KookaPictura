@@ -39,6 +39,11 @@ pub use blur::SmartBlurMode;
 pub use distort::adaptive_wide_angle::{
     awa_two_to_one, AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
 };
+pub use distort::lens_correction::{
+    builtin_profiles as builtin_lens_profiles, match_profiles as match_lens_profiles,
+    parse_profiles as parse_lens_profiles, straighten_angle, LensCorrectionParams, LensEdge,
+    LensMap, LensModel, LensProfile, LensSource,
+};
 pub use distort::liquify::{
     LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool, LIQUIFY_MAX_BRUSH,
 };

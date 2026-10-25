@@ -702,6 +702,14 @@ fn moving_kernels() -> Vec<Filter> {
                 ..Default::default()
             },
         },
+        // Barrel removal samples inside the frame, so opaque stays opaque.
+        Filter::LensCorrection {
+            params: pictura_filters::LensCorrectionParams {
+                distortion: 30.0,
+                edge: pictura_filters::LensEdge::Extension,
+                ..Default::default()
+            },
+        },
         // Grid lines across the soft disc's edge.
         Filter::VanishingPoint {
             edit: std::sync::Arc::new(pictura_filters::VpEdit {

@@ -48,6 +48,7 @@ impl FilterKind {
             | FilterKind::Displace
             | FilterKind::Liquify
             | FilterKind::AdaptiveWideAngle
+            | FilterKind::LensCorrection
             | FilterKind::VanishingPoint
             | FilterKind::ZigZag
             | FilterKind::OceanRipple
@@ -190,6 +191,7 @@ impl FilterKind {
             | FilterKind::Displace
             | FilterKind::Liquify
             | FilterKind::AdaptiveWideAngle
+            | FilterKind::LensCorrection
             | FilterKind::VanishingPoint
             | FilterKind::ZigZag
             | FilterKind::OceanRipple
@@ -364,6 +366,7 @@ impl Filter {
             | Filter::Displace { .. }
             | Filter::Liquify { .. }
             | Filter::AdaptiveWideAngle { .. }
+            | Filter::LensCorrection { .. }
             | Filter::VanishingPoint { .. }
             | Filter::ZigZag { .. }
             | Filter::OceanRipple { .. }
