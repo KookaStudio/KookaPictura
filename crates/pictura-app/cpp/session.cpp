@@ -114,6 +114,8 @@ SessionState loadSession()
         obj.value(QStringLiteral("layersAddCopyOnDuplicate")).toBool(true);
     state.layersUseDefaultMasksOnFill =
         obj.value(QStringLiteral("layersUseDefaultMasksOnFill")).toBool(true);
+    state.layersAddMaskByDefault =
+        obj.value(QStringLiteral("layersAddMaskByDefault")).toBool(true);
     state.toolsColumns =
         obj.value(QStringLiteral("toolsColumns")).toInt(1) == 2 ? 2 : 1;
     state.useShiftKeyForToolSwitch =
@@ -262,6 +264,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("layersExpandNewEffects"), state.layersExpandNewEffects);
     obj.insert(QStringLiteral("layersAddCopyOnDuplicate"), state.layersAddCopyOnDuplicate);
     obj.insert(QStringLiteral("layersUseDefaultMasksOnFill"), state.layersUseDefaultMasksOnFill);
+    obj.insert(QStringLiteral("layersAddMaskByDefault"), state.layersAddMaskByDefault);
     obj.insert(QStringLiteral("toolsColumns"), state.toolsColumns);
     obj.insert(QStringLiteral("useShiftKeyForToolSwitch"), state.useShiftKeyForToolSwitch);
     obj.insert(QStringLiteral("openDocumentsAsTabs"), state.openDocumentsAsTabs);

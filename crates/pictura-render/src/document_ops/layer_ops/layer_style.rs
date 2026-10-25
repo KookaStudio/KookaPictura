@@ -409,12 +409,17 @@ pub fn layer_style_value(layer: &Layer, key: &str) -> Option<f64> {
 /// on (enabled and present) or off. False when the key is unknown, the layer
 /// cannot carry a style, or nothing changed.
 pub fn set_layer_style_value(layer: &mut Layer, key: &str, value: f64) -> bool {
-    if !value.is_finite() || !styleable(layer) {
+    if !value.is_finite() || layer.background {
         return false;
     }
     let Some((group, name)) = key.split_once('.') else {
         return false;
     };
+    // Groups carry Blending Options now; their effects wait for the group
+    // effects renderer.
+    if layer.is_group {
+        return group == "blending" && set_blending_value(layer, name, value);
+    }
     if group == "blending" {
         return set_blending_value(layer, name, value);
     }

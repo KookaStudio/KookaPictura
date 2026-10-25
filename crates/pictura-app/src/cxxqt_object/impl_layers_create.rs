@@ -19,7 +19,7 @@ use pictura_core::{BlendMode, ColorLabel};
 /// does. `None` for an unknown key.
 ///
 /// [`PictureView::set_layers_blend`]: qobject::PictureView::set_layers_blend
-fn decode_blend_key(key: &str) -> Option<BlendMode> {
+pub(super) fn decode_blend_key(key: &str) -> Option<BlendMode> {
     let bytes = key.as_bytes();
     if bytes.len() != 4 {
         return None;
@@ -27,7 +27,7 @@ fn decode_blend_key(key: &str) -> Option<BlendMode> {
     BlendMode::from_psd_key([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
-fn decode_color(value: i32) -> ColorLabel {
+pub(super) fn decode_color(value: i32) -> ColorLabel {
     if (0..=7).contains(&value) {
         ColorLabel::from_byte(value as u8)
     } else {

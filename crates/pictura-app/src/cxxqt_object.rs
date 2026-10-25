@@ -107,6 +107,7 @@ pub mod qobject {
         vector_mask_linked: bool,
         vector_mask_disabled: bool,
         has_adjustment: bool,
+        adjustment_kind: QString,
         expandable: bool,
         child_count: i32,
         linked: bool,
@@ -125,7 +126,6 @@ pub mod qobject {
         #[qobject]
         #[namespace = "pictura"]
         type PictureView = super::PictureViewRust;
-
         /// Emitted whenever the layer stack changes and the image is refreshed.
         #[qsignal]
         fn changed(self: Pin<&mut Self>);

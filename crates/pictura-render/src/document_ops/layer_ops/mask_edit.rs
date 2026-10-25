@@ -335,6 +335,38 @@ mod tests {
     }
 
     #[test]
+    fn group_mask_round_trips_through_the_adapter() {
+        use crate::document_ops::layer_ops::{add_layer_mask, LayerMaskKind};
+
+        let mut doc = masked_doc();
+        doc.layers[0].is_group = true;
+        doc.layers[0].rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        };
+        doc.layers[0].mask = None;
+        assert!(add_layer_mask(
+            &mut doc,
+            "0",
+            LayerMaskKind::RevealAll,
+            None
+        ));
+        let mut edited = mask_document(&doc, "0")
+            .expect("group mask document")
+            .document;
+        edited.layers[0]
+            .channels
+            .iter_mut()
+            .find(|c| c.id == 0)
+            .unwrap()
+            .data = vec![9u8; 16].into();
+        assert!(write_mask_back(&mut doc, "0", &edited, None));
+        assert!(coverage(&doc).iter().all(|&v| v == 9));
+    }
+
+    #[test]
     fn a_data_less_mask_materialises_from_its_default() {
         let mut doc = masked_doc();
         doc.layers[0].mask.as_mut().unwrap().data = None;

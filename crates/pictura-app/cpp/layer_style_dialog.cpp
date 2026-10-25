@@ -1,6 +1,7 @@
 #include "layer_style_dialog.h"
 
 #include "blend_modes.h"
+#include "api/layers_api.h"
 #include "color_picker_dialog.h"
 #include "image_view.h"
 #include "panels/angle_dial.h"
@@ -70,6 +71,8 @@ LayerStyleDialog::LayerStyleDialog(PictureView* view, const QString& path, const
     : QDialog(parent), view_(view), path_(path)
 {
     setObjectName(QStringLiteral("layerStyleDialog"));
+    blendingOnly_ = view_ && pictura::layers_api::rowForPath(*view_, path_).kind
+                                    == QLatin1String("group");
     setWindowTitle(tr("Layer Style"));
     resize(720, 520);
 
@@ -117,9 +120,10 @@ LayerStyleDialog::LayerStyleDialog(PictureView* view, const QString& path, const
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
 
-    const int row = qMax(0, keys_.indexOf(effect));
+    const int row = blendingOnly_ ? 0 : qMax(0, keys_.indexOf(effect));
     list_->setCurrentRow(row);
-    if (!effect.isEmpty() && value(effect + QStringLiteral(".on")) < 0.5
+    if (!effect.isEmpty() && !blendingOnly_
+        && value(effect + QStringLiteral(".on")) < 0.5
         && (list_->item(row)->flags() & Qt::ItemIsUserCheckable)) {
         list_->item(row)->setCheckState(Qt::Checked);
     }
@@ -250,9 +254,17 @@ void LayerStyleDialog::addFixedPage(const QString& title, QWidget* page)
 void LayerStyleDialog::addEffect(const QString& key, const QString& title, QWidget* page)
 {
     auto* item = new QListWidgetItem(title, list_);
-    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-    const QSignalBlocker block(list_);
-    item->setCheckState(value(key + QStringLiteral(".on")) >= 0.5 ? Qt::Checked : Qt::Unchecked);
+    if (blendingOnly_) {
+        // The compositor does not render group effects yet; keep the page
+        // visible but inert so the Blending Options dialog still opens.
+        item->setFlags(item->flags() & ~(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable));
+        item->setToolTip(tr("Group effects — not implemented yet"));
+    } else {
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        const QSignalBlocker block(list_);
+        item->setCheckState(value(key + QStringLiteral(".on")) >= 0.5 ? Qt::Checked
+                                                                     : Qt::Unchecked);
+    }
     pages_->addWidget(page);
     keys_.append(key);
 }

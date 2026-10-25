@@ -16,13 +16,16 @@
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QStringList>
+#include <QtCore/QTimer>
 #include <QtGui/QAction>
 #include <QtGui/QColor>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDragMoveEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QLineEdit>
@@ -146,6 +149,16 @@ bool triggerSolidFill(pictura::LayersPanel& panel)
     }
     for (QAction* action : button->menu()->actions()) {
         if (action->text() == QStringLiteral("Solid Color…")) {
+            // The entry creates the fill and then opens the colour picker.
+            QTimer::singleShot(0, [] {
+                for (QWidget* widget : QApplication::topLevelWidgets()) {
+                    auto* dialog = qobject_cast<QDialog*>(widget);
+                    if (dialog && dialog->isVisible()) {
+                        dialog->reject();
+                        break;
+                    }
+                }
+            });
             action->trigger();
             return true;
         }

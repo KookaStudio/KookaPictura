@@ -571,6 +571,20 @@ public:
                     painter->drawPath(arc);
                 }
                 painter->restore();
+            } else if (index.data(HasAdjustmentRole).toBool()
+                       && !index.data(AdjustmentKindRole).toString().isEmpty()
+                       && index.data(ThumbnailRole).value<QImage>().isNull()) {
+                // CS6 shows an adjustment layer as its type icon on a neutral
+                // card, not a checkerboard with no pixels under it. A fill row
+                // carries a content preview in ThumbnailRole, so it falls
+                // through to the checkerboard+image branch below.
+                painter->fillRect(shaped, palette.color(QPalette::Base));
+                const QString kind = index.data(AdjustmentKindRole).toString();
+                const QPixmap glyph =
+                    pictura::icon(QStringLiteral("adjustments.") + kind).pixmap(thumb, thumb);
+                if (!glyph.isNull()) {
+                    painter->drawPixmap(box, glyph);
+                }
             } else {
                 painter->drawTiledPixmap(shaped, checkerTile());
                 const QImage image = index.data(ThumbnailRole).value<QImage>();

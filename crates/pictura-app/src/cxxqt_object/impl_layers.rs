@@ -8,6 +8,7 @@ use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::{BlendMode, ColorLabel, Document, Layer};
 
 mod auto_select;
+mod fill_content;
 mod layer_masks;
 mod mask_commands;
 pub(in crate::cxxqt_object) use mask_commands::coverage_at;
@@ -361,6 +362,7 @@ impl qobject::PictureView {
         let thumb = if thumb_size > 0 { thumb_size as u32 } else { 0 };
         let effects = pictura_render::layer_style_effect_names();
         let link_sets = &self.rust().link_sets;
+        let mut patterns: Option<Vec<pictura_codec::PatternPixels>> = None;
         pictura_render::flatten_rows(doc)
             .into_iter()
             .map(
@@ -386,8 +388,17 @@ impl qobject::PictureView {
                             QImage::default()
                         } else if shape {
                             super::shapes::shape_thumbnail(layer, doc, thumb_size)
-                        } else if layer.is_group || layer.adjustment.is_some() {
+                        } else if layer.is_group {
                             QImage::default()
+                        } else if layer.adjustment.is_some() {
+                            if pictura_render::is_fill_content_layer(layer) {
+                                let decoded = patterns
+                                    .get_or_insert_with(|| pictura_codec::decode_patterns(doc));
+                                fill_thumbnail_image(layer, doc, thumb, entire_document, decoded)
+                                    .unwrap_or_default()
+                            } else {
+                                QImage::default()
+                            }
                         } else if entire_document {
                             layer_thumbnail_positioned(layer, doc.width, doc.height, thumb)
                                 .unwrap_or_default()
@@ -440,6 +451,7 @@ impl qobject::PictureView {
                             vector_mask_linked: pictura_render::vector_mask_linked(doc, &path),
                             vector_mask_disabled: pictura_render::vector_mask_disabled(doc, &path),
                             has_adjustment: layer.adjustment.is_some(),
+                            adjustment_kind: QString::from(adjustment_kind(layer).as_str()),
                             expandable: layer.is_group,
                             child_count: layer.children.len() as i32,
                             linked: link_sets.contains_key(&path),
@@ -474,6 +486,7 @@ impl qobject::PictureView {
                         vector_mask_linked: false,
                         vector_mask_disabled: false,
                         has_adjustment: false,
+                        adjustment_kind: QString::default(),
                         expandable: false,
                         child_count: 0,
                         linked: false,

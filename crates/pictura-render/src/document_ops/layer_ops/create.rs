@@ -278,6 +278,12 @@ pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer)
     format_segments(&[at])
 }
 
+/// Insert a prebuilt node with the tree-aware [`insert_node`] rule. Returns the
+/// new path, or empty when the insertion was refused.
+pub fn insert_layer(doc: &mut Document, selection_path: &str, node: Layer) -> String {
+    insert_node(doc, selection_path, node)
+}
+
 /// Insert a transparent raster layer for `name` (generated when empty) using
 /// the tree-aware [`insert_node`] rule, applying `spec`'s attributes. Returns
 /// the new path, or empty for a zero-dimension document.

@@ -203,7 +203,8 @@ void LayersPanel::setOptionFlagsForTest(bool addCopy, bool useDefaultMasks)
     addCopyOnDuplicate_ = addCopy;
     useDefaultMasksOnFill_ = useDefaultMasks;
     if (view_) {
-        set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_);
+        set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_,
+                                 addMaskByDefault_);
     }
     persistOptions();
 }

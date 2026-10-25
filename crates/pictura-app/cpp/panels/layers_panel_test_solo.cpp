@@ -40,6 +40,11 @@ bool LayersPanel::altClickMaskThumbnailForTest(const QString& path)
     return clickMaskThumbWithModifiersForTest(path, Qt::AltModifier);
 }
 
+bool LayersPanel::ctrlClickMaskThumbnailForTest(const QString& path)
+{
+    return clickMaskThumbWithModifiersForTest(path, Qt::ControlModifier);
+}
+
 bool LayersPanel::altShiftClickMaskThumbnailForTest(const QString& path)
 {
     return clickMaskThumbWithModifiersForTest(path, Qt::AltModifier | Qt::ShiftModifier);

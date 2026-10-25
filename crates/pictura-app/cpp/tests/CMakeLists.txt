@@ -39,8 +39,12 @@ set(PICTURA_QT_TESTS
     tst_layers_panel
     tst_layer_target
     tst_layers_panel_fixes
+    tst_layers_panel_bundle
+    tst_layers_row_menu
     tst_layers_preview_coalescing
     tst_layers_snapshot
+    tst_canvas_backdrop
+    tst_fill_layer_editor
     tst_align_distribute
     tst_options_bars_parity
     tst_transform_options

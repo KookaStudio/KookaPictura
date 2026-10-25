@@ -114,10 +114,13 @@ pub struct PictureViewRust {
     /// Layers Panel Options: name a duplicate `"<name> copy"` (CS6 "Add copy to
     /// Copied Layers and Groups", default on).
     pub(super) add_copy: bool,
-    /// Layers Panel Options: a fill/adjustment layer created with an active
-    /// selection takes that selection as a layer mask (CS6 "Use Default Masks
-    /// on Fill Layers", default on).
+    /// Layers Panel Options: a fill layer created with an active selection
+    /// takes that selection as a layer mask (CS6 "Use Default Masks on Fill
+    /// Layers", default on).
     pub(super) use_default_masks: bool,
+    /// Adjustments panel menu: a new adjustment layer receives a mask (CS6
+    /// "Add Mask by Default", default on).
+    pub(super) add_mask_by_default: bool,
     /// The Copy Shape Attributes clipboard: the last shape layer's fill and
     /// stroke, pasted onto another shape layer. Session state, never saved.
     pub(super) shape_attributes: Option<pictura_render::ShapeAttributes>,
@@ -183,6 +186,7 @@ impl Default for PictureViewRust {
             filter_error: None,
             add_copy: true,
             use_default_masks: true,
+            add_mask_by_default: true,
             shape_attributes: None,
             recovery_write: None,
             open_cancelled: false,
@@ -197,7 +201,9 @@ impl PictureViewRust {
     /// Replace the target, clearing a mask edit target that named the previous
     /// active path.
     pub(super) fn set_layer_target(&mut self, target: crate::layer_target::LayerTarget) {
-        if self.layer_target.anchor() != target.anchor() {
+        // The mask target follows its layer: keep it whenever the new anchor is
+        // that layer, even when the previous anchor was stale.
+        if self.mask_edit_target.as_deref() != target.anchor() {
             self.mask_edit_target = None;
         }
         self.layer_target = target;

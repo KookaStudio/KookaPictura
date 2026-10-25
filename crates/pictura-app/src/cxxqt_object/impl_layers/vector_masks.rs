@@ -33,6 +33,14 @@ pub mod ffi {
         /// or Current Path has no work path.
         fn vector_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bool;
 
+        /// Add a vector mask of `kind` to the layer at `path`; one
+        /// "Add Vector Mask" state. The row menu edits the clicked row.
+        fn vector_mask_add_path(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            kind: &QString,
+        ) -> bool;
+
         /// Delete the active layer's vector mask; one "Delete Vector Mask"
         /// state. False without a vector mask.
         fn vector_mask_delete(view: Pin<&mut PictureView>) -> bool;
@@ -133,6 +141,23 @@ fn vector_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bool {
     let Some(path) = active_path(&view) else {
         return false;
     };
+    let changed = view.batch_changed(&one(&path), "Add Vector Mask", |doc, paths| {
+        let mut changed = 0;
+        for &path in paths {
+            if pictura_render::add_vector_mask(doc, path, kind) {
+                changed += 1;
+            }
+        }
+        changed
+    });
+    changed > 0
+}
+
+fn vector_mask_add_path(view: Pin<&mut PictureView>, path: &QString, kind: &QString) -> bool {
+    let Some(kind) = kind_from(&kind.to_string()) else {
+        return false;
+    };
+    let path = path.to_string();
     let changed = view.batch_changed(&one(&path), "Add Vector Mask", |doc, paths| {
         let mut changed = 0;
         for &path in paths {

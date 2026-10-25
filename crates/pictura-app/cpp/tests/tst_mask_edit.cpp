@@ -17,6 +17,8 @@
 #include "toolbox.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
@@ -35,9 +37,20 @@ QImage maskMoveSeed()
 // A blue pixel layer carrying a hide-all mask with a white patch at (8, 8), so
 // the patch reveals the layer and the rest hides it. Leaves the mask target
 // active. `layer` receives the masked layer's path.
+// The fill's automatic default mask is a #895 behavior; these mask-editing
+// tests start from an unmasked layer, so remove it right after creation.
+QString addUnmaskedFill(pictura::PictureView& view)
+{
+    const QString path = view.add_solid_fill(0xff2244aau);
+    if (!path.isEmpty()) {
+        pictura::layer_mask_delete_path(view, path);
+    }
+    return path;
+}
+
 bool setUpMaskedLayer(paint_fixture::Fixture& f, QString& layer)
 {
-    layer = f.view->add_solid_fill(0xff2244aau);
+    layer = addUnmaskedFill(*f.view);
     if (layer.isEmpty() || !f.view->rasterize_fill_content(layer)) {
         return false;
     }
@@ -63,6 +76,9 @@ class MaskEditTest : public QObject {
 private slots:
     void initTestCase();
     void maskEditTarget();
+    void maskThumbnailOnNonActiveRowKeepsTarget();
+    void ctrlClickMaskLoadsSelection();
+    void invertOnMaskTarget();
     void paintAndFillWriteCoverage();
     void canvasToolsWriteCoverage();
     void healingRefusesMaskTarget();
@@ -91,6 +107,91 @@ void MaskEditTest::initTestCase()
     QVERIFY(window_ != nullptr);
 }
 
+void MaskEditTest::maskThumbnailOnNonActiveRowKeepsTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskNonActive"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString base = addUnmaskedFill(*view);
+    QVERIFY(!base.isEmpty());
+    QVERIFY(view->rasterize_fill_content(base));
+    const QString top = view->add_layer_in(QString());
+    QVERIFY(!top.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, base, QStringLiteral("reveal-all")));
+    pictura::LayersPanel* panel =
+        frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->setView(view);
+    frame.selectLayerPath(top);
+    panel->refresh();
+    QCoreApplication::processEvents();
+
+    QVERIFY(panel->clickMaskThumbnailForTest(base));
+    QCoreApplication::processEvents();
+    QCOMPARE(view->active_layer_path(), base);
+    QCOMPARE(pictura::mask_edit_target_get(*view), base);
+
+    const pictura::PaintTip tip{20, 100, 100, 0, 25, 0, 1, 0, 0, 0};
+    QVERIFY(pictura::begin_brush(*view, 0xff000000u, 0xffffffffu, tip, 100, 100,
+                                 QStringLiteral("normal"), false, false));
+    QVERIFY(view->paint_dab(8.0, 8.0, 1.0));
+    QVERIFY(view->end_paint());
+
+    // The black dab must have changed mask coverage, not the layer pixels.
+    QVERIFY(view->mask_selection(base, QStringLiteral("new")));
+    QCOMPARE(view->selection_coverage(8, 8), 0);
+    QVERIFY(view->selection_coverage(1, 1) > 0);
+    frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::ctrlClickMaskLoadsSelection()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskCtrlClick"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString path = addUnmaskedFill(*view);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    pictura::LayersPanel* panel =
+        frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->setView(view);
+    frame.selectLayerPath(path);
+    panel->refresh();
+    QCoreApplication::processEvents();
+
+    QVERIFY(panel->ctrlClickMaskThumbnailForTest(path));
+    QCoreApplication::processEvents();
+    QVERIFY2(view->selection_coverage(8, 8) > 0, "the mask loaded as a selection");
+    QCOMPARE(panel->selectedPaths().size(), 1);
+    QCOMPARE(panel->selectedPaths().first(), path);
+    frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::invertOnMaskTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskInvert"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString fill = view->add_solid_fill(0xff2244aau);
+    QVERIFY(!fill.isEmpty());
+    QVERIFY(pictura::mask_edit_target_set(*view, fill));
+    QVERIFY(pictura::filter_target_ready(*view));
+    QVERIFY(pictura::image_adjust_direct(*view, QStringLiteral("invert")));
+    QVERIFY(view->mask_selection(fill, QStringLiteral("new")));
+    QCOMPARE(view->selection_coverage(8, 8), 0);
+    frame.closeDocument(doc, false);
+}
+
 void MaskEditTest::maskEditTarget()
 {
     pictura::PicturaMainWindow& frame = *window_;
@@ -99,7 +200,7 @@ void MaskEditTest::maskEditTarget()
     pictura::PictureView* view = frame.activeView();
     QVERIFY2(created && view, "mask target fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString path = view->add_solid_fill(0xff2244aau);
+    const QString path = addUnmaskedFill(*view);
     QVERIFY(!path.isEmpty());
     QVERIFY(view->rasterize_fill_content(path));
     frame.selectLayerPath(path);
@@ -128,7 +229,7 @@ void MaskEditTest::paintAndFillWriteCoverage()
     pictura::PictureView* view = frame.activeView();
     QVERIFY2(created && view, "mask paint fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString path = view->add_solid_fill(0xff2244aau);
+    const QString path = addUnmaskedFill(*view);
     QVERIFY(!path.isEmpty());
     QVERIFY(view->rasterize_fill_content(path));
     frame.selectLayerPath(path);
@@ -191,7 +292,7 @@ void MaskEditTest::canvasToolsWriteCoverage()
     pictura::PictureView* view = frame.activeView();
     QVERIFY2(created && view, "mask tools fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString path = view->add_solid_fill(0xff2244aau);
+    const QString path = addUnmaskedFill(*view);
     QVERIFY(!path.isEmpty());
     QVERIFY(view->rasterize_fill_content(path));
     frame.selectLayerPath(path);
@@ -507,7 +608,7 @@ void MaskEditTest::maskSoloView()
     auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(created && view && panel, "mask solo fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString layer = view->add_solid_fill(0xff2244aau);
+    const QString layer = addUnmaskedFill(*view);
     QVERIFY(!layer.isEmpty());
     QVERIFY(view->rasterize_fill_content(layer));
     frame.selectLayerPath(layer);
@@ -583,7 +684,7 @@ void MaskEditTest::maskContextMenu()
     auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(created && view && panel, "mask menu fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString layer = view->add_solid_fill(0xff2244aau);
+    const QString layer = addUnmaskedFill(*view);
     QVERIFY(!layer.isEmpty());
     QVERIFY(view->rasterize_fill_content(layer));
     frame.selectLayerPath(layer);
@@ -696,7 +797,7 @@ void MaskEditTest::maskStrokePresentsWhileDragging()
     pictura::PictureView* view = frame.activeView();
     QVERIFY2(created && view, "mask drag fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString layer = view->add_solid_fill(0xff2244aau);
+    const QString layer = addUnmaskedFill(*view);
     QVERIFY(!layer.isEmpty());
     QVERIFY(view->rasterize_fill_content(layer));
     frame.selectLayerPath(layer);
@@ -738,7 +839,7 @@ QString maskedFillFixture(pictura::PicturaMainWindow& frame, const QString& name
         return {};
     }
     pictura::PictureView* view = frame.activeView();
-    const QString path = view ? view->add_solid_fill(0xff2244aau) : QString();
+    const QString path = view ? addUnmaskedFill(*view) : QString();
     if (path.isEmpty() || !view->rasterize_fill_content(path)) {
         return {};
     }
@@ -853,7 +954,7 @@ void MaskEditTest::maskSoloFollowsLayerChange()
     QVERIFY2(created && view && panel, "mask solo follow fixture");
     const int doc = frame.activeDocumentIndex();
 
-    const QString masked = view->add_solid_fill(0xff2244aau);
+    const QString masked = addUnmaskedFill(*view);
     QVERIFY(!masked.isEmpty());
     QVERIFY(view->rasterize_fill_content(masked));
     QVERIFY2(pictura::layer_mask_add_path(*view, masked, QStringLiteral("reveal-all")), "mask");
@@ -909,7 +1010,7 @@ void MaskEditTest::addLayerMaskStripInverts()
     auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(created && view && panel, "mask strip invert fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString layer = view->add_solid_fill(0xff2244aau);
+    const QString layer = addUnmaskedFill(*view);
     QVERIFY(!layer.isEmpty());
     QVERIFY(view->rasterize_fill_content(layer));
     frame.selectLayerPath(layer);

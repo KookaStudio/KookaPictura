@@ -93,7 +93,10 @@ pub use color_lookup_presets::{preset_cube, COLOR_LOOKUP_PRESETS};
 mod vector_mask;
 
 mod fill;
-pub use fill::{decode_layer_fill, decode_vector_fill, encode_gradient_fill};
+pub use fill::{
+    decode_layer_fill, decode_vector_fill, encode_gradient_fill, encode_gradient_fill_params,
+    encode_pattern_fill, gradient_rgba, pattern_preview_rgba,
+};
 
 mod svg;
 pub use svg::{encode_document_svg, svg_nodes};
@@ -156,7 +159,7 @@ pub use document_ops::{
     delete_paths_report, delete_smart_filter, delete_vector_mask, distribute_layers,
     document_bit_depth, document_color_mode, duplicate_layer, duplicate_paths, extend_background,
     flatten, flatten_rows, flip_document, group_layer, group_paths, has_forced_locks,
-    has_layer_mask, has_layer_style, has_vector_mask, indexed_exact_available,
+    has_layer_mask, has_layer_style, has_vector_mask, indexed_exact_available, insert_layer,
     insertion_is_content_neutral, invert_layer_mask, is_background, is_fill_content_layer,
     is_shape_layer, is_visible_in_panel, layer_content_bounds, layer_from_background,
     layer_live_shape, layer_mask_disabled, layer_mask_linked, layer_mask_refinement,

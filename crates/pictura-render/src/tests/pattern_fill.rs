@@ -337,3 +337,27 @@ fn scratch_dir(tag: &str) -> std::path::PathBuf {
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
+
+#[test]
+fn encode_pattern_fill_round_trips() {
+    let source = params("p1", 50.0, false, (3, 4));
+    let data = crate::encode_pattern_fill(&source);
+    assert_eq!(
+        decode_adjustment(&data),
+        Some(Adjustment::PatternFill(source))
+    );
+}
+
+#[test]
+fn encode_pattern_fill_omits_default_origin() {
+    let source = params("p1", 100.0, true, (0, 0));
+    let data = crate::encode_pattern_fill(&source);
+    let Ok(DescValue::Object { items, .. }) = pictura_codec::read_descriptor(&data.data) else {
+        panic!("PtFl descriptor");
+    };
+    assert!(!items.iter().any(|(key, _)| key.as_slice() == b"phase"));
+    assert_eq!(
+        decode_adjustment(&data),
+        Some(Adjustment::PatternFill(source))
+    );
+}

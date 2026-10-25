@@ -300,7 +300,8 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
                      rows << imp(entry.panelMenu, QStringLiteral("adjustment:") + entry.kind);
                  }
              }
-             rows << dis(QStringLiteral("Add Mask by Default"), true)
+             rows << chkAction(QStringLiteral("Add Mask by Default"),
+                                 QStringLiteral("addMaskByDefault"), true)
                   << chk(QStringLiteral("Clip to Layer"));
              return rows;
          }()},
@@ -436,6 +437,20 @@ void PanelGroup::updateHeaderMenu()
                 action->setEnabled(layers && layers->canMergeSelection());
             }
         }
+        if (panel == QStringLiteral("adjustmentsPanel")) {
+            LayersPanel* layersPanel = qobject_cast<LayersPanel*>(tabs_->currentWidget());
+            if (!layersPanel) {
+                if (QWidget* win = window()) {
+                    layersPanel =
+                        win->findChild<LayersPanel*>(QStringLiteral("layersPanel"));
+                }
+            }
+            for (QAction* action : headerMenu_->findChildren<QAction*>()) {
+                if (action->data().toString() == QStringLiteral("addMaskByDefault")) {
+                    action->setChecked(layersPanel && layersPanel->addMaskByDefault());
+                }
+            }
+        }
         if (panelMenuHooks_.contains(panel)) {
             panelMenuHooks_.value(panel)(headerMenu_);
         } else if (auto* actions = qobject_cast<ActionsPanel*>(tabs_->currentWidget())) {
@@ -481,9 +496,10 @@ void PanelGroup::runPanelMenuAction(const QString& actionId)
         paragraph->performPanelMenuAction(actionId);
         return;
     }
-    // The Adjustments panel is a placeholder with no view handle; its
-    // adjustment kinds run through the Layers panel, which owns the view.
-    if (actionId.startsWith(QStringLiteral("adjustment:"))) {
+    // The Adjustments panel is a launcher with no view handle; its adjustment
+    // kinds and mask preference run through the Layers panel, which owns the view.
+    if (actionId == QStringLiteral("addMaskByDefault")
+        || actionId.startsWith(QStringLiteral("adjustment:"))) {
         if (QWidget* win = window()) {
             if (auto* layers = win->findChild<LayersPanel*>(QStringLiteral("layersPanel"))) {
                 layers->performPanelMenuAction(actionId);

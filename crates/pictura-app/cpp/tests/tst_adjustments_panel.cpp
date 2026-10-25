@@ -1,4 +1,8 @@
 #include <QtTest/QtTest>
+
+#include <QtCore/QTimer>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QDialog>
 #include "api/layers_api.h"
 
 #include "adjustment_catalogue.h"
@@ -110,7 +114,7 @@ void AdjustmentsPanelTest::gridEntriesCarryTooltips()
     for (int i = 0; i < tips.size(); ++i) {
         QVERIFY2(!tips.at(i).isEmpty(), qPrintable(QString::number(i)));
     }
-    QVERIFY(tips.at(2).contains(QStringLiteral("not implemented yet")));
+    QVERIFY(tips.at(2).contains(QStringLiteral("No patterns are loaded")));
     QCOMPARE(tips.at(4), QStringLiteral("Levels"));
     QCOMPARE(tips.at(8), QStringLiteral("Hue/Saturation"));
 }
@@ -213,6 +217,15 @@ void AdjustmentsPanelTest::solidColorIconDispatchesFillCommand()
     pictura::PictureView* view = window_->activeView();
     QVERIFY(view);
     const int before = pictura::layers_api::rowCount(*view);
+    QTimer::singleShot(0, [] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (dialog && dialog->isVisible()) {
+                dialog->reject();
+                break;
+            }
+        }
+    });
     panel()->buttonByIdForTest(QStringLiteral("solid-color"))->click();
     QCoreApplication::processEvents();
     QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);

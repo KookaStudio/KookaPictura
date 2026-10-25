@@ -160,6 +160,8 @@ class LayersSnapshotTest : public QObject {
 private slots:
     void fixtureExpectations();
     void entireDocumentPlacement();
+    void adjustmentThumbnailKindIcon();
+    void fillThumbnailPreviews();
 };
 
 void LayersSnapshotTest::fixtureExpectations()
@@ -266,6 +268,46 @@ void LayersSnapshotTest::entireDocumentPlacement()
     QVERIFY2(rowFor(positioned, *view, fx.placed).thumbnail
             != rowFor(bounded, *view, fx.placed).thumbnail,
         "the 8x8 place is positioned in the 16x16 canvas, not bounds-filling");
+}
+
+void LayersSnapshotTest::adjustmentThumbnailKindIcon()
+{
+    std::unique_ptr<pictura::PictureView> view;
+    QString why;
+    QVERIFY2(buildFixture(view, &why), qPrintable(why));
+    const Fixture fx;
+    const Snapshot snap = pictura::layers_api::snapshot(*view, 24, false);
+    const LayerRow& adjustment = rowFor(snap, *view, fx.adjustment);
+    QCOMPARE(adjustment.adjustmentKind, QStringLiteral("invert"));
+    QVERIFY2(adjustment.thumbnail.isNull(), "the delegate paints the kind icon");
+    const LayerRow& fill = rowFor(snap, *view, fx.fill);
+    QCOMPARE(fill.adjustmentKind, QStringLiteral("solid-color"));
+    QVERIFY2(!fill.thumbnail.isNull(), "a fill row carries a content preview");
+}
+
+void LayersSnapshotTest::fillThumbnailPreviews()
+{
+    std::unique_ptr<pictura::PictureView> view;
+    QString why;
+    QVERIFY2(buildFixture(view, &why), qPrintable(why));
+    const Snapshot snap = pictura::layers_api::snapshot(*view, 24, false);
+    const LayerRow& solid = rowFor(snap, *view, Fixture().fill);
+    QVERIFY(!solid.thumbnail.isNull());
+    const QColor swatch =
+        solid.thumbnail.pixelColor(solid.thumbnail.width() / 2, solid.thumbnail.height() / 2);
+    QVERIFY2(swatch.green() > 200 && swatch.red() < 60, "the solid preview is the fill colour");
+
+    const QString gradient = view->add_gradient_fill();
+    QVERIFY(!gradient.isEmpty());
+    const Snapshot withGradient = pictura::layers_api::snapshot(*view, 24, false);
+    pictura::layers_api::LayerRow gradientRow;
+    for (const auto& row : withGradient.rows) {
+        if (row.path == gradient) {
+            gradientRow = row;
+        }
+    }
+    QCOMPARE(gradientRow.adjustmentKind, QStringLiteral("gradient"));
+    QVERIFY(!gradientRow.thumbnail.isNull());
 }
 
 QTEST_MAIN(LayersSnapshotTest)

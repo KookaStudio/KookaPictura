@@ -266,14 +266,26 @@ fn decode_stops(value: &DescValue) -> Option<Vec<GradientStop>> {
     Some(stops)
 }
 
-/// Build a standard PSD `GdFl` descriptor. `reverse` and `scale` are not
-/// written, so a decoded copy is forward at scale 100 (the psd-tools defaults);
-/// only custom-stop gradients are emitted, matching the decoder.
+/// Build a standard PSD `GdFl` descriptor with only custom stops.
 pub fn encode_gradient_fill(
     kind: GradientKind,
     stops: &[GradientStop],
     angle_deg: f32,
 ) -> AdjustmentData {
+    encode_gradient_fill_params(&GradientFillParams {
+        stops: stops.to_vec(),
+        reverse: false,
+        kind,
+        angle_deg,
+        scale: 100.0,
+    })
+}
+
+/// Build a standard PSD `GdFl` descriptor carrying every field the decoder
+/// reads. `Rvrs` and `Scl ` are written only when they differ from the decode
+/// defaults, so the default output is byte-identical to
+/// [`encode_gradient_fill`].
+pub fn encode_gradient_fill_params(params: &GradientFillParams) -> AdjustmentData {
     let grad = DescValue::Object {
         name: String::new(),
         class_id: b"Grdn".to_vec(),
@@ -295,28 +307,74 @@ pub fn encode_gradient_fill(
             ),
             (
                 b"Clrs".to_vec(),
-                DescValue::List(stops.iter().map(encode_stop).collect()),
+                DescValue::List(params.stops.iter().map(encode_stop).collect()),
             ),
         ],
     };
+    let mut items = vec![
+        (b"Angl".to_vec(), DescValue::Double(params.angle_deg as f64)),
+        (
+            b"Type".to_vec(),
+            DescValue::Enum {
+                kind: b"GrdT".to_vec(),
+                value: kind_enum(params.kind).to_vec(),
+            },
+        ),
+        (b"Grad".to_vec(), grad),
+    ];
+    if params.reverse {
+        items.push((b"Rvrs".to_vec(), DescValue::Bool(true)));
+    }
+    if params.scale != 100.0 {
+        items.push((b"Scl ".to_vec(), DescValue::Double(params.scale as f64)));
+    }
     let desc = DescValue::Object {
         name: String::new(),
         class_id: b"GdFl".to_vec(),
-        items: vec![
-            (b"Angl".to_vec(), DescValue::Double(angle_deg as f64)),
-            (
-                b"Type".to_vec(),
-                DescValue::Enum {
-                    kind: b"GrdT".to_vec(),
-                    value: kind_enum(kind).to_vec(),
-                },
-            ),
-            (b"Grad".to_vec(), grad),
-        ],
+        items,
     };
     AdjustmentData {
         key: *b"GdFl",
         data: pictura_codec::write_descriptor(&desc),
+    }
+}
+
+/// Build a standard PSD `PtFl` descriptor from `params`. The `phase` point is
+/// written only for a non-zero origin, matching the decoder's default.
+pub fn encode_pattern_fill(params: &PatternFillParams) -> AdjustmentData {
+    let ptrn = DescValue::Object {
+        name: String::new(),
+        class_id: b"Ptrn".to_vec(),
+        items: vec![(
+            b"Idnt".to_vec(),
+            DescValue::Text(format!("{}\0", params.pattern_id)),
+        )],
+    };
+    let mut items = vec![
+        (b"Ptrn".to_vec(), ptrn),
+        (b"Scl ".to_vec(), DescValue::Double(params.scale as f64)),
+        (b"Algn".to_vec(), DescValue::Bool(params.link_with_layer)),
+    ];
+    if params.origin != (0, 0) {
+        items.push((
+            b"phase".to_vec(),
+            DescValue::Object {
+                name: String::new(),
+                class_id: b"Pnt ".to_vec(),
+                items: vec![
+                    (b"Hrzn".to_vec(), DescValue::Double(params.origin.0 as f64)),
+                    (b"Vrtc".to_vec(), DescValue::Double(params.origin.1 as f64)),
+                ],
+            },
+        ));
+    }
+    AdjustmentData {
+        key: *b"PtFl",
+        data: pictura_codec::write_descriptor(&DescValue::Object {
+            name: String::new(),
+            class_id: b"PtFl".to_vec(),
+            items,
+        }),
     }
 }
 
@@ -352,7 +410,7 @@ fn encode_stop(stop: &GradientStop) -> DescValue {
 ///
 /// Mirrors psd-tools' `draw_gradient_fill` coordinate convention and the five
 /// kind geometries; alpha is always 255.
-pub(crate) fn gradient_rgba(w: i32, h: i32, params: &GradientFillParams) -> Vec<[u8; 4]> {
+pub fn gradient_rgba(w: i32, h: i32, params: &GradientFillParams) -> Vec<[u8; 4]> {
     let mut out = vec![[0u8, 0, 0, 255]; w.max(0) as usize * h.max(0) as usize];
     if w <= 0 || h <= 0 {
         return out;
@@ -568,6 +626,13 @@ impl Tile<'_> {
 /// Build the tile for `params`, resolving the pattern in the document's decoded
 /// pattern set (the placeholder when absent).
 fn tile_for<'a>(pattern: Option<&'a PatternPixels>, params: &PatternFillParams) -> Tile<'a> {
+    let pattern = pattern.filter(|pattern| {
+        if pattern.width == 0 || pattern.height == 0 {
+            return false;
+        }
+        let pixels = (pattern.width as usize).saturating_mul(pattern.height as usize);
+        pattern.rgba.len() >= pixels.saturating_mul(4)
+    });
     let Some(pattern) = pattern else {
         return Tile {
             rgba: &PATTERN_PLACEHOLDER,
@@ -681,6 +746,31 @@ pub(crate) fn pattern_tile_rgba(
             rect_top + h.max(0),
         ),
     )
+}
+
+/// A `width`x`height` preview of a pattern fill's layer rect, sampling the tile
+/// at the scaled document position. Nearest-neighbour; used by the Layers
+/// panel thumbnail so a pattern reads at any thumbnail size.
+pub fn pattern_preview_rgba(
+    patterns: &[PatternPixels],
+    params: &PatternFillParams,
+    rect: pictura_core::PsdRect,
+    width: u32,
+    height: u32,
+) -> Vec<[u8; 4]> {
+    let pattern = patterns.iter().find(|p| p.pattern_id == params.pattern_id);
+    let tile = tile_for(pattern, params);
+    let mut out = Vec::with_capacity((width as usize) * (height as usize));
+    let sx = rect.width().max(1) as f64 / width.max(1) as f64;
+    let sy = rect.height().max(1) as f64 / height.max(1) as f64;
+    for y in 0..height {
+        for x in 0..width {
+            let px = rect.left + (x as f64 * sx) as i32;
+            let py = rect.top + (y as f64 * sy) as i32;
+            out.push(tile.sample(px, py, rect.left, rect.top));
+        }
+    }
+    out
 }
 
 /// Paint a fill layer's coverage alpha into a region `(x0, y0, x1, y1)` of the

@@ -1,5 +1,6 @@
 #include "selftest_report.h"
 #include "api/layers_api.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
@@ -2490,9 +2491,9 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const QString childB = anatomyView->add_layer_in(anatomyGroup);
         const QString anatomyNested = anatomyView->add_group_in(anatomyGroup);
         const QString nestedChild = anatomyView->add_layer_in(anatomyNested);
-        anatomyView->select_all();
+        // No layer target: the adjustment lands on top; anchored creation is tested elsewhere.
+        pictura::clear_layer_target(*anatomyView);
         anatomyView->add_adjustment(QStringLiteral("invert"));
-        anatomyView->deselect();
         anatomyPanel->setView(anatomyView);
         anatomyPanel->refresh();
 

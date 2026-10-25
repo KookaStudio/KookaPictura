@@ -34,6 +34,7 @@ struct LayerRow {
     bool vectorMaskLinked = false;
     bool vectorMaskDisabled = false;
     bool hasAdjustment = false;
+    QString adjustmentKind;
     bool expandable = false;
     int childCount = 0;
     bool linked = false;

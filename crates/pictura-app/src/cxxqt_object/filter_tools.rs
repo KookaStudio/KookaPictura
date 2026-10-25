@@ -9,7 +9,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::filter_map::filter_from_kind_params;
-use super::helpers::{active_layer_visible, active_pixel_layer};
+use super::helpers::{active_layer_visible, active_mask_target, active_pixel_layer};
 use super::helpers_composite::{
     buffer_to_image, patch_buffer_region, premultiplied_display_image, selection_to_mask,
 };
@@ -436,6 +436,12 @@ fn filter_target_ready(view: Pin<&mut PictureView>) -> bool {
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
+    // A mask target routes filters and adjustments to coverage instead of the
+    // layer, so a fill/adjustment/group layer is a valid target while its mask
+    // is active.
+    if active_mask_target(rust).is_some() {
+        return true;
+    }
     let active = rust.layer_target.single();
     active_layer_visible(doc, active)
         && active_pixel_layer(doc, active).is_some_and(|layer| !layer_pixel_locked(layer))

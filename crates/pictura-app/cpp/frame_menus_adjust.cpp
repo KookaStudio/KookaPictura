@@ -8,11 +8,13 @@
 #include "adjustment_catalogue.h"
 #include "adjustment_dialog.h"
 #include "api/document_api.h"
+#include "fill_layer_editor.h"
 #include "hdr_toning_dialog.h"
 #include "match_color_dialog.h"
 #include "replace_color_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
 
 namespace pictura {
@@ -200,7 +202,13 @@ void PicturaMainWindow::wireLayerContentOptions()
     const QString id = QString::fromLatin1(command_ids::LayerContentOptions);
     registry_->setImplemented(id, true);
     registry_->setHandler(id, [this, currentAdjustmentPath]() {
-        if (currentAdjustmentPath().isEmpty()) {
+        const QString path = currentAdjustmentPath();
+        if (path.isEmpty()) {
+            return;
+        }
+        PictureView* view = activeView();
+        if (view && layer_is_editable_fill(*view, path)) {
+            openFillLayerEditor(*view, path, this);
             return;
         }
         if (panelColumn_) {

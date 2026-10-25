@@ -1,0 +1,154 @@
+// The CS6 type-only rows of the Layers row menu: orientation, anti-aliasing,
+// point/paragraph conversion, and Warp Text.
+
+#include "layers_panel.h"
+
+#include "api/type_api.h"
+#include "warp_text_dialog.h"
+
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
+
+#include <QtCore/QPointer>
+
+#include <memory>
+#include <QtGui/QAction>
+#include <QtGui/QActionGroup>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QMessageBox>
+
+namespace pictura {
+
+namespace {
+
+void addUnimplemented(QMenu& menu, const QString& text)
+{
+    QAction* action = menu.addAction(text);
+    action->setEnabled(false);
+    action->setToolTip(QObject::tr("%1 — not implemented yet").arg(text));
+}
+
+QString warpRefusalText(type_api::WarpRefusal refusal)
+{
+    const QString lead
+        = QObject::tr("Could not complete the Warp Text command because the type ");
+    switch (refusal) {
+    case type_api::WarpRefusal::OnPath:
+        return lead + QObject::tr("is on a path.");
+    case type_api::WarpRefusal::FauxBold:
+        return lead + QObject::tr("layer uses a faux bold style.");
+    case type_api::WarpRefusal::NoOutlines:
+        return lead + QObject::tr("layer uses a font that has no outline data.");
+    default:
+        return lead + QObject::tr("layer cannot be warped.");
+    }
+}
+
+} // namespace
+
+void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
+{
+    if (!view_ || path.isEmpty()) {
+        return;
+    }
+    const type_api::LayerType type = type_api::readLayer(*view_, path);
+    if (!type.isType) {
+        return;
+    }
+    if (emitted) {
+        menu.addSeparator();
+    }
+    emitted = true;
+
+    addUnimplemented(menu, tr("Create Work Path"));
+    addUnimplemented(menu, tr("Convert to Shape"));
+    menu.addSeparator();
+
+    const auto update = [this, path](const std::function<void(type_api::TypeSpec&)>& edit) {
+        type_api::TypeSpec spec = type_api::readLayer(*view_, path).spec;
+        edit(spec);
+        if (type_api::updateLayer(*view_, path, spec)) {
+            refresh();
+        }
+    };
+    const auto orientation = [update](bool vertical) {
+        update([vertical](type_api::TypeSpec& spec) { spec.setting.vertical = vertical; });
+    };
+    auto* orientationGroup = new QActionGroup(&menu);
+    orientationGroup->setExclusive(true);
+    QAction* horizontal = menu.addAction(tr("Horizontal"));
+    horizontal->setCheckable(true);
+    horizontal->setChecked(!type.spec.setting.vertical);
+    orientationGroup->addAction(horizontal);
+    connect(horizontal, &QAction::triggered, this, [orientation] { orientation(false); });
+    QAction* vertical = menu.addAction(tr("Vertical"));
+    vertical->setCheckable(true);
+    vertical->setChecked(type.spec.setting.vertical);
+    orientationGroup->addAction(vertical);
+    connect(vertical, &QAction::triggered, this, [orientation] { orientation(true); });
+
+    menu.addSeparator();
+    auto* antiAliasGroup = new QActionGroup(&menu);
+    antiAliasGroup->setExclusive(true);
+    const QStringList antiAliasNames{tr("None"), tr("Sharp"), tr("Crisp"), tr("Strong"),
+                                     tr("Smooth")};
+    const int antiAlias = type.spec.character.anti_alias;
+    for (int i = 0; i < int(antiAliasNames.size()); ++i) {
+        QAction* action = menu.addAction(antiAliasNames.at(i));
+        action->setCheckable(true);
+        action->setChecked(antiAlias == i);
+        antiAliasGroup->addAction(action);
+        connect(action, &QAction::triggered, this, [update, i] {
+            update([i](type_api::TypeSpec& spec) { spec.character.anti_alias = i; });
+        });
+    }
+    addUnimplemented(menu, tr("Windows LCD"));
+    addUnimplemented(menu, tr("Windows"));
+
+    menu.addSeparator();
+    const bool paragraph = type_api::isParagraph(*view_, path);
+    QAction* convert = menu.addAction(paragraph ? tr("Convert to Point Text")
+                                                : tr("Convert to Paragraph Text"));
+    connect(convert, &QAction::triggered, this, [this, path, paragraph] {
+        if (type_api::convert(*view_, path, !paragraph)) {
+            refresh();
+        }
+    });
+    QAction* warp = menu.addAction(tr("Warp Text…"));
+    connect(warp, &QAction::triggered, this, [this, path] {
+        if (!view_) {
+            return;
+        }
+        const type_api::WarpRefusal refusal = type_api::warpRefusal(*view_, path);
+        if (refusal != type_api::WarpRefusal::None) {
+            auto* box = new QMessageBox(QMessageBox::Warning, tr("Warp Text"),
+                                        warpRefusalText(refusal), QMessageBox::Ok, this);
+            box->setObjectName(QStringLiteral("warpTextRefusal"));
+            box->setAttribute(Qt::WA_DeleteOnClose);
+            box->open();
+            return;
+        }
+        auto* dialog = new WarpTextDialog(type_api::layerWarp(*view_, path), this);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        // The dialog's connections own the session; an unfinished session
+        // cancels when the dialog is destroyed.
+        const auto session = std::make_shared<type_api::WarpSession>(*view_, path);
+        connect(dialog, &WarpTextDialog::changed, dialog, [this, dialog, session] {
+            if (session->preview(dialog->setting())) {
+                refresh();
+            }
+        });
+        connect(dialog, &QDialog::accepted, dialog, [this, dialog, session] {
+            if (session->commit(dialog->setting())) {
+                refresh();
+            }
+        });
+        connect(dialog, &QDialog::rejected, dialog, [this, session] {
+            if (session->cancel()) {
+                refresh();
+            }
+        });
+        dialog->open();
+    });
+}
+
+} // namespace pictura

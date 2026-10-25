@@ -3,6 +3,8 @@
 #include "adjustment_catalogue.h"
 #include "icons.h"
 
+#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
+
 #include <QtCore/QSize>
 #include <QtCore/QStringList>
 #include <QtWidgets/QFrame>
@@ -58,12 +60,8 @@ QToolButton* AdjustmentsPanel::makeButton(const AdjustmentKind& entry)
     button->setAutoRaise(true);
     button->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     if (entry.fill) {
-        connect(button, &QToolButton::clicked, this, [this, id = entry.kind] {
-            if (id == QLatin1String("pattern")) {
-                return;
-            }
-            emit fillRequested(id);
-        });
+        connect(button, &QToolButton::clicked, this,
+                [this, id = entry.kind] { emit fillRequested(id); });
     } else {
         connect(button, &QToolButton::clicked, this,
                 [this, id = entry.kind] { emit adjustmentRequested(id); });
@@ -78,8 +76,10 @@ void AdjustmentsPanel::setView(PictureView* view)
         button->setEnabled(enabled);
     }
     if (QToolButton* pattern = buttonByIdForTest(QStringLiteral("pattern"))) {
-        pattern->setEnabled(false);
-        pattern->setToolTip(QStringLiteral("Pattern — not implemented yet"));
+        const bool hasPatterns = view && layer_has_patterns(*view);
+        pattern->setEnabled(hasPatterns);
+        pattern->setToolTip(hasPatterns ? QStringLiteral("Pattern")
+                                        : QStringLiteral("No patterns are loaded"));
     }
 }
 

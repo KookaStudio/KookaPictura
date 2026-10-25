@@ -164,6 +164,25 @@ pub(super) fn selection_to_mask(selection: &Selection, doc: &Document) -> LayerM
         ..Default::default()
     }
 }
+/// The mask a new fill or adjustment layer receives when the matching default
+/// is enabled: the active selection when there is one, else a white
+/// document-sized reveal-all mask.
+pub(super) fn default_layer_mask(doc: &Document, selection: Option<LayerMask>) -> LayerMask {
+    selection.unwrap_or_else(|| LayerMask {
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        },
+        default_color: 255,
+        disabled: false,
+        flags: 1,
+        data: Some(vec![255u8; doc.width as usize * doc.height as usize].into()),
+        ..Default::default()
+    })
+}
+
 /// A document-sized selection plane cropped to `rect` in mask-local coordinates
 /// (row-major over the rectangle); pixels outside the document are unselected.
 pub(super) fn crop_selection(data: &[u8], doc_w: u32, doc_h: u32, rect: PsdRect) -> Vec<u8> {
@@ -568,6 +587,61 @@ pub(super) fn layer_thumbnail_positioned(
     }
     Some(rgba_image(rgba, tw as i32, th as i32))
 }
+/// A fill layer's content preview at the document's thumbnail aspect: a flat
+/// swatch for a solid fill, a scaled ramp for a gradient, or a scaled pattern
+/// tile. `None` for an adjustment or an undecodable block.
+pub(super) fn fill_thumbnail_image(
+    layer: &Layer,
+    doc: &Document,
+    size: u32,
+    entire_document: bool,
+    patterns: &[pictura_codec::PatternPixels],
+) -> Option<QImage> {
+    if size == 0 || doc.width == 0 || doc.height == 0 {
+        return None;
+    }
+    let adjustment = pictura_render::decode_layer_fill(layer)?;
+    let rect = if layer.rect.width() > 0 && layer.rect.height() > 0 {
+        layer.rect
+    } else {
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        }
+    };
+    let (aspect_width, aspect_height) = if entire_document {
+        (doc.width, doc.height)
+    } else {
+        (rect.width().max(1) as u32, rect.height().max(1) as u32)
+    };
+    let (tw, th) = aspect_thumbnail_extent(aspect_width, aspect_height, size);
+    let rgba: Vec<u8> = match adjustment {
+        pictura_render::Adjustment::SolidFill([r, g, b, a]) => {
+            let mut out = Vec::with_capacity((tw * th * 4) as usize);
+            for _ in 0..(tw * th) {
+                out.extend_from_slice(&[r, g, b, a]);
+            }
+            out
+        }
+        pictura_render::Adjustment::GradientFill(params) => {
+            pictura_render::gradient_rgba(tw as i32, th as i32, &params)
+                .into_iter()
+                .flatten()
+                .collect()
+        }
+        pictura_render::Adjustment::PatternFill(params) => {
+            pictura_render::pattern_preview_rgba(patterns, &params, rect, tw, th)
+                .into_iter()
+                .flatten()
+                .collect()
+        }
+        _ => return None,
+    };
+    Some(rgba_image(rgba, tw as i32, th as i32))
+}
+
 /// Downsample a layer mask's grayscale data into a `size`-bounded square (long
 /// edge `size`, aspect kept), replicating the value across RGB. Null without
 /// mask data.
@@ -999,5 +1073,24 @@ mod tests {
             right: 5,
         };
         assert_eq!(crop_selection(&data, 3, 3, rect), vec![8, 0, 0, 0, 0, 0]);
+    }
+}
+
+#[cfg(test)]
+mod bundle_tests {
+    use super::*;
+
+    #[test]
+    fn white_default_mask_has_a_thumbnail() {
+        let doc = Document::new(
+            16,
+            16,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        let mask = default_layer_mask(&doc, None);
+        assert_eq!(mask.rect.width(), 16);
+        assert_eq!(mask.data.as_ref().map(|d| d.len()), Some(256));
+        assert!(mask_thumbnail_image(&mask, 24).is_some());
     }
 }

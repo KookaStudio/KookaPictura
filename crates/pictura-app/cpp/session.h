@@ -30,7 +30,8 @@ struct SessionState {
     int layersThumbContents = 0;     // 0 Entire Document / 1 Layer Bounds
     bool layersExpandNewEffects = true;
     bool layersAddCopyOnDuplicate = true;   // name a duplicate "<name> copy"
-    bool layersUseDefaultMasksOnFill = true;  // fill/adjustment takes selection mask
+    bool layersUseDefaultMasksOnFill = true;  // fill layer takes selection mask
+    bool layersAddMaskByDefault = true;       // new adjustment gets a mask
     int toolsColumns = 1;            // 1 or 2; out-of-range loads the default
     bool useShiftKeyForToolSwitch = true;
     // Interface: Open Documents As Tabs, and Enable Floating Document Window

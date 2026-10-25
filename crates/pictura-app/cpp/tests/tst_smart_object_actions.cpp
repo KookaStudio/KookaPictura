@@ -302,12 +302,16 @@ void SmartObjectActionsTest::backgroundRowConvertsToSmartObject()
     registry->refresh();
     QVERIFY(registry->action(id(pictura::command_ids::LayerSmartObjectConvertTo))->isEnabled());
 
-    // A group row does not offer the command.
+    // A group row shows the command disabled, because the engine refuses a
+    // group conversion.
     const QString group = view->add_group_in(QString());
     panel->refresh();
-    QVERIFY2(!panel->rowMenuTextsForPathForTest(group)
+    QVERIFY2(panel->rowMenuTextsForPathForTest(group)
                   .contains(QStringLiteral("Convert to Smart Object")),
-             "a group row omits Convert to Smart Object");
+             "a group row shows Convert to Smart Object");
+    QVERIFY2(!panel->rowMenuEnabledForPathForTest(group,
+                                                  QStringLiteral("Convert to Smart Object")),
+             "a group row disables Convert to Smart Object");
 
     panel->selectPaths({path}, path);
     registry->refresh();

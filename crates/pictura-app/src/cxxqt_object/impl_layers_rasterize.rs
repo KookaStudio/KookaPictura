@@ -5,7 +5,7 @@
 //! successful command recomposites then records exactly one undo state; a
 //! refusal records nothing.
 
-use super::helpers_composite::selection_to_mask;
+use super::helpers_composite::{default_layer_mask, selection_to_mask};
 use super::qobject;
 use crate::cxxqt_object::document_session::DocumentSession;
 use crate::cxxqt_object::edit::Edit;
@@ -13,10 +13,10 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 
-/// CS6 "Use Default Masks on Fill Layers": when enabled and a selection is
-/// active, the just-created fill layer at `path` takes that selection as a
-/// layer mask. A no-op when the option is off, there is no selection, or the
-/// path did not resolve.
+/// CS6 "Use Default Masks on Fill Layers": when enabled, the just-created fill
+/// layer at `path` takes the active selection as a layer mask, or a white
+/// document-sized mask when there is no selection. A no-op when the option is
+/// off or the path did not resolve.
 fn apply_default_mask(
     doc: &mut pictura_core::Document,
     path: &str,
@@ -26,10 +26,10 @@ fn apply_default_mask(
     if !use_default_masks || path.is_empty() {
         return;
     }
-    let Some(selection) = selection else {
-        return;
-    };
-    let mask = selection_to_mask(selection, doc);
+    let mask = default_layer_mask(
+        doc,
+        selection.map(|selection| selection_to_mask(selection, doc)),
+    );
     if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
         layer.mask = Some(mask);
     }
@@ -47,17 +47,19 @@ impl qobject::PictureView {
             (rgba >> 24) as u8,
         ];
         let use_mask = self.rust().use_default_masks;
+        let anchor = self.rust().layer_target.anchor().unwrap_or("").to_string();
         let mut created = String::new();
         self.as_mut().edit("Color Fill", |rust| {
             let DocumentSession { doc, selection, .. } = &mut rust.session;
             let Some(doc) = doc.as_mut() else {
                 return Edit::None;
             };
-            created = pictura_render::add_solid_fill(doc, "", color);
+            created = pictura_render::add_solid_fill(doc, &anchor, color);
             apply_default_mask(doc, &created, selection.as_ref(), use_mask);
             if created.is_empty() {
                 return Edit::None;
             }
+            rust.select_only_layer(&created);
             Edit::Structural
         });
         QString::from(created.as_str())
@@ -68,17 +70,19 @@ impl qobject::PictureView {
     /// path, or empty without a document.
     pub fn add_gradient_fill(mut self: Pin<&mut Self>) -> QString {
         let use_mask = self.rust().use_default_masks;
+        let anchor = self.rust().layer_target.anchor().unwrap_or("").to_string();
         let mut created = String::new();
         self.as_mut().edit("Gradient Fill", |rust| {
             let DocumentSession { doc, selection, .. } = &mut rust.session;
             let Some(doc) = doc.as_mut() else {
                 return Edit::None;
             };
-            created = pictura_render::add_gradient_fill(doc, "");
+            created = pictura_render::add_gradient_fill(doc, &anchor);
             apply_default_mask(doc, &created, selection.as_ref(), use_mask);
             if created.is_empty() {
                 return Edit::None;
             }
+            rust.select_only_layer(&created);
             Edit::Structural
         });
         QString::from(created.as_str())

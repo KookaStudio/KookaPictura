@@ -103,6 +103,8 @@ private:
     QString path_;
     QStringList keys_;
     QListWidget* list_ = nullptr;
+    // Groups expose Blending Options only until group effects render.
+    bool blendingOnly_ = false;
     QStackedWidget* pages_ = nullptr;
     bool dirty_ = false;
     // A canvas drag in progress: the press point and the shadow's offset then.

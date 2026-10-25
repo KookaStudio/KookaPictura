@@ -199,7 +199,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "layer.smartFilters.clear", path: &["Layer", "Smart Filter", "Clear Smart Filters"], label: "Clear Smart Filters", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "layer.new.fill.solidColor", path: &["Layer", "New Fill Layer", "Solid Color…"], label: "Solid Color…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "layer.new.fill.gradient", path: &["Layer", "New Fill Layer", "Gradient…"], label: "Gradient…", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "layer.new.fill.layer.pattern", path: &["Layer", "New Fill Layer", "Pattern…"], label: "Pattern…", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "layer.new.fill.layer.pattern", path: &["Layer", "New Fill Layer", "Pattern…"], label: "Pattern…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "layer.new.adjustment.layer.brightnesscontrast", path: &["Layer", "New Adjustment Layer", "Brightness/Contrast"], label: "Brightness/Contrast", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "layer.new.adjustment.layer.levels", path: &["Layer", "New Adjustment Layer", "Levels"], label: "Levels", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "layer.new.adjustment.layer.curves", path: &["Layer", "New Adjustment Layer", "Curves"], label: "Curves", shortcut: "", implemented: false, checkable: false },

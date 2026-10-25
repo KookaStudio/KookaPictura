@@ -23,8 +23,9 @@ read as `enab` and `present` both true and SHALL write both; the read-only
 `<effect>.exists` SHALL report whether the effect object is present. Every
 authored effect SHALL decode through the shipped `lfx2` decoder with the values
 written. A write SHALL return false, changing nothing, for an unknown key, an
-unchanged value, a non-finite value, a group, the Background, or (from the layer-only setter)
-a Pattern Overlay that does not yet exist. An `lfx2` left with no effect object SHALL be
+unchanged value, a non-finite value, the Background, or (from the layer-only setter)
+a Pattern Overlay that does not yet exist. A group accepts the `blending.*` keys;
+its effect fields remain refused until the compositor renders group effects. An `lfx2` left with no effect object SHALL be
 removed.
 
 #### Scenario: An absent effect reads its defaults
@@ -125,3 +126,14 @@ record the pattern decoder reads back and keep every other global block.
 
 - **WHEN** two RGB patterns are added to a document with another global block, and one is added again
 - **THEN** the decoder returns both with their pixels, the other block is unchanged, the repeat is refused, and a PSD save and reopen keeps them
+
+### Requirement: Group Blending Options writes
+
+`set_layer_style_value(layer, key, value)` SHALL accept the `blending.*` keys for
+a group and update the layer record. It SHALL continue to refuse effect keys on a
+group until the compositor renders group effects.
+
+#### Scenario: A group's opacity is written
+
+- **WHEN** `blending.opacity` is set to 50 on a group
+- **THEN** the group's opacity is 128 and `dropShadow.on` remains refused

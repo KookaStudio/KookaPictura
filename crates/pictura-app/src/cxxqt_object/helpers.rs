@@ -97,6 +97,44 @@ pub(super) fn adjustment_layer(kind: &str, mask: Option<LayerMask>) -> Option<La
         ..Default::default()
     })
 }
+/// The adjustments-panel kind key for `layer`'s decoded adjustment block, or
+/// empty when it has none. Fill blocks map to the three fill kinds.
+pub(super) fn adjustment_kind(layer: &Layer) -> String {
+    use pictura_render::Adjustment;
+    match layer
+        .adjustment
+        .as_ref()
+        .and_then(pictura_render::decode_adjustment)
+    {
+        Some(Adjustment::Levels(_)) => "levels",
+        Some(Adjustment::Curves(_)) => "curves",
+        Some(Adjustment::BrightnessContrast(_)) => "brightness-contrast",
+        Some(Adjustment::Exposure(_)) => "exposure",
+        Some(Adjustment::HueSaturation(_)) => "hue-saturation",
+        Some(Adjustment::BlackWhite(_)) => "black-white",
+        Some(Adjustment::PhotoFilter(_)) => "photo-filter",
+        Some(Adjustment::ChannelMixer(_)) => "channel-mixer",
+        Some(Adjustment::Vibrance(_)) => "vibrance",
+        Some(Adjustment::ShadowsHighlights(_)) => "shadows-highlights",
+        Some(Adjustment::ColorBalance(_)) => "color-balance",
+        Some(Adjustment::SelectiveColor(_)) => "selective-color",
+        Some(Adjustment::Auto(_)) => "auto",
+        Some(Adjustment::Invert) => "invert",
+        Some(Adjustment::Posterize(_)) => "posterize",
+        Some(Adjustment::Threshold(_)) => "threshold",
+        Some(Adjustment::Desaturate) => "desaturate",
+        Some(Adjustment::Equalize) => "equalize",
+        Some(Adjustment::GradientMap(_)) => "gradient-map",
+        Some(Adjustment::GradientFill(_)) => "gradient",
+        Some(Adjustment::SolidFill(_)) => "solid-color",
+        Some(Adjustment::PatternFill(_)) => "pattern",
+        Some(Adjustment::ColorLookup(_)) => "color-lookup",
+        Some(Adjustment::ReplaceColor(_)) => "replace-color",
+        Some(Adjustment::MatchColor(_)) => "match-color",
+        None => "",
+    }
+    .to_string()
+}
 /// Delegates to the shared M36 Background heuristic in `pictura-render`, so the
 /// panel core and the bridge agree on one definition.
 pub(super) fn is_background_layer(doc: &Document, i: i32) -> bool {

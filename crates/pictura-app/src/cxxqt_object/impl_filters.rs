@@ -18,19 +18,27 @@ impl qobject::PictureView {
         if self.rust().modal_transform_blocks_edit() {
             return false;
         }
-        let mask = {
+        let (anchor, use_mask, mask) = {
             let rust = self.rust();
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            if !rust.use_default_masks {
-                None
+            let mask = if rust.add_mask_by_default {
+                Some(default_layer_mask(
+                    doc,
+                    rust.session
+                        .selection
+                        .as_ref()
+                        .map(|selection| selection_to_mask(selection, doc)),
+                ))
             } else {
-                rust.session
-                    .selection
-                    .as_ref()
-                    .map(|selection| selection_to_mask(selection, doc))
-            }
+                None
+            };
+            (
+                rust.layer_target.anchor().unwrap_or("").to_string(),
+                rust.add_mask_by_default,
+                mask,
+            )
         };
         let Some(layer) = adjustment_layer(&kind.to_string(), mask) else {
             return false;
@@ -39,13 +47,8 @@ impl qobject::PictureView {
         let mut created = String::new();
         let pushed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
-                let index = doc.layers.len();
-                if doc.layers.push(layer).is_ok() {
-                    created = index.to_string();
-                    true
-                } else {
-                    false
-                }
+                created = pictura_render::insert_layer(doc, &anchor, layer);
+                !created.is_empty()
             }
             None => false,
         };
@@ -55,12 +58,30 @@ impl qobject::PictureView {
             let outcome = match region {
                 Some(rect) => Edit::Regions {
                     rects: vec![rect],
-                    notify: false,
+                    // Creation adds a row, so the panel must refresh even when
+                    // the recomposite is limited to the new mask's region.
+                    notify: true,
                 },
                 None => Edit::Full,
             };
             self.as_mut().edit("Adjustment", |rust| {
+                // Inserting below the top shifts every later path, so the
+                // path-keyed link sets no longer name the same layers.
+                rust.link_sets.clear();
                 rust.select_only_layer(&created);
+                if use_mask {
+                    // The created mask becomes the edit target, as CS6 selects
+                    // its thumbnail; mask solo stays off.
+                    let has_mask = rust
+                        .session
+                        .doc
+                        .as_ref()
+                        .and_then(|doc| pictura_render::resolve_path(doc, &created))
+                        .is_some_and(|layer| layer.mask.is_some());
+                    if has_mask {
+                        rust.mask_edit_target = Some(created.clone());
+                    }
+                }
                 // A recomposite is not a structural edit, so clear the solo
                 // snapshot explicitly.
                 rust.solo_snapshot = None;
@@ -118,7 +139,9 @@ impl qobject::PictureView {
             let outcome = match region {
                 Some(rect) => Edit::Regions {
                     rects: vec![rect],
-                    notify: false,
+                    // Creation adds a row, so the panel must refresh even when
+                    // the recomposite is limited to the new mask's region.
+                    notify: true,
                 },
                 None => Edit::Full,
             };

@@ -34,6 +34,7 @@ private slots:
     void dialogOpensOnItsEffectAndCancelDropsTheEdits();
     void okRecordsOneState();
     void menuCommands();
+    void groupBlendingOptions();
     void patternOverlayPicksABuiltInPattern();
     void distanceSliderIsExponential();
     void canvasDragMovesTheShadow();
@@ -142,6 +143,25 @@ void LayerStyleTest::okRecordsOneState()
     pictura::LayerStyleDialog idle(view_, QStringLiteral("1"), QString());
     idle.accept();
     QCOMPARE(view_->history_count(), states + 1);
+}
+
+void LayerStyleTest::groupBlendingOptions()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("GroupStyle"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    const QString group = view_->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    QVERIFY(pictura::layer_style_can_edit(*view_, group));
+    QVERIFY(pictura::layer_style_set(*view_, group, QStringLiteral("blending.opacity"), 50.0));
+    QCOMPARE(pictura::layer_style_value(*view_, group, QStringLiteral("blending.opacity")), 50.0);
+    QVERIFY2(!pictura::layer_style_set(*view_, group, QStringLiteral("dropShadow.on"), 1.0),
+             "group effects wait for the group-effects renderer");
+    pictura::LayerStyleDialog dialog(view_, group, QString());
+    QCOMPARE(dialog.currentPage(), 0);
+    QVERIFY(!(dialog.effectList()->item(1)->flags() & Qt::ItemIsEnabled));
 }
 
 void LayerStyleTest::menuCommands()

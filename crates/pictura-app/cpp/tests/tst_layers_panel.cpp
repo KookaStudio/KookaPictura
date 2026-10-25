@@ -996,8 +996,8 @@ void LayersPanelTest::fillAdjustmentMenu()
         }
     }
     QVERIFY(pattern != nullptr);
-    QVERIFY2(!pattern->isEnabled(), "Pattern stays disabled until authoring exists");
-    QVERIFY(pattern->toolTip().contains(QStringLiteral("not implemented yet")));
+    QVERIFY2(!pattern->isEnabled(), "Pattern stays disabled without document patterns");
+    QVERIFY(pattern->toolTip().contains(QStringLiteral("No patterns are loaded")));
 
     const int before = pictura::layers_api::rowCount(*view_);
     QAction* levels = nullptr;
@@ -1125,7 +1125,8 @@ void LayersPanelTest::renameTabNavigation()
     QVERIFY(delegate->eventFilter(editor0, &backtab0));
     QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QVERIFY2(!panel_->inlineEditorOpenForTest(), "no wrap at the first visible row");
+    QTRY_VERIFY2_WITH_TIMEOUT(!panel_->inlineEditorOpenForTest(),
+                              "no wrap at the first visible row", 1000);
     QCOMPARE(view_->history_count(), firstBase);
 
     // Tab commits the edit and opens the next visible row's editor.

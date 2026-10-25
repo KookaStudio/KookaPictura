@@ -381,9 +381,6 @@ public:
     // the gesture ends.
     void setCropStraightenLine(const QLineF& line);
     void clearCropStraightenLine();
-    // The canvas backdrop: when `opaque` (a Background layer exists) the area
-    // beyond the content shows `color` instead of the transparency checkerboard.
-    void setCanvasBackdrop(const QColor& color, bool opaque);
     // The axis-aligned canvas rect (image space) the preview shows: the image
     // rect when straight, else the bounding box of the rotated canvas.
     QRectF cropCanvasImageRect() const;
@@ -741,8 +738,6 @@ private:
     // `source` with only the visible channel, as greyscale, cached by `key`.
     const QImage& channelImage(const QImage& source, qint64 key);
     QColor canvasColor_{Theme::workspaceColor()};
-    QColor canvasBackdrop_{Qt::white};
-    bool canvasBackdropOpaque_ = false;
     double zoom_ = 1.0;
     QPointF offset_;
     double rotation_ = 0.0;

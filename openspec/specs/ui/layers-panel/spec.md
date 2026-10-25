@@ -131,10 +131,13 @@ composite. A new group SHALL be an empty group with a Normal blend. New
 Layer/New Group SHALL insert directly above the selected layer, or, when the
 selected row is a group, as that group's topmost child; with no selection they
 SHALL insert at the top of the stack, and the new row SHALL become selected.
-Duplicating SHALL deep-copy each selected layer — children, mask, adjustment
-data, and all attributes included — directly above itself, naming the copy
-`"<name> copy"`, except that the copy of the Background SHALL be an ordinary
-layer: not the Background, unlocked, and with an opaque alpha channel. Deleting SHALL remove every selected, eligible layer. Move
+The same insertion rule SHALL apply to an adjustment or fill layer created from
+the Layers panel, the Adjustments panel, or a `Layer` menu, and the created
+node SHALL become selected. Duplicating SHALL deep-copy each selected layer —
+children, mask, adjustment data, and all attributes included — directly above
+itself, naming the copy `"<name> copy"`, except that the copy of the Background
+SHALL be an ordinary layer: not the Background, unlocked, and with an opaque
+alpha channel. Deleting SHALL remove every selected, eligible layer. Move
 Layer Up/Down SHALL swap the selected layer with its neighbour within its own
 container and MUST refuse a move that would place the layer below the
 Background. Each applied operation SHALL mark the document modified and be one
@@ -181,6 +184,16 @@ undoable step.
 
 - **WHEN** the Background is duplicated
 - **THEN** `Background copy` sits above it as an unlocked pixel layer with no lock badge, and the original stays the Background
+
+#### Scenario: An adjustment inserts above the active layer [lpo_anchor_adjustment]
+
+- **WHEN** a layer in the middle of a group is selected and an adjustment layer is created
+- **THEN** the adjustment is inserted immediately above that layer inside the same group, becomes selected, and is one undo state
+
+#### Scenario: A fill inserts above the active layer [lpo_anchor_fill]
+
+- **WHEN** a layer in the middle of the stack is selected and a Solid Color or Gradient fill layer is created
+- **THEN** the fill is inserted immediately above that layer in the same container, becomes selected, and is one undo state
 
 ### Requirement: Layers panel docking and toggle
 The system SHALL host the Layers panel in a registered dock with a stable
@@ -478,10 +491,12 @@ layer's content at its document position scaled into a document-sized thumbnail.
 `Expand New Effects` SHALL have no visible effect until effect rows exist. When
 `Add "copy"` is enabled, a duplicated layer or group SHALL be named
 `"<name> copy"`; when disabled, the copy SHALL keep the original's name. When
-`Use Default Masks` is enabled and a selection is active, a fill or adjustment
-layer created from the panel or the `Layer > New Fill/Adjustment Layer` menu SHALL
-receive that selection as a layer mask; when disabled, the new layer SHALL have
-no mask.
+`Use Default Masks on Fill Layers` is enabled, a fill layer created from the
+panel or a `Layer` menu SHALL receive the active selection as a layer mask when
+one exists, and otherwise a white document-sized layer mask; when disabled, the
+new fill layer SHALL have no mask. The `Add Mask by Default` preference itself
+belongs to the Adjustments panel capability and SHALL NOT be controlled by
+`Panel Options`.
 
 #### Scenario: Defaults on a fresh install [m39_options]
 
@@ -510,13 +525,18 @@ no mask.
 
 #### Scenario: A fill layer takes the selection as a default mask [lpo_default_mask]
 
-- **WHEN** `Use Default Masks` is enabled, a selection is active, and a fill or adjustment layer is created
-- **THEN** the created layer carries a layer mask derived from the selection
+- **WHEN** `Use Default Masks` is enabled, a selection is active, and a fill layer is created
+- **THEN** the created fill layer carries a layer mask derived from the selection
+
+#### Scenario: A fill layer without a selection gets a white mask [lpo_default_mask_white]
+
+- **WHEN** `Use Default Masks` is enabled, no selection is active, and a fill layer is created
+- **THEN** the created fill layer carries a white document-sized layer mask
 
 #### Scenario: A fill layer created without the option has no mask [lpo_default_mask_off]
 
-- **WHEN** `Use Default Masks` is disabled, a selection is active, and a fill or adjustment layer is created
-- **THEN** the created layer has no layer mask
+- **WHEN** `Use Default Masks` is disabled, a selection is active, and a fill layer is created
+- **THEN** the created fill layer has no layer mask
 
 ### Requirement: Panel and row menus
 
@@ -526,18 +546,45 @@ Layer(s), Group Layers, Ungroup Layers, Move Layer Up, and Move Layer Down;
 commands the system does not yet implement SHALL appear disabled with a
 `— not implemented yet` tooltip rather than being hidden.
 
-The row context menu SHALL be assembled **per layer kind**. Each kind (pixel,
-background, group, adjustment, type, shape, smart object) SHALL be offered the
-commands that apply to it, and SHALL NOT be offered commands that do not apply
-(for example, a group or adjustment row SHALL NOT offer `Export As…` or `Quick
-Export as PNG`, and a group row SHALL NOT offer `Fill`-related content). Every
-applicable command that is not yet implemented SHALL still appear, rendered
-disabled, carrying a `— not implemented yet` tooltip, so that implementing a
-command enables an existing row rather than adding one. The commands common to
-every kind SHALL include Rename and a color-label submenu containing `None`,
-`Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Violet`, and `Gray`.
+The row context menu SHALL be assembled **per layer kind** and SHALL emit one
+separator between adjacent non-empty command blocks, in this order:
 
-A shape row SHALL, in addition to the common commands, offer **Copy Shape
+1. Blending Options… (style-capable rows) and Edit Adjustment… (adjustment
+   rows).
+2. Duplicate Layer(s), Delete Layer(s), Group from Layers…, New Layer, New
+   Group, Ungroup Layers, Move Layer Up, and Move Layer Down.
+3. Quick Export as PNG, then Export As… (every non-Background kind).
+4. Artboard/Frame placeholders, then Convert to Smart Object (pixel, Background, and
+   type rows enabled; group and adjustment rows disabled).
+5. Rasterize Type, Rasterize Shape, Rasterize Layer, and Rasterize Layer Style
+   (applicable kinds; the style row is not yet implemented and is disabled).
+6. Add/Delete/Enable/Disable Layer Mask, Add/Delete/Enable/Disable Vector Mask,
+   and Create/Release Clipping Mask.
+7. Link Layers (or Unlink Layers when the row is linked) and Select Linked
+   Layers.
+8. Copy Layer Style, Paste Layer Style, and Clear Layer Style.
+9. Copy Shape Attributes and Paste Shape Attributes.
+10. Release from Isolation, only while isolation is active, near the bottom of
+    the menu.
+11. Merge Down (or Merge Layers for a multi-selection), Merge Visible, Merge
+    Clipping Mask, and Flatten Image.
+12. The Color Label submenu.
+
+Each kind (pixel, background, group, adjustment, type, shape, smart object)
+SHALL be offered the commands that apply to it, and SHALL NOT be offered
+commands that do not apply. Every applicable command that is not yet implemented
+SHALL still appear, rendered disabled, carrying a `— not implemented yet`
+tooltip, so that implementing a command enables an existing row rather than
+adding one. The commands common to every kind except the Background SHALL
+include Rename and a color-label submenu containing `None`, `Red`, `Orange`,
+`Yellow`, `Green`, `Blue`, `Violet`, and `Gray`.
+
+The **Background row SHALL use a brief dedicated menu**: `Layer from
+Background…`, `Duplicate Layer…`, `Delete Layer` (disabled), `Quick Export as
+PNG`, `Export As…`, and `Convert to Smart Object`. It SHALL NOT offer Rename,
+Blending Options…, the color-label submenu, merge/flatten, or any other row.
+
+A shape row SHALL, in addition to its kind's commands, offer **Copy Shape
 Attributes**, **Paste Shape Attributes**, and **Rasterize Shape**, each wired to
 the shape bridge and acting on that row. A shape row SHALL be resolved by its
 shape-layer projection (a fill cut to a vector mask), not by its adjustment
@@ -561,12 +608,30 @@ Contents SHALL be enabled only for a smart object with a non-empty payload. A
 non-smart row SHALL NOT offer the smart-object-only rows. Each applied action
 SHALL be one undoable step.
 
-For a pixel row the menu SHALL offer **Add Layer Mask**, **Delete Layer Mask**,
-**Enable Layer Mask**, and **Disable Layer Mask**, each wired to the layer-mask
-bridge: Add Layer Mask SHALL add a `reveal-selection` mask when a selection
-exists and a `reveal-all` mask otherwise; Delete Layer Mask SHALL remove the
-mask; and Enable/Disable Layer Mask SHALL set the mask's enabled state. Each
-applied action SHALL be one undoable step.
+For a pixel, group, or adjustment/fill row the menu SHALL offer **Add Layer Mask**,
+**Delete Layer Mask**, **Enable Layer Mask**, and **Disable Layer Mask**, each
+wired to the layer-mask bridge: Add Layer Mask SHALL add a `reveal-selection`
+mask when a selection exists and a `reveal-all` mask otherwise; Delete Layer
+Mask SHALL remove the mask; and Enable/Disable Layer Mask SHALL set the mask's
+enabled state. A pixel, group, or adjustment/fill row SHALL also offer **Add Vector Mask**, **Delete
+Vector Mask**, **Enable Vector Mask**, and **Disable Vector Mask**, each wired
+to the vector-mask bridge and gated by vector-mask presence. A pixel or
+adjustment/fill row SHALL offer **Create Clipping Mask** when the row can clip,
+and **Release Clipping Mask** when it is clipped. Each applied action SHALL be one undoable step.
+
+A pixel, group, or adjustment/fill row SHALL offer **Merge Down** when a single row is targeted,
+**Merge Layers** when several rows are targeted, **Merge Visible**, **Merge
+Clipping Mask**, and **Flatten Image**, wired to their merge bridges; Merge
+Down/Merge Layers SHALL be enabled only where the selection can merge. A pixel
+row SHALL offer **Link Layers** when it is not linked and **Unlink Layers** when
+it is, plus **Select Linked Layers**. **Group from Layers…** SHALL open the
+Group from Layers dialog for the row's selection. A row with a layer style
+SHALL offer the style rows. **Rasterize Type** SHALL rasterize a type row,
+**Rasterize Shape** a shape row, and **Rasterize Layer** a smart-object or
+fill-content row; a plain pixel row and a group SHALL hide the rasterize rows.
+**Rasterize Layer Style** SHALL appear disabled with the `— not implemented
+yet` tooltip on a styled row. Right-clicking an unselected row SHALL select it
+before a row command runs, so every row action acts on the clicked row.
 
 Right-clicking the visibility toggle SHALL offer show/hide this layer only and
 show/hide all. The bottom action strip SHALL remain exactly the CS6 seven
@@ -598,17 +663,17 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 #### Scenario: Pixel and smart-object rows offer export
 
 - **WHEN** the user opens the row menu for a pixel layer or a smart-object layer
-- **THEN** it contains Export As… and Quick Export as PNG
+- **THEN** it contains Export As… and Quick Export as PNG, with Quick Export first
 
-#### Scenario: Group and adjustment rows hide export
+#### Scenario: Group and adjustment rows offer export
 
 - **WHEN** the user opens the row menu for a group or an adjustment layer
-- **THEN** it does not offer Export As… or Quick Export as PNG
+- **THEN** it offers Quick Export as PNG and Export As…
 
-#### Scenario: Type rows hide export
+#### Scenario: Type rows offer export
 
 - **WHEN** the user opens the row menu for a type layer
-- **THEN** it does not offer Export As… or Quick Export as PNG
+- **THEN** it offers Quick Export as PNG and Export As…
 
 #### Scenario: A shape row offers its shape commands
 
@@ -675,7 +740,7 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 
 - **WHEN** the user opens the row menu for a group row
 - **THEN** it does not offer `Export As…`, `Quick Export as PNG`, or fill
-  commands, and it offers `Ungroup Layers`
+  commands, it offers `Ungroup Layers`, and it offers the layer-mask rows
 
 #### Scenario: A type row offers rasterize
 
@@ -688,6 +753,51 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
   kind but is not yet implemented
 - **THEN** the command is present, disabled, and shows the `— not implemented
   yet` tooltip
+
+#### Scenario: The row blocks appear in CS6 order [lpr_row_blocks]
+
+- **WHEN** the row menu is opened for a pixel layer with an editable style, a mask, and a selection that can merge
+- **THEN** Blending Options, the layer operations, Quick Export/Export As, Convert to Smart Object, Rasterize, the mask and clipping rows, link rows, style rows, merge rows, and the color label appear in that order, with one separator between each non-empty block
+
+#### Scenario: The Background row menu is brief [lpr_background_brief]
+
+- **WHEN** the user opens the row menu for the Background layer
+- **THEN** it contains only Layer from Background…, Duplicate Layer…, Delete Layer (disabled), Quick Export as PNG, Export As…, and Convert to Smart Object, and it does not contain Rename, Blending Options…, a color label, merge, or flatten
+
+#### Scenario: A group row offers the mask and merge rows [lpr_group_rows]
+
+- **WHEN** the user opens the row menu for a group
+- **THEN** it offers Add/Delete/Enable/Disable Layer Mask, the four vector-mask rows, Quick Export/Export As, Link/Unlink Layers, Select Linked Layers, Merge Layers/Merge Visible/Merge Clipping Mask, and Flatten Image, and it does not offer fill rows
+
+#### Scenario: A pixel row offers clipping and vector-mask rows [lpr_pixel_mask_rows]
+
+- **WHEN** the user opens the row menu for a pixel layer that can clip
+- **THEN** it offers Create Clipping Mask and the four vector-mask rows, and a clipped row offers Release Clipping Mask instead of Create Clipping Mask
+
+#### Scenario: The row menu links and selects linked layers [lpr_link_rows]
+
+- **WHEN** the user opens the row menu for an unlinked pixel row
+- **THEN** it offers Link Layers and Select Linked Layers; once linked, the row offers Unlink Layers
+
+#### Scenario: The row menu offers the merge family [lpr_merge_rows]
+
+- **WHEN** the user opens the row menu for a single pixel row above another layer
+- **THEN** it offers Merge Down, Merge Visible, Merge Clipping Mask, and Flatten Image, and a multi-selection offers Merge Layers instead of Merge Down
+
+#### Scenario: The row menu rasterizes by kind [lpr_rasterize_rows]
+
+- **WHEN** the user opens the row menu for a type layer, a shape layer, a fill layer, a smart object, and a plain pixel layer
+- **THEN** the first four offer Rasterize Type, Rasterize Shape, Rasterize Layer, and Rasterize Layer respectively, the plain pixel row hides the rasterize rows, and a styled row also offers the disabled Rasterize Layer Style
+
+#### Scenario: Release from Isolation sits near the bottom [lpr_isolation_row]
+
+- **WHEN** isolation is active and the row menu is opened
+- **THEN** Release from Isolation appears after the style and shape blocks and before the merge block
+
+#### Scenario: A row action acts on the clicked row [lpr_row_action_target]
+
+- **WHEN** the user right-clicks an unselected row and picks a row action
+- **THEN** the panel selects that row first and the action applies to it
 
 ### Requirement: Layer row tooltips
 
@@ -1441,11 +1551,14 @@ linked and disabled states through roles populated from the bridge.
 ### Requirement: Fill / Adjustment creation menu
 
 The Layers panel's New Fill / Adjustment strip button SHALL open a menu whose
-Fill group offers Solid Color… and Gradient…, a Pattern… entry that is present
-but disabled with the `— not implemented yet` tooltip until pattern authoring
-exists, and whose Adjustment group lists all sixteen CS6 adjustment kinds.
-Choosing an adjustment kind SHALL create that adjustment layer through the
-bridge. The Fill and Adjustment groups SHALL be separated as in CS6.
+Fill group offers Solid Color…, Gradient…, and Pattern…. Solid Color and
+Gradient SHALL create the matching fill layer through the bridge. Pattern SHALL
+be enabled when the open document contains at least one pattern resource and
+SHALL be disabled with a "No patterns are loaded" reason when it contains none.
+The Adjustment group SHALL list all sixteen CS6 adjustment kinds. Choosing an
+adjustment kind SHALL create that adjustment layer through the bridge. The Fill
+and Adjustment groups SHALL be separated as in CS6. The `Layer > New Fill Layer`
+submenu SHALL offer the same three fill types with the same Pattern gating.
 
 #### Scenario: The menu lists every adjustment kind
 
@@ -1454,19 +1567,35 @@ bridge. The Fill and Adjustment groups SHALL be separated as in CS6.
 
 #### Scenario: Pattern stays disabled until authoring exists
 
-- **WHEN** the New Fill / Adjustment menu is opened before pattern authoring exists
-- **THEN** the Pattern… entry is present, disabled, and carries the `— not implemented yet` tooltip
+- **WHEN** the New Fill / Adjustment menu is opened on a document with no pattern resources
+- **THEN** the Pattern… entry is present, disabled, and carries a no-patterns reason
+
+#### Scenario: Pattern follows the document's pattern resources [lpr_pattern_entry]
+
+- **WHEN** the menu is opened on a document with patterns and on one without
+- **THEN** Pattern… is enabled on the first and disabled with the no-patterns reason on the second
+
+#### Scenario: The Layer menu offers the fill types [lpr_layer_fill_menu]
+
+- **WHEN** the `Layer > New Fill Layer` submenu is built
+- **THEN** it offers Solid Color…, Gradient…, and Pattern… with the same enablement as the panel menu
 
 ### Requirement: Layer Content Options opens the fill / adjustment editor
 
 `Layer > Layer Content Options…` SHALL be enabled only when the current layer is
-a fill or adjustment layer. Invoking it SHALL show the Properties panel and
-refresh it so it reflects that layer. For any other current layer the command
-SHALL be disabled and invoking it SHALL do nothing.
+a fill or adjustment layer. Invoking it on a fill layer SHALL open that fill
+type's editor; invoking it on an adjustment layer SHALL show the Properties
+panel and refresh it so it reflects that layer. For any other current layer the
+command SHALL be disabled and invoking it SHALL do nothing.
+
+#### Scenario: The command opens the fill editor
+
+- **WHEN** a Solid Color, Gradient, or Pattern fill layer is current and the command is invoked
+- **THEN** the matching fill editor opens on that layer
 
 #### Scenario: The command opens Properties for an adjustment layer
 
-- **WHEN** an adjustment or fill layer is current and `Layer Content Options…` is invoked
+- **WHEN** an adjustment layer is current and `Layer Content Options…` is invoked
 - **THEN** the Properties panel is shown and reflects that layer
 
 #### Scenario: The command is disabled for other layers
@@ -1570,16 +1699,21 @@ filter-mask decoding lands.
 ### Requirement: Layer style panel integration
 
 The Layers panel SHALL be the surface that reaches the layer-style feature. A
-row double-click outside the name and the eye/mask controls SHALL open the Layer
-Style dialog on Blending Options for that layer when the layer can carry a style
-(`layer_style_can_edit`), and SHALL do nothing otherwise. The row context menu
-SHALL offer **Blending Options…**, **Copy Layer Style**, **Paste Layer Style**,
-and **Clear Layer Style** as implemented commands: Blending Options SHALL appear
-for pixel, background, group, and type rows and SHALL be enabled only where the
-layer can carry a style; Copy and Clear SHALL be enabled when the row's layer
-carries a style; Paste SHALL be enabled when the app-wide style clipboard is
-non-empty. Choosing a command SHALL act on the row's layer through the
-layer-style bridge and SHALL record through the bridge's own history.
+row double-click outside the name, the eye/mask controls, and a fill or
+adjustment layer's content thumbnail SHALL open the Layer Style dialog on
+Blending Options for that layer when the layer can carry a style
+(`layer_style_can_edit`), and SHALL do nothing otherwise. A double-click on an
+adjustment layer's content thumbnail SHALL show the Properties panel; a
+double-click on a fill layer's content thumbnail SHALL open its fill editor. The
+row context menu SHALL offer **Blending Options…**, **Copy Layer Style**,
+**Paste Layer Style**, and **Clear Layer Style** as implemented commands:
+Blending Options SHALL appear for pixel, group, and type rows and SHALL be
+enabled only where the layer can carry a style; Copy and Clear SHALL be enabled
+when the row's layer carries a style; Paste SHALL be enabled when the app-wide
+style clipboard is non-empty. Choosing a command SHALL act on the row's layer
+through the layer-style bridge and SHALL record through the bridge's own
+history. The Background's brief row menu SHALL NOT offer Blending Options or the
+style clipboard rows.
 
 An `Alt`-click on a styled-or-adjustment row's right-edge `fx` region SHALL
 toggle every layer's effects through `layer_style_set_all_visible`, showing
@@ -1636,6 +1770,16 @@ their ancestors), and a row whose layer does not carry it SHALL be filtered out.
 - **WHEN** the filter's Effect dimension is selected
 - **THEN** its choices are the ten effect keys from the layer-style effect list
 
+#### Scenario: An adjustment content thumbnail opens Properties [lpr_adjustment_thumb_opens]
+
+- **WHEN** the user double-clicks an adjustment layer's content thumbnail
+- **THEN** the Properties panel is shown on that adjustment and no Layer Style dialog opens
+
+#### Scenario: A fill content thumbnail opens the fill editor [lpr_fill_thumb_opens]
+
+- **WHEN** the user double-clicks a fill layer's content thumbnail
+- **THEN** the matching fill editor opens and no Layer Style dialog opens
+
 ### Requirement: Layers panel row cursors
 
 The Layers panel SHALL show a pointing-hand cursor while the pointer hovers a
@@ -1676,7 +1820,11 @@ so it reads vertically between the side-by-side thumbnails, in both the linked
 and unlinked states. A row's active edit target SHALL be marked with brackets
 around that thumbnail, and clicking a thumbnail SHALL make it the active target;
 Alt+clicking a thumbnail SHALL also activate it in the composite. A group row
-SHALL NOT draw brackets around its icon.
+SHALL NOT draw brackets around its icon. An **adjustment row's image thumbnail
+SHALL be a neutral card bearing the icon for its decoded adjustment kind**, with
+no checkerboard; a **fill row's image thumbnail SHALL show its content preview**
+(a flat solid swatch, a gradient ramp, or a scaled pattern tile) in the same
+letterboxed geometry as a pixel thumbnail.
 
 #### Scenario: Mask thumbnail adjacency [uip_layers_mask_adjacency]
 
@@ -1693,6 +1841,16 @@ SHALL NOT draw brackets around its icon.
 - **WHEN** a masked or vector-masked row is shown, linked or unlinked
 - **THEN** its chain glyph is drawn two pixels larger than the slot and rotated
   a quarter turn, so its ink is taller than it is wide
+
+#### Scenario: An adjustment row shows its kind icon [lpr_thumb_adjustment_icon]
+
+- **WHEN** an Invert, Levels, or other adjustment layer is shown
+- **THEN** its thumbnail is a neutral card with that adjustment kind's icon and no checkerboard
+
+#### Scenario: A fill row shows its content preview [lpr_thumb_fill_preview]
+
+- **WHEN** a Solid Color, Gradient, or Pattern fill layer is shown
+- **THEN** its thumbnail shows the fill's solid colour, gradient ramp, or scaled pattern tile instead of a generic checkerboard
 
 ### Requirement: Layers panel folder rows
 
@@ -2282,3 +2440,61 @@ active, and the panel SHALL show that selection.
 - **WHEN** the document has no layer in its target
 - **THEN** `Layer ▸ Duplicate Layer…` is disabled and running it leaves the rows
   and history unchanged
+
+### Requirement: CS6 row-menu follow-ups for type, fill, and group rows
+
+The Layers row context menu SHALL expose the CS6 commands for the row's kind and
+SHALL render unimplemented applicable commands disabled with a
+`— not implemented yet` tooltip.
+
+Type rows SHALL add Horizontal and Vertical orientation, None/Sharp/Crisp/Strong/Smooth
+anti-aliasing, Convert to Point Text or Convert to Paragraph Text, and Warp
+Text…, all wired to the type bridge and acting on the clicked row. They SHALL
+also offer Create Work Path and Convert to Shape disabled, Windows LCD and
+Windows anti-aliasing disabled, and Copy CSS/Copy SVG, Artboard from Layers…,
+Frame from Layers…, and Convert to Frame disabled. Type rows SHALL offer Quick
+Export as PNG, Export As…, and an enabled Convert to Smart Object.
+
+Fill and adjustment rows SHALL offer Add/Delete/Enable/Disable Layer Mask,
+Add/Delete/Enable/Disable Vector Mask, Create/Release Clipping Mask, Merge
+Layers, Quick Export as PNG, Export As…, and Convert to Smart Object. Convert to
+Smart Object SHALL be disabled for a fill or adjustment target because the
+engine refuses those kinds. A fill row SHALL use the `Merge Layers` label even
+for a single row.
+
+Group rows SHALL offer Quick Export as PNG, Export As…, Add/Delete/Enable/Disable
+Vector Mask, Merge Layers, and an enabled Blending Options…; Convert to Smart
+Object SHALL be expressed as disabled. Group effect pages remain governed by
+`ui/layer-style-dialog`.
+
+Duplicate and Delete labels SHALL be per kind and per selection size:
+`Duplicate Layer…`/`Delete Layer` for one pixel, type, or adjustment/fill row,
+`Duplicate Layers…`/`Delete Layers` for a multi-selection, and
+`Duplicate Group…`/`Delete Group` for a group.
+
+#### Scenario: A type row offers its CS6 text controls
+
+- **WHEN** the user opens the row menu for a type layer
+- **THEN** Horizontal, Vertical, the five anti-aliasing rows, Convert to
+  Paragraph Text, and Warp Text… are enabled, and Create Work Path, Convert to
+  Shape, Copy CSS, Copy SVG, and the Windows anti-aliasing rows are disabled
+
+#### Scenario: A fill row offers its mask and merge rows
+
+- **WHEN** the user opens the row menu for a solid-fill row above another layer
+- **THEN** Delete Layer Mask, Add Vector Mask, Create Clipping Mask, Merge
+  Layers, Quick Export as PNG, Export As…, and Rasterize Layer are present, and
+  Convert to Smart Object and Copy CSS are disabled
+
+#### Scenario: A group row offers export and Blending Options
+
+- **WHEN** the user opens the row menu for a group
+- **THEN** Quick Export as PNG, Export As…, Add Vector Mask, Merge Layers, and
+  Blending Options… are present and Convert to Smart Object is disabled
+
+#### Scenario: Per-kind Duplicate and Delete labels
+
+- **WHEN** the user opens the row menu for a pixel row, a group, and a
+  multi-selection
+- **THEN** the labels read Duplicate Layer…/Delete Layer, Duplicate Group…/Delete
+  Group, and Duplicate Layers…/Delete Layers respectively

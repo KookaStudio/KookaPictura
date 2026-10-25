@@ -22,7 +22,10 @@ not hand-edit these files.
 outside it, under `assets/test_with_smart_object0{1,2}.psd`, because psd-tools
 cannot author a `SoLd` config block plus its document-level `lnk2` record: they
 are authored by `pictura-codec`'s own writer via the
-`make_smart_fixtures` example (no reference bytes are copied).
+`make_smart_fixtures` example (no reference bytes are copied). The same example
+writes `assets/layers_panel_smoke.psd`, a 64×64 document with one row of every
+kind the Layers panel smoke test needs: Background, pixel, group, adjustment,
+solid fill, type, and smart object.
 
 ## Contents
 

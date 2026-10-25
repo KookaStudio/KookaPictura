@@ -113,7 +113,9 @@ Deeper technical status for PSD/PSB lives in
 - [ ] 32-bit and Lab blend-mode menu gating (#589)
 - [ ] `Ctrl+J` duplicate-group semantics (#590)
 - [ ] Smart-object Stack Modes (#591)
-- [ ] Pattern fill layers (#262) and vector-mask path authoring (#261)
+- [x] Pattern fill layers using the open document's embedded patterns (#262)
+- [ ] Pattern preset library and `Edit > Define Pattern` (#262, #599)
+- [ ] Vector-mask path authoring (#261)
 - [ ] A Blend-If editor UI (#264)
 - [ ] Relink and convert-to-linked for smart objects (#113)
 - [ ] The Layers panel thumbnail-size option and the `00` / `Shift+00` opacity

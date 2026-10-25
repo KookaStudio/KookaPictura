@@ -64,8 +64,8 @@ pub(crate) use create::insert_node;
 pub use create::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,
     add_layer_in, add_raster_layer_from_rgba, add_solid_fill, background_from_layer,
-    can_background_from_layer, duplicate_layer, group_layer, layer_from_background, neutral_color,
-    next_layer_name, ungroup_layer, NewLayerSpec,
+    can_background_from_layer, duplicate_layer, group_layer, insert_layer, layer_from_background,
+    neutral_color, next_layer_name, ungroup_layer, NewLayerSpec,
 };
 pub use kernel::Interpolation;
 pub use layer_masks::{

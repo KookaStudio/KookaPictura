@@ -92,14 +92,6 @@ void ImageView::setCanvasColor(const QColor& color)
     update();
 }
 
-void ImageView::setCanvasBackdrop(const QColor& color, bool opaque)
-{
-    if (canvasBackdrop_ == color && canvasBackdropOpaque_ == opaque) return;
-    canvasBackdrop_ = color;
-    canvasBackdropOpaque_ = opaque;
-    update();
-}
-
 void ImageView::setPanEnabled(bool enabled)
 {
     // A transient Space pan owns pan state while held: a tool-state refresh that
@@ -597,11 +589,7 @@ void ImageView::paintEvent(QPaintEvent*)
     const QRect checkerRect = docDevice.intersected(viewRect().toAlignedRect());
     if (!checkerRect.isEmpty()) {
         painter.setBrushOrigin(docDevice.topLeft());
-        // A Background layer makes the canvas opaque: the area beyond the
-        // content shows the background colour, not the transparency tile.
-        painter.fillRect(checkerRect,
-                         canvasBackdropOpaque_ ? QBrush(canvasBackdrop_)
-                                               : QBrush(transparencyTile()));
+        painter.fillRect(checkerRect, transparencyTile());
     }
 
     painter.translate(offset_);
