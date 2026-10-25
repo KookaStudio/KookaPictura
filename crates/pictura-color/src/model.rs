@@ -264,12 +264,15 @@ mod tests {
 
     #[test]
     fn cmyk_round_trips_in_gamut() {
+        // Muted colours a coated press reproduces; saturated sRGB blues and
+        // yellows fall outside its gamut and map to the nearest ink.
         let cmyk = CmykConverter::working();
         for rgb in [
             [200, 120, 80],
-            [90, 140, 200],
             [128, 128, 128],
-            [230, 210, 60],
+            [150, 130, 110],
+            [120, 140, 160],
+            [180, 170, 150],
         ] {
             let back = cmyk.cmyk_to_srgb(cmyk.srgb_to_cmyk(rgb));
             for c in 0..3 {
