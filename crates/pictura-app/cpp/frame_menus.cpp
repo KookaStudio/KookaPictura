@@ -276,18 +276,13 @@ void PicturaMainWindow::registerHandlers()
     });
 
     wireEditHistory();
-
-    registry_->setHandler(command_ids::EditAssignProfile,
-                          [this]() { showProfileCommand(false); });
-    registry_->setHandler(command_ids::EditConvertProfile,
-                          [this]() { showProfileCommand(true); });
-    registry_->setHandler(command_ids::EditColorSettings,
-                          [this]() { showColorSettings(); });
+    registry_->setHandler(command_ids::EditAssignProfile, [this]() { showProfileCommand(false); });
+    registry_->setHandler(command_ids::EditConvertProfile, [this]() { showProfileCommand(true); });
+    registry_->setHandler(command_ids::EditColorSettings, [this]() { showColorSettings(); });
     for (const char* id : {command_ids::EditAssignProfile, command_ids::EditConvertProfile}) {
         registry_->setEnabledProvider(id, [this]() {
             PictureView* view = activeView();
-            return view && view->has_document()
-                && document_api::documentMode(*view) == QStringLiteral("rgb");
+            return view && view->has_document() && document_api::documentMode(*view) == QStringLiteral("rgb");
         });
     }
 
