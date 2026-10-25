@@ -647,12 +647,22 @@ private:
     BrushDynamics dynamics_;
 };
 
-// The selection family's shared options: combine mode, marquee constraint,
-// tolerance, wand settings, and the magnetic lasso's detection fields.
+// The selection tools' options: combine mode, marquee constraint, tolerance,
+// wand settings, and the magnetic lasso's detection fields. Quick Selection
+// owns a second instance so its New-to-Add switch stays local to that tool.
 class SelectionOptions : public ToolOptions {
 public:
     SelectionMode combineMode() const { return combineMode_; }
-    void setCombineMode(SelectionMode mode) { combineMode_ = mode; }
+    void setCombineMode(SelectionMode mode)
+    {
+        if (combineMode_ == mode) {
+            return;
+        }
+        combineMode_ = mode;
+        if (combineModeChanged) {
+            combineModeChanged(mode);
+        }
+    }
 
     MarqueeStyle marqueeStyle() const { return marqueeStyle_; }
     void setMarqueeStyle(MarqueeStyle style) { marqueeStyle_ = style; }
@@ -709,6 +719,9 @@ public:
         magneticFrequency_ = std::clamp(frequency, 0, 100);
     }
 
+    // A mode button or the Quick Selection New-to-Add switch changed the mode;
+    // the Quick Selection options page re-checks its buttons.
+    std::function<void(SelectionMode)> combineModeChanged;
     std::function<void(int)> magneticWidthChanged;
 
 private:

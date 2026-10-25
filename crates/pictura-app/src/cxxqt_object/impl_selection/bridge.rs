@@ -54,13 +54,15 @@ pub mod ffi {
         /// Snapshot the selection before a Quick Selection stroke.
         fn quick_select_begin(view: Pin<&mut PictureView>) -> bool;
 
-        /// Apply one Quick Selection dab without recording history.
+        /// Apply one Quick Selection dab without recording history. `is_move`
+        /// lets a move inside the selected region skip the full flood.
         fn quick_select_preview(
             view: Pin<&mut PictureView>,
             x: i32,
             y: i32,
             tolerance: i32,
             mode: &QString,
+            is_move: bool,
         ) -> bool;
 
         /// Record the Quick Selection stroke's one history state.
@@ -117,8 +119,9 @@ fn quick_select_preview(
     y: i32,
     tolerance: i32,
     mode: &QString,
+    is_move: bool,
 ) -> bool {
-    view.quick_select_preview(x, y, tolerance, mode)
+    view.quick_select_preview(x, y, tolerance, mode, is_move)
 }
 
 fn quick_select_commit(view: Pin<&mut PictureView>) -> bool {

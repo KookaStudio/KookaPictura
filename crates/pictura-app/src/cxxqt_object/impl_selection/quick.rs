@@ -81,7 +81,28 @@ impl qobject::PictureView {
         y: i32,
         tolerance: i32,
         mode: &QString,
+        is_move: bool,
     ) -> bool {
+        // A move inside the region the stroke has already selected adds
+        // nothing. Skip before this dab composites, floods, combines, and
+        // retraces the outline. New, Subtract, Intersect, the first press, and
+        // partially covered pixels still run the full path.
+        // ponytail: a seed whose local colour differs can no longer contribute
+        // a few extra pixels inside an existing selection; the stroke does not
+        // require that growth.
+        if is_move && combine_mode_from(&mode.to_string()) == CombineMode::Add {
+            let rust = self.rust();
+            let inside = rust.session.selection.as_ref().is_some_and(|sel| {
+                x >= 0
+                    && y >= 0
+                    && (x as u32) < sel.width
+                    && (y as u32) < sel.height
+                    && sel.data.get(y as usize * sel.width as usize + x as usize) == Some(&255)
+            });
+            if inside {
+                return true;
+            }
+        }
         let Some(shape) = self.quick_select_shape(x, y, tolerance) else {
             return false;
         };

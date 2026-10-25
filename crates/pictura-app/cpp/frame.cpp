@@ -993,6 +993,7 @@ void PicturaMainWindow::closeEvent(QCloseEvent* event)
             break;
         }
     }
+    for (NumericField* field : findChildren<NumericField*>()) field->commitPendingEdit();
     saveSession();
     QMainWindow::closeEvent(event);
 }

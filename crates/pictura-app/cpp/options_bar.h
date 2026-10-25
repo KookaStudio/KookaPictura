@@ -8,6 +8,7 @@
 
 #include "tools.h"
 
+class QButtonGroup;
 class QStackedWidget;
 class QHBoxLayout;
 class QIcon;
@@ -164,8 +165,12 @@ private:
     static NumericFieldConfig numericConfig(double lo, double hi, double step, int decimals,
                                             const QString& suffix, bool popup,
                                             const QString& name, bool allowFractional = false);
-    void addModeButtons(QHBoxLayout* layout, QWidget* page, bool withIntersect);
-    void addMagneticFields(QHBoxLayout* layout, QWidget* page);
+    QButtonGroup* addModeButtons(QHBoxLayout* layout, QWidget* page, SelectionOptions* group,
+                                 bool withIntersect);
+    void addMagneticFields(QHBoxLayout* layout, QWidget* page, SelectionOptions* group);
+    // The selection options group for `id` (Quick Selection has its own); the
+    // shared family group is the fallback for handlers with no port.
+    SelectionOptions* selectionGroupFor(ToolId id) const;
     QToolButton* toolButton(ToolId id, QWidget* parent);
     // Re-seed the Crop W/H fields from their mode (ratio values, or pixels in
     // `W x H x Resolution` mode).

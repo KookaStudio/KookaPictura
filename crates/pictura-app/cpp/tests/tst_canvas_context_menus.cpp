@@ -6,12 +6,17 @@
 #include "selftest_paint_fixture.h"
 #include "qt_test_support.h"
 
+#include "command_ids.h"
 #include "panels/brush_preset_picker.h"
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QTimer>
 #include <QtGui/QMouseEvent>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
 
 namespace {
@@ -70,6 +75,10 @@ private slots:
     void cropNoBoxHasNoMenu();
     void cropToggleDelete();
     void cropReset();
+    void selectionMenuOpensForEverySelectionTool();
+    void selectionMenuRunsCommandsOnClickedDocument();
+    void selectionMenuNeedsASelection();
+    void requestCommandDispatches();
     void pasteboardBackgroundMenu();
     void backgroundColour();
     void brushPickerOpens();
@@ -279,6 +288,126 @@ void CanvasContextMenusTest::cropReset()
     auto* session = f.tools->cropBoxSession();
     QVERIFY(session != nullptr);
     QCOMPARE(session->pendingCropRect(), QRect(0, 0, 64, 64));
+    delete menu;
+}
+
+void CanvasContextMenusTest::selectionMenuOpensForEverySelectionTool()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ccm_selection_menu"));
+    QVERIFY2(f.ok(), "selection menu fixture");
+    f.view->select_all();
+    QVERIFY(f.view->has_selection());
+
+    const QList<pictura::ToolId> tools{
+        pictura::ToolId::Marquee,       pictura::ToolId::EllipticalMarquee,
+        pictura::ToolId::Lasso,         pictura::ToolId::PolygonalLasso,
+        pictura::ToolId::MagneticLasso, pictura::ToolId::MagicWand,
+        pictura::ToolId::QuickSelection};
+    for (pictura::ToolId id : tools) {
+        f.frame.setActiveTool(id);
+        QMenu* menu = f.tools->contextMenuForTest(f.canvas, QPointF(2, 2));
+        QVERIFY2(menu != nullptr, qPrintable(QStringLiteral("no menu for tool %1").arg(int(id))));
+        QCOMPARE(nonSeparatorActions(menu), 4);
+        QVERIFY(actionNamed(menu, QStringLiteral("Deselect")) != nullptr);
+        QVERIFY(actionNamed(menu, QStringLiteral("Inverse")) != nullptr);
+        QVERIFY(actionNamed(menu, QStringLiteral("Feather…")) != nullptr);
+        QVERIFY(actionNamed(menu, QStringLiteral("Refine Edge…")) != nullptr);
+        delete menu;
+    }
+}
+
+void CanvasContextMenusTest::selectionMenuNeedsASelection()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ccm_selection_gate"));
+    QVERIFY2(f.ok(), "selection gate fixture");
+    f.frame.setActiveTool(pictura::ToolId::Marquee);
+    QVERIFY(!f.view->has_selection());
+    QVERIFY(f.tools->contextMenuForTest(f.canvas, QPointF(2, 2)) == nullptr);
+    QVERIFY(!f.tools->routeCanvasContextMenu(f.canvas, QPointF(-10, -10), QPoint(0, 0)));
+    QMenu* background = window_->canvasBackgroundMenuForTest();
+    QVERIFY(background != nullptr);
+    delete background;
+}
+
+void CanvasContextMenusTest::requestCommandDispatches()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ccm_selection_command"));
+    QVERIFY2(f.ok(), "selection command fixture");
+    f.view->select_all();
+    QVERIFY(f.view->has_selection());
+    f.tools->requestCommand(QString::fromLatin1(pictura::command_ids::SelectDeselect));
+    QVERIFY(!f.view->has_selection());
+}
+
+void CanvasContextMenusTest::selectionMenuRunsCommandsOnClickedDocument()
+{
+    Fixture a(*window_, seedImage(), QStringLiteral("ccm_selection_cmd_a"));
+    Fixture b(*window_, seedImage(), QStringLiteral("ccm_selection_cmd_b"));
+    QVERIFY2(a.ok() && b.ok(), "two selection fixtures");
+    QVERIFY(a.doc != b.doc);
+    a.view->select_all();
+    b.view->select_all();
+    QVERIFY(a.view->has_selection() && b.view->has_selection());
+    const int bHistory = b.view->history_count();
+    QCOMPARE(b.frame.activeDocumentIndex(), b.doc);
+    b.frame.setActiveTool(pictura::ToolId::Marquee);
+
+    // The menu activates the clicked document; the command then runs on it.
+    QMenu* menu = b.tools->contextMenuForTest(a.canvas, QPointF(2, 2));
+    QVERIFY(menu != nullptr);
+    QVERIFY(b.frame.activeView() == a.view);
+    QAction* deselect = actionNamed(menu, QStringLiteral("Deselect"));
+    QVERIFY(deselect != nullptr);
+    deselect->trigger();
+    QVERIFY(!a.view->has_selection());
+    QVERIFY(b.view->has_selection());
+    QCOMPARE(b.view->history_count(), bHistory);
+    delete menu;
+
+    QVERIFY(a.view->select_rect(0, 0, 10, 10, QStringLiteral("new"), 0.0));
+    menu = b.tools->contextMenuForTest(a.canvas, QPointF(2, 2));
+    QVERIFY(menu != nullptr);
+    QAction* inverse = actionNamed(menu, QStringLiteral("Inverse"));
+    QVERIFY(inverse != nullptr);
+    inverse->trigger();
+    QCOMPARE(a.view->selection_coverage(2, 2), 0);
+    QVERIFY(a.view->selection_coverage(32, 32) > 0);
+    QVERIFY(b.view->selection_coverage(2, 2) > 0);
+    QCOMPARE(b.view->history_count(), bHistory);
+    delete menu;
+
+    QVERIFY(a.view->select_rect(0, 0, 10, 10, QStringLiteral("new"), 0.0));
+    const int beforeFeather = a.view->history_count();
+    menu = b.tools->contextMenuForTest(a.canvas, QPointF(2, 2));
+    QVERIFY(menu != nullptr);
+    QAction* feather = actionNamed(menu, QStringLiteral("Feather…"));
+    QVERIFY(feather != nullptr);
+    QTimer::singleShot(0, []() {
+        if (auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget())) {
+            dialog->accept();
+        }
+    });
+    feather->trigger();
+    QCOMPARE(a.view->history_count(), beforeFeather + 1);
+    QVERIFY(b.view->selection_coverage(2, 2) > 0);
+    QCOMPARE(b.view->history_count(), bHistory);
+    delete menu;
+
+    QVERIFY(a.view->select_rect(0, 0, 10, 10, QStringLiteral("new"), 0.0));
+    const int beforeRefine = a.view->history_count();
+    menu = b.tools->contextMenuForTest(a.canvas, QPointF(2, 2));
+    QVERIFY(menu != nullptr);
+    QAction* refine = actionNamed(menu, QStringLiteral("Refine Edge…"));
+    QVERIFY(refine != nullptr);
+    QTimer::singleShot(0, [this]() {
+        if (auto* dialog = window_->findChild<QDialog*>(QStringLiteral("refineEdgeDialog"))) {
+            dialog->accept();
+        }
+    });
+    refine->trigger();
+    QCOMPARE(a.view->history_count(), beforeRefine + 1);
+    QVERIFY(b.view->selection_coverage(2, 2) > 0);
+    QCOMPARE(b.view->history_count(), bHistory);
     delete menu;
 }
 

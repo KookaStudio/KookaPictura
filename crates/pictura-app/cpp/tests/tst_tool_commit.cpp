@@ -110,6 +110,9 @@ private slots:
     void pointerDownMoveUpPaints();
     void quickSelectionOneStatePerStroke();
     void quickSelectionCancelRestores();
+    void quickSelectionSecondStrokeAdds();
+    void quickSelectionMoveInsideRegionIsNoop();
+    void quickSelectionKeepsMarqueeModeIndependent();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -348,6 +351,85 @@ void ToolCommitTest::quickSelectionCancelRestores()
     QCOMPARE(f.view->history_count(), base);
     QCOMPARE(f.view->selection_coverage(2, 2), before);
     QCOMPARE(f.view->selection_coverage(10, 10), 0);
+}
+
+void ToolCommitTest::quickSelectionSecondStrokeAdds()
+{
+    Fixture f(*window_, quickSelectionSeed(),
+              QStringLiteral("pictura_quick_selection_second"));
+    QVERIFY2(f.ok(), "quick selection second fixture");
+    auto* selection =
+        f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::QuickSelection);
+    QVERIFY(selection);
+    selection->setCombineMode(pictura::SelectionMode::New);
+    f.tools->setActiveTool(pictura::ToolId::QuickSelection);
+    const int base = f.view->history_count();
+
+    f.drag({QPointF(10, 10)});
+    QVERIFY2(f.view->selection_coverage(10, 10) > 0, "first stroke selected");
+    QCOMPARE(selection->combineMode(), pictura::SelectionMode::Add);
+
+    f.drag({QPointF(44, 10)});
+    QVERIFY2(f.view->selection_coverage(10, 10) > 0, "first region kept");
+    QVERIFY2(f.view->selection_coverage(44, 10) > 0, "second stroke added");
+    QCOMPARE(f.view->history_count(), base + 2);
+}
+
+void ToolCommitTest::quickSelectionMoveInsideRegionIsNoop()
+{
+    int changes = 0;
+    Fixture f(*window_, quickSelectionSeed(), QStringLiteral("pictura_quick_selection_move"));
+    QVERIFY2(f.ok(), "quick selection move fixture");
+    auto* selection =
+        f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::QuickSelection);
+    QVERIFY(selection);
+    selection->setCombineMode(pictura::SelectionMode::New);
+    f.tools->setActiveTool(pictura::ToolId::QuickSelection);
+    QObject::connect(f.view, &pictura::PictureView::changed, f.view,
+                     [&changes]() { ++changes; });
+
+    f.canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, 0);
+    QVERIFY2(changes >= 1, "the press previews");
+    const int afterPress = changes;
+    const int base = f.view->history_count();
+    const int before = f.view->selection_coverage(10, 10);
+    QVERIFY(before > 0);
+
+    for (int i = 0; i < 24; ++i) {
+        f.canvas->mouseMoved(QPointF(10 + i % 5, 10 + i / 5));
+    }
+    QCOMPARE(changes, afterPress);
+    QCOMPARE(f.view->selection_coverage(10, 10), before);
+    QCOMPARE(f.view->history_count(), base);
+
+    f.canvas->mouseReleased(QPointF(14, 14));
+    QCOMPARE(f.view->history_count(), base + 1);
+}
+
+void ToolCommitTest::quickSelectionKeepsMarqueeModeIndependent()
+{
+    Fixture f(*window_, quickSelectionSeed(),
+              QStringLiteral("pictura_quick_selection_marquee"));
+    QVERIFY2(f.ok(), "quick selection marquee fixture");
+    auto* quick =
+        f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::QuickSelection);
+    auto* marquee =
+        f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee);
+    QVERIFY(quick && marquee);
+    quick->setCombineMode(pictura::SelectionMode::New);
+    marquee->setCombineMode(pictura::SelectionMode::New);
+
+    f.tools->setActiveTool(pictura::ToolId::QuickSelection);
+    f.drag({QPointF(10, 10)});
+    QVERIFY2(f.view->selection_coverage(10, 10) > 0, "quick selection selected");
+    QCOMPARE(quick->combineMode(), pictura::SelectionMode::Add);
+    QCOMPARE(marquee->combineMode(), pictura::SelectionMode::New);
+
+    f.tools->setActiveTool(pictura::ToolId::Marquee);
+    f.drag({QPointF(20, 10), QPointF(30, 20)});
+    QCOMPARE(f.view->selection_coverage(10, 10), 0);
+    QVERIFY2(f.view->selection_coverage(25, 15) > 0, "the marquee replaced the selection");
+    QCOMPARE(marquee->combineMode(), pictura::SelectionMode::New);
 }
 
 QTEST_MAIN(ToolCommitTest)
