@@ -581,7 +581,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
 
     // M43: `D` resets fg/bg to the active target's CS6 defaults (black/white
     // for layer pixels, white/black for a mask). `D` is also unassigned in the
-    // tool letter catalogue (see tools.cpp `kToolTable`).
+    // tool letter catalogue (the engine tool catalogue, `pictura_script::tool_catalogue`).
     connect(new QShortcut(QKeySequence(Qt::Key_D), this), &QShortcut::activated, this,
             [this]() {
                 if (toolbox_) {

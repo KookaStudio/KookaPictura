@@ -57,6 +57,7 @@ mod selection_move;
 mod shapes;
 mod state;
 mod svg_export;
+mod tool_catalogue;
 mod type_tools;
 mod web_export;
 pub use state::PictureViewRust;

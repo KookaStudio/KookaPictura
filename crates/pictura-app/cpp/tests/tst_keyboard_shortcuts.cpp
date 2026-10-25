@@ -12,12 +12,15 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
 
+#include <iterator>
 #include <memory>
 
 #include "commands.h"
 #include "frame.h"
 #include "keyboard_shortcuts_dialog.h"
 #include "session.h"
+#include "tool_catalogue_golden.h"
+#include "pictura_app/src/cxxqt_object/tool_catalogue.cxxqt.h"
 #include "theme.h"
 #include "tools.h"
 
@@ -95,6 +98,8 @@ private slots:
     void noticeIsDarkOnYellow();
     void okAppliesCancelDiscards();
     void overridesPersistAcrossLaunch();
+    void toolIdOrderMatchesCatalogue();
+    void toolCatalogueMatchesGolden();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -528,6 +533,49 @@ void KeyboardShortcutsTest::overridesPersistAcrossLaunch()
     QCOMPARE(relaunched->registry()->action(kNew)->shortcuts(), keys({"Ctrl+N", "Ctrl+Alt+N"}));
     QVERIFY(pictura::toolShortcut(pictura::ToolId::Hand).isNull());
     QVERIFY(!pictura::toolShortcutKeys().contains(QChar(u'H')));
+}
+
+// `ToolId` mirrors the engine catalogue's order (#274). The golden's
+// enumerator-to-name pairs are kept independently of the catalogue, so a row
+// inserted or moved in Rust fails here instead of shifting every tool.
+void KeyboardShortcutsTest::toolIdOrderMatchesCatalogue()
+{
+    const ::rust::Vec<pictura::ToolSpecRow> rows = pictura::tool_catalogue_rows();
+    const int count = int(std::size(pictura::test::kToolGolden));
+    QCOMPARE(int(rows.size()), count);
+    QCOMPARE(count, int(pictura::ToolId::Zoom) + 1);
+    for (int i = 0; i < count; ++i) {
+        const pictura::test::ToolGolden& golden = pictura::test::kToolGolden[i];
+        QCOMPARE(int(golden.id), i);
+        QCOMPARE(rows[std::size_t(i)].name, QString::fromLatin1(golden.name));
+        QCOMPARE(pictura::toolIdName(golden.id), QString::fromLatin1(golden.name));
+    }
+    QCOMPARE(pictura::allToolIds().size(), count);
+}
+
+// Every per-tool field the shell shows equals the pre-move table.
+void KeyboardShortcutsTest::toolCatalogueMatchesGolden()
+{
+    for (const pictura::test::ToolGolden& golden : pictura::test::kToolGolden) {
+        const pictura::ToolInfo& info = pictura::toolInfo(golden.id);
+        const QString what = QString::fromLatin1(golden.name);
+        QCOMPARE(info.id, golden.id);
+        QCOMPARE(QString::fromUtf8(info.label), QString::fromUtf8(golden.label));
+        QCOMPARE(info.shortcut, golden.shortcut ? QChar(QLatin1Char(golden.shortcut)) : QChar());
+        QVERIFY2(info.cursor == golden.cursor, qPrintable(what));
+        QCOMPARE(QString::fromUtf8(info.hint), QString::fromUtf8(golden.hint));
+        QCOMPARE(info.group, golden.group);
+        QCOMPARE(info.implemented, golden.implemented);
+        QCOMPARE(pictura::toolImplemented(golden.id), golden.implemented);
+        QCOMPARE(info.hotspotX, golden.hotspotX);
+        QCOMPARE(info.hotspotY, golden.hotspotY);
+        QStringList hints;
+        for (const pictura::ToolHint& hint : pictura::toolHintEntries(golden.id)) {
+            hints << QStringLiteral("%1|%2|%3").arg(hint.key, hint.text,
+                                                    QString::fromLatin1(hint.commandId));
+        }
+        QCOMPARE(hints.join(QLatin1Char(';')), QString::fromUtf8(golden.hints));
+    }
 }
 
 QTEST_MAIN(KeyboardShortcutsTest)

@@ -12,6 +12,7 @@ pub mod error;
 pub mod library;
 pub mod player;
 pub mod recorder;
+pub mod tool_catalogue;
 
 pub use action::{
     Action, ActionColor, ActionSet, ActionStep, Condition, DialogOptions, DocumentFacts, EventKey,
