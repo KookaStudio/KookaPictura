@@ -202,7 +202,7 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
-| FILT-8 | `lens-correction.md` | Lens Correction ships one synthetic profile: no real profile set, sub-profiles, Prefer RAW, or Search Online | PARTIAL | `pictura-filters/src/distort/lens_correction/profiles.txt`, `lens_correction_panels.cpp` | #932 |
+| FILT-8 | `lens-correction.md` | Lens Correction lists real cameras and lenses (bundled catalogues) but ships one synthetic correction profile: no real lens corrections, sub-profiles, Prefer RAW, or Search Online | PARTIAL | `pictura-filters/src/distort/lens_correction/profiles.txt`, `lens_correction_panels.cpp` | #932 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
 | FILT-10 | `lens-correction.md` | Lens Correction on a Smart Object adds no Smart Filter | MISSING | `pictura-render/src/smart_filter.rs` | #934 |
 

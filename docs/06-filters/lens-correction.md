@@ -182,5 +182,5 @@ Marked inferred/community (not primary): the distortion polynomial form, CA and 
 - **Sub-profile selection rule.** The exact interpolation/tie-break across focal length, f-stop, and focus distance is closed. Resolve with test shots.
 - **Offset control.** Confirm CS6 truly lacks X/Y offset (post-CS6 addition), so the UI does not expose a non-parity control.
 - **Idempotence.** Confirm that re-applying profile correction to an already-corrected image is a no-op (needed for acceptance).
-- **Online profile source.** `Search Online` relied on an Adobe-hosted repository; a Linux-native equivalent needs a decision (community mirror, bundled set, or disable).
+- **Online profile source.** `Search Online` relied on an Adobe-hosted repository; a Linux-native equivalent needs a decision (community mirror, bundled set, or disable). The Search Criteria lists are filled from bundled camera (MIT) and lens (lensfun's list: names and crop factors only) catalogues; correction coefficients still need a licence-clean source — lensfun's are CC BY-SA 3.0, and discorpy (Apache-2.0) can calibrate new ones from a target.
 - **Reuse with `FILT-100`.** Confirm the shared `pictura_lens` design before implementing both.
