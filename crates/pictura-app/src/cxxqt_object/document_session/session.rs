@@ -415,6 +415,7 @@ impl PictureViewRust {
         self.link_sets.clear();
         self.source_format = "psd".to_string();
         self.filter_error = None;
+        self.save_embed_profile = None;
     }
 
     /// Drop the panel previews that were never committed.

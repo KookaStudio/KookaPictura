@@ -81,14 +81,22 @@ impl qobject::PictureView {
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let Some((rgba, width, height)) = super::helpers::safe_io::read_capped(
+        let Some(bytes) = super::helpers::safe_io::read_capped(
             &file,
             super::helpers::safe_io::import_file_limit(),
-        )
-        .as_deref()
-        .and_then(decode_import) else {
+        ) else {
             return QString::default();
         };
+        let Some((rgba, width, height)) = decode_import(&bytes) else {
+            return QString::default();
+        };
+        let policy = {
+            let mut rust = self.as_mut().rust_mut();
+            rust.open_policy_override
+                .take()
+                .unwrap_or(rust.color_policy)
+        };
+        let rgba = super::open_jobs::convert_placed_rgba(&bytes, rgba, width, height, policy);
         let mut created = String::new();
         self.as_mut().edit("Place", |rust| {
             let Some(doc) = rust.session.doc.as_mut() else {

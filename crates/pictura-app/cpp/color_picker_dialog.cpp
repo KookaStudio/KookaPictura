@@ -1,4 +1,6 @@
 #include "color_picker_dialog.h"
+#include "color_picker_math.h"
+#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
 #include "dialogs.h"
 #include "panels/color_swatch_widget.h"
 #include "panels/swatches_panel.h"
@@ -9,6 +11,7 @@
 #include <QtGui/QRegularExpressionValidator>
 #include <QtGui/QResizeEvent>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QColorDialog>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -18,6 +21,7 @@
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 
+#include <array>
 #include <cmath>
 
 namespace pictura {
@@ -30,9 +34,6 @@ constexpr int kPlaneSize = 256;
 constexpr int kRampWidth = 19;
 /// Gutter either side of the strip, where the arrow markers are drawn.
 constexpr int kRampGutter = 7;
-
-/// Web-safe palette step. The 216-colour cube is every multiple of 0x33.
-constexpr int kWebStep = 0x33;
 
 // -- axis mapping -----------------------------------------------------------
 //
@@ -153,16 +154,6 @@ int planeCacheKey(ColorAxis axis, int h, int s, int v)
 }
 
 /// Convert to HSV while keeping `h` when the colour is achromatic.
-void toHsvPreservingHue(const QColor& c, int& h, int& s, int& v)
-{
-    const int newHue = c.hue();
-    if (newHue >= 0) {
-        h = newHue;
-    }
-    s = c.saturation();
-    v = c.value();
-}
-
 void drawPlaneMarker(QPainter& p, const QPointF& pos)
 {
     p.setBrush(Qt::NoBrush);
@@ -173,50 +164,10 @@ void drawPlaneMarker(QPainter& p, const QPointF& pos)
     p.drawEllipse(pos, 4.5, 4.5);
 }
 
-// -- hex input --------------------------------------------------------------
-
-bool isHexDigit(QChar c)
-{
-    const ushort u = c.unicode();
-    return (u >= '0' && u <= '9') || (u >= 'a' && u <= 'f') || (u >= 'A' && u <= 'F');
-}
-
-QString hexDigits(QString text)
-{
-    text = text.trimmed();
-    if (text.startsWith(QLatin1Char('#'))) {
-        text.remove(0, 1);
-    } else if (text.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
-        text.remove(0, 2);
-    }
-    return text;
-}
-
-bool parseHexColor(const QString& text, QColor* color)
-{
-    QString digits = hexDigits(text);
-    if (digits.size() == 3) {
-        digits = QString(digits[0]) + digits[0] + digits[1] + digits[1] + digits[2] + digits[2];
-    }
-    if (digits.size() != 6) {
-        return false;
-    }
-    for (QChar c : digits) {
-        if (!isHexDigit(c)) {
-            return false;
-        }
-    }
-    const QColor parsed(QStringLiteral("#") + digits);
-    if (!parsed.isValid()) {
-        return false;
-    }
-    *color = parsed.toRgb();
-    return true;
-}
-
 // -- Add to Swatches --------------------------------------------------------
 
 QPointer<SwatchGrid> g_swatchGrid;
+int g_pickerChoice = 0;
 
 bool promptForSwatchName(QWidget* parent, const QColor& color, const QString& suggested,
                          QString* name)
@@ -269,20 +220,6 @@ bool promptForSwatchName(QWidget* parent, const QColor& color, const QString& su
 }
 
 } // namespace
-
-QColor snapToWebColor(const QColor& color)
-{
-    const auto snap = [](int c) {
-        return qBound(0, int(std::lround(c / double(kWebStep)) * kWebStep), 255);
-    };
-    return QColor(snap(color.red()), snap(color.green()), snap(color.blue()));
-}
-
-bool isWebColor(const QColor& color)
-{
-    return color.red() % kWebStep == 0 && color.green() % kWebStep == 0
-        && color.blue() % kWebStep == 0;
-}
 
 // ===========================================================================
 // ColorPlane
@@ -639,6 +576,7 @@ void ColorPicker::buildUi()
     fieldColumn->addWidget(m_plane);
 
     m_webOnly = new QCheckBox(tr("Only Web Colors"), this);
+    m_webOnly->setObjectName(QStringLiteral("colorPickerOnlyWeb"));
     m_webOnly->setToolTip(tr("Restrict the picker to the 216-color web-safe palette"));
     fieldColumn->addWidget(m_webOnly);
     fieldColumn->addStretch(1);
@@ -665,6 +603,29 @@ void ColorPicker::buildUi()
     currentLabel->setAlignment(Qt::AlignHCenter);
     centre->addWidget(currentLabel);
     centre->addSpacing(8);
+
+    m_webAlert = new QPushButton(tr("Web-safe"), this);
+    m_webAlert->setObjectName(QStringLiteral("colorPickerWebAlert"));
+    m_webAlert->setToolTip(tr("Click to select the closest web-safe color"));
+    m_webAlert->setVisible(false);
+    centre->addWidget(m_webAlert);
+    m_gamutAlert = new QPushButton(tr("Out of gamut"), this);
+    m_gamutAlert->setObjectName(QStringLiteral("colorPickerGamutAlert"));
+    m_gamutAlert->setToolTip(tr("Click to select the closest printable color"));
+    m_gamutAlert->setVisible(false);
+    centre->addWidget(m_gamutAlert);
+    connect(m_webAlert, &QPushButton::clicked, this, [this]() {
+        setColor(snapToWebColor(m_color));
+        notify();
+    });
+    connect(m_gamutAlert, &QPushButton::clicked, this, [this]() {
+        const uint32_t rgb = pictura::picker_closest_rgb(m_color.red(), m_color.green(),
+                                                         m_color.blue());
+        if (rgb != 0xFFFFFFFFu) {
+            setColor(QColor::fromRgb(QRgb(rgb)));
+            notify();
+        }
+    });
 
     auto* grid = new QGridLayout();
     grid->setHorizontalSpacing(4);
@@ -701,23 +662,21 @@ void ColorPicker::buildUi()
     addRow(0, 4, nullptr, tr("L:"), &m_spinL, 0, 100, QString(), false);
     addRow(1, 4, nullptr, tr("a:"), &m_spinLabA, -128, 127, QString(), false);
     addRow(2, 4, nullptr, tr("b:"), &m_spinLabB, -128, 127, QString(), false);
-    addRow(3, 4, nullptr, tr("C:"), &m_spinC, 0, 100, tr("%"), true);
-    addRow(4, 4, nullptr, tr("M:"), &m_spinM, 0, 100, tr("%"), true);
-    addRow(5, 4, nullptr, tr("Y:"), &m_spinY, 0, 100, tr("%"), true);
-    addRow(6, 4, nullptr, tr("K:"), &m_spinK, 0, 100, tr("%"), true);
-    m_spinL->setObjectName(QStringLiteral("colorPickerL"));
-    m_spinLabA->setObjectName(QStringLiteral("colorPickerLabA"));
-    m_spinLabB->setObjectName(QStringLiteral("colorPickerLabB"));
-    m_spinC->setObjectName(QStringLiteral("colorPickerC"));
-    m_spinM->setObjectName(QStringLiteral("colorPickerM"));
-    m_spinY->setObjectName(QStringLiteral("colorPickerY"));
-    m_spinK->setObjectName(QStringLiteral("colorPickerK"));
+    addRow(3, 4, nullptr, tr("C:"), &m_spinC, 0, 100, tr("%"), false);
+    addRow(4, 4, nullptr, tr("M:"), &m_spinM, 0, 100, tr("%"), false);
+    addRow(5, 4, nullptr, tr("Y:"), &m_spinY, 0, 100, tr("%"), false);
+    addRow(6, 4, nullptr, tr("K:"), &m_spinK, 0, 100, tr("%"), false);
 
     const QString cmykTip =
-        tr("CMYK through the working CMYK profile (relative colorimetric with\n"
-           "black point compensation); the bundled profile models a coated press.");
-    for (QSpinBox* box : {m_spinC, m_spinM, m_spinY, m_spinK}) {
-        box->setToolTip(cmykTip);
+        tr("CMYK is projected through the working CMYK profile from Color Settings.");
+    // ponytail: the picker fields are 8-bit; 16/32-bit picker fields remain
+    // #604's scope.
+    const std::array<QSpinBox*, 4> cmykBoxes = {m_spinC, m_spinM, m_spinY, m_spinK};
+    const std::array<const char*, 4> cmykNames = {
+        "colorPickerCyan", "colorPickerMagenta", "colorPickerYellow", "colorPickerBlack"};
+    for (int i = 0; i < 4; ++i) {
+        cmykBoxes[i]->setToolTip(cmykTip);
+        cmykBoxes[i]->setObjectName(QString::fromLatin1(cmykNames[i]));
     }
     for (QSpinBox* box : {m_spinL, m_spinLabA, m_spinLabB}) {
         box->setToolTip(tr("CIE L*a*b*, D50 reference white"));
@@ -753,6 +712,9 @@ void ColorPicker::buildUi()
     }
     for (QSpinBox* s : {m_spinL, m_spinLabA, m_spinLabB}) {
         connect(s, &QSpinBox::valueChanged, this, &ColorPicker::onLabFieldsEdited);
+    }
+    for (QSpinBox* s : {m_spinC, m_spinM, m_spinY, m_spinK}) {
+        connect(s, &QSpinBox::valueChanged, this, &ColorPicker::onCmykFieldsEdited);
     }
     connect(m_hex, &QLineEdit::textEdited, this, &ColorPicker::onHexEdited);
     connect(m_hex, &QLineEdit::editingFinished, this, &ColorPicker::onHexCommitted);
@@ -843,16 +805,20 @@ void ColorPicker::syncControls(QWidget* except)
     assign(m_spinLabA, int(std::lround(a)));
     assign(m_spinLabB, int(std::lround(b)));
 
-    const CmykPercent cmyk = rgbToCmyk(color);
-    assign(m_spinC, int(std::lround(cmyk.c)));
-    assign(m_spinM, int(std::lround(cmyk.m)));
-    assign(m_spinY, int(std::lround(cmyk.y)));
-    assign(m_spinK, int(std::lround(cmyk.k)));
+    const ::rust::Vec<std::int32_t> cmyk =
+        pictura::picker_cmyk(color.red(), color.green(), color.blue());
+    if (cmyk.size() >= 4) {
+        assign(m_spinC, cmyk[0]);
+        assign(m_spinM, cmyk[1]);
+        assign(m_spinY, cmyk[2]);
+        assign(m_spinK, cmyk[3]);
+    }
 
     if (m_hex != except) {
         m_hex->setText(color.name().mid(1).toUpper());
     }
 
+    updateAlerts();
     m_updating = false;
 }
 
@@ -940,6 +906,32 @@ bool ColorPicker::applyHex(const QString& text, bool normalize)
     return true;
 }
 
+void ColorPicker::onCmykFieldsEdited()
+{
+    if (m_updating) {
+        return;
+    }
+    const uint32_t rgb = pictura::picker_rgb(m_spinC->value(), m_spinM->value(),
+                                             m_spinY->value(), m_spinK->value());
+    if (rgb == 0xFFFFFFFFu) {
+        return;
+    }
+    m_color = QColor::fromRgb(QRgb(rgb));
+    toHsvPreservingHue(m_color, m_hue, m_sat, m_val);
+    syncControls(qobject_cast<QWidget*>(sender()));
+    notify();
+}
+
+void ColorPicker::updateAlerts()
+{
+    if (!m_webAlert || !m_gamutAlert) {
+        return;
+    }
+    m_webAlert->setVisible(!m_webOnly->isChecked() && !isWebColor(m_color));
+    m_gamutAlert->setVisible(
+        !pictura::picker_in_gamut(m_color.red(), m_color.green(), m_color.blue()));
+}
+
 void ColorPicker::onHexEdited()
 {
     if (m_updating) {
@@ -1023,6 +1015,8 @@ ColorPickerDialog::ColorPickerDialog(const QColor& initial, QWidget* parent, con
         addSwatch->setEnabled(false);
         addSwatch->setToolTip(tr("The Swatches panel is not available"));
     }
+    // ponytail: Color Libraries need the #489 preset codecs and PANTONE
+    // licensing; re-enable with the book loader.
     libraries->setEnabled(false);
     libraries->setToolTip(tr("Spot color libraries are not implemented yet"));
 
@@ -1098,10 +1092,23 @@ void ColorPickerDialog::sampleCanvas(ToolController* tools,
     });
 }
 
+void ColorPickerDialog::setPickerPreference(int choice)
+{
+    g_pickerChoice = choice == 1 ? 1 : 0;
+}
+
+int ColorPickerDialog::pickerPreference()
+{
+    return g_pickerChoice;
+}
+
 QColor ColorPickerDialog::getColor(const QColor& initial, QWidget* parent, const QString& title,
                                    ToolController* tools,
                                    std::function<QColor(const QPoint&)> colorAt)
 {
+    if (g_pickerChoice == 1) {
+        return QColorDialog::getColor(initial, parent, title);
+    }
     ColorPickerDialog dialog(initial, parent, title, defaultSwatchGrid());
     dialog.sampleCanvas(tools, std::move(colorAt));
     if (runDialog(dialog, parent) != QDialog::Accepted) {

@@ -7,13 +7,20 @@
 #include <QtCore/QTimer>
 #include <QtGui/QColor>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QColorDialog>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 
 #include "color_picker_dialog.h"
+#include "panels/color_panel.h"
 #include "panels/swatches_panel.h"
+#include "session.h"
+
+#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
+#include "qt_test_support.h"
 
 #include <cmath>
 
@@ -53,6 +60,14 @@ private slots:
     void addToSwatchesCancelsCleanly();
     void addToSwatchesIsDisabledWithoutPanel();
     void labEditUpdatesRgb();
+    void webAlertAppearsAndSnaps();
+    void gamutAlertAppliesClosest();
+    void cmykFieldsUpdate();
+    void alertsHiddenInGamut();
+    void defaultAdobePicker();
+    void pickerPreferenceSurvivesRestart();
+    void systemPickerReturnsColor();
+    void colorPanelSwatchOpensPicker();
 };
 
 void ColorPickerTest::hexAcceptsPrefixes()
@@ -192,6 +207,124 @@ void ColorPickerTest::labEditUpdatesRgb()
     pictura::rgbToLab(expected, &back[0], &back[1], &back[2]);
     QVERIFY(std::abs(back[0] - 60.0) < 1.0 && std::abs(back[1] - 20.0) < 1.5
             && std::abs(back[2] + 30.0) < 1.5);
+}
+
+void ColorPickerTest::webAlertAppearsAndSnaps()
+{
+    pictura::ColorPickerDialog dialog(QColor(1, 2, 3));
+    auto* alert = dialog.findChild<QPushButton*>(QStringLiteral("colorPickerWebAlert"));
+    QVERIFY2(alert, "web-safe alert present");
+    QVERIFY2(!alert->isHidden(), "a non-web-safe colour shows the alert");
+    alert->click();
+    QCOMPARE(dialog.selectedColor(), QColor(0, 0, 0));
+}
+
+void ColorPickerTest::gamutAlertAppliesClosest()
+{
+    pictura::ColorPickerDialog dialog(QColor(0, 0, 255));
+    auto* alert = dialog.findChild<QPushButton*>(QStringLiteral("colorPickerGamutAlert"));
+    QVERIFY2(alert, "gamut alert present");
+    QVERIFY2(!alert->isHidden(), "saturated blue is outside the CMYK gamut");
+    const uint32_t closest = pictura::picker_closest_rgb(0, 0, 255);
+    alert->click();
+    QCOMPARE(dialog.selectedColor().rgb() & 0xFFFFFFu, QColor::fromRgb(QRgb(closest)).rgb() & 0xFFFFFFu);
+}
+
+void ColorPickerTest::cmykFieldsUpdate()
+{
+    pictura::ColorPickerDialog dialog(QColor(200, 50, 100));
+    auto* cyan = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerCyan"));
+    auto* magenta = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerMagenta"));
+    auto* yellow = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerYellow"));
+    auto* black = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerBlack"));
+    QVERIFY(cyan && magenta && yellow && black);
+    const int m = magenta->value();
+    const int y = yellow->value();
+    const int k = black->value();
+    cyan->setValue(50);
+    const uint32_t expected = pictura::picker_rgb(50, m, y, k);
+    QCOMPARE(dialog.selectedColor().rgb() & 0xFFFFFFu,
+             QColor::fromRgb(QRgb(expected)).rgb() & 0xFFFFFFu);
+    auto* alert = dialog.findChild<QPushButton*>(QStringLiteral("colorPickerGamutAlert"));
+    QVERIFY2(alert && alert->isHidden(), "a profile CMYK value is printable");
+}
+
+void ColorPickerTest::alertsHiddenInGamut()
+{
+    pictura::ColorPickerDialog dialog(QColor(255, 255, 255));
+    auto* web = dialog.findChild<QPushButton*>(QStringLiteral("colorPickerWebAlert"));
+    auto* gamut = dialog.findChild<QPushButton*>(QStringLiteral("colorPickerGamutAlert"));
+    QVERIFY(web && gamut);
+    QVERIFY(web->isHidden());
+    QVERIFY(gamut->isHidden());
+}
+
+void ColorPickerTest::defaultAdobePicker()
+{
+    pictura::ColorPickerDialog::setPickerPreference(0);
+    QCOMPARE(pictura::ColorPickerDialog::pickerPreference(), 0);
+}
+
+void ColorPickerTest::pickerPreferenceSurvivesRestart()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    pictura::SessionState state;
+    state.pickerChoice = 1;
+    QVERIFY(pictura::saveSession(state));
+    QCOMPARE(pictura::loadSession().pickerChoice, 1);
+    pictura::ColorPickerDialog::setPickerPreference(0);
+}
+
+void ColorPickerTest::systemPickerReturnsColor()
+{
+    pictura::ColorPickerDialog::setPickerPreference(1);
+    QTimer::singleShot(0, []() {
+        auto* dialog = qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+        if (!dialog) {
+            QTimer::singleShot(20, []() {
+                if (auto* late = qobject_cast<QColorDialog*>(QApplication::activeModalWidget())) {
+                    late->setCurrentColor(QColor(10, 200, 30));
+                    late->accept();
+                }
+            });
+            return;
+        }
+        dialog->setCurrentColor(QColor(10, 200, 30));
+        dialog->accept();
+    });
+    const QColor chosen = pictura::ColorPickerDialog::getColor(QColor(1, 2, 3));
+    pictura::ColorPickerDialog::setPickerPreference(0);
+    QCOMPARE(chosen, QColor(10, 200, 30));
+}
+
+void ColorPickerTest::colorPanelSwatchOpensPicker()
+{
+    pictura::ColorPickerDialog::setPickerPreference(0);
+    pictura::ColorState state;
+    pictura::ColorPanel panel(&state);
+    auto* fg = panel.findChild<QPushButton*>(QStringLiteral("colorPanelForeground"));
+    QVERIFY2(fg, "foreground swatch present");
+
+    bool opened = false;
+    QTimer::singleShot(0, [&opened]() {
+        auto* dialog =
+            qobject_cast<pictura::ColorPickerDialog*>(QApplication::activeModalWidget());
+        if (!dialog) {
+            return;
+        }
+        auto* picker = dialog->findChild<pictura::ColorPicker*>();
+        if (!picker) {
+            dialog->reject();
+            return;
+        }
+        picker->setColor(QColor(12, 34, 56));
+        opened = true;
+        dialog->accept();
+    });
+    fg->click();
+    QVERIFY2(opened, "the swatch opens the color picker");
+    QCOMPARE(state.foreground(), QColor(12, 34, 56));
 }
 
 QTEST_MAIN(ColorPickerTest)

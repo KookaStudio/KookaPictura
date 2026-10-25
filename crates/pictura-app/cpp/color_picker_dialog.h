@@ -9,10 +9,12 @@
 #include <functional>
 
 #include "color_models.h"
+#include "color_picker_math.h"
 
 class QCheckBox;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 class QRadioButton;
 class QSpinBox;
 
@@ -167,6 +169,7 @@ private slots:
     void onHsbFieldsEdited();
     void onRgbFieldsEdited();
     void onLabFieldsEdited();
+    void onCmykFieldsEdited();
     void onHexEdited();
     void onHexCommitted();
     void onWebColorsToggled(bool on);
@@ -178,6 +181,7 @@ private:
     void setHsv(int hue, int sat, int val);
     bool applyHex(const QString& text, bool normalize);
     void notify();
+    void updateAlerts();
     ColorAxis currentAxis() const;
 
     // Both representations are kept, and which one is authoritative depends on
@@ -218,6 +222,8 @@ private:
 
     QLineEdit* m_hex = nullptr;
     QCheckBox* m_webOnly = nullptr;
+    QPushButton* m_webAlert = nullptr;
+    QPushButton* m_gamutAlert = nullptr;
 };
 
 /// Photoshop's Color Picker dialog: a [`ColorPicker`] with OK / Cancel.
@@ -250,6 +256,10 @@ public:
     static void setDefaultSwatchGrid(SwatchGrid* grid);
     static SwatchGrid* defaultSwatchGrid();
 
+    /// Preferences > General > Color Picker: 0 Adobe, 1 System/Qt.
+    static void setPickerPreference(int choice);
+    static int pickerPreference();
+
     /// While the dialog is open, a canvas click (through `tools`' canvas
     /// sampler) takes `colorAt` of the clicked document pixel; an invalid
     /// colour (outside the document) is ignored.
@@ -269,10 +279,5 @@ private:
     QPointer<ToolController> m_tools;
     SwatchGrid* m_swatches = nullptr;
 };
-
-/// Snap each channel to the nearest web-safe value (multiples of 0x33).
-QColor snapToWebColor(const QColor& color);
-/// Whether every channel is already a multiple of 0x33.
-bool isWebColor(const QColor& color);
 
 } // namespace pictura

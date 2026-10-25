@@ -328,3 +328,77 @@ fn save_view_trims_the_display_alpha_only_for_a_source_mode() {
     assert_eq!(cmyk.composite.channels, 4);
     assert_eq!(save_view(&cmyk).composite.channels, 3);
 }
+
+#[test]
+fn mode_profile_uses_working_cmyk() {
+    let mut doc = ramp(2, 1);
+    let source = doc.composite.data[..6].to_vec();
+    let profile = Profile::coated_cmyk();
+    let options = ConversionOptions {
+        dither: false,
+        ..ConversionOptions::default()
+    };
+    convert_mode_with_profiles(&mut doc, ColorMode::Cmyk, Some(&profile), options)
+        .expect("converts");
+    let expected =
+        pictura_codec::rgb_to_cmyk_with_profile(&source, &profile, options).expect("lcms2 encode");
+    let store = doc.source_planes.as_ref().expect("store");
+    let Samples::U8(values) = &store.samples else {
+        panic!("8-bit store");
+    };
+    assert_eq!(values.as_slice(), expected.as_slice());
+    let icc = pictura_codec::decode_image_resources(&doc)
+        .into_iter()
+        .find(|r| r.id == pictura_codec::ICC_PROFILE)
+        .map(|r| r.data)
+        .expect("1039");
+    assert_eq!(icc, profile.to_icc());
+}
+
+#[test]
+fn mode_profile_falls_back() {
+    let mut doc = ramp(2, 1);
+    let source = doc.composite.data[..6].to_vec();
+    convert_mode(&mut doc, ColorMode::Cmyk).expect("converts");
+    let expected = planes::rgb_to_cmyk_gcr(&source);
+    let store = doc.source_planes.as_ref().expect("store");
+    let Samples::U8(values) = &store.samples else {
+        panic!("8-bit store");
+    };
+    assert_eq!(values.as_slice(), expected.as_slice());
+    assert!(pictura_codec::decode_image_resources(&doc)
+        .iter()
+        .all(|r| r.id != pictura_codec::ICC_PROFILE));
+}
+
+#[test]
+fn mode_profile_round_trip() {
+    let mut doc = ramp(2, 1);
+    let profile = Profile::coated_cmyk();
+    let options = ConversionOptions {
+        dither: false,
+        ..ConversionOptions::default()
+    };
+    convert_mode_with_profiles(&mut doc, ColorMode::Cmyk, Some(&profile), options)
+        .expect("converts");
+    let shown = doc.composite.data[..6].to_vec();
+    let written = write_psd(&save_view(&doc)).expect("writes");
+    let read = pictura_codec::read_psd_with_options(
+        &written,
+        &pictura_codec::OpenOptions {
+            policy: pictura_codec::Policy::Preserve,
+            working_cmyk: Some(profile.to_icc()),
+            conversion: options,
+        },
+    )
+    .expect("reads");
+    assert_eq!(read.source_mode, Some(ColorMode::Cmyk));
+    assert_eq!(read.source_planes, doc.source_planes);
+    for (a, b) in shown.iter().zip(&read.composite.data[..6]) {
+        assert!(
+            a.abs_diff(*b) <= 8,
+            "{shown:?} -> {:?}",
+            &read.composite.data[..6]
+        );
+    }
+}

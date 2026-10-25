@@ -10,6 +10,9 @@
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
+#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 
 #include <QtCore/QHash>
@@ -105,6 +108,15 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     setFileDialogRecentPaths(recent_);
     gpuCompute_ = state.gpuCompute;
     colorPolicy_ = state.colorPolicy;
+    cmykPolicy_ = state.cmykPolicy;
+    workingCmyk_ = state.workingCmyk;
+    renderIntent_ = state.renderIntent;
+    blackPointCompensation_ = state.blackPointCompensation;
+    useDither_ = state.useDither;
+    askMismatchOpen_ = state.askMismatchOpen;
+    askMissingOpen_ = state.askMissingOpen;
+    pickerChoice_ = state.pickerChoice;
+    ColorPickerDialog::setPickerPreference(pickerChoice_);
     applyTextGamma(state.textGammaEnabled, state.textGamma);
     typeShowAsianOptions_ = state.typeShowAsianOptions; typeMiddleEastern_ = state.typeMiddleEastern;
     typeMissingGlyphProtection_ = state.typeMissingGlyphProtection;
@@ -393,9 +405,7 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path, bool 
     if (view->gpu_compute() != gpuCompute_) {
         view->set_gpu_compute(gpuCompute_);
     }
-    if (view->color_policy() != colorPolicy_) {
-        view->set_color_policy(colorPolicy_);
-    }
+    applyColorSettings(view);
     gpuAvailable_ = view->gpu_available();
     auto* entry = new DocEntry;
     entry->view = view;
@@ -709,40 +719,6 @@ void PicturaMainWindow::showFileInfo()
     if (runDialog(dialog, this) == QDialog::Accepted) {
         view->apply_metadata_edits(dialog.edits());
     }
-}
-
-void PicturaMainWindow::showProfileCommand(bool convert)
-{
-    PictureView* view = activeView();
-    if (!view || !view->has_document() || document_api::documentMode(*view) != QStringLiteral("rgb")) {
-        return;
-    }
-    ProfileDialog dialog(convert, this);
-    if (runDialog(dialog, this) != QDialog::Accepted) {
-        return;
-    }
-    const int index = dialog.profileIndex();
-    const bool ok = convert ? view->convert_profile(index) : view->assign_profile(index);
-    if (ok) {
-        refresh();
-    }
-}
-
-void PicturaMainWindow::showColorSettings()
-{
-    ColorSettingsDialog dialog(colorPolicy_, this);
-    dialog.setTextGamma(textGammaEnabled_, textGamma_);
-    if (runDialog(dialog, this) != QDialog::Accepted) {
-        return;
-    }
-    colorPolicy_ = dialog.policyCode();
-    applyTextGamma(dialog.textGammaEnabled(), dialog.textGamma());
-    for (const DocEntry* entry : docs_) {
-        if (entry->view) {
-            entry->view->set_color_policy(colorPolicy_);
-        }
-    }
-    saveSession();
 }
 
 void PicturaMainWindow::showOpenDialog()

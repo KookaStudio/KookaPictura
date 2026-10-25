@@ -187,6 +187,16 @@ fn store_opened_composite(doc: &mut Document, gpu: bool) {
     store_composite(doc, &rendered);
 }
 
+/// The application's default open options. The working CMYK profile is the
+/// bundled synthetic coated profile until Color Settings carries a choice.
+fn open_options(policy: Policy) -> pictura_codec::OpenOptions {
+    pictura_codec::OpenOptions {
+        policy,
+        working_cmyk: Some(pictura_codec::Profile::coated_cmyk().to_icc()),
+        conversion: pictura_codec::ConversionOptions::default(),
+    }
+}
+
 /// Read and decode a PSD/PSB. `None` when the file is missing or unsupported.
 pub(super) fn decode_psd(
     path: &str,
@@ -194,10 +204,19 @@ pub(super) fn decode_psd(
     gpu: bool,
     progress: &dyn Fn(u8, &str),
 ) -> Option<OpenedDocument> {
+    decode_psd_with(path, open_options(policy), gpu, progress)
+}
+
+fn decode_psd_with(
+    path: &str,
+    options: pictura_codec::OpenOptions,
+    gpu: bool,
+    progress: &dyn Fn(u8, &str),
+) -> Option<OpenedDocument> {
     progress(5, "Reading file");
     let bytes = std::fs::read(path).ok()?;
     progress(25, "Decoding");
-    let mut doc = pictura_codec::read_psd_with(&bytes, policy).ok()?;
+    let mut doc = pictura_codec::read_psd_with_options(&bytes, &options).ok()?;
     progress(65, "Compositing");
     store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
@@ -237,9 +256,94 @@ pub(super) fn make_background(layer: &mut Layer) {
     layer.channels.retain(|channel| channel.id != -1);
 }
 
+/// Apply a raster's embedded RGB ICC profile under the incoming policy. A
+/// CMYK profile is not applied to the decoded RGB bytes; Qt has already
+/// produced RGB values and the profile cannot describe them.
+fn apply_raster_profile(
+    doc: &mut Document,
+    bytes: &[u8],
+    policy: Policy,
+    options: pictura_codec::ConversionOptions,
+) {
+    let probe = pictura_codec::probe_raster_profile(bytes);
+    let Some(icc) = probe.embedded else {
+        return;
+    };
+    if probe.is_srgb || probe.channels != Some(3) {
+        return;
+    }
+    match policy {
+        Policy::Preserve => doc.document_icc = Some(icc),
+        Policy::Convert => {
+            doc.document_icc = Some(icc.clone());
+            let _ =
+                pictura_codec::convert_document_with(doc, &pictura_codec::Profile::srgb(), options);
+            doc.source_icc = Some(icc);
+        }
+        Policy::Off => {}
+    }
+}
+
+/// Convert a placed raster's decoded pixels to the host sRGB working space
+/// when it carries a non-sRGB RGB ICC profile. Place always converts, so the
+/// resulting layer is in the document's working space.
+pub(super) fn convert_placed_rgba(
+    bytes: &[u8],
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    policy: Policy,
+) -> Vec<u8> {
+    if policy == Policy::Off {
+        return rgba;
+    }
+    let probe = pictura_codec::probe_raster_profile(bytes);
+    let Some(icc) = probe.embedded else {
+        return rgba;
+    };
+    if probe.is_srgb || probe.channels != Some(3) {
+        return rgba;
+    }
+    let mut doc = Document::from_rgba("place", width, height, &rgba);
+    doc.document_icc = Some(icc);
+    if !pictura_codec::convert_document_with(
+        &mut doc,
+        &pictura_codec::Profile::srgb(),
+        pictura_codec::ConversionOptions::default(),
+    ) {
+        return rgba;
+    }
+    super::helpers_composite::buffer_to_rgba_bytes(&doc.composite)
+}
+
 /// Read and decode a raster through the shared import path.
 pub(super) fn decode_image(
     path: &str,
+    gpu: bool,
+    progress: &dyn Fn(u8, &str),
+) -> Option<OpenedDocument> {
+    decode_image_with_policy(path, Policy::Convert, gpu, progress)
+}
+
+pub(super) fn decode_image_with_policy(
+    path: &str,
+    policy: Policy,
+    gpu: bool,
+    progress: &dyn Fn(u8, &str),
+) -> Option<OpenedDocument> {
+    decode_image_with_options(
+        path,
+        policy,
+        pictura_codec::ConversionOptions::default(),
+        gpu,
+        progress,
+    )
+}
+
+pub(super) fn decode_image_with_options(
+    path: &str,
+    policy: Policy,
+    options: pictura_codec::ConversionOptions,
     gpu: bool,
     progress: &dyn Fn(u8, &str),
 ) -> Option<OpenedDocument> {
@@ -254,6 +358,7 @@ pub(super) fn decode_image(
     let (rgba, width, height) = decode_import(&bytes)?;
     progress(70, "Compositing");
     let mut doc = Document::from_rgba(&name, width, height, &rgba);
+    apply_raster_profile(&mut doc, &bytes, policy, options);
     finalize_import(&mut doc, &rgba);
     if let Some(section) = pictura_codec::raster_image_resources(&bytes) {
         doc.image_resources = section;
@@ -342,12 +447,12 @@ fn decode_pdf_psd(
     psd: &[u8],
     path: &str,
     password: &str,
-    policy: Policy,
+    options: pictura_codec::OpenOptions,
     gpu: bool,
     progress: &dyn Fn(u8, &str),
 ) -> Option<OpenedDocument> {
     progress(35, "Decoding");
-    let mut doc = pictura_codec::read_psd_with(psd, policy).ok()?;
+    let mut doc = pictura_codec::read_psd_with_options(psd, &options).ok()?;
     progress(65, "Compositing");
     store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
@@ -370,7 +475,7 @@ pub(super) fn decode_pdf(path: &str, password: &str, policy: Policy, gpu: bool) 
     let bytes = std::fs::read(path).unwrap_or_default();
     match pictura_codec::pdf::editing_psd(&bytes, password) {
         pictura_codec::pdf::EditingPsd::Psd(psd) => {
-            match decode_pdf_psd(&psd, path, password, policy, gpu, &|_, _| {}) {
+            match decode_pdf_psd(&psd, path, password, open_options(policy), gpu, &|_, _| {}) {
                 Some(opened) => PdfOpen::Ok(Box::new(opened)),
                 None => PdfOpen::None,
             }
@@ -586,10 +691,21 @@ fn start(
 
 pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
     let path = path.to_string();
-    let policy = view.rust().color_policy;
-    let gpu = view.rust().gpu_compute;
+    let (options, gpu) = {
+        let mut rust = view.as_mut().rust_mut();
+        let policy = rust
+            .open_policy_override
+            .take()
+            .unwrap_or(rust.color_policy);
+        let options = pictura_codec::OpenOptions {
+            policy,
+            working_cmyk: Some(rust.working_cmyk.clone()),
+            conversion: rust.conversion_options,
+        };
+        (options, rust.gpu_compute)
+    };
     start(&mut view, move |progress| {
-        match decode_psd(&path, policy, gpu, progress) {
+        match decode_psd_with(&path, options, gpu, progress) {
             Some(opened) => (Some(opened), "ok".to_string(), Vec::new()),
             None => (None, "error".to_string(), Vec::new()),
         }
@@ -598,9 +714,16 @@ pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
 
 pub fn open_image_start(mut view: Pin<&mut PictureView>, path: &QString) {
     let path = path.to_string();
-    let gpu = view.rust().gpu_compute;
+    let (policy, options, gpu) = {
+        let mut rust = view.as_mut().rust_mut();
+        let policy = rust
+            .open_policy_override
+            .take()
+            .unwrap_or(rust.color_policy);
+        (policy, rust.conversion_options, rust.gpu_compute)
+    };
     start(&mut view, move |progress| {
-        match decode_image(&path, gpu, progress) {
+        match decode_image_with_options(&path, policy, options, gpu, progress) {
             Some(opened) => (Some(opened), "ok".to_string(), Vec::new()),
             None => (None, "error".to_string(), Vec::new()),
         }
@@ -621,7 +744,14 @@ pub fn open_smart_object_start(mut view: Pin<&mut PictureView>, path: &QString) 
 pub fn open_pdf_start(mut view: Pin<&mut PictureView>, path: &QString, password: &QString) {
     let path = path.to_string();
     let password = password.to_string();
-    let policy = view.rust().color_policy;
+    let options = {
+        let rust = view.rust();
+        pictura_codec::OpenOptions {
+            policy: rust.color_policy,
+            working_cmyk: Some(rust.working_cmyk.clone()),
+            conversion: rust.conversion_options,
+        }
+    };
     let gpu = view.rust().gpu_compute;
     let request = view.as_mut().rust_mut().begin_open_request();
     let delay_ms = view.rust().open_delay_for_test;
@@ -651,7 +781,7 @@ pub fn open_pdf_start(mut view: Pin<&mut PictureView>, path: &QString, password:
                         }
                     })
                     .ok();
-                let opened = decode_pdf_psd(&psd, &path, &password, policy, gpu, &progress);
+                let opened = decode_pdf_psd(&psd, &path, &password, options, gpu, &progress);
                 let status = if opened.is_some() {
                     "ok".to_string()
                 } else {

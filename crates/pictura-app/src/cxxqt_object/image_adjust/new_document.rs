@@ -124,6 +124,8 @@ fn create_document(
     let rgb = [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8];
     let finished = {
         let mut rust = view.as_mut().rust_mut();
+        let profile = pictura_codec::Profile::from_icc(&rust.working_cmyk).ok();
+        let options = rust.conversion_options;
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
@@ -141,7 +143,10 @@ fn create_document(
             Some(ColorMode::Bitmap) => {
                 pictura_render::convert_to_bitmap(doc, BitmapMethod::Threshold).is_ok()
             }
-            Some(mode) => pictura_render::convert_mode(doc, mode).is_ok(),
+            Some(mode) => {
+                pictura_render::convert_mode_with_profiles(doc, mode, profile.as_ref(), options)
+                    .is_ok()
+            }
             None => true,
         } && depth
             .is_none_or(|d| pictura_render::convert_bit_depth(doc, d).is_ok());

@@ -229,6 +229,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/new_guide_dialog.cpp
     crates/pictura-app/cpp/file_info_dialog.cpp
     crates/pictura-app/cpp/profile_dialog.cpp
+    crates/pictura-app/cpp/profile_warning_dialog.cpp
+    crates/pictura-app/cpp/save_options_dialog.cpp
     crates/pictura-app/cpp/hdr_conversion_dialog.cpp
     crates/pictura-app/cpp/pictura_raw_dialog.cpp
     crates/pictura-app/cpp/acr/acr_settings.cpp
@@ -301,6 +303,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/color_models.cpp
     crates/pictura-app/cpp/color_models.h
     crates/pictura-app/cpp/color_picker_dialog.cpp
+    crates/pictura-app/cpp/color_picker_math.cpp
     crates/pictura-app/cpp/color_range_dialog.cpp
     crates/pictura-app/cpp/refine_edge_dialog.cpp
     crates/pictura-app/cpp/mask_display_options_dialog.cpp
@@ -367,6 +370,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_document_windows.cpp
     crates/pictura-app/cpp/frame_document_menus.cpp
     crates/pictura-app/cpp/frame_document_arrange.cpp
+    crates/pictura-app/cpp/frame_color.cpp
     crates/pictura-app/cpp/frame_open.cpp
     crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_import.cpp

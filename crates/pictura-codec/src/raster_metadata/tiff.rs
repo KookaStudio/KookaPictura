@@ -14,6 +14,7 @@ const TAG_XMP: u16 = 700;
 const TAG_IPTC: u16 = 33723;
 const TAG_EXIF_POINTER: u16 = 34665;
 const TAG_PHOTOSHOP: u16 = 34377;
+const TAG_ICC: u16 = 34675;
 
 /// Tags whose value is an offset into the TIFF/EXIF block they came from. The
 /// destination keeps its own copies, so an offset carried over from the
@@ -296,7 +297,7 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
         .filter(|entry| {
             !matches!(
                 entry.tag,
-                TAG_XMP | TAG_IPTC | TAG_EXIF_POINTER | TAG_PHOTOSHOP
+                TAG_XMP | TAG_IPTC | TAG_EXIF_POINTER | TAG_PHOTOSHOP | TAG_ICC
             )
         })
         .map(|entry| OutEntry {
@@ -343,6 +344,15 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
             count: block.len() as u32,
             inline: None,
             data: Some(block),
+        });
+    }
+    if let Some(icc) = &metadata.icc {
+        entries.push(OutEntry {
+            tag: TAG_ICC,
+            typ: 7,
+            count: icc.len() as u32,
+            inline: None,
+            data: Some(icc.clone()),
         });
     }
     if let Some(offset) = exif_ifd_offset {
@@ -414,11 +424,12 @@ mod tests {
             iptc: Some(b"iptc".to_vec()),
             xmp: Some(b"<x:xmpmeta/>".to_vec()),
             vanishing_point: None,
+            icc: Some(b"fake-icc".to_vec()),
         };
         let out = embed(&minimal_tiff(), &metadata).expect("embed");
         let (order, offset) = parse_header(&out).expect("header");
         let entries = read_ifd(&out, order, offset).expect("IFD0");
-        for tag in [256u16, 271, 700, 33723] {
+        for tag in [256u16, 271, 700, 33723, 34377, 34675] {
             assert!(entries.iter().any(|entry| entry.tag == tag), "tag {tag}");
         }
         assert!(find(&out, b"Canon\0"), "Make survives");

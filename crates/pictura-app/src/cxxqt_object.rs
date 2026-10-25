@@ -7,6 +7,7 @@ mod annotations;
 mod channels;
 mod clipboard;
 mod clipping;
+mod color_management;
 mod color_range;
 mod command_catalogue;
 mod crop_group;

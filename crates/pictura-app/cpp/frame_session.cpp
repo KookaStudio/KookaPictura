@@ -146,6 +146,14 @@ void PicturaMainWindow::saveSession()
     state.uiScalePercent = uiScalePercent_;
     state.gpuCompute = gpuCompute_;
     state.colorPolicy = colorPolicy_;
+    state.cmykPolicy = cmykPolicy_;
+    state.workingCmyk = workingCmyk_;
+    state.renderIntent = renderIntent_;
+    state.blackPointCompensation = blackPointCompensation_;
+    state.useDither = useDither_;
+    state.askMismatchOpen = askMismatchOpen_;
+    state.askMissingOpen = askMissingOpen_;
+    state.pickerChoice = pickerChoice_;
     state.textGammaEnabled = textGammaEnabled_;
     state.textGamma = textGamma_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;

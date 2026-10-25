@@ -134,6 +134,19 @@ bool PicturaMainWindow::saveAsWithDialog()
         }
         return saved;
     }
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    const bool native = suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
+    const bool offersProfile = native || suffix == QStringLiteral("jpg")
+        || suffix == QStringLiteral("jpeg") || suffix == QStringLiteral("jpe")
+        || suffix == QStringLiteral("tif") || suffix == QStringLiteral("tiff");
+    if (offersProfile) {
+        SaveOptionsDialog options(
+            pictura::default_save_embed_profile(*view, native), true, this);
+        if (runDialog(options, this) != QDialog::Accepted) {
+            return false;
+        }
+        pictura::set_save_embed_profile(*view, options.embedProfile());
+    }
     if (saveAsNeedsFeatureWarning(path, view)) {
         const auto choice = QMessageBox::warning(
             this, tr("Save As"),
@@ -171,6 +184,10 @@ void PicturaMainWindow::registerHandlers()
             return;
         }
         const bool psd = PicturaMainWindow::isNativeDocumentPath(path);
+        applyColorSettings(view);
+        if (!psd && !confirmProfileForOpen(view, path)) {
+            return;
+        }
         const QString created =
             psd ? view->place_smart_object(path) : view->place_image(path);
         if (!created.isEmpty()) {

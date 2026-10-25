@@ -37,6 +37,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setBrightnessLevel(brightnessLevel_);
         preferencesDialog_->setThemeFamily(themeFamily_);
         preferencesDialog_->setUiScalePercent(uiScalePercent_);
+        preferencesDialog_->setPickerChoice(pickerChoice_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
         preferencesDialog_->setGpuComputeEnabled(gpuAvailable_);
         preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
@@ -81,6 +82,17 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 [this](int family) { setThemeFamily(family); });
         connect(preferencesDialog_, &PreferencesDialog::uiScalePercentChanged, this,
                 [this](int percent) { setUiScalePercent(percent); });
+        connect(preferencesDialog_, &PreferencesDialog::pickerChoiceChanged, this,
+                [this](int choice) {
+                    pickerChoice_ = choice == 1 ? 1 : 0;
+                    ColorPickerDialog::setPickerPreference(pickerChoice_);
+                    for (const DocEntry& entry : docs_) {
+                        if (entry.view) {
+                            pictura::set_picker_choice(*entry.view, pickerChoice_);
+                        }
+                    }
+                    saveSession();
+                });
         connect(preferencesDialog_, &PreferencesDialog::gpuComputeChanged, this,
                 &PicturaMainWindow::applyGpuComputePreference);
         connect(preferencesDialog_, &PreferencesDialog::typePlaceholderTextChanged, this,

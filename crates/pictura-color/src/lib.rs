@@ -38,6 +38,49 @@ impl Intent {
 
 const COATED_CMYK_ICC: &[u8] = include_bytes!("../../../assets/icc/photocraft-coated-cmyk.icc");
 
+/// Options shared by every profile conversion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConversionOptions {
+    pub intent: Intent,
+    pub black_point_compensation: bool,
+    pub dither: bool,
+}
+
+impl Default for ConversionOptions {
+    fn default() -> Self {
+        Self {
+            intent: Intent::RelativeColorimetric,
+            black_point_compensation: true,
+            dither: true,
+        }
+    }
+}
+
+/// A deterministic 8x8 ordered dither for one 8-bit colour plane. The pattern
+/// is centred on zero and scaled to +/-2 LSB, enough to break a visible band
+/// without visibly changing a flat patch. Callers apply it only to 8-bit data.
+pub fn dither_plane(plane: &mut [u8], width: usize) {
+    if width == 0 {
+        return;
+    }
+    const BAYER8: [[u8; 8]; 8] = [
+        [0, 32, 8, 40, 2, 34, 10, 42],
+        [48, 16, 56, 24, 50, 18, 58, 26],
+        [12, 44, 4, 36, 14, 46, 6, 38],
+        [60, 28, 52, 20, 62, 30, 54, 22],
+        [3, 35, 11, 43, 1, 33, 9, 41],
+        [51, 19, 59, 27, 49, 17, 57, 25],
+        [15, 47, 7, 39, 13, 45, 5, 37],
+        [63, 31, 55, 23, 61, 29, 53, 21],
+    ];
+    for (i, value) in plane.iter_mut().enumerate() {
+        let x = i % width;
+        let y = i / width;
+        let delta = i16::from(BAYER8[y % 8][x % 8]) / 16 - 2;
+        *value = (i16::from(*value) + delta).clamp(0, 255) as u8;
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ColorError {
     #[error("invalid ICC profile")]
@@ -84,14 +127,15 @@ impl Policy {
     }
 }
 
-/// An ICC profile handle.
+/// An ICC profile handle. The source bytes, when the profile was parsed, are
+/// kept so serialization is the exact input rather than a lossy round trip.
 #[derive(Debug)]
-pub struct Profile(LcmsProfile);
+pub struct Profile(LcmsProfile, Option<Vec<u8>>);
 
 impl Profile {
     /// sRGB IEC61966-2.1 (the default working space).
     pub fn srgb() -> Profile {
-        Profile(LcmsProfile::new_srgb())
+        Profile(LcmsProfile::new_srgb(), None)
     }
 
     /// Adobe RGB (1998): D65, Adobe primaries, gamma 563/256.
@@ -175,6 +219,7 @@ impl Profile {
         Profile(
             LcmsProfile::new_gray(&white, &ToneCurve::new(2.2))
                 .expect("built-in gray profile is valid"),
+            None,
         )
     }
 
@@ -192,12 +237,16 @@ impl Profile {
     /// Parse an ICC profile from raw bytes. Malformed input yields an error.
     pub fn from_icc(bytes: &[u8]) -> Result<Profile, ColorError> {
         LcmsProfile::new_icc(bytes)
-            .map(Profile)
+            .map(|profile| Profile(profile, Some(bytes.to_vec())))
             .map_err(|_| ColorError::InvalidProfile)
     }
 
-    /// Serialize the profile back to ICC bytes.
+    /// The profile's ICC bytes: the exact input for a profile parsed with
+    /// [`Profile::from_icc`], else a serialization of the built-in profile.
     pub fn to_icc(&self) -> Vec<u8> {
+        if let Some(bytes) = &self.1 {
+            return bytes.clone();
+        }
         // A Profile only exists after lcms2 accepted it, so serialization
         // succeeds in practice; the empty fallback keeps this panic-free.
         let mut bytes = self.0.icc().unwrap_or_default();
@@ -246,6 +295,7 @@ fn rgb_profile(white: CIExyY, primaries: CIExyYTRIPLE, curve: ToneCurve) -> Prof
     Profile(
         LcmsProfile::new_rgb(&white, &primaries, &curves)
             .expect("built-in RGB primaries are valid"),
+        None,
     )
 }
 
@@ -882,5 +932,86 @@ mod tests {
             let reparsed = Profile::from_icc(&v2).expect("v2 bytes parse");
             assert_eq!(reparsed.channels(), profile.channels());
         }
+    }
+
+    #[test]
+    fn profile_options_default_to_cs6_values() {
+        let options = ConversionOptions::default();
+        assert_eq!(options.intent, Intent::RelativeColorimetric);
+        assert!(options.black_point_compensation);
+        assert!(options.dither);
+    }
+
+    #[test]
+    fn cmyk_profile_serializes() {
+        let cmyk = Profile::coated_cmyk();
+        let bytes = cmyk.to_icc();
+        let reloaded = Profile::from_icc(&bytes).expect("serialized CMYK parses");
+        assert_eq!(reloaded.channels(), Some(4));
+        assert_eq!(reloaded.description(), cmyk.description());
+    }
+
+    #[test]
+    fn cmyk_round_trip_within_tolerance() {
+        let srgb = Profile::srgb();
+        let cmyk = Profile::coated_cmyk();
+        let rgb = rgb8(&[
+            [0, 0, 0],
+            [255, 255, 255],
+            [128, 128, 128],
+            [200, 50, 100],
+            [20, 80, 160],
+        ]);
+        let inks = convert_space(&srgb, &cmyk, &rgb, Intent::RelativeColorimetric, true)
+            .expect("rgb to cmyk");
+        let back = convert_space(&cmyk, &srgb, &inks, Intent::RelativeColorimetric, true)
+            .expect("cmyk to rgb");
+        for (a, b) in rgb.iter().zip(&back) {
+            assert!(
+                (*a as i16 - *b as i16).abs() <= 8,
+                "CMYK round trip moved {a} to {b}"
+            );
+        }
+    }
+
+    #[test]
+    fn cmyk_buffer_length_is_refused() {
+        let result = convert_space(
+            &Profile::coated_cmyk(),
+            &Profile::srgb(),
+            &[0, 0, 0],
+            Intent::RelativeColorimetric,
+            true,
+        );
+        assert!(matches!(result, Err(ColorError::Unsupported(_))));
+    }
+
+    #[test]
+    fn black_point_compensation_changes_shadows() {
+        let srgb = Profile::srgb();
+        let cmyk = Profile::coated_cmyk();
+        let shadow = rgb8(&[
+            [0, 0, 0],
+            [1, 1, 1],
+            [2, 2, 2],
+            [4, 4, 4],
+            [8, 8, 8],
+            [16, 16, 16],
+        ]);
+        let on = convert_space(&srgb, &cmyk, &shadow, Intent::RelativeColorimetric, true)
+            .expect("bpc on");
+        let off = convert_space(&srgb, &cmyk, &shadow, Intent::RelativeColorimetric, false)
+            .expect("bpc off");
+        assert_ne!(on, off, "black-point compensation must reach the transform");
+    }
+
+    #[test]
+    fn dither_is_deterministic_and_8bit_only() {
+        let mut first = vec![0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        let mut second = first.clone();
+        dither_plane(&mut first, 4);
+        dither_plane(&mut second, 4);
+        assert_eq!(first, second, "the ordered pattern is stable");
+        assert_ne!(first, vec![0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     }
 }

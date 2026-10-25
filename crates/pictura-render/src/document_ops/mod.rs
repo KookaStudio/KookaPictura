@@ -70,9 +70,9 @@ pub use layer_ops::{
 pub(crate) use layer_ops::{insert_node, map_shape_layer};
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};
 pub use mode::{
-    can_convert_depth, can_convert_mode, convert_bit_depth, convert_mode, convert_to_bitmap,
-    convert_to_indexed, document_bit_depth, document_color_mode, indexed_exact_available,
-    save_view, BitmapMethod,
+    can_convert_depth, can_convert_mode, convert_bit_depth, convert_mode,
+    convert_mode_with_profiles, convert_to_bitmap, convert_to_indexed, document_bit_depth,
+    document_color_mode, indexed_exact_available, save_view, BitmapMethod,
 };
 pub use orient::{flip_document, rotate_document};
 pub use pictura_raw::{

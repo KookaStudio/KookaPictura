@@ -104,6 +104,17 @@ SessionState loadSession()
     state.gpuCompute = obj.value(QStringLiteral("gpuCompute")).toBool(true);
     const int colorPolicy = obj.value(QStringLiteral("colorPolicy")).toInt(0);
     state.colorPolicy = (colorPolicy == 1 || colorPolicy == 2) ? colorPolicy : 0;
+    const int cmykPolicy = obj.value(QStringLiteral("cmykPolicy")).toInt(0);
+    state.cmykPolicy = (cmykPolicy == 1 || cmykPolicy == 2) ? cmykPolicy : 0;
+    state.workingCmyk = obj.value(QStringLiteral("workingCmyk")).toInt(0);
+    const int renderIntent = obj.value(QStringLiteral("renderIntent")).toInt(1);
+    state.renderIntent = (renderIntent >= 0 && renderIntent <= 3) ? renderIntent : 1;
+    state.blackPointCompensation =
+        obj.value(QStringLiteral("blackPointCompensation")).toBool(true);
+    state.useDither = obj.value(QStringLiteral("useDither")).toBool(true);
+    state.askMismatchOpen = obj.value(QStringLiteral("askMismatchOpen")).toBool(false);
+    state.askMissingOpen = obj.value(QStringLiteral("askMissingOpen")).toBool(false);
+    state.pickerChoice = obj.value(QStringLiteral("pickerChoice")).toInt(0) == 1 ? 1 : 0;
     state.textGammaEnabled = obj.value(QStringLiteral("textGammaEnabled")).toBool(true);
     state.textGamma = qBound(1.0, obj.value(QStringLiteral("textGamma")).toDouble(1.45), 2.2);
     state.layersThumbSize = obj.value(QStringLiteral("layersThumbSize")).toInt(2);
@@ -257,6 +268,14 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("uiScalePercent"), state.uiScalePercent);
     obj.insert(QStringLiteral("gpuCompute"), state.gpuCompute);
     obj.insert(QStringLiteral("colorPolicy"), state.colorPolicy);
+    obj.insert(QStringLiteral("cmykPolicy"), state.cmykPolicy);
+    obj.insert(QStringLiteral("workingCmyk"), state.workingCmyk);
+    obj.insert(QStringLiteral("renderIntent"), state.renderIntent);
+    obj.insert(QStringLiteral("blackPointCompensation"), state.blackPointCompensation);
+    obj.insert(QStringLiteral("useDither"), state.useDither);
+    obj.insert(QStringLiteral("askMismatchOpen"), state.askMismatchOpen);
+    obj.insert(QStringLiteral("askMissingOpen"), state.askMissingOpen);
+    obj.insert(QStringLiteral("pickerChoice"), state.pickerChoice);
     obj.insert(QStringLiteral("textGammaEnabled"), state.textGammaEnabled);
     obj.insert(QStringLiteral("textGamma"), state.textGamma);
     obj.insert(QStringLiteral("layersThumbSize"), state.layersThumbSize);
