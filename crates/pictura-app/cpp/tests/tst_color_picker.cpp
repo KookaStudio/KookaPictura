@@ -310,8 +310,13 @@ void ColorPickerTest::colorPanelSwatchOpensPicker()
     QTimer timer;
     timer.setInterval(10);
     connect(&timer, &QTimer::timeout, [&]() {
-        auto* dialog =
-            qobject_cast<pictura::ColorPickerDialog*>(QApplication::activeModalWidget());
+        pictura::ColorPickerDialog* dialog = nullptr;
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (auto* candidate = qobject_cast<pictura::ColorPickerDialog*>(widget)) {
+                dialog = candidate;
+                break;
+            }
+        }
         if (!dialog) {
             return;
         }
