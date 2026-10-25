@@ -49,13 +49,14 @@ public:
             return true;
         }
         const MixerOptions o = mixer_->get();
-        // ponytail: Sample All Layers is not wired; the active layer is sampled.
+        // The bar has no Mode or Opacity, so a stroke is Normal at 100 % rather
+        // than inheriting what the Brush last set on the shared options.
         {
             pictura::ScopedTimer beginTimer("cxx_begin_mixer_brush (call)");
             stroke_.emplace(*v, [&] {
                 return begin_mixer_brush(*v, mixer_->get().reservoir.rgba(), paintTip(*paint_),
-                                         o.wet, o.load, o.mix, o.flow, paint_->opacity(),
-                                         paint_->mode());
+                                         o.wet, o.load, o.mix, o.flow, o.sampleAllLayers, 100,
+                                         QStringLiteral("normal"));
             });
         }
         if (!stroke_->open()) {

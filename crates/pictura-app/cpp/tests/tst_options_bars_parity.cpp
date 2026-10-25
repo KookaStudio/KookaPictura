@@ -38,7 +38,7 @@ private slots:
     void moveAutoSelectPicksTheTopmostLayer();
     void eraserBarMatchesTheBrush();
     void pencilAutoEraseDoesNotLeakToBrush();
-    void mixerExposesModeOpacity();
+    void mixerBarMatchesCc();
     void eyedropperSampleSize();
     void eyedropperSampleScope();
     void eyedropperSamplingRing();
@@ -230,7 +230,7 @@ void OptionsBarsParityTest::pencilAutoEraseDoesNotLeakToBrush()
     pencil->setAutoErase(false);
 }
 
-void OptionsBarsParityTest::mixerExposesModeOpacity()
+void OptionsBarsParityTest::mixerBarMatchesCc()
 {
     QVERIFY(window_->newDocument(QStringLiteral("Mixer"), 40, 40, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
@@ -240,22 +240,21 @@ void OptionsBarsParityTest::mixerExposesModeOpacity()
     QVERIFY(bar && tools);
     QWidget* page = bar->pageForTest(pictura::ToolId::MixerBrush);
     QVERIFY(page);
-    auto* mode = page->findChild<QComboBox*>(QStringLiteral("optionsMixerMode"));
-    auto* opacity =
-        page->findChild<pictura::NumericField*>(QStringLiteral("optionsMixerOpacity"));
-    QVERIFY(mode && opacity);
-    auto* paint = tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::MixerBrush);
-    QVERIFY(paint);
+    QVERIFY(!page->findChild<QComboBox*>(QStringLiteral("optionsMixerMode")));
+    QVERIFY(!page->findChild<QWidget*>(QStringLiteral("optionsMixerOpacity")));
+    auto* sampleAll = page->findChild<QCheckBox*>(QStringLiteral("optionsMixerSampleAll"));
+    QVERIFY(sampleAll);
+    QVERIFY(sampleAll->isEnabled());
+    auto* mixer = tools->optionsFor<pictura::MixerGroup>(pictura::ToolId::MixerBrush);
+    QVERIFY(mixer);
+    QVERIFY(!mixer->get().sampleAllLayers);
 
-    mode->setCurrentIndex(4);
-    QCOMPARE(paint->mode(), QStringLiteral("multiply"));
-    QCOMPARE(mode->currentText(), QStringLiteral("Multiply"));
-
-    paint->setOpacity(50);
-    QCOMPARE(opacity->value(), 50.0);
-
-    paint->setMode(QStringLiteral("normal"));
-    paint->setOpacity(100);
+    sampleAll->setChecked(true);
+    QVERIFY(mixer->get().sampleAllLayers);
+    pictura::MixerOptions o = mixer->get();
+    o.sampleAllLayers = false;
+    mixer->set(o);
+    QVERIFY(!mixer->get().sampleAllLayers);
 }
 
 void OptionsBarsParityTest::eraserBarMatchesTheBrush()

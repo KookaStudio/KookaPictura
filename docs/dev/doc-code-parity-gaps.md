@@ -129,7 +129,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-13 | `clone-stamp-and-pattern-stamp.md` | Clone Source overlay controls | MISSING | `clone_source_panel.h` | #537 |
 | TOOL-14 | `healing-brushes.md` | Healing Mode/Source/Sample, Sample All Layers, depth/mode handling | PARTIAL | `options_bar.cpp:694-741`; `tool_healing.cpp:165` | #538 |
 | TOOL-15 | `history-brush.md` | Merged/composite source + Edit ▸ Fill ▸ History | PARTIAL | `paint_tools.rs:524-527` | #539 |
-| TOOL-16 | `mixer-brush.md` | Sample All Layers, Load Solid Colors Only, keyboard shortcuts | MISSING | `options_bar_paint.cpp:310`; `tool_mixerbrush.cpp:39-41` | #540 |
+| TOOL-16 | `mixer-brush.md` | Load Solid Colors Only, keyboard shortcuts | MISSING | `tool_mixerbrush.cpp:39-41` | #540 |
 | TOOL-18 | `path-selection-tools.md` | Path operations/align/arrange, constrain path dragging, Target Path toggle, segment/marquee multi-select | MISSING | `tool_path_selection.cpp:13-14` | #542 |
 | TOOL-19 | `slice-tools.md` | Slice options bar/style/modifiers, Divide/Combine/Duplicate, Slice Options dialog, slices-from-guides | MISSING | `tool_slice.cpp:65-102` | #543 |
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |

@@ -47,6 +47,7 @@ struct MixerOptions {
     int load = 50;
     int mix = 0;
     int flow = 100;
+    bool sampleAllLayers = false;
     bool loadAfterStroke = false;
     bool cleanAfterStroke = false;
     QColor reservoir = Qt::black;

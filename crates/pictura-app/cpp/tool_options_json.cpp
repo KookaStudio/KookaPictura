@@ -73,6 +73,7 @@ template <typename F> void fields(MixerOptions& o, F&& f)
     f("load", o.load);
     f("mix", o.mix);
     f("flow", o.flow);
+    f("sampleAllLayers", o.sampleAllLayers);
     f("loadAfterStroke", o.loadAfterStroke);
     f("cleanAfterStroke", o.cleanAfterStroke);
 }
