@@ -9,6 +9,8 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
 #include <QtCore/QPointer>
+
+#include <memory>
 #include <QtGui/QAction>
 #include <QtGui/QActionGroup>
 #include <QtWidgets/QMenu>
@@ -45,7 +47,11 @@ QString warpRefusalText(type_api::WarpRefusal refusal)
 
 void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
 {
-    if (!view_ || path.isEmpty() || !type_api::isType(*view_, path)) {
+    if (!view_ || path.isEmpty()) {
+        return;
+    }
+    const type_api::LayerType type = type_api::readLayer(*view_, path);
+    if (!type.isType) {
         return;
     }
     if (emitted) {
@@ -57,29 +63,26 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
     addUnimplemented(menu, tr("Convert to Shape"));
     menu.addSeparator();
 
-    const auto orientation = [this, path](bool vertical) {
-        TypeSetting setting = type_api::layerSetting(*view_, path);
-        if (setting.vertical == vertical) {
-            return;
-        }
-        setting.vertical = vertical;
-        if (type_api::updateLayer(*view_, path, type_api::layerText(*view_, path),
-                                  type_api::layerFont(*view_, path), setting,
-                                  type_api::layerCharacterSetting(*view_, path),
-                                  type_api::layerParagraphSetting(*view_, path))) {
+    const auto update = [this, path](const std::function<void(type_api::TypeSpec&)>& edit) {
+        type_api::TypeSpec spec = type_api::readLayer(*view_, path).spec;
+        edit(spec);
+        if (type_api::updateLayer(*view_, path, spec)) {
             refresh();
         }
+    };
+    const auto orientation = [update](bool vertical) {
+        update([vertical](type_api::TypeSpec& spec) { spec.setting.vertical = vertical; });
     };
     auto* orientationGroup = new QActionGroup(&menu);
     orientationGroup->setExclusive(true);
     QAction* horizontal = menu.addAction(tr("Horizontal"));
     horizontal->setCheckable(true);
-    horizontal->setChecked(!type_api::layerSetting(*view_, path).vertical);
+    horizontal->setChecked(!type.spec.setting.vertical);
     orientationGroup->addAction(horizontal);
     connect(horizontal, &QAction::triggered, this, [orientation] { orientation(false); });
     QAction* vertical = menu.addAction(tr("Vertical"));
     vertical->setCheckable(true);
-    vertical->setChecked(type_api::layerSetting(*view_, path).vertical);
+    vertical->setChecked(type.spec.setting.vertical);
     orientationGroup->addAction(vertical);
     connect(vertical, &QAction::triggered, this, [orientation] { orientation(true); });
 
@@ -88,24 +91,14 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
     antiAliasGroup->setExclusive(true);
     const QStringList antiAliasNames{tr("None"), tr("Sharp"), tr("Crisp"), tr("Strong"),
                                      tr("Smooth")};
-    const int antiAlias = type_api::layerCharacterSetting(*view_, path).anti_alias;
+    const int antiAlias = type.spec.character.anti_alias;
     for (int i = 0; i < int(antiAliasNames.size()); ++i) {
         QAction* action = menu.addAction(antiAliasNames.at(i));
         action->setCheckable(true);
         action->setChecked(antiAlias == i);
         antiAliasGroup->addAction(action);
-        connect(action, &QAction::triggered, this, [this, path, i] {
-            CharacterSetting character = type_api::layerCharacterSetting(*view_, path);
-            if (character.anti_alias == i) {
-                return;
-            }
-            character.anti_alias = i;
-            if (type_api::updateLayer(*view_, path, type_api::layerText(*view_, path),
-                                      type_api::layerFont(*view_, path),
-                                      type_api::layerSetting(*view_, path), character,
-                                      type_api::layerParagraphSetting(*view_, path))) {
-                refresh();
-            }
+        connect(action, &QAction::triggered, this, [update, i] {
+            update([i](type_api::TypeSpec& spec) { spec.character.anti_alias = i; });
         });
     }
     addUnimplemented(menu, tr("Windows LCD"));
@@ -136,19 +129,21 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
         }
         auto* dialog = new WarpTextDialog(type_api::layerWarp(*view_, path), this);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
-        const QPointer<PictureView> guard(view_);
-        connect(dialog, &WarpTextDialog::changed, this, [this, dialog, guard, path] {
-            if (guard && type_api::previewWarp(*guard, path, dialog->setting())) {
+        // The dialog's connections own the session; an unfinished session
+        // cancels when the dialog is destroyed.
+        const auto session = std::make_shared<type_api::WarpSession>(*view_, path);
+        connect(dialog, &WarpTextDialog::changed, dialog, [this, dialog, session] {
+            if (session->preview(dialog->setting())) {
                 refresh();
             }
         });
-        connect(dialog, &QDialog::accepted, this, [this, dialog, guard, path] {
-            if (guard && type_api::commitWarp(*guard, path, dialog->setting())) {
+        connect(dialog, &QDialog::accepted, dialog, [this, dialog, session] {
+            if (session->commit(dialog->setting())) {
                 refresh();
             }
         });
-        connect(dialog, &QDialog::rejected, this, [this, guard] {
-            if (guard && type_api::cancelWarp(*guard)) {
+        connect(dialog, &QDialog::rejected, dialog, [this, session] {
+            if (session->cancel()) {
                 refresh();
             }
         });

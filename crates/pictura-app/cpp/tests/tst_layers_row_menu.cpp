@@ -514,9 +514,9 @@ void LayersRowMenuTest::typeRows()
     QVERIFY(texts.contains(QStringLiteral("Convert to Paragraph Text")));
 
     QVERIFY(panel_->triggerRowMenuActionForPathForTest(path, QStringLiteral("Vertical")));
-    QVERIFY(pictura::type_api::layerSetting(*view_, path).vertical);
+    QVERIFY(pictura::type_api::readLayer(*view_, path).spec.setting.vertical);
     QVERIFY(panel_->triggerRowMenuActionForPathForTest(path, QStringLiteral("None")));
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*view_, path).anti_alias, 0);
+    QCOMPARE(pictura::type_api::readLayer(*view_, path).spec.character.anti_alias, 0);
     QVERIFY(panel_->triggerRowMenuActionForPathForTest(
         path, QStringLiteral("Convert to Paragraph Text")));
     QVERIFY(pictura::type_api::isParagraph(*view_, path));
