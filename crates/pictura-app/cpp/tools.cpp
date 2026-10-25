@@ -154,6 +154,9 @@ ToolController::ToolController(QObject* parent)
     // for signal wiring and its own reads.
     auto paint = std::make_shared<PaintOptions>();
     auto selection = std::make_shared<SelectionOptions>();
+    // Quick Selection owns its combine mode: its New-to-Add switch must not
+    // leak into the marquee and the other selection tools.
+    auto quickSelection = std::make_shared<SelectionOptions>();
     auto crop = std::make_shared<CropOptions>();
     auto clone = std::make_shared<CloneSourceOptions>();
     auto move = std::make_shared<MoveGroup>();
@@ -261,7 +264,7 @@ ToolController::ToolController(QObject* parent)
     registry_.registerTool(ToolId::Brush, makeBrushToolHandler(false, paint));
     registry_.registerTool(ToolId::Pencil, makeBrushToolHandler(true, paint));
     registry_.registerTool(ToolId::MagicWand, makeMagicWandToolHandler(selection));
-    registry_.registerTool(ToolId::QuickSelection, makeQuickSelectionToolHandler(selection));
+    registry_.registerTool(ToolId::QuickSelection, makeQuickSelectionToolHandler(quickSelection));
     registry_.registerTool(ToolId::Move, makeMoveToolHandler(move));
     registry_.registerTool(ToolId::Crop, makeCropToolHandler(crop));
     registry_.registerTool(ToolId::PerspectiveCrop, makePerspectiveCropToolHandler(crop));
@@ -599,7 +602,11 @@ void ToolController::sampledForeground(const QColor& color)
 SelectionMode ToolController::resolveSelectionMode(Qt::KeyboardModifiers mods,
                                                    bool hasExistingSelection) const
 {
-    return selectionModeForModifiers(selection_->combineMode(), mods, hasExistingSelection);
+    // The active handler's own group. Handlers without a SelectionOptions port
+    // (Type, content-aware move, patch) keep the shared family group.
+    const SelectionOptions* group = optionsFor<SelectionOptions>(active_);
+    return selectionModeForModifiers(group ? group->combineMode() : selection_->combineMode(),
+                                     mods, hasExistingSelection);
 }
 
 void ToolController::refused(const QString& message) { emit pixelEditRefused(message); }
@@ -785,6 +792,15 @@ ToolHandler* ToolController::canvasMenuHandler(ImageView* canvas)
     // handlers see the clicked view through `view()` / `canvas()`.
     if (canvas && canvas != canvas_ && canvasActivationHandler_) {
         canvasActivationHandler_(canvas);
+    }
+    // The selection tools offer their menu only with an active selection. The
+    // gate runs after activation so it reads the clicked document, not the one
+    // that was active before the right-click.
+    if (isSelectionMenuTool(active_)) {
+        PictureView* v = view();
+        if (!v || !v->has_selection()) {
+            return nullptr;
+        }
     }
     return h;
 }
@@ -1171,17 +1187,9 @@ bool ToolController::toolRedo()
     return false;
 }
 
-bool ToolController::canToolUndo() const
-{
-    ToolHandler* h = registry_.forTool(active_);
-    return h && h->canToolUndo();
-}
+bool ToolController::canToolUndo() const { ToolHandler* h = registry_.forTool(active_); return h && h->canToolUndo(); }
 
-bool ToolController::canToolRedo() const
-{
-    ToolHandler* h = registry_.forTool(active_);
-    return h && h->canToolRedo();
-}
+bool ToolController::canToolRedo() const { ToolHandler* h = registry_.forTool(active_); return h && h->canToolRedo(); }
 
 } // namespace pictura
 

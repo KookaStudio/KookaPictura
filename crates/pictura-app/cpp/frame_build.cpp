@@ -433,6 +433,11 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     tools_ = new ToolController(this);
     applyToolOptionsJson(*tools_, toolOptions);
     tools_->setViewProvider([this]() { return activeView(); });
+    connect(tools_, &ToolController::commandRequested, this, [this](const QString& id) {
+        if (registry_) {
+            registry_->dispatch(id);
+        }
+    });
     pathsPanel_->setToolServices(tools_);
 
     // A tool commit (marquee release, wand click, lasso close) reaches the

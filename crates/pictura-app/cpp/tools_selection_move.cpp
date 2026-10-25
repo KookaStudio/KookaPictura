@@ -17,6 +17,11 @@ bool ToolController::isSelectionTool(ToolId id)
         || id == ToolId::PolygonalLasso || id == ToolId::MagneticLasso;
 }
 
+bool ToolController::isSelectionMenuTool(ToolId id)
+{
+    return isSelectionTool(id) || id == ToolId::MagicWand || id == ToolId::QuickSelection;
+}
+
 bool ToolController::maybeBeginSelectionMove(PictureView* v, const QPointF& imagePos)
 {
     if (!v || !v->has_selection()

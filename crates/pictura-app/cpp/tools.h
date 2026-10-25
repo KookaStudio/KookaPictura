@@ -142,6 +142,10 @@ QString toolIdName(ToolId id);
 // its plain `tool.<name>` asset.
 QString toolCursorId(ToolId id, Qt::KeyboardModifiers mods);
 
+// The selection tools' canvas menu (Deselect, Inverse, Feather…, Refine Edge…),
+// parented to the controller's canvas; null without one.
+QMenu* selectionCanvasMenu(ToolServices& ctx, const QPointF& imagePos);
+
 // The tool's effective letter: the user's override (Edit > Keyboard
 // Shortcuts) when one is set, else the catalogue's. A null QChar means none.
 QChar toolShortcut(ToolId id);
@@ -334,6 +338,9 @@ public:
     {
         emit toolZoomed(factor, allWindows, resizeToFit);
     }
+    // A tool's canvas menu asks the frame to run a registered command (the
+    // selection menu reuses Deselect, Inverse, Feather, and Refine Edge).
+    void requestCommand(const QString& id) override { emit commandRequested(id); }
     // The options bar's Clear for the active Color Sampler, Note, or Ruler tool.
     bool clearAnnotations();
 
@@ -535,6 +542,8 @@ signals:
     void isolationModeRequested();
     // The Zoom tool zoomed the bound canvas by `factor` (notifyToolZoom).
     void toolZoomed(double factor, bool allWindows, bool resizeToFit);
+    // A canvas menu action asks the frame to dispatch this command id.
+    void commandRequested(const QString& id);
 
 private:
     void applyToolPolicy();
@@ -542,6 +551,9 @@ private:
     // exists, else the transparency tile) to the active canvas.
     void updateCanvasBackdrop();
     static bool isSelectionTool(ToolId id);
+    // The selection tools that also offer a canvas menu (the seven ids; the
+    // marquee handler serves rectangular and elliptical).
+    static bool isSelectionMenuTool(ToolId id);
     bool maybeBeginSelectionMove(PictureView* v, const QPointF& imagePos);
     void cancelSelectionMove();
     void updateSelectionHover(const QPointF& imagePos);

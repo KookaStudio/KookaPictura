@@ -759,7 +759,12 @@ void ImageView::paintEvent(QPaintEvent*)
     }
 
     painter.save();
-    painter.setClipRect(docClip);
+    // One device pixel of slack lets a cosmetic stroke centred on the document
+    // border draw on both sides of the clip. Without it the rasteriser can
+    // choose the outer pixel and the border segment disappears at fractional
+    // pan/zoom. The contour and the content clip are unchanged.
+    const qreal borderPad = 1.0 / std::max(zoom_, 1e-6);
+    painter.setClipRect(docClip.adjusted(-borderPad, -borderPad, borderPad, borderPad));
 
     if (!overlayPolygon_.isEmpty()) {
         painter.setBrush(Qt::NoBrush);

@@ -46,6 +46,8 @@ public:
 
     double value() const { return value_; }
     void setValue(double value);
+    // Apply text that is still being edited, so a window close persists it.
+    void commitPendingEdit() { commitEdit(); }
     // Show an empty box (e.g. an unconstrained crop ratio has no value yet).
     // Typing a value or setValue clears the blank state.
     void setBlank(bool blank);

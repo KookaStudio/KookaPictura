@@ -36,6 +36,12 @@ public:
         return true;
     }
 
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        return selectionCanvasMenu(ctx, imagePos);
+    }
+
 private:
     std::shared_ptr<SelectionOptions> selection_;
 };
@@ -122,6 +128,12 @@ public:
         ctx_ = nullptr;
     }
 
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        return selectionCanvasMenu(ctx, imagePos);
+    }
+
 private:
     // One dab of the stroke. A New-mode dab replaces; the tool then switches
     // to Add so the rest of the stroke accumulates on top of it.
@@ -133,7 +145,8 @@ private:
         }
         if (!pictura::quick_select_preview(*v, qRound(imagePos.x()), qRound(imagePos.y()),
                                            selection_->tolerance(),
-                                           selectionModeString(ctx.dragMode()))) {
+                                           selectionModeString(ctx.dragMode()),
+                                           ctx.dragCommitted())) {
             return false;
         }
         ctx.setDragCommitted(true);

@@ -12,6 +12,91 @@ fn ms(label: &str, d: std::time::Duration) {
     println!("{label}: {:.2} ms", d.as_secs_f64() * 1000.0);
 }
 
+/// A one-layer checkerboard (8 px cells) so a Quick Selection flood covers a
+/// small region inside a large document.
+fn checker_layer(name: &str, w: u32, h: u32) -> pictura_core::Layer {
+    let mut layer = pixel_layer(name, w, h, (0, 0, 0));
+    let mut r = vec![0u8; (w * h) as usize];
+    let mut g = vec![0u8; (w * h) as usize];
+    let mut b = vec![0u8; (w * h) as usize];
+    for y in 0..h as usize {
+        for x in 0..w as usize {
+            let v = if (x / 8 + y / 8) % 2 == 0 { 200 } else { 40 };
+            let i = y * w as usize + x;
+            r[i] = v;
+            g[i] = v;
+            b[i] = v;
+        }
+    }
+    layer.channels[0].data = r.into();
+    layer.channels[1].data = g.into();
+    layer.channels[2].data = b.into();
+    layer
+}
+
+/// Print-only 4000² Quick Selection profile: the press path (composite,
+/// flood, combine, contour) and the intra-region move lookup. Run with
+/// `cargo test -p pictura_app quick_selection_profile_4000 -- --ignored --nocapture`.
+#[test]
+#[ignore = "4000x4000 Quick Selection profile; run explicitly with --ignored --nocapture"]
+fn quick_selection_profile_4000() {
+    let n = 4000u32;
+    let mut doc = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![checker_layer("checker", n, n)]);
+
+    let t = std::time::Instant::now();
+    let buffer = super::helpers_composite::current_buffer(&doc, false);
+    let composite = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = std::time::Instant::now();
+    let first = pictura_select::magic_wand(&buffer, 4, 4, 32, true).expect("flood");
+    let flood = t.elapsed().as_secs_f64() * 1000.0;
+
+    let mut add = first.clone();
+    let t = std::time::Instant::now();
+    add.combine_with(&first, pictura_select::CombineMode::Add);
+    let combine = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = std::time::Instant::now();
+    let _ = pictura_select::contour(&add, 128);
+    let contour = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = std::time::Instant::now();
+    let second = pictura_select::magic_wand(&buffer, 20, 4, 32, true).expect("flood 2");
+    add.combine_with(&second, pictura_select::CombineMode::Add);
+    let new_region = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = std::time::Instant::now();
+    let _ = pictura_select::contour(&add, 128);
+    let new_contour = t.elapsed().as_secs_f64() * 1000.0;
+
+    let steps = 1000usize;
+    let t = std::time::Instant::now();
+    let mut hits = 0usize;
+    for i in 0..steps {
+        let x = 4 + (i % 4) as u32;
+        let y = 4 + ((i / 4) % 4) as u32;
+        let index = y as usize * n as usize + x as usize;
+        if add.data[index] == 255 {
+            hits += 1;
+        }
+    }
+    let intra_move = t.elapsed().as_secs_f64() * 1e6 / steps as f64;
+
+    // The per-stage times above plus the totals the change's latency targets
+    // use; every non-skipped dab recomposites, so both totals include the
+    // composite once.
+    let first_dab = composite + flood + combine + contour;
+    let new_region_total = composite + new_region + new_contour;
+
+    println!(
+        "quick_selection_profile_4000 composite={composite:.2}ms flood={flood:.2}ms \
+         combine={combine:.2}ms contour={contour:.2}ms new_region={new_region:.2}ms \
+         new_contour={new_contour:.2}ms first_dab={first_dab:.2}ms \
+         new_region_total={new_region_total:.2}ms intra_move={intra_move:.2}us hits={hits}"
+    );
+}
+
 /// Print-only 4000² opacity preview profile: a 512² bounded layer's region
 /// composite against the full-document composite the old preview path ran per
 /// tick. Run with `cargo test -p pictura_app opacity_preview_profile_4000 --

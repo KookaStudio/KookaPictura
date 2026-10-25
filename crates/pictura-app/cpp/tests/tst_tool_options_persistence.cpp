@@ -3,11 +3,14 @@
 
 #include <QtTest/QtTest>
 
+#include "options_bar.h"
+#include "panels/numeric_field.h"
 #include "tool_options_json.h"
 #include "tools.h"
 
 #include <QtCore/QJsonObject>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QLineEdit>
 
 #include <memory>
 
@@ -19,6 +22,8 @@ class ToolOptionsPersistenceTest : public QObject {
 private slots:
     void initTestCase();
     void optionsSurviveARestart();
+    void quickSelectionToleranceFromOptionsBarPersists();
+    void quickSelectionToleranceTypedWithoutEnterPersists();
     void badEntriesKeepDefaults();
 
 private:
@@ -53,6 +58,7 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
         paint->setAliased(true);
         paint->setWetEdges(true);
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(5.5);
+        tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->setTolerance(77);
         RetouchGroup* blur = tools->optionsFor<RetouchGroup>(ToolId::Blur);
         RetouchOptions r = blur->get();
         r.strength = 80;
@@ -79,12 +85,85 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->aliased());
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->wetEdges());
     QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::Marquee)->feather(), 5.5);
+    QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->tolerance(), 77);
     QCOMPARE(tools->optionsFor<RetouchGroup>(ToolId::Blur)->get().strength, 80);
     QCOMPARE(tools->optionsFor<ToneGroup>(ToolId::Burn)->get().amount, 20);
     // Each retouch and toning tool keeps its own options.
     QCOMPARE(tools->optionsFor<RetouchGroup>(ToolId::Sharpen)->get().strength,
              RetouchOptions{}.strength);
     QCOMPARE(tools->optionsFor<ToneGroup>(ToolId::Dodge)->get().amount, ToneOptions{}.amount);
+}
+
+void ToolOptionsPersistenceTest::quickSelectionToleranceFromOptionsBarPersists()
+{
+    using namespace pictura;
+    {
+        auto window = test::makeMainWindow();
+        window->show();
+        auto* tools = window->findChild<ToolController*>();
+        auto* bar = window->findChild<OptionsBar*>(QStringLiteral("optionsBar"));
+        QVERIFY(tools && bar);
+        window->setActiveTool(ToolId::QuickSelection);
+        QWidget* page = bar->pageForTest(ToolId::QuickSelection);
+        QVERIFY(page);
+        auto* spin = page->findChild<NumericField*>(QStringLiteral("optionsTolerance"));
+        QVERIFY(spin);
+        auto* edit = spin->findChild<QLineEdit*>();
+        QVERIFY(edit);
+        edit->setFocus();
+        edit->selectAll();
+        QTest::keyClicks(edit, QStringLiteral("77"));
+        QTest::keyClick(edit, Qt::Key_Return);
+        QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->tolerance(), 77);
+        window->saveSession();
+    }
+
+    auto window = test::makeMainWindow();
+    auto* tools = window->findChild<ToolController*>();
+    auto* bar = window->findChild<OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(tools && bar);
+    window->setActiveTool(ToolId::QuickSelection);
+    QWidget* page = bar->pageForTest(ToolId::QuickSelection);
+    QVERIFY(page);
+    auto* spin = page->findChild<NumericField*>(QStringLiteral("optionsTolerance"));
+    QVERIFY(spin);
+    QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->tolerance(), 77);
+    QCOMPARE(spin->value(), 77.0);
+}
+
+void ToolOptionsPersistenceTest::quickSelectionToleranceTypedWithoutEnterPersists()
+{
+    using namespace pictura;
+    {
+        auto window = test::makeMainWindow();
+        window->show();
+        auto* tools = window->findChild<ToolController*>();
+        auto* bar = window->findChild<OptionsBar*>(QStringLiteral("optionsBar"));
+        QVERIFY(tools && bar);
+        window->setActiveTool(ToolId::QuickSelection);
+        QWidget* page = bar->pageForTest(ToolId::QuickSelection);
+        QVERIFY(page);
+        auto* spin = page->findChild<NumericField*>(QStringLiteral("optionsTolerance"));
+        QVERIFY(spin);
+        auto* edit = spin->findChild<QLineEdit*>();
+        QVERIFY(edit);
+        edit->setFocus();
+        edit->selectAll();
+        QTest::keyClicks(edit, QStringLiteral("88"));
+        window->close();
+    }
+
+    auto window = test::makeMainWindow();
+    auto* tools = window->findChild<ToolController*>();
+    auto* bar = window->findChild<OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(tools && bar);
+    window->setActiveTool(ToolId::QuickSelection);
+    QWidget* page = bar->pageForTest(ToolId::QuickSelection);
+    QVERIFY(page);
+    auto* spin = page->findChild<NumericField*>(QStringLiteral("optionsTolerance"));
+    QVERIFY(spin);
+    QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->tolerance(), 88);
+    QCOMPARE(spin->value(), 88.0);
 }
 
 void ToolOptionsPersistenceTest::badEntriesKeepDefaults()

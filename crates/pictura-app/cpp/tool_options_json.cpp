@@ -426,6 +426,10 @@ QJsonObject toolOptionsToJson(const ToolController& tools)
     if (const SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee)) {
         out.insert(QStringLiteral("selection"), write(selectionFields(*s)));
     }
+    if (const SelectionOptions* s =
+            tools.optionsFor<SelectionOptions>(ToolId::QuickSelection)) {
+        out.insert(QStringLiteral("quickSelection"), write(selectionFields(*s)));
+    }
     if (const CropOptions* crop = tools.optionsFor<CropOptions>(ToolId::Crop)) {
         out.insert(QStringLiteral("crop"), write(crop->settings()));
     }
@@ -454,6 +458,11 @@ void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
     if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
         s && selection.isObject()) {
         applySelection(*s, read(selection.toObject(), selectionFields(*s)));
+    }
+    const QJsonValue quickSelection = json.value(QStringLiteral("quickSelection"));
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection);
+        s && quickSelection.isObject()) {
+        applySelection(*s, read(quickSelection.toObject(), selectionFields(*s)));
     }
 }
 
