@@ -70,7 +70,7 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
             refresh();
         }
     };
-    auto* orientationGroup = new QActionGroup(menu);
+    auto* orientationGroup = new QActionGroup(&menu);
     orientationGroup->setExclusive(true);
     QAction* horizontal = menu.addAction(tr("Horizontal"));
     horizontal->setCheckable(true);
@@ -84,7 +84,7 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
     connect(vertical, &QAction::triggered, this, [orientation] { orientation(true); });
 
     menu.addSeparator();
-    auto* antiAliasGroup = new QActionGroup(menu);
+    auto* antiAliasGroup = new QActionGroup(&menu);
     antiAliasGroup->setExclusive(true);
     const QStringList antiAliasNames{tr("None"), tr("Sharp"), tr("Crisp"), tr("Strong"),
                                      tr("Smooth")};
