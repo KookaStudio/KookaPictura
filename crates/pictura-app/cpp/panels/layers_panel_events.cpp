@@ -387,7 +387,9 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     tree_->edit(index);
                 } else if (!delegate_->eyeColumnContains(tree_->visualRect(index), pos)
                            && !delegate_->lockRect(tree_->visualRect(index)).contains(pos)
-                           && !delegate_->fxRect(tree_->visualRect(index), index).contains(pos)) {
+                           && !delegate_->fxRect(tree_->visualRect(index), index).contains(pos)
+                           && !delegate_->chevronRect(tree_->visualRect(index), index)
+                                   .contains(pos)) {
                     openLayerStyle(path);
                 }
                 return true;
