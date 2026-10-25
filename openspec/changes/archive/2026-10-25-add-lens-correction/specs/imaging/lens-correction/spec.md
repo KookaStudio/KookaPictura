@@ -218,7 +218,8 @@ with a message naming the requirement.
 #### Scenario: Shift+Ctrl+R opens it [lc_shortcut]
 
 - **WHEN** `tst_lens_correction::menuRowHasItsShortcut` reads the action
-- **THEN** its shortcut is `Shift+Ctrl+R`
+- **THEN** its shortcut is `Shift+Ctrl+R` and its text "Lens Correction…", one
+  ellipsis (Liquify's too)
 
 #### Scenario: Last Filter refuses off the gate [lc_last_gate]
 

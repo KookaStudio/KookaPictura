@@ -258,3 +258,47 @@ fn a_depth16_fill_survives_a_psd_round_trip() {
         "the re-read samples are the fill: {values:?}"
     );
 }
+
+/// A filter committed on a depth-16 layer is what the saved file holds: the
+/// retained native planes are re-emitted only while they still match the
+/// working pixels, so the edited plane is written from the filtered result.
+#[test]
+fn a_depth16_filter_survives_a_psd_round_trip() {
+    let mut doc = layered_fixture();
+    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    let filter = pictura_filters::Filter::LensCorrection {
+        params: pictura_filters::LensCorrectionParams {
+            distortion: 100.0,
+            vignette_amount: -100.0,
+            edge: pictura_filters::LensEdge::Extension,
+            ..Default::default()
+        },
+    };
+    let before: Vec<u8> = doc.layers[0].channels[0].data.to_vec();
+    pictura_render::apply_filter(&mut doc.layers[0], &filter, None, false).expect("filter");
+    let after: Vec<u8> = doc.layers[0].channels[0].data.to_vec();
+    assert_ne!(before, after, "the filter changed the working plane");
+
+    let out = write_psd(&doc).expect("save the filtered document");
+    let back = read_psd(&out).expect("re-read the filtered document");
+    let saved = back.layers[0]
+        .channels
+        .iter()
+        .find(|c| c.id == doc.layers[0].channels[0].id)
+        .unwrap();
+    assert_eq!(
+        saved.data.to_vec(),
+        after,
+        "the saved layer holds the filter"
+    );
+    // Its native store is the filtered plane too, not the pre-filter samples.
+    let (_, native) = back.layers[0]
+        .source_channels
+        .as_ref()
+        .expect("the re-read layer keeps a native store")
+        .planes
+        .iter()
+        .find(|(id, _)| *id == 0)
+        .expect("the color plane");
+    assert_eq!(native.narrow_to_u8(), after);
+}

@@ -214,6 +214,13 @@ void LensCorrectionTest::menuRowHasItsShortcut()
     QAction* action = window_->registry()->action(pictura::commandIdForPath(kPath));
     QVERIFY(action != nullptr);
     QCOMPARE(action->shortcut(), QKeySequence(QStringLiteral("Shift+Ctrl+R")));
+    // One ellipsis, though the descriptor's label already ends in one.
+    window_->registry()->refresh();
+    QCOMPARE(action->text(), QStringLiteral("Lens Correction…"));
+    QAction* liquify = window_->registry()->action(
+        pictura::commandIdForPath({QStringLiteral("Filter"), QStringLiteral("Liquify…")}));
+    QVERIFY(liquify != nullptr);
+    QCOMPARE(liquify->text(), QStringLiteral("Liquify…"));
 }
 
 void LensCorrectionTest::opensWithControls()

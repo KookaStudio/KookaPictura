@@ -260,9 +260,12 @@ void PicturaMainWindow::wireFilterMenu()
         });
         // CS6 marks every dialog-opening entry with an ellipsis; a parameterless
         // entry applies straight away and stays bare.
+        // The workspace filters' labels already carry it.
         registry_->setLabelProvider(id, [captured]() {
-            return captured.params.isEmpty() ? captured.label
-                                             : captured.label + QStringLiteral("…");
+            const QString ellipsis = QStringLiteral("…");
+            return captured.params.isEmpty() || captured.label.endsWith(ellipsis)
+                       ? captured.label
+                       : captured.label + ellipsis;
         });
         // Adaptive Wide Angle and Vanishing Point take 8-bit RGB and
         // Grayscale only, as CS6's 16- and 32-bpc filter lists leave them out;

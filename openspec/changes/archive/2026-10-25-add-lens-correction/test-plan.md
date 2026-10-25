@@ -24,7 +24,7 @@
 | `lc_profile_compose` | Vignette-only profile with and without a Custom darkening; clear each checkbox | Corners brighten, then darken back; cleared parts are zero | `pictura-filters::profile_composes_with_custom`, `pictura-app::checkboxes_gate_the_profile_parts` |
 | `lc_slots` | Map default, out-of-range, NaN, short, and unknown-profile slot lists | Identity; clamped; refused; refused; refused | `pictura-app::default_slots_are_the_identity`, `pictura-app::slots_map_and_clamp`, `pictura-app::unknown_profile_id_is_refused` |
 | `lc_menu_gate` | New RGB 8-bit, 16-bit, 32-bit, Grayscale, CMYK, Lab documents | Enabled for 8/16-bit RGB and Grayscale only; AWA and VP stay 8-bit | `tst_lens_correction::menuFollowsDepthAndMode`, `pictura-app::commits_are_refused_off_eight_bit_rgb_and_gray` |
-| `lc_shortcut` | Read the menu action | `Shift+Ctrl+R` | `tst_lens_correction::menuRowHasItsShortcut` |
+| `lc_shortcut` | Read the menu action and Liquify's | `Shift+Ctrl+R`; "Lens Correction…" and "Liquify…" with one ellipsis | `tst_lens_correction::menuRowHasItsShortcut` |
 | `lc_last_gate` | Commit; 16-bit Last Filter; 32-bit Last Filter Settings and Last Filter | 16-bit applies; 32-bit no dialog, no state, refusal names "8- or 16-bit" | `tst_lens_correction::lastFilterRefusesOffSixteenBit` |
 | `lc_controls` | Open on an image without EXIF | CS6 title, tabs, Edge items, ranges, defaults; "No matching profiles found"; Search Online disabled; `--` status lines | `tst_lens_correction::opensWithControls` |
 | `lc_exif` | Open on `metadata.psd`; toggle Vignette; clear the make | Criteria and status filled ("50mm, f/2.8"); profile chosen; preview changes; no profile | `tst_lens_correction::exifPrefillsSearchAndStatus`, `pictura-app::camera_settings_text` |
