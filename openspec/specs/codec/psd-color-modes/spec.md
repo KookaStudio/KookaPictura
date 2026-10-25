@@ -2,22 +2,26 @@
 
 ## Purpose
 Opens non-RGB PSD colour modes by normalizing to the working mode, including Bitmap, Indexed, CMYK, and Lab.
+
 ## Requirements
+
 ### Requirement: Non-RGB color modes open by normalizing to the working mode
 
 `read_psd` SHALL accept header color modes Bitmap (0), Grayscale (1), Indexed
 (2), RGB (3), CMYK (4), Multichannel (7), Duotone (8), and Lab (9). It SHALL convert a non-RGB mode's color
 planes into the engine's working mode (RGB for Bitmap/Indexed/CMYK/Lab,
 Grayscale unchanged) and SHALL set the returned document's `mode` to `Rgb` or
-`Grayscale` and its `depth` to `Eight`. A header color mode of Duotone (8) or
-Multichannel (7) with header channel count 1 or 3 at depth 8 SHALL open by
-normalizing to the working mode (Duotone and 1-channel Multichannel as
-grayscale; 3-channel Multichannel as profile-free CMY→RGB). Multichannel with
-any other channel count, any other mode code, and any bit depth other than 8
-(other than depth 1 for Bitmap, and depths 16/32 for the Grayscale/RGB/CMYK/Lab
-modes read per `psd-bit-depth`) SHALL return `PsdError::Unsupported`. A header
-channel count below the mode's color-channel count SHALL return
-`PsdError::Invalid`.
+`Grayscale` and its `depth` to `Eight`. For CMYK, the conversion SHALL use the
+embedded resource `1039` profile when it parses as a CMYK profile; otherwise the
+working CMYK profile supplied by the caller when one is available; otherwise the
+documented profile-free fallback. A header color mode of Duotone (8) or Multichannel (7)
+with header channel count 1 or 3 at depth 8 SHALL open by normalizing to the
+working mode (Duotone and 1-channel Multichannel as grayscale; 3-channel
+Multichannel as profile-free CMY→RGB). Multichannel with any other channel
+count, any other mode code, and any bit depth other than 8 (other than depth 1
+for Bitmap, and depths 16/32 for the Grayscale/RGB/CMYK/Lab modes read per
+`psd-bit-depth`) SHALL return `PsdError::Unsupported`. A header channel count
+below the mode's color-channel count SHALL return `PsdError::Invalid`.
 
 #### Scenario: An Indexed document opens as RGB with palette colors
 
@@ -26,8 +30,18 @@ channel count below the mode's color-channel count SHALL return
 
 #### Scenario: A CMYK document opens as RGB
 
-- **WHEN** an 8-bit CMYK PSD is read
-- **THEN** `read_psd` returns a document whose `mode` is `Rgb`, whose `depth` is `Eight`, and whose composite is the profile-free CMYK-to-RGB conversion of the stored planes
+- **WHEN** an 8-bit CMYK PSD carrying a decodable CMYK resource `1039` is read
+- **THEN** `read_psd` returns a document whose `mode` is `Rgb`, whose `depth` is `Eight`, and whose composite is the lcms2 CMYK-to-RGB conversion of the stored planes through that profile
+
+#### Scenario: An untagged CMYK document opens through the working profile
+
+- **WHEN** an 8-bit CMYK PSD with no resource `1039` is opened by the application with a working CMYK profile
+- **THEN** the composite is the lcms2 conversion through the working CMYK profile
+
+#### Scenario: An untagged CMYK document with no working profile uses the fallback
+
+- **WHEN** an untagged CMYK PSD is read by the library convenience with no working CMYK profile
+- **THEN** the composite uses the documented profile-free formula
 
 #### Scenario: A Lab document opens as RGB
 
@@ -122,36 +136,6 @@ whose length is not 768 SHALL return `PsdError::Invalid`, never a panic.
 - **WHEN** an Indexed document's color-mode-data section is shorter or longer than 768 bytes
 - **THEN** `read_psd` returns `PsdError::Invalid`
 
-### Requirement: CMYK and Lab use documented profile-free approximations
-
-The CMYK conversion SHALL compute each RGB channel as `floor(stored_color *
-stored_black / 255)` from the stored cyan, magenta, yellow, and black planes,
-where a stored value of 0 is full ink and 255 is no ink. The Lab conversion
-SHALL treat the three planes as `L* = L * 100 / 255`, `a* = a - 128`, and
-`b* = b - 128` and convert CIELAB under D50 to sRGB through a Bradford D50-to-D65
-adaptation. Both conversions SHALL be profile-free: the document's embedded ICC
-profile SHALL NOT be applied and no Photoshop pixel parity SHALL be claimed.
-
-#### Scenario: CMYK uses the integer formula
-
-- **WHEN** a CMYK pixel stores `(C, M, Y, K) = (128, 64, 32, 200)`
-- **THEN** the decoded RGB pixel is `(100, 50, 25)`
-
-#### Scenario: CMYK full black and full white
-
-- **WHEN** a CMYK pixel stores `(0, 0, 0, 0)` or `(255, 255, 255, 255)`
-- **THEN** the decoded RGB pixel is `(0, 0, 0)` or `(255, 255, 255)` respectively
-
-#### Scenario: Lab neutral gray and white
-
-- **WHEN** a Lab pixel stores `(200, 128, 128)` or `(255, 128, 128)`
-- **THEN** the decoded RGB pixel is a neutral gray near `(194, 194, 194)` or white near `(255, 255, 255)`, within 2 per channel
-
-#### Scenario: An embedded profile is ignored
-
-- **WHEN** a CMYK document carries an embedded ICC profile
-- **THEN** the decoded RGB values use the profile-free formula and do not depend on the profile bytes
-
 ### Requirement: Layer color planes are converted with the document
 
 When a non-RGB document carries layers, `read_psd` SHALL convert each layer's
@@ -164,7 +148,7 @@ than producing a wrong conversion.
 #### Scenario: A CMYK layer becomes RGB
 
 - **WHEN** a CMYK document carries a pixel layer with four color channels
-- **THEN** the returned layer carries three RGB color channels that are the profile-free conversion of the stored CMYK planes, and its transparency channel is unchanged
+- **THEN** the returned layer carries three RGB color channels that are the same profile-aware conversion as the composite, and its transparency channel is unchanged
 
 #### Scenario: Alpha and mask channels are untouched
 
@@ -257,13 +241,14 @@ with that header color mode and, when the read retained native samples, at that
 source depth, preferring the source color planes the read retained: it SHALL
 re-emit a plane — the composite's or every layer's color channels —
 byte-identically at the source depth when the plane is unchanged, and SHALL
-otherwise convert it from the working RGB with a profile-free inverse of the
-read-side conversion for that mode (8-bit, widened to the source depth when it is
-16/32). The Lab inverse quantizes; the CMYK inverse (`rgb_to_cmyk`) SHALL be an
-exact right-inverse of `cmyk_to_rgb` so an edited CMYK pixel reads back to the
-edited RGB. Each such conversion SHALL be documented as an approximation for an
-edited plane (the read is profile-free) and SHALL NOT claim Photoshop
-color-management parity.
+otherwise convert it from the working RGB through the document's CMYK profile
+(the embedded profile, or the working CMYK profile when the file is untagged)
+at 8-bit, widened to the source depth when it is 16/32. The profile-free
+`rgb_to_cmyk` inverse SHALL be used only when no CMYK profile is available, and
+SHALL remain an exact right-inverse of `cmyk_to_rgb` in that fallback. The Lab
+inverse quantizes. A profile-aware CMYK conversion SHALL be within the lcms2
+round-trip tolerance and SHALL NOT claim Adobe pixel parity; the profile-free
+fallback SHALL be documented as an approximation for an edited plane.
 
 `write_psd` SHALL write an Indexed document back with header color mode Indexed
 (one index channel and the retained palette) when its `source_mode` is `Indexed`
@@ -318,10 +303,15 @@ a document with no source mode it SHALL continue to write the working mode.
 - **WHEN** an 8-bit Lab document's composite is edited and written
 - **THEN** the changed plane is re-encoded from the edited working RGB with the profile-free inverse, which the spec documents as approximate for saturated colors
 
+#### Scenario: An edited CMYK plane re-encodes through the document profile
+
+- **WHEN** an 8-bit CMYK document with a CMYK profile has a color plane edited and written
+- **THEN** the changed plane is encoded through that profile and reading the output back yields the edited RGB within the lcms2 tolerance
+
 #### Scenario: An edited CMYK plane uses the exact inverse
 
-- **WHEN** an 8-bit CMYK document's color plane is edited and written
-- **THEN** reading the output back yields exactly the edited RGB bytes
+- **WHEN** an untagged CMYK document has a color plane edited and written with no working CMYK profile available
+- **THEN** the changed plane uses the profile-free right-inverse and reading the output back yields the edited RGB bytes
 
 #### Scenario: A Lab layer channel is converted
 
@@ -342,6 +332,11 @@ a document with no source mode it SHALL continue to write the working mode.
 
 - **WHEN** a 16/32-bit Lab or CMYK document is read and written unchanged
 - **THEN** the output's header color mode is Lab or CMYK and its header depth is the source depth, and the retained native color planes are byte-identical to the input's
+
+#### Scenario: A profile-aware CMYK save carries the profile
+
+- **WHEN** an 8-bit CMYK document read through a CMYK profile is written unchanged
+- **THEN** the output's image resources still carry that CMYK profile and the retained planes are byte-identical
 
 #### Scenario: Source mode is recorded
 
@@ -441,3 +436,45 @@ be unchanged.
 - **WHEN** a Duotone document is read
 - **THEN** it still opens as grayscale-normalized RGB with `source_mode` `Duotone` and its color-mode data preserved
 
+### Requirement: CMYK uses the document profile and Lab uses a documented approximation
+
+The CMYK conversion SHALL use the embedded CMYK profile when the document carries one, else the working CMYK profile supplied by the caller, and SHALL use Little CMS 2 through the profile connection space. The profile-free integer formula (`floor(stored_color * stored_black / 255)`, where stored 0 is full ink and 255 is no ink) SHALL remain only as the fallback when no CMYK profile is available, and SHALL be documented as an approximation. The Lab conversion SHALL treat the three planes as `L* = L * 100 / 255`, `a* = a - 128`, and `b* = b - 128` and convert CIELAB under D50 to sRGB through a Bradford D50-to-D65 adaptation; it remains profile-free. Profile-aware CMYK parity is lcms2 parity, not Adobe pixel parity.
+
+#### Scenario: A profile-bearing CMYK pixel uses lcms2
+
+- **WHEN** a CMYK pixel is decoded with an embedded or working CMYK profile
+- **THEN** the RGB result equals an independent lcms2 CMYK-to-sRGB conversion within one LSB per channel
+
+#### Scenario: The profile-free fallback is used only without a profile
+
+- **WHEN** a CMYK pixel is decoded with no embedded or working profile
+- **THEN** the decoded RGB pixel follows the documented integer formula
+
+#### Scenario: The fallback still decodes black and white
+
+- **WHEN** a profile-free CMYK pixel stores `(0, 0, 0, 0)` or `(255, 255, 255, 255)`
+- **THEN** the decoded RGB pixel is `(0, 0, 0)` or `(255, 255, 255)` respectively
+
+#### Scenario: Lab neutral gray and white
+
+- **WHEN** a Lab pixel stores `(200, 128, 128)` or `(255, 128, 128)`
+- **THEN** the decoded RGB pixel is a neutral gray near `(194, 194, 194)` or white near `(255, 255, 255)`, within 2 per channel
+
+### Requirement: A profile-bearing CMYK fixture is verified against lcms2
+
+The test corpus SHALL include a CMYK PSD fixture carrying the bundled Photocraft Coated CMYK profile in image resource `1039`, generated by a committed script and stable across runs. A test SHALL compare its decoded composite and a pixel layer against an independent lcms2 CMYK-to-sRGB conversion within one LSB per channel, and SHALL verify that the embedded profile is retained on an unchanged save. The existing profile-free `cmyk.psd` fixture SHALL remain and continue to exercise the fallback.
+
+#### Scenario: The profile-bearing fixture matches lcms2
+
+- **WHEN** the profile-bearing CMYK fixture is read
+- **THEN** every composite and layer color channel is within one LSB of an independent lcms2 conversion
+
+#### Scenario: An unchanged profile-bearing save keeps the profile
+
+- **WHEN** the profile-bearing fixture is read and written unchanged
+- **THEN** the output carries the same CMYK profile bytes and its planes are byte-identical
+
+#### Scenario: The profile-free fixture still uses the fallback
+
+- **WHEN** the legacy profile-free `cmyk.psd` fixture is read
+- **THEN** its decoded pixels equal the documented integer formula

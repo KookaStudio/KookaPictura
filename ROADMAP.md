@@ -256,10 +256,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       (#566)
 - [ ] The arbitrary rotation dialog, the interpolation preference, and the
       ruler-straighten prefill (#567)
-- [ ] Convert to Profile options, mismatch and missing-profile warnings, and
+- [x] Convert to Profile options, mismatch and missing-profile warnings, and
       the embed toggle (#568)
-- [ ] The full Color Settings dialog: spaces, policies, conversion options and
-      `.csf` (#569)
+- [x] CMYK conversions use the document or working ICC profile (#809)
+- [x] Color Settings: working CMYK space, RGB/CMYK policies, conversion options,
+      and profile warnings (#569)
+- [ ] Color Settings `.csf` save/load, Gray/Spot working spaces, and installed
+      profile discovery (#569)
 - [ ] 32-bit Preview Options, the HDR colour picker, and the 32-bit Info
       readout (#570)
 - [ ] The Channel Mixer Monochrome UI, and the CMYK and Gray output channels
@@ -320,12 +323,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] The Gradient Editor reachable from the Gradient tool, plus opacity stops
       and a midpoint (#598)
 - [ ] Define Pattern, the `.pat` library, and Scripted Patterns (#599)
-- [ ] Color-picker gamut and web alerts, Color Libraries (PANTONE), and the
-      picker preference (#600)
+- [x] Color-picker gamut and web alerts, and the picker preference (#600)
+- [ ] Color Libraries (PANTONE) (#600)
 - [ ] The HUD colour picker (#601)
 - [ ] The HDR colour picker at 32 bpc (#602)
-- [ ] The out-of-gamut triangle, CMYK to working space, and the 16/32-bit
-      picker fields (#604)
+- [x] The out-of-gamut triangle and CMYK to working space (#604)
+- [ ] The 16/32-bit picker fields (#604)
 - [ ] `.aco` and `.ase` swatch libraries, rename, and display modes (#605)
 - [ ] Pattern Overlay Snap To Origin, and the style Texture sub-options (#606)
 - [ ] Bristle brushes (#607)

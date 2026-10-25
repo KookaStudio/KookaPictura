@@ -126,6 +126,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   anti-aliasing. Groups open Blending Options with effect pages disabled until
   group effects render (#939). The smoke fixture now carries the default masks
   its Invert and Solid Fill rows should have.
+- **Colour management bundle** (#568, #569, #600, #604, #809, #947; OpenSpec
+  changes `color-management-bundle` and `color-conversion-layer-fix`). CMYK
+  now converts through the document's embedded profile or the configured working profile, with `OpenOptions` and a shared
+  `ConversionOptions` (intent/BPC/dither); the profile-free formula is only the
+  fallback. Color Settings adds the working CMYK space, RGB/CMYK policies,
+  conversion options, and profile-warning asks. Convert to Profile has
+  intent/BPC/dither, flatten, and on-canvas preview; PSD/PSB/JPEG/TIFF Save As
+  can embed the profile (resource 1039 / APP2 / TIFF 34675). JPEG, TIFF, and PNG
+  imports carry their embedded profile through Preserve/Convert/Off, and the
+  picker has web/gamut alerts, editable CMYK, and the Adobe/System preference.
+  Place uses the same profile policy and warning flow. Convert to Profile no
+  longer reinterprets a retained CMYK/Lab layer store as RGB (#947), and the
+  Color panel swatches open the picker (#319). Ceilings: `.csf`, Color
+  Libraries, 16/32-bit picker fields, Gray/Spot working spaces, and profile-aware
+  Selective Color remain.
+  Tests: `tst_color_settings`, `tst_profile_dialog`, `tst_profile_warnings`,
+  `tst_save_options`, `tst_image_import`, extended `tst_color_picker`, and the
+  Rust lcms2/ICC oracles.
 - **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
   OpenSpec change `add-vanishing-point-planes`, archived into
   `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)

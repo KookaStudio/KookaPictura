@@ -6,7 +6,7 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 161 gaps — 5 systemic in §B, 156 per-domain in §C.
+- **Rows:** 160 gaps — 5 systemic in §B, 155 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -162,8 +162,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | IMG-13 | `image-size.md` | Smoother/Sharper/Automatic kernels, Scale Styles, Auto resolution, picas/columns, float resample | DIVERGENT | `resize.rs:13`; `image_size_dialog.cpp:70` | #565 |
 | IMG-14 | `canvas-size.md` | picas/columns units + extension-fill availability gating | PARTIAL | `canvas_size_dialog.cpp:256,274` | #566 |
 | IMG-15 | `image-rotation-and-flip.md` | Arbitrary rotation dialog, interpolation preference, ruler-straighten prefill | DIVERGENT | `frame_menus_image.cpp:115` | #567 |
-| IMG-16 | `color-profiles-and-assignment.md` | Convert to Profile options + mismatch/missing warnings + embed toggle | PARTIAL | `profile_dialog.cpp:19`; `icc.rs:259` | #568 |
-| IMG-17 | `color-settings.md` | full Color Settings dialog (spaces, policies, conversion options, `.csf`) | PARTIAL | `color_settings_dialog.cpp:23-43` | #569 |
+| IMG-17 | `color-settings.md` | `.csf` save/load, Gray/Spot working spaces, and installed-profile discovery | MISSING | `color_settings_dialog.cpp` | #569 |
 | IMG-18 | `32-bit-hdr.md` | 32-bit Preview Options, HDR colour picker, 32-bit Info readout | MISSING | `info_panel.cpp:377` | #570 |
 | ADJ-1 | `adjustments/channel-mixer.md` | Monochrome UI + CMYK/Gray outputs | MISSING | `channel_mixer_dialog.h:15` | #571 |
 | ADJ-2 | `adjustments/color-balance.md` | Numeric readouts + Lab/CMYK mapping | MISSING | `color_balance_dialog.cpp:33-53`; `color.rs:165-192` | #572 |
@@ -214,7 +213,7 @@ are already tracked.
 |---|---|---|---|---|---|
 | CLR-1 | `gradient-presets.md` | Gradient Editor reachable from the Gradient tool + opacity stops + midpoint | PARTIAL | `options_bar_fill.cpp:129-131`; `gradient_editor_dialog.cpp:481-484` | #598 |
 | CLR-2 | `pattern-presets.md` | Define Pattern, `.pat` library, Scripted Patterns | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs`; `codec/patterns.rs` | #599 |
-| CLR-3 | `color-picker.md` | Gamut/web alerts, Color Libraries (PANTONE), picker preference | MISSING | `color_picker_dialog.cpp:1083-1085` | #600 |
+| CLR-3 | `color-picker.md` | Color Libraries (PANTONE) | MISSING | `color_picker_dialog.cpp` libraries disabled | #600 |
 | CLR-4 | `color-picker.md` | HUD colour picker | MISSING | none found | #601 |
 | CLR-5 | `color-picker.md` | HDR colour picker (32-bpc) | MISSING | `color_picker_dialog.cpp` 8-bit only | #602 |
 | CLR-7 | `color-models.md` | Out-of-gamut triangle, 16/32-bit picker fields (CMYK now goes through the working profile in `pictura_color::model`) | PARTIAL | `color_picker_dialog.cpp:714` | #604 |
@@ -343,6 +342,13 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   round-trip, which is why full depth/colour-mode fidelity (SYS-2) is broad.
 - Most "missing" secondary controls are already marked in-source with `ponytail:`
   comments naming the ceiling — they are known scope cuts, not regressions.
+- **Corrections from the colour-management bundle.** `IMG-16` is removed:
+  Convert to Profile options/preview/flatten, mismatch/missing warnings, the
+  embed toggle, profile-aware CMYK conversion (#809), and raster ICC
+  import/export now ship (`profile_dialog.cpp`, `profile_warning_dialog.cpp`,
+  `save_options_dialog.cpp`, `color_management.rs`, `profile_probe.rs`).
+  `IMG-17`, `CLR-3`, and `CLR-7` are narrowed to the remaining `.csf`/Gray/Spot
+  settings, Color Libraries, and 16/32-bit picker gaps.
 - **Corrections from the `#785` sweep.** Five rows in this register were wrong,
   and have been fixed or removed:
   - `FILT-1` (Lighting Effects engine, `#592`) — the engine ships
