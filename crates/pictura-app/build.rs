@@ -154,6 +154,7 @@ fn main() {
                 "src/cxxqt_object/engine_tables/blend_modes.rs",
                 "src/cxxqt_object/channels.rs",
                 "src/cxxqt_object/clipping.rs",
+                "src/cxxqt_object/color_management.rs",
                 "src/cxxqt_object/command_catalogue.rs",
                 "src/cxxqt_object/engine_tables/color_models.rs",
                 "src/cxxqt_object/color_range.rs",

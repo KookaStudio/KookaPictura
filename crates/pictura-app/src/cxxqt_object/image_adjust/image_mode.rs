@@ -274,7 +274,17 @@ fn refresh_active_layer(mut view: Pin<&mut PictureView>) {
 fn convert_image_mode(view: Pin<&mut PictureView>, mode: &QString) -> bool {
     match mode_from_name(&mode.to_string()) {
         Some(mode @ (ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Cmyk | ColorMode::Lab)) => {
-            commit(view, |doc| pictura_render::convert_mode(doc, mode).is_ok())
+            let (profile, options) = {
+                let rust = view.rust();
+                (
+                    pictura_codec::Profile::from_icc(&rust.working_cmyk).ok(),
+                    rust.conversion_options,
+                )
+            };
+            commit(view, |doc| {
+                pictura_render::convert_mode_with_profiles(doc, mode, profile.as_ref(), options)
+                    .is_ok()
+            })
         }
         _ => false,
     }

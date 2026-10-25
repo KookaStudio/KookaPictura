@@ -1393,3 +1393,5 @@ fn short_indexed_composite_data_is_a_typed_error_not_a_panic() {
     });
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 }
+
+mod profile;

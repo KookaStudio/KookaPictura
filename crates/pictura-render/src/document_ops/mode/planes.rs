@@ -251,13 +251,22 @@ pub(super) fn reduce_to_gray(doc: &mut Document) {
 
 /// The 8-bit source-mode planes for working RGB `rgb` (plane-major), and the
 /// working RGB they display as.
-fn encode_source_mode(mode: ColorMode, rgb: &[u8]) -> (Vec<u8>, Vec<u8>) {
+fn encode_source_mode(
+    mode: ColorMode,
+    rgb: &[u8],
+    cmyk_profile: Option<&pictura_codec::Profile>,
+    options: pictura_codec::ConversionOptions,
+) -> (Vec<u8>, Vec<u8>) {
     let encoded = match mode {
-        ColorMode::Cmyk => rgb_to_cmyk_gcr(rgb),
+        ColorMode::Cmyk => cmyk_profile
+            .and_then(|profile| pictura_codec::rgb_to_cmyk_with_profile(rgb, profile, options))
+            .unwrap_or_else(|| rgb_to_cmyk_gcr(rgb)),
         _ => pictura_codec::rgb_to_lab(rgb),
     };
     let shown = match mode {
-        ColorMode::Cmyk => pictura_codec::cmyk_to_rgb(&encoded),
+        ColorMode::Cmyk => cmyk_profile
+            .and_then(|profile| pictura_codec::cmyk_to_rgb_with_profile(&encoded, profile, options))
+            .unwrap_or_else(|| pictura_codec::cmyk_to_rgb(&encoded)),
         _ => pictura_codec::lab_to_rgb(&encoded),
     };
     (encoded, shown)
@@ -290,10 +299,20 @@ pub(super) fn rgb_to_cmyk_gcr(rgb: &[u8]) -> Vec<u8> {
 /// Encode a working RGB document in `mode` (CMYK or Lab): each color plane set
 /// gains an 8-bit store in that mode and the working RGB becomes what the
 /// store displays as, so a save re-emits the store and the canvas matches it.
-pub(super) fn encode_document(doc: &mut Document, mode: ColorMode) {
+pub(super) fn encode_document(
+    doc: &mut Document,
+    mode: ColorMode,
+    cmyk_profile: Option<&pictura_codec::Profile>,
+    options: pictura_codec::ConversionOptions,
+) {
     let plane = doc.width as usize * doc.height as usize;
     if doc.composite.data.len() >= 3 * plane {
-        let (encoded, shown) = encode_source_mode(mode, &doc.composite.data[..3 * plane]);
+        let (encoded, shown) = encode_source_mode(
+            mode,
+            &doc.composite.data[..3 * plane],
+            cmyk_profile,
+            options,
+        );
         let mut data = doc.composite.data.to_vec();
         data[..3 * plane].copy_from_slice(&shown);
         doc.composite.data = data.into();
@@ -305,14 +324,20 @@ pub(super) fn encode_document(doc: &mut Document, mode: ColorMode) {
         });
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
-        encode_layer(layer, mode, true)
+        encode_layer(layer, mode, true, cmyk_profile, options)
     });
     doc.source_mode = Some(mode);
 }
 
 /// Store `layer`'s color planes encoded in `mode`; with `show`, also rewrite
 /// its working RGB to what the encoding displays as.
-fn encode_layer(layer: &mut Layer, mode: ColorMode, show: bool) {
+fn encode_layer(
+    layer: &mut Layer,
+    mode: ColorMode,
+    show: bool,
+    cmyk_profile: Option<&pictura_codec::Profile>,
+    options: pictura_codec::ConversionOptions,
+) {
     let Some(pos) = color_positions(layer, 3) else {
         return;
     };
@@ -321,7 +346,7 @@ fn encode_layer(layer: &mut Layer, mode: ColorMode, show: bool) {
         .iter()
         .flat_map(|&i| layer.channels[i].data.iter().copied())
         .collect();
-    let (encoded, shown) = encode_source_mode(mode, &rgb);
+    let (encoded, shown) = encode_source_mode(mode, &rgb, cmyk_profile, options);
     if show {
         for (c, &i) in pos.iter().enumerate() {
             layer.channels[i].data = shown[c * n..(c + 1) * n].to_vec().into();
@@ -341,7 +366,15 @@ pub(super) fn ensure_stores(doc: &mut Document) {
     match doc.source_mode {
         Some(mode @ (ColorMode::Cmyk | ColorMode::Lab)) => {
             if doc.source_planes.is_none() && doc.composite.data.len() >= 3 * plane {
-                let (encoded, _) = encode_source_mode(mode, &doc.composite.data[..3 * plane]);
+                let (encoded, _) = encode_source_mode(
+                    mode,
+                    &doc.composite.data[..3 * plane],
+                    None,
+                    pictura_codec::ConversionOptions {
+                        dither: false,
+                        ..Default::default()
+                    },
+                );
                 doc.source_planes = Some(SourcePlanes {
                     depth: BitDepth::Eight,
                     width: doc.width,
@@ -351,7 +384,16 @@ pub(super) fn ensure_stores(doc: &mut Document) {
             }
             for_each_layer(&mut doc.layers, &mut |layer| {
                 if layer.source_channels.is_none() {
-                    encode_layer(layer, mode, false);
+                    encode_layer(
+                        layer,
+                        mode,
+                        false,
+                        None,
+                        pictura_codec::ConversionOptions {
+                            dither: false,
+                            ..Default::default()
+                        },
+                    );
                 }
             });
         }

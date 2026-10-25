@@ -2,7 +2,7 @@
 //! 8-bit RGB. Bitmap and Indexed are exact; CMYK and Lab are approximations of
 //! the reference's color-managed transforms.
 
-use pictura_color::model;
+use pictura_color::{dither_plane, model, ConversionOptions, Profile};
 use pictura_core::{
     BitDepth, Channel, ColorMode, Document, Layer, LayerStack, Samples, SourceChannels,
 };
@@ -101,6 +101,249 @@ pub(crate) fn rgb_to_cmyk(rgb: &[u8]) -> Vec<u8> {
     out[plane..2 * plane].copy_from_slice(g);
     out[2 * plane..3 * plane].copy_from_slice(b);
     out
+}
+
+fn planar_to_interleaved(planar: &[u8], channels: usize) -> Option<Vec<u8>> {
+    if channels == 0 || !planar.len().is_multiple_of(channels) {
+        return None;
+    }
+    let n = planar.len() / channels;
+    let mut out = Vec::with_capacity(planar.len());
+    for i in 0..n {
+        for c in 0..channels {
+            out.push(planar[c * n + i]);
+        }
+    }
+    Some(out)
+}
+
+fn interleaved_to_planar(interleaved: &[u8], channels: usize) -> Option<Vec<u8>> {
+    if channels == 0 || !interleaved.len().is_multiple_of(channels) {
+        return None;
+    }
+    let n = interleaved.len() / channels;
+    let mut out = vec![0u8; interleaved.len()];
+    for i in 0..n {
+        for c in 0..channels {
+            out[c * n + i] = interleaved[i * channels + c];
+        }
+    }
+    Some(out)
+}
+
+/// Decode planar CMYK through a CMYK profile into planar sRGB. The profile-free
+/// formula is the caller's fallback when this returns `None`.
+pub fn cmyk_to_rgb_with_profile(
+    cmyk: &[u8],
+    profile: &Profile,
+    options: ConversionOptions,
+) -> Option<Vec<u8>> {
+    let interleaved = planar_to_interleaved(cmyk, 4)?;
+    let out = pictura_color::convert_space(
+        profile,
+        &Profile::srgb(),
+        &interleaved,
+        options.intent,
+        options.black_point_compensation,
+    )
+    .ok()?;
+    let mut planar = interleaved_to_planar(&out, 3)?;
+    if options.dither {
+        let n = planar.len() / 3;
+        for plane in planar.chunks_exact_mut(n) {
+            dither_plane(plane, n);
+        }
+    }
+    Some(planar)
+}
+
+/// Encode planar sRGB through a CMYK profile into planar CMYK.
+pub fn rgb_to_cmyk_with_profile(
+    rgb: &[u8],
+    profile: &Profile,
+    options: ConversionOptions,
+) -> Option<Vec<u8>> {
+    let interleaved = planar_to_interleaved(rgb, 3)?;
+    let out = pictura_color::convert_space(
+        &Profile::srgb(),
+        profile,
+        &interleaved,
+        options.intent,
+        options.black_point_compensation,
+    )
+    .ok()?;
+    let mut planar = interleaved_to_planar(&out, 4)?;
+    if options.dither {
+        let n = planar.len() / 4;
+        for plane in planar.chunks_exact_mut(n) {
+            dither_plane(plane, n);
+        }
+    }
+    Some(planar)
+}
+
+/// Convert the retained 8-bit CMYK composite and layer stores from one CMYK
+/// profile to another. Retained 16/32-bit CMYK samples are left unchanged
+/// because the profile-pair conversion is 8-bit.
+pub(crate) fn convert_retained_cmyk(
+    doc: &mut Document,
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+) {
+    if let Some(store) = doc.source_planes.as_mut() {
+        if store.depth == BitDepth::Eight {
+            convert_cmyk_samples(&mut store.samples, src, dst, options);
+        }
+    }
+    for_each_source_layer(&mut doc.layers, &mut |layer| {
+        let Some(store) = layer.source_channels.as_mut() else {
+            return;
+        };
+        if store.depth != BitDepth::Eight {
+            return;
+        }
+        let ids = [0i16, 1, 2, 3];
+        let Some(planes) = ids
+            .iter()
+            .map(|id| {
+                store
+                    .planes
+                    .iter()
+                    .find(|(cid, _)| cid == id)
+                    .map(|(_, samples)| samples.clone())
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+        if planes.iter().any(|p| !matches!(p, Samples::U8(_))) {
+            return;
+        }
+        let Some(converted) = convert_cmyk_planes(&planes, src, dst, options) else {
+            return;
+        };
+        for (id, samples) in ids.iter().zip(&converted) {
+            if let Some((_, slot)) = store.planes.iter_mut().find(|(cid, _)| cid == id) {
+                *slot = samples.clone();
+            }
+        }
+        write_working_rgb(layer, &converted, dst, options);
+    });
+    if let Some(store) = doc.source_planes.as_ref() {
+        if store.depth == BitDepth::Eight {
+            let plane = doc.width as usize * doc.height as usize;
+            if let Samples::U8(values) = &store.samples {
+                if values.len() == plane * 4 && doc.composite.data.len() >= plane * 3 {
+                    if let Some(rgb) = cmyk_to_rgb_with_profile(values, dst, options) {
+                        doc.composite.data[..plane * 3].copy_from_slice(&rgb);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Rewrite a CMYK layer's 8-bit RGB channels from its converted retained planes.
+fn write_working_rgb(
+    layer: &mut Layer,
+    planes: &[Samples],
+    profile: &Profile,
+    options: ConversionOptions,
+) {
+    let flat: Vec<u8> = planes
+        .iter()
+        .filter_map(|p| match p {
+            Samples::U8(v) => Some(v.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .concat();
+    let Some(rgb) = cmyk_to_rgb_with_profile(&flat, profile, options) else {
+        return;
+    };
+    let n = rgb.len() / 3;
+    for id in 0..3i16 {
+        if let Some(channel) = layer.channels.iter_mut().find(|c| c.id == id) {
+            channel.data = rgb[id as usize * n..(id as usize + 1) * n].to_vec().into();
+        }
+    }
+}
+
+fn convert_cmyk_samples(
+    samples: &mut Samples,
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+) {
+    let Samples::U8(values) = samples else {
+        return;
+    };
+    if !values.len().is_multiple_of(4) {
+        return;
+    }
+    let planes: Vec<Samples> = (0..4)
+        .map(|c| {
+            let n = values.len() / 4;
+            Samples::U8(values[c * n..(c + 1) * n].to_vec())
+        })
+        .collect();
+    let Some(converted) = convert_cmyk_planes(&planes, src, dst, options) else {
+        return;
+    };
+    let mut out = Vec::with_capacity(values.len());
+    for plane in converted {
+        let Samples::U8(plane) = plane else {
+            return;
+        };
+        out.extend_from_slice(&plane);
+    }
+    *values = out;
+}
+
+fn convert_cmyk_planes(
+    planes: &[Samples],
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+) -> Option<Vec<Samples>> {
+    let flat: Vec<u8> = planes
+        .iter()
+        .map(|p| match p {
+            Samples::U8(v) => Some(v.clone()),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?
+        .concat();
+    let interleaved = planar_to_interleaved(&flat, 4)?;
+    let out = pictura_color::convert_space(
+        src,
+        dst,
+        &interleaved,
+        options.intent,
+        options.black_point_compensation,
+    )
+    .ok()?;
+    let mut planar = interleaved_to_planar(&out, 4)?;
+    if options.dither {
+        let n = planar.len() / 4;
+        for plane in planar.chunks_exact_mut(n) {
+            dither_plane(plane, n);
+        }
+    }
+    let n = planar.len() / 4;
+    Some(
+        (0..4)
+            .map(|c| Samples::U8(planar[c * n..(c + 1) * n].to_vec()))
+            .collect(),
+    )
+}
+
+fn for_each_source_layer(layers: &mut LayerStack, f: &mut impl FnMut(&mut Layer)) {
+    for layer in layers {
+        f(layer);
+        for_each_source_layer(&mut layer.children, f);
+    }
 }
 
 /// Profile-free CIE XYZ (D50) → 8-bit sRGB with the same matrix class as
@@ -271,14 +514,22 @@ pub(crate) fn convert_layer_color_channels(
     layer: &mut Layer,
     mode: ColorMode,
     palette: &[u8; 768],
+    cmyk_profile: Option<&Profile>,
+    options: ConversionOptions,
 ) {
-    convert_one_layer(layer, mode, palette);
+    convert_one_layer(layer, mode, palette, cmyk_profile, options);
     for child in &mut layer.children {
-        convert_layer_color_channels(child, mode, palette);
+        convert_layer_color_channels(child, mode, palette, cmyk_profile, options);
     }
 }
 
-fn convert_one_layer(layer: &mut Layer, mode: ColorMode, palette: &[u8; 768]) {
+fn convert_one_layer(
+    layer: &mut Layer,
+    mode: ColorMode,
+    palette: &[u8; 768],
+    cmyk_profile: Option<&Profile>,
+    options: ConversionOptions,
+) {
     let color_channels = mode.color_channels() as usize;
     if color_channels == 0 {
         // ponytail: Multichannel layer color ids are not converted — the mode has
@@ -308,7 +559,9 @@ fn convert_one_layer(layer: &mut Layer, mode: ColorMode, palette: &[u8; 768]) {
     }
     let rgb = match mode {
         ColorMode::Indexed => indexed_to_rgb(&planar, palette),
-        ColorMode::Cmyk => cmyk_to_rgb(&planar),
+        ColorMode::Cmyk => cmyk_profile
+            .and_then(|profile| cmyk_to_rgb_with_profile(&planar, profile, options))
+            .unwrap_or_else(|| cmyk_to_rgb(&planar)),
         ColorMode::Lab => lab_to_rgb(&planar),
         // A Bitmap or Duotone layer's single gray plane replicates to RGB.
         ColorMode::Bitmap | ColorMode::Duotone => gray_to_rgb(&planar),

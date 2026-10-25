@@ -163,82 +163,6 @@ fn lab_layer_color_planes(layer: &Layer, depth: u16) -> Vec<Option<Vec<u8>>> {
     out
 }
 
-/// The CMYK bytes to emit for a CMYK output's composite color planes: the four
-/// retained source planes exactly when their forward RGB conversion still matches
-/// the working composite, else the working RGB re-encoded with the exact
-/// [`crate::color_mode::rgb_to_cmyk`] right-inverse. The document is never
-/// mutated. The retained plane is the 8-bit CMYK read store at depth 8, or the
-/// native store narrowed to 8-bit at 16/32; for an RGB/Grayscale document there
-/// is none.
-///
-/// ponytail: the four planes are re-encoded as a unit, so an edited channel also
-/// re-encodes its unchanged siblings. Per-channel change tracking would be the
-/// upgrade if that matters.
-fn cmyk_composite_planes(doc: &Document, depth: u16, plane: usize) -> Vec<u8> {
-    let color_channels = doc.composite.channels as usize;
-    let current = &doc.composite.data[..color_channels * plane];
-    let retained: Option<Vec<Vec<u8>>> = (0..4)
-        .map(|c| crate::color_mode::composite_retained_8(doc, depth, c))
-        .collect();
-    if let Some(retained) = retained {
-        let retained: Vec<u8> = retained.concat();
-        if retained.len() == plane * 4
-            && crate::color_mode::cmyk_to_rgb(&retained).as_slice() == current
-        {
-            return retained;
-        }
-    }
-    crate::color_mode::rgb_to_cmyk(current)
-}
-
-/// The four CMYK planes to emit for a layer's color channels, or empty when the
-/// layer does not carry exactly three id-0/1/2 color channels of equal length.
-/// The retained source planes are re-emitted when their forward conversion still
-/// matches the working RGB; an edited layer is re-encoded with the exact
-/// [`crate::color_mode::rgb_to_cmyk`] inverse. The returned planes are C, M, Y, K.
-fn cmyk_layer_color_planes(layer: &Layer, depth: u16) -> Vec<Vec<u8>> {
-    let positions: Vec<usize> = layer
-        .channels
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| c.id >= 0 && c.id < 3)
-        .map(|(i, _)| i)
-        .collect();
-    if positions.len() != 3 {
-        return Vec::new();
-    }
-    let plane = layer.channels[positions[0]].data.len();
-    if positions
-        .iter()
-        .any(|&i| layer.channels[i].data.len() != plane)
-    {
-        return Vec::new();
-    }
-    let mut current = Vec::with_capacity(plane * 3);
-    for &i in &positions {
-        current.extend_from_slice(&layer.channels[i].data);
-    }
-    let retained: Option<Vec<Vec<u8>>> = (0..4)
-        .map(|c| crate::color_mode::layer_retained_8(layer, depth, c))
-        .collect();
-    let flat = match retained {
-        Some(retained) => {
-            let flat: Vec<u8> = retained.concat();
-            if flat.len() == plane * 4
-                && crate::color_mode::cmyk_to_rgb(&flat).as_slice() == current.as_slice()
-            {
-                flat
-            } else {
-                crate::color_mode::rgb_to_cmyk(&current)
-            }
-        }
-        None => crate::color_mode::rgb_to_cmyk(&current),
-    };
-    (0..4)
-        .map(|c| flat[c * plane..(c + 1) * plane].to_vec())
-        .collect()
-}
-
 fn write_layer_info(
     doc: &Document,
     psb: bool,
@@ -256,6 +180,7 @@ fn write_layer_info(
 
     let mut channel_data: Vec<Vec<(i16, OutChannel)>> = Vec::with_capacity(records.len());
     let depth = output_depth(doc)?;
+    let cmyk_profile = crate::icc::cmyk_profile_from_resources(doc);
     for record in &records {
         let mut channels: Vec<(i16, OutChannel)> = Vec::new();
         if let Some(layer) = record.layer {
@@ -269,7 +194,7 @@ fn write_layer_info(
             // A CMYK layer's working channels are three RGB planes; the output
             // synthesizes `(0,C),(1,M),(2,Y),(3,K)` and keeps the rest.
             let cmyk_planes = if cmyk_mode {
-                cmyk_layer_color_planes(layer, depth)
+                crate::write_cmyk::cmyk_layer_color_planes(layer, depth, cmyk_profile.as_ref())
             } else {
                 Vec::new()
             };
@@ -1106,7 +1031,8 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
     // they are unchanged, and otherwise re-encodes from the working RGB into a
     // temp buffer (Indexed never re-encodes: an edit already chose the RGB mode).
     let lab_composite = lab_mode.then(|| lab_composite_planes(doc, depth, plane));
-    let cmyk_composite = cmyk_mode.then(|| cmyk_composite_planes(doc, depth, plane));
+    let cmyk_composite =
+        cmyk_mode.then(|| crate::write_cmyk::cmyk_composite_planes(doc, depth, plane));
     let indexed_composite = indexed_mode.then(|| {
         composite_retained(doc, depth, 0)
             .expect("indexed_mode checked the composite plane")

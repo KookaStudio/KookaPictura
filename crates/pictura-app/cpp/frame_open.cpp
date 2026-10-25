@@ -80,6 +80,50 @@ void PicturaMainWindow::wireOpenSignals(PictureView* view)
             });
 }
 
+bool PicturaMainWindow::confirmProfileForOpen(PictureView* view, const QString& path)
+{
+    if (!view || path.isEmpty()) {
+        return true;
+    }
+    const QStringList probe = pictura::probe_file_profile(path);
+    if (probe.isEmpty()) {
+        return true;
+    }
+    const QString kind = probe.value(0);
+    const bool mismatch = kind == QStringLiteral("mismatch");
+    const bool missing = kind == QStringLiteral("missing");
+    if (kind == QStringLiteral("malformed")) {
+        return true;
+    }
+    if ((!mismatch && !missing)
+        || (mismatch && !pictura::ask_mismatch_open(*view))
+        || (missing && !pictura::ask_missing_open(*view))) {
+        return true;
+    }
+    ProfileWarningDialog dialog(mismatch ? ProfileWarningDialog::Mismatch
+                                         : ProfileWarningDialog::Missing,
+                                probe.value(1), this);
+    if (runDialog(dialog, this) != QDialog::Accepted) {
+        return false;
+    }
+    int policy = 0;
+    switch (dialog.choice()) {
+    case ProfileWarningDialog::ConvertToWorking:
+    case ProfileWarningDialog::AssignThenConvert:
+        policy = 1;
+        break;
+    case ProfileWarningDialog::DiscardEmbedded:
+    case ProfileWarningDialog::LeaveUntagged:
+        policy = 2;
+        break;
+    default:
+        policy = 0;
+        break;
+    }
+    pictura::set_open_policy_override(*view, policy);
+    return true;
+}
+
 void PicturaMainWindow::beginLoadingDocument(PictureView* view, const QString& path,
                                              const QString& displayName, quint64 token,
                                              const QString& recentPath, OpenKind kind)
@@ -90,9 +134,7 @@ void PicturaMainWindow::beginLoadingDocument(PictureView* view, const QString& p
     if (view->gpu_compute() != gpuCompute_) {
         view->set_gpu_compute(gpuCompute_);
     }
-    if (view->color_policy() != colorPolicy_) {
-        view->set_color_policy(colorPolicy_);
-    }
+    applyColorSettings(view);
     open_set_delay(*view, quint64(openDelayForTest_));
     wireOpenSignals(view);
 
@@ -492,6 +534,11 @@ quint64 PicturaMainWindow::startOpenPath(const QString& path)
 {
     const quint64 token = nextOpenToken();
     auto* view = new PictureView(this);
+    applyColorSettings(view);
+    if (!confirmProfileForOpen(view, path)) {
+        delete view;
+        return 0;
+    }
     beginOpenCursor();
     cursorTokens_.insert(token);
     beginLoadingDocument(view, path, QFileInfo(path).fileName(), token, path, OpenKind::Psd);
@@ -503,6 +550,11 @@ quint64 PicturaMainWindow::startOpenImagePath(const QString& path)
 {
     const quint64 token = nextOpenToken();
     auto* view = new PictureView(this);
+    applyColorSettings(view);
+    if (!confirmProfileForOpen(view, path)) {
+        delete view;
+        return 0;
+    }
     beginOpenCursor();
     cursorTokens_.insert(token);
     beginLoadingDocument(view, path, QFileInfo(path).fileName(), token, path,

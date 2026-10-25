@@ -3,20 +3,31 @@
 //! Split from `icc.rs` for the file-size cap. This module owns the plane and
 //! layer conversion; `icc.rs` owns profile policy and resource rewriting.
 
-use pictura_color::{convert, Intent, Profile};
+use pictura_color::{convert, ConversionOptions, Profile};
 use pictura_core::{BitDepth, Document, Layer, LayerStack, Samples};
 
-use super::icc::convert_planes;
+use super::icc::convert_planes_with_options;
 
-/// Convert a layer's 8-bit RGB channels and then its retained native store.
-fn convert_layer(layer: &mut Layer, src: &Profile, dst: &Profile) {
-    convert_layer_8bit(layer, src, dst);
-    convert_layer_native(layer, src, dst);
+/// Convert a layer's 8-bit RGB channels and, when `native` is set, its
+/// retained RGB native store. A native store in a recorded source mode
+/// (CMYK/Lab) is not RGB and must not be transformed by an RGB profile
+/// conversion; the 8-bit working channels already carry that conversion.
+fn convert_layer(
+    layer: &mut Layer,
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+    native: bool,
+) {
+    convert_layer_8bit(layer, src, dst, options);
+    if native {
+        convert_layer_native(layer, src, dst, options);
+    }
 }
 
 /// Convert a layer's RGB color channels in place, selected by channel id `0..3`
 /// rather than by storage order. A layer missing a color channel is unchanged.
-fn convert_layer_8bit(layer: &mut Layer, src: &Profile, dst: &Profile) {
+fn convert_layer_8bit(layer: &mut Layer, src: &Profile, dst: &Profile, options: ConversionOptions) {
     let mut slots = Vec::with_capacity(3);
     let mut planes = Vec::with_capacity(3);
     for id in 0..3i16 {
@@ -27,7 +38,7 @@ fn convert_layer_8bit(layer: &mut Layer, src: &Profile, dst: &Profile) {
         slots.push(slot);
         planes.push(channel.data.to_vec());
     }
-    if let Some(converted) = convert_planes(&planes, src, dst) {
+    if let Some(converted) = convert_planes_with_options(&planes, src, dst, options) {
         for (slot, plane) in slots.into_iter().zip(converted) {
             layer.channels[slot].data = plane.into();
         }
@@ -42,6 +53,7 @@ fn convert_native(
     depth: BitDepth,
     src: &Profile,
     dst: &Profile,
+    options: ConversionOptions,
 ) -> Option<Vec<Samples>> {
     let bits = match depth {
         BitDepth::Sixteen => 16u8,
@@ -92,8 +104,8 @@ fn convert_native(
         1,
         channels as u8,
         bits,
-        Intent::RelativeColorimetric,
-        false,
+        options.intent,
+        options.black_point_compensation,
     )
     .ok()?;
     let mut converted = Vec::with_capacity(channels);
@@ -160,27 +172,19 @@ fn write_color_planes(samples: &mut Samples, n: usize, planes: &[Samples]) {
 /// working planes from the narrowed result, so `write_psd` re-emits the native
 /// store instead of widening the 8-bit copy. A converted source mode (e.g. an
 /// 8-bit Lab read) keeps its source-mode planes untouched.
-fn convert_source_planes(doc: &mut Document, src: &Profile, dst: &Profile) {
-    eprintln!(
-        "DBG csp mode={:?} docdepth={:?} dims={}x{}",
-        doc.source_mode, doc.source_depth, doc.width, doc.height
-    );
+fn convert_source_planes(
+    doc: &mut Document,
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+) {
     if doc.source_mode.is_some() {
-        eprintln!("DBG csp early source_mode");
         return;
     }
     let (width, height) = (doc.width, doc.height);
     let Some(store) = doc.source_planes.as_mut() else {
-        eprintln!("DBG csp early no store");
         return;
     };
-    eprintln!(
-        "DBG csp store depth={:?} dims={}x{} len={}",
-        store.depth,
-        store.width,
-        store.height,
-        store.samples.len()
-    );
     if !matches!(store.depth, BitDepth::Sixteen | BitDepth::ThirtyTwo)
         || store.width != width
         || store.height != height
@@ -191,7 +195,7 @@ fn convert_source_planes(doc: &mut Document, src: &Profile, dst: &Profile) {
     let Some(planes) = split_color_planes(&store.samples, n) else {
         return;
     };
-    let Some(converted) = convert_native(&planes, store.depth, src, dst) else {
+    let Some(converted) = convert_native(&planes, store.depth, src, dst, options) else {
         return;
     };
     for (ch, plane) in converted.iter().enumerate() {
@@ -207,7 +211,12 @@ fn convert_source_planes(doc: &mut Document, src: &Profile, dst: &Profile) {
 
 /// Convert a layer's retained native color planes and sync its 8-bit working
 /// channels from the narrowed result. A partial store is left unchanged.
-fn convert_layer_native(layer: &mut Layer, src: &Profile, dst: &Profile) {
+fn convert_layer_native(
+    layer: &mut Layer,
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+) {
     let Some(store) = layer.source_channels.as_mut() else {
         return;
     };
@@ -249,7 +258,7 @@ fn convert_layer_native(layer: &mut Layer, src: &Profile, dst: &Profile) {
     if planes.iter().any(|p| p.len() != n) {
         return;
     }
-    let Some(converted) = convert_native(&planes, store.depth, src, dst) else {
+    let Some(converted) = convert_native(&planes, store.depth, src, dst, options) else {
         return;
     };
     for (id, plane) in ids.iter().zip(&converted) {
@@ -264,15 +273,66 @@ fn convert_layer_native(layer: &mut Layer, src: &Profile, dst: &Profile) {
 
 /// Convert every layer in `layers` and, recursively, every descendant of a
 /// group, so a nested pixel layer is not left in the old profile.
-pub(super) fn convert_layers(layers: &mut LayerStack, src: &Profile, dst: &Profile) {
+pub(super) fn convert_layers(
+    layers: &mut LayerStack,
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+    native: bool,
+) {
     for layer in layers {
-        convert_layer(layer, src, dst);
-        convert_layers(&mut layer.children, src, dst);
+        convert_layer(layer, src, dst, options, native);
+        convert_layers(&mut layer.children, src, dst, options, native);
     }
 }
 
 /// Convert the document's retained native composite planes after its 8-bit
 /// working copy and layers have been converted.
-pub(super) fn convert_native_document(doc: &mut Document, src: &Profile, dst: &Profile) {
-    convert_source_planes(doc, src, dst);
+pub(super) fn convert_native_document(
+    doc: &mut Document,
+    src: &Profile,
+    dst: &Profile,
+    options: ConversionOptions,
+) {
+    convert_source_planes(doc, src, dst, options);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pictura_color::Intent;
+
+    #[test]
+    fn convert_options_dither_is_8bit_only() {
+        let planes = vec![
+            Samples::U16(vec![0, 1000, 65535]),
+            Samples::U16(vec![500, 2000, 40000]),
+            Samples::U16(vec![900, 3000, 50000]),
+        ];
+        let base = ConversionOptions {
+            intent: Intent::RelativeColorimetric,
+            black_point_compensation: true,
+            dither: false,
+        };
+        let plain = convert_native(
+            &planes,
+            BitDepth::Sixteen,
+            &Profile::srgb(),
+            &Profile::adobe_rgb(),
+            base,
+        )
+        .expect("16-bit transform");
+        let dithered = convert_native(
+            &planes,
+            BitDepth::Sixteen,
+            &Profile::srgb(),
+            &Profile::adobe_rgb(),
+            ConversionOptions {
+                dither: true,
+                ..base
+            },
+        )
+        .expect("16-bit transform");
+        assert_eq!(plain, dithered, "dither is 8-bit only");
+    }
 }

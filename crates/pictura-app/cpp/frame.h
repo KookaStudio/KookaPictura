@@ -482,6 +482,9 @@ public:
     // Edit > Color Settings…: show the sRGB working space and incoming-profile
     // policy; on OK persist the choice and apply it to every open view.
     void showColorSettings();
+    void wireColorManagementMenu();
+    void applyColorSettings(PictureView* view);
+    bool confirmProfileForOpen(PictureView* view, const QString& path);
     // Help > Developer > Design System…: the in-app storybook over the real
     // widgets (modeless; the single instance is reused).
     void showDesignSystemDialog();
@@ -1043,6 +1046,14 @@ private:
     QToolButton* themeCornerButton_ = nullptr;
     bool gpuCompute_ = true;
     int colorPolicy_ = 0;
+    int cmykPolicy_ = 0;
+    int workingCmyk_ = 0;
+    int renderIntent_ = 1;
+    bool blackPointCompensation_ = true;
+    bool useDither_ = true;
+    bool askMismatchOpen_ = false;
+    bool askMissingOpen_ = false;
+    int pickerChoice_ = 0;
     bool textGammaEnabled_ = true;
     double textGamma_ = 1.45;
     bool typeShowAsianOptions_ = false;

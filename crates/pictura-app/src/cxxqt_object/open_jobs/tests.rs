@@ -291,3 +291,90 @@ fn pdf_open_status_classifies() {
         PdfOpen::None
     ));
 }
+
+fn profile_jpeg(icc: &[u8]) -> Vec<u8> {
+    let jpeg = [0xFF, 0xD8, 0xFF, 0xD9];
+    pictura_codec::embed_raster_metadata(
+        &jpeg,
+        "jpg",
+        &pictura_codec::RasterMetadata {
+            icc: Some(icc.to_vec()),
+            ..pictura_codec::RasterMetadata::default()
+        },
+    )
+    .expect("embed ICC")
+}
+
+fn profile_rgba_document() -> Document {
+    Document::from_rgba("profile", 1, 1, &[200, 50, 100, 255])
+}
+
+#[test]
+fn raster_import_policy_preserve() {
+    let icc = pictura_codec::Profile::adobe_rgb().to_icc();
+    let bytes = profile_jpeg(&icc);
+    let mut doc = profile_rgba_document();
+    let before = doc.composite.data.to_vec();
+    super::apply_raster_profile(
+        &mut doc,
+        &bytes,
+        Policy::Preserve,
+        pictura_codec::ConversionOptions::default(),
+    );
+    assert_eq!(doc.document_icc.as_deref(), Some(icc.as_slice()));
+    assert!(doc.source_icc.is_none());
+    assert_eq!(doc.composite.data.to_vec(), before);
+}
+
+#[test]
+fn raster_import_policy_convert() {
+    let icc = pictura_codec::Profile::adobe_rgb().to_icc();
+    let bytes = profile_jpeg(&icc);
+    let mut doc = profile_rgba_document();
+    let before = doc.composite.data.to_vec();
+    super::apply_raster_profile(
+        &mut doc,
+        &bytes,
+        Policy::Convert,
+        pictura_codec::ConversionOptions::default(),
+    );
+    assert_eq!(doc.source_icc.as_deref(), Some(icc.as_slice()));
+    assert!(doc.document_icc.is_none());
+    assert_ne!(doc.composite.data.to_vec(), before);
+}
+
+#[test]
+fn raster_import_policy_off() {
+    let icc = pictura_codec::Profile::adobe_rgb().to_icc();
+    let bytes = profile_jpeg(&icc);
+    let mut doc = profile_rgba_document();
+    let before = doc.composite.data.to_vec();
+    super::apply_raster_profile(
+        &mut doc,
+        &bytes,
+        Policy::Off,
+        pictura_codec::ConversionOptions::default(),
+    );
+    assert!(doc.document_icc.is_none());
+    assert!(doc.source_icc.is_none());
+    assert_eq!(doc.composite.data.to_vec(), before);
+}
+
+#[test]
+fn raster_import_policy_malformed_profile() {
+    let mut jpeg = vec![0xFF, 0xD8];
+    jpeg.extend_from_slice(&[0xFF, 0xE2, 0x00, 0x18]);
+    jpeg.extend_from_slice(b"ICC_PROFILE\0");
+    jpeg.extend_from_slice(&[1, 1]);
+    jpeg.extend_from_slice(b"not an ICC profile");
+    jpeg.extend_from_slice(&[0xFF, 0xD9]);
+    let mut doc = profile_rgba_document();
+    super::apply_raster_profile(
+        &mut doc,
+        &jpeg,
+        Policy::Convert,
+        pictura_codec::ConversionOptions::default(),
+    );
+    assert!(doc.document_icc.is_none());
+    assert!(doc.source_icc.is_none());
+}

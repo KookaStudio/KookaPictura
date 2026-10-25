@@ -15,6 +15,7 @@ use std::time::Instant;
 
 mod display;
 mod recovery;
+mod save;
 
 /// The output format remembered for `path`: its lowercased extension, or
 /// `"psd"` when it has none.
@@ -133,7 +134,8 @@ impl qobject::PictureView {
     pub fn open_image(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         let gpu_compute = self.rust().gpu_compute;
-        match super::open_jobs::decode_image(&path, gpu_compute, &|_, _| {}) {
+        let policy = self.rust().color_policy;
+        match super::open_jobs::decode_image_with_policy(&path, policy, gpu_compute, &|_, _| {}) {
             Some(opened) => {
                 super::open_jobs::apply_opened(&mut self.as_mut().rust_mut(), opened);
                 self.as_mut().session_cancelled();
@@ -245,78 +247,6 @@ impl qobject::PictureView {
         true
     }
 
-    pub fn save(mut self: Pin<&mut Self>, path: &QString) -> bool {
-        let path = path.to_string();
-        let suffix = format_for_path(&path);
-        if matches!(suffix.as_str(), "pdf" | "pdp") {
-            return super::pdf_export::save_with_last_options(self, &QString::from(path.as_str()));
-        }
-        let dirty = self.rust().session.dirty;
-        match raster_writer_for_suffix(&suffix) {
-            None => {
-                let bytes = {
-                    let mut rust = self.as_mut().rust_mut();
-                    let session = &mut rust.session;
-                    let Some(doc) = session.doc.as_mut() else {
-                        return false;
-                    };
-                    let planes = store_planes(session.vanishing_planes.as_ref(), doc);
-                    if dirty {
-                        pictura_render::refresh_native_composite(doc);
-                    }
-                    // A `.psb` path forces a version-2 PSB container; every other
-                    // native suffix (including an unknown one) writes a PSD.
-                    let mut doc = pictura_render::save_view(doc);
-                    pictura_codec::set_vanishing_point_data(doc.to_mut(), planes.as_deref());
-                    let written = if suffix == "psb" {
-                        pictura_codec::write_psb(&doc)
-                    } else {
-                        pictura_codec::write_psd(&doc)
-                    };
-                    let Ok(bytes) = written else {
-                        return false;
-                    };
-                    bytes
-                };
-                if super::helpers::safe_io::write_atomically(&path, &bytes, false).is_err() {
-                    return false;
-                }
-            }
-            Some(format) => {
-                let gpu_compute = self.rust().gpu_compute;
-                let (rgba, width, height, metadata) = {
-                    let mut rust = self.as_mut().rust_mut();
-                    let session = &mut rust.session;
-                    let Some(doc) = session.doc.as_mut() else {
-                        return false;
-                    };
-                    if dirty {
-                        pictura_render::refresh_native_composite(doc);
-                    }
-                    let buffer = current_buffer(doc, gpu_compute);
-                    let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
-                    let mut metadata = pictura_codec::raster_metadata(doc);
-                    metadata.vanishing_point = store_planes(session.vanishing_planes.as_ref(), doc);
-                    (
-                        buffer_to_rgba_bytes(&srgb),
-                        srgb.width,
-                        srgb.height,
-                        metadata,
-                    )
-                };
-                if !super::export::write_raster_with_metadata(
-                    &rgba, width, height, &path, format, &metadata,
-                ) {
-                    return false;
-                }
-            }
-        }
-        let mut view = self.as_mut().rust_mut();
-        view.path = Some(path);
-        view.session.mark_saved();
-        true
-    }
-
     pub fn is_dirty(&self) -> bool {
         self.rust().session.dirty
     }
@@ -399,18 +329,21 @@ impl qobject::PictureView {
     }
 
     fn icc_notice(&self) -> QString {
-        let Some(icc) = self
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|d| d.source_icc.as_deref())
-        else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
+            return QString::default();
+        };
+        if let Some(icc) = doc.source_icc.as_deref() {
+            return match pictura_codec::profile_description(icc) {
+                Some(name) => QString::from(format!("Converted from ICC profile {name}")),
+                None => QString::from("Converted from embedded ICC profile"),
+            };
+        }
+        let Some(icc) = doc.document_icc.as_deref() else {
             return QString::default();
         };
         match pictura_codec::profile_description(icc) {
-            Some(name) => QString::from(format!("Converted from ICC profile {name}")),
-            None => QString::from("Converted from embedded ICC profile"),
+            Some(name) => QString::from(format!("Embedded ICC profile {name} preserved")),
+            None => QString::from("Embedded ICC profile preserved"),
         }
     }
 

@@ -20,6 +20,7 @@ pub use flat::{convert_to_bitmap, convert_to_indexed, indexed_exact_available, B
 
 use std::borrow::Cow;
 
+use pictura_codec::{ConversionOptions, Profile};
 use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer};
 use pictura_ops::OpsError;
 
@@ -97,6 +98,25 @@ pub fn can_convert_depth(doc: &Document, out: BitDepth) -> bool {
 /// and show the working RGB the encoding decodes to. The document's depth is
 /// kept. `Err` without mutating when [`can_convert_mode`] refuses.
 pub fn convert_mode(doc: &mut Document, target: ColorMode) -> Result<(), OpsError> {
+    convert_mode_with_profiles(
+        doc,
+        target,
+        None,
+        ConversionOptions {
+            dither: false,
+            ..Default::default()
+        },
+    )
+}
+
+/// [`convert_mode`] with the application's working CMYK profile and conversion
+/// options. The profile is attached to resource 1039 after a CMYK conversion.
+pub fn convert_mode_with_profiles(
+    doc: &mut Document,
+    target: ColorMode,
+    working_cmyk: Option<&Profile>,
+    options: ConversionOptions,
+) -> Result<(), OpsError> {
     if !can_convert_mode(doc, target) || matches!(target, ColorMode::Bitmap | ColorMode::Indexed) {
         return Err(OpsError::Unsupported(format!(
             "cannot convert {:?} to {target:?}",
@@ -115,7 +135,12 @@ pub fn convert_mode(doc: &mut Document, target: ColorMode) -> Result<(), OpsErro
             planes::expand_gray(doc);
             doc.source_planes = None;
             planes::drop_layer_stores(doc);
-            planes::encode_document(doc, target);
+            planes::encode_document(doc, target, working_cmyk, options);
+            if target == ColorMode::Cmyk {
+                if let Some(profile) = working_cmyk {
+                    pictura_codec::assign_cmyk_profile(doc, profile);
+                }
+            }
         }
     }
     if depth != BitDepth::Eight && !doc.retains_source_depth() {

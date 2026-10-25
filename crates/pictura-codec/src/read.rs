@@ -1,4 +1,5 @@
-use pictura_color::Policy;
+use pictura_color::{ConversionOptions, Policy, Profile};
+
 use pictura_core::*;
 
 use crate::budget::DecodeBudget;
@@ -23,20 +24,50 @@ pub(crate) const MAX_GROUP_DEPTH: usize = 64;
 /// `palette_from` errors on a malformed Indexed palette before conversion.
 const EMPTY_PALETTE: [u8; 768] = [0; 768];
 
+/// Options for opening a PSD/PSB: the incoming-profile policy, an optional
+/// working CMYK profile, and the conversion options used by a policy pass.
+#[derive(Debug, Clone, Default)]
+pub struct OpenOptions {
+    pub policy: Policy,
+    pub working_cmyk: Option<Vec<u8>>,
+    pub conversion: ConversionOptions,
+}
+
 /// Read a PSD/PSB applying the historical **Convert** incoming-profile policy.
 ///
 /// ponytail: this is the Convert convenience kept for existing callers (including
 /// the render smart-object payload read); the application opens with the user's
-/// persisted policy through [`read_psd_with`].
+/// persisted settings through [`read_psd_with_options`].
 pub fn read_psd(bytes: &[u8]) -> Result<Document, PsdError> {
     read_psd_with(bytes, Policy::Convert)
 }
 
-/// Parse a PSD (or PSB) file into a [`Document`] holding the composite image and
-/// the layer tree (bottom-first, matching PSD on-disk z-order), applying an
-/// incoming-profile `policy` to an RGB document's embedded non-sRGB profile.
+/// Parse a PSD (or PSB) file applying an incoming-profile `policy` with the
+/// library defaults (sRGB working space, no working CMYK profile).
 pub fn read_psd_with(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
-    read_psd_within(bytes, policy, ImageBudget::default())
+    read_psd_with_options(
+        bytes,
+        &OpenOptions {
+            policy,
+            conversion: legacy_conversion(),
+            ..OpenOptions::default()
+        },
+    )
+}
+
+/// The historical library conversion settings: relative colorimetric, no
+/// black-point compensation, no dither.
+fn legacy_conversion() -> ConversionOptions {
+    ConversionOptions {
+        intent: pictura_color::Intent::RelativeColorimetric,
+        black_point_compensation: false,
+        dither: false,
+    }
+}
+
+/// Parse a PSD/PSB with the application's full colour settings.
+pub fn read_psd_with_options(bytes: &[u8], options: &OpenOptions) -> Result<Document, PsdError> {
+    read_psd_within_options(bytes, options, ImageBudget::default())
 }
 
 /// [`read_psd_with`] under an explicit allocation `budget`: no plane larger
@@ -47,7 +78,24 @@ pub fn read_psd_within(
     policy: Policy,
     budget: ImageBudget,
 ) -> Result<Document, PsdError> {
-    let mut doc = read_container(bytes, policy, &mut DecodeBudget::new(budget))?;
+    read_psd_within_options(
+        bytes,
+        &OpenOptions {
+            policy,
+            conversion: legacy_conversion(),
+            ..OpenOptions::default()
+        },
+        budget,
+    )
+}
+
+/// [`read_psd_with_options`] under an explicit allocation budget.
+pub fn read_psd_within_options(
+    bytes: &[u8],
+    options: &OpenOptions,
+    budget: ImageBudget,
+) -> Result<Document, PsdError> {
+    let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget))?;
     crate::path_resources::resolve_paths(&mut doc);
     crate::guide_resources::resolve_guides(&mut doc);
     Ok(doc)
@@ -55,7 +103,7 @@ pub fn read_psd_within(
 
 fn read_container(
     bytes: &[u8],
-    policy: Policy,
+    options: &OpenOptions,
     budget: &mut DecodeBudget,
 ) -> Result<Document, PsdError> {
     let mut r = Reader::new(bytes);
@@ -203,9 +251,10 @@ fn read_container(
             saved_paths: Vec::new(),
             text_styles: Default::default(),
         };
-        return Ok(crate::icc::apply_icc_policy(
-            normalize(doc, mode, depth, palette.as_ref()),
-            policy,
+        return Ok(crate::icc::apply_icc_policy_with_options(
+            normalize(doc, mode, depth, palette.as_ref(), options),
+            options.policy,
+            options.conversion,
         ));
     }
 
@@ -294,9 +343,10 @@ fn read_container(
         saved_paths: Vec::new(),
         text_styles: Default::default(),
     };
-    Ok(crate::icc::apply_icc_policy(
-        normalize(doc, mode, depth, palette.as_ref()),
-        policy,
+    Ok(crate::icc::apply_icc_policy_with_options(
+        normalize(doc, mode, depth, palette.as_ref(), options),
+        options.policy,
+        options.conversion,
     ))
 }
 
@@ -343,6 +393,7 @@ fn normalize(
     header_mode: ColorMode,
     depth: u16,
     palette: Option<&[u8; 768]>,
+    options: &OpenOptions,
 ) -> Document {
     if matches!(header_mode, ColorMode::Grayscale | ColorMode::Rgb) {
         return doc;
@@ -357,9 +408,38 @@ fn normalize(
         crate::color_mode::retain_indexed_layer_planes(&mut doc.layers, depth);
     }
     let palette = palette.unwrap_or(&EMPTY_PALETTE);
-    doc.composite = convert_pixels(doc.composite, header_mode, depth, Some(palette));
+
+    let embedded_cmyk = if header_mode == ColorMode::Cmyk {
+        crate::icc::cmyk_profile_from_resources(&doc)
+    } else {
+        None
+    };
+    let working_cmyk = options
+        .working_cmyk
+        .as_deref()
+        .and_then(|bytes| Profile::from_icc(bytes).ok());
+    let decode_profile = if options.policy == Policy::Off {
+        None
+    } else {
+        embedded_cmyk.as_ref().or(working_cmyk.as_ref())
+    };
+
+    doc.composite = convert_pixels(
+        doc.composite,
+        header_mode,
+        depth,
+        Some(palette),
+        decode_profile,
+        options.conversion,
+    );
     for layer in &mut doc.layers {
-        crate::color_mode::convert_layer_color_channels(layer, header_mode, palette);
+        crate::color_mode::convert_layer_color_channels(
+            layer,
+            header_mode,
+            palette,
+            decode_profile,
+            options.conversion,
+        );
     }
     doc.mode = ColorMode::Rgb;
     doc.depth = BitDepth::Eight;
@@ -367,6 +447,49 @@ fn normalize(
     if header_mode == ColorMode::Indexed {
         doc.source_palette = Some(*palette);
         doc.color_mode_data.clear();
+    }
+    if header_mode == ColorMode::Cmyk {
+        doc.document_icc = None;
+        match options.policy {
+            Policy::Off => {
+                crate::icc::set_icc_resource(&mut doc, None);
+                doc.source_icc = None;
+            }
+            Policy::Preserve => {
+                doc.source_icc = None;
+                // An untagged CMYK file is treated as the working CMYK; attach
+                // the working profile so a save re-encodes consistently. An
+                // embedded profile is kept byte-for-byte.
+                if embedded_cmyk.is_none() {
+                    if let Some(working) = working_cmyk.as_ref() {
+                        let icc = working.to_icc();
+                        crate::icc::set_icc_resource(&mut doc, Some(&icc));
+                    }
+                }
+            }
+            Policy::Convert => {
+                let source_bytes = crate::icc::icc_resource_bytes(&doc);
+                if let (Some(src), Some(dst)) = (embedded_cmyk.as_ref(), working_cmyk.as_ref()) {
+                    crate::color_mode::convert_retained_cmyk(
+                        &mut doc,
+                        src,
+                        dst,
+                        options.conversion,
+                    );
+                    let icc = dst.to_icc();
+                    crate::icc::set_icc_resource(&mut doc, Some(&icc));
+                } else if let Some(dst) = working_cmyk.as_ref() {
+                    let icc = dst.to_icc();
+                    crate::icc::set_icc_resource(&mut doc, Some(&icc));
+                } else if let Some(src) = embedded_cmyk.as_ref() {
+                    let icc = src.to_icc();
+                    crate::icc::set_icc_resource(&mut doc, Some(&icc));
+                } else {
+                    crate::icc::set_icc_resource(&mut doc, None);
+                }
+                doc.source_icc = source_bytes;
+            }
+        }
     }
     doc
 }
@@ -377,6 +500,8 @@ fn convert_pixels(
     mode: ColorMode,
     depth: u16,
     palette: Option<&[u8; 768]>,
+    cmyk_profile: Option<&Profile>,
+    options: ConversionOptions,
 ) -> PixelBuffer {
     use crate::color_mode::*;
     let data = match mode {
@@ -385,7 +510,9 @@ fn convert_pixels(
         }
         ColorMode::Bitmap => gray_to_rgb(&buf.data),
         ColorMode::Indexed => indexed_to_rgb(&buf.data, palette.unwrap_or(&EMPTY_PALETTE)),
-        ColorMode::Cmyk => cmyk_to_rgb(&buf.data),
+        ColorMode::Cmyk => cmyk_profile
+            .and_then(|profile| cmyk_to_rgb_with_profile(&buf.data, profile, options))
+            .unwrap_or_else(|| cmyk_to_rgb(&buf.data)),
         ColorMode::Lab => lab_to_rgb(&buf.data),
         ColorMode::Duotone => gray_to_rgb(&buf.data),
         ColorMode::Multichannel if buf.channels == 1 => gray_to_rgb(&buf.data),

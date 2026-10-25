@@ -514,7 +514,9 @@ QSplitter::handle:hover { background: ${selection}; }
 
 /* A colour swatch paints its data colour itself; the global rule only removes
    the button chrome and the focus ring comes from the paint. */
-QPushButton#colorSwatch { background: transparent; border: 0; padding: 0; }
+QPushButton#colorSwatch,
+QPushButton#colorPanelForeground,
+QPushButton#colorPanelBackground { background: transparent; border: 0; padding: 0; }
 
 /* Static surfaces that used to carry per-widget stylesheets. */
 QToolButton#optionsBrushTip:!hover:!pressed { background: transparent; border: 0; padding: 0; }

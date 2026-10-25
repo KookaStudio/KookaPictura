@@ -11,6 +11,11 @@ const PHOTOSHOP_SIGNATURE: &[u8] = b"Photoshop 3.0\0";
 /// The most IRB bytes one APP13 segment holds; a longer block runs on in
 /// the next segment, as Photoshop splits it.
 const IRB_CHUNK: usize = u16::MAX as usize - 2 - PHOTOSHOP_SIGNATURE.len();
+const ICC_SIGNATURE: &[u8] = b"ICC_PROFILE\0";
+/// The ICC_PROFILE header plus its sequence/count bytes.
+const ICC_HEADER: usize = 14;
+/// The largest profile chunk one APP2 segment can carry.
+const ICC_CHUNK: usize = u16::MAX as usize - 2 - ICC_HEADER;
 
 pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, PsdError> {
     if !bytes.starts_with(&[0xFF, 0xD8]) {
@@ -36,6 +41,9 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
         for chunk in block.chunks(IRB_CHUNK) {
             push_segment(&mut out, 0xED, &[PHOTOSHOP_SIGNATURE, chunk].concat())?;
         }
+    }
+    if let Some(icc) = &metadata.icc {
+        push_icc(&mut out, icc)?;
     }
 
     let mut at = 2;
@@ -63,7 +71,8 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
         let payload = &bytes[at + 4..at + 2 + length];
         let metadata_segment = (marker == 0xE1
             && (payload.starts_with(b"Exif\0\0") || payload.starts_with(XMP_SIGNATURE)))
-            || (marker == 0xED && payload.starts_with(PHOTOSHOP_SIGNATURE));
+            || (marker == 0xED && payload.starts_with(PHOTOSHOP_SIGNATURE))
+            || (marker == 0xE2 && payload.starts_with(ICC_SIGNATURE));
         if !metadata_segment {
             out.extend_from_slice(&bytes[at..at + 2 + length]);
         }
@@ -112,6 +121,22 @@ pub(super) fn photoshop_block(bytes: &[u8]) -> Option<Vec<u8>> {
     block
 }
 
+fn push_icc(out: &mut Vec<u8>, icc: &[u8]) -> Result<(), PsdError> {
+    let chunks = icc.len().div_ceil(ICC_CHUNK);
+    if chunks > u8::MAX as usize {
+        return Err(PsdError::Unsupported("ICC profile is too large".into()));
+    }
+    for (index, chunk) in icc.chunks(ICC_CHUNK).enumerate() {
+        let mut payload = Vec::with_capacity(ICC_HEADER + chunk.len());
+        payload.extend_from_slice(ICC_SIGNATURE);
+        payload.push(index as u8 + 1);
+        payload.push(chunks as u8);
+        payload.extend_from_slice(chunk);
+        push_segment(out, 0xE2, &payload)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,6 +161,7 @@ mod tests {
             iptc: Some(b"iptc".to_vec()),
             xmp: Some(b"<x:xmpmeta/>".to_vec()),
             vanishing_point: None,
+            icc: Some(b"fake-icc".to_vec()),
         };
         let mut existing = vec![0xFF, 0xD8];
         push_segment(&mut existing, 0xE1, b"Exif\0\0old").expect("existing exif");
@@ -158,6 +184,7 @@ mod tests {
         );
         assert!(find(&out, &[0x04, 0x04]), "the IPTC resource id is present");
         assert!(find(&out, b"<x:xmpmeta/>"));
+        assert!(find(&out, b"fake-icc"), "the ICC profile is inserted");
     }
 
     #[test]

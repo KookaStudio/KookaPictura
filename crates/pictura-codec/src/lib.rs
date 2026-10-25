@@ -49,6 +49,7 @@ pub mod pdf;
 mod pictura_raw;
 mod png;
 mod probe;
+mod profile_probe;
 mod raster_metadata;
 mod read;
 mod smart_filter;
@@ -65,6 +66,7 @@ mod web;
 mod webp;
 mod write;
 mod write_bitmap;
+mod write_cmyk;
 mod write_duotone;
 mod write_indexed;
 mod xmp;
@@ -78,7 +80,8 @@ mod tests;
 
 pub use advanced_blending::encode_blend_if;
 pub use color_mode::{
-    bitmap_rows_to_rgb, cmyk_to_rgb, indexed_to_rgb, lab_to_rgb, rgb_to_lab, xyz_d50_to_srgb_u8,
+    bitmap_rows_to_rgb, cmyk_to_rgb, cmyk_to_rgb_with_profile, indexed_to_rgb, lab_to_rgb,
+    rgb_to_cmyk_with_profile, rgb_to_lab, xyz_d50_to_srgb_u8,
 };
 pub use crs_xmp::set_crs_property;
 pub use descriptor::{write_descriptor, DescValue};
@@ -88,7 +91,10 @@ pub use engine_data_encode::encode_engine_data;
 pub use error::PsdError;
 pub use exif::{exif_tag_name, parse_exif, Exif, ExifValue};
 pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind};
-pub use icc::{assign_document_profile, buffer_to_srgb, convert_document, profile_description};
+pub use icc::{
+    assign_cmyk_profile, assign_document_profile, buffer_to_srgb, convert_document,
+    convert_document_with, profile_description, remove_document_profile,
+};
 pub use image_resources::{
     decode_image_resources, document_resolution, encode_image_resources, frame_image_resource,
     set_document_resolution, set_vanishing_point_data, vanishing_point_data, ImageResource,
@@ -113,13 +119,20 @@ pub use live_shape::{
     decode_live_shape, encode_live_shape, LiveShape, ORIGIN_ELLIPSE, ORIGIN_RECTANGLE,
     ORIGIN_ROUNDED_RECTANGLE,
 };
-pub use pictura_color::{Policy, Profile};
+pub use pictura_color::{ConversionOptions, Intent, Policy, Profile};
 pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};
+pub use profile_probe::{
+    probe_jpeg_profile, probe_png_profile, probe_psd_profile, probe_raster_profile,
+    probe_tiff_profile, ProfileProbe,
+};
 pub use raster_metadata::{
     embed_raster_metadata, raster_image_resources, raster_metadata, RasterMetadata,
 };
-pub use read::{read_psd, read_psd_with, read_psd_within};
+pub use read::{
+    read_psd, read_psd_with, read_psd_with_options, read_psd_within, read_psd_within_options,
+    OpenOptions,
+};
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
     set_smart_filter_enabled, set_smart_filters_enabled,

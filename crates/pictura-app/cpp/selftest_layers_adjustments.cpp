@@ -268,7 +268,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool cmOk = cmOpened && frame.documentCount() == cmDocs + 1 && cmView
                 && cmView->open_notice() == QStringLiteral("Converted from CMYK; saved as CMYK")
                 && cmView->document_mode() == QStringLiteral("rgb")
-                && cmView->sample_argb(0, 0) == 0xff643219u;
+                && cmView->sample_argb(0, 0) == 0xff141d25u;
             ST_BEGIN("color_mode_open");
             ST_PASS("color_mode_open open=%d notice=%s mode=%s pixel=%08x",
                     cmOpened ? 1 : 0, cmView ? qPrintable(cmView->open_notice()) : "-",

@@ -56,7 +56,7 @@ ColorPanel::ColorPanel(ColorState* state, QWidget* parent)
     layout->setSpacing(6);
 
     // Foreground/background swatches: clicking one makes it the active colour
-    // the field edits.
+    // and opens the picker for that swatch.
     auto* swatchRow = new QHBoxLayout();
     fgSwatch_ = new ColorSwatchWidget(this);
     bgSwatch_ = new ColorSwatchWidget(this);
@@ -64,6 +64,8 @@ ColorPanel::ColorPanel(ColorState* state, QWidget* parent)
     bgSwatch_->setFixedSize(44, 26);
     fgSwatch_->setFlat(true);
     bgSwatch_->setFlat(true);
+    fgSwatch_->setObjectName(QStringLiteral("colorPanelForeground"));
+    bgSwatch_->setObjectName(QStringLiteral("colorPanelBackground"));
     fgSwatch_->setToolTip(tr("Foreground color"));
     bgSwatch_->setToolTip(tr("Background color"));
     swatchRow->addWidget(fgSwatch_);
@@ -90,11 +92,21 @@ ColorPanel::ColorPanel(ColorState* state, QWidget* parent)
         if (state_) {
             state_->setForegroundActive(true);
         }
+        const QColor start = state_ ? state_->foreground() : QColor(Qt::black);
+        const QColor picked = ColorPickerDialog::getColor(start, this, tr("Foreground Color"));
+        if (state_ && picked.isValid()) {
+            state_->setForeground(picked);
+        }
         syncControls();
     });
     connect(bgSwatch_, &QPushButton::clicked, this, [this] {
         if (state_) {
             state_->setForegroundActive(false);
+        }
+        const QColor start = state_ ? state_->background() : QColor(Qt::white);
+        const QColor picked = ColorPickerDialog::getColor(start, this, tr("Background Color"));
+        if (state_ && picked.isValid()) {
+            state_->setBackground(picked);
         }
         syncControls();
     });

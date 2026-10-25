@@ -132,6 +132,15 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     generalForm->addRow(tr("Theme"), themeFamily_);
     makeCheckbox(QStringLiteral("zoomResizesWindows"), tr("Zoom Resizes Windows"),
                  generalPage);
+
+    pickerChoice_ = new QComboBox(generalPage);
+    pickerChoice_->setObjectName(QStringLiteral("preferencesPickerChoice"));
+    pickerChoice_->addItem(tr("Adobe"), 0);
+    pickerChoice_->addItem(tr("System"), 1);
+    generalForm->addRow(tr("Color Picker"), pickerChoice_);
+    connect(pickerChoice_, &QComboBox::currentIndexChanged, this, [this](int index) {
+        emit pickerChoiceChanged(pickerChoice_->itemData(index).toInt());
+    });
     stack_->addWidget(generalPage);
 
     auto* interfacePage = new QWidget(this);
@@ -334,6 +343,22 @@ void PreferencesDialog::setAutoShowHidden(bool on)
 void PreferencesDialog::setBrightnessLevel(int level)
 {
     brightness_->setValue(level);
+}
+
+void PreferencesDialog::setPickerChoice(int choice)
+{
+    if (!pickerChoice_) {
+        return;
+    }
+    const int index = pickerChoice_->findData(choice == 1 ? 1 : 0);
+    if (index >= 0) {
+        pickerChoice_->setCurrentIndex(index);
+    }
+}
+
+int PreferencesDialog::pickerChoice() const
+{
+    return pickerChoice_ ? pickerChoice_->currentData().toInt() : 0;
 }
 
 void PreferencesDialog::setThemeFamily(int family)

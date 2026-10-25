@@ -92,6 +92,10 @@ set(PICTURA_QT_TESTS
     tst_tool_hint_bar
     tst_swatches_panel
     tst_color_picker
+    tst_color_settings
+    tst_profile_dialog
+    tst_profile_warnings
+    tst_save_options
     tst_properties_panel
     tst_adjustments_panel
     tst_actions_panel
@@ -130,6 +134,7 @@ set(PICTURA_QT_TESTS
     tst_save_pdf
     tst_import_pdf
     tst_image_adjustments
+    tst_image_import
     tst_layers_smart_filters
     tst_smart_object_actions
     tst_edit_shortcuts

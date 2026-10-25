@@ -144,7 +144,7 @@ int PicturaMainWindow::recoverOrphans()
         bool quarantineFailed = false;
         for (const RecoverableDocument& doc : session.documents) {
             auto* view = new PictureView(this);
-            view->set_color_policy(colorPolicy_);
+            applyColorSettings(view);
             if (!recovery_open(*view, doc.snapshot)) {
                 delete view;
                 failed.append(doc.name);

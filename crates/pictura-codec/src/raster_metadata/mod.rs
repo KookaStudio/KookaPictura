@@ -24,6 +24,8 @@ pub struct RasterMetadata {
     pub xmp: Option<Vec<u8>>,
     /// The planes resource's data, for the Photoshop resource block.
     pub vanishing_point: Option<Vec<u8>>,
+    /// An RGB working profile to embed. `None` writes no profile.
+    pub icc: Option<Vec<u8>>,
 }
 
 impl RasterMetadata {
@@ -32,6 +34,7 @@ impl RasterMetadata {
             && self.iptc.is_none()
             && self.xmp.is_none()
             && self.vanishing_point.is_none()
+            && self.icc.is_none()
     }
 
     /// The image-resource section a JPEG's APP13 or a TIFF's Photoshop tag

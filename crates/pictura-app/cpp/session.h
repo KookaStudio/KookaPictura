@@ -23,6 +23,14 @@ struct SessionState {
     int uiScalePercent = 100;        // Theme UI scale, normalized on restore
     bool gpuCompute = true;          // GPU compositing preference
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
+    int cmykPolicy = 0;              // incoming CMYK profile policy (0 Preserve)
+    int workingCmyk = 0;             // 0 = bundled Photocraft Coated CMYK
+    int renderIntent = 1;            // 0 Perceptual, 1 Relative, 2 Saturation, 3 Absolute
+    bool blackPointCompensation = true;
+    bool useDither = true;
+    bool askMismatchOpen = false;
+    bool askMissingOpen = false;
+    int pickerChoice = 0;            // 0 Adobe, 1 System
     // Color Settings > More Options: Blend Text Colors Using Gamma (1.00–2.20).
     bool textGammaEnabled = true;
     double textGamma = 1.45;

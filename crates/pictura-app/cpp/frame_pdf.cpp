@@ -125,7 +125,7 @@ void PicturaMainWindow::startPdfProbe(const QString& path, bool interactive,
                                       const QString& password, quint64 token)
 {
     auto* view = new PictureView(this);
-    view->set_color_policy(colorPolicy_);
+    applyColorSettings(view);
     view->set_gpu_compute(gpuCompute_);
     open_set_delay(*view, quint64(openDelayForTest_));
     wireOpenSignals(view);
