@@ -4,6 +4,7 @@
 #include <QtTest/QtTest>
 
 #include <QtGui/QImage>
+#include <QtGui/QImageWriter>
 
 #include "frame.h"
 #include "save_options_dialog.h"
@@ -15,6 +16,16 @@
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
+
+namespace {
+
+bool tiffWriterAvailable()
+{
+    const QList<QByteArray> formats = QImageWriter::supportedImageFormats();
+    return formats.contains("tif") || formats.contains("tiff");
+}
+
+} // namespace
 
 class SaveOptionsTest : public QObject {
     Q_OBJECT
@@ -145,6 +156,9 @@ void SaveOptionsTest::jpegApp2()
 
 void SaveOptionsTest::tiffTag()
 {
+    if (!tiffWriterAvailable()) {
+        QSKIP("Qt TIFF writer unavailable");
+    }
     pictura::PictureView* view = newView(QColor(30, 120, 220), true);
     QVERIFY(view);
     pictura::set_save_embed_profile(*view, true);
@@ -156,6 +170,9 @@ void SaveOptionsTest::tiffTag()
 
 void SaveOptionsTest::tiffOff()
 {
+    if (!tiffWriterAvailable()) {
+        QSKIP("Qt TIFF writer unavailable");
+    }
     pictura::PictureView* view = newView(QColor(30, 120, 220), true);
     QVERIFY(view);
     pictura::set_save_embed_profile(*view, false);
@@ -167,6 +184,9 @@ void SaveOptionsTest::tiffOff()
 
 void SaveOptionsTest::cmykSourceNotMistagged()
 {
+    if (!tiffWriterAvailable()) {
+        QSKIP("Qt TIFF writer unavailable");
+    }
     pictura::PictureView* view = newView(QColor(30, 120, 220), false);
     QVERIFY(view);
     QVERIFY(pictura::convert_image_mode(*view, QStringLiteral("cmyk")));

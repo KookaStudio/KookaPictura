@@ -6,6 +6,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QTimer>
 #include <QtGui/QImage>
+#include <QtGui/QImageWriter>
 #include <QtWidgets/QApplication>
 
 #include "color_settings_dialog.h"
@@ -73,6 +74,16 @@ QByteArray pngWithIccp(QByteArray png, const QByteArray& profile)
     }
     png.insert(33, pngChunk("iCCP", iccp));
     return png;
+}
+
+} // namespace
+
+namespace {
+
+bool tiffWriterAvailable()
+{
+    const QList<QByteArray> formats = QImageWriter::supportedImageFormats();
+    return formats.contains("tif") || formats.contains("tiff");
 }
 
 } // namespace
@@ -209,6 +220,9 @@ void ImageImportTest::jpegPreserve()
 
 void ImageImportTest::tiffConvert()
 {
+    if (!tiffWriterAvailable()) {
+        QSKIP("Qt TIFF writer unavailable");
+    }
     const QString path = makeEmbedded(QStringLiteral("convert.tif"), "TIF", true);
     QVERIFY(!path.isEmpty());
     const QImage raw(path);
