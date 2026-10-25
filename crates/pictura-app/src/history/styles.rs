@@ -22,6 +22,14 @@ pub fn edit_character_style(
     Ok(())
 }
 
+/// Rename a character style and rewrite every type layer's reference.
+pub fn rename_character_style(doc: &mut Document, from: &str, to: &str) -> Result<(), StyleError> {
+    doc.text_styles.rename_character_style(from, to)?;
+    rename_applied(&mut doc.layers, from, to, false);
+    re_resolve_layers(doc, to, false);
+    Ok(())
+}
+
 /// Delete a named character style and unlink the type layers applying it.
 pub fn delete_character_style(doc: &mut Document, name: &str) -> Result<(), StyleError> {
     doc.text_styles.delete_character_style(name)?;
@@ -109,6 +117,22 @@ fn styled_layer_paths(
         };
         if matches {
             out.push(path);
+        }
+    }
+}
+
+fn rename_applied(layers: &mut LayerStack, from: &str, to: &str, paragraph: bool) {
+    for layer in layers {
+        if layer.is_group {
+            rename_applied(&mut layer.children, from, to, paragraph);
+            continue;
+        }
+        if paragraph {
+            if layer.applied_paragraph_style.as_deref() == Some(from) {
+                layer.applied_paragraph_style = Some(to.to_string());
+            }
+        } else if layer.applied_character_style.as_deref() == Some(from) {
+            layer.applied_character_style = Some(to.to_string());
         }
     }
 }

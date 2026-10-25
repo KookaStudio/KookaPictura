@@ -203,9 +203,12 @@ row SHALL be disabled, and every commit path SHALL refuse. The commit
 outcomes SHALL be:
 
 - **Cancel** SHALL change nothing.
-- **OK with Render Grids To Photoshop on** SHALL record one "Vanishing
-  Point" state that draws the grids, clipped to the selection.
-- **OK without Render Grids** SHALL record no state but keep the planes.
+- **OK with Render Grids To Photoshop on, or after any pixel edit**
+  (a dropped selection, a Stamp or Brush stroke) SHALL record one
+  "Vanishing Point" state that applies the session's pixels and draws the
+  grids, clipped to the selection. A selection still floating at OK SHALL be
+  dropped first.
+- **OK with neither** SHALL record no state but keep the planes.
 
 The document SHALL keep its planes, so the dialog reopens on them; a new
 document SHALL start with none. Last Filter Settings SHALL reopen on the
@@ -262,6 +265,14 @@ committed edit's planes with Render Grids on.
 - **THEN** no dialog opens, no state is added, the refusal names 8-bit,
   and only 8-bit RGB and Grayscale pass
 
+#### Scenario: OK applies pixel edits as one state [vp_ok_pixels]
+
+- **WHEN** `tst_vanishing_point_retouch::okAppliesAStrokeAsOneState`
+  paints a Brush stroke in a plane, with Render Grids off, and presses OK;
+  and separately paints and cancels
+- **THEN** OK adds one "Vanishing Point" state that changes pixels inside
+  the plane only, and Cancel changes nothing
+
 ### Requirement: Vanishing Point workspace
 
 The dialog SHALL have:
@@ -271,8 +282,14 @@ The dialog SHALL have:
 - Grid Size (1–1000) and Angle (0–360°, enabled only for a plane that may
   turn)
 - a help line naming the tool's use, and OK / Cancel
-- the tools Edit Plane (V), Create Plane (C), Hand (H) and Zoom (Z), with
-  the Extended-only Measure tool absent
+- the tools, in CS6's order, Edit Plane (V), Create Plane (C), Marquee (M),
+  Stamp (S), Brush (B), Transform (T), Eyedropper (I), Hand (H) and Zoom
+  (Z), with the Extended-only Measure tool absent
+- options that follow the tool: Grid Size and Angle for the plane tools;
+  Feather, Opacity, Heal and Move Mode for Marquee; Diameter, Hardness,
+  Opacity, Heal and Aligned for Stamp; Diameter, Hardness, Opacity, Heal and
+  Brush Color for Brush; Flip and Flop for Transform; Brush Color for
+  Eyedropper
 - the preview, with a zoom row and the title "Vanishing Point (name @
   zoom%)".
 
@@ -285,9 +302,9 @@ Planes SHALL draw in their validity colour, with the active plane's nodes.
 
 - **WHEN** `tst_vanishing_point::opensWithControls` opens the dialog on a
   document with no planes
-- **THEN** the title, the four tools (no Measure), Grid Size 100 in 1–1000,
-  Angle disabled, Show Edges on, Render Grids off and Create Plane selected
-  are as stated
+- **THEN** the title, the nine tools in order (no Measure), Grid Size 100
+  in 1–1000, Angle disabled, Show Edges on, Render Grids off and Create
+  Plane selected are as stated
 
 #### Scenario: Four clicks create a plane [vp_create]
 
@@ -337,5 +354,253 @@ Planes SHALL draw in their validity colour, with the active plane's nodes.
 
 #### Scenario: Tool shortcuts [vp_tool_keys]
 
-- **WHEN** `tst_vanishing_point::toolShortcuts` presses C, H, Z, V
+- **WHEN** `tst_vanishing_point::toolShortcuts` presses C, M, S, B, T, I,
+  H, Z, V
 - **THEN** each selects its tool
+
+### Requirement: Perspective editing space
+
+Each plane family SHALL have one flat editing space: a root plane's own
+metric coordinates, with every related plane unfolded about its hinge so
+that distances from the hinge are kept. Edits SHALL be placed, sized and
+moved in this space, and SHALL be mapped into the image through the plane
+under each pixel. Edits SHALL change pixels only inside valid planes. A
+pixel covered by several planes of a family SHALL take the plane the edit
+belongs to first.
+
+#### Scenario: A hinge unfolds into the flat space [vp_flat]
+
+- **WHEN** `vanishing_point::tests_retouch::a_hinge_unfolds_into_the_flat_space`
+  maps points on a plane torn off at 90° into the flat space and back
+- **THEN** a point a distance t past the hinge lies t past the parent's
+  edge in flat space, and image → flat → image returns the point within
+  1e-6 px
+
+#### Scenario: Edits stay inside planes [vp_inside]
+
+- **WHEN** `vanishing_point::tests_retouch::edits_stay_inside_planes`
+  paints a stroke that runs off a plane and drops a selection larger than it
+- **THEN** no pixel outside the plane changes
+
+### Requirement: Floating selections
+
+Paste (Ctrl+V) SHALL bring the clipboard's pixels in as a floating
+selection, placed in the active valid plane (or the newest valid one) at one
+texel per metric unit, shrunk to fit within 80 % of the plane. With no valid
+plane, or an empty clipboard, Paste SHALL be refused with a message. A
+floating selection SHALL be drawn through the perspective of the planes it
+covers, SHALL follow the pointer when dragged (across hinges and into other
+planes), and SHALL be dropped (composited into the layer) when the user
+clicks outside it with the Marquee tool, switches to a painting tool, presses
+Ctrl+D or presses OK.
+
+Marquee options SHALL be:
+
+- **Feather** (0–250 px): softens the dropped edge.
+- **Opacity** (0–100 %, default 100): how much the dropped pixels cover
+  what is below.
+- **Heal** (Off, Luminance, On; default Off): Off copies the pixels;
+  Luminance keeps their colour and takes the destination's lighting; On
+  keeps their texture and takes the destination's colour and lighting, with
+  no seam.
+- **Move Mode** (Destination, Source; default Destination).
+
+The Marquee tool SHALL draw a rectangle in the flat space (Shift: a square),
+and a double-click inside a plane SHALL select the whole plane. Dragging
+inside a selection SHALL move the marquee (Destination) or fill it from
+where the pointer moves to (Source). Alt-drag SHALL float a copy of the
+pixels under the selection, and Ctrl-drag SHALL fill it from under the
+pointer, whatever the Move Mode.
+
+The Transform tool (Ctrl+T on a floating selection) SHALL show a bounding
+box: corner handles scale (Shift keeps the aspect), dragging just outside a
+corner rotates, dragging inside moves, and Flip and Flop mirror it.
+
+#### Scenario: Paste places a float in the active plane [vp_paste]
+
+- **WHEN** `vanishing_point::tests_retouch::paste_places_a_float_in_the_active_plane`
+  pastes a 40×30 image into a square-on plane, then pastes with no valid
+  plane
+- **THEN** the float is centred in the plane at one texel per metric unit,
+  and the second paste is refused
+
+#### Scenario: A float follows the plane's perspective [vp_float_perspective]
+
+- **WHEN** `vanishing_point::tests_retouch::a_float_follows_the_planes_perspective`
+  renders a solid float on a square-on plane and on a tilted one
+- **THEN** the square-on footprint covers the texel area within 2 %, and
+  on the tilted plane each footprint edge runs through one of the plane's
+  vanishing points
+
+#### Scenario: A float wraps across a hinge [vp_float_hinge]
+
+- **WHEN** `vanishing_point::tests_retouch::a_dragged_float_wraps_across_a_hinge`
+  drags a float from a root plane onto the plane torn off its edge
+- **THEN** the float covers pixels on both planes, and they meet at the
+  hinge
+
+#### Scenario: Transform scales, rotates and flips [vp_transform]
+
+- **WHEN** `vanishing_point::tests_retouch::transform_scales_rotates_and_flips`
+  scales a float by 2, rotates it 90° and flips it
+- **THEN** its footprint grows fourfold, a rotated corner texel lands
+  where expected, and the flip mirrors it left to right
+
+#### Scenario: Dropping uses Opacity and Feather [vp_drop]
+
+- **WHEN** `vanishing_point::tests_retouch::dropping_uses_opacity_and_feather`
+  drops a white float over black at 50 % opacity, then another with an
+  8 px feather
+- **THEN** the first covers half-way, and the second is full inside and
+  fades over its edge
+
+#### Scenario: Heal modes [vp_heal]
+
+- **WHEN** `vanishing_point::tests_retouch::heal_modes_blend_as_stated`
+  drops a flat red float onto flat grey with Heal Off, Luminance and On
+- **THEN** Off leaves red, Luminance leaves red's hue at grey's lightness,
+  and On leaves grey
+
+#### Scenario: Marquee copies, moves and fills [vp_marquee]
+
+- **WHEN** `vanishing_point::tests_retouch::the_marquee_copies_moves_and_fills`
+  draws a marquee and Alt-drags it, then draws another, drags it in
+  Destination mode, and Ctrl-drags it
+- **THEN** the Alt-drag floats a copy and leaves the source untouched, the
+  Destination drag only moves the marquee, and the Ctrl-drag fills the
+  marquee from under the pointer
+
+#### Scenario: A double-click selects the whole plane [vp_marquee_plane]
+
+- **WHEN** `vanishing_point::tests_retouch::a_double_click_selects_the_whole_plane`
+  double-clicks inside a plane with the Marquee tool
+- **THEN** the marquee is the plane's rect
+
+### Requirement: Stamp, Brush and Eyedropper
+
+The Stamp tool SHALL clone within the image in perspective. Alt-click SHALL
+set the source point; a stroke SHALL copy from the source offset in the flat
+space, so cloned detail scales and foreshortens with the planes. With
+Aligned on the offset SHALL stay set from the first stroke; with it off,
+each stroke SHALL restart at the source point. The Stamp SHALL NOT clone
+from another image.
+
+The Brush tool SHALL paint the Brush Color (the foreground colour when the
+dialog opens) in round dabs whose size is in the flat space, so they
+foreshorten with the plane. Stamp and Brush SHALL offer:
+
+- **Diameter** (1–5000 px, default 100 *(unverified)*)
+- **Hardness** (0–100 %, default 100)
+- **Opacity** (0–100 %, default 100)
+- **Heal** (Off, Luminance, On)
+
+`[` and `]` SHALL change Diameter. The Eyedropper SHALL set Brush Color
+from the preview. Stamp and Brush SHALL paint only inside planes. Every
+stroke SHALL be one step of the dialog's undo.
+
+#### Scenario: The Stamp clones in perspective [vp_stamp]
+
+- **WHEN** `vanishing_point::tests_retouch::the_stamp_clones_in_perspective`
+  sets a source on a textured half of a square-on plane and paints on the
+  other, aligned and then not
+- **THEN** the painted pixels repeat the source's texture at the offset,
+  and an unaligned second stroke starts again from the source
+
+#### Scenario: Brush dabs foreshorten [vp_brush]
+
+- **WHEN** `vanishing_point::tests_retouch::brush_dabs_foreshorten`
+  paints one dab on a square-on plane and one on a plane receding upward
+- **THEN** the first footprint is round, and the second is flatter
+  vertically than horizontally
+
+#### Scenario: Pixel edits undo and redo [vp_pixel_undo]
+
+- **WHEN** `vanishing_point::tests_retouch::pixel_edits_undo_and_redo`
+  paints a stroke, undoes and redoes it
+- **THEN** undo restores the layer bit-identically and redo puts the stroke
+  back
+
+#### Scenario: The commit replays the session's pixels [vp_patch]
+
+- **WHEN** `vanishing_point::tests_retouch::the_commit_replays_the_sessions_pixels`
+  applies a session's edit to the original layer pixels
+- **THEN** the result equals the session's working pixels, and an edit
+  with grids draws them over the pixels
+
+#### Scenario: The Eyedropper picks from the preview [vp_eyedropper]
+
+- **WHEN** `vanishing_point::tests_retouch::the_eyedropper_picks_from_the_preview`
+  samples a painted pixel and a backdrop pixel
+- **THEN** each returns the colour the preview shows there
+
+#### Scenario: Paste in the dialog [vp_paste_ui]
+
+- **WHEN** `tst_vanishing_point_retouch::ctrlVPastesIntoThePlane` copies a
+  layer, opens the dialog with a plane and presses Ctrl+V; and presses it
+  with no plane
+- **THEN** a floating selection appears and the Transform tool is
+  selectable; with no plane the help line says a plane is needed and
+  nothing floats
+
+#### Scenario: A pasted float commits as one state [vp_paste_commit]
+
+- **WHEN** `tst_vanishing_point_retouch::pastedFloatCommitsOnOk` pastes,
+  drags the float and presses OK
+- **THEN** one state is added and the pasted colour appears inside the
+  plane only
+
+#### Scenario: Tool options follow the tool [vp_options]
+
+- **WHEN** `tst_vanishing_point_retouch::optionsFollowTheTool` selects each
+  tool
+- **THEN** each shows its options, with the stated ranges and defaults
+
+#### Scenario: Stamp and Eyedropper in the dialog [vp_stamp_ui]
+
+- **WHEN** `tst_vanishing_point_retouch::stampAndEyedropperWork` Alt-clicks
+  a source, paints with the Stamp, then picks a colour with the Eyedropper
+- **THEN** the painted area takes the source's colour, and Brush Color
+  becomes the picked colour
+
+#### Scenario: Brush size keys [vp_brush_keys]
+
+- **WHEN** `tst_vanishing_point_retouch::bracketsChangeDiameter` presses
+  `]` and `[` with the Brush
+- **THEN** Diameter grows, then shrinks back
+
+### Requirement: Vanishing Point planes are saved with the document
+
+Saving as PSD, PSB, TIFF or JPEG, and the crash-recovery snapshot, SHALL
+write the document's planes; other formats SHALL drop them. Opening or
+reverting a document SHALL restore the saved planes when they fit its
+canvas, so the dialog reopens on them. Planes drawn on a canvas of another
+size SHALL be neither saved nor restored. OK that changes the planes,
+including deleting the last one, SHALL mark the document modified without
+adding a history state, and it SHALL stay modified until it is saved; OK
+with the planes unchanged and Cancel SHALL leave the mark as it was.
+
+#### Scenario: Saved planes reopen [vp_files_reopen]
+
+- **WHEN** `tst_vanishing_point_files::planesReopenFromSavedFiles` draws two
+  planes, sets the first's Grid Size to 40, and saves as PSD, PSB, TIFF
+  (when Qt has a TIFF writer), JPEG and PNG, reopening each in the dialog
+- **THEN** each save leaves the document unmodified; PSD, PSB, TIFF and
+  JPEG reopen with both planes at the same corners and Grid Size 40, and
+  the PNG reopens with none
+
+#### Scenario: A plane-only OK marks the document modified [vp_files_modified]
+
+- **WHEN** `tst_vanishing_point_files::planeOnlyOkMarksTheDocumentModified`
+  cancels a new plane, presses OK with no change, draws a plane and presses
+  OK, saves, reopens the dialog and presses OK, then deletes the plane,
+  presses OK, saves and reopens the file
+- **THEN** only the plane drawn and the plane deleted mark the document
+  modified, neither adds a history state, and the reopened file has no
+  planes
+
+#### Scenario: Planes must fit the canvas [vp_files_fit]
+
+- **WHEN** `pictura-app::saved_planes_must_fit_the_canvas` reads and writes
+  planes for a 100×80 document, an empty set, and a 120×80 document
+- **THEN** the 100×80 planes round-trip, the empty set writes no block, and
+  the 120×80 document neither reads nor writes them

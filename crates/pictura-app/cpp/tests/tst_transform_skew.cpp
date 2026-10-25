@@ -459,6 +459,7 @@ void TransformSkewTest::strongPerspectiveKeepsTheLayerColor()
 void TransformSkewTest::pixelsShapeToolKeepsTheLayerColor()
 {
     pictura::PicturaMainWindow& frame = *window_;
+    frame.resize(1600, 1100);
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
     QTest::qWait(50);

@@ -1,7 +1,7 @@
 use super::*;
 use crate::descriptor::read_descriptor;
 use crate::engine_data::{as_list, extract_fonts, extract_style, path};
-use pictura_core::{AntiAlias, Justify};
+use pictura_core::{AntiAlias, Justify, TextDirection};
 
 fn spec(text: &str, vertical: bool) -> TypeSpec {
     let mut spec = TypeSpec::new(text, "Liberation Sans", 36.0);
@@ -335,6 +335,26 @@ fn re_author_matches_font_by_family_and_keeps_its_style() {
 }
 
 #[test]
+fn changing_font_style_updates_the_reused_font_entry() {
+    let source = b"<< /EngineDict << /Editor << /Text (\xFE\xFF\x00H\x00i\x00\r) >> \
+            /StyleRun << /RunArray [ << /StyleSheet << /StyleSheetData << /Font 0 /FontSize 20.0 \
+            /FillColor << /Values [ 1.0 0.0 0.0 1.0 ] >> >> >> >> ] >> \
+            /ParagraphRun << /RunArray [ << /ParagraphSheet << /Properties << /Justification 0 >> >> >> ] >> \
+            >> /ResourceDict << /FontSet [ << /Name (NotoSans) /FontFamily (Noto Sans) /FontStyle (Regular) >> ] >> >>";
+    let existing = descriptor_with_engine(source);
+    let mut s = spec("Hi", false);
+    s.character.font_family = "Noto Sans".into();
+    s.character.font_style = "Bold".into();
+    let root = parse_engine_data(&engine_data(&s, Some(&existing), Some("NotoSans"))).unwrap();
+    let fonts = font_set(&root, "ResourceDict");
+    assert_eq!(fonts.len(), 1, "the family match reuses the entry");
+    assert_eq!(
+        get(&fonts[0].1, "FontStyle"),
+        Some(&EngineValue::String("Bold".into()))
+    );
+}
+
+#[test]
 fn appended_font_entry_carries_family_and_style() {
     let source = b"<< /EngineDict << /Editor << /Text (\xFE\xFF\x00H\x00i\x00\r) >> \
             /StyleRun << /RunArray [ << /StyleSheet << /StyleSheetData << /Font 0 /FontSize 20.0 \
@@ -458,4 +478,38 @@ fn authors_the_warp_descriptor() {
         crate::decode_type_warp(&plain.warp_desc),
         TextWarp::default()
     );
+}
+
+#[test]
+fn tsume_language_and_direction_survive_author_and_read() {
+    let mut s = spec("abc", false);
+    s.character.tsume = 60.0;
+    s.character.language = "French".to_string();
+    s.paragraph.direction = TextDirection::Rtl;
+    let tool = author_type_tool(&s, [0.0, 0.0, 10.0, 10.0], None, None);
+    let back = read_style(&tool);
+    assert_eq!(back.character.tsume, 60.0);
+    assert_eq!(back.character.language, "French");
+    assert_eq!(back.paragraph.direction, TextDirection::Rtl);
+}
+
+#[test]
+fn existing_direction_survives_unrelated_reauthor() {
+    let mut s = spec("abc", false);
+    s.paragraph.direction = TextDirection::Rtl;
+    let tool = author_type_tool(&s, [0.0, 0.0, 10.0, 10.0], None, None);
+    let decoded = decode_type_tool(&crate::encode_type_tool(&tool)).expect("decodes");
+    let style = decoded.style.expect("style");
+
+    let mut re_spec = spec("abc", false);
+    re_spec.character = style.character;
+    re_spec.paragraph = style.paragraph;
+    re_spec.character.size = 40.0;
+    let merged = author_type_tool(
+        &re_spec,
+        [0.0, 0.0, 10.0, 10.0],
+        Some(&tool.text_desc),
+        None,
+    );
+    assert_eq!(read_style(&merged).paragraph.direction, TextDirection::Rtl);
 }

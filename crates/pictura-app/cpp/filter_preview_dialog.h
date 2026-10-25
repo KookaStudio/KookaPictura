@@ -41,6 +41,8 @@ struct FilterPreviewView {
     // device pixel ratio. Without one every preview filters the document.
     ImageView* canvas = nullptr;
     double devicePixelRatio = 1.0;
+    // The document's other windows' canvases, which show the same preview.
+    QList<ImageView*> mirrors;
 };
 
 // CS6's shared filter dialog: a preview thumbnail with its own zoom and a
@@ -113,6 +115,7 @@ private:
     bool shownOnce_ = false;
     QTimer* previewTimer_ = nullptr;
     QPointer<ImageView> canvas_;
+    QList<QPointer<ImageView>> mirrors_;
     double devicePixelRatio_ = 1.0;
     // The filter places itself against the whole layer, so neither a section
     // preview nor a section of the proxy stands for it.

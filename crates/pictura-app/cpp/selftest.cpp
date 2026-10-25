@@ -5278,6 +5278,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                     panelColumnColumn->groupForPanel(QStringLiteral("layersPanel"));
                 const QString src = otherPanel(target, QString());
                 if (target && target->titleCountForTest() >= 1 && !src.isEmpty()) {
+                    panelColumnColumn->ensureGroupVisibleForTest(QStringLiteral("layersPanel"));
+                    panelFixPump(4);
                     const int end = target->titleCountForTest();
                     const QPoint p = target->tabInsertionGlobalPointForTest(end);
                     QTabBar* bar = target->tabBar();
@@ -5726,14 +5728,17 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                     const int end = dg->titleCountForTest();
                     const QPoint p = dg->tabInsertionGlobalPointForTest(end);
                     QTabBar* bar = dg->tabBar();
-                    const int barCenter =
-                        bar ? bar->mapToGlobal(QPoint(0, 0)).x() + bar->width() / 2 : -1;
+                    int lastVisible = -1;
+                    for (int i = 0; bar && i < bar->count(); ++i)
+                        if (bar->isTabVisible(i)) lastVisible = i;
+                    const int rightmostVisible = bar && lastVisible >= 0
+                        ? bar->mapToGlobal(bar->tabRect(lastVisible).center()).x() : -1;
                     panelColumnColumn->beginTabDragForTest(src);
                     panelColumnColumn->dragToForTest(p);
                     const QRect g = dest->dropIndicatorGlobalGeometryForTest();
                     hiddenShown = hid && invariant && dest->dropIndicatorVisibleForTest()
                                      && !panelColumnColumn->dropIndicatorVisibleForTest()
-                                     && g.isValid() && g.center().x() >= barCenter
+                                     && g.isValid() && g.center().x() >= rightmostVisible
                                      && qAbs(g.center().x() - p.x()) <= 8;
                     panelColumnColumn->dropForTest(p);
                     toolbarFixPump(4);

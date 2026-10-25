@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QPointF>
+#include <QtCore/QPointer>
 #include <QtCore/QRect>
 #include <QtCore/QSize>
 #include <QtGui/QImage>
@@ -81,7 +82,8 @@ private:
     void syncFromCanvas();
     void centerOn(const QPointF& imagePoint);
 
-    ImageView* canvas_ = nullptr;
+    // A floating window's canvas can be deleted before the panels retarget.
+    QPointer<ImageView> canvas_;
     PictureView* view_ = nullptr;
     NavigatorThumbnail* thumbnail_ = nullptr;
     QSlider* slider_ = nullptr;

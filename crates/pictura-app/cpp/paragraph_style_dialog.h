@@ -36,7 +36,8 @@ class ParagraphStyleDialog : public QDialog {
 public:
     ParagraphStyleDialog(const QString& name, const QString& family,
                          const CharacterSetting& character, const ParagraphSetting& paragraph,
-                         bool previewAvailable, QWidget* parent = nullptr);
+                         bool previewAvailable, QWidget* parent = nullptr,
+                         bool characterOnly = false);
 
     // The edited style, read back off the widgets. Only meaningful once the
     // dialog has been accepted.
@@ -96,6 +97,8 @@ private:
     QDoubleSpinBox* hScale_ = nullptr;
     QDoubleSpinBox* vScale_ = nullptr;
     QDoubleSpinBox* baselineShift_ = nullptr;
+    QDoubleSpinBox* tsume_ = nullptr;
+    QCheckBox* fractionalWidths_ = nullptr;
     QComboBox* language_ = nullptr;
 
     QCheckBox* standardLigatures_ = nullptr;

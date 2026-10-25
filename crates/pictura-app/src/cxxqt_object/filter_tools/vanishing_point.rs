@@ -1,31 +1,29 @@
-//! Filter ▸ Vanishing Point (#349): the dialog's plane-editing session and
-//! its kept edits. The dialog edits planes over the document here; OK keeps
-//! the planes on the document and, with Render Grids on, keeps the edit the
-//! `vanishing-point` kind's one slot names by id, so the commit, Fade and
-//! Last Filter run the ordinary filter path, as Liquify's mesh does. Free
-//! functions (their own bridge); the dialog is modal, so one session at a
-//! time.
+//! Filter ▸ Vanishing Point (#349): the dialog's session (planes here, the
+//! retouch tools in `vanishing_point_retouch.rs`) and its kept edits. OK
+//! keeps the planes on the document and, when the session changed pixels or
+//! Render Grids is on, keeps the edit the `vanishing-point` kind's one slot
+//! names by id, so the commit, Fade and Last Filter run the ordinary filter
+//! path, as Liquify's mesh does. Free functions (their own bridge); the
+//! dialog is modal, so one session at a time.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QImage;
-use pictura_core::PsdRect;
-use pictura_filters::{VpDragMode, VpEdit, VpEditor, VpPart, VpPlanes, VP_DEFAULT_GRID};
+use pictura_core::{ColorMode, PsdRect};
+use pictura_filters::{
+    VpCanvas, VpDragMode, VpEdit, VpEditor, VpPart, VpPatch, VpPlanes, VP_DEFAULT_GRID,
+};
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
-use super::super::helpers_composite::document_to_image;
+use super::super::helpers_composite::{buffer_to_rgba_bytes, layer_buffer};
 use super::super::qobject::PictureView;
-use super::document_supported;
+use super::{document_supported, hidden_layer_buffer};
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
-        include!("cxx-qt-lib/qimage.h");
-        type QImage = cxx_qt_lib::QImage;
-
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
         type PictureView = super::PictureView;
@@ -34,9 +32,10 @@ pub mod ffi {
     #[namespace = "pictura"]
     extern "Rust" {
         /// Open a session over the active layer, on the planes the document
-        /// kept. False when the document is not 8-bit RGB or Grayscale or
-        /// there is no pixel layer to edit.
-        fn vp_begin(view: &PictureView) -> bool;
+        /// kept, with a working copy of the layer and the document composite
+        /// without it. False when the document is not 8-bit RGB or Grayscale
+        /// or there is no pixel layer to edit.
+        fn vp_begin(view: Pin<&mut PictureView>) -> bool;
 
         /// Replace the session's planes with those kept edit `id` was made
         /// from (Last Filter Settings). False when it is no longer kept or
@@ -46,9 +45,6 @@ pub mod ffi {
         /// The session's document size, `[width, height]`; empty with no
         /// session.
         fn vp_geometry() -> Vec<i32>;
-
-        /// The document's composite, as the dialog shows it.
-        fn vp_backdrop(view: &PictureView) -> QImage;
 
         fn vp_plane_count() -> i32;
 
@@ -108,9 +104,11 @@ pub mod ffi {
         fn vp_undo() -> bool;
         fn vp_redo() -> bool;
 
-        /// End the session. With `keep` the document keeps the planes, and
-        /// with `render_grids` a grid edit is kept and its id returned for
-        /// the `vanishing-point` slot; otherwise 0.
+        /// End the session. With `keep` any floating selection is dropped,
+        /// the document keeps the planes (marked modified when they changed,
+        /// so a save writes them), and when pixels changed or
+        /// `render_grids` is on the edit is kept and its id returned for the
+        /// `vanishing-point` slot; otherwise 0.
         fn vp_finish(view: Pin<&mut PictureView>, keep: bool, render_grids: bool) -> i32;
     }
 }
@@ -167,15 +165,15 @@ pub(in crate::cxxqt_object) fn vp_edit(id: u32) -> Option<Arc<VpEdit>> {
         .map(|k| k.edit.clone())
 }
 
-struct Session {
-    editor: VpEditor,
+pub(super) struct Session {
+    pub(super) editor: VpEditor,
     /// The active layer's rect: the edit is kept in its pixels.
     frame: PsdRect,
 }
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 
-fn with_session<R>(default: R, f: impl FnOnce(&mut Session) -> R) -> R {
+pub(super) fn with_session<R>(default: R, f: impl FnOnce(&mut Session) -> R) -> R {
     let mut guard = SESSION.lock().unwrap_or_else(|e| e.into_inner());
     guard.as_mut().map_or(default, f)
 }
@@ -185,7 +183,7 @@ fn pairs(points: &[f64]) -> Option<[(f64, f64); 4]> {
         .then(|| std::array::from_fn(|k| (points[2 * k], points[2 * k + 1])))
 }
 
-fn flat(points: &[(f64, f64)]) -> Vec<f64> {
+pub(super) fn flat(points: &[(f64, f64)]) -> Vec<f64> {
     points.iter().flat_map(|p| [p.0, p.1]).collect()
 }
 
@@ -195,30 +193,49 @@ fn plane_index(editor: &VpEditor, index: i32) -> Option<usize> {
         .filter(|&i| i < editor.planes().len())
 }
 
-fn vp_begin(view: &PictureView) -> bool {
-    let rust = view.rust();
-    if active_mask_target(rust).is_some() {
+fn vp_begin(mut view: Pin<&mut PictureView>) -> bool {
+    let mut rust = view.as_mut().rust_mut();
+    if active_mask_target(&rust).is_some() {
         return false;
     }
-    let Some(doc) = rust.session.doc.as_ref().filter(|d| document_supported(d)) else {
+    let gpu_compute = rust.gpu_compute;
+    let Some(path) = rust.layer_target.single().map(str::to_string) else {
         return false;
     };
-    let Some(layer) = active_pixel_layer(doc, rust.layer_target.single()) else {
+    let kept = rust.session.vanishing_planes.clone();
+    let Some(doc) = rust.session.doc.as_mut().filter(|d| document_supported(d)) else {
+        return false;
+    };
+    let Some(layer) = active_pixel_layer(doc, Some(&path)) else {
         return false;
     };
     if doc.width == 0 || doc.height == 0 {
         return false;
     }
-    let planes = rust
-        .session
-        .vanishing_planes
-        .clone()
+    let frame = layer.rect;
+    let Some(pixels) = layer_buffer(layer) else {
+        return false;
+    };
+    let Some(canvas) = VpCanvas::new(
+        frame.width() as usize,
+        frame.height() as usize,
+        frame.left,
+        frame.top,
+        buffer_to_rgba_bytes(&pixels),
+    ) else {
+        return false;
+    };
+    let gray = doc.mode == ColorMode::Grayscale;
+    // ponytail: the layer shows in its own values over an sRGB backdrop, so a
+    // document in another working space previews slightly off.
+    let backdrop = hidden_layer_buffer(doc, &path, gpu_compute)
+        .map(|b| buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(doc, &b)));
+    let planes = kept
         .filter(|p| p.size() == (doc.width, doc.height))
         .unwrap_or_else(|| VpPlanes::new(doc.width, doc.height));
-    *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Session {
-        editor: VpEditor::new(planes),
-        frame: layer.rect,
-    });
+    let mut editor = VpEditor::new(planes);
+    editor.attach(canvas, backdrop, gray);
+    *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Session { editor, frame });
     true
 }
 
@@ -236,7 +253,7 @@ fn vp_load(id: i32) -> bool {
         if planes.size() != s.editor.planes().size() {
             return false;
         }
-        s.editor = VpEditor::new(planes);
+        s.editor.reset_planes(planes);
         true
     })
 }
@@ -246,16 +263,6 @@ fn vp_geometry() -> Vec<i32> {
         let (w, h) = s.editor.planes().size();
         vec![w as i32, h as i32]
     })
-}
-
-fn vp_backdrop(view: &PictureView) -> QImage {
-    let rust = view.rust();
-    rust.session
-        .doc
-        .as_ref()
-        .map_or_else(QImage::default, |doc| {
-            document_to_image(doc, rust.gpu_compute)
-        })
 }
 
 fn vp_plane_count() -> i32 {
@@ -412,18 +419,40 @@ fn vp_redo() -> bool {
 
 fn vp_finish(mut view: Pin<&mut PictureView>, keep: bool, render_grids: bool) -> i32 {
     let session = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
-    let Some(Session { editor, frame }) = session.filter(|_| keep) else {
+    let Some(Session { mut editor, frame }) = session.filter(|_| keep) else {
         return 0;
     };
+    editor.drop_float();
+    let patch = editor
+        .changed_patch()
+        .map(|(x, y, width, height, rgba)| VpPatch {
+            x,
+            y,
+            width,
+            height,
+            rgba: Arc::new(rgba),
+        });
     let planes = editor.into_planes();
     let edit = VpEdit {
+        patch,
         lines: if render_grids {
             planes.rendered_grid(-f64::from(frame.left), -f64::from(frame.top))
         } else {
             Vec::new()
         },
     };
-    view.as_mut().rust_mut().session.vanishing_planes = Some(planes.clone());
+    let mut rust = view.as_mut().rust_mut();
+    let session = &mut rust.session;
+    let changed = match &session.vanishing_planes {
+        Some(kept) => kept != &planes,
+        None => !planes.is_empty(),
+    };
+    // No history state records the planes, so the change has no saved point
+    // to step back to: the document stays modified until it is saved.
+    if changed {
+        session.mark_unsaved();
+    }
+    session.vanishing_planes = Some(planes.clone());
     if edit.is_empty() {
         0
     } else {
@@ -445,6 +474,7 @@ mod tests {
         let lines = planes.rendered_grid(0.0, 0.0);
         let id = register(
             VpEdit {
+                patch: None,
                 lines: lines.clone(),
             },
             planes,

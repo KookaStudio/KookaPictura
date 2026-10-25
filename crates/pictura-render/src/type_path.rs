@@ -20,8 +20,7 @@ use pictura_core::{TextPath, TextPathKind, TypeSpec};
 use crate::fonts::face_for;
 use crate::text_render::{blit_glyph, glyph_matrix};
 use crate::type_layer::{render_view, type_lines, TypePlacement};
-use crate::type_paragraph::line_advance;
-use crate::type_style::{shape_styled, tracking, RunStyle};
+use crate::type_style::{shape_styled, tracking_step, RunStyle};
 
 const FLATTEN: f64 = 0.25;
 
@@ -34,6 +33,8 @@ pub(crate) struct PathGlyph {
     pub y: f64,
     pub angle: f64,
     pub scale: f32,
+    pub x_scale: f32,
+    pub face: u16,
     pub advance: f64,
 }
 
@@ -101,7 +102,7 @@ pub(crate) fn layout_path(spec: &TypeSpec) -> Option<PathLayout> {
     if path_spec.kind != TextPathKind::OnPath {
         return None;
     }
-    let bundled = face_for(&spec.character.font_family)?;
+    let bundled = face_for(&spec.character.font_family, &spec.character.font_style)?;
     let size = spec.character.size as f32;
     if size.is_nan() || size <= 0.0 {
         return None;
@@ -118,7 +119,7 @@ pub(crate) fn layout_path(spec: &TypeSpec) -> Option<PathLayout> {
     let text = path_text(spec);
     let shaped = shape_styled(bundled, &text, &spec.character);
     let rise = f64::from(RunStyle::of(bundled, &spec.character).rise);
-    let track = tracking(&spec.character) as f64 * f64::from(size) / 1000.0;
+    let track = f64::from(tracking_step(&spec.character, size));
     let mut pen = 0.0;
     let mut glyphs = Vec::with_capacity(shaped.len());
     for glyph in shaped {
@@ -141,6 +142,8 @@ pub(crate) fn layout_path(spec: &TypeSpec) -> Option<PathLayout> {
             y: position.1 - normal.1 * rise,
             angle,
             scale: glyph.scale,
+            x_scale: glyph.x_scale,
+            face: glyph.face,
             advance,
         });
         pen += advance;
@@ -184,7 +187,7 @@ pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
             bounds: box_bounds,
         });
     }
-    let bundled = face_for(&spec.character.font_family)?;
+    let bundled = face_for(&spec.character.font_family, &spec.character.font_style)?;
     let size = spec.character.size as f32;
     if size.is_nan() || size <= 0.0 {
         return None;
@@ -245,11 +248,11 @@ pub(crate) fn render_path(
     rect: pictura_core::PsdRect,
 ) -> Option<pictura_core::PixelBuffer> {
     let layout = layout_path(spec)?;
-    let bundled = face_for(&spec.character.font_family)?;
+    let bundled = face_for(&spec.character.font_family, &spec.character.font_style)?;
     let run = RunStyle::of(bundled, &spec.character);
     let color = spec.rgba().map(|c| f64::from(c) / 255.0);
     let mut out = pictura_core::PixelBuffer::new(rect.width() as u32, rect.height() as u32, 4);
-    let rasterizer = bundled.rasterizer();
+    let faces = crate::fonts::faces_in_order(bundled);
     let mut painted = false;
     for glyph in &layout.glyphs {
         let fx = glyph.x - f64::from(rect.left);
@@ -264,7 +267,12 @@ pub(crate) fn render_path(
         };
         let (sin, cos) = glyph.angle.sin_cos();
         let rotation = [cos as f32, sin as f32, -sin as f32, cos as f32];
-        let outline = compose(rotation, glyph_matrix(&run, glyph.scale));
+        let face = faces.get(glyph.face as usize).copied().unwrap_or(bundled);
+        let rasterizer = face.rasterizer();
+        let mut matrix = glyph_matrix(&run, glyph.scale);
+        matrix[0] *= glyph.x_scale;
+        matrix[2] *= glyph.x_scale;
+        let outline = compose(rotation, matrix);
         if let Some(mask) = rasterizer.rasterize_styled(&request, outline, run.embolden) {
             painted |= blit_glyph(&mut out, &mask, px as i32, py as i32, color);
         }
@@ -333,7 +341,7 @@ pub(crate) fn caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
     if path_spec.kind != TextPathKind::OnPath {
         return Vec::new();
     }
-    let Some(bundled) = face_for(&spec.character.font_family) else {
+    let Some(bundled) = face_for(&spec.character.font_family, &spec.character.font_style) else {
         return Vec::new();
     };
     let size = spec.character.size as f32;
@@ -355,10 +363,11 @@ pub(crate) fn caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
         let advance = if k == 0 {
             0.0
         } else {
-            f64::from(line_advance(
+            f64::from(crate::type_paragraph::line_advance_with(
                 bundled,
                 &chars[..k].iter().collect::<String>(),
                 &spec.character,
+                &spec.paragraph,
             ))
         };
         let arc = if flattened.closed {

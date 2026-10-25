@@ -11,12 +11,12 @@
 //! ponytail: greedy wrap, not Adobe's every-line composer; no hyphenation, and
 //! vertical columns break by character count with no kinsoku rules.
 
-use pictura_core::{CharacterAttrs, TypeSpec};
+use pictura_core::{CharacterAttrs, ParagraphAttrs, TypeSpec};
 
 use crate::fonts::face_for;
 use crate::text_render::BundledText;
 use crate::type_layer::{align_factor, leading_px, map, type_lines, type_placement};
-use crate::type_style::{shape_styled, tracking};
+use crate::type_style::shape_styled;
 
 /// Float slack: a line measured at exactly the box width still fits it.
 const FIT: f32 = 0.01;
@@ -63,12 +63,44 @@ impl Lines {
 }
 
 /// `text`'s advance as the layout sets it: the styled run's advance (scale,
-/// caps, Faux Bold, kerning mode), plus tracking per glyph.
-pub(crate) fn line_advance(bundled: &BundledText, text: &str, c: &CharacterAttrs) -> f32 {
+/// caps, Faux Bold, kerning mode), plus tracking per glyph, with the paragraph's
+/// desired word, letter, and glyph spacing applied in the order `type_justify`
+/// spreads a line.
+pub(crate) fn line_advance_with(
+    bundled: &BundledText,
+    text: &str,
+    c: &CharacterAttrs,
+    paragraph: &ParagraphAttrs,
+) -> f32 {
     let size = c.size as f32;
     let glyphs = shape_styled(bundled, text, c);
-    glyphs.iter().map(|g| g.advance).sum::<f32>()
-        + tracking(c) * size / 1000.0 * glyphs.len() as f32
+    let mut advance = glyphs.iter().map(|g| g.advance).sum::<f32>();
+    if let Some(space) = bundled.space_glyph() {
+        let spaces = glyphs.iter().filter(|g| g.id == space).count() as f32;
+        if spaces > 0.0 {
+            let normal = glyphs
+                .iter()
+                .find(|g| g.id == space)
+                .map_or(0.0, |g| g.advance);
+            let desired = paragraph.word_spacing[1]
+                .clamp(paragraph.word_spacing[0], paragraph.word_spacing[2])
+                as f32;
+            advance += normal * (desired - 1.0) * spaces;
+        }
+    }
+    let desired = paragraph.letter_spacing[1]
+        .clamp(paragraph.letter_spacing[0], paragraph.letter_spacing[2]) as f32
+        * size;
+    advance += desired * glyphs.len() as f32;
+    let desired = paragraph.glyph_spacing[1]
+        .clamp(paragraph.glyph_spacing[0], paragraph.glyph_spacing[2]) as f32;
+    advance * desired + crate::type_style::tracking_step(c, size) * glyphs.len() as f32
+}
+
+/// [`line_advance_with`] at the paragraph defaults.
+#[cfg(test)]
+pub(crate) fn line_advance(bundled: &BundledText, text: &str, c: &CharacterAttrs) -> f32 {
+    line_advance_with(bundled, text, c, &ParagraphAttrs::default())
 }
 
 /// The vertical cell one character occupies down a column.
@@ -135,6 +167,7 @@ pub(crate) fn visual_lines(
     vertical: bool,
     box_bounds: Option<[f64; 4]>,
     c: &CharacterAttrs,
+    paragraph: &ParagraphAttrs,
 ) -> Lines {
     let hard = type_lines(text);
     let Some(b) = box_bounds else {
@@ -147,7 +180,7 @@ pub(crate) fn visual_lines(
         };
     };
     let size = c.size as f32;
-    let leading = leading_px(size, c.leading);
+    let leading = leading_px(size, c.leading, paragraph.auto_leading);
     let (width, height) = ((b[2] - b[0]) as f32, (b[3] - b[1]) as f32);
     let mut lines = Vec::new();
     let fitting = if vertical {
@@ -171,7 +204,7 @@ pub(crate) fn visual_lines(
         }
         ((width + FIT) / leading).floor() as usize
     } else {
-        let measure = |s: &str| line_advance(bundled, s, c);
+        let measure = |s: &str| line_advance_with(bundled, s, c, paragraph);
         for line in &hard {
             wrap_line(line, width, &measure, &mut lines);
         }
@@ -198,7 +231,7 @@ pub fn type_overflows(spec: &TypeSpec) -> bool {
     {
         return crate::type_path::layout_path(spec).is_some_and(|layout| layout.overflow);
     }
-    let Some(bundled) = face_for(&spec.character.font_family) else {
+    let Some(bundled) = face_for(&spec.character.font_family, &spec.character.font_style) else {
         return false;
     };
     if spec.box_bounds.is_none() || spec.character.size.is_nan() || spec.character.size <= 0.0 {
@@ -210,6 +243,7 @@ pub fn type_overflows(spec: &TypeSpec) -> bool {
         spec.vertical,
         spec.box_bounds,
         &spec.character,
+        &spec.paragraph,
     );
     lines.visible < lines.lines.len()
 }
@@ -235,13 +269,20 @@ pub fn type_to_point(spec: &TypeSpec) -> Option<TypeSpec> {
         return None;
     }
     let b = spec.box_bounds?;
-    let bundled = face_for(&spec.character.font_family)?;
+    let bundled = face_for(&spec.character.font_family, &spec.character.font_style)?;
     let c = &spec.character;
-    let lines = visual_lines(bundled, &spec.text, spec.vertical, Some(b), c);
+    let lines = visual_lines(
+        bundled,
+        &spec.text,
+        spec.vertical,
+        Some(b),
+        c,
+        &spec.paragraph,
+    );
     let size = c.size as f32;
     let factor = f64::from(align_factor(spec.justification()));
     let (u, v) = if spec.vertical {
-        let leading = f64::from(leading_px(size, c.leading));
+        let leading = f64::from(leading_px(size, c.leading, spec.paragraph.auto_leading));
         (b[2] - leading / 2.0, b[1] + (b[3] - b[1]) * factor)
     } else {
         (
@@ -277,13 +318,14 @@ mod tests {
     }
 
     fn lines_of(spec: &TypeSpec) -> Lines {
-        let bundled = face_for(&spec.character.font_family).unwrap();
+        let bundled = face_for(&spec.character.font_family, &spec.character.font_style).unwrap();
         visual_lines(
             bundled,
             &spec.text,
             spec.vertical,
             spec.box_bounds,
             &spec.character,
+            &spec.paragraph,
         )
     }
 
@@ -298,8 +340,86 @@ mod tests {
     }
 
     #[test]
+    fn rtl_wraps_at_same_words() {
+        let mut ltr = boxed("aa bb cc dd ee ff gg hh", 80.0, 200.0);
+        let mut rtl = ltr.clone();
+        ltr.paragraph.direction = pictura_core::TextDirection::Ltr;
+        rtl.paragraph.direction = pictura_core::TextDirection::Rtl;
+        let ltr_lines = lines_of(&ltr);
+        let rtl_lines = lines_of(&rtl);
+        assert_eq!(ltr_lines.lines.len(), rtl_lines.lines.len());
+        for (a, b) in ltr_lines.lines.iter().zip(&rtl_lines.lines) {
+            assert_eq!(a.text, b.text);
+        }
+    }
+
+    #[test]
+    fn rtl_overflow_counts_logical_lines() {
+        let mut ltr = boxed("aa bb cc dd ee ff gg hh", 80.0, 30.0);
+        let mut rtl = ltr.clone();
+        ltr.paragraph.direction = pictura_core::TextDirection::Ltr;
+        rtl.paragraph.direction = pictura_core::TextDirection::Rtl;
+        assert_eq!(type_overflows(&ltr), type_overflows(&rtl));
+    }
+
+    #[test]
+    fn rtl_alignment_keeps_named_edge() {
+        let bundled = face_for("Liberation Sans", "").unwrap();
+        let c = CharacterAttrs {
+            size: 20.0,
+            ..CharacterAttrs::default()
+        };
+        let faces = crate::fonts::faces_in_order(bundled);
+        let glyphs = crate::text_render::shape_line_directed(
+            &faces,
+            "\u{5D0}\u{5D1}\u{5D2}",
+            &c,
+            pictura_core::TextDirection::Rtl,
+        );
+        let params = pictura_core::LayoutParams {
+            font_size: 20.0,
+            units_per_em: 20.0,
+            tracking: 0.0,
+            leading: 20.0,
+            align: pictura_core::TextAlign::Center,
+            wrap_width: Some(200.0),
+        };
+        let layout = pictura_core::layout_lines(&[glyphs], &params);
+        let line = &layout.lines[0];
+        let left = line.glyphs.first().unwrap().x;
+        let right = left + line.advance;
+        assert!((left - (200.0 - right)).abs() < 1.0, "centred edge margins");
+    }
+
+    #[test]
+    fn mixed_line_wrap_uses_fallback_advance() {
+        let _guard = crate::fonts::FALLBACK_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let noto = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/NotoSans-Regular.ttf"
+        ));
+        assert!(crate::fonts::register_font(
+            "Fallback Wrap",
+            "",
+            noto.to_vec()
+        ));
+        let spec = boxed("A\u{370}", 200.0, 200.0);
+        let on = crate::type_caret::type_caret_stops(&spec);
+        crate::fonts::set_missing_glyph_protection(false);
+        let off = crate::type_caret::type_caret_stops(&spec);
+        crate::fonts::set_missing_glyph_protection(true);
+        assert_ne!(
+            on.last().map(|s| s[0]),
+            off.last().map(|s| s[0]),
+            "the fallback advance changes the line's last caret stop"
+        );
+    }
+
+    #[test]
     fn paragraph_wraps_words_and_long_words() {
-        let bundled = face_for("Liberation Sans").unwrap();
+        let bundled = face_for("Liberation Sans", "").unwrap();
         let s = boxed("the quick brown fox jumps", 70.0, 400.0);
         let lines = lines_of(&s);
         assert!(lines.lines.len() >= 3, "wraps");
@@ -339,7 +459,7 @@ mod tests {
     #[test]
     fn paragraph_overflow_is_hidden_and_reported() {
         let text = "aaaa bbbb cccc dddd";
-        let bundled = face_for("Liberation Sans").unwrap();
+        let bundled = face_for("Liberation Sans", "").unwrap();
         let width = f64::from(line_advance(bundled, "aaaa", &spec(text).character)) + 4.0;
         let tall = boxed(text, width, 200.0);
         assert_eq!(lines_of(&tall).visible, 4);
@@ -361,7 +481,7 @@ mod tests {
 
     #[test]
     fn a_justified_paragraph_loses_its_spread_when_converted() {
-        let bundled = face_for("Liberation Sans").unwrap();
+        let bundled = face_for("Liberation Sans", "").unwrap();
         let mut s = boxed("aa bb cc", 200.0, 200.0);
         s.paragraph.justify = pictura_core::Justify::JustifyLastRight;
         let point = type_to_point(&s).expect("converts");
@@ -406,7 +526,7 @@ mod tests {
         assert!((back.origin.0 - point.origin.0).abs() < 1e-3);
         assert!((back.origin.1 - point.origin.1).abs() < 1e-3);
 
-        let bundled = face_for("Liberation Sans").unwrap();
+        let bundled = face_for("Liberation Sans", "").unwrap();
         let width = f64::from(line_advance(bundled, "aaaa", &point.character)) + 4.0;
         let two = 20.0 * 1.2 + f64::from(bundled.ascent(20.0) + bundled.descent(20.0)) + 1.0;
         let wrapped = boxed("aaaa bbbb cccc dddd", width, two);

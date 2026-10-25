@@ -2,6 +2,7 @@
 // frame.cpp / frame_menus.cpp to keep them within their size budgets.
 
 #include "frame_includes.h"
+#include "api/type_api.h"
 
 namespace pictura {
 
@@ -28,13 +29,20 @@ void PicturaMainWindow::showPreferences(const QString& page)
     if (!preferencesDialog_) {
         preferencesDialog_ = new PreferencesDialog(this);
         preferencesDialog_->setShiftKeyForToolSwitch(useShiftKeyForToolSwitch_);
+        preferencesDialog_->setOpenDocumentsAsTabs(openDocumentsAsTabs_);
+        preferencesDialog_->setFloatingDocumentDocking(floatingDocumentDocking_);
+        preferencesDialog_->setZoomResizesWindows(zoomResizesWindows_);
         preferencesDialog_->setAutoCollapseIconic(panelColumn_->autoCollapseIconic());
         preferencesDialog_->setAutoShowHidden(panelColumn_->autoShowHidden());
         preferencesDialog_->setBrightnessLevel(brightnessLevel_);
         preferencesDialog_->setThemeFamily(themeFamily_);
+        preferencesDialog_->setUiScalePercent(uiScalePercent_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
         preferencesDialog_->setGpuComputeEnabled(gpuAvailable_);
         preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
+        preferencesDialog_->setTypeShowAsianOptions(typeShowAsianOptions_);
+        preferencesDialog_->setTypeMiddleEastern(typeMiddleEastern_);
+        preferencesDialog_->setTypeMissingGlyphProtection(typeMissingGlyphProtection_);
         connectRecoveryPreferences(preferencesDialog_);
         connectGuidePreferences(preferencesDialog_);
         connect(preferencesDialog_, &PreferencesDialog::useShiftKeyForToolSwitchChanged,
@@ -43,6 +51,21 @@ void PicturaMainWindow::showPreferences(const QString& page)
                     if (toolbox_) {
                         toolbox_->setShiftKeyForToolSwitch(on);
                     }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::openDocumentsAsTabsChanged, this,
+                [this](bool on) {
+                    openDocumentsAsTabs_ = on;
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::floatingDocumentDockingChanged, this,
+                [this](bool on) {
+                    floatingDocumentDocking_ = on;
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::zoomResizesWindowsChanged, this,
+                [this](bool on) {
+                    zoomResizesWindows_ = on;
                     saveSession();
                 });
         connect(preferencesDialog_, &PreferencesDialog::autoCollapseIconicChanged, this,
@@ -56,12 +79,41 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 });
         connect(preferencesDialog_, &PreferencesDialog::themeFamilyChanged, this,
                 [this](int family) { setThemeFamily(family); });
+        connect(preferencesDialog_, &PreferencesDialog::uiScalePercentChanged, this,
+                [this](int percent) { setUiScalePercent(percent); });
         connect(preferencesDialog_, &PreferencesDialog::gpuComputeChanged, this,
                 &PicturaMainWindow::applyGpuComputePreference);
         connect(preferencesDialog_, &PreferencesDialog::typePlaceholderTextChanged, this,
                 [this](bool on) {
                     if (tools_) {
                         tools_->setTypePlaceholderText(on);
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::typeShowAsianOptionsChanged, this,
+                [this](bool on) {
+                    typeShowAsianOptions_ = on;
+                    if (characterPanel_) {
+                        characterPanel_->setShowAsianOptions(on);
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::typeMiddleEasternChanged, this,
+                [this](bool on) {
+                    typeMiddleEastern_ = on;
+                    if (paragraphPanel_) {
+                        paragraphPanel_->setMiddleEastern(on);
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::typeMissingGlyphProtectionChanged, this,
+                [this](bool on) {
+                    typeMissingGlyphProtection_ = on;
+                    pictura::type_api::setMissingGlyphProtection(on);
+                    for (const DocEntry* entry : docs_) {
+                        if (entry && entry->view) {
+                            pictura::type_api::refreshMissingGlyphProtection(*entry->view);
+                        }
                     }
                     saveSession();
                 });

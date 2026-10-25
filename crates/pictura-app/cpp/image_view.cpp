@@ -281,6 +281,9 @@ void ImageView::endMovePreview()
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
                                       const QPointF& layerPos, double opacity)
 {
+    // A transform session is modal: the paint hover that owns the ring is
+    // suspended, so the ring must go with the first transform frame.
+    clearBrushOutline();
     moveBase_ = base;
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
@@ -756,7 +759,12 @@ void ImageView::paintEvent(QPaintEvent*)
     }
 
     painter.save();
-    painter.setClipRect(docClip);
+    // One device pixel of slack lets a cosmetic stroke centred on the document
+    // border draw on both sides of the clip. Without it the rasteriser can
+    // choose the outer pixel and the border segment disappears at fractional
+    // pan/zoom. The contour and the content clip are unchanged.
+    const qreal borderPad = 1.0 / std::max(zoom_, 1e-6);
+    painter.setClipRect(docClip.adjusted(-borderPad, -borderPad, borderPad, borderPad));
 
     if (!overlayPolygon_.isEmpty()) {
         painter.setBrush(Qt::NoBrush);
@@ -961,8 +969,12 @@ void ImageView::mouseMoveEvent(QMouseEvent* event)
     if (panning_ && (buttons & (Qt::MiddleButton | Qt::LeftButton))) {
         // A screen-space drag moves the turned canvas along with the pointer.
         const QTransform unturn = QTransform().rotate(-rotation_);
-        panBy(unturn.map(event->position() - last_));
+        const QPointF delta = unturn.map(event->position() - last_);
+        panBy(delta);
         last_ = event->position();
+        if ((buttons & Qt::LeftButton) && (spacePan_ || panEnabled_)) {
+            emit handPanned(delta, event->modifiers());
+        }
     } else if (!(spacePan_ && buttons == Qt::NoButton)) {
         // While Space is held with no button down, the hover path is muted so a
         // tool cursor update cannot clobber the hand cursor; a button-held drag

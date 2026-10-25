@@ -6,10 +6,14 @@
 
 #include "selftest_paint_fixture.h"
 
+#include "api/selection_api.h"
 #include "qt_test_support.h"
 #include "selection_geometry.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QtMath>
+#include <QtGui/QColor>
+#include <QtGui/QImage>
 #include <QtGui/QPainter>
 #include <QtGui/QPolygonF>
 
@@ -103,6 +107,7 @@ private slots:
     void polygonalBandStaysOpenAtTheBorder();
     void combineModeShowsTheNewShape();
     void zoomMarqueeStaysUnclipped();
+    void committedOutlineStaysVisibleAtBorderAcrossPanAndZoom();
 
 private:
     static QImage seed();
@@ -398,6 +403,83 @@ void SelectionPreviewTest::zoomMarqueeStaysUnclipped()
     QCOMPARE(int(loops.size()), 1);
     QVERIFY(hasVertex(loops.first(), QPointF(100, 100)));
     f.canvas->mouseReleased(QPointF(100, 100));
+}
+
+void SelectionPreviewTest::committedOutlineStaysVisibleAtBorderAcrossPanAndZoom()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_border"));
+    QVERIFY2(f.ok(), "selection fixture");
+    // The backdrop is white too, so a dark pixel near the border can only be
+    // the ant dash, never the pasteboard.
+    f.canvas->setCanvasColor(QColor(Qt::white));
+    f.view->select_all();
+    QVERIFY(f.view->has_selection());
+    window_->refreshSelectionOverlay();
+
+    const QList<QPolygonF> before = f.canvas->selectionContours();
+    const pictura::selection_api::SelectionContour traced =
+        pictura::selection_api::contour(*f.view);
+    QVERIFY(!before.isEmpty());
+    QVERIFY(!traced.isEmpty());
+    const QList<QPolygonF> tracedLoops(traced.loops.begin(), traced.loops.end());
+    QVERIFY(before == tracedLoops);
+
+    // A dark dash within one device pixel of the reported border, anywhere
+    // along that edge.
+    const auto darkDashAlong = [](const QImage& shot, const QPointF& from, const QPointF& to,
+                                  bool horizontal) {
+        const int first = qRound(horizontal ? from.x() : from.y());
+        const int last = qRound(horizontal ? to.x() : to.y());
+        const int fixed = qRound(horizontal ? from.y() : from.x());
+        for (int t = first; t <= last; ++t) {
+            for (int d = -1; d <= 1; ++d) {
+                const int x = horizontal ? t : fixed + d;
+                const int y = horizontal ? fixed + d : t;
+                if (x < 0 || x >= shot.width() || y < 0 || y >= shot.height()) {
+                    continue;
+                }
+                const QColor colour = shot.pixelColor(x, y);
+                if (colour.red() < 80 && colour.green() < 80 && colour.blue() < 80) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const QList<QPointF> offsets{QPointF(40.25, 30.75), QPointF(41.5, 31.5),
+                                 QPointF(40.9, 30.1)};
+    for (const double zoom : {1.0, 1.37, 2.21}) {
+        for (const QPointF& offset : offsets) {
+            f.canvas->setZoom(zoom, QPointF(0, 0));
+            f.canvas->setOffset(offset);
+            f.canvas->update();
+            QCoreApplication::processEvents();
+            const QImage shot = f.canvas->grab().toImage();
+            QVERIFY(!shot.isNull());
+
+            const QPointF tl = f.canvas->imageToWidget(QPointF(0, 0));
+            const QPointF tr = f.canvas->imageToWidget(QPointF(kCanvas, 0));
+            const QPointF bl = f.canvas->imageToWidget(QPointF(0, kCanvas));
+            const QPointF br = f.canvas->imageToWidget(QPointF(kCanvas, kCanvas));
+            const QString where = QStringLiteral("zoom %1 offset %2,%3")
+                                      .arg(zoom)
+                                      .arg(offset.x())
+                                      .arg(offset.y());
+            QVERIFY2(darkDashAlong(shot, tl, tr, true),
+                     qPrintable(where + QStringLiteral(" top")));
+            QVERIFY2(darkDashAlong(shot, bl, br, true),
+                     qPrintable(where + QStringLiteral(" bottom")));
+            QVERIFY2(darkDashAlong(shot, tl, bl, false),
+                     qPrintable(where + QStringLiteral(" left")));
+            QVERIFY2(darkDashAlong(shot, tr, br, false),
+                     qPrintable(where + QStringLiteral(" right")));
+            QVERIFY(f.canvas->selectionContours() == before);
+            const pictura::selection_api::SelectionContour after =
+                pictura::selection_api::contour(*f.view);
+            QVERIFY(QList<QPolygonF>(after.loops.begin(), after.loops.end()) == tracedLoops);
+        }
+    }
 }
 
 QTEST_MAIN(SelectionPreviewTest)

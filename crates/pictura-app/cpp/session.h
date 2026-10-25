@@ -20,6 +20,7 @@ struct SessionState {
                                      // mismatch discards the layout on restore
     int brightnessLevel = 1;         // Theme level
     int themeFamily = 0;             // Theme family: 0 dark / 1 light
+    int uiScalePercent = 100;        // Theme UI scale, normalized on restore
     bool gpuCompute = true;          // GPU compositing preference
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
     // Color Settings > More Options: Blend Text Colors Using Gamma (1.00–2.20).
@@ -32,8 +33,20 @@ struct SessionState {
     bool layersUseDefaultMasksOnFill = true;  // fill/adjustment takes selection mask
     int toolsColumns = 1;            // 1 or 2; out-of-range loads the default
     bool useShiftKeyForToolSwitch = true;
+    // Interface: Open Documents As Tabs, and Enable Floating Document Window
+    // Docking (a float dropped on the tab strip docks). A store written before
+    // them loads both on.
+    bool openDocumentsAsTabs = true;
+    bool enableFloatingDocumentDocking = true;
+    // General: Zoom Resizes Windows (View zoom fits a floating window). A store
+    // written before it loads off.
+    bool zoomResizesWindows = false;
     // Edit > Preferences > Type: new type starts with selected placeholder text.
     bool typePlaceholderText = true;
+    // Edit > Preferences > Type: the CS6 type options and glyph protection.
+    bool typeShowAsianOptions = false;
+    bool typeMiddleEastern = false;
+    bool typeMissingGlyphProtection = true;
     bool confirmLiveShapeToPath = true;  // off after "Don't show again"
     bool confirmDeleteVectorMask = true;  // off after "Don't show again"
     bool showFullScreenMessage = true;   // off after "Don't show again"
@@ -96,7 +109,7 @@ struct SessionState {
     // tool name -> letter (empty: none).
     QMap<QString, QStringList> shortcuts;
     QMap<QString, QString> toolShortcuts;
-    int schemaVersion = 10;
+    int schemaVersion = 11;
     QStringList recent;
     QByteArray windowGeometry;       // QMainWindow::saveGeometry(), empty = default
     bool windowMaximized = false;    // restored as Qt::WindowMaximized on launch

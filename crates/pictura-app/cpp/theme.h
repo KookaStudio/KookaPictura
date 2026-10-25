@@ -23,6 +23,14 @@ public:
     static constexpr int kLevelCount = 4;
     static constexpr int kDefaultLevel = 1;
 
+    // UI scale choices in percent: 10 % steps from 80 to 200, plus the 75 %
+    // floor the owner asked for. 100 is the default and leaves every metric
+    // unchanged.
+    static constexpr int kUiScaleMinPercent = 75;
+    static constexpr int kUiScaleMaxPercent = 200;
+    static constexpr int kUiScaleStepPercent = 10;
+    static constexpr int kDefaultUiScalePercent = 100;
+
     // The palette family: a dark and a light ramp with identical role keys.
     enum class ThemeFamily { Dark, Light };
     static constexpr int kFamilyCount = 2;
@@ -50,6 +58,16 @@ public:
 
     // Clamp a level into [0, kLevelCount).
     static int clampLevel(int level);
+
+    // The UI scale choices, current percentage, nearest-choice normalization,
+    // and the multiplier applied to chrome pixels.
+    static QVector<int> uiScaleChoices();
+    static int normalizedUiScalePercent(int percent);
+    static int uiScalePercent();
+    static void setUiScalePercent(int percent);
+    static double uiScale();
+    // Scale one chrome pixel value; a positive value never falls below 1.
+    static int scaled(int value);
 
     // The named tokens of `family` at `level`: every colour the stylesheet
     // substitutes (including the derived shades) and every shared metric. The

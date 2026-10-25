@@ -40,10 +40,16 @@ public:
     void openOn(const QString& page);
 
     void setShiftKeyForToolSwitch(bool on);
+    void setOpenDocumentsAsTabs(bool on);
+    void setFloatingDocumentDocking(bool on);
+    // General: Zoom Resizes Windows.
+    void setZoomResizesWindows(bool on);
     void setAutoCollapseIconic(bool on);
     void setAutoShowHidden(bool on);
     void setBrightnessLevel(int level);
     void setThemeFamily(int family);
+    void setUiScalePercent(int percent);
+    int uiScalePercentForTest() const;
     void setGpuCompute(bool on);
     void setGpuComputeEnabled(bool on);
     // File Handling: Automatically Save Recovery Information Every `minutes`.
@@ -56,6 +62,10 @@ public:
     void setTraditionalPoints(bool on);
     // Type: Fill New Type Layers With Placeholder Text (not CS6; Photoshop CC).
     void setTypePlaceholderText(bool on);
+    // Type: Show Asian Text Options, Middle Eastern, Missing Glyph Protection.
+    void setTypeShowAsianOptions(bool on);
+    void setTypeMiddleEastern(bool on);
+    void setTypeMissingGlyphProtection(bool on);
 
     // Test hooks.
     QStringList pagesForTest() const;
@@ -65,16 +75,23 @@ public:
 
 signals:
     void useShiftKeyForToolSwitchChanged(bool on);
+    void openDocumentsAsTabsChanged(bool on);
+    void floatingDocumentDockingChanged(bool on);
+    void zoomResizesWindowsChanged(bool on);
     void autoCollapseIconicChanged(bool on);
     void autoShowHiddenChanged(bool on);
     void brightnessLevelChanged(int level);
     void themeFamilyChanged(int family);
+    void uiScalePercentChanged(int percent);
     void gpuComputeChanged(bool on);
     void autoSaveRecoveryChanged(bool on, int minutes);
     void guideAppearanceChanged(const QColor& color, bool dashed);
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
     void typePlaceholderTextChanged(bool on);
+    void typeShowAsianOptionsChanged(bool on);
+    void typeMiddleEasternChanged(bool on);
+    void typeMissingGlyphProtectionChanged(bool on);
 
 private:
     void showPage(const QString& page);
@@ -90,6 +107,7 @@ private:
     QHash<QString, QCheckBox*> checkboxes_;
     NumericField* brightness_ = nullptr;
     QComboBox* themeFamily_ = nullptr;
+    QComboBox* uiScale_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;

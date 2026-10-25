@@ -121,6 +121,12 @@ public:
 
     bool gestureInProgress() const override { return active_; }
 
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        return selectionCanvasMenu(ctx, imagePos);
+    }
+
 private:
     void begin(ToolServices& ctx, PictureView& v, const QPoint& p, Qt::KeyboardModifiers mods)
     {

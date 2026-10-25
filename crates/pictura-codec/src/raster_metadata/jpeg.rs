@@ -1,6 +1,6 @@
 //! JPEG metadata: insert APP1 Exif, APP1 XMP, and APP13 Photoshop IRB resources
-//! after SOI, replacing any existing copies. The entropy-coded scan after SOS is
-//! copied verbatim.
+//! after SOI, replacing any existing copies, and read the IRB back. The
+//! entropy-coded scan after SOS is copied verbatim.
 
 use crate::error::PsdError;
 
@@ -8,7 +8,9 @@ use super::RasterMetadata;
 
 const XMP_SIGNATURE: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
 const PHOTOSHOP_SIGNATURE: &[u8] = b"Photoshop 3.0\0";
-const IPTC_RESOURCE: u16 = 0x0404;
+/// The most IRB bytes one APP13 segment holds; a longer block runs on in
+/// the next segment, as Photoshop splits it.
+const IRB_CHUNK: usize = u16::MAX as usize - 2 - PHOTOSHOP_SIGNATURE.len();
 
 pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, PsdError> {
     if !bytes.starts_with(&[0xFF, 0xD8]) {
@@ -30,8 +32,10 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
         payload.extend_from_slice(xmp);
         push_segment(&mut out, 0xE1, &payload)?;
     }
-    if let Some(iptc) = &metadata.iptc {
-        push_segment(&mut out, 0xED, &photoshop_irb(iptc))?;
+    if let Some(block) = metadata.photoshop_block() {
+        for chunk in block.chunks(IRB_CHUNK) {
+            push_segment(&mut out, 0xED, &[PHOTOSHOP_SIGNATURE, chunk].concat())?;
+        }
     }
 
     let mut at = 2;
@@ -82,18 +86,30 @@ fn push_segment(out: &mut Vec<u8>, marker: u8, payload: &[u8]) -> Result<(), Psd
     Ok(())
 }
 
-fn photoshop_irb(iptc: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(PHOTOSHOP_SIGNATURE.len() + 16 + iptc.len());
-    out.extend_from_slice(PHOTOSHOP_SIGNATURE);
-    out.extend_from_slice(b"8BIM");
-    out.extend_from_slice(&IPTC_RESOURCE.to_be_bytes());
-    out.extend_from_slice(&[0, 0]); // empty Pascal name, padded
-    out.extend_from_slice(&(iptc.len() as u32).to_be_bytes());
-    out.extend_from_slice(iptc);
-    if !iptc.len().is_multiple_of(2) {
-        out.push(0);
+/// The IRB of every APP13 Photoshop segment before the scan, joined in file
+/// order; `None` when there is none or the markers are malformed.
+pub(super) fn photoshop_block(bytes: &[u8]) -> Option<Vec<u8>> {
+    let mut block: Option<Vec<u8>> = None;
+    let mut at = 2;
+    while at + 4 <= bytes.len() && bytes[at] == 0xFF {
+        let marker = bytes[at + 1];
+        if marker == 0xDA || marker == 0xD9 {
+            break;
+        }
+        if (0xD0..=0xD7).contains(&marker) || marker == 0x01 || marker == 0xFF {
+            at += if marker == 0xFF { 1 } else { 2 };
+            continue;
+        }
+        let length = u16::from_be_bytes([bytes[at + 2], bytes[at + 3]]) as usize;
+        let payload = bytes.get(at + 4..(at + 2 + length).max(at + 4))?;
+        if marker == 0xED {
+            if let Some(irb) = payload.strip_prefix(PHOTOSHOP_SIGNATURE) {
+                block.get_or_insert_with(Vec::new).extend_from_slice(irb);
+            }
+        }
+        at += 2 + length.max(2);
     }
-    out
+    block
 }
 
 #[cfg(test)]
@@ -119,6 +135,7 @@ mod tests {
             exif: Some(b"II*\0exif".to_vec()),
             iptc: Some(b"iptc".to_vec()),
             xmp: Some(b"<x:xmpmeta/>".to_vec()),
+            vanishing_point: None,
         };
         let mut existing = vec![0xFF, 0xD8];
         push_segment(&mut existing, 0xE1, b"Exif\0\0old").expect("existing exif");
@@ -141,5 +158,28 @@ mod tests {
         );
         assert!(find(&out, &[0x04, 0x04]), "the IPTC resource id is present");
         assert!(find(&out, b"<x:xmpmeta/>"));
+    }
+
+    #[test]
+    fn the_photoshop_block_round_trips_and_splits_across_segments() {
+        let planes = vec![7u8; 100_001];
+        let metadata = RasterMetadata {
+            iptc: Some(b"iptc".to_vec()),
+            vanishing_point: Some(planes.clone()),
+            ..RasterMetadata::default()
+        };
+        let mut plain = vec![0xFF, 0xD8];
+        push_segment(&mut plain, 0xE0, b"JFIF\0").expect("app0");
+        plain.extend_from_slice(&[0xFF, 0xDA, 0, 2, 0xFF, 0xD9]);
+        assert_eq!(photoshop_block(&plain), None);
+
+        let out = embed(&plain, &metadata).expect("embed");
+        assert_eq!(
+            count(&out, PHOTOSHOP_SIGNATURE),
+            2,
+            "split over two APP13 segments"
+        );
+        let block = photoshop_block(&out).expect("the block reads back");
+        assert_eq!(Some(block), metadata.photoshop_block());
     }
 }

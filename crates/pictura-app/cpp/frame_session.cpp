@@ -3,6 +3,7 @@
 #include "panels/actions_panel.h"
 
 #include "pictura_debug_timing.h"
+#include "type_fonts.h"
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
@@ -29,6 +30,7 @@ void PicturaMainWindow::setPanelsHidden(bool hidden)
 void PicturaMainWindow::retargetDock()
 {
     pictura::ScopedTimer dockTimer("cxx_retargetDock (all panels)");
+    registerTypeFallbacks();
     PictureView* view = activeView();
     ImageView* canvas = canvasAt(activeDocumentIndex());
 
@@ -74,6 +76,10 @@ void PicturaMainWindow::retargetDock()
         paragraphStylesPanel_->setView(view);
         paragraphStylesPanel_->refresh();
     }
+    if (characterStylesPanel_) {
+        characterStylesPanel_->setView(view);
+        characterStylesPanel_->refresh();
+    }
     if (notesPanel_) {
         notesPanel_->setView(view);
     }
@@ -112,9 +118,9 @@ void PicturaMainWindow::refreshPanels()
 void PicturaMainWindow::applyGpuComputePreference(bool on)
 {
     gpuCompute_ = on;
-    for (const DocEntry& entry : docs_) {
-        if (entry.view) {
-            entry.view->set_gpu_compute(on);
+    for (const DocEntry* entry : docs_) {
+        if (entry->view) {
+            entry->view->set_gpu_compute(on);
         }
     }
     saveSession();
@@ -136,13 +142,20 @@ void PicturaMainWindow::saveSession()
     state.windowMaximized = isMaximized();
     state.brightnessLevel = brightnessLevel_;
     state.themeFamily = themeFamily_ == 1 ? 1 : 0;
+    state.uiScalePercent = uiScalePercent_;
     state.gpuCompute = gpuCompute_;
     state.colorPolicy = colorPolicy_;
     state.textGammaEnabled = textGammaEnabled_;
     state.textGamma = textGamma_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;
     state.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
+    state.openDocumentsAsTabs = openDocumentsAsTabs_;
+    state.enableFloatingDocumentDocking = floatingDocumentDocking_;
+    state.zoomResizesWindows = zoomResizesWindows_;
     state.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
+    state.typeShowAsianOptions = typeShowAsianOptions_;
+    state.typeMiddleEastern = typeMiddleEastern_;
+    state.typeMissingGlyphProtection = typeMissingGlyphProtection_;
     state.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = registry_->shortcutOverrides();
     const QSet<QString> shadowed =
@@ -216,7 +229,7 @@ void PicturaMainWindow::saveSession()
     // v9: the ordered per-column layout, in central-splitter order; shared with
     // the workspace store's arrangement shape (see serializeWorkspaceLayout).
     state.panelColumns = serializeWorkspaceLayout();
-    state.schemaVersion = 10;
+    state.schemaVersion = 11;
     state.recent = recent_;
     // A refused write means another instance wrote the store after this one
     // launched; leave its workspace snapshot alone too.
@@ -250,21 +263,18 @@ void PicturaMainWindow::restoreSessionWindowGeometry(const SessionState& state)
 void PicturaMainWindow::onCanvasZoomChanged()
 {
     updateStatus();
-    auto* canvas = qobject_cast<ImageView*>(sender());
-    for (int i = 0; i < docs_.size(); ++i) {
-        if (docs_.at(i).canvas == canvas) {
-            updateTabTitle(i);
-            return;
-        }
+    if (const DocWindow* window = windowOfCanvas(qobject_cast<ImageView*>(sender()))) {
+        updateTabTitle(indexOfDoc(window->doc));
     }
 }
 
 QString PicturaMainWindow::documentTabTextForTest(int index) const
 {
-    if (!tabs_ || index < 0 || index >= tabs_->count()) {
+    if (index < 0 || index >= docs_.size() || docs_.at(index)->windows.isEmpty()) {
         return QString();
     }
-    return tabs_->tabText(index);
+    const int tab = tabOf(docs_.at(index)->windows.first());
+    return tab >= 0 ? tabs_->tabText(tab) : QString();
 }
 
 bool PicturaMainWindow::restoreStoredLayout(const QByteArray& layout, int revision)
@@ -325,7 +335,7 @@ void PicturaMainWindow::applyPanelSession(const SessionState& state)
         panelColumn_->setRailMode(state.panelRailMode == QStringLiteral("iconic"));
         panelColumn_->setRestoredWidth(state.railWidth > 0
                                             ? state.railWidth
-                                            : PanelColumn::kDefaultNormalWidth);
+                                            : PanelColumn::defaultNormalWidth());
         // A test/reset apply should leave the primary column visible when any
         // group still has visible tabs.
         bool anyVisible = false;
@@ -387,7 +397,7 @@ void PicturaMainWindow::applyPanelSession(const SessionState& state)
             entry.insert(QStringLiteral("width"),
                          i == primaryIndex && state.railWidth > 0
                              ? state.railWidth
-                             : PanelColumn::kDefaultNormalWidth);
+                             : PanelColumn::defaultNormalWidth());
         }
         layout.replace(i, entry);
     }

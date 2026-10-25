@@ -1,5 +1,7 @@
 #include "fonts.h"
 
+#include "theme.h"
+
 #include <QtCore/QString>
 #include <QtGui/QFontDatabase>
 #include <QtWidgets/QApplication>
@@ -39,7 +41,7 @@ QFont bundledUiFont()
 {
     QFont font(QString::fromLatin1(kBundledUiFamily));
     font.setStyleHint(QFont::SansSerif);
-    font.setPixelSize(kBundledUiFontPx);
+    font.setPixelSize(Theme::scaled(kBundledUiFontPx));
     return font;
 }
 
@@ -57,7 +59,7 @@ void applyTabBarFont(QTabBar* bar)
     registerBundledFonts();
     int baseFontPx = QApplication::font().pixelSize();
     if (baseFontPx <= 0) {
-        baseFontPx = kBundledUiFontPx;
+        baseFontPx = Theme::scaled(kBundledUiFontPx);
     }
     QFont tabFont = bar->font();
     tabFont.setPixelSize(qMax(1, baseFontPx - 2));

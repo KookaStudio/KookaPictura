@@ -1,8 +1,13 @@
-//! The Vanishing Point dialog's editing state over its planes: the active
-//! plane, the gesture in progress, and the dialog's own undo and redo.
+//! The Vanishing Point dialog's editing state: the planes, the floating
+//! selection and the marquee, the active plane, the gesture in progress, and
+//! the dialog's own undo and redo. The retouch tools (`tools.rs`) add the
+//! working copy of the layer; their pixel edits undo through the same stack.
 
+use super::canvas::{PixelStep, Rect};
+use super::float::{Floating, Marquee};
 use super::geometry::P2;
 use super::planes::{Part, VpPlanes};
+use super::tools::Retouch;
 
 /// How a node drag was started.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,31 +31,66 @@ enum Drag {
 /// The dialog's undo keeps this many steps.
 const UNDO_DEPTH: usize = 100;
 
-#[derive(Clone, Debug)]
+/// Everything the dialog's undo restores but the layer's pixels.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct State {
+    pub planes: VpPlanes,
+    pub float: Option<Floating>,
+    pub marquee: Option<Marquee>,
+}
+
+struct Step {
+    state: State,
+    pixels: Option<PixelStep>,
+}
+
 pub struct VpEditor {
-    planes: VpPlanes,
-    active: Option<usize>,
-    undo: Vec<VpPlanes>,
-    redo: Vec<VpPlanes>,
+    pub(super) state: State,
+    pub(super) active: Option<usize>,
+    undo: Vec<Step>,
+    redo: Vec<Step>,
     drag: Option<Drag>,
-    before: Option<VpPlanes>,
+    before: Option<State>,
+    pub(super) retouch: Option<Retouch>,
+    /// Document pixels the preview must recompose.
+    pub(super) dirty: Rect,
 }
 
 impl VpEditor {
     pub fn new(planes: VpPlanes) -> Self {
         let active = planes.len().checked_sub(1);
         VpEditor {
-            planes,
+            state: State {
+                planes,
+                float: None,
+                marquee: None,
+            },
             active,
             undo: Vec::new(),
             redo: Vec::new(),
             drag: None,
             before: None,
+            retouch: None,
+            dirty: Rect::default(),
         }
     }
 
     pub fn planes(&self) -> &VpPlanes {
-        &self.planes
+        &self.state.planes
+    }
+
+    /// Start over on `planes` (Last Filter Settings): no floating selection,
+    /// marquee or undo; the working copy of the layer stays.
+    pub fn reset_planes(&mut self, planes: VpPlanes) {
+        self.active = planes.len().checked_sub(1);
+        self.state = State {
+            planes,
+            float: None,
+            marquee: None,
+        };
+        self.undo.clear();
+        self.redo.clear();
+        self.touch_all();
     }
 
     pub fn active(&self) -> Option<usize> {
@@ -58,23 +98,54 @@ impl VpEditor {
     }
 
     pub fn set_active(&mut self, i: Option<usize>) {
-        self.active = i.filter(|&i| i < self.planes.len());
+        self.active = i.filter(|&i| i < self.state.planes.len());
     }
 
-    fn record(&mut self, before: VpPlanes) {
-        if before != self.planes {
-            self.undo.push(before);
-            if self.undo.len() > UNDO_DEPTH {
-                self.undo.remove(0);
-            }
-            self.redo.clear();
+    /// Mark the whole document for recomposing (a plane edit moves a float).
+    pub(super) fn touch_all(&mut self) {
+        let (w, h) = self.state.planes.size();
+        self.dirty = Rect {
+            x0: 0,
+            y0: 0,
+            x1: w as i32,
+            y1: h as i32,
+        };
+    }
+
+    /// Have the preview recompose everything (an option the float shows
+    /// changed).
+    pub fn invalidate(&mut self) {
+        self.touch_all();
+    }
+
+    /// Take the pixels the preview must recompose since the last call.
+    pub fn take_dirty(&mut self) -> Option<Rect> {
+        let r = std::mem::take(&mut self.dirty);
+        (!r.is_empty()).then_some(r)
+    }
+
+    /// Record an undo step from `before` (and the pixels `pixels` held).
+    pub(super) fn record(&mut self, before: State, pixels: Option<PixelStep>) {
+        if pixels.is_none() && before == self.state {
+            return;
         }
+        if self.state.float.is_some() || before.float.is_some() {
+            self.touch_all();
+        }
+        self.undo.push(Step {
+            state: before,
+            pixels,
+        });
+        if self.undo.len() > UNDO_DEPTH {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
     }
 
     fn edit(&mut self, f: impl FnOnce(&mut VpPlanes)) {
-        let before = self.planes.clone();
-        f(&mut self.planes);
-        self.record(before);
+        let before = self.state.clone();
+        f(&mut self.state.planes);
+        self.record(before, None);
     }
 
     /// Add a root plane on `q` and make it active.
@@ -86,13 +157,13 @@ impl VpEditor {
     }
 
     pub fn hit(&self, p: P2, tol: f64) -> Option<(usize, Part)> {
-        self.planes.hit(p, tol, self.active)
+        self.state.planes.hit(p, tol, self.active)
     }
 
     /// Make the next plane under `p` after the active one active (CS6's
     /// Ctrl-click through overlapping planes).
     pub fn cycle(&mut self, p: P2) -> Option<usize> {
-        let under = self.planes.planes_at(p);
+        let under = self.state.planes.planes_at(p);
         let next = match self.active.and_then(|a| under.iter().position(|&i| i == a)) {
             Some(at) => under.get(at + 1).or(under.first()).copied(),
             None => under.last().copied(),
@@ -107,13 +178,14 @@ impl VpEditor {
     /// not apply (a tear-off from an invalid plane, an Alt-drag that is not
     /// on a turnable plane's far edge).
     pub fn begin(&mut self, plane: usize, part: Part, mode: DragMode, p: P2) -> bool {
-        if plane >= self.planes.len() {
+        if plane >= self.state.planes.len() {
             return false;
         }
-        self.before = Some(self.planes.clone());
+        self.before = Some(self.state.clone());
+        let planes = &mut self.state.planes;
         let drag = match (part, mode) {
-            (Part::Edge(k), DragMode::TearOff) => self.planes.tear_off(plane, k).map(Drag::TearOff),
-            (Part::Edge(2), DragMode::Angle) if self.planes.angle_editable(plane) => {
+            (Part::Edge(k), DragMode::TearOff) => planes.tear_off(plane, k).map(Drag::TearOff),
+            (Part::Edge(2), DragMode::Angle) if planes.angle_editable(plane) => {
                 Some(Drag::Angle(plane))
             }
             (_, DragMode::Angle) => None,
@@ -133,23 +205,27 @@ impl VpEditor {
     }
 
     pub fn drag_to(&mut self, p: P2) {
+        let planes = &mut self.state.planes;
         match self.drag {
-            Some(Drag::Corner(i, k)) => self.planes.move_corner(i, k, p),
-            Some(Drag::Edge(i, k)) => self.planes.move_edge(i, k, p),
+            Some(Drag::Corner(i, k)) => planes.move_corner(i, k, p),
+            Some(Drag::Edge(i, k)) => planes.move_edge(i, k, p),
             Some(Drag::Slide(i, from)) => {
-                self.planes.slide(i, from, p);
+                planes.slide(i, from, p);
                 self.drag = Some(Drag::Slide(i, p));
             }
-            Some(Drag::TearOff(c)) => self.planes.extend(c, p),
-            Some(Drag::Angle(c)) => self.planes.aim(c, p),
-            None => {}
+            Some(Drag::TearOff(c)) => planes.extend(c, p),
+            Some(Drag::Angle(c)) => planes.aim(c, p),
+            None => return,
+        }
+        if self.state.float.is_some() {
+            self.touch_all();
         }
     }
 
     pub fn end(&mut self) {
         self.drag = None;
         if let Some(before) = self.before.take() {
-            self.record(before);
+            self.record(before, None);
         }
     }
 
@@ -166,7 +242,7 @@ impl VpEditor {
 
     /// Set the active plane's angle; false when it may not turn.
     pub fn set_angle(&mut self, degrees: f64) -> bool {
-        let Some(i) = self.active.filter(|&i| self.planes.angle_editable(i)) else {
+        let Some(i) = self.active.filter(|&i| self.state.planes.angle_editable(i)) else {
             return false;
         };
         self.edit(|planes| {
@@ -175,12 +251,17 @@ impl VpEditor {
         true
     }
 
-    /// Delete the active plane and the planes hinged on it.
+    /// Delete the active plane and the planes hinged on it. A floating
+    /// selection and the marquee go with them, since plane indices shift.
     pub fn delete_active(&mut self) -> bool {
         let Some(i) = self.active.take() else {
             return false;
         };
-        self.edit(|planes| planes.remove(i));
+        let before = self.state.clone();
+        self.state.planes.remove(i);
+        self.state.float = None;
+        self.state.marquee = None;
+        self.record(before, None);
         true
     }
 
@@ -198,15 +279,20 @@ impl VpEditor {
         } else {
             (&mut self.redo, &mut self.undo)
         };
-        let Some(state) = from.pop() else {
+        let Some(mut step) = from.pop() else {
             return false;
         };
-        to.push(std::mem::replace(&mut self.planes, state));
-        self.active = self.active.filter(|&i| i < self.planes.len());
+        std::mem::swap(&mut self.state, &mut step.state);
+        if let (Some(pixels), Some(retouch)) = (step.pixels.as_mut(), self.retouch.as_mut()) {
+            pixels.swap(&mut retouch.canvas);
+        }
+        to.push(step);
+        self.active = self.active.filter(|&i| i < self.state.planes.len());
+        self.touch_all();
         true
     }
 
     pub fn into_planes(self) -> VpPlanes {
-        self.planes
+        self.state.planes
     }
 }

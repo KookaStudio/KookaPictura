@@ -93,6 +93,12 @@ fn stored() -> Option<Clip> {
     CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
+/// The clipboard's pixels as straight RGBA (selection folded into alpha):
+/// `(width, height, rgba)`.
+pub(in crate::cxxqt_object) fn clipboard_pixels() -> Option<(u32, u32, Vec<u8>)> {
+    stored().map(|clip| (clip.width(), clip.height(), clip.masked_rgba()))
+}
+
 fn clipboard_has_contents() -> bool {
     CLIPBOARD
         .lock()

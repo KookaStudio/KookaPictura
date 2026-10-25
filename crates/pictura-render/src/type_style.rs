@@ -93,26 +93,28 @@ fn native_small_caps(face: &BundledText, c: &CharacterAttrs) -> bool {
     c.small_caps && !c.all_caps && has_feature(face, b"smcp")
 }
 
-/// The run's text as it shapes, in pieces with their glyph scale: upper case
-/// for All Caps; for Small Caps without `smcp`, lower-case runs as capitals at
-/// [`SMALL_CAPS`].
-fn case_pieces(face: &BundledText, text: &str, c: &CharacterAttrs) -> Vec<(String, f32)> {
+/// The run's text as it shapes, in pieces with their glyph scale and source
+/// byte start: upper case for All Caps; for Small Caps without `smcp`,
+/// lower-case runs as capitals at [`SMALL_CAPS`].
+fn case_pieces(face: &BundledText, text: &str, c: &CharacterAttrs) -> Vec<(usize, String, f32)> {
     if c.all_caps {
-        return vec![(text.to_uppercase(), 1.0)];
+        return vec![(0, text.to_uppercase(), 1.0)];
     }
     if !c.small_caps || native_small_caps(face, c) {
-        return vec![(text.to_owned(), 1.0)];
+        return vec![(0, text.to_owned(), 1.0)];
     }
-    let mut pieces: Vec<(String, f32)> = Vec::new();
+    let mut pieces: Vec<(usize, String, f32)> = Vec::new();
+    let mut start = 0;
     for ch in text.chars() {
         let (piece, scale) = match ch.is_lowercase() {
             true => (ch.to_uppercase().collect::<String>(), SMALL_CAPS),
             false => (ch.to_string(), 1.0),
         };
         match pieces.last_mut() {
-            Some((last, s)) if *s == scale => last.push_str(&piece),
-            _ => pieces.push((piece, scale)),
+            Some((_, last, s)) if *s == scale => last.push_str(&piece),
+            _ => pieces.push((start, piece, scale)),
         }
+        start += ch.len_utf8();
     }
     pieces
 }
@@ -222,22 +224,137 @@ pub(crate) fn needs_raster(face: &BundledText, c: &CharacterAttrs) -> bool {
         || (c.small_caps && !c.all_caps && !has_feature(face, b"smcp"))
 }
 
+/// Whether `ch` occupies a full-width CJK cell, which Set Tsume compresses.
+pub(crate) fn is_full_width(ch: char) -> bool {
+    matches!(ch as u32,
+        0x1100..=0x11FF
+            | 0x2E80..=0x2FFF
+            | 0x3000..=0x303F
+            | 0x3040..=0x30FF
+            | 0x3130..=0x318F
+            | 0x31F0..=0x31FF
+            | 0x3400..=0x4DBF
+            | 0x4E00..=0x9FFF
+            | 0xA960..=0xA97F
+            | 0xAC00..=0xD7AF
+            | 0xF900..=0xFAFF
+            | 0xFE30..=0xFE4F
+            | 0xFF00..=0xFFEF
+            | 0x20000..=0x2FA1F)
+}
+
+/// The tsume-adjusted advance of one glyph. CS6 compresses the character-side
+/// gap; this approximation removes half an em at 100%.
+pub(crate) fn tsume_advance(advance: f32, ch: char, c: &CharacterAttrs) -> f32 {
+    if c.tsume <= 0.0 || !is_full_width(ch) {
+        return advance;
+    }
+    let reduction = (c.tsume / 100.0) as f32 * 0.5 * c.size as f32;
+    (advance - reduction).max(0.0)
+}
+
 /// Shape `text` as `c` styles it: glyph ids with **device-pixel** advances and
 /// offsets at the run's effective size, already carrying the horizontal and
-/// vertical scale, each glyph's small-caps scale, Faux Bold's widening, and the
-/// optical pair spacing. Tracking and manual kerning are the layout's (see
-/// [`tracking`]).
+/// vertical scale, each glyph's small-caps scale, Faux Bold's widening, Set
+/// Tsume's full-width compression, and the optical pair spacing. Tracking and
+/// manual kerning are the layout's (see [`tracking`]). Fractional Widths off
+/// rounds every advance and offset to a whole pixel.
 pub(crate) fn shape_styled(face: &BundledText, text: &str, c: &CharacterAttrs) -> Vec<ShapedGlyph> {
+    let faces = crate::fonts::faces_in_order(face);
+    shape_styled_faces(&faces, text, c, rustybuzz::Direction::LeftToRight)
+}
+
+/// Shape `text` over the active face plus its ordered fallback faces. With
+/// Missing Glyph Protection off, only the first face is used. Each glyph
+/// records the index of the face that produced it, so the renderer paints the
+/// same face the layout measured.
+pub(crate) fn shape_styled_faces(
+    faces: &[&BundledText],
+    text: &str,
+    c: &CharacterAttrs,
+    direction: rustybuzz::Direction,
+) -> Vec<ShapedGlyph> {
+    let Some(active) = faces.first().copied() else {
+        return Vec::new();
+    };
+    if faces.len() == 1 || !crate::fonts::missing_glyph_protection() {
+        return shape_one_dir(active, text, c, direction);
+    }
+    // ponytail: splits per character, so a covered base with an uncovered
+    // combining mark loses the pair's positioning; split by grapheme cluster
+    // if that matters.
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let face_for = |ch: char| {
+        if active.has_glyph(ch) {
+            0
+        } else {
+            faces
+                .iter()
+                .position(|face| face.has_glyph(ch))
+                .unwrap_or(0)
+        }
+    };
+    let mut runs = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let (offset, ch) = chars[i];
+        let index = face_for(ch);
+        let mut end = i + 1;
+        while end < chars.len() {
+            let (_, next) = chars[end];
+            if face_for(next) != index {
+                break;
+            }
+            end += 1;
+        }
+        let end_offset = chars.get(end).map_or(text.len(), |(offset, _)| *offset);
+        let mut shaped = shape_one_dir(faces[index], &text[offset..end_offset], c, direction);
+        for glyph in &mut shaped {
+            glyph.face = index as u16;
+            glyph.cluster = glyph.cluster.saturating_add(offset as u32);
+        }
+        runs.push(shaped);
+        i = end;
+    }
+    // A right-to-left run shapes each sub-run right-to-left already; the
+    // sub-runs themselves are still in logical order, so paint them in the
+    // reverse visual order.
+    if direction == rustybuzz::Direction::RightToLeft {
+        runs.reverse();
+    }
+    runs.into_iter().flatten().collect()
+}
+
+fn shape_one_dir(
+    face: &BundledText,
+    text: &str,
+    c: &CharacterAttrs,
+    direction: rustybuzz::Direction,
+) -> Vec<ShapedGlyph> {
     let run = RunStyle::of(face, c);
     let features = features(face, c);
-    let mut glyphs: Vec<ShapedGlyph> = Vec::new();
-    for (piece, scale) in case_pieces(face, text, c) {
-        glyphs.extend(
-            face.shape_with(&piece, run.size * scale, &features)
-                .into_iter()
-                .map(|g| ShapedGlyph { scale, ..g }),
-        );
+    let mut pieces = Vec::new();
+    for (start, piece, scale) in case_pieces(face, text, c) {
+        let mut shaped: Vec<ShapedGlyph> = face
+            .shape_with(&piece, run.size * scale, &features, direction)
+            .into_iter()
+            .map(|g| ShapedGlyph { scale, ..g })
+            .collect();
+        for g in &mut shaped {
+            if let Some(ch) = piece
+                .get(g.cluster as usize..)
+                .and_then(|s| s.chars().next())
+            {
+                g.advance = tsume_advance(g.advance, ch, c);
+            }
+            g.cluster = g.cluster.saturating_add(start as u32);
+        }
+        pieces.push(shaped);
     }
+    if direction == rustybuzz::Direction::RightToLeft {
+        pieces.reverse();
+    }
+    let mut glyphs: Vec<ShapedGlyph> = pieces.into_iter().flatten().collect();
     if c.kerning == KerningMode::Optical {
         optical_spacing(face, &mut glyphs, run.size);
     }
@@ -245,6 +362,11 @@ pub(crate) fn shape_styled(face: &BundledText, text: &str, c: &CharacterAttrs) -
         g.advance = g.advance * run.h + run.embolden;
         g.x_offset *= run.h;
         g.y_offset *= run.v;
+        if !c.fractional_widths {
+            g.advance = g.advance.round();
+            g.x_offset = g.x_offset.round();
+            g.y_offset = g.y_offset.round();
+        }
     }
     glyphs
 }
@@ -256,6 +378,17 @@ pub(crate) fn tracking(c: &CharacterAttrs) -> f32 {
         KerningMode::Metrics | KerningMode::Optical => 0.0,
     };
     c.tracking as f32 + manual
+}
+
+/// The per-glyph tracking step in device pixels. Fractional Widths off snaps it
+/// to a whole pixel like each shaped advance.
+pub(crate) fn tracking_step(c: &CharacterAttrs, size: f32) -> f32 {
+    let step = tracking(c) * size / 1000.0;
+    if c.fractional_widths {
+        step
+    } else {
+        step.round()
+    }
 }
 
 /// A glyph's ink extent per horizontal band between the baseline and the cap

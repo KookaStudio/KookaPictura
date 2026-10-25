@@ -1,5 +1,6 @@
 #include "theme.h"
 
+#include <QtCore/QRegularExpression>
 #include <QtCore/QString>
 
 #include <QtGui/QColor>
@@ -10,6 +11,7 @@
 #include <QtWidgets/QAbstractSpinBox>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QProxyStyle>
 #include <QtWidgets/QStyleOption>
 #include <QtWidgets/QStyleFactory>
@@ -30,6 +32,16 @@ namespace {
 class SpinArrowStyle : public QProxyStyle {
 public:
     using QProxyStyle::QProxyStyle;
+
+    void polish(QWidget* widget) override
+    {
+        QProxyStyle::polish(widget);
+        // A menu's rounded outline only shows when its popup is translucent;
+        // otherwise the unpainted corners keep the opaque window background.
+        if (qobject_cast<QMenu*>(widget) != nullptr) {
+            widget->setAttribute(Qt::WA_TranslucentBackground, true);
+        }
+    }
 
     void drawPrimitive(PrimitiveElement element, const QStyleOption* option, QPainter* painter,
                        const QWidget* widget) const override
@@ -66,6 +78,7 @@ public:
 quint64 g_paletteGeneration = 0;
 int g_level = Theme::kDefaultLevel;
 Theme::ThemeFamily g_family = Theme::kDefaultFamily;
+int g_uiScalePercent = Theme::kDefaultUiScalePercent;
 
 struct Ramp {
     // Text and accent colours are constant across brightness levels.
@@ -244,10 +257,12 @@ QMenuBar::item { background: transparent; color: ${content}; padding: 4px 5px; }
 QMenuBar::item:selected { background: ${selection}; color: ${content-on-selection}; }
 QMenuBar::item:pressed { background: ${surface-pressed}; color: ${content-control}; }
 
-QMenu { background: ${surface}; color: ${content-body}; border: 1px solid ${border}; }
+QMenu { background: ${surface}; color: ${content-body}; border: 1px solid ${border}; border-radius: 4px; padding: 2px; }
 QMenu::item { background: transparent; padding: 4px 22px; }
 QMenu::item:selected { background: ${selection}; color: ${content-on-selection}; }
 QMenu::item:disabled { color: ${content-disabled-menu}; }
+QMenu::icon { left: 10px; }
+QMenu::indicator { left: 10px; }
 QMenu::separator { background: ${border-subtle}; height: 1px; margin: 4px 6px; }
 
 QToolBar { background: ${surface}; color: ${content}; border: 0; spacing: 2px; padding: 2px; }
@@ -316,6 +331,14 @@ QTabBar#documentTabBar { background: ${surface-header}; }
 QTabBar#documentTabBar::tab { font-size: ${font-size-tab}px; font-weight: 700; padding-right: 4px; border: 0; }
 QToolButton#tabCloseButton { border: 0; background: transparent; }
 QToolButton#tabCloseButton:hover, QToolButton#tabCloseButton:pressed { background: ${surface-hover}; }
+/* Floating document windows and tile panes carry the document tab's header. */
+QWidget#documentFloatWindow { background: ${surface}; border: ${border-width-panel}px solid ${border}; }
+QWidget#documentFloatHeader, QWidget#documentTileHeader { background: ${surface-header}; border: 0; border-bottom: 1px solid ${border-header}; }
+QLabel#documentFloatTitle, QLabel#documentTileTitle { font-size: ${font-size-tab}px; font-weight: 700; padding-left: 6px; }
+QWidget#documentFloatBody, QWidget#documentTilePane { background: ${surface-canvas}; }
+QToolButton#documentFloatClose, QToolButton#documentTileClose { border: 0; background: transparent; }
+QToolButton#documentFloatClose:hover, QToolButton#documentFloatClose:pressed,
+QToolButton#documentTileClose:hover, QToolButton#documentTileClose:pressed { background: ${surface-hover}; }
 /* Columns keep their side rules only; the top and bottom edges are open, and
    the header carries no rule of its own. */
 QWidget#panelColumnContainer { border: 0; border-left: ${border-width-panel}px solid ${border-subtle}; border-right: ${border-width-panel}px solid ${border-subtle}; border-bottom: ${border-width-panel}px solid ${border-subtle}; background: ${surface}; }
@@ -497,7 +520,7 @@ QPushButton#colorSwatch { background: transparent; border: 0; padding: 0; }
 QToolButton#optionsBrushTip:!hover:!pressed { background: transparent; border: 0; padding: 0; }
 QToolButton#gradientMapPresets::menu-indicator { image: none; width: 0; }
 QWidget#panelDropIndicator, QWidget#panelStripDropIndicator, QWidget#panelFloatDropIndicator,
-QWidget#panelColumnEdgeIndicator { background: ${accent}; }
+QWidget#panelColumnEdgeIndicator, QWidget#documentDockIndicator { background: ${accent}; }
 QWidget#panelOutlineIndicator { background: transparent; border: 2px solid ${accent}; border-radius: 6px; }
 QLabel#imageSizePreview { background: ${surface-input}; border: 1px solid ${border-input}; }
 QLabel#brushTipPreview { background: ${surface-input}; }
@@ -515,6 +538,23 @@ QWidget#optionsCropShieldPanel { background: transparent; }
 QLabel#dialogTitle, QLabel#sectionTitle { font-weight: 700; }
 QLabel#sectionTabLabel { font-weight: 700; padding: 3px 0; }
 )");
+
+    // Scale literal pixel lengths in the template before token substitution.
+    // Token metrics are scaled in `tokens()`; the font-size placeholders are
+    // resolved afterwards from the already-scaled application font.
+    const QRegularExpression pxPattern(QStringLiteral("(\\d+)px"));
+    QString scaledQss;
+    int last = 0;
+    auto matches = pxPattern.globalMatch(qss);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        scaledQss += qss.mid(last, match.capturedStart() - last);
+        scaledQss += QString::number(Theme::scaled(match.captured(1).toInt()))
+                     + QStringLiteral("px");
+        last = match.capturedEnd();
+    }
+    scaledQss += qss.mid(last);
+    qss = scaledQss;
 
     for (const ThemeToken& token : tokens) {
         qss.replace(QStringLiteral("${") + token.key + QLatin1Char('}'), token.value);
@@ -556,6 +596,54 @@ int Theme::clampLevel(int level)
         return kLevelCount - 1;
     }
     return level;
+}
+
+QVector<int> Theme::uiScaleChoices()
+{
+    QVector<int> choices;
+    choices.append(kUiScaleMinPercent);
+    for (int percent = 80; percent <= kUiScaleMaxPercent; percent += kUiScaleStepPercent) {
+        choices.append(percent);
+    }
+    return choices;
+}
+
+int Theme::normalizedUiScalePercent(int percent)
+{
+    const QVector<int> choices = uiScaleChoices();
+    int best = kDefaultUiScalePercent;
+    int bestDistance = qAbs(percent - best);
+    for (int choice : choices) {
+        const int distance = qAbs(percent - choice);
+        if (distance < bestDistance || (distance == bestDistance && choice < best)) {
+            best = choice;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+int Theme::uiScalePercent()
+{
+    return g_uiScalePercent;
+}
+
+void Theme::setUiScalePercent(int percent)
+{
+    g_uiScalePercent = normalizedUiScalePercent(percent);
+}
+
+double Theme::uiScale()
+{
+    return g_uiScalePercent / 100.0;
+}
+
+int Theme::scaled(int value)
+{
+    if (value <= 0) {
+        return value;
+    }
+    return qMax(1, qRound(value * uiScale()));
 }
 
 QColor Theme::workspaceColor(int level)
@@ -652,13 +740,13 @@ QVector<ThemeToken> Theme::tokens(Theme::ThemeFamily family, int level)
         color("scrollbar-thumb-hover", shade(ramp.borderControl, dir)),
         color("graph-fill", ramp.graphFill),
         color("graph-axis", ramp.graphAxis),
-        metric("border-width-panel", kPanelBorderWidth),
-        metric("border-width-chrome", kChromeBorderWidth),
-        metric("divider-width-group", kGroupDividerWidth),
-        metric("slot-base-width", kSlotBaseW),
-        metric("slot-base-height", kSlotBaseH),
-        metric("slot-icon-max-width", kSlotIconMaxW),
-        metric("slot-icon-max-height", kSlotIconMaxH),
+        metric("border-width-panel", scaled(kPanelBorderWidth)),
+        metric("border-width-chrome", scaled(kChromeBorderWidth)),
+        metric("divider-width-group", scaled(kGroupDividerWidth)),
+        metric("slot-base-width", scaled(kSlotBaseW)),
+        metric("slot-base-height", scaled(kSlotBaseH)),
+        metric("slot-icon-max-width", scaled(kSlotIconMaxW)),
+        metric("slot-icon-max-height", scaled(kSlotIconMaxH)),
         metric("shade-step", kShadeStep),
     };
 }

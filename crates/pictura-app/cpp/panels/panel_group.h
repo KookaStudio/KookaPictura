@@ -76,6 +76,8 @@ public:
     // M44: make the first visible panel current (a stored layout used to leave
     // the last visible panel active after `setPanelVisible` walked the tabs).
     void setCurrentToFirstVisible();
+    // Re-apply the theme scale to the tab bar and icon controls.
+    void applyUiScale();
 
     // A panel may refine its own menu on aboutToShow (enablement, check state,
     // dynamic rows, and installed lists).

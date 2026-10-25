@@ -220,15 +220,19 @@ void VanishingPointTest::opensWithControls()
     QVERIFY(dialog && dialog->ready());
     QVERIFY(dialog->windowTitle().startsWith(QStringLiteral("Vanishing Point (vp.png @ ")));
     QStringList tools;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 9; ++i) {
         auto* button = dialog->findChild<QToolButton*>(QStringLiteral("vpTool%1").arg(i));
         QVERIFY(button != nullptr);
         tools << button->toolTip();
     }
     QCOMPARE(tools, QStringList({QStringLiteral("Edit Plane Tool (V)"),
                                  QStringLiteral("Create Plane Tool (C)"),
+                                 QStringLiteral("Marquee Tool (M)"), QStringLiteral("Stamp Tool (S)"),
+                                 QStringLiteral("Brush Tool (B)"),
+                                 QStringLiteral("Transform Tool (T)"),
+                                 QStringLiteral("Eyedropper Tool (I)"),
                                  QStringLiteral("Hand Tool (H)"), QStringLiteral("Zoom Tool (Z)")}));
-    QVERIFY(dialog->findChild<QToolButton*>(QStringLiteral("vpTool4")) == nullptr);
+    QVERIFY(dialog->findChild<QToolButton*>(QStringLiteral("vpTool9")) == nullptr);
     for (const QString& tip : tools) {
         QVERIFY(!tip.contains(QStringLiteral("Measure")));
     }
@@ -391,6 +395,11 @@ void VanishingPointTest::toolShortcuts()
         Qt::Key key;
         VanishingPointDialog::Tool tool;
     } keys[] = {{Qt::Key_V, VanishingPointDialog::EditPlane},
+                {Qt::Key_M, VanishingPointDialog::Marquee},
+                {Qt::Key_S, VanishingPointDialog::Stamp},
+                {Qt::Key_B, VanishingPointDialog::Brush},
+                {Qt::Key_T, VanishingPointDialog::Transform},
+                {Qt::Key_I, VanishingPointDialog::Eyedropper},
                 {Qt::Key_H, VanishingPointDialog::Hand},
                 {Qt::Key_Z, VanishingPointDialog::Zoom},
                 {Qt::Key_C, VanishingPointDialog::CreatePlane}};

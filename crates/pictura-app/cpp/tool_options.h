@@ -47,6 +47,7 @@ struct MixerOptions {
     int load = 50;
     int mix = 0;
     int flow = 100;
+    bool sampleAllLayers = false;
     bool loadAfterStroke = false;
     bool cleanAfterStroke = false;
     QColor reservoir = Qt::black;
@@ -296,6 +297,19 @@ struct RedEyeOptions {
     int darken = 50;
 };
 
+// The Hand tool: Scroll All Windows pans every other visible document window
+// with the dragged one.
+struct HandOptions {
+    bool scrollAll = false;
+};
+
+// The Zoom tool: Resize Windows To Fit resizes a floating window to the
+// zoomed image; Zoom All Windows zooms every other window by the same factor.
+struct ZoomOptions {
+    bool resizeToFit = false;
+    bool zoomAll = false;
+};
+
 // The magnetic lasso's detection settings: Width 1-256 px, Contrast 1-100 %,
 // Frequency 0-100; CS6 defaults 10 / 10 / 57.
 struct MagneticOptions {
@@ -418,6 +432,8 @@ using RetouchGroup = ToolOption<RetouchOptions>;
 using ToneGroup = ToolOption<ToneOptions>;
 using ColorReplaceGroup = ToolOption<ColorReplaceOptions>;
 using MixerGroup = ToolOption<MixerOptions>;
+using HandGroup = ToolOption<HandOptions>;
+using ZoomGroup = ToolOption<ZoomOptions>;
 
 // The paint family's shared brush: tip shape, dynamics, and paint stroke. The
 // size has its own notification (the hover ring and the size readouts); every
@@ -631,12 +647,22 @@ private:
     BrushDynamics dynamics_;
 };
 
-// The selection family's shared options: combine mode, marquee constraint,
-// tolerance, wand settings, and the magnetic lasso's detection fields.
+// The selection tools' options: combine mode, marquee constraint, tolerance,
+// wand settings, and the magnetic lasso's detection fields. Quick Selection
+// owns a second instance so its New-to-Add switch stays local to that tool.
 class SelectionOptions : public ToolOptions {
 public:
     SelectionMode combineMode() const { return combineMode_; }
-    void setCombineMode(SelectionMode mode) { combineMode_ = mode; }
+    void setCombineMode(SelectionMode mode)
+    {
+        if (combineMode_ == mode) {
+            return;
+        }
+        combineMode_ = mode;
+        if (combineModeChanged) {
+            combineModeChanged(mode);
+        }
+    }
 
     MarqueeStyle marqueeStyle() const { return marqueeStyle_; }
     void setMarqueeStyle(MarqueeStyle style) { marqueeStyle_ = style; }
@@ -693,6 +719,9 @@ public:
         magneticFrequency_ = std::clamp(frequency, 0, 100);
     }
 
+    // A mode button or the Quick Selection New-to-Add switch changed the mode;
+    // the Quick Selection options page re-checks its buttons.
+    std::function<void(SelectionMode)> combineModeChanged;
     std::function<void(int)> magneticWidthChanged;
 
 private:

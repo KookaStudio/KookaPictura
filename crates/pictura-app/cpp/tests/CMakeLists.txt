@@ -10,6 +10,7 @@ set(PICTURA_QT_TESTS
     tst_fonts
     tst_design_system
     tst_design_system_dialog
+    tst_ui_scale
     tst_edit_clipboard
     tst_edit_refresh
     tst_mask_edit
@@ -73,6 +74,8 @@ set(PICTURA_QT_TESTS
     tst_tool_options_persistence
     tst_character_paragraph_panels
     tst_paragraph_styles_panel
+    tst_character_styles_panel
+    tst_type_preferences
     tst_warp_text
     tst_type_placeholder
     tst_text_gamma_fonts
@@ -109,6 +112,8 @@ set(PICTURA_QT_TESTS
     tst_liquify_dialog
     tst_adaptive_wide_angle
     tst_vanishing_point
+    tst_vanishing_point_retouch
+    tst_vanishing_point_files
     tst_layer_style
     tst_color_range
     tst_refine_edge
@@ -141,6 +146,10 @@ set(PICTURA_QT_TESTS
     tst_search_bar
     tst_native_menu_bar
     tst_loading_tab
+    tst_document_windows
+    tst_document_float
+    tst_document_arrange
+    tst_document_navigate
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog
@@ -161,6 +170,9 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 # A suite that shares its window between the test functions keeps one entry:
 # its functions build on each other's state.
 set(PICTURA_QT_TEST_SHARDS
+    tst_document_arrange
+    tst_document_float
+    tst_document_windows
     tst_floating_workspaces
     tst_import_pdf
     tst_save_pdf

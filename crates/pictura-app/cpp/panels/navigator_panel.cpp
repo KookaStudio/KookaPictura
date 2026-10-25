@@ -244,12 +244,12 @@ void NavigatorPanel::setCanvas(ImageView* canvas)
         return;
     }
     if (canvas_) {
-        disconnect(canvas_, nullptr, this, nullptr);
+        disconnect(canvas_.data(), nullptr, this, nullptr);
         canvas_->removeEventFilter(this);
     }
     canvas_ = canvas;
     if (canvas_) {
-        connect(canvas_, &ImageView::zoomChanged, this, [this](double) { syncFromCanvas(); });
+        connect(canvas_.data(), &ImageView::zoomChanged, this, [this](double) { syncFromCanvas(); });
         canvas_->installEventFilter(this);
     }
     refresh();

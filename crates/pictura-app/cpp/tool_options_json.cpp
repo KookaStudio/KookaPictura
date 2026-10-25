@@ -73,6 +73,7 @@ template <typename F> void fields(MixerOptions& o, F&& f)
     f("load", o.load);
     f("mix", o.mix);
     f("flow", o.flow);
+    f("sampleAllLayers", o.sampleAllLayers);
     f("loadAfterStroke", o.loadAfterStroke);
     f("cleanAfterStroke", o.cleanAfterStroke);
 }
@@ -158,6 +159,14 @@ template <typename F> void fields(RedEyeOptions& o, F&& f)
 {
     f("pupil", o.pupil);
     f("darken", o.darken);
+}
+
+template <typename F> void fields(HandOptions& o, F&& f) { f("scrollAll", o.scrollAll); }
+
+template <typename F> void fields(ZoomOptions& o, F&& f)
+{
+    f("resizeToFit", o.resizeToFit);
+    f("zoomAll", o.zoomAll);
 }
 
 template <typename F> void fields(ColorReplaceOptions& o, F&& f)
@@ -396,6 +405,8 @@ template <typename F> void eachGroup(F&& f)
     f("dodge", ToolId::Dodge, static_cast<ToneGroup*>(nullptr));
     f("burn", ToolId::Burn, static_cast<ToneGroup*>(nullptr));
     f("sponge", ToolId::Sponge, static_cast<ToneGroup*>(nullptr));
+    f("hand", ToolId::Hand, static_cast<HandGroup*>(nullptr));
+    f("zoom", ToolId::Zoom, static_cast<ZoomGroup*>(nullptr));
 }
 
 } // namespace
@@ -414,6 +425,10 @@ QJsonObject toolOptionsToJson(const ToolController& tools)
     }
     if (const SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee)) {
         out.insert(QStringLiteral("selection"), write(selectionFields(*s)));
+    }
+    if (const SelectionOptions* s =
+            tools.optionsFor<SelectionOptions>(ToolId::QuickSelection)) {
+        out.insert(QStringLiteral("quickSelection"), write(selectionFields(*s)));
     }
     if (const CropOptions* crop = tools.optionsFor<CropOptions>(ToolId::Crop)) {
         out.insert(QStringLiteral("crop"), write(crop->settings()));
@@ -443,6 +458,11 @@ void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
     if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
         s && selection.isObject()) {
         applySelection(*s, read(selection.toObject(), selectionFields(*s)));
+    }
+    const QJsonValue quickSelection = json.value(QStringLiteral("quickSelection"));
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection);
+        s && quickSelection.isObject()) {
+        applySelection(*s, read(quickSelection.toObject(), selectionFields(*s)));
     }
 }
 

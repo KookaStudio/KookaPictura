@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+unicode-bidi = "0.3"
 # The built-in pattern set a Pattern Overlay offers; also the CPU stroke
 # engine the GPU stroke parity test checks against.
 pictura-paint = { path = "../pictura-paint" }

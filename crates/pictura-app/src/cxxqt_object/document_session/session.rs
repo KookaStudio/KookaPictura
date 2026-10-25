@@ -63,8 +63,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// Revert can reopen it.
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
     /// The Vanishing Point planes this document's last session kept, so the
-    /// dialog reopens on them.
-    // ponytail: memory only; CS6 saves planes in PSD, TIFF and JPEG files (#918).
+    /// dialog reopens on them: read from the file when the document is
+    /// installed and written into it by a save. Kept out of the document so
+    /// undo leaves them alone, as no history state records them.
     pub(in crate::cxxqt_object) vanishing_planes: Option<pictura_filters::VpPlanes>,
 }
 
@@ -370,6 +371,11 @@ impl PictureViewRust {
         self.cancel_active_sessions();
         self.clear_document_scoped_state();
         self.session.install(doc, history, pdf_password);
+        self.session.vanishing_planes = self
+            .session
+            .doc
+            .as_ref()
+            .and_then(crate::cxxqt_object::filter_tools::saved_planes);
         self.layer_target = target;
         self.reset_pyramid();
     }

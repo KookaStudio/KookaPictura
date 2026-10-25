@@ -876,7 +876,9 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         bool sized = false;
         if (tools && primary && tabs) {
             const int wantW = qMax(tools->minimumWidth(), tools->minimumSizeHint().width());
-            const int wantH = qMax(tools->minimumHeight(), tools->minimumSizeHint().height());
+            // The docked column's scroll area keeps its minimum height small; a
+            // floating tools overlay still hugs the full tool grid.
+            const int wantH = qMax(tools->minimumHeight(), tools->sizeHint().height());
             tools->beginColumnHeaderDragForTest(
                 tools->mapToGlobal(QPoint(qMax(1, tools->width() / 2), 8)));
             tools->dragColumnHeaderToForTest(tabs->mapToGlobal(tabs->rect().center()));

@@ -1,14 +1,16 @@
 #pragma once
 
 // CS6's Vanishing Point workspace: the menu button (Show Edges, Render Grids
-// To Photoshop), the tool options (Grid Size, Angle) over a help line, OK /
-// Cancel, the tool column (Edit Plane, Create Plane, Hand, Zoom) and the
-// preview with its zoom row. The planes live in a Rust session; OK keeps them
-// on the document, and with Render Grids on fills the `vanishing-point`
-// slot with the kept grid edit's id.
-// ponytail: no Marquee, Stamp, Brush, Transform or Eyedropper tool yet, and
-// the Extended-only Measure tool, Render Measurements and DXF/3DS export are
-// not offered.
+// To Photoshop), the tool options over a help line, OK / Cancel, the tool
+// column (Edit Plane, Create Plane, Marquee, Stamp, Brush, Transform,
+// Eyedropper, Hand, Zoom) and the preview with its zoom row. Ctrl+V pastes the
+// clipboard as a floating selection, Ctrl+T picks Transform for it, Ctrl+D
+// drops it and clears the marquee, and [ / ] size the Stamp and Brush. The
+// planes and the edited layer live in a Rust session; OK keeps the planes on
+// the document and, when the session changed pixels or Render Grids is on,
+// fills the `vanishing-point` slot with the kept edit's id.
+// ponytail: the Extended-only Measure tool, Render Measurements and DXF/3DS
+// export are not offered.
 
 #include <QtCore/QList>
 #include <QtWidgets/QDialog>
@@ -16,20 +18,22 @@
 class QAction;
 class QButtonGroup;
 class QLabel;
-class QSpinBox;
 
 namespace pictura {
 
 class PictureView;
 class VpCanvas;
+class VpOptionsBar;
 
 class VanishingPointDialog : public QDialog {
     Q_OBJECT
 
 public:
-    enum Tool { EditPlane, CreatePlane, Hand, Zoom };
+    // In CS6's column order.
+    enum Tool { EditPlane, CreatePlane, Marquee, Stamp, Brush, Transform, Eyedropper, Hand, Zoom };
 
     // `documentName` titles the dialog, as "Vanishing Point (name @ zoom)".
+    // A main-window `parent` gives Brush Color its foreground colour.
     VanishingPointDialog(PictureView* view, const QString& documentName,
                          QWidget* parent = nullptr);
     ~VanishingPointDialog() override;
@@ -43,9 +47,14 @@ public:
     int tool() const;
     void selectTool(int tool);
     VpCanvas* canvas() const { return canvas_; }
+    VpOptionsBar* options() const { return options_; }
     QAction* showEdgesAction() const { return showEdges_; }
     QAction* renderGridsAction() const { return renderGrids_; }
-    // The kind's slot after OK with something to draw; empty otherwise.
+    QLabel* helpLine() const { return help_; }
+    // Paste the clipboard (Ctrl+V); false, with the reason on the help line,
+    // when it cannot.
+    bool paste();
+    // The kind's slot after OK with something to commit; empty otherwise.
     const QList<double>& committed() const { return committed_; }
 
     void accept() override;
@@ -61,6 +70,7 @@ private:
     void syncOptions();
     void updateZoomLabel();
     void finish(bool keep);
+    void toolChanged(int tool);
 
     PictureView* view_ = nullptr;
     bool ready_ = false;
@@ -68,11 +78,10 @@ private:
     QList<double> committed_;
 
     VpCanvas* canvas_ = nullptr;
+    VpOptionsBar* options_ = nullptr;
     QButtonGroup* tools_ = nullptr;
     QLabel* help_ = nullptr;
     QLabel* zoomLabel_ = nullptr;
-    QSpinBox* gridSize_ = nullptr;
-    QSpinBox* angle_ = nullptr;
     QAction* showEdges_ = nullptr;
     QAction* renderGrids_ = nullptr;
     QString documentName_;

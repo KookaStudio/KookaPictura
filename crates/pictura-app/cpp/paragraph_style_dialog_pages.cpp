@@ -213,6 +213,14 @@ QWidget* ParagraphStyleDialog::buildAdvancedCharacterPage()
     baselineShift_->setValue(character_.baseline_shift);
     form->addRow(tr("Baseline Shift:"), baselineShift_);
 
+    tsume_ = spin(page, "paragraphStyleTsume", 0.0, 100.0, 0, tr("%"));
+    tsume_->setValue(character_.tsume);
+    form->addRow(tr("Tsume:"), tsume_);
+
+    fractionalWidths_ = check(page, "paragraphStyleFractionalWidths", tr("Fractional Widths"),
+                              character_.fractional_widths);
+    form->addRow(QString(), fractionalWidths_);
+
     language_ = new QComboBox(page);
     language_->setObjectName(QStringLiteral("paragraphStyleLanguage"));
     language_->addItems({tr("English: USA"), tr("English: UK"), tr("French"), tr("German"),
@@ -227,7 +235,8 @@ QWidget* ParagraphStyleDialog::buildAdvancedCharacterPage()
     language_->setCurrentText(character_.language);
     form->addRow(tr("Language:"), language_);
 
-    for (QWidget* control : QList<QWidget*>{hScale_, vScale_, baselineShift_, language_}) {
+    for (QWidget* control :
+         QList<QWidget*>{hScale_, vScale_, baselineShift_, tsume_, fractionalWidths_, language_}) {
         watch(control);
     }
     return page;

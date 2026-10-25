@@ -8,6 +8,7 @@
 
 #include "tools.h"
 
+class QButtonGroup;
 class QStackedWidget;
 class QHBoxLayout;
 class QIcon;
@@ -133,6 +134,9 @@ private:
     using ShapeSyncs = std::vector<std::function<void(const ShapeOptions&)>>;
     QWidget* buildShapePage(ToolId id);
     QWidget* buildRotateViewPage(ToolId id);
+    // options_bar_navigate.cpp: the Hand and Zoom tools' multi-window options.
+    QWidget* buildHandPage(ToolId id);
+    QWidget* buildZoomPage(ToolId id);
     // options_bar_move.cpp: the Move tool's Align and Distribute buttons.
     QWidget* buildMovePage(ToolId id);
     // options_bar_eyedropper.cpp: the Eyedropper's Sample Size / Sample / ring.
@@ -161,8 +165,12 @@ private:
     static NumericFieldConfig numericConfig(double lo, double hi, double step, int decimals,
                                             const QString& suffix, bool popup,
                                             const QString& name, bool allowFractional = false);
-    void addModeButtons(QHBoxLayout* layout, QWidget* page, bool withIntersect);
-    void addMagneticFields(QHBoxLayout* layout, QWidget* page);
+    QButtonGroup* addModeButtons(QHBoxLayout* layout, QWidget* page, SelectionOptions* group,
+                                 bool withIntersect);
+    void addMagneticFields(QHBoxLayout* layout, QWidget* page, SelectionOptions* group);
+    // The selection options group for `id` (Quick Selection has its own); the
+    // shared family group is the fallback for handlers with no port.
+    SelectionOptions* selectionGroupFor(ToolId id) const;
     QToolButton* toolButton(ToolId id, QWidget* parent);
     // Re-seed the Crop W/H fields from their mode (ratio values, or pixels in
     // `W x H x Resolution` mode).
@@ -194,6 +202,8 @@ private:
     PenGroup* pen_ = nullptr;
     ShapeGroup* shape_ = nullptr;
     TypeGroup* type_ = nullptr;
+    HandGroup* hand_ = nullptr;
+    ZoomGroup* zoom_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     QToolButton* workspaceSwitcher_ = nullptr;
     BrushPresetPicker* brushPicker_ = nullptr;

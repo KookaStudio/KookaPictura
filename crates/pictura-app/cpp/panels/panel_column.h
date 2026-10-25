@@ -12,6 +12,8 @@
 #include <QtGui/QIcon>
 #include <QtWidgets/QWidget>
 
+#include "theme.h"
+
 #include <functional>
 
 class QBoxLayout;
@@ -56,6 +58,9 @@ public:
     // child mode so the branch can be exercised on a top-level platform.
     static bool overlayUsesTopLevel();
     static void setForceChildOverlayForTest(bool force);
+    // Whether the test override is on. Floating document windows read it to
+    // take the in-frame hosting in tests; they are top-level otherwise.
+    static bool childOverlayForcedForTest();
     PanelGroup* group() const { return group_; }
     void setGroup(PanelGroup* group);
     // A whole torn-off `PanelColumn` is hosted through the same overlay: the
@@ -218,12 +223,17 @@ public:
     bool autoCollapseIconic() const { return autoCollapseIconic_; }
     bool autoShowHidden() const { return autoShowHidden_; }
     void setPreferredWidth(int width);
+    // Re-apply the theme scale to the column chrome and its groups.
+    void applyUiScale();
     // A migrated v6 per-column entry carries no width; use this until one is set.
     static constexpr int kDefaultNormalWidth = 300;
     // The normal-mode width range. A restored or persisted width is clamped to it
     // so a stale store can never expand a column across the workspace.
     static constexpr int kMinNormalWidth = 300;
     static constexpr int kMaxNormalWidth = 400;
+    static int defaultNormalWidth() { return Theme::scaled(kDefaultNormalWidth); }
+    static int minNormalWidth() { return Theme::scaled(kMinNormalWidth); }
+    static int maxNormalWidth() { return Theme::scaled(kMaxNormalWidth); }
     // Width to persist for this column: its own width in normal mode, or the
     // remembered normal width while iconic, clamped to the range above. During an
     // iconic->normal flip the widening may still be pending, so the remembered
@@ -239,7 +249,7 @@ public:
         const int width = railMode_ || (widthFlipPending_ && normalWidthBeforeIconic_ > 0)
             ? normalWidthBeforeIconic_
             : this->width();
-        return width <= 0 ? 0 : qBound(kMinNormalWidth, width, kMaxNormalWidth);
+        return width <= 0 ? 0 : qBound(minNormalWidth(), width, maxNormalWidth());
     }
     // Apply a width loaded from the session. An iconic column records it as the
     // normal width to restore on the next toggle instead of resizing the strip.
@@ -552,6 +562,7 @@ private:
     std::function<int()> toolsColumnsState_;
     std::function<void()> toolsToggleAction_;
     QScrollArea* scroll_ = nullptr;
+    QScrollArea* toolsScroll_ = nullptr;
     QSplitter* splitter_ = nullptr;
     QWidget* iconStrip_ = nullptr;
     QBoxLayout* iconStripLayout_ = nullptr;

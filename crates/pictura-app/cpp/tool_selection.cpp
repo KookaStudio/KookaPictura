@@ -1,5 +1,6 @@
 #include "tool_handler.h"
 
+#include "commands.h"
 #include "image_view.h"
 #include "selection_geometry.h"
 #include "tools.h"
@@ -166,6 +167,12 @@ private:
             QStringLiteral("%1 x %2").arg(rect.width()).arg(rect.height()), imagePos);
     }
 
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        return selectionCanvasMenu(ctx, imagePos);
+    }
+
     bool elliptical_;
     std::shared_ptr<SelectionOptions> selection_;
     Qt::KeyboardModifiers dragMods_ = Qt::NoModifier;
@@ -253,6 +260,12 @@ public:
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSelectionPreview();
         }
+    }
+
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        return selectionCanvasMenu(ctx, imagePos);
     }
 
 private:
@@ -399,6 +412,12 @@ private:
         }
     }
 
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        return selectionCanvasMenu(ctx, imagePos);
+    }
+
     QPolygonF polygonPoints_;
     QPointF lastPolygonPress_;
     QElapsedTimer polygonClock_;
@@ -408,6 +427,28 @@ private:
 };
 
 } // namespace
+
+QMenu* selectionCanvasMenu(ToolServices& ctx, const QPointF& imagePos)
+{
+    Q_UNUSED(imagePos);
+    QWidget* parent = ctx.canvas();
+    if (!parent) {
+        return nullptr;
+    }
+    auto* menu = new QMenu(parent);
+    const auto add = [menu, &ctx](const QString& label, const QString& id) {
+        QAction* action = menu->addAction(label);
+        ToolServices* services = &ctx;
+        QObject::connect(action, &QAction::triggered, menu,
+                         [services, id]() { services->requestCommand(id); });
+    };
+    add(QObject::tr("Deselect"), QString::fromLatin1(command_ids::SelectDeselect));
+    add(QObject::tr("Inverse"), QString::fromLatin1(command_ids::SelectInverse));
+    add(QObject::tr("Feather…"), QString::fromLatin1(command_ids::SelectModifyFeather));
+    add(QObject::tr("Refine Edge…"),
+        commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
+    return menu;
+}
 
 std::unique_ptr<ToolHandler> makeMarqueeToolHandler(std::shared_ptr<SelectionOptions> selection)
 {

@@ -97,7 +97,7 @@ bool PicturaMainWindow::savePdfWithDialog(const QString& path)
     SessionState state = loadSession();
     state.pdfOptions = withoutPasswords(options);
     pictura::saveSession(state);
-    docs_[index].path = path;
+    docs_[index]->path = path;
     dropRecoverySnapshot(view);
     updateTabTitle(index);
     rememberRecent(path);

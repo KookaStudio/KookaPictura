@@ -20,10 +20,7 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::path::PathPoint;
-use pictura_core::{
-    CharacterAttrs, ParagraphAttrs, StyleOverrides, TextPath, TextPathKind, TypeSpec,
-};
+use pictura_core::{CharacterAttrs, ParagraphAttrs, StyleOverrides, TextPathKind, TypeSpec};
 use pictura_select::Selection;
 
 #[cxx_qt::bridge]
@@ -84,6 +81,7 @@ pub mod ffi {
         horizontal_scale: f64,
         vertical_scale: f64,
         baseline_shift: f64,
+        tsume: f64,
         anti_alias: i32,
         color: u32,
         all_caps: bool,
@@ -169,14 +167,15 @@ pub mod ffi {
         /// The default paragraph attribute set for new type, matching the model.
         fn type_default_paragraph_setting() -> ParagraphSetting;
 
-        /// Register `bytes` (an sfnt Qt resolved for `family`) so type set in `family` renders in it; false for bytes that do not parse.
-        fn type_register_font(family: &QString, bytes: &[u8]) -> bool;
+        /// Register `bytes` (an sfnt Qt resolved for `family` and `style`) so type set in that face renders in it; false for bytes that do not parse.
+        fn type_register_font(family: &QString, style: &QString, bytes: &[u8]) -> bool;
 
-        /// Which of the Character panel's eight OpenType features `family`'s
-        /// face carries: bit 0 Standard Ligatures, 1 Contextual Alternates, 2
-        /// Discretionary Ligatures, 3 Swash, 4 Stylistic Alternates, 5 Titling
-        /// Alternates, 6 Ordinals, 7 Fractions.
-        fn type_font_opentype_features(family: &QString) -> u32;
+        /// Which of the Character panel's eight OpenType features
+        /// `family`/`style`'s face carries: bit 0 Standard Ligatures,
+        /// 1 Contextual Alternates, 2 Discretionary Ligatures, 3 Swash,
+        /// 4 Stylistic Alternates, 5 Titling Alternates, 6 Ordinals,
+        /// 7 Fractions.
+        fn type_font_opentype_features(family: &QString, style: &QString) -> u32;
 
         /// The caret at every UTF-16 boundary of `text` (`len + 1` segments), flat `[x0, y0, x1, y1, …]` in document pixels; empty for a non-positive size.
         fn type_caret_stops(
@@ -312,8 +311,17 @@ pub mod ffi {
             character: &CharacterSetting,
         ) -> bool;
 
-        /// Edit the named character style to `character`, re-resolve every applying type layer, and record one "Edit Character Style" state; false (no state) for a missing style.
+        /// Edit the named character style to `character` (`new_name` may rename it), re-resolve every applying type layer, and record one "Edit Character Style" state; false (no state) for a missing style.
         fn type_edit_character_style(
+            view: Pin<&mut PictureView>,
+            name: &QString,
+            new_name: &QString,
+            font: &QString,
+            character: &CharacterSetting,
+        ) -> bool;
+
+        /// Edit the named character style for a live Preview, re-resolving every applying type layer and recording no history state; false (unchanged) for a missing style.
+        fn type_preview_character_style(
             view: Pin<&mut PictureView>,
             name: &QString,
             font: &QString,
@@ -322,6 +330,18 @@ pub mod ffi {
 
         /// Delete the named character style and record one "Delete Character Style" state; false (no state) for a missing style.
         fn type_delete_character_style(view: Pin<&mut PictureView>, name: &QString) -> bool;
+
+        /// The number of character styles in the document (0 without one).
+        fn type_character_style_count(view: &PictureView) -> i32;
+
+        /// The character style name at `index` in creation order; empty out of range.
+        fn type_character_style_name(view: &PictureView, index: i32) -> QString;
+
+        /// The named character style's effective character attribute set, resolved against the style sheet; the default set for an unknown name.
+        fn type_character_style_character(view: &PictureView, name: &QString) -> CharacterSetting;
+
+        /// The named character style's effective font family; empty for an unknown name.
+        fn type_character_style_font(view: &PictureView, name: &QString) -> QString;
 
         /// Create the named paragraph style and record one "New Paragraph Style" state; false (no state) for a duplicate name.
         fn type_create_paragraph_style(
@@ -385,11 +405,14 @@ use ffi::{CharacterSetting, ParagraphSetting, TypeSetting};
 
 mod attrs;
 mod fonts;
+mod spec;
 mod warp;
 
+use spec::{placement_setting, spec};
+
 use attrs::{
-    character_attrs, character_setting, edited_overrides, paragraph_attrs, paragraph_overrides,
-    paragraph_setting, style_character_overrides,
+    character_setting, edited_overrides, paragraph_attrs, paragraph_overrides, paragraph_setting,
+    style_character_overrides,
 };
 
 fn type_default_character_setting() -> CharacterSetting {
@@ -398,134 +421,6 @@ fn type_default_character_setting() -> CharacterSetting {
 
 fn type_default_paragraph_setting() -> ParagraphSetting {
     paragraph_setting(&ParagraphAttrs::default())
-}
-
-fn spec(
-    text: &QString,
-    font: &QString,
-    placement: &TypeSetting,
-    character: &CharacterSetting,
-    paragraph: &ParagraphSetting,
-) -> TypeSpec {
-    let mut spec = TypeSpec::new(text.to_string(), font.to_string(), character.size);
-    spec.vertical = placement.vertical;
-    spec.origin = (placement.x, placement.y);
-    spec.matrix = [placement.xx, placement.xy, placement.yx, placement.yy];
-    spec.box_bounds = placement.boxed.then_some([
-        placement.box_left,
-        placement.box_top,
-        placement.box_right,
-        placement.box_bottom,
-    ]);
-    if let Some(path) = path_from_setting(placement) {
-        if path.kind == TextPathKind::Area {
-            let flattened = path.subpath.flattened(0.25);
-            if let Some(&(first_x, first_y)) = flattened.points.first() {
-                let (mut left, mut top, mut right, mut bottom) =
-                    (first_x, first_y, first_x, first_y);
-                for &(x, y) in &flattened.points {
-                    left = left.min(x);
-                    top = top.min(y);
-                    right = right.max(x);
-                    bottom = bottom.max(y);
-                }
-                spec.origin = (left, top);
-                spec.box_bounds = Some([0.0, 0.0, right - left, bottom - top]);
-            }
-        } else {
-            let flattened = path.subpath.flattened(0.25);
-            if let Some((point, _)) = flattened.point_at(path.start) {
-                spec.origin = point;
-            }
-        }
-        spec.path = Some(path);
-    }
-    spec.character = character_attrs(character);
-    spec.character.font_family = font.to_string();
-    spec.paragraph = paragraph_attrs(paragraph);
-    spec.warp = warp::text_warp(placement);
-    spec
-}
-
-fn path_from_setting(setting: &TypeSetting) -> Option<TextPath> {
-    let kind = match setting.path_kind {
-        1 => TextPathKind::OnPath,
-        2 => TextPathKind::Area,
-        _ => return None,
-    };
-    let segments: Vec<[(f64, f64); 4]> = setting
-        .path_points
-        .to_string()
-        .split(';')
-        .filter(|part| !part.trim().is_empty())
-        .filter_map(|part| {
-            let values: Vec<f64> = part
-                .split_whitespace()
-                .filter_map(|value| value.parse().ok())
-                .collect();
-            (values.len() == 8).then(|| {
-                [
-                    (values[0], values[1]),
-                    (values[2], values[3]),
-                    (values[4], values[5]),
-                    (values[6], values[7]),
-                ]
-            })
-        })
-        .collect();
-    if segments.is_empty() {
-        return None;
-    }
-    let mut points = Vec::with_capacity(segments.len() + usize::from(!setting.path_closed));
-    for (index, segment) in segments.iter().enumerate() {
-        let in_handle = if index == 0 {
-            setting
-                .path_closed
-                .then(|| segments.last().map(|last| last[2]))
-                .flatten()
-        } else {
-            Some(segments[index - 1][2])
-        };
-        points.push(PathPoint {
-            anchor: segment[0],
-            in_handle,
-            out_handle: Some(segment[1]),
-            smooth: true,
-        });
-    }
-    if !setting.path_closed {
-        if let Some(last) = segments.last() {
-            points.push(PathPoint {
-                anchor: last[3],
-                in_handle: Some(last[2]),
-                out_handle: None,
-                smooth: false,
-            });
-        }
-    }
-    Some(TextPath {
-        kind,
-        subpath: pictura_core::path::Subpath {
-            points,
-            closed: setting.path_closed,
-        },
-        start: setting.path_start,
-    })
-}
-
-fn path_points(path: &TextPath) -> QString {
-    let mut parts = Vec::new();
-    for index in 0..path.subpath.segment_count() {
-        let Some(segment) = path.subpath.segment(index) else {
-            continue;
-        };
-        let values: Vec<String> = segment
-            .iter()
-            .flat_map(|(x, y)| [format!("{x}"), format!("{y}")])
-            .collect();
-        parts.push(values.join(" "));
-    }
-    QString::from(parts.join(";").as_str())
 }
 
 fn type_preview_rect(
@@ -541,12 +436,12 @@ fn type_preview_rect(
         })
 }
 
-fn type_register_font(family: &QString, bytes: &[u8]) -> bool {
-    pictura_render::register_font(&family.to_string(), bytes.to_vec())
+fn type_register_font(family: &QString, style: &QString, bytes: &[u8]) -> bool {
+    pictura_render::register_font(&family.to_string(), &style.to_string(), bytes.to_vec())
 }
 
-fn type_font_opentype_features(family: &QString) -> u32 {
-    pictura_render::opentype_features(&family.to_string())
+fn type_font_opentype_features(family: &QString, style: &QString) -> u32 {
+    pictura_render::opentype_features(&family.to_string(), &style.to_string())
 }
 
 fn type_caret_stops(
@@ -778,43 +673,6 @@ fn type_layer_font(view: &PictureView, path: &QString) -> QString {
     })
 }
 
-fn placement_setting(spec: &TypeSpec) -> TypeSetting {
-    let b = spec.box_bounds.unwrap_or_default();
-    TypeSetting {
-        vertical: spec.vertical,
-        x: spec.origin.0,
-        y: spec.origin.1,
-        xx: spec.matrix[0],
-        xy: spec.matrix[1],
-        yx: spec.matrix[2],
-        yy: spec.matrix[3],
-        boxed: spec.box_bounds.is_some(),
-        box_left: b[0],
-        box_top: b[1],
-        box_right: b[2],
-        box_bottom: b[3],
-        path_kind: spec.path.as_ref().map_or(0, |path| match path.kind {
-            TextPathKind::OnPath => 1,
-            TextPathKind::Area => 2,
-        }),
-        path_closed: spec.path.as_ref().is_some_and(|path| path.subpath.closed),
-        path_start: spec.path.as_ref().map_or(0.0, |path| path.start),
-        path_points: spec
-            .path
-            .as_ref()
-            .map_or_else(QString::default, path_points),
-        warp_style: QString::from(if spec.warp.style.is_preset() {
-            spec.warp.style.id()
-        } else {
-            ""
-        }),
-        warp_bend: spec.warp.bend,
-        warp_h: spec.warp.h_distort,
-        warp_v: spec.warp.v_distort,
-        warp_vertical: spec.warp.vertical,
-    }
-}
-
 fn type_layer_setting(view: &PictureView, path: &QString) -> TypeSetting {
     layer_spec(view, path).map_or(
         TypeSetting {
@@ -988,20 +846,96 @@ fn type_create_character_style(
 fn type_edit_character_style(
     view: Pin<&mut PictureView>,
     name: &QString,
+    new_name: &QString,
+    font: &QString,
+    character: &CharacterSetting,
+) -> bool {
+    let name = name.to_string();
+    let new_name = new_name.to_string();
+    let attrs = style_character_overrides(font, character);
+    commit_style(view, "Edit Character Style", |doc| {
+        if name != new_name
+            && crate::history::rename_character_style(doc, &name, &new_name).is_err()
+        {
+            return false;
+        }
+        crate::history::edit_character_style(doc, &new_name, attrs).is_ok()
+    })
+}
+
+fn type_preview_character_style(
+    mut view: Pin<&mut PictureView>,
+    name: &QString,
     font: &QString,
     character: &CharacterSetting,
 ) -> bool {
     let name = name.to_string();
     let attrs = style_character_overrides(font, character);
-    commit_style(view, "Edit Character Style", |doc| {
-        crate::history::edit_character_style(doc, &name, attrs).is_ok()
-    })
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| crate::history::edit_character_style(doc, &name, attrs).is_ok());
+    if changed {
+        view.as_mut().clear_link_sets();
+        view.as_mut().recomposite();
+        view.as_mut().changed();
+    }
+    changed
 }
 
 fn type_delete_character_style(view: Pin<&mut PictureView>, name: &QString) -> bool {
     let name = name.to_string();
     commit_style(view, "Delete Character Style", |doc| {
         crate::history::delete_character_style(doc, &name).is_ok()
+    })
+}
+
+fn type_character_style_count(view: &PictureView) -> i32 {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .map_or(0, |doc| doc.text_styles.character_styles.len() as i32)
+}
+
+fn type_character_style_name(view: &PictureView, index: i32) -> QString {
+    if index < 0 {
+        return QString::default();
+    }
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| doc.text_styles.character_styles.get(index as usize))
+        .map_or_else(QString::default, |style| QString::from(style.name.as_str()))
+}
+
+/// A character style's effective attributes, resolved against the sheet so a
+/// sparse style reports the document defaults for the fields it leaves unset.
+fn resolved_character_style(
+    view: &PictureView,
+    name: &QString,
+) -> Option<pictura_core::ResolvedStyle> {
+    let name = name.to_string();
+    let doc = view.rust().session.doc.as_ref()?;
+    doc.text_styles.character_style(&name).map(|_| {
+        doc.text_styles
+            .resolve(&StyleOverrides::default(), Some(&name), None)
+    })
+}
+
+fn type_character_style_character(view: &PictureView, name: &QString) -> CharacterSetting {
+    resolved_character_style(view, name).map_or_else(type_default_character_setting, |r| {
+        character_setting(&r.character)
+    })
+}
+
+fn type_character_style_font(view: &PictureView, name: &QString) -> QString {
+    resolved_character_style(view, name).map_or_else(QString::default, |r| {
+        QString::from(r.character.font_family.as_str())
     })
 }
 
