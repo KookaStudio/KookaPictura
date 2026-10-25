@@ -36,6 +36,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setAutoShowHidden(panelColumn_->autoShowHidden());
         preferencesDialog_->setBrightnessLevel(brightnessLevel_);
         preferencesDialog_->setThemeFamily(themeFamily_);
+        preferencesDialog_->setUiScalePercent(uiScalePercent_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
         preferencesDialog_->setGpuComputeEnabled(gpuAvailable_);
         preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
@@ -78,6 +79,8 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 });
         connect(preferencesDialog_, &PreferencesDialog::themeFamilyChanged, this,
                 [this](int family) { setThemeFamily(family); });
+        connect(preferencesDialog_, &PreferencesDialog::uiScalePercentChanged, this,
+                [this](int percent) { setUiScalePercent(percent); });
         connect(preferencesDialog_, &PreferencesDialog::gpuComputeChanged, this,
                 &PicturaMainWindow::applyGpuComputePreference);
         connect(preferencesDialog_, &PreferencesDialog::typePlaceholderTextChanged, this,

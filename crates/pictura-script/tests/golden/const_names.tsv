@@ -220,6 +220,10 @@ WindowWorkspaceNew	window.workspace.new
 WindowWorkspaceDelete	window.workspace.delete
 WindowWorkspaceReset	window.workspace.reset
 WindowWorkspaceKeyboardShortcuts	window.workspace.keyboardShortcuts
+WindowUiSize	window.uiSize
+WindowUiEnlarge	window.uiEnlarge
+WindowUiDecrease	window.uiDecrease
+WindowUiReset	window.uiReset
 TypePanelsCharacter	type.panels.character
 TypePanelsParagraph	type.panels.paragraph
 TypePanelsParagraphStyles	type.panels.paragraphStyles

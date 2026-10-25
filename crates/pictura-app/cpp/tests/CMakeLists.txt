@@ -10,6 +10,7 @@ set(PICTURA_QT_TESTS
     tst_fonts
     tst_design_system
     tst_design_system_dialog
+    tst_ui_scale
     tst_edit_clipboard
     tst_edit_refresh
     tst_mask_edit

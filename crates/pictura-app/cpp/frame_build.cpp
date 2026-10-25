@@ -774,7 +774,7 @@ void PicturaMainWindow::buildStatusBar()
     QStatusBar* bar = statusBar();
     bar->setSizeGripEnabled(false);
     bar->setContentsMargins(6, 0, 0, 0);
-    bar->setFixedHeight(28);
+    bar->setFixedHeight(Theme::scaled(28));
 
     // Footer text runs 2px under the app default, matching the tab chrome. A
     // point-sized default font (pixelSize() < 0) falls back to 12px at 96 DPI.
@@ -831,7 +831,7 @@ void PicturaMainWindow::buildStatusBar()
     hintBar_ = new ToolHintBar(bar);
     // A ~28px status strip: cap the readouts and hint so the bar trims 4px
     // without clipping. (The theme already dropped the bar's top border.)
-    constexpr int kStatusItemHeight = 22;
+    const int kStatusItemHeight = Theme::scaled(22);
     zoomField_->setFixedHeight(kStatusItemHeight);
     sizeLabel_->setFixedHeight(kStatusItemHeight);
     statusOptionsButton_->setFixedHeight(kStatusItemHeight);
@@ -847,7 +847,7 @@ void PicturaMainWindow::buildStatusBar()
         separator->setFrameShape(QFrame::VLine);
         separator->setFrameShadow(QFrame::Sunken);
         separator->setFixedWidth(1);
-        separator->setFixedHeight(16);
+        separator->setFixedHeight(Theme::scaled(16));
         separator->setAttribute(Qt::WA_TransparentForMouseEvents);
         return separator;
     };

@@ -49,6 +49,7 @@ const QList<PanelToggle>& panelToggles()
 void PicturaMainWindow::buildMenus()
 {
     registry_->buildMenuBar(menuBar());
+    buildUiSizeMenu();
     // The History panel's iconic flyout is a separate top-level Qt::Popup.
     if (QAction* undo = registry_->action(QLatin1String(command_ids::EditUndo))) {
         undo->setShortcutContext(Qt::ApplicationShortcut);
@@ -1080,6 +1081,27 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setCheckedProvider(command_ids::WindowPanelsTools,
                                   [this]() { return toolsColumn_ && toolsColumn_->isVisible(); });
+
+    const auto stepUiScale = [this](int direction) {
+        const QVector<int> choices = Theme::uiScaleChoices();
+        int index = choices.indexOf(uiScalePercent_);
+        if (index < 0) {
+            index = choices.indexOf(Theme::kDefaultUiScalePercent);
+        }
+        setUiScalePercent(choices.at(qBound(0, index + direction, choices.size() - 1)));
+    };
+    registry_->setHandler(command_ids::WindowUiEnlarge, [stepUiScale]() { stepUiScale(1); });
+    registry_->setHandler(command_ids::WindowUiDecrease, [stepUiScale]() { stepUiScale(-1); });
+    registry_->setHandler(command_ids::WindowUiReset,
+                          [this]() { setUiScalePercent(Theme::kDefaultUiScalePercent); });
+    registry_->setEnabledProvider(command_ids::WindowUiEnlarge,
+                                  [this]() { return uiScalePercent_ < Theme::kUiScaleMaxPercent; });
+    registry_->setEnabledProvider(command_ids::WindowUiDecrease,
+                                  [this]() { return uiScalePercent_ > Theme::kUiScaleMinPercent; });
+    registry_->setEnabledProvider(command_ids::WindowUiReset,
+                                  [this]() { return uiScalePercent_ != Theme::kDefaultUiScalePercent; });
+    registry_->setLabelProvider(command_ids::WindowUiSize,
+                                [this]() { return tr("UI Size: %1%").arg(uiScalePercent_); });
 
     registerPreferenceHandlers();
     registerShortcutHandlers();

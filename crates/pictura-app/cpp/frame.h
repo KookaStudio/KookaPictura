@@ -246,6 +246,10 @@ public:
     int themeFamily() const { return themeFamily_; }
     void setThemeFamily(int family);
 
+    // UI scale in percent (75..200); applies live and persists.
+    int uiScalePercent() const { return uiScalePercent_; }
+    void setUiScalePercent(int percent);
+
     ScreenMode screenMode() const { return screenMode_; }
     void setScreenMode(ScreenMode mode);
     void cycleScreenMode(bool forward);
@@ -543,6 +547,8 @@ private:
     };
 
     void buildMenus();
+    void buildUiSizeMenu();
+    void updateUiSizeMenu();
     void buildPanels(const SessionState& state);
     // `toolOptions` is the session's saved tool options, restored before the
     // options bar is built so its controls start from them.
@@ -864,6 +870,10 @@ private:
     void reportOpenFailure(int index, const QString& status);
     void openRecent(const QString& path);
     void applyBrightness(int level);
+    // Re-scale the explicit chrome that the stylesheet and app font cannot
+    // reach: status bar, menu-corner icons, tool slots, panel columns/groups.
+    void applyUiScaleToChrome(int oldPercent, int newPercent);
+    void applyStatusBarScale();
     QColor canvasColorForIndex(int index) const;
     void applyWorkspaceCanvasColor();
     // The mode `cycleScreenMode` steps to, and the panel toggles: Standard and
@@ -1029,6 +1039,7 @@ private:
     int untitledCounter_ = 0;
     int brightnessLevel_ = 1;
     int themeFamily_ = 0;
+    int uiScalePercent_ = 100;
     QToolButton* themeCornerButton_ = nullptr;
     bool gpuCompute_ = true;
     int colorPolicy_ = 0;

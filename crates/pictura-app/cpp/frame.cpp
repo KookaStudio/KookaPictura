@@ -5,13 +5,19 @@
 #include "api/selection_api.h"
 #include "api/type_api.h"
 #include "file_drop_router.h"
+#include "fonts.h"
+#include "frame_canvas.h"
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
 #include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 
+#include <QtCore/QHash>
+#include <QtCore/QSize>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QFontMetrics>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QFrame>
 #include <QtWidgets/QTabBar>
 
 namespace pictura {
@@ -113,6 +119,14 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     loadGuideSession(state);
     // The family drives the theme chrome built below, so resolve it before the menu bar (and its theme toggle icon) is built.
     themeFamily_ = state.themeFamily == 1 ? 1 : 0;
+    // The application font and every chrome metric built below read the scale,
+    // so resolve it before the menu bar, panels, tools, and status bar exist.
+    uiScalePercent_ = Theme::normalizedUiScalePercent(state.uiScalePercent);
+    Theme::setUiScalePercent(uiScalePercent_);
+    applyBundledUiFont();
+    // The window predates the application font, so it keeps the default face
+    // until told otherwise; the menu bar is created below and inherits it.
+    setFont(QApplication::font());
     // Probe the adapter once so the toggle can be offered without a document.
     {
         PictureView probe;
@@ -741,11 +755,6 @@ void PicturaMainWindow::showOpenDialog()
     startOpenDocumentAtPath(path);
 }
 
-void PicturaMainWindow::setBrightnessLevel(int level)
-{
-    applyBrightness(level);
-}
-
 void PicturaMainWindow::setScreenMode(ScreenMode mode)
 {
     const ScreenMode previous = screenMode_;
@@ -1057,14 +1066,6 @@ void PicturaMainWindow::updateStatus()
     if (statusOptionsButton_) {
         statusOptionsButton_->setVisible(hasDoc);
     }
-}
-void PicturaMainWindow::applyBrightness(int level)
-{
-    brightnessLevel_ = Theme::clampLevel(level);
-    const Theme::ThemeFamily family = themeFamily_ == 1 ? Theme::ThemeFamily::Light
-                                                        : Theme::ThemeFamily::Dark;
-    Theme::apply(family, brightnessLevel_);
-    applyWorkspaceCanvasColor();
 }
 QStringList PicturaMainWindow::selectedLayerPaths() const
 {

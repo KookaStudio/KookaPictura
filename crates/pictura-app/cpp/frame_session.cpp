@@ -142,6 +142,7 @@ void PicturaMainWindow::saveSession()
     state.windowMaximized = isMaximized();
     state.brightnessLevel = brightnessLevel_;
     state.themeFamily = themeFamily_ == 1 ? 1 : 0;
+    state.uiScalePercent = uiScalePercent_;
     state.gpuCompute = gpuCompute_;
     state.colorPolicy = colorPolicy_;
     state.textGammaEnabled = textGammaEnabled_;
@@ -228,7 +229,7 @@ void PicturaMainWindow::saveSession()
     // v9: the ordered per-column layout, in central-splitter order; shared with
     // the workspace store's arrangement shape (see serializeWorkspaceLayout).
     state.panelColumns = serializeWorkspaceLayout();
-    state.schemaVersion = 10;
+    state.schemaVersion = 11;
     state.recent = recent_;
     // A refused write means another instance wrote the store after this one
     // launched; leave its workspace snapshot alone too.
@@ -334,7 +335,7 @@ void PicturaMainWindow::applyPanelSession(const SessionState& state)
         panelColumn_->setRailMode(state.panelRailMode == QStringLiteral("iconic"));
         panelColumn_->setRestoredWidth(state.railWidth > 0
                                             ? state.railWidth
-                                            : PanelColumn::kDefaultNormalWidth);
+                                            : PanelColumn::defaultNormalWidth());
         // A test/reset apply should leave the primary column visible when any
         // group still has visible tabs.
         bool anyVisible = false;
@@ -396,7 +397,7 @@ void PicturaMainWindow::applyPanelSession(const SessionState& state)
             entry.insert(QStringLiteral("width"),
                          i == primaryIndex && state.railWidth > 0
                              ? state.railWidth
-                             : PanelColumn::kDefaultNormalWidth);
+                             : PanelColumn::defaultNormalWidth());
         }
         layout.replace(i, entry);
     }

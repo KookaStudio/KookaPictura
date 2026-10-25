@@ -6,6 +6,7 @@
 #include "session.h"
 #include "theme.h"
 
+#include <QtCore/QSignalBlocker>
 #include <QtGui/QPixmap>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QColorDialog>
@@ -148,6 +149,18 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     makeCheckbox(QStringLiteral("enableFloatingDocumentDocking"),
                  tr("Enable Floating Document Window Docking"), interfacePage)
         ->setChecked(true);
+    auto* uiScaleRow = new QWidget(interfacePage);
+    auto* uiScaleLayout = new QHBoxLayout(uiScaleRow);
+    uiScaleLayout->addWidget(new QLabel(tr("UI Size"), uiScaleRow));
+    uiScale_ = new QComboBox(uiScaleRow);
+    uiScale_->setObjectName(QStringLiteral("preferencesUiScale"));
+    for (int percent : Theme::uiScaleChoices()) {
+        uiScale_->addItem(tr("%1%").arg(percent), percent);
+    }
+    uiScale_->setCurrentIndex(uiScale_->findData(Theme::kDefaultUiScalePercent));
+    uiScaleLayout->addWidget(uiScale_);
+    uiScaleLayout->addStretch(1);
+    interfaceLayout->addWidget(uiScaleRow);
     interfaceLayout->addStretch(1);
     stack_->addWidget(interfacePage);
 
@@ -228,6 +241,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
             [this](double level) { emit brightnessLevelChanged(qRound(level)); });
     connect(themeFamily_, &QComboBox::currentIndexChanged, this,
             [this](int index) { emit themeFamilyChanged(themeFamily_->itemData(index).toInt()); });
+    connect(uiScale_, &QComboBox::currentIndexChanged, this,
+            [this]() { emit uiScalePercentChanged(uiScale_->currentData().toInt()); });
     pageList_->setCurrentRow(0);
 }
 
@@ -329,6 +344,23 @@ void PreferencesDialog::setThemeFamily(int family)
             themeFamily_->setCurrentIndex(index);
         }
     }
+}
+
+void PreferencesDialog::setUiScalePercent(int percent)
+{
+    if (!uiScale_) {
+        return;
+    }
+    const int index = uiScale_->findData(percent);
+    if (index >= 0) {
+        const QSignalBlocker blocker(uiScale_);
+        uiScale_->setCurrentIndex(index);
+    }
+}
+
+int PreferencesDialog::uiScalePercentForTest() const
+{
+    return uiScale_ ? uiScale_->currentData().toInt() : 0;
 }
 
 void PreferencesDialog::setTypePlaceholderText(bool on)

@@ -294,12 +294,12 @@ layer.lock.layers.transparency	Layer/Lock Layers/Transparency	Transparency		1	0
 layer.lock.layers.image	Layer/Lock Layers/Image	Image		1	0
 layer.lock.layers.position	Layer/Lock Layers/Position	Position		1	0
 layer.lock.allInGroup	Layer/Lock All Layers In Group…	Lock All Layers In Group…		1	0
-layer.merge.layers	Layer/Merge Layers	Merge Layers	Ctrl+E	1	0
-layer.merge.visible	Layer/Merge Visible	Merge Visible	Shift+Ctrl+E	1	0
-layer.stamp.visible	Layer/Stamp Visible	Stamp Visible	Ctrl+Alt+Shift+E	1	0
-layer.stamp.selected	Layer/Stamp Selected	Stamp Selected	Ctrl+Alt+E	1	0
-layer.flatten.image	Layer/Flatten Image	Flatten Image		1	0
-layer.merge.clippingMask	Layer/Merge Clipping Mask	Merge Clipping Mask		1	0
+layer.merge.layers	Layer/Merge/Merge Layers	Merge Layers	Ctrl+E	1	0
+layer.merge.visible	Layer/Merge/Merge Visible	Merge Visible	Shift+Ctrl+E	1	0
+layer.stamp.visible	Layer/Merge/Stamp Visible	Stamp Visible	Ctrl+Alt+Shift+E	1	0
+layer.stamp.selected	Layer/Merge/Stamp Selected	Stamp Selected	Ctrl+Alt+E	1	0
+layer.flatten.image	Layer/Merge/Flatten Image	Flatten Image		1	0
+layer.merge.clippingMask	Layer/Merge/Merge Clipping Mask	Merge Clipping Mask		1	0
 layer.matting.defringe	Layer/Matting/Defringe…	Defringe…		1	0
 layer.matting.removeBlack	Layer/Matting/Remove Black Matte	Remove Black Matte		1	0
 layer.matting.removeWhite	Layer/Matting/Remove White Matte	Remove White Matte		1	0
@@ -577,6 +577,10 @@ window.panels.timeline	Window/Panels/Timeline	Timeline		0	0
 window.panels.tool.presets	Window/Panels/Tool Presets	Tool Presets		0	0
 window.panels.tools	Window/Panels/Tools	Tools		1	1
 view.options	Window/Options	Options		1	1
+window.uiSize	Window/UI Size	UI Size: 100%		1	0
+window.uiEnlarge	Window/Enlarge UI Size	Enlarge UI Size	Ctrl+Alt++	1	0
+window.uiDecrease	Window/Decrease UI Size	Decrease UI Size	Ctrl+Alt+-	1	0
+window.uiReset	Window/Reset UI Size	Reset UI Size	Ctrl+Alt+0	1	0
 help.search	Help/Search…	Search…	Shift+Space	1	0
 help.kooka.pictura.help	Help/Kooka Pictura Help	Kooka Pictura Help	F1	0	0
 help.online.support	Help/Online Support	Online Support		0	0
