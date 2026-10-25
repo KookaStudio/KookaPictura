@@ -346,7 +346,6 @@ fn for_each_source_layer(layers: &mut LayerStack, f: &mut impl FnMut(&mut Layer)
     }
 }
 
-
 /// Profile-free CIE XYZ (D50) → 8-bit sRGB with the same matrix class as
 /// [`lab_to_rgb`]; out-of-gamut components clamp.
 pub fn xyz_d50_to_srgb_u8(xyz: [f64; 3]) -> [u8; 3] {
