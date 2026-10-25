@@ -10,6 +10,7 @@
 
 #include <QtCore/QPointer>
 #include <QtGui/QAction>
+#include <QtGui/QActionGroup>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
 
@@ -69,16 +70,22 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
             refresh();
         }
     };
+    auto* orientationGroup = new QActionGroup(menu);
+    orientationGroup->setExclusive(true);
     QAction* horizontal = menu.addAction(tr("Horizontal"));
     horizontal->setCheckable(true);
     horizontal->setChecked(!type_api::layerSetting(*view_, path).vertical);
+    orientationGroup->addAction(horizontal);
     connect(horizontal, &QAction::triggered, this, [orientation] { orientation(false); });
     QAction* vertical = menu.addAction(tr("Vertical"));
     vertical->setCheckable(true);
     vertical->setChecked(type_api::layerSetting(*view_, path).vertical);
+    orientationGroup->addAction(vertical);
     connect(vertical, &QAction::triggered, this, [orientation] { orientation(true); });
 
     menu.addSeparator();
+    auto* antiAliasGroup = new QActionGroup(menu);
+    antiAliasGroup->setExclusive(true);
     const QStringList antiAliasNames{tr("None"), tr("Sharp"), tr("Crisp"), tr("Strong"),
                                      tr("Smooth")};
     const int antiAlias = type_api::layerCharacterSetting(*view_, path).anti_alias;
@@ -86,6 +93,7 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
         QAction* action = menu.addAction(antiAliasNames.at(i));
         action->setCheckable(true);
         action->setChecked(antiAlias == i);
+        antiAliasGroup->addAction(action);
         connect(action, &QAction::triggered, this, [this, path, i] {
             CharacterSetting character = type_api::layerCharacterSetting(*view_, path);
             if (character.anti_alias == i) {
