@@ -1080,6 +1080,13 @@ void CharacterParagraphPanelsTest::characterMenuCheckStates()
         ++feature;
     }
     if (feature < 8) {
+        // Standard Ligatures can be on in the layer's defaults; start from a
+        // known unchecked state so the assertion proves the menu reflects the
+        // click rather than the inherited default.
+        if (panel->openTypeButtonForTest(feature)->isChecked()) {
+            panel->openTypeButtonForTest(feature)->click();
+            panel->refresh();
+        }
         panel->openTypeButtonForTest(feature)->click();
     }
     panel->refresh();
