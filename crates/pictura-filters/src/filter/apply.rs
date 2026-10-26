@@ -29,6 +29,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
         Filter::AdaptiveWideAngle { params } => {
             distort::adaptive_wide_angle::adaptive_wide_angle(buf, params)
         }
+        Filter::LensCorrection { params } => distort::lens_correction::lens_correction(buf, params),
         Filter::VanishingPoint { edit } => distort::vanishing_point::vanishing_point(buf, edit),
         Filter::SmartBlur {
             radius,

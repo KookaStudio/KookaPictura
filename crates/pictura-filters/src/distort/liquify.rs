@@ -694,7 +694,7 @@ fn bilinear(d: &[[f32; 2]], w: usize, h: usize, gx: f64, gy: f64) -> [f64; 2] {
     [l(0), l(1)]
 }
 
-fn catmull_rom(t: f64) -> [f64; 4] {
+pub(super) fn catmull_rom(t: f64) -> [f64; 4] {
     let t2 = t * t;
     let t3 = t2 * t;
     [

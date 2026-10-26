@@ -12,6 +12,7 @@
 #include "filter_commit.h"
 #include "filter_gallery_dialog.h"
 #include "filter_preview_dialog.h"
+#include "lens_correction_dialog.h"
 #include "lens_flare_dialog.h"
 #include "lighting_effects_dialog.h"
 #include "liquify_dialog.h"
@@ -65,9 +66,10 @@ bool chooseDisplacementMap(QList<double>* values, QWidget* parent)
 }
 
 // Lens Flare's parameters are one struct, Lighting Effects' a list of lights,
-// Liquify's a mesh, Adaptive Wide Angle's a constraint set and Vanishing
-// Point's a set of planes, each edited on its own dialog; every other filter
-// edits independent slots on the shared one.
+// Liquify's a mesh, Adaptive Wide Angle's a constraint set, Vanishing
+// Point's a set of planes and Lens Correction's a workspace with its own
+// tools, each edited on its own dialog; every other filter edits independent
+// slots on the shared one.
 // `*kind` is the kind to commit: the spec's, except that the Blur Gallery
 // commits whichever of its effects the user switched on.
 bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
@@ -101,6 +103,8 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
         const QString name = frame ? frame->activeDocumentName() : QString();
         return VanishingPointDialog::get(view, name, initial, out, parent);
     }
+    case FilterDialogKind::LensCorrection:
+        return LensCorrectionDialog::get(view, initial, out, parent);
     case FilterDialogKind::Shared:
         break;
     }
@@ -256,18 +260,19 @@ void PicturaMainWindow::wireFilterMenu()
         });
         // CS6 marks every dialog-opening entry with an ellipsis; a parameterless
         // entry applies straight away and stays bare.
+        // The workspace filters' labels already carry it.
         registry_->setLabelProvider(id, [captured]() {
-            return captured.params.isEmpty() ? captured.label
-                                             : captured.label + QStringLiteral("…");
+            const QString ellipsis = QStringLiteral("…");
+            return captured.params.isEmpty() || captured.label.endsWith(ellipsis)
+                       ? captured.label
+                       : captured.label + ellipsis;
         });
         // Adaptive Wide Angle and Vanishing Point take 8-bit RGB and
-        // Grayscale only, as CS6's 16- and 32-bpc filter lists leave them out.
-        const bool eightBitOnly = spec.dialog == FilterDialogKind::AdaptiveWideAngle ||
-                                  spec.dialog == FilterDialogKind::VanishingPoint;
-        registry_->setEnabledProvider(id, [this, eightBitOnly]() {
+        // Grayscale only, as CS6's 16- and 32-bpc filter lists leave them out;
+        // Lens Correction takes 8- and 16-bit RGB and Grayscale.
+        registry_->setEnabledProvider(id, [this, kind = captured.kind]() {
             PictureView* view = activeView();
-            return view && filter_target_ready(*view) &&
-                   (!eightBitOnly || filter_eight_bit_document(*view));
+            return view && filter_target_ready(*view) && filter_document_takes(*view, kind);
         });
     }
 

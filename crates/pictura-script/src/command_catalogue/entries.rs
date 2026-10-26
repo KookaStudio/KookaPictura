@@ -366,7 +366,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "filter.filter.gallery", path: &["Filter", "Filter Gallery…"], label: "Filter Gallery…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.adaptive.wide.angle", path: &["Filter", "Adaptive Wide Angle…"], label: "Adaptive Wide Angle…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.picturaRaw", path: &["Filter", "Pictura Raw…"], label: "Pictura Raw…", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "filter.lens.correction", path: &["Filter", "Lens Correction…"], label: "Lens Correction…", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "filter.lens.correction", path: &["Filter", "Lens Correction…"], label: "Lens Correction…", shortcut: "Shift+Ctrl+R", implemented: true, checkable: false },
     CommandSpec { id: "filter.liquify", path: &["Filter", "Liquify…"], label: "Liquify…", shortcut: "Shift+Ctrl+X", implemented: true, checkable: false },
     CommandSpec { id: "filter.oil.paint", path: &["Filter", "Oil Paint…"], label: "Oil Paint…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.vanishing.point", path: &["Filter", "Vanishing Point…"], label: "Vanishing Point…", shortcut: "Alt+Ctrl+V", implemented: true, checkable: false },

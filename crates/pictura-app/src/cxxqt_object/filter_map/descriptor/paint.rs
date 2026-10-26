@@ -48,6 +48,44 @@ pub(super) const ROWS: &[FilterDescriptor] = &[
         live_preview: true,
     },
 
+    // Auto Correction: Geometric Distortion, Chromatic Aberration and
+    // Vignette checkboxes, Auto Scale Image, Edge (Edge Extension,
+    // Transparency, Black Color, White Color), and the profile id (0 none).
+    // Custom: Remove Distortion, the Red/Cyan, Green/Magenta and Blue/Yellow
+    // fringes, Vignette Amount and Midpoint, Vertical and Horizontal
+    // Perspective, Angle, and Scale (%).
+    FilterDescriptor {
+        kind: "lens-correction",
+        path: &["Filter", "Lens Correction…"],
+        menu: true,
+        label: "Lens Correction…",
+        params: &[
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 1.0, value: 1.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 1.0, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 1.0, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 1.0, value: 1.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 3.0, value: 1.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 1e6, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -100.0, maximum: 100.0, value: 0.0, decimals: 2, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -100.0, maximum: 100.0, value: 0.0, decimals: 2, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -100.0, maximum: 100.0, value: 0.0, decimals: 2, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -100.0, maximum: 100.0, value: 0.0, decimals: 2, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -100.0, maximum: 100.0, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 100.0, value: 50.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -100.0, maximum: 100.0, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -100.0, maximum: 100.0, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 360.0, value: 0.0, decimals: 2, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 50.0, maximum: 150.0, value: 100.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+        ],
+        whole_layer: true,
+        dialog: DialogKind::LensCorrection,
+        map_after_ok: false,
+        preview_pane: true,
+        stacked: false,
+        preview_below: false,
+        live_preview: true,
+    },
+
     // The kept session edit's id.
     FilterDescriptor {
         kind: "vanishing-point",

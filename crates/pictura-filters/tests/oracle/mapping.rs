@@ -491,6 +491,11 @@ const MAPPING: &[Mapping] = &[
          tests",
     ),
     none(
+        "LensCorrection",
+        "ImageMagick's barrel distort has no per-channel fringe, vignette, or tilt; guarded by \
+         the lens_correction tests",
+    ),
+    none(
         "Glass",
         "no ImageMagick texture-refraction operator with Pictura's surface smoothing and \
          scaling; guarded by the glass tests",

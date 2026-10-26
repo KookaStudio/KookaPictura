@@ -361,7 +361,7 @@ filter.convertForSmartFilters	Filter/Convert for Smart Filters	Convert for Smart
 filter.filter.gallery	Filter/Filter Gallery…	Filter Gallery…		1	0
 filter.adaptive.wide.angle	Filter/Adaptive Wide Angle…	Adaptive Wide Angle…		1	0
 filter.picturaRaw	Filter/Pictura Raw…	Pictura Raw…		1	0
-filter.lens.correction	Filter/Lens Correction…	Lens Correction…		0	0
+filter.lens.correction	Filter/Lens Correction…	Lens Correction…	Shift+Ctrl+R	1	0
 filter.liquify	Filter/Liquify…	Liquify…	Shift+Ctrl+X	1	0
 filter.oil.paint	Filter/Oil Paint…	Oil Paint…		1	0
 filter.vanishing.point	Filter/Vanishing Point…	Vanishing Point…	Alt+Ctrl+V	1	0

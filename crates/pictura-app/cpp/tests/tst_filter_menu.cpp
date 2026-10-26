@@ -967,6 +967,9 @@ pictura::FilterDialogKind dialogForKind(const QString& kind)
     if (kind == QStringLiteral("vanishing-point")) {
         return pictura::FilterDialogKind::VanishingPoint;
     }
+    if (kind == QStringLiteral("lens-correction")) {
+        return pictura::FilterDialogKind::LensCorrection;
+    }
     return pictura::FilterDialogKind::Shared;
 }
 

@@ -1004,6 +1004,7 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
         | Filter::NtscColors
         | Filter::Liquify { .. }
         | Filter::AdaptiveWideAngle { .. }
+        | Filter::LensCorrection { .. }
         | Filter::VanishingPoint { .. }
         | Filter::OceanRipple { .. }
         | Filter::Glass { .. }

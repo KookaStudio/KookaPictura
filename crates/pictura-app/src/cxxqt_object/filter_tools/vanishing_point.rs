@@ -462,7 +462,7 @@ fn vp_finish(mut view: Pin<&mut PictureView>, keep: bool, render_grids: bool) ->
 
 #[cfg(test)]
 mod tests {
-    use super::super::eight_bit_refusal;
+    use super::super::depth_refusal;
     use super::*;
     use pictura_core::{BitDepth, ColorMode, Document};
 
@@ -493,12 +493,32 @@ mod tests {
         let rgb16 = Document::new(4, 4, ColorMode::Rgb, BitDepth::Sixteen);
         let cmyk8 = Document::new(4, 4, ColorMode::Cmyk, BitDepth::Eight);
         for kind in ["adaptive-wide-angle", "vanishing-point"] {
-            assert!(eight_bit_refusal(kind, Some(&rgb8)).is_none());
-            assert!(eight_bit_refusal(kind, Some(&gray8)).is_none());
-            assert!(eight_bit_refusal(kind, Some(&rgb16)).is_some());
-            assert!(eight_bit_refusal(kind, Some(&cmyk8)).is_some());
-            assert!(eight_bit_refusal(kind, None).is_some());
+            assert!(depth_refusal(kind, Some(&rgb8)).is_none());
+            assert!(depth_refusal(kind, Some(&gray8)).is_none());
+            assert!(depth_refusal(kind, Some(&rgb16)).is_some());
+            assert!(depth_refusal(kind, Some(&cmyk8)).is_some());
+            assert!(depth_refusal(kind, None).is_some());
         }
-        assert!(eight_bit_refusal("liquify", Some(&rgb16)).is_none());
+        assert!(depth_refusal("liquify", Some(&rgb16)).is_none());
+        // Lens Correction also takes 16-bit, but not 32-bit, CMYK, or Lab.
+        let gray16 = Document::new(4, 4, ColorMode::Grayscale, BitDepth::Sixteen);
+        let rgb32 = Document::new(4, 4, ColorMode::Rgb, BitDepth::ThirtyTwo);
+        let lab8 = Document::new(4, 4, ColorMode::Lab, BitDepth::Eight);
+        let mut read16 = rgb8.clone();
+        read16.source_depth = Some(BitDepth::Sixteen);
+        let mut read32 = rgb8.clone();
+        read32.source_depth = Some(BitDepth::ThirtyTwo);
+        // A CMYK conversion keeps RGB working planes.
+        let mut converted = rgb8.clone();
+        converted.source_mode = Some(ColorMode::Cmyk);
+        assert!(depth_refusal("adaptive-wide-angle", Some(&converted)).is_some());
+        for ok in [&rgb8, &gray8, &rgb16, &gray16, &read16] {
+            assert!(depth_refusal("lens-correction", Some(ok)).is_none());
+        }
+        for refused in [&rgb32, &cmyk8, &lab8, &read32, &converted] {
+            let reason = depth_refusal("lens-correction", Some(refused)).unwrap();
+            assert!(reason.contains("8- or 16-bit"), "{reason}");
+        }
+        assert!(depth_refusal("lens-correction", None).is_some());
     }
 }

@@ -220,7 +220,7 @@ fn lens_from_exif(exif: &Exif) -> Option<[f64; 2]> {
     Some([round(focal.clamp(low, high)), crop])
 }
 
-fn exif_text(exif: &Exif, tags: &[u16]) -> String {
+pub(super) fn exif_text(exif: &Exif, tags: &[u16]) -> String {
     tags.iter()
         .filter_map(|&t| exif.get(t).map(|v| v.display().trim().to_string()))
         .filter(|s| !s.is_empty())
