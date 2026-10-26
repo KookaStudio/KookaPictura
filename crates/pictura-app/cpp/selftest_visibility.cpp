@@ -22,7 +22,7 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
     constexpr unsigned kWhite = 0xFFFFFFFFu;
 
     // vis_toggle_region (363): the eye toggle on a large canvas takes the
-    // region fast path (regionBlitted fires, no full changed recomposite) and
+    // region fast path (regionDamaged fires, no full changed recomposite) and
     // records exactly one history state. The measured toggle time is recorded;
     // the sub-second target is enforced only on the reference run so a slow
     // shared machine does not fail the check.
@@ -47,8 +47,8 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         int blits = 0;
         int changed = 0;
         auto blitConn = QObject::connect(
-            view, &PictureView::regionBlitted,
-            [&blits](const QImage&, int, int) { ++blits; });
+            view, &PictureView::regionDamaged,
+            [&blits](int, int, int, int) { ++blits; });
         auto changedConn =
             QObject::connect(view, &PictureView::changed, [&changed]() { ++changed; });
         const int historyBefore = view->history_count();

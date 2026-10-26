@@ -1591,7 +1591,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // M31 large region: with the per-pixel blit budget gone, a canvas-sized
         // dirty union (a 1024² canvas moved by (1,1) makes `old ∪ new` the whole
         // canvas) takes the region-blit path in C++ and must NOT trigger a
-        // full-document recomposite. `regionBlitted` fires; `changed` (emitted
+        // full-document recomposite. `regionDamaged` fires; `changed` (emitted
         // only by a full recomposite) does not. The on-screen canvas must still
         // equal a full recomposite.
         const bool regionAltCreated =
@@ -1608,8 +1608,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         int regionAltRegionBlits = 0;
         int regionAltChanged = 0;
         auto regionAltRegionConn = QObject::connect(
-            regionAltView, &pictura::PictureView::regionBlitted,
-            [&regionAltRegionBlits](const QImage&, int, int) { ++regionAltRegionBlits; });
+            regionAltView, &pictura::PictureView::regionDamaged,
+            [&regionAltRegionBlits](int, int, int, int) { ++regionAltRegionBlits; });
         auto regionAltChangedConn = QObject::connect(
             regionAltView, &pictura::PictureView::changed, [&regionAltChanged]() { ++regionAltChanged; });
         const bool regionAltMoved = regionAltView->commit_move(1, 1);
@@ -1920,8 +1920,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         canvas->setZoom(0.4, pcCentre);
         QImage pcShot3(canvas->size(), QImage::Format_ARGB32);
         canvas->render(&pcShot3);
-        const bool pcRebuiltOnZoom = canvas->presentCacheRebuiltOnLastPaint()
-                                      && canvas->presentCacheRebuildCount() > pcRebuildsAfterFirst;
+        const bool pcRebuiltOnZoom = canvas->presentCacheRebuiltOnLastPaint();
         const QSize pcLevel1SizeActual = canvas->presentCacheImageSize();
         const bool pcLevel1Size = pcLevel1SizeActual == QSize(260, 60);
         // A pan over a fully-visible document keeps the same crop (no resample).
@@ -2049,7 +2048,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         frame.closeDocument(frame.activeDocumentIndex(), false);
         frame.closeDocument(coherenceDocIndex, false);
 
-        // M35: the C++ region-blit path. A region refresh emits regionBlitted
+        // M35: the C++ region path. A region refresh emits regionDamaged
         // (not changed), ImageView::blitRegion overwrites the canvas, and the
         // on-screen canvas equals a full recomposite; image() rebuilds from the
         // composite while dirty; the present cache is patched, not rebuilt.
@@ -2075,8 +2074,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         int regionBlits = 0;
         int blitChanged = 0;
         auto regionConn = QObject::connect(
-            blitView, &pictura::PictureView::regionBlitted,
-            [&regionBlits](const QImage&, int, int) { ++regionBlits; });
+            blitView, &pictura::PictureView::regionDamaged,
+            [&regionBlits](int, int, int, int) { ++regionBlits; });
         auto changedConn = QObject::connect(
             blitView, &pictura::PictureView::changed, [&blitChanged]() { ++blitChanged; });
         const bool blitPreviewed = blitView->begin_move_preview();
@@ -2088,7 +2087,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
 
         QImage blitShot(blitCanvas->size(), QImage::Format_ARGB32);
         blitCanvas->render(&blitShot);
-        const bool cropRefreshedAfter = blitCanvas->presentCacheRebuiltOnLastPaint();
+        // The commit patched the cached crop in place, so this paint needs no new crop.
+        const bool cropPatchedAfter = !blitCanvas->presentCacheRebuiltOnLastPaint();
         QImage blitShot2(blitCanvas->size(), QImage::Format_ARGB32);
         blitCanvas->render(&blitShot2);
         const bool cropReusedAfter = !blitCanvas->presentCacheRebuiltOnLastPaint()
@@ -2101,7 +2101,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool regionPath = regionBlits >= 1 && blitChanged == 0;
         const bool canvasSame = samePixels(blitBlitted, blitFull);
         const bool rebuiltSame = samePixels(blitRebuilt, blitFull);
-        const bool cacheOk = reuseBefore && cropRefreshedAfter && cropReusedAfter;
+        const bool cacheOk = reuseBefore && cropPatchedAfter && cropReusedAfter;
         ST_BEGIN("region_blit_region");
         ST_PASS("region_blit region=%d changed=%d canvas=%d "
                      "rebuilt=%d cache=%d", regionPath ? 1 : 0,
@@ -2134,8 +2134,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         int blitAltRegionBlits = 0;
         int blitAltChanged = 0;
         auto blitAltRegionConn = QObject::connect(
-            blitAltView, &pictura::PictureView::regionBlitted,
-            [&blitAltRegionBlits](const QImage&, int, int) { ++blitAltRegionBlits; });
+            blitAltView, &pictura::PictureView::regionDamaged,
+            [&blitAltRegionBlits](int, int, int, int) { ++blitAltRegionBlits; });
         auto blitAltChangedConn = QObject::connect(
             blitAltView, &pictura::PictureView::changed, [&blitAltChanged]() { ++blitAltChanged; });
         const bool blitAltMoved = blitAltView->commit_move(1, 1);

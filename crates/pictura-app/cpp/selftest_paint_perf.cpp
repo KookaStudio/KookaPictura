@@ -98,10 +98,10 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         int firstX = -1;
         int lastX = -1;
         auto conn = QObject::connect(
-            view, &PictureView::regionBlitted,
-            [&blits, &maxW, &firstX, &lastX](const QImage& region, int x, int) {
+            view, &PictureView::regionDamaged,
+            [&blits, &maxW, &firstX, &lastX](int x, int, int w, int) {
                 ++blits;
-                maxW = std::max(maxW, region.width());
+                maxW = std::max(maxW, w);
                 if (firstX < 0) {
                     firstX = x;
                 }
@@ -254,12 +254,12 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         int blits = 0;
         int flushX = -1;
         int flushW = 0;        auto conn = QObject::connect(
-            view, &PictureView::regionBlitted,
-            [&blits, &flushX, &flushW](const QImage& region, int x, int) {
+            view, &PictureView::regionDamaged,
+            [&blits, &flushX, &flushW](int x, int, int w, int) {
                 ++blits;
                 if (blits > 1) {
                     flushX = x;
-                    flushW = region.width();
+                    flushW = w;
                 }
             });
 
@@ -300,7 +300,7 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
 
     // pp_large_preview (545): a brush above the raster budget presents the
     // in-progress stroke from a reduced view-pyramid level while the button is
-    // down, emits regionBlitted so the canvas repaints, and the commit restores
+    // down, emits regionDamaged so the canvas repaints, and the commit restores
     // the zoom-selected level with the canvas byte-identical to a full
     // recomposite. The exact full-resolution stroke still lands at release.
     {
@@ -325,8 +325,8 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         QApplication::processEvents();
 
         int blits = 0;
-        auto conn = QObject::connect(view, &PictureView::regionBlitted,
-                                     [&blits](const QImage&, int, int) { ++blits; });
+        auto conn = QObject::connect(view, &PictureView::regionDamaged,
+                                     [&blits](int, int, int, int) { ++blits; });
 
         // 512 px on 2048² exceeds the 262 144 px budget (514² = 264 196), so the
         // level-3 preview engages; level 3 exists (2048 → 1024 → 512 → 256).
