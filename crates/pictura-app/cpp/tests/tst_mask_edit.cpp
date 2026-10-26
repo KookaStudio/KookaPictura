@@ -786,7 +786,7 @@ void MaskEditTest::maskContextMenu()
     frame.closeDocument(doc, false);
 }
 
-// A live mask stroke must count as painting, so the shell's `regionBlitted`
+// A live mask stroke must count as painting, so the shell's `regionDamaged`
 // slot schedules `flush_present` and the drag renders frame by frame instead of
 // only on release. Guards `PictureView::is_painting` including `mask_stroke`.
 void MaskEditTest::maskStrokePresentsWhileDragging()
@@ -804,8 +804,8 @@ void MaskEditTest::maskStrokePresentsWhileDragging()
     QVERIFY2(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")), "add mask");
     QVERIFY(pictura::mask_edit_target_set(*view, layer));
 
-    QSignalSpy blit(view, &pictura::PictureView::regionBlitted);
-    QVERIFY2(blit.isValid(), "regionBlitted spy");
+    QSignalSpy blit(view, &pictura::PictureView::regionDamaged);
+    QVERIFY2(blit.isValid(), "regionDamaged spy");
     const int history = view->history_count();
     // A small brush stays on the exact CPU mask path.
     QVERIFY2(view->begin_paint(0xff000000u, 0xffffffffu, 24, 100, 100, 0, 100, 100, 25,

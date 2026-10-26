@@ -18,12 +18,12 @@ impl qobject::PictureView {
         for region in change.regions {
             match region.srgb {
                 Some(srgb) => {
-                    let image = super::super::helpers_composite::premultiplied_display_image(&srgb);
-                    let (x, y) = (region.rect.left, region.rect.top);
+                    let rect = region.rect;
                     self.as_mut()
                         .rust_mut()
-                        .apply_refreshed_region(x, y, region.rect, srgb);
-                    self.as_mut().region_blitted(image, x, y);
+                        .apply_refreshed_region(rect.left, rect.top, rect, srgb);
+                    self.as_mut()
+                        .region_damaged(rect.left, rect.top, rect.width(), rect.height());
                 }
                 None => self.as_mut().refresh_region(region.rect),
             }

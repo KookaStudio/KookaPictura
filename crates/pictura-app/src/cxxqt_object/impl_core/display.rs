@@ -8,9 +8,9 @@ use super::super::helpers_composite::{level_display_image, patch_buffer_region, 
 use crate::cxxqt_object::qobject;
 use crate::cxxqt_object::state::PictureViewRust;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QImage;
+use cxx_qt_lib::{c_void, QImage, QImageFormat};
 use pictura_core::{LayerMask, PixelBuffer, PsdRect};
-use pictura_render::ViewPyramid;
+use pictura_render::{LevelView, ViewPyramid};
 
 impl qobject::PictureView {
     /// A premultiplied crop of the **canvas display source** at `level` over
@@ -29,6 +29,54 @@ impl qobject::PictureView {
         };
         self.rust().canvas_present_image(level, rect)
     }
+
+    /// A zero-copy display image of stored pyramid `level` (premultiplied
+    /// RGBA8888), or an empty image for level 0 or past the last level. The
+    /// handle behind the image is dropped with the image.
+    pub fn canvas_level_image(&self, level: i32) -> QImage {
+        if level <= 0 {
+            return QImage::default();
+        }
+        let rust = self.rust();
+        let handle = if rust.mask_solo_active() {
+            rust.mask_pyramid.level_view(level as usize)
+        } else {
+            rust.pyramid.level_view(level as usize)
+        };
+        handle.map_or_else(QImage::default, level_view_image)
+    }
+}
+
+/// Wrap a shared level handle as a `QImage`; the cleanup drops the handle.
+fn level_view_image(view: LevelView) -> QImage {
+    let width = view.width() as i32;
+    let height = view.height() as i32;
+    let expected = width as usize * height as usize * 4;
+    debug_assert_eq!(view.data().len(), expected, "a stored level is packed");
+    debug_assert_eq!(
+        view.data().as_ptr() as usize % 4,
+        0,
+        "an external QImage needs 4-byte alignment"
+    );
+    let data = view.data().as_ptr();
+    let info = Box::into_raw(Box::new(view)).cast::<c_void>();
+    // SAFETY: the handle is alive until `release_level_view` drops it, and the
+    // level's storage is packed premultiplied RGBA8888.
+    unsafe {
+        QImage::from_raw_parts(
+            data,
+            width,
+            height,
+            QImageFormat::Format_RGBA8888_Premultiplied,
+            release_level_view,
+            info,
+        )
+    }
+}
+
+extern "C" fn release_level_view(info: *mut c_void) {
+    // SAFETY: `info` is the `Box<LevelView>` made in `level_view_image`.
+    unsafe { drop(Box::from_raw(info.cast::<LevelView>())) }
 }
 
 impl PictureViewRust {

@@ -92,7 +92,7 @@ pub struct PictureViewRust {
     pub(super) canvas_revision: u64,
     /// Bumped when the level-0 frame is rebuilt whole **or the canvas display
     /// source changes** (mask solo enter/exit); a region change always reaches
-    /// the shell as a `region_blitted`. A shell whose copy of the frame carries
+    /// the shell as a `region_damaged`. A shell whose copy of the frame carries
     /// this revision needs no full image on `changed`.
     pub(super) frame_revision: u64,
     /// The halved-level view of the composite, fed by `recomposite` and

@@ -179,7 +179,7 @@ void EditRefreshTest::newLayerDoesNotRecomposite()
     pictura::PictureView view;
     QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
     const quint64 frame = pictura::frame_revision(view);
-    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy blits(&view, &pictura::PictureView::regionDamaged);
     QSignalSpy changes(&view, &pictura::PictureView::changed);
     QVERIFY(!view.add_layer_in(QStringLiteral("0")).isEmpty());
     QCOMPARE(view.layer_count(), 2);

@@ -377,11 +377,11 @@ fn paint_commit_region_patch_equals_a_full_recomposite() {
     );
 }
 
-/// A single-rectangle commit builds its blit image from the region buffer, so
-/// that image must equal the level-0 crop the multi-rect path (and the old code)
-/// produced — otherwise the canvas would show different pixels after a commit.
+/// Patching a damage rectangle into a cached level-0 crop only works if the
+/// damage-rect crop is the same pixels as that rectangle of the cached crop.
+/// The Qt test proves the in-place patch; this proves its positional premise.
 #[test]
-fn a_single_region_commit_blit_equals_the_level0_crop() {
+fn a_level_zero_damage_crop_matches_the_cached_crop_rect() {
     let rgba = vec![30u8; 200 * 160 * 4];
     let mut doc = Document::from_rgba("paint", 200, 160, &rgba);
     doc.composite = varied_rgba(200, 160, 9);
@@ -390,33 +390,77 @@ fn a_single_region_commit_blit_equals_the_level0_crop() {
         ..Default::default()
     };
     rust.reset_pyramid();
-    let rect = PsdRect {
-        top: 20,
-        left: 30,
-        bottom: 120,
-        right: 150,
+    let cached = PsdRect {
+        top: 18,
+        left: 28,
+        bottom: 122,
+        right: 152,
+    };
+    let damage = PsdRect {
+        top: 30,
+        left: 40,
+        bottom: 70,
+        right: 110,
     };
 
-    let (image, x, y) = rust
-        .refresh_regions(&[rect])
-        .expect("the region composites pixels");
-    assert_eq!((x, y), (rect.left, rect.top));
-
-    let crop = rust.display_crop(0, rect);
-    assert_eq!(
-        (image.width(), image.height()),
-        (crop.width(), crop.height())
-    );
-    for yy in 0..image.height() {
-        for xx in 0..image.width() {
-            let (a, b) = (image.pixel_color(xx, yy), crop.pixel_color(xx, yy));
-            assert_eq!(
-                (a.red(), a.green(), a.blue(), a.alpha()),
-                (b.red(), b.green(), b.blue(), b.alpha()),
-                "the region blit differs from the level-0 crop at {xx},{yy}"
-            );
+    let cache_crop = rust.display_crop(0, cached);
+    let damage_crop = rust.display_crop(0, damage);
+    let fresh = rust.display_crop(0, cached);
+    assert!(!cache_crop.is_null() && !damage_crop.is_null());
+    let ox = damage.left - cached.left;
+    let oy = damage.top - cached.top;
+    for y in 0..damage_crop.height() {
+        for x in 0..damage_crop.width() {
+            let a = damage_crop.pixel_color(x, y);
+            let b = cache_crop.pixel_color(ox + x, oy + y);
+            let c = fresh.pixel_color(ox + x, oy + y);
+            let px = |c: &cxx_qt_lib::QColor| (c.red(), c.green(), c.blue(), c.alpha());
+            assert_eq!(px(&a), px(&b), "the cached crop differs at {x},{y}");
+            assert_eq!(px(&a), px(&c), "a fresh crop differs at {x},{y}");
         }
     }
+}
+
+#[test]
+fn sample_argb_after_a_region_refresh_reads_the_composite() {
+    let mut layer = vec![0u8; 64 * 32 * 4];
+    for px in layer.as_chunks_mut::<4>().0 {
+        px.copy_from_slice(&[255, 0, 0, 255]);
+    }
+    let mut doc = Document::from_rgba("paint", 64, 32, &layer);
+    doc.composite = varied_rgba(64, 32, 3);
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        ..Default::default()
+    };
+    rust.reset_pyramid();
+    let outside_before = sample_planar_argb(&rust.session.doc.as_ref().unwrap().composite, 1, 1);
+    let rect = PsdRect {
+        top: 8,
+        left: 10,
+        bottom: 24,
+        right: 40,
+    };
+
+    let (x0, y0, clipped, srgb) = rust
+        .refresh_region_buffer(rect)
+        .expect("the region composites pixels");
+    rust.apply_refreshed_region(x0, y0, clipped, srgb);
+
+    let doc = rust.session.doc.as_ref().expect("the document survives");
+    let fresh = pictura_render::composite_rgba(doc);
+    for &(x, y) in &[(20, 12), (39, 23)] {
+        assert_eq!(
+            sample_planar_argb(&doc.composite, x, y),
+            sample_planar_argb(&fresh, x, y),
+            "sample at {x},{y} must come from the refreshed composite"
+        );
+    }
+    assert_eq!(
+        sample_planar_argb(&doc.composite, 1, 1),
+        outside_before,
+        "a pixel outside the region keeps its value"
+    );
 }
 
 #[test]

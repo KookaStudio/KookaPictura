@@ -442,6 +442,7 @@ void ImageView::paintCompass(QPainter& painter)
 void ImageView::setPresentCacheEnabledForTest(bool enabled)
 {
     presentCacheEnabledForTest_ = enabled;
+    presentCache_.valid = false;
 }
 
 void ImageView::setPresentLevelCropForTest(bool enabled)
@@ -453,7 +454,9 @@ void ImageView::setPresentLevelCropForTest(bool enabled)
 void ImageView::setLevelProvider(LevelProvider provider)
 {
     levelProvider_ = std::move(provider);
-    presentCache_.valid = false;
+    dropPresentCache();
+    presentedLevel_ = -1;
+    presentedDocRect_ = QRect();
 }
 
 int ImageView::presentLevelForZoom(double zoom, int levelCount)
@@ -481,44 +484,40 @@ QRectF ImageView::visibleDocumentRect() const
     return visible.intersected(QRectF(0.0, 0.0, docSize_.width(), docSize_.height()));
 }
 
-const QImage* ImageView::presentCrop(QRect& docRect)
+int ImageView::presentLevel() const
 {
-    docRect = QRect();
-    // A live stroke patches the same level-0/pyramid the idle present crops (the
-    // app's regional refresh folds every dab into the damage account), so a
-    // stroke in progress presents through the level crop too, not the
-    // full-resolution image.
     // No provider or no crop source: nothing to present, and no cache to touch.
     if (!presentLevelCropForTest_ || !levelProvider_.crop || docSize_.isEmpty()) {
-        return nullptr;
+        return -1;
     }
     const int levels = levelProvider_.levelCount ? levelProvider_.levelCount() : 0;
     if (levels <= 0) {
-        return nullptr;
+        return -1;
     }
-    // While a large brush previews, the crop must come from the level the
-    // preview patched, whatever the zoom would otherwise select: only that level
-    // carries the in-progress pixels, and the commit's level-0 rebuild hands the
-    // zoom-selected level back.
+    // While a large brush previews, the present must come from the level the
+    // preview patched, whatever the zoom would otherwise select: only that
+    // level carries the in-progress pixels, and the commit's level-0 rebuild
+    // hands the zoom-selected level back.
     int level = presentLevelForZoom(zoom_, levels);
     if (levelProvider_.previewLevel) {
         const int previewLevel = levelProvider_.previewLevel();
         if (previewLevel > 0 && previewLevel < levels) {
             level = previewLevel;
-        } else if (previewLevel < 0) {
-            // A GPU stroke presents level-0 regions, so crop level 0 while it
-            // is live.
-            level = 0;
         }
     }
+    return level;
+}
+
+bool ImageView::presentLevelRect(int level, QRect& docRect, QRect& sourceRect) const
+{
     const QSize levelSize =
         levelProvider_.levelSize ? levelProvider_.levelSize(level) : QSize();
     if (levelSize.isEmpty()) {
-        return nullptr;
+        return false;
     }
     const QRectF visible = visibleDocumentRect();
     if (visible.isEmpty()) {
-        return nullptr;
+        return false;
     }
     const int scale = 1 << level;
     const double inv = 1.0 / double(scale);
@@ -528,20 +527,36 @@ const QImage* ImageView::presentCrop(QRect& docRect)
     const int lx1 = std::min(levelSize.width(), int(std::ceil(visible.right() * inv)) + 1);
     const int ly1 = std::min(levelSize.height(), int(std::ceil(visible.bottom() * inv)) + 1);
     if (lx1 <= lx0 || ly1 <= ly0) {
+        return false;
+    }
+    sourceRect = QRect(lx0, ly0, lx1 - lx0, ly1 - ly0);
+    docRect = QRect(lx0 * scale, ly0 * scale, (lx1 - lx0) * scale, (ly1 - ly0) * scale);
+    return true;
+}
+
+void ImageView::dropPresentCache()
+{
+    presentCache_.valid = false;
+    presentCache_.level = -1;
+    presentCache_.crop = QImage();
+}
+
+const QImage* ImageView::presentCrop(int level, const QRect& docRect, const QRect& sourceRect)
+{
+    if (!levelProvider_.crop) {
         return nullptr;
     }
-    const QRect rect(lx0 * scale, ly0 * scale, (lx1 - lx0) * scale, (ly1 - ly0) * scale);
     const qint64 key = frameKey_;
     const quint64 revision =
         levelProvider_.canvasRevision ? levelProvider_.canvasRevision() : quint64(0);
     if (presentCacheEnabledForTest_ && presentCache_.valid && presentCache_.key == key
         && presentCache_.revision == revision && presentCache_.level == level
-        && presentCache_.docRect == rect && !presentCache_.crop.isNull()) {
-        docRect = presentCache_.docRect;
+        && presentCache_.docRect == docRect && !presentCache_.crop.isNull()) {
         return &presentCache_.crop;
     }
-    QImage crop = levelProvider_.crop(level, lx0, ly0, lx1 - lx0, ly1 - ly0);
     ++presentCache_.rebuilds;
+    QImage crop = levelProvider_.crop(level, sourceRect.x(), sourceRect.y(), sourceRect.width(),
+                                      sourceRect.height());
     if (crop.isNull() || crop.width() <= 0 || crop.height() <= 0) {
         presentCache_.valid = false;
         return nullptr;
@@ -550,9 +565,8 @@ const QImage* ImageView::presentCrop(QRect& docRect)
     presentCache_.key = key;
     presentCache_.revision = revision;
     presentCache_.level = level;
-    presentCache_.docRect = rect;
-    presentCache_.valid = true;
-    docRect = rect;
+    presentCache_.docRect = docRect;
+    presentCache_.valid = presentCacheEnabledForTest_;
     return &presentCache_.crop;
 }
 
@@ -644,8 +658,25 @@ void ImageView::paintEvent(QPaintEvent*)
         presentCacheRebuiltLastPaint_ = false;
     } else {
         const int before = presentCache_.rebuilds;
+        const int level = presentLevel();
         QRect cropDoc;
-        const QImage* crop = presentCrop(cropDoc);
+        QRect sourceRect;
+        const bool haveRect = level >= 0 && presentLevelRect(level, cropDoc, sourceRect);
+        // A stored level is drawn from a zero-copy view for this paint only: a
+        // view retained across paints would force a level copy on the next
+        // update. Without a view (single-channel, or an old provider) the crop
+        // cache serves any level.
+        QImage levelView;
+        if (haveRect && level > 0 && singleChannel() < 0 && presentCacheEnabledForTest_
+            && levelProvider_.levelImage) {
+            levelView = levelProvider_.levelImage(level);
+        }
+        const QImage* crop = nullptr;
+        if (levelView.isNull() && haveRect) {
+            crop = presentCrop(level, cropDoc, sourceRect);
+        } else if (!levelView.isNull()) {
+            dropPresentCache();
+        }
         painter.save();
         painter.setTransform(rotation);
         painter.setRenderHint(QPainter::SmoothPixmapTransform,
@@ -681,6 +712,11 @@ void ImageView::paintEvent(QPaintEvent*)
                                      offset_.y() + visible.y() * zoom_, visible.width() * zoom_,
                                      visible.height() * zoom_),
                               channelImage(image_, image_.cacheKey()), visible);
+        } else if (!levelView.isNull()) {
+            const QRectF target(offset_.x() + cropDoc.x() * zoom_,
+                                offset_.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
+                                cropDoc.height() * zoom_);
+            painter.drawImage(target, levelView, QRectF(sourceRect));
         } else if (crop) {
             const QRectF target(offset_.x() + cropDoc.x() * zoom_,
                                 offset_.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
@@ -708,7 +744,21 @@ void ImageView::paintEvent(QPaintEvent*)
             }
         }
         painter.restore();
-        presentCacheRebuiltLastPaint_ = presentCache_.rebuilds != before;
+        const bool rebuilt = level != presentedLevel_ || cropDoc != presentedDocRect_
+                             || presentCache_.rebuilds != before;
+        presentCacheRebuiltLastPaint_ = rebuilt;
+        presentedLevel_ = level;
+        presentedDocRect_ = cropDoc;
+        if (!levelView.isNull()) {
+            presentedImageSize_ = sourceRect.size();
+            presentedImageKey_ = levelView.cacheKey();
+        } else if (crop) {
+            presentedImageSize_ = crop->size();
+            presentedImageKey_ = crop->cacheKey();
+        } else {
+            presentedImageSize_ = QSize();
+            presentedImageKey_ = -1;
+        }
     }
     paintFilterPreview(painter);
     paintMaskOverlay(painter);

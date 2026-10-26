@@ -596,10 +596,9 @@ fn filter_commit_running(view: &PictureView) -> bool {
 
 /// What the canvas needs after [`commit_finish`] landed a commit.
 pub(in crate::cxxqt_object) enum Landed {
-    /// Level 0 and the pyramid were patched over this document origin.
+    /// Level 0 and the pyramid were patched over this document rectangle.
     Region {
-        x0: i32,
-        y0: i32,
+        rect: PsdRect,
     },
     /// The pyramid was rebuilt.
     Everywhere,
@@ -640,7 +639,7 @@ pub(in crate::cxxqt_object) fn commit_finish(rust: &mut PictureViewRust) -> Resu
             srgb,
         } => {
             rust.apply_refreshed_region(x0, y0, clipped, srgb);
-            Landed::Region { x0, y0 }
+            Landed::Region { rect: clipped }
         }
         Refresh::Everywhere => {
             rust.reset_pyramid();
@@ -660,13 +659,11 @@ fn filter_commit_finish(mut view: Pin<&mut PictureView>) -> bool {
             view.as_mut().recomposite();
             return false;
         }
-        Ok(Landed::Region { x0, y0 }) => {
-            // A document canvas re-crops the pyramid on any blit and never
-            // reads the image, so a pixel stands for the region rather than a
-            // second full-size copy of it.
-            let marker = PixelBuffer::new(1, 1, 4);
+        Ok(Landed::Region { rect }) => {
+            // A document canvas patches its present crop from the damaged
+            // rectangle; no region or marker pixels cross the bridge.
             view.as_mut()
-                .region_blitted(premultiplied_display_image(&marker), x0, y0);
+                .region_damaged(rect.left, rect.top, rect.width(), rect.height());
         }
         Ok(Landed::Everywhere) => view.as_mut().changed(),
         Ok(Landed::Nothing) => {}

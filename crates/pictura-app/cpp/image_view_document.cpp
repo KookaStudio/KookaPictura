@@ -171,6 +171,52 @@ void ImageView::blitRegion(const QImage& region, int x, int y)
     update();
 }
 
+void ImageView::damageRegion(const QRect& damaged)
+{
+    const QRect docRect = damaged.intersected(QRect(QPoint(0, 0), docSize_));
+    if (docRect.isEmpty()) {
+        return;
+    }
+    if (presentLevel() != 0) {
+        // A stored level needs no pixels: its view reads live bytes.
+        dropPresentCache();
+    } else if (!(presentCacheEnabledForTest_ && presentCache_.valid
+                 && presentCache_.level == 0 && !presentCache_.crop.isNull()
+                 && levelProvider_.crop)) {
+        presentCache_.valid = false;
+    } else {
+        const QRect hit = docRect.intersected(presentCache_.docRect);
+        // A damage outside the cached rectangle needs no work: the crop stays
+        // exactly as it was.
+        if (!hit.isEmpty()) {
+            bool patched = false;
+            QImage part = levelProvider_.crop(0, hit.x(), hit.y(), hit.width(), hit.height());
+            if (part.size() == hit.size() && part.format() == presentCache_.crop.format()) {
+                const int bpp = std::max(1, presentCache_.crop.depth() / 8);
+                const QPoint origin = presentCache_.docRect.topLeft();
+                for (int row = 0; row < hit.height(); ++row) {
+                    std::memcpy(presentCache_.crop.scanLine(hit.y() - origin.y() + row)
+                                    + (hit.x() - origin.x()) * bpp,
+                                part.constScanLine(row), hit.width() * bpp);
+                }
+                presentCache_.revision = levelProvider_.canvasRevision
+                                             ? levelProvider_.canvasRevision()
+                                             : quint64(0);
+                // The crop's cache key survives an in-place patch, so a
+                // single-channel conversion keyed on it must be rebuilt.
+                channelImageKey_ = -1;
+                patched = true;
+            }
+            if (!patched) {
+                presentCache_.valid = false;
+            }
+        }
+    }
+    // A full repaint: the present is a stored-level view or a patched crop, so
+    // this stays cheap, and it keeps rotated and straightened views correct.
+    update();
+}
+
 void ImageView::setImage(const QImage& image)
 {
     image_ = image;
