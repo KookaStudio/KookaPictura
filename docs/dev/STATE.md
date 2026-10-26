@@ -1352,7 +1352,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   `Filter ▸ Blur ▸ Shape Blur…` (after Box Blur) has Radius `5..=1000`
   (default 10, inferred) and `FilterControl::Shape`, a grid of the six
   built-in Custom Shapes; the `shape-blur` kind is 2 slots (Radius, Shape).
-  `filter_map.rs`'s choice lists moved to `filter_map_choices.rs` to stay
+  `filter_map.rs`'s choice lists moved to `catalogue/build/choices.rs` to stay
   under the cap. Ceilings: the six app shapes, not CS6's library; no large
   Shape swatch or shape-set gear. Tests: unit (runs = direct convolution on
   every shape), ImageMagick `-morphology Convolve` differential (exact),
@@ -1477,7 +1477,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   inverse-square distance. Field Blur's pyramid and effects passes moved
   behind a shared `variable_blur(radius_at)` with the Field digest unchanged.
   The `iris-blur` kind is `count`, 8 slots per pin, then the 13-slot effects
-  tail (22 canonical), parsed with `field-blur` in `filter_map/gallery.rs`.
+  tail (22 canonical), parsed with `field-blur` in `catalogue/build/gallery.rs`.
   `Filter ▸ Blur Gallery ▸ Iris Blur…` opens `BlurGalleryDialog` in Iris mode:
   the Iris Blur row active (Blur, default 15 px), the other rows disabled, and
   the selected pin's outline with radius handles (resize + rotate), feather
@@ -1703,7 +1703,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   exposes `pub(super) filter_from_kind_params(kind, &[f64])` (empty slice = the
   documented defaults; a wrong-length fixed list is refused, and variable-list
   kinds accept only their documented shapes), with `filter_from_kind`
-  delegating to it; its filter parameter descriptor (`filter_map/descriptor/`)
+  delegating to it; its filter parameter descriptor (`pictura-filters/src/catalogue/rows/`)
   records every kind, including the parameterless `Blur` and `Blur More` and
   the parameterised `Oil Paint`, and
   `cpp/filter_commands.cpp` builds its rows from it. `PictureView`
