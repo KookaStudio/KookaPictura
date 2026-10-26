@@ -45,6 +45,11 @@ pub mod ffi {
         /// Whether the whole smart-filter group on `layer_path` is enabled.
         fn layer_smart_filters_enabled(view: &PictureView, layer_path: &QString) -> bool;
 
+        /// 1 when filter `i` on `layer_path` is the camera-raw smart filter, 2
+        /// when it is the Lens Correction smart filter, 0 otherwise (no dialog
+        /// to reopen).
+        fn layer_smart_filter_edit_kind(view: &PictureView, layer_path: &QString, i: i32) -> i32;
+
         /// Set filter `i` on `layer_path` enabled, recomposite, and record one
         /// "Smart Filter Visibility" state. False and no state when unchanged.
         fn set_layer_smart_filter_visible(
@@ -81,6 +86,16 @@ pub mod ffi {
         /// "Clear Smart Filters" state. False and no state when the layer has no
         /// filters.
         fn clear_layer_smart_filters(view: Pin<&mut PictureView>, layer_path: &QString) -> bool;
+
+        /// Whether the smart-object layer at `layer_path` carries a filter mask.
+        fn layer_has_smart_filter_mask(view: &PictureView, layer_path: &QString) -> bool;
+
+        /// Delete the filter mask on `layer_path`, recomposite, and record one
+        /// "Delete Filter Mask" state. False and no state when it has none.
+        fn delete_layer_smart_filter_mask(
+            view: Pin<&mut PictureView>,
+            layer_path: &QString,
+        ) -> bool;
 
         /// Move filter `from` to `to` on `layer_path` (panel order is apply
         /// order), recomposite, and record one "Reorder Smart Filters" state.
@@ -210,6 +225,23 @@ fn layer_smart_filters_enabled(view: &PictureView, layer_path: &QString) -> bool
         .is_some_and(|doc| smart_filters_enabled(doc, &layer_path.to_string()))
 }
 
+fn layer_smart_filter_edit_kind(view: &PictureView, layer_path: &QString, i: i32) -> i32 {
+    let path = layer_path.to_string();
+    let id = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| smart_object(doc, &path))
+        .and_then(|so| so.smart_filters.get(i.max(0) as usize))
+        .map(|filter| filter.filter_id);
+    match id {
+        Some(pictura_codec::CAMERA_RAW_FILTER_ID) => 1,
+        Some(pictura_codec::LENS_CORRECTION_FILTER_ID) => 2,
+        _ => 0,
+    }
+}
+
 fn set_layer_smart_filter_visible(
     mut view: Pin<&mut PictureView>,
     layer_path: &QString,
@@ -282,6 +314,24 @@ fn clear_layer_smart_filters(mut view: Pin<&mut PictureView>, layer_path: &QStri
     };
     if changed {
         view.as_mut().edit("Clear Smart Filters", |_| Edit::Full);
+    }
+    changed
+}
+
+fn layer_has_smart_filter_mask(view: &PictureView, layer_path: &QString) -> bool {
+    view.rust().session.doc.as_ref().is_some_and(|doc| {
+        pictura_render::has_smart_filter_mask(doc, base_path(&layer_path.to_string()))
+    })
+}
+
+fn delete_layer_smart_filter_mask(mut view: Pin<&mut PictureView>, layer_path: &QString) -> bool {
+    let path = layer_path.to_string();
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
+        Some(doc) => pictura_render::delete_smart_filter_mask(doc, base_path(&path)),
+        None => false,
+    };
+    if changed {
+        view.as_mut().edit("Delete Filter Mask", |_| Edit::Full);
     }
     changed
 }

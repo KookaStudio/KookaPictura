@@ -33,12 +33,14 @@ mod engine_data_encode;
 pub mod eps;
 mod error;
 mod exif;
+mod filter_effects;
 mod ghostscript;
 mod guide_resources;
 mod icc;
 mod icc_convert;
 mod image_resources;
 mod iptc;
+mod lens_correction;
 mod live_shape;
 mod mask_params;
 mod metadata;
@@ -90,6 +92,7 @@ pub use engine_data::{extract_fonts, extract_style, parse_engine_data, EngineVal
 pub use engine_data_encode::encode_engine_data;
 pub use error::PsdError;
 pub use exif::{exif_tag_name, parse_exif, Exif, ExifValue};
+pub use filter_effects::remove_filter_mask;
 pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind};
 pub use icc::{
     assign_cmyk_profile, assign_document_profile, buffer_to_srgb, convert_document,
@@ -102,6 +105,10 @@ pub use image_resources::{
     VANISHING_POINT_NAME, XMP_METADATA,
 };
 pub use iptc::{encode_iptc, iptc_field_name, parse_iptc, Iptc};
+pub use lens_correction::{
+    attach_lens_correction_filter, decode_lens_correction_slots, LENS_CORRECTION_FILTER_ID,
+    LENS_CORRECTION_FILTER_NAME,
+};
 pub use metadata::{
     apply_template, export_template, read_metadata, set_file_info_fields, set_iptc_fields,
     set_xmp_fields, set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,

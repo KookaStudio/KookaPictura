@@ -70,6 +70,44 @@ pub fn clear_smart_filters(doc: &mut Document, path: &str) -> bool {
     })
 }
 
+/// Whether the smart-object layer at `path` carries a filter mask.
+pub fn has_smart_filter_mask(doc: &Document, path: &str) -> bool {
+    resolve_path(doc, path).is_some_and(|layer| {
+        layer
+            .smart_object
+            .as_ref()
+            .is_some_and(|so| so.filter_mask.is_some())
+    })
+}
+
+/// Delete the filter mask of the smart-object layer at `path`: drop its
+/// `FEid`/`FMsk` blocks from the document's preserved bytes and clear the typed
+/// mask. Returns `false` without mutating when there is no mask.
+pub fn delete_smart_filter_mask(doc: &mut Document, path: &str) -> bool {
+    let Some((uuid, placed)) = resolve_path(doc, path)
+        .and_then(|layer| layer.smart_object.as_ref())
+        .filter(|so| so.filter_mask.is_some())
+        .map(|so| (so.uuid.clone(), so.placed_uuid.clone()))
+    else {
+        return false;
+    };
+    // The `FEid` block is keyed by the SoLd `placed` uuid, falling back to
+    // `Idnt` when the object has no `placed` field.
+    let key = if placed.is_empty() { uuid } else { placed };
+    if let Some(extra) =
+        pictura_codec::remove_filter_mask(&doc.layer_section_extra, &key, doc.is_psb)
+    {
+        doc.layer_section_extra = extra;
+    }
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    if let Some(so) = layer.smart_object.as_mut() {
+        so.filter_mask = None;
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,5 +182,30 @@ mod tests {
         assert!(!reorder_smart_filters(&mut doc, "0", 0, 1));
         assert!(!clear_smart_filters(&mut doc, "0"));
         assert!(!can_add_smart_filter(&doc, "0"));
+        assert!(!has_smart_filter_mask(&doc, "0"));
+        assert!(!delete_smart_filter_mask(&mut doc, "0"));
+    }
+
+    #[test]
+    fn delete_smart_filter_mask_clears_the_typed_mask() {
+        let mut doc = smart_doc();
+        resolve_path_mut(&mut doc, "0")
+            .unwrap()
+            .smart_object
+            .as_mut()
+            .unwrap()
+            .filter_mask = Some(pictura_core::FilterMask {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 4,
+                right: 4,
+            },
+            data: vec![255u8; 16].into(),
+        });
+        assert!(has_smart_filter_mask(&doc, "0"));
+        assert!(delete_smart_filter_mask(&mut doc, "0"));
+        assert!(!has_smart_filter_mask(&doc, "0"));
+        assert!(!delete_smart_filter_mask(&mut doc, "0"), "nothing left");
     }
 }

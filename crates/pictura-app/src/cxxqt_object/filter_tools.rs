@@ -18,6 +18,7 @@ use super::impl_filters::{
     ActiveOp,
 };
 use super::qobject::PictureView;
+use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 pub(super) use canvas_proxy::{canvas_proxy_buffer, resolve_stack, scaled_stack_params};
 use core::pin::Pin;
@@ -300,6 +301,17 @@ fn apply_filter_params(
         return false;
     }
     let params_v: Vec<f64> = params.into_iter().copied().collect();
+    // Lens Correction on an embedded smart object attaches a smart filter
+    // instead of filtering the proxy destructively.
+    if kind_s == "lens-correction" {
+        if let Some(path) = lens_correction_smart_target(view.rust()) {
+            if apply_lens_correction_smart(view.as_mut(), &path, &params_v, "Filter") {
+                view.as_mut().rust_mut().last_filter = Some((kind_s, params_v));
+                return true;
+            }
+            return false;
+        }
+    }
     let params_v = super::filter_map::commit_params(&kind_s, &params_v);
     let params_v = lens_blur_depths::commit_slots(&kind_s, view.rust(), &params_v);
     let region = {
@@ -319,6 +331,37 @@ fn apply_filter_params(
         None => Edit::Full,
     };
     view.as_mut().edit("Filter", |_| outcome);
+    true
+}
+
+/// Whether the active layer is an embedded smart object a Lens Correction smart
+/// filter can attach to, and its path.
+fn lens_correction_smart_target(rust: &PictureViewRust) -> Option<String> {
+    let doc = rust.session.doc.as_ref()?;
+    let path = rust.layer_target.single()?.to_string();
+    pictura_render::can_replace_smart_object_contents(doc, &path).then_some(path)
+}
+
+/// Attach a Lens Correction smart filter carrying `slots` to the smart object at
+/// `path` and bake its proxy, recording one `label` history state. `false` (no
+/// state) when the engine refuses.
+fn apply_lens_correction_smart(
+    mut view: Pin<&mut PictureView>,
+    path: &str,
+    slots: &[f64],
+    label: &str,
+) -> bool {
+    let applied = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return false;
+        };
+        pictura_render::apply_lens_correction(doc, path, slots)
+    };
+    if !applied {
+        return false;
+    }
+    view.as_mut().edit(label, |_| Edit::Structural);
     true
 }
 

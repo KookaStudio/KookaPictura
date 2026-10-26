@@ -12,8 +12,8 @@ use cxx_qt_lib::{QImage, QImageFormat, QString, QStringList};
 use pictura_codec::Exif;
 use pictura_filters::{
     builtin_lens_profiles, camera_models, catalog_makes, find_camera, find_camera_make, find_lens,
-    lenses_for, match_lens_profiles, straighten_angle, Filter, LensCorrectionParams, LensEdge,
-    LensMap, LensModel, LensSource,
+    lenses_for, match_lens_profiles, straighten_angle, Filter, LensCorrectionParams, LensMap,
+    LensSource,
 };
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
@@ -97,6 +97,10 @@ pub mod ffi {
         /// The slots of the last OK (Previous Conversion); empty before one.
         fn lc_previous() -> Vec<f64>;
 
+        /// The layer's stored Lens Correction smart filter slots, for the
+        /// dialog's prefill; empty when it carries none.
+        fn lc_stored() -> Vec<f64>;
+
         /// End the session. With `keep`, remember the slots as Previous
         /// Conversion and return them; otherwise empty.
         fn lc_finish(keep: bool) -> Vec<f64>;
@@ -104,46 +108,13 @@ pub mod ffi {
 }
 
 /// The kind's slot count; the order is the descriptor's.
-pub(in crate::cxxqt_object) const SLOTS: usize = 16;
+pub(in crate::cxxqt_object) const SLOTS: usize = LensCorrectionParams::SLOTS;
 
 /// The slots as engine parameters: the Auto tab's checkboxes gate the
 /// profile's parts. `None` for a wrong count or a profile that is not
 /// installed.
 fn params_of(values: &[f64]) -> Option<LensCorrectionParams> {
-    if values.len() != SLOTS || values.iter().any(|v| !v.is_finite()) {
-        return None;
-    }
-    let on = |i: usize| values[i] >= 0.5;
-    let id = values[5].round();
-    let profile = if id <= 0.0 {
-        None
-    } else {
-        let p = builtin_lens_profiles().get(id as usize - 1)?.coefficients;
-        Some(LensModel {
-            distortion: if on(0) { p.distortion } else { [0.0; 3] },
-            ca_scale: if on(1) { p.ca_scale } else { [1.0; 3] },
-            vignette: if on(2) { p.vignette } else { [0.0; 3] },
-        })
-    };
-    let slider = |i: usize| values[i].clamp(-100.0, 100.0);
-    Some(LensCorrectionParams {
-        profile,
-        distortion: slider(6),
-        fringe: [slider(7), slider(8), slider(9)],
-        vignette_amount: slider(10),
-        vignette_midpoint: values[11].clamp(0.0, 100.0),
-        vertical: slider(12),
-        horizontal: slider(13),
-        angle: values[14].rem_euclid(360.0),
-        scale: values[15].clamp(50.0, 150.0) / 100.0,
-        auto_scale: on(3),
-        edge: match values[4].round() as i64 {
-            0 => LensEdge::Extension,
-            2 => LensEdge::Black,
-            3 => LensEdge::White,
-            _ => LensEdge::Transparency,
-        },
-    })
+    LensCorrectionParams::from_slots(values)
 }
 
 /// The `lens-correction` kind's filter for a full slot list.
@@ -186,6 +157,9 @@ struct Session {
     gray: bool,
     source: LensSource,
     slots: Vec<f64>,
+    /// The layer's stored Lens Correction smart filter slots, for the dialog's
+    /// prefill; empty when it carries none.
+    stored: Vec<f64>,
     map: LensMap,
     exif: [String; 4],
     /// The photo's focal length in millimetres, from EXIF.
@@ -219,40 +193,24 @@ fn lc_begin(view: &PictureView) -> bool {
     let Some(doc) = rust.session.doc.as_ref().filter(|d| lens_supported(d)) else {
         return false;
     };
-    let Some(layer) = active_pixel_layer(doc, rust.layer_target.single()) else {
+    let Some(path) = rust.layer_target.single().map(str::to_string) else {
         return false;
     };
-    let (w, h) = (layer.rect.width(), layer.rect.height());
-    if w <= 0 || h <= 0 {
-        return false;
-    }
-    let plane = w as usize * h as usize;
-    // Planes are shared, not copied: the modal dialog never edits the layer.
-    let channel = |id: i16| {
-        layer
-            .channels
-            .iter()
-            .find(|c| c.id == id && c.data.len() == plane)
-            .map(|c| c.data.clone())
-    };
-    let Some(c0) = channel(0) else {
+    let Some(layer) = active_pixel_layer(doc, Some(path.as_str())) else {
         return false;
     };
-    // A Grayscale layer carries one colour plane.
-    let color = [
-        c0.clone(),
-        channel(1).unwrap_or_else(|| c0.clone()),
-        channel(2).unwrap_or(c0),
-    ];
+    let Some((w, h, color, alpha)) = session_source(doc, &path, layer) else {
+        return false;
+    };
     let exif = pictura_codec::read_metadata(doc).exif;
-    let (w, h) = (w as u32, h as u32);
     let params = LensCorrectionParams::default();
     let session = Session {
         w,
         h,
         gray: doc.mode == pictura_core::ColorMode::Grayscale,
-        source: LensSource::new(w, h, color, channel(-1)),
+        source: LensSource::new(w, h, color, alpha),
         slots: Vec::new(),
+        stored: pictura_render::lens_correction_slots(doc, &path).unwrap_or_default(),
         map: LensMap::new(&params, w, h),
         exif: catalogue_names(
             &exif_text(&exif, &[0x010f]),
@@ -267,6 +225,61 @@ fn lc_begin(view: &PictureView) -> bool {
     };
     *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     true
+}
+
+/// The planes a dialog session reads: `(width, height, colour, alpha)`.
+type SessionPlanes = (
+    u32,
+    u32,
+    [pictura_core::Plane<u8>; 3],
+    Option<pictura_core::Plane<u8>>,
+);
+
+/// The planes a session reads for the layer at `path`: its embedded smart source
+/// when it is a smart object, so a re-edit never re-applies the baked proxy, else
+/// its own colour and alpha channels. `None` when a colour channel is missing.
+fn session_source(
+    doc: &pictura_core::Document,
+    path: &str,
+    layer: &pictura_core::Layer,
+) -> Option<SessionPlanes> {
+    let (w, h) = (layer.rect.width(), layer.rect.height());
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    if layer
+        .smart_object
+        .as_ref()
+        .is_some_and(|so| so.kind == pictura_core::SmartObjectKind::Embedded)
+    {
+        let buffer = pictura_render::smart_source_buffer(doc, path)?;
+        let n = buffer.width as usize * buffer.height as usize;
+        let plane = |c: usize| -> pictura_core::Plane<u8> {
+            buffer.data[c * n..(c + 1) * n].to_vec().into()
+        };
+        let alpha = (buffer.channels == 4).then(|| plane(3));
+        return Some((
+            buffer.width,
+            buffer.height,
+            [plane(0), plane(1), plane(2)],
+            alpha,
+        ));
+    }
+    let plane = w as usize * h as usize;
+    let channel = |id: i16| {
+        layer
+            .channels
+            .iter()
+            .find(|c| c.id == id && c.data.len() == plane)
+            .map(|c| c.data.clone())
+    };
+    let c0 = channel(0)?;
+    let color = [
+        c0.clone(),
+        channel(1).unwrap_or_else(|| c0.clone()),
+        channel(2).unwrap_or(c0),
+    ];
+    Some((w as u32, h as u32, color, channel(-1)))
 }
 
 fn lc_geometry() -> Vec<i32> {
@@ -447,6 +460,10 @@ fn lc_previous() -> Vec<f64> {
         .unwrap_or_default()
 }
 
+fn lc_stored() -> Vec<f64> {
+    with_session(Vec::new(), |s| s.stored.clone())
+}
+
 fn lc_finish(keep: bool) -> Vec<f64> {
     let session = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
     match session {
@@ -462,6 +479,7 @@ fn lc_finish(keep: bool) -> Vec<f64> {
 mod tests {
     use super::*;
     use pictura_codec::parse_exif;
+    use pictura_filters::{LensEdge, LensModel};
 
     /// The descriptor's opening slots.
     fn defaults() -> Vec<f64> {
@@ -567,6 +585,59 @@ mod tests {
         // Unknown names pass through.
         let names = catalogue_names("ACME Cameras", "ACME One", "", String::new());
         assert_eq!(names[..3], ["ACME Cameras", "ACME One", ""]);
+    }
+
+    #[test]
+    fn session_source_is_the_unfiltered_smart_source() {
+        let mut payload_doc = pictura_core::Document::new(
+            2,
+            2,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        for i in 0..4 {
+            payload_doc.composite.data[i] = 30;
+            payload_doc.composite.data[4 + i] = 60;
+            payload_doc.composite.data[8 + i] = 90;
+        }
+        let payload = pictura_codec::write_psd(&payload_doc).expect("payload writes");
+
+        let mut layer = pictura_core::Layer {
+            name: "Smart".into(),
+            rect: pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 2,
+            },
+            smart_object: Some(pictura_core::SmartObject {
+                kind: pictura_core::SmartObjectKind::Embedded,
+                payload: Some(payload),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        // The baked proxy is the corrected (black) pixels, unlike the source.
+        for id in 0..3i16 {
+            layer.channels.push(pictura_core::Channel {
+                id,
+                data: vec![0u8; 4].into(),
+            });
+        }
+        let mut doc = pictura_core::Document::new(
+            2,
+            2,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+
+        let (_, _, color, _) = session_source(&doc, "0", &doc.layers[0]).expect("source");
+        assert_eq!(
+            color[0].to_vec(),
+            vec![30u8, 30, 30, 30],
+            "the source, not the proxy"
+        );
     }
 
     #[test]

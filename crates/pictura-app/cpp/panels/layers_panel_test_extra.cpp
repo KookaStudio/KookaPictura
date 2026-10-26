@@ -13,6 +13,65 @@
 
 namespace pictura {
 
+QStringList LayersPanel::smartFiltersGroupMenuTextsForTest(const QString& path)
+{
+    QMenu menu;
+    populateSmartFiltersGroupMenu(menu, path);
+    QStringList texts;
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator()) {
+            texts.push_back(action->text());
+        }
+    }
+    return texts;
+}
+
+QStringList LayersPanel::smartFilterRowMenuTextsForTest(const QString& path)
+{
+    QMenu menu;
+    populateSmartFilterMenu(menu, path);
+    QStringList texts;
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator()) {
+            texts.push_back(action->text());
+        }
+    }
+    return texts;
+}
+
+bool LayersPanel::smartFilterMenuEnabledForTest(const QString& path, const QString& text)
+{
+    QMenu menu;
+    if (path.endsWith(QStringLiteral("/@sf"))) {
+        populateSmartFiltersGroupMenu(menu, path);
+    } else {
+        populateSmartFilterMenu(menu, path);
+    }
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator() && action->text() == text) {
+            return action->isEnabled();
+        }
+    }
+    return false;
+}
+
+bool LayersPanel::triggerSmartFilterMenuActionForTest(const QString& path, const QString& text)
+{
+    QMenu menu;
+    if (path.endsWith(QStringLiteral("/@sf"))) {
+        populateSmartFiltersGroupMenu(menu, path);
+    } else {
+        populateSmartFilterMenu(menu, path);
+    }
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator() && action->text() == text) {
+            action->trigger();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool LayersPanel::triggerRowMenuActionForPathForTest(const QString& path, const QString& text)
 {
     const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();

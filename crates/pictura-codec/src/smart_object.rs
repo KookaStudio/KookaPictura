@@ -34,43 +34,57 @@ pub(crate) fn resolve_smart_objects(
     is_psb: bool,
 ) {
     let records = collect_linked_records(layer_section_extra, is_psb);
+    let masks = crate::filter_effects::collect_filter_masks(layer_section_extra, is_psb);
     for layer in layers.iter_mut() {
-        resolve_layer(layer, &records);
+        resolve_layer(layer, &records, &masks);
     }
 }
 
-fn resolve_layer(layer: &mut Layer, records: &[LinkedRecord]) {
-    layer.smart_object = build_smart_object(layer, records);
+fn resolve_layer(
+    layer: &mut Layer,
+    records: &[LinkedRecord],
+    masks: &[crate::filter_effects::FilterMaskRecord],
+) {
+    layer.smart_object = build_smart_object(layer, records, masks);
     for child in layer.children.iter_mut() {
-        resolve_layer(child, records);
+        resolve_layer(child, records, masks);
     }
 }
 
-fn build_smart_object(layer: &Layer, records: &[LinkedRecord]) -> Option<SmartObject> {
+fn build_smart_object(
+    layer: &Layer,
+    records: &[LinkedRecord],
+    masks: &[crate::filter_effects::FilterMaskRecord],
+) -> Option<SmartObject> {
     let block = find_config_block(&layer.extra_blocks)?;
     let raw = block.data.clone();
-    let (uuid, smart_filters, flags) = match &block.key {
+    // `uuid` links the layer to its linked-source record (`Idnt`); `placed` is
+    // the second SoLd uuid, which the document-level filter effect (`FEid`) is
+    // keyed by. Photoshop writes them differently; we author them equal.
+    let (uuid, placed, smart_filters, flags) = match &block.key {
         b"SoLd" | b"SoLE" => {
             let DescValue::Object { items, .. } = read_layer_data_descriptor(&raw).ok()? else {
                 return None;
             };
-            let uuid = match get_object_item(&items, b"Idnt") {
-                Some(DescValue::Text(id)) => id.trim_end_matches('\0').to_string(),
-                _ => return None,
+            let text = |key: &[u8]| match get_object_item(&items, key) {
+                Some(DescValue::Text(id)) => Some(id.trim_end_matches('\0').to_string()),
+                _ => None,
             };
+            let uuid = text(b"Idnt")?;
+            let placed = text(b"placed").unwrap_or_else(|| uuid.clone());
             let (filters, flags) = parse_filter_fx(&items);
-            (uuid, filters, flags)
+            (uuid, placed, filters, flags)
         }
-        b"plLd" | b"PlLd" => (
-            read_placed_layer_uuid(&raw).ok()?,
-            Vec::new(),
-            FilterFxFlags::default(),
-        ),
+        b"plLd" | b"PlLd" => {
+            let uuid = read_placed_layer_uuid(&raw).ok()?;
+            (uuid.clone(), uuid, Vec::new(), FilterFxFlags::default())
+        }
         _ => return None,
     };
 
     let mut so = SmartObject {
         uuid: uuid.clone(),
+        placed_uuid: placed.clone(),
         config_descriptor: raw,
         smart_filters,
         filter_mask_enabled: flags.mask_enabled,
@@ -79,6 +93,12 @@ fn build_smart_object(layer: &Layer, records: &[LinkedRecord]) -> Option<SmartOb
         smart_filters_enabled: flags.enabled,
         ..Default::default()
     };
+    if let Some(mask) = masks.iter().find(|m| m.uuid == placed || m.uuid == uuid) {
+        so.filter_mask = Some(pictura_core::FilterMask {
+            rect: mask.rect,
+            data: mask.coverage.clone().into(),
+        });
+    }
     let Some(record) = records.iter().find(|r| r.uuid == uuid) else {
         return Some(so);
     };
