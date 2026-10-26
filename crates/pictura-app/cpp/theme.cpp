@@ -85,6 +85,8 @@ struct Ramp {
     QColor content;
     QColor contentBody;
     QColor contentControl;
+    // The tint for bundled SVG glyphs, independent of the shared text colour.
+    QColor icon;
     QColor selection;
     QColor contentOnSelection;
     QColor surfaceTooltip;
@@ -127,6 +129,7 @@ const Ramp kLevel1Ramp = {
     QColor(224, 224, 224),    // content
     QColor(224, 224, 224),    // contentBody
     QColor(224, 224, 224),    // contentControl
+    QColor(255, 255, 255),    // icon
     QColor(61, 111, 153),     // selection
     QColor(255, 255, 255),    // contentOnSelection
     QColor(58, 58, 58),       // surfaceTooltip
@@ -164,6 +167,7 @@ const Ramp kLight1Ramp = {
     QColor(43, 43, 43),       // content
     QColor(43, 43, 43),       // contentBody
     QColor(43, 43, 43),       // contentControl
+    QColor(0x2b, 0x2b, 0x2b), // icon
     QColor(61, 111, 153),     // selection
     QColor(255, 255, 255),    // contentOnSelection
     QColor(0xf0, 0xf0, 0xf0), // surfaceTooltip
@@ -708,6 +712,7 @@ QVector<ThemeToken> Theme::tokens(Theme::ThemeFamily family, int level)
         color("content-body", ramp.contentBody),
         color("surface-control", ramp.surfaceControl),
         color("content-control", ramp.contentControl),
+        color("icon", ramp.icon),
         color("selection", ramp.selection),
         color("content-on-selection", ramp.contentOnSelection),
         color("surface-tooltip", ramp.surfaceTooltip),

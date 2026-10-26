@@ -9,6 +9,26 @@
 #include "icons.h"
 #include "theme.h"
 
+namespace {
+
+QRgb strongestPixel(const QImage& image)
+{
+    int maxAlpha = 0;
+    QRgb strongest = 0;
+    for (int y = 0; y < image.height(); ++y) {
+        const QRgb* line = reinterpret_cast<const QRgb*>(image.constScanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            if (qAlpha(line[x]) > maxAlpha) {
+                maxAlpha = qAlpha(line[x]);
+                strongest = line[x];
+            }
+        }
+    }
+    return strongest;
+}
+
+} // namespace
+
 class IconAssetsTest : public QObject {
     Q_OBJECT
 
@@ -21,6 +41,9 @@ private slots:
     void characterStylesGlyphResolves();
     void unknownIdIsNull();
     void explicitColour();
+    void defaultTintIsWhite();
+    void disabledTintStaysDimmed();
+    void lightFamilyTintIsDark();
     void disabledDiffers();
     void hidpiRenders();
     void themeChangeRerenders();
@@ -144,20 +167,49 @@ void IconAssetsTest::explicitColour()
                            .convertToFormat(QImage::Format_ARGB32);
     QVERIFY(!img.isNull());
 
-    int maxAlpha = 0;
-    QRgb strongest = 0;
-    for (int y = 0; y < img.height(); ++y) {
-        const QRgb* line = reinterpret_cast<const QRgb*>(img.constScanLine(y));
-        for (int x = 0; x < img.width(); ++x) {
-            if (qAlpha(line[x]) > maxAlpha) {
-                maxAlpha = qAlpha(line[x]);
-                strongest = line[x];
-            }
-        }
-    }
-    QVERIFY2(maxAlpha > 0, "icon rendered fully transparent");
+    const QRgb strongest = strongestPixel(img);
+    QVERIFY2(qAlpha(strongest) > 0, "icon rendered fully transparent");
     QVERIFY2(qRed(strongest) > 240 && qGreen(strongest) < 16 && qBlue(strongest) < 16,
              "opaque pixel is not the requested colour");
+}
+
+void IconAssetsTest::defaultTintIsWhite()
+{
+    pictura::Theme::apply(pictura::Theme::kDefaultLevel);
+    const QImage img = pictura::icon(QStringLiteral("tool.brush"))
+                           .pixmap(48, 48)
+                           .toImage()
+                           .convertToFormat(QImage::Format_ARGB32);
+    const QRgb strongest = strongestPixel(img);
+    QVERIFY2(qAlpha(strongest) > 0, "icon rendered fully transparent");
+    QCOMPARE(QColor::fromRgb(strongest).rgb(), QColor(255, 255, 255).rgb());
+    QVERIFY2(qAbs(qAlpha(strongest) - 204) <= 2,
+             qPrintable(QStringLiteral("tint alpha is %1, expected 80%").arg(qAlpha(strongest))));
+}
+
+void IconAssetsTest::disabledTintStaysDimmed()
+{
+    pictura::Theme::apply(pictura::Theme::kDefaultLevel);
+    const QImage img = pictura::icon(QStringLiteral("tool.brush"))
+                           .pixmap(48, 48, QIcon::Disabled)
+                           .toImage()
+                           .convertToFormat(QImage::Format_ARGB32);
+    const QRgb strongest = strongestPixel(img);
+    QVERIFY2(qAlpha(strongest) > 0, "icon rendered fully transparent");
+    QCOMPARE(QColor::fromRgb(strongest).rgb(), QColor(0x68, 0x68, 0x68).rgb());
+}
+
+void IconAssetsTest::lightFamilyTintIsDark()
+{
+    pictura::Theme::apply(pictura::Theme::ThemeFamily::Light, pictura::Theme::kDefaultLevel);
+    const QImage img = pictura::icon(QStringLiteral("tool.brush"))
+                           .pixmap(48, 48)
+                           .toImage()
+                           .convertToFormat(QImage::Format_ARGB32);
+    const QRgb strongest = strongestPixel(img);
+    QVERIFY2(qAlpha(strongest) > 0, "icon rendered fully transparent");
+    QCOMPARE(QColor::fromRgb(strongest).rgb(), QColor(0x2b, 0x2b, 0x2b).rgb());
+    pictura::Theme::apply(pictura::Theme::kDefaultFamily, pictura::Theme::kDefaultLevel);
 }
 
 void IconAssetsTest::disabledDiffers()
@@ -185,7 +237,7 @@ void IconAssetsTest::themeChangeRerenders()
 {
     // A theme change must invalidate the icon cache: the engine folds
     // `paletteGeneration()` into its cache key so the same QIcon instance
-    // re-renders. Icon tints track the brightness-constant ButtonText, so the
+    // re-renders. Icon tints track the brightness-constant icon token, so the
     // generation counter is the observable that the key changed.
     pictura::Theme::apply(0);
     const quint64 dark = pictura::Theme::paletteGeneration();

@@ -274,7 +274,7 @@ QWidget* palettePage()
     group(QStringLiteral("Text and disabled"),
           {QStringLiteral("content-body"), QStringLiteral("content"),
            QStringLiteral("content-disabled"), QStringLiteral("content-disabled-menu"),
-           QStringLiteral("surface-control-active")});
+           QStringLiteral("icon"), QStringLiteral("surface-control-active")});
     return page(sections);
 }
 
