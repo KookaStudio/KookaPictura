@@ -11,6 +11,7 @@
 //! in-place update lands on exactly the pyramid a full rebuild would produce.
 
 use pictura_core::PsdRect;
+use std::sync::Arc;
 
 /// Levels stop halving once the next would be smaller than this on its long side.
 pub const SMALLEST_SIDE: u32 = 256;
@@ -37,7 +38,9 @@ pub struct Planes<'a> {
 pub struct PyramidLevel {
     width: u32,
     height: u32,
-    data: Vec<u8>,
+    /// Shared with any [`LevelView`] handed out; a write while one is alive
+    /// copies the level first so the view keeps the bytes it was made from.
+    data: Arc<Vec<u8>>,
 }
 
 impl PyramidLevel {
@@ -45,7 +48,7 @@ impl PyramidLevel {
         Self {
             width,
             height,
-            data: vec![0u8; width as usize * height as usize * 4],
+            data: Arc::new(vec![0u8; width as usize * height as usize * 4]),
         }
     }
 
@@ -59,7 +62,44 @@ impl PyramidLevel {
 
     /// Interleaved premultiplied RGBA, row-major.
     pub fn data(&self) -> &[u8] {
-        &self.data
+        self.data.as_slice()
+    }
+
+    /// The level's own bytes for writing, copied first when a view shares them.
+    fn data_mut(&mut self) -> &mut [u8] {
+        Arc::make_mut(&mut self.data).as_mut_slice()
+    }
+}
+
+/// A borrowed, shared handle to a stored level's premultiplied RGBA bytes.
+///
+/// The handle keeps the level's storage alive; an update while it exists writes
+/// a fresh buffer so the handle's bytes never change under it. Drop it when the
+/// display is done with it.
+#[derive(Clone)]
+pub struct LevelView {
+    data: Arc<Vec<u8>>,
+    width: u32,
+    height: u32,
+}
+
+impl LevelView {
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// Interleaved premultiplied RGBA, row-major.
+    pub fn data(&self) -> &[u8] {
+        self.data.as_slice()
+    }
+
+    /// Identity of the shared allocation, for tests that prove no copy happened.
+    pub fn storage_id(&self) -> usize {
+        self.data.as_ptr() as usize
     }
 }
 
@@ -161,6 +201,7 @@ impl ViewPyramid {
         }
         let mut out = PyramidLevel::new(rw, rh);
         let (lw_i, lh_i) = (lw as i32, lh as i32);
+        let out_data = out.data_mut();
         for oy in 0..rh as i32 {
             let sy = rect.top + oy;
             if sy < 0 || sy >= lh_i {
@@ -177,7 +218,7 @@ impl ViewPyramid {
                 } else {
                     stored_pixel(&self.levels[level - 1], sx as usize, sy as usize)
                 };
-                out.data[o..o + 4].copy_from_slice(&px);
+                out_data[o..o + 4].copy_from_slice(&px);
             }
         }
         out
@@ -213,12 +254,26 @@ impl ViewPyramid {
         let sx = (clipped.left - rect.left) as u32;
         let sy = (clipped.top - rect.top) as u32;
         let stride = dst.width as usize * 4;
+        let data = dst.data_mut();
         for row in 0..ch as usize {
             let src = ((sy as usize + row) * sw as usize + sx as usize) * 4;
             let dst_off = ((clipped.top as usize + row) * stride) + clipped.left as usize * 4;
             let len = cw as usize * 4;
-            dst.data[dst_off..dst_off + len].copy_from_slice(&rgba[src..src + len]);
+            data[dst_off..dst_off + len].copy_from_slice(&rgba[src..src + len]);
         }
+    }
+
+    /// A borrowed, shared view of stored `level`, or `None` for level 0 and
+    /// past the last level. Level 0 is planar straight alpha and is never
+    /// stored, so it has no interleaved buffer to share.
+    pub fn level_view(&self, level: usize) -> Option<LevelView> {
+        self.levels
+            .get(level.checked_sub(1)?)
+            .map(|stored| LevelView {
+                data: Arc::clone(&stored.data),
+                width: stored.width,
+                height: stored.height,
+            })
     }
 }
 
@@ -316,12 +371,8 @@ fn premultiplied_plane_pixel(l0: &Planes<'_>, x: usize, y: usize) -> [u8; 4] {
 
 fn stored_pixel(level: &PyramidLevel, x: usize, y: usize) -> [u8; 4] {
     let o = (y * level.width as usize + x) * 4;
-    [
-        level.data[o],
-        level.data[o + 1],
-        level.data[o + 2],
-        level.data[o + 3],
-    ]
+    let data = level.data();
+    [data[o], data[o + 1], data[o + 2], data[o + 3]]
 }
 
 /// Fill `rect` of `dst` (level 1) from the straight-alpha level 0, each pixel the
@@ -372,7 +423,7 @@ fn each_row(dst: &mut PyramidLevel, rect: PsdRect, f: impl Fn(i32, &mut [u8]) + 
     use rayon::prelude::*;
     let stride = dst.width as usize * 4;
     let (top, bottom) = (rect.top as usize, rect.bottom as usize);
-    dst.data[top * stride..bottom * stride]
+    dst.data_mut()[top * stride..bottom * stride]
         .par_chunks_mut(stride)
         .enumerate()
         .for_each(|(k, row)| f(rect.top + k as i32, row));
@@ -387,6 +438,7 @@ fn shrink_into(src: &PyramidLevel, dst: &mut PyramidLevel, rect: PsdRect) {
     }
     let sw = src.width as i32;
     let sh = src.height as i32;
+    let src_data = src.data();
     each_row(dst, rect, |y, row| {
         for x in rect.left..rect.right {
             let mut sum = [0u32; 4];
@@ -403,7 +455,7 @@ fn shrink_into(src: &PyramidLevel, dst: &mut PyramidLevel, rect: PsdRect) {
                     }
                     let s = (sy as usize * src.width as usize + sx as usize) * 4;
                     for (c, slot) in sum.iter_mut().enumerate() {
-                        *slot += src.data[s + c] as u32;
+                        *slot += src_data[s + c] as u32;
                     }
                     n += 1;
                 }
@@ -702,7 +754,7 @@ mod patch_tests {
         let mut pyramid = ViewPyramid::rebuild(planes);
         let level = 1;
         let (lw, lh) = pyramid.level_size(level);
-        let before: Vec<u8> = pyramid.levels[level - 1].data.clone();
+        let before: Vec<u8> = pyramid.levels[level - 1].data().to_vec();
 
         let rect = PsdRect {
             top: 4,
@@ -716,7 +768,7 @@ mod patch_tests {
 
         pyramid.patch_level(level, &patch, rect);
 
-        let after = &pyramid.levels[level - 1].data;
+        let after = pyramid.levels[level - 1].data();
         assert_eq!(after.len(), before.len(), "the level keeps its size");
         assert!(lw >= 20 && lh >= 12, "the level must cover the patch");
         for y in 0..lh as usize {
@@ -757,7 +809,7 @@ mod patch_tests {
             a: &a,
         };
         let mut pyramid = ViewPyramid::rebuild(planes);
-        let before: Vec<u8> = pyramid.levels[0].data.clone();
+        let before: Vec<u8> = pyramid.levels[0].data().to_vec();
         let rect = PsdRect {
             top: 0,
             left: 0,
@@ -777,6 +829,150 @@ mod patch_tests {
         };
         pyramid.patch_level(1, &patch, off);
 
-        assert_eq!(pyramid.levels[0].data, before, "nothing was written");
+        assert_eq!(pyramid.levels[0].data(), before, "nothing was written");
+    }
+
+    fn damage_tile() -> PsdRect {
+        PsdRect {
+            top: 64,
+            left: 128,
+            bottom: 128,
+            right: 192,
+        }
+    }
+
+    fn change_tile(r: &mut [u8], g: &mut [u8], b: &mut [u8], a: &mut [u8], width: u32) {
+        let rect = damage_tile();
+        for y in rect.top..rect.bottom {
+            for x in rect.left..rect.right {
+                let i = y as usize * width as usize + x as usize;
+                r[i] = r[i].wrapping_add(101);
+                g[i] = g[i].wrapping_add(53);
+                b[i] = b[i].wrapping_add(29);
+                a[i] = a[i].max(1);
+            }
+        }
+    }
+
+    #[test]
+    fn a_stored_level_view_shares_the_level_bytes() {
+        let (r, g, b, a) = built(900, 600);
+        let planes = Planes {
+            width: 900,
+            height: 600,
+            r: &r,
+            g: &g,
+            b: &b,
+            a: &a,
+        };
+        let pyramid = ViewPyramid::rebuild(planes);
+        assert!(pyramid.level_view(0).is_none(), "level 0 is not stored");
+        let view = pyramid.level_view(1).expect("a stored level");
+        let (lw, lh) = pyramid.level_size(1);
+        assert_eq!((view.width(), view.height()), (lw, lh));
+        assert_eq!(view.data(), pyramid.levels[0].data());
+        let again = pyramid.level_view(1).expect("a second handle");
+        assert_eq!(
+            view.storage_id(),
+            again.storage_id(),
+            "handles share the level's storage"
+        );
+    }
+
+    #[test]
+    fn an_update_copies_a_level_a_live_view_holds() {
+        let (mut r, mut g, mut b, mut a) = built(900, 600);
+        let original = Planes {
+            width: 900,
+            height: 600,
+            r: &r,
+            g: &g,
+            b: &b,
+            a: &a,
+        };
+        let mut pyramid = ViewPyramid::rebuild(original);
+        let view = pyramid.level_view(1).expect("a stored level");
+        let held = view.data().to_vec();
+        let held_id = view.storage_id();
+
+        change_tile(&mut r, &mut g, &mut b, &mut a, 900);
+        let changed = Planes {
+            width: 900,
+            height: 600,
+            r: &r,
+            g: &g,
+            b: &b,
+            a: &a,
+        };
+        pyramid.update(changed, damage_tile());
+
+        assert_eq!(
+            view.data(),
+            held.as_slice(),
+            "the held view keeps the bytes it was made from"
+        );
+        let fresh = pyramid.level_view(1).expect("the updated level");
+        assert_ne!(
+            fresh.storage_id(),
+            held_id,
+            "the update wrote a fresh buffer while a view was alive"
+        );
+        let reference = ViewPyramid::rebuild(changed);
+        assert_eq!(
+            fresh.data(),
+            reference.level_view(1).expect("reference level").data(),
+            "the updated level equals a rebuild"
+        );
+    }
+
+    #[test]
+    fn an_update_without_a_view_writes_in_place() {
+        let (mut r, mut g, mut b, mut a) = built(900, 600);
+        let original = Planes {
+            width: 900,
+            height: 600,
+            r: &r,
+            g: &g,
+            b: &b,
+            a: &a,
+        };
+        let mut pyramid = ViewPyramid::rebuild(original);
+        let id = pyramid.level_view(1).expect("a stored level").storage_id();
+
+        change_tile(&mut r, &mut g, &mut b, &mut a, 900);
+        let changed = Planes {
+            width: 900,
+            height: 600,
+            r: &r,
+            g: &g,
+            b: &b,
+            a: &a,
+        };
+        pyramid.update(changed, damage_tile());
+        assert_eq!(
+            pyramid
+                .level_view(1)
+                .expect("the updated level")
+                .storage_id(),
+            id,
+            "an update with no live view writes the level in place"
+        );
+    }
+
+    #[test]
+    fn level_zero_has_no_borrowed_view() {
+        let (r, g, b, a) = built(300, 200);
+        let planes = Planes {
+            width: 300,
+            height: 200,
+            r: &r,
+            g: &g,
+            b: &b,
+            a: &a,
+        };
+        let pyramid = ViewPyramid::rebuild(planes);
+        assert_eq!(pyramid.level_count(), 1, "a small composite has one level");
+        assert!(pyramid.level_view(0).is_none());
+        assert!(pyramid.level_view(1).is_none());
     }
 }

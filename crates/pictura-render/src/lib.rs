@@ -44,7 +44,7 @@ pub use composite::{
     encode_invert, encode_photo_filter, encode_posterize, encode_solid_color_fill,
     encode_threshold,
 };
-pub use view_pyramid::{Planes, PyramidLevel, ViewPyramid, SMALLEST_SIDE, TILE};
+pub use view_pyramid::{LevelView, Planes, PyramidLevel, ViewPyramid, SMALLEST_SIDE, TILE};
 
 mod composite_native;
 pub use composite_native::{composite_native, refresh_native_composite};
