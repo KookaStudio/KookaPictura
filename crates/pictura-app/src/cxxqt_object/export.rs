@@ -26,6 +26,10 @@ pub mod ffi {
             format: &str,
             quality: i32,
             scale: i32,
+            compression: i32,
+            optimized: bool,
+            progressive: bool,
+            matte: i32,
         ) -> bool;
 
         /// Rescale packed RGBA8888 by `scale` percent with a smooth filter and report the new size in `out_width`/`out_height`.
@@ -120,12 +124,18 @@ pub fn export_image(
         &format,
         quality,
         scale,
+        -1,
+        false,
+        false,
+        -1,
     )
 }
 
 /// Encode packed RGBA8888 to `path` in `format` at `scale` percent: `WEBP`
 /// through the engine's native codec, every other format through the Qt
-/// boundary. False without writing on any failure.
+/// boundary. `compression`, `optimized`, `progressive`, and `matte` are the
+/// per-format save options. False without writing on any failure.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn encode_raster(
     rgba: &[u8],
     width: u32,
@@ -134,6 +144,10 @@ pub(super) fn encode_raster(
     format: &str,
     quality: i32,
     scale: i32,
+    compression: i32,
+    optimized: bool,
+    progressive: bool,
+    matte: i32,
 ) -> bool {
     if format.eq_ignore_ascii_case("WEBP") {
         encode_webp_rgba(rgba, width, height, path, scale)
@@ -146,13 +160,17 @@ pub(super) fn encode_raster(
             format,
             quality,
             scale,
+            compression,
+            optimized,
+            progressive,
+            matte,
         )
     }
 }
 
-/// Encode a raster to a temporary path, inject the document metadata into
-/// JPEG/TIFF, and rename over `path`. A failed encode or injection removes the
-/// temporary and leaves the previous file untouched.
+/// Encode a raster to a temporary path with the per-format options, inject the
+/// document metadata into JPEG/TIFF, and rename over `path`. A failed encode or
+/// injection removes the temporary and leaves the previous file untouched.
 pub(super) fn write_raster_with_metadata(
     rgba: &[u8],
     width: u32,
@@ -160,9 +178,27 @@ pub(super) fn write_raster_with_metadata(
     path: &str,
     format: &str,
     metadata: &pictura_codec::RasterMetadata,
+    options: &super::save_format::SaveRasterOptions,
 ) -> bool {
+    let quality = if options.quality > 0 {
+        options.quality
+    } else {
+        90
+    };
     let tmp = format!("{path}.tmp-metadata");
-    if !encode_raster(rgba, width, height, &tmp, format, 90, 100) {
+    if !encode_raster(
+        rgba,
+        width,
+        height,
+        &tmp,
+        format,
+        quality,
+        100,
+        options.compression,
+        options.optimized,
+        options.progressive,
+        options.matte,
+    ) {
         let _ = std::fs::remove_file(&tmp);
         return false;
     }

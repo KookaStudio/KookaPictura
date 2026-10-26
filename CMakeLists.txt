@@ -231,6 +231,11 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/profile_dialog.cpp
     crates/pictura-app/cpp/profile_warning_dialog.cpp
     crates/pictura-app/cpp/save_options_dialog.cpp
+    crates/pictura-app/cpp/save_format_options.cpp
+    crates/pictura-app/cpp/jpeg_options_dialog.cpp
+    crates/pictura-app/cpp/png_options_dialog.cpp
+    crates/pictura-app/cpp/bmp_options_dialog.cpp
+    crates/pictura-app/cpp/tiff_options_dialog.cpp
     crates/pictura-app/cpp/hdr_conversion_dialog.cpp
     crates/pictura-app/cpp/pictura_raw_dialog.cpp
     crates/pictura-app/cpp/acr/acr_settings.cpp
@@ -390,6 +395,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/search_controls.cpp
     crates/pictura-app/cpp/search_index.cpp
     crates/pictura-app/cpp/frame_menus.cpp
+    crates/pictura-app/cpp/frame_save_options.cpp
     crates/pictura-app/cpp/frame_system_info.cpp
     crates/pictura-app/cpp/system_info.cpp
     crates/pictura-app/cpp/system_info_dialog.cpp
@@ -577,6 +583,11 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/new_guide_dialog.h
     crates/pictura-app/cpp/file_info_dialog.h
     crates/pictura-app/cpp/profile_dialog.h
+    crates/pictura-app/cpp/save_format_options.h
+    crates/pictura-app/cpp/jpeg_options_dialog.h
+    crates/pictura-app/cpp/png_options_dialog.h
+    crates/pictura-app/cpp/bmp_options_dialog.h
+    crates/pictura-app/cpp/tiff_options_dialog.h
     crates/pictura-app/cpp/hdr_conversion_dialog.h
     crates/pictura-app/cpp/hdr_toning_dialog.h
     crates/pictura-app/cpp/hdr_toning_controls.h

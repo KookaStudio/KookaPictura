@@ -54,6 +54,7 @@ impl qobject::PictureView {
             }
             Some(format) => {
                 let gpu_compute = self.rust().gpu_compute;
+                let options = self.rust().save_raster_options.unwrap_or_default();
                 let keeps_working = matches!(
                     format.to_ascii_lowercase().as_str(),
                     "jpg" | "jpeg" | "jpe" | "tif" | "tiff"
@@ -91,7 +92,7 @@ impl qobject::PictureView {
                     (rgba, buffer.width, buffer.height, metadata)
                 };
                 if !super::super::export::write_raster_with_metadata(
-                    &rgba, width, height, &path, format, &metadata,
+                    &rgba, width, height, &path, format, &metadata, &options,
                 ) {
                     return false;
                 }

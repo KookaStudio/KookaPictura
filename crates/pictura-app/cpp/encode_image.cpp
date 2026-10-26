@@ -7,6 +7,7 @@
 #include <QtCore/QSaveFile>
 #include <QtCore/QString>
 #include <QtCore/QtGlobal>
+#include <QtGui/QColor>
 #include <QtGui/QImage>
 #include <QtGui/QImageWriter>
 #include <QtGui/QPainter>
@@ -32,37 +33,82 @@ QImage scaledImage(const QImage& source, int32_t width, int32_t height, int32_t 
     return source.scaled(scaledWidth, scaledHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
-} // namespace
+// `image` composited onto an opaque `background` (a packed 0xRRGGBB).
+QImage flattenedOnto(const QImage& image, int32_t background)
+{
+    const int r = (background >> 16) & 0xFF;
+    const int g = (background >> 8) & 0xFF;
+    const int b = background & 0xFF;
+    QImage flat(image.width(), image.height(), QImage::Format_RGB32);
+    flat.fill(QColor(r, g, b));
+    QPainter painter(&flat);
+    painter.drawImage(0, 0, image);
+    painter.end();
+    return flat;
+}
 
-bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,
-                       ::rust::Str path, ::rust::Str format, int32_t quality, int32_t scale)
+// The encoded bytes of `rgba` in `format`, or empty on any refusal. `matte` is
+// a packed 0xRRGGBB background, or -1 to keep alpha; JPEG and BMP always flatten
+// (onto `matte`, else opaque white).
+QByteArray encodeImage(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,
+                       ::rust::Str format, int32_t quality, int32_t scale, int32_t compression,
+                       bool optimized, bool progressive, int32_t matte)
 {
     if (width <= 0 || height <= 0) {
-        return false;
+        return {};
     }
     if (rgba.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 4u) {
-        return false;
+        return {};
     }
 
     const QImage source(rgba.data(), width, height, width * 4, QImage::Format_RGBA8888);
-
     QImage image = scaledImage(source, width, height, scale);
 
     const QString fmt = toQString(format).toUpper();
-    if (fmt == QLatin1String("JPG") || fmt == QLatin1String("JPEG")
-        || fmt == QLatin1String("BMP")) {
-        // JPEG has no alpha, and Qt's BMP writer drops it too: composite the
-        // transparent pixels onto opaque white so the result is deterministic.
-        QImage flat(image.width(), image.height(), QImage::Format_RGB32);
-        flat.fill(Qt::white);
-        QPainter painter(&flat);
-        painter.drawImage(0, 0, image);
-        painter.end();
-        image = flat;
+    const bool formatHasAlpha =
+        !(fmt == QLatin1String("JPG") || fmt == QLatin1String("JPEG")
+          || fmt == QLatin1String("BMP"));
+    if (!formatHasAlpha) {
+        // JPEG has no alpha, and Qt's BMP writer drops it too: composite onto
+        // the matte (or opaque white) so the result is deterministic.
+        image = flattenedOnto(image, matte >= 0 ? matte : 0xFFFFFF);
+    } else if (matte >= 0) {
+        // TIFF/PNG with Save Transparency off.
+        image = flattenedOnto(image, matte);
     }
 
     const QByteArray formatBytes = fmt.toUtf8();
     const int qualityOrDefault = (quality > 0 && quality <= 100) ? quality : -1;
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly)) {
+        return {};
+    }
+    QImageWriter writer(&buffer, formatBytes);
+    writer.setQuality(qualityOrDefault);
+    if (compression >= 0) {
+        writer.setCompression(compression);
+    }
+    writer.setOptimizedWrite(optimized);
+    writer.setProgressiveScanWrite(progressive);
+    if (!writer.write(image)) {
+        return {};
+    }
+    return bytes;
+}
+
+} // namespace
+
+bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,
+                       ::rust::Str path, ::rust::Str format, int32_t quality, int32_t scale,
+                       int32_t compression, bool optimized, bool progressive, int32_t matte)
+{
+    const QByteArray bytes =
+        encodeImage(rgba, width, height, format, quality, scale, compression, optimized,
+                    progressive, matte);
+    if (bytes.isEmpty()) {
+        return false;
+    }
     // QSaveFile writes to a temp file and renames on commit, so a mid-write
     // failure never truncates an existing file -- the same atomicity the PSD
     // codec path gets from tmp+rename.
@@ -70,13 +116,26 @@ bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
-    QImageWriter writer(&file, formatBytes);
-    writer.setQuality(qualityOrDefault);
-    if (!writer.write(image)) {
+    if (file.write(bytes) != bytes.size()) {
         file.cancelWriting();
         return false;
     }
     return file.commit();
+}
+
+::rust::Vec<uint8_t> encode_image_bytes(::rust::Slice<const uint8_t> rgba, int32_t width,
+                                        int32_t height, ::rust::Str format, int32_t quality,
+                                        int32_t scale, int32_t compression, bool optimized,
+                                        bool progressive, int32_t matte)
+{
+    const QByteArray bytes =
+        encodeImage(rgba, width, height, format, quality, scale, compression, optimized,
+                    progressive, matte);
+    if (bytes.isEmpty()) {
+        return {};
+    }
+    return ::copy_bytes(::rust::Slice<const uint8_t>(
+        reinterpret_cast<const uint8_t*>(bytes.constData()), static_cast<size_t>(bytes.size())));
 }
 
 ::rust::Vec<uint8_t> scale_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,

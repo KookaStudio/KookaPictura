@@ -129,6 +129,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     autoSaveRecovery_ = state.autoSaveRecovery;
     autoSaveMinutes_ = state.autoSaveMinutes;
     loadGuideSession(state);
+    saveFormatOptions_ = state.saveFormatOptions;
     // The family drives the theme chrome built below, so resolve it before the menu bar (and its theme toggle icon) is built.
     themeFamily_ = state.themeFamily == 1 ? 1 : 0;
     // The application font and every chrome metric built below read the scale,
