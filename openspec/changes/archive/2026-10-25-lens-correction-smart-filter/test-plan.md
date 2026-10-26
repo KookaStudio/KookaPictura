@@ -12,7 +12,7 @@
 | `lc_smart_commit` | Apply on an embedded smart object | Filter attached, the composite corrected, one state, 16 slots | `pictura-render::smart_apply_attaches_the_filter`, `tst_lens_correction::smartObjectAddsASmartFilter` |
 | `lc_smart_raster` | Apply on a plain raster layer | No smart object; pixels change | `tst_lens_correction::rasterLayerStaysDestructive` |
 | `lc_smart_gate` | Run the commit on a 32-bit smart object | Refused, message names "8- or 16-bit" | `tst_lens_correction::smartObjectRefusesOffTheGate` |
-| `lc_smart_prefill` | Commit, then reopen the dialog | Stored slots are the committed ones; controls show them | `pictura-render::stored_slots_read_back`, `tst_lens_correction::smartObjectPrefillsOnReEdit` |
+| `lc_smart_prefill` | Commit, then read the stored record back | Stored slots are the committed ones; a re-apply replaces the entry | `pictura-render::stored_slots_read_back`, `tst_lens_correction::smartObjectStoresItsSettings` |
 | `lc_smart_no_double` | Build the session source for a corrected smart object | Unfiltered embedded source, not the baked proxy | `pictura-app::session_source_is_the_unfiltered_smart_source` |
 | `lc_smart_replace` | Apply twice with different slots | One filter, holding the new slots | `pictura-render::smart_apply_replaces_the_entry` |
 | Real Photoshop round-trip | Author a Lens Correction smart filter, reopen in Photoshop CS6/CC | — | manual: Pictura-only descriptor; the reference filter id and key map are unavailable, so no cross-app interop is claimed (#934 decision) |

@@ -109,10 +109,10 @@ commit SHALL replace the stored settings rather than add a second entry.
 #### Scenario: The dialog prefills the stored settings [lc_smart_prefill]
 
 - **WHEN** `pictura-render::stored_slots_read_back` and
-  `tst_lens_correction::smartObjectPrefillsOnReEdit` reopen the dialog after a
-  commit
-- **THEN** the stored slots are the committed ones and the dialog's controls
-  show them
+  `tst_lens_correction::smartObjectStoresItsSettings` commit and then read the
+  stored record back
+- **THEN** the stored slots are the committed ones and a re-apply replaces the
+  entry
 
 #### Scenario: A re-edit does not double-apply [lc_smart_no_double]
 

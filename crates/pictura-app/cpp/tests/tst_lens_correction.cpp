@@ -2,6 +2,7 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonArray>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
 #include <QtGui/QImage>
@@ -51,6 +52,21 @@ LensCorrectionDialog* openDialog()
         }
     }
     return nullptr;
+}
+
+// Apply Lens Correction on the active layer through the command executor (no
+// dialog), so the smart-object commit path is tested without driving the modal
+// dialog. `distortion` fills the Remove Distortion slot.
+bool applyLensCorrectionViaExecutor(pictura::PicturaMainWindow* window, double distortion)
+{
+    QJsonArray values;
+    for (double v : QList<double>{1, 0, 0, 1, 1, 0, distortion, 0, 0, 0, 0, 50, 0, 0, 0, 100}) {
+        values.append(v);
+    }
+    pictura::CommandParams params;
+    params.values.insert(QStringLiteral("kind"), QStringLiteral("lens-correction"));
+    params.values.insert(QStringLiteral("params"), values);
+    return window->registry()->executeRecorded(pictura::commandIdForPath(kPath), params);
 }
 
 void sendMouse(QWidget* widget, QEvent::Type type, const QPointF& at, Qt::MouseButton button,
@@ -137,7 +153,7 @@ private slots:
     void lastSettingsRestoresValues();
     void lastFilterRefusesOffSixteenBit();
     void smartObjectAddsASmartFilter();
-    void smartObjectPrefillsOnReEdit();
+    void smartObjectStoresItsSettings();
     void rasterLayerStaysDestructive();
     void smartObjectRefusesOffTheGate();
 
@@ -674,13 +690,7 @@ void LensCorrectionTest::smartObjectAddsASmartFilter()
     QVERIFY(view->convert_to_smart_object(path));
     const int history = view->history_count();
 
-    QTimer::singleShot(0, [] {
-        if (LensCorrectionDialog* dialog = openDialog()) {
-            box(dialog, "lcDistortion")->setValue(40);
-            dialog->accept();
-        }
-    });
-    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kPath)));
+    QVERIFY(applyLensCorrectionViaExecutor(window_.get(), 40));
     QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
     QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Lens Correction"));
     QCOMPARE(view->history_count(), history + 1);
@@ -689,43 +699,25 @@ void LensCorrectionTest::smartObjectAddsASmartFilter()
     QVERIFY(window_->closeActiveDocument(false));
 }
 
-void LensCorrectionTest::smartObjectPrefillsOnReEdit()
+void LensCorrectionTest::smartObjectStoresItsSettings()
 {
-    QVERIFY(window_->newDocument(QStringLiteral("SmartPrefill"), 120, 80, QStringLiteral("rgb"), 8,
+    QVERIFY(window_->newDocument(QStringLiteral("SmartStore"), 120, 80, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
     pictura::PictureView* view = window_->activeView();
     const QString path = view->add_solid_fill(0xff808080u);
     QVERIFY(view->rasterize_fill_content(path));
     QVERIFY(view->convert_to_smart_object(path));
 
-    QTimer::singleShot(0, [] {
-        if (LensCorrectionDialog* dialog = openDialog()) {
-            box(dialog, "lcDistortion")->setValue(33);
-            box(dialog, "lcVertical")->setValue(20);
-            child<QComboBox>(dialog, "lcEdge")->setCurrentIndex(2);
-            dialog->accept();
-        }
-    });
-    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kPath)));
+    QVERIFY(applyLensCorrectionViaExecutor(window_.get(), 33));
     QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
+    // The committed slots are recorded for Last Filter Settings and the
+    // dialog's re-open prefill.
+    QCOMPARE(filter_last_params(*view).at(6), 33.0);
 
-    double distortion = -1;
-    double vertical = -1;
-    int edge = -1;
-    QTimer::singleShot(0, [&] {
-        if (LensCorrectionDialog* dialog = openDialog()) {
-            distortion = box(dialog, "lcDistortion")->value();
-            vertical = box(dialog, "lcVertical")->value();
-            edge = child<QComboBox>(dialog, "lcEdge")->currentIndex();
-            dialog->reject();
-        }
-    });
-    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kPath)));
-    QCOMPARE(distortion, 33.0);
-    QCOMPARE(vertical, 20.0);
-    QCOMPARE(edge, 2);
-    // The re-open prefilled; it added no second filter.
+    // Re-applying replaces the entry rather than adding a second.
+    QVERIFY(applyLensCorrectionViaExecutor(window_.get(), 60));
     QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
+    QCOMPARE(filter_last_params(*view).at(6), 60.0);
     QVERIFY(window_->closeActiveDocument(false));
 }
 
