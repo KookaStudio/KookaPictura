@@ -433,6 +433,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/layers_filter_proxy.cpp
     crates/pictura-app/cpp/panels/layers_filter_bar.cpp
     crates/pictura-app/cpp/panels/layers_panel_actions.cpp
+    crates/pictura-app/cpp/panels/layers_panel_effects.cpp
     crates/pictura-app/cpp/panels/layers_panel_menu.cpp
     crates/pictura-app/cpp/panels/layers_panel_type_menu.cpp
     crates/pictura-app/cpp/panels/layers_panel_mask_menu.cpp

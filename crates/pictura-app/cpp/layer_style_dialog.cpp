@@ -66,6 +66,50 @@ void paintSwatch(ColorSwatchWidget* button, const QColor& color)
 
 } // namespace
 
+QStringList LayerStyleDialog::effectKeys()
+{
+    return {QStringLiteral("bevel"),        QStringLiteral("stroke"),
+            QStringLiteral("innerShadow"),  QStringLiteral("innerGlow"),
+            QStringLiteral("satin"),        QStringLiteral("colorOverlay"),
+            QStringLiteral("gradientOverlay"), QStringLiteral("patternOverlay"),
+            QStringLiteral("outerGlow"),    QStringLiteral("dropShadow")};
+}
+
+QString LayerStyleDialog::effectTitle(const QString& key)
+{
+    if (key == QLatin1String("bevel")) {
+        return tr("Bevel & Emboss");
+    }
+    if (key == QLatin1String("stroke")) {
+        return tr("Stroke");
+    }
+    if (key == QLatin1String("innerShadow")) {
+        return tr("Inner Shadow");
+    }
+    if (key == QLatin1String("innerGlow")) {
+        return tr("Inner Glow");
+    }
+    if (key == QLatin1String("satin")) {
+        return tr("Satin");
+    }
+    if (key == QLatin1String("colorOverlay")) {
+        return tr("Color Overlay");
+    }
+    if (key == QLatin1String("gradientOverlay")) {
+        return tr("Gradient Overlay");
+    }
+    if (key == QLatin1String("patternOverlay")) {
+        return tr("Pattern Overlay");
+    }
+    if (key == QLatin1String("outerGlow")) {
+        return tr("Outer Glow");
+    }
+    if (key == QLatin1String("dropShadow")) {
+        return tr("Drop Shadow");
+    }
+    return key;
+}
+
 LayerStyleDialog::LayerStyleDialog(PictureView* view, const QString& path, const QString& effect,
                                    QWidget* parent)
     : QDialog(parent), view_(view), path_(path)

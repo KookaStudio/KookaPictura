@@ -369,21 +369,30 @@ impl qobject::PictureView {
                 |(path, depth)| match pictura_render::resolve_path(doc, &path) {
                     Some(layer) => {
                         let shape = pictura_render::is_shape_layer(layer);
-                        let style_effects = if pictura_render::has_layer_style(layer) {
-                            let active: Vec<&str> = effects
-                                .iter()
-                                .copied()
-                                .filter(|name| {
-                                    pictura_render::layer_style_value(
+                        let mut style_present: Vec<&str> = Vec::new();
+                        let mut style_on: Vec<&str> = Vec::new();
+                        if pictura_render::has_layer_style(layer) {
+                            for name in effects.iter().copied() {
+                                if pictura_render::layer_style_value(
+                                    layer,
+                                    &format!("{name}.exists"),
+                                ) == Some(1.0)
+                                {
+                                    style_present.push(name);
+                                    if pictura_render::layer_style_value(
                                         layer,
-                                        &format!("{name}.exists"),
+                                        &format!("{name}.on"),
                                     ) == Some(1.0)
-                                })
-                                .collect();
-                            QString::from(active.join("\n").as_str())
-                        } else {
-                            QString::default()
-                        };
+                                    {
+                                        style_on.push(name);
+                                    }
+                                }
+                            }
+                        }
+                        let style_effects = QString::from(style_present.join("\n").as_str());
+                        let style_effects_on = QString::from(style_on.join("\n").as_str());
+                        let style_visible =
+                            pictura_render::layer_style_value(layer, "fx.visible") != Some(0.0);
                         let thumbnail = if thumb == 0 {
                             QImage::default()
                         } else if shape {
@@ -460,6 +469,8 @@ impl qobject::PictureView {
                             smart_object: layer.smart_object.is_some(),
                             has_style: pictura_render::has_layer_style(layer),
                             style_effects,
+                            style_effects_on,
+                            style_visible,
                             has_blend_if: super::layer_style::layer_is_blend_if_customised(layer),
                             thumbnail,
                             mask_thumbnail,
@@ -495,6 +506,8 @@ impl qobject::PictureView {
                         smart_object: false,
                         has_style: false,
                         style_effects: QString::default(),
+                        style_effects_on: QString::default(),
+                        style_visible: true,
                         has_blend_if: false,
                         thumbnail: QImage::default(),
                         mask_thumbnail: QImage::default(),

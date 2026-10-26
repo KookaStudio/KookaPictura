@@ -141,6 +141,27 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
             }
+            // A layer-effects group or effect row owns only its eye; a click
+            // elsewhere selects the row and reaches no layer control.
+            const QString rowKind = index.data(KindRole).toString();
+            if (rowKind == QLatin1String("layer-effects")
+                || rowKind == QLatin1String("layer-effect")) {
+                if (delegate_->eyeColumnContains(tree_->visualRect(index), pos)) {
+                    toggleEffectVisibility(index, rowKind);
+                    return true;
+                }
+                return false;
+            }
+            // A plain click on a styled layer's fx badge expands or collapses
+            // its effects group (Alt is the Hide/Show All Effects gesture).
+            if (index.isValid() && index.data(HasLayerStyleRole).toBool()
+                && !(mouse->modifiers() & Qt::AltModifier)) {
+                const QRect fx = delegate_->fxRect(tree_->visualRect(index), index);
+                if (!fx.isEmpty() && fx.contains(pos)) {
+                    tree_->setExpanded(index, !tree_->isExpanded(index));
+                    return true;
+                }
+            }
             if (index.isValid() && (mouse->modifiers() & Qt::ControlModifier)) {
                 const QRect thumb = delegate_->thumbRect(tree_->visualRect(index), index);
                 if (!thumb.isEmpty() && thumb.contains(pos)) {
@@ -352,7 +373,23 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             const QPoint pos = mouse->position().toPoint();
             const QModelIndex index = tree_->indexAt(pos);
             if (index.isValid()) {
-                if (index.data(KindRole).toString().startsWith(QLatin1String("smart-filter"))) {
+                const QString rowKind = index.data(KindRole).toString();
+                if (rowKind.startsWith(QLatin1String("smart-filter"))) {
+                    return true;
+                }
+                // A layer-effects group row opens Blending Options and an effect
+                // row opens that effect's page.
+                if (rowKind == QLatin1String("layer-effects")
+                    || rowKind == QLatin1String("layer-effect")) {
+                    const QString path = pathForProxyIndex(index);
+                    const int at = path.indexOf(QStringLiteral("/@fx"));
+                    if (at >= 0) {
+                        const QString base = path.left(at);
+                        const QString effect = rowKind == QLatin1String("layer-effect")
+                            ? path.mid(at + 5)
+                            : QString();
+                        openLayerStyle(base, effect);
+                    }
                     return true;
                 }
                 // The mask thumbnail and link glyph own their clicks; a
@@ -385,6 +422,10 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     }
                 } else if (delegate_->nameRect(tree_->visualRect(index), index).contains(pos)) {
                     tree_->edit(index);
+                } else if (index.data(HasLayerStyleRole).toBool()
+                           && delegate_->fxRect(tree_->visualRect(index), index).contains(pos)) {
+                    // A double-click on the fx badge opens Blending Options.
+                    openLayerStyle(path);
                 } else if (!delegate_->eyeColumnContains(tree_->visualRect(index), pos)
                            && !delegate_->lockRect(tree_->visualRect(index)).contains(pos)
                            && !delegate_->fxRect(tree_->visualRect(index), index).contains(pos)

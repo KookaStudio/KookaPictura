@@ -94,7 +94,8 @@ Deeper technical status for PSD/PSB lives in
   `crates/pictura-render/src/document_ops/layer_ops/`.
 - [x] **27 blend modes**, plus Pass Through for groups.
   `crates/pictura-core/src/lib.rs`.
-- [x] **Layer styles and effects** — the ten `lfx2` effects.
+- [x] **Layer styles and effects** — the ten `lfx2` effects, with the Layers
+  panel's nested `Effects` group and per-effect rows (#960).
   `crates/pictura-render/src/layer_effects/`.
 - [x] **Fill and adjustment layers.** `crates/pictura-render/src/fill.rs`.
 - [x] **Shape and type layers.** `crates/pictura-render/src/type_layer.rs`.

@@ -17,7 +17,7 @@ void LayersPanel::writeTarget()
         return;
     }
     const QString current = currentPath();
-    if (current.contains(QStringLiteral("/@sf"))) {
+    if (isSyntheticRowPath(current)) {
         return;
     }
     QStringList paths = selectedPaths();
@@ -45,7 +45,7 @@ void LayersPanel::writeCurrentAnchor()
         return;
     }
     const QString current = currentPath();
-    if (current.isEmpty() || current.contains(QStringLiteral("/@sf"))) {
+    if (current.isEmpty() || isSyntheticRowPath(current)) {
         return;
     }
     // Ctrl+arrow moves the current row without changing the selection. Only the

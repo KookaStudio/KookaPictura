@@ -37,6 +37,12 @@ public:
     LayerStyleDialog(PictureView* view, const QString& path, const QString& effect,
                      QWidget* parent = nullptr);
 
+    // The ten effect keys in CS6 list order, and an effect key's plain title
+    // (e.g. "bevel" -> "Bevel & Emboss"); the panel's effects rows and the
+    // layer-style menu name effects from these.
+    static QStringList effectKeys();
+    static QString effectTitle(const QString& key);
+
     // The dialog keys of the effect rows, row order; Blending Options is "".
     QStringList rowKeys() const { return keys_; }
     QListWidget* effectList() const { return list_; }

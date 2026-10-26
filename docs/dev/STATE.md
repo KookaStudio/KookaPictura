@@ -126,6 +126,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   anti-aliasing. Groups open Blending Options with effect pages disabled until
   group effects render (#939). The smoke fixture now carries the default masks
   its Invert and Solid Fill rows should have.
+- **Layers panel layer-effects rows** (#960, OpenSpec change
+  `layers-panel-effects-rows`). A styled layer now nests its effects in the
+  panel: an `Effects` group row (disclosure + master `fx.visible` eye) and one
+  row per present effect (`<effect>.on` eye), expanded once on a new style when
+  **Expand New Effects** is on. The layer's `fx` badge is the group's
+  disclosure; a double-click on the badge or the group opens Blending Options
+  and on an effect row opens that effect's page; the badge's and rows' context
+  menu is the CS6 layer-style menu (Disable/Enable Layer Effects, Blending
+  Options…, the ten effects, Copy/Paste/Clear, disabled Global Light…/Create
+  Layer, Hide/Show All Effects, Scale Effects…). Tests: `tst_layers_effects`.
 - **Colour management bundle** (#568, #569, #600, #604, #809, #947; OpenSpec
   changes `color-management-bundle` and `color-conversion-layer-fix`). CMYK
   now converts through the document's embedded profile or the configured working profile, with `OpenOptions` and a shared
