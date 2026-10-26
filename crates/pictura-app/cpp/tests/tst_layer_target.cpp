@@ -68,6 +68,7 @@ private slots:
     void multiSelectionHasNoEditTarget();
     void deselectClearsTarget();
     void deselectSurvivesRefresh();
+    void userDeselectClearsCurrentRow();
     void selectionDoesNotDirtyOrRecord();
     void singleSelectionIsEditTarget();
     void zeroOrMultiSelectionRefusesToolEdit();
@@ -105,6 +106,7 @@ private slots:
     void selectSimilarKeepsActiveSelected();
     void selectLinkedSelectsMembers();
     void documentSwitchCurrentRow();
+    void clickingEmptySpaceClearsCurrentRow();
 
 private:
     bool newDoc(const QString& name, int layers);
@@ -212,6 +214,26 @@ void LayerTargetTest::deselectSurvivesRefresh()
     panel_->refresh();
     QVERIFY(pictura::selected_layer_paths(*view_).isEmpty());
     QVERIFY(panel_->selectedPaths().isEmpty());
+}
+
+// lt_deselect: a user-driven deselect clears the target and the tree's current
+// row with it, so no row keeps an active highlight the document does not have.
+void LayerTargetTest::userDeselectClearsCurrentRow()
+{
+    QVERIFY(newDoc(QStringLiteral("UserDeselect"), 2));
+    select({QStringLiteral("1")}, QStringLiteral("1"));
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    QVERIFY(tree->currentIndex().isValid());
+
+    tree->selectionModel()->clearSelection();
+    QCoreApplication::processEvents();
+
+    QVERIFY(pictura::selected_layer_paths(*view_).isEmpty());
+    QVERIFY(pictura::layer_selection_anchor(*view_).isEmpty());
+    QVERIFY(panel_->selectedPaths().isEmpty());
+    QVERIFY(!tree->currentIndex().isValid());
+    QVERIFY(panel_->currentPath().isEmpty());
 }
 
 // lt_no_history
@@ -730,6 +752,32 @@ void LayerTargetTest::documentSwitchCurrentRow()
     panel_->setView(view_);
     panel_->refresh();
     QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
+}
+
+// lt_deselect: clicking the empty space below the rows is the panel's explicit
+// deselect gesture; it leaves no current row behind.
+void LayerTargetTest::clickingEmptySpaceClearsCurrentRow()
+{
+    QVERIFY(newDoc(QStringLiteral("EmptyClick"), 2));
+    window_->show();
+    QCoreApplication::processEvents();
+    select({QStringLiteral("1")}, QStringLiteral("1"));
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    QAbstractItemModel* model = tree->model();
+    QVERIFY(model != nullptr);
+    const QModelIndex last = model->index(model->rowCount() - 1, 0);
+    QVERIFY(last.isValid());
+    const int y = tree->visualRect(last).bottom() + 10;
+    QVERIFY2(y < tree->viewport()->height(), "the tree leaves no empty space below the rows");
+
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(10, y));
+    QCoreApplication::processEvents();
+
+    QVERIFY(pictura::selected_layer_paths(*view_).isEmpty());
+    QVERIFY(pictura::layer_selection_anchor(*view_).isEmpty());
+    QVERIFY(!tree->currentIndex().isValid());
+    QVERIFY(panel_->currentPath().isEmpty());
 }
 
 QTEST_MAIN(LayerTargetTest)
