@@ -281,8 +281,15 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     // The swatch sets the foreground, which the text colour follows (CS6 links
     // the two); a type layer being edited or selected takes the colour.
     connect(color, &QToolButton::clicked, this, [this]() {
-        const QColor picked = ColorPickerDialog::getColor(type_->get().color, this,
-                                                          QStringLiteral("Text Color"));
+        TextSession* session = textSession();
+        std::function<void(const QColor&)> live;
+        if (session) {
+            live = [session](const QColor& c) { session->previewTextColor(c); };
+        }
+        // A copy, because the preview rewrites the options it was read from.
+        const QColor opening = type_->get().color;
+        const QColor picked = ColorPickerDialog::getColor(
+            opening, this, QStringLiteral("Text Color"), nullptr, {}, live);
         if (picked.isValid()) {
             controller_->setForeground(picked);
         }

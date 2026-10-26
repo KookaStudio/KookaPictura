@@ -312,6 +312,17 @@ pub mod ffi {
             paragraph: &ParagraphSetting,
         ) -> bool;
 
+        /// As `type_update_layer` but only shows the result: no history state, so a live preview (the Text Color picker open) can be dropped by re-setting the original.
+        fn type_preview_layer(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            text: &QString,
+            font: &QString,
+            setting: &TypeSetting,
+            character: &CharacterSetting,
+            paragraph: &ParagraphSetting,
+        ) -> bool;
+
         /// Apply the saved character (`paragraph` false) or paragraph (`paragraph` true) style named `name` to the type layer at `path`, resolve it, and record one "Apply Type Style" state; false (no state) for a missing style or non-type layer.
         fn type_apply_style(
             view: Pin<&mut PictureView>,
@@ -783,6 +794,31 @@ fn type_update_layer(
     );
     if replaced {
         commit_edit(view);
+    }
+    replaced
+}
+
+fn type_preview_layer(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    text: &QString,
+    font: &QString,
+    setting: &TypeSetting,
+    character: &CharacterSetting,
+    paragraph: &ParagraphSetting,
+) -> bool {
+    let replaced = replace(
+        view.as_mut(),
+        path,
+        text,
+        font,
+        setting,
+        character,
+        paragraph,
+    );
+    if replaced {
+        view.as_mut().recomposite();
+        view.as_mut().changed();
     }
     replaced
 }

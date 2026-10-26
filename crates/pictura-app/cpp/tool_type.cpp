@@ -572,6 +572,29 @@ public:
         return true;
     }
 
+    bool previewTextColor(const QColor& color) override
+    {
+        if (active_) {
+            TypeOptions o = type_->get();
+            o.color = color;
+            type_->set(o);
+            return true;
+        }
+        PictureView* v = ctx_ ? ctx_->view() : nullptr;
+        if (!v || layerPath_.isEmpty()) {
+            return false;
+        }
+        const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*v, layerPath_);
+        if (!layer.isType) {
+            return false;
+        }
+        CharacterSetting c = layer.spec.character;
+        c.color = color.rgba();
+        return pictura::type_api::previewLayer(
+            *v, layerPath_, {layer.spec.text, familyForFontName(layer.spec.font), layer.spec.setting,
+                             c, layer.spec.paragraph});
+    }
+
     bool insertText(const QString& text) override
     {
         if (!active_) {

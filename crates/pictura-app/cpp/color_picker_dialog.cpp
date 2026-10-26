@@ -1104,14 +1104,32 @@ int ColorPickerDialog::pickerPreference()
 
 QColor ColorPickerDialog::getColor(const QColor& initial, QWidget* parent, const QString& title,
                                    ToolController* tools,
-                                   std::function<QColor(const QPoint&)> colorAt)
+                                   std::function<QColor(const QPoint&)> colorAt,
+                                   std::function<void(const QColor&)> onLive)
 {
     if (g_pickerChoice == 1) {
-        return QColorDialog::getColor(initial, parent, title);
+        QColorDialog dialog(initial, parent);
+        dialog.setWindowTitle(title);
+        if (onLive) {
+            connect(&dialog, &QColorDialog::currentColorChanged, &dialog, onLive);
+        }
+        if (dialog.exec() != QDialog::Accepted) {
+            if (onLive) {
+                onLive(initial);
+            }
+            return {};
+        }
+        return dialog.selectedColor();
     }
     ColorPickerDialog dialog(initial, parent, title, defaultSwatchGrid());
     dialog.sampleCanvas(tools, std::move(colorAt));
+    if (onLive) {
+        connect(dialog.m_picker, &ColorPicker::colorChanged, &dialog, onLive);
+    }
     if (runDialog(dialog, parent) != QDialog::Accepted) {
+        if (onLive) {
+            onLive(initial);
+        }
         return {};
     }
     return dialog.selectedColor();

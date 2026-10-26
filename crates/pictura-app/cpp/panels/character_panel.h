@@ -97,7 +97,8 @@ private:
     void commitCombo(ComboField& field);
     void syncCombos();
     void updateIcons();
-    void apply();
+    // `preview` shows the layer's new attributes without a history state.
+    void apply(bool preview = false);
     void resetCharacter();
     bool hasTypeLayer() const;
     void updateColorIcon();

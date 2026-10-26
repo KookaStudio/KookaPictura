@@ -3,6 +3,7 @@
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QString>
+#include <QtGui/QColor>
 
 namespace pictura {
 
@@ -62,6 +63,11 @@ public:
     // a session. Setting them previews at once.
     virtual bool newTextCharacter(CharacterSetting& character, QString& family) const = 0;
     virtual bool setNewTextCharacter(const CharacterSetting& character, const QString& family) = 0;
+    // Shows `color` on the text being typed or the selected type layer without
+    // a history state (the Text Color picker's live preview); calling it with
+    // the original colour drops the preview. The committed colour still goes
+    // through the options bar.
+    virtual bool previewTextColor(const QColor& color) = 0;
 };
 
 } // namespace pictura
