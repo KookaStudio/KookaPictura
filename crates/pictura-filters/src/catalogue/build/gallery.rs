@@ -7,14 +7,14 @@
 //! canonical list is one pin plus the tail; its all-defaults form
 //! (count 0) and an empty list both mean one default pin.
 
-use super::choices::BLUR_NOISE_KINDS;
-use super::{f, flag, pick, u32v, u64v, u8v};
-use pictura_filters::{
-    BlurNoise, BlurPath, BlurPin, BokehParams, Filter, IrisPin, PathMotion, SpinPin, SpinStrobe,
-    TiltPin, MAX_FIELD_PINS, MAX_PATH_POINTS,
+use super::{BuildCtx, BLUR_NOISE_KINDS};
+use crate::catalogue::GALLERY_TAIL;
+use crate::filter::Filter;
+use crate::{
+    BlurNoise, BlurPath, BlurPin, BokehParams, IrisPin, PathMotion, SpinPin, SpinStrobe, TiltPin,
+    MAX_FIELD_PINS, MAX_PATH_POINTS,
 };
 
-pub(in crate::cxxqt_object) const GALLERY_TAIL: usize = 13;
 /// Field Blur's pin record: `(x, y, blur)`.
 const FIELD_PIN_SLOTS: usize = 3;
 /// Iris Blur's pin record: `(x, y, radius x, radius y, angle, squareness,
@@ -94,36 +94,18 @@ fn read_spin(s: &[f64]) -> SpinPin {
     }
 }
 
-pub(super) fn field_blur(params: &[f64]) -> Option<Filter> {
-    let (pins, bokeh, noise) = gallery(
-        "field-blur",
-        params,
-        FIELD_PIN_SLOTS,
-        FIELD_DEFAULT_PIN,
-        read_field,
-    )?;
+pub(super) fn field_blur(ctx: &BuildCtx) -> Option<Filter> {
+    let (pins, bokeh, noise) = gallery(ctx, FIELD_PIN_SLOTS, FIELD_DEFAULT_PIN, read_field)?;
     Some(Filter::FieldBlur { pins, bokeh, noise })
 }
 
-pub(super) fn iris_blur(params: &[f64]) -> Option<Filter> {
-    let (pins, bokeh, noise) = gallery(
-        "iris-blur",
-        params,
-        IRIS_PIN_SLOTS,
-        IrisPin::default(),
-        read_iris,
-    )?;
+pub(super) fn iris_blur(ctx: &BuildCtx) -> Option<Filter> {
+    let (pins, bokeh, noise) = gallery(ctx, IRIS_PIN_SLOTS, IrisPin::default(), read_iris)?;
     Some(Filter::IrisBlur { pins, bokeh, noise })
 }
 
-pub(super) fn tilt_shift(params: &[f64]) -> Option<Filter> {
-    let (pins, bokeh, noise) = gallery(
-        "tilt-shift",
-        params,
-        TILT_PIN_SLOTS,
-        TiltPin::default(),
-        read_tilt,
-    )?;
+pub(super) fn tilt_shift(ctx: &BuildCtx) -> Option<Filter> {
+    let (pins, bokeh, noise) = gallery(ctx, TILT_PIN_SLOTS, TiltPin::default(), read_tilt)?;
     Some(Filter::TiltShift { pins, bokeh, noise })
 }
 
@@ -140,7 +122,8 @@ fn default_path() -> BlurPath {
 
 /// The `path-blur` kind. An empty list and the canonical list with count 0
 /// map to one default path.
-pub(super) fn path_blur(params: &[f64]) -> Option<Filter> {
+pub(super) fn path_blur(ctx: &BuildCtx) -> Option<Filter> {
+    let params = ctx.params;
     if params.is_empty() {
         return Some(Filter::PathBlur {
             paths: vec![default_path()],
@@ -148,8 +131,7 @@ pub(super) fn path_blur(params: &[f64]) -> Option<Filter> {
             noise: BlurNoise::default(),
         });
     }
-    let canonical =
-        params.len() == super::descriptor::arity("path-blur").unwrap_or(0) && params[0] == 0.0;
+    let canonical = params.len() == ctx.spec.slots() && params[0] == 0.0;
     let (paths, at) = if canonical {
         (vec![default_path()], 1 + PATH_RECORD_SLOTS)
     } else {
@@ -212,7 +194,8 @@ fn read_motion(params: &[f64], at: usize) -> PathMotion {
 
 /// The `spin-blur` kind. An empty list and the canonical list with count 0
 /// map to one default spin.
-pub(super) fn spin_blur(params: &[f64]) -> Option<Filter> {
+pub(super) fn spin_blur(ctx: &BuildCtx) -> Option<Filter> {
+    let params = ctx.params;
     if params.is_empty() {
         return Some(Filter::SpinBlur {
             spins: vec![SpinPin::default()],
@@ -220,8 +203,7 @@ pub(super) fn spin_blur(params: &[f64]) -> Option<Filter> {
             noise: BlurNoise::default(),
         });
     }
-    let canonical =
-        params.len() == super::descriptor::arity("spin-blur").unwrap_or(0) && params[0] == 0.0;
+    let canonical = params.len() == ctx.spec.slots() && params[0] == 0.0;
     let (spins, at) = if canonical {
         (vec![SpinPin::default()], 1 + SPIN_PIN_SLOTS)
     } else {
@@ -250,8 +232,9 @@ pub(super) fn spin_blur(params: &[f64]) -> Option<Filter> {
 /// the motion section, the spin flash duration, then the tail. Spins take
 /// the motion section's strobe strength and flashes. An empty list and the
 /// canonical all-defaults list (every count 0) map to one default Field pin.
-pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
-    let total = super::descriptor::arity("blur-gallery").unwrap_or(0);
+pub(super) fn blur_gallery(ctx: &BuildCtx) -> Option<Filter> {
+    let params = ctx.params;
+    let total = ctx.spec.slots();
     let canonical_counts = [
         0,
         1 + FIELD_PIN_SLOTS,
@@ -329,12 +312,12 @@ fn section<P>(
 /// Split a gallery slot list into its pins and effects; `None` for a list
 /// whose length does not match its count, or more pins than the cap.
 fn gallery<P>(
-    kind: &str,
-    params: &[f64],
+    ctx: &BuildCtx,
     stride: usize,
     default_pin: P,
     read: impl Fn(&[f64]) -> P,
 ) -> Option<(Vec<P>, BokehParams, BlurNoise)> {
+    let params = ctx.params;
     if params.is_empty() {
         return Some((
             vec![default_pin],
@@ -346,7 +329,7 @@ fn gallery<P>(
     if count > MAX_FIELD_PINS {
         return None;
     }
-    let canonical = params.len() == super::descriptor::arity(kind).unwrap_or(0) && count == 0;
+    let canonical = params.len() == ctx.spec.slots() && count == 0;
     let tail = if canonical {
         1 + stride
     } else {
@@ -388,4 +371,29 @@ fn effects(params: &[f64], tail: usize) -> (BokehParams, BlurNoise) {
         seed: u64v(params, tail + 12, 1.0),
     };
     (bokeh, noise)
+}
+
+fn f(s: &[f64], i: usize, d: f64) -> f64 {
+    s.get(i).copied().unwrap_or(d)
+}
+
+fn flag(s: &[f64], i: usize, d: bool) -> bool {
+    s.get(i).map(|v| *v >= 0.5).unwrap_or(d)
+}
+
+fn u32v(s: &[f64], i: usize, d: f64) -> u32 {
+    f(s, i, d).max(0.0).round() as u32
+}
+
+fn u64v(s: &[f64], i: usize, d: f64) -> u64 {
+    f(s, i, d).max(0.0).round() as u64
+}
+
+fn u8v(s: &[f64], i: usize, d: f64) -> u8 {
+    f(s, i, d).clamp(0.0, 255.0).round() as u8
+}
+
+fn pick<T: Copy>(all: &[T], s: &[f64], i: usize, d: usize) -> T {
+    let j = s.get(i).map(|v| v.round().max(0.0) as usize).unwrap_or(d);
+    *all.get(j).unwrap_or(&all[d])
 }

@@ -92,6 +92,8 @@ struct FilterCommandSpec {
     // No preview at all, no Preview checkbox (Displace: its map is chosen
     // after OK, so there is nothing to show).
     bool livePreview = true;
+    // Gallery order; -1 when the filter is not in the gallery.
+    int galleryRank = -1;
 };
 
 // Every Filter-menu leaf that has an engine kernel, in table order.

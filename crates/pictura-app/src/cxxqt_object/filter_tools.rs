@@ -93,6 +93,7 @@ pub mod ffi {
         stacked: bool,
         preview_below: bool,
         live_preview: bool,
+        gallery_rank: i32,
     }
 
     #[namespace = "pictura"]
@@ -295,6 +296,9 @@ fn apply_filter_params(
     params: &QList<f64>,
 ) -> bool {
     let kind_s = kind.to_string();
+    if !super::filter_map::is_filter_command(&kind_s) {
+        return false;
+    }
     if let Some(reason) = depth_refusal(&kind_s, view.rust().session.doc.as_ref()) {
         eprintln!("pictura: filter '{kind_s}' refused: {reason}");
         view.as_mut().rust_mut().filter_error = Some(reason);
@@ -367,6 +371,9 @@ fn apply_lens_correction_smart(
 
 fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QList<f64>) -> bool {
     let kind_s = kind.to_string();
+    if !super::filter_map::is_filter_command(&kind_s) {
+        return false;
+    }
     let params_v: Vec<f64> = params.into_iter().copied().collect();
     let region = {
         let mut rust = view.as_mut().rust_mut();
@@ -526,7 +533,7 @@ fn selected_area_empty(layer: &Layer, selection: Option<&pictura_select::Selecti
 }
 
 fn filter_kind_supported(kind: &QString) -> bool {
-    super::filter_map::filter_param_arity(&kind.to_string()).is_some()
+    super::filter_map::is_filter_command(&kind.to_string())
 }
 
 fn filter_descriptors() -> Vec<ffi::FilterDescriptorRow> {
@@ -564,7 +571,7 @@ fn filter_descriptors() -> Vec<ffi::FilterDescriptorRow> {
                 path.append(QString::from(*part));
             }
             ffi::FilterDescriptorRow {
-                kind: QString::from(descriptor.kind),
+                kind: QString::from(descriptor.id),
                 path,
                 menu: descriptor.menu,
                 label: QString::from(descriptor.label),
@@ -576,6 +583,7 @@ fn filter_descriptors() -> Vec<ffi::FilterDescriptorRow> {
                 stacked: descriptor.stacked,
                 preview_below: descriptor.preview_below,
                 live_preview: descriptor.live_preview,
+                gallery_rank: descriptor.gallery.map_or(-1, i32::from),
             }
         })
         .collect()
@@ -738,6 +746,9 @@ fn filter_thumbnail(
     params: &QList<f64>,
     scale: f64,
 ) -> QImage {
+    if !super::filter_map::is_filter_command(&kind.to_string()) {
+        return QImage::default();
+    }
     let params: Vec<f64> = params.into_iter().copied().collect();
     let params =
         super::filter_map::descriptor::scale_pixel_params(&kind.to_string(), &params, scale);
@@ -924,6 +935,9 @@ fn proxy_layer_frame_buffer(
     kind: &str,
     params: &[f64],
 ) -> Option<PixelBuffer> {
+    if !super::filter_map::is_filter_command(kind) {
+        return None;
+    }
     let scale = f64::from(max_edge) / f64::from(doc_width.max(doc_height).max(1));
     let mut buffer = proxy_layer_buffer(layer, scale)?;
     if let Some(filter) = filter_from_kind_params(kind, params) {

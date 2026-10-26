@@ -59,6 +59,19 @@ fn check_f(what: &str, v: f64, range: RangeInclusive<f64>) -> Result<(), FilterE
     }
 }
 
+fn check_slot(filter: &Filter, slot: usize, value: f64) -> Result<(), FilterError> {
+    let range = filter
+        .kind()
+        .spec()
+        .range_for_slot(slot)
+        .ok_or_else(|| bad("parameter slot"))?;
+    if value.is_finite() && range.contains(&value) {
+        Ok(())
+    } else {
+        Err(bad("filter parameter"))
+    }
+}
+
 /// Texture options: `scaling 50..=200`, `relief 0..=50`, light `0..=7`.
 fn check_texture(t: &TextureOptions) -> Result<(), FilterError> {
     check("texture scaling", t.scaling, 50..=200)?;
@@ -102,13 +115,13 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             distribution,
             monochromatic,
             seed,
-        } => check_f("add noise amount", amount, 0.0..=400.0).map(|()| {
+        } => check_slot(filter, 0, amount).map(|()| {
             let gaussian = distribution == NoiseDistribution::Gaussian;
             let run: Run = Box::new(move |p| add_noise(p, amount as f32, monochromatic, gaussian));
             (seed, run)
         }),
-        Filter::DustAndScratches { radius, threshold } => check("dust radius", radius, 1..=16)
-            .and(check("dust threshold", threshold, 0..=255))
+        Filter::DustAndScratches { radius, threshold } => check_slot(filter, 0, f64::from(radius))
+            .and(check_slot(filter, 1, f64::from(threshold)))
             .map(|()| unseeded(move |p| convolve::dust_and_scratches(p, radius, threshold))),
         Filter::Average => Ok(unseeded(convolve::average)),
         // --- Render -------------------------------------------------------
@@ -116,8 +129,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             .validate()
             .map(|()| unseeded(move |p| crate::render::picture_frame(p, &options))),
         // --- Blur / Sharpen -----------------------------------------------
-        Filter::SurfaceBlur { radius, threshold } => check("surface radius", radius, 1..=100)
-            .and(check("surface threshold", threshold, 1..=255))
+        Filter::SurfaceBlur { radius, threshold } => check_slot(filter, 0, f64::from(radius))
+            .and(check_slot(filter, 1, f64::from(threshold)))
             .map(|()| unseeded(move |p| convolve::surface_blur(p, radius, u32::from(threshold)))),
         Filter::SharpenEdges => Ok(unseeded(sharpen::sharpen_edges)),
         // --- Stylize ------------------------------------------------------
@@ -125,9 +138,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             angle,
             height,
             amount,
-        } => check_f("emboss angle", angle, -360.0..=360.0)
-            .and(check_f("emboss height", height, 1.0..=100.0))
-            .and(check_f("emboss amount", amount, 1.0..=500.0))
+        } => check_slot(filter, 0, angle)
+            .and(check_slot(filter, 1, height))
+            .and(check_slot(filter, 2, amount))
             .map(|()| {
                 unseeded(move |p| stylize::emboss(p, angle as f32, height as f32, amount as f32))
             }),
@@ -137,9 +150,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             width,
             brightness,
             smoothness,
-        } => check("glowing edges width", width, 1..=14)
-            .and(check("glowing edges brightness", brightness, 0..=20))
-            .and(check("glowing edges smoothness", smoothness, 1..=15))
+        } => check_slot(filter, 0, f64::from(width))
+            .and(check_slot(filter, 1, f64::from(brightness)))
+            .and(check_slot(filter, 2, f64::from(smoothness)))
             .map(|()| unseeded(move |p| stylize::glowing_edges(p, width, brightness, smoothness))),
         Filter::Extrude {
             kind,
@@ -148,8 +161,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             level_based,
             solid_front,
             mask_incomplete,
-        } => check("extrude size", size, 2..=255)
-            .and(check_f("extrude depth", f64::from(depth), 1.0..=255.0))
+        } => check_slot(filter, 1, f64::from(size))
+            .and(check_slot(filter, 2, f64::from(depth)))
             .map(|()| {
                 let opt = stylize::ExtrudeOptions {
                     kind,
@@ -167,8 +180,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             fill,
             foreground,
             background,
-        } => check("tiles count", count, 1..=99)
-            .and(check("tiles offset", offset, 1..=99))
+        } => check_slot(filter, 0, f64::from(count))
+            .and(check_slot(filter, 1, f64::from(offset)))
             .map(|()| {
                 let opt = stylize::TileOptions {
                     count,
@@ -186,17 +199,15 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             Ok(unseeded(move |p| stylize::wind(p, method, from_right)))
         }
         // --- Pixelate -----------------------------------------------------
-        Filter::Mosaic { cell_size } => check("mosaic cell size", cell_size, 2..=200)
+        Filter::Mosaic { cell_size } => check_slot(filter, 0, f64::from(cell_size))
             .map(|()| unseeded(move |p| pixelate::mosaic(p, cell_size))),
-        Filter::Crystallize { cell_size, seed } => {
-            check("crystallize cell size", cell_size, 3..=300)
-                .map(|()| seeded(seed, move |p| pixelate::crystallize(p, cell_size)))
-        }
+        Filter::Crystallize { cell_size, seed } => check_slot(filter, 0, f64::from(cell_size))
+            .map(|()| seeded(seed, move |p| pixelate::crystallize(p, cell_size))),
         Filter::Pointillize {
             cell_size,
             background,
             seed,
-        } => check("pointillize cell size", cell_size, 3..=300).map(|()| {
+        } => check_slot(filter, 0, f64::from(cell_size)).map(|()| {
             seeded(seed, move |p| {
                 pixelate::pointillize(p, cell_size, rgb(background))
             })
@@ -205,7 +216,7 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
         Filter::Fragment => Ok(unseeded(pixelate::fragment)),
         Filter::Mezzotint { kind, seed } => Ok(seeded(seed, move |p| pixelate::mezzotint(p, kind))),
         Filter::ColorHalftone { max_radius, angles } => {
-            check("color halftone radius", max_radius, 4..=127)
+            check_slot(filter, 0, f64::from(max_radius))
                 .and(
                     angles
                         .iter()
@@ -217,13 +228,13 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
                 })
         }
         // --- Distort ------------------------------------------------------
-        Filter::Twirl { angle } => check_f("twirl angle", angle, -999.0..=999.0)
+        Filter::Twirl { angle } => check_slot(filter, 0, angle)
             .map(|()| unseeded(move |p| distort::twirl(p, angle as f32))),
-        Filter::Pinch { amount } => check_f("pinch amount", amount, -100.0..=100.0)
+        Filter::Pinch { amount } => check_slot(filter, 0, amount)
             .map(|()| unseeded(move |p| distort::pinch(p, amount as f32))),
-        Filter::Spherize { amount, mode } => check_f("spherize amount", amount, -100.0..=100.0)
+        Filter::Spherize { amount, mode } => check_slot(filter, 0, amount)
             .map(|()| unseeded(move |p| distort::spherize(p, amount as f32, mode))),
-        Filter::Ripple { amount, size } => check_f("ripple amount", amount, -999.0..=999.0)
+        Filter::Ripple { amount, size } => check_slot(filter, 0, amount)
             .map(|()| unseeded(move |p| distort::ripple(p, amount as f32, size))),
         Filter::PolarCoordinates { kind } => {
             let to_polar = kind == PolarKind::RectangularToPolar;
@@ -266,8 +277,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             amount,
             ridges,
             style,
-        } => check_f("zigzag amount", amount, -100.0..=100.0)
-            .and(check("zigzag ridges", ridges, 0..=20))
+        } => check_slot(filter, 0, amount)
+            .and(check_slot(filter, 1, f64::from(ridges)))
             .map(|()| unseeded(move |p| distort::zigzag(p, amount as f32, ridges, style))),
         Filter::Wave {
             generators,
@@ -293,9 +304,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             paper_brightness,
             background,
             seed,
-        } => check("colored pencil width", pencil_width, 1..=24)
-            .and(check("colored pencil pressure", stroke_pressure, 0..=15))
-            .and(check("colored pencil paper", paper_brightness, 0..=50))
+        } => check_slot(filter, 0, f64::from(pencil_width))
+            .and(check_slot(filter, 1, f64::from(stroke_pressure)))
+            .and(check_slot(filter, 2, f64::from(paper_brightness)))
             .map(|()| {
                 seeded(seed, move |p| {
                     artistic::colored_pencil(
@@ -311,9 +322,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             levels,
             edge_simplicity,
             edge_fidelity,
-        } => check("cutout levels", levels, 2..=8)
-            .and(check("cutout simplicity", edge_simplicity, 0..=10))
-            .and(check("cutout fidelity", edge_fidelity, 1..=3))
+        } => check_slot(filter, 0, f64::from(levels))
+            .and(check_slot(filter, 1, f64::from(edge_simplicity)))
+            .and(check_slot(filter, 2, f64::from(edge_fidelity)))
             .map(|()| {
                 unseeded(move |p| {
                     artistic::cutout(p, u(levels), u(edge_simplicity), u(edge_fidelity))
@@ -344,9 +355,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             highlight_area,
             intensity,
             seed,
-        } => check("film grain", grain, 0..=20)
-            .and(check("film grain highlight", highlight_area, 0..=20))
-            .and(check("film grain intensity", intensity, 0..=10))
+        } => check_slot(filter, 0, f64::from(grain))
+            .and(check_slot(filter, 1, f64::from(highlight_area)))
+            .and(check_slot(filter, 2, f64::from(intensity)))
             .map(|()| {
                 seeded(seed, move |p| {
                     artistic::film_grain(p, u(grain), u(highlight_area), u(intensity))
@@ -356,8 +367,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             glow_size,
             glow_brightness,
             glow_color,
-        } => check("neon glow size", glow_size, -24..=24)
-            .and(check("neon glow brightness", glow_brightness, 0..=50))
+        } => check_slot(filter, 0, f64::from(glow_size))
+            .and(check_slot(filter, 1, f64::from(glow_brightness)))
             .map(|()| {
                 // ponytail: CS6 tints with the document foreground and
                 // background; the variant carries no colours yet, so the
@@ -378,8 +389,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             sharpness,
             brush_type,
             seed,
-        } => check("paint daubs size", brush_size, 1..=50)
-            .and(check("paint daubs sharpness", sharpness, 0..=40))
+        } => check_slot(filter, 0, f64::from(brush_size))
+            .and(check_slot(filter, 1, f64::from(sharpness)))
             .map(|()| {
                 seeded(seed, move |p| {
                     artistic::paint_daubs(p, u(brush_size), u(sharpness), brush_type)
@@ -389,9 +400,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             stroke_size,
             stroke_detail,
             softness,
-        } => check("palette knife size", stroke_size, 1..=50)
-            .and(check("palette knife detail", stroke_detail, 1..=3))
-            .and(check("palette knife softness", softness, 0..=10))
+        } => check_slot(filter, 0, f64::from(stroke_size))
+            .and(check_slot(filter, 1, f64::from(stroke_detail)))
+            .and(check_slot(filter, 2, f64::from(softness)))
             .map(|()| {
                 unseeded(move |p| {
                     artistic::palette_knife(p, u(stroke_size), u(stroke_detail), u(softness))
@@ -401,9 +412,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             highlight_strength,
             detail,
             smoothness,
-        } => check("plastic wrap highlight", highlight_strength, 0..=20)
-            .and(check("plastic wrap detail", detail, 1..=15))
-            .and(check("plastic wrap smoothness", smoothness, 1..=15))
+        } => check_slot(filter, 0, f64::from(highlight_strength))
+            .and(check_slot(filter, 1, f64::from(detail)))
+            .and(check_slot(filter, 2, f64::from(smoothness)))
             .map(|()| {
                 unseeded(move |p| {
                     artistic::plastic_wrap(p, u(highlight_strength), u(detail), u(smoothness))
@@ -413,9 +424,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             edge_thickness,
             edge_intensity,
             posterization,
-        } => check("poster edges thickness", edge_thickness, 0..=10)
-            .and(check("poster edges intensity", edge_intensity, 0..=10))
-            .and(check("poster edges posterization", posterization, 0..=10))
+        } => check_slot(filter, 0, f64::from(edge_thickness))
+            .and(check_slot(filter, 1, f64::from(edge_intensity)))
+            .and(check_slot(filter, 2, f64::from(posterization)))
             .map(|()| {
                 unseeded(move |p| {
                     artistic::poster_edges(
@@ -431,8 +442,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             stroke_detail,
             texture,
             seed,
-        } => check("rough pastels length", stroke_length, 0..=40)
-            .and(check("rough pastels detail", stroke_detail, 1..=20))
+        } => check_slot(filter, 0, f64::from(stroke_length))
+            .and(check_slot(filter, 1, f64::from(stroke_detail)))
             .and(check_texture(&texture))
             .map(|()| {
                 seeded(seed, move |p| {
@@ -453,9 +464,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             highlight_area,
             intensity,
             seed,
-        } => check("smudge stick length", stroke_length, 0..=10)
-            .and(check("smudge stick highlight", highlight_area, 0..=20))
-            .and(check("smudge stick intensity", intensity, 0..=10))
+        } => check_slot(filter, 0, f64::from(stroke_length))
+            .and(check_slot(filter, 1, f64::from(highlight_area)))
+            .and(check_slot(filter, 2, f64::from(intensity)))
             .map(|()| {
                 seeded(seed, move |p| {
                     artistic::smudge_stick(p, u(stroke_length), u(highlight_area), u(intensity))
@@ -466,9 +477,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             definition,
             smoothness,
             seed,
-        } => check("sponge size", brush_size, 0..=10)
-            .and(check("sponge definition", definition, 0..=25))
-            .and(check("sponge smoothness", smoothness, 1..=15))
+        } => check_slot(filter, 0, f64::from(brush_size))
+            .and(check_slot(filter, 1, f64::from(definition)))
+            .and(check_slot(filter, 2, f64::from(smoothness)))
             .map(|()| {
                 seeded(seed, move |p| {
                     artistic::sponge(p, u(brush_size), u(definition), u(smoothness))
@@ -479,8 +490,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             texture_coverage,
             texture,
             seed,
-        } => check("underpainting size", brush_size, 0..=40)
-            .and(check("underpainting coverage", texture_coverage, 0..=40))
+        } => check_slot(filter, 0, f64::from(brush_size))
+            .and(check_slot(filter, 1, f64::from(texture_coverage)))
             .and(check_texture(&texture))
             .map(|()| {
                 seeded(seed, move |p| {
@@ -501,9 +512,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             shadow_intensity,
             texture,
             seed,
-        } => check("watercolor detail", brush_detail, 1..=14)
-            .and(check("watercolor shadow", shadow_intensity, 0..=10))
-            .and(check("watercolor texture", texture, 1..=3))
+        } => check_slot(filter, 0, f64::from(brush_detail))
+            .and(check_slot(filter, 1, f64::from(shadow_intensity)))
+            .and(check_slot(filter, 2, f64::from(texture)))
             .map(|()| {
                 seeded(seed, move |p| {
                     artistic::watercolor(p, u(brush_detail), u(shadow_intensity), u(texture))
@@ -513,9 +524,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             edge_width,
             edge_brightness,
             smoothness,
-        } => check("accented edges width", edge_width, 1..=14)
-            .and(check("accented edges brightness", edge_brightness, 0..=50))
-            .and(check("accented edges smoothness", smoothness, 1..=15))
+        } => check_slot(filter, 0, f64::from(edge_width))
+            .and(check_slot(filter, 1, f64::from(edge_brightness)))
+            .and(check_slot(filter, 2, f64::from(smoothness)))
             .map(|()| {
                 unseeded(move |p| {
                     brush_strokes::accented_edges(
@@ -530,9 +541,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             direction_balance,
             stroke_length,
             sharpness,
-        } => check("angled strokes balance", direction_balance, 0..=100)
-            .and(check("angled strokes length", stroke_length, 3..=50))
-            .and(check("angled strokes sharpness", sharpness, 0..=10))
+        } => check_slot(filter, 0, f64::from(direction_balance))
+            .and(check_slot(filter, 1, f64::from(stroke_length)))
+            .and(check_slot(filter, 2, f64::from(sharpness)))
             .map(|()| {
                 unseeded(move |p| {
                     brush_strokes::angled_strokes(
@@ -547,9 +558,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             stroke_length,
             sharpness,
             strength,
-        } => check("crosshatch length", stroke_length, 3..=50)
-            .and(check("crosshatch sharpness", sharpness, 0..=20))
-            .and(check("crosshatch strength", strength, 1..=3))
+        } => check_slot(filter, 0, f64::from(stroke_length))
+            .and(check_slot(filter, 1, f64::from(sharpness)))
+            .and(check_slot(filter, 2, f64::from(strength)))
             .map(|()| {
                 unseeded(move |p| {
                     brush_strokes::crosshatch(p, u(stroke_length), u(sharpness), u(strength))
@@ -559,9 +570,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             balance,
             black_intensity,
             white_intensity,
-        } => check("dark strokes balance", balance, 0..=10)
-            .and(check("dark strokes black", black_intensity, 0..=10))
-            .and(check("dark strokes white", white_intensity, 0..=10))
+        } => check_slot(filter, 0, f64::from(balance))
+            .and(check_slot(filter, 1, f64::from(black_intensity)))
+            .and(check_slot(filter, 2, f64::from(white_intensity)))
             .map(|()| {
                 unseeded(move |p| {
                     brush_strokes::dark_strokes(
@@ -576,9 +587,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             stroke_length,
             dark_intensity,
             light_intensity,
-        } => check("ink outlines length", stroke_length, 1..=50)
-            .and(check("ink outlines dark", dark_intensity, 0..=50))
-            .and(check("ink outlines light", light_intensity, 0..=50))
+        } => check_slot(filter, 0, f64::from(stroke_length))
+            .and(check_slot(filter, 1, f64::from(dark_intensity)))
+            .and(check_slot(filter, 2, f64::from(light_intensity)))
             .map(|()| {
                 unseeded(move |p| {
                     brush_strokes::ink_outlines(
@@ -593,8 +604,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             spray_radius,
             smoothness,
             seed,
-        } => check("spatter radius", spray_radius, 0..=25)
-            .and(check("spatter smoothness", smoothness, 1..=15))
+        } => check_slot(filter, 0, f64::from(spray_radius))
+            .and(check_slot(filter, 1, f64::from(smoothness)))
             .map(|()| {
                 seeded(seed, move |p| {
                     brush_strokes::spatter(p, u(spray_radius), u(smoothness))
@@ -605,8 +616,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             spray_radius,
             direction,
             seed,
-        } => check("sprayed strokes length", stroke_length, 0..=20)
-            .and(check("sprayed strokes radius", spray_radius, 0..=25))
+        } => check_slot(filter, 0, f64::from(stroke_length))
+            .and(check_slot(filter, 1, f64::from(spray_radius)))
             .map(|()| {
                 seeded(seed, move |p| {
                     brush_strokes::sprayed_strokes(p, u(stroke_length), u(spray_radius), direction)
@@ -616,9 +627,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             stroke_width,
             stroke_pressure,
             contrast,
-        } => check("sumi-e width", stroke_width, 3..=15)
-            .and(check("sumi-e pressure", stroke_pressure, 0..=15))
-            .and(check("sumi-e contrast", contrast, 0..=40))
+        } => check_slot(filter, 0, f64::from(stroke_width))
+            .and(check_slot(filter, 1, f64::from(stroke_pressure)))
+            .and(check_slot(filter, 2, f64::from(contrast)))
             .map(|()| {
                 unseeded(move |p| {
                     brush_strokes::sumi_e(p, u(stroke_width), u(stroke_pressure), u(contrast))
@@ -631,8 +642,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             light_direction,
             foreground,
             background,
-        } => check("bas relief detail", detail, 1..=15)
-            .and(check("bas relief smoothness", smoothness, 1..=15))
+        } => check_slot(filter, 0, f64::from(detail))
+            .and(check_slot(filter, 1, f64::from(smoothness)))
             .map(|()| {
                 unseeded(move |p| {
                     sketch::bas_relief(
@@ -652,9 +663,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             foreground,
             background,
             seed,
-        } => check("chalk charcoal area", charcoal_area, 0..=20)
-            .and(check("chalk area", chalk_area, 0..=20))
-            .and(check("chalk pressure", stroke_pressure, 0..=5))
+        } => check_slot(filter, 0, f64::from(charcoal_area))
+            .and(check_slot(filter, 1, f64::from(chalk_area)))
+            .and(check_slot(filter, 2, f64::from(stroke_pressure)))
             .map(|()| {
                 seeded(seed, move |p| {
                     sketch::chalk_and_charcoal(
@@ -674,9 +685,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             foreground,
             background,
             seed,
-        } => check("charcoal thickness", thickness, 1..=7)
-            .and(check("charcoal detail", detail, 0..=5))
-            .and(check("charcoal balance", light_dark_balance, 0..=100))
+        } => check_slot(filter, 0, f64::from(thickness))
+            .and(check_slot(filter, 1, f64::from(detail)))
+            .and(check_slot(filter, 2, f64::from(light_dark_balance)))
             .map(|()| {
                 seeded(seed, move |p| {
                     sketch::charcoal(
@@ -689,8 +700,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
                     )
                 })
             }),
-        Filter::Chrome { detail, smoothness } => check("chrome detail", detail, 0..=10)
-            .and(check("chrome smoothness", smoothness, 0..=10))
+        Filter::Chrome { detail, smoothness } => check_slot(filter, 0, f64::from(detail))
+            .and(check_slot(filter, 1, f64::from(smoothness)))
             .map(|()| unseeded(move |p| sketch::chrome(p, u(detail), u(smoothness)))),
         Filter::ConteCrayon {
             foreground_level,
@@ -699,8 +710,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             foreground,
             background,
             seed,
-        } => check("conte foreground level", foreground_level, 1..=15)
-            .and(check("conte background level", background_level, 1..=15))
+        } => check_slot(filter, 0, f64::from(foreground_level))
+            .and(check_slot(filter, 1, f64::from(background_level)))
             .and(check_texture(&texture))
             .map(|()| {
                 seeded(seed, move |p| {
@@ -724,8 +735,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             direction,
             foreground,
             background,
-        } => check("graphic pen length", stroke_length, 1..=15)
-            .and(check("graphic pen balance", light_dark_balance, 0..=100))
+        } => check_slot(filter, 0, f64::from(stroke_length))
+            .and(check_slot(filter, 1, f64::from(light_dark_balance)))
             .map(|()| {
                 unseeded(move |p| {
                     sketch::graphic_pen(
@@ -742,8 +753,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             size,
             contrast,
             pattern,
-        } => check("halftone size", size, 1..=12)
-            .and(check("halftone contrast", contrast, 0..=50))
+        } => check_slot(filter, 0, f64::from(size))
+            .and(check_slot(filter, 1, f64::from(contrast)))
             .map(|()| {
                 // ponytail: CS6 draws with the document foreground and
                 // background; the variant carries no colours yet, so CS6's
@@ -764,9 +775,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             graininess,
             relief,
             seed,
-        } => check("note paper balance", image_balance, 0..=50)
-            .and(check("note paper graininess", graininess, 0..=20))
-            .and(check("note paper relief", relief, 0..=25))
+        } => check_slot(filter, 0, f64::from(image_balance))
+            .and(check_slot(filter, 1, f64::from(graininess)))
+            .and(check_slot(filter, 2, f64::from(relief)))
             .map(|()| {
                 // ponytail: CS6 draws with the document foreground and
                 // background; the variant carries no colours yet, so CS6's
@@ -782,8 +793,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
                     )
                 })
             }),
-        Filter::Photocopy { detail, darkness } => check("photocopy detail", detail, 0..=24)
-            .and(check("photocopy darkness", darkness, 1..=50))
+        Filter::Photocopy { detail, darkness } => check_slot(filter, 0, f64::from(detail))
+            .and(check_slot(filter, 1, f64::from(darkness)))
             .map(|()| {
                 // ponytail: CS6 draws with the document foreground and
                 // background; the variant carries no colours yet, so CS6's
@@ -798,8 +809,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             light_direction,
             foreground,
             background,
-        } => check("plaster balance", image_balance, 0..=50)
-            .and(check("plaster smoothness", smoothness, 0..=15))
+        } => check_slot(filter, 0, f64::from(image_balance))
+            .and(check_slot(filter, 1, f64::from(smoothness)))
             .map(|()| {
                 unseeded(move |p| {
                     sketch::plaster(
@@ -819,9 +830,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             foreground,
             background,
             seed,
-        } => check("reticulation density", density, 0..=50)
-            .and(check("reticulation black level", black_level, 0..=50))
-            .and(check("reticulation white level", white_level, 0..=50))
+        } => check_slot(filter, 0, f64::from(density))
+            .and(check_slot(filter, 1, f64::from(black_level)))
+            .and(check_slot(filter, 2, f64::from(white_level)))
             .map(|()| {
                 seeded(seed, move |p| {
                     sketch::reticulation(
@@ -839,8 +850,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             smoothness,
             foreground,
             background,
-        } => check("stamp balance", light_dark_balance, 0..=50)
-            .and(check("stamp smoothness", smoothness, 1..=50))
+        } => check_slot(filter, 0, f64::from(light_dark_balance))
+            .and(check_slot(filter, 1, f64::from(smoothness)))
             .map(|()| {
                 unseeded(move |p| {
                     sketch::stamp(
@@ -858,9 +869,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             contrast,
             foreground,
             background,
-        } => check("torn edges balance", image_balance, 0..=50)
-            .and(check("torn edges smoothness", smoothness, 1..=15))
-            .and(check("torn edges contrast", contrast, 1..=25))
+        } => check_slot(filter, 0, f64::from(image_balance))
+            .and(check_slot(filter, 1, f64::from(smoothness)))
+            .and(check_slot(filter, 2, f64::from(contrast)))
             .map(|()| {
                 unseeded(move |p| {
                     sketch::torn_edges(
@@ -878,9 +889,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             brightness,
             contrast,
             seed,
-        } => check("water paper fiber", fiber_length, 3..=50)
-            .and(check("water paper brightness", brightness, 0..=100))
-            .and(check("water paper contrast", contrast, 0..=100))
+        } => check_slot(filter, 0, f64::from(fiber_length))
+            .and(check_slot(filter, 1, f64::from(brightness)))
+            .and(check_slot(filter, 2, f64::from(contrast)))
             .map(|()| {
                 seeded(seed, move |p| {
                     sketch::water_paper(p, u(fiber_length), u(brightness), u(contrast))
@@ -890,9 +901,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             crack_spacing,
             crack_depth,
             crack_brightness,
-        } => check("craquelure spacing", crack_spacing, 2..=100)
-            .and(check("craquelure depth", crack_depth, 0..=10))
-            .and(check("craquelure brightness", crack_brightness, 0..=10))
+        } => check_slot(filter, 0, f64::from(crack_spacing))
+            .and(check_slot(filter, 1, f64::from(crack_depth)))
+            .and(check_slot(filter, 2, f64::from(crack_brightness)))
             .map(|()| {
                 unseeded(move |p| {
                     texture::craquelure(p, u(crack_spacing), u(crack_depth), u(crack_brightness))
@@ -904,8 +915,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             grain_type,
             background,
             seed,
-        } => check("grain intensity", intensity, 0..=100)
-            .and(check("grain contrast", contrast, 0..=100))
+        } => check_slot(filter, 0, f64::from(intensity))
+            .and(check_slot(filter, 1, f64::from(contrast)))
             .map(|()| {
                 seeded(seed, move |p| {
                     texture::grain(
@@ -923,9 +934,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             grout_width,
             lighten_grout,
             seed,
-        } => check("mosaic tiles size", tile_size, 2..=100)
-            .and(check("mosaic tiles grout", grout_width, 1..=15))
-            .and(check("mosaic tiles lighten", lighten_grout, 0..=10))
+        } => check_slot(filter, 0, f64::from(tile_size))
+            .and(check_slot(filter, 1, f64::from(grout_width)))
+            .and(check_slot(filter, 2, f64::from(lighten_grout)))
             .map(|()| {
                 seeded(seed, move |p| {
                     texture::mosaic_tiles(p, u(tile_size), u(grout_width), u(lighten_grout))
@@ -935,8 +946,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             square_size,
             relief,
             seed,
-        } => check("patchwork square", square_size, 0..=10)
-            .and(check("patchwork relief", relief, 0..=25))
+        } => check_slot(filter, 0, f64::from(square_size))
+            .and(check_slot(filter, 1, f64::from(relief)))
             .map(|()| {
                 seeded(seed, move |p| {
                     texture::patchwork(p, u(square_size), u(relief))
@@ -948,9 +959,9 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             light_intensity,
             foreground,
             seed,
-        } => check("stained glass cell", cell_size, 2..=50)
-            .and(check("stained glass border", border_thickness, 1..=20))
-            .and(check("stained glass light", light_intensity, 0..=10))
+        } => check_slot(filter, 0, f64::from(cell_size))
+            .and(check_slot(filter, 1, f64::from(border_thickness)))
+            .and(check_slot(filter, 2, f64::from(light_intensity)))
             .map(|()| {
                 seeded(seed, move |p| {
                     texture::stained_glass(

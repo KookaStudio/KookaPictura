@@ -1,12 +1,12 @@
-use super::gallery::GALLERY_TAIL;
 use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
+use pictura_filters::catalogue::GALLERY_TAIL;
 use pictura_filters::{
     BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DisplaceFit, Filter,
     FrameOptions, GlassTexture, IrisPin, IrisShape, LightType, NoiseDistribution, PathMotion,
     Quality, RadialMethod, ReduceNoiseParams, SharpenRemove, ShearFill, SmartBlurMode, SpinPin,
-    SpinStrobe, TextureChannel, TiltPin, TonalFade, WaveType, WindMethod, MAX_FIELD_PINS,
-    MAX_PATH_POINTS,
+    SpinStrobe, TextureChannel, TextureOptions, TextureSurface, TiltPin, TonalFade, WaveType,
+    WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
 };
 
 fn slots(kind: &str) -> usize {
@@ -14,9 +14,14 @@ fn slots(kind: &str) -> usize {
 }
 
 #[test]
+fn engine_only_kinds_are_not_filter_commands() {
+    assert!(crate::cxxqt_object::helpers::filter_from_kind("hdr-toning").is_none());
+}
+
+#[test]
 fn every_kind_defaults_from_empty_and_rejects_wrong_arity() {
     for descriptor in super::descriptor::all() {
-        let kind = descriptor.kind;
+        let kind = descriptor.id;
         let n = descriptor.slots();
         assert!(
             filter_from_kind_params(kind, &[]).is_some(),
