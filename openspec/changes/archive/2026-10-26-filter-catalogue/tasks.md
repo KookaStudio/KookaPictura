@@ -11,7 +11,7 @@
 ## 2. Catalogue core
 
 - [x] 2.1 Add `pictura-filters/src/catalogue/mod.rs` with `FilterSpec`, `FilterParam`, `FilterControl`, `FilterDialog`, `AlphaPolicy`, `ApronPolicy`, `GpuPolicy`, `Build`, and the range/defaults accessors; verify the new module compiles on its own
-- [x] 2.2 Move the 114 menu rows and add the `HdrToning` engine-only row into `catalogue/{paint,blur,distort,render,stylize,video,engine_only}.rs`, preserving paths, labels, parameter order, and defaults; verify `catalogue_covers_every_kind` and `catalogue_rows_match_kind_order`
+- [x] 2.2 Move the 115 menu rows and add the `HdrToning` engine-only row into `catalogue/{paint,blur,distort,render,stylize,video,engine_only}.rs`, preserving paths, labels, parameter order, and defaults; verify `catalogue_covers_every_kind` and `catalogue_rows_match_kind_order`
 - [x] 2.3 Extend `filter_variants!` so each row names its spec const and `FilterKind::ALL`, `name`, `engine`, `spec`, `moves_alpha`, `preview_apron`, and `cpu_outruns_gpu` derive from it; verify `catalogue_rows_round_trip_their_facts` and the existing `filter_reports_its_own_facts`
 - [x] 2.4 Add `defaults()`, `arity()`, `range_for_slot()`, `default_filter()`, and `NullResources`; verify `catalogue_defaults_are_in_range` and `every_catalogue_row_builds_from_its_defaults`
 

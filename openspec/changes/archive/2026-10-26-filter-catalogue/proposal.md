@@ -2,7 +2,7 @@
 
 ## Why
 
-Adding or changing one filter still edits roughly ten source files and five or six test files across three crates, because the engine facts, menu data, parameter schema, defaults, ranges, gallery membership, and slot construction are duplicated. The copies have already drifted: Add Noise accepts `0.0..400` in the ported engine but opens at `0.1..400` in the dialog, and Surface Blur rejects a threshold of 1 in the dialog while the documented range and engine accept it. A filter kind missing from the GPU plan silently stays on the CPU, and `FilterKind` completeness is checked only by a literal `114`.
+Adding or changing one filter still edits roughly ten source files and five or six test files across three crates, because the engine facts, menu data, parameter schema, defaults, ranges, gallery membership, and slot construction are duplicated. The copies have already drifted: Add Noise accepts `0.0..400` in the ported engine but opens at `0.1..400` in the dialog, and Surface Blur rejects a threshold of 1 in the dialog while the documented range and engine accept it. A filter kind missing from the GPU plan silently stays on the CPU, and `FilterKind` completeness is checked only by a literal count.
 
 ## What Changes
 

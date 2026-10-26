@@ -6,7 +6,7 @@ The current filter facts are split across four seams:
 
 - `crates/pictura-filters/src/filter/variants.rs:8` generates `FilterKind`, `ALL`, `name`, `engine`, and `Filter::kind` from one macro table.
 - `crates/pictura-filters/src/filter/props.rs:10` decides `moves_alpha`, `cpu_outruns_gpu`, and the parameter-dependent `preview_apron`.
-- `crates/pictura-app/src/cxxqt_object/filter_map/descriptor/mod.rs:78` owns one `FilterDescriptor` per menu kind (114 rows). Each row carries the menu path, label, control schema, ranges, defaults, dialog and preview policy. `filter_tools.rs:487` mirrors it to C++.
+- `crates/pictura-app/src/cxxqt_object/filter_map/descriptor/mod.rs:78` owns one `FilterDescriptor` per menu kind (115 rows). Each row carries the menu path, label, control schema, ranges, defaults, dialog and preview policy. `filter_tools.rs:487` mirrors it to C++.
 - `crates/pictura-app/src/cxxqt_object/filter_map/mapping.rs:39` maps kind plus slots to a `Filter` (1,141 lines). `gallery.rs` owns the variable-length Blur Gallery grammar. `mapping.rs:81` clamps Smart Blur; `photorust/dispatch.rs:105` and `:119` independently range-check Add Noise and Surface Blur.
 
 The shell surfaces also hold copies: `crates/pictura-app/cpp/filter_gallery_dialog.cpp:97` has `kGallery`, and `crates/pictura-script/tests/catalogue.rs:88` parses the descriptor Rust source because the script crate cannot depend on the app crate.
@@ -137,7 +137,7 @@ Ranks are assigned in the old `kGallery` order (Artistic 0-14, Brush Strokes 15-
 
 ### D8: HdrToning is an engine-only row
 
-`HdrToning` has a `FilterKind` but is deliberately absent from the 114 menu rows. It gets a row with `path: &[]`, `menu: false`, `params: &[]`, `gallery: None`, `dialog: Shared`, `whole_layer: false`. Its builder returns `Filter::HdrToning(HdrToningParams::default())` for an empty list and refuses non-empty lists. `filter_kind_supported` requires a non-empty command path, so HDR Toning stays out of the Filter menu, gallery, and scriptable filter command set. `filterCommandForKind` still resolves the no-menu row, as `imaging/filter-app-ui`'s `fpd_cpp_rows` scenario requires, and the app's filter-command entry points reject empty-path rows before applying them.
+`HdrToning` has a `FilterKind` but is deliberately absent from the 115 menu rows. It gets a row with `path: &[]`, `menu: false`, `params: &[]`, `gallery: None`, `dialog: Shared`, `whole_layer: false`. Its builder returns `Filter::HdrToning(HdrToningParams::default())` for an empty list and refuses non-empty lists. `filter_kind_supported` requires a non-empty command path, so HDR Toning stays out of the Filter menu, gallery, and scriptable filter command set. `filterCommandForKind` still resolves the no-menu row, as `imaging/filter-app-ui`'s `fpd_cpp_rows` scenario requires, and the app's filter-command entry points reject empty-path rows before applying them.
 
 ### D9: File layout
 
@@ -168,6 +168,6 @@ No persisted data or public file format changes. The move lands in one change:
 3. Fix the Add Noise and Surface Blur ranges; make dispatch read slot ranges.
 4. Add `gallery_rank` to the bridge and C++ spec; delete `kGallery`.
 5. Switch the script membership test and GPU parity cross-check to the catalogue.
-6. Delete the old descriptor/mapping tests or move their assertions to the catalogue; update the literal `114` to `FilterKind::ALL.len()`.
+6. Delete the old descriptor/mapping tests or move their assertions to the catalogue; replace the literal kind count with `FilterKind::ALL.len()`.
 
 Rollback is a revert of the change; there is no migration artifact.
