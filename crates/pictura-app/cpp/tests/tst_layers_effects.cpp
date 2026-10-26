@@ -33,6 +33,7 @@ private slots:
     void doubleClickBadgeOpensBlendingOptions();
     void rowMenuListsLayerStyleCommands();
     void disableLayerEffectsIsOneState();
+    void effectOrderingMatchesTheDialog();
 
 private:
     // A 10x10 white square lifted onto layer "1" over a white Background.
@@ -233,6 +234,13 @@ void LayersEffectsTest::disableLayerEffectsIsOneState()
     QCoreApplication::processEvents();
     QCOMPARE(styleValue("fx.visible"), 0.0);
     QCOMPARE(view_->history_count(), states + 1);
+}
+
+void LayersEffectsTest::effectOrderingMatchesTheDialog()
+{
+    // The panel rows take their order from the engine's effect table and the
+    // menu from the dialog's; the two must stay identical.
+    QCOMPARE(pictura::layer_style_effect_names(), pictura::LayerStyleDialog::effectKeys());
 }
 
 QTEST_MAIN(LayersEffectsTest)

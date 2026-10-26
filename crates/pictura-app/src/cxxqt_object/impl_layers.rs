@@ -347,8 +347,9 @@ impl qobject::PictureView {
     }
 
     /// One crossing for the whole layer tree: every row's typed fields, its
-    /// active effect names `\n`-joined for the adapter to split, and
-    /// thumbnails at `thumb_size` (0 skips them). `entire_document` places
+    /// present effect names and enabled subset (each `\n`-joined) plus the
+    /// master effect switch, and thumbnails at `thumb_size` (0 skips them).
+    /// `entire_document` places
     /// pixel thumbnails at their document extent; shape rows always use the
     /// fill-coverage thumbnail.
     pub fn layers_snapshot(

@@ -68,6 +68,8 @@ void paintSwatch(ColorSwatchWidget* button, const QColor& color)
 
 QStringList LayerStyleDialog::effectKeys()
 {
+    // Must match the engine's effect table (`layer_style_effect_names`);
+    // `tst_layers_effects::effectOrderingMatchesTheDialog` guards the pair.
     return {QStringLiteral("bevel"),        QStringLiteral("stroke"),
             QStringLiteral("innerShadow"),  QStringLiteral("innerGlow"),
             QStringLiteral("satin"),        QStringLiteral("colorOverlay"),
