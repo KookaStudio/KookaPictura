@@ -424,7 +424,7 @@ fn a_level_zero_damage_crop_matches_the_cached_crop_rect() {
 #[test]
 fn sample_argb_after_a_region_refresh_reads_the_composite() {
     let mut layer = vec![0u8; 64 * 32 * 4];
-    for px in layer.chunks_exact_mut(4) {
+    for px in layer.as_chunks_mut::<4>().0 {
         px.copy_from_slice(&[255, 0, 0, 255]);
     }
     let mut doc = Document::from_rgba("paint", 64, 32, &layer);
