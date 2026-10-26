@@ -144,6 +144,29 @@ Snapshot for resuming after a context break. Update after each milestone.
   Tests: `tst_color_settings`, `tst_profile_dialog`, `tst_profile_warnings`,
   `tst_save_options`, `tst_image_import`, extended `tst_color_picker`, and the
   Rust lcms2/ICC oracles.
+- **Save As format options dialogs** (#958, #625; OpenSpec change
+  `save-format-options`, capability `interop/save-format-options`). `File ▸ Save
+  As` now opens the destination format's CS6 options dialog: JPEG Options
+  (Matte, quality 0–12 with presets, Baseline/Baseline Optimized/Progressive,
+  Scans, Preview, file-size estimate), PNG Options (Compression, Interlace), BMP
+  Options (File Format, Depth, RLE, Flip Row Order, Advanced Modes), and TIFF
+  Options (Image Compression + JPEG Quality, Pixel Order, Byte Order, Layer
+  Compression, Save Image Pyramid, Save Transparency).
+  - **Honored.** JPEG quality/format (via `QImageWriter::setQuality`,
+    `setOptimizedWrite`, `setProgressiveScanWrite`), the JPEG matte, PNG
+    compression, TIFF compression (None/LZW/JPEG) and TIFF Save Transparency
+    (`encode_image.cpp`). The options travel on the view
+    (`save_format.rs`) and are read by `PictureView::save`.
+  - **Ceilings (`ponytail:`).** Controls the Qt writer cannot honor — BMP's
+    whole set, PNG Interlace, TIFF Pixel/Byte Order, Save Image Pyramid, and
+    Layer Compression — are shown disabled with a tooltip; the JPEG scan count
+    is not chosen and the JPEG Matte is shown disabled (transparency flattens
+    onto white). The JPEG Preview is an in-dialog pane, not the CS6 canvas
+    preview; the 0–12 quality map follows the reverse-engineered
+    Photoshop→libjpeg table (0 ≈ libjpeg 60), not Adobe's exact tables.
+  - **Remembered.** The last accepted settings per format persist in the session
+    store (`saveFormatOptions`) and seed the next dialog.
+  Tests: `tst_save_format_options` (16 cases) and the Rust `save_format` units.
 - **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
   OpenSpec change `add-vanishing-point-planes`, archived into
   `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)

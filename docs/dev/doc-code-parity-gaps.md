@@ -258,7 +258,7 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| WF-1 | `save-and-save-as.md` | Save As per-format option dialogs (TIFF/JPEG/PNG/GIF/EPS/DCS/Raw/BMP/TGA/Cineon) | MISSING | `encode_image.cpp:23-64` | #625 |
+| WF-1 | `save-and-save-as.md` | JPEG/PNG/BMP/TIFF Save As options dialogs shipped (#958) with JPEG quality/format/matte, PNG compression, and TIFF compression/transparency honored; still missing: the controls the Qt writer cannot honor (BMP format/depth/RLE/flip, PNG interlace, TIFF pixel/byte order, image pyramid, layer compression) and the GIF/EPS/DCS/Raw/TGA/Cineon dialogs | PARTIAL | `jpeg_options_dialog.cpp`; `png_options_dialog.cpp`; `bmp_options_dialog.cpp`; `tiff_options_dialog.cpp`; `encode_image.cpp:88-118` | #958, #625 |
 | WF-2 | `save-and-save-as.md` | Photoshop PDF writer shipped (#626); still missing: JPEG2000 compression (no encoder), Spot Colors (no spot-channel model), Use Proof Setup (no Proof Setup); Preserve Photoshop Editing Capabilities embeds Pictura's own PSD, not Adobe's layout | PARTIAL | `pictura-codec/src/pdf/options.rs:661`; `pdf_save_dialog.cpp:220,278` | #626 |
 | WF-3 | `open-and-new.md` | Generic PDF/EPS import (Import PDF and Rasterize Generic EPS Format dialogs) and Open As shipped (#627) through Ghostscript; still missing: native CMYK/16-bit rendering (converted from an 8-bit RGB render), Images mode on encrypted PDFs, inline images, the 3D option | PARTIAL | `pictura-codec/src/pdf/import/mod.rs`; `import_pdf_dialog.cpp`; `frame_import.cpp` | #627 |
 | WF-4 | `save-and-save-as.md` | GIF-via-Indexed on save + Save a Copy | MISSING | `encode_image.cpp` | #628 |
