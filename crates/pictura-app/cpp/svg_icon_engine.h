@@ -7,7 +7,7 @@
 namespace pictura {
 
 // Renders a bundled SVG icon at the requested size and device pixel ratio,
-// recolouring by the rendered alpha with the active palette foreground (or an
+// recolouring by the rendered alpha with the active theme's icon tint (or an
 // explicit colour). Folding the theme generation into key() lets QIcon
 // re-render after a brightness change.
 class SvgIconEngine : public QIconEngine

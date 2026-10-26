@@ -24,11 +24,11 @@ QColor SvgIconEngine::colorFor(QIcon::Mode mode) const
     if (color_.isValid()) {
         return color_;
     }
-    const QPalette pal = QApplication::palette();
     if (mode == QIcon::Disabled) {
+        const QPalette pal = QApplication::palette();
         return pal.color(QPalette::Disabled, QPalette::ButtonText);
     }
-    return pal.color(QPalette::ButtonText);
+    return Theme::tokenColor(QStringLiteral("icon"));
 }
 
 QPixmap SvgIconEngine::render(const QSize& pixelSize, QIcon::Mode mode) const

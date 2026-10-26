@@ -78,7 +78,8 @@ QString ruleBody(const QString& qss, const QString& selector)
 // tokens, not the whole paint-only set.
 bool isPaintOnlyToken(const QString& key)
 {
-    return key == QLatin1String("graph-fill") || key == QLatin1String("graph-axis");
+    return key == QLatin1String("graph-fill") || key == QLatin1String("graph-axis")
+           || key == QLatin1String("icon");
 }
 
 bool imageHasColor(const QImage& image, const QColor& color)
@@ -147,6 +148,10 @@ void DesignSystemTest::tokensCoverColoursAndMetrics()
     // The CS6 drop accent is explicit and constant across levels.
     QCOMPARE(tokenColor(0, QStringLiteral("accent")), QColor(0x2a, 0x7f, 0xff));
     QCOMPARE(tokenColor(3, QStringLiteral("accent")), QColor(0x2a, 0x7f, 0xff));
+
+    // The icon tint is a dedicated token, constant across dark levels.
+    QCOMPARE(tokenColor(0, QStringLiteral("icon")), QColor(255, 255, 255));
+    QCOMPARE(tokenColor(3, QStringLiteral("icon")), QColor(255, 255, 255));
 
     // Inline warning / info text is dark-on-yellow at every level.
     for (int level = 0; level < Theme::kLevelCount; ++level) {
