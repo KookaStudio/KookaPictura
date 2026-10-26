@@ -41,7 +41,12 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
         },
         [levelView]() { return levelView ? levelView->canvas_revision() : quint64(0); },
         [levelView]() { return levelView && levelView->is_painting(); },
-        [levelView]() { return levelView ? levelView->preview_present_level() : 0; }});
+        [levelView]() { return levelView ? levelView->preview_present_level() : 0; },
+        [levelView](int level) {
+            // A zero-copy view of a stored level; the canvas drops it after the
+            // paint so the next update can write the level in place.
+            return levelView ? levelView->canvas_level_image(level) : QImage();
+        }});
 }
 
 // Create the canvas for `window` and show its document's current image (or the
@@ -111,10 +116,50 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
         }
     });
     trackRecovery(view);
-    // The windows are looked up on each blit, so one opened or closed since
-    // is reached or skipped.
+    // The cheapest sync only: restart the same 120 ms panel timer the `changed`
+    // path uses, and never call image()/replaceImage(), so the region path
+    // cannot refresh panels faster than a full recomposite.
+    const auto afterPresent = [this, view](int index) {
+        panelRefreshTimer_->start();
+        // A region update can change the active layer's visibility without a
+        // `changed` emission; keep the tool cursor in sync.
+        if (tools_) {
+            tools_->refreshCursor();
+        }
+        // Mid-stroke, skip the command-registry and title fan-out on every dab
+        // (Krita's "unnecessary objects per event"). Releasing the stroke emits
+        // `changed`, whose refresh() runs them once.
+        if (view->is_painting()) {
+            // A present arms its own flush: the next event-loop turn folds every
+            // dab that arrived since into one region, so the composite and the
+            // present track the frame rate, not the input rate.
+            paint_api::presentDeferred(*view);
+            return;
+        }
+        updateTabTitle(index);
+        updateWindowTitle();
+        if (registry_) {
+            registry_->refresh();
+        }
+    };
+    // Document canvases receive the changed rectangle only: their present crop
+    // is patched from the pyramid, so no region pixels cross the bridge.
+    connect(view, &PictureView::regionDamaged, this,
+            [this, view, afterPresent](int x, int y, int w, int h) {
+                pictura::ScopedTimer damageSlotTimer("cxx_regionDamaged_slot");
+                const int index = indexOfView(view);
+                if (index >= 0) {
+                    const QRect damaged(x, y, w, h);
+                    forEachCanvas(*docs_.at(index), [&damaged](ImageView* canvas) {
+                        canvas->damageRegion(damaged);
+                    });
+                }
+                afterPresent(index);
+            });
+    // A canvas that holds its own image still takes the pixel path (the
+    // non-document fallback).
     connect(view, &PictureView::regionBlitted, this,
-            [this, view](const QImage& region, int x, int y) {
+            [this, view, afterPresent](const QImage& region, int x, int y) {
                 pictura::ScopedTimer blitSlotTimer("cxx_regionBlitted_slot");
                 const int index = indexOfView(view);
                 if (index >= 0) {
@@ -122,32 +167,7 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
                         canvas->blitRegion(region, x, y);
                     });
                 }
-                // The cheapest sync only: restart the same 120 ms panel timer the
-                // `changed` path uses, and never call image()/replaceImage(), so
-                // the region path cannot refresh panels faster than a full
-                // recomposite.
-                panelRefreshTimer_->start();
-                // A region update can change the active layer's visibility
-                // without a `changed` emission; keep the tool cursor in sync.
-                if (tools_) {
-                    tools_->refreshCursor();
-                }
-                // Mid-stroke, skip the command-registry and title fan-out on
-                // every dab (Krita's "unnecessary objects per event"). Releasing
-                // the stroke emits `changed`, whose refresh() runs them once.
-                if (view->is_painting()) {
-                    // A present arms its own flush: the next event-loop turn
-                    // folds every dab that arrived since into one region, so the
-                    // composite and the present track the frame rate, not the
-                    // input rate.
-                    paint_api::presentDeferred(*view);
-                    return;
-                }
-                updateTabTitle(index);
-                updateWindowTitle();
-                if (registry_) {
-                    registry_->refresh();
-                }
+                afterPresent(index);
             });
 }
 

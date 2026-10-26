@@ -85,6 +85,11 @@ public:
     // null canvas are no-ops.
     void blitRegion(const QImage& region, int x, int y);
 
+    // A document region refresh: patch the present crop over `docRect` where
+    // possible and repaint. No pixels are passed; the level provider already
+    // holds them.
+    void damageRegion(const QRect& docRect);
+
     // A zoomed-out filter dialog's preview: `picture`, a reduced render of the
     // document rect `area`, drawn over the document there until cleared. The
     // document itself is untouched.
@@ -112,9 +117,12 @@ public:
         std::function<quint64()> canvasRevision;
         std::function<bool()> isPainting;
         // The view-pyramid level an in-progress large-brush preview patched;
-        // 0 when no preview is running (the zoom picks the level as usual), -1
-        // while a GPU stroke presents level-0 regions (crop level 0).
+        // 0 when no preview is running (the zoom picks the level as usual).
         std::function<int()> previewLevel;
+        // A zero-copy view of a stored level (premultiplied RGBA8888), or an
+        // empty image for level 0 / past the end. The image keeps the level
+        // storage alive; do not retain it past the current paint.
+        std::function<QImage(int level)> levelImage;
     };
     void setLevelProvider(LevelProvider provider);
 
@@ -580,8 +588,11 @@ public:
     bool presentCacheRebuiltOnLastPaint() const { return presentCacheRebuiltLastPaint_; }
     int presentCacheRebuildCount() const { return presentCache_.rebuilds; }
     bool holdsImageForTest() const { return !image_.isNull(); }
-    QSize presentCacheImageSize() const { return presentCache_.crop.size(); }
-    qint64 presentCacheImageKey() const { return presentCache_.key; }
+    QSize presentCacheImageSize() const { return presentedImageSize_; }
+    qint64 presentCacheImageKey() const { return presentedImageKey_; }
+    int presentLevelForTest() const { return presentLevel(); }
+    bool presentCacheValidForTest() const { return presentCache_.valid; }
+    QImage presentCacheCropForTest() const { return presentCache_.crop.copy(); }
     void setPresentCacheEnabledForTest(bool enabled);
     void setPresentLevelCropForTest(bool enabled);
 
@@ -719,7 +730,16 @@ private:
         int rebuilds = 0;
         QImage crop;
     };
-    const QImage* presentCrop(QRect& docRect);
+    // The level the zoom (and a live preview) selects, or -1 when there is no
+    // provider or document to present.
+    int presentLevel() const;
+    // The level-space source rectangle and its document-space target.
+    bool presentLevelRect(int level, QRect& docRect, QRect& sourceRect) const;
+    // The premultiplied crop of `level` over `sourceRect`, cached by frame,
+    // revision, level and document rect. Level 0 is repaired in place from a
+    // damage rect; a level with no zero-copy view uses the same cache.
+    const QImage* presentCrop(int level, const QRect& docRect, const QRect& sourceRect);
+    void dropPresentCache();
 
     // Held only for a canvas without a level provider (tests, dialogs); a
     // document canvas presents from pyramid crops and keeps none.
@@ -777,6 +797,11 @@ private:
     QTimer* antsTimer_ = nullptr;
 
     PresentCache presentCache_;
+    // What the last paint presented, for the present test hooks.
+    int presentedLevel_ = -1;
+    QRect presentedDocRect_;
+    QSize presentedImageSize_;
+    qint64 presentedImageKey_ = -1;
     LevelProvider levelProvider_;
     bool presentCacheRebuiltLastPaint_ = false;
     bool presentCacheEnabledForTest_ = true;

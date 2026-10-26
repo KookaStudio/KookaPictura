@@ -2,21 +2,21 @@ mod display;
 mod purge;
 
 use super::helpers::clamp_region;
-use super::helpers_composite::{crop_planar, into_rgba_frame, premultiplied_display_image};
+use super::helpers_composite::{crop_planar, into_rgba_frame};
 use super::{qobject, PictureViewRust};
 use crate::history::{detached_copy, History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{QImage, QString};
+use cxx_qt_lib::QString;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
 
 impl PictureViewRust {
     /// Fold `rect` of the document's own composite into level 0 and the
     /// pyramid without compositing it again — history has just restored those
-    /// bytes — and return the blit image with its origin.
-    pub(super) fn refresh_from_composite(&mut self, rect: PsdRect) -> Option<(QImage, i32, i32)> {
+    /// bytes — and return the damaged document rectangle.
+    pub(super) fn refresh_from_composite(&mut self, rect: PsdRect) -> Option<PsdRect> {
         let doc = self.session.doc.as_ref()?;
         if doc.composite.width != doc.width || doc.composite.height != doc.height {
             return self.refresh_regions(&[rect]);
@@ -24,7 +24,6 @@ impl PictureViewRust {
         let (x0, y0, w, h) = clamp_region(rect, doc.width, doc.height)?;
         let crop = crop_planar(&doc.composite, x0, y0, w, h);
         let srgb = into_rgba_frame(pictura_codec::buffer_to_srgb(doc, &crop).into_owned());
-        let image = premultiplied_display_image(&srgb);
         let clipped = PsdRect {
             top: y0,
             left: x0,
@@ -32,7 +31,7 @@ impl PictureViewRust {
             right: x0 + w as i32,
         };
         self.apply_refreshed_region(x0, y0, clipped, srgb);
-        Some((image, x0, y0))
+        Some(clipped)
     }
 
     /// Restore through the history in place into the live document, or by
@@ -100,8 +99,13 @@ impl qobject::PictureView {
                 self.as_mut().changed();
             }
             Some(Restored::Region(rect)) => {
-                if let Some((image, x, y)) = self.as_mut().rust_mut().refresh_from_composite(rect) {
-                    self.as_mut().region_blitted(image, x, y);
+                if let Some(damaged) = self.as_mut().rust_mut().refresh_from_composite(rect) {
+                    self.as_mut().region_damaged(
+                        damaged.left,
+                        damaged.top,
+                        damaged.width(),
+                        damaged.height(),
+                    );
                 }
                 self.as_mut().changed();
             }

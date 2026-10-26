@@ -980,45 +980,22 @@ impl super::PictureViewRust {
     }
 
     /// Fold each commit rectangle into level 0, the damage account and the
-    /// pyramid, and hand back the one blit image the shell needs (with its
-    /// origin), or `None` when nothing landed.
+    /// pyramid, and return their union as the one damaged document rectangle the
+    /// shell needs, or `None` when nothing landed.
     ///
-    /// A single rectangle is the dense-stroke collapse: its `srgb` buffer is
-    /// already the whole commit region, so the image comes straight from it
-    /// rather than a second crop of level 0. Several rectangles keep the union
-    /// crop, which is the one image that keeps the shell's region handler (and
-    /// the command registry it refreshes) to a single run per commit.
-    pub(super) fn refresh_regions(&mut self, rects: &[PsdRect]) -> Option<(QImage, i32, i32)> {
-        let solo = self.mask_solo_active();
-        let single = rects.len() == 1 && !solo;
+    /// A paint commit uses it so a tiled stroke composites only its tiles yet
+    /// the shell's region handler — and the command registry it refreshes —
+    /// runs once.
+    pub(super) fn refresh_regions(&mut self, rects: &[PsdRect]) -> Option<PsdRect> {
         let mut union: Option<PsdRect> = None;
-        let mut direct: Option<(QImage, i32, i32)> = None;
         for &rect in rects {
             let Some((x0, y0, clipped, srgb)) = self.refresh_region_buffer(rect) else {
                 continue;
             };
-            if single {
-                let t = Instant::now();
-                direct = Some((premultiplied_display_image(&srgb), x0, y0));
-                paint_timing::record("rr_to_qimage", t.elapsed());
-            }
             self.apply_refreshed_region(x0, y0, clipped, srgb);
             union = Some(union.map_or(clipped, |u| union_rect(u, clipped)));
         }
-        union.map(|union| {
-            if solo {
-                return (self.canvas_present_image(0, union), union.left, union.top);
-            }
-            match direct {
-                Some(image) => image,
-                None => {
-                    let t = Instant::now();
-                    let image = self.display_crop(0, union);
-                    paint_timing::record("rr_to_qimage", t.elapsed());
-                    (image, union.left, union.top)
-                }
-            }
-        })
+        union
     }
 }
 
@@ -1045,8 +1022,8 @@ impl qobject::PictureView {
     }
 
     /// Composite only `rect`, patch the authoritative `doc.composite` and the
-    /// cached sRGB level-0 frame, and emit [`region_blitted`] with a
-    /// rectangle-sized image.
+    /// cached sRGB level-0 frame, and emit [`regionDamaged`] with the changed
+    /// document rectangle.
     ///
     /// The source is the active stroke's working document while painting, else
     /// the app document. While painting `doc.composite` is the pre-stroke base
@@ -1057,43 +1034,27 @@ impl qobject::PictureView {
         let t_rr = Instant::now();
         let prepared = self.as_mut().rust_mut().refresh_region_buffer(rect);
         if let Some((x0, y0, clipped, srgb)) = prepared {
-            let solo = self.rust().mask_solo_active();
-            let composite = if solo {
-                QImage::default()
-            } else {
-                let t = Instant::now();
-                let image = premultiplied_display_image(&srgb);
-                paint_timing::record("rr_to_qimage", t.elapsed());
-                image
-            };
             self.as_mut()
                 .rust_mut()
                 .apply_refreshed_region(x0, y0, clipped, srgb);
-            let image = if solo {
-                self.rust().canvas_present_image(0, clipped)
-            } else {
-                composite
-            };
             let t = Instant::now();
-            self.region_blitted(image, x0, y0);
+            self.region_damaged(clipped.left, clipped.top, clipped.width(), clipped.height());
             paint_timing::record("rr_blit_emit(C++)", t.elapsed());
         }
         paint_timing::record("refresh_region_total", t_rr.elapsed());
     }
 
     /// Refresh several disjoint rects in one pass, emitting a single
-    /// [`region_blitted`] over their bounding box. A paint commit uses it so a
+    /// [`regionDamaged`] over their bounding box. A paint commit uses it so a
     /// tiled stroke composites only its tiles yet the shell's region handler —
     /// and the command registry it refreshes — runs once.
     pub(super) fn refresh_regions(mut self: Pin<&mut Self>, rects: &[PsdRect]) {
         let t0 = Instant::now();
         let blit = self.as_mut().rust_mut().refresh_regions(rects);
-        if let Some((image, x, y)) = blit {
-            if image.width() > 0 && image.height() > 0 {
-                let t = Instant::now();
-                self.region_blitted(image, x, y);
-                paint_timing::record("rr_blit_emit(C++)", t.elapsed());
-            }
+        if let Some(rect) = blit {
+            let t = Instant::now();
+            self.region_damaged(rect.left, rect.top, rect.width(), rect.height());
+            paint_timing::record("rr_blit_emit(C++)", t.elapsed());
         }
         paint_timing::record("commit_refresh_region", t0.elapsed());
     }
