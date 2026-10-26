@@ -97,6 +97,7 @@ set(PICTURA_QT_TESTS
     tst_profile_dialog
     tst_profile_warnings
     tst_save_options
+    tst_save_format_options
     tst_properties_panel
     tst_adjustments_panel
     tst_actions_panel

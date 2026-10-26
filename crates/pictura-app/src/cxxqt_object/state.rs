@@ -80,6 +80,9 @@ pub struct PictureViewRust {
     pub(super) open_policy_override: Option<pictura_codec::Policy>,
     /// The last Embed Color Profile choice accepted for this document.
     pub(super) save_embed_profile: Option<bool>,
+    /// The raster format options the next save of this document uses, set by the
+    /// per-format options dialog (`save_format.rs`); `None` uses the defaults.
+    pub(super) save_raster_options: Option<super::save_format::SaveRasterOptions>,
     /// Outstanding display damage; the canvas redraws the region `take` reports.
     /// No longer consumed by present: it keys on [`Self::canvas_revision`].
     pub(super) damage: CanvasDamage,
@@ -188,6 +191,7 @@ impl Default for PictureViewRust {
             picker_choice: 0,
             open_policy_override: None,
             save_embed_profile: None,
+            save_raster_options: None,
             damage: CanvasDamage::default(),
             canvas_revision: 0,
             frame_revision: 0,

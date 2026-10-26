@@ -19,6 +19,7 @@
 #include "document_window.h"
 #include "panels/panel_column.h"
 #include "recovery_store.h"
+#include "save_format_options.h"
 #include "tools.h"
 #include "workspace_store.h"
 
@@ -229,6 +230,7 @@ public:
     ToolId activeTool() const;
     void setActiveTool(ToolId id);
     QColor foregroundColor() const;
+    QColor backgroundColor() const;
     // Before a paste: take another application's newer clipboard image
     // (the Vanishing Point dialog pastes too).
     void importSystemClipboard();
@@ -267,6 +269,11 @@ public:
 
     void refresh();
     void saveSession();
+    // The per-format Save As options (frame_menus.cpp).
+    bool runSaveFormatDialog(SaveFormatKind kind, SaveFormatOptions& options);
+    void rememberSaveFormatOptions(SaveFormatKind kind, const SaveFormatOptions& options);
+    void applySaveRasterOptions(PictureView& view, SaveFormatKind kind,
+                                const SaveFormatOptions& options);
     // Apply a GPU-compute preference change to every open document and persist.
     void applyGpuComputePreference(bool on);
 
@@ -390,6 +397,16 @@ public:
     // active document's source format) and write through `saveActiveAs`. Warns
     // before flattening a layered document into a raster format.
     bool saveAsWithDialog();
+    // Prompt for the destination format's options dialog (JPEG/PNG/BMP/TIFF),
+    // remember the accepted settings, and store them on the view. False aborts
+    // the save. A format that opens no dialog returns true.
+    bool promptSaveFormatOptions(const QString& path);
+    // Save As with a known path: prompt for the format options, then write.
+    bool saveActiveAsWithOptions(const QString& path);
+    // Test seam: replace the format options dialog. Returns true to proceed with
+    // `options` (possibly edited); false to abort.
+    void setSaveFormatDialogForTest(
+        std::function<bool(SaveFormatKind, SaveFormatOptions&)> hook);
     bool revertActive();
     // frame_pdf.cpp: Photoshop PDF save through the Save Adobe PDF dialog,
     // reopening a Pictura Photoshop PDF, and Edit > Adobe PDF Presets.
@@ -967,6 +984,10 @@ private:
     void installTransformLock();
     void syncTransformLock();
     bool transformLocked_ = false;
+    // The remembered per-format Save As options (the session store's object),
+    // and the test seam that replaces the format options dialog.
+    QJsonObject saveFormatOptions_;
+    std::function<bool(SaveFormatKind, SaveFormatOptions&)> saveFormatDialogForTest_;
     // The pasteboard colour menu, created lazily and popped up non-modally.
     QMenu* backgroundMenu_ = nullptr;
     HistoryPanel* historyPanel_ = nullptr;

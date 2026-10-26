@@ -6,14 +6,26 @@
 
 // Encode tightly packed RGBA8888 of `width` × `height` to `path` with the named
 // Qt image writer (`PNG`, `JPG`, `TIF`, `BMP`). `scale` is a percentage
-// (100 = unchanged); `quality` is 0–100 for lossy formats and ignored otherwise.
-// Formats without alpha (JPEG) are flattened onto opaque white. Returns false
-// and writes nothing when the buffer size, path, format, or writer is unusable.
+// (100 = unchanged); `quality` is 0–100 for lossy formats and ignored otherwise;
+// `compression` is the writer's format-specific level (-1 = the writer default);
+// `optimized` and `progressive` apply to JPEG. `matte` is a packed 0xRRGGBB
+// background to composite transparency onto, or -1 to keep alpha (JPEG and BMP
+// always flatten, onto `matte` else opaque white). Returns false and writes
+// nothing when the buffer size, path, format, or writer is unusable.
 // WebP is not handled here: its Qt writer is an optional plugin, so the app
 // encodes it through the engine (`pictura_codec::encode_webp`).
 // Defined at global scope because the cxx bridge declares no namespace.
 bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,
-                       ::rust::Str path, ::rust::Str format, int32_t quality, int32_t scale);
+                       ::rust::Str path, ::rust::Str format, int32_t quality, int32_t scale,
+                       int32_t compression, bool optimized, bool progressive, int32_t matte);
+
+// The same encoding as `encode_image_rgba`, returned as bytes rather than
+// written to a path. Used by the JPEG Options dialog's size estimate and
+// preview; empty on any refusal.
+::rust::Vec<uint8_t> encode_image_bytes(::rust::Slice<const uint8_t> rgba, int32_t width,
+                                        int32_t height, ::rust::Str format, int32_t quality,
+                                        int32_t scale, int32_t compression, bool optimized,
+                                        bool progressive, int32_t matte);
 
 // Rescale tightly packed RGBA8888 of `width` × `height` by `scale` percent with
 // a smooth filter and return the rescaled buffer, reporting the new size in

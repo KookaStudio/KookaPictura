@@ -197,6 +197,7 @@ void PicturaMainWindow::saveSession()
     state.snapCanvasToWorkspace = snapCanvasToWorkspace_;
     state.guideColor = guideColor_.name();
     state.guideDashed = guideDashed_;
+    state.saveFormatOptions = saveFormatOptions_;
     if (tools_ && tools_->optionsFor<CropOptions>(ToolId::Crop)) {
         const CropOptions* crop = tools_->optionsFor<CropOptions>(ToolId::Crop);
         state.cropClassicMode = crop->classicMode();

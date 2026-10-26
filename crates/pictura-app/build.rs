@@ -211,6 +211,7 @@ fn main() {
                 "src/cxxqt_object/paths.rs",
                 "src/cxxqt_object/pdf_export.rs",
                 "src/cxxqt_object/pdf_export/import.rs",
+                "src/cxxqt_object/save_format.rs",
                 "src/cxxqt_object/shapes.rs",
                 "src/cxxqt_object/engine_tables/tool_catalogue.rs",
                 "src/cxxqt_object/type_tools.rs",
