@@ -172,9 +172,7 @@ fn out_of_range_slot_is_refused() {
     };
     assert!(apply(&filter, &mut buffer).is_err());
 
-    let mut smart = descriptor("smart-blur")
-        .expect("Smart Blur row")
-        .defaults();
+    let mut smart = descriptor("smart-blur").expect("Smart Blur row").defaults();
     smart[0] = 0.0;
     let smart = build("smart-blur", &smart, &NullResources).expect("Smart Blur builds");
     assert!(apply(&smart, &mut PixelBuffer::new(4, 4, 4)).is_err());

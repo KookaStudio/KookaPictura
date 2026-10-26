@@ -488,12 +488,12 @@ fn smart_blur_reads_radius_threshold_quality_mode() {
     assert_eq!(
         filter_from_kind_params("smart-blur", &[0.0, 400.0, 2.0, 1.0]),
         Some(Filter::SmartBlur {
-            radius: 0.1,
-            threshold: 100.0,
+            radius: 0.0,
+            threshold: 400.0,
             quality: Quality::Best,
             mode: SmartBlurMode::EdgeOnly,
         }),
-        "radius and threshold clamp into 0.1..=100"
+        "the builder keeps the row's values; apply rejects out-of-range"
     );
     assert!(filter_from_kind_params("smart-blur", &[3.0, 25.0, 0.0]).is_none());
 }
