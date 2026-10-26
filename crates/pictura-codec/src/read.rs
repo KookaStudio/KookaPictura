@@ -14,7 +14,8 @@ mod decode;
 pub(crate) use decode::decode_channel_data;
 #[cfg(test)]
 pub(crate) use decode::decode_rle_channel;
-use decode::{inflate, read_channel_data, read_rle};
+pub(crate) use decode::inflate;
+use decode::{read_channel_data, read_rle};
 
 /// The deepest group nesting a file may declare. CS6 nests groups ten deep;
 /// the cap keeps the recursive compositor and `Drop` off the stack limit.

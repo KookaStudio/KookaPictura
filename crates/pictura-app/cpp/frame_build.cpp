@@ -10,6 +10,7 @@
 #include "panels/actions_engine_bridge.h"
 #include "panels/actions_panel.h"
 #include "pictura_app/src/cxxqt_object/actions_engine.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
 #include "panels/brush_preset_picker.h"
@@ -54,6 +55,26 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
             registry_->dispatch(QString::fromLatin1(command_ids::LayerContentOptions));
         }
     });
+    // Edit Smart Filter… on a filter row reopens that filter's own dialog, which
+    // already prefills from the stored record and replaces the entry.
+    connect(layersPanel_, &LayersPanel::smartFilterEditRequested, this,
+            [this](const QString& path, int index) {
+                PictureView* view = activeView();
+                if (!view || !registry_) {
+                    return;
+                }
+                switch (layer_smart_filter_edit_kind(*view, path, index)) {
+                case 1:
+                    registry_->dispatch(QString::fromLatin1(command_ids::FilterPicturaRaw));
+                    break;
+                case 2:
+                    registry_->dispatch(commandIdForPath(
+                        {QStringLiteral("Filter"), QStringLiteral("Lens Correction…")}));
+                    break;
+                default:
+                    break;
+                }
+            });
 
     historyPanel_ = new HistoryPanel(this);
     historyPanel_->setObjectName(QStringLiteral("historyPanel"));

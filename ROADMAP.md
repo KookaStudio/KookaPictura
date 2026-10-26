@@ -305,7 +305,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Lens Correction correction profiles for real lenses and sub-profiles
       (#932)
 - [ ] Lens Correction Save/Load Settings and Set Lens Default (#933)
-- [ ] Lens Correction as a Smart Filter (#934)
+- [x] Lens Correction as a Smart Filter (#934): an embedded Smart Object
+      attaches a Lens Correction smart filter instead of filtering the proxy
+      destructively, re-opens the dialog prefilled, and renders through the
+      composite; the Layers panel gives the Smart Filters group and each filter
+      their CS6 context menus (Edit Smart Filter…, Delete Filter Mask), and
+      smart filter masks are read and rendered (#956); the descriptor is
+      Pictura-only
 - [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
       Grid Size, related planes torn off at 90° with Angle, Render Grids
 - [x] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste

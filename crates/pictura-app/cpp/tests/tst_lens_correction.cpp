@@ -29,6 +29,7 @@
 #include "panels/color_swatch_widget.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 
 #include "qt_test_support.h"
@@ -135,6 +136,10 @@ private slots:
     void previousConversionRestoresLastCommit();
     void lastSettingsRestoresValues();
     void lastFilterRefusesOffSixteenBit();
+    void smartObjectAddsASmartFilter();
+    void smartObjectPrefillsOnReEdit();
+    void rasterLayerStaysDestructive();
+    void smartObjectRefusesOffTheGate();
 
 private:
     std::unique_ptr<LensCorrectionDialog> showDialog();
@@ -655,6 +660,125 @@ void LensCorrectionTest::lastFilterRefusesOffSixteenBit()
     QVERIFY(!opened);
     window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::FilterLastFilter));
     QCOMPARE(view->history_count(), history);
+    QVERIFY(filter_last_error(*view).contains(QStringLiteral("8- or 16-bit")));
+    QVERIFY(window_->closeActiveDocument(false));
+}
+
+void LensCorrectionTest::smartObjectAddsASmartFilter()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("SmartLC"), 160, 120, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    const QString path = view->add_solid_fill(0xff808080u);
+    QVERIFY(view->rasterize_fill_content(path));
+    QVERIFY(view->convert_to_smart_object(path));
+    const int history = view->history_count();
+
+    QTimer::singleShot(0, [] {
+        if (LensCorrectionDialog* dialog = openDialog()) {
+            box(dialog, "lcDistortion")->setValue(40);
+            dialog->accept();
+        }
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kPath)));
+    QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Lens Correction"));
+    QCOMPARE(view->history_count(), history + 1);
+    QCOMPARE(filter_last_kind(*view), QStringLiteral("lens-correction"));
+    QCOMPARE(filter_last_params(*view).size(), 16);
+    QVERIFY(window_->closeActiveDocument(false));
+}
+
+void LensCorrectionTest::smartObjectPrefillsOnReEdit()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("SmartPrefill"), 120, 80, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    const QString path = view->add_solid_fill(0xff808080u);
+    QVERIFY(view->rasterize_fill_content(path));
+    QVERIFY(view->convert_to_smart_object(path));
+
+    QTimer::singleShot(0, [] {
+        if (LensCorrectionDialog* dialog = openDialog()) {
+            box(dialog, "lcDistortion")->setValue(33);
+            box(dialog, "lcVertical")->setValue(20);
+            child<QComboBox>(dialog, "lcEdge")->setCurrentIndex(2);
+            dialog->accept();
+        }
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kPath)));
+    QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
+
+    double distortion = -1;
+    double vertical = -1;
+    int edge = -1;
+    QTimer::singleShot(0, [&] {
+        if (LensCorrectionDialog* dialog = openDialog()) {
+            distortion = box(dialog, "lcDistortion")->value();
+            vertical = box(dialog, "lcVertical")->value();
+            edge = child<QComboBox>(dialog, "lcEdge")->currentIndex();
+            dialog->reject();
+        }
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kPath)));
+    QCOMPARE(distortion, 33.0);
+    QCOMPARE(vertical, 20.0);
+    QCOMPARE(edge, 2);
+    // The re-open prefilled; it added no second filter.
+    QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
+    QVERIFY(window_->closeActiveDocument(false));
+}
+
+void LensCorrectionTest::rasterLayerStaysDestructive()
+{
+    QImage picture(120, 80, QImage::Format_RGB32);
+    for (int y = 0; y < picture.height(); ++y) {
+        for (int x = 0; x < picture.width(); ++x) {
+            picture.setPixelColor(x, y, QColor(x * 2, y * 3, 128));
+        }
+    }
+    const QString file = dir_.filePath(QStringLiteral("raster-lens.png"));
+    QVERIFY(picture.save(file) && window_->openDocumentAtPath(file));
+    pictura::PictureView* view = window_->activeView();
+    const QString path = view->active_layer_path();
+    QVERIFY(!view->layer_can_replace_smart_object_contents(path));
+    const QImage before = view->image();
+
+    QTimer::singleShot(0, [] {
+        if (LensCorrectionDialog* dialog = openDialog()) {
+            box(dialog, "lcDistortion")->setValue(40);
+            dialog->accept();
+        }
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kPath)));
+    QVERIFY(!view->layer_can_replace_smart_object_contents(path));
+    QVERIFY(view->image() != before);
+    QVERIFY(window_->closeActiveDocument(false));
+}
+
+void LensCorrectionTest::smartObjectRefusesOffTheGate()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("SmartGate"), 120, 80, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    const QString path = view->add_solid_fill(0xff808080u);
+    QVERIFY(view->rasterize_fill_content(path));
+    QVERIFY(view->convert_to_smart_object(path));
+
+    QTimer::singleShot(0, [] {
+        if (LensCorrectionDialog* dialog = openDialog()) {
+            box(dialog, "lcDistortion")->setValue(20);
+            dialog->accept();
+        }
+    });
+    window_->registry()->dispatch(pictura::commandIdForPath(kPath));
+    QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
+
+    // 32-bit does not take it on any path: the smart filter is not replaced.
+    QVERIFY(pictura::convert_image_depth(*view, 32));
+    const int count = pictura::layer_smart_filter_count(*view, path);
+    window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::FilterLastFilter));
+    QCOMPARE(pictura::layer_smart_filter_count(*view, path), count);
     QVERIFY(filter_last_error(*view).contains(QStringLiteral("8- or 16-bit")));
     QVERIFY(window_->closeActiveDocument(false));
 }

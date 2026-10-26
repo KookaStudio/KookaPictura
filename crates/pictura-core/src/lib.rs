@@ -694,6 +694,15 @@ pub struct SmartFilter {
     pub options: Vec<u8>,
 }
 
+/// A smart filter stack's mask: the coverage that limits where the filters
+/// apply. `data` is the mask plane over `rect`, `255` where the filter applies
+/// and `0` where the unfiltered source shows through.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FilterMask {
+    pub rect: PsdRect,
+    pub data: Plane<u8>,
+}
+
 /// A typed view of a layer's embedded/linked smart object, derived on read.
 ///
 /// The raw config descriptor and the document-level linked record are preserved
@@ -703,6 +712,10 @@ pub struct SmartFilter {
 pub struct SmartObject {
     /// The `Idnt`/`PlLd` uuid that links the layer config to its record.
     pub uuid: String,
+    /// The SoLd `placed` uuid, which the document-level filter effect (`FEid`)
+    /// is keyed by. Empty when the object has no `placed` field, in which case
+    /// [`SmartObject::uuid`] is used.
+    pub placed_uuid: String,
     /// Original filename, with any trailing NUL stripped.
     pub filename: String,
     /// 4-byte file-type code stored in the record (e.g. `8BPB`).
@@ -730,12 +743,16 @@ pub struct SmartObject {
     /// The `filterFXStyle.enab` group flag: whether the whole smart-filter
     /// stack is enabled. Defaults to `true`.
     pub smart_filters_enabled: bool,
+    /// The document-level filter mask (`FEid`/`FMsk`), when the smart filter
+    /// stack is limited by one. `None` when there is none.
+    pub filter_mask: Option<FilterMask>,
 }
 
 impl Default for SmartObject {
     fn default() -> Self {
         Self {
             uuid: String::new(),
+            placed_uuid: String::new(),
             filename: String::new(),
             filetype: [0; 4],
             creator: [0; 4],
@@ -750,6 +767,7 @@ impl Default for SmartObject {
             filter_mask_linked: false,
             filter_mask_extend_with_white: true,
             smart_filters_enabled: true,
+            filter_mask: None,
         }
     }
 }

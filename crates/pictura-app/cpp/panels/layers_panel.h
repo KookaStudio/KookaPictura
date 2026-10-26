@@ -110,7 +110,11 @@ public:
     QStringList shapeRowMenuTextsForTest();
     bool shapeRowMenuEnabledForTest(const QString& text);
     QStringList smartRowMenuTextsForTest();
-    // Lock-strip toggles by flag: 0 transparency, 1 pixels, 2 position, 3 all.
+    // The Smart Filters group row and filter row context menus.
+    QStringList smartFiltersGroupMenuTextsForTest(const QString& path);
+    QStringList smartFilterRowMenuTextsForTest(const QString& path);
+    bool smartFilterMenuEnabledForTest(const QString& path, const QString& text);
+    bool triggerSmartFilterMenuActionForTest(const QString& path, const QString& text);    // Lock-strip toggles by flag: 0 transparency, 1 pixels, 2 position, 3 all.
     bool lockToggleEnabledForTest(int flag) const;
     bool lockToggleCheckedForTest(int flag) const;
     QStringList colorLabelTextsForTest();
@@ -334,6 +338,9 @@ signals:
     // A row-menu content edit (Edit Adjustment…), to be run by the frame's
     // Layer Content Options path on the now-current layer.
     void editContentRequested(const QString& path);
+    // Edit Smart Filter… on a smart-filter row: reopen the filter's dialog on
+    // the layer at `path`, for filter `index`.
+    void smartFilterEditRequested(const QString& path, int index);
     // The rubylith overlay or its display options changed; the frame re-renders
     // the overlay.
     void maskDisplayChanged();
@@ -399,6 +406,9 @@ private:
     void populateRowMenu(QMenu& menu, const QString& path, int color, const QString& kind,
                          bool shape = false, bool smart = false);
     void populateBackgroundMenu(QMenu& menu, const QString& path);
+    // The Smart Filters group row and each smart-filter row.
+    void populateSmartFiltersGroupMenu(QMenu& menu, const QString& path);
+    void populateSmartFilterMenu(QMenu& menu, const QString& path);
     // CS6's type-only rows (orientation, anti-aliasing, text kind, warp).
     void addTypeRows(QMenu& menu, const QString& path, bool& emitted);
     bool performRowAction(const QString& id, const QString& path);

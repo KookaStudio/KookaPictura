@@ -5,6 +5,7 @@
 
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h"
@@ -199,6 +200,20 @@ unsigned kindMaskFor(const QString& kind)
     return Pixel;
 }
 
+// The real layer path behind a synthetic smart-filter row path.
+QString smartFilterBase(const QString& path)
+{
+    const int at = path.indexOf(QStringLiteral("/@sf"));
+    return at < 0 ? path : path.left(at);
+}
+
+// The filter index in a `.../@sf/<i>` path (0 when absent).
+int smartFilterIndex(const QString& path)
+{
+    const int at = path.lastIndexOf(QLatin1Char('/'));
+    return at < 0 ? 0 : path.mid(at + 1).toInt();
+}
+
 } // namespace
 
 void LayersPanel::showContextMenu(const QPoint& pos)
@@ -229,6 +244,20 @@ void LayersPanel::showContextMenu(const QPoint& pos)
         // A row action runs on the clicked row: make it the selection first.
         tree_->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect);
         tree_->setCurrentIndex(index);
+    }
+
+    // The synthetic Smart Filters rows have their own CS6 menus, not the
+    // generic layer-row menu.
+    const QString rowKind = index.data(KindRole).toString();
+    if (rowKind == QLatin1String("smart-filters") || rowKind == QLatin1String("smart-filter")) {
+        QMenu menu(tree_);
+        if (rowKind == QLatin1String("smart-filters")) {
+            populateSmartFiltersGroupMenu(menu, path);
+        } else {
+            populateSmartFilterMenu(menu, path);
+        }
+        menu.exec(tree_->viewport()->mapToGlobal(pos));
+        return;
     }
 
     QMenu menu(tree_);
@@ -391,6 +420,72 @@ void LayersPanel::populateBackgroundMenu(QMenu& menu, const QString& path)
     QAction* convert = menu.addAction(tr("Convert to Smart Object"));
     connect(convert, &QAction::triggered, this, [this, path] {
         if (view_ && view_->convert_to_smart_object(path)) {
+            refresh();
+        }
+    });
+}
+
+void LayersPanel::populateSmartFiltersGroupMenu(QMenu& menu, const QString& path)
+{
+    const QString base = smartFilterBase(path);
+    const bool groupOn = view_ && layer_smart_filters_enabled(*view_, base);
+    QAction* toggle =
+        menu.addAction(groupOn ? tr("Disable Smart Filters") : tr("Enable Smart Filters"));
+    toggle->setEnabled(view_ != nullptr);
+    connect(toggle, &QAction::triggered, this, [this, base, groupOn] {
+        if (view_ && set_layer_smart_filters_enabled(*view_, base, !groupOn)) {
+            refresh();
+        }
+    });
+
+    QAction* mask = menu.addAction(tr("Delete Filter Mask"));
+    mask->setEnabled(view_ && layer_has_smart_filter_mask(*view_, base));
+    connect(mask, &QAction::triggered, this, [this, base] {
+        if (view_ && delete_layer_smart_filter_mask(*view_, base)) {
+            refresh();
+        }
+    });
+
+    QAction* clear = menu.addAction(tr("Clear Smart Filters"));
+    clear->setEnabled(view_ != nullptr);
+    connect(clear, &QAction::triggered, this, [this, base] {
+        if (view_ && clear_layer_smart_filters(*view_, base)) {
+            refresh();
+        }
+    });
+}
+
+void LayersPanel::populateSmartFilterMenu(QMenu& menu, const QString& path)
+{
+    const QString base = smartFilterBase(path);
+    const int index = smartFilterIndex(path);
+
+    // A per-filter opacity/blend-mode dialog is a follow-up; the item is shown
+    // as CS6 has it but disabled.
+    QAction* blend = menu.addAction(tr("Edit Smart Filter Blending Options…"));
+    blend->setEnabled(false);
+    blend->setToolTip(tr("Edit Smart Filter Blending Options… — not implemented yet"));
+
+    const int editKind = view_ ? layer_smart_filter_edit_kind(*view_, base, index) : 0;
+    QAction* edit = menu.addAction(tr("Edit Smart Filter…"));
+    edit->setEnabled(editKind != 0);
+    connect(edit, &QAction::triggered, this,
+            [this, base, index] { emit smartFilterEditRequested(base, index); });
+
+    menu.addSeparator();
+
+    const bool visible = view_ && layer_smart_filter_visible(*view_, base, index);
+    QAction* toggle =
+        menu.addAction(visible ? tr("Disable Smart Filter") : tr("Enable Smart Filter"));
+    connect(toggle, &QAction::triggered, this, [this, base, index, visible] {
+        if (view_ && set_layer_smart_filter_visible(*view_, base, index, !visible)) {
+            refresh();
+        }
+    });
+
+    QAction* remove = menu.addAction(tr("Delete Smart Filter"));
+    connect(remove, &QAction::triggered, this, [this, base, index] {
+        if (view_ && delete_layer_smart_filter(*view_, base, index)) {
             refresh();
         }
     });

@@ -186,7 +186,7 @@ fn write_color_channels(layer: &mut Layer, src: &PixelBuffer, color_channels: us
 
 /// Replace the layer's color channels from `src`, keeping an existing alpha
 /// channel or materializing the rendered one.
-fn write_proxy(layer: &mut Layer, src: &PixelBuffer, color_channels: usize) {
+pub(super) fn write_proxy(layer: &mut Layer, src: &PixelBuffer, color_channels: usize) {
     let plane = src.width as usize * src.height as usize;
     let existing_alpha = layer
         .channels

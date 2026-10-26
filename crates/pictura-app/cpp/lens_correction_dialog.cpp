@@ -362,9 +362,17 @@ bool LensCorrectionDialog::get(PictureView* view, const QList<double>& initial,
     if (!dialog.ready()) {
         return false;
     }
+    // A Smart Object carrying a Lens Correction smart filter prefills from the
+    // stored record when the caller passes no settings.
+    QList<double> start = initial;
+    if (start.isEmpty()) {
+        for (double v : lc_stored()) {
+            start.append(v);
+        }
+    }
     // Settings that no longer apply (a profile no longer installed) refuse
     // rather than open on defaults OK would then commit.
-    if (!initial.isEmpty() && !dialog.load(initial)) {
+    if (!start.isEmpty() && !dialog.load(start)) {
         qWarning().noquote() << "Lens Correction: the last settings no longer apply";
         return false;
     }

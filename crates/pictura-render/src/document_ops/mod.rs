@@ -5,6 +5,7 @@ mod canvas;
 mod crop;
 mod depth;
 mod layer_ops;
+mod lens_correction;
 mod matting;
 mod mode;
 mod native_store;
@@ -68,6 +69,7 @@ pub use layer_ops::{
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub(crate) use layer_ops::{insert_node, map_shape_layer};
+pub use lens_correction::{apply_lens_correction, lens_correction_slots, smart_source_buffer};
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};
 pub use mode::{
     can_convert_depth, can_convert_mode, convert_bit_depth, convert_mode,
@@ -84,7 +86,7 @@ pub use rotate_in::{rotate_document_in, rotate_document_in_offset};
 pub use slices::{add_slice, remove_slice, resolve_slices, set_slice, Slice};
 pub use smart_filters::{
     add_smart_filter, can_add_smart_filter, clear_smart_filters, delete_smart_filter,
-    reorder_smart_filters,
+    delete_smart_filter_mask, has_smart_filter_mask, reorder_smart_filters,
 };
 
 /// Reject a zero width or height with `InvalidParams`.

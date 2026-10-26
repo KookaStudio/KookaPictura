@@ -527,6 +527,20 @@ fn filter_commit_start_inner(
         return false;
     }
     let params: Vec<f64> = params.into_iter().copied().collect();
+    // Lens Correction on an embedded smart object attaches a smart filter
+    // instead of filtering the proxy destructively; the apply is synchronous.
+    if kind == "lens-correction" {
+        if let Some(path) = super::lens_correction_smart_target(view.rust()) {
+            let label = label.to_string();
+            if super::apply_lens_correction_smart(view.as_mut(), &path, &params, &label) {
+                view.as_mut().rust_mut().last_filter = Some((kind, params));
+                return true;
+            }
+            view.as_mut().rust_mut().filter_error =
+                Some("the lens correction could not be applied".to_string());
+            return false;
+        }
+    }
     let params = super::super::filter_map::commit_params(&kind, &params);
     let params = super::lens_blur_depths::commit_slots(&kind, view.rust(), &params);
     let Some(filter) = filter_from_kind_params(&kind, &params) else {
