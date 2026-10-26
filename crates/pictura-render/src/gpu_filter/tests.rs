@@ -1,4 +1,4 @@
-use pictura_filters::Filter;
+use pictura_filters::{Filter, FilterKind, Quality, RadialMethod};
 
 use super::plan::plan;
 use super::resources::{chunks, run_chunked};
@@ -51,5 +51,36 @@ fn chunked_dispatch_matches_one_submission() {
         let whole = run_chunked(device, queue, &plan, &input, w, h, u64::MAX).expect("gpu run");
         let split = run_chunked(device, queue, &plan, &input, w, h, 1).expect("gpu run");
         assert_eq!(whole, split, "{filter:?}");
+    }
+}
+
+#[test]
+fn gpu_plan_matches_the_row_policy() {
+    for &kind in FilterKind::ALL {
+        let Some(filter) = pictura_filters::catalogue::default_filter(kind) else {
+            continue;
+        };
+        if kind == FilterKind::RadialBlur {
+            let zoom = Filter::RadialBlur {
+                method: RadialMethod::Zoom,
+                amount: 20.0,
+                center: (0.5, 0.5),
+                quality: Quality::Good,
+            };
+            let spin = Filter::RadialBlur {
+                method: RadialMethod::Spin,
+                amount: 20.0,
+                center: (0.5, 0.5),
+                quality: Quality::Good,
+            };
+            assert!(plan(&zoom).is_some(), "{kind:?} Zoom");
+            assert!(plan(&spin).is_none(), "{kind:?} Spin");
+            continue;
+        }
+        assert_eq!(
+            plan(&filter).is_some(),
+            kind.spec().gpu.is_supported(),
+            "{kind:?}"
+        );
     }
 }

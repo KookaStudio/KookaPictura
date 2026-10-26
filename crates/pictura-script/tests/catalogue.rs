@@ -87,35 +87,14 @@ fn every_implemented_command_is_classified() {
 
 #[test]
 fn every_wired_filter_has_a_definition() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../pictura-app/src/cxxqt_object/filter_map/descriptor");
-    let mut wired = Vec::new();
-    for entry in std::fs::read_dir(&root).expect("filter descriptor directory") {
-        let path = entry.expect("descriptor entry").path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
-            continue;
-        }
-        let text = std::fs::read_to_string(&path).expect("descriptor file");
-        for row in text.split("FilterDescriptor {").skip(1) {
-            let Some(path_line) = row.lines().find(|line| line.trim().starts_with("path: &["))
-            else {
-                continue;
-            };
-            let menu = row
-                .lines()
-                .find(|line| line.trim().starts_with("menu:"))
-                .is_some_and(|line| line.contains("true"));
-            if !menu {
-                continue;
-            }
-            let segments: Vec<&str> = path_line.split('"').skip(1).step_by(2).collect();
-            wired.push(command_id_for_path(&segments));
-        }
-    }
+    let mut wired: Vec<String> = pictura_filters::catalogue::all()
+        .filter(|row| row.menu)
+        .map(|row| command_id_for_path(row.path))
+        .collect();
     wired.push("filter.filter.gallery".to_string());
     assert!(
         wired.len() > 100,
-        "parsed only {} wired filters",
+        "collected only {} wired filters",
         wired.len()
     );
     for id in &wired {

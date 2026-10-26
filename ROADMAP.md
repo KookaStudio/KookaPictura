@@ -288,7 +288,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **110 filters** across the Artistic, Blur, Blur Gallery, Brush Strokes,
       Distort, Noise, Pixelate, Render, Sharpen, Sketch, Stylize, Texture and
       Other families. `crates/pictura-filters/src/`,
-      `crates/pictura-app/src/cxxqt_object/filter_map/descriptor/`.
+      `crates/pictura-filters/src/catalogue/`.
 - [x] **Liquify, Oil Paint, the Blur Gallery, and the Filter Gallery.**
       `crates/pictura-app/cpp/filter_gallery_dialog.cpp`,
       `crates/pictura-app/cpp/blur_gallery_dialog.cpp`.

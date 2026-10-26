@@ -198,9 +198,9 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #593 |
-| FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `filter_map/descriptor/render.rs` (Smart Sharpen row) | #595 |
+| FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `crates/pictura-filters/src/catalogue/rows/render.rs` (Smart Sharpen row) | #595 |
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
-| FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
+| FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `crates/pictura-filters/src/catalogue/build/paint.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
 | FILT-8 | `lens-correction.md` | Lens Correction lists real cameras and lenses (bundled catalogues) but ships one synthetic correction profile: no real lens corrections, sub-profiles, Prefer RAW, or Search Online | PARTIAL | `pictura-filters/src/distort/lens_correction/profiles.txt`, `lens_correction_panels.cpp` | #932 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
@@ -360,8 +360,8 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   and have been fixed or removed:
   - `FILT-1` (Lighting Effects engine, `#592`) — the engine ships
     (`crates/pictura-filters/src/render/lighting.rs`, mapped at
-    `filter_map/mapping.rs` (Lighting Effects arm), descriptor at
-    `filter_map/descriptor/render.rs`). The row is removed and
+    `crates/pictura-filters/src/catalogue/build/render.rs` (Lighting Effects arm), descriptor at
+    `crates/pictura-filters/src/catalogue/rows/render.rs`). The row is removed and
     `#592` can be closed.
   - `LAY-7` (Rubylith display options, `#585`) — shipped in `#672`
     (`crates/pictura-app/cpp/mask_display_options_dialog.cpp:20`). The row is

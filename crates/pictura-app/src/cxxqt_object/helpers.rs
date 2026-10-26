@@ -187,8 +187,11 @@ pub(super) fn filter_from_kind(kind: &str) -> Option<pictura_filters::Filter> {
     // A parameterless apply is a commit: build the descriptor's opening
     // values and run the commit normalization (Lens Blur's Faster path never
     // commits).
-    let defaults = super::filter_map::descriptor::descriptor(kind)?.defaults();
-    let params = super::filter_map::commit_params(kind, &defaults);
+    let spec = super::filter_map::descriptor::descriptor(kind)?;
+    if spec.path.is_empty() {
+        return None;
+    }
+    let params = super::filter_map::commit_params(kind, &spec.defaults());
     super::filter_map::filter_from_kind_params(kind, &params)
 }
 /// Map an image-size resample `kind` to [`pictura_render::Resample`], or

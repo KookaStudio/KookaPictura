@@ -9,7 +9,7 @@
 //! without one. The timing evidence stays opt-in through `PICTURA_GPU_BENCH`.
 
 use pictura_core::PixelBuffer;
-use pictura_filters::{apply, Filter, Quality, RadialMethod};
+use pictura_filters::{apply, Filter, FilterKind, Quality, RadialMethod};
 use pictura_render::{apply_filter_active, filter_gpu_available, Backend};
 
 const SIZE: u32 = 32;
@@ -100,6 +100,25 @@ fn custom_filter() -> Filter {
         scale: 50.0,
         offset: 5.0,
     }
+}
+
+/// The catalogue's GPU-supported kinds and the parity fixture must name the
+/// same kinds in both directions.
+#[test]
+fn accelerated_parity_fixture_matches_the_catalogue() {
+    let fixture: std::collections::BTreeSet<&str> = accelerated_filters()
+        .iter()
+        .map(|filter| filter.kind().name())
+        .collect();
+    let expected: std::collections::BTreeSet<&str> = FilterKind::ALL
+        .iter()
+        .filter(|kind| kind.spec().gpu.is_supported())
+        .map(|kind| kind.name())
+        .collect();
+    assert_eq!(
+        fixture, expected,
+        "GPU parity fixture drifted from the catalogue"
+    );
 }
 
 /// A kernel-less filter (the painterly family stays CPU-only).

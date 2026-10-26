@@ -21,6 +21,9 @@ pub(in crate::cxxqt_object) fn resolve_stack(
     let mut filters = Vec::new();
     for kind in &QList::<QString>::from(kinds) {
         let kind = kind.to_string();
+        if !crate::cxxqt_object::filter_map::is_filter_command(&kind) {
+            return None;
+        }
         let arity = crate::cxxqt_object::filter_map::filter_param_arity(&kind)?;
         let slots = params.get(at..at + arity)?;
         filters.push(crate::cxxqt_object::filter_map::filter_from_kind_params(
