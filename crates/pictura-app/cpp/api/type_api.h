@@ -85,6 +85,8 @@ bool convert(PictureView& view, const QString& path, bool paragraph);
 QString commitLayer(PictureView& view, const TypeSpec& spec);
 bool commitMask(PictureView& view, const TypeSpec& spec, const QString& mode);
 bool updateLayer(PictureView& view, const QString& path, const TypeSpec& spec);
+/// As `updateLayer` without a history state: shows `spec` until it is replaced.
+bool previewLayer(PictureView& view, const QString& path, const TypeSpec& spec);
 bool applyStyle(PictureView& view, const QString& path, const QString& name, bool paragraph);
 
 /// One character style, resolved against the style sheet.

@@ -1004,6 +1004,18 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
     frame.setActiveTool(pictura::ToolId::HorizontalType);
     QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().color, QColor(0, 0, 200));
 
+    // The picker's live preview shows each colour on the selected layer
+    // without a history state, and the original colour drops it.
+    const int liveBase = f.view->history_index();
+    pictura::TextSession* session = f.tools->textSession();
+    QVERIFY(session);
+    QVERIFY(session->previewTextColor(QColor(0, 200, 0)));
+    QVERIFY2(inked(layerRect(f, path), QColor(0, 200, 0)), "layer shows the previewed colour");
+    QCOMPARE(f.view->history_index(), liveBase);
+    QVERIFY(session->previewTextColor(QColor(0, 0, 200)));
+    QVERIFY2(inked(layerRect(f, path), QColor(0, 0, 200)), "the original colour restores the layer");
+    QCOMPARE(f.view->history_index(), liveBase);
+
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     f.tools->setForeground(foreground);
 }

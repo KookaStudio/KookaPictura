@@ -147,6 +147,12 @@ bool updateLayer(PictureView& view, const QString& path, const TypeSpec& spec)
                                         spec.character, spec.paragraph);
 }
 
+bool previewLayer(PictureView& view, const QString& path, const TypeSpec& spec)
+{
+    return ::pictura::type_preview_layer(view, path, spec.text, spec.font, spec.setting,
+                                         spec.character, spec.paragraph);
+}
+
 bool applyStyle(PictureView& view, const QString& path, const QString& name, bool paragraph)
 {
     return ::pictura::type_apply_style(view, path, name, paragraph);

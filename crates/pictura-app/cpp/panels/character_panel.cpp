@@ -509,7 +509,16 @@ CharacterPanel::CharacterPanel(QWidget* parent)
         });
     }
     connect(colorButton_, &QToolButton::clicked, this, [this]() {
-        const QColor picked = ColorPickerDialog::getColor(color_, this, tr("Text Color"));
+        // Each pick shows on the layer at once without a state; Cancel
+        // reports the opening colour back, which drops the preview. A copy,
+        // because the preview rewrites `color_`.
+        const QColor opening = color_;
+        const QColor picked = ColorPickerDialog::getColor(
+            opening, this, tr("Text Color"), nullptr, {}, [this](const QColor& live) {
+                color_ = live;
+                updateColorIcon();
+                apply(true);
+            });
         if (picked.isValid()) {
             color_ = picked;
             updateColorIcon();
@@ -848,7 +857,7 @@ void CharacterPanel::refresh()
     }
 }
 
-void CharacterPanel::apply()
+void CharacterPanel::apply(bool preview)
 {
     CharacterSetting live = pictura::type_api::defaultCharacterSetting();
     QString liveFamily;
@@ -872,7 +881,13 @@ void CharacterPanel::apply()
 
     const QString family = family_->currentFont().family();
     registerTypeFont(family, shown_.font_style);
-    pictura::type_api::updateLayer(*view_, path, {layer.spec.text, family, layer.spec.setting, c, layer.spec.paragraph});
+    const pictura::type_api::TypeSpec spec{layer.spec.text, family, layer.spec.setting, c,
+                                           layer.spec.paragraph};
+    if (preview) {
+        pictura::type_api::previewLayer(*view_, path, spec);
+    } else {
+        pictura::type_api::updateLayer(*view_, path, spec);
+    }
 }
 
 bool CharacterPanel::editingEnabledForTest() const { return size_.combo->isEnabled(); }

@@ -267,9 +267,12 @@ public:
 
     /// Modal convenience wrapper. Returns an invalid QColor if cancelled.
     /// With `tools` and `colorAt`, the image can be sampled (`sampleCanvas`).
+    /// `onLive` hears each colour while the dialog is open, and `initial` again
+    /// on cancel, so a caller can preview the colour without committing it.
     static QColor getColor(const QColor& initial, QWidget* parent = nullptr,
                            const QString& title = {}, ToolController* tools = nullptr,
-                           std::function<QColor(const QPoint&)> colorAt = {});
+                           std::function<QColor(const QPoint&)> colorAt = {},
+                           std::function<void(const QColor&)> onLive = {});
 
 private slots:
     void addToSwatches();
