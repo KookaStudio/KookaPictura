@@ -94,6 +94,28 @@ impl qobject::PictureView {
         apply_link(&mut rust.link_sets, &owned, on)
     }
 
+    /// Whether every listed path resolves to the same non-zero link set. False
+    /// for an empty list, an unlinked path, or paths in different sets.
+    pub fn linked_together(&self, paths: &QStringList) -> bool {
+        let owned = list_of_strings(paths);
+        if owned.is_empty() {
+            return false;
+        }
+        let rust = self.rust();
+        let mut id: Option<u32> = None;
+        for path in &owned {
+            let Some(&this) = rust.link_sets.get(path) else {
+                return false;
+            };
+            match id {
+                None => id = Some(this),
+                Some(previous) if previous != this => return false,
+                _ => {}
+            }
+        }
+        id.is_some()
+    }
+
     /// Hide the listed layers, recording one "Hide Layers" state when any
     /// changed. Returns the number of layers changed.
     pub fn hide_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> i32 {
@@ -186,6 +208,19 @@ fn apply_link(link_sets: &mut HashMap<String, u32>, paths: &[String], on: bool) 
                 changed += 1;
             }
         }
+        // A link set is a relationship between two or more layers: an unlink
+        // that severs the last partner leaves a single member, which is not
+        // linked to anything, so drop it too.
+        prune_singleton_links(link_sets);
         changed
     }
+}
+
+/// Drop every link set left with a single member.
+fn prune_singleton_links(link_sets: &mut HashMap<String, u32>) {
+    let mut counts: HashMap<u32, usize> = HashMap::new();
+    for id in link_sets.values() {
+        *counts.entry(*id).or_default() += 1;
+    }
+    link_sets.retain(|_, id| counts.get(id).copied().unwrap_or(0) >= 2);
 }

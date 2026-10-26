@@ -144,6 +144,56 @@ public:
                      badge);
     }
 
+    /// Whether a row is a member of a link set (and so paints the chain badge).
+    bool showsLink(const QModelIndex& index) const
+    {
+        return index.data(LayerRowLinkedRole).toBool();
+    }
+
+    /// The linked-layer chain badge's side: the same as the fx/lock badge.
+    int linkBadgeSide() const
+    {
+        const int thumb = qMax(0, thumbnailSize_);
+        return qMax(12, thumb > 0 ? thumb : 16);
+    }
+
+    /// The horizontal space a row's link badge consumes at the right edge; zero
+    /// when the row is unlinked or the asset is missing.
+    int linkBadgeAdvance(const QModelIndex& index) const
+    {
+        if (!showsLink(index)) {
+            return 0;
+        }
+        const int side = linkBadgeSide();
+        return pictura::icon(QStringLiteral("layers.link2")).pixmap(side, side).isNull()
+            ? 0
+            : side + 3;
+    }
+
+    /// The link badge's rect at a row's right edge, immediately left of the fx
+    /// badge; empty when the row is unlinked or the asset is missing.
+    QRect linkBadgeRect(const QRect& itemRect, const QModelIndex& index) const
+    {
+        if (linkBadgeAdvance(index) == 0) {
+            return {};
+        }
+        const int side = linkBadgeSide();
+        const int thumb = qMax(0, thumbnailSize_);
+        const int badge = qMax(12, thumb > 0 ? thumb : 16);
+        int right = itemRect.right() - 3;
+        if (index.data(LockBadgeRole).toInt() != 0
+            && !pictura::icon(QStringLiteral("layers.lockAll"))
+                    .pixmap(lockBadgeSide(), lockBadgeSide())
+                    .isNull()) {
+            right -= lockBadgeSide() + 3;
+        }
+        if (showsFx(index)
+            && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
+            right -= badge + 3;
+        }
+        return QRect(right - side, itemRect.top() + (itemRect.height() - side) / 2, side, side);
+    }
+
     /// The `Blend If` chip's font: the app font, a step smaller and bold, so the
     /// chip reads as a badge rather than a second name.
     static QFont blendIfFont()
@@ -284,6 +334,7 @@ public:
             && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
             right -= badge + 3;
         }
+        right -= linkBadgeAdvance(index);
         right -= blendIfAdvance(index);
         return right;
     }
@@ -388,6 +439,7 @@ public:
             && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
             right -= badge + 3;
         }
+        right -= linkBadgeAdvance(index);
         right -= blendIfAdvance(index);
         const int nameLeft = x + (index.data(ClippingRole).toBool() ? 12 : 0);
         const int nameRight = qMax(nameLeft, right - 4);
@@ -722,6 +774,20 @@ public:
                     QRect(right - badge, rect.top() + (height - badge) / 2, badge, badge),
                     badgePix);
                 right -= badge + 3;
+            }
+        }
+        // A link-set member shows the chain glyph left of the fx badge, as CS6
+        // marks a linked layer.
+        if (linkBadgeAdvance(index) != 0) {
+            const int linkSide = linkBadgeSide();
+            const QPixmap linkPix =
+                pictura::icon(QStringLiteral("layers.link2")).pixmap(linkSide, linkSide);
+            if (!linkPix.isNull()) {
+                painter->drawPixmap(
+                    QRect(right - linkSide, rect.top() + (height - linkSide) / 2, linkSide,
+                          linkSide),
+                    linkPix);
+                right -= linkSide + 3;
             }
         }
         // A customised Blend If shows a text chip, left of the fx/lock badges.

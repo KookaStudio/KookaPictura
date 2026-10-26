@@ -37,6 +37,7 @@ Each row is drawn by a custom delegate. Left to right:
 - **Name** — inline rename on double-click; `Tab`/`Shift+Tab` in CS6 move to the next/previous layer while renaming. Shape-layer names reflect the tool used (e.g. "Rectangle 1"). Tooltips include the layer name.
 - **Color label** — CS6 sets it from the row's right-click context menu (CS5 used layer properties).
 - **Mask thumbnails** — a layer mask thumbnail and/or a vector mask thumbnail, with a **link icon** between the layer and its mask when linked. The link icon is the click target for unlink/relink.
+- **Link badge** — a layer that is a member of a link set shows a chain-link badge at the row's right edge, left of the `fx`/lock badges. Moving any member moves the whole set together.
 - **Clip indicator** — a layer clipped to the layer below is indented, and its base layer's name is underlined.
 - **Style / effects badge** — the layer-effects (`fx`) expander; a **Blend If** badge appears when the layer's blending options have been customised. In CS6 the effects are ordered as applied (e.g. Drop Shadow below other effects).
 - **Fill indicator** — the adjustment/fill/smart-object content thumbnail occupies the layer-thumbnail slot (see `LAY-012`, `LAY-013`, `LAY-020`). An adjustment row shows its adjustment-type icon; a fill row shows a solid swatch, gradient ramp, or scaled pattern tile.

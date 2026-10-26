@@ -406,6 +406,7 @@ impl PictureViewRust {
         self.move_opacity = 0;
         self.move_prepared_revision = 0;
         self.move_prepared_layer.clear();
+        self.move_prepared_union = None;
         self.move_preview_cache_hit = false;
         self.last_transform = None;
         self.transform_controls = false;
@@ -435,6 +436,7 @@ impl PictureViewRust {
         self.move_opacity = 0;
         self.move_prepared_revision = 0;
         self.move_prepared_layer.clear();
+        self.move_prepared_union = None;
         self.move_preview_cache_hit = false;
         if let Some(rect) = session.untrimmed {
             if let Some(doc) = self.session.doc.as_mut() {

@@ -6,6 +6,7 @@
 #include "layers_panel.h"
 
 #include "dialogs.h"
+#include "icons.h"
 #include "mask_display_options_dialog.h"
 #include "refine_edge_dialog.h"
 #include "session.h"
@@ -38,6 +39,14 @@ void LayersPanel::syncStripButtons()
     if (!hasDocument) {
         return;
     }
+    // The Link button follows the selection's link state: it links the selected
+    // layers, or unlinks them when they already share a set.
+    const QStringList paths = targetPaths();
+    const bool linked = !paths.isEmpty() && view_->linked_together(paths);
+    linkButton_->setEnabled(!paths.isEmpty());
+    linkButton_->setIcon(pictura::icon(linked ? QStringLiteral("layers.unlink2")
+                                              : QStringLiteral("layers.link")));
+    linkButton_->setToolTip(linked ? tr("Unlink Layers") : tr("Link Layers"));
     // CS6 adds a layer mask first, then a vector mask; with both there is
     // nothing left to add.
     const bool layerMask = view_ && layer_mask_present(*view_);

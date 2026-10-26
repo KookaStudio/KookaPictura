@@ -126,6 +126,27 @@ Snapshot for resuming after a context break. Update after each milestone.
   anti-aliasing. Groups open Blending Options with effect pages disabled until
   group effects render (#939). The smoke fixture now carries the default masks
   its Invert and Solid Fill rows should have.
+- **Linked layers move together** (#959, OpenSpec change `linked-layers-move`).
+  A linked row now draws a `layers.link2` chain badge in its right-edge badge
+  run, the action-strip Link button is enabled with a layer selection and
+  toggles the selection's link set (showing link/unlink), and the Move tool
+  translates every member of the active layer's link set by one delta in a
+  single "Move Layer" state (drag and arrow-key nudge; the live preview shows
+  the set moving together). `move_group_paths` + `translate_move_group` drive
+  the group; a linked group/adjustment/position-locked member is left in place
+  (`ponytail:` a linked member whose blend reads the layers below previews as
+  over transparency). Tests: `tst_linked_layers` (8), two Rust
+  `translate_move_group` units. Follow-up `unlink-singleton-link-set`: unlinking
+  one of two drops the leftover singleton, so a severed relationship shows no
+  link (link sets always have two or more members). Follow-up
+  `move-multi-selection`: the Move group is every selected layer plus its link
+  sets (movable/visible/unlocked), so a multi-selection drags as one. Follow-up
+  `linked-move-preview-fix`: a rendered group's cached preview origin is clamped
+  to the canvas like its crop, so a re-drag lands at the drop, and the Move
+  tool's smart guides exclude every moving layer (no self-snap). Follow-up
+  `move-preview-cache-freshness`: the move-preview cache also keys on the
+  group's union rect, so a moved set recomputes instead of reusing an image
+  composited at the old positions.
 - **Colour management bundle** (#568, #569, #600, #604, #809, #947; OpenSpec
   changes `color-management-bundle` and `color-conversion-layer-fix`). CMYK
   now converts through the document's embedded profile or the configured working profile, with `OpenOptions` and a shared

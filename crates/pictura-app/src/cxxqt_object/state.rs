@@ -57,9 +57,14 @@ pub struct PictureViewRust {
     pub(super) move_y: i32,
     pub(super) move_opacity: i32,
     pub(super) move_prepared_revision: u64,
-    /// The panel path of the layer the move-preview base was built from; empty
-    /// when no whole-layer preview is prepared.
+    /// The move-group key (its paths joined by `\n`) the move-preview base was
+    /// built from; empty when no whole-layer preview is prepared.
     pub(super) move_prepared_layer: String,
+    /// The move group's union rect when the moving image is a rendered group.
+    /// A rendered group is composited at the layers' positions and clipped to
+    /// the canvas, so a move makes the cached image stale; the cache is reused
+    /// only while this rect is unchanged.
+    pub(super) move_prepared_union: Option<(i32, i32, i32, i32)>,
     pub(super) move_preview_cache_hit: bool,
     /// The last committed similarity transform, for `Edit > Transform > Again`.
     /// Projective and Warp commits clear it (they are not repeatable this way).
@@ -174,6 +179,7 @@ impl Default for PictureViewRust {
             move_opacity: 0,
             move_prepared_revision: 0,
             move_prepared_layer: String::new(),
+            move_prepared_union: None,
             move_preview_cache_hit: false,
             last_transform: None,
             transform_controls: false,

@@ -278,12 +278,23 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
         return button;
     };
 
-    // CS6 strip order. Link has an icon but no behaviour yet, so it stays
-    // disabled rather than pretending; fx opens Blending Options.
-    auto* linkButton =
+    // CS6 strip order. Link toggles the selected layers' link set; fx opens
+    // Blending Options.
+    linkButton_ =
         stripIconButton(QStringLiteral("layersStripLink"), QStringLiteral("layers.link"));
-    linkButton->setEnabled(false);
-    linkButton->setToolTip(tr("Link Layers — not implemented yet"));
+    linkButton_->setToolTip(tr("Link Layers"));
+    connect(linkButton_, &QToolButton::clicked, this, [this] {
+        if (!view_) {
+            return;
+        }
+        const QStringList paths = targetPaths();
+        if (paths.isEmpty()) {
+            return;
+        }
+        const bool linked = view_->linked_together(paths);
+        view_->link_layers(paths, !linked);
+        refresh();
+    });
     auto* fxButton = stripIconButton(QStringLiteral("layersStripFx"), QStringLiteral("layers.fx"));
     fxButton->setToolTip(tr("Layer Style — click opens Blending Options; "
                             "Alt-click toggles all effects"));
@@ -365,8 +376,8 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     deleteButton_->installEventFilter(this);
     buttons->addStretch(1);
     layout->addLayout(buttons);
-    stripButtons_ = {fxButton,       maskButton_,      addButton,
-                     newGroupButton, newLayerButton, deleteButton_};
+    stripButtons_ = {linkButton_,     fxButton,         maskButton_,      addButton,
+                     newGroupButton,  newLayerButton,   deleteButton_};
     syncStripButtons();
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,

@@ -2424,11 +2424,9 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             QStringLiteral("layersStripMask"),   QStringLiteral("layersStripFillAdjustment"),
             QStringLiteral("layersStripGroup"),  QStringLiteral("layersStripNewLayer"),
             QStringLiteral("layersStripDelete")};
-        // link has an icon but no behaviour yet; fx is wired to the Layer Style
-        // dialog. delete follows the selection (greyed out when nothing in it
-        // can be deleted, tst_last_layer), so only its icon is checked here.
-        const QSet<QString> stripDisabled = {QStringLiteral("link")};
-        const QSet<QString> stripStateful = {QStringLiteral("delete")};
+        // link and delete follow the layer selection, so only their icons are
+        // checked here; the other strip buttons carry their icon while enabled.
+        const QSet<QString> stripStateful = {QStringLiteral("link"), QStringLiteral("delete")};
         QWidget* assetsLayers = frame.findChild<QWidget*>(QStringLiteral("layersPanel"));
         int stripOk = 0;
         QString stripWrong;
@@ -2438,9 +2436,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 : nullptr;
             const QIcon expected =
                 pictura::icon(QStringLiteral("layers.") + stripIds.at(i));
-            const bool disabled = stripDisabled.contains(stripIds.at(i));
             if (button && sameIcon(button->icon(), expected)
-                && (stripStateful.contains(stripIds.at(i)) || button->isEnabled() != disabled)) {
+                && (stripStateful.contains(stripIds.at(i)) || button->isEnabled())) {
                 ++stripOk;
             } else if (stripWrong.isEmpty()) {
                 stripWrong = stripIds.at(i);

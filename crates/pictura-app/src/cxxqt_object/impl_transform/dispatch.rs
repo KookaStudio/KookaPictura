@@ -8,6 +8,7 @@ use super::geometry::{
 };
 use super::perspective::{gesture_perspective, gesture_scale_base};
 use super::skew::{gesture_free_skew, gesture_skew};
+use super::translate_move_group;
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -212,80 +213,64 @@ impl qobject::PictureView {
 
 impl qobject::PictureView {
     pub fn translate_layer(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
-        let Some(path) = self.as_ref().move_cache_target() else {
+        let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
-        let before = self
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, &path))
-            .map(|layer| layer.rect);
-        let moved = {
+        let effects = self.rust().session.doc.as_ref().is_some_and(|doc| {
+            paths
+                .iter()
+                .any(|path| pictura_render::resolve_path(doc, path).is_some_and(layer_has_effects))
+        });
+        let dirty = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
-            pictura_render::translate_layer_path(doc, &path, dx, dy)
+            translate_move_group(doc, &paths, dx, dy)
         };
-        if moved {
-            let edit = match (
-                before,
-                self.rust()
-                    .session
-                    .doc
-                    .as_ref()
-                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                    .map(|l| (l.rect, layer_has_effects(l))),
-            ) {
-                (Some(b), Some((a, false))) => Edit::Regions {
-                    rects: vec![union_rect(b, a)],
-                    notify: false,
-                },
-                _ => Edit::Full,
-            };
-            self.as_mut().commit_move_edit("Move Layer", |_| edit);
-        }
-        moved
+        let Some(dirty) = dirty else {
+            return false;
+        };
+        let edit = if effects {
+            Edit::Full
+        } else {
+            Edit::Regions {
+                rects: vec![dirty],
+                notify: false,
+            }
+        };
+        self.as_mut().commit_move_edit("Move Layer", |_| edit);
+        true
     }
 
     pub fn move_preview(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
         if dx == 0 && dy == 0 {
             return false;
         }
-        let Some(path) = self.as_ref().move_cache_target() else {
+        let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
-        let before = self
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, &path))
-            .map(|layer| layer.rect);
-        let moved = {
+        let effects = self.rust().session.doc.as_ref().is_some_and(|doc| {
+            paths
+                .iter()
+                .any(|path| pictura_render::resolve_path(doc, path).is_some_and(layer_has_effects))
+        });
+        let dirty = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
-            pictura_render::translate_layer_path(doc, &path, dx, dy)
+            translate_move_group(doc, &paths, dx, dy)
         };
-        if moved {
-            match (
-                before,
-                self.rust()
-                    .session
-                    .doc
-                    .as_ref()
-                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                    .map(|l| (l.rect, layer_has_effects(l))),
-            ) {
-                (Some(b), Some((a, false))) => self.as_mut().refresh_region(union_rect(b, a)),
-                _ => self.as_mut().recomposite(),
-            }
+        let Some(dirty) = dirty else {
+            return false;
+        };
+        if effects {
+            self.as_mut().recomposite();
+        } else {
+            self.as_mut().refresh_region(dirty);
         }
-        moved
+        true
     }
 }
 

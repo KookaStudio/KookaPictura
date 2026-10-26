@@ -175,4 +175,13 @@ bool LayersPanel::doubleClickMaskForTest(const QString& path)
     return true;
 }
 
+QRect LayersPanel::rowLinkBadgeRectForTest(const QString& path) const
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid() || !delegate_ || !tree_) {
+        return {};
+    }
+    return delegate_->linkBadgeRect(tree_->visualRect(index), index);
+}
+
 } // namespace pictura

@@ -38,6 +38,7 @@ set(PICTURA_QT_TESTS
     tst_hdr_conversion
     tst_layers_panel
     tst_layer_target
+    tst_linked_layers
     tst_layers_panel_fixes
     tst_layers_panel_bundle
     tst_layers_row_menu

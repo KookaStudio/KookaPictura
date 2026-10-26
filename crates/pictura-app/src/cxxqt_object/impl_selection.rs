@@ -295,6 +295,7 @@ impl qobject::PictureView {
         rust.move_prepared_revision = rust.session.content_revision;
         // The empty sentinel keeps the whole-layer cache from reusing this base.
         rust.move_prepared_layer = String::new();
+        rust.move_prepared_union = None;
         rust.move_preview_cache_hit = false;
         true
     }
