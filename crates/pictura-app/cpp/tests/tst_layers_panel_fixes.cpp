@@ -44,6 +44,7 @@
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include "qt_test_support.h"
@@ -192,6 +193,8 @@ private slots:
     void legacyMoveLayerShiftsAndRefuses();
     void actionStripStaysFixedAndCentred();
     void bottomStripDisabledWithoutDocument();
+    void fxButtonOpensBlendingOptions();
+    void fxButtonAltTogglesAll();
     void dropBelowBackgroundRefused();
     void cannotClipToBackground();
     void moveDownStopsAtBackground();
@@ -929,6 +932,50 @@ void LayersPanelFixesTest::bottomStripDisabledWithoutDocument()
         QVERIFY2(button != nullptr, qPrintable(name));
         QVERIFY2(!button->isEnabled(), qPrintable(name));
     }
+}
+
+// The fx strip button: a click opens the Layer Style dialog, and an Alt-click
+// toggles every layer's effects (one undoable step each).
+void LayersPanelFixesTest::fxButtonOpensBlendingOptions()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("FxButton"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("transparent")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    panel_->refresh();
+    bool opened = false;
+    panel_->setDialogDriverForTest([&opened](QDialog&) {
+        opened = true;
+        return false;
+    });
+    panel_->clickFxButtonForTest(false);
+    QVERIFY2(opened, "the fx button opens the Layer Style dialog");
+    panel_->setDialogDriverForTest(nullptr);
+}
+
+void LayersPanelFixesTest::fxButtonAltTogglesAll()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("FxAlt"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("transparent")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    panel_->refresh();
+    const QString layer = QStringLiteral("0");
+    QVERIFY(pictura::layer_style_set(*view_, layer, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    const int before = view_->history_count();
+    panel_->clickFxButtonForTest(true);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Hide All Effects"));
+    panel_->clickFxButtonForTest(true);
+    QCOMPARE(view_->history_count(), before + 2);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Show All Effects"));
 }
 
 // Issue #717: a layer dropped below the Background shows no indicator, is

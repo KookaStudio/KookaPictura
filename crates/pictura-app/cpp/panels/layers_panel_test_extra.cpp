@@ -184,4 +184,9 @@ QRect LayersPanel::rowLinkBadgeRectForTest(const QString& path) const
     return delegate_->linkBadgeRect(tree_->visualRect(index), index);
 }
 
+void LayersPanel::clickFxButtonForTest(bool alt)
+{
+    applyFxButton(alt);
+}
+
 } // namespace pictura

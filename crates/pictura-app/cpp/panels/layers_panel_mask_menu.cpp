@@ -62,12 +62,11 @@ void LayersPanel::syncStripButtons()
                                   || layers_can_delete(*view_, targetPaths())));
 }
 
-void LayersPanel::addMaskFromButton()
+void LayersPanel::addMaskFromButton(bool alt)
 {
     if (!view_) {
         return;
     }
-    const bool alt = QApplication::keyboardModifiers().testFlag(Qt::AltModifier);
     if (!layer_mask_present(*view_)) {
         layer_mask_add(*view_, alt                      ? QStringLiteral("hide-all")
                                : view_->has_selection() ? QStringLiteral("reveal-selection")
@@ -189,6 +188,11 @@ void LayersPanel::clickMaskButtonForTest()
     if (maskButton_) {
         maskButton_->click();
     }
+}
+
+void LayersPanel::altClickMaskButtonForTest()
+{
+    addMaskFromButton(true);
 }
 
 bool LayersPanel::deleteButtonEnabledForTest() const

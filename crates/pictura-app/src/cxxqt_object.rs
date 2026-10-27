@@ -596,7 +596,7 @@ pub mod qobject {
         #[qinvokable]
         fn hide_layers(self: Pin<&mut Self>, paths: &QStringList) -> i32;
 
-        /// Delete every effectively hidden layer; records one "Delete Hidden Layers" state.
+        /// Delete every effectively hidden layer; records one "Delete Hidden Layers" state when any is removed.
         #[qinvokable]
         fn delete_hidden_layers(self: Pin<&mut Self>) -> i32;
 

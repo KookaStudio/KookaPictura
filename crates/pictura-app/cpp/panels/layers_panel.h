@@ -290,6 +290,11 @@ public:
     QString maskButtonToolTipForTest() const;
     bool maskButtonEnabledForTest() const;
     void clickMaskButtonForTest();
+    // Alt-click the mask button as a user would (the button reads the process
+    // global modifier, which a synthetic click cannot set).
+    void altClickMaskButtonForTest();
+    // Run the fx strip button's action with an explicit Alt state (same reason).
+    void clickFxButtonForTest(bool alt);
     bool deleteButtonEnabledForTest() const;
     void clickDeleteButtonForTest();
     // The texts of the menu a right-click on `path`'s vector-mask thumbnail opens.
@@ -401,7 +406,7 @@ private:
     // The action strip is disabled without a document; the mask and trash
     // buttons also follow the active layer and the selection.
     void syncStripButtons();
-    void addMaskFromButton();
+    void addMaskFromButton(bool alt);
     // The trash: with both masks on the layer it deletes the vector mask after
     // a "Delete Vector Mask?" prompt; otherwise it deletes the selection.
     void deleteFromTrash();
@@ -423,6 +428,9 @@ private:
     void openPanelOptions();
     void persistOptions();
     void openLayerStyle(const QString& path);
+    // The fx strip button's action: Alt toggles every layer's effects, else the
+    // active layer's Blending Options.
+    void applyFxButton(bool alt);
     void openBackgroundConversion(const QString& path);
 
     void applyFilter(const LayerFilter& filter);

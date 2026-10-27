@@ -119,7 +119,11 @@ pub(super) fn move_group_union(doc: &Document, paths: &[String]) -> Option<(i32,
 ///
 /// ponytail: a member whose blend mode reads the layers below previews as if
 /// over transparency (the base is excluded from this render, as the existing
-/// clipping-group preview does); the commit recomposites correctly.
+/// clipping-group preview does); the commit recomposites correctly. The scratch
+/// document is a full clone per press, so a large document pays a whole-document
+/// copy at each drag start; scope it to the layers `current_buffer` reads if a
+/// profile shows it. A group dragged entirely off the canvas has an empty
+/// clamped crop, so the preview refuses and only the keyboard nudge recovers it.
 pub(super) fn rendered_move_group(
     doc: &Document,
     paths: &[String],

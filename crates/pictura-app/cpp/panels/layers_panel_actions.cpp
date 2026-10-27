@@ -301,13 +301,25 @@ void LayersPanel::openBackgroundConversion(const QString& path)
     }
 }
 
+void LayersPanel::applyFxButton(bool alt)
+{
+    if (!view_) {
+        return;
+    }
+    if (alt) {
+        layer_style_set_all_visible(*view_, !layer_style_any_visible(*view_, true));
+    } else {
+        openLayerStyle(layer_selection_anchor(*view_));
+    }
+}
+
 void LayersPanel::openLayerStyle(const QString& path)
 {
     if (!view_ || path.isEmpty() || !layer_style_can_edit(*view_, path)) {
         return;
     }
     LayerStyleDialog dialog(view_, path, QString(), this);
-    runDialog(dialog, this);
+    runPanelDialog(dialog);
     refresh();
 }
 
