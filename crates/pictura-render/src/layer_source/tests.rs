@@ -410,6 +410,7 @@ fn filtered_source_invalidates_when_only_the_off_canvas_rect_changes() {
 #[test]
 fn text_state_invalidates_sources_and_passes() {
     let _guard = locked();
+    let _gamma = crate::test_support::gamma_guard();
     let old_gamma = crate::text_gamma();
     let so = embedded();
     let first = embedded_source(&so).expect("source decodes");

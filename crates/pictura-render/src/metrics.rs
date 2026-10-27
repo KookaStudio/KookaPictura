@@ -31,7 +31,7 @@ pub const DECLINE_REASONS: [&str; 11] = [
     "unsupported_mode",
     "unsupported_adjustment",
     "unsupported_smart_object",
-    "unsupported_text",
+    "type_source",
     "unsupported_layer_effect",
     "unsupported_advanced_blending",
     "unsupported_depth",
@@ -205,6 +205,42 @@ mod tests {
             Err(GpuError::UnsupportedMode(BlendMode::Dissolve))
         ));
         assert!(decline_count("unsupported_mode") > before);
+    }
+
+    #[test]
+    fn type_source_decline_is_counted() {
+        let layer = Layer {
+            name: "text".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 2,
+            },
+            type_tool: Some(pictura_core::TypeTool {
+                transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                text: "Hi".into(),
+                bounds: [0, 0, 2, 2],
+                text_desc: Vec::new(),
+                warp_desc: Vec::new(),
+                fonts: Vec::new(),
+                style: None,
+                vertical: false,
+                box_bounds: None,
+                path: None,
+            }),
+            ..Default::default()
+        };
+        let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        let before = decline_count("type_source");
+        assert!(matches!(
+            crate::composite_gpu(&doc),
+            Err(GpuError::UnsupportedText)
+        ));
+        assert!(decline_count("type_source") > before);
+        assert!(DECLINE_REASONS.contains(&"type_source"));
+        assert!(!DECLINE_REASONS.contains(&"unsupported_text"));
     }
 
     #[test]

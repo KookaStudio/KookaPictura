@@ -30,7 +30,7 @@ const MAX_HUNDREDTHS: u32 = 220;
 const OFF: u32 = 0;
 /// Table steps; linear interpolation between them stays within an 8-bit level
 /// except at γ near 1.00, where the curve is steep next to full coverage.
-const STEPS: usize = 4096;
+pub(crate) const STEPS: usize = 4096;
 
 /// The gamma in hundredths, or [`OFF`].
 static TEXT_GAMMA: AtomicU32 = AtomicU32::new(hundredths(DEFAULT_TEXT_GAMMA));
@@ -58,6 +58,12 @@ impl TextCurve {
         let i = (at as usize).min(STEPS - 1);
         let t = at - i as f32;
         self.table[i] + (self.table[i + 1] - self.table[i]) * t
+    }
+
+    /// The sampled table, `STEPS + 1` entries wide. The GPU uploads this so its
+    /// interpolation matches [`Self::apply`] exactly.
+    pub(crate) fn samples(&self) -> &[f32] {
+        &self.table
     }
 }
 

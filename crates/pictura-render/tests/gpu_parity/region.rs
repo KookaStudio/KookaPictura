@@ -2,14 +2,17 @@
 
 use std::time::Instant;
 
-use pictura_core::{BitDepth, BlendMode, ColorMode, Document, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{
+    BitDepth, BlendMode, ColorMode, Document, LayerMask, PixelBuffer, PsdRect, TypeTool,
+};
 use pictura_render::{
-    composite_active, composite_region_active, encode_invert, gpu_available, Backend,
+    composite_active, composite_region_active, encode_invert, gpu_available, set_text_gamma,
+    text_gamma, Backend, DEFAULT_TEXT_GAMMA,
 };
 
 use crate::common::{
-    adjustment_layer, base_layer, bench_enabled, group, large_layer, layer, require_gpu, scene,
-    SIZE,
+    adjustment_layer, base_layer, bench_enabled, gamma_guard, group, large_layer, layer,
+    require_gpu, scene, SIZE,
 };
 
 fn whole_rect() -> PsdRect {
@@ -30,8 +33,29 @@ fn region_rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
     }
 }
 
+fn type_tool() -> TypeTool {
+    TypeTool {
+        transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        text: "Hi".into(),
+        bounds: [0, 0, SIZE as i32, SIZE as i32],
+        text_desc: Vec::new(),
+        warp_desc: Vec::new(),
+        fonts: Vec::new(),
+        style: None,
+        vertical: false,
+        box_bounds: None,
+        path: None,
+    }
+}
+
+fn alpha_ramp(x: u32, y: u32) -> u8 {
+    let i = y * SIZE + x;
+    (i * 255 / (SIZE * SIZE - 1)) as u8
+}
+
 /// One document per scene kind the region path must preserve: separable,
-/// non-separable, adjustment, masked, and an isolated group.
+/// non-separable, adjustment, masked, an isolated group, and a proxied type
+/// layer.
 fn region_scenes() -> Vec<(&'static str, Document)> {
     let separable = scene(BlendMode::Multiply);
     let nonseparable = scene(BlendMode::Hue);
@@ -57,6 +81,13 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
     let mut masked = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     masked.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), masked_layer]);
 
+    let mut proxied_type = layer("text", BlendMode::Normal, |x, y| {
+        (0, 0, 0, alpha_ramp(x, y))
+    });
+    proxied_type.type_tool = Some(type_tool());
+    let mut typed = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
+    typed.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), proxied_type]);
+
     let mut iso = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     iso.layers = pictura_core::LayerStack::from_layers(vec![
         base_layer(),
@@ -75,6 +106,7 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
         ("nonseparable_hue", nonseparable),
         ("adjustment_invert", adjustment),
         ("masked_layer", masked),
+        ("proxied_type", typed),
         ("isolated_group", iso),
     ]
 }
@@ -121,6 +153,9 @@ fn assert_region_slice(doc: &Document, full: &PixelBuffer, r: PsdRect, ctx: &str
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn region_matches_full_slice() {
+    let _guard = gamma_guard();
+    let old_gamma = text_gamma();
+    set_text_gamma(Some(DEFAULT_TEXT_GAMMA));
     require_gpu();
     let rects = [
         region_rect(0, 0, 4, 4),
@@ -139,11 +174,15 @@ fn region_matches_full_slice() {
         }
     }
     eprintln!("region parity: {count} scenes byte-identical to the full-active slice");
+    set_text_gamma(old_gamma);
 }
 
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn full_region_equals_full_composite() {
+    let _guard = gamma_guard();
+    let old_gamma = text_gamma();
+    set_text_gamma(Some(DEFAULT_TEXT_GAMMA));
     require_gpu();
     for (name, doc) in region_scenes() {
         let (full, fb) = composite_active(&doc, true);
@@ -157,10 +196,14 @@ fn full_region_equals_full_composite() {
         );
     }
     eprintln!("full-region parity: every scene byte-identical");
+    set_text_gamma(old_gamma);
 }
 
 #[test]
 fn cpu_region_matches_full_slice() {
+    let _guard = gamma_guard();
+    let old_gamma = text_gamma();
+    set_text_gamma(Some(DEFAULT_TEXT_GAMMA));
     // The CPU fallback must composite only the requested rect yet stay
     // byte-identical to the same slice of the full CPU composite, including
     // partial coverage and every multi-layer scene kind.
@@ -208,6 +251,7 @@ fn cpu_region_matches_full_slice() {
         }
     }
     eprintln!("cpu region parity: every scene byte-identical to the full slice");
+    set_text_gamma(old_gamma);
 }
 
 #[test]
