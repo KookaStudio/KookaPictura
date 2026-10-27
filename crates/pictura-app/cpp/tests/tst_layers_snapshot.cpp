@@ -204,6 +204,8 @@ void LayersSnapshotTest::fixtureExpectations()
     QVERIFY(!pix.placed);
     QVERIFY(pix.hasStyle);
     QCOMPARE(pix.styleEffects, QStringList{QStringLiteral("colorOverlay")});
+    QCOMPARE(pix.styleEffectsOn, QStringList{QStringLiteral("colorOverlay")});
+    QVERIFY(pix.styleVisible);
     QVERIFY(pix.hasBlendIf);
     QVERIFY(pix.hasVectorMask);
     QVERIFY(pix.linked);

@@ -537,7 +537,15 @@ void LayersPanel::refresh()
     const int thumbSize = delegate_ ? delegate_->thumbnailSize() : 24;
 
     QVector<LayerRowNode> rows;
+    // A layer that first appears styled this refresh, to expand when
+    // `Expand New Effects` is on; an opened document's effects stay collapsed.
+    QStringList autoExpandEffects;
     if (view_) {
+        const bool newDocument = view_->document_generation() != styledGeneration_;
+        styledGeneration_ = view_->document_generation();
+        if (newDocument) {
+            styledPathsSeen_.clear();
+        }
         // One crossing per rebuild: the bridge fills every row field in one
         // pass, including the shape-aware thumbnails and the effect names.
         const pictura::layers_api::Snapshot snap =
@@ -630,6 +638,11 @@ void LayersPanel::refresh()
                 synthetic.push_back(std::move(child));
             }
         }
+        // Display-only layer-effects rows: an "Effects" group under each styled
+        // layer plus one row per effect it carries, each with an eye.
+        for (LayerRowNode& row : appendEffectRows(snap, autoExpandEffects, newDocument)) {
+            synthetic.push_back(std::move(row));
+        }
         for (LayerRowNode& row : synthetic) {
             rows.push_back(std::move(row));
         }
@@ -665,6 +678,18 @@ void LayersPanel::refresh()
         }
     }
     setExpandedPaths(live);
+    // A layer that first gained a style this refresh expands its effects group
+    // and the group's effect rows, once, when `Expand New Effects` is on.
+    for (const QString& path : autoExpandEffects) {
+        const QModelIndex layerIndex = proxyIndexForPath(path);
+        if (layerIndex.isValid()) {
+            tree_->expand(layerIndex);
+        }
+        const QModelIndex fxIndex = proxyIndexForPath(path + QStringLiteral("/@fx"));
+        if (fxIndex.isValid()) {
+            tree_->expand(fxIndex);
+        }
+    }
     if (proxy_->filter().enabled && proxy_->hasActiveCriteria()) {
         expandMatchingGroups();
     }
@@ -772,7 +797,7 @@ QStringList LayersPanel::selectedPaths() const
     const QModelIndexList rows = tree_->selectionModel()->selectedRows(0);
     for (const QModelIndex& index : rows) {
         const QString path = pathForProxyIndex(index);
-        if (!path.isEmpty() && !path.contains(QStringLiteral("/@sf"))) {
+        if (!path.isEmpty() && !isSyntheticRowPath(path)) {
             paths.push_back(path);
         }
     }

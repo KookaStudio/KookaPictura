@@ -140,6 +140,7 @@ set(PICTURA_QT_TESTS
     tst_image_adjustments
     tst_image_import
     tst_layers_smart_filters
+    tst_layers_effects
     tst_smart_object_actions
     tst_edit_shortcuts
     tst_workspaces

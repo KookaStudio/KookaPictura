@@ -539,9 +539,10 @@ public:
                                               box.top() + (box.height() - gs) / 2, gs, gs),
                                         glyph);
                 }
-            } else if (index.data(KindRole).toString().startsWith(QLatin1String("smart-filter"))) {
-                // The Smart Filters group and its rows show the fx badge instead
-                // of a checkerboard (there is no raster thumbnail for them).
+            } else if (index.data(KindRole).toString().startsWith(QLatin1String("smart-filter"))
+                       || index.data(KindRole).toString().startsWith(QLatin1String("layer-effect"))) {
+                // The Smart Filters and layer-effects group/rows show the fx
+                // badge instead of a checkerboard (they have no raster pixels).
                 const QPixmap glyph =
                     pictura::icon(QStringLiteral("layers.fx")).pixmap(thumb, thumb);
                 if (!glyph.isNull()) {
@@ -595,7 +596,8 @@ public:
             // 1 px black outline around the letterboxed thumbnail. A group's
             // folder glyph and a type layer's white "T" card keep no outline.
             const QString outlineKind = index.data(KindRole).toString();
-            if (outlineKind != QLatin1String("group") && outlineKind != QLatin1String("type")) {
+            if (outlineKind != QLatin1String("group") && outlineKind != QLatin1String("type")
+                && !outlineKind.startsWith(QLatin1String("layer-effect"))) {
                 painter->setPen(QPen(Qt::black, 1));
                 painter->setBrush(Qt::NoBrush);
                 painter->drawRect(shaped.adjusted(0, 0, -1, -1));

@@ -1,6 +1,7 @@
 #include "layers_panel.h"
 
 #include "export_as_dialog.h"
+#include "layer_style_dialog.h"
 #include "layers_panel_internal.h"
 
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
@@ -20,6 +21,7 @@
 #include <QtGui/QAction>
 #include <QtGui/QIcon>
 #include <QtGui/QPixmap>
+#include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QTreeView>
 
@@ -259,6 +261,25 @@ void LayersPanel::showContextMenu(const QPoint& pos)
         menu.exec(tree_->viewport()->mapToGlobal(pos));
         return;
     }
+    // The layer-effects rows and the fx badge carry the CS6 layer-style menu.
+    if (rowKind == QLatin1String("layer-effects") || rowKind == QLatin1String("layer-effect")) {
+        const int at = path.indexOf(QStringLiteral("/@fx"));
+        QMenu menu(tree_);
+        if (at >= 0) {
+            populateLayerStyleMenu(menu, path.left(at));
+        }
+        menu.exec(tree_->viewport()->mapToGlobal(pos));
+        return;
+    }
+    if (index.data(HasLayerStyleRole).toBool()) {
+        const QRect fx = delegate_->fxRect(tree_->visualRect(index), index);
+        if (!fx.isEmpty() && fx.contains(pos)) {
+            QMenu menu(tree_);
+            populateLayerStyleMenu(menu, path);
+            menu.exec(tree_->viewport()->mapToGlobal(pos));
+            return;
+        }
+    }
 
     QMenu menu(tree_);
     // The vector-mask thumbnail has its own menu of vector-mask commands.
@@ -486,6 +507,83 @@ void LayersPanel::populateSmartFilterMenu(QMenu& menu, const QString& path)
     QAction* remove = menu.addAction(tr("Delete Smart Filter"));
     connect(remove, &QAction::triggered, this, [this, base, index] {
         if (view_ && delete_layer_smart_filter(*view_, base, index)) {
+            refresh();
+        }
+    });
+}
+
+void LayersPanel::populateLayerStyleMenu(QMenu& menu, const QString& path)
+{
+    if (!view_) {
+        return;
+    }
+    const bool visible =
+        layer_style_value(*view_, path, QStringLiteral("fx.visible")) >= 0.5;
+    const bool styled = layer_style_has(*view_, path);
+
+    QAction* toggle = menu.addAction(visible ? tr("Disable Layer Effects")
+                                             : tr("Enable Layer Effects"));
+    connect(toggle, &QAction::triggered, this, [this, path, visible] {
+        if (layer_style_set(*view_, path, QStringLiteral("fx.visible"), visible ? 0.0 : 1.0)) {
+            layer_style_commit(*view_, visible ? tr("Disable Layer Effects")
+                                               : tr("Enable Layer Effects"));
+        }
+    });
+    menu.addSeparator();
+
+    QAction* blending = menu.addAction(tr("Blending Options…"));
+    connect(blending, &QAction::triggered, this, [this, path] { openLayerStyle(path); });
+    menu.addSeparator();
+
+    for (const QString& key : LayerStyleDialog::effectKeys()) {
+        QAction* effect =
+            menu.addAction(LayerStyleDialog::effectTitle(key) + QStringLiteral("…"));
+        connect(effect, &QAction::triggered, this,
+                [this, path, key] { openLayerStyle(path, key); });
+    }
+    menu.addSeparator();
+
+    QAction* copy = menu.addAction(tr("Copy Layer Style"));
+    copy->setEnabled(styled);
+    connect(copy, &QAction::triggered, this, [this, path] { layer_style_copy(*view_, path); });
+    QAction* paste = menu.addAction(tr("Paste Layer Style"));
+    paste->setEnabled(layer_style_can_paste());
+    connect(paste, &QAction::triggered, this, [this, path] {
+        if (layer_style_paste(*view_, QStringList{path}) > 0) {
+            refresh();
+        }
+    });
+    QAction* clear = menu.addAction(tr("Clear Layer Style"));
+    clear->setEnabled(styled);
+    connect(clear, &QAction::triggered, this, [this, path] {
+        if (layer_style_clear(*view_, QStringList{path}) > 0) {
+            refresh();
+        }
+    });
+    menu.addSeparator();
+
+    QAction* globalLight = menu.addAction(tr("Global Light…"));
+    globalLight->setEnabled(false);
+    globalLight->setToolTip(tr("Global Light… — not implemented yet"));
+    QAction* createLayer = menu.addAction(tr("Create Layer"));
+    createLayer->setEnabled(false);
+    createLayer->setToolTip(tr("Create Layer — not implemented yet"));
+
+    const bool anyVisible = layer_style_any_visible(*view_, true);
+    QAction* hide =
+        menu.addAction(anyVisible ? tr("Hide All Effects") : tr("Show All Effects"));
+    connect(hide, &QAction::triggered, this, [this, anyVisible] {
+        if (layer_style_set_all_visible(*view_, !anyVisible) > 0) {
+            refresh();
+        }
+    });
+
+    QAction* scale = menu.addAction(tr("Scale Effects…"));
+    connect(scale, &QAction::triggered, this, [this, path] {
+        bool ok = false;
+        const int percent = QInputDialog::getInt(this, tr("Scale Layer Effects"), tr("Scale (%):"),
+                                                 100, 1, 1000, 1, &ok);
+        if (ok && layer_style_scale(*view_, QStringList{path}, percent) > 0) {
             refresh();
         }
     });

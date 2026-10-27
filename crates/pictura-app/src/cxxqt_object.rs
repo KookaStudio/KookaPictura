@@ -117,8 +117,12 @@ pub mod qobject {
         shape: bool,
         smart_object: bool,
         has_style: bool,
-        /// Active effect names joined by `\n`; the adapter splits them back.
+        /// Present effect names joined by `\n`; the adapter splits them back.
         style_effects: QString,
+        /// The enabled subset of `style_effects`, joined by `\n`.
+        style_effects_on: QString,
+        /// The layer's master effect switch (`fx.visible`); true when absent.
+        style_visible: bool,
         has_blend_if: bool,
         thumbnail: QImage,
         mask_thumbnail: QImage,

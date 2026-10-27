@@ -7,6 +7,7 @@
 #include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+#include <QtCore/QVector>
 #include <QtGui/QImage>
 #include <QtWidgets/QWidget>
 
@@ -28,10 +29,22 @@ class QTreeView;
 
 namespace pictura {
 
+/// A display-only path below a real layer: the Smart Filters group/rows
+/// (`/@sf`) or the layer-effects group/rows (`/@fx`). Such a row is never the
+/// document's layer target.
+inline bool isSyntheticRowPath(const QString& path)
+{
+    return path.contains(QLatin1String("/@sf")) || path.contains(QLatin1String("/@fx"));
+}
+
 class ColorState;
 class LayerFilterBar;
 class LayerRowDelegate;
 struct LayerFilter;
+struct LayerRowNode;
+namespace layers_api {
+struct Snapshot;
+}
 class LayersFilterProxyModel;
 class LayersModel;
 class LayersTreeView;
@@ -276,6 +289,20 @@ public:
     // Build the row menu and trigger the action with `text`.
     bool triggerRowMenuActionForPathForTest(const QString& path, const QString& text);
     bool performRowActionForTest(const QString& id, const QString& path);
+    // Layer-effects rows: the synthetic row's kind/name/eye, a click on its
+    // eye, its expansion, the CS6 layer-style menu, and a double-click on the
+    // fx badge or a row's centre.
+    QString rowKindForTest(const QString& path) const;
+    QString rowNameForTest(const QString& path) const;
+    bool rowVisibleForTest(const QString& path) const;
+    bool rowExistsForTest(const QString& path) const;
+    bool rowExpandedForTest(const QString& path) const;
+    bool clickRowEyeForTest(const QString& path);
+    QStringList layerStyleMenuTextsForTest(const QString& path);
+    bool layerStyleMenuEnabledForTest(const QString& path, const QString& text);
+    bool triggerLayerStyleMenuActionForTest(const QString& path, const QString& text);
+    bool doubleClickFxBadgeForTest(const QString& path);
+    bool doubleClickRowCenterForTest(const QString& path);
     // The mask-thumbnail context menu: its item texts/enabled states, and a
     // direct run of one command by its action id (test seam).
     QStringList maskMenuTextsForPathForTest(const QString& path);
@@ -409,6 +436,15 @@ private:
     // The Smart Filters group row and each smart-filter row.
     void populateSmartFiltersGroupMenu(QMenu& menu, const QString& path);
     void populateSmartFilterMenu(QMenu& menu, const QString& path);
+    // The synthetic layer-effects rows for `snap`'s styled layers. A layer that
+    // first appears styled is appended to `autoExpand` unless `newDocument`.
+    QVector<LayerRowNode> appendEffectRows(const layers_api::Snapshot& snap,
+                                           QStringList& autoExpand, bool newDocument);
+    // The CS6 layer-style menu on the fx badge and the effects rows.
+    void populateLayerStyleMenu(QMenu& menu, const QString& path);
+    // The effects rows' eye: the master switch on the group, the effect's own
+    // enabled bit on an effect row, as one undoable state.
+    void toggleEffectVisibility(const QModelIndex& index, const QString& kind);
     // CS6's type-only rows (orientation, anti-aliasing, text kind, warp).
     void addTypeRows(QMenu& menu, const QString& path, bool& emitted);
     bool performRowAction(const QString& id, const QString& path);
@@ -419,7 +455,7 @@ private:
     void addColorLabelActions(QMenu* menu, int currentLabel);
     void openPanelOptions();
     void persistOptions();
-    void openLayerStyle(const QString& path);
+    void openLayerStyle(const QString& path, const QString& effect = QString());
     void openBackgroundConversion(const QString& path);
 
     void applyFilter(const LayerFilter& filter);
@@ -479,6 +515,11 @@ private:
     int thumbSizeIndex_ = 2;
     int thumbContents_ = 0;
     bool expandNewEffects_ = true;
+    // Layer paths whose effects group has been shown; a layer newly appearing
+    // here expands once, so a later user collapse is not overridden. Reset when
+    // the document changes, so an opened document's effects stay collapsed.
+    QSet<QString> styledPathsSeen_;
+    quint64 styledGeneration_ = 0;
     bool addCopyOnDuplicate_ = true;
     bool useDefaultMasksOnFill_ = true;
     bool addMaskByDefault_ = true;
