@@ -38,7 +38,7 @@ gate runs.
 
 ## 3. Verification (CI-only)
 
-- [ ] 3.1 The PR's `lint`, `test`, `qt-headless` (both self-test steps, CTest,
+- [x] 3.1 The PR's `lint`, `test`, `qt-headless` (both self-test steps, CTest,
   Qt test report), `guards`, and `oracles` jobs pass. POSIX: the
   `mcp_control_socket_mode` self-test check still reports a user-only mode.
 - [x] 3.2 The temporarily enabled `windows` job (staged, portable archive, and
@@ -50,7 +50,7 @@ gate runs.
   `pictura.exe --headless --self-test` runs. They must differ, and each client
   must be answered by the process that started it; a shared name surfaces as
   `unauthorized` (the other server's token), not code 463.
-- [ ] 3.4 The PR's `guards` job passes `check-test-plan.py`,
+- [x] 3.4 The PR's `guards` job passes `check-test-plan.py`,
   `check-file-size.sh`, `check-selftest-budget.sh` (507/507),
   `openspec validate --all --strict`, and, after archiving,
   `check-openspec-archived.sh`.
