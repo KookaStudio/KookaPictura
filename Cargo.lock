@@ -1002,6 +1002,9 @@ dependencies = [
 [[package]]
 name = "pictura-core"
 version = "0.2.0"
+dependencies = [
+ "rayon",
+]
 
 [[package]]
 name = "pictura-filters"
@@ -1069,6 +1072,7 @@ name = "pictura-select"
 version = "0.2.0"
 dependencies = [
  "pictura-core",
+ "rayon",
  "thiserror 2.0.20",
 ]
 

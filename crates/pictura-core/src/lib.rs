@@ -12,6 +12,7 @@ mod guides;
 pub mod hdr;
 pub mod homography;
 mod layer_stack;
+pub mod mask_ops;
 pub mod nonseparable;
 pub mod path;
 mod plane;

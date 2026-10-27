@@ -92,6 +92,7 @@
 
 use pictura_adjust::Adjustment;
 use pictura_codec::DescValue;
+use pictura_core::mask_ops::{self, Border};
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 
 use crate::composite::{channel, Canvas};
@@ -685,78 +686,16 @@ pub(super) fn spread_pad(spread: f64, size: f64) -> i64 {
     spread_dilate(spread, size) + blur_support(size)
 }
 
-/// Grayscale dilation (max filter) of radius `r`, separable over the box
-/// window. Spread expands the matte before the blur, up to a hard edge at 100 %.
+/// Grayscale dilation (max filter) of radius `r`, clamp-to-edge.
+/// Spread expands the matte before the blur, up to a hard edge at 100 %.
 fn dilate_matte(src: &[f32], w: usize, h: usize, r: i64) -> Vec<f32> {
-    let horizontal = axis_max(src, w, h, r, true);
-    axis_max(&horizontal, w, h, r, false)
+    mask_ops::dilate(src, w, h, r.max(0) as usize, Border::Clamp)
 }
 
-fn axis_max(src: &[f32], w: usize, h: usize, r: i64, horizontal: bool) -> Vec<f32> {
-    let mut out = vec![0.0f32; src.len()];
-    if horizontal {
-        for y in 0..h {
-            for x in 0..w as i64 {
-                let lo = (x - r).max(0) as usize;
-                let hi = (x + r).min(w as i64 - 1) as usize;
-                let mut v = f32::NEG_INFINITY;
-                for k in lo..=hi {
-                    v = v.max(src[y * w + k]);
-                }
-                out[y * w + x as usize] = v;
-            }
-        }
-    } else {
-        for x in 0..w {
-            for y in 0..h as i64 {
-                let lo = (y - r).max(0) as usize;
-                let hi = (y + r).min(h as i64 - 1) as usize;
-                let mut v = f32::NEG_INFINITY;
-                for k in lo..=hi {
-                    v = v.max(src[k * w + x]);
-                }
-                out[y as usize * w + x] = v;
-            }
-        }
-    }
-    out
-}
-
-/// Grayscale erosion (min filter) of radius `r`, separable over the box window.
+/// Grayscale erosion (min filter) of radius `r`, clamp-to-edge.
 /// Choke shrinks the inverted matte before the blur, narrowing the shadow.
 fn erode_matte(src: &[f32], w: usize, h: usize, r: i64) -> Vec<f32> {
-    let horizontal = axis_min(src, w, h, r, true);
-    axis_min(&horizontal, w, h, r, false)
-}
-
-fn axis_min(src: &[f32], w: usize, h: usize, r: i64, horizontal: bool) -> Vec<f32> {
-    let mut out = vec![0.0f32; src.len()];
-    if horizontal {
-        for y in 0..h {
-            for x in 0..w as i64 {
-                let lo = (x - r).max(0) as usize;
-                let hi = (x + r).min(w as i64 - 1) as usize;
-                let mut v = f32::INFINITY;
-                for k in lo..=hi {
-                    v = v.min(src[y * w + k]);
-                }
-                out[y * w + x as usize] = v;
-            }
-        }
-    } else {
-        for x in 0..w {
-            for y in 0..h as i64 {
-                let lo = (y - r).max(0) as usize;
-                let hi = (y + r).min(h as i64 - 1) as usize;
-                let mut v = f32::INFINITY;
-                for k in lo..=hi {
-                    v = v.min(src[k * w + x]);
-                }
-                out[y as usize * w + x] = v;
-            }
-        }
-    }
-    out
+    mask_ops::erode(src, w, h, r.max(0) as usize, Border::Clamp)
 }
 
 /// Gaussian-blur the matte with the crate blur, carrying the quantized matte in
@@ -777,4 +716,92 @@ fn blur_matte(src: &[f32], w: usize, h: usize, size: f64) -> Vec<f32> {
         return src.to_vec();
     }
     buf.data[..n].iter().map(|&b| b as f32 / 255.0).collect()
+}
+
+#[cfg(test)]
+mod matte_differential {
+    use super::{dilate_matte, erode_matte};
+
+    fn axis(
+        src: &[f32],
+        w: usize,
+        h: usize,
+        r: isize,
+        horizontal: bool,
+        want_max: bool,
+    ) -> Vec<f32> {
+        let mut out = vec![0.0f32; src.len()];
+        if horizontal {
+            for y in 0..h {
+                for x in 0..w {
+                    let lo = (x as isize - r).max(0) as usize;
+                    let hi = (x as isize + r).min(w as isize - 1) as usize;
+                    let mut v = if want_max {
+                        f32::NEG_INFINITY
+                    } else {
+                        f32::INFINITY
+                    };
+                    for k in lo..=hi {
+                        v = if want_max {
+                            v.max(src[y * w + k])
+                        } else {
+                            v.min(src[y * w + k])
+                        };
+                    }
+                    out[y * w + x] = v;
+                }
+            }
+        } else {
+            for x in 0..w {
+                for y in 0..h {
+                    let lo = (y as isize - r).max(0) as usize;
+                    let hi = (y as isize + r).min(h as isize - 1) as usize;
+                    let mut v = if want_max {
+                        f32::NEG_INFINITY
+                    } else {
+                        f32::INFINITY
+                    };
+                    for k in lo..=hi {
+                        v = if want_max {
+                            v.max(src[k * w + x])
+                        } else {
+                            v.min(src[k * w + x])
+                        };
+                    }
+                    out[y * w + x] = v;
+                }
+            }
+        }
+        out
+    }
+
+    fn naive(src: &[f32], w: usize, h: usize, r: isize, want_max: bool) -> Vec<f32> {
+        let horizontal = axis(src, w, h, r, true, want_max);
+        axis(&horizontal, w, h, r, false, want_max)
+    }
+
+    #[test]
+    fn spread_and_choke_mattes_match_the_pre_migration_scan() {
+        let (w, h) = (37usize, 29usize);
+        let mut state = 0x5eed_1234u64;
+        let mut src = vec![0.0f32; w * h];
+        for value in &mut src {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            *value = (state % 1000) as f32 / 1000.0;
+        }
+        for r in [0isize, 1, 3, 10, 50] {
+            assert_eq!(
+                dilate_matte(&src, w, h, r as i64),
+                naive(&src, w, h, r, true),
+                "dilate r={r}"
+            );
+            assert_eq!(
+                erode_matte(&src, w, h, r as i64),
+                naive(&src, w, h, r, false),
+                "erode r={r}"
+            );
+        }
+    }
 }

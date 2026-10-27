@@ -15,6 +15,7 @@
 use crate::fill::{fill_layer, Alpha};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
+use pictura_core::mask_ops::{self, Border};
 use pictura_core::{Document, PsdRect};
 
 /// What the Paint Bucket fills with: the options bar's Fill menu.
@@ -56,23 +57,11 @@ pub fn flood(
                 .collect(),
         );
     }
-    let mut mask = vec![0u8; surface.data.len()];
-    let index = |x: i32, y: i32| (y * w + x) as usize;
-    mask[index(seed.0, seed.1)] = 255;
-    let mut pending = vec![seed];
-    while let Some((x, y)) = pending.pop() {
-        for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
-            if nx < 0 || ny < 0 || nx >= w || ny >= h {
-                continue;
-            }
-            let i = index(nx, ny);
-            if mask[i] == 0 && matches(&surface.data[i]) {
-                mask[i] = 255;
-                pending.push((nx, ny));
-            }
-        }
-    }
-    Some(mask)
+    let mut seeds = vec![0u8; (w * h) as usize];
+    seeds[(seed.1 * w + seed.0) as usize] = 1;
+    mask_ops::flood(w as usize, h as usize, &seeds, |_, to| {
+        matches(&surface.data[to])
+    })
 }
 
 /// Fill the pixel layer at `path` with `paint` through a document-sized
@@ -142,14 +131,27 @@ pub fn stroke_selection(
     if !selection.iter().any(|&v| v > 0) {
         return None;
     }
+    let selection = &selection[..(w * h) as usize];
     let radius = width.min(u32::from(u16::MAX)) as i32;
     let (out_r, in_r) = match position {
         StrokeAlign::Outside => (radius, 0),
         StrokeAlign::Inside => (0, radius),
         StrokeAlign::Center => ((radius + 1) / 2, radius / 2),
     };
-    let dilated = dilate(selection, w, h, out_r);
-    let eroded = erode(selection, w, h, in_r);
+    let dilated = mask_ops::dilate(
+        selection,
+        w as usize,
+        h as usize,
+        out_r.max(0) as usize,
+        Border::Clamp,
+    );
+    let eroded = mask_ops::erode(
+        selection,
+        w as usize,
+        h as usize,
+        in_r.max(0) as usize,
+        Border::Clamp,
+    );
     let band: Vec<u8> = selection
         .iter()
         .zip(&dilated)
@@ -178,74 +180,6 @@ pub enum StrokeAlign {
     Inside,
     Outside,
     Center,
-}
-
-/// A separable max filter of radius `r` (0 returns the mask unchanged).
-///
-/// The horizontal pass reads the mask and writes a buffer of its own: a
-/// filter that read and wrote the same buffer would feed each pixel the value
-/// the previous one had just written, and the filter would cascade along the
-/// row instead of spreading `r` px from the shape.
-fn dilate(mask: &[u8], w: i32, h: i32, r: i32) -> Vec<u8> {
-    if r <= 0 {
-        return mask.to_vec();
-    }
-    let mut out = vec![0u8; mask.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let mut m = 0u8;
-            for k in -r..=r {
-                let nx = (x + k).clamp(0, w - 1);
-                m = m.max(mask[(y * w + nx) as usize]);
-            }
-            out[(y * w + x) as usize] = m;
-        }
-    }
-    let mut out2 = vec![0u8; mask.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let mut m = 0u8;
-            for k in -r..=r {
-                let ny = (y + k).clamp(0, h - 1);
-                m = m.max(out[(ny * w + x) as usize]);
-            }
-            out2[(y * w + x) as usize] = m;
-        }
-    }
-    out2
-}
-
-/// A separable min filter of radius `r` (0 returns the mask unchanged).
-///
-/// The horizontal pass reads the mask and writes a buffer of its own, as
-/// [`dilate`]'s does.
-fn erode(mask: &[u8], w: i32, h: i32, r: i32) -> Vec<u8> {
-    if r <= 0 {
-        return mask.to_vec();
-    }
-    let mut out = vec![0u8; mask.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let mut m = 255u8;
-            for k in -r..=r {
-                let nx = (x + k).clamp(0, w - 1);
-                m = m.min(mask[(y * w + nx) as usize]);
-            }
-            out[(y * w + x) as usize] = m;
-        }
-    }
-    let mut out2 = vec![0u8; mask.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let mut m = 255u8;
-            for k in -r..=r {
-                let ny = (y + k).clamp(0, h - 1);
-                m = m.min(out[(ny * w + x) as usize]);
-            }
-            out2[(y * w + x) as usize] = m;
-        }
-    }
-    out2
 }
 
 #[cfg(test)]
