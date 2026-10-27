@@ -12,6 +12,9 @@
 
 #include "api/type_api.h"
 
+#include <algorithm>
+#include <cstdlib>
+
 #include <QtCore/QDataStream>
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QClipboard>
@@ -138,6 +141,7 @@ private slots:
     void reopenTypeLayer();
     void freeTransformKeepsType();
     void skewKeepsType();
+    void rasterizeKeepsTransformedType();
     void freeTransformRotateCursor();
     void textEditModel();
     void editLikeATextField();
@@ -414,6 +418,53 @@ void TypeToolsTest::freeTransformKeepsType()
     QVERIFY(layerRect(f, path).width() > stretched.width() + 10);
     QCOMPARE(layerRect(f, path).height(), stretched.height());
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
+}
+
+// Rasterize Type bakes the type as the canvas shows it (#962): a stretched and
+// moved layer keeps its rect, and the composite does not change.
+void TypeToolsTest::rasterizeKeepsTransformedType()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_rasterize"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = commitTypeLayer(f);
+    QVERIFY(!path.isEmpty());
+    const QRect before = layerRect(f, path);
+    QVERIFY(f.view->begin_free_transform(path));
+    const double y = before.center().y();
+    QVERIFY(f.view->transform_press(before.right() + 1, y, 1.0, false, false) >= 0);
+    f.view->transform_move(before.right() + 1 + before.width() / 2, y, 1.0, false, false);
+    f.view->transform_release();
+    QVERIFY(f.view->commit_transform());
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
+
+    const QRect shown = layerRect(f, path);
+    QVERIFY2(shown.width() > before.width() + before.width() / 3, "stretched");
+    QList<quint32> composite;
+    for (int py = shown.top(); py <= shown.bottom(); ++py) {
+        for (int px = shown.left(); px <= shown.right(); ++px) {
+            composite.append(f.view->sample_argb(px, py));
+        }
+    }
+    const int base = f.view->history_index();
+    QVERIFY(pictura::type_api::rasterize(*f.view, path));
+    QVERIFY2(f.committedOnce(base, "Rasterize Type"), "one Rasterize Type state");
+    QVERIFY(!pictura::type_api::readLayer(*f.view, path).isType);
+    QCOMPARE(layerRect(f, path), shown);
+    int worst = 0;
+    int i = 0;
+    for (int py = shown.top(); py <= shown.bottom(); ++py) {
+        for (int px = shown.left(); px <= shown.right(); ++px, ++i) {
+            const quint32 after = f.view->sample_argb(px, py);
+            for (int byte = 0; byte < 4; ++byte) {
+                const int a = int((composite[i] >> (8 * byte)) & 0xffu);
+                const int b = int((after >> (8 * byte)) & 0xffu);
+                worst = std::max(worst, std::abs(a - b));
+            }
+        }
+    }
+    QVERIFY2(worst <= 2, qPrintable(QStringLiteral("composite moved by %1").arg(worst)));
 }
 
 // A Skew corner drag slides the whole followed edge on an editable type layer,

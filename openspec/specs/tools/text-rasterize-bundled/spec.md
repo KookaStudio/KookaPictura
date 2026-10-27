@@ -112,32 +112,6 @@ enabled only when the selected layer is a type layer.
 - **WHEN** the selected layer is not a type layer
 - **THEN** the `layer.rasterize.type` action is disabled
 
-### Requirement: The Rasterize Type command can render through the Qt backend
-
-`PictureView::rasterize_type` SHALL attempt a Qt `QFont`/`QPainter` text render
-of the layer's text and style and, when it yields a non-empty raster, replace
-the layer's channels with it, drop `TySh`, clear the type tool, and record one
-`Rasterize Type` state. When the Qt render is empty it SHALL fall back to the
-bundled backend. A non-type layer SHALL still be refused without mutation.
-The Qt render SHALL align the text by the justification bytes 0, 1 and 2; the
-bytes 3 to 6 SHALL render left-aligned, because the Qt text layout cannot
-justify a paragraph's last line to the right or centre it.
-
-#### Scenario: A type layer rasterizes through Qt
-
-- **WHEN** `rasterize_type` is called on a type layer
-- **THEN** the layer's channels hold the Qt-rendered text, it is no longer a type layer, and one state is recorded
-
-#### Scenario: An empty Qt render falls back to the bundled face
-
-- **WHEN** the Qt render yields no pixels
-- **THEN** the bundled backend materializes the layer instead
-
-#### Scenario: A non-type layer is refused
-
-- **WHEN** `rasterize_type` is called on a plain pixel layer
-- **THEN** it returns false and records no state
-
 ### Requirement: The Qt text helper is directly testable
 
 `pictura-render` SHALL expose `materialize_text_rgba(document, path, rgba)` that
@@ -171,3 +145,34 @@ library that nothing uses. The backend SHALL remain free of any C dependency.
 
 - **WHEN** the existing shape, raster, render, kerning, and subpixel tests run
 - **THEN** they pass with the same assertions
+
+### Requirement: Rasterizing type keeps its on-canvas render
+
+Rasterize Type, Rasterize Layer and Rasterize All Layers SHALL turn a type layer
+that carries its rendered colour and alpha planes into a pixel layer with the
+same rect and colour planes. The alpha SHALL bake the composite-time text gamma,
+so the document composite does not change by more than rounding. A type layer
+without rendered planes SHALL be painted over its rect by the bundled backend,
+as the compositor draws it. Rasterizing SHALL drop `TySh`, the type tool, the
+applied style names and overrides, and the transparency and pixel locks. The
+pixels SHALL NOT come from a second, Qt-side text render.
+
+#### Scenario: A transformed and moved type layer keeps its size and place [rtoc_transformed]
+
+- **WHEN** a type layer scaled by Free Transform and then moved is rasterized
+- **THEN** its rect and colour planes are the on-canvas render, its alpha is the baked text gamma, and the document composite is unchanged within 2 levels
+
+#### Scenario: Rasterize Type through the app keeps the composite [rtoc_app]
+
+- **WHEN** `Rasterize Type` runs on a Free Transformed type layer in the app
+- **THEN** one `Rasterize Type` state is recorded, the layer is no longer type, its rect is unchanged, and the sampled composite is unchanged within 2 levels
+
+#### Scenario: The raster is unlocked and styleless [rtoc_unlocked]
+
+- **WHEN** a type layer with its type locks and an applied paragraph style is rasterized
+- **THEN** the layer has no locks and no applied style
+
+#### Scenario: A colour font rasterizes as shown [rtoc_color_font]
+
+- **WHEN** a type layer set in a COLR colour font is rasterized
+- **THEN** the raster shows the same glyphs in the text colour as the canvas did, with no palette layers or garbage tiles

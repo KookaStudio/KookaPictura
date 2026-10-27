@@ -497,3 +497,80 @@ fn ltr_line_unchanged_by_direction() {
         shape_styled(&face, "abc", &c)
     );
 }
+
+/// A set type layer, scaled 3× by Free Transform and then moved, as the canvas
+/// shows it: its rect and planes.
+fn transformed_type_doc() -> Document {
+    use crate::document_ops::{transform_layer, LayerTransform};
+    let mut doc = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
+    let mut spec = pictura_core::TypeSpec::new("Lorem", "Liberation Sans", 24.0);
+    spec.origin = (40.0, 60.0);
+    spec.character.fill_color = [1.0, 0.0, 0.0, 1.0];
+    let path = crate::add_type_layer(&mut doc, "", &spec);
+    let scale = LayerTransform {
+        scale_x: 3.0,
+        scale_y: 3.0,
+        angle_radians: 0.0,
+        dx: 0.0,
+        dy: 0.0,
+    };
+    assert!(transform_layer(&mut doc, &path, scale));
+    assert!(crate::document_ops::translate_layer_path(
+        &mut doc, &path, 25, 30
+    ));
+    assert!(doc.layers[0].is_type());
+    doc
+}
+
+#[test]
+fn rasterize_keeps_a_transformed_type_layer_as_shown() {
+    let mut doc = transformed_type_doc();
+    let live = doc.clone();
+    let shown = live.layers[0].rect;
+    assert!(render_text_layer(&mut doc, "0"));
+    let layer = &doc.layers[0];
+    assert!(layer.type_tool.is_none(), "type tool is cleared");
+    assert!(layer.extra_blocks.iter().all(|b| &b.key != b"TySh"));
+    assert_eq!(layer.rect, shown, "the stretched, moved rect is kept");
+    for id in [0, 1, 2] {
+        assert_eq!(
+            crate::channel(layer, id),
+            crate::channel(&live.layers[0], id),
+            "colour plane {id} is the on-canvas render"
+        );
+    }
+    let alpha = crate::channel(layer, -1).unwrap();
+    let curved = crate::channel(&live.layers[0], -1)
+        .unwrap()
+        .iter()
+        .map(|&a| {
+            crate::composite::to_u8(crate::text_gamma::text_gamma_alpha(
+                f32::from(a) / 255.0,
+                crate::text_gamma::DEFAULT_TEXT_GAMMA,
+            ))
+        });
+    assert!(
+        alpha.iter().zip(curved).all(|(&a, c)| a.abs_diff(c) <= 1),
+        "alpha carries the baked text gamma"
+    );
+    let (live, raster) = (crate::composite_rgba(&live), crate::composite_rgba(&doc));
+    let worst = live
+        .data
+        .iter()
+        .zip(&raster.data)
+        .map(|(&l, &r)| l.abs_diff(r))
+        .max()
+        .unwrap();
+    assert!(worst <= 2, "composite differs by {worst}");
+}
+
+#[test]
+fn rasterize_unlocks_type_and_drops_its_style_state() {
+    let mut doc = transformed_type_doc();
+    doc.layers[0].applied_paragraph_style = Some("Body".into());
+    assert_ne!(doc.layers[0].lock.bits(), 0, "type carries its locks");
+    assert!(render_text_layer(&mut doc, "0"));
+    let layer = &doc.layers[0];
+    assert_eq!(layer.lock.bits(), 0, "the raster paints like any layer");
+    assert!(layer.applied_paragraph_style.is_none());
+}
