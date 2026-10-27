@@ -30,7 +30,6 @@
 #include "panels/layers_panel.h"
 #include "panels/panel_column.h"
 
-#include "render_text.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
@@ -1041,29 +1040,6 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         if (const int vv = pictura::runVisibilityChecks(frame); vv != 0) { return vv; }
 
         if (const int wi = pictura::runWorkspaceInputChecks(frame); wi != 0) { return wi; }
-
-        // lpr_qt_text (525): the Qt font helper rasterizes text into a
-        // layer-sized RGBA8888 buffer with some non-zero alpha coverage.
-        {
-            const ::rust::Vec<uint8_t> qt =
-                render_text_rgba(::rust::String("DejaVu Sans"), 48.0, ::rust::String("Hi"), 0,
-                                 0, 0, 0, 255, 200, 80);
-            bool covered = false;
-            for (std::size_t i = 3; i < qt.size(); i += 4) {
-                if (qt[i] != 0) {
-                    covered = true;
-                    break;
-                }
-            }
-            const bool qtOk =
-                qt.size() == static_cast<std::size_t>(200 * 80 * 4) && covered;
-            ST_BEGIN("lpr_qt_text");
-            ST_PASS("lpr_qt_text bytes=%d covered=%d", static_cast<int>(qt.size()),
-                    covered ? 1 : 0);
-            if (!qtOk) {
-                return pictura::selfTest().fail(525, "qt text helper");
-            }
-        }
 
     return 0;
 }

@@ -108,7 +108,7 @@ impl qobject::PictureView {
     }
 
     /// `Rasterize Layer` on a type layer or a fill-content layer. A type layer
-    /// is rasterized through the bundled text backend and records one
+    /// is rasterized as it shows on the canvas and records one
     /// "Rasterize Type" state; a fill layer records "Rasterize Layer". Returns
     /// false (no state) for any other kind.
     pub fn rasterize_layer(mut self: Pin<&mut Self>, path: &QString) -> bool {
@@ -163,10 +163,9 @@ impl qobject::PictureView {
         count as i32
     }
 
-    /// `Rasterize Type`: render the type layer at `path` through the Qt font
-    /// backend, falling back to the bundled face when Qt yields no pixels, and
-    /// record one "Rasterize Type" state on success. Returns false (no state)
-    /// for a non-type layer.
+    /// `Rasterize Type`: bake the type layer at `path` into pixels as it shows
+    /// on the canvas and record one "Rasterize Type" state. Returns false (no
+    /// state) for a non-type layer.
     pub fn rasterize_type(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         if path.is_empty() {
@@ -177,30 +176,7 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
-            let rendered = pictura_render::resolve_path(doc, &path).and_then(|layer| {
-                let tool = layer.type_tool.as_ref()?;
-                let style = tool.style.as_ref()?;
-                let family = style.font.as_deref().unwrap_or("sans-serif");
-                let fill = style.rgba();
-                Some(super::qobject::render_text_rgba(
-                    family,
-                    style.character.size,
-                    &tool.text,
-                    i32::from(style.paragraph.justify.index()),
-                    fill[0],
-                    fill[1],
-                    fill[2],
-                    fill[3],
-                    layer.rect.width(),
-                    layer.rect.height(),
-                ))
-            });
-            changed = match rendered {
-                Some(rgba) if !rgba.is_empty() => {
-                    pictura_render::materialize_text_rgba(doc, &path, &rgba)
-                }
-                _ => pictura_render::render_text_layer(doc, &path),
-            };
+            changed = pictura_render::render_text_layer(doc, &path);
             if changed {
                 Edit::Structural
             } else {

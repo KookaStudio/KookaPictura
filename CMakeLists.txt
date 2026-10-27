@@ -213,8 +213,6 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/decode_image.h
     crates/pictura-app/cpp/encode_image.cpp
     crates/pictura-app/cpp/encode_image.h
-    crates/pictura-app/cpp/render_text.cpp
-    crates/pictura-app/cpp/render_text.h
     crates/pictura-app/cpp/interop.cpp
     crates/pictura-app/cpp/commands.cpp
     crates/pictura-app/cpp/control_server.cpp

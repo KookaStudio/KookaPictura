@@ -33,11 +33,9 @@ fn find_qmake6() -> Option<PathBuf> {
 /// The `cc` crate emits no change-tracking directive for the sources it
 /// compiles, so without these the build script would not rerun when one of
 /// them changes and the Rust static library would keep a stale object.
-const BRIDGE_EDGES: [&str; 8] = [
+const BRIDGE_EDGES: [&str; 6] = [
     "cpp/decode_image.h",
     "cpp/decode_image.cpp",
-    "cpp/render_text.h",
-    "cpp/render_text.cpp",
     "cpp/encode_image.h",
     "cpp/encode_image.cpp",
     "cpp/panels/actions_tool_recording_bridge.h",
@@ -237,7 +235,6 @@ fn main() {
                 // them into the shell, and the Rust test binary needs its own
                 // copies (static libraries only pull what they resolve).
                 cc.file("cpp/decode_image.cpp");
-                cc.file("cpp/render_text.cpp");
                 cc.file("cpp/encode_image.cpp");
                 // This one is not in CMake's shell sources: it must be in the
                 // Rust static library so `cargo test -p pictura-app` resolves

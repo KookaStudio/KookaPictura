@@ -5,6 +5,7 @@
 #include <QtTest/QtTest>
 
 #include "commands.h"
+#include "font_combo.h"
 #include "frame.h"
 #include "panels/paragraph_styles_panel.h"
 #include "paragraph_style_dialog.h"
@@ -13,9 +14,14 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "api/type_api.h"
 
+#include <algorithm>
+#include <cstdlib>
+
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QAction>
+#include <QtGui/QFontDatabase>
 #include <QtGui/QRawFont>
+#include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
@@ -61,6 +67,8 @@ private slots:
     void dialogRoundTripsAttributes();
     void dialogPreviewAppliesAndCancelRestores();
     void dialogFontFamilyPopup();
+    void fontRowsNameFamiliesInTheUiFont();
+    void fontPopupPaintsPromptlyAcrossTheList();
     void doubleClickOpensDialog();
     void fontHoverDoesNotPreview();
     void styleLibraryReadsInOneCall();
@@ -332,7 +340,8 @@ void ParagraphStylesPanelTest::dialogFontFamilyPopup()
     panel->refresh();
 
     bool stayedOpen = false;
-    qint64 emojiRenderMs = -1;
+    qint64 colorRenderMs = -1;
+    QString colorFace;
     QTimer::singleShot(0, [&] {
         auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
         QVERIFY(dialog);
@@ -358,35 +367,121 @@ void ParagraphStylesPanelTest::dialogFontFamilyPopup()
         stayedOpen = family->view()->isVisible();
         family->hidePopup();
 
-        // A list scrolled onto an emoji face must render at the speed of any
+        // A list scrolled onto a color face must render at the speed of any
         // other: previewing one took ~400 ms per repaint and left the popup
-        // blank for seconds.
-        QString emoji;
-        for (int i = 0; i < family->count() && emoji.isEmpty(); ++i) {
-            const QRawFont raw = QRawFont::fromFont(QFont(family->itemText(i)));
-            if (raw.isValid() && !raw.supportsCharacter(QLatin1Char('A'))
-                && raw.supportsCharacter(0x1F600U)) {
-                emoji = family->itemText(i);
+        // blank for seconds. A color face with Latin letters (a COLR display
+        // face) is preferred: the emoji-only rule missed those.
+        QString color;
+        for (int i = 0; i < family->count(); ++i) {
+            const QString name = family->itemText(i);
+            if (!pictura::isColorFont(name)) {
+                continue;
+            }
+            const bool latin = QRawFont::fromFont(QFont(name)).supportsCharacter(QLatin1Char('A'));
+            if (color.isEmpty() || latin) {
+                color = name;
+                colorFace = name;
+            }
+            if (latin) {
+                break;
             }
         }
-        if (!emoji.isEmpty()) {
-            family->setCurrentFont(QFont(emoji));
+        if (!color.isEmpty()) {
+            family->setCurrentFont(QFont(color));
             family->showPopup();
             QElapsedTimer timer;
             timer.start();
             family->view()->window()->grab();
-            emojiRenderMs = timer.elapsed();
+            colorRenderMs = timer.elapsed();
             family->hidePopup();
         }
         dialog->reject();
     });
     QVERIFY(!panel->editStyle(1));
     QVERIFY2(stayedOpen, "the font family popup closed itself");
-    if (emojiRenderMs < 0) {
-        QSKIP("no emoji font installed");
+    if (colorRenderMs < 0) {
+        QSKIP("no color font installed");
     }
-    QVERIFY2(emojiRenderMs < 150, qPrintable(QStringLiteral("emoji-row render took %1 ms")
-                                                  .arg(emojiRenderMs)));
+    QVERIFY2(colorRenderMs < 150,
+             qPrintable(QStringLiteral("%1 row render took %2 ms").arg(colorFace).arg(colorRenderMs)));
+}
+
+// A family's name is drawn in the UI font, as in CS6's font menu: in the open
+// popup, the lightest installed face (a Thin or ExtraLight weight) still reads
+// at full contrast.
+void ParagraphStylesPanelTest::fontRowsNameFamiliesInTheUiFont()
+{
+    showFrame();
+    auto* family = window_->findChild<QFontComboBox*>(QStringLiteral("optionsTypeFamily"));
+    QVERIFY(family);
+    QString lightest;
+    int lightestWeight = QFont::Normal;
+    for (int i = 0; i < family->count(); ++i) {
+        const QString name = family->itemText(i);
+        const QStringList styles = QFontDatabase::styles(name);
+        const int weight = styles.isEmpty() ? QFont::Normal
+                                            : QFontDatabase::weight(name, styles.first());
+        if (weight < lightestWeight) {
+            lightest = name;
+            lightestWeight = weight;
+        }
+    }
+    if (lightest.isEmpty()) {
+        QSKIP("no face lighter than Normal installed");
+    }
+    const int row = family->findText(lightest);
+    family->setCurrentIndex(row);
+    family->showPopup();
+    QAbstractItemView* view = family->view();
+    const QRect rect = view->visualRect(family->model()->index(row, 0));
+    const QImage shot = view->viewport()->grab().toImage();
+    family->hidePopup();
+    QVERIFY(!rect.isEmpty());
+
+    // The current row is selected: the name is highlighted text on highlight.
+    const int background = qGray(view->palette().highlight().color().rgb());
+    const int nameEnd = rect.left() + 22 + QFontMetrics(view->font()).horizontalAdvance(lightest);
+    int contrast = 0;
+    for (int y = rect.top(); y <= rect.bottom(); ++y) {
+        for (int x = rect.left() + 20; x < std::min(nameEnd, shot.width()); ++x) {
+            contrast = std::max(contrast, std::abs(qGray(shot.pixel(x, y)) - background));
+        }
+    }
+    QVERIFY2(contrast > 120, qPrintable(QStringLiteral("%1 (weight %2) name is faint: %3")
+                                            .arg(lightest)
+                                            .arg(lightestWeight)
+                                            .arg(contrast)));
+}
+
+// The popup paints its rows promptly wherever the list opens: a slow first
+// paint shows the popup's frame with no rows.
+void ParagraphStylesPanelTest::fontPopupPaintsPromptlyAcrossTheList()
+{
+    showFrame();
+    auto* family = window_->findChild<QFontComboBox*>(QStringLiteral("optionsTypeFamily"));
+    QVERIFY(family);
+    const int saved = family->currentIndex();
+    qint64 worst = 0;
+    QString worstAt;
+    const int step = std::max(1, family->maxVisibleItems());
+    for (int i = 0; i < family->count(); i += step) {
+        family->setCurrentIndex(i);
+        family->showPopup();
+        QElapsedTimer timer;
+        timer.start();
+        family->view()->window()->grab();
+        if (timer.elapsed() > worst) {
+            worst = timer.elapsed();
+            worstAt = family->itemText(i);
+        }
+        family->hidePopup();
+    }
+    family->setCurrentIndex(saved);
+    qInfo("worst popup paint %lld ms at %s (%d families)", worst, qPrintable(worstAt),
+          family->count());
+    QVERIFY2(worst < 250, qPrintable(QStringLiteral("popup at %1 took %2 ms")
+                                         .arg(worstAt)
+                                         .arg(worst)));
 }
 
 void ParagraphStylesPanelTest::doubleClickOpensDialog()

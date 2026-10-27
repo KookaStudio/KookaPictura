@@ -282,9 +282,8 @@ pub(crate) fn bundled() -> Option<&'static BundledText> {
 
 /// Replace the layer at `path`'s `0/1/2/-1` channels from a packed straight-alpha
 /// RGBA buffer of the layer-rect size, drop `TySh`, and clear the type tool.
-/// The alpha bakes the text gamma curve: live type curves coverage × opacity ×
-/// Fill, so each sample stores `curve(a·k) / k` for the layer's `k` = opacity ×
-/// Fill, and the raster composites at that opacity as the type did. A later
+/// The alpha bakes the text gamma curve ([`baked_text_alpha`]), so the raster
+/// composites at the layer's opacity as the type did. A later
 /// opacity change then scales the baked alpha linearly, as for any pixel layer.
 /// Returns false without mutating for a missing layer, a non-positive rect, or
 /// a buffer that is not `width * height * 4` bytes.
@@ -311,15 +310,7 @@ pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> boo
     let mut g = Vec::with_capacity(plane);
     let mut b = Vec::with_capacity(plane);
     let mut a = Vec::with_capacity(plane);
-    let k = f32::from(layer.opacity) / 255.0 * f32::from(layer.fill) / 255.0;
-    let baked: [u8; 256] = std::array::from_fn(|v| {
-        let coverage = v as f32 / 255.0;
-        match crate::text_gamma::current_curve() {
-            Some(curve) if k > 0.0 => crate::composite::to_u8(curve.apply(coverage * k) / k),
-            Some(curve) => crate::composite::to_u8(curve.apply(coverage)),
-            None => v as u8,
-        }
-    });
+    let baked = baked_text_alpha(layer);
     for px in rgba.as_chunks::<4>().0 {
         r.push(px[0]);
         g.push(px[1]);
@@ -344,14 +335,58 @@ pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> boo
             data: a.into(),
         },
     ];
-    layer.extra_blocks.retain(|block| &block.key != b"TySh");
-    layer.type_tool = None;
+    drop_type(layer);
     true
 }
 
-/// Shape, lay out, and paint a type layer over its rect, then drop the type
-/// tool: the layer becomes raster. Returns false without mutating when there is
-/// no type tool or style, the rect has no area, or no glyph rendered.
+/// The text gamma bake as a lookup over 8-bit alpha. Live type curves coverage
+/// × opacity × Fill, so each sample stores `curve(a·k) / k` for the layer's
+/// `k` = opacity × Fill.
+fn baked_text_alpha(layer: &Layer) -> [u8; 256] {
+    let k = f32::from(layer.opacity) / 255.0 * f32::from(layer.fill) / 255.0;
+    std::array::from_fn(|v| {
+        let coverage = v as f32 / 255.0;
+        match crate::text_gamma::current_curve() {
+            Some(curve) if k > 0.0 => crate::composite::to_u8(curve.apply(coverage * k) / k),
+            Some(curve) => crate::composite::to_u8(curve.apply(coverage)),
+            None => v as u8,
+        }
+    })
+}
+
+/// Turn a type layer raster: drop `TySh`, the type tool, its style state, and
+/// the transparency and pixel locks type layers carry, so the result paints like
+/// any pixel layer.
+fn drop_type(layer: &mut Layer) {
+    layer.extra_blocks.retain(|block| &block.key != b"TySh");
+    layer.type_tool = None;
+    layer.applied_character_style = None;
+    layer.applied_paragraph_style = None;
+    layer.type_overrides = Default::default();
+    layer.lock = layer
+        .lock
+        .with(pictura_core::LockFlags::TRANSPARENCY, false)
+        .with(pictura_core::LockFlags::PIXELS, false);
+}
+
+/// Whether a type layer carries the rendered colour and alpha planes the
+/// compositor shows for it (every set or re-set type layer, and a type layer
+/// opened with its pixels).
+fn has_type_pixels(layer: &Layer) -> bool {
+    let area = layer.rect.width().max(0) as usize * layer.rect.height().max(0) as usize;
+    area > 0
+        && [0, 1, 2, -1]
+            .iter()
+            .all(|&id| crate::channel(layer, id).is_some_and(|data| data.len() == area))
+}
+
+/// Rasterize a type layer as it shows on the canvas, then drop the type tool:
+/// the layer becomes raster. A layer that carries its rendered pixels keeps
+/// them, so a transformed, moved, or colour-font layer keeps its rect and
+/// look; only the composite-time text gamma is baked into the alpha. A layer
+/// without pixels is shaped, laid out, and painted over its rect, as the
+/// compositor draws it. Returns false without mutating when there is no type
+/// tool, or when a layer without pixels has no style, no area, or no glyph.
 pub fn render_text_layer(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = crate::resolve_path(doc, path) else {
         return false;
@@ -359,6 +394,19 @@ pub fn render_text_layer(doc: &mut Document, path: &str) -> bool {
     let Some(type_tool) = layer.type_tool.as_ref() else {
         return false;
     };
+    if has_type_pixels(layer) {
+        let Some(layer) = crate::resolve_path_mut(doc, path) else {
+            return false;
+        };
+        let baked = baked_text_alpha(layer);
+        if let Some(alpha) = layer.channels.iter_mut().find(|c| c.id == -1) {
+            for a in alpha.data.as_mut_slice() {
+                *a = baked[usize::from(*a)];
+            }
+        }
+        drop_type(layer);
+        return true;
+    }
     let Some(buffer) = render_text_buffer(type_tool, layer.rect.width(), layer.rect.height())
     else {
         return false;

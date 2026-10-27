@@ -12,4 +12,6 @@
 # Lowered to 510 when the pictura_raw check moved to tst_pictura_raw.
 # Lowered to 508 when the lpr_warp_preset check (exit code 527, retired) went
 # with the preset-only Warp dialog; Warp mode is covered by tst_transform_warp.
-508
+# Lowered to 507 when the lpr_qt_text check (exit code 525, retired) went with
+# the Qt text helper; Rasterize Type now bakes the on-canvas render (#962).
+507
