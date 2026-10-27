@@ -6,6 +6,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QEventLoop>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
@@ -96,14 +97,23 @@ QImage decodePng(const QString& base64, bool* ok)
 int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
 {
     QTemporaryDir dir;
+#ifdef _WIN32
+    // A Windows QLocalServer name is a machine-global named pipe with no
+    // filesystem location, so it must be a bare name, and per-process so two
+    // concurrent self-tests never share one pipe.
+    const QString socketPath = pictura::ControlServer::defaultSocketPath()
+                               + QStringLiteral("-")
+                               + QString::number(QCoreApplication::applicationPid());
+#else
     const QString socketPath = dir.path() + QStringLiteral("/control.sock");
+#endif
     pictura::ControlServer server(&frame, socketPath);
     ST_BEGIN("mcp_control_server");
     if (!dir.isValid() || !server.listen()) {
         return pictura::selfTest().fail(463, "control server listen");
     }
     sessionToken = QString::fromLatin1(server.token());
-    ST_PASS("socket=%s", qPrintable(socketPath));
+    ST_PASS("socket=%s", qPrintable(server.socketPath()));
 
     QLocalSocket socket;
     socket.connectToServer(socketPath);
