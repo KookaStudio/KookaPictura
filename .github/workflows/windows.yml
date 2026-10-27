@@ -19,8 +19,6 @@ on:
       - packaging/**
       - .github/workflows/windows.yml
       - .github/actions/windows-bundle/action.yml
-      # TEMPORARY (#986): let this branch's PR exercise the Windows job; remove before merge.
-      - crates/**
   workflow_call:
     inputs:
       tag:
@@ -45,12 +43,9 @@ jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 90
-    # TEMPORARY (#986): let this branch's PR run the Windows job; remove before merge.
     if: >-
       github.event_name != 'pull_request' ||
       (github.head_ref == 'release-please--branches--master' &&
-       github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.head_ref == 'fix/986-windows-control-server' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     env:
       TAG: ${{ inputs.tag }}
