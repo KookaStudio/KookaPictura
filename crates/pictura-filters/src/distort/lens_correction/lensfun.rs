@@ -13,7 +13,7 @@
 
 use quick_xml::escape::resolve_predefined_entity;
 use quick_xml::events::{BytesStart, Event};
-use quick_xml::Reader;
+use quick_xml::{Reader, XmlVersion};
 
 use super::profile::{LensProfile, SubProfile};
 use super::LensModel;
@@ -65,8 +65,11 @@ fn attributes(e: &BytesStart) -> Result<Vec<(String, String)>, String> {
     e.attributes()
         .map(|a| {
             let a = a.map_err(|e| e.to_string())?;
-            let key = String::from_utf8_lossy(a.key.as_ref()).into_owned();
-            let value = a.unescape_value().map_err(|e| e.to_string())?.into_owned();
+            let key = a.key.as_ref().to_owned();
+            let value = a
+                .normalized_value(XmlVersion::Implicit1_0)
+                .map_err(|e| e.to_string())?
+                .into_owned();
             Ok((key, value))
         })
         .collect()
@@ -88,7 +91,7 @@ pub fn parse_lensfun(text: &str) -> Result<Vec<LensProfile>, String> {
             .map_err(|e| format!("at byte {}: {e}", reader.error_position()))?;
         match event {
             Event::Start(ref e) | Event::Empty(ref e) => {
-                let name = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
+                let name = e.local_name().as_ref().to_owned();
                 let empty = matches!(event, Event::Empty(_));
                 let attrs = attributes(e)?;
                 let parent = stack.last().map(String::as_str);
@@ -138,12 +141,12 @@ pub fn parse_lensfun(text: &str) -> Result<Vec<LensProfile>, String> {
             }
             Event::Text(t) => {
                 if let Some((_, _, text)) = field.as_mut() {
-                    text.push_str(&t.decode().map_err(|e| e.to_string())?);
+                    text.push_str(&t.xml10_content());
                 }
             }
             Event::GeneralRef(r) => {
                 if let Some((_, _, text)) = field.as_mut() {
-                    let name = r.decode().map_err(|e| e.to_string())?;
+                    let name = r.xml10_content();
                     match r.resolve_char_ref().map_err(|e| e.to_string())? {
                         Some(c) => text.push(c),
                         None => text.push_str(resolve_predefined_entity(&name).unwrap_or("")),

@@ -12,7 +12,7 @@ thiserror.workspace = true
 rand_chacha = "0.9"
 rayon = "1"
 # lensfun's XML lens database, read at runtime (#932).
-quick-xml = "0.38"
+quick-xml = "0.42"
 
 [dev-dependencies]
 pictura-testkit = { path = "../pictura-testkit" }
