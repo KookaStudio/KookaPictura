@@ -251,14 +251,11 @@ ControlServer::~ControlServer()
 
 QString ControlServer::defaultSocketPath()
 {
-    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
-    if (!runtime.isEmpty()) {
-        return runtime + QStringLiteral("/pictura-control.sock");
-    }
 #ifdef _WIN32
     // A Windows QLocalServer is a named pipe, not a filesystem path, and there
-    // is no getuid(). Scope the pipe name to the user's temp directory so two
-    // users never collide on one endpoint.
+    // is no getuid(). XDG_RUNTIME_DIR is a POSIX convention and must not shape
+    // the name. Scope the pipe name to the user's temp directory so two users
+    // never collide on one endpoint.
     QString scope = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
     if (scope.isEmpty()) {
         scope = QDir::tempPath();
@@ -266,6 +263,10 @@ QString ControlServer::defaultSocketPath()
     return QStringLiteral("pictura-control-%1")
         .arg(QString::number(static_cast<qulonglong>(qHash(scope)), 16));
 #else
+    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    if (!runtime.isEmpty()) {
+        return runtime + QStringLiteral("/pictura-control.sock");
+    }
     return QDir::tempPath() + QStringLiteral("/pictura-control-%1.sock").arg(::getuid());
 #endif
 }
