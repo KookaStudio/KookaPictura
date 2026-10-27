@@ -9,6 +9,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/auto_select.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QElapsedTimer>
@@ -172,7 +173,7 @@ public:
         rawDelta_ = QPointF();
         ImageView* canvas = ctx.canvas();
         referenceRects_ = canvas && canvas->smartGuidesEnabled()
-            ? smartGuideReferences(*v, layer_selection_anchor(*v))
+            ? smartGuideReferences(*v, pictura::move_group_paths(*v))
             : QList<QRectF>();
         if (canvas) {
             const bool reuse = warmValid_ && warmView_ == v && v->move_preview_cache_hit();

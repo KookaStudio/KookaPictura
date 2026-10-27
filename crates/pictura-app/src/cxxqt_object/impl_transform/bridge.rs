@@ -15,7 +15,7 @@ use super::perspective::drag_angle_degrees;
 use super::session::can_begin_mode;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
+use cxx_qt_lib::{QString, QStringList};
 use pictura_render::Interpolation;
 
 #[cxx_qt::bridge]
@@ -23,6 +23,9 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -40,6 +43,11 @@ pub mod ffi {
         /// The layer at `path`'s rect as flat `[left, top, right, bottom]`;
         /// empty when the path does not resolve to a layer.
         fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// The paths the Move tool acts on for the view's current selection:
+        /// every selected movable layer plus its link-set members, in panel
+        /// order; empty when nothing is movable. The Move tool's smart guides
+        /// exclude these from their references.
+        fn move_group_paths(view: &PictureView) -> QStringList;
         /// Whether a transform in `mode` ("skew", "distort", "perspective", or
         /// empty/"free") may begin on `path`, including Distort's and
         /// Perspective's editable-type refusal.
@@ -192,6 +200,14 @@ fn transform_session_rect(view: &PictureView) -> QString {
             ))
         })
         .unwrap_or_default()
+}
+
+fn move_group_paths(view: &PictureView) -> QStringList {
+    let mut out = QStringList::default();
+    for path in view.move_group_paths().unwrap_or_default() {
+        out.append(QString::from(path));
+    }
+    out
 }
 
 fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32> {

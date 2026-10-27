@@ -57,7 +57,10 @@ above but not every control's widget form.)
   under the pointer).
 - Linked layers "retain their relationship until you unlink them"; unlike a
   transient multiple selection. Link/unlink via the link icon at the bottom of
-  the panel; `Shift`-click the link icon temporarily disables it (red X).
+  the panel; `Shift`-click the link icon temporarily disables it (red X). A
+  linked layer's row shows a chain-link badge at its right edge, and moving any
+  member with the Move tool moves the whole set by the same offset in one undo
+  step (a group, adjustment, or position-locked member is left in place).
 
 ### Visibility, lock, opacity/fill, blend mode
 

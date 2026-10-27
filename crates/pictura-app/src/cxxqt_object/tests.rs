@@ -1,7 +1,7 @@
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::impl_core::{format_for_path, raster_writer_for_suffix};
-use super::impl_transform::{build_move_preview_base, duplicate_move_target};
+use super::impl_transform::{build_move_preview_base, duplicate_move_target, translate_move_group};
 use super::open_jobs::finalize_import;
 use crate::history::{History, Snapshot};
 use crate::layer_target::LayerTarget;
@@ -545,7 +545,7 @@ fn move_preview_base_preserves_layer_visibility() {
     doc.layers[1].visible = false;
 
     // The region path.
-    let base = build_move_preview_base(&mut doc, "1", false);
+    let base = build_move_preview_base(&mut doc, &["1".to_string()], false);
     assert!(
         !doc.layers[1].visible,
         "a move must not reveal the invisible layer"
@@ -556,11 +556,51 @@ fn move_preview_base_preserves_layer_visibility() {
     let mut no_composite = doc.clone();
     no_composite.composite.data.clear();
     no_composite.layers[1].visible = false;
-    let _ = build_move_preview_base(&mut no_composite, "1", false);
+    let _ = build_move_preview_base(&mut no_composite, &["1".to_string()], false);
     assert!(
         !no_composite.layers[1].visible,
         "the fallback must restore the prior visibility"
     );
+}
+
+#[test]
+fn translate_move_group_moves_every_member() {
+    let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        pixel_layer("base", 4, 4, (30, 60, 90)),
+        pixel_layer("top", 4, 4, (200, 100, 50)),
+    ]);
+    let paths = vec!["0".to_string(), "1".to_string()];
+    let dirty = translate_move_group(&mut doc, &paths, 3, 5).expect("both layers move");
+    assert_eq!(doc.layers[0].rect.left, 3);
+    assert_eq!(doc.layers[0].rect.top, 5);
+    assert_eq!(doc.layers[1].rect.left, 3);
+    assert_eq!(doc.layers[1].rect.top, 5);
+    assert_eq!(dirty.left, 0, "the union covers the before rect");
+    assert_eq!(dirty.top, 0);
+    assert_eq!(dirty.right, 7);
+    assert_eq!(dirty.bottom, 9);
+}
+
+#[test]
+fn translate_move_group_skips_locked() {
+    let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        pixel_layer("base", 4, 4, (30, 60, 90)),
+        pixel_layer("top", 4, 4, (200, 100, 50)),
+    ]);
+    doc.layers[1].lock = LockFlags::default().with(LockFlags::POSITION, true);
+    let paths = vec!["0".to_string(), "1".to_string()];
+    let dirty = translate_move_group(&mut doc, &paths, 2, 2).expect("the unlocked member moves");
+    assert_eq!(doc.layers[0].rect.left, 2);
+    assert_eq!(doc.layers[0].rect.top, 2);
+    assert_eq!(
+        doc.layers[1].rect.left, 0,
+        "the position-locked layer stays"
+    );
+    assert_eq!(doc.layers[1].rect.top, 0);
+    assert_eq!(dirty.left, 0);
+    assert_eq!(dirty.right, 6);
 }
 
 #[test]

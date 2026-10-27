@@ -278,28 +278,34 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
         return button;
     };
 
-    // CS6 strip order. Link has an icon but no behaviour yet, so it stays
-    // disabled rather than pretending; fx opens Blending Options.
-    auto* linkButton =
+    // CS6 strip order. Link toggles the selected layers' link set; fx opens
+    // Blending Options.
+    linkButton_ =
         stripIconButton(QStringLiteral("layersStripLink"), QStringLiteral("layers.link"));
-    linkButton->setEnabled(false);
-    linkButton->setToolTip(tr("Link Layers — not implemented yet"));
+    linkButton_->setToolTip(tr("Link Layers"));
+    connect(linkButton_, &QToolButton::clicked, this, [this] {
+        if (!view_) {
+            return;
+        }
+        const QStringList paths = targetPaths();
+        if (paths.isEmpty()) {
+            return;
+        }
+        const bool linked = view_->linked_together(paths);
+        view_->link_layers(paths, !linked);
+        refresh();
+    });
     auto* fxButton = stripIconButton(QStringLiteral("layersStripFx"), QStringLiteral("layers.fx"));
     fxButton->setToolTip(tr("Layer Style — click opens Blending Options; "
                             "Alt-click toggles all effects"));
     connect(fxButton, &QToolButton::clicked, this, [this] {
-        if (!view_) {
-            return;
-        }
-        if (QApplication::keyboardModifiers().testFlag(Qt::AltModifier)) {
-            layer_style_set_all_visible(*view_, !layer_style_any_visible(*view_, true));
-        } else {
-            openLayerStyle(view_ ? layer_selection_anchor(*view_) : QString());
-        }
+        applyFxButton(QApplication::keyboardModifiers().testFlag(Qt::AltModifier));
     });
     maskButton_ =
         stripIconButton(QStringLiteral("layersStripMask"), QStringLiteral("layers.mask"));
-    connect(maskButton_, &QToolButton::clicked, this, [this] { addMaskFromButton(); });
+    connect(maskButton_, &QToolButton::clicked, this, [this] {
+        addMaskFromButton(QApplication::keyboardModifiers().testFlag(Qt::AltModifier));
+    });
 
     auto* addButton = stripIconButton(QStringLiteral("layersStripFillAdjustment"),
                                       QStringLiteral("layers.fillAdjustment"));
@@ -365,8 +371,8 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     deleteButton_->installEventFilter(this);
     buttons->addStretch(1);
     layout->addLayout(buttons);
-    stripButtons_ = {fxButton,       maskButton_,      addButton,
-                     newGroupButton, newLayerButton, deleteButton_};
+    stripButtons_ = {linkButton_,     fxButton,         maskButton_,      addButton,
+                     newGroupButton,  newLayerButton,   deleteButton_};
     syncStripButtons();
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,

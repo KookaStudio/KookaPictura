@@ -652,7 +652,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const QStringList lkGone = lkView->select_linked(QStringLiteral("0"));
         const bool lkOk = lkLinked == 2 && lkBoth.size() == 2
             && lkBoth.contains(QStringLiteral("0")) && lkBoth.contains(QStringLiteral("1"))
-            && lkUnlinked == 1 && lkOne == QStringList{QStringLiteral("1")} && lkGone.isEmpty()
+            && lkUnlinked == 1 && lkOne.isEmpty() && lkGone.isEmpty()
             && lkView->history_count() == lkBase;
         ST_BEGIN("lpr_link_linked_unlink");
         ST_PASS("lpr_link_linked_unlink linked=%d both=%d unlinked=%d one=%d",

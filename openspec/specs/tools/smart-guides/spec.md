@@ -14,10 +14,11 @@ content-box edges or centres (left, horizontal centre, right; top, vertical
 centre, bottom) comes within eight screen pixels of the document's matching edge
 or centre, or of another visible layer's matching content-box edge or centre.
 Snapping SHALL apply the smallest offset that aligns the edge; when the document
-and a layer are equally close, the layer alignment SHALL win. The moving layer
-and its descendants SHALL NOT be used as references, and groups and adjustment
-layers SHALL contribute no reference box. The guides SHALL clear when the drag
-ends or when no alignment is active.
+and a layer are equally close, the layer alignment SHALL win. Every layer the
+Move tool is moving — each selected layer and every member of its link set — and
+their descendants SHALL NOT be used as references, so a multi-selection never
+snaps to itself; groups and adjustment layers SHALL contribute no reference box.
+The guides SHALL clear when the drag ends or when no alignment is active.
 
 #### Scenario: Snap to the document centre [sg_document_centre]
 
@@ -43,6 +44,11 @@ ends or when no alignment is active.
 
 - **WHEN** `tst_smart_guides::typeMove` drags live text so its ink box centre approaches the document centre
 - **THEN** the guide is drawn during the drag and the committed type layer's ink box is centred
+
+#### Scenario: A multi-selection is not its own reference [sg_no_self]
+
+- **WHEN** two linked layers are both selected and the Move tool drags them
+- **THEN** neither moving layer appears among the smart-guide references
 
 ### Requirement: Gap distance readout
 

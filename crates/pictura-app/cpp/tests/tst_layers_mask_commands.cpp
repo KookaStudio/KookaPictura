@@ -38,6 +38,8 @@ private slots:
     void cleanup();
     void rowMenuFollowsTheMaskState();
     void maskButtonFollowsTheMasks();
+    void maskButtonRespectsSelection();
+    void maskButtonAltHidesAll();
     void maskMenuRows();
     void maskMenuActions();
     void applyNeedsAPixelLayer();
@@ -158,6 +160,36 @@ void LayersMaskCommandsTest::maskButtonFollowsTheMasks()
     panel_->refresh();
     QCOMPARE(panel_->maskButtonToolTipForTest(), QStringLiteral("Add layer mask"));
     QVERIFY(panel_->maskButtonEnabledForTest());
+}
+
+// lmk_strip_sel: with a selection, the mask button adds a reveal-selection mask.
+void LayersMaskCommandsTest::maskButtonRespectsSelection()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view->select_rect(4, 4, 6, 6, QStringLiteral("new"), 0.0));
+    panel_->clickMaskButtonForTest();
+    QCoreApplication::processEvents();
+    QVERIFY2(pictura::layer_mask_present(*view), "the button added a mask");
+    view->deselect();
+    QVERIFY(panel_->performMaskActionForTest(QStringLiteral("maskAdd"), path));
+    QVERIFY2(view->selection_coverage(5, 5) > 0, "the mask holds the selection");
+    QCOMPARE(view->selection_coverage(12, 12), 0);
+}
+
+// lmk_strip_alt: Alt-clicking the mask button adds a hide-all mask.
+void LayersMaskCommandsTest::maskButtonAltHidesAll()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    panel_->altClickMaskButtonForTest();
+    QCoreApplication::processEvents();
+    QVERIFY2(pictura::layer_mask_present(*view), "the button added a mask");
+    view->deselect();
+    QVERIFY(panel_->performMaskActionForTest(QStringLiteral("maskAdd"), path));
+    QCOMPARE(view->selection_coverage(8, 8), 0);
 }
 
 // lmc_mask_menu_rows

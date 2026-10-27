@@ -174,12 +174,19 @@ SmartGuideResult smartGuideSnap(const QRectF& moving, const QList<QRectF>& refer
     return result;
 }
 
-QList<QRectF> smartGuideReferences(PictureView& view, const QString& path)
+QList<QRectF> smartGuideReferences(PictureView& view, const QStringList& movingPaths)
 {
     QList<QRectF> out;
-    const QString prefix = path + QLatin1Char('/');
     for (const pictura::layers_api::LayerRow& row : pictura::layers_api::rows(view)) {
-        if (!row.visible || row.path == path || row.path.startsWith(prefix)) {
+        if (!row.visible) {
+            continue;
+        }
+        const bool moving = std::any_of(
+            movingPaths.cbegin(), movingPaths.cend(), [&row](const QString& path) {
+                return !path.isEmpty()
+                    && (row.path == path || row.path.startsWith(path + QLatin1Char('/')));
+            });
+        if (moving) {
             continue;
         }
         const pictura::transform_api::LayerRect rect =

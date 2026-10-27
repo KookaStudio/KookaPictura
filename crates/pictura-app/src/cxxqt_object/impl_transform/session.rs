@@ -6,7 +6,10 @@ use super::super::state::PictureViewRust;
 use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
-use super::{build_move_preview_base, duplicate_move_target, movable_layer};
+use super::{
+    build_move_preview_base, duplicate_move_target, link_members, movable_layer, move_group_key,
+    move_group_union, move_origin_opacity, rendered_move_group, translate_move_group,
+};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -405,6 +408,7 @@ impl qobject::PictureView {
         rust.move_opacity = opacity;
         rust.move_prepared_revision = rust.session.content_revision;
         rust.move_prepared_layer = String::new();
+        rust.move_prepared_union = None;
         true
     }
 
@@ -630,41 +634,25 @@ impl qobject::PictureView {
 }
 
 impl qobject::PictureView {
-    /// Cache the base composite (the active raster layer hidden), the layer
+    /// Cache the base composite (every move-group layer hidden), the moving
     /// image, its document-space origin, and opacity. One region composite at
     /// drag start, derived from the authoritative `doc.composite`.
     ///
-    /// Reuses the cached base when the content revision, target path, and
-    /// clamped rect all match; otherwise it recomputes.
+    /// Reuses the cached base when the content revision and move-group key
+    /// match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
-        let Some(path) = self.as_ref().move_cache_target() else {
+        let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
-        {
-            let rust = self.rust();
-            let Some(layer) = rust
-                .session
-                .doc
-                .as_ref()
-                .and_then(|doc| pictura_render::resolve_path(doc, &path))
-            else {
-                return false;
-            };
-            if !layer.visible || layer_move_locked(layer) {
-                return false;
-            }
-        }
-        if self.as_ref().move_cache_valid(&path) {
+        if self.as_ref().move_cache_valid(&paths) {
             {
                 let mut rust = self.as_mut().rust_mut();
                 let (x, y, opacity) = rust
                     .session
                     .doc
                     .as_ref()
-                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                    .map_or((0, 0, 0), |layer| {
-                        (layer.rect.left, layer.rect.top, layer.opacity as i32)
-                    });
+                    .and_then(|doc| move_origin_opacity(doc, &paths))
+                    .unwrap_or((0, 0, 0));
                 rust.move_x = x;
                 rust.move_y = y;
                 rust.move_opacity = opacity;
@@ -672,7 +660,7 @@ impl qobject::PictureView {
             }
             return true;
         }
-        let computed = self.as_mut().compute_move_preview(path);
+        let computed = self.as_mut().compute_move_preview(paths);
         self.as_mut().rust_mut().move_preview_cache_hit = false;
         computed
     }
@@ -697,102 +685,142 @@ impl qobject::PictureView {
             new_path
         };
         self.as_mut().recomposite();
-        self.as_mut().compute_move_preview(new_path)
+        self.as_mut().compute_move_preview(vec![new_path])
     }
 
     /// Warm the move-preview cache without entering preview mode. A layer the
     /// Move tool may not move (a Background) is never previewed, so it is not
     /// warmed either: the warm composites the whole document.
     pub fn prepare_move_preview(mut self: Pin<&mut Self>) -> bool {
-        let Some(path) = self.as_ref().move_cache_target() else {
+        let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
-        {
-            let rust = self.rust();
-            let Some(layer) = rust
-                .session
-                .doc
-                .as_ref()
-                .and_then(|doc| pictura_render::resolve_path(doc, &path))
-            else {
-                return false;
-            };
-            if !layer.visible || layer_move_locked(layer) {
-                return false;
-            }
-        }
-        if self.as_ref().move_cache_valid(&path) {
+        if self.as_ref().move_cache_valid(&paths) {
             return true;
         }
-        self.as_mut().compute_move_preview(path)
+        self.as_mut().compute_move_preview(paths)
     }
 
     pub fn move_preview_cache_hit(&self) -> bool {
         self.rust().move_preview_cache_hit
     }
 
-    /// The active movable layer's path (a raster or shape layer), or `None`
-    /// without a document or a single such layer.
-    pub(super) fn move_cache_target(&self) -> Option<String> {
+    /// The paths the Move tool acts on: every selected layer plus every movable
+    /// member of a selected layer's link set, restricted to movable
+    /// (pixel/shape), visible, position-unlocked layers and ordered by panel
+    /// position (topmost-first). `None` when the selection has no such layer.
+    pub(super) fn move_group_paths(&self) -> Option<Vec<String>> {
         let rust = self.rust();
         let doc = rust.session.doc.as_ref()?;
-        let path = rust.layer_target.single()?;
-        movable_layer(doc, path)?;
-        Some(path.to_string())
+        if rust.layer_target.is_empty() {
+            return None;
+        }
+        let mut wanted: Vec<String> = Vec::new();
+        for path in rust.layer_target.selected() {
+            for member in link_members(rust, doc, path) {
+                if wanted.contains(&member) {
+                    continue;
+                }
+                let Some(layer) = pictura_render::resolve_path(doc, &member) else {
+                    continue;
+                };
+                if movable_layer(doc, &member).is_some()
+                    && layer.visible
+                    && !layer_move_locked(layer)
+                {
+                    wanted.push(member);
+                }
+            }
+        }
+        if wanted.is_empty() {
+            return None;
+        }
+        let group: Vec<String> = pictura_render::flatten_rows(doc)
+            .into_iter()
+            .map(|(path, _)| path)
+            .filter(|path| wanted.contains(path))
+            .collect();
+        Some(group)
     }
 
-    fn move_cache_valid(&self, path: &str) -> bool {
+    fn move_cache_valid(&self, paths: &[String]) -> bool {
         let rust = self.rust();
-        // The base is the document with the target layer hidden, so it does not
-        // depend on that layer's position: a committed move leaves it valid.
+        // The base is the document with every move-group layer hidden, so it
+        // does not depend on their positions: a committed move leaves it valid.
         // The move commit deliberately does not bump `content_revision` for this
-        // reason; keying on the layer rect here would throw the base away on
+        // reason; keying on a layer rect here would throw the base away on
         // every drag and force a full region recomposite on the next press.
         // A shape's moving image is rendered at its outline, which a move
-        // shifts without changing the layer rect, so it is never reused.
-        let shape = rust
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, path))
-            .is_some_and(pictura_render::is_shape_layer);
+        // shifts without changing the layer rect, so a group with one is never
+        // reused. A rendered group's moving image is composited at the layers'
+        // positions and clipped to the canvas, so any move makes it stale; the
+        // group's union rect must match too.
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return false;
+        };
+        let union = if paths.len() > 1 {
+            move_group_union(doc, paths)
+        } else {
+            None
+        };
+        if union != rust.move_prepared_union {
+            return false;
+        }
+        let shape = paths.iter().any(|path| {
+            pictura_render::resolve_path(doc, path).is_some_and(pictura_render::is_shape_layer)
+        });
         !shape
             && rust.move_base.is_some()
             && rust.move_prepared_revision == rust.session.content_revision
-            && rust.move_prepared_layer == path
+            && rust.move_prepared_layer == move_group_key(paths)
     }
 
-    /// Compute and store the move-preview base/layer for the layer at `path`
-    /// and record the revision and path they were built from.
-    fn compute_move_preview(mut self: Pin<&mut Self>, path: String) -> bool {
+    /// Compute and store the move-preview base/layer for `paths` and record the
+    /// revision and group key they were built from.
+    fn compute_move_preview(mut self: Pin<&mut Self>, paths: Vec<String>) -> bool {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
-        let Some(layer) = pictura_render::resolve_path(doc, &path) else {
-            return false;
-        };
-        let opacity = layer.opacity as i32;
-        // A shape layer has no pixels of its own: its fill cut to the outline
-        // is rendered.
-        let moving = if pictura_render::is_shape_layer(layer) {
-            rendered_layer_image(doc, &path, gpu_compute)
+        let moving = if let [path] = paths.as_slice() {
+            let Some(layer) = pictura_render::resolve_path(doc, path) else {
+                return false;
+            };
+            // A shape layer has no pixels of its own: its fill cut to the
+            // outline is rendered.
+            if pictura_render::is_shape_layer(layer) {
+                rendered_layer_image(doc, path, gpu_compute)
+            } else {
+                layer_image(layer).map(|image| (image, layer.rect.left, layer.rect.top))
+            }
         } else {
-            layer_image(layer).map(|image| (image, layer.rect.left, layer.rect.top))
+            rendered_move_group(doc, &paths, gpu_compute)
         };
         let Some((layer_image, x, y)) = moving else {
             return false;
         };
-        let base = build_move_preview_base(doc, &path, gpu_compute);
+        // A single layer's own image carries no opacity; the preview applies it
+        // once. A rendered group already has each member's opacity baked in.
+        let opacity = if let [path] = paths.as_slice() {
+            pictura_render::resolve_path(doc, path).map_or(255, |layer| layer.opacity as i32)
+        } else {
+            255
+        };
+        let base = build_move_preview_base(doc, &paths, gpu_compute);
         rust.move_base = Some(base);
         rust.move_layer = Some(layer_image);
         rust.move_x = x;
         rust.move_y = y;
         rust.move_opacity = opacity;
         rust.move_prepared_revision = rust.session.content_revision;
-        rust.move_prepared_layer = path;
+        rust.move_prepared_layer = move_group_key(&paths);
+        rust.move_prepared_union = if paths.len() > 1 {
+            move_group_union(doc, &paths)
+        } else {
+            None
+        };
         true
     }
 
@@ -833,6 +861,7 @@ impl qobject::PictureView {
         rust.move_opacity = 0;
         rust.move_prepared_revision = 0;
         rust.move_prepared_layer.clear();
+        rust.move_prepared_union = None;
         rust.move_preview_cache_hit = false;
     }
 
@@ -840,48 +869,18 @@ impl qobject::PictureView {
         if dx == 0 && dy == 0 {
             return false;
         }
-        let Some(path) = self.as_ref().move_cache_target() else {
+        let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
-        let editable = self
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, &path))
-            .is_some_and(|layer| layer.visible && !layer_move_locked(layer));
-        if !editable {
-            return false;
-        }
-        let before = {
-            let rust = self.rust();
-            let Some(doc) = rust.session.doc.as_ref() else {
-                return false;
-            };
-            match pictura_render::resolve_path(doc, &path) {
-                Some(layer) => layer.rect,
-                None => return false,
-            }
-        };
-        let moved = {
+        let dirty = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
-            pictura_render::translate_layer_path(doc, &path, dx, dy)
+            translate_move_group(doc, &paths, dx, dy)
         };
-        if !moved {
+        let Some(dirty) = dirty else {
             return false;
-        }
-        let dirty = {
-            let rust = self.rust();
-            let after = rust
-                .session
-                .doc
-                .as_ref()
-                .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                .map_or(before, |layer| layer.rect);
-            union_rect(before, after)
         };
         self.as_mut()
             .commit_move_edit("Move Layer", |_| Edit::Regions {

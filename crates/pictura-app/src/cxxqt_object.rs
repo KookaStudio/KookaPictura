@@ -581,26 +581,26 @@ pub mod qobject {
         #[qinvokable]
         fn layer_via_cut(self: Pin<&mut Self>, path: &QString) -> QString;
 
-        /// The layer and every layer matching its node class, adjustment kind,
-        /// and blend mode. Sets the document target and notifies the view.
+        /// The layer and every layer matching its kind and attributes; sets the target.
         #[qinvokable]
         fn select_similar(self: Pin<&mut Self>, path: &QString) -> QStringList;
 
-        /// Every member of the link set containing `path`; empty when unlinked.
-        /// A linked set becomes the target; an unlinked layer leaves it alone.
+        /// Every member of the link set containing `path`; empty when unlinked; a linked set becomes the target.
         #[qinvokable]
         fn select_linked(self: Pin<&mut Self>, path: &QString) -> QStringList;
 
         /// Link (`on`) or unlink the listed layers, joining every set they touch.
         #[qinvokable]
         fn link_layers(self: Pin<&mut Self>, paths: &QStringList, on: bool) -> i32;
+        /// Whether every listed layer resolves to one shared link set.
+        #[qinvokable]
+        fn linked_together(&self, paths: &QStringList) -> bool;
 
         /// Hide the listed layers; records one "Hide Layers" state.
         #[qinvokable]
         fn hide_layers(self: Pin<&mut Self>, paths: &QStringList) -> i32;
 
-        /// Delete every effectively hidden layer; records one "Delete Hidden
-        /// Layers" state only when at least one is removed.
+        /// Delete every effectively hidden layer; records one "Delete Hidden Layers" state when any is removed.
         #[qinvokable]
         fn delete_hidden_layers(self: Pin<&mut Self>) -> i32;
 

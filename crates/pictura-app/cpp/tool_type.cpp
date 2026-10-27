@@ -300,7 +300,7 @@ public:
                 movingInkOrigin_ = frame_.origin;
                 referenceRects_ = ctx_ && ctx_->view() && ctx_->canvas()
                         && ctx_->canvas()->smartGuidesEnabled()
-                    ? smartGuideReferences(*ctx_->view(), editPath_)
+                    ? smartGuideReferences(*ctx_->view(), {editPath_})
                     : QList<QRectF>();
             }
             const QPointF next = moveOrigin_ + (imagePos - moveStart_);

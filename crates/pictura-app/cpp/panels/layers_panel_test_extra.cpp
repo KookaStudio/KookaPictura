@@ -175,6 +175,20 @@ bool LayersPanel::doubleClickMaskForTest(const QString& path)
     return true;
 }
 
+QRect LayersPanel::rowLinkBadgeRectForTest(const QString& path) const
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid() || !delegate_ || !tree_) {
+        return {};
+    }
+    return delegate_->linkBadgeRect(tree_->visualRect(index), index);
+}
+
+void LayersPanel::clickFxButtonForTest(bool alt)
+{
+    applyFxButton(alt);
+}
+
 QString LayersPanel::rowKindForTest(const QString& path) const
 {
     const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();

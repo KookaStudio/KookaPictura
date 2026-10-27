@@ -10,6 +10,7 @@
 #include <QtCore/QRectF>
 #include <QtCore/QSizeF>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 namespace pictura {
 
@@ -50,8 +51,8 @@ SmartGuideResult smartGuideSnap(const QRectF& moving, const QList<QRectF>& refer
                                 const QSizeF& document, double zoom,
                                 double thresholdScreenPx = 8.0);
 
-// Content boxes of the layers that can be references while `path` moves: every
-// visible layer other than `path` and its descendants that has ink.
-QList<QRectF> smartGuideReferences(PictureView& view, const QString& path);
+// Content boxes of the layers that can be references while `movingPaths` move:
+// every visible layer other than those paths and their descendants that has ink.
+QList<QRectF> smartGuideReferences(PictureView& view, const QStringList& movingPaths);
 
 } // namespace pictura

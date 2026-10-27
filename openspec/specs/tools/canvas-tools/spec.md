@@ -6,11 +6,17 @@ Move, Crop, Eyedropper, Hand, and Zoom tools for navigating and editing the canv
 ## Requirements
 
 ### Requirement: Move tool translates the active layer
-The system SHALL translate the topmost pixel layer of the active document by a
-dragged offset, recompositing the document. Group and adjustment layers SHALL be
-ignored, and an empty or absent document SHALL be a no-op. A layer whose lock
+The system SHALL translate the document's selected layers by a dragged offset,
+recompositing the document. With one layer selected it SHALL translate that
+layer; with several selected it SHALL translate every selected layer. The live
+preview SHALL show the moving layers at the pointer's offset and the committed
+move SHALL land them at that offset, including a link set whose preview image is
+cropped to the canvas. Group and adjustment layers SHALL be ignored (not
+translated), and an empty or absent document SHALL be a no-op. A layer whose lock
 state includes the position lock SHALL be refused, and the refusal SHALL leave
-the document unchanged with no history state.
+that layer unchanged; a move that translates no layer SHALL add no history state
+and change no pixels. A selected layer's linked members move with it (see
+`compositing/layer-management`).
 
 #### Scenario: Drag moves the layer content
 - **WHEN** the Move tool is dragged by a delta and the active document has a pixel layer
@@ -24,6 +30,17 @@ the document unchanged with no history state.
 - **WHEN** the Move tool is dragged and the topmost pixel layer is position-locked
 - **THEN** the layer does not move, the composite is unchanged, and no history
   state is added
+
+#### Scenario: Dragging a multi-selection moves every selected layer [lct_move_multi]
+- **WHEN** two pixel layers are selected and the Move tool is dragged by a delta
+- **THEN** both layers translate by the delta and the move is one `Move Layer`
+  history state
+
+#### Scenario: A cropped group preview lands at the drop [lct_move_preview_origin]
+- **WHEN** a linked set that extends past the canvas edge is dragged again and a
+  delta is committed
+- **THEN** the preview origin matches the preview image's crop and the set lands
+  at the drop offset
 
 ### Requirement: Crop tool
 The system SHALL place a crop box over the whole canvas when the Crop tool is
@@ -468,3 +485,19 @@ policy, and the canvas SHALL remain the single source of the offset.
 
 - **WHEN** Snap Canvas To Workspace is on and the canvas has no document
 - **THEN** the clamp keeps today's behaviour and no centring offset is produced
+
+### Requirement: Move preview freshness
+
+The Move tool's live preview SHALL place the moving layers at the pointer's
+offset. A prepared preview SHALL be reused only while the moving layers have not
+moved: a rendered link set's preview image is composited at the layers'
+positions and clipped to the canvas, so a move makes the cached image stale and
+the next drag SHALL recompute it rather than draw the stale image at the new
+origin.
+
+#### Scenario: A moved link set recomputes its preview [lct_move_preview_fresh]
+
+- **WHEN** a linked set is moved and the Move tool begins another drag without
+  moving it again
+- **THEN** the moved set's preview is recomputed at the new union rect and the
+  set previews and lands at the pointer's offset

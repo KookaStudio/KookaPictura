@@ -13,7 +13,7 @@
 
 ## CS6 behavior
 
-The **Move tool** (`V`) repositions the contents of the active layer(s), layer groups, selections, and guides. With **Auto Select** enabled it also picks the layer under the pointer: choosing `Layer` selects the top layer whose pixels are under the cursor, `Group` selects the top group (clicking an ungrouped layer selects that layer). Without Auto Select, right-clicking the canvas lists every layer that has pixels under the pointer and lets the user pick one from the context menu.
+The **Move tool** (`V`) repositions the contents of the active layer(s), layer groups, selections, and guides. A selection of several layers moves them all together, and a linked layer's set moves with any member that is selected, so dragging one linked layer (or a selection containing one) shifts the whole set. With **Auto Select** enabled it also picks the layer under the pointer: choosing `Layer` selects the top layer whose pixels are under the cursor, `Group` selects the top group (clicking an ungrouped layer selects that layer). Without Auto Select, right-clicking the canvas lists every layer that has pixels under the pointer and lets the user pick one from the context menu.
 
 The Move tool options bar also exposes:
 - **Show Transform Controls** — displays the transform bounding box and handles on the active layer/selection so the same scale/rotate gestures as Free Transform are available without entering the command (per the CS6 Help "Transform freely" topic).

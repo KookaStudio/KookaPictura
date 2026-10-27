@@ -223,6 +223,9 @@ public:
     // The chain glyph slot of `path`'s row, and the side the glyph is drawn at.
     QRect rowLinkGlyphRectForTest(const QString& path) const;
     int linkIconSideForTest() const;
+    // The linked-layer chain badge's rect at the row's right edge; empty when
+    // the row is unlinked.
+    QRect rowLinkBadgeRectForTest(const QString& path) const;
     bool rowHasVectorMaskForTest(const QString& path) const;
     bool rowVectorMaskLinkedForTest(const QString& path) const;
     bool rowVectorMaskDisabledForTest(const QString& path) const;
@@ -314,6 +317,11 @@ public:
     QString maskButtonToolTipForTest() const;
     bool maskButtonEnabledForTest() const;
     void clickMaskButtonForTest();
+    // Alt-click the mask button as a user would (the button reads the process
+    // global modifier, which a synthetic click cannot set).
+    void altClickMaskButtonForTest();
+    // Run the fx strip button's action with an explicit Alt state (same reason).
+    void clickFxButtonForTest(bool alt);
     bool deleteButtonEnabledForTest() const;
     void clickDeleteButtonForTest();
     // The texts of the menu a right-click on `path`'s vector-mask thumbnail opens.
@@ -425,7 +433,7 @@ private:
     // The action strip is disabled without a document; the mask and trash
     // buttons also follow the active layer and the selection.
     void syncStripButtons();
-    void addMaskFromButton();
+    void addMaskFromButton(bool alt);
     // The trash: with both masks on the layer it deletes the vector mask after
     // a "Delete Vector Mask?" prompt; otherwise it deletes the selection.
     void deleteFromTrash();
@@ -456,6 +464,9 @@ private:
     void openPanelOptions();
     void persistOptions();
     void openLayerStyle(const QString& path, const QString& effect = QString());
+    // The fx strip button's action: Alt toggles every layer's effects, else the
+    // active layer's Blending Options.
+    void applyFxButton(bool alt);
     void openBackgroundConversion(const QString& path);
 
     void applyFilter(const LayerFilter& filter);
@@ -496,8 +507,9 @@ private:
     QToolButton* lockAll_ = nullptr;
     QToolButton* maskButton_ = nullptr;
     QToolButton* deleteButton_ = nullptr;
-    // The six actionable strip buttons. Link is excluded because it stays
-    // disabled until its operation exists.
+    // The seven action-strip buttons; the link button's icon and enabled state
+    // follow the selection's link state in syncStripButtons.
+    QToolButton* linkButton_ = nullptr;
     QList<QToolButton*> stripButtons_;
     QAction* patternFill_ = nullptr;
     std::function<bool(QDialog&)> dialogDriver_;
