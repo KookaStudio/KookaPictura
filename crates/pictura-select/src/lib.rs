@@ -8,9 +8,9 @@
 //! feather radius->sigma, colour distance, structuring element) are inferred and
 //! marked below.
 
-use std::collections::{HashSet, VecDeque};
-
+use pictura_core::mask_ops::{self, Border};
 use pictura_core::{Channel, Layer, LayerMask, PixelBuffer};
+use rayon::prelude::*;
 
 mod color_range;
 pub use color_range::{color_range, ColorRangeSelect};
@@ -21,6 +21,8 @@ mod blur;
 
 mod magnetic;
 pub use magnetic::EdgeMap;
+
+mod matcher;
 
 mod refine;
 pub use refine::{
@@ -306,20 +308,40 @@ impl Selection {
 
     /// Dilate the coverage. radius 0 = identity. Clamped to 1..=100.
     pub fn expand(&self, radius: u32) -> Selection {
-        let r = radius.clamp(0, MORPH_MAX);
+        let r = radius.clamp(0, MORPH_MAX) as usize;
         if r == 0 || self.data.is_empty() {
             return self.clone();
         }
-        self.morph(r, true)
+        Selection {
+            width: self.width,
+            height: self.height,
+            data: mask_ops::dilate(
+                &self.data,
+                self.width as usize,
+                self.height as usize,
+                r,
+                Border::Zero(0u8),
+            ),
+        }
     }
 
     /// Erode the coverage. radius 0 = identity. Clamped to 1..=100.
     pub fn contract(&self, radius: u32) -> Selection {
-        let r = radius.clamp(0, MORPH_MAX);
+        let r = radius.clamp(0, MORPH_MAX) as usize;
         if r == 0 || self.data.is_empty() {
             return self.clone();
         }
-        self.morph(r, false)
+        Selection {
+            width: self.width,
+            height: self.height,
+            data: mask_ops::erode(
+                &self.data,
+                self.width as usize,
+                self.height as usize,
+                r,
+                Border::Zero(0u8),
+            ),
+        }
     }
 
     /// Band centred on the current edge (roughly half in / half out).
@@ -353,50 +375,7 @@ impl Selection {
         Selection {
             width: self.width,
             height: self.height,
-            data: median(&self.data, self.width as usize, self.height as usize, r),
-        }
-    }
-
-    fn morph(&self, radius: u32, dilate: bool) -> Selection {
-        let (w, h) = (self.width as usize, self.height as usize);
-        let r = radius as isize;
-        let pick = |a: u8, b: u8| if dilate { a.max(b) } else { a.min(b) };
-        let mut tmp = vec![0u8; w * h];
-        for y in 0..h {
-            for x in 0..w {
-                let mut acc = self.data[y * w + x];
-                for i in -r..=r {
-                    let xx = x as isize + i;
-                    let v = if xx < 0 || xx >= w as isize {
-                        0
-                    } else {
-                        self.data[y * w + xx as usize]
-                    };
-                    acc = pick(acc, v);
-                }
-                tmp[y * w + x] = acc;
-            }
-        }
-        let mut out = vec![0u8; w * h];
-        for y in 0..h {
-            for x in 0..w {
-                let mut acc = tmp[y * w + x];
-                for i in -r..=r {
-                    let yy = y as isize + i;
-                    let v = if yy < 0 || yy >= h as isize {
-                        0
-                    } else {
-                        tmp[yy as usize * w + x]
-                    };
-                    acc = pick(acc, v);
-                }
-                out[y * w + x] = acc;
-            }
-        }
-        Selection {
-            width: self.width,
-            height: self.height,
-            data: out,
+            data: mask_ops::median(&self.data, self.width as usize, self.height as usize, r),
         }
     }
 }
@@ -447,46 +426,23 @@ pub fn magic_wand(
             "point ({x},{y}) outside {w}x{h}"
         )));
     }
-    let mut data = vec![0u8; w * h];
     let reference = rgb_at(img, y as usize * w + x as usize);
-    if contiguous {
-        let mut seen = vec![false; w * h];
-        let mut queue = VecDeque::new();
-        let start = y as usize * w + x as usize;
-        seen[start] = true;
-        data[start] = 255;
-        queue.push_back(start);
-        while let Some(p) = queue.pop_front() {
-            let px = p % w;
-            let py = p / w;
-            let mut visit = |nx: usize, ny: usize, queue: &mut VecDeque<usize>| {
-                let q = ny * w + nx;
-                if !seen[q] && chebyshev(rgb_at(img, q), reference) <= tolerance {
-                    seen[q] = true;
-                    data[q] = 255;
-                    queue.push_back(q);
-                }
-            };
-            if px > 0 {
-                visit(px - 1, py, &mut queue);
-            }
-            if px + 1 < w {
-                visit(px + 1, py, &mut queue);
-            }
-            if py > 0 {
-                visit(px, py - 1, &mut queue);
-            }
-            if py + 1 < h {
-                visit(px, py + 1, &mut queue);
-            }
-        }
+    let data = if contiguous {
+        let mut seeds = vec![0u8; w * h];
+        seeds[y as usize * w + x as usize] = 1;
+        mask_ops::flood(w, h, &seeds, |_, q| {
+            chebyshev(rgb_at(img, q), reference) <= tolerance
+        })
+        .unwrap_or_else(|| vec![0u8; w * h])
     } else {
+        let mut data = vec![0u8; w * h];
         for (p, slot) in data.iter_mut().enumerate() {
             if chebyshev(rgb_at(img, p), reference) <= tolerance {
                 *slot = 255;
             }
         }
-    }
+        data
+    };
     Ok(Selection {
         width: img.width,
         height: img.height,
@@ -502,31 +458,14 @@ pub fn grow(sel: &Selection, img: &PixelBuffer, tolerance: u8) -> Result<Selecti
     if w == 0 || h == 0 {
         return Ok(out);
     }
-    let mut seen: Vec<bool> = sel.data.iter().map(|&v| v > 0).collect();
-    let mut queue: VecDeque<usize> = (0..w * h).filter(|&p| seen[p]).collect();
-    while let Some(p) = queue.pop_front() {
-        let pc = rgb_at(img, p);
-        let px = p % w;
-        let py = p / w;
-        let mut visit = |nx: usize, ny: usize, out: &mut Selection, queue: &mut VecDeque<usize>| {
-            let q = ny * w + nx;
-            if !seen[q] && chebyshev(rgb_at(img, q), pc) <= tolerance {
-                seen[q] = true;
-                out.data[q] = 255;
-                queue.push_back(q);
-            }
-        };
-        if px > 0 {
-            visit(px - 1, py, &mut out, &mut queue);
-        }
-        if px + 1 < w {
-            visit(px + 1, py, &mut out, &mut queue);
-        }
-        if py > 0 {
-            visit(px, py - 1, &mut out, &mut queue);
-        }
-        if py + 1 < h {
-            visit(px, py + 1, &mut out, &mut queue);
+    let Some(reached) = mask_ops::flood(w, h, &sel.data, |from, to| {
+        chebyshev(rgb_at(img, to), rgb_at(img, from)) <= tolerance
+    }) else {
+        return Ok(out);
+    };
+    for (p, &value) in reached.iter().enumerate() {
+        if value != 0 && out.data[p] == 0 {
+            out.data[p] = 255;
         }
     }
     Ok(out)
@@ -541,56 +480,19 @@ pub fn similar(
     check_dims(sel, img)?;
     let mut out = sel.clone();
     let n = expected_len(sel);
-    let mut references: HashSet<[u8; 3]> = HashSet::new();
-    for p in 0..n {
-        if sel.data[p] > 0 {
-            references.insert(rgb_at(img, p));
-        }
-    }
-    if references.is_empty() {
+    if !sel.data.iter().any(|&value| value > 0) {
         return Ok(out);
     }
-    for p in 0..n {
-        if out.data[p] != 0 {
-            continue;
+    let matcher = matcher::ColorMatcher::new(
+        (0..n).filter(|&p| sel.data[p] > 0).map(|p| rgb_at(img, p)),
+        tolerance,
+    );
+    out.data.par_iter_mut().enumerate().for_each(|(p, slot)| {
+        if *slot == 0 && matcher.contains(rgb_at(img, p)) {
+            *slot = 255;
         }
-        let c = rgb_at(img, p);
-        if references.iter().any(|r| chebyshev(c, *r) <= tolerance) {
-            out.data[p] = 255;
-        }
-    }
+    });
     Ok(out)
-}
-
-pub(crate) fn median(src: &[u8], w: usize, h: usize, radius: usize) -> Vec<u8> {
-    let r = radius as isize;
-    let mut out = vec![0u8; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            let mut hist = [0u32; 256];
-            let mut total = 0u32;
-            for dy in -r..=r {
-                let yy = (y as isize + dy).clamp(0, h as isize - 1) as usize;
-                for dx in -r..=r {
-                    let xx = (x as isize + dx).clamp(0, w as isize - 1) as usize;
-                    hist[src[yy * w + xx] as usize] += 1;
-                    total += 1;
-                }
-            }
-            let mut acc = 0u32;
-            let half = total / 2;
-            let mut value = 0u8;
-            for (v, count) in hist.iter().enumerate() {
-                acc += *count;
-                if acc > half {
-                    value = v as u8;
-                    break;
-                }
-            }
-            out[y * w + x] = value;
-        }
-    }
-    out
 }
 
 /// Build a document-sized selection from `layer`'s alpha channel (`-1`),
@@ -1117,6 +1019,91 @@ mod tests {
         let sel = Selection::none(5, 4);
         assert!(grow(&sel, &img, 0).is_err());
         assert!(similar(&sel, &img, 0).is_err());
+    }
+
+    #[test]
+    fn similar_matches_the_per_colour_scan() {
+        let (w, h) = (64u32, 64u32);
+        let colour = |x: u32, y: u32| {
+            [
+                (x * 5 % 256) as u8,
+                (y * 7 % 256) as u8,
+                ((x * 11 + y * 13) % 256) as u8,
+            ]
+        };
+        let img = rgb_image(w, h, colour);
+        let sel = sel_from(w, h, |x, y| {
+            if (8..56).contains(&x) && (8..56).contains(&y) {
+                255
+            } else {
+                0
+            }
+        });
+        let got = similar(&sel, &img, 17).unwrap();
+        let mut references = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                if sel.data[(y * w + x) as usize] > 0 {
+                    references.push(colour(x, y));
+                }
+            }
+        }
+        for y in 0..h {
+            for x in 0..w {
+                let p = (y * w + x) as usize;
+                let expected = if sel.data[p] > 0 {
+                    sel.data[p]
+                } else if references
+                    .iter()
+                    .any(|reference| chebyshev(*reference, colour(x, y)) <= 17)
+                {
+                    255
+                } else {
+                    0
+                };
+                assert_eq!(got.data[p], expected, "({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn similar_zero_tolerance_selects_only_the_exact_colour() {
+        let img = rgb_image(6, 3, |x, _| if x < 3 { [12, 34, 56] } else { [12, 34, 57] });
+        let seed = sel_from(6, 3, |x, y| if x == 0 && y == 1 { 255 } else { 0 });
+        let out = similar(&seed, &img, 0).unwrap();
+        for y in 0..3 {
+            for x in 0..6 {
+                let expected = if x < 3 { 255 } else { 0 };
+                assert_eq!(out.data[(y * 6 + x) as usize], expected, "({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn similar_preserves_soft_selected_coverage() {
+        let img = rgb_image(6, 6, |_, _| [40, 40, 40]);
+        let mut sel = Selection::none(6, 6);
+        sel.data[2 * 6 + 2] = 128;
+        let out = similar(&sel, &img, 0).unwrap();
+        assert_eq!(out.data[2 * 6 + 2], 128, "soft seed coverage survives");
+        assert_eq!(out.data[0], 255, "an in-tolerance pixel is fully selected");
+    }
+
+    #[test]
+    fn similar_with_an_empty_selection_adds_nothing() {
+        let img = rgb_image(5, 5, |x, y| [(x * 20) as u8, (y * 20) as u8, 7]);
+        let empty = Selection::none(5, 5);
+        assert_eq!(similar(&empty, &img, 255).unwrap(), empty);
+    }
+
+    #[test]
+    fn grow_preserves_soft_selected_coverage() {
+        let img = rgb_image(8, 4, |_, _| [90, 90, 90]);
+        let mut sel = Selection::none(8, 4);
+        sel.data[8 + 1] = 128;
+        let out = grow(&sel, &img, 0).unwrap();
+        assert_eq!(out.data[8 + 1], 128, "the seed keeps its coverage");
+        assert_eq!(out.data[0], 255, "the connected region grows");
     }
 
     #[test]

@@ -8,6 +8,7 @@
 //! so the choices marked `ponytail:` are documented approximations, not
 //! verified parity.
 
+use pictura_core::mask_ops::{self, Border};
 use pictura_core::PixelBuffer;
 
 use crate::kernel::{clamp_index, gaussian_blur_planes, sigma_from_radius};
@@ -154,11 +155,8 @@ pub fn custom(
     Ok(())
 }
 
-/// Max (dilate) or min (erode) over the `(2r+1)²` clamped square, applied
-/// separably (per-row then per-column) because both operators are associative.
-///
-/// `ponytail:` separable naive scan is O(pixels · r); a monotonic-deque sliding
-/// max would make it O(pixels) if radius 100 on huge documents ever gets hot.
+/// Max (dilate) or min (erode) over the `(2r+1)²` clamped square, delegated to
+/// the shared separable sliding-window kernel.
 fn morphology(buf: &mut PixelBuffer, radius: u32, dilate: bool) -> Result<(), FilterError> {
     let n = validate(buf)?;
     if radius == 0 {
@@ -168,43 +166,15 @@ fn morphology(buf: &mut PixelBuffer, radius: u32, dilate: bool) -> Result<(), Fi
     let w = buf.width as usize;
     let h = buf.height as usize;
     let planes = buf.channels as usize;
-    let mut horizontal = vec![0u8; n];
     for c in 0..planes {
         let base = c * n;
-        let src = &buf.data[base..base + n];
-        horizontal
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, out)| {
-                let line = &src[y * w..y * w + w];
-                for (x, out) in out.iter_mut().enumerate() {
-                    let mut best = if dilate { u8::MIN } else { u8::MAX };
-                    for dx in 0..=2 * r {
-                        let v = line[clamp_index(x as isize + dx as isize - r as isize, w)];
-                        best = if dilate { best.max(v) } else { best.min(v) };
-                    }
-                    *out = best;
-                }
-            });
-        // Max and min are order-free, so the column pass folds whole rows.
-        let horizontal = &horizontal;
-        buf.data[base..base + n]
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, out)| {
-                out.fill(if dilate { u8::MIN } else { u8::MAX });
-                for dy in 0..=2 * r {
-                    let sy = clamp_index(y as isize + dy as isize - r as isize, h);
-                    let line = &horizontal[sy * w..sy * w + w];
-                    for (best, &v) in out.iter_mut().zip(line) {
-                        *best = if dilate {
-                            (*best).max(v)
-                        } else {
-                            (*best).min(v)
-                        };
-                    }
-                }
-            });
+        let src = buf.data[base..base + n].to_vec();
+        let out = if dilate {
+            mask_ops::dilate(&src, w, h, r, Border::Clamp)
+        } else {
+            mask_ops::erode(&src, w, h, r, Border::Clamp)
+        };
+        buf.data[base..base + n].copy_from_slice(&out);
     }
     Ok(())
 }
