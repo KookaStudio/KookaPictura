@@ -43,7 +43,8 @@ pub struct LensMap {
     k1_norm: f64,
     profile: Option<LensModel>,
     auto: f64,
-    ca: [f64; 3],
+    /// The fringe sliders' radial scale per channel.
+    fringe: [f64; 3],
     vignette_amount: f64,
     vignette_start: f64,
     /// Whether the vignette or the profile's falloff changes colour.
@@ -56,7 +57,6 @@ impl LensMap {
         let (w, h) = (f64::from(width.max(1)), f64::from(height.max(1)));
         let profile = p.profile.filter(|m| *m != LensModel::NONE);
         let fringe = |i: usize| 1.0 + FRINGE_SCALE * p.fringe[i].clamp(-100.0, 100.0) / 100.0;
-        let ca_profile = profile.map_or([1.0; 3], |m| m.ca_scale);
         let d = p.distortion.clamp(-100.0, 100.0) / 100.0;
         let k1 = if d >= 0.0 {
             -BARREL_K1 * d
@@ -74,14 +74,14 @@ impl LensMap {
             k1_norm: if k1 > 0.0 { 1.0 / (1.0 + k1) } else { 1.0 },
             profile,
             auto: 1.0,
-            ca: [0, 1, 2].map(|i| fringe(i) * ca_profile[i]),
+            fringe: [0, 1, 2].map(fringe),
             vignette_amount: p.vignette_amount.clamp(-100.0, 100.0) / 100.0,
             vignette_start: 0.7 * p.vignette_midpoint.clamp(0.0, 100.0) / 100.0,
             shades: p.vignette_amount != 0.0 || profile.is_some_and(|m| m.vignette != [0.0; 3]),
             edge: p.edge,
         };
         map.inverse = map.homography(p).and_then(|m| invert(m, map.centre));
-        if p.auto_scale && profile.is_some_and(|m| m.distortion != [0.0; 3]) {
+        if p.auto_scale && profile.is_some_and(|m| m.distortion != [0.0; 6]) {
             map.auto = map.auto_scale();
         }
         map
@@ -187,19 +187,20 @@ impl LensMap {
         hi
     }
 
-    fn radial(&self, q: [f64; 2], k: [f64; 3], zoom: f64) -> [f64; 2] {
+    /// `q` pushed along its radius by `1 + c1 r + … + c6 r⁶`.
+    fn radial(&self, q: [f64; 2], c: &[f64; 6], zoom: f64) -> [f64; 2] {
         let d = [
             (q[0] - self.centre[0]) / zoom,
             (q[1] - self.centre[1]) / zoom,
         ];
-        let r2 = (d[0] * d[0] + d[1] * d[1]) / (self.radius * self.radius);
-        let g = 1.0 + r2 * (k[0] + r2 * (k[1] + r2 * k[2]));
+        let r = d[0].hypot(d[1]) / self.radius;
+        let g = 1.0 + c.iter().rev().fold(0.0, |acc, k| (acc + k) * r);
         [self.centre[0] + d[0] * g, self.centre[1] + d[1] * g]
     }
 
     fn profile_point(&self, q: [f64; 2], zoom: f64) -> [f64; 2] {
         match &self.profile {
-            Some(m) => self.radial(q, m.distortion, zoom),
+            Some(m) => self.radial(q, &m.distortion, zoom),
             None => q,
         }
     }
@@ -217,7 +218,7 @@ impl LensMap {
             q = project(m, q)?;
         }
         if self.k1 != 0.0 {
-            q = self.radial(q, [self.k1, 0.0, 0.0], 1.0);
+            q = self.radial(q, &LensModel::brown([self.k1, 0.0, 0.0]), 1.0);
             q = [
                 cx + (q[0] - cx) * self.k1_norm,
                 cy + (q[1] - cy) * self.k1_norm,
@@ -226,9 +227,15 @@ impl LensMap {
         Some(self.profile_point(q, self.auto))
     }
 
-    /// The point channel `c` samples for source point `s`.
+    /// The point channel `c` samples for source point `s`: the fringe
+    /// slider's scale times the profile's `v + c r + b r²`.
     pub(super) fn channel(&self, s: [f64; 2], c: usize) -> [f64; 2] {
-        let k = self.ca[c];
+        let mut k = self.fringe[c];
+        if let Some(m) = &self.profile {
+            let [v, a, b] = m.ca[c];
+            let r = (s[0] - self.centre[0]).hypot(s[1] - self.centre[1]) / self.radius;
+            k *= v + r * (a + r * b);
+        }
         [
             self.centre[0] + (s[0] - self.centre[0]) * k,
             self.centre[1] + (s[1] - self.centre[1]) * k,
@@ -236,7 +243,7 @@ impl LensMap {
     }
 
     pub(super) fn has_fringe(&self) -> bool {
-        self.ca != [1.0; 3]
+        self.fringe != [1.0; 3] || self.profile.is_some_and(|m| m.ca != LensModel::NONE.ca)
     }
 
     pub(super) fn shades(&self) -> bool {

@@ -40,7 +40,42 @@ fn read_back(layer: Layer) -> Document {
 /// A realistic slot list: booleans, whole-number ints, and fractional doubles.
 fn slots() -> Vec<f64> {
     vec![
-        1.0, 0.0, 1.0, 1.0, 2.0, 1.0, -12.5, 3.25, -4.0, 0.0, -20.0, 30.0, 10.0, -5.0, 45.0, 120.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        2.0,
+        1_234_567_890.0,
+        -12.5,
+        3.25,
+        -4.0,
+        0.0,
+        -20.0,
+        30.0,
+        10.0,
+        -5.0,
+        45.0,
+        120.0,
+        3.0,
+        1.0,
+        0.0125,
+        -0.08,
+        0.0,
+        0.004,
+        0.0,
+        -0.0001,
+        1.0004,
+        0.0002,
+        -0.0001,
+        1.0,
+        0.0,
+        0.0,
+        0.9996,
+        -0.0002,
+        0.0001,
+        -0.3,
+        0.05,
+        -0.01,
     ]
 }
 
@@ -98,6 +133,22 @@ fn missing_keys_decode_to_the_opening_slots() {
         items,
     });
     assert_eq!(decode_lens_correction_slots(&bytes)[14], 0.0);
+
+    // A record from before the profile slots: only the first 16 keys. The
+    // tail takes its opening values, so the coefficients flag is off.
+    let full = self::slots();
+    let DescValue::Object { items, .. } = encode_lens_correction_fltr(&full) else {
+        unreachable!("an object");
+    };
+    let bytes = crate::write_descriptor(&DescValue::Object {
+        name: String::new(),
+        class_id: b"x".to_vec(),
+        items: items.into_iter().take(16).collect(),
+    });
+    let decoded = decode_lens_correction_slots(&bytes);
+    assert_eq!(decoded[..16], full[..16]);
+    assert_eq!(decoded[16..], DEFAULT_SLOTS[16..]);
+    assert_eq!(decoded[17], 0.0);
 }
 
 #[test]

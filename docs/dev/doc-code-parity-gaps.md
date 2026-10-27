@@ -6,7 +6,7 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 159 gaps — 5 systemic in §B, 154 per-domain in §C.
+- **Rows:** 158 gaps — 5 systemic in §B, 153 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -202,7 +202,6 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `crates/pictura-filters/src/catalogue/build/paint.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
-| FILT-8 | `lens-correction.md` | Lens Correction lists real cameras and lenses (bundled catalogues) but ships one synthetic correction profile: no real lens corrections, sub-profiles, Prefer RAW, or Search Online | PARTIAL | `pictura-filters/src/distort/lens_correction/profiles.txt`, `lens_correction_panels.cpp` | #932 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
 
 De-Interlace (`#344`), NTSC Colors (`#345`), Embed/Read Watermark (`#350`/`#351`)
@@ -356,6 +355,14 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   `pictura-render/src/smart_filter.rs`, `document_ops/lens_correction.rs`),
   re-opens the dialog prefilled, and renders through the composite. The
   descriptor is Pictura-only, so no cross-app interop is claimed (#934).
+- **Corrections from the lens-correction profiles bundle.** `FILT-8` is
+  removed: Lens Correction reads the system's lensfun database at runtime
+  (`crates/pictura-filters/src/distort/lens_correction/lensfun.rs`,
+  `pictura-app/src/cxxqt_object/filter_tools/lens_profiles.rs`) and user
+  profiles, picks the closest sub-profile with a right-click menu, offers
+  Prefer RAW Profiles, and stores the resolved coefficients in its settings.
+  Search Online and Save Online Profile Locally stay disabled by decision:
+  there is no online profile service (#932).
 - **Corrections from the `#785` sweep.** Five rows in this register were wrong,
   and have been fixed or removed:
   - `FILT-1` (Lighting Effects engine, `#592`) — the engine ships

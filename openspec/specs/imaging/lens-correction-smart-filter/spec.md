@@ -11,12 +11,13 @@ Pictura and preserves keys it does not model, but claims no cross-app interop.
 ### Requirement: Lens Correction smart filter descriptor
 
 The codec SHALL read and write a Lens Correction smart filter's settings as a
-descriptor of the dialog's 16 slots under `Fltr`, with a Pictura-only
+descriptor of the dialog's 36 slots under `Fltr`, with a Pictura-only
 `filterID` and display name, and SHALL return each slot's opening value when
-its key is missing or malformed. Attaching SHALL go through the generic
-smart-filter attach, so re-attaching over a preserved descriptor keeps the
-entry's unmodeled `Fltr` keys and `blendOptions`, and a filter id this codec
-does not model is preserved untouched.
+its key is missing or malformed, so a 16-slot record decodes with no profile
+coefficients. Attaching SHALL go through the generic smart-filter attach, so
+re-attaching over a preserved descriptor keeps the entry's unmodeled `Fltr`
+keys and `blendOptions`, and a filter id this codec does not model is
+preserved untouched.
 
 #### Scenario: Slots round-trip through the descriptor [lc_smart_descriptor]
 
@@ -27,8 +28,10 @@ does not model is preserved untouched.
 #### Scenario: Missing keys decode to the opening slots [lc_smart_defaults]
 
 - **WHEN** `pictura-codec::missing_keys_decode_to_the_opening_slots` decodes an
-  empty descriptor and one missing a single key
-- **THEN** every missing slot takes the descriptor's opening value
+  empty descriptor, one missing a single key, and one with only the first 16
+  keys
+- **THEN** every missing slot takes the descriptor's opening value, and the
+  16-key record has the coefficients flag off
 
 #### Scenario: Attaching records the filter [lc_smart_attach]
 
@@ -53,9 +56,11 @@ does not model is preserved untouched.
 ### Requirement: Lens Correction smart filter rendering
 
 The smart-filter chain SHALL apply a Lens Correction smart filter, building its
-parameters from the stored slots with the profile resolved from the bundled set
-and gated by the Auto-tab checkboxes. A slot list that does not map SHALL make
-the filter undecodable, leaving the layer on its proxy path.
+parameters from the stored slots with the profile taken from the stored
+coefficients (or, for a record without them, the bundled profile) and gated
+by the Auto-tab checkboxes, so the result does not depend on which profiles
+are installed. A slot list that does not map SHALL make the filter
+undecodable, leaving the layer on its proxy path.
 
 #### Scenario: The filter renders the chain [lc_smart_render]
 
@@ -67,14 +72,15 @@ the filter undecodable, leaving the layer on its proxy path.
 #### Scenario: Unmappable slots fall back [lc_smart_fallback]
 
 - **WHEN** `pictura-render::unmappable_slots_are_refused` decodes a filter
-  whose profile id is past the bundled set and one with a bad slot count
+  whose profile id is not the bundled one and carries no coefficients, and
+  one with a bad slot count
 - **THEN** the decode returns nothing, so the layer is not smart-filtered
 
 ### Requirement: Lens Correction commit on a Smart Object
 
 A `lens-correction` commit on an embedded Smart Object SHALL attach a Lens
 Correction smart filter and re-render the layer's proxy rather than filter it
-destructively, recording one history state and the kind's 16 slots for Last
+destructively, recording one history state and the kind's 36 slots for Last
 Filter and Last Filter Settings; a plain raster layer SHALL keep the
 destructive commit. Every commit path SHALL keep the 8-/16-bit RGB and
 Grayscale gate.
@@ -85,7 +91,7 @@ Grayscale gate.
   `tst_lens_correction::smartObjectAddsASmartFilter` apply on an embedded smart
   object
 - **THEN** a Lens Correction smart filter is attached, the composite shows the
-  corrected pixels, and one history state is recorded with the 16 slots
+  corrected pixels, and one history state is recorded with the 36 slots
 
 #### Scenario: A raster layer stays destructive [lc_smart_raster]
 

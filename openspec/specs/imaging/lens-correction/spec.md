@@ -162,12 +162,13 @@ render the same pixels the commit writes.
 ### Requirement: Lens Correction profiles
 
 Lens profiles SHALL be read from an in-tree text format whose parse errors
-name the line. Matching SHALL need the camera make (case-insensitive) and
-rank a matching model and lens higher; an empty criterion matches anything.
-The Auto Correction checkboxes SHALL gate the profile's distortion,
-chromatic aberration, and vignette parts, and the profile SHALL compose with
-the Custom settings. Slots naming a profile that is not installed SHALL be
-refused, and slot values SHALL be clamped to their ranges.
+name the line. Matching a camera-specific profile SHALL need the camera make
+(case-insensitive) and rank a matching model and lens higher; an empty
+criterion matches anything. The Auto Correction checkboxes SHALL gate the
+profile's distortion, chromatic aberration, and vignette parts, and the
+profile SHALL compose with the Custom settings. Slots that carry no profile
+coefficients and name a profile other than the bundled one SHALL be refused,
+and slot values SHALL be clamped to their ranges.
 
 #### Scenario: Profiles parse and report errors by line [lc_profile_parse]
 
@@ -180,7 +181,7 @@ refused, and slot values SHALL be clamped to their ranges.
 #### Scenario: Profiles match by make, model, and lens [lc_profile_match]
 
 - **WHEN** `lens_correction::tests::profiles_match_make_then_model_and_lens`
-  searches three profiles
+  searches three camera-specific profiles
 - **THEN** results need the make, a lens match outranks a model match, and
   no make matches nothing
 
@@ -197,8 +198,8 @@ refused, and slot values SHALL be clamped to their ranges.
 - **WHEN** the bridge's `default_slots_are_the_identity`,
   `slots_map_and_clamp`, and `unknown_profile_id_is_refused` map slot lists
 - **THEN** the defaults are the identity, out-of-range values clamp, a
-  non-finite value or a wrong count is refused, and a profile id past the
-  bundled set is refused
+  non-finite value or a wrong count is refused, and a profile id that is not
+  the bundled one is refused when the slots carry no coefficients
 
 ### Requirement: Lens Correction depth gate and menu
 
@@ -324,7 +325,7 @@ Model, Lens Model, and Camera Settings lines.
 ### Requirement: Lens Correction commit
 
 Cancel SHALL leave the document unchanged; OK SHALL add one history state
-through the ordinary filter path and record the kind's 16 slots for Last
+through the ordinary filter path and record the kind's 36 slots for Last
 Filter and Last Filter Settings. Previous Conversion SHALL restore the last
 OK's distortion, fringe, and vignette values, never the transform.
 
@@ -333,7 +334,7 @@ OK's distortion, fringe, and vignette values, never the transform.
 - **WHEN** `tst_lens_correction::cancelAndOk` cancels and then accepts a
   Remove Distortion of 40
 - **THEN** Cancel leaves the history and pixels; OK adds one state, records
-  `lens-correction` with 16 slots, and changes the pixels
+  `lens-correction` with 36 slots, and changes the pixels
 
 #### Scenario: Previous Conversion restores the last OK [lc_previous]
 

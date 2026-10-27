@@ -126,6 +126,7 @@ set(PICTURA_QT_TESTS
     tst_liquify_dialog
     tst_adaptive_wide_angle
     tst_lens_correction
+    tst_lens_profiles
     tst_vanishing_point
     tst_vanishing_point_retouch
     tst_vanishing_point_files
