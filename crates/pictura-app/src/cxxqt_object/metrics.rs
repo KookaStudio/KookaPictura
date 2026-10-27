@@ -154,8 +154,13 @@ impl Metrics {
         let counters = pictura_render::metrics::counters();
         let _ = write!(
             out,
-            "}},\"counters\":{{\"resident_hits\":{},\"resident_misses\":{},\"declines\":{{",
-            counters.resident_hits, counters.resident_misses
+            "}},\"counters\":{{\"resident_hits\":{},\"resident_misses\":{},\"source_hits\":{},\"source_misses\":{},\"source_bytes\":{},\"effect_decodes\":{},\"declines\":{{",
+            counters.resident_hits,
+            counters.resident_misses,
+            counters.source_hits,
+            counters.source_misses,
+            counters.source_bytes,
+            counters.effect_decodes
         );
         for (i, (reason, n)) in counters.declines.iter().enumerate() {
             if i > 0 {

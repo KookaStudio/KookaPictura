@@ -22,12 +22,11 @@ fn payload(seed: u64, len: usize) -> Vec<u8> {
 }
 
 fn embedded(filename: &str, data: Vec<u8>) -> SmartObject {
-    SmartObject {
-        filename: filename.to_string(),
-        kind: SmartObjectKind::Embedded,
-        payload: Some(data),
-        ..Default::default()
-    }
+    let mut so = SmartObject::default();
+    so.filename = filename.to_string();
+    so.kind = SmartObjectKind::Embedded;
+    so.set_payload(data);
+    so
 }
 
 fn smart_layer(name: &str, so: SmartObject) -> Layer {
@@ -110,7 +109,7 @@ fn authored_smart_object_round_trips() {
     assert_eq!(so.creator, *b"8BIM");
     assert!(!so.uuid.is_empty(), "authored uuid is present");
     assert_eq!(
-        so.payload.as_deref(),
+        so.payload(),
         Some(&data[..]),
         "payload bytes survive write and read"
     );
@@ -289,7 +288,10 @@ fn psd_tools_parses_authored_smart_object() {
         .find(|l| l.name == "Layer 1")
         .and_then(|l| l.smart_object.as_ref())
         .expect("fixture smart object resolves");
-    let payload = source.payload.clone().expect("fixture payload");
+    let payload = source
+        .payload()
+        .map(<[u8]>::to_vec)
+        .expect("fixture payload");
     let filename = source.filename.clone();
 
     let doc = doc_with(vec![smart_layer(

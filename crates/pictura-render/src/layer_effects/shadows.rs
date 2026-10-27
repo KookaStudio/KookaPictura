@@ -1,8 +1,9 @@
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
+use crate::composite::{desc_item, mask_alpha};
 
+use super::planes::{EffectPass, PassWriter};
 use super::{
     blur_matte, blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color,
     dilate_matte, effect_blend_mode, erode_matte, noise_factor, num_clamped, num_or, pad_rect,
@@ -142,27 +143,21 @@ pub fn decode_inner_shadow(layer: &Layer) -> Option<InnerShadow> {
     })
 }
 
-/// Build the shadow matte over the padded source region, dilate it by the
-/// spread, blur it by the size, and composite it behind the layer content over
-/// the shifted region only.
-///
-/// ponytail: a canvas-filling layer with the maximum `size` still costs
-/// O(canvas · size) because the blur is a naive separable kernel; the upgrade
-/// path is a bounded/box-blur approximation or a tighter first-slice size
-/// ceiling. The common small-layer and crafted off-canvas cases are bounded.
-pub(super) fn composite_drop_shadow(
-    canvas: &mut Canvas,
+pub(super) fn build_drop_shadow(
     layer: &Layer,
     doc: &Document,
     shadow: &DropShadow,
-) {
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+) -> Vec<EffectPass> {
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
-        return;
+        return Vec::new();
     }
     let source = clip_rect(layer, w, h);
     if rect_empty(source) {
-        return;
+        return Vec::new();
     }
     // Clamp again: a hand-built `DropShadow` may not have gone through decode.
     let distance = clamp_finite(shadow.distance, MAX_DISTANCE) as f64;
@@ -182,8 +177,8 @@ pub(super) fn composite_drop_shadow(
     // at most `reach`, so the matte is built and processed over `padded` only.
     let padded = pad_rect(source, dilate_radius + blur_pad, w, h);
     let (px0, py0, px1, py1) = padded;
-    // The shadow at canvas `(x, y)` is the matte at `(x - dx, y - dy)`; only the
-    // shifted region can be non-zero, and only its canvas part is composited.
+    // The shadow at document `(x, y)` is the matte at `(x - dx, y - dy)`; only
+    // the shifted region can be non-zero.
     let ox = dx.round() as i64;
     let oy = dy.round() as i64;
     let cx0 = (px0 as i64 + ox).max(0);
@@ -191,7 +186,7 @@ pub(super) fn composite_drop_shadow(
     let cx1 = (px1 as i64 + ox).min(w as i64);
     let cy1 = (py1 as i64 + oy).min(h as i64);
     if cx1 <= cx0 || cy1 <= cy0 {
-        return;
+        return Vec::new();
     }
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
@@ -203,7 +198,7 @@ pub(super) fn composite_drop_shadow(
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
-        return;
+        return Vec::new();
     }
     let dilated = if dilate_radius > 0 {
         dilate_matte(&matte, pw, ph, dilate_radius)
@@ -217,6 +212,13 @@ pub(super) fn composite_drop_shadow(
         shadow.color[2] as f32 / 255.0,
     ];
     let opacity = clamp_finite(shadow.opacity, MAX_OPACITY) / 100.0;
+    let rect = PsdRect {
+        top: cy0 as i32,
+        left: cx0 as i32,
+        bottom: cy1 as i32,
+        right: cx1 as i32,
+    };
+    let mut writer = PassWriter::constant(rect, shadow.blend_mode, color);
     for y in cy0..cy1 {
         for x in cx0..cx1 {
             let sx = (x - ox - px0 as i64) as usize;
@@ -224,41 +226,28 @@ pub(super) fn composite_drop_shadow(
             let alpha =
                 blurred[sy * pw + sx] * opacity * noise_factor(shadow.noise, x as i32, y as i32);
             if alpha > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    color,
-                    alpha,
-                    shadow.blend_mode,
-                );
+                writer.emit(x as i32, y as i32, color, alpha);
             }
         }
     }
+    vec![writer.finish()]
 }
 
-/// Build the masked content matte `M` over the padded source region, form the
-/// inverted matte `1 - M`, erode it by the choke radius, blur it by the size,
-/// then composite `M · blurred(x - dx, y - dy) · opacity` above the content over
-/// `source` only (a sample outside the built region is the exterior value `1`).
-///
-/// ponytail: a canvas-filling layer with the maximum `size` still costs
-/// O(canvas · size) because the blur is a naive separable kernel; the common
-/// small-layer and crafted off-canvas cases are bounded. The choke maps to a
-/// min-filter erode of radius `round(choke / 100 · size)`.
-pub(super) fn composite_inner_shadow(
-    canvas: &mut Canvas,
+pub(super) fn build_inner_shadow(
     layer: &Layer,
     doc: &Document,
     shadow: &InnerShadow,
-) {
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+) -> Vec<EffectPass> {
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
-        return;
+        return Vec::new();
     }
     let source = clip_rect(layer, w, h);
     if rect_empty(source) {
-        return;
+        return Vec::new();
     }
     // Clamp again: a hand-built `InnerShadow` may not have gone through decode.
     let distance = clamp_finite(shadow.distance, MAX_DISTANCE) as f64;
@@ -278,7 +267,7 @@ pub(super) fn composite_inner_shadow(
     // inverted matte by at most `reach`, so it is built over `padded` only.
     let padded = pad_rect(source, erode_radius + blur_pad, w, h);
     if rect_empty(padded) {
-        return;
+        return Vec::new();
     }
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
@@ -291,7 +280,7 @@ pub(super) fn composite_inner_shadow(
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
-        return;
+        return Vec::new();
     }
     let inverted: Vec<f32> = matte.iter().map(|&m| 1.0 - m).collect();
     let eroded = if erode_radius > 0 {
@@ -308,6 +297,13 @@ pub(super) fn composite_inner_shadow(
     let opacity = clamp_finite(shadow.opacity, MAX_OPACITY) / 100.0;
     let ox = dx.round() as i64;
     let oy = dy.round() as i64;
+    let rect = PsdRect {
+        top: source.1,
+        left: source.0,
+        bottom: source.3,
+        right: source.2,
+    };
+    let mut writer = PassWriter::constant(rect, shadow.blend_mode, color);
     for y in source.1..source.3 {
         for x in source.0..source.2 {
             let sx = x as i64 - ox - px0 as i64;
@@ -321,15 +317,9 @@ pub(super) fn composite_inner_shadow(
             let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
             let alpha = m * b * opacity * noise_factor(shadow.noise, x, y);
             if alpha > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    color,
-                    alpha,
-                    shadow.blend_mode,
-                );
+                writer.emit(x, y, color, alpha);
             }
         }
     }
+    vec![writer.finish()]
 }

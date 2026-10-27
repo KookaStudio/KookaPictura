@@ -153,7 +153,7 @@ pub fn attach_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(),
     let Some(so) = layer.smart_object.as_mut() else {
         return Err(malformed("layer has no smart object"));
     };
-    if so.kind != SmartObjectKind::Embedded || so.payload.is_none() {
+    if so.kind != SmartObjectKind::Embedded || so.payload().is_none() {
         return Err(malformed("smart object is not an embedded payload"));
     }
     match so

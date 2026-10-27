@@ -101,11 +101,13 @@ mod bevel;
 mod glows;
 mod legacy;
 mod overlays;
+mod planes;
 mod satin;
 mod shadows;
 mod strokes;
 
 pub(crate) use legacy::{decode_legacy_effects, LegacyEffects};
+pub(crate) use planes::EffectPass;
 
 pub use bevel::{
     decode_bevel_emboss, BevelDirection, BevelEmboss, BevelHighlight, BevelShadow, BevelStyle,
@@ -359,22 +361,10 @@ fn master_switch_on(data: &[u8]) -> bool {
     )
 }
 
-/// The document-space box `(left, top, right, bottom)` a non-group layer's
-/// effects can paint, or `None` when it cannot be bounded (content with no
-/// box of its own: a fill without a vector mask, an inverted mask). The
-/// outward reach is the drop shadow's distance plus its spread and blur
-/// support, the outer glow's spread and blur support, and the stroke's and
-/// bevel's size (plus soften), with two pixels to spare; the inner effects and
-/// the overlays stay inside the content.
-pub(crate) fn effects_reach(layer: &Layer) -> Option<(i32, i32, i32, i32)> {
-    let rect = (
-        layer.rect.left,
-        layer.rect.top,
-        layer.rect.right,
-        layer.rect.bottom,
-    );
+pub(crate) fn effects_reach(layer: &Layer) -> PsdRect {
+    let rect = layer.rect;
     let pixels = !layer.channels.is_empty();
-    let (l, t, r, b) = match layer.vector_mask.as_ref().filter(|m| m.has_fill()) {
+    let (l, t, r, b) = match layer.vector_mask.as_ref().filter(|mask| mask.has_fill()) {
         Some(mask) if !mask.invert => {
             let points = mask
                 .subpaths
@@ -393,99 +383,287 @@ pub(crate) fn effects_reach(layer: &Layer) -> Option<(i32, i32, i32, i32)> {
             );
             if pixels {
                 (
-                    mask_box.0.max(rect.0),
-                    mask_box.1.max(rect.1),
-                    mask_box.2.min(rect.2),
-                    mask_box.3.min(rect.3),
+                    mask_box.0.max(rect.left),
+                    mask_box.1.max(rect.top),
+                    mask_box.2.min(rect.right),
+                    mask_box.3.min(rect.bottom),
                 )
             } else {
                 mask_box
             }
         }
-        _ if pixels => rect,
-        _ => return None,
+        _ => (rect.left, rect.top, rect.right, rect.bottom),
     };
-    let effects = decode_layer_effects(layer);
+    let effects = crate::layer_source::decoded_effects(layer);
     let mut reach = 0.0f32;
-    if let Some(shadow) = effects.drop_shadow {
+    if let Some(shadow) = effects.drop_shadow.as_ref() {
         reach = reach.max(
             shadow.distance.abs() + spread_pad(shadow.spread as f64, shadow.size as f64) as f32,
         );
     }
-    if let Some(glow) = effects.outer_glow {
+    if let Some(glow) = effects.outer_glow.as_ref() {
         reach = reach.max(spread_pad(glow.spread as f64, glow.size as f64) as f32);
     }
-    if let Some(stroke) = effects.stroke {
+    if let Some(stroke) = effects.stroke.as_ref() {
         reach = reach.max(stroke.size as f32);
     }
-    if let Some(bevel) = effects.bevel {
-        reach = reach.max(bevel.size + bevel.soften);
+    if let Some(bevel) = effects.bevel.as_ref() {
+        reach = reach.max(bevel::reach(bevel));
     }
-    let pad = reach.min(1.0e6).ceil() as i32 + 2;
-    Some((l - pad, t - pad, r + pad, b + pad))
-}
-
-/// Composite a layer's enabled, present drop shadow into the running canvas
-/// before the layer's own content. Groups and destructive adjustment layers are
-/// skipped.
-///
-/// ponytail: an effect on a group or on a destructive adjustment layer is
-/// deferred; fill content still contributes.
-pub(crate) fn composite_layer_effects(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
-    if canvas.skip_effects || layer.is_group || is_destructive_adjustment(layer) {
-        return;
-    }
-    let effects = decode_layer_effects(layer);
-    if let Some(shadow) = effects.drop_shadow {
-        if shadow.enabled && shadow.present {
-            shadows::composite_drop_shadow(canvas, layer, doc, &shadow);
-        }
-    }
-    if let Some(glow) = effects.outer_glow {
-        if glow.enabled && glow.present {
-            glows::composite_outer_glow(canvas, layer, doc, &glow);
-        }
+    let pad = if reach > 0.0 {
+        reach.min(1.0e6).ceil() as i32 + 2
+    } else {
+        0
+    };
+    PsdRect {
+        top: t - pad,
+        left: l - pad,
+        bottom: b + pad,
+        right: r + pad,
     }
 }
 
-/// Composite a layer's enabled, present interior effects into the running
-/// canvas **after** the layer's own content, in CS6's stacking order — the
-/// Layer Style list read bottom-up: Pattern, Gradient and Color Overlay, Satin,
-/// Inner Glow, Inner Shadow, Stroke, then Bevel & Emboss on top. Groups and
-/// destructive adjustment layers are skipped, matching the below-content pass.
-pub(crate) fn composite_layer_effects_above(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
-    if canvas.skip_effects || layer.is_group || is_destructive_adjustment(layer) {
-        return;
+/// The document-space box a Layer Style change on `path` can affect, or `None`
+/// for a missing path or an empty group. A pixel, smart-object, type, or fill
+/// layer is its rect unioned with its effect reach; a group is its descendants'
+/// union; an adjustment layer is the document canvas.
+pub fn layer_paint_bounds(doc: &Document, path: &str) -> Option<PsdRect> {
+    paint_bounds(crate::resolve_path(doc, path)?, doc)
+}
+
+fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
+    if layer.is_group {
+        return layer
+            .children
+            .iter()
+            .filter_map(|child| paint_bounds(child, doc))
+            .reduce(union_rect);
     }
-    let effects = decode_layer_effects(layer);
+    if is_destructive_adjustment(layer) {
+        // A zero-default raster mask confines the adjustment to its rect.
+        if let Some(mask) = layer.mask.as_ref() {
+            if !mask.disabled
+                && mask.data.is_some()
+                && mask.default_color == 0
+                && mask.rect.width() > 0
+                && mask.rect.height() > 0
+            {
+                return Some(mask.rect);
+            }
+        }
+        return Some(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height.min(i32::MAX as u32) as i32,
+            right: doc.width.min(i32::MAX as u32) as i32,
+        });
+    }
+    let reach = effects_reach(layer);
+    let rect = PsdRect {
+        left: layer.rect.left.min(reach.left),
+        top: layer.rect.top.min(reach.top),
+        right: layer.rect.right.max(reach.right),
+        bottom: layer.rect.bottom.max(reach.bottom),
+    };
+    (!rect_empty((rect.left, rect.top, rect.right, rect.bottom))).then_some(rect)
+}
+
+fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
+    PsdRect {
+        left: a.left.min(b.left),
+        top: a.top.min(b.top),
+        right: a.right.max(b.right),
+        bottom: a.bottom.max(b.bottom),
+    }
+}
+
+/// Replay the already-built below-content pass group.
+pub(crate) fn composite_layer_effects(
+    canvas: &mut Canvas,
+    passes: Option<&crate::layer_source::LayerPasses>,
+) {
+    if let Some(passes) = passes {
+        planes::apply(canvas, &passes.below);
+    }
+}
+
+/// Replay the already-built above-content pass group.
+pub(crate) fn composite_layer_effects_above(
+    canvas: &mut Canvas,
+    passes: Option<&crate::layer_source::LayerPasses>,
+) {
+    if let Some(passes) = passes {
+        planes::apply(canvas, &passes.above);
+    }
+}
+
+/// Build every enabled pass group in draw order. Called once per layer per
+/// composite by the source cache.
+pub(crate) fn build_layer_passes(
+    layer: &Layer,
+    doc: &Document,
+    effects: &LayerEffects,
+) -> crate::layer_source::LayerPasses {
+    let mut out = crate::layer_source::LayerPasses::default();
+    if let Some(shadow) = effects
+        .drop_shadow
+        .as_ref()
+        .filter(|effect| effect.enabled && effect.present)
+    {
+        out.below
+            .extend(shadows::build_drop_shadow(layer, doc, shadow));
+    }
+    if let Some(glow) = effects
+        .outer_glow
+        .as_ref()
+        .filter(|effect| effect.enabled && effect.present)
+    {
+        out.below.extend(glows::build_outer_glow(layer, doc, glow));
+    }
     let on = |enabled: bool, present: bool| enabled && present;
-    if let Some(overlay) = effects.pattern_overlay.filter(|e| on(e.enabled, e.present)) {
-        overlays::composite_pattern_overlay(canvas, layer, doc, &overlay);
+    if let Some(overlay) = effects
+        .pattern_overlay
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
+    {
+        out.above
+            .extend(overlays::build_pattern_overlay(layer, doc, overlay));
     }
     if let Some(overlay) = effects
         .gradient_overlay
-        .filter(|e| on(e.enabled, e.present))
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
     {
-        overlays::composite_gradient_overlay(canvas, layer, doc, &overlay);
+        out.above
+            .extend(overlays::build_gradient_overlay(layer, doc, overlay));
     }
-    if let Some(overlay) = effects.color_overlay.filter(|e| on(e.enabled, e.present)) {
-        overlays::composite_color_overlay(canvas, layer, doc, &overlay);
+    if let Some(overlay) = effects
+        .color_overlay
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
+    {
+        out.above
+            .extend(overlays::build_color_overlay(layer, doc, overlay));
     }
-    if let Some(satin) = effects.satin.filter(|e| on(e.enabled, e.present)) {
-        satin::composite_satin(canvas, layer, doc, &satin);
+    if let Some(satin) = effects
+        .satin
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
+    {
+        out.above.extend(satin::build_satin(layer, doc, satin));
     }
-    if let Some(glow) = effects.inner_glow.filter(|e| on(e.enabled, e.present)) {
-        glows::composite_inner_glow(canvas, layer, doc, &glow);
+    if let Some(glow) = effects
+        .inner_glow
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
+    {
+        out.above.extend(glows::build_inner_glow(layer, doc, glow));
     }
-    if let Some(shadow) = effects.inner_shadow.filter(|e| on(e.enabled, e.present)) {
-        shadows::composite_inner_shadow(canvas, layer, doc, &shadow);
+    if let Some(shadow) = effects
+        .inner_shadow
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
+    {
+        out.above
+            .extend(shadows::build_inner_shadow(layer, doc, shadow));
     }
-    if let Some(stroke) = effects.stroke.filter(|e| on(e.enabled, e.present)) {
-        strokes::composite_stroke(canvas, layer, doc, &stroke);
+    if let Some(stroke) = effects
+        .stroke
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
+    {
+        out.above.extend(strokes::build_stroke(layer, doc, stroke));
     }
-    if let Some(bevel) = effects.bevel.filter(|e| on(e.enabled, e.present)) {
-        bevel::composite_bevel_emboss(canvas, layer, doc, &bevel);
+    if let Some(bevel) = effects
+        .bevel
+        .as_ref()
+        .filter(|effect| on(effect.enabled, effect.present))
+    {
+        out.above
+            .extend(bevel::build_bevel_emboss(layer, doc, bevel));
     }
+    out
+}
+
+/// Whether the layer has no drawable pass group, so the cache can skip it.
+pub(crate) fn no_passes(layer: &Layer, effects: &LayerEffects) -> bool {
+    if layer.is_group || is_destructive_adjustment(layer) {
+        return true;
+    }
+    let on = |enabled: bool, present: bool| enabled && present;
+    let shadow = effects
+        .drop_shadow
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let outer = effects
+        .outer_glow
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let inner_shadow = effects
+        .inner_shadow
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let inner_glow = effects
+        .inner_glow
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let bevel = effects
+        .bevel
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let satin = effects
+        .satin
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let stroke = effects
+        .stroke
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let color = effects
+        .color_overlay
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let gradient = effects
+        .gradient_overlay
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    let pattern = effects
+        .pattern_overlay
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present));
+    !(shadow
+        || outer
+        || inner_shadow
+        || inner_glow
+        || bevel
+        || satin
+        || stroke
+        || color
+        || gradient
+        || pattern)
+}
+
+/// Whether a pass build reads the document's pattern library, which this
+/// change does not key.
+pub(crate) fn reads_pattern(layer: &Layer, effects: &LayerEffects) -> bool {
+    if matches!(
+        crate::fill::decode_layer_fill(layer),
+        Some(Adjustment::PatternFill(_))
+    ) {
+        return true;
+    }
+    let on = |enabled: bool, present: bool| enabled && present;
+    if effects
+        .pattern_overlay
+        .as_ref()
+        .is_some_and(|effect| on(effect.enabled, effect.present))
+    {
+        return true;
+    }
+    effects.stroke.as_ref().is_some_and(|stroke| {
+        on(stroke.enabled, stroke.present)
+            && matches!(&stroke.fill, strokes::StrokeFill::Pattern { .. })
+    })
 }
 
 /// Test-only: run a hand-built satin (bypassing decode) over a fresh canvas so
@@ -497,7 +675,8 @@ pub(crate) fn composite_satin_for_test(
     satin: &Satin,
 ) -> PixelBuffer {
     let mut canvas = Canvas::new(doc.width as usize, doc.height as usize);
-    satin::composite_satin(&mut canvas, layer, doc, satin);
+    let passes = satin::build_satin(layer, doc, satin);
+    planes::apply(&mut canvas, &passes);
     canvas.into_pixel_buffer()
 }
 
@@ -510,13 +689,14 @@ pub(crate) fn composite_bevel_emboss_for_test(
     bevel: &BevelEmboss,
 ) -> PixelBuffer {
     let mut canvas = Canvas::new(doc.width as usize, doc.height as usize);
-    bevel::composite_bevel_emboss(&mut canvas, layer, doc, bevel);
+    let passes = bevel::build_bevel_emboss(layer, doc, bevel);
+    planes::apply(&mut canvas, &passes);
     canvas.into_pixel_buffer()
 }
 
 /// A layer whose content is a destructive adjustment (not fill content) has no
 /// matte; its effect is deferred.
-fn is_destructive_adjustment(layer: &Layer) -> bool {
+pub(crate) fn is_destructive_adjustment(layer: &Layer) -> bool {
     match layer.adjustment.as_ref().and_then(crate::decode_adjustment) {
         Some(
             Adjustment::SolidFill(_) | Adjustment::GradientFill(_) | Adjustment::PatternFill(_),

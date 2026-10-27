@@ -141,8 +141,8 @@ fn new_smart_object_via_copy_is_independent() {
         .smart_object
         .as_ref()
         .unwrap()
-        .payload
-        .clone()
+        .payload()
+        .map(<[u8]>::to_vec)
         .unwrap();
 
     let path = new_smart_object_via_copy(&mut d, "0").expect("copy");
@@ -150,22 +150,12 @@ fn new_smart_object_via_copy_is_independent() {
     assert_eq!(d.layers.len(), 2);
     assert_eq!(d.layers[1].name, "L copy");
     assert_eq!(
-        d.layers[1]
-            .smart_object
-            .as_ref()
-            .unwrap()
-            .payload
-            .as_deref(),
+        d.layers[1].smart_object.as_ref().unwrap().payload(),
         Some(original.as_slice())
     );
     assert!(d.layers[1].smart_object.as_ref().unwrap().uuid.is_empty());
     assert_eq!(
-        d.layers[0]
-            .smart_object
-            .as_ref()
-            .unwrap()
-            .payload
-            .as_deref(),
+        d.layers[0].smart_object.as_ref().unwrap().payload(),
         Some(original.as_slice())
     );
 
@@ -178,21 +168,11 @@ fn new_smart_object_via_copy_is_independent() {
         &replacement
     ));
     assert_eq!(
-        d.layers[0]
-            .smart_object
-            .as_ref()
-            .unwrap()
-            .payload
-            .as_deref(),
+        d.layers[0].smart_object.as_ref().unwrap().payload(),
         Some(original.as_slice())
     );
     assert_eq!(
-        d.layers[1]
-            .smart_object
-            .as_ref()
-            .unwrap()
-            .payload
-            .as_deref(),
+        d.layers[1].smart_object.as_ref().unwrap().payload(),
         Some(replacement.as_slice())
     );
 }

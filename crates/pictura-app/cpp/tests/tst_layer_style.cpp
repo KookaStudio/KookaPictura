@@ -39,6 +39,8 @@ private slots:
     void distanceSliderIsExponential();
     void canvasDragMovesTheShadow();
     void zoomKeysReachTheCanvasBehindADialog();
+    void previewIsBounded();
+    void refusedValueEmitsNothing();
 
 private:
     // A 10x10 white square at (10, 10) lifted onto layer "1" over a white
@@ -314,6 +316,41 @@ void LayerStyleTest::zoomKeysReachTheCanvasBehindADialog()
     });
     pictura::runDialog(dialog, window_.get());
     QVERIFY2(canvas->zoom() > before, "Ctrl+= zoomed the canvas in");
+}
+
+void LayerStyleTest::previewIsBounded()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("StyleBounded"), 120, 120, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    const QString fixture =
+        QFINDTESTDATA("../../../../assets/layers_panel_smoke.psd");
+    QVERIFY(!fixture.isEmpty());
+    const QString path = view_->place_smart_object(fixture);
+    QVERIFY(!path.isEmpty());
+
+    QVERIFY(pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.on"), 1.0));
+    QSignalSpy damaged(view_, &pictura::PictureView::regionDamaged);
+    QVERIFY(pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.size"), 6.0));
+    QCOMPARE(damaged.count(), 1);
+    const QList<QVariant> args = damaged.takeLast();
+    const int w = args.at(2).toInt();
+    const int h = args.at(3).toInt();
+    QVERIFY(w > 0 && h > 0);
+    QVERIFY2(w > 64 && h > 64, "the damaged reach is larger than the 64x64 layer");
+    QVERIFY2(w < 120 && h < 120, "a slider tick recomposites the reach, not the document");
+}
+
+void LayerStyleTest::refusedValueEmitsNothing()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.on"), 1.0));
+    QSignalSpy damaged(view_, &pictura::PictureView::regionDamaged);
+    QVERIFY(!pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                      QStringLiteral("dropShadow.on"), 1.0));
+    QCOMPARE(damaged.count(), 0);
 }
 
 QTEST_MAIN(LayerStyleTest)

@@ -102,14 +102,17 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         super::create::release_background(layer);
         layer.name = name.clone();
     }
-    layer.smart_object = Some(SmartObject {
-        kind: SmartObjectKind::Embedded,
-        payload: Some(payload),
-        filename: format!("{name}.psd"),
-        filetype: *b"8BPB",
-        creator: *b"8BIM",
-        ..Default::default()
-    });
+    layer.smart_object = Some(
+        {
+            let mut so = SmartObject::default();
+            so.kind = SmartObjectKind::Embedded;
+            so.filename = format!("{name}.psd");
+            so.filetype = *b"8BPB";
+            so.creator = *b"8BIM";
+            so
+        }
+        .with_payload(payload),
+    );
     true
 }
 
@@ -128,8 +131,7 @@ pub fn can_replace_smart_object_contents(doc: &Document, path: &str) -> bool {
         !layer.is_group
             && layer.adjustment.is_none()
             && layer.smart_object.as_ref().is_some_and(|so| {
-                so.kind == SmartObjectKind::Embedded
-                    && so.payload.as_ref().is_some_and(|p| !p.is_empty())
+                so.kind == SmartObjectKind::Embedded && so.payload().is_some_and(|p| !p.is_empty())
             })
     })
 }
@@ -147,9 +149,9 @@ pub fn smart_object_source_bytes(doc: &Document, path: &str) -> Option<Vec<u8>> 
         layer
             .smart_object
             .as_ref()
-            .and_then(|so| so.payload.as_ref())
+            .and_then(|so| so.payload())
             .filter(|p| !p.is_empty())
-            .cloned()
+            .map(<[u8]>::to_vec)
     })
 }
 
@@ -194,7 +196,7 @@ pub fn replace_smart_object_contents(
             .extra_blocks
             .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
         let so = layer.smart_object.as_mut().expect("checked");
-        so.payload = Some(bytes.to_vec());
+        so.set_payload(bytes.to_vec());
         so.filename = filename.to_string();
         so.filetype = *b"8BPB";
         so.creator = *b"8BIM";
@@ -227,14 +229,17 @@ pub fn place_smart_object(doc: &mut Document, filename: &str, bytes: &[u8]) -> O
         fill: 255,
         visible: true,
         channels: Vec::new(),
-        smart_object: Some(SmartObject {
-            kind: SmartObjectKind::Embedded,
-            payload: Some(bytes.to_vec()),
-            filename: filename.to_string(),
-            filetype: *b"8BPB",
-            creator: *b"8BIM",
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so.filename = filename.to_string();
+                so.filetype = *b"8BPB";
+                so.creator = *b"8BIM";
+                so
+            }
+            .with_payload(bytes.to_vec()),
+        ),
         ..Default::default()
     };
     if doc.layers.insert(&[], index, layer).is_err() {
@@ -556,8 +561,7 @@ pub fn can_new_smart_object_via_copy(doc: &Document, path: &str) -> bool {
         !layer.is_group
             && layer.adjustment.is_none()
             && layer.smart_object.as_ref().is_some_and(|so| {
-                so.kind == SmartObjectKind::Embedded
-                    && so.payload.as_ref().is_some_and(|p| !p.is_empty())
+                so.kind == SmartObjectKind::Embedded && so.payload().is_some_and(|p| !p.is_empty())
             })
     })
 }

@@ -457,9 +457,10 @@ mod tests {
         assert!(!apply_pictura_raw_destructive(&mut group, "0", &settings));
 
         let mut smart = destructive_doc(None);
-        smart.layers[0].smart_object = Some(SmartObject {
-            kind: SmartObjectKind::Embedded,
-            ..Default::default()
+        smart.layers[0].smart_object = Some({
+            let mut so = SmartObject::default();
+            so.kind = SmartObjectKind::Embedded;
+            so
         });
         assert!(!apply_pictura_raw_destructive(&mut smart, "0", &settings));
 

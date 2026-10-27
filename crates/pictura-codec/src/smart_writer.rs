@@ -18,7 +18,7 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 /// payload, and no preserved config block to re-emit.
 pub(crate) fn should_author(layer: &Layer) -> Option<&SmartObject> {
     let so = layer.smart_object.as_ref()?;
-    if so.kind != SmartObjectKind::Embedded || so.payload.is_none() {
+    if so.kind != SmartObjectKind::Embedded || so.payload().is_none() {
         return None;
     }
     let config_keys = [*b"SoLd", *b"SoLE", *b"plLd", *b"PlLd"];
@@ -45,7 +45,7 @@ fn fnv1a(seed: u64, bytes: &[u8]) -> u64 {
 pub(crate) fn author_uuid(so: &SmartObject) -> String {
     let mut data = so.filename.as_bytes().to_vec();
     data.push(0);
-    data.extend_from_slice(so.payload.as_deref().unwrap_or(&[]));
+    data.extend_from_slice(so.payload().unwrap_or(&[]));
     let mut bytes = [0u8; 16];
     bytes[..8].copy_from_slice(&fnv1a(FNV_OFFSET, &data).to_be_bytes());
     bytes[8..].copy_from_slice(&fnv1a(FNV_OFFSET_ALT, &data).to_be_bytes());
@@ -230,7 +230,7 @@ fn write_unicode_raw(out: &mut Vec<u8>, value: &str) {
 
 /// One `liFD` record matching the reader's field order and version gating.
 fn linked_layer_bytes(so: &SmartObject, uuid: &str) -> Vec<u8> {
-    let payload = so.payload.as_deref().unwrap_or(&[]);
+    let payload = so.payload().unwrap_or(&[]);
     let filetype = if so.filetype == [0; 4] {
         *b"8BPB"
     } else {

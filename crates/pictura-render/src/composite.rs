@@ -21,11 +21,13 @@ pub(crate) use crate::smart_source::render_smart_source;
 /// Returns a 4-channel (R,G,B,A) planar, straight-alpha, 8-bit buffer at
 /// document resolution.
 pub fn composite_rgba(doc: &Document) -> PixelBuffer {
-    if banded(doc, doc.height) {
-        return composite_banded(doc, 0, 0, doc.width, doc.height);
+    if crate::composite_region::banded(doc, doc.height) {
+        return crate::composite_region::composite_banded(doc, 0, 0, doc.width, doc.height);
     }
     composite_whole(doc)
 }
+
+pub use crate::composite_region::composite_rgba_region;
 
 /// [`composite_rgba`] on one canvas, the path every stack can take; the
 /// banded compositor is held to it.
@@ -35,154 +37,13 @@ pub(crate) fn composite_whole(doc: &Document) -> PixelBuffer {
     canvas.into_pixel_buffer()
 }
 
-/// Composite only the document-space region `[x0, x0+rw) × [y0, y0+rh)`.
-///
-/// Byte-identical to the same slice of [`composite_rgba`] for every stack whose
-/// only neighborhood operations are layer effects; such a stack falls back to
-/// the full composite plus a slice.
-///
-/// Effects are neighbourhood operations drawn on a canvas whose origin is the
-/// document's, so they cannot be drawn into a region: when no layer's effects
-/// can reach the region (`effects_reach`), the region composites alone with
-/// effects skipped, which is exact because they paint nothing there.
-///
-/// ponytail: a region an effect does reach still full-composites and slices
-/// (a brush dab beside a stroked shape); add a region-expanded effect kernel
-/// if that shows up in a profile.
-pub(crate) fn composite_rgba_region(
-    doc: &Document,
-    x0: u32,
-    y0: u32,
-    rw: u32,
-    rh: u32,
-) -> PixelBuffer {
-    if rw == 0 || rh == 0 {
-        return PixelBuffer::new(0, 0, 4);
-    }
-    if banded(doc, rh) {
-        return composite_banded(doc, x0, y0, rw, rh);
-    }
-    let region = (x0 as i32, y0 as i32, (x0 + rw) as i32, (y0 + rh) as i32);
-    let mut canvas = Canvas::new_region(x0 as i32, y0 as i32, rw as usize, rh as usize);
-    if doc.layers.iter().any(has_effect_block) {
-        if effects_may_reach(&doc.layers, region) {
-            return slice_region(&composite_rgba(doc), doc.width, x0, y0, rw, rh);
-        }
-        canvas.skip_effects = true;
-    }
-    composite_layers(&mut canvas, doc);
-    canvas.into_pixel_buffer()
-}
-
-/// Rows per band of the banded compositor: a band's `f32` canvas stays a few
-/// tens of megabytes on a 16k-wide document.
-const BAND: u32 = 64;
-
-/// Whether `rows` rows of `doc` composite in bands: a tall region of a stack
-/// whose every layer composites per pixel. Effects, type and smart objects
-/// render whole sources, so a band would redo that work or miss a neighbour.
-fn banded(doc: &Document, rows: u32) -> bool {
-    fn per_pixel(layer: &Layer) -> bool {
-        // ponytail: a type layer without a rasterized proxy re-renders its text
-        // in every band it meets, so only one a few bands tall is banded; cache
-        // the rendered text if a tall one shows up in a profile.
-        let renders_text = layer.type_tool.is_some() && channel(layer, 0).is_none();
-        let short = layer.rect.height() <= 4 * BAND as i32;
-        !has_effect_block(layer)
-            && layer.smart_object.is_none()
-            && (!renders_text || short)
-            && layer.children.iter().all(per_pixel)
-    }
-    rows > 2 * BAND && doc.layers.iter().all(per_pixel)
-}
-
-/// Composite `[x0, x0+rw) × [y0, y0+rh)` a band of rows at a time, the bands in
-/// parallel, each written straight into the output planes. Exact because a
-/// region of a per-pixel stack composites exactly (see
-/// [`composite_rgba_region`]); it never holds the region's whole `f32` canvas,
-/// which on a 267-megapixel document is 4 GB.
-fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32) -> PixelBuffer {
-    use rayon::prelude::*;
-    let (w, plane) = (rw as usize, rw as usize * rh as usize);
-    let run = BAND as usize * w;
-    let data = pictura_core::Plane::build(plane * 4, |out| {
-        let (r, rest) = out.split_at_mut(plane);
-        let (g, rest) = rest.split_at_mut(plane);
-        let (b, a) = rest.split_at_mut(plane);
-        r.par_chunks_mut(run)
-            .zip(g.par_chunks_mut(run))
-            .zip(b.par_chunks_mut(run))
-            .zip(a.par_chunks_mut(run))
-            .enumerate()
-            .for_each(|(band, (((r, g), b), a))| {
-                let top = y0 as i32 + (band * BAND as usize) as i32;
-                let mut canvas = Canvas::new_region(x0 as i32, top, w, r.len() / w);
-                composite_layers(&mut canvas, doc);
-                for (i, p) in canvas.px.iter().enumerate() {
-                    r[i] = to_u8(p.r);
-                    g[i] = to_u8(p.g);
-                    b[i] = to_u8(p.b);
-                    a[i] = to_u8(p.a);
-                }
-            });
-    });
-    PixelBuffer {
-        width: rw,
-        height: rh,
-        channels: 4,
-        data,
-    }
-}
-
-/// Whether the layer (or a descendant) carries a layer-effects block, which the
-/// region compositor cannot restrict to a rectangle. Conservative: a disabled
-/// effect still forces the full-composite fallback.
+/// Whether the layer (or a descendant) carries a layer-effects block. The PDF
+/// and SVG exporters use this to decide that a layer's appearance is not just
+/// its pixels.
 pub(crate) fn has_effect_block(layer: &Layer) -> bool {
     layer.extra_block(b"lfx2").is_some()
         || layer.extra_block(b"lrFX").is_some()
         || layer.children.iter().any(has_effect_block)
-}
-
-/// Whether any non-group layer's effects (groups' effects are not drawn) may
-/// paint inside `region` (left, top, right, bottom).
-fn effects_may_reach(layers: &[Layer], region: (i32, i32, i32, i32)) -> bool {
-    layers.iter().any(|layer| {
-        let own = !layer.is_group
-            && (layer.extra_block(b"lfx2").is_some() || layer.extra_block(b"lrFX").is_some())
-            && crate::layer_effects::effects_reach(layer).is_none_or(|(l, t, r, b)| {
-                l < region.2 && region.0 < r && t < region.3 && region.1 < b
-            });
-        own || effects_may_reach(&layer.children, region)
-    })
-}
-
-/// Copy the region `[x0, x0+rw) × [y0, y0+rh)` out of a full-document buffer.
-fn slice_region(
-    full: &PixelBuffer,
-    full_width: u32,
-    x0: u32,
-    y0: u32,
-    rw: u32,
-    rh: u32,
-) -> PixelBuffer {
-    let fw = full_width as usize;
-    let fplane = full.pixel_count();
-    let rw = rw as usize;
-    let rh = rh as usize;
-    let rplane = rw * rh;
-    let mut out = PixelBuffer::new(rw as u32, rh as u32, 4);
-    for ry in 0..rh {
-        let frow = (y0 as usize + ry) * fw + x0 as usize;
-        let rrow = ry * rw;
-        for rx in 0..rw {
-            let f = frow + rx;
-            let r = rrow + rx;
-            for c in 0..4 {
-                out.data[c * rplane + r] = full.data[c * fplane + f];
-            }
-        }
-    }
-    out
 }
 
 /// Straight-alpha RGBA accumulator in normalized `f32`.
@@ -210,7 +71,7 @@ pub(crate) struct Canvas {
     /// canvas a knockout layer composites into. `None` on the output canvas so
     /// the normal path stays allocation-free.
     pub(crate) cover: Option<Vec<bool>>,
-    /// Draw no layer effects: set only on a region no effect can reach.
+    /// Draw no layer effects: set by clipping/knockout coverage canvases.
     pub(crate) skip_effects: bool,
     /// Multiplier for effect alpha while a layer's effects are drawn. `1.0`
     /// outside an effect pass; the layer's opacity inside one.
@@ -323,10 +184,15 @@ pub(crate) fn composite_layer_inner(
     if !layer.visible {
         return;
     }
+    let effects = crate::layer_source::decoded_effects(layer);
+    let passes = (!canvas.skip_effects
+        && !layer.is_group
+        && !crate::layer_effects::is_destructive_adjustment(layer))
+    .then(|| crate::layer_source::effect_passes(layer, doc, &effects));
     // Below-content effects (drop shadow, outer glow) render behind the content.
     let effect_scale = canvas.effect_scale;
     canvas.effect_scale = effect_scale * layer.opacity as f32 / 255.0;
-    crate::layer_effects::composite_layer_effects(canvas, layer, doc);
+    crate::layer_effects::composite_layer_effects(canvas, passes.as_deref());
     canvas.effect_scale = effect_scale;
     // Each arm keeps the fall-through the old if/else chain had: a source
     // that cannot render (an empty region, an unreadable payload) leaves the
@@ -401,7 +267,7 @@ pub(crate) fn composite_layer_inner(
     // The above-content effect (inner shadow) renders over the layer's content.
     let effect_scale = canvas.effect_scale;
     canvas.effect_scale = effect_scale * layer.opacity as f32 / 255.0;
-    crate::layer_effects::composite_layer_effects_above(canvas, layer, doc);
+    crate::layer_effects::composite_layer_effects_above(canvas, passes.as_deref());
     canvas.effect_scale = effect_scale;
 }
 

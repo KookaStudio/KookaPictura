@@ -57,6 +57,10 @@ fn reason_index(err: &GpuError) -> usize {
 static DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 11];
 static RESIDENT_HITS: AtomicU64 = AtomicU64::new(0);
 static RESIDENT_MISSES: AtomicU64 = AtomicU64::new(0);
+static SOURCE_HITS: AtomicU64 = AtomicU64::new(0);
+static SOURCE_MISSES: AtomicU64 = AtomicU64::new(0);
+static SOURCE_BYTES: AtomicU64 = AtomicU64::new(0);
+static EFFECT_DECODES: AtomicU64 = AtomicU64::new(0);
 static LARGEST_CANVAS: AtomicU64 = AtomicU64::new(0);
 /// Device time of the last GPU composite in nanoseconds; `u64::MAX` is "none".
 static DEVICE_NS: AtomicU64 = AtomicU64::new(u64::MAX);
@@ -72,6 +76,22 @@ pub(crate) fn count_resident(hit: bool) {
     } else {
         RESIDENT_MISSES.fetch_add(1, Relaxed);
     }
+}
+
+pub(crate) fn count_source_hit() {
+    SOURCE_HITS.fetch_add(1, Relaxed);
+}
+
+pub(crate) fn count_source_miss() {
+    SOURCE_MISSES.fetch_add(1, Relaxed);
+}
+
+pub(crate) fn set_source_bytes(bytes: usize) {
+    SOURCE_BYTES.store(bytes as u64, Relaxed);
+}
+
+pub(crate) fn count_effect_decode() {
+    EFFECT_DECODES.fetch_add(1, Relaxed);
 }
 
 /// Note a composite canvas of `bytes`; the largest since the last
@@ -104,6 +124,10 @@ pub fn take_device_ms() -> Option<f64> {
 pub struct Counters {
     pub resident_hits: u64,
     pub resident_misses: u64,
+    pub source_hits: u64,
+    pub source_misses: u64,
+    pub source_bytes: u64,
+    pub effect_decodes: u64,
     /// One `(reason, count)` per [`DECLINE_REASONS`] entry, in that order.
     pub declines: Vec<(&'static str, u64)>,
 }
@@ -112,6 +136,10 @@ pub fn counters() -> Counters {
     Counters {
         resident_hits: RESIDENT_HITS.load(Relaxed),
         resident_misses: RESIDENT_MISSES.load(Relaxed),
+        source_hits: SOURCE_HITS.load(Relaxed),
+        source_misses: SOURCE_MISSES.load(Relaxed),
+        source_bytes: SOURCE_BYTES.load(Relaxed),
+        effect_decodes: EFFECT_DECODES.load(Relaxed),
         declines: DECLINE_REASONS
             .iter()
             .zip(&DECLINES)

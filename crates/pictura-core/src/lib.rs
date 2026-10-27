@@ -8,6 +8,7 @@ mod advanced_blending;
 mod annotations;
 pub mod blur;
 mod crs;
+mod digest;
 mod guides;
 pub mod hdr;
 pub mod homography;
@@ -30,6 +31,7 @@ pub use annotations::{
     MAX_COLOR_SAMPLERS,
 };
 pub use crs::CrsSettings;
+pub use digest::content_digest;
 pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
 pub use homography::Homography;
@@ -53,7 +55,7 @@ pub use type_tool::{
 pub use vector::{VectorFillRule, VectorMask, VectorSubpath};
 
 /// PSD color modes (`header.color_mode`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ColorMode {
     Bitmap,
     Grayscale,
@@ -709,7 +711,7 @@ pub struct FilterMask {
 /// The raw config descriptor and the document-level linked record are preserved
 /// separately and remain the source of truth for re-emission; this view only
 /// exposes what the engine can resolve.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct SmartObject {
     /// The `Idnt`/`PlLd` uuid that links the layer config to its record.
     pub uuid: String,
@@ -727,7 +729,11 @@ pub struct SmartObject {
     /// Raw `SoLd`/`SoLE`/`plLd`/`PlLd` block data, kept verbatim.
     pub config_descriptor: Vec<u8>,
     /// Embedded source bytes; `Some` only for [`SmartObjectKind::Embedded`].
-    pub payload: Option<Vec<u8>>,
+    payload: Option<Vec<u8>>,
+    /// Cached identity of [`SmartObject::payload`]; `0` means "not set", and
+    /// [`SmartObject::payload_digest`] hashes on demand. Excluded from
+    /// equality: this is cache metadata, not document content.
+    pub payload_digest: u64,
     /// The `crs:` XMP packet found in an embedded payload, if any.
     pub crs_xmp: Option<Vec<u8>>,
     /// Typed view of the fixed `crs:` property set in [`SmartObject::crs_xmp`].
@@ -760,6 +766,7 @@ impl Default for SmartObject {
             kind: SmartObjectKind::default(),
             config_descriptor: Vec::new(),
             payload: None,
+            payload_digest: 0,
             crs_xmp: None,
             crs: None,
             smart_filters: Vec::new(),
@@ -770,6 +777,63 @@ impl Default for SmartObject {
             smart_filters_enabled: true,
             filter_mask: None,
         }
+    }
+}
+
+impl PartialEq for SmartObject {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid == other.uuid
+            && self.placed_uuid == other.placed_uuid
+            && self.filename == other.filename
+            && self.filetype == other.filetype
+            && self.creator == other.creator
+            && self.kind == other.kind
+            && self.config_descriptor == other.config_descriptor
+            && self.payload == other.payload
+            && self.crs_xmp == other.crs_xmp
+            && self.crs == other.crs
+            && self.smart_filters == other.smart_filters
+            && self.filter_mask_enabled == other.filter_mask_enabled
+            && self.filter_mask_linked == other.filter_mask_linked
+            && self.filter_mask_extend_with_white == other.filter_mask_extend_with_white
+            && self.smart_filters_enabled == other.smart_filters_enabled
+            && self.filter_mask == other.filter_mask
+    }
+}
+
+impl SmartObject {
+    /// The embedded payload's cache identity: the stored digest when set,
+    /// otherwise a hash of the bytes. `0` for an absent payload.
+    pub fn payload_digest(&self) -> u64 {
+        if self.payload_digest != 0 {
+            self.payload_digest
+        } else {
+            self.payload.as_deref().map_or(0, content_digest)
+        }
+    }
+
+    /// The embedded payload bytes, when present.
+    pub fn payload(&self) -> Option<&[u8]> {
+        self.payload.as_deref()
+    }
+
+    /// Mutable access to the payload. Clears the stored digest so the next
+    /// [`SmartObject::payload_digest`] hashes the new bytes.
+    pub fn payload_mut(&mut self) -> &mut Option<Vec<u8>> {
+        self.payload_digest = 0;
+        &mut self.payload
+    }
+
+    /// Replace the embedded payload and stamp its cache identity.
+    pub fn set_payload(&mut self, bytes: Vec<u8>) {
+        self.payload_digest = content_digest(&bytes);
+        self.payload = Some(bytes);
+    }
+
+    /// [`SmartObject::set_payload`] as a builder, for literals.
+    pub fn with_payload(mut self, bytes: Vec<u8>) -> Self {
+        self.set_payload(bytes);
+        self
     }
 }
 

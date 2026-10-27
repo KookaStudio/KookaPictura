@@ -105,11 +105,14 @@ mod tests {
                 bottom: 4,
                 right: 4,
             },
-            smart_object: Some(SmartObject {
-                kind: SmartObjectKind::Embedded,
-                payload: Some(payload()),
-                ..Default::default()
-            }),
+            smart_object: Some(
+                {
+                    let mut so = SmartObject::default();
+                    so.kind = SmartObjectKind::Embedded;
+                    so
+                }
+                .with_payload(payload()),
+            ),
             ..Default::default()
         };
         for id in 0..3i16 {

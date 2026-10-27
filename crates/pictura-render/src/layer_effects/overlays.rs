@@ -15,10 +15,11 @@
 
 use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
+use crate::composite::{desc_item, mask_alpha};
 
+use super::planes::{EffectPass, PassWriter};
 use super::{
     bool_or, clamp_finite, clip_rect, content_matte, effect_blend_mode, num_clamped, num_or,
     rect_empty, MAX_OPACITY,
@@ -189,11 +190,11 @@ type Region = (i32, i32, i32, i32);
 /// The content region, its masked coverage matte, and the clamped opacity.
 type Coverage = (Region, Vec<f32>, f32);
 
-/// The layer's content rect clamped to the canvas, the masked coverage matte
-/// `M` over it, and the clamped `opacity/100`. `None` when the rect is empty,
-/// `opacity` is 0 or the matte is all zero.
-fn coverage(canvas: &Canvas, layer: &Layer, doc: &Document, opacity: f32) -> Option<Coverage> {
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+fn coverage(layer: &Layer, doc: &Document, opacity: f32) -> Option<Coverage> {
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
         return None;
     }
@@ -228,16 +229,13 @@ fn rgb(c: [u8; 4]) -> [f32; 3] {
     ]
 }
 
-/// Composite a color overlay above the content: for each pixel the flat colour,
-/// alpha `M · opacity/100`, in the overlay's own blend mode.
-pub(super) fn composite_color_overlay(
-    canvas: &mut Canvas,
+pub(super) fn build_color_overlay(
     layer: &Layer,
     doc: &Document,
     overlay: &ColorOverlay,
-) {
-    let Some((region, matte, opacity)) = coverage(canvas, layer, doc, overlay.opacity) else {
-        return;
+) -> Vec<EffectPass> {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity) else {
+        return Vec::new();
     };
     let (x0, y0, x1, y1) = region;
     let w = (x1 - x0) as usize;
@@ -246,34 +244,31 @@ pub(super) fn composite_color_overlay(
         overlay.color[1] as f32 / 255.0,
         overlay.color[2] as f32 / 255.0,
     ];
+    let rect = PsdRect {
+        top: y0,
+        left: x0,
+        bottom: y1,
+        right: x1,
+    };
+    let mut writer = PassWriter::constant(rect, overlay.blend_mode, color);
     for y in y0..y1 {
         for x in x0..x1 {
             let m = matte[(y - y0) as usize * w + (x - x0) as usize];
             if m > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    color,
-                    m * opacity,
-                    overlay.blend_mode,
-                );
+                writer.emit(x, y, color, m * opacity);
             }
         }
     }
+    vec![writer.finish()]
 }
 
-/// Composite a gradient overlay above the content. The gradient is generated
-/// over the layer rect when `align_with_layer` (sampling local `(x-left,
-/// y-top)`), else over the canvas (sampling `(x, y)`); alpha `M · opacity/100`.
-pub(super) fn composite_gradient_overlay(
-    canvas: &mut Canvas,
+pub(super) fn build_gradient_overlay(
     layer: &Layer,
     doc: &Document,
     overlay: &GradientOverlay,
-) {
-    let Some((region, matte, opacity)) = coverage(canvas, layer, doc, overlay.opacity) else {
-        return;
+) -> Vec<EffectPass> {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity) else {
+        return Vec::new();
     };
     let params = GradientFillParams {
         stops: overlay.stops.clone(),
@@ -290,15 +285,27 @@ pub(super) fn composite_gradient_overlay(
             layer.rect.top,
         )
     } else {
-        (canvas.w as i32, canvas.h as i32, 0, 0)
+        (
+            doc.width.min(i32::MAX as u32) as i32,
+            doc.height.min(i32::MAX as u32) as i32,
+            0,
+            0,
+        )
     };
     if gw <= 0 || gh <= 0 {
-        return;
+        return Vec::new();
     }
     let grad = crate::fill::gradient_rgba(gw, gh, &params);
     let grow = gw as usize;
     let (x0, y0, x1, y1) = region;
     let w = (x1 - x0) as usize;
+    let rect = PsdRect {
+        top: y0,
+        left: x0,
+        bottom: y1,
+        right: x1,
+    };
+    let mut writer = PassWriter::per_pixel(rect, overlay.blend_mode);
     for y in y0..y1 {
         for x in x0..x1 {
             let m = matte[(y - y0) as usize * w + (x - x0) as usize];
@@ -311,34 +318,23 @@ pub(super) fn composite_gradient_overlay(
             else {
                 continue;
             };
-            blend_parts(
-                canvas,
-                x as usize,
-                y as usize,
-                rgb(*c),
-                m * opacity,
-                overlay.blend_mode,
-            );
+            writer.emit(x, y, rgb(*c), m * opacity);
         }
     }
+    vec![writer.finish()]
 }
 
-/// Composite a pattern overlay above the content, tiling the document pattern
-/// (the grey placeholder when the id is absent) over the layer rect, anchored
-/// by `align_with_layer` and offset by the `phase` origin; alpha
-/// `M · pattern_alpha/255 · opacity/100`.
-pub(super) fn composite_pattern_overlay(
-    canvas: &mut Canvas,
+pub(super) fn build_pattern_overlay(
     layer: &Layer,
     doc: &Document,
     overlay: &PatternOverlay,
-) {
-    let Some((region, matte, opacity)) = coverage(canvas, layer, doc, overlay.opacity) else {
-        return;
+) -> Vec<EffectPass> {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity) else {
+        return Vec::new();
     };
     let (lw, lh) = (layer.rect.width(), layer.rect.height());
     if lw <= 0 || lh <= 0 {
-        return;
+        return Vec::new();
     }
     let origin = overlay.origin;
     let params = PatternFillParams {
@@ -353,6 +349,13 @@ pub(super) fn composite_pattern_overlay(
     let trow = lw as usize;
     let (x0, y0, x1, y1) = region;
     let w = (x1 - x0) as usize;
+    let rect = PsdRect {
+        top: y0,
+        left: x0,
+        bottom: y1,
+        right: x1,
+    };
+    let mut writer = PassWriter::per_pixel(rect, overlay.blend_mode);
     for y in y0..y1 {
         for x in x0..x1 {
             let m = matte[(y - y0) as usize * w + (x - x0) as usize];
@@ -366,15 +369,9 @@ pub(super) fn composite_pattern_overlay(
             };
             let alpha = m * (c[3] as f32 / 255.0) * opacity;
             if alpha > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    rgb(*c),
-                    alpha,
-                    overlay.blend_mode,
-                );
+                writer.emit(x, y, rgb(*c), alpha);
             }
         }
     }
+    vec![writer.finish()]
 }

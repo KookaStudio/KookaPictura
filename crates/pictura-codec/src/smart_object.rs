@@ -82,16 +82,17 @@ fn build_smart_object(
         _ => return None,
     };
 
-    let mut so = SmartObject {
-        uuid: uuid.clone(),
-        placed_uuid: placed.clone(),
-        config_descriptor: raw,
-        smart_filters,
-        filter_mask_enabled: flags.mask_enabled,
-        filter_mask_linked: flags.mask_linked,
-        filter_mask_extend_with_white: flags.extend_with_white,
-        smart_filters_enabled: flags.enabled,
-        ..Default::default()
+    let mut so = {
+        let mut so = SmartObject::default();
+        so.uuid = uuid.clone();
+        so.placed_uuid = placed.clone();
+        so.config_descriptor = raw;
+        so.smart_filters = smart_filters;
+        so.filter_mask_enabled = flags.mask_enabled;
+        so.filter_mask_linked = flags.mask_linked;
+        so.filter_mask_extend_with_white = flags.extend_with_white;
+        so.smart_filters_enabled = flags.enabled;
+        so
     };
     if let Some(mask) = masks.iter().find(|m| m.uuid == placed || m.uuid == uuid) {
         so.filter_mask = Some(pictura_core::FilterMask {
@@ -111,7 +112,9 @@ fn build_smart_object(
             so.kind = SmartObjectKind::Embedded;
             so.crs_xmp = record.payload.as_deref().and_then(extract_crs);
             so.crs = so.crs_xmp.as_deref().map(crate::crs_xmp::parse_crs);
-            so.payload = record.payload.clone();
+            if let Some(payload) = record.payload.clone() {
+                so.set_payload(payload);
+            }
         }
         b"liFE" => so.kind = SmartObjectKind::External,
         b"liFA" => so.kind = SmartObjectKind::Alias,
@@ -727,7 +730,7 @@ mod tests {
         resolve_smart_objects(&mut layers, &section, false);
         let so = layers[0].smart_object.as_ref().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::External);
-        assert!(so.payload.is_none(), "external payload is not exposed");
+        assert!(so.payload().is_none(), "external payload is not exposed");
         assert_eq!(so.filename, "linked.psd");
     }
 
@@ -739,7 +742,7 @@ mod tests {
         let so = layers[0].smart_object.as_ref().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::Unresolved);
         assert_eq!(so.uuid, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-        assert!(so.payload.is_none());
+        assert!(so.payload().is_none());
     }
 
     #[test]
@@ -755,7 +758,7 @@ mod tests {
         assert_eq!(so.filename, "Layer 1.psb");
         assert_eq!(so.filetype, *b"8BPB");
         assert_eq!(so.creator, *b"8BIM");
-        assert_eq!(so.payload.as_deref(), Some(&b"8BPS\x00\x02raw"[..]));
+        assert_eq!(so.payload(), Some(&b"8BPS\x00\x02raw"[..]));
     }
 
     #[test]
@@ -868,7 +871,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
         assert!(!so.config_descriptor.is_empty());
         assert!(so.smart_filters.is_empty(), "fixture 01 has no filterFX");
 
-        let payload = so.payload.as_ref().expect("embedded payload");
+        let payload = so.payload().expect("embedded payload");
         assert_eq!(&payload[..4], b"8BPS");
         assert_eq!(payload[4], 0);
         assert_eq!(payload[5], 2, "version 2 embedded source");
@@ -888,7 +891,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
             .expect("smart object survives a write");
         assert_eq!(so2.uuid, so.uuid);
         assert_eq!(so2.kind, SmartObjectKind::Embedded);
-        assert_eq!(fnv1a(so2.payload.as_ref().unwrap()), payload_hash);
+        assert_eq!(fnv1a(so2.payload().unwrap()), payload_hash);
     }
 
     #[test]

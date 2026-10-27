@@ -33,16 +33,20 @@ pub use canvas_damage::CanvasDamage;
 mod composite;
 mod composite_clipping;
 mod composite_knockout;
+mod composite_region;
 mod composite_route;
 mod composite_rows;
+mod layer_source;
+pub use layer_effects::layer_paint_bounds;
+pub use layer_source::purge_source_cache;
 mod mask_refine;
 mod smart_source;
 mod view_pyramid;
 pub(crate) use composite::{channel, mask_alpha, render_smart_source, sample};
 pub use composite::{
-    composite_rgba, decode_adjustment, encode_brightness_contrast, encode_hue_saturation,
-    encode_invert, encode_photo_filter, encode_posterize, encode_solid_color_fill,
-    encode_threshold,
+    composite_rgba, composite_rgba_region, decode_adjustment, encode_brightness_contrast,
+    encode_hue_saturation, encode_invert, encode_photo_filter, encode_posterize,
+    encode_solid_color_fill, encode_threshold,
 };
 pub use view_pyramid::{LevelView, Planes, PyramidLevel, ViewPyramid, SMALLEST_SIDE, TILE};
 

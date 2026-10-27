@@ -18,12 +18,15 @@ fn embedded_layer() -> Layer {
             bottom: 2,
             right: 2,
         },
-        smart_object: Some(SmartObject {
-            kind: SmartObjectKind::Embedded,
-            payload: Some(b"8BPS\x00\x01not-a-real-psd".to_vec()),
-            filename: "src.psd".into(),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so.filename = "src.psd".into();
+                so
+            }
+            .with_payload(b"8BPS\x00\x01not-a-real-psd".to_vec()),
+        ),
         ..Default::default()
     }
 }
@@ -292,12 +295,13 @@ fn reattach_without_a_preserved_block_updates_the_typed_filter() {
 
 #[test]
 fn attach_inserts_into_a_preserved_sold_and_preserves_other_keys() {
-    let so = SmartObject {
-        uuid: "12345678-1234-1234-1234-123456789abc".into(),
-        kind: SmartObjectKind::Embedded,
-        payload: Some(b"8BPS\x00\x01x".to_vec()),
-        ..Default::default()
-    };
+    let so = {
+        let mut so = SmartObject::default();
+        so.uuid = "12345678-1234-1234-1234-123456789abc".into();
+        so.kind = SmartObjectKind::Embedded;
+        so
+    }
+    .with_payload(b"8BPS\x00\x01x".to_vec());
     let layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     let mut layer = layer;
@@ -429,17 +433,18 @@ fn reattach_over_a_preserved_filter_keeps_unmodeled_keys() {
 fn reattach_a_generic_filter_replaces_only_its_own_entry() {
     let options =
         descriptor::write_descriptor(&object(b"null", vec![(b"Keep", DescValue::Long(7))]));
-    let so = SmartObject {
-        kind: SmartObjectKind::Embedded,
-        payload: Some(b"8BPS\x00\x01x".to_vec()),
-        smart_filters: vec![SmartFilter {
+    let so = {
+        let mut so = SmartObject::default();
+        so.kind = SmartObjectKind::Embedded;
+        so.smart_filters = vec![SmartFilter {
             filter_id: 4242,
             name: "First".to_string(),
             enabled: true,
             options,
-        }],
-        ..Default::default()
-    };
+        }];
+        so
+    }
+    .with_payload(b"8BPS\x00\x01x".to_vec());
     let layer0 = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer0, 2, 2);
     let mut layer = layer0;

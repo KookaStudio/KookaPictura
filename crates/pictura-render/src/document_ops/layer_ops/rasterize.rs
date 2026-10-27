@@ -116,14 +116,12 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
 /// The union of `layer.rect` and the document-space box its effects can paint,
 /// so a bake covers an outside/centered stroke that reaches past the rect.
 fn effects_bounds(layer: &Layer) -> PsdRect {
-    match crate::layer_effects::effects_reach(layer) {
-        Some((l, t, r, b)) => PsdRect {
-            left: layer.rect.left.min(l),
-            top: layer.rect.top.min(t),
-            right: layer.rect.right.max(r),
-            bottom: layer.rect.bottom.max(b),
-        },
-        None => layer.rect,
+    let reach = crate::layer_effects::effects_reach(layer);
+    PsdRect {
+        left: layer.rect.left.min(reach.left),
+        top: layer.rect.top.min(reach.top),
+        right: layer.rect.right.max(reach.right),
+        bottom: layer.rect.bottom.max(reach.bottom),
     }
 }
 

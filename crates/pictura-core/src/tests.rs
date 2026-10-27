@@ -456,3 +456,29 @@ fn psd_rect_extent_saturates_instead_of_overflowing() {
     };
     assert_eq!(inverted.width(), i32::MIN);
 }
+
+#[test]
+fn content_digest_is_stable_and_sensitive_to_bytes() {
+    assert_eq!(content_digest(b"layer"), content_digest(b"layer"));
+    assert_ne!(content_digest(b"layer"), content_digest(b"layers"));
+}
+
+#[test]
+fn payload_digest_hashes_a_literal_built_payload() {
+    let mut so = SmartObject::default();
+    so.set_payload(b"abc".to_vec());
+    assert_ne!(
+        so.payload_digest, 0,
+        "a literal leaves the stored digest set"
+    );
+    assert_eq!(so.payload_digest(), content_digest(b"abc"));
+}
+
+#[test]
+fn smart_object_equality_ignores_the_payload_digest() {
+    let mut a = SmartObject::default();
+    a.set_payload(b"abc".to_vec());
+    let b = a.clone();
+    a.payload_digest = 42;
+    assert_eq!(a, b, "the digest is cache metadata, not content");
+}

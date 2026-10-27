@@ -439,15 +439,16 @@ mod tests {
     #[test]
     fn toggle_without_a_preserved_block_updates_only_the_typed_view() {
         let mut layer = Layer {
-            smart_object: Some(SmartObject {
-                smart_filters: vec![SmartFilter {
+            smart_object: Some({
+                let mut so = SmartObject::default();
+                so.smart_filters = vec![SmartFilter {
                     filter_id: 2683,
                     name: "Camera Raw Filter".to_string(),
                     enabled: true,
                     options: Vec::new(),
-                }],
-                smart_filters_enabled: true,
-                ..Default::default()
+                }];
+                so.smart_filters_enabled = true;
+                so
             }),
             ..Default::default()
         };
@@ -707,14 +708,15 @@ mod tests {
     #[test]
     fn out_of_range_delete_and_reorder_are_errors() {
         let mut layer = Layer {
-            smart_object: Some(SmartObject {
-                smart_filters: vec![SmartFilter {
+            smart_object: Some({
+                let mut so = SmartObject::default();
+                so.smart_filters = vec![SmartFilter {
                     filter_id: 2683,
                     name: "only".to_string(),
                     enabled: true,
                     options: Vec::new(),
-                }],
-                ..Default::default()
+                }];
+                so
             }),
             ..Default::default()
         };
@@ -740,16 +742,17 @@ mod tests {
                 key: *b"SoLd",
                 data,
             }],
-            smart_object: Some(SmartObject {
-                smart_filters: (0..typed_len)
+            smart_object: Some({
+                let mut so = SmartObject::default();
+                so.smart_filters = (0..typed_len)
                     .map(|_| SmartFilter {
                         filter_id: 2683,
                         name: "f".to_string(),
                         enabled: true,
                         options: Vec::new(),
                     })
-                    .collect(),
-                ..Default::default()
+                    .collect();
+                so
             }),
             ..Default::default()
         }

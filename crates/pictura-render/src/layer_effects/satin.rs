@@ -13,10 +13,11 @@
 //! `size`; `Scale Effects` and the exact inter-effect order are not modelled.
 
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
+use crate::composite::{desc_item, mask_alpha};
 
+use super::planes::{EffectPass, PassWriter};
 use super::{
     blur_matte, bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode,
     num_clamped, num_or, pad_rect, rect_empty, MAX_DISTANCE, MAX_OPACITY, MAX_SIZE,
@@ -83,21 +84,17 @@ pub fn decode_satin(layer: &Layer) -> Option<Satin> {
     })
 }
 
-/// Build the masked content matte `M` over the padded source region, blur it to
-/// `B`, then composite `M · |B(x - d) - B(x + d)| · opacity` above the content
-/// over `source` only (a sample outside the built region is the exterior `0`).
-///
-/// ponytail: a canvas-filling layer with the maximum `size` still costs
-/// `O(canvas · size)` because the blur is a naive separable kernel; the common
-/// small-layer and crafted off-canvas cases are bounded.
-pub(super) fn composite_satin(canvas: &mut Canvas, layer: &Layer, doc: &Document, satin: &Satin) {
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+pub(super) fn build_satin(layer: &Layer, doc: &Document, satin: &Satin) -> Vec<EffectPass> {
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
-        return;
+        return Vec::new();
     }
     let source = clip_rect(layer, w, h);
     if rect_empty(source) {
-        return;
+        return Vec::new();
     }
     // Clamp again: a hand-built `Satin` may not have gone through decode.
     let distance = clamp_finite(satin.distance, MAX_DISTANCE) as f64;
@@ -120,7 +117,7 @@ pub(super) fn composite_satin(canvas: &mut Canvas, layer: &Layer, doc: &Document
     // built over `padded` only.
     let padded = pad_rect(source, ox.abs() + oy.abs() + blur_support, w, h);
     if rect_empty(padded) {
-        return;
+        return Vec::new();
     }
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
@@ -133,7 +130,7 @@ pub(super) fn composite_satin(canvas: &mut Canvas, layer: &Layer, doc: &Document
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
-        return;
+        return Vec::new();
     }
     let blurred = blur_matte(&matte, pw, ph, size);
     let sample = |x: i64, y: i64| -> f32 {
@@ -152,8 +149,15 @@ pub(super) fn composite_satin(canvas: &mut Canvas, layer: &Layer, doc: &Document
     ];
     let opacity = clamp_finite(satin.opacity, MAX_OPACITY) / 100.0;
     if opacity <= 0.0 {
-        return;
+        return Vec::new();
     }
+    let rect = PsdRect {
+        top: source.1,
+        left: source.0,
+        bottom: source.3,
+        right: source.2,
+    };
+    let mut writer = PassWriter::constant(rect, satin.blend_mode, color);
     for y in source.1..source.3 {
         for x in source.0..source.2 {
             let band = (sample(x as i64 - ox, y as i64 - oy)
@@ -164,15 +168,9 @@ pub(super) fn composite_satin(canvas: &mut Canvas, layer: &Layer, doc: &Document
             let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
             let alpha = m * field * opacity;
             if alpha > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    color,
-                    alpha,
-                    satin.blend_mode,
-                );
+                writer.emit(x, y, color, alpha);
             }
         }
     }
+    vec![writer.finish()]
 }
