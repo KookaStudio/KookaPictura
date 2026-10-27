@@ -280,6 +280,7 @@ fn materialize_text_rgba_refuses_a_missing_layer() {
 
 #[test]
 fn materialize_text_rgba_sets_channels_and_clears_the_type_tool() {
+    let _gamma = crate::test_support::gamma_guard();
     let mut doc = doc_with(type_layer(Some(style())));
     let n = 200 * 80;
     let mut rgba = vec![0u8; n * 4];
@@ -306,7 +307,33 @@ fn materialize_text_rgba_sets_channels_and_clears_the_type_tool() {
 
 #[test]
 fn materialize_bakes_the_curve() {
+    let _gamma = crate::test_support::gamma_guard();
     let mut doc = doc_with(type_layer(Some(style())));
+    let n = 200 * 80;
+    let mut rgba = vec![0u8; n * 4];
+    for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+        px[3] = (i % 256) as u8;
+    }
+    assert!(materialize_text_rgba(&mut doc, "0", &rgba));
+    let alpha = crate::channel(crate::resolve_path(&doc, "0").unwrap(), -1).unwrap();
+    for (i, &stored) in alpha.iter().enumerate().take(256) {
+        let curved = crate::text_gamma::text_gamma_alpha(
+            i as f32 / 255.0,
+            crate::text_gamma::DEFAULT_TEXT_GAMMA,
+        );
+        let expected = i32::from(crate::composite::to_u8(curved));
+        assert!(
+            (i32::from(stored) - expected).abs() <= 1,
+            "alpha {i}: {stored}"
+        );
+    }
+}
+
+#[test]
+fn materialize_bakes_the_curve_when_opacity_is_zero() {
+    let _gamma = crate::test_support::gamma_guard();
+    let mut doc = doc_with(type_layer(Some(style())));
+    crate::resolve_path_mut(&mut doc, "0").unwrap().opacity = 0;
     let n = 200 * 80;
     let mut rgba = vec![0u8; n * 4];
     for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {

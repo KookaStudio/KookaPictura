@@ -88,9 +88,8 @@ pub enum GpuError {
     /// A channel-less smart-object layer is present: it renders from its
     /// embedded source, which the GPU has no path for.
     UnsupportedSmartObject,
-    /// A channel-less type layer is present (it renders from its text model),
-    /// or any type layer while Blend Text Colors Using Gamma is on (the shader
-    /// has no text curve): the GPU has no path for either.
+    /// A channel-less type layer is present (it renders from its text model):
+    /// the GPU has no path for it.
     UnsupportedText,
     /// A visible layer carries an enabled object-based layer effect.
     UnsupportedLayerEffect,
@@ -117,7 +116,7 @@ impl fmt::Display for GpuError {
                 write!(f, "channel-less smart-object source is CPU-only")
             }
             GpuError::UnsupportedText => {
-                write!(f, "channel-less or gamma-blended type layer is CPU-only")
+                write!(f, "channel-less type layer is CPU-only")
             }
             GpuError::UnsupportedLayerEffect => {
                 write!(f, "layer effect is CPU-only")
@@ -441,7 +440,7 @@ fn adjustment_params(adjustment: &Adjustment) -> Option<(u32, i32, i32, i32)> {
 ///
 /// A document with a source depth declines first. Then the first visible layer
 /// in stack order that declines names the reason; within a layer the checks
-/// run effects, content route, Dissolve, advanced blending, text gamma.
+/// run effects, content route, Dissolve, then advanced blending.
 fn check_supported(doc: &Document) -> Result<(), GpuError> {
     fn walk(layer: &Layer) -> Result<(), GpuError> {
         if !layer.visible {
@@ -482,9 +481,6 @@ fn check_supported(doc: &Document) -> Result<(), GpuError> {
             || layer.clipping
         {
             return Err(GpuError::UnsupportedAdvancedBlending);
-        }
-        if layer.type_tool.is_some() && crate::text_gamma::text_gamma().is_some() {
-            return Err(GpuError::UnsupportedText);
         }
         if group {
             for child in &layer.children {
@@ -1112,6 +1108,7 @@ mod tests {
                     layer.blend,
                     layer.opacity,
                     layer.fill,
+                    layer.type_tool.is_some(),
                     NO_ADJ,
                 );
             }

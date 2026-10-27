@@ -1,5 +1,7 @@
 //! Shared constants, scenes, and parity helpers for the GPU parity tests.
 
+use std::sync::{Mutex, MutexGuard};
+
 use pictura_core::{
     AdjustmentData, BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer,
     LockFlags, PsdRect,
@@ -40,6 +42,15 @@ pub(crate) const GPU_MODES: &[BlendMode] = &[
 ];
 
 pub(crate) const CPU_ONLY: &[BlendMode] = &[BlendMode::Dissolve];
+
+static GAMMA_LOCK: Mutex<()> = Mutex::new(());
+
+/// Serializes tests that read or mutate the process-wide text gamma.
+pub(crate) fn gamma_guard() -> MutexGuard<'static, ()> {
+    GAMMA_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// Heavy hardware evidence tests are opt-in. Set `PICTURA_GPU_BENCH=1` to run the
 /// 4000²/2048/1024 timing and large-document tests; the default `cargo test` on a

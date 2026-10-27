@@ -19,3 +19,4 @@ mod fresh_white;
 mod large;
 mod layers;
 mod region;
+mod text;

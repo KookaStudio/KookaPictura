@@ -785,7 +785,8 @@ fn proxy_less_type_layer_composites_live_coverage() {
         layer.channels.is_empty(),
         "proxy-less type carries no channel"
     );
-    let out = composite_rgba(&doc(200, 80, vec![layer]));
+    let d = doc(200, 80, vec![layer]);
+    let out = composite_rgba(&d);
     let plane = (200 * 80) as usize;
     let covered = out.data[3 * plane..4 * plane]
         .iter()
@@ -796,6 +797,9 @@ fn proxy_less_type_layer_composites_live_coverage() {
         covered < plane,
         "a proxy-less type layer is not an opaque black rect"
     );
+    let (active, backend) = composite_active(&d, true);
+    assert_eq!(backend, Backend::Cpu);
+    assert_eq!(active, out);
 }
 
 #[test]

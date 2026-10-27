@@ -37,6 +37,7 @@ impl ComputeResources {
                     },
                     count: None,
                 },
+                storage_entry(4, true),
             ],
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -214,7 +215,7 @@ async fn request_device() -> Option<Devices> {
         .await
         .ok()?;
     if !accelerates(adapter.get_info().device_type)
-        || adapter.limits().max_storage_buffers_per_shader_stage < 3
+        || adapter.limits().max_storage_buffers_per_shader_stage < 4
     {
         return None;
     }
@@ -370,6 +371,9 @@ pub(super) struct Gpu {
     res: &'static ComputeResources,
     planar: &'static PlanarResources,
     params: wgpu::Buffer,
+    /// The current text-gamma table; one zero entry while the setting is off.
+    text_lut: wgpu::Buffer,
+    text_on: bool,
     /// Present only when the device was created with timestamp queries.
     timing: Option<Timing>,
     /// Region origin in document pixels.
@@ -404,6 +408,25 @@ impl Gpu {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        static OFF_TABLE: [f32; 1] = [0.0];
+        let curve = crate::text_gamma::current_curve();
+        let text_on = curve.is_some();
+        let table = curve.map_or(&OFF_TABLE[..], |curve| curve.samples());
+        if text_on {
+            debug_assert_eq!(
+                table.len(),
+                crate::text_gamma::STEPS + 1,
+                "the uploaded text-gamma table must match the shader's 4096 steps"
+            );
+        }
+        let bytes: Vec<u8> = table.iter().flat_map(|v| v.to_le_bytes()).collect();
+        let text_lut = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("pictura-text-lut"),
+            size: bytes.len() as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&text_lut, 0, &bytes);
         let timing = device
             .features()
             .contains(wgpu::Features::TIMESTAMP_QUERY)
@@ -414,6 +437,8 @@ impl Gpu {
             res: shared.resources(),
             planar: shared.planar_resources(),
             params,
+            text_lut,
+            text_on,
             timing,
             x0,
             y0,
@@ -597,6 +622,7 @@ impl Gpu {
                 layer.blend,
                 layer.opacity,
                 255,
+                layer.type_tool.is_some(),
                 NO_ADJ,
             );
             return;
@@ -618,6 +644,7 @@ impl Gpu {
                     layer.blend,
                     layer.opacity,
                     255,
+                    layer.type_tool.is_some(),
                     adj,
                 );
             }
@@ -633,6 +660,7 @@ impl Gpu {
                 layer.blend,
                 layer.opacity,
                 layer.fill,
+                layer.type_tool.is_some(),
                 NO_ADJ,
             );
         }
@@ -648,8 +676,10 @@ impl Gpu {
         mode: BlendMode,
         opacity: u8,
         fill: u8,
+        text: bool,
         adj: (u32, i32, i32, i32),
     ) {
+        let text_on = text && self.text_on;
         let flags = u32::from(layout.packed) | (u32::from(layout.gray) << 1);
         let (gx, gy) = grid_2d(
             self.n,
@@ -674,6 +704,7 @@ impl Gpu {
             self.y0.to_le_bytes(),
             self.w.to_le_bytes(),
             (gx * 64).to_le_bytes(),
+            u32::from(text_on).to_le_bytes(),
         ]
         .concat();
         self.queue.write_buffer(&self.params, 0, &params);
@@ -697,6 +728,10 @@ impl Gpu {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: self.params.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.text_lut.as_entire_binding(),
                 },
             ],
         });

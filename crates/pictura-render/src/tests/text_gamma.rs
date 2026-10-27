@@ -42,6 +42,7 @@ fn ramp(type_tool: Option<TypeTool>) -> Layer {
 
 #[test]
 fn type_edges_thin_by_default() {
+    let _gamma = crate::test_support::gamma_guard();
     let typed = composite_rgba(&doc(256, 1, vec![white(256, 1), ramp(tool())]));
     let plain = composite_rgba(&doc(256, 1, vec![white(256, 1), ramp(None)]));
     let mut lighter = 0;
@@ -61,6 +62,7 @@ fn type_edges_thin_by_default() {
 
 #[test]
 fn opacity_passes_through_the_curve() {
+    let _gamma = crate::test_support::gamma_guard();
     let mut ink = solid("ink", full(1, 1), (0, 0, 0), 255, BlendMode::Normal, 128);
     ink.type_tool = tool();
     let out = composite_rgba(&doc(1, 1, vec![white(1, 1), ink]));
@@ -82,7 +84,15 @@ fn pixel_layers_skip_the_curve() {
 }
 
 #[test]
-fn gpu_defers_type_while_gamma_is_on() {
+fn gpu_accepts_proxied_type_while_gamma_is_on() {
+    let _gamma = crate::test_support::gamma_guard();
+    assert!(
+        crate::text_gamma::text_gamma().is_some(),
+        "the default gamma is on"
+    );
     let d = doc(256, 1, vec![white(256, 1), ramp(tool())]);
-    assert!(matches!(composite_gpu(&d), Err(GpuError::UnsupportedText)));
+    assert!(matches!(
+        composite_gpu(&d),
+        Ok(_) | Err(GpuError::Unavailable)
+    ));
 }

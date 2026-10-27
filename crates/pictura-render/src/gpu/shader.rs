@@ -17,12 +17,14 @@ struct Params {
     region_y0: u32,
     region_w: u32,
     stride: u32,
+    text_on: u32,
 };
 
 @group(0) @binding(0) var<storage, read_write> canvas: array<u32>;
 @group(0) @binding(1) var<storage, read> src: array<u32>;
 @group(0) @binding(2) var<storage, read> mask: array<u32>;
 @group(0) @binding(3) var<uniform> params: Params;
+@group(0) @binding(4) var<storage, read> text_lut: array<f32>;
 
 // Both the packed canvas and a group's inner canvas are one u32 per pixel with
 // bytes laid out R,G,B,A (little-endian word). Planar pixel-layer sources and
@@ -224,6 +226,19 @@ fn sample_src(i: u32) -> vec4<f32> {
     return vec4<f32>(rgb, f32(src_byte(a_plane * n + li)) / 255.0);
 }
 
+// The host uploads the CPU's 4097-sample curve table; this mirrors
+// `TextCurve::apply` so GPU and CPU interpolate the same samples. The host
+// debug-asserts that the table has `TextCurve::STEPS + 1` entries (4097) before
+// binding it, so these 4096/4095 literals must change with that constant.
+fn text_curve(a: f32) -> f32 {
+    let at = clamp(a, 0.0, 1.0) * 4096.0;
+    var i = u32(at);
+    if (i > 4095u) { i = 4095u; }
+    let t = at - f32(i);
+    let lo = text_lut[i];
+    return lo + (text_lut[i + 1u] - lo) * t;
+}
+
 fn adj_posterize(v: u32, levels: i32) -> u32 {
     if (levels >= 255) { return v; }
     let d = f32(levels - 1);
@@ -335,7 +350,9 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let cb = unpack_word(canvas[i]);
         let ab = cb.a;
         if (ab <= 0.0) { return; }
-        let as_ = ab * params.opacity * params.fill * mask_a;
+        var content = ab * params.opacity * params.fill;
+        if (params.text_on != 0u) { content = text_curve(content); }
+        let as_ = content * mask_a;
         if (as_ <= 0.0) { return; }
         let cs = adjust(params.adj_kind, cb.rgb, params.p0, params.p1, params.p2);
         let b = blend(params.mode, cb.rgb, cs);
@@ -351,7 +368,9 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let s = sample_src(i);
     if (s.a <= 0.0) { return; }
-    let as_ = s.a * params.opacity * params.fill * mask_a;
+    var content = s.a * params.opacity * params.fill;
+    if (params.text_on != 0u) { content = text_curve(content); }
+    let as_ = content * mask_a;
     if (as_ <= 0.0) { return; }
 
     let cb = unpack_word(canvas[i]);
