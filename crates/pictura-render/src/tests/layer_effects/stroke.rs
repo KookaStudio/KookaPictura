@@ -1241,11 +1241,14 @@ fn channel_less_smart_object_stroke_covers_the_rect() {
         name: "Smart".into(),
         rect: rect(4, 4, 8, 8),
         channels: Vec::new(),
-        smart_object: Some(pictura_core::SmartObject {
-            kind: pictura_core::SmartObjectKind::Embedded,
-            payload: Some(vec![0; 4]),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = pictura_core::SmartObject::default();
+                so.kind = pictura_core::SmartObjectKind::Embedded;
+                so
+            }
+            .with_payload(vec![0; 4]),
+        ),
         ..Default::default()
     };
     layer.extra_blocks = vec![spec_block(&StrokeSpec::default())];

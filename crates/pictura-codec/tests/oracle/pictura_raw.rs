@@ -17,12 +17,15 @@ fn authoring_smart_doc() -> Document {
             bottom: 4,
             right: 4,
         },
-        smart_object: Some(SmartObject {
-            filename: "source.psb".into(),
-            kind: SmartObjectKind::Embedded,
-            payload: Some((0..512).map(|i| (i % 251) as u8).collect()),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.filename = "source.psb".into();
+                so.kind = SmartObjectKind::Embedded;
+                so
+            }
+            .with_payload((0..512).map(|i| (i % 251) as u8).collect()),
+        ),
         ..Default::default()
     }]);
     doc

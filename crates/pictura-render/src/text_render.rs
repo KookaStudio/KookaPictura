@@ -734,10 +734,7 @@ pub(crate) fn composite_type_source(
     layer: &Layer,
     doc: &Document,
 ) -> bool {
-    let Some(type_tool) = layer.type_tool.as_ref() else {
-        return false;
-    };
-    if crate::channel(layer, 0).is_some() {
+    if layer.type_tool.is_none() || crate::channel(layer, 0).is_some() {
         return false;
     }
     let region = PsdRect {
@@ -749,7 +746,7 @@ pub(crate) fn composite_type_source(
     if region.width() <= 0 || region.height() <= 0 {
         return false;
     }
-    let Some(buf) = render_text_buffer(type_tool, layer.rect.width(), layer.rect.height()) else {
+    let Some(buf) = crate::layer_source::text_raster(layer) else {
         return false;
     };
     let lw = layer.rect.width() as usize;

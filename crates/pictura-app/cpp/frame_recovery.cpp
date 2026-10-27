@@ -62,6 +62,8 @@ void PicturaMainWindow::trackRecovery(PictureView* view)
     recoveryIds_.insert(view, ++recoveryCounter_);
     recoveryStale_.insert(view);
     connect(view, &PictureView::changed, this, [this, view] { recoveryStale_.insert(view); });
+    connect(view, &PictureView::regionDamaged, this,
+            [this, view](int, int, int, int) { recoveryStale_.insert(view); });
 }
 
 void PicturaMainWindow::autosaveRecovery()

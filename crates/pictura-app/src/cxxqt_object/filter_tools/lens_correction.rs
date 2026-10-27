@@ -603,11 +603,14 @@ mod tests {
                 bottom: 2,
                 right: 2,
             },
-            smart_object: Some(pictura_core::SmartObject {
-                kind: pictura_core::SmartObjectKind::Embedded,
-                payload: Some(payload),
-                ..Default::default()
-            }),
+            smart_object: Some(
+                {
+                    let mut so = pictura_core::SmartObject::default();
+                    so.kind = pictura_core::SmartObjectKind::Embedded;
+                    so
+                }
+                .with_payload(payload),
+            ),
             ..Default::default()
         };
         // The baked proxy is the corrected (black) pixels, unlike the source.

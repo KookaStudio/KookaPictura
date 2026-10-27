@@ -1,8 +1,9 @@
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
+use crate::composite::{desc_item, mask_alpha};
 
+use super::planes::{EffectPass, PassWriter};
 use super::{
     blur_matte, blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color,
     dilate_matte, effect_blend_mode, erode_matte, noise_factor, num_clamped, pad_rect, rect_empty,
@@ -178,27 +179,17 @@ pub fn decode_inner_glow(layer: &Layer) -> Option<InnerGlow> {
     })
 }
 
-/// Build the glow matte over the padded source region, dilate it by the spread,
-/// blur it by the size, knock out the content, and composite it behind the
-/// layer content over the padded region only (a glow has no offset).
-///
-/// ponytail: a canvas-filling layer with the maximum `size` still costs
-/// O(canvas · size) because the blur is a naive separable kernel; the common
-/// small-layer and crafted off-canvas cases are bounded. `Precise` renders as
-/// `Softer`.
-pub(super) fn composite_outer_glow(
-    canvas: &mut Canvas,
-    layer: &Layer,
-    doc: &Document,
-    glow: &OuterGlow,
-) {
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+pub(super) fn build_outer_glow(layer: &Layer, doc: &Document, glow: &OuterGlow) -> Vec<EffectPass> {
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
-        return;
+        return Vec::new();
     }
     let source = clip_rect(layer, w, h);
     if rect_empty(source) {
-        return;
+        return Vec::new();
     }
     // Clamp again: a hand-built `OuterGlow` may not have gone through decode.
     let spread = clamp_finite(glow.spread, MAX_SPREAD) as f64;
@@ -209,7 +200,7 @@ pub(super) fn composite_outer_glow(
     // at most `reach`, so the matte is built and processed over `padded` only.
     let padded = pad_rect(source, dilate_radius + blur_pad, w, h);
     if rect_empty(padded) {
-        return;
+        return Vec::new();
     }
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
@@ -222,7 +213,7 @@ pub(super) fn composite_outer_glow(
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
-        return;
+        return Vec::new();
     }
     // Exterior mask: the glow is knocked out where the content is opaque.
     let exterior: Vec<f32> = matte.iter().map(|&m| 1.0 - m).collect();
@@ -238,46 +229,36 @@ pub(super) fn composite_outer_glow(
         glow.color[2] as f32 / 255.0,
     ];
     let opacity = clamp_finite(glow.opacity, MAX_OPACITY) / 100.0;
+    let rect = PsdRect {
+        top: py0,
+        left: px0,
+        bottom: py1,
+        right: px1,
+    };
+    let mut writer = PassWriter::constant(rect, glow.blend_mode, color);
     for y in py0..py1 {
         for x in px0..px1 {
             let i = (y - py0) as usize * pw + (x - px0) as usize;
             let alpha = blurred[i] * exterior[i] * opacity * noise_factor(glow.noise, x, y);
             if alpha > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    color,
-                    alpha,
-                    glow.blend_mode,
-                );
+                writer.emit(x, y, color, alpha);
             }
         }
     }
+    vec![writer.finish()]
 }
 
-/// Build the masked content matte `M` over the padded source region, erode it
-/// by the choke radius into `anchor`, blur it by the size into `B`, form the
-/// interior field `1 - B` for `Source = Edge` or `B` for `Source = Center`, and
-/// composite `M · field · opacity` above the content over `source` only.
-///
-/// ponytail: a canvas-filling layer with the maximum `size` still costs
-/// O(canvas · size) because the blur is a naive separable kernel; the common
-/// small-layer and crafted off-canvas cases are bounded. The choke maps to a
-/// min-filter erode of radius `round(choke / 100 · size)`.
-pub(super) fn composite_inner_glow(
-    canvas: &mut Canvas,
-    layer: &Layer,
-    doc: &Document,
-    glow: &InnerGlow,
-) {
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+pub(super) fn build_inner_glow(layer: &Layer, doc: &Document, glow: &InnerGlow) -> Vec<EffectPass> {
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
-        return;
+        return Vec::new();
     }
     let source = clip_rect(layer, w, h);
     if rect_empty(source) {
-        return;
+        return Vec::new();
     }
     // Clamp again: a hand-built `InnerGlow` may not have gone through decode.
     let choke = clamp_finite(glow.choke, MAX_CHOKE) as f64;
@@ -285,7 +266,7 @@ pub(super) fn composite_inner_glow(
     // `size 0` with `choke 0` under Edge would otherwise tint partial-alpha
     // content through `M · (1 - M)`; the documented no-op returns early.
     if size == 0.0 && choke == 0.0 && matches!(glow.source, GlowSource::Edge) {
-        return;
+        return Vec::new();
     }
     let erode_radius = (choke / 100.0 * size).round() as i64;
     let blur_pad = blur_support(size);
@@ -293,7 +274,7 @@ pub(super) fn composite_inner_glow(
     // matte by at most `reach`, so it is built and processed over `padded` only.
     let padded = pad_rect(source, erode_radius + blur_pad, w, h);
     if rect_empty(padded) {
-        return;
+        return Vec::new();
     }
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
@@ -306,7 +287,7 @@ pub(super) fn composite_inner_glow(
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
-        return;
+        return Vec::new();
     }
     let blurred = if erode_radius > 0 {
         let anchor = erode_matte(&matte, pw, ph, erode_radius);
@@ -320,6 +301,13 @@ pub(super) fn composite_inner_glow(
         glow.color[2] as f32 / 255.0,
     ];
     let opacity = clamp_finite(glow.opacity, MAX_OPACITY) / 100.0;
+    let rect = PsdRect {
+        top: source.1,
+        left: source.0,
+        bottom: source.3,
+        right: source.2,
+    };
+    let mut writer = PassWriter::constant(rect, glow.blend_mode, color);
     for y in source.1..source.3 {
         for x in source.0..source.2 {
             let i = (y - py0) as usize * pw + (x - px0) as usize;
@@ -329,15 +317,9 @@ pub(super) fn composite_inner_glow(
             };
             let alpha = matte[i] * field * opacity * noise_factor(glow.noise, x, y);
             if alpha > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    color,
-                    alpha,
-                    glow.blend_mode,
-                );
+                writer.emit(x, y, color, alpha);
             }
         }
     }
+    vec![writer.finish()]
 }

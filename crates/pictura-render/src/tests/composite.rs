@@ -745,7 +745,7 @@ fn blend_if_source_gate_changes_composite_output() {
 
 // --- Live type compositing ----------------------------------------------
 
-fn type_style() -> TextStyle {
+pub(crate) fn type_style() -> TextStyle {
     TextStyle {
         font: Some("Arial".into()),
         character: CharacterAttrs {
@@ -758,7 +758,7 @@ fn type_style() -> TextStyle {
     }
 }
 
-fn type_layer(style: Option<TextStyle>) -> Layer {
+pub(crate) fn type_layer(style: Option<TextStyle>) -> Layer {
     Layer {
         name: "text".into(),
         rect: rect(0, 0, 80, 200),

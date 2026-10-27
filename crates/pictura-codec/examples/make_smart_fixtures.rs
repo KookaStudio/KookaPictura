@@ -67,15 +67,18 @@ fn smart_layer(name: &str, payload: Vec<u8>, smart_filters: Vec<SmartFilter>) ->
                 data: vec![255; 16].into(),
             },
         ],
-        smart_object: Some(SmartObject {
-            kind: SmartObjectKind::Embedded,
-            payload: Some(payload),
-            filename: EMBEDDED_FILENAME.to_string(),
-            filetype: *b"8BPB",
-            creator: *b"8BIM",
-            smart_filters,
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so.filename = EMBEDDED_FILENAME.to_string();
+                so.filetype = *b"8BPB";
+                so.creator = *b"8BIM";
+                so.smart_filters = smart_filters;
+                so
+            }
+            .with_payload(payload),
+        ),
         ..Default::default()
     }
 }
@@ -248,14 +251,17 @@ fn smoke_smart_layer(payload: Vec<u8>) -> Layer {
         [230, 120, 40],
         255,
     );
-    layer.smart_object = Some(SmartObject {
-        kind: SmartObjectKind::Embedded,
-        payload: Some(payload),
-        filename: EMBEDDED_FILENAME.to_string(),
-        filetype: *b"8BPB",
-        creator: *b"8BIM",
-        ..Default::default()
-    });
+    layer.smart_object = Some(
+        {
+            let mut so = SmartObject::default();
+            so.kind = SmartObjectKind::Embedded;
+            so.filename = EMBEDDED_FILENAME.to_string();
+            so.filetype = *b"8BPB";
+            so.creator = *b"8BIM";
+            so
+        }
+        .with_payload(payload),
+    );
     layer
 }
 

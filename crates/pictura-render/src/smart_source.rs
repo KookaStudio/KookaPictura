@@ -2,10 +2,9 @@
 //!
 //! Split from `composite.rs` for the file-size cap.
 
-use pictura_core::{Document, Layer, PixelBuffer, PsdRect, SmartObject, SmartObjectKind};
+use pictura_core::{Document, Layer, PixelBuffer, PsdRect, SmartObject};
 
 use crate::composite::{blend_into, channel, Canvas};
-use crate::composite_rgba;
 
 /// Render an embedded smart object's source over `region` (document
 /// coordinates, within `rect`), scaling with the renderer's integer ratio.
@@ -19,32 +18,12 @@ use crate::composite_rgba;
 /// decoded, the decoded source is empty, or either rectangle has no positive
 /// area. Shared by compositing and by rasterizing a channel-less smart-object
 /// layer.
-///
-/// ponytail: an embedded source that itself holds a no-proxy smart object
-/// recurses without a depth guard; a crafted cyclic payload could loop. Add a
-/// depth pass-through when untrusted embeddings appear.
 pub(crate) fn render_smart_source(
     so: &SmartObject,
     rect: PsdRect,
     region: PsdRect,
 ) -> Option<PixelBuffer> {
-    if so.kind != SmartObjectKind::Embedded {
-        return None;
-    }
-    let payload = so.payload.as_deref().filter(|p| !p.is_empty())?;
-    let embedded = pictura_codec::read_psd(payload).ok()?;
-    let comp = &embedded.composite;
-    let usable = comp.width > 0
-        && comp.height > 0
-        && comp.channels >= 1
-        && comp.data.len() == comp.width as usize * comp.height as usize * comp.channels as usize;
-    let fallback;
-    let src: &PixelBuffer = if embedded.merged_composite_present && usable {
-        comp
-    } else {
-        fallback = composite_rgba(&embedded);
-        &fallback
-    };
+    let src = crate::layer_source::embedded_source(so)?;
 
     let src_w = src.width as usize;
     let src_h = src.height as usize;

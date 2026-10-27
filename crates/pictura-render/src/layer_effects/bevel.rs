@@ -23,10 +23,11 @@
 //! highlight/shadow order are not modelled.
 
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
+use crate::composite::{desc_item, mask_alpha};
 
+use super::planes::{EffectPass, PassWriter};
 use super::{
     blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode,
     num_clamped, num_or, pad_rect, rect_empty, MAX_ALTITUDE, MAX_DEPTH, MAX_OPACITY, MAX_SIZE,
@@ -190,33 +191,35 @@ fn rounding(technique: BevelTechnique, size: f64) -> f64 {
     }
 }
 
-/// Build the masked content matte `M` over the padded region, turn its signed
-/// distance to the content edge into the style's chamfer height (rounded by the
-/// technique), light the height field's normal from `angle`/`altitude`, soften
-/// the signed shading, and composite its positive (highlight) and negative
-/// (shadow) parts above the content over the style's coverage. Everything stays
-/// in `f32`, so a steep bevel shades in smooth gradients rather than steps.
-///
-/// ponytail: a canvas-filling layer with the maximum `size`/`soften` still costs
-/// `O(canvas · size)` because the blurs are naive separable kernels; the common
-/// small-layer and crafted off-canvas cases are bounded.
-pub(super) fn composite_bevel_emboss(
-    canvas: &mut Canvas,
+/// How far a bevel's visible band reaches past the content box: the chamfer,
+/// the technique's rounding blur, the soften blur, and two spare pixels.
+pub(super) fn reach(bevel: &BevelEmboss) -> f32 {
+    let size = clamp_finite(bevel.size, MAX_SIZE) as f64;
+    let soften = clamp_finite(bevel.soften, MAX_SIZE) as f64;
+    let size = size.max(1.0);
+    (size.ceil() as i64 + blur_support(rounding(bevel.technique, size)) + blur_support(soften) + 2)
+        as f32
+}
+
+pub(super) fn build_bevel_emboss(
     layer: &Layer,
     doc: &Document,
     bevel: &BevelEmboss,
-) {
+) -> Vec<EffectPass> {
     // Stroke Emboss lights only a Stroke effect's band, which is not modelled.
     if bevel.style == BevelStyle::Stroke {
-        return;
+        return Vec::new();
     }
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
-        return;
+        return Vec::new();
     }
     let source = clip_rect(layer, w, h);
     if rect_empty(source) {
-        return;
+        return Vec::new();
     }
     // Clamp again: a hand-built `BevelEmboss` may not have gone through decode.
     let size = clamp_finite(bevel.size, MAX_SIZE) as f64;
@@ -231,7 +234,7 @@ pub(super) fn composite_bevel_emboss(
     let hi_opacity = clamp_finite(bevel.highlight.opacity, MAX_OPACITY) / 100.0;
     let sh_opacity = clamp_finite(bevel.shadow.opacity, MAX_OPACITY) / 100.0;
     if (hi_opacity <= 0.0 && sh_opacity <= 0.0) || depth <= 0.0 {
-        return;
+        return Vec::new();
     }
     let size = size.max(1.0);
     let round = rounding(bevel.technique, size);
@@ -244,7 +247,7 @@ pub(super) fn composite_bevel_emboss(
         h,
     );
     if rect_empty(padded) {
-        return;
+        return Vec::new();
     }
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
@@ -257,7 +260,7 @@ pub(super) fn composite_bevel_emboss(
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
-        return;
+        return Vec::new();
     }
     // Height 0..1 along the chamfer, from the signed distance (inside positive).
     let start = match bevel.style {
@@ -326,12 +329,33 @@ pub(super) fn composite_bevel_emboss(
     let unit = |c: [u8; 3]| c.map(|v| v as f32 / 255.0);
     let shadow_color = unit(bevel.shadow.color);
     let highlight_color = unit(bevel.highlight.color);
+    let rect = PsdRect {
+        top: region.1,
+        left: region.0,
+        bottom: region.3,
+        right: region.2,
+    };
+    let two_slots = matches!(bevel.style, BevelStyle::Pillow);
+    let mut shadows = vec![PassWriter::constant(rect, bevel.shadow.mode, shadow_color)];
+    let mut highlights = vec![PassWriter::constant(
+        rect,
+        bevel.highlight.mode,
+        highlight_color,
+    )];
+    if two_slots {
+        shadows.push(PassWriter::constant(rect, bevel.shadow.mode, shadow_color));
+        highlights.push(PassWriter::constant(
+            rect,
+            bevel.highlight.mode,
+            highlight_color,
+        ));
+    }
     for y in region.1..region.3 {
         for x in region.0..region.2 {
             let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
             let i = (y - region.1) as usize * rw + (x - region.0) as usize;
-            for (coverage, sign) in lit(m) {
-                if coverage <= 0.0 {
+            for (slot, (coverage, sign)) in lit(m).into_iter().enumerate() {
+                if coverage <= 0.0 || slot >= shadows.len() {
                     continue;
                 }
                 // A sunken side swaps which part is the highlight.
@@ -342,29 +366,21 @@ pub(super) fn composite_bevel_emboss(
                 };
                 let sh_alpha = coverage * dark.clamp(0.0, 1.0) * sh_opacity;
                 if sh_alpha > 0.0 {
-                    blend_parts(
-                        canvas,
-                        x as usize,
-                        y as usize,
-                        shadow_color,
-                        sh_alpha,
-                        bevel.shadow.mode,
-                    );
+                    shadows[slot].emit(x, y, shadow_color, sh_alpha);
                 }
                 let hi_alpha = coverage * light.clamp(0.0, 1.0) * hi_opacity;
                 if hi_alpha > 0.0 {
-                    blend_parts(
-                        canvas,
-                        x as usize,
-                        y as usize,
-                        highlight_color,
-                        hi_alpha,
-                        bevel.highlight.mode,
-                    );
+                    highlights[slot].emit(x, y, highlight_color, hi_alpha);
                 }
             }
         }
     }
+    let mut passes = Vec::with_capacity(shadows.len() * 2);
+    for (shadow, highlight) in shadows.into_iter().zip(highlights) {
+        passes.push(shadow.finish());
+        passes.push(highlight.finish());
+    }
+    passes
 }
 
 /// The signed Euclidean distance of every pixel to the matte's edge (the 0.5

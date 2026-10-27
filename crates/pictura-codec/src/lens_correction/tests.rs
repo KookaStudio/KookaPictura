@@ -14,12 +14,15 @@ fn embedded_layer() -> Layer {
             bottom: 2,
             right: 2,
         },
-        smart_object: Some(SmartObject {
-            kind: SmartObjectKind::Embedded,
-            payload: Some(b"8BPS\x00\x01not-a-real-psd".to_vec()),
-            filename: "src.psd".into(),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so.filename = "src.psd".into();
+                so
+            }
+            .with_payload(b"8BPS\x00\x01not-a-real-psd".to_vec()),
+        ),
         ..Default::default()
     }
 }
@@ -136,17 +139,18 @@ fn reattaching_keeps_unmodeled_keys() {
         class_id: b"Pictura Lens Correction Filter".to_vec(),
         items,
     };
-    let so = SmartObject {
-        kind: SmartObjectKind::Embedded,
-        payload: Some(b"8BPS\x00\x01x".to_vec()),
-        smart_filters: vec![SmartFilter {
+    let so = {
+        let mut so = SmartObject::default();
+        so.kind = SmartObjectKind::Embedded;
+        so.smart_filters = vec![SmartFilter {
             filter_id: LENS_CORRECTION_FILTER_ID,
             name: LENS_CORRECTION_FILTER_NAME.to_string(),
             enabled: true,
             options: crate::write_descriptor(&fltr),
-        }],
-        ..Default::default()
-    };
+        }];
+        so
+    }
+    .with_payload(b"8BPS\x00\x01x".to_vec());
     let mut layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     layer.extra_blocks.push(LayerBlock {
@@ -194,12 +198,13 @@ fn a_foreign_filter_id_is_left_alone() {
             items: vec![(b"Keep".to_vec(), DescValue::Long(7))],
         }),
     };
-    let so = SmartObject {
-        kind: SmartObjectKind::Embedded,
-        payload: Some(b"8BPS\x00\x01x".to_vec()),
-        smart_filters: vec![foreign.clone()],
-        ..Default::default()
-    };
+    let so = {
+        let mut so = SmartObject::default();
+        so.kind = SmartObjectKind::Embedded;
+        so.smart_filters = vec![foreign.clone()];
+        so
+    }
+    .with_payload(b"8BPS\x00\x01x".to_vec());
     let mut layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     layer.extra_blocks.push(LayerBlock {

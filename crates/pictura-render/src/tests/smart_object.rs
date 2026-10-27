@@ -49,12 +49,11 @@ fn absent_composite_layers_payload(rgb: (u8, u8, u8)) -> Vec<u8> {
 }
 
 pub(super) fn embedded(payload: Vec<u8>) -> SmartObject {
-    SmartObject {
-        filename: "source.psd".into(),
-        kind: SmartObjectKind::Embedded,
-        payload: Some(payload),
-        ..Default::default()
-    }
+    let mut so = SmartObject::default();
+    so.filename = "source.psd".into();
+    so.kind = SmartObjectKind::Embedded;
+    so.set_payload(payload);
+    so
 }
 
 pub(super) fn smart_layer(
@@ -150,11 +149,9 @@ fn proxy_wins_over_source() {
 
 #[test]
 fn undecodable_payload_is_a_noop() {
-    let so = SmartObject {
-        kind: SmartObjectKind::Embedded,
-        payload: Some(vec![0, 1, 2]),
-        ..Default::default()
-    };
+    let mut so = SmartObject::default();
+    so.kind = SmartObjectKind::Embedded;
+    so.set_payload(vec![0, 1, 2]);
     let layer = smart_layer("smart", full(4, 4), so, Vec::new());
     let out = composite_rgba(&doc(4, 4, vec![layer]));
     assert_all_alpha_zero(&out);
@@ -162,11 +159,9 @@ fn undecodable_payload_is_a_noop() {
 
 #[test]
 fn empty_payload_is_a_noop() {
-    let so = SmartObject {
-        kind: SmartObjectKind::Embedded,
-        payload: Some(Vec::new()),
-        ..Default::default()
-    };
+    let mut so = SmartObject::default();
+    so.kind = SmartObjectKind::Embedded;
+    so.set_payload(Vec::new());
     let layer = smart_layer("smart", full(4, 4), so, Vec::new());
     let out = composite_rgba(&doc(4, 4, vec![layer]));
     assert_all_alpha_zero(&out);
@@ -212,11 +207,9 @@ fn external_and_unresolved_do_not_render() {
         SmartObjectKind::Alias,
         SmartObjectKind::Unresolved,
     ] {
-        let so = SmartObject {
-            kind,
-            payload: Some(payload_of([255, 0, 0])),
-            ..Default::default()
-        };
+        let mut so = SmartObject::default();
+        so.kind = kind;
+        so.set_payload(payload_of([255, 0, 0]));
         let layer = smart_layer("smart", full(4, 4), so, Vec::new());
         let out = composite_rgba(&doc(4, 4, vec![layer]));
         assert_all_alpha_zero(&out);
@@ -281,14 +274,14 @@ fn convert_authors_embedded_object_and_keeps_proxy() {
 
     let so = d.layers[0].smart_object.as_ref().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
-    assert!(so.payload.as_deref().is_some_and(|p| !p.is_empty()));
+    assert!(so.payload().is_some_and(|p| !p.is_empty()));
     assert_eq!(so.filename, "Raster.psd");
     assert_eq!(so.filetype, *b"8BPB");
     assert_eq!(so.creator, *b"8BIM");
     assert_eq!(d.layers[0].channels, before.layers[0].channels);
     assert_eq!(composite_rgba(&d), before_comp);
 
-    let embedded = read_psd(so.payload.as_deref().unwrap()).expect("payload reads");
+    let embedded = read_psd(so.payload().unwrap()).expect("payload reads");
     assert_eq!(embedded.width, 4);
     assert_eq!(embedded.height, 4);
     assert_eq!(embedded.composite.channels, 3);
@@ -315,15 +308,15 @@ fn converted_layer_round_trips() {
         .smart_object
         .as_ref()
         .unwrap()
-        .payload
-        .clone()
+        .payload()
+        .map(<[u8]>::to_vec)
         .unwrap();
 
     let bytes = write_psd(&d).expect("host writes");
     let back = read_psd(&bytes).expect("host reads");
     let so = back.layers[0].smart_object.as_ref().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
-    assert_eq!(so.payload.as_deref(), Some(payload.as_slice()));
+    assert_eq!(so.payload(), Some(payload.as_slice()));
     assert_eq!(back.layers[0].channels, d.layers[0].channels);
     assert_eq!(composite_rgba(&back), composite_rgba(&d));
 }
@@ -486,8 +479,8 @@ fn grayscale_layer_converts_to_grayscale_source() {
         .smart_object
         .as_ref()
         .unwrap()
-        .payload
-        .clone()
+        .payload()
+        .map(<[u8]>::to_vec)
         .unwrap();
     let embedded = read_psd(&payload).expect("payload reads");
     assert_eq!(embedded.mode, ColorMode::Grayscale);
@@ -761,7 +754,7 @@ fn place_appends_topmost_channel_less_embedded_object() {
     assert_eq!(layer.fill, 255);
     let so = layer.smart_object.as_ref().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
-    assert_eq!(so.payload.as_deref(), Some(payload.as_slice()));
+    assert_eq!(so.payload(), Some(payload.as_slice()));
     assert_eq!(so.filename, "source.psd");
     assert_eq!(so.filetype, *b"8BPB");
     assert_eq!(so.creator, *b"8BIM");
@@ -808,15 +801,15 @@ fn placed_layer_round_trips() {
         .smart_object
         .as_ref()
         .unwrap()
-        .payload
-        .clone()
+        .payload()
+        .map(<[u8]>::to_vec)
         .unwrap();
 
     let bytes = write_psd(&d).expect("host writes");
     let back = read_psd(&bytes).expect("host reads");
     let so = back.layers[1].smart_object.as_ref().expect("resolved");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
-    assert_eq!(so.payload.as_deref(), Some(placed.as_slice()));
+    assert_eq!(so.payload(), Some(placed.as_slice()));
 }
 
 #[test]
@@ -861,7 +854,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
     assert!(!old_uuid.is_empty());
     assert!(section_has_uuid(&d.layer_section_extra, &old_uuid));
     assert!(before.extra_blocks.iter().any(|b| &b.key == b"SoLd"));
-    assert!(before.smart_object.as_ref().unwrap().payload.is_some());
+    assert!(before.smart_object.as_ref().unwrap().payload().is_some());
 
     let new_payload = payload_of([10, 20, 30]);
     let new_hash = hash(&new_payload);
@@ -875,9 +868,9 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
 
     let after = &d.layers[index];
     let so = after.smart_object.as_ref().expect("still smart");
-    assert_eq!(so.payload.as_deref(), Some(new_payload.as_slice()));
-    assert_eq!(hash(so.payload.as_deref().unwrap()), new_hash);
-    read_psd(so.payload.as_deref().unwrap()).expect("payload parses");
+    assert_eq!(so.payload(), Some(new_payload.as_slice()));
+    assert_eq!(hash(so.payload().unwrap()), new_hash);
+    read_psd(so.payload().unwrap()).expect("payload parses");
     assert_eq!(so.filename, "replacement.psd");
     assert_eq!(so.filetype, *b"8BPB");
     assert_eq!(so.creator, *b"8BIM");
@@ -910,7 +903,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
     let back = read_psd(&saved).expect("replaced document reads");
     let reread = back.layers[index].smart_object.as_ref().expect("resolves");
     assert_eq!(reread.kind, SmartObjectKind::Embedded);
-    assert_eq!(hash(reread.payload.as_deref().unwrap()), new_hash);
+    assert_eq!(hash(reread.payload().unwrap()), new_hash);
 }
 
 #[test]
@@ -1048,7 +1041,7 @@ fn replace_clears_proxy_and_renders_new_source() {
 
     assert!(d.layers[0].channels.is_empty());
     let so = d.layers[0].smart_object.as_ref().unwrap();
-    assert_eq!(so.payload.as_deref(), Some(new_payload.as_slice()));
+    assert_eq!(so.payload(), Some(new_payload.as_slice()));
     assert_eq!(so.filename, "new.psd");
     assert!(so.uuid.is_empty());
     let after_comp = composite_rgba(&d);
@@ -1074,7 +1067,7 @@ fn open_as_smart_object_builds_one_embedded_layer() {
     assert_eq!(layer.rect, rect(0, 0, 2, 2));
     let so = layer.smart_object.as_ref().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
-    assert_eq!(so.payload.as_deref(), Some(bytes.as_slice()));
+    assert_eq!(so.payload(), Some(bytes.as_slice()));
     assert_eq!(so.filename, "source");
     assert_eq!(so.filetype, *b"8BPB");
     assert_eq!(so.creator, *b"8BIM");

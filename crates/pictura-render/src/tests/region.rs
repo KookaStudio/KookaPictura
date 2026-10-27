@@ -74,7 +74,7 @@ fn a_region_no_effect_reaches_composites_alone_and_exactly() {
 #[test]
 fn a_region_an_effect_reaches_still_matches_the_full_composite() {
     let d = shapes_doc();
-    // Across the stroke band: the full-composite fallback.
+    // Across the stroke band: the region replay must match the full slice.
     assert_region_matches_full(&d, 50, 10, 40, 40);
     let full = composite_rgba(&d);
     assert_eq!(
@@ -329,5 +329,232 @@ fn banding_with_a_short_type_layer_equals_one_canvas() {
     assert!(
         whole.data != crate::composite::composite_whole(&banded_doc()).data,
         "no text drawn"
+    );
+}
+
+fn styled_effects_layer() -> Layer {
+    let mut layer = solid(
+        "Styled",
+        rect(30, 30, 34, 34),
+        (255, 0, 0),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    for key in [
+        "dropShadow.on",
+        "outerGlow.on",
+        "innerShadow.on",
+        "innerGlow.on",
+        "stroke.on",
+        "satin.on",
+        "bevel.on",
+        "colorOverlay.on",
+        "gradientOverlay.on",
+        "patternOverlay.on",
+    ] {
+        crate::set_layer_style_value(&mut layer, key, 1.0);
+    }
+    layer
+}
+
+#[test]
+fn styled_layer_region_matches_the_full_slice() {
+    let d = doc(
+        80,
+        80,
+        vec![
+            solid(
+                "Backdrop",
+                full(80, 80),
+                (255, 255, 255),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            styled_effects_layer(),
+        ],
+    );
+    assert_region_matches_full(&d, 14, 26, 30, 30);
+    assert_region_matches_full(&d, 0, 0, 80, 80);
+}
+
+#[test]
+fn smart_filter_region_matches_the_full_slice() {
+    let mut filtered = smart_source_layer(rect(10, 10, 50, 50));
+    let slots = [
+        1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 25.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0,
+    ];
+    pictura_codec::attach_lens_correction_filter(&mut filtered, &slots).expect("attaches");
+    let d = doc(
+        80,
+        80,
+        vec![
+            solid(
+                "Backdrop",
+                full(80, 80),
+                (255, 255, 255),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            filtered,
+        ],
+    );
+    let painted = composite_rgba(&d);
+    let p = px(&painted, 20, 20);
+    assert_ne!(
+        p[..3],
+        [255u8, 255, 255],
+        "the smart-filtered layer must actually paint"
+    );
+    assert_region_matches_full(&d, 20, 20, 20, 20);
+    assert_region_matches_full(&d, 10, 10, 40, 40);
+}
+
+#[test]
+fn offset_canvas_effect_replay_matches() {
+    let d = doc(
+        80,
+        80,
+        vec![
+            solid(
+                "Backdrop",
+                full(80, 80),
+                (255, 255, 255),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            styled_effects_layer(),
+        ],
+    );
+    // A non-zero canvas origin on both axes.
+    assert_region_matches_full(&d, 31, 33, 12, 12);
+    assert_region_matches_full(&d, 13, 29, 9, 9);
+}
+
+#[test]
+fn bounded_effect_does_not_full_composite() {
+    let d = doc(
+        4000,
+        4000,
+        vec![
+            solid(
+                "Backdrop",
+                rect(0, 0, 200, 200),
+                (255, 255, 255),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            styled_effects_layer(),
+        ],
+    );
+    let _ = crate::metrics::take_largest_canvas();
+    let _ = crate::composite::composite_rgba_region(&d, 20, 30, 512, 120);
+    let largest = crate::metrics::take_largest_canvas();
+    let region_bytes = (512 * 120 * std::mem::size_of::<crate::composite::Px>()) as u64;
+    assert!(
+        largest <= region_bytes,
+        "a bounded effect must stay region-sized, got {largest} bytes"
+    );
+}
+
+fn smart_source_layer(rect: pictura_core::PsdRect) -> Layer {
+    let mut source = doc(
+        4,
+        4,
+        vec![solid(
+            "s",
+            full(4, 4),
+            (200, 50, 0),
+            255,
+            BlendMode::Normal,
+            255,
+        )],
+    );
+    source.composite = composite_rgba(&source);
+    let payload = pictura_codec::write_psd(&source).expect("source writes");
+    let mut so = {
+        let mut so = pictura_core::SmartObject::default();
+        so.kind = pictura_core::SmartObjectKind::Embedded;
+        so
+    };
+    so.set_payload(payload);
+    Layer {
+        name: "Smart".into(),
+        rect,
+        smart_object: Some(so),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn banded_equals_whole_with_object_layers() {
+    let mut filtered = smart_source_layer(rect(0, 0, 20, 20));
+    let slots = [
+        1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 25.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0,
+    ];
+    pictura_codec::attach_lens_correction_filter(&mut filtered, &slots).expect("attaches");
+    let d = doc(
+        100,
+        300,
+        vec![
+            solid(
+                "Backdrop",
+                full(100, 300),
+                (255, 255, 255),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            filtered,
+            crate::tests::composite::type_layer(Some(crate::tests::composite::type_style())),
+            styled_effects_layer(),
+            smart_source_layer(rect(30, 30, 60, 60)),
+        ],
+    );
+    let banded = composite_rgba(&d);
+    let whole = crate::composite::composite_whole(&d);
+    assert_eq!(banded.data.as_ref(), whole.data.as_ref());
+}
+
+#[test]
+fn pattern_effects_disable_banding_and_stay_identical() {
+    let mut d = doc(
+        40,
+        300,
+        vec![solid(
+            "Styled",
+            full(40, 300),
+            (200, 40, 40),
+            255,
+            BlendMode::Normal,
+            255,
+        )],
+    );
+    assert!(crate::set_document_layer_style_value(
+        &mut d,
+        "0",
+        "patternOverlay.on",
+        1.0
+    ));
+    assert!(
+        !crate::composite_region::banded(&d, 300),
+        "a pattern overlay pass cannot be rebuilt once per band"
+    );
+    crate::purge_source_cache();
+    let cold = composite_rgba(&d);
+    let warm = composite_rgba(&d);
+    assert_eq!(cold.data.as_ref(), warm.data.as_ref());
+
+    let mut plain = d.clone();
+    plain.layers[0]
+        .extra_blocks
+        .retain(|block| &block.key != b"lfx2");
+    assert!(
+        crate::composite_region::banded(&plain, 300),
+        "without the pattern overlay the same tall document is bandable"
     );
 }

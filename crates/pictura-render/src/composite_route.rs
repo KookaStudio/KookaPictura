@@ -184,10 +184,11 @@ pub(crate) mod tests {
         Layer {
             rect: rect(),
             channels,
-            smart_object: Some(SmartObject {
-                smart_filters: filters,
-                smart_filters_enabled: master,
-                ..Default::default()
+            smart_object: Some({
+                let mut so = SmartObject::default();
+                so.smart_filters = filters;
+                so.smart_filters_enabled = master;
+                so
             }),
             ..Default::default()
         }

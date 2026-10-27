@@ -187,8 +187,8 @@ pub fn set_crs_property(
             .clone()
             .ok_or_else(|| PsdError::Invalid(format!("smart object {uuid} has no crs packet")))?;
         let payload = so
-            .payload
-            .clone()
+            .payload()
+            .map(<[u8]>::to_vec)
             .ok_or_else(|| PsdError::Invalid(format!("smart object {uuid} has no payload")))?;
         (packet, payload)
     };
@@ -210,7 +210,7 @@ pub fn set_crs_property(
     let so = find_smart_object_mut(&mut doc.layers, uuid)
         .ok_or_else(|| PsdError::Invalid(format!("smart object {uuid} vanished")))?;
     so.crs_xmp = Some(new_packet);
-    so.payload = Some(new_payload);
+    so.set_payload(new_payload);
     so.crs = Some(new_crs);
     doc.layer_section_extra = new_section;
     Ok(())
@@ -435,14 +435,14 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
     fn edit_round_trips_through_write_and_read() {
         let mut doc = crs_doc_with_payload(&payload());
         let so = find_smart_object(&doc.layers, UUID).unwrap();
-        let old_payload = so.payload.clone().unwrap();
+        let old_payload = so.payload().map(<[u8]>::to_vec).unwrap();
         let old_packet = so.crs_xmp.clone().unwrap();
 
         set_crs_property(&mut doc, UUID, "Exposure2012", 1.25).expect("edit succeeds");
 
         let so = find_smart_object(&doc.layers, UUID).unwrap();
         assert_eq!(so.crs.as_ref().unwrap().exposure, Some(1.25));
-        let new_payload = so.payload.clone().unwrap();
+        let new_payload = so.payload().map(<[u8]>::to_vec).unwrap();
         let new_packet = so.crs_xmp.clone().unwrap();
         let at = find_subslice(&old_payload, &old_packet).unwrap();
         let mut expected = old_payload[..at].to_vec();
@@ -493,8 +493,8 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
         let section = doc.layer_section_extra.clone();
         let payload = find_smart_object(&doc.layers, UUID)
             .unwrap()
-            .payload
-            .clone();
+            .payload()
+            .map(<[u8]>::to_vec);
 
         assert!(matches!(
             set_crs_property(&mut doc, UUID, "Nope", 1.0),
@@ -511,8 +511,8 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
 
         assert_eq!(doc.layer_section_extra, section);
         assert_eq!(
-            find_smart_object(&doc.layers, UUID).unwrap().payload,
-            payload
+            find_smart_object(&doc.layers, UUID).unwrap().payload(),
+            payload.as_deref()
         );
     }
 
@@ -557,6 +557,35 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
             crate::write_psd(&back).expect("re-writes"),
             written,
             "open to save is byte-identical"
+        );
+    }
+
+    #[test]
+    fn payload_digest_tracks_replace_and_crs_patch() {
+        let mut doc = crs_doc_with_payload(&payload());
+        let before = find_smart_object(&doc.layers, UUID)
+            .unwrap()
+            .payload_digest();
+        assert_ne!(before, 0, "a decoded payload has a digest");
+
+        set_crs_property(&mut doc, UUID, "Exposure2012", 1.25).expect("edit succeeds");
+        let patched = find_smart_object(&doc.layers, UUID)
+            .unwrap()
+            .payload_digest();
+        assert_ne!(
+            before, patched,
+            "patching the CRS packet changes the payload"
+        );
+
+        find_smart_object_mut(&mut doc.layers, UUID)
+            .unwrap()
+            .set_payload(b"8BPS\x00\x01replacement".to_vec());
+        let replaced = find_smart_object(&doc.layers, UUID)
+            .unwrap()
+            .payload_digest();
+        assert_ne!(
+            patched, replaced,
+            "replacing the payload changes the digest"
         );
     }
 }

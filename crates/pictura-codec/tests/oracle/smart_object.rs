@@ -33,12 +33,15 @@ fn embedded_smart_doc() -> Document {
                 data: vec![255; 16].into(),
             },
         ],
-        smart_object: Some(SmartObject {
-            filename: "source.psb".into(),
-            kind: SmartObjectKind::Embedded,
-            payload: Some((0..4096).map(|i| (i % 251) as u8).collect()),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.filename = "source.psb".into();
+                so.kind = SmartObjectKind::Embedded;
+                so
+            }
+            .with_payload((0..4096).map(|i| (i % 251) as u8).collect()),
+        ),
         ..Default::default()
     }]);
     doc

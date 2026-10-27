@@ -63,6 +63,8 @@ pub use state::PictureViewRust;
 #[cfg(test)]
 mod canvas_view_test;
 #[cfg(test)]
+mod damage_policy_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_auto_select;

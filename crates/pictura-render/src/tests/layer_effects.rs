@@ -2,6 +2,8 @@ use pictura_core::{Knockout, LayerBlock};
 
 use super::*;
 
+mod cache;
+
 const PRC: [u8; 4] = *b"#Prc";
 const ANG: [u8; 4] = *b"#Ang";
 const PXL: [u8; 4] = *b"#Pxl";
@@ -695,11 +697,14 @@ fn channel_less_smart_object_shadow_covers_the_layer_rect() {
         name: "Smart".into(),
         rect: rect(3, 3, 6, 6),
         channels: Vec::new(),
-        smart_object: Some(pictura_core::SmartObject {
-            kind: pictura_core::SmartObjectKind::Embedded,
-            payload: Some(vec![0; 4]),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = pictura_core::SmartObject::default();
+                so.kind = pictura_core::SmartObjectKind::Embedded;
+                so
+            }
+            .with_payload(vec![0; 4]),
+        ),
         ..Default::default()
     };
     layer.extra_blocks = vec![spec_block(&ShadowSpec::default())];
@@ -1072,12 +1077,15 @@ fn placed_smart_object_effect_matte() {
         name: "Placed".into(),
         rect: rect(3, 3, 7, 7),
         channels: Vec::new(),
-        smart_object: Some(pictura_core::SmartObject {
-            filename: "placed.psd".into(),
-            kind: pictura_core::SmartObjectKind::Embedded,
-            payload: Some(transparent_corner_payload()),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = pictura_core::SmartObject::default();
+                so.filename = "placed.psd".into();
+                so.kind = pictura_core::SmartObjectKind::Embedded;
+                so
+            }
+            .with_payload(transparent_corner_payload()),
+        ),
         ..Default::default()
     };
     layer.extra_blocks = vec![spec_block(&ShadowSpec {
@@ -1148,5 +1156,37 @@ fn layer_opacity_scales_effects() {
     assert!(
         left_strip_darkness(&half) > 0,
         "a half-opacity shadow paints"
+    );
+}
+
+#[test]
+fn rasterized_styled_object_bakes_the_effect_reach() {
+    use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
+
+    let mut d = doc(80, 80, vec![]);
+    let ellipse = outline_in_box(
+        ShapeOptions::new(ShapeKind::Ellipse, 0.0, 3),
+        (30.0, 30.0, 20.0, 20.0),
+    )
+    .unwrap();
+    let path = crate::add_shape_layer(&mut d, "", [255, 0, 0, 255], "Ellipse", &ellipse, None);
+    let layer = crate::resolve_path_mut(&mut d, &path).unwrap();
+    crate::set_shape_stroke(
+        layer,
+        Some(&crate::ShapeStroke {
+            color: [0, 160, 0],
+            width: 6,
+            position: crate::StrokePosition::Outside,
+        }),
+    );
+    layer.rect = rect(30, 30, 50, 50);
+    crate::set_layer_style_value(layer, "dropShadow.on", 1.0);
+    crate::set_layer_style_value(layer, "dropShadow.size", 12.0);
+    let before = crate::resolve_path(&d, &path).unwrap().rect;
+    assert!(crate::rasterize_shape(&mut d, &path));
+    let after = crate::resolve_path(&d, &path).unwrap().rect;
+    assert!(
+        after.width() > before.width(),
+        "the bake includes the shadow/stroke reach: {before:?} -> {after:?}"
     );
 }

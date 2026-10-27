@@ -386,12 +386,13 @@ mod tests {
 
     #[test]
     fn a_mask_attaches_to_its_smart_object_by_uuid() {
-        let so = SmartObject {
-            kind: pictura_core::SmartObjectKind::Embedded,
-            filename: "src.psd".into(),
-            payload: Some(b"8BPS\x00\x01x".to_vec()),
-            ..Default::default()
-        };
+        let so = {
+            let mut so = SmartObject::default();
+            so.kind = pictura_core::SmartObjectKind::Embedded;
+            so.filename = "src.psd".into();
+            so
+        }
+        .with_payload(b"8BPS\x00\x01x".to_vec());
         let uuid = crate::smart_writer::author_uuid(&so);
         let mut layer = Layer {
             name: "L".into(),

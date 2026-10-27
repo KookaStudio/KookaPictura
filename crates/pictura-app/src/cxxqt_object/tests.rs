@@ -935,12 +935,13 @@ fn layer_can_edit_smart_object_contents_eligibility() {
     };
     let smart = |payload: Option<Vec<u8>>| {
         let mut layer = pixel_layer("smart", 4, 4, (1, 2, 3));
-        layer.smart_object = Some(SmartObject {
-            kind: SmartObjectKind::Embedded,
-            payload,
-            filename: "source.psd".into(),
-            ..Default::default()
-        });
+        let mut so = SmartObject::default();
+        so.kind = SmartObjectKind::Embedded;
+        so.filename = "source.psd".into();
+        if let Some(payload) = payload {
+            so.set_payload(payload);
+        }
+        layer.smart_object = Some(so);
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         doc
@@ -1284,10 +1285,9 @@ fn placed_smart_object_predicate_accepts_external_and_alias() {
 
     let with_kind = |kind: SmartObjectKind| {
         let mut layer = pixel_layer("placed", 2, 2, (1, 2, 3));
-        layer.smart_object = Some(SmartObject {
-            kind,
-            ..Default::default()
-        });
+        let mut so = SmartObject::default();
+        so.kind = kind;
+        layer.smart_object = Some(so);
         layer
     };
 

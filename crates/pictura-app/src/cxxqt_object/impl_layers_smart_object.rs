@@ -241,7 +241,7 @@ impl qobject::PictureView {
                     SmartObjectKind::Alias => "alias",
                     SmartObjectKind::Unresolved => "unresolved",
                 };
-                format!("{kind}:{}", so.payload.as_ref().map_or(0, Vec::len))
+                format!("{kind}:{}", so.payload().map_or(0, <[u8]>::len))
             })
             .unwrap_or_default();
         QString::from(state.as_str())

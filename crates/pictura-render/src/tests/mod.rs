@@ -9,7 +9,7 @@ use pictura_core::{
 mod adjustment;
 mod blend;
 mod clipping;
-mod composite;
+pub(crate) mod composite;
 mod gradient_fill;
 mod layer_effects;
 mod native_depth;
@@ -23,7 +23,7 @@ mod text_gamma;
 mod vector_fill;
 mod vector_mask;
 
-fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
+pub(crate) fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
     PsdRect {
         top,
         left,
@@ -32,11 +32,11 @@ fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
     }
 }
 
-fn full(w: u32, h: u32) -> PsdRect {
+pub(crate) fn full(w: u32, h: u32) -> PsdRect {
     rect(0, 0, h as i32, w as i32)
 }
 
-fn solid(
+pub(crate) fn solid(
     name: &str,
     r: PsdRect,
     rgb: (u8, u8, u8),
@@ -111,7 +111,7 @@ fn group(
     }
 }
 
-fn doc(w: u32, h: u32, layers: Vec<Layer>) -> Document {
+pub(crate) fn doc(w: u32, h: u32, layers: Vec<Layer>) -> Document {
     let mut d = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     d.layers = pictura_core::LayerStack::from_layers(layers);
     d

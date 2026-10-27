@@ -79,6 +79,7 @@ fn apply_op(base: &PixelBuffer, op: SmartFilterOp) -> PixelBuffer {
 /// `origin` is `base`'s top-left in document coordinates, which the mask rect
 /// is expressed in. Without a mask (or with it disabled) the filtered result is
 /// returned unchanged.
+#[cfg(test)]
 pub(crate) fn apply_masked_chain(
     base: &PixelBuffer,
     so: &SmartObject,
@@ -156,29 +157,51 @@ pub(crate) fn composite_smart_filtered_source(
     if region.width() <= 0 || region.height() <= 0 {
         return false;
     }
-    let Some(base) = render_smart_source(so, layer.rect, region) else {
+    let Some(cached) = crate::layer_source::filtered_source(layer, doc) else {
         return false;
     };
-    let src = apply_masked_chain(&base, so, [region.left, region.top]);
+    let has_mask = so
+        .filter_mask
+        .as_ref()
+        .is_some_and(|_| so.filter_mask_enabled);
+    let base = has_mask
+        .then(|| render_smart_source(so, layer.rect, cached.rect))
+        .flatten();
 
-    let rw = region.width() as usize;
-    let rh = region.height() as usize;
-    let plane = rw * rh;
-    for by in 0..rh {
-        for bx in 0..rw {
-            let i = by * rw + bx;
+    let full = &cached.buffer;
+    let fw = full.width as usize;
+    let plane = fw * full.height as usize;
+    for y in region.top..region.bottom {
+        for x in region.left..region.right {
+            let i = (y - cached.rect.top) as usize * fw + (x - cached.rect.left) as usize;
+            let mut c = [
+                full.data[i],
+                full.data[plane + i],
+                full.data[2 * plane + i],
+                full.data[3 * plane + i],
+            ];
+            if let Some(base) = base.as_ref() {
+                let m = mask_value(so, x, y);
+                if m < 1.0 {
+                    for (k, value) in c.iter_mut().enumerate() {
+                        let b = f32::from(base.data[k * plane + i]);
+                        let f = f32::from(full.data[k * plane + i]);
+                        *value = (b + (f - b) * m).round().clamp(0.0, 255.0) as u8;
+                    }
+                }
+            }
             blend_into(
                 canvas,
                 layer,
                 doc,
-                region.left as usize + bx,
-                region.top as usize + by,
+                x as usize,
+                y as usize,
                 [
-                    src.data[i] as f32 / 255.0,
-                    src.data[plane + i] as f32 / 255.0,
-                    src.data[2 * plane + i] as f32 / 255.0,
+                    c[0] as f32 / 255.0,
+                    c[1] as f32 / 255.0,
+                    c[2] as f32 / 255.0,
                 ],
-                src.data[3 * plane + i] as f32 / 255.0,
+                c[3] as f32 / 255.0,
             );
         }
     }
@@ -189,17 +212,20 @@ pub(crate) fn composite_smart_filtered_source(
 mod tests {
     use super::*;
     use pictura_codec::LENS_CORRECTION_FILTER_NAME;
-    use pictura_core::{FilterMask, SmartObject, SmartObjectKind};
+    use pictura_core::{BitDepth, ColorMode, FilterMask, LayerStack, SmartObject, SmartObjectKind};
 
     /// A Lens Correction smart filter carrying `slots`, built through the codec
     /// so the options bytes are the ones a commit would write.
     fn lens_filter(slots: &[f64]) -> SmartFilter {
         let mut layer = Layer {
-            smart_object: Some(SmartObject {
-                kind: SmartObjectKind::Embedded,
-                payload: Some(b"8BPS\x00\x01x".to_vec()),
-                ..Default::default()
-            }),
+            smart_object: Some(
+                {
+                    let mut so = SmartObject::default();
+                    so.kind = SmartObjectKind::Embedded;
+                    so
+                }
+                .with_payload(b"8BPS\x00\x01x".to_vec()),
+            ),
             ..Default::default()
         };
         pictura_codec::attach_lens_correction_filter(&mut layer, slots).expect("attaches");
@@ -279,12 +305,13 @@ mod tests {
         for y in 0..4 {
             coverage[y * 4] = 0;
         }
-        let so = SmartObject {
-            smart_filters: vec![filter.clone()],
-            smart_filters_enabled: true,
-            filter_mask_enabled: true,
-            filter_mask_extend_with_white: true,
-            filter_mask: Some(FilterMask {
+        let so = {
+            let mut so = SmartObject::default();
+            so.smart_filters = vec![filter.clone()];
+            so.smart_filters_enabled = true;
+            so.filter_mask_enabled = true;
+            so.filter_mask_extend_with_white = true;
+            so.filter_mask = Some(FilterMask {
                 rect: PsdRect {
                     top: 0,
                     left: 0,
@@ -292,8 +319,8 @@ mod tests {
                     right: 4,
                 },
                 data: coverage.into(),
-            }),
-            ..Default::default()
+            });
+            so
         };
         let base = base_buffer();
         let out = apply_masked_chain(&base, &so, [0, 0]);
@@ -320,15 +347,97 @@ mod tests {
     #[test]
     fn a_layer_without_a_mask_is_unchanged() {
         let filter = distortion_filter();
-        let so = SmartObject {
-            smart_filters: vec![filter.clone()],
-            smart_filters_enabled: true,
-            filter_mask: None,
-            ..Default::default()
+        let so = {
+            let mut so = SmartObject::default();
+            so.smart_filters = vec![filter.clone()];
+            so.smart_filters_enabled = true;
+            so.filter_mask = None;
+            so
         };
         let base = base_buffer();
         let out = apply_masked_chain(&base, &so, [0, 0]);
         let filtered = apply_smart_filter_chain(&base, std::slice::from_ref(&filter), true);
         assert_eq!(out.data.as_ref(), filtered.data.as_ref());
+    }
+
+    fn source_payload() -> Vec<u8> {
+        let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        let n = 4 * 4;
+        for y in 0..4 {
+            for x in 0..4 {
+                let i = y * 4 + x;
+                d.composite.data[i] = (x * 60) as u8;
+                d.composite.data[n + i] = (y * 60) as u8;
+                d.composite.data[2 * n + i] = ((x + y) * 30) as u8;
+            }
+        }
+        pictura_codec::write_psd(&d).expect("source writes")
+    }
+
+    #[test]
+    fn the_production_composite_honours_the_filter_mask() {
+        let mut coverage = vec![255u8; 16];
+        for y in 0..4 {
+            coverage[y * 4] = 0;
+        }
+        let mut so = SmartObject::default();
+        so.kind = SmartObjectKind::Embedded;
+        so.set_payload(source_payload());
+        so.smart_filters = vec![distortion_filter()];
+        so.smart_filters_enabled = true;
+        so.filter_mask_enabled = true;
+        so.filter_mask = Some(FilterMask {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 4,
+                right: 4,
+            },
+            data: coverage.into(),
+        });
+        let masked = Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 4,
+                right: 4,
+            },
+            smart_object: Some(so.clone()),
+            ..Default::default()
+        };
+        let mut plain_so = so.clone();
+        plain_so.smart_filters.clear();
+        plain_so.filter_mask = None;
+        let plain = Layer {
+            rect: masked.rect,
+            smart_object: Some(plain_so),
+            ..Default::default()
+        };
+        let mut unmasked_so = so;
+        unmasked_so.filter_mask = None;
+        let unmasked = Layer {
+            rect: masked.rect,
+            smart_object: Some(unmasked_so),
+            ..Default::default()
+        };
+        let render = |layer: Layer| {
+            let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+            d.layers = LayerStack::from_layers(vec![layer]);
+            crate::composite_rgba(&d)
+        };
+        let masked_out = render(masked);
+        let unmasked_out = render(unmasked);
+        let plain_out = render(plain);
+        assert_ne!(
+            masked_out.data, unmasked_out.data,
+            "the filter mask changes the composite"
+        );
+        for y in 0..4 {
+            let i = y * 4;
+            assert_eq!(
+                masked_out.data[i], plain_out.data[i],
+                "masked-out pixel keeps the unfiltered source"
+            );
+        }
     }
 }

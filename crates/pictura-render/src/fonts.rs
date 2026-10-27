@@ -7,7 +7,7 @@
 //! bounded by the faces a user actually picks.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{OnceLock, RwLock};
 
 use crate::text_render::{bundled, BundledText};
@@ -34,6 +34,14 @@ struct Registry {
 
 /// Missing Glyph Protection is application-wide, not document or history state.
 static MISSING_GLYPH_PROTECTION: AtomicBool = AtomicBool::new(true);
+
+/// Bumped whenever a face is registered, so caches keyed on text invalidate.
+static REGISTRY_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// The cache identity of the current font registry.
+pub(crate) fn generation() -> u64 {
+    REGISTRY_GENERATION.load(Ordering::Relaxed)
+}
 
 /// Turn per-character fallback on or off for every document.
 pub fn set_missing_glyph_protection(on: bool) {
@@ -115,6 +123,7 @@ pub fn register_font(family: &str, style: &str, bytes: Vec<u8>) -> bool {
     registry.families.entry(key(family)).or_insert(entry);
     registry.postscript.insert(key(&entry.postscript), entry);
     registry.order.push(entry);
+    REGISTRY_GENERATION.fetch_add(1, Ordering::Relaxed);
     true
 }
 

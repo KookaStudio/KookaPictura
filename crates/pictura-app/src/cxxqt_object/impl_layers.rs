@@ -23,7 +23,7 @@ fn property_compositing(doc: &Document, path: &str) -> Option<(BlendMode, u8, u8
     pictura_render::resolve_path(doc, path).map(|layer| (layer.blend, layer.opacity, layer.fill))
 }
 
-fn changed_property_region(
+pub(super) fn changed_property_region(
     doc: &Document,
     refs: &[&str],
     before: &[Option<(BlendMode, u8, u8)>],

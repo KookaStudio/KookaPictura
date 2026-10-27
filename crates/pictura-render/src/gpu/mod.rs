@@ -238,11 +238,9 @@ pub fn composite_region_active(
 
 /// The CPU region fallback.
 ///
-/// Composites only the requested region for a per-pixel stack; a stack with
-/// object-based layer effects still full-composites and slices (effect kernels
-/// read neighborhoods outside the rect). Byte-identical to the same slice of
-/// the full CPU composite either way. ponytail: layer effects keep the
-/// full-composite fallback; raise it only if one shows up in a brush profile.
+/// Composites only the requested region. Cached sources are sampled and effect
+/// passes are replayed into the region, so the result is byte-identical to the
+/// same slice of the full CPU composite for every stack.
 fn composite_cpu_region(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32) -> PixelBuffer {
     crate::composite::composite_rgba_region(doc, x0, y0, rw, rh)
 }
@@ -946,12 +944,15 @@ mod tests {
             name: "placed".into(),
             rect: px_rect(w, h),
             channels: Vec::new(),
-            smart_object: Some(SmartObject {
-                filename: "source.psd".into(),
-                kind: SmartObjectKind::Embedded,
-                payload: Some(payload),
-                ..Default::default()
-            }),
+            smart_object: Some(
+                {
+                    let mut so = SmartObject::default();
+                    so.filename = "source.psd".into();
+                    so.kind = SmartObjectKind::Embedded;
+                    so
+                }
+                .with_payload(payload),
+            ),
             ..Default::default()
         }]);
 

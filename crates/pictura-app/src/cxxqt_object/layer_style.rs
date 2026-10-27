@@ -43,7 +43,7 @@ pub mod ffi {
         /// The value of `key` (`"<effect>.<field>"`, `"<effect>.on"`, `"fx.visible"` or `"blending.<option>"`) on the layer at `path`; colours pack as 0xRRGGBB, blend modes and choices are indices. NaN for an unknown key or path.
         fn layer_style_value(view: &PictureView, path: &QString, key: &QString) -> f64;
 
-        /// Set `key` on the layer at `path` and recomposite, without a history state. False when refused or unchanged.
+        /// Set `key` on the layer at `path` and refresh its paint bounds, without a history state. False when refused or unchanged.
         fn layer_style_set(
             view: Pin<&mut PictureView>,
             path: &QString,
@@ -52,7 +52,7 @@ pub mod ffi {
         ) -> bool;
 
         /// Set the composite-source Blend If range on the layer at `path` and
-        /// recomposite, without a history state; `(0, 65535)` restores the
+        /// refresh its paint bounds, without a history state; `(0, 65535)` restores the
         /// default. False when refused or unchanged.
         fn layer_style_set_blend_if(
             view: Pin<&mut PictureView>,
@@ -148,6 +148,7 @@ fn layer_style_set(
     value: f64,
 ) -> bool {
     let (path, key) = (path.to_string(), key.to_string());
+    let before = paint_bounds(view.as_ref().get_ref(), &path);
     let changed = view
         .as_mut()
         .rust_mut()
@@ -156,11 +157,63 @@ fn layer_style_set(
         .as_mut()
         .is_some_and(|doc| pictura_render::set_document_layer_style_value(doc, &path, &key, value));
     if changed {
-        view.as_mut().recomposite();
+        refresh_paint_bounds(view.as_mut(), &path, before);
         let mut rust = view.as_mut().rust_mut();
         rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     }
     changed
+}
+
+/// The layer's paint bounds before or after a style change.
+fn paint_bounds(view: &PictureView, path: &str) -> Option<pictura_core::PsdRect> {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::layer_paint_bounds(doc, path))
+}
+
+/// Recomposite only the union of the bounds before and after a style edit,
+/// clipped to the canvas.
+fn refresh_paint_bounds(
+    mut view: Pin<&mut PictureView>,
+    path: &str,
+    before: Option<pictura_core::PsdRect>,
+) {
+    let after = paint_bounds(view.as_ref().get_ref(), path);
+    let (Some(a), Some(b)) = (before, after) else {
+        let Some(bounds) = before.or(after) else {
+            return;
+        };
+        let Some(rect) = clip_to_canvas(view.as_ref().get_ref(), bounds) else {
+            return;
+        };
+        view.as_mut().refresh_region(rect);
+        return;
+    };
+    let union = pictura_core::PsdRect {
+        left: a.left.min(b.left),
+        top: a.top.min(b.top),
+        right: a.right.max(b.right),
+        bottom: a.bottom.max(b.bottom),
+    };
+    if let Some(rect) = clip_to_canvas(view.as_ref().get_ref(), union) {
+        view.as_mut().refresh_region(rect);
+    }
+}
+
+fn clip_to_canvas(
+    view: &PictureView,
+    rect: pictura_core::PsdRect,
+) -> Option<pictura_core::PsdRect> {
+    let doc = view.rust().session.doc.as_ref()?;
+    let clipped = pictura_core::PsdRect {
+        left: rect.left.max(0),
+        top: rect.top.max(0),
+        right: rect.right.min(doc.width.min(i32::MAX as u32) as i32),
+        bottom: rect.bottom.min(doc.height.min(i32::MAX as u32) as i32),
+    };
+    (clipped.width() > 0 && clipped.height() > 0).then_some(clipped)
 }
 
 fn layer_style_set_blend_if(
@@ -171,6 +224,7 @@ fn layer_style_set_blend_if(
 ) -> bool {
     const FULL: (u16, u16) = (0, 65535);
     let path = path.to_string();
+    let before = paint_bounds(view.as_ref().get_ref(), &path);
     let range = pictura_core::BlendIf {
         composite_source: (
             source_black.clamp(0, 65535) as u16,
@@ -198,7 +252,7 @@ fn layer_style_set_blend_if(
             true
         });
     if changed {
-        view.as_mut().recomposite();
+        refresh_paint_bounds(view.as_mut(), &path, before);
         let mut rust = view.as_mut().rust_mut();
         rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     }

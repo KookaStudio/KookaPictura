@@ -453,11 +453,14 @@ fn channel_less_layer(payload: Vec<u8>) -> Layer {
         name: "SO".into(),
         rect: rect(2, 2),
         channels: Vec::new(),
-        smart_object: Some(SmartObject {
-            kind: SmartObjectKind::Embedded,
-            payload: Some(payload),
-            ..Default::default()
-        }),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so
+            }
+            .with_payload(payload),
+        ),
         ..Default::default()
     }
 }

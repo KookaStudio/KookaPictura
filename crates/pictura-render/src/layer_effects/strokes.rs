@@ -1,9 +1,10 @@
 use pictura_adjust::{GradientFillParams, PatternFillParams};
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
+use crate::composite::{desc_item, mask_alpha};
 
+use super::planes::{EffectPass, PassWriter};
 use super::{
     bool_or, clamp_finite, clip_rect, content_matte, decode_color, dilate_matte, effect_blend_mode,
     erode_matte, num_clamped, num_or, pad_rect, rect_empty, with_gradient_defaults, MAX_OPACITY,
@@ -164,40 +165,23 @@ pub fn decode_stroke(layer: &Layer) -> Option<Stroke> {
     })
 }
 
-/// Build the masked content matte `M` over the padded source region, form the
-/// band from exact integer max/min filters, and composite
-/// `band · source_alpha · opacity/100` above the content over `padded` only,
-/// where the source is the stroke fill: the flat `Solid` colour (alpha 1), the
-/// `Gradient` sampled over the layer rect when aligned (out-of-rect samples
-/// clamped to the nearest edge) else over the canvas, or the `Pattern` tiled
-/// from `padded` and anchored to the layer rect when linked (else the origin)
-/// with the tile alpha.
-///
-/// ponytail: the band is composited after the interior effects, so it sits on
-/// top of them; the exact inter-effect order and the isolated `Blend
-/// Interior Effects As Group` composite are not modelled. The max/min filters
-/// are separable, so a canvas-filling layer at the maximum size costs
-/// `O(canvas · size)` — the existing compositor ceiling, plus one
-/// gradient/pattern buffer.
-pub(super) fn composite_stroke(
-    canvas: &mut Canvas,
-    layer: &Layer,
-    doc: &Document,
-    stroke: &Stroke,
-) {
-    let (w, h) = (canvas.w as i32, canvas.h as i32);
+pub(super) fn build_stroke(layer: &Layer, doc: &Document, stroke: &Stroke) -> Vec<EffectPass> {
+    let (w, h) = (
+        doc.width.min(i32::MAX as u32) as i32,
+        doc.height.min(i32::MAX as u32) as i32,
+    );
     if w == 0 || h == 0 {
-        return;
+        return Vec::new();
     }
     let source = clip_rect(layer, w, h);
     if rect_empty(source) {
-        return;
+        return Vec::new();
     }
     // Clamp again: a hand-built `Stroke` may not have gone through decode.
     let size = clamp_finite(stroke.size as f32, MAX_SIZE) as i64;
     let opacity = clamp_finite(stroke.opacity, MAX_OPACITY) / 100.0;
     if size == 0 || opacity == 0.0 {
-        return;
+        return Vec::new();
     }
     let (out_r, in_r) = match stroke.position {
         StrokePosition::Outside => (size, 0),
@@ -209,7 +193,7 @@ pub(super) fn composite_stroke(
     // the source edge that the erode min filter needs.
     let padded = pad_rect(source, size, w, h);
     if rect_empty(padded) {
-        return;
+        return Vec::new();
     }
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
@@ -222,7 +206,7 @@ pub(super) fn composite_stroke(
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
-        return;
+        return Vec::new();
     }
     let dilate = |r: i64| {
         if r > 0 {
@@ -259,7 +243,7 @@ pub(super) fn composite_stroke(
         }
     };
     // The gradient buffer is generated over the layer rect (aligned) or the
-    // canvas (unaligned); both leave every `padded` sample in range, and the
+    // document (unaligned); both leave every `padded` sample in range, and the
     // aligned out-of-rect samples are clamped to the nearest edge (design D4).
     let gradient = match &stroke.fill {
         StrokeFill::Gradient {
@@ -274,10 +258,15 @@ pub(super) fn composite_stroke(
                     layer.rect.top,
                 )
             } else {
-                (canvas.w as i32, canvas.h as i32, 0, 0)
+                (
+                    doc.width.min(i32::MAX as u32) as i32,
+                    doc.height.min(i32::MAX as u32) as i32,
+                    0,
+                    0,
+                )
             };
             if gw <= 0 || gh <= 0 {
-                return;
+                return Vec::new();
             }
             Some((
                 crate::fill::gradient_rgba(gw, gh, params),
@@ -290,7 +279,7 @@ pub(super) fn composite_stroke(
         _ => None,
     };
     // The pattern tile is baked once over `padded`, anchored to the layer rect
-    // when linked (matching the pattern overlay) else the canvas origin; the
+    // when linked (matching the pattern overlay) else the document origin; the
     // shipped `Tile` wraps both axes, so the pattern repeats beyond the content.
     let pattern = match &stroke.fill {
         StrokeFill::Pattern { params, .. } => {
@@ -305,6 +294,16 @@ pub(super) fn composite_stroke(
             ))
         }
         _ => None,
+    };
+    let rect = PsdRect {
+        top: py0,
+        left: px0,
+        bottom: py1,
+        right: px1,
+    };
+    let mut writer = match &stroke.fill {
+        StrokeFill::Solid(color) => PassWriter::constant(rect, stroke.blend_mode, rgb_f32(*color)),
+        _ => PassWriter::per_pixel(rect, stroke.blend_mode),
     };
     for y in py0..py1 {
         for x in px0..px1 {
@@ -334,17 +333,11 @@ pub(super) fn composite_stroke(
             };
             let alpha = band[i] * src_a * opacity;
             if alpha > 0.0 {
-                blend_parts(
-                    canvas,
-                    x as usize,
-                    y as usize,
-                    rgb,
-                    alpha,
-                    stroke.blend_mode,
-                );
+                writer.emit(x, y, rgb, alpha);
             }
         }
     }
+    vec![writer.finish()]
 }
 
 fn rgb_f32(c: [u8; 3]) -> [f32; 3] {
