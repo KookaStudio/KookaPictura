@@ -33,7 +33,8 @@ namespace pictura {
 
 namespace {
 
-constexpr int kSlots = LensAutoPanel::kSlots + LensCustomPanel::kSlots;
+constexpr int kSlots =
+    LensAutoPanel::kSlots + LensCustomPanel::kSlots + LensAutoPanel::kProfileSlots;
 
 struct ToolInfo {
     LensCorrectionDialog::Tool tool;
@@ -241,7 +242,7 @@ LensCorrectionDialog::~LensCorrectionDialog()
 
 QList<double> LensCorrectionDialog::values() const
 {
-    return auto_->values() + custom_->values();
+    return auto_->values() + custom_->values() + auto_->profileValues();
 }
 
 bool LensCorrectionDialog::load(const QList<double>& values)
@@ -253,10 +254,11 @@ bool LensCorrectionDialog::load(const QList<double>& values)
     if (!lc_set(::rust::Slice<const double>(flat.data(), flat.size()))) {
         return false;
     }
-    if (!auto_->setValues(values.mid(0, LensAutoPanel::kSlots))) {
+    constexpr int profileAt = LensAutoPanel::kSlots + LensCustomPanel::kSlots;
+    if (!auto_->setValues(values.mid(0, LensAutoPanel::kSlots), values.mid(profileAt))) {
         return false;
     }
-    custom_->setValues(values.mid(LensAutoPanel::kSlots));
+    custom_->setValues(values.mid(LensAutoPanel::kSlots, LensCustomPanel::kSlots));
     pushValues();
     return true;
 }
@@ -370,8 +372,9 @@ bool LensCorrectionDialog::get(PictureView* view, const QList<double>& initial,
             start.append(v);
         }
     }
-    // Settings that no longer apply (a profile no longer installed) refuse
-    // rather than open on defaults OK would then commit.
+    // Settings that no longer apply (a profile no longer installed, with no
+    // stored coefficients) refuse rather than open on defaults OK would then
+    // commit.
     if (!start.isEmpty() && !dialog.load(start)) {
         qWarning().noquote() << "Lens Correction: the last settings no longer apply";
         return false;

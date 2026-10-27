@@ -1,0 +1,40 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `lcp_lensfun_parse` | Parse a synthetic database: a zoom lens with distortion and TCA at 24 and 70 mm, vignetting at 50 mm f/2.8 and f/4, and a second calibration at crop 1.5 | Two profiles (one per crop); sub-profiles for each vignetting entry plus 24 and 70 mm; each takes the nearest focal's distortion and TCA; the model is empty | `pictura-filters::lensfun_xml_yields_profiles_and_subprofiles` |
+| `lcp_lensfun_skip` | Parse `acm` entries, a fisheye, a lens with `k1="x"`, and broken XML | Those entries and lenses skipped; the rest loads; the broken file errors | `pictura-filters::lensfun_skips_what_it_cannot_model` |
+| `lcp_lensfun_convert` | Map radii through converted `poly3`, `poly5`, `ptlens`, TCA `poly3`, and `pa` at aspect 3:2 | Equal to lensfun's formulas in lensfun units; the `ptlens` centre magnification is divided out | `pictura-filters::lensfun_coefficients_convert_to_the_half_diagonal` |
+| `lcp_crop_rescale` | Resolve a sub-profile for crop = calibration, crop 2× larger, and an unknown camera | Unchanged, rescaled by `crop_cal / crop_camera`, unchanged | `pictura-filters::profile_rescales_to_the_camera_crop` |
+| `lcp_search_dirs` | Compute the roots for a set environment, with and without `PICTURA_LENSFUN_DIR` | System, `XDG_DATA_DIRS`, updates, and user roots in order; the override alone | `pictura-app::lensfun_dirs_follow_xdg_and_the_override` |
+| `lcp_search_replace` | Two roots with a same-named file holding different lenses, and a file only the first has | The later file's lenses only; the lone file loads | `pictura-app::later_files_replace_earlier_ones` |
+| `lcp_user_profiles` | A user folder with one in-tree profile and a broken file; a lensfun root with one lens; open the dialog | Bundled, lensfun, and user profiles are installed; the broken file is skipped; the dialog lists them | `pictura-app::user_profiles_load_from_the_data_home`, `tst_lens_profiles::userAndLensfunProfilesAreListed` |
+| `lcp_sub_format` | Parse defaults with two `[sub]` blocks, a plain profile, `[sub]` first, and `focal` at profile level | Subs inherit and override; one sub for the plain profile; `raw = yes` sets the flag; two errors naming the line | `pictura-filters::profile_parse_reads_subprofiles_and_raw` |
+| `lcp_sub_pick` | Pick for shots with all, some, and no EXIF values | Focal first, then stops, then distance; missing values skipped; a tie keeps the first | `pictura-filters::subprofile_pick_is_closest_focal_then_aperture_then_distance` |
+| `lcp_sub_auto` | Open `metadata.psd` (50 mm f/2.8) with a lensfun lens calibrated at 24/50/70 mm; OK | The lens is listed; the 50 mm f/2.8 sub is selected; committed slots carry its coefficients | `tst_lens_profiles::exifPicksTheClosestSubprofile` |
+| `lcp_sub_menu` | Build the context menu; trigger the 24 mm sub-profile | Every sub listed, current checked; slot 16 and the coefficients change; the preview changes | `tst_lens_profiles::subprofileMenuSwitchesTheSubprofile` |
+| `lcp_match` | Search lens-only and camera-specific profiles for a crop-1.5 camera | Lens-only match by lens or by maker; make rule kept for camera-specific; nearer crop first | `pictura-filters::lens_profiles_match_any_camera_and_sort_by_sensor` |
+| `lcp_prefer_raw` | Search with Prefer RAW off and on; toggle it in the dialog | Raw moves ahead of an equal match only when on; the list follows | `pictura-filters::prefer_raw_ranks_raw_profiles_first`, `tst_lens_profiles::preferRawReordersTheList` |
+| `lcp_ids` | Hash the bundled, user, and lensfun profiles in two load orders | Same id per profile; distinct ids; all ≥ 2³⁰ | `pictura-filters::profile_ids_are_stable` |
+| `lcp_slots` | Map flag-on slots with an unknown id; a pre-change record with id 1; flag off with an unknown id | Stored model gated by the checkboxes; the bundled profile; refused | `pictura-filters::slots_carry_the_profile_coefficients` |
+| `lcp_unavailable` | Load slots whose id is not installed; OK | "Profile unavailable"; checkboxes enabled; committed slots equal the loaded ones | `tst_lens_profiles::unavailableProfileKeepsItsSettings` |
+| `lcp_online` | Open with a profile selected; build the sub-profile menu | Search Online disabled with its tooltip; Save Online Profile Locally disabled | `tst_lens_profiles::onlineProfilesStayDisabled` |
+| `lc_profile_parse` | Parse the bundled set and malformed text | Bundled parses; errors name the line or profile | `pictura-filters::profile_parse_reports_the_line`, `pictura-filters::builtin_profiles_parse` |
+| `lc_profile_match` | Search three camera-specific profiles by make, model, lens | Make required; lens outranks model; no make, nothing | `pictura-filters::profiles_match_make_then_model_and_lens` |
+| `lc_profile_compose` | Vignette-only profile with and without a Custom darkening; clear each checkbox | Corners brighten, then darken back; cleared parts are zero | `pictura-filters::profile_composes_with_custom`, `pictura-app::checkboxes_gate_the_profile_parts` |
+| `lc_slots` | Map default, out-of-range, NaN, short, and unknown-profile slot lists | Identity; clamped; refused; refused; refused without coefficients | `pictura-app::default_slots_are_the_identity`, `pictura-app::slots_map_and_clamp`, `pictura-app::unknown_profile_id_is_refused` |
+| `lc_commit` | Cancel, then OK with Remove Distortion 40 | No change; then one state, 36 slots, pixels changed | `tst_lens_correction::cancelAndOk` |
+| `lc_previous` | Commit distortion, fringe, perspective; pick Previous Conversion | Enabled; distortion and fringe restored; perspective 0 | `tst_lens_correction::previousConversionRestoresLastCommit` |
+| `lc_last_settings` | Commit, then Last Filter Settings | Committed values shown; Cancel adds no state | `tst_lens_correction::lastSettingsRestoresValues` |
+| `lc_smart_descriptor` | Encode a full 36-slot list and decode it | Equal | `pictura-codec::slots_round_trip_through_the_descriptor` |
+| `lc_smart_defaults` | Decode an empty descriptor, one missing a key, one with only the 16 old keys | Missing slots take the opening values; the 16-key record has the flag off | `pictura-codec::missing_keys_decode_to_the_opening_slots` |
+| `lc_smart_attach` | Attach slots to an embedded smart object; read back | Id, name, and slots round-trip | `pictura-codec::attach_records_the_filter` |
+| `lc_smart_attach_keeps` | Re-attach over an entry with an extra `Fltr` key | Extra key and `blendOptions` survive | `pictura-codec::reattaching_keeps_unmodeled_keys` |
+| `lc_smart_foreign` | Read a smart object with a foreign filter id | Options unchanged | `pictura-codec::a_foreign_filter_id_is_left_alone` |
+| `lc_smart_render` | Apply the chain with a Lens Correction filter | Equals `lens_correction` with the same parameters | `pictura-render::lens_correction_renders_the_chain` |
+| `lc_smart_fallback` | Decode an unknown id without coefficients and a bad slot count | Nothing decoded | `pictura-render::unmappable_slots_are_refused` |
+| `lc_smart_commit` | Apply on an embedded smart object | Filter attached; composite corrected; one state with 36 slots | `pictura-render::smart_apply_attaches_the_filter`, `tst_lens_correction::smartObjectAddsASmartFilter` |
+| `lc_smart_raster` | Apply on a raster layer | No smart object; pixels change | `tst_lens_correction::rasterLayerStaysDestructive` |
+| `lc_smart_gate` | Commit on a 32-bit document | Refused naming "8- or 16-bit" | `tst_lens_correction::smartObjectRefusesOffTheGate` |
+| Real lensfun database | Install `lensfun-data`; open a photo from a lensfun-calibrated lens (EXIF lens model set) | The lens is listed and auto-selected; the sub-profile follows the focal length; Geometric Distortion visibly straightens a barrel | manual: no lensfun data is in the tree or CI (CC BY-SA 3.0), so a real database is only on a reviewer's machine |
+| Right-click menu feel | Right-click the selected profile in the list | The sub-profile menu pops at the pointer | manual: the suite builds the menu directly; `QMenu::exec` at the pointer is modal and not driven offscreen |

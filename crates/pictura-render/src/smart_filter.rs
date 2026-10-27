@@ -20,7 +20,7 @@ use crate::composite::{blend_into, render_smart_source, Canvas};
 #[derive(Debug, Clone)]
 pub enum SmartFilterOp {
     CameraRaw(Box<PicturaRawSettings>),
-    LensCorrection(LensCorrectionParams),
+    LensCorrection(Box<LensCorrectionParams>),
 }
 
 /// Decode a [`SmartFilter`]'s options into a renderable op, or `None` for an
@@ -31,9 +31,9 @@ pub fn decode_smart_filter(filter: &SmartFilter) -> Option<SmartFilterOp> {
         CAMERA_RAW_FILTER_ID => Some(SmartFilterOp::CameraRaw(Box::new(
             decode_pictura_raw_settings(&filter.options),
         ))),
-        LENS_CORRECTION_FILTER_ID => Some(SmartFilterOp::LensCorrection(
+        LENS_CORRECTION_FILTER_ID => Some(SmartFilterOp::LensCorrection(Box::new(
             LensCorrectionParams::from_slots(&decode_lens_correction_slots(&filter.options))?,
-        )),
+        ))),
         _ => None,
     }
 }
@@ -67,7 +67,7 @@ fn apply_op(base: &PixelBuffer, op: SmartFilterOp) -> PixelBuffer {
         }
         SmartFilterOp::LensCorrection(params) => {
             let mut out = base.clone();
-            pictura_filters::apply(&Filter::LensCorrection { params }, &mut out)
+            pictura_filters::apply(&Filter::LensCorrection { params: *params }, &mut out)
                 .map(|()| out)
                 .unwrap_or_else(|_| base.clone())
         }
@@ -214,6 +214,12 @@ mod tests {
     use pictura_codec::LENS_CORRECTION_FILTER_NAME;
     use pictura_core::{BitDepth, ColorMode, FilterMask, LayerStack, SmartObject, SmartObjectKind};
 
+    /// The profile slots after the dialog's 16: no sub-profile, no coefficients.
+    const NO_PROFILE: [f64; 20] = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+        0.0, 0.0,
+    ];
+
     /// A Lens Correction smart filter carrying `slots`, built through the codec
     /// so the options bytes are the ones a commit would write.
     fn lens_filter(slots: &[f64]) -> SmartFilter {
@@ -239,9 +245,10 @@ mod tests {
 
     #[test]
     fn lens_correction_renders_the_chain() {
-        let slots = [
+        let mut slots = vec![
             1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 25.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0,
         ];
+        slots.extend(NO_PROFILE);
         let filter = lens_filter(&slots);
         let base = PixelBuffer {
             width: 8,
@@ -278,7 +285,7 @@ mod tests {
         assert!(decode_smart_filter(&filter).is_none());
 
         // A wrong slot count never reaches the mapping through the codec (decode
-        // always returns 16), so check the mapping directly.
+        // always returns 36), so check the mapping directly.
         assert!(LensCorrectionParams::from_slots(&[0.0; 15]).is_none());
     }
 
@@ -292,9 +299,11 @@ mod tests {
     }
 
     fn distortion_filter() -> SmartFilter {
-        lens_filter(&[
+        let mut slots = vec![
             1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 40.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0,
-        ])
+        ];
+        slots.extend(NO_PROFILE);
+        lens_filter(&slots)
     }
 
     #[test]

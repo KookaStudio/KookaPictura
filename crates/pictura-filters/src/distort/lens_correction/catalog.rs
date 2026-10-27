@@ -127,7 +127,7 @@ pub fn lenses() -> &'static [LensSpec] {
 }
 
 /// Lowercase with runs of spaces, dashes and underscores as one space.
-fn fold(s: &str) -> String {
+pub(super) fn fold(s: &str) -> String {
     s.split(|c: char| c.is_whitespace() || c == '-' || c == '_')
         .filter(|w| !w.is_empty())
         .collect::<Vec<_>>()

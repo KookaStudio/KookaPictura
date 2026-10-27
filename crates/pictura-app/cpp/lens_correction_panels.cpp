@@ -3,6 +3,7 @@
 #include "panels/jump_slider.h"
 
 #include <QtCore/QSignalBlocker>
+#include <QtGui/QActionGroup>
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -12,7 +13,9 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
 #include <algorithm>
@@ -25,6 +28,17 @@ namespace pictura {
 namespace {
 
 const QString kNoMatch = QStringLiteral("No matching profiles found");
+const QString kUnavailable = QStringLiteral("Profile unavailable");
+const QString kNoOnline =
+    QStringLiteral("No online lens profile service is available. Install lensfun's database "
+                   "(lensfun-data) for real profiles.");
+
+// The profile slots with no profile: no sub-profile, no coefficients, then the
+// identity model.
+const QList<double> kNoProfile = {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0};
+
+// Prefer RAW Profiles holds for the rest of the session.
+bool gPreferRaw = false;
 
 // The Custom slots' opening values, in slot order.
 constexpr double kCustomDefaults[LensCustomPanel::kSlots] = {0, 0, 0, 0, 0, 50, 0, 0, 0, 100};
@@ -98,6 +112,21 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     searchLayout->addRow(QStringLiteral("Camera Make:"), make_);
     searchLayout->addRow(QStringLiteral("Camera Model:"), model_);
     searchLayout->addRow(QStringLiteral("Lens Model:"), lens_);
+    // The Search Criteria pop-up; the list sorts by sensor size unless raw
+    // profiles are preferred.
+    searchMenu_ = new QToolButton(search);
+    searchMenu_->setObjectName(QStringLiteral("lcSearchMenu"));
+    searchMenu_->setText(QStringLiteral("Search Options"));
+    searchMenu_->setPopupMode(QToolButton::InstantPopup);
+    searchMenu_->setToolTip(
+        QStringLiteral("Search Criteria: profiles are sorted by sensor size; prefer raw profiles."));
+    auto* searchOptions = new QMenu(searchMenu_);
+    preferRaw_ = searchOptions->addAction(QStringLiteral("Prefer RAW Profiles"));
+    preferRaw_->setObjectName(QStringLiteral("lcPreferRaw"));
+    preferRaw_->setCheckable(true);
+    preferRaw_->setChecked(gPreferRaw);
+    searchMenu_->setMenu(searchOptions);
+    searchLayout->addRow(searchMenu_);
     info_ = new QLabel(search);
     info_->setObjectName(QStringLiteral("lcCriteriaInfo"));
     info_->setWordWrap(true);
@@ -108,11 +137,18 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     auto* profileLayout = new QVBoxLayout(profileBox);
     profiles_ = new QListWidget(profileBox);
     profiles_->setObjectName(QStringLiteral("lcProfiles"));
+    profiles_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(profiles_, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
+        QMenu* menu = subProfileMenu();
+        menu->exec(profiles_->viewport()->mapToGlobal(at));
+        delete menu;
+    });
     profileLayout->addWidget(profiles_);
-    // ponytail: no online profile source; the button stays for parity.
+    // The button stays for parity; there is no online profile source.
     searchOnline_ = new QPushButton(QStringLiteral("Search Online"), profileBox);
     searchOnline_->setObjectName(QStringLiteral("lcSearchOnline"));
     searchOnline_->setEnabled(false);
+    searchOnline_->setToolTip(kNoOnline);
     profileLayout->addWidget(searchOnline_, 0, Qt::AlignRight);
     layout->addWidget(profileBox, 1);
 
@@ -144,7 +180,14 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
         emitChanged();
     });
     connect(profiles_, &QListWidget::currentRowChanged, this, [this] {
+        sub_ = lc_auto_subprofile(profileId());
+        resolveProfile();
         updateCorrections();
+        emitChanged();
+    });
+    connect(preferRaw_, &QAction::toggled, this, [this](bool on) {
+        gPreferRaw = on;
+        fillProfiles();
         emitChanged();
     });
 }
@@ -166,7 +209,7 @@ void LensAutoPanel::fillProfiles()
     const QSignalBlocker block(profiles_);
     profiles_->clear();
     for (int32_t id : lc_match_profiles(make_->currentText(), model_->currentText(),
-                                        lens_->currentText())) {
+                                        lens_->currentText(), preferRaw_->isChecked())) {
         auto* item = new QListWidgetItem(QString(lc_profile_name(id)), profiles_);
         item->setData(Qt::UserRole, id);
     }
@@ -185,6 +228,12 @@ void LensAutoPanel::fillProfiles()
         }
         profiles_->setCurrentRow(row);
     }
+    // A new profile takes the sub-profile EXIF suits; a kept one keeps its
+    // choice, re-resolved for the camera.
+    if (profileId() != keep) {
+        sub_ = lc_auto_subprofile(profileId());
+    }
+    resolveProfile();
     updateCorrections();
     info_->setText(QString(
         lc_criteria_info(make_->currentText(), model_->currentText(), lens_->currentText())));
@@ -198,10 +247,58 @@ void LensAutoPanel::updateCorrections()
     vignette_->setEnabled(profile);
 }
 
+void LensAutoPanel::resolveProfile()
+{
+    profileSlots_.clear();
+    const int id = profileId();
+    if (id == 0) {
+        return;
+    }
+    for (double v : lc_profile_slots(id, sub_, make_->currentText(), model_->currentText())) {
+        profileSlots_.append(v);
+    }
+}
+
+void LensAutoPanel::selectSubProfile(int sub)
+{
+    sub_ = sub;
+    resolveProfile();
+    emitChanged();
+}
+
 int LensAutoPanel::profileId() const
 {
     const QListWidgetItem* item = profiles_->currentItem();
     return item ? item->data(Qt::UserRole).toInt() : 0;
+}
+
+int LensAutoPanel::subProfile() const
+{
+    return sub_;
+}
+
+QMenu* LensAutoPanel::subProfileMenu()
+{
+    auto* menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("lcSubProfileMenu"));
+    auto* group = new QActionGroup(menu);
+    const QStringList subs = lc_subprofiles(profileId());
+    for (int i = 0; i < subs.size(); ++i) {
+        QAction* action = menu->addAction(subs.at(i));
+        action->setCheckable(true);
+        action->setChecked(i == sub_);
+        group->addAction(action);
+        connect(action, &QAction::triggered, this, [this, i] { selectSubProfile(i); });
+    }
+    if (subs.isEmpty()) {
+        menu->addAction(QStringLiteral("No sub-profiles"))->setEnabled(false);
+    }
+    menu->addSeparator();
+    QAction* save = menu->addAction(QStringLiteral("Save Online Profile Locally"));
+    save->setObjectName(QStringLiteral("lcSaveOnline"));
+    save->setEnabled(false);
+    save->setToolTip(kNoOnline);
+    return menu;
 }
 
 QList<double> LensAutoPanel::values() const
@@ -214,12 +311,22 @@ QList<double> LensAutoPanel::values() const
             static_cast<double>(profileId())};
 }
 
-bool LensAutoPanel::setValues(const QList<double>& values)
+QList<double> LensAutoPanel::profileValues() const
+{
+    return profileId() != 0 && profileSlots_.size() == kProfileSlots ? profileSlots_ : kNoProfile;
+}
+
+bool LensAutoPanel::setValues(const QList<double>& values, const QList<double>& profile)
 {
     if (values.size() < kSlots) {
         return false;
     }
     const int id = static_cast<int>(std::lround(values.at(5)));
+    const bool stored = profile.size() == kProfileSlots && profile.at(1) >= 0.5;
+    const QString name = id != 0 ? QString(lc_profile_name(id)) : QString();
+    if (id != 0 && !stored && name.isEmpty()) {
+        return false;
+    }
     const QSignalBlocker a(geometric_);
     const QSignalBlocker b(chromatic_);
     const QSignalBlocker c(vignette_);
@@ -230,11 +337,21 @@ bool LensAutoPanel::setValues(const QList<double>& values)
     vignette_->setChecked(values.at(2) >= 0.5);
     autoScale_->setChecked(values.at(3) >= 0.5);
     edge_->setCurrentIndex(std::clamp(static_cast<int>(std::lround(values.at(4))), 0, 3));
+    auto restoreProfile = [&] {
+        if (id == 0) {
+            return;
+        }
+        if (stored) {
+            sub_ = static_cast<int>(std::lround(profile.at(0)));
+            profileSlots_ = profile;
+        } else {
+            sub_ = lc_auto_subprofile(id);
+            resolveProfile();
+        }
+    };
     if (id == profileId()) {
+        restoreProfile();
         return true;
-    }
-    if (id != 0 && QString(lc_profile_name(id)).isEmpty()) {
-        return false;
     }
     // Show every profile so the restored one is listed.
     {
@@ -251,10 +368,11 @@ bool LensAutoPanel::setValues(const QList<double>& values)
         fillProfiles();
         profiles_->setCurrentRow(-1);
     } else {
-        auto* item = new QListWidgetItem(QString(lc_profile_name(id)), profiles_);
+        auto* item = new QListWidgetItem(name.isEmpty() ? kUnavailable : name, profiles_);
         item->setData(Qt::UserRole, id);
         profiles_->setCurrentRow(0);
     }
+    restoreProfile();
     updateCorrections();
     return true;
 }

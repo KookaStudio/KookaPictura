@@ -60,7 +60,10 @@ LensCorrectionDialog* openDialog()
 bool applyLensCorrectionViaExecutor(pictura::PicturaMainWindow* window, double distortion)
 {
     QJsonArray values;
-    for (double v : QList<double>{1, 0, 0, 1, 1, 0, distortion, 0, 0, 0, 0, 50, 0, 0, 0, 100}) {
+    // The dialog's 16 slots, then no profile: no sub-profile, no coefficients,
+    // and the identity model.
+    for (double v : QList<double>{1, 0, 0, 1, 1, 0, distortion, 0, 0, 0, 0, 50, 0, 0, 0, 100,
+                                  0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0}) {
         values.append(v);
     }
     pictura::CommandParams params;
@@ -169,6 +172,9 @@ void LensCorrectionTest::initTestCase()
 {
     QVERIFY(stateHome_.isValid());
     QVERIFY(dir_.isValid());
+    // Only the bundled profile: no system lensfun database, no user profiles.
+    qputenv("PICTURA_LENSFUN_DIR", dir_.filePath(QStringLiteral("no-lensfun")).toUtf8());
+    qputenv("XDG_DATA_HOME", dir_.filePath(QStringLiteral("data")).toUtf8());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
     // Diagonal bands over a gradient, so every correction shows.
@@ -200,7 +206,7 @@ void LensCorrectionTest::menuFollowsDepthAndMode()
     QVERIFY(spec != nullptr);
     QCOMPARE(spec->kind, QStringLiteral("lens-correction"));
     QCOMPARE(spec->dialog, pictura::FilterDialogKind::LensCorrection);
-    QCOMPARE(pictura::filter_param_arity(spec->kind), 16);
+    QCOMPARE(pictura::filter_param_arity(spec->kind), 36);
     QAction* action = window_->registry()->action(pictura::commandIdForPath(kPath));
     QVERIFY(action != nullptr);
     // Whether the menu row is enabled on a new 8-bit RGB document after
@@ -304,7 +310,7 @@ void LensCorrectionTest::opensWithControls()
     QCOMPARE(child<QLabel>(dialog.get(), "lcCameraSettings")->text(),
              QStringLiteral("Camera Settings: --mm, f/--, --m"));
     QCOMPARE(dialog->tool(), int(LensCorrectionDialog::RemoveDistortion));
-    QCOMPARE(dialog->values().size(), 16);
+    QCOMPARE(dialog->values().size(), 36);
     dialog->reject();
 }
 
@@ -331,7 +337,11 @@ void LensCorrectionTest::exifPrefillsSearchAndStatus()
         QVERIFY(lens->findText(QStringLiteral("Canon EF 24-70mm f/2.8L II USM")) >= 0);
         QCOMPARE(lens->findText(QStringLiteral("Canon EF 100-300mm f/5.6L")), -1);
         // The synthetic profile matches and is chosen; its corrections apply.
-        QCOMPARE(dialog->autoPanel()->profileId(), 1);
+        QVERIFY(dialog->autoPanel()->profileId() >= (1 << 30));
+        QVERIFY(child<QListWidget>(dialog.get(), "lcProfiles")
+                    ->currentItem()
+                    ->text()
+                    .startsWith(QStringLiteral("ACME 50mm")));
         auto* geometric = child<QCheckBox>(dialog.get(), "lcGeometric");
         QVERIFY(geometric->isEnabled());
         auto* vignette = child<QCheckBox>(dialog.get(), "lcVignette");
@@ -581,7 +591,7 @@ void LensCorrectionTest::cancelAndOk()
     QVERIFY(window_->registry()->dispatch(id));
     QCOMPARE(view->history_count(), history + 1);
     QCOMPARE(filter_last_kind(*view), QStringLiteral("lens-correction"));
-    QCOMPARE(filter_last_params(*view).size(), 16);
+    QCOMPARE(filter_last_params(*view).size(), 36);
     QVERIFY(view->image() != document);
 }
 
@@ -695,7 +705,7 @@ void LensCorrectionTest::smartObjectAddsASmartFilter()
     QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Lens Correction"));
     QCOMPARE(view->history_count(), history + 1);
     QCOMPARE(filter_last_kind(*view), QStringLiteral("lens-correction"));
-    QCOMPARE(filter_last_params(*view).size(), 16);
+    QCOMPARE(filter_last_params(*view).size(), 36);
     QVERIFY(window_->closeActiveDocument(false));
 }
 
