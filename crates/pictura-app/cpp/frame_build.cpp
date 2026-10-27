@@ -34,6 +34,11 @@ QColor PicturaMainWindow::foregroundColor() const
     return colorState_ ? colorState_->foreground() : QColor(Qt::black);
 }
 
+QColor PicturaMainWindow::backgroundColor() const
+{
+    return colorState_ ? colorState_->background() : QColor(Qt::white);
+}
+
 void PicturaMainWindow::buildPanels(const SessionState& state)
 {
     colorState_ = new ColorState(this);

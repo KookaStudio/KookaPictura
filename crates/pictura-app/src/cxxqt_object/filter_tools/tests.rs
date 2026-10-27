@@ -169,3 +169,40 @@ fn a_nested_active_layer_resolves_for_the_proxy() {
     assert_eq!(base.data[2 * plane], 0, "the blue nested layer is hidden");
     assert!(doc.layers[0].children[1].visible, "visibility restored");
 }
+
+#[test]
+fn filter_descriptors_mirror_the_catalogue() {
+    let rows = filter_descriptors();
+    let specs: Vec<_> = pictura_filters::catalogue::all().collect();
+    assert_eq!(rows.len(), specs.len());
+    for (row, spec) in rows.iter().zip(specs) {
+        assert_eq!(row.kind.to_string(), spec.id);
+        assert_eq!(row.menu, spec.menu);
+        assert_eq!(row.label.to_string(), spec.label);
+        assert_eq!(row.gallery_rank, spec.gallery.map_or(-1, i32::from));
+        let path: Vec<String> = row.path.iter().map(ToString::to_string).collect();
+        let expected: Vec<String> = spec.path.iter().map(|part| (*part).to_string()).collect();
+        assert_eq!(path, expected);
+        assert_eq!(row.params.len(), spec.params.len());
+        for (param, source) in row.params.iter().zip(spec.params) {
+            assert_eq!(param.control, source.control as i32);
+            assert_eq!(param.minimum, source.minimum);
+            assert_eq!(param.maximum, source.maximum);
+            assert_eq!(param.value, source.value);
+            assert_eq!(param.slot_count, source.slots() as i32);
+            assert_eq!(param.measures_pixels, source.pixel_distance);
+        }
+    }
+}
+
+#[test]
+fn hdr_toning_is_not_a_filter_command() {
+    assert!(!filter_kind_supported(&cxx_qt_lib::QString::from(
+        "hdr-toning"
+    )));
+    assert_eq!(
+        filter_param_arity(&cxx_qt_lib::QString::from("hdr-toning")),
+        0
+    );
+    assert!(pictura_filters::catalogue::descriptor("hdr-toning").is_some());
+}

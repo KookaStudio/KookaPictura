@@ -147,6 +147,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   `move-preview-cache-freshness`: the move-preview cache also keys on the
   group's union rect, so a moved set recomputes instead of reusing an image
   composited at the old positions.
+- **Layers panel layer-effects rows** (#960, OpenSpec change
+  `layers-panel-effects-rows`). A styled layer now nests its effects in the
+  panel: an `Effects` group row (disclosure + master `fx.visible` eye) and one
+  row per present effect (`<effect>.on` eye), expanded once on a new style when
+  **Expand New Effects** is on. The layer's `fx` badge is the group's
+  disclosure; a double-click on the badge or the group opens Blending Options
+  and on an effect row opens that effect's page; the badge's and rows' context
+  menu is the CS6 layer-style menu (Disable/Enable Layer Effects, Blending
+  Options…, the ten effects, Copy/Paste/Clear, disabled Global Light…/Create
+  Layer, Hide/Show All Effects, Scale Effects…). Tests: `tst_layers_effects`.
 - **Colour management bundle** (#568, #569, #600, #604, #809, #947; OpenSpec
   changes `color-management-bundle` and `color-conversion-layer-fix`). CMYK
   now converts through the document's embedded profile or the configured working profile, with `OpenOptions` and a shared
@@ -165,6 +175,29 @@ Snapshot for resuming after a context break. Update after each milestone.
   Tests: `tst_color_settings`, `tst_profile_dialog`, `tst_profile_warnings`,
   `tst_save_options`, `tst_image_import`, extended `tst_color_picker`, and the
   Rust lcms2/ICC oracles.
+- **Save As format options dialogs** (#958, #625; OpenSpec change
+  `save-format-options`, capability `interop/save-format-options`). `File ▸ Save
+  As` now opens the destination format's CS6 options dialog: JPEG Options
+  (Matte, quality 0–12 with presets, Baseline/Baseline Optimized/Progressive,
+  Scans, Preview, file-size estimate), PNG Options (Compression, Interlace), BMP
+  Options (File Format, Depth, RLE, Flip Row Order, Advanced Modes), and TIFF
+  Options (Image Compression + JPEG Quality, Pixel Order, Byte Order, Layer
+  Compression, Save Image Pyramid, Save Transparency).
+  - **Honored.** JPEG quality/format (via `QImageWriter::setQuality`,
+    `setOptimizedWrite`, `setProgressiveScanWrite`), the JPEG matte, PNG
+    compression, TIFF compression (None/LZW/JPEG) and TIFF Save Transparency
+    (`encode_image.cpp`). The options travel on the view
+    (`save_format.rs`) and are read by `PictureView::save`.
+  - **Ceilings (`ponytail:`).** Controls the Qt writer cannot honor — BMP's
+    whole set, PNG Interlace, TIFF Pixel/Byte Order, Save Image Pyramid, and
+    Layer Compression — are shown disabled with a tooltip; the JPEG scan count
+    is not chosen and the JPEG Matte is shown disabled (transparency flattens
+    onto white). The JPEG Preview is an in-dialog pane, not the CS6 canvas
+    preview; the 0–12 quality map follows the reverse-engineered
+    Photoshop→libjpeg table (0 ≈ libjpeg 60), not Adobe's exact tables.
+  - **Remembered.** The last accepted settings per format persist in the session
+    store (`saveFormatOptions`) and seed the next dialog.
+  Tests: `tst_save_format_options` (16 cases) and the Rust `save_format` units.
 - **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
   OpenSpec change `add-vanishing-point-planes`, archived into
   `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)
@@ -1373,7 +1406,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   `Filter ▸ Blur ▸ Shape Blur…` (after Box Blur) has Radius `5..=1000`
   (default 10, inferred) and `FilterControl::Shape`, a grid of the six
   built-in Custom Shapes; the `shape-blur` kind is 2 slots (Radius, Shape).
-  `filter_map.rs`'s choice lists moved to `filter_map_choices.rs` to stay
+  `filter_map.rs`'s choice lists moved to `catalogue/build/choices.rs` to stay
   under the cap. Ceilings: the six app shapes, not CS6's library; no large
   Shape swatch or shape-set gear. Tests: unit (runs = direct convolution on
   every shape), ImageMagick `-morphology Convolve` differential (exact),
@@ -1498,7 +1531,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   inverse-square distance. Field Blur's pyramid and effects passes moved
   behind a shared `variable_blur(radius_at)` with the Field digest unchanged.
   The `iris-blur` kind is `count`, 8 slots per pin, then the 13-slot effects
-  tail (22 canonical), parsed with `field-blur` in `filter_map/gallery.rs`.
+  tail (22 canonical), parsed with `field-blur` in `catalogue/build/gallery.rs`.
   `Filter ▸ Blur Gallery ▸ Iris Blur…` opens `BlurGalleryDialog` in Iris mode:
   the Iris Blur row active (Blur, default 15 px), the other rows disabled, and
   the selected pin's outline with radius handles (resize + rotate), feather
@@ -1724,7 +1757,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   exposes `pub(super) filter_from_kind_params(kind, &[f64])` (empty slice = the
   documented defaults; a wrong-length fixed list is refused, and variable-list
   kinds accept only their documented shapes), with `filter_from_kind`
-  delegating to it; its filter parameter descriptor (`filter_map/descriptor/`)
+  delegating to it; its filter parameter descriptor (`pictura-filters/src/catalogue/rows/`)
   records every kind, including the parameterless `Blur` and `Blur More` and
   the parameterised `Oil Paint`, and
   `cpp/filter_commands.cpp` builds its rows from it. `PictureView`

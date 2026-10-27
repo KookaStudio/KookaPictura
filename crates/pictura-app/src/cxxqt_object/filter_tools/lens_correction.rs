@@ -12,8 +12,7 @@ use cxx_qt_lib::{QImage, QImageFormat, QString, QStringList};
 use pictura_codec::Exif;
 use pictura_filters::{
     builtin_lens_profiles, camera_models, catalog_makes, find_camera, find_camera_make, find_lens,
-    lenses_for, match_lens_profiles, straighten_angle, Filter, LensCorrectionParams, LensMap,
-    LensSource,
+    lenses_for, match_lens_profiles, straighten_angle, LensCorrectionParams, LensMap, LensSource,
 };
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
@@ -115,11 +114,6 @@ pub(in crate::cxxqt_object) const SLOTS: usize = LensCorrectionParams::SLOTS;
 /// installed.
 fn params_of(values: &[f64]) -> Option<LensCorrectionParams> {
     LensCorrectionParams::from_slots(values)
-}
-
-/// The `lens-correction` kind's filter for a full slot list.
-pub(in crate::cxxqt_object) fn lens_correction_filter(values: &[f64]) -> Option<Filter> {
-    params_of(values).map(|params| Filter::LensCorrection { params })
 }
 
 /// EXIF's make, model, and lens in the catalogue's spelling where it knows
@@ -523,7 +517,6 @@ mod tests {
         assert!(params_of(&v).unwrap().profile.is_some());
         v[5] = 2.0;
         assert!(params_of(&v).is_none());
-        assert!(lens_correction_filter(&v).is_none());
     }
 
     #[test]

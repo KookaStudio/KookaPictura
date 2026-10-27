@@ -166,7 +166,7 @@ void LayersPreviewCoalescingTest::opacityDragCoalescesPreview()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
 
     slider->setSliderDown(true);
@@ -199,7 +199,7 @@ void LayersPreviewCoalescingTest::fillDragCoalescesPreview()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersFillField"));
     QVERIFY2(slider != nullptr, "fill slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
 
     slider->setSliderDown(true);
@@ -230,7 +230,7 @@ void LayersPreviewCoalescingTest::midDragPausePreviewsWhileHeld()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
 
     slider->setSliderDown(true);
@@ -257,7 +257,7 @@ void LayersPreviewCoalescingTest::fastOpacityRoundTripRecordsNothing()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
 
     slider->setSliderDown(true);
@@ -283,7 +283,7 @@ void LayersPreviewCoalescingTest::fillFastRoundTripRecordsNothing()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersFillField"));
     QVERIFY2(slider != nullptr, "fill slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
 
     slider->setSliderDown(true);
@@ -309,7 +309,7 @@ void LayersPreviewCoalescingTest::pendingPreviewSurvivesPanelRefresh()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
 
     slider->setSliderDown(true);
@@ -343,7 +343,7 @@ void LayersPreviewCoalescingTest::documentSwitchCancelsPendingPreview()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     QSignalSpy committed(field, &pictura::NumericField::valueCommitted);
     pictura::PictureView* first = view_;
     const int firstBase = first->history_count();
@@ -384,7 +384,7 @@ void LayersPreviewCoalescingTest::selectionChangeCancelsPendingPreview()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     QSignalSpy committed(field, &pictura::NumericField::valueCommitted);
     const int base = view_->history_count();
     slider->setSliderDown(true);
@@ -425,7 +425,7 @@ void LayersPreviewCoalescingTest::sameViewReplacementCancelsPendingPreview()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     QSignalSpy committed(field, &pictura::NumericField::valueCommitted);
     slider->setSliderDown(true);
     slider->setValue(70);
@@ -463,7 +463,7 @@ void LayersPreviewCoalescingTest::continuousTicksDoNotRestartTheTimer()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
     slider->setSliderDown(true);
     for (int value = 35; value <= 95; value += 10) {
@@ -628,7 +628,7 @@ void LayersPreviewCoalescingTest::opacityPreviewUsesTheRegionPath()
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     const int base = view_->history_count();
     const QImage before = view_->image();
     QPoint outside(rect.right, rect.bottom);
@@ -643,11 +643,10 @@ void LayersPreviewCoalescingTest::opacityPreviewUsesTheRegionPath()
     QCOMPARE(blitted.count(), 1);
     QCOMPARE(changed.count(), 0);
     const QList<QVariant> args = blitted.takeFirst();
-    const QImage region = args.at(0).value<QImage>();
-    QCOMPARE(region.width(), 8);
-    QCOMPARE(region.height(), 8);
-    QCOMPARE(args.at(1).toInt(), rect.left);
-    QCOMPARE(args.at(2).toInt(), rect.top);
+    QCOMPARE(args.at(2).toInt(), 8);
+    QCOMPARE(args.at(3).toInt(), 8);
+    QCOMPARE(args.at(0).toInt(), rect.left);
+    QCOMPARE(args.at(1).toInt(), rect.top);
     QCOMPARE(view_->image().pixel(outside), outsideBefore);
     QCOMPARE(pictura::layers_api::rowForPath(*view_, placed).opacity, 179);
     QCOMPARE(view_->history_count(), base);
@@ -668,7 +667,7 @@ void LayersPreviewCoalescingTest::opacityCommitUsesTheRegionPath()
     const auto rect = pictura::transform_api::layerRect(*view_, placed);
     QVERIFY(rect.valid);
     const int base = view_->history_count();
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     (void)view_->image();
     (void)view_->take_canvas_damage();
 
@@ -677,11 +676,10 @@ void LayersPreviewCoalescingTest::opacityCommitUsesTheRegionPath()
     QCOMPARE(view_->history_count(), base + 1);
     QCOMPARE(blitted.count(), 1);
     const QList<QVariant> args = blitted.takeFirst();
-    const QImage region = args.at(0).value<QImage>();
-    QCOMPARE(region.width(), 8);
-    QCOMPARE(region.height(), 8);
-    QCOMPARE(args.at(1).toInt(), rect.left);
-    QCOMPARE(args.at(2).toInt(), rect.top);
+    QCOMPARE(args.at(2).toInt(), 8);
+    QCOMPARE(args.at(3).toInt(), 8);
+    QCOMPARE(args.at(0).toInt(), rect.left);
+    QCOMPARE(args.at(1).toInt(), rect.top);
     QCOMPARE(pictura::layers_api::rowForPath(*view_, placed).opacity, 128);
 }
 
@@ -698,7 +696,7 @@ void LayersPreviewCoalescingTest::canvasSizedOpacityUsesTheRegionPath()
     QCOMPARE(rect.width(), 16);
     QCOMPARE(rect.height(), 16);
     const int base = view_->history_count();
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
     (void)view_->image();
     (void)view_->take_canvas_damage();
 
@@ -706,9 +704,9 @@ void LayersPreviewCoalescingTest::canvasSizedOpacityUsesTheRegionPath()
     QVERIFY(!view_->take_canvas_damage().isEmpty());
     QCOMPARE(view_->history_count(), base + 1);
     QCOMPARE(blitted.count(), 1);
-    const QImage region = blitted.takeFirst().at(0).value<QImage>();
-    QCOMPARE(region.width(), 16);
-    QCOMPARE(region.height(), 16);
+    const QList<QVariant> region = blitted.takeFirst();
+    QCOMPARE(region.at(2).toInt(), 16);
+    QCOMPARE(region.at(3).toInt(), 16);
 }
 
 void LayersPreviewCoalescingTest::groupOpacityPreviewFallsBackToFullRecomposite()
@@ -717,7 +715,7 @@ void LayersPreviewCoalescingTest::groupOpacityPreviewFallsBackToFullRecomposite(
     panel_->setView(view_);
     panel_->refresh();
     QSignalSpy changed(view_, &pictura::PictureView::changed);
-    QSignalSpy blitted(view_, &pictura::PictureView::regionBlitted);
+    QSignalSpy blitted(view_, &pictura::PictureView::regionDamaged);
 
     QCOMPARE(view_->preview_layers_opacity(QStringList{group_}, 128), 1);
     QCOMPARE(changed.count(), 1);

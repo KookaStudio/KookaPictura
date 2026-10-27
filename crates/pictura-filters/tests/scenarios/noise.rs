@@ -90,11 +90,13 @@ fn add_noise_same_seed_is_identical_and_different_seed_differs() {
 }
 
 #[test]
-fn zero_amount_and_zero_radius_are_noops_bad_amount_errors() {
+fn zero_radius_is_a_noop_and_bad_amounts_error() {
     let base = plane(4, 4, 3, [128, 128, 128]);
     let mut buf = base.clone();
-    add(&mut buf, 0.0, NoiseDistribution::Uniform, false, 1).unwrap();
-    assert_eq!(buf.data, base.data);
+    assert!(
+        add(&mut buf, 0.0, NoiseDistribution::Uniform, false, 1).is_err(),
+        "Add Noise's range starts at 0.1"
+    );
     median(&mut buf, 0).unwrap();
     assert_eq!(buf.data, base.data);
     assert!(add(&mut buf, -1.0, NoiseDistribution::Uniform, false, 1).is_err());

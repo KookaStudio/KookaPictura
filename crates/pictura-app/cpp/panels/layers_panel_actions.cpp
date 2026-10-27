@@ -313,13 +313,43 @@ void LayersPanel::applyFxButton(bool alt)
     }
 }
 
-void LayersPanel::openLayerStyle(const QString& path)
+void LayersPanel::openLayerStyle(const QString& path, const QString& effect)
 {
     if (!view_ || path.isEmpty() || !layer_style_can_edit(*view_, path)) {
         return;
     }
-    LayerStyleDialog dialog(view_, path, QString(), this);
-    runPanelDialog(dialog);
+    LayerStyleDialog dialog(view_, path, effect, this);
+    if (!runPanelDialog(dialog)) {
+        // A rejected dialog drops its live edits; the driver path skips exec.
+        dialog.reject();
+    }
+    refresh();
+}
+
+void LayersPanel::toggleEffectVisibility(const QModelIndex& index, const QString& kind)
+{
+    if (!view_) {
+        return;
+    }
+    const QString path = pathForProxyIndex(index);
+    const int at = path.indexOf(QStringLiteral("/@fx"));
+    if (at < 0) {
+        return;
+    }
+    const QString base = path.left(at);
+    const bool on = !index.data(VisibleRole).toBool();
+    if (kind == QLatin1String("layer-effects")) {
+        if (layer_style_set(*view_, base, QStringLiteral("fx.visible"), on ? 1.0 : 0.0)) {
+            layer_style_commit(*view_,
+                               on ? tr("Enable Layer Effects") : tr("Disable Layer Effects"));
+        }
+    } else {
+        const QString effect = path.mid(at + 5);
+        if (layer_style_set(*view_, base, effect + QStringLiteral(".on"), on ? 1.0 : 0.0)) {
+            layer_style_commit(*view_, (on ? tr("Show %1") : tr("Hide %1"))
+                                            .arg(LayerStyleDialog::effectTitle(effect)));
+        }
+    }
     refresh();
 }
 

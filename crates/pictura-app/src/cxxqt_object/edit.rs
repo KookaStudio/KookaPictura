@@ -9,7 +9,6 @@ use super::qobject;
 use super::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QImage;
 use pictura_core::PsdRect;
 use std::time::Instant;
 
@@ -67,10 +66,10 @@ pub(super) fn insertion_edit(doc: &pictura_core::Document, path: &str) -> Edit {
     }
 }
 
-/// A committed edit and the region blit (if any) the QObject must emit.
+/// A committed edit and the damaged rectangle (if any) the QObject must emit.
 pub(super) struct Applied {
     pub(super) edit: Edit,
-    pub(super) blit: Option<(QImage, i32, i32)>,
+    pub(super) blit: Option<PsdRect>,
 }
 
 impl PictureViewRust {
@@ -120,7 +119,7 @@ impl PictureViewRust {
     }
 
     /// The compositing half of an outcome, shared by commits and previews.
-    fn refresh_for(&mut self, edit: &Edit) -> Option<(QImage, i32, i32)> {
+    fn refresh_for(&mut self, edit: &Edit) -> Option<PsdRect> {
         match edit {
             Edit::Regions { rects, .. } => {
                 metrics::mark_composited();
@@ -146,7 +145,7 @@ impl PictureViewRust {
     }
 
     /// Present a live edit without capturing history.
-    pub(super) fn preview_edit(&mut self, edit: &Edit) -> Option<(QImage, i32, i32)> {
+    pub(super) fn preview_edit(&mut self, edit: &Edit) -> Option<PsdRect> {
         if matches!(edit, Edit::None) {
             return None;
         }
@@ -176,9 +175,14 @@ impl qobject::PictureView {
             metrics::cancel_edit();
         }
         let Applied { edit, blit } = self.as_mut().rust_mut().apply_edit(label, edit);
-        if let Some((image, x, y)) = blit {
-            if image.width() > 0 && image.height() > 0 {
-                self.as_mut().region_blitted(image, x, y);
+        if let Some(damaged) = blit {
+            if damaged.width() > 0 && damaged.height() > 0 {
+                self.as_mut().region_damaged(
+                    damaged.left,
+                    damaged.top,
+                    damaged.width(),
+                    damaged.height(),
+                );
             }
         }
         if matches!(
@@ -208,9 +212,14 @@ impl qobject::PictureView {
             metrics::cancel_edit();
         }
         let Applied { edit, blit } = self.as_mut().rust_mut().apply_edit_move(label, edit);
-        if let Some((image, x, y)) = blit {
-            if image.width() > 0 && image.height() > 0 {
-                self.as_mut().region_blitted(image, x, y);
+        if let Some(damaged) = blit {
+            if damaged.width() > 0 && damaged.height() > 0 {
+                self.as_mut().region_damaged(
+                    damaged.left,
+                    damaged.top,
+                    damaged.width(),
+                    damaged.height(),
+                );
             }
         }
         if matches!(
@@ -235,9 +244,14 @@ impl qobject::PictureView {
             f(&mut rust)
         };
         let blit = self.as_mut().rust_mut().preview_edit(&edit);
-        if let Some((image, x, y)) = blit {
-            if image.width() > 0 && image.height() > 0 {
-                self.as_mut().region_blitted(image, x, y);
+        if let Some(damaged) = blit {
+            if damaged.width() > 0 && damaged.height() > 0 {
+                self.as_mut().region_damaged(
+                    damaged.left,
+                    damaged.top,
+                    damaged.width(),
+                    damaged.height(),
+                );
             }
         }
         if matches!(

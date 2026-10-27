@@ -14,6 +14,7 @@
 use pictura_core::PixelBuffer;
 
 pub mod blur;
+pub mod catalogue;
 mod distort;
 pub mod hdr_toning;
 pub mod kernel;

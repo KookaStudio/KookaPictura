@@ -1,6 +1,6 @@
 use super::document_session::{PreviewStroke, SessionKind, StrokeSession};
 use super::helpers::*;
-use super::helpers_composite::{patch_composite_region, planes_of, rgba_image};
+use super::helpers_composite::{patch_composite_region, planes_of};
 use super::qobject;
 use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
@@ -675,30 +675,29 @@ impl qobject::PictureView {
         }
     }
 
-    /// Patch the preview's level and emit [`region_blitted`] so the shell repaints
-    /// and schedules the next frame flush. Returns whether anything was presented.
+    /// Patch the preview's stored level and emit [`region_damaged`] over the
+    /// changed document rectangle so the shell repaints and schedules the next
+    /// frame flush. Returns whether anything was presented.
     ///
-    /// The emitted region is level-sized and its origin is document-space
-    /// (`rect << level`); the blit into the full-resolution `image_` is the
-    /// documented approximation, superseded by the commit's region refresh (the
-    /// canvas draws the forced preview level meanwhile, never `image_`).
+    /// The canvas draws the forced preview level meanwhile, never `image_`; the
+    /// commit's region refresh repairs level 0 and the levels below it.
     fn present_preview(mut self: Pin<&mut Self>) -> bool {
         let t = Instant::now();
-        let Some((image, x, y)) = self.as_mut().preview_present() else {
+        let Some(rect) = self.as_mut().preview_present() else {
             return false;
         };
         paint_timing::record("preview_present_blend", t.elapsed());
         let t = Instant::now();
-        self.region_blitted(image, x, y);
+        self.region_damaged(rect.left, rect.top, rect.width(), rect.height());
         paint_timing::record("preview_present_blit(C++)", t.elapsed());
         true
     }
 
     /// Blend the accumulated coverage over the stroke-start snapshot and patch
     /// it into the stored pyramid level. Level 0 is deliberately untouched: the
-    /// commit and the cancel both repair the level from it. Returns the patched
-    /// region image and its document-space origin.
-    fn preview_present(mut self: Pin<&mut Self>) -> Option<(cxx_qt_lib::QImage, i32, i32)> {
+    /// commit and the cancel both repair the level from it. Returns the changed
+    /// document rectangle.
+    fn preview_present(mut self: Pin<&mut Self>) -> Option<PsdRect> {
         let mut rust = self.as_mut().rust_mut();
         let (rgba, rect, level, scale) = {
             let preview = rust.session.live.preview()?;
@@ -710,11 +709,12 @@ impl qobject::PictureView {
         // the commit's region refresh repairs it when the stroke ends.
         rust.pyramid.patch_level(level as usize, &rgba, rect);
         rust.canvas_revision = rust.canvas_revision.wrapping_add(1);
-        Some((
-            rgba_image(rgba, rect.width(), rect.height()),
-            rect.left * scale,
-            rect.top * scale,
-        ))
+        Some(PsdRect {
+            top: rect.top * scale,
+            left: rect.left * scale,
+            bottom: rect.bottom * scale,
+            right: rect.right * scale,
+        })
     }
 
     /// One sample of a GPU stroke: place its dabs exactly as the exact stroke
@@ -785,16 +785,12 @@ impl qobject::PictureView {
         }
     }
 
-    /// The view-pyramid level the active stroke is presenting: `-1` while a GPU
-    /// stroke presents level-0 regions (so the canvas crops level 0), the
-    /// preview level while a reduced preview runs, and 0 when no preview is
-    /// active — level 0 is never a preview, so the canvas can clamp its crop to
-    /// this unambiguously.
+    /// The view-pyramid level the active stroke is presenting: the preview
+    /// level while a reduced preview runs, `0` otherwise (the zoom picks the
+    /// level as usual). A GPU stroke presents the zoom-selected level, because
+    /// its region refresh repairs every stored level.
     pub fn preview_present_level(&self) -> i32 {
         let rust = self.rust();
-        if rust.session.live.gpu_stroke().is_some() {
-            return -1;
-        }
         rust.session
             .live
             .preview()
@@ -926,8 +922,13 @@ impl qobject::PictureView {
             Some(rect) => {
                 let t = Instant::now();
                 let blit = self.as_mut().rust_mut().refresh_from_composite(rect);
-                if let Some((image, x, y)) = blit {
-                    self.as_mut().region_blitted(image, x, y);
+                if let Some(damaged) = blit {
+                    self.as_mut().region_damaged(
+                        damaged.left,
+                        damaged.top,
+                        damaged.width(),
+                        damaged.height(),
+                    );
                 }
                 paint_timing::record("cancel_refresh_region", t.elapsed());
             }

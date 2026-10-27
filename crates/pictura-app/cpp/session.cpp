@@ -161,6 +161,7 @@ SessionState loadSession()
         obj.value(QStringLiteral("snapCanvasToWorkspace")).toBool(false);
     state.guideColor = obj.value(QStringLiteral("guideColor")).toString(state.guideColor);
     state.pdfOptions = obj.value(QStringLiteral("pdfOptions")).toString();
+    state.saveFormatOptions = obj.value(QStringLiteral("saveFormatOptions")).toObject();
     state.guideDashed = obj.value(QStringLiteral("guideDashed")).toBool(false);
     state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(false);
     state.cropDeletePixels = obj.value(QStringLiteral("cropDeletePixels")).toBool(true);
@@ -309,6 +310,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("snapCanvasToWorkspace"), state.snapCanvasToWorkspace);
     obj.insert(QStringLiteral("guideColor"), state.guideColor);
     obj.insert(QStringLiteral("pdfOptions"), state.pdfOptions);
+    obj.insert(QStringLiteral("saveFormatOptions"), state.saveFormatOptions);
     obj.insert(QStringLiteral("guideDashed"), state.guideDashed);
     obj.insert(QStringLiteral("cropClassicMode"), state.cropClassicMode);
     obj.insert(QStringLiteral("cropDeletePixels"), state.cropDeletePixels);

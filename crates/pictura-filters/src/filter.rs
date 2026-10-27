@@ -1,5 +1,4 @@
 mod apply;
-mod props;
 mod types;
 mod variants;
 

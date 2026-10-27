@@ -45,6 +45,8 @@ struct LayerRow {
     bool smartObject = false;
     bool hasStyle = false;
     QStringList styleEffects;
+    QStringList styleEffectsOn;
+    bool styleVisible = true;
     bool hasBlendIf = false;
     QImage thumbnail;
     QImage maskThumbnail;

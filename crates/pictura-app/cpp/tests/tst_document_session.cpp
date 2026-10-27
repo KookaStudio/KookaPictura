@@ -78,7 +78,7 @@ void DocumentSessionTest::regionBlitDoesNotEmitChanged()
 {
     pictura::PictureView view;
     QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
-    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy blits(&view, &pictura::PictureView::regionDamaged);
     QSignalSpy changes(&view, &pictura::PictureView::changed);
     QVERIFY(view.begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 16, 100, 100, 0, 100, 100, 25,
                              QStringLiteral("normal"), false, false));
@@ -94,7 +94,7 @@ void DocumentSessionTest::regionBlitCanAlsoEmitChanged()
     // `changed` reach the shell.
     pictura::PictureView view;
     QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
-    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy blits(&view, &pictura::PictureView::regionDamaged);
     QSignalSpy changes(&view, &pictura::PictureView::changed);
     QVERIFY(pictura::healing_begin(view, 20, 50));
     QVERIFY(pictura::healing_dab(view, 16.0, 16.0));
@@ -109,7 +109,7 @@ void DocumentSessionTest::notifyOnlyEmitsChanged()
     // region blit.
     pictura::PictureView view;
     QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
-    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy blits(&view, &pictura::PictureView::regionDamaged);
     QSignalSpy changes(&view, &pictura::PictureView::changed);
     pictura::path_gesture_begin(view);
     QVERIFY(pictura::path_gesture_abort(view));
@@ -177,7 +177,7 @@ void DocumentSessionTest::replacementSignalsMatchTheEntryPoint()
 {
     pictura::PictureView view;
     QSignalSpy changes(&view, &pictura::PictureView::changed);
-    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy blits(&view, &pictura::PictureView::regionDamaged);
     QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
     QCOMPARE(changes.count(), 0);
     QCOMPARE(blits.count(), 0);

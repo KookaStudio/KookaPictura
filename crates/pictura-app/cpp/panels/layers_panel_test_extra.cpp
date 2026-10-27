@@ -189,4 +189,123 @@ void LayersPanel::clickFxButtonForTest(bool alt)
     applyFxButton(alt);
 }
 
+QString LayersPanel::rowKindForTest(const QString& path) const
+{
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    return index.data(KindRole).toString();
+}
+
+QString LayersPanel::rowNameForTest(const QString& path) const
+{
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    return index.data(Qt::DisplayRole).toString();
+}
+
+bool LayersPanel::rowVisibleForTest(const QString& path) const
+{
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    return index.isValid() && index.data(VisibleRole).toBool();
+}
+
+bool LayersPanel::rowExistsForTest(const QString& path) const
+{
+    return model_ && model_->indexForPath(path).isValid();
+}
+
+bool LayersPanel::rowExpandedForTest(const QString& path) const
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    return index.isValid() && tree_ && tree_->isExpanded(index);
+}
+
+bool LayersPanel::clickRowEyeForTest(const QString& path)
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid() || !tree_ || !delegate_) {
+        return false;
+    }
+    const QRect vr = tree_->visualRect(index);
+    const QRect eye = delegate_->eyeRect(QRect(0, 0, vr.width(), vr.height()));
+    const QPointF at(vr.left() + eye.center().x(), vr.center().y());
+    QMouseEvent press(QEvent::MouseButtonPress, at, tree_->viewport()->mapToGlobal(at),
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree_->viewport(), &press);
+    return true;
+}
+
+QStringList LayersPanel::layerStyleMenuTextsForTest(const QString& path)
+{
+    QMenu menu;
+    populateLayerStyleMenu(menu, path);
+    QStringList texts;
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator()) {
+            texts.push_back(action->text());
+        }
+    }
+    return texts;
+}
+
+bool LayersPanel::layerStyleMenuEnabledForTest(const QString& path, const QString& text)
+{
+    QMenu menu;
+    populateLayerStyleMenu(menu, path);
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator() && action->text() == text) {
+            return action->isEnabled();
+        }
+    }
+    return false;
+}
+
+bool LayersPanel::triggerLayerStyleMenuActionForTest(const QString& path, const QString& text)
+{
+    QMenu menu;
+    populateLayerStyleMenu(menu, path);
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator() && action->text() == text) {
+            action->trigger();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool LayersPanel::doubleClickFxBadgeForTest(const QString& path)
+{
+    if (!delegate_ || !tree_) {
+        return false;
+    }
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid()) {
+        return false;
+    }
+    const QRect vr = tree_->visualRect(index);
+    const QRect fx = delegate_->fxRect(vr, index);
+    if (fx.isEmpty()) {
+        return false;
+    }
+    const QPoint pos = fx.center();
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, tree_->viewport()->mapToGlobal(pos),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree_->viewport(), &dbl);
+    return true;
+}
+
+bool LayersPanel::doubleClickRowCenterForTest(const QString& path)
+{
+    if (!tree_) {
+        return false;
+    }
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid()) {
+        return false;
+    }
+    const QPoint pos = tree_->visualRect(index).center();
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, tree_->viewport()->mapToGlobal(pos),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree_->viewport(), &dbl);
+    return true;
+}
+
 } // namespace pictura

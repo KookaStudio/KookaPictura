@@ -70,6 +70,9 @@ pub(super) struct SepPlan {
 /// `None` means "no GPU kernel for this filter or these parameters": fall back
 /// to the CPU so the oracle still decides the bytes.
 pub(super) fn plan(filter: &Filter) -> Option<Plan> {
+    if !filter.kind().spec().gpu.is_supported() {
+        return None;
+    }
     match filter {
         // Blur and the two Sharpens are a Gaussian and an Unsharp Mask at fixed
         // settings on the CPU, so they take those filters' plans.

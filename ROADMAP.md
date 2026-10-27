@@ -52,8 +52,13 @@ Deeper technical status for PSD/PSB lives in
 - [x] **Metadata.** EXIF, IPTC and XMP reading, six editable IPTC fields, File
   Info, and XMP metadata templates. `crates/pictura-codec/src/exif.rs`,
   `crates/pictura-codec/src/xmp.rs`.
-- [ ] Save As per-format option dialogs: TIFF, JPEG, PNG, GIF, EPS, DCS, Raw,
-      BMP, TGA and Cineon (#625)
+- [x] **Save As format options dialogs** for JPEG, PNG, BMP and TIFF, with the
+  JPEG quality/format/matte, PNG compression, and TIFF compression/transparency
+  options honored and the last-used settings remembered. `crates/pictura-app/cpp/jpeg_options_dialog.cpp`,
+  `png_options_dialog.cpp`, `bmp_options_dialog.cpp`, `tiff_options_dialog.cpp`.
+- [ ] The Save As options the Qt writer cannot honor (BMP format/depth/RLE/flip,
+      PNG interlace, TIFF pixel/byte order, pyramid, layer compression) and the
+      GIF, EPS, DCS, Raw, TGA and Cineon dialogs (#625)
 - [ ] JPEG 2000 compression, Spot Colors, and Use Proof Setup in the PDF writer
       (#626)
 - [ ] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
@@ -89,7 +94,8 @@ Deeper technical status for PSD/PSB lives in
   `crates/pictura-render/src/document_ops/layer_ops/`.
 - [x] **27 blend modes**, plus Pass Through for groups.
   `crates/pictura-core/src/lib.rs`.
-- [x] **Layer styles and effects** — the ten `lfx2` effects.
+- [x] **Layer styles and effects** — the ten `lfx2` effects, with the Layers
+  panel's nested `Effects` group and per-effect rows (#960).
   `crates/pictura-render/src/layer_effects/`.
 - [x] **Fill and adjustment layers.** `crates/pictura-render/src/fill.rs`.
 - [x] **Shape and type layers.** `crates/pictura-render/src/type_layer.rs`.
@@ -283,7 +289,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **110 filters** across the Artistic, Blur, Blur Gallery, Brush Strokes,
       Distort, Noise, Pixelate, Render, Sharpen, Sketch, Stylize, Texture and
       Other families. `crates/pictura-filters/src/`,
-      `crates/pictura-app/src/cxxqt_object/filter_map/descriptor/`.
+      `crates/pictura-filters/src/catalogue/`.
 - [x] **Liquify, Oil Paint, the Blur Gallery, and the Filter Gallery.**
       `crates/pictura-app/cpp/filter_gallery_dialog.cpp`,
       `crates/pictura-app/cpp/blur_gallery_dialog.cpp`.

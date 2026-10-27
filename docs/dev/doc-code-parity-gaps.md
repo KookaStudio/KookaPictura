@@ -198,9 +198,9 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #593 |
-| FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `filter_map/descriptor/render.rs` (Smart Sharpen row) | #595 |
+| FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `crates/pictura-filters/src/catalogue/rows/render.rs` (Smart Sharpen row) | #595 |
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
-| FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
+| FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `crates/pictura-filters/src/catalogue/build/paint.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
 | FILT-8 | `lens-correction.md` | Lens Correction lists real cameras and lenses (bundled catalogues) but ships one synthetic correction profile: no real lens corrections, sub-profiles, Prefer RAW, or Search Online | PARTIAL | `pictura-filters/src/distort/lens_correction/profiles.txt`, `lens_correction_panels.cpp` | #932 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
@@ -257,7 +257,7 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| WF-1 | `save-and-save-as.md` | Save As per-format option dialogs (TIFF/JPEG/PNG/GIF/EPS/DCS/Raw/BMP/TGA/Cineon) | MISSING | `encode_image.cpp:23-64` | #625 |
+| WF-1 | `save-and-save-as.md` | JPEG/PNG/BMP/TIFF Save As options dialogs shipped (#958) with JPEG quality/format/matte, PNG compression, and TIFF compression/transparency honored; still missing: the controls the Qt writer cannot honor (BMP format/depth/RLE/flip, PNG interlace, TIFF pixel/byte order, image pyramid, layer compression) and the GIF/EPS/DCS/Raw/TGA/Cineon dialogs | PARTIAL | `jpeg_options_dialog.cpp`; `png_options_dialog.cpp`; `bmp_options_dialog.cpp`; `tiff_options_dialog.cpp`; `encode_image.cpp:88-118` | #958, #625 |
 | WF-2 | `save-and-save-as.md` | Photoshop PDF writer shipped (#626); still missing: JPEG2000 compression (no encoder), Spot Colors (no spot-channel model), Use Proof Setup (no Proof Setup); Preserve Photoshop Editing Capabilities embeds Pictura's own PSD, not Adobe's layout | PARTIAL | `pictura-codec/src/pdf/options.rs:661`; `pdf_save_dialog.cpp:220,278` | #626 |
 | WF-3 | `open-and-new.md` | Generic PDF/EPS import (Import PDF and Rasterize Generic EPS Format dialogs) and Open As shipped (#627) through Ghostscript; still missing: native CMYK/16-bit rendering (converted from an 8-bit RGB render), Images mode on encrypted PDFs, inline images, the 3D option | PARTIAL | `pictura-codec/src/pdf/import/mod.rs`; `import_pdf_dialog.cpp`; `frame_import.cpp` | #627 |
 | WF-4 | `save-and-save-as.md` | GIF-via-Indexed on save + Save a Copy | MISSING | `encode_image.cpp` | #628 |
@@ -360,8 +360,8 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   and have been fixed or removed:
   - `FILT-1` (Lighting Effects engine, `#592`) — the engine ships
     (`crates/pictura-filters/src/render/lighting.rs`, mapped at
-    `filter_map/mapping.rs` (Lighting Effects arm), descriptor at
-    `filter_map/descriptor/render.rs`). The row is removed and
+    `crates/pictura-filters/src/catalogue/build/render.rs` (Lighting Effects arm), descriptor at
+    `crates/pictura-filters/src/catalogue/rows/render.rs`). The row is removed and
     `#592` can be closed.
   - `LAY-7` (Rubylith display options, `#585`) — shipped in `#672`
     (`crates/pictura-app/cpp/mask_display_options_dialog.cpp:20`). The row is

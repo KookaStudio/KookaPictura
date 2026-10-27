@@ -40,6 +40,7 @@ FilterCommandSpec specFromRow(const FilterDescriptorRow& row)
     spec.stacked = row.stacked;
     spec.previewBelow = row.preview_below;
     spec.livePreview = row.live_preview;
+    spec.galleryRank = row.gallery_rank;
     for (const FilterParamRow& source : row.params) {
         spec.params.append(paramFromRow(source));
     }

@@ -52,6 +52,7 @@ mod paint_tools;
 mod path_list;
 mod paths;
 mod pdf_export;
+mod save_format;
 mod selection_move;
 mod shapes;
 mod state;
@@ -116,8 +117,12 @@ pub mod qobject {
         shape: bool,
         smart_object: bool,
         has_style: bool,
-        /// Active effect names joined by `\n`; the adapter splits them back.
+        /// Present effect names joined by `\n`; the adapter splits them back.
         style_effects: QString,
+        /// The enabled subset of `style_effects`, joined by `\n`.
+        style_effects_on: QString,
+        /// The layer's master effect switch (`fx.visible`); true when absent.
+        style_visible: bool,
         has_blend_if: bool,
         thumbnail: QImage,
         mask_thumbnail: QImage,
@@ -134,24 +139,23 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "regionBlitted"]
         fn region_blitted(self: Pin<&mut Self>, region: QImage, x: i32, y: i32);
-        /// Emitted after a document replacement or history restore cancelled the
-        /// live tool session; handlers drop their local gesture state.
+        /// Emitted after a document region composite. The receiver patches its present crop over `(x, y, w, h)` and repaints; no region pixels cross the bridge.
+        #[qsignal]
+        #[cxx_name = "regionDamaged"]
+        fn region_damaged(self: Pin<&mut Self>, x: i32, y: i32, w: i32, h: i32);
+        /// Emitted after a document replacement or history restore cancelled the live tool session; handlers drop their local gesture state.
         #[qsignal]
         #[cxx_name = "sessionCancelled"]
         fn session_cancelled(self: Pin<&mut Self>);
-        /// Emitted on the GUI thread when a started document open ends. `status`
-        /// is `ok`, a PDF probe status, or `error:<message>`; `warnings` are the
-        /// renderer's recoverable problems (PDF/EPS imports).
+        /// Emitted on the GUI thread when a started document open ends. `status` is `ok`, a PDF probe status, or `error:<message>`; `warnings` are the renderer's recoverable problems (PDF/EPS imports).
         #[qsignal]
         #[cxx_name = "openFinished"]
         fn open_finished(self: Pin<&mut Self>, status: QString, warnings: QStringList);
-        /// Emitted on the GUI thread when a PDF probe found editing data, before
-        /// its PSD decode: the frame creates the loading tab here.
+        /// Emitted on the GUI thread when a PDF probe found editing data, before its PSD decode: the frame creates the loading tab here.
         #[qsignal]
         #[cxx_name = "openDetected"]
         fn open_detected(self: Pin<&mut Self>);
-        /// Emitted on the GUI thread at an open phase boundary; `percent` is a
-        /// phase weight, not measured work.
+        /// Emitted on the GUI thread at an open phase boundary; `percent` is a phase weight, not measured work.
         #[qsignal]
         #[cxx_name = "openProgress"]
         fn open_progress(self: Pin<&mut Self>, percent: i32, phase: QString);
@@ -195,7 +199,6 @@ pub mod qobject {
         /// Record the Layers panel's isolated set: while the Selected filter is on, `paths` are the panel paths Move Auto-Select may pick. `active` false clears the scope.
         #[qinvokable]
         fn isolation_set(self: Pin<&mut Self>, paths: &QStringList, active: bool);
-
         /// Whether the Layers panel's Selected filter is isolating a set.
         #[qinvokable]
         fn isolation_active(&self) -> bool;
@@ -251,6 +254,10 @@ pub mod qobject {
         /// The **canvas display source** crop at `(x, y, w, h)`: the solo mask plane while a mask is soloed, else the composite. The canvas provider uses this; other panels keep `display_image`.
         #[qinvokable]
         fn canvas_display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
+
+        /// A zero-copy view of stored pyramid `level` (premultiplied RGBA8888), or an empty image for level 0 or past the last level. The image keeps the level's storage alive.
+        #[qinvokable]
+        fn canvas_level_image(&self, level: i32) -> QImage;
 
         /// Extents of every view-pyramid level as flat `w,h` pairs; empty without a document.
         #[qinvokable]
@@ -406,13 +413,11 @@ pub mod qobject {
         #[qinvokable]
         fn set_layers_blend(self: Pin<&mut Self>, paths: &QStringList, key: &QString) -> i32;
 
-        /// Set opacity (clamped `0..=255`) on every path. Returns the number
-        /// changed; records one undo state only when non-zero.
+        /// Set opacity (clamped `0..=255`) on every path. Returns the number changed; records one undo state only when non-zero.
         #[qinvokable]
         fn set_layers_opacity(self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32;
 
-        /// Set fill opacity (clamped `0..=255`) on every path. Returns the
-        /// number changed; records one undo state only when non-zero.
+        /// Set fill opacity (clamped `0..=255`) on every path. Returns the number changed; records one undo state only when non-zero.
         #[qinvokable]
         fn set_layers_fill(self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32;
 
@@ -420,8 +425,7 @@ pub mod qobject {
         #[qinvokable]
         fn preview_layers_opacity(self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32;
 
-        /// Commit opacity: apply and record one undo state when the value
-        /// changed or a preview ran. Returns the number changed.
+        /// Commit opacity: apply and record one undo state when the value changed or a preview ran. Returns the number changed.
         #[qinvokable]
         fn commit_layers_opacity(self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32;
 
@@ -1004,7 +1008,7 @@ pub mod qobject {
         /// Whether a paint stroke is currently active.
         #[qinvokable]
         fn is_painting(&self) -> bool;
-        /// The view-pyramid level the active stroke presents: -1 while a GPU stroke defers the pyramid (crop level 0), 0 when it presents the zoom's own.
+        /// The view-pyramid level the active stroke presents: the reduced preview level, or 0 when the zoom picks it. A GPU stroke presents the zoom-selected level.
         #[qinvokable]
         fn preview_present_level(&self) -> i32;
 

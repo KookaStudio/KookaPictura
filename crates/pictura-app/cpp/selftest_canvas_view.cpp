@@ -300,7 +300,7 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     // fully-visible document reuses the level crop without resampling the
     // full-resolution document; at level 0 the crop present is identical to a
     // full-resolution transform draw; and a region refresh still emits
-    // regionBlitted with no changed.
+    // regionDamaged with no changed.
     const bool levelCreated = frame.newDocument(QStringLiteral("LevelCrop"), 512, 384,
                                                 QStringLiteral("rgb"), 8,
                                                 QStringLiteral("white"));
@@ -339,8 +339,8 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     int levelRegionBlits = 0;
     int levelChanged = 0;
     auto levelRegionConn = QObject::connect(
-        levelView, &pictura::PictureView::regionBlitted,
-        [&levelRegionBlits](const QImage&, int, int) { ++levelRegionBlits; });
+        levelView, &pictura::PictureView::regionDamaged,
+        [&levelRegionBlits](int, int, int, int) { ++levelRegionBlits; });
     auto levelChangedConn = QObject::connect(
         levelView, &pictura::PictureView::changed, [&levelChanged]() { ++levelChanged; });
     const bool levelPreviewed = levelView->begin_move_preview();

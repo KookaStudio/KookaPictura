@@ -46,6 +46,8 @@ LayerRow convert(const ::pictura::LayerRow& row)
     out.smartObject = row.smart_object;
     out.hasStyle = row.has_style;
     out.styleEffects = splitEffects(row.style_effects);
+    out.styleEffectsOn = splitEffects(row.style_effects_on);
+    out.styleVisible = row.style_visible;
     out.hasBlendIf = row.has_blend_if;
     out.thumbnail = row.thumbnail;
     out.maskThumbnail = row.mask_thumbnail;

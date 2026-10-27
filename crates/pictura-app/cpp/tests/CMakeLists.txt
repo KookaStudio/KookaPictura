@@ -45,6 +45,7 @@ set(PICTURA_QT_TESTS
     tst_layers_preview_coalescing
     tst_layers_snapshot
     tst_canvas_backdrop
+    tst_present_cache
     tst_fill_layer_editor
     tst_align_distribute
     tst_options_bars_parity
@@ -98,6 +99,7 @@ set(PICTURA_QT_TESTS
     tst_profile_dialog
     tst_profile_warnings
     tst_save_options
+    tst_save_format_options
     tst_properties_panel
     tst_adjustments_panel
     tst_actions_panel
@@ -139,6 +141,7 @@ set(PICTURA_QT_TESTS
     tst_image_adjustments
     tst_image_import
     tst_layers_smart_filters
+    tst_layers_effects
     tst_smart_object_actions
     tst_edit_shortcuts
     tst_workspaces

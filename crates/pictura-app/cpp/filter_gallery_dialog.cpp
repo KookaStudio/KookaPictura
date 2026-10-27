@@ -91,36 +91,6 @@ const int kPreviewMargin = 16;
 // The thumbnails' source: the picture with its shorter side reduced to this.
 const int kThumbnailSourceSide = 160;
 
-// The gallery's membership in CS6: every Artistic filter, every Brush Strokes
-// filter, three Distort, every Sketch filter, Glowing Edges, every Texture
-// filter.
-const char* const kGallery[][2] = {
-    {"Artistic", "Colored Pencil"},  {"Artistic", "Cutout"},
-    {"Artistic", "Dry Brush"},       {"Artistic", "Film Grain"},
-    {"Artistic", "Fresco"},          {"Artistic", "Neon Glow"},
-    {"Artistic", "Paint Daubs"},     {"Artistic", "Palette Knife"},
-    {"Artistic", "Plastic Wrap"},    {"Artistic", "Poster Edges"},
-    {"Artistic", "Rough Pastels"},   {"Artistic", "Smudge Stick"},
-    {"Artistic", "Sponge"},          {"Artistic", "Underpainting"},
-    {"Artistic", "Watercolor"},      {"Brush Strokes", "Accented Edges"},
-    {"Brush Strokes", "Angled Strokes"}, {"Brush Strokes", "Crosshatch"},
-    {"Brush Strokes", "Dark Strokes"},   {"Brush Strokes", "Ink Outlines"},
-    {"Brush Strokes", "Spatter"},        {"Brush Strokes", "Sprayed Strokes"},
-    {"Brush Strokes", "Sumi-e"},     {"Distort", "Diffuse Glow"},
-    {"Distort", "Glass"},            {"Distort", "Ocean Ripple"},
-    {"Sketch", "Bas Relief"},        {"Sketch", "Chalk & Charcoal"},
-    {"Sketch", "Charcoal"},          {"Sketch", "Chrome"},
-    {"Sketch", "Conté Crayon"},      {"Sketch", "Graphic Pen"},
-    {"Sketch", "Halftone Pattern"},  {"Sketch", "Note Paper"},
-    {"Sketch", "Photocopy"},         {"Sketch", "Plaster"},
-    {"Sketch", "Reticulation"},      {"Sketch", "Stamp"},
-    {"Sketch", "Torn Edges"},        {"Sketch", "Water Paper"},
-    {"Stylize", "Glowing Edges"},    {"Texture", "Craquelure"},
-    {"Texture", "Grain"},            {"Texture", "Mosaic Tiles"},
-    {"Texture", "Patchwork"},        {"Texture", "Stained Glass"},
-    {"Texture", "Texturizer"},
-};
-
 const FilterCommandSpec* specFor(const QString& kind)
 {
     return filterCommandForKind(kind);
@@ -169,14 +139,19 @@ QImage FilterGalleryDialog::thumbnailSample(const QImage& picture)
 
 QList<FilterGalleryDialog::Category> FilterGalleryDialog::categories()
 {
-    QList<Category> result;
-    for (const auto& row : kGallery) {
-        const QString family = QString::fromUtf8(row[0]);
-        const FilterCommandSpec* spec = filterCommandForPath(
-            {QStringLiteral("Filter"), family, QString::fromUtf8(row[1])});
-        if (!spec || !filter_kind_supported(spec->kind)) {
-            continue;
+    QList<const FilterCommandSpec*> gallery;
+    for (const FilterCommandSpec& spec : filterCommands()) {
+        if (spec.galleryRank >= 0 && filter_kind_supported(spec.kind)) {
+            gallery.append(&spec);
         }
+    }
+    std::sort(gallery.begin(), gallery.end(),
+              [](const FilterCommandSpec* a, const FilterCommandSpec* b) {
+                  return a->galleryRank < b->galleryRank;
+              });
+    QList<Category> result;
+    for (const FilterCommandSpec* spec : gallery) {
+        const QString family = spec->path.value(1);
         if (result.isEmpty() || result.last().first != family) {
             result.append({family, {}});
         }
