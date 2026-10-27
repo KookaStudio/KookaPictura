@@ -112,13 +112,16 @@ public:
         return imageThumbBox(itemRect, index).right() + 1;
     }
 
-    /// Whether a row paints the fx badge: adjustment content or a layer style,
-    /// but never a shape row (its own badge owns the thumbnail corner).
+    /// Whether a row paints the fx badge: a layer whose style carries at least
+    /// one effect, but never a shape row (its own badge owns the thumbnail
+    /// corner). A layer with no style — an adjustment or fill row in
+    /// particular — and a layer whose effects are all gone draw no badge, so
+    /// the badge and the row's Effects group always appear together.
     bool showsFx(const QModelIndex& index) const
     {
         return !index.data(LayerRowShapeRole).toBool()
-            && (index.data(HasAdjustmentRole).toBool()
-                || index.data(HasLayerStyleRole).toBool());
+            && index.data(HasLayerStyleRole).toBool()
+            && !index.data(StyleEffectsRole).toStringList().isEmpty();
     }
 
     /// The fx badge's rect at a row's right edge, immediately left of the lock
