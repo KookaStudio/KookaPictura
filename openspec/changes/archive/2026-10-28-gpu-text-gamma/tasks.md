@@ -29,4 +29,4 @@
 ## 6. Delivery
 
 - [x] 6.1 Commit the `docs/dev/STATE.md` update separately with `TASK-ALLOWS-DOCS`
-- [ ] 6.2 Archive the change with `openspec archive gpu-text-gamma`; verify only `archive/` remains under `openspec/changes/`
+- [x] 6.2 Archive the change with `openspec archive gpu-text-gamma`; verify only `archive/` remains under `openspec/changes/`
