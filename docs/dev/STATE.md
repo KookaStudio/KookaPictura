@@ -331,8 +331,9 @@ Snapshot for resuming after a context break. Update after each milestone.
     `blend_into_row` before the mask applies (`pictura-render/src/text_gamma.rs`).
     The setting is process-wide, not stored on the document; Color Settings >
     More Options edits it and saves it in the session. Rasterize Type bakes the
-    curve into the layer's alpha. While it is on, the GPU compositor hands type
-    layers back to the CPU.
+    curve into the layer's alpha. The GPU compositor applies the same curve
+    table to a type layer's raster proxy; a proxy-less type layer still takes
+    the CPU (`GpuError::UnsupportedText`, counted as `type_source`).
   - **Missing fonts.** A font counts as missing when it is not the bundled
     Liberation Sans and Qt has no installed family for it (`fontIsInstalled` in
     `type_fonts.cpp`). Opening a document with missing fonts raises one
