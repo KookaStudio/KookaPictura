@@ -32,7 +32,7 @@ gate runs.
 - [x] 2.1 In `.github/workflows/windows.yml`, add `crates/**` to
   `pull_request.paths` and extend the job `if:` to allow head ref
   `fix/986-windows-control-server`; mark both edits `# TEMPORARY (#986)`.
-- [ ] 2.2 After 3.2 and 3.3 pass, revert both edits and verify
+- [x] 2.2 After 3.2 and 3.3 pass, revert both edits and verify
   `git diff origin/master -- .github/workflows/windows.yml` is empty, so the
   workflow file matches the base.
 
@@ -41,7 +41,7 @@ gate runs.
 - [ ] 3.1 The PR's `lint`, `test`, `qt-headless` (both self-test steps, CTest,
   Qt test report), `guards`, and `oracles` jobs pass. POSIX: the
   `mcp_control_socket_mode` self-test check still reports a user-only mode.
-- [ ] 3.2 The temporarily enabled `windows` job (staged, portable archive, and
+- [x] 3.2 The temporarily enabled `windows` job (staged, portable archive, and
   installed binary): all three self-test steps print
   `SUMMARY passed=<n> failed=0` and `mcp_control_server` reports `socket=` with a
   value containing no `/`, `\`, or `:`.
@@ -57,6 +57,6 @@ gate runs.
 
 ## 4. Archive
 
-- [ ] 4.1 Run `openspec archive fix-windows-control-selftest-endpoint` and commit
+- [x] 4.1 Run `openspec archive fix-windows-control-selftest-endpoint` and commit
   the synced `interop/agentic-control` spec in the same pull request. Verify: the
   PR's `guards` job `check-openspec-archived.sh` passes.

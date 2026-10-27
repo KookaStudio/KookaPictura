@@ -8,12 +8,13 @@ An opt-in local control mode exposing a newline-delimited JSON protocol for non-
 ### Requirement: Opt-in control mode over a local socket
 
 The application SHALL start a control server only when invoked with `--control`.
-The server SHALL listen on a per-user Unix-domain socket whose default path is
-`$XDG_RUNTIME_DIR/pictura-control.sock`, overridable with `--control-socket
-PATH`; the resolved path SHALL be printed to stderr. `--state-home DIR` SHALL
-isolate the session store to `DIR`. `--headless --control` SHALL run offscreen
-without a display. Without `--control`, no socket SHALL be created and startup,
-the self-test, and normal runs SHALL be unchanged.
+On POSIX the server SHALL listen on a per-user Unix-domain socket whose default
+path is `$XDG_RUNTIME_DIR/pictura-control.sock`; on Windows it SHALL listen on a
+machine-local named pipe. The resolved endpoint SHALL be printed to stderr and
+`--control-socket ENDPOINT` SHALL override it. `--state-home DIR` SHALL isolate
+the session store to `DIR`. `--headless --control` SHALL run offscreen without a
+display. Without `--control`, no socket SHALL be created and startup, the
+self-test, and normal runs SHALL be unchanged.
 
 #### Scenario: Control mode starts and reports its socket
 
@@ -158,16 +159,17 @@ reach that prompt.
 
 ### Requirement: Local-only security
 
-The socket SHALL be a Unix-domain socket created with user-only access (owner
-read/write and no group or other access; Qt's `UserAccessOption` creates it with
-mode `0700`), SHALL NOT be a TCP listener, and the control surface SHALL NOT
-include any arbitrary-code-evaluation method. The control server SHALL exist
+The endpoint SHALL NOT be a TCP listener, and the control surface SHALL NOT
+include any arbitrary-code-evaluation method. On POSIX the socket SHALL be a
+Unix-domain socket created with user-only access (owner read/write and no group
+or other access; Qt's `UserAccessOption` creates it with mode `0700`). On Windows
+the endpoint SHALL be a machine-local named pipe. The control server SHALL exist
 only under `--control`. A line or buffered request larger than a fixed bound
 SHALL be rejected with `bad_request` rather than growing without limit.
 
 #### Scenario: The socket is user-only
 
-- **WHEN** the control server creates its socket
+- **WHEN** the control server creates its socket on POSIX
 - **THEN** the socket's permissions grant access to the owning user only
 
 #### Scenario: No eval method exists
@@ -184,17 +186,35 @@ SHALL be rejected with `bad_request` rather than growing without limit.
 ### Requirement: Verification of the control server
 
 The self-test SHALL include a `mcp_control` block that starts a control server on
-a temporary socket, connects a client, and round-trips at least `status`,
+a temporary endpoint, connects a client, and round-trips at least `status`,
 `list_commands`, and a `dispatch_command`, asserting the response shapes and the
-`bad_request`/`unknown_method` error paths, using the next append-only check
-code.
+`bad_request`/`unknown_method` error paths, using the existing append-only check
+codes and adding no new check. The temporary endpoint SHALL be
+platform-appropriate: a Unix-domain socket inside a fresh private temporary
+directory on POSIX, and a machine-local named pipe on Windows. The endpoint SHALL
+be unique to the running self-test process on every platform, so two self-tests
+running concurrently SHALL NOT share one, and the server and every client in the
+block SHALL use the same endpoint.
 
 #### Scenario: The control block proves the socket and core methods
 
 - **WHEN** the self-test runs the `mcp_control` block
-- **THEN** a client connects to the temporary socket and receives well-formed
+- **THEN** a client connects to the temporary endpoint and receives well-formed
   `status`, `list_commands`, and `dispatch_command` responses, and a malformed
   line yields `bad_request`
+
+#### Scenario: Windows listens on a pipe-safe endpoint
+
+- **WHEN** the self-test runs the `mcp_control` block on Windows
+- **THEN** the server listens on a named pipe whose name carries no directory or
+  path separator, the client connects to that same name, and the block reports
+  pass
+
+#### Scenario: Concurrent self-tests use distinct endpoints
+
+- **WHEN** two self-test processes run the `mcp_control` block at the same time
+- **THEN** each uses its own distinct endpoint name and each client is answered
+  by the process that started it
 
 ### Requirement: Screenshot readback
 
