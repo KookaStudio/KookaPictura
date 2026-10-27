@@ -34,6 +34,7 @@ private slots:
     void rowMenuListsLayerStyleCommands();
     void disableLayerEffectsIsOneState();
     void effectOrderingMatchesTheDialog();
+    void adjustmentRowsShowNoFxBadge();
 
 private:
     // A 10x10 white square lifted onto layer "1" over a white Background.
@@ -241,6 +242,54 @@ void LayersEffectsTest::effectOrderingMatchesTheDialog()
     // The panel rows take their order from the engine's effect table and the
     // menu from the dialog's; the two must stay identical.
     QCOMPARE(pictura::layer_style_effect_names(), pictura::LayerStyleDialog::effectKeys());
+}
+
+// The fx badge tracks the layer's present effects, not the style block: an
+// adjustment or fill row paints no badge, and a real effect object brings it
+// back whether it is on or off (#983).
+void LayersEffectsTest::adjustmentRowsShowNoFxBadge()
+{
+    setupSquare();
+
+    QVERIFY(view_->add_adjustment(QStringLiteral("invert")));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    const QString adjustment = panel_->currentPath();
+    QVERIFY2(!adjustment.isEmpty(), "adjustment row present");
+    QVERIFY2(panel_->rowHasAdjustmentForTest(adjustment), "row is an adjustment");
+    QVERIFY2(!panel_->rowHasStyleForTest(adjustment), "adjustment carries no style");
+    QVERIFY2(panel_->rowFxRectForTest(adjustment).isEmpty(),
+             "an adjustment row paints no fx badge");
+
+    // The Alt-click-all-effects gesture needs an fx region; with none it is inert.
+    const int before = view_->history_count();
+    panel_->altClickRowFxForTest(adjustment);
+    QCOMPARE(view_->history_count(), before);
+
+    // A fill row is content too, so it also paints no fx badge.
+    const QString fill = view_->add_solid_fill(0xff00ff00u);
+    QVERIFY2(!fill.isEmpty(), "fill row present");
+    panel_->refresh();
+    QVERIFY2(panel_->rowHasAdjustmentForTest(fill), "fill row reports adjustment content");
+    QVERIFY2(panel_->rowFxRectForTest(fill).isEmpty(), "a fill row paints no fx badge");
+
+    // A real layer style on the adjustment brings the badge back.
+    QVERIFY(pictura::layer_style_set(*view_, adjustment, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QVERIFY2(panel_->rowHasStyleForTest(adjustment), "styled adjustment reports a style");
+    QVERIFY2(!panel_->rowFxRectForTest(adjustment).isEmpty(),
+             "a styled adjustment paints the fx badge");
+
+    // Switching the effect off leaves its object in the style block, so it is
+    // still a present effect and the badge stays (present means on or off).
+    QVERIFY(pictura::layer_style_set(*view_, adjustment, QStringLiteral("colorOverlay.on"), 0.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QVERIFY2(!panel_->rowFxRectForTest(adjustment).isEmpty(),
+             "an off effect is still present, so the badge stays");
 }
 
 QTEST_MAIN(LayersEffectsTest)

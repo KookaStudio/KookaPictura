@@ -1656,10 +1656,12 @@ through the layer-style bridge and SHALL record through the bridge's own
 history. The Background's brief row menu SHALL NOT offer Blending Options or the
 style clipboard rows.
 
-An `Alt`-click on a styled-or-adjustment row's right-edge `fx` region SHALL
-toggle every layer's effects through `layer_style_set_all_visible`, showing
-them when all were hidden and hiding them when any were shown, as one undoable
-step.
+An `Alt`-click on a row whose layer carries effects — its right-edge `fx`
+region — SHALL toggle every layer's effects through
+`layer_style_set_all_visible`, showing them when all were hidden and hiding
+them when any were shown, as one undoable step. A row that carries no effect —
+an adjustment or fill row in particular, or a layer whose effects are all gone
+— has no `fx` region, so that `Alt`-click SHALL do nothing.
 
 The filter row's **Effect** dimension SHALL be enabled and SHALL list the ten
 effect keys from `layer_style_effect_names()`; selecting an effect SHALL match
@@ -2093,8 +2095,8 @@ The system SHALL draw each row with a delegate that paints, in CS6 order, the
 visibility toggle, the thumbnail (a folder glyph for a group), the name, a
 clipping-mask indicator for a clipped layer, the clipping indentation and base
 underline, the layer-mask thumbnail when a mask is present, an adjustment badge
-when adjustment content is present, a layer-style `fx` badge when the layer
-carries a layer style (an `lfx2` or legacy `lrFX` block), and a compact
+when adjustment content is present, a layer-style `fx` badge when the layer's
+style carries at least one effect, and a compact
 **`Blend If` text chip** when the layer's advanced blending is customised — a
 non-default `Blend If` view, or a raw `blending_ranges` block present without a
 typed view. The chip SHALL be a text-only badge (no icon asset) drawn in the
@@ -2276,9 +2278,16 @@ rather than fail.
 
 #### Scenario: A styled layer shows the fx badge
 
-- **WHEN** a layer that carries a layer style is shown
+- **WHEN** a layer whose style carries at least one effect is shown
 - **THEN** its row draws the `layers.fx` badge at its right edge beside the lock
-  and mask badges, and a layer with no style draws no fx badge
+  and mask badges, and a layer with no style, or whose style carries no effect,
+  draws no fx badge
+
+#### Scenario: An adjustment row shows no fx badge [lpr_fx_absent_adjustment]
+
+- **WHEN** an adjustment or fill layer whose style carries no effect is shown
+- **THEN** its row draws no `fx` badge and reserves no fx space, while the same
+  layer once it carries an effect draws one
 
 #### Scenario: A customised Blend If shows the badge [lpr_blendif_badge]
 
@@ -2522,6 +2531,7 @@ when the asset is unavailable.
 
 - **WHEN** a row whose layer is not linked is shown
 - **THEN** no chain link glyph is drawn
+
 ### Requirement: Layer effects disclosure rows
 
 The Layers panel SHALL list a styled layer's effects nested under its row: one
