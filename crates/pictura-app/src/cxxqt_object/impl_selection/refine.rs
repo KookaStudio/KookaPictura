@@ -605,7 +605,7 @@ fn apply(
     {
         let mut rust = view.as_mut().rust_mut();
         if target == OutputTarget::Selection {
-            rust.session.selection = Some(refined);
+            rust.session.set_selection(Some(refined));
         }
         if let Some(path) = new_layer_path {
             rust.select_only_layer(&path);

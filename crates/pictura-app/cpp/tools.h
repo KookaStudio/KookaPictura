@@ -456,6 +456,10 @@ public:
     {
         transformPrompt_ = std::move(prompt);
     }
+    // Settle a pending transform before an action that would leave it behind (a
+    // tool switch or a layer change): Apply commits, Don't Apply cancels, Cancel
+    // keeps it; false means the action must not proceed.
+    bool resolvePendingTransform();
     // The box is shown but no session runs: it is drawn from the layer's
     // content bounds and the layer is untouched until a handle is grabbed.
     bool transformControlsIdleForTest() const { return controlsIdle_; }
@@ -579,9 +583,6 @@ private:
     // The Perspective drag's angle readout beside the pointer; cleared when
     // the drag has none.
     void updateTransformReadout(PictureView* v, const QPointF& imagePos);
-    // Settle a pending transform before a tool switch: Apply commits, Don't
-    // Apply cancels, Cancel keeps it; false means stay on the current tool.
-    bool resolvePendingTransform();
     std::function<TransformDecision()> transformPrompt_;
     // Settle a pending Crop / Perspective Crop before a tool switch: Crop
     // commits, Don't Crop drops it, Cancel stays; false means stay.

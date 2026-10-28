@@ -26,12 +26,12 @@ impl qobject::PictureView {
         if let Some((w, h)) = dims {
             {
                 let mut rust = self.as_mut().rust_mut();
-                if let Some(prev) = rust.session.selection.take() {
+                if let Some(prev) = rust.session.take_selection() {
                     if prev.data.iter().any(|&v| v > 0) {
                         rust.session.deselected_selection = Some(prev);
                     }
                 }
-                rust.session.selection = Some(Selection::all(w, h));
+                rust.session.set_selection(Some(Selection::all(w, h)));
             }
             self.as_mut().edit("Select All", |_| Edit::Meta);
         }
@@ -40,7 +40,7 @@ impl qobject::PictureView {
     pub fn deselect(mut self: Pin<&mut Self>) {
         {
             let mut rust = self.as_mut().rust_mut();
-            if let Some(prev) = rust.session.selection.take() {
+            if let Some(prev) = rust.session.take_selection() {
                 rust.session.deselected_selection = Some(prev);
             }
         }
@@ -60,7 +60,10 @@ impl qobject::PictureView {
                 _ => return false,
             }
         };
-        self.as_mut().rust_mut().session.selection = Some(restored);
+        self.as_mut()
+            .rust_mut()
+            .session
+            .set_selection(Some(restored));
         self.as_mut().edit("Reselect", |_| Edit::Meta);
         true
     }
@@ -79,7 +82,10 @@ impl qobject::PictureView {
         let Some(inverted) = inverted else {
             return false;
         };
-        self.as_mut().rust_mut().session.selection = Some(inverted);
+        self.as_mut()
+            .rust_mut()
+            .session
+            .set_selection(Some(inverted));
         self.as_mut().edit("Inverse Selection", |_| Edit::Meta);
         true
     }
@@ -183,13 +189,10 @@ impl qobject::PictureView {
             {
                 let mut rust = self.as_mut().rust_mut();
                 rust.session.live.take_selection_move();
-                rust.session.selection = Some(moved_selection);
+                rust.session.set_selection(Some(moved_selection));
             }
             let outcome = match dirty {
-                Some(rect) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: false,
-                },
+                Some(rect) => Edit::regions(vec![rect], false),
                 None => Edit::Full,
             };
             self.as_mut().edit("Move Selection", |_| outcome);
@@ -235,7 +238,7 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             rust.session.live.take_selection_move();
-            rust.session.selection = Some(moved_selection);
+            rust.session.set_selection(Some(moved_selection));
             if duplicate {
                 // `layer_via_copy` inserts the copy directly above the source
                 // in the source's own container.
@@ -245,10 +248,7 @@ impl qobject::PictureView {
             }
         }
         let outcome = match dirty {
-            Some(rect) => Edit::Regions {
-                rects: vec![rect],
-                notify: false,
-            },
+            Some(rect) => Edit::regions(vec![rect], false),
             None => Edit::Full,
         };
         self.as_mut().edit("Move Selection", |_| outcome);
@@ -334,7 +334,10 @@ impl qobject::PictureView {
         let Some(modified) = modified else {
             return false;
         };
-        self.as_mut().rust_mut().session.selection = Some(modified);
+        self.as_mut()
+            .rust_mut()
+            .session
+            .set_selection(Some(modified));
         self.as_mut().edit(label, |_| Edit::Meta);
         true
     }
@@ -353,7 +356,7 @@ impl qobject::PictureView {
                 Err(_) => return false,
             }
         };
-        self.as_mut().rust_mut().session.selection = Some(grown);
+        self.as_mut().rust_mut().session.set_selection(Some(grown));
         self.as_mut().edit("Grow Selection", |_| Edit::Meta);
         true
     }
@@ -372,7 +375,10 @@ impl qobject::PictureView {
                 Err(_) => return false,
             }
         };
-        self.as_mut().rust_mut().session.selection = Some(matched);
+        self.as_mut()
+            .rust_mut()
+            .session
+            .set_selection(Some(matched));
         self.as_mut().edit("Similar Selection", |_| Edit::Meta);
         true
     }
@@ -399,7 +405,10 @@ impl qobject::PictureView {
         let Some(selection) = loaded else {
             return false;
         };
-        self.as_mut().rust_mut().session.selection = Some(selection);
+        self.as_mut()
+            .rust_mut()
+            .session
+            .set_selection(Some(selection));
         self.as_mut().edit("Load Selection", |_| Edit::Meta);
         true
     }
@@ -660,7 +669,7 @@ impl qobject::PictureView {
                 return false;
             }
             // Canvas dimensions changed, so the old selection no longer maps.
-            rust.session.selection = None;
+            rust.session.set_selection(None);
             true
         };
         if cropped {
@@ -686,12 +695,39 @@ impl qobject::PictureView {
     /// The 50 %-coverage outline of the selection encoded as flat
     /// `[n0, x,y, x,y, …, n1, …]` (loop point counts then integer pixel
     /// corners); empty without a selection. View-only: derives from the mask,
-    /// records no history.
+    /// records no history. Cached by the selection revision.
     pub fn selection_contour_extents(&self) -> Vec<i32> {
-        let rust = self.rust();
-        let Some(sel) = rust.session.selection.as_ref() else {
+        self.rust().selection_contour_extents()
+    }
+
+    /// The selection revision the cached outline is keyed by.
+    pub fn selection_revision(&self) -> u64 {
+        self.rust().session.selection_revision
+    }
+
+    /// How many times the committed outline has been traced, for the cache test.
+    pub fn selection_contour_compute_count(&self) -> u64 {
+        self.rust().selection_contour_computes.get()
+    }
+}
+
+impl super::state::PictureViewRust {
+    /// The encoded committed outline, cached by the selection revision.
+    /// View-only: never recorded or saved.
+    pub(super) fn selection_contour_extents(&self) -> Vec<i32> {
+        let Some(sel) = self.session.selection.as_ref() else {
+            self.selection_contour_cache.borrow_mut().take();
             return Vec::new();
         };
+        let revision = self.session.selection_revision;
+        {
+            let cache = self.selection_contour_cache.borrow();
+            if let Some((cached, extents)) = cache.as_ref() {
+                if *cached == revision {
+                    return extents.clone();
+                }
+            }
+        }
         let loops = pictura_select::contour(sel, 128);
         let mut out = Vec::new();
         for poly in &loops {
@@ -701,6 +737,9 @@ impl qobject::PictureView {
                 out.push(p[1]);
             }
         }
+        self.selection_contour_computes
+            .set(self.selection_contour_computes.get() + 1);
+        *self.selection_contour_cache.borrow_mut() = Some((revision, out.clone()));
         out
     }
 }

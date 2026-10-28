@@ -33,10 +33,13 @@ void LayersPanel::syncStripButtons()
         return;
     }
     const bool hasDocument = view_ != nullptr;
+    // A pending transform disables the action strip until it is resolved; the
+    // layer list itself stays selectable.
+    const bool usable = hasDocument && !transformPending_;
     for (QToolButton* button : stripButtons_) {
-        button->setEnabled(hasDocument);
+        button->setEnabled(usable);
     }
-    if (!hasDocument) {
+    if (!usable) {
         return;
     }
     // The Link button follows the selection's link state: it links the selected

@@ -892,3 +892,39 @@ fn reset_pyramid_drops_a_live_preview() {
         "a full rebuild drops the preview"
     );
 }
+
+#[test]
+fn selection_contour_cache_reuses_a_revision() {
+    let mut rust = PictureViewRust::default();
+    rust.session
+        .set_selection(Some(pictura_select::Selection::all(8, 8)));
+    let first = rust.selection_contour_extents();
+    let second = rust.selection_contour_extents();
+    assert_eq!(first, second);
+    assert_eq!(rust.selection_contour_computes.get(), 1);
+}
+
+#[test]
+fn selection_contour_cache_recomputes_after_a_selection_change() {
+    let mut rust = PictureViewRust::default();
+    rust.session
+        .set_selection(Some(pictura_select::Selection::rect(8, 8, 1, 1, 3, 3)));
+    let first = rust.selection_contour_extents();
+    rust.session
+        .set_selection(Some(pictura_select::Selection::rect(8, 8, 2, 2, 6, 6)));
+    let second = rust.selection_contour_extents();
+    assert_ne!(first, second);
+    assert_eq!(rust.selection_contour_computes.get(), 2);
+}
+
+#[test]
+fn selection_contour_cache_clears_without_a_selection() {
+    let mut rust = PictureViewRust::default();
+    rust.session
+        .set_selection(Some(pictura_select::Selection::all(8, 8)));
+    assert!(!rust.selection_contour_extents().is_empty());
+    rust.session.set_selection(None);
+    assert!(rust.selection_contour_extents().is_empty());
+    assert!(rust.selection_contour_cache.borrow().is_none());
+    assert_eq!(rust.selection_contour_computes.get(), 1);
+}

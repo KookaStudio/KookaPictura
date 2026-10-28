@@ -30,31 +30,27 @@ void PicturaMainWindow::setPanelsHidden(bool hidden)
 void PicturaMainWindow::retargetDock()
 {
     pictura::ScopedTimer dockTimer("cxx_retargetDock (all panels)");
-    registerTypeFallbacks();
     PictureView* view = activeView();
     ImageView* canvas = canvasAt(activeDocumentIndex());
 
     if (layersPanel_) {
         pictura::ScopedTimer t("cxx_layersPanel_refresh");
-        // setView ends with a refresh; a second one rebuilt every row and
-        // thumbnail again (about 0.5 s on a 24 MP document).
+        // setView ends with a refresh; the debounced pass must not refresh it
+        // a second time.
         layersPanel_->setView(view);
     }
     if (historyPanel_) {
         pictura::ScopedTimer t("cxx_historyPanel_refresh");
         historyPanel_->setView(view);
-        historyPanel_->refresh();
     }
     if (navigatorPanel_) {
         pictura::ScopedTimer t("cxx_navigatorPanel_refresh");
         navigatorPanel_->setCanvas(canvas);
         navigatorPanel_->setView(view);
-        navigatorPanel_->refresh();
     }
     if (infoPanel_) {
         pictura::ScopedTimer t("cxx_infoPanel_refresh");
         infoPanel_->setView(view);
-        infoPanel_->refresh();
     }
     if (propertiesPanel_) {
         propertiesPanel_->setView(view);
@@ -67,19 +63,15 @@ void PicturaMainWindow::retargetDock()
     }
     if (characterPanel_) {
         characterPanel_->setView(view);
-        characterPanel_->refresh();
     }
     if (paragraphPanel_) {
         paragraphPanel_->setView(view);
-        paragraphPanel_->refresh();
     }
     if (paragraphStylesPanel_) {
         paragraphStylesPanel_->setView(view);
-        paragraphStylesPanel_->refresh();
     }
     if (characterStylesPanel_) {
         characterStylesPanel_->setView(view);
-        characterStylesPanel_->refresh();
     }
     if (notesPanel_) {
         notesPanel_->setView(view);
@@ -95,11 +87,70 @@ void PicturaMainWindow::retargetDock()
     }
     if (pathsPanel_) {
         pathsPanel_->setView(view);
-        pathsPanel_->refresh();
     }
     if (histogramPanel_) {
         pictura::ScopedTimer t("cxx_histogramPanel_refresh");
         histogramPanel_->setView(view);
+    }
+
+    dockView_ = view;
+    dockCanvas_ = canvas;
+    dockGeneration_ = view ? view->document_generation() : 0;
+    panelsRefreshedByChanged_ = false;
+    panelsFreshlyBound_ = true;
+    ++dockRetargetCount_;
+}
+
+bool PicturaMainWindow::dockNeedsRebind() const
+{
+    PictureView* view = activeView();
+    ImageView* canvas = canvasAt(activeDocumentIndex());
+    return view != dockView_ || canvas != dockCanvas_
+           || (view && view->document_generation() != dockGeneration_);
+}
+
+void PicturaMainWindow::refreshDock(bool includeSelfRefreshing)
+{
+    if (layersPanel_ && includeSelfRefreshing) {
+        layersPanel_->refresh();
+    }
+    if (historyPanel_ && includeSelfRefreshing) {
+        historyPanel_->refresh();
+    }
+    if (navigatorPanel_) {
+        navigatorPanel_->refresh();
+    }
+    if (infoPanel_) {
+        infoPanel_->refresh();
+    }
+    if (propertiesPanel_) {
+        propertiesPanel_->refresh();
+    }
+    if (adjustmentsPanel_) {
+        adjustmentsPanel_->refresh();
+    }
+    if (channelsPanel_) {
+        channelsPanel_->refresh();
+    }
+    if (characterPanel_) {
+        characterPanel_->refresh();
+    }
+    if (paragraphPanel_) {
+        paragraphPanel_->refresh();
+    }
+    if (paragraphStylesPanel_) {
+        paragraphStylesPanel_->refresh();
+    }
+    if (characterStylesPanel_) {
+        characterStylesPanel_->refresh();
+    }
+    if (notesPanel_) {
+        notesPanel_->refresh();
+    }
+    if (pathsPanel_) {
+        pathsPanel_->refresh();
+    }
+    if (histogramPanel_) {
         histogramPanel_->refresh();
     }
 }
@@ -107,13 +158,33 @@ void PicturaMainWindow::retargetDock()
 void PicturaMainWindow::refreshPanels()
 {
     pictura::ScopedTimer t("cxx_refreshPanels (debounced timer)");
+    registerTypeFallbacks();
     // A filter commit holds the history on its worker; the commit's own
     // refresh restarts this timer once it lands.
     PictureView* view = activeView();
     if (view && filter_commit_running(*view)) {
         return;
     }
-    retargetDock();
+    if (view && view->is_painting()) {
+        return;
+    }
+    if (dockNeedsRebind()) {
+        retargetDock();
+    } else if (panelsFreshlyBound_) {
+        panelsFreshlyBound_ = false;
+    } else {
+        const bool includeSelfRefreshing = !panelsRefreshedByChanged_;
+        panelsRefreshedByChanged_ = false;
+        refreshingDock_ = true;
+        refreshDock(includeSelfRefreshing);
+        refreshingDock_ = false;
+    }
+    if (registryRefreshPending_) {
+        registryRefreshPending_ = false;
+        if (registry_) {
+            registry_->refresh();
+        }
+    }
 }
 
 void PicturaMainWindow::applyGpuComputePreference(bool on)

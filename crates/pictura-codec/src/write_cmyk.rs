@@ -81,10 +81,34 @@ pub(crate) fn cmyk_layer_color_planes(
     let retained: Option<Vec<Vec<u8>>> = (0..4)
         .map(|c| crate::color_mode::layer_retained_8(layer, depth, c))
         .collect();
+    if let Some(store) = &layer.source_channels {
+        if store.working_idents != [0; 3] {
+            let ids = [0i16, 1, 2].map(|id| {
+                layer
+                    .channels
+                    .iter()
+                    .find(|channel| channel.id == id)
+                    .map(|channel| channel.data.ident())
+                    .unwrap_or(0)
+            });
+            if store.working_idents == ids {
+                if let Some(retained) = &retained {
+                    let flat: Vec<u8> = retained.concat();
+                    if flat.len() == plane * 4 {
+                        return split_planes(flat, plane);
+                    }
+                }
+            } else {
+                return cmyk_from_rgb(&current, plane, profile, options);
+            }
+        }
+    }
     let flat = match retained {
         Some(retained) => {
             let flat: Vec<u8> = retained.concat();
             if flat.len() == plane * 4 {
+                #[cfg(test)]
+                FORWARD_CONVERSIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let forward = profile
                     .and_then(|p| crate::color_mode::cmyk_to_rgb_with_profile(&flat, p, options))
                     .unwrap_or_else(|| crate::color_mode::cmyk_to_rgb(&flat));
@@ -107,7 +131,37 @@ pub(crate) fn cmyk_layer_color_planes(
             .and_then(|p| crate::color_mode::rgb_to_cmyk_with_profile(&current, p, options))
             .unwrap_or_else(|| crate::color_mode::rgb_to_cmyk(&current)),
     };
+    split_planes(flat, plane)
+}
+
+fn split_planes(flat: Vec<u8>, plane: usize) -> Vec<Vec<u8>> {
     (0..4)
         .map(|c| flat[c * plane..(c + 1) * plane].to_vec())
         .collect()
+}
+
+fn cmyk_from_rgb(
+    current: &[u8],
+    plane: usize,
+    profile: Option<&pictura_color::Profile>,
+    options: ConversionOptions,
+) -> Vec<Vec<u8>> {
+    let flat = profile
+        .and_then(|p| crate::color_mode::rgb_to_cmyk_with_profile(current, p, options))
+        .unwrap_or_else(|| crate::color_mode::rgb_to_cmyk(current));
+    split_planes(flat, plane)
+}
+
+#[cfg(test)]
+pub(crate) static FORWARD_CONVERSIONS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_forward_conversions() {
+    FORWARD_CONVERSIONS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn forward_conversions() -> usize {
+    FORWARD_CONVERSIONS.load(std::sync::atomic::Ordering::Relaxed)
 }

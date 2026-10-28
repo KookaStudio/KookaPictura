@@ -2,6 +2,7 @@ use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::{PixelBuffer, PsdRect};
 use pictura_render::{CanvasDamage, ViewPyramid};
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 /// A filter dialog's reduced canvas copy and what it was built from.
@@ -16,6 +17,11 @@ pub struct PictureViewRust {
     /// The document, the selection, and the history: the state the document
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
+    /// The encoded committed selection outline and the selection revision it
+    /// was built for. `None` until the outline is first requested.
+    pub(super) selection_contour_cache: RefCell<Option<(u64, Vec<i32>)>>,
+    /// How many times the committed outline has been traced, for the cache test.
+    pub(super) selection_contour_computes: Cell<u64>,
     pub(super) path: Option<String>,
     /// The selected layer paths and the active path. The shared resolver turns
     /// this into the single tool-edit target.
@@ -147,6 +153,12 @@ pub struct PictureViewRust {
     /// The background crash-recovery snapshot write in flight, if any
     /// (`impl_core/recovery.rs`); its result is whether the file landed.
     pub(super) recovery_write: Option<std::thread::JoinHandle<bool>>,
+    /// The native save worker in flight, if any (`impl_core/save_jobs.rs`).
+    pub(super) save_job: Option<super::impl_core::save_jobs::SaveJob>,
+    /// Test seam: hold a started save's completion for this many milliseconds.
+    pub(super) save_delay_for_test: u64,
+    /// The adjustment dialog's worker jobs (`image_adjust/jobs.rs`).
+    pub(super) adjust_jobs: super::image_adjust::jobs::AdjustJobs,
     /// Set when a loading tab's open is cancelled; the worker's queued result
     /// is dropped instead of applied (`open_jobs`).
     pub(super) open_cancelled: bool,
@@ -164,6 +176,8 @@ impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
             session: Default::default(),
+            selection_contour_cache: RefCell::new(None),
+            selection_contour_computes: Cell::new(0),
             path: None,
             layer_target: LayerTarget::default(),
             path_on_layer: false,
@@ -220,6 +234,9 @@ impl Default for PictureViewRust {
             add_mask_by_default: true,
             shape_attributes: None,
             recovery_write: None,
+            save_job: None,
+            save_delay_for_test: 0,
+            adjust_jobs: Default::default(),
             open_cancelled: false,
             open_request: 0,
             open_delay_for_test: 0,

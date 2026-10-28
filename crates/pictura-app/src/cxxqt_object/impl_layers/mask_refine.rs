@@ -81,18 +81,41 @@ fn edit(
         view.as_mut().edit(other, |_| Edit::Record);
     }
     let pending = pending == Some(label);
+    let Some(path) = view.rust().layer_target.single().map(str::to_string) else {
+        return false;
+    };
+    let before = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, &path));
     let changed = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(path) = rust.layer_target.single().map(str::to_string) else {
-            return false;
-        };
         rust.session.doc.as_mut().is_some_and(|doc| set(doc, &path))
     };
+    let after = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, &path));
+    let region = pictura_render::damage::union(before, after).map(|rect| vec![rect]);
     if !commit && (changed || pending) {
         view.as_mut().rust_mut().pending_previews.mask_refine = Some(label);
-        view.as_mut().preview(|_| Edit::Full);
+        view.as_mut().preview(|_| match region {
+            Some(rects) => Edit::regions(rects, false),
+            None => Edit::Full,
+        });
     } else if commit && (changed || pending) {
-        view.as_mut().edit(label, |_| Edit::Full);
+        // An earlier preview already changed the document without a history
+        // state, so the commit must not narrow history to this call's region.
+        view.as_mut().rust_mut().pending_previews.mask_refine = Some(label);
+        view.as_mut().edit(label, |_| match region {
+            Some(rects) => Edit::regions(rects, true),
+            None => Edit::Full,
+        });
+        view.as_mut().rust_mut().pending_previews.mask_refine = None;
     }
     changed
 }

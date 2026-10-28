@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QString>
+#include <QtCore/QtGlobal>
 #include <QtCore/QVector>
 #include <QtGui/QPolygon>
 
@@ -25,6 +26,9 @@ struct SelectionBounds {
 /// The marching-ants outline: one loop of integer pixel corners per contour.
 struct SelectionContour {
     QVector<QPolygonF> loops;
+    /// The selection revision this contour was traced for; a consumer may skip
+    /// applying a contour it already shows.
+    quint64 revision = 0;
     bool isEmpty() const { return loops.isEmpty(); }
     int loopCount() const { return loops.size(); }
     /// Whether any loop carries `(x, y)` as a vertex.

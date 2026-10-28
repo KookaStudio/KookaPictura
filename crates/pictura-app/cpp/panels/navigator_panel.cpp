@@ -240,7 +240,6 @@ NavigatorPanel::NavigatorPanel(QWidget* parent)
 void NavigatorPanel::setCanvas(ImageView* canvas)
 {
     if (canvas_ == canvas) {
-        refresh();
         return;
     }
     if (canvas_) {
@@ -252,7 +251,6 @@ void NavigatorPanel::setCanvas(ImageView* canvas)
         connect(canvas_.data(), &ImageView::zoomChanged, this, [this](double) { syncFromCanvas(); });
         canvas_->installEventFilter(this);
     }
-    refresh();
 }
 
 bool NavigatorPanel::eventFilter(QObject* watched, QEvent* event)

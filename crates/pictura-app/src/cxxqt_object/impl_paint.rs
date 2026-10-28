@@ -878,15 +878,16 @@ impl qobject::PictureView {
                         // level, so the canvas returns to the zoom-selected one.
                         // Any other stroke presented as it went, so only the
                         // region still pending is left.
+                        let stroke_union = stroke_tiles.bounds().unwrap_or(rect);
+                        let hint = stroke_tiles.regions(stroke_union);
                         let regions = if previewed {
-                            stroke_tiles.regions(rect)
+                            hint.clone()
                         } else {
-                            pending.into_iter().collect()
+                            pending.map_or_else(|| vec![rect], |pending| vec![pending])
                         };
                         let t = Instant::now();
-                        self.as_mut().edit(&stroke_label, |_| Edit::Regions {
-                            rects: regions,
-                            notify: false,
+                        self.as_mut().edit(&stroke_label, |_| {
+                            Edit::regions_hinted(regions, hint, false)
                         });
                         paint_timing::record("commit_record_history", t.elapsed());
                         true
@@ -950,6 +951,8 @@ impl qobject::PictureView {
 #[cfg(test)]
 mod tests {
     use super::{gpu_paint_mode, preview_blend, preview_level, rasterize_preview};
+    use crate::cxxqt_object::edit::{effect_of, Edit, Effect};
+    use crate::cxxqt_object::helpers::TileSet;
     use pictura_core::PsdRect;
     use pictura_paint::{tip_coverage, PaintMode, Rgba, StrokeConfig, StrokeSample};
     use pictura_render::gpu::GpuPaintMode;
@@ -1147,5 +1150,50 @@ mod tests {
                 "reduced coverage at level pixel ({lx},{ly}) is the full tip at its scaled offset"
             );
         }
+    }
+
+    #[test]
+    fn paint_commit_hints_all_stroke_tiles() {
+        let mut tiles = TileSet::default();
+        tiles.reset(128, 128);
+        tiles.mark(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 64,
+            right: 64,
+        });
+        tiles.mark(PsdRect {
+            top: 64,
+            left: 64,
+            bottom: 128,
+            right: 128,
+        });
+        let bounds = tiles.bounds().expect("the stroke covers tiles");
+        assert_eq!(
+            (bounds.left, bounds.top, bounds.right, bounds.bottom),
+            (0, 0, 128, 128)
+        );
+        let hint = tiles.regions(bounds);
+        assert!(!hint.is_empty());
+        let edit = Edit::regions_hinted(vec![], hint.clone(), false);
+        assert_eq!(effect_of(&edit), Effect::Blit { notify: false });
+        assert_eq!(edit.history_hint(), Some(hint.as_slice()));
+    }
+
+    #[test]
+    fn paint_commit_with_no_pending_region_hints_the_whole_stroke() {
+        let mut tiles = TileSet::default();
+        tiles.reset(128, 128);
+        tiles.mark(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 64,
+            right: 64,
+        });
+        let bounds = tiles.bounds().expect("the stroke covers tiles");
+        let hint = tiles.regions(bounds);
+        let edit = Edit::regions_hinted(Vec::new(), hint.clone(), false);
+        assert_eq!(effect_of(&edit), Effect::Blit { notify: false });
+        assert_eq!(edit.history_hint(), Some(hint.as_slice()));
     }
 }

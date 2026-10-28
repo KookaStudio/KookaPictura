@@ -15,7 +15,7 @@ use super::super::document_session::{FilterPreview, PreviewBaseline};
 use super::super::helpers::{active_mask_target, layer_has_effects};
 use super::super::qobject::PictureView;
 use super::super::state::PictureViewRust;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::structural;
 
 /// Whether the edit target is a Smart Object's pixels: one active layer
 /// carrying a smart object, with no layer mask targeted. Linked and legacy
@@ -315,6 +315,13 @@ pub(in crate::cxxqt_object) fn commit_kind(
     Some(applied)
 }
 
+/// What the active Smart Object covers on the canvas, for a damage-bounded
+/// history state.
+fn influence(rust: &PictureViewRust) -> Option<PsdRect> {
+    let path = rust.layer_target.single()?;
+    pictura_render::damage::influence(rust.session.doc.as_ref()?, path)
+}
+
 /// [`commit_kind`] plus one `label` history state.
 pub(in crate::cxxqt_object) fn route_commit(
     mut view: Pin<&mut PictureView>,
@@ -322,12 +329,14 @@ pub(in crate::cxxqt_object) fn route_commit(
     params: &[f64],
     label: &str,
 ) -> Option<bool> {
+    let before = influence(view.rust());
     let applied = {
         let mut rust = view.as_mut().rust_mut();
         commit_kind(&mut rust, kind, params)?
     };
     if applied {
-        view.as_mut().edit(label, |_| Edit::Structural);
+        let after = influence(view.rust());
+        view.as_mut().edit(label, |_| structural(before, after));
     }
     Some(applied)
 }
@@ -350,12 +359,14 @@ pub(in crate::cxxqt_object) fn route_stack(
         return Some(false);
     };
     if commit {
+        let before = influence(view.rust());
         let applied = {
             let mut rust = view.as_mut().rust_mut();
             smart_commit(&mut rust, &steps, true)
         };
         if applied {
-            view.as_mut().edit(label, |_| Edit::Structural);
+            let after = influence(view.rust());
+            view.as_mut().edit(label, |_| structural(before, after));
         }
         return Some(applied);
     }

@@ -985,6 +985,7 @@ dependencies = [
  "pictura-core",
  "pictura-render",
  "pictura-testkit",
+ "rayon",
  "sha2",
  "thiserror 2.0.20",
  "windows-sys",

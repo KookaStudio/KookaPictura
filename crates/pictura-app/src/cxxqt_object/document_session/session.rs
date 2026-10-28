@@ -35,6 +35,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) doc: Option<Document>,
     /// The live selection.
     pub(in crate::cxxqt_object) selection: Option<Selection>,
+    /// Bumped whenever the selection is written. The committed-outline cache
+    /// keys on it; a history restore counts as a write.
+    pub(in crate::cxxqt_object) selection_revision: u64,
     /// CS6 "last deselected" memory: the selection replaced by Deselect or a
     /// New-mode commit. Restored by `reselect`.
     pub(in crate::cxxqt_object) deselected_selection: Option<Selection>,
@@ -67,6 +70,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// installed and written into it by a save. Kept out of the document so
     /// undo leaves them alone, as no history state records them.
     pub(in crate::cxxqt_object) vanishing_planes: Option<pictura_filters::VpPlanes>,
+    /// Encoded PSD channel streams for this document session. Shared with the
+    /// save and recovery workers; replaced when a document is installed.
+    pub(in crate::cxxqt_object) encode_cache: std::sync::Arc<pictura_codec::EncodeCache>,
 }
 
 impl DocumentSession {
@@ -77,6 +83,39 @@ impl DocumentSession {
             doc: Some(doc),
             ..Default::default()
         }
+    }
+
+    /// A no-op live session for the transaction tests: it exercises the
+    /// full-rebuild fallback without starting a real gesture.
+    #[cfg(test)]
+    pub(in crate::cxxqt_object) fn force_test_session(&mut self) {
+        self.live = ActiveSession::ModePreview(Box::new(Document::new(
+            1,
+            1,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        )));
+    }
+
+    /// Replace the live selection and bump its revision.
+    pub(in crate::cxxqt_object) fn set_selection(&mut self, selection: Option<Selection>) {
+        self.selection = selection;
+        self.touch_selection();
+    }
+
+    /// Take the live selection, bumping its revision when there was one.
+    pub(in crate::cxxqt_object) fn take_selection(&mut self) -> Option<Selection> {
+        let selection = self.selection.take();
+        if selection.is_some() {
+            self.touch_selection();
+        }
+        selection
+    }
+
+    /// Mark the selection as written without replacing it. Used for an
+    /// in-place mask edit and after a history step rewrites the selection.
+    pub(in crate::cxxqt_object) fn touch_selection(&mut self) {
+        self.selection_revision = self.selection_revision.wrapping_add(1);
     }
 
     /// Install a replacement document, its history, and its PDF password.
@@ -92,6 +131,7 @@ impl DocumentSession {
         self.doc = doc;
         self.history = history;
         self.pdf_password = pdf_password;
+        self.encode_cache = std::sync::Arc::new(pictura_codec::EncodeCache::new());
         self.document_generation = self.document_generation.wrapping_add(1);
         self.saved_id = self.history.current_id();
         self.refresh_dirty();
@@ -100,25 +140,42 @@ impl DocumentSession {
     /// Capture the live document as a history state under `label`. False
     /// without a document.
     pub(in crate::cxxqt_object) fn record(&mut self, target: &LayerTarget, label: &str) -> bool {
-        self.record_with(target, label, true)
+        self.record_with(target, label, true, None)
     }
 
-    /// As [`Self::record`] for a move of the topmost pixel layer, which leaves
-    /// the cached move-preview base valid: no content-revision bump.
-    pub(in crate::cxxqt_object) fn record_move(
+    /// As [`Self::record`] with a history hint: only tiles intersecting `hint`
+    /// are compared.
+    pub(in crate::cxxqt_object) fn record_hinted(
         &mut self,
         target: &LayerTarget,
         label: &str,
+        hint: Option<&[PsdRect]>,
     ) -> bool {
-        self.record_with(target, label, false)
+        self.record_with(target, label, true, hint)
     }
 
-    fn record_with(&mut self, target: &LayerTarget, label: &str, bump_revision: bool) -> bool {
+    /// As [`Self::record_move`] with a history hint.
+    pub(in crate::cxxqt_object) fn record_move_with(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+        hint: Option<&[PsdRect]>,
+    ) -> bool {
+        self.record_with(target, label, false, hint)
+    }
+
+    fn record_with(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+        bump_revision: bool,
+        hint: Option<&[PsdRect]>,
+    ) -> bool {
         let Some(doc) = self.doc.as_mut() else {
             return false;
         };
         self.history
-            .capture_live(doc, &self.selection, target, label);
+            .capture_live_with(doc, &self.selection, target, label, hint);
         self.dirty = true;
         if bump_revision {
             self.content_revision = self.content_revision.wrapping_add(1);
@@ -169,6 +226,7 @@ impl DocumentSession {
                 Restored::Everywhere
             }),
         }?;
+        self.touch_selection();
         self.refresh_dirty();
         self.content_revision = self.content_revision.wrapping_add(1);
         Some(restored)
@@ -382,7 +440,7 @@ impl PictureViewRust {
 
     /// Clear every field that names or belongs to the outgoing document.
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
-        self.session.selection = None;
+        self.session.set_selection(None);
         self.session.deselected_selection = None;
         self.session.quick_selection_snapshot = None;
         self.session.live = ActiveSession::Idle;
@@ -418,6 +476,9 @@ impl PictureViewRust {
         self.filter_error = None;
         self.save_embed_profile = None;
         self.save_raster_options = None;
+        self.filter_jobs.cancel_all();
+        self.adjust_jobs.cancel();
+        self.save_job = None;
     }
 
     /// Drop the panel previews that were never committed.

@@ -282,6 +282,11 @@ void LayersPanel::showContextMenu(const QPoint& pos)
     if (!index.isValid()) {
         return;
     }
+    // A pending transform resolves first: the menu's own selection move and its
+    // actions both change the document.
+    if (!resolvePendingTransform()) {
+        return;
+    }
     if (delegate_->eyeColumnContains(tree_->visualRect(index), pos)) {
         showEyeMenu(pos, index);
         return;
@@ -1068,6 +1073,13 @@ void LayersPanel::addColorLabelActions(QMenu* menu, int currentLabel)
 
 bool LayersPanel::performPanelMenuAction(const QString& actionId)
 {
+    // A pending transform resolves first for every mutating entry; the two
+    // non-mutating entries (a preference and the options dialog) pass through.
+    const bool mutates = actionId != QLatin1String("addMaskByDefault")
+        && actionId != QLatin1String("panelOptions");
+    if (mutates && !resolvePendingTransform()) {
+        return false;
+    }
     if (actionId == QLatin1String("newLayer")) {
         openNewLayerDialog();
     } else if (actionId == QLatin1String("duplicate")) {

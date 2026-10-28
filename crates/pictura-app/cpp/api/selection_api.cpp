@@ -42,6 +42,7 @@ SelectionContour contour(const PictureView& view)
 {
     const ::rust::Vec<int32_t> extents = view.selection_contour_extents();
     SelectionContour out;
+    out.revision = view.selection_revision();
     size_t i = 0;
     while (i < extents.size()) {
         const int count = int(extents[i++]);

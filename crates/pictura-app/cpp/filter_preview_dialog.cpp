@@ -332,11 +332,30 @@ void FilterPreviewDialog::runPreview()
     if (previewsOnProxy() && showProxy()) {
         // The canvas shows the copy as a draft at once; the pane shows its own
         // section exactly (a positional filter's pane crops the canvas picture).
-        startExactPreview(current);
-        updatePaneSection();
-        updateThumbnail();
-        return;
+        if (startExactPreview(current)) {
+            updatePaneSection();
+            updateThumbnail();
+            return;
+        }
+        clearProxy();
     }
+    // A whole-layer filter at 100% or above must not filter the live layer on
+    // the GUI thread. Prepare the display state, then let the worker compute.
+    if (canvasZoom_ >= 1.0 && positional_
+        && double(view_->document_width()) * double(view_->document_height())
+               > kExactPreviewPixels) {
+        prepareExactPreview();
+        if (startExactPreview(current)) {
+            updateThumbnail();
+            return;
+        }
+        clearProxy();
+    }
+    runSynchronousPreview(current);
+}
+
+void FilterPreviewDialog::runSynchronousPreview(const QList<double>& current)
+{
     clearProxy();
     cancelExactPreview();
     // Restrict the preview to the visible section when the caller supplied one;
@@ -417,13 +436,33 @@ void FilterPreviewDialog::clearProxy()
     proxyShown_ = false;
 }
 
-void FilterPreviewDialog::startExactPreview(const QList<double>& values)
+bool FilterPreviewDialog::startExactPreview(const QList<double>& values)
 {
-    if (filter_exact_preview_start(*view_, spec_.kind, values, proxyArea_.x(), proxyArea_.y(),
-                                   proxyArea_.width(), proxyArea_.height(), proxyScale_)) {
-        exactTimer_->start();
-        pollExactPreview();
+    if (!view_
+        || !filter_exact_preview_start(*view_, spec_.kind, values, proxyArea_.x(),
+                                       proxyArea_.y(), proxyArea_.width(),
+                                       proxyArea_.height(), proxyScale_)) {
+        return false;
     }
+    exactPending_ = true;
+    exactTimer_->start();
+    pollExactPreview();
+    return true;
+}
+
+void FilterPreviewDialog::prepareExactPreview()
+{
+    const QRect region = proxyRegion();
+    const double area = double(region.width()) * region.height();
+    double scale = qMin(1.0, canvasZoom_ * devicePixelRatio_);
+    if (area * scale * scale > kCanvasProxyPixels) {
+        scale = std::sqrt(kCanvasProxyPixels / area);
+    }
+    proxyArea_ = region;
+    proxyScale_ = scale;
+    // No draft exists for this path; a stale picture must not stand in for it.
+    proxyPicture_ = QImage();
+    proxyShown_ = true;
 }
 
 void FilterPreviewDialog::pollExactPreview()
@@ -433,6 +472,7 @@ void FilterPreviewDialog::pollExactPreview()
     }
     const QImage exact = filter_exact_preview_poll(*view_);
     if (!exact.isNull() && proxyShown_ && canvas_) {
+        exactPending_ = false;
         proxyPicture_ = exact;
         canvas_->setFilterPreview(exact, proxyArea_);
         for (ImageView* mirror : std::as_const(mirrors_)) {
@@ -448,6 +488,15 @@ void FilterPreviewDialog::pollExactPreview()
     exactBusy_->setVisible(busy);
     if (!busy) {
         exactTimer_->stop();
+        if (exactPending_) {
+            exactPending_ = false;
+            // The worker finished without a picture. A reduced draft (if any)
+            // still stands; otherwise show the synchronous result or refusal.
+            if (proxyPicture_.isNull()) {
+                runSynchronousPreview(values());
+                return;
+            }
+        }
     }
 }
 
@@ -455,6 +504,7 @@ void FilterPreviewDialog::cancelExactPreview()
 {
     exactTimer_->stop();
     exactBusy_->hide();
+    exactPending_ = false;
     if (view_) {
         filter_exact_preview_cancel(*view_);
     }

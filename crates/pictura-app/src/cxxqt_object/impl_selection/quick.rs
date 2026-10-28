@@ -18,19 +18,19 @@ pub(super) fn combine_selection(
     mode: CombineMode,
     keep_reselect: bool,
 ) {
-    let previous = rust.session.selection.take();
+    let previous = rust.session.take_selection();
     let replaced = matches!(mode, CombineMode::New)
         && previous
             .as_ref()
             .is_some_and(|s| s.data.iter().any(|&v| v > 0));
     if replaced {
         rust.session.deselected_selection = previous;
-        rust.session.selection = Some(shape);
+        rust.session.set_selection(Some(shape));
     } else {
         if !keep_reselect {
             rust.session.deselected_selection = None;
         }
-        rust.session.selection = Some(match previous {
+        rust.session.set_selection(Some(match previous {
             Some(mut base) => {
                 base.combine_with(&shape, mode);
                 base
@@ -38,7 +38,7 @@ pub(super) fn combine_selection(
             // Combined into nothing, a new or added shape is itself.
             None if matches!(mode, CombineMode::New | CombineMode::Add) => shape,
             None => Selection::none(shape.width, shape.height),
-        });
+        }));
     }
 }
 
@@ -176,7 +176,7 @@ impl qobject::PictureView {
             return false;
         };
         self.as_mut().edit("Selection", |rust| {
-            rust.session.selection = snapshot.selection;
+            rust.session.set_selection(snapshot.selection);
             rust.session.deselected_selection = snapshot.deselected;
             Edit::SelectionPreview
         });

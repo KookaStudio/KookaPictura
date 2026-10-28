@@ -100,10 +100,10 @@ pub use perspective_crop::{
 pub use properties::{
     apply_visibility, arrange_path, arrange_path_index, can_arrange_path, can_delete_paths,
     can_move_path, can_move_path_to, delete_hidden_layers, delete_paths, delete_paths_report,
-    duplicate_paths, group_paths, lock_group_layers, move_path, move_path_to, move_path_to_result,
-    rename_path, reverse_paths, reverse_paths_result, select_similar, set_blend_paths,
-    set_color_paths, set_fill_paths, set_lock_paths, set_opacity_paths, set_visible_paths,
-    ungroup_paths, Arrange,
+    duplicate_paths, group_paths, hidden_layer_paths, lock_group_layers, move_path, move_path_to,
+    move_path_to_result, rename_path, reverse_paths, reverse_paths_result, select_similar,
+    set_blend_paths, set_color_paths, set_fill_paths, set_lock_paths, set_opacity_paths,
+    set_visible_paths, ungroup_paths, Arrange,
 };
 pub use rasterize::{
     is_fill_content_layer, rasterize_all_layers, rasterize_fill_content, rasterize_shape,

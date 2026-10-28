@@ -327,10 +327,7 @@ fn apply_filter_params(
         return false;
     };
     let outcome = match region {
-        Some(rect) => Edit::Regions {
-            rects: vec![rect],
-            notify: false,
-        },
+        Some(rect) => Edit::regions(vec![rect], false),
         None => Edit::Full,
     };
     view.as_mut().edit("Filter", |_| outcome);
@@ -626,10 +623,7 @@ fn run_stack(
         return false;
     };
     let outcome = match region {
-        Some(rect) => Edit::Regions {
-            rects: vec![rect],
-            notify: false,
-        },
+        Some(rect) => Edit::regions(vec![rect], false),
         None => Edit::Full,
     };
     if commit {

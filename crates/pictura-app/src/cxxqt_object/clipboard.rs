@@ -9,7 +9,6 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers::layer_visibility_region;
 use super::helpers_composite::{current_buffer, rgba_frame};
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
@@ -155,7 +154,8 @@ fn copy_layer_from_document(
         return QString::default();
     };
     view.as_mut().rust_mut().select_only_layer(&created);
-    view.as_mut().edit("Duplicate Layer", |_| Edit::Structural);
+    view.as_mut()
+        .edit("Duplicate Layer", |_| Edit::Structural { damage: None });
     QString::from(created.as_str())
 }
 
@@ -227,13 +227,9 @@ fn clear(mut view: Pin<&mut PictureView>, path: &str, label: &str) -> bool {
             .session
             .doc
             .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, path))
-            .and_then(layer_visibility_region);
+            .and_then(|doc| pictura_render::damage::influence(doc, path));
         let outcome = match region {
-            Some(rect) => Edit::Regions {
-                rects: vec![rect],
-                notify: false,
-            },
+            Some(rect) => Edit::regions(vec![rect], false),
             None => Edit::Full,
         };
         view.as_mut().edit(label, |_| outcome);
@@ -307,7 +303,7 @@ fn clipboard_paste(
     // CS6 drops the marquee after any paste; Reselect restores it. Into and
     // Outside have already folded it into the layer mask.
     let mut rust = view.as_mut().rust_mut();
-    if let Some(selection) = rust.session.selection.take() {
+    if let Some(selection) = rust.session.take_selection() {
         rust.session.deselected_selection = Some(selection);
     }
     view.as_mut().rust_mut().select_only_layer(&created);
@@ -318,13 +314,9 @@ fn clipboard_paste(
         .session
         .doc
         .as_ref()
-        .and_then(|doc| pictura_render::resolve_path(doc, &created))
-        .and_then(layer_visibility_region);
+        .and_then(|doc| pictura_render::damage::influence(doc, &created));
     let outcome = match region {
-        Some(rect) => Edit::Regions {
-            rects: vec![rect],
-            notify: false,
-        },
+        Some(rect) => Edit::regions(vec![rect], false),
         None => Edit::Full,
     };
     view.as_mut().edit(label, |_| outcome);

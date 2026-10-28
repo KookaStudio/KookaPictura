@@ -14,6 +14,7 @@ class QGridLayout;
 class QHBoxLayout;
 class QPushButton;
 class QSpinBox;
+class QTimer;
 class QToolButton;
 class QVBoxLayout;
 
@@ -137,7 +138,9 @@ protected:
 private:
     void edited(const QByteArray& next);
     void preview();
+    void pollPreview();
     void cancelPreview();
+    void setUpPreviewTimers();
     void takeHistograms();
 
     PictureView* view_ = nullptr;
@@ -148,6 +151,8 @@ private:
     bool previewing_ = false;
     AdjustmentControls* controls_ = nullptr;
     QCheckBox* preview_ = nullptr;
+    QTimer* previewTimer_ = nullptr;
+    QTimer* previewPollTimer_ = nullptr;
     std::array<std::array<int, 256>, 4> histograms_{};
 };
 

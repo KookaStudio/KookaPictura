@@ -505,11 +505,6 @@ void LayersPanel::setView(PictureView* view)
     rememberedGeneration_ = view ? view->document_generation() : 0;
     model_->setView(view);
     tree_->setDragSource(view);
-    if (patternFill_) {
-        const bool hasPatterns = view_ && layer_has_patterns(*view_);
-        patternFill_->setEnabled(hasPatterns);
-        patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
-    }
     if (view_) {
         set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_,
                                  addMaskByDefault_);
@@ -530,9 +525,29 @@ void LayersPanel::setView(PictureView* view)
     refresh();
 }
 
+void LayersPanel::refreshPatternAction()
+{
+    const quint64 generation = view_ ? view_->document_generation() : 0;
+    if (!patternFill_ || (view_ == patternView_ && generation == patternGeneration_)) {
+        return;
+    }
+    patternView_ = view_;
+    patternGeneration_ = generation;
+    const bool hasPatterns = view_ && layer_has_patterns(*view_);
+    patternFill_->setEnabled(hasPatterns);
+    patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
+}
+
+bool LayersPanel::patternActionEnabledForTest() const
+{
+    return patternFill_ && patternFill_->isEnabled();
+}
+
 void LayersPanel::refresh()
 {
     refreshQueued_ = false;
+    ++refreshCount_;
+    refreshPatternAction();
     const MetricsTimer<PictureView> timer(view_, "layers_panel_refresh");
     const bool wasRefreshing = refreshing_;
     const bool wasApplying = applyingTarget_;
@@ -944,16 +959,18 @@ void LayersPanel::syncControls()
     }
 
     // Set the final enabled state once: a control that stays enabled keeps its
-    // keyboard focus, where a transient disable would drop it.
-    blend_->setEnabled(blendAny);
+    // keyboard focus, where a transient disable would drop it. A pending
+    // transform disables the editing controls until it is resolved.
+    const bool editable = !transformPending_;
+    blend_->setEnabled(blendAny && editable);
     if (!pendingOpacity) {
-        opacity_->setEnabled(opacityAny);
+        opacity_->setEnabled(opacityAny && editable);
     }
     if (!pendingFill) {
-        fill_->setEnabled(fillAny);
+        fill_->setEnabled(fillAny && editable);
     }
     for (QToolButton* button : lockButtons) {
-        button->setEnabled(lockAny);
+        button->setEnabled(lockAny && editable);
     }
     if (forcedLocks) {
         lockTransparency_->setEnabled(false);

@@ -4,6 +4,7 @@
 #include "api/document_api.h"
 #include "api/selection_api.h"
 #include "api/type_api.h"
+#include "busy_job.h"
 #include "file_drop_router.h"
 #include "fonts.h"
 #include "frame_canvas.h"
@@ -503,7 +504,14 @@ bool PicturaMainWindow::saveActive()
             continue;
         }
         const QString file = session.temp->filePath(session.filename);
-        if (!document_api::save(*view, file)
+        const QString name = QFileInfo(file).fileName();
+        const bool saved = saveRunsOnWorker(file)
+            ? runBusyJob(this, name, tr("Saving %1…").arg(name),
+                         [view, file] { return document_api::saveStart(*view, file); },
+                         [view] { return document_api::saveRunning(*view); },
+                         [view] { return document_api::saveFinish(*view); })
+            : document_api::save(*view, file);
+        if (!saved
             || !session.origin->commit_smart_object_edit(session.layerPath, file)) {
             return false;
         }
@@ -541,11 +549,25 @@ bool PicturaMainWindow::saveActiveAs(const QString& path)
 {
     const int index = activeDocumentIndex();
     PictureView* view = viewAt(index);
-    if (!view || path.isEmpty() || !document_api::save(*view, path)) {
+    if (!view || path.isEmpty()) {
+        return false;
+    }
+    const QString name = QFileInfo(path).fileName();
+    const bool saved = saveRunsOnWorker(path)
+        ? runBusyJob(this, name, tr("Saving %1…").arg(name),
+                     [view, path] { return document_api::saveStart(*view, path); },
+                     [view] { return document_api::saveRunning(*view); },
+                     [view] { return document_api::saveFinish(*view); })
+        : document_api::save(*view, path);
+    if (!saved) {
         return false;
     }
     docs_[index]->path = path;
-    dropRecoverySnapshot(view);
+    // A stale save leaves the document modified; keep the recovery snapshot so
+    // an edit made during the save is still recoverable.
+    if (!document_api::isDirty(*view)) {
+        dropRecoverySnapshot(view);
+    }
     updateTabTitle(index);
     rememberRecent(path);
     updateWindowTitle();
@@ -630,6 +652,8 @@ void PicturaMainWindow::removeDocument(int index)
             editSessions_.removeAt(i);
         }
     }
+    const bool removedWasActive = entry->view && activeWindow_ && activeWindow_->doc == entry;
+    const bool removedWasBound = entry->view && entry->view == dockView_;
     detachWindows(entry->windows);
     forgetRecovery(entry->view);
     if (entry->view) {
@@ -646,9 +670,11 @@ void PicturaMainWindow::removeDocument(int index)
         destroyWindowWidgets(window);
     }
     qDeleteAll(entry->windows);
-    // A floating or tiled window leaves no tab change to retarget the panels,
-    // and a panel refresh mid-retarget would read the view about to be freed.
-    retargetDock();
+    // Unbind the panels before the active or bound view is freed; closing an
+    // unbound, inactive document leaves the surface untouched.
+    if (removedWasActive || removedWasBound) {
+        retargetDock();
+    }
     delete entry->view;
     delete entry;
     refresh();
@@ -866,6 +892,7 @@ void PicturaMainWindow::refresh()
         pictura::ScopedTimer registryTimer("cxx_registry_refresh");
         registry_->refresh();
     }
+    registryRefreshPending_ = false;
     updateAlignControls();
     updateTabTitle(index);
     updateWindowTitle();

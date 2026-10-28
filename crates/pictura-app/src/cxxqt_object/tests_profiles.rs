@@ -1,9 +1,12 @@
 use super::helpers::rgba_from_argb;
 use super::helpers_composite::buffer_to_image;
 use super::tests::pixel_layer;
+use super::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect};
 use pictura_render::{Planes, ViewPyramid};
+
+mod damage;
 
 /// Viewport the canvas presents into (a typical desktop canvas).
 const VIEW: (u32, u32) = (1280, 800);
@@ -32,6 +35,45 @@ fn checker_layer(name: &str, w: u32, h: u32) -> pictura_core::Layer {
     layer.channels[1].data = g.into();
     layer.channels[2].data = b.into();
     layer
+}
+
+#[test]
+#[ignore = "6000x4000 selection-contour cache profile; run explicitly with --ignored --nocapture"]
+fn selection_contour_cache_profile_6000x4000() {
+    use super::PictureViewRust;
+    use pictura_select::Selection;
+
+    let (w, h) = (6000u32, 4000u32);
+    let mut data = vec![0u8; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            if (x / 64 + y / 64) % 2 == 0 {
+                data[(y * w + x) as usize] = 255;
+            }
+        }
+    }
+    let mut rust = PictureViewRust::default();
+    rust.session.set_selection(Some(Selection {
+        width: w,
+        height: h,
+        data,
+    }));
+
+    let t = std::time::Instant::now();
+    let first = rust.selection_contour_extents();
+    let compute = t.elapsed();
+    let t = std::time::Instant::now();
+    let second = rust.selection_contour_extents();
+    let hit = t.elapsed();
+
+    println!(
+        "6000x4000 contour: compute {:.2} ms ({} ints), cache hit {:.2} ms",
+        compute.as_secs_f64() * 1000.0,
+        first.len(),
+        hit.as_secs_f64() * 1000.0
+    );
+    assert_eq!(first, second);
+    assert_eq!(rust.selection_contour_computes.get(), 1);
 }
 
 /// Print-only 4000² Quick Selection profile: the press path (composite,

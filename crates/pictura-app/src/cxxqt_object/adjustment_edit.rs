@@ -7,7 +7,6 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::edit::Edit;
-use super::helpers::layer_visibility_region;
 use super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -127,11 +126,13 @@ fn edit_adjustment(
             return Edit::None;
         };
         layer.adjustment = Some(next);
-        match layer_visibility_region(layer) {
-            Some(rect) => Edit::Regions {
-                rects: vec![rect],
-                notify: false,
-            },
+        match rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path))
+        {
+            Some(rect) => Edit::regions(vec![rect], false),
             None => Edit::Full,
         }
     });

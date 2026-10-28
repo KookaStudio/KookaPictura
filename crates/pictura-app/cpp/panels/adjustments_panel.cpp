@@ -71,12 +71,24 @@ QToolButton* AdjustmentsPanel::makeButton(const AdjustmentKind& entry)
 
 void AdjustmentsPanel::setView(PictureView* view)
 {
+    view_ = view;
     const bool enabled = view != nullptr;
     for (QToolButton* button : buttons_) {
         button->setEnabled(enabled);
     }
+    refresh();
+}
+
+void AdjustmentsPanel::refresh()
+{
+    const quint64 generation = view_ ? view_->document_generation() : 0;
+    if (view_ == patternView_ && generation == patternGeneration_) {
+        return;
+    }
+    patternView_ = view_;
+    patternGeneration_ = generation;
     if (QToolButton* pattern = buttonByIdForTest(QStringLiteral("pattern"))) {
-        const bool hasPatterns = view && layer_has_patterns(*view);
+        const bool hasPatterns = view_ && layer_has_patterns(*view_);
         pattern->setEnabled(hasPatterns);
         pattern->setToolTip(hasPatterns ? QStringLiteral("Pattern")
                                         : QStringLiteral("No patterns are loaded"));

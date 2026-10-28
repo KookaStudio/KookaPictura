@@ -239,6 +239,7 @@ public:
     // A pending transform locks the Layer menu and greys the Layers panel.
     bool layersLockedForTest() const { return transformLocked_; }
     LayersPanel* layersPanelForTest() const { return layersPanel_; }
+    int dockRetargetCountForTest() const { return dockRetargetCount_; }
 
     int brightnessLevel() const { return brightnessLevel_; }
     void setBrightnessLevel(int level);
@@ -360,6 +361,10 @@ public:
     // True when `path`'s suffix routes to the native PSD/PSB reader rather than
     // the Qt image decode edge.
     static bool isNativeDocumentPath(const QString& path);
+    // True when a save to `path` goes through the shared PSD/PSB worker: every
+    // path that is neither a raster writer nor PDF (an unknown or missing
+    // suffix writes a PSD, as `format_for_path` does).
+    static bool saveRunsOnWorker(const QString& path);
     bool openAsSmartObjectPath(const QString& path);
     // Test seam: hold a started open's completion for `ms` milliseconds so the
     // loading tab, spinner, hover, and cancel are observable.
@@ -708,6 +713,8 @@ private:
     void updateColumnFrameEdges();
     void showPreferences(const QString& page);
     void retargetDock();
+    void refreshDock(bool includeSelfRefreshing);
+    bool dockNeedsRebind() const;
     void refreshPanels();
     void updateStatus();
     void updateToolHint();
@@ -970,6 +977,20 @@ private:
     QWidget* workspaceFrameRight_ = nullptr;
     QTimer* panelRefreshTimer_ = nullptr;
     QTimer* sessionSaveTimer_ = nullptr;
+    // The surface the docked panels are bound to; a pass rebinds only when the
+    // active view, active canvas, or document generation changes.
+    PictureView* dockView_ = nullptr;
+    ImageView* dockCanvas_ = nullptr;
+    quint64 dockGeneration_ = 0;
+    // A notifying change already refreshed the panels that subscribe to it.
+    bool panelsRefreshedByChanged_ = false;
+    // A bind already refreshed every panel; skip the next redundant pass.
+    bool panelsFreshlyBound_ = false;
+    // A panel pass is running and owns the one command-table refresh.
+    bool refreshingDock_ = false;
+    // A region presentation requested a command-table refresh in the next pass.
+    bool registryRefreshPending_ = false;
+    int dockRetargetCount_ = 0;
     // M49: while dragging the divider between two widget columns, keep the
     // workspace-side column's width fixed and let the workspace absorb the delta.
     PanelColumn* resizeAnchorColumn_ = nullptr;

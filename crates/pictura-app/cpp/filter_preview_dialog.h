@@ -86,9 +86,15 @@ private:
     void clearProxy();
     // The exact picture: the worker filters the full-resolution layer and the
     // canvas swaps the draft copy for it when it lands.
-    void startExactPreview(const QList<double>& values);
+    bool startExactPreview(const QList<double>& values);
+    // Set the exact-preview region and scale without drawing a synchronous
+    // draft, so a large whole-layer preview at full zoom never filters on the
+    // GUI thread.
+    void prepareExactPreview();
     void pollExactPreview();
     void cancelExactPreview();
+    // The tail of runPreview: filter the live layer/selection synchronously.
+    void runSynchronousPreview(const QList<double>& values);
     // The pane's section filtered off the document while the canvas shows
     // the copy.
     void updatePaneSection();
@@ -127,6 +133,8 @@ private:
     QImage sectionImage_;
     QTimer* exactTimer_ = nullptr;
     QProgressBar* exactBusy_ = nullptr;
+    // A started exact request whose picture has not landed yet.
+    bool exactPending_ = false;
     QRectF previewVisible_;
     double canvasZoom_ = 1.0;
     // A small pre-preview picture for a bottom pane (Shear): the document with

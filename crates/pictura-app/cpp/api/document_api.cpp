@@ -1,6 +1,7 @@
 #include "api/document_api.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
 
 #include <rust/cxx.h>
@@ -36,6 +37,26 @@ bool newDocument(PictureView& view, int width, int height, const QString& mode, 
 bool save(PictureView& view, const QString& path)
 {
     return view.save(path);
+}
+
+bool saveStart(PictureView& view, const QString& path)
+{
+    return pictura::save_start(view, path);
+}
+
+bool saveRunning(const PictureView& view)
+{
+    return pictura::save_running(view);
+}
+
+bool saveFinish(PictureView& view)
+{
+    return pictura::save_finish(view);
+}
+
+void saveSetDelayForTest(PictureView& view, quint64 ms)
+{
+    pictura::save_set_delay(view, ms);
 }
 
 bool isDirty(const PictureView& view)

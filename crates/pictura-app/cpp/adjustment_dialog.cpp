@@ -3,6 +3,7 @@
 #include <QtCore/QDebug>
 
 #include "api/document_api.h"
+#include "busy_job.h"
 #include "dialogs.h"
 #include "image_view.h"
 #include "tools.h"
@@ -12,7 +13,9 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h"
 
 #include "curves_dialog.h"
 #include "exposure_dialog.h"
@@ -29,6 +32,7 @@
 #include <QtCore/QTimer>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
@@ -66,6 +70,7 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     , visible_(visible)
 {
     setObjectName(QStringLiteral("adjustmentDialog"));
+    setUpPreviewTimers();
     // The same frame as the hand-laid-out pages: controls with Preview under
     // them on the left, OK / Cancel down the right.
     auto* outer = new QHBoxLayout(this);
@@ -108,6 +113,7 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
 {
     setObjectName(QStringLiteral("adjustmentDialog"));
     setWindowTitle(title_);
+    setUpPreviewTimers();
     takeHistograms();
     // Show the opening block at once, as the generic page does: Black & White
     // and Photo Filter are not the identity at their defaults.
@@ -232,7 +238,7 @@ QCheckBox* AdjustmentDialog::previewCheck()
         preview_->setChecked(true);
         connect(preview_, &QCheckBox::toggled, this, [this](bool on) {
             if (on) {
-                preview();
+                previewTimer_->start();
             } else {
                 cancelPreview();
             }
@@ -382,26 +388,63 @@ void AdjustmentDialog::edited(const QByteArray& next)
         return;
     }
     block_ = next;
-    if (!preview_ || preview_->isChecked()) {
-        preview();
+    if (previewTimer_ && (!preview_ || preview_->isChecked())) {
+        previewTimer_->start();
     }
 }
 
 void AdjustmentDialog::preview()
 {
-    if (view_) {
-        previewing_ = image_adjust_preview(*view_, slice(block_), visible_.x(), visible_.y(),
-                                           visible_.width(), visible_.height())
-            || previewing_;
+    if (!view_) {
+        return;
+    }
+    if (image_adjust_preview_start(*view_, slice(block_))) {
+        previewing_ = true;
+        previewPollTimer_->start();
+        return;
+    }
+    // A layer-mask target keeps the mask-sized synchronous path.
+    previewing_ = image_adjust_preview(*view_, slice(block_), visible_.x(), visible_.y(),
+                                       visible_.width(), visible_.height())
+        || previewing_;
+}
+
+void AdjustmentDialog::pollPreview()
+{
+    if (!view_) {
+        return;
+    }
+    if (image_adjust_preview_poll(*view_)) {
+        previewing_ = true;
+    }
+    if (!image_adjust_preview_busy(*view_)) {
+        previewPollTimer_->stop();
     }
 }
 
 void AdjustmentDialog::cancelPreview()
 {
-    if (view_ && previewing_) {
-        filter_preview_cancel(*view_);
+    if (previewTimer_) {
+        previewTimer_->stop();
+    }
+    if (previewPollTimer_) {
+        previewPollTimer_->stop();
+    }
+    if (view_) {
+        image_adjust_preview_cancel(*view_);
     }
     previewing_ = false;
+}
+
+void AdjustmentDialog::setUpPreviewTimers()
+{
+    previewTimer_ = new QTimer(this);
+    previewTimer_->setSingleShot(true);
+    previewTimer_->setInterval(0);
+    connect(previewTimer_, &QTimer::timeout, this, &AdjustmentDialog::preview);
+    previewPollTimer_ = new QTimer(this);
+    previewPollTimer_->setInterval(16);
+    connect(previewPollTimer_, &QTimer::timeout, this, &AdjustmentDialog::pollPreview);
 }
 
 QColor AdjustmentDialog::originalColorAt(const QPoint& pos)
@@ -415,8 +458,8 @@ QColor AdjustmentDialog::originalColorAt(const QPoint& pos)
     const bool previewed = previewing_;
     cancelPreview();
     const QColor color = QColor::fromRgb(view_->sample_argb(pos.x(), pos.y()));
-    if (previewed) {
-        preview();
+    if (previewed && previewTimer_) {
+        previewTimer_->start();
     }
     return color;
 }
@@ -427,18 +470,23 @@ void AdjustmentDialog::setPreviewArea(const QRect& visible)
         return;
     }
     visible_ = visible;
-    if (!preview_ || preview_->isChecked()) {
-        preview();
+    if (previewTimer_ && (!preview_ || preview_->isChecked())) {
+        previewTimer_->start();
     }
 }
 
 void AdjustmentDialog::accept()
 {
     // The commit re-applies to the whole layer from the pre-preview pixels.
-    if (view_ && image_adjust_apply(*view_, slice(block_), title_)) {
-        previewing_ = false;
-    } else {
-        cancelPreview();
+    cancelPreview();
+    if (view_) {
+        if (runBusyJob(this, title_,
+                       QApplication::translate("AdjustmentDialog", "Applying %1…").arg(title_),
+                       [this] { return image_adjust_apply_start(*view_, slice(block_), title_); },
+                       [this] { return filter_commit_running(*view_); },
+                       [this] { return filter_commit_finish(*view_); })) {
+            previewing_ = false;
+        }
     }
     QDialog::accept();
 }

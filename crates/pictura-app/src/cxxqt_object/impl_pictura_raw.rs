@@ -81,7 +81,8 @@ impl qobject::PictureView {
             }
         };
         if applied {
-            self.as_mut().edit("Pictura Raw", |_| Edit::Structural);
+            self.as_mut()
+                .edit("Pictura Raw", |_| Edit::Structural { damage: None });
         }
         applied
     }

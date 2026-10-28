@@ -16,7 +16,7 @@
 
 use super::helpers::combine_mode_from;
 use super::qobject::PictureView;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, structural_after, structural_paths, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -516,21 +516,34 @@ fn type_convert(mut view: Pin<&mut PictureView>, path: &QString, paragraph: bool
     let Some(spec) = converted.filter(|s| !s.text.trim().is_empty()) else {
         return false;
     };
+    let path = path.to_string();
+    let before = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, &path));
     let replaced = view
         .as_mut()
         .rust_mut()
         .session
         .doc
         .as_mut()
-        .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec));
+        .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path, &spec));
     if replaced {
+        let after = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
         view.as_mut().edit(
             if paragraph {
                 "Convert To Paragraph Text"
             } else {
                 "Convert To Point Text"
             },
-            |_| Edit::Structural,
+            |_| structural(before, after),
         );
     }
     replaced
@@ -581,13 +594,19 @@ fn type_commit_layer(
         created
     };
     if !created.is_empty() {
+        let after = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &created));
         view.as_mut().edit(
             if spec.vertical {
                 "Vertical Type"
             } else {
                 "Horizontal Type"
             },
-            |_| Edit::Structural,
+            |_| structural_after(after.map(|rect| vec![rect])),
         );
     }
     QString::from(created.as_str())
@@ -829,6 +848,13 @@ fn type_apply_style(
     name: &QString,
     paragraph: bool,
 ) -> bool {
+    let path = path.to_string();
+    let before = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, &path));
     let applied = view
         .as_mut()
         .rust_mut()
@@ -836,12 +862,29 @@ fn type_apply_style(
         .doc
         .as_mut()
         .is_some_and(|doc| {
-            pictura_render::apply_type_style(doc, &path.to_string(), &name.to_string(), paragraph)
+            pictura_render::apply_type_style(doc, &path, &name.to_string(), paragraph)
         });
     if applied {
-        view.as_mut().edit("Apply Type Style", |_| Edit::Structural);
+        let after = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
+        view.as_mut()
+            .edit("Apply Type Style", |_| structural(before, after));
     }
     applied
+}
+
+pub(super) fn type_paths(doc: &pictura_core::Document) -> Vec<String> {
+    pictura_render::flatten_rows(doc)
+        .into_iter()
+        .filter(|(path, _)| {
+            pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.is_type())
+        })
+        .map(|(path, _)| path)
+        .collect()
 }
 
 /// Run a style operation on the document and record one history state when it
@@ -851,6 +894,11 @@ fn commit_style(
     label: &str,
     apply: impl FnOnce(&mut pictura_core::Document) -> bool,
 ) -> bool {
+    let before = view.rust().session.doc.as_ref().and_then(|doc| {
+        let paths = type_paths(doc);
+        let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+        pictura_render::damage::influence_paths(doc, &refs)
+    });
     let changed = view
         .as_mut()
         .rust_mut()
@@ -859,7 +907,13 @@ fn commit_style(
         .as_mut()
         .is_some_and(apply);
     if changed {
-        view.as_mut().edit(label, |_| Edit::Structural);
+        let after = view.rust().session.doc.as_ref().and_then(|doc| {
+            let paths = type_paths(doc);
+            let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+            pictura_render::damage::influence_paths(doc, &refs)
+        });
+        view.as_mut()
+            .edit(label, |_| structural_paths(before, after));
     }
     changed
 }
@@ -1060,7 +1114,8 @@ fn replace(
 }
 
 fn commit_edit(mut view: Pin<&mut PictureView>) {
-    view.as_mut().edit("Edit Type Layer", |_| Edit::Structural);
+    view.as_mut()
+        .edit("Edit Type Layer", |_| Edit::Structural { damage: None });
 }
 
 /// Show the layer at `path` again after `type_edit_begin` hid it; no composite.
