@@ -11,6 +11,22 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **The shared fill path fills a mask** (#1022, OpenSpec change
+  `fill-path-mask-target`). With a mask edit target, the Gradient, the Paint
+  Bucket, `Edit ▸ Stroke`, Fill Path, Stroke Path, and the shape tools' Fill
+  Pixels now write the mask's coverage instead of refusing with "the layer's
+  pixels are locked" (a type layer's pixels are locked from birth). `fills::apply`
+  resolves the mask, runs the fill on its mask-sized grayscale document
+  (`mask_document_coverage`), translates the drag and click into the mask's
+  frame, crops the selection to the mask's rectangle, and writes the result back
+  with `write_mask_back`, one state each. A fill colour, a ramp, a path's and a
+  shape's coverage are reduced to their Rec. 601 luma; the Paint Bucket's All
+  Layers samples the mask rather than a composite. `Edit ▸ Fill`'s private mask
+  path is folded into the shared one (`fill_mask`/`gray_image` deleted), so every
+  fill on a mask goes through one path. Tests:
+  `tst_mask_edit::fillToolsWriteCoverage`,
+  `tst_mask_edit::gradientFillsALockedLayersMask`, and the updated
+  `tst_mask_edit::canvasToolsWriteCoverage`.
 - **Layers panel thumbnail borders** (#982, OpenSpec change
   `layers-thumbnail-borders`). A row that paints an icon or fill content instead
   of a raster image now draws a 1:1 square card: type (already square),
