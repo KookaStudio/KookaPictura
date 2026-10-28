@@ -2,11 +2,21 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QJsonArray>
+#include <QtCore/QTimer>
 #include <QtGui/QAction>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QMessageBox>
+#include <QtWidgets/QTreeView>
+
+#include <functional>
 
 #include "commands.h"
 #include "filter_commands.h"
+#include "filter_preview_dialog.h"
 #include "frame.h"
+#include "panels/layers_panel.h"
+#include "session.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
@@ -29,13 +39,17 @@ private slots:
     void previewCancelRestoresSmartObject();
     void undoRemovesSmartFilter();
     void adjustmentsDisabledOnSmartObject();
-    void editSmartFilterDisabledForGenericEntry();
+    void editSmartFilterEnabledForGenericEntry();
+    void filterRowsShowNewestFirst();
+    void doubleClickReopensTheFilterDialog();
 
 private:
     // A new document whose active layer is an embedded Smart Object; returns
     // its layer path.
     QString smartObject(const QString& name);
     bool applyGaussianBlur(double radius);
+    bool applyEmboss();
+    pictura::LayersPanel* panelOn(pictura::PictureView* view, const QString& path);
     QAction* action(const QStringList& path);
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -82,6 +96,32 @@ bool SmartFilterApplyTest::applyGaussianBlur(double radius)
         pictura::commandIdForPath(
             {QStringLiteral("Filter"), QStringLiteral("Blur"), QStringLiteral("Gaussian Blur")}),
         params);
+}
+
+bool SmartFilterApplyTest::applyEmboss()
+{
+    pictura::CommandParams params;
+    params.values.insert(QStringLiteral("kind"), QStringLiteral("emboss"));
+    params.values.insert(QStringLiteral("params"), QJsonArray{});
+    return window_->registry()->executeRecorded(
+        pictura::commandIdForPath(
+            {QStringLiteral("Filter"), QStringLiteral("Stylize"), QStringLiteral("Emboss")}),
+        params);
+}
+
+pictura::LayersPanel* SmartFilterApplyTest::panelOn(pictura::PictureView* view, const QString& path)
+{
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    if (!panel) {
+        return nullptr;
+    }
+    panel->setView(view);
+    panel->refresh();
+    QCoreApplication::processEvents();
+    panel->expandForTest(path);
+    panel->expandForTest(path + QStringLiteral("/@sf"));
+    QCoreApplication::processEvents();
+    return panel;
 }
 
 QAction* SmartFilterApplyTest::action(const QStringList& path)
@@ -180,13 +220,95 @@ void SmartFilterApplyTest::adjustmentsDisabledOnSmartObject()
     QVERIFY(action(invert)->isEnabled());
 }
 
-void SmartFilterApplyTest::editSmartFilterDisabledForGenericEntry()
+void SmartFilterApplyTest::editSmartFilterEnabledForGenericEntry()
 {
     const QString path = smartObject(QStringLiteral("Edit"));
     QVERIFY(!path.isEmpty());
     pictura::PictureView* view = window_->activeView();
     QVERIFY(applyGaussianBlur(2.0));
-    QCOMPARE(pictura::layer_smart_filter_edit_kind(*view, path, 0), 0);
+    QVERIFY(pictura::apply_filter_stack(*view, {QStringLiteral("gaussian-blur")}, {1.0}));
+    QCOMPARE(pictura::layer_smart_filter_edit_kind(*view, path, 0), 3);
+    QCOMPARE(pictura::layer_smart_filter_edit_kind(*view, path, 1), 4);
+    QCOMPARE(pictura::layer_smart_filter_kinds(*view, path, 0),
+             QStringList{QStringLiteral("gaussian-blur")});
+    QCOMPARE(pictura::layer_smart_filter_params(*view, path, 0), QList<double>{2.0});
+}
+
+void SmartFilterApplyTest::filterRowsShowNewestFirst()
+{
+    const QString path = smartObject(QStringLiteral("Order"));
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(applyGaussianBlur(2.0));
+    QVERIFY(applyEmboss());
+    pictura::LayersPanel* panel = panelOn(view, path);
+    QVERIFY(panel);
+    auto* tree = panel->findChild<QTreeView*>();
+    QVERIFY(tree && tree->model());
+    QAbstractItemModel* model = tree->model();
+    std::function<QModelIndex(const QModelIndex&)> findGroup =
+        [&](const QModelIndex& parent) -> QModelIndex {
+        for (int r = 0; r < model->rowCount(parent); ++r) {
+            const QModelIndex index = model->index(r, 0, parent);
+            if (index.data(Qt::DisplayRole).toString() == QStringLiteral("Smart Filters")) {
+                return index;
+            }
+            const QModelIndex found = findGroup(index);
+            if (found.isValid()) {
+                return found;
+            }
+        }
+        return {};
+    };
+    const QModelIndex group = findGroup(QModelIndex());
+    QVERIFY(group.isValid());
+    QCOMPARE(model->rowCount(group), 2);
+    QCOMPARE(model->index(0, 0, group).data(Qt::DisplayRole).toString(), QStringLiteral("Emboss"));
+    QCOMPARE(model->index(1, 0, group).data(Qt::DisplayRole).toString(),
+             QStringLiteral("Gaussian Blur"));
+}
+
+void SmartFilterApplyTest::doubleClickReopensTheFilterDialog()
+{
+    const QString path = smartObject(QStringLiteral("DoubleClick"));
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(applyGaussianBlur(2.0));
+    QVERIFY(applyEmboss());
+    pictura::LayersPanel* panel = panelOn(view, path);
+    QVERIFY(panel);
+
+    // Gaussian Blur is under Emboss, so the stacked-filters notice comes
+    // first; tick Don't show again, then OK the prefilled dialog.
+    bool noticed = false;
+    bool opened = false;
+    QTimer poll;
+    poll.setInterval(20);
+    connect(&poll, &QTimer::timeout, [&] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (!widget->isVisible()) {
+                continue;
+            }
+            if (auto* box = qobject_cast<QMessageBox*>(widget);
+                box && box->objectName() == QStringLiteral("smartFilterEditNotice")) {
+                noticed = true;
+                box->checkBox()->setChecked(true);
+                box->accept();
+            } else if (auto* dialog = qobject_cast<pictura::FilterPreviewDialog*>(widget)) {
+                opened = true;
+                dialog->accept();
+            }
+        }
+    });
+    poll.start();
+    QVERIFY(panel->doubleClickRowCenterForTest(path + QStringLiteral("/@sf/0")));
+    poll.stop();
+    QVERIFY2(noticed, "the stacked-filters notice was shown");
+    QVERIFY2(opened, "the filter's dialog reopened");
+    QVERIFY(!pictura::loadSession().showSmartFilterEditMessage);
+    QCOMPARE(pictura::layer_smart_filter_count(*view, path), 2);
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Gaussian Blur"));
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 1), QStringLiteral("Emboss"));
 }
 
 QTEST_MAIN(SmartFilterApplyTest)

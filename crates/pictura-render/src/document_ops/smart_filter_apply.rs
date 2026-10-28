@@ -61,6 +61,23 @@ pub fn apply_smart_filter(
     true
 }
 
+/// Replace the Smart Filter at `index` on the embedded Smart Object at `path`
+/// with `filter`, keeping its position and enable flag (an edit of an applied
+/// filter). The filter mask is left alone. `false` without mutating for an
+/// ineligible target or an out-of-range index.
+pub fn replace_smart_filter_at(
+    doc: &mut Document,
+    path: &str,
+    index: usize,
+    filter: SmartFilter,
+) -> bool {
+    if !crate::can_replace_smart_object_contents(doc, path) {
+        return false;
+    }
+    resolve_path_mut(doc, path)
+        .is_some_and(|layer| pictura_codec::replace_smart_filter(layer, index, filter).is_ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,5 +287,28 @@ mod tests {
             a.filter_mask.as_ref().map(|m| m.data.to_vec())
         );
         assert_eq!(crate::composite_rgba(&back).data, before.data);
+    }
+
+    #[test]
+    fn replace_at_index_keeps_order() {
+        let mut doc = smart_doc();
+        assert!(apply_smart_filter(&mut doc, "0", blur(1.0), None));
+        assert!(apply_smart_filter(&mut doc, "0", blur(2.0), None));
+        let emboss = smart_filter_record(
+            &[FilterStep {
+                kind: "emboss".into(),
+                slots: pictura_filters::catalogue::descriptor("emboss")
+                    .unwrap()
+                    .defaults(),
+            }],
+            false,
+        )
+        .expect("record");
+        assert!(!replace_smart_filter_at(&mut doc, "0", 9, emboss.clone()));
+        assert!(replace_smart_filter_at(&mut doc, "0", 0, emboss.clone()));
+        let filters = &so(&doc).smart_filters;
+        assert_eq!(filters.len(), 2);
+        assert_eq!(filters[0].options, emboss.options);
+        assert_eq!(filters[1].options, blur(2.0).options);
     }
 }

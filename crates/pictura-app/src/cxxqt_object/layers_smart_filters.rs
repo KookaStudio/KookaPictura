@@ -9,18 +9,25 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+use super::filter_tools::smart_apply;
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
-use pictura_core::{Document, SmartObject};
+use cxx_qt_lib::{QList, QString, QStringList};
+use pictura_core::{Document, SmartFilter, SmartObject};
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
+
+        include!("cxx-qt-lib/qlist.h");
+        type QList_f64 = cxx_qt_lib::QList<f64>;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -45,10 +52,36 @@ pub mod ffi {
         /// Whether the whole smart-filter group on `layer_path` is enabled.
         fn layer_smart_filters_enabled(view: &PictureView, layer_path: &QString) -> bool;
 
-        /// 1 when filter `i` on `layer_path` is the camera-raw smart filter, 2
-        /// when it is the Lens Correction smart filter, 0 otherwise (no dialog
-        /// to reopen).
+        /// How filter `i` on `layer_path` re-edits: 1 the camera-raw smart
+        /// filter, 2 Lens Correction, 3 a generic filter with a dialog, 4 a
+        /// Filter Gallery stack, 0 otherwise (no dialog to reopen).
         fn layer_smart_filter_edit_kind(view: &PictureView, layer_path: &QString, i: i32) -> i32;
+
+        /// The filter kinds of generic filter `i` on `layer_path`, in apply
+        /// order (one for a single filter); empty for any other filter.
+        fn layer_smart_filter_kinds(
+            view: &PictureView,
+            layer_path: &QString,
+            i: i32,
+        ) -> QStringList;
+
+        /// The slots of generic filter `i` on `layer_path`, each kind's in
+        /// turn, for the dialog's prefill; empty for any other filter.
+        fn layer_smart_filter_params(view: &PictureView, layer_path: &QString, i: i32)
+            -> QList_f64;
+
+        /// Start re-editing filter `i` on the active Smart Object at
+        /// `layer_path`: until `smart_filter_edit_end`, the filter dialog
+        /// previews the chain up to it and OK replaces it in place. False when
+        /// it has no generic dialog or the layer is not the active one.
+        fn smart_filter_edit_begin(
+            view: Pin<&mut PictureView>,
+            layer_path: &QString,
+            i: i32,
+        ) -> bool;
+
+        /// End the re-edit started by `smart_filter_edit_begin`.
+        fn smart_filter_edit_end(view: Pin<&mut PictureView>);
 
         /// Set filter `i` on `layer_path` enabled, recomposite, and record one
         /// "Smart Filter Visibility" state. False and no state when unchanged.
@@ -225,21 +258,53 @@ fn layer_smart_filters_enabled(view: &PictureView, layer_path: &QString) -> bool
         .is_some_and(|doc| smart_filters_enabled(doc, &layer_path.to_string()))
 }
 
-fn layer_smart_filter_edit_kind(view: &PictureView, layer_path: &QString, i: i32) -> i32 {
+/// Filter `i` on `layer_path`, when there is one.
+fn stored_filter<'a>(
+    view: &'a PictureView,
+    layer_path: &QString,
+    i: i32,
+) -> Option<&'a SmartFilter> {
     let path = layer_path.to_string();
-    let id = view
-        .rust()
+    view.rust()
         .session
         .doc
         .as_ref()
         .and_then(|doc| smart_object(doc, &path))
-        .and_then(|so| so.smart_filters.get(i.max(0) as usize))
-        .map(|filter| filter.filter_id);
-    match id {
-        Some(pictura_codec::CAMERA_RAW_FILTER_ID) => 1,
-        Some(pictura_codec::LENS_CORRECTION_FILTER_ID) => 2,
-        _ => 0,
+        .and_then(|so| so.smart_filters.get(usize::try_from(i).ok()?))
+}
+
+fn layer_smart_filter_edit_kind(view: &PictureView, layer_path: &QString, i: i32) -> i32 {
+    stored_filter(view, layer_path, i).map_or(0, smart_apply::edit_kind)
+}
+
+fn layer_smart_filter_kinds(view: &PictureView, layer_path: &QString, i: i32) -> QStringList {
+    let mut list = QStringList::default();
+    if let Some((steps, _)) = stored_filter(view, layer_path, i).and_then(smart_apply::record_steps)
+    {
+        for step in steps {
+            list.append(QString::from(step.kind.as_str()));
+        }
     }
+    list
+}
+
+fn layer_smart_filter_params(view: &PictureView, layer_path: &QString, i: i32) -> QList<f64> {
+    stored_filter(view, layer_path, i)
+        .and_then(smart_apply::record_steps)
+        .map(|(steps, _)| steps.iter().flat_map(|s| s.slots.iter().copied()).collect())
+        .unwrap_or_default()
+}
+
+fn smart_filter_edit_begin(mut view: Pin<&mut PictureView>, layer_path: &QString, i: i32) -> bool {
+    let Ok(index) = usize::try_from(i) else {
+        return false;
+    };
+    let path = base_path(&layer_path.to_string()).to_string();
+    smart_apply::edit_begin(&mut view.as_mut().rust_mut(), &path, index)
+}
+
+fn smart_filter_edit_end(mut view: Pin<&mut PictureView>) {
+    smart_apply::edit_end(&mut view.as_mut().rust_mut());
 }
 
 fn set_layer_smart_filter_visible(

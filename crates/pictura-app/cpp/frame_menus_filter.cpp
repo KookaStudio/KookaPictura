@@ -3,6 +3,7 @@
 #include <QtCore/QDebug>
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonArray>
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStatusBar>
 
@@ -18,10 +19,12 @@
 #include "liquify_dialog.h"
 #include "picture_frame_dialog.h"
 #include "reduce_noise_dialog.h"
+#include "session.h"
 #include "vp_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 
 namespace pictura {
 
@@ -152,6 +155,31 @@ bool commitFilter(QWidget* parent, PictureView* view, const QList<ImageView*>& c
     return applied;
 }
 
+// CS6's notice before re-editing a Smart Filter with others stacked above
+// it, with the "Don't show again" choice persisted in the session store.
+void noteStackedSmartFilterEdit(QWidget* parent)
+{
+    SessionState session = loadSession();
+    if (!session.showSmartFilterEditMessage) {
+        return;
+    }
+    QMessageBox box(QMessageBox::Information, QStringLiteral("Kooka Pictura"),
+                    QObject::tr("Smart filters stacked on top of this filter will not preview "
+                                "while this filter is being edited. They will be applied after "
+                                "committing the filter parameters dialog."),
+                    QMessageBox::Ok, parent);
+    box.setObjectName(QStringLiteral("smartFilterEditNotice"));
+    auto* dontShow = new QCheckBox(QObject::tr("Don't show again"), &box);
+    dontShow->setObjectName(QStringLiteral("smartFilterEditDontShowAgain"));
+    box.setCheckBox(dontShow);
+    box.exec();
+    if (dontShow->isChecked()) {
+        session = loadSession();
+        session.showSmartFilterEditMessage = false;
+        saveSession(session);
+    }
+}
+
 CommandParams filterParams(const QString& kind, const QList<double>& values)
 {
     QJsonArray params;
@@ -236,6 +264,51 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
             reportFilterRefusal(view);
         }
     }
+}
+
+void PicturaMainWindow::editSmartFilter(const QString& path, int index)
+{
+    PictureView* view = activeView();
+    if (!view) {
+        return;
+    }
+    const int editKind = layer_smart_filter_edit_kind(*view, path, index);
+    const QStringList kinds = layer_smart_filter_kinds(*view, path, index);
+    const QList<double> params = layer_smart_filter_params(*view, path, index);
+    if ((editKind != 3 && editKind != 4) || kinds.isEmpty()) {
+        return;
+    }
+    if (index < layer_smart_filter_count(*view, path) - 1) {
+        noteStackedSmartFilterEdit(this);
+    }
+    if (!smart_filter_edit_begin(*view, path, index)) {
+        return;
+    }
+    if (editKind == 4) {
+        QList<FilterGalleryDialog::Effect> effects;
+        int at = 0;
+        for (const QString& kind : kinds) {
+            const int arity = filter_param_arity(kind);
+            effects.append({kind, params.mid(at, arity), true});
+            at += arity;
+        }
+        FilterGalleryDialog dialog(view, this);
+        dialog.setEffects(effects);
+        if (runDialog(dialog, this) == QDialog::Accepted
+            && dialog.commit() == FilterGalleryDialog::CommitResult::Refused) {
+            reportFilterRefusal(view);
+        }
+    } else if (const FilterCommandSpec* spec = filterCommandForKind(kinds.first())) {
+        QList<double> values;
+        QString kind;
+        if (runFilterDialog(view, *spec, previewViewFor(activeDocumentCanvases()), params, &values,
+                            &kind, this)
+            && !commitFilter(this, view, activeDocumentCanvases(), kind, values)) {
+            reportFilterRefusal(view);
+        }
+    }
+    smart_filter_edit_end(*view);
+    refresh();
 }
 
 void PicturaMainWindow::wireFilterMenu()

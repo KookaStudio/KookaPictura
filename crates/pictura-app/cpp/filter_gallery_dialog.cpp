@@ -446,6 +446,17 @@ void FilterGalleryDialog::selectFilter(const QString& kind)
     selectEffect(selected_);
 }
 
+void FilterGalleryDialog::setEffects(const QList<Effect>& effects)
+{
+    if (effects.isEmpty()) {
+        return;
+    }
+    effects_ = effects;
+    selected_ = effects_.size() - 1;
+    rebuildList();
+    selectEffect(selected_);
+}
+
 void FilterGalleryDialog::addEffect()
 {
     if (selected_ < 0 || selected_ >= effects_.size()) {

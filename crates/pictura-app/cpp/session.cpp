@@ -147,6 +147,8 @@ SessionState loadSession()
         obj.value(QStringLiteral("confirmDeleteVectorMask")).toBool(true);
     state.showFullScreenMessage =
         obj.value(QStringLiteral("showFullScreenMessage")).toBool(true);
+    state.showSmartFilterEditMessage =
+        obj.value(QStringLiteral("showSmartFilterEditMessage")).toBool(true);
     state.autoSaveRecovery = obj.value(QStringLiteral("autoSaveRecovery")).toBool(true);
     const int autoSaveMinutes = obj.value(QStringLiteral("autoSaveMinutes")).toInt(10);
     state.autoSaveMinutes = kAutoSaveMinuteChoices.contains(autoSaveMinutes) ? autoSaveMinutes : 10;
@@ -298,6 +300,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("confirmLiveShapeToPath"), state.confirmLiveShapeToPath);
     obj.insert(QStringLiteral("confirmDeleteVectorMask"), state.confirmDeleteVectorMask);
     obj.insert(QStringLiteral("showFullScreenMessage"), state.showFullScreenMessage);
+    obj.insert(QStringLiteral("showSmartFilterEditMessage"), state.showSmartFilterEditMessage);
     obj.insert(QStringLiteral("autoSaveRecovery"), state.autoSaveRecovery);
     obj.insert(QStringLiteral("autoSaveMinutes"), state.autoSaveMinutes);
     obj.insert(QStringLiteral("rulersVisible"), state.rulersVisible);

@@ -132,3 +132,72 @@ fn last_filter_appends() {
     assert_eq!(commit_kind(&mut rust, &kind, &params), Some(true));
     assert_eq!(filters(&rust).len(), 2);
 }
+
+/// A Smart Object carrying Gaussian Blur (index 0) then Emboss (index 1).
+fn two_filter_state() -> PictureViewRust {
+    let mut rust = smart_state();
+    assert_eq!(commit_kind(&mut rust, "gaussian-blur", &[1.0]), Some(true));
+    assert_eq!(commit_kind(&mut rust, "emboss", &[]), Some(true));
+    rust
+}
+
+#[test]
+fn edit_kind_reports_generic_and_gallery() {
+    let mut rust = two_filter_state();
+    let kinds = vec!["gaussian-blur".to_string()];
+    let steps = stack_steps(&kinds, &[2.0]).expect("steps");
+    assert!(smart_commit(&mut rust, &steps, true));
+    assert_eq!(commit_kind(&mut rust, "blur", &[]), Some(true));
+    let kinds: Vec<i32> = filters(&rust).iter().map(edit_kind).collect();
+    // Gaussian Blur and Emboss have dialogs, the gallery is 4, Blur has none.
+    assert_eq!(kinds, vec![3, 3, 4, 0]);
+    assert!(!edit_begin(&mut rust, "0", 3), "a filter with no dialog");
+    assert!(!edit_begin(&mut rust, "0", 9), "out of range");
+    assert!(edit_begin(&mut rust, "0", 2));
+}
+
+#[test]
+fn edit_preview_hides_filters_above() {
+    let mut rust = two_filter_state();
+    let before = filters(&rust);
+    assert!(edit_begin(&mut rust, "0", 0));
+    assert!(apply_filter_active_region(&mut rust, "gaussian-blur", &[5.0], false, None).is_some());
+    let previewed = filters(&rust);
+    assert_eq!(previewed.len(), 1, "the filter above is not previewed");
+    assert_ne!(
+        previewed[0].options, before[0].options,
+        "the edited values preview"
+    );
+    assert!(cancel_filter_preview(&mut rust).is_some());
+    edit_end(&mut rust);
+    assert_eq!(filters(&rust), before, "cancel restores the whole chain");
+}
+
+#[test]
+fn edit_commit_replaces_in_place() {
+    let mut rust = two_filter_state();
+    let before = filters(&rust);
+    set_selection_everywhere(&mut rust);
+    assert!(edit_begin(&mut rust, "0", 0));
+    assert!(apply_filter_active_region(&mut rust, "gaussian-blur", &[5.0], false, None).is_some());
+    assert_eq!(commit_kind(&mut rust, "gaussian-blur", &[5.0]), Some(true));
+    edit_end(&mut rust);
+    let after = filters(&rust);
+    assert_eq!(after.len(), 2, "replaced, not appended");
+    assert_eq!(after[1], before[1], "the filter above is kept");
+    let (steps, _) = record_steps(&after[0]).expect("generic record");
+    assert_eq!(steps[0].slots, vec![5.0]);
+    let so = rust.session.doc.as_ref().unwrap().layers[0]
+        .smart_object
+        .as_ref()
+        .unwrap();
+    assert!(so.filter_mask.is_none(), "an edit does not add a mask");
+}
+
+fn set_selection_everywhere(rust: &mut PictureViewRust) {
+    rust.session.selection = Some(pictura_select::Selection {
+        width: 16,
+        height: 16,
+        data: vec![255; 256],
+    });
+}

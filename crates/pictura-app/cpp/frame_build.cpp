@@ -68,6 +68,10 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
                 if (!view || !registry_) {
                     return;
                 }
+                // The filter's layer becomes current, so its dialog edits it.
+                if (layersPanel_) {
+                    layersPanel_->selectPaths(QStringList{path}, path);
+                }
                 switch (layer_smart_filter_edit_kind(*view, path, index)) {
                 case 1:
                     registry_->dispatch(QString::fromLatin1(command_ids::FilterPicturaRaw));
@@ -75,6 +79,10 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
                 case 2:
                     registry_->dispatch(commandIdForPath(
                         {QStringLiteral("Filter"), QStringLiteral("Lens Correction…")}));
+                    break;
+                case 3:
+                case 4:
+                    editSmartFilter(path, index);
                     break;
                 default:
                     break;

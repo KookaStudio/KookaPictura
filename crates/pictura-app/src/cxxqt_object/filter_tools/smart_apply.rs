@@ -149,11 +149,82 @@ fn restore_preview(rust: &mut PictureViewRust, path: &str) -> Option<PsdRect> {
     Some(preview.baseline.restore(layer))
 }
 
+/// The index of the Smart Filter being re-edited on `path`, if any.
+fn edit_index(rust: &PictureViewRust, path: &str) -> Option<usize> {
+    rust.smart_filter_edit
+        .as_ref()
+        .filter(|(p, _)| p == path)
+        .map(|(_, i)| *i)
+}
+
+/// How a stored Smart Filter re-edits: 1 Camera Raw, 2 Lens Correction, 3 a
+/// generic filter with a dialog, 4 a Filter Gallery stack, 0 none (a filter
+/// with no dialog, or one this engine does not model).
+pub(in crate::cxxqt_object) fn edit_kind(filter: &SmartFilter) -> i32 {
+    match filter.filter_id {
+        pictura_codec::CAMERA_RAW_FILTER_ID => 1,
+        pictura_codec::LENS_CORRECTION_FILTER_ID => 2,
+        pictura_codec::PICTURA_FILTER_ID => match record_steps(filter) {
+            Some((_, true)) => 4,
+            Some((steps, false))
+                if steps.len() == 1
+                    && catalogue::descriptor(&steps[0].kind)
+                        .is_some_and(|spec| !spec.params.is_empty()) =>
+            {
+                3
+            }
+            _ => 0,
+        },
+        _ => 0,
+    }
+}
+
+/// A generic record's steps and gallery flag, when it decodes.
+pub(in crate::cxxqt_object) fn record_steps(
+    filter: &SmartFilter,
+) -> Option<(Vec<FilterStep>, bool)> {
+    (filter.filter_id == pictura_codec::PICTURA_FILTER_ID)
+        .then(|| pictura_codec::decode_pictura_filter(&filter.options))
+        .flatten()
+}
+
+/// Start re-editing the Smart Filter at `index` on the active Smart Object at
+/// `path`: until [`edit_end`], previews show the chain up to that filter (the
+/// filters stacked above it are not previewed) and a commit replaces it in
+/// place. False when `path` is not the active embedded Smart Object or the
+/// filter has no generic dialog.
+pub(in crate::cxxqt_object) fn edit_begin(
+    rust: &mut PictureViewRust,
+    path: &str,
+    index: usize,
+) -> bool {
+    let editable = smart_filter_target(rust).as_deref() == Some(path)
+        && rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::resolve_path(doc, path))
+            .and_then(|layer| layer.smart_object.as_ref())
+            .and_then(|so| so.smart_filters.get(index))
+            .is_some_and(|filter| matches!(edit_kind(filter), 3 | 4));
+    if editable {
+        rust.smart_filter_edit = Some((path.to_string(), index));
+    }
+    editable
+}
+
+/// End a re-edit started by [`edit_begin`].
+pub(in crate::cxxqt_object) fn edit_end(rust: &mut PictureViewRust) {
+    rust.smart_filter_edit = None;
+}
+
 /// Preview `steps` as a Smart Filter on top of the active Smart Object's
 /// chain: the layer is kept whole as the baseline, the record (and a mask from
 /// the selection) is pushed onto the typed view only, and the compositor's
-/// chain key re-renders it. Cancel restores the layer. Returns the region to
-/// refresh; `None` with `filter_error` set when refused.
+/// chain key re-renders it. While a filter is re-edited the record stands in
+/// for it and the filters above it are left out, as CS6 does. Cancel restores
+/// the layer. Returns the region to refresh; `None` with `filter_error` set
+/// when refused.
 pub(in crate::cxxqt_object) fn smart_preview(
     rust: &mut PictureViewRust,
     steps: &[FilterStep],
@@ -165,11 +236,15 @@ pub(in crate::cxxqt_object) fn smart_preview(
     }
     let path = target(rust)?;
     let record = record(rust, steps, gallery)?;
-    let mask = selection_mask(rust);
+    let editing = edit_index(rust, &path);
+    let mask = selection_mask(rust).filter(|_| editing.is_none());
     restore_preview(rust, &path);
     let layer = pictura_render::resolve_path_mut(rust.session.doc.as_mut()?, &path)?;
     let baseline = PreviewBaseline::Layer(Box::new(layer.clone()));
     let so = layer.smart_object.as_mut()?;
+    if let Some(index) = editing {
+        so.smart_filters.truncate(index);
+    }
     so.smart_filters.push(record);
     if so.filter_mask.is_none() && mask.is_some() {
         so.filter_mask = mask;
@@ -183,9 +258,10 @@ pub(in crate::cxxqt_object) fn smart_preview(
     Some(region)
 }
 
-/// Append `steps` as one Smart Filter to the active Smart Object, putting an
-/// open preview back first; `false` with `filter_error` set when refused. Lens
-/// Correction attaches its own record, replacing an existing one.
+/// Append `steps` as one Smart Filter to the active Smart Object (or, while a
+/// filter is re-edited, replace it), putting an open preview back first;
+/// `false` with `filter_error` set when refused. Lens Correction attaches its
+/// own record, replacing an existing one.
 pub(in crate::cxxqt_object) fn smart_commit(
     rust: &mut PictureViewRust,
     steps: &[FilterStep],
@@ -203,14 +279,18 @@ pub(in crate::cxxqt_object) fn smart_commit(
             None => return false,
         }
     };
+    let editing = edit_index(rust, &path);
     let mask = selection_mask(rust);
     restore_preview(rust, &path);
     let Some(doc) = rust.session.doc.as_mut() else {
         return false;
     };
-    let applied = match record {
-        Some(record) => pictura_render::apply_smart_filter(doc, &path, record, mask),
-        None => pictura_render::apply_lens_correction(doc, &path, &steps[0].slots),
+    let applied = match (record, editing) {
+        (Some(record), Some(index)) => {
+            pictura_render::replace_smart_filter_at(doc, &path, index, record)
+        }
+        (Some(record), None) => pictura_render::apply_smart_filter(doc, &path, record, mask),
+        (None, _) => pictura_render::apply_lens_correction(doc, &path, &steps[0].slots),
     };
     if !applied {
         rust.filter_error = Some("the smart filter could not be applied".to_string());

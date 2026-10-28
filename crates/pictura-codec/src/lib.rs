@@ -124,7 +124,7 @@ pub use pictura_filter::{
 pub use pictura_raw::{
     append_smart_filter, attach_pictura_raw_filter, attach_smart_filter,
     decode_pictura_raw_settings, encode_pictura_raw_fltr, pictura_raw_from_text,
-    pictura_raw_to_text, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
+    pictura_raw_to_text, replace_smart_filter, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
 };
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.

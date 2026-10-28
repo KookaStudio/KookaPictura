@@ -633,7 +633,9 @@ void LayersPanel::refresh()
             group.childCount = count;
             group.synthetic = true;
             synthetic.push_back(std::move(group));
-            for (int j = 0; j < count; ++j) {
+            // The newest filter is drawn on top, as CS6 stacks them; the row
+            // path keeps the chain index (0 is applied first).
+            for (int j = count - 1; j >= 0; --j) {
                 LayerRowNode child;
                 child.path = row.path + QStringLiteral("/@sf/") + QString::number(j);
                 child.depth = row.depth + 2;
