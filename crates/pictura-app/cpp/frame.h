@@ -983,6 +983,8 @@ private:
     bool panelsRefreshedByChanged_ = false;
     // A bind already refreshed every panel; skip the next redundant pass.
     bool panelsFreshlyBound_ = false;
+    // A panel pass is running and owns the one command-table refresh.
+    bool refreshingDock_ = false;
     // A region presentation requested a command-table refresh in the next pass.
     bool registryRefreshPending_ = false;
     int dockRetargetCount_ = 0;

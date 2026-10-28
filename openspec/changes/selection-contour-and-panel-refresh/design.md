@@ -167,7 +167,11 @@ timer at startup would never register the bundled/fallback fonts.
 
 `Edit::SelectionPreview` notifications (Quick Selection) keep the synchronous
 registry refresh and are out of scope: the issue targets the region-blit path,
-and narrowing the coalescing keeps this change small.
+and narrowing the coalescing keeps this change small. A Layers panel refresh
+during the pass can emit `selectionChanged`; the frame folds that registry
+refresh into the same pass instead of recomputing inside `refreshDock`. A
+Layers self-refresh caused by a notifying edit reuses the edit's synchronous
+recomputation.
 
 Alternative considered: a dedicated 120 ms registry timer. Two timers would add
 another member and could fire apart from the panel pass; the existing single-shot

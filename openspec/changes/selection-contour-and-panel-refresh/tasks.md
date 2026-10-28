@@ -22,7 +22,7 @@
 
 ## 4. Command registry coalescing
 
-- [x] 4.1 Replace the synchronous `registry_->refresh()` in `afterPresent` with a pending flag consumed by the debounced pass; clear the flag after `refresh()`'s synchronous recomputation; verify `previewTicksCoalesceTheRegistry` and `aCommitRefreshIsNotDelayedByPreviews` after `cmake --build build --target tst_edit_refresh --parallel`
+- [x] 4.1 Replace the synchronous `registry_->refresh()` in `afterPresent` with a pending flag consumed by the debounced pass; clear the flag after `refresh()`'s synchronous recomputation; fold a Layers `selectionChanged` recomputation into the same pass; verify `previewTicksCoalesceTheRegistry` and `aCommitRefreshIsNotDelayedByPreviews` after `cmake --build build --target tst_edit_refresh --parallel`
 - [x] 4.2 Update `pp_no_registry_refresh` (exit code 394, `selftest_paint_perf.cpp:199-236`): after `end_paint` assert the synchronous count is unchanged, pump the event loop past the 120 ms pass, then assert one refresh; update its stale "releasing the stroke emits changed" comment; verify `cmake --build build --parallel && ./build/pictura --headless --self-test` (or `bash scripts/test-report.sh` after a build)
 - [x] 4.3 Keep the existing one-refresh-per-notifying-edit contract; verify `aCommandRefreshesOnce` and `ctest --test-dir build -R '^tst_command_bus$' --output-on-failure`
 

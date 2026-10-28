@@ -175,7 +175,9 @@ void PicturaMainWindow::refreshPanels()
     } else {
         const bool includeSelfRefreshing = !panelsRefreshedByChanged_;
         panelsRefreshedByChanged_ = false;
+        refreshingDock_ = true;
         refreshDock(includeSelfRefreshing);
+        refreshingDock_ = false;
     }
     if (registryRefreshPending_) {
         registryRefreshPending_ = false;

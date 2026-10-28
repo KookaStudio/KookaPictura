@@ -87,6 +87,24 @@ void closeAll(pictura::PicturaMainWindow& window)
     }
 }
 
+QString paintedLayer(pictura::PictureView* view)
+{
+    if (!view) {
+        return QString();
+    }
+    const QString layer = view->add_layer_in(QString());
+    if (layer.isEmpty()) {
+        return QString();
+    }
+    view->set_active_layer(layer);
+    if (!view->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 20, 100, 100, 0, 100, 100, 25,
+                           QStringLiteral("normal"), false, false)
+        || !view->paint_dab(32.0, 32.0, 1.0) || !view->end_paint()) {
+        return QString();
+    }
+    return layer;
+}
+
 } // namespace
 
 class EditRefreshTest : public QObject {
@@ -605,7 +623,8 @@ void EditRefreshTest::previewTicksCoalesceTheRegistry()
     QTest::qWait(250);
     pictura::PictureView* view = window_->activeView();
     QVERIFY(view);
-    const QString layer = view->add_layer_in(QString());
+    view->set_gpu_compute(false);
+    const QString layer = paintedLayer(view);
     QVERIFY(!layer.isEmpty());
     QTest::qWait(250);
     pictura::CommandRegistry* registry = window_->registry();
@@ -630,7 +649,8 @@ void EditRefreshTest::aCommitRefreshIsNotDelayedByPreviews()
     QTest::qWait(250);
     pictura::PictureView* view = window_->activeView();
     QVERIFY(view);
-    const QString layer = view->add_layer_in(QString());
+    view->set_gpu_compute(false);
+    const QString layer = paintedLayer(view);
     QVERIFY(!layer.isEmpty());
     QTest::qWait(250);
     pictura::CommandRegistry* registry = window_->registry();
@@ -638,7 +658,7 @@ void EditRefreshTest::aCommitRefreshIsNotDelayedByPreviews()
 
     const int before = registry->refreshCount();
     QVERIFY(view->preview_layers_opacity(QStringList{layer}, 200) > 0);
-    QVERIFY(!view->duplicate_layers(QStringList{layer}).isEmpty());
+    QVERIFY(!view->add_layer_in(QString()).isEmpty());
     const int after = registry->refreshCount();
     QCOMPARE(after - before, 1);
     QTest::qWait(250);

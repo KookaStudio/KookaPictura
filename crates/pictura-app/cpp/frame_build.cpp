@@ -432,7 +432,11 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
         }
         updateAlignControls();
         if (registry_) {
-            registry_->refresh();
+            if (refreshingDock_) {
+                registryRefreshPending_ = true;
+            } else if (!panelsRefreshedByChanged_) {
+                registry_->refresh();
+            }
         }
         // The Move tool's Show Transform Controls box follows the active layer.
         if (tools_) {
