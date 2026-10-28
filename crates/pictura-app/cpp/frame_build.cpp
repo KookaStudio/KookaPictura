@@ -434,7 +434,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
         if (registry_) {
             if (refreshingDock_) {
                 registryRefreshPending_ = true;
-            } else if (!panelsRefreshedByChanged_) {
+            } else {
                 registry_->refresh();
             }
         }
