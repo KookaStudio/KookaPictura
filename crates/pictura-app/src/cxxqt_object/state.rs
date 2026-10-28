@@ -131,6 +131,9 @@ pub struct PictureViewRust {
     /// The last committed filter's kind and slot values, for Last Filter and
     /// Last Filter Settings.
     pub(super) last_filter: Option<(String, Vec<f64>)>,
+    /// The Smart Filter being re-edited, `(layer path, index)`: its dialog
+    /// previews the chain up to it and OK replaces it in place.
+    pub(super) smart_filter_edit: Option<(String, usize)>,
     /// Why the most recent filter apply/preview was refused, for surfacing the
     /// failure to the user. Cleared at the start of every attempt.
     pub(super) filter_error: Option<String>,
@@ -224,6 +227,7 @@ impl Default for PictureViewRust {
             canvas_proxy: None,
             filter_jobs: Default::default(),
             last_filter: None,
+            smart_filter_edit: None,
             filter_error: None,
             add_copy: true,
             use_default_masks: true,

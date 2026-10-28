@@ -212,3 +212,82 @@ fn engine_defaults_agree_with_the_catalogue() {
         })
     );
 }
+
+/// Records whether a build asked for any session resource.
+#[derive(Default)]
+struct Recording(std::cell::Cell<bool>);
+
+impl FilterResources for Recording {
+    fn depth_map(&self, _id: u32) -> Option<Arc<crate::DepthMap>> {
+        self.0.set(true);
+        None
+    }
+
+    fn displace_map(&self, id: u32) -> Option<Arc<crate::DisplaceMap>> {
+        self.0.set(true);
+        NullResources.displace_map(id)
+    }
+
+    fn liquify_mesh(&self, id: u32) -> Option<Arc<crate::LiquifyMesh>> {
+        self.0.set(true);
+        NullResources.liquify_mesh(id)
+    }
+
+    fn vanishing_point(&self, id: u32) -> Option<Arc<crate::VpEdit>> {
+        self.0.set(true);
+        NullResources.vanishing_point(id)
+    }
+
+    fn awa_constraints(&self, id: u32) -> Option<Arc<Vec<crate::AwaConstraint>>> {
+        self.0.set(true);
+        NullResources.awa_constraints(id)
+    }
+}
+
+#[test]
+fn resource_kinds_are_not_smart_capable() {
+    for spec in all() {
+        let defaults = spec.defaults();
+        // Defaults, then each slot nudged through the first choice indices, so
+        // a resource behind a non-default choice (Lens Blur's depth source) is
+        // reached too.
+        let mut variants = vec![defaults.clone()];
+        for slot in 0..defaults.len() {
+            for value in [1.0, 2.0, 3.0] {
+                let mut params = defaults.clone();
+                params[slot] = value;
+                variants.push(params);
+            }
+        }
+        let touched = variants.iter().any(|params| {
+            let recording = Recording::default();
+            let _ = build(spec.id, params, &recording);
+            recording.0.get()
+        });
+        if touched {
+            assert!(
+                !smart_capable(spec.id),
+                "{} reads a session resource but is smart-capable",
+                spec.id
+            );
+        }
+    }
+}
+
+#[test]
+fn smart_capable_excludes_cs6_list() {
+    for id in [
+        "liquify",
+        "vanishing-point",
+        "lens-blur",
+        "displace",
+        "adaptive-wide-angle",
+    ] {
+        assert!(descriptor(id).is_some(), "{id} is a catalogue kind");
+        assert!(!smart_capable(id), "{id} is excluded");
+    }
+    for id in ["gaussian-blur", "add-noise", "lens-correction", "emboss"] {
+        assert!(smart_capable(id), "{id} is smart-capable");
+    }
+    assert!(!smart_capable("not-a-filter"));
+}

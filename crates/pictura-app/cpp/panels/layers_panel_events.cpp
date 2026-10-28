@@ -413,7 +413,16 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             }
             if (index.isValid()) {
                 const QString rowKind = index.data(KindRole).toString();
-                if (rowKind.startsWith(QLatin1String("smart-filter"))) {
+                // A filter row reopens its dialog, as Edit Smart Filter… does.
+                if (rowKind == QLatin1String("smart-filter")) {
+                    const QString path = pathForProxyIndex(index);
+                    const int at = path.indexOf(QStringLiteral("/@sf/"));
+                    if (at >= 0) {
+                        emit smartFilterEditRequested(path.left(at), path.mid(at + 5).toInt());
+                    }
+                    return true;
+                }
+                if (rowKind == QLatin1String("smart-filters")) {
                     return true;
                 }
                 // A layer-effects group row opens Blending Options and an effect

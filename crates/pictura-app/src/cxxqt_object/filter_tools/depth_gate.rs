@@ -32,7 +32,9 @@ pub(in crate::cxxqt_object) fn lens_supported(doc: &Document) -> bool {
 }
 
 pub(super) fn filter_document_takes(view: &PictureView, kind: &QString) -> bool {
-    depth_refusal(&kind.to_string(), view.rust().session.doc.as_ref()).is_none()
+    let kind = kind.to_string();
+    depth_refusal(&kind, view.rust().session.doc.as_ref()).is_none()
+        && super::smart_apply::smart_refusal(&kind, view.rust()).is_none()
 }
 
 /// Why `kind` may not commit on `doc`, whichever path (Last Filter

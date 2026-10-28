@@ -14,6 +14,7 @@ mod pictura_raw;
 mod resize;
 mod rotate_in;
 mod slices;
+mod smart_filter_apply;
 mod smart_filters;
 
 pub use canvas::{extend_background, resize_canvas_document};
@@ -84,6 +85,7 @@ pub use pictura_raw::{
 pub use resize::resize_document;
 pub use rotate_in::{rotate_document_in, rotate_document_in_offset};
 pub use slices::{add_slice, remove_slice, resolve_slices, set_slice, Slice};
+pub use smart_filter_apply::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
 pub use smart_filters::{
     add_smart_filter, can_add_smart_filter, clear_smart_filters, delete_smart_filter,
     delete_smart_filter_mask, has_smart_filter_mask, reorder_smart_filters,

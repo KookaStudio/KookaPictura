@@ -59,6 +59,7 @@ struct SessionState {
     bool confirmLiveShapeToPath = true;  // off after "Don't show again"
     bool confirmDeleteVectorMask = true;  // off after "Don't show again"
     bool showFullScreenMessage = true;   // off after "Don't show again"
+    bool showSmartFilterEditMessage = true;  // off after "Don't show again"
     // Edit > Preferences > File Handling: Automatically Save Recovery
     // Information Every <n> minutes (CS6 choices 5/10/15/30/60, default 10).
     bool autoSaveRecovery = true;

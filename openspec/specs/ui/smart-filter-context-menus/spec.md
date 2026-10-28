@@ -39,8 +39,10 @@ Right-clicking a smart filter row SHALL open a menu with exactly `Edit Smart
 Filter Blending Options…` (disabled), `Edit Smart Filter…`, `Disable Smart
 Filter` (or `Enable Smart Filter`), and `Delete Smart Filter`. `Edit Smart
 Filter…` SHALL be enabled only for a filter whose dialog we can reopen (Camera
-Raw or Lens Correction); choosing it SHALL reopen that filter's dialog and
-replace the entry.
+Raw, Lens Correction, a generic filter with dialog parameters, or a Filter
+Gallery stack); choosing it SHALL reopen that filter's dialog and replace the
+entry. Double-clicking a smart filter row SHALL do the same as `Edit Smart
+Filter…`.
 
 #### Scenario: The filter menu [sfcm_filter_menu]
 
@@ -61,6 +63,12 @@ replace the entry.
 - **WHEN** `tst_layers_smart_filters::editSmartFilterRequestsTheDialog` chooses
   Edit Smart Filter… on a Lens Correction filter
 - **THEN** the Lens Correction dialog opens prefilled and OK replaces the entry
+
+#### Scenario: A double-click edits a generic filter [sfcm_double_click]
+
+- **WHEN** `tst_smart_filter_apply::doubleClickReopensTheFilterDialog`
+  double-clicks a generic filter row
+- **THEN** that filter's dialog opens prefilled
 
 #### Scenario: The filter toggles and deletes [sfcm_filter_actions]
 

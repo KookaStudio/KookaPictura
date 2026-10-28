@@ -629,3 +629,131 @@ fn fixture_full_key_map_round_trips_and_preserves_unmodeled() {
         );
     }
 }
+
+fn generic(name: &str) -> SmartFilter {
+    SmartFilter {
+        filter_id: 4242,
+        name: name.into(),
+        enabled: true,
+        options: Vec::new(),
+    }
+}
+
+#[test]
+fn append_stacks_same_id_typed() {
+    let mut layer = embedded_layer();
+    append_smart_filter(&mut layer, generic("A")).expect("appends");
+    append_smart_filter(&mut layer, generic("B")).expect("appends");
+    let names: Vec<_> = layer
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .smart_filters
+        .iter()
+        .map(|f| f.name.clone())
+        .collect();
+    assert_eq!(names, ["A", "B"]);
+}
+
+#[test]
+fn append_stacks_same_id_preserved() {
+    let mut layer = embedded_layer();
+    let so = layer.smart_object.clone().unwrap();
+    let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
+    layer.extra_blocks.push(LayerBlock {
+        key: *b"SoLd",
+        data,
+    });
+    append_smart_filter(&mut layer, generic("A")).expect("appends");
+    append_smart_filter(&mut layer, generic("B")).expect("appends");
+    let so = layer.smart_object.as_ref().unwrap();
+    assert_eq!(so.smart_filters.len(), 2);
+
+    let block = &layer
+        .extra_blocks
+        .iter()
+        .find(|b| &b.key == b"SoLd")
+        .unwrap()
+        .data;
+    let mut r = Reader::new(&block[8..]);
+    let DescValue::Object { items, .. } = descriptor::read_descriptor(&mut r).expect("parses")
+    else {
+        panic!("not an object");
+    };
+    let Some(DescValue::Object { items: fx, .. }) = get_object_item(&items, b"filterFX") else {
+        panic!("no filterFX");
+    };
+    let Some(DescValue::List(list)) = get_object_item(fx, b"filterFXList") else {
+        panic!("no list");
+    };
+    assert_eq!(list.len(), so.smart_filters.len(), "the lists stay aligned");
+    let names: Vec<_> = list
+        .iter()
+        .map(|e| match e {
+            DescValue::Object { items, .. } => match get_object_item(items, b"Nm  ") {
+                Some(DescValue::Text(t)) => t.trim_end_matches('\0').to_string(),
+                _ => String::new(),
+            },
+            _ => String::new(),
+        })
+        .collect();
+    assert_eq!(names, ["A", "B"]);
+}
+
+#[test]
+fn replace_keeps_position_flag_and_blend_options() {
+    let mut layer = embedded_layer();
+    let so = layer.smart_object.clone().unwrap();
+    let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
+    layer.extra_blocks.push(LayerBlock {
+        key: *b"SoLd",
+        data,
+    });
+    append_smart_filter(&mut layer, generic("A")).expect("appends");
+    append_smart_filter(&mut layer, generic("B")).expect("appends");
+    crate::set_smart_filter_enabled(&mut layer, 0, false).expect("disables");
+    let replacement = SmartFilter {
+        filter_id: 77,
+        name: "C".into(),
+        enabled: true,
+        options: Vec::new(),
+    };
+    assert!(replace_smart_filter(&mut layer, 5, replacement.clone()).is_err());
+    replace_smart_filter(&mut layer, 0, replacement).expect("replaces");
+
+    let typed = &layer.smart_object.as_ref().unwrap().smart_filters;
+    assert_eq!((typed[0].name.as_str(), typed[0].filter_id), ("C", 77));
+    assert!(!typed[0].enabled, "the entry keeps its enable flag");
+    assert_eq!(typed[1].name, "B");
+
+    let block = &layer
+        .extra_blocks
+        .iter()
+        .find(|b| &b.key == b"SoLd")
+        .unwrap()
+        .data;
+    let mut r = Reader::new(&block[8..]);
+    let DescValue::Object { items, .. } = descriptor::read_descriptor(&mut r).expect("parses")
+    else {
+        panic!("not an object");
+    };
+    let Some(DescValue::Object { items: fx, .. }) = get_object_item(&items, b"filterFX") else {
+        panic!("no filterFX");
+    };
+    let Some(DescValue::List(list)) = get_object_item(fx, b"filterFXList") else {
+        panic!("no list");
+    };
+    assert_eq!(list.len(), 2);
+    let DescValue::Object { items: entry, .. } = &list[0] else {
+        panic!("entry");
+    };
+    assert_eq!(
+        get_object_item(entry, b"filterID"),
+        Some(&DescValue::Long(77))
+    );
+    assert_eq!(
+        get_object_item(entry, b"enab"),
+        Some(&DescValue::Bool(false))
+    );
+    assert!(get_object_item(entry, b"blendOptions").is_some());
+}

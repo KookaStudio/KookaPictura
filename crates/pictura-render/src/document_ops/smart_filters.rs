@@ -3,9 +3,8 @@
 //! Thin path-resolving wrappers over the `pictura-codec` descriptor edits, so
 //! each document op rewrites the preserved `SoLd`/`SoLE` `filterFX` list and the
 //! typed `SmartObject.smart_filters` view together. Adding uses the codec's
-//! generic attach, which replaces a same-`filterID` entry rather than stacking a
-//! duplicate. ponytail: a same-id stack is not modelled; revisit if CS6 stacking
-//! of one filter type is needed.
+//! generic attach, which replaces a same-`filterID` entry; a Filter-menu filter
+//! stacks through `smart_filter_apply`, which appends.
 
 use pictura_core::{Document, SmartFilter};
 

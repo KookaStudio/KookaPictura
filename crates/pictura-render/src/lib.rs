@@ -200,6 +200,7 @@ pub use document_ops::{
     ShapeStroke, Slice, StampScope, VectorMaskKind, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED,
     VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
+pub use document_ops::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
 
 mod text_render;
 mod type_decor;

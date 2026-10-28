@@ -250,17 +250,18 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
             return QStringList{};
         }
         const QModelIndex index = model_->indexForPath(path);
-        if (index.isValid() && index.data(SyntheticRole).toBool()) {
+        if (index.isValid() && index.data(SyntheticRole).toBool()
+            && index.data(KindRole).toString() != QLatin1String("smart-filter")) {
             return QStringList{};
         }
         return QStringList{path};
     });
     tree_->setPathResolver([this](const QModelIndex& index) { return pathForProxyIndex(index); });
     tree_->setDropHandler([this](const QString& dragged, const QString& target, int mode) {
-        return view_ && view_->move_layer_to(dragged, target, mode);
+        return dropRow(dragged, target, mode);
     });
     tree_->setDropValidator([this](const QString& dragged, const QString& target, int mode) {
-        return view_ && view_->can_move_layer_to(dragged, target, mode);
+        return canDropRow(dragged, target, mode);
     });
     layout->addWidget(tree_, 1);
 
@@ -625,9 +626,9 @@ void LayersPanel::refresh()
             row.vectorMaskDisabled = source.vectorMaskDisabled;
             rows.push_back(std::move(row));
         }
-        // Display-only Smart Filters rows: a group header under each filtered
-        // smart object plus one row per filter. The header carries the filter
-        // count and the group eye; the children carry their own eyes.
+        // Display-only Smart Filters rows: a group header (count, group eye)
+        // under each filtered smart object, then one row per filter, newest on
+        // top as CS6 stacks them; a row's path keeps its chain index.
         QVector<LayerRowNode> synthetic;
         for (int k = 0; k < rows.size(); ++k) {
             LayerRowNode& row = rows[k];
@@ -648,7 +649,7 @@ void LayersPanel::refresh()
             group.childCount = count;
             group.synthetic = true;
             synthetic.push_back(std::move(group));
-            for (int j = 0; j < count; ++j) {
+            for (int j = count - 1; j >= 0; --j) {
                 LayerRowNode child;
                 child.path = row.path + QStringLiteral("/@sf/") + QString::number(j);
                 child.depth = row.depth + 2;

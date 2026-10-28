@@ -470,6 +470,23 @@ pub fn build(id: &str, params: &[f64], resources: &dyn FilterResources) -> Optio
     (spec.build)(&ctx)
 }
 
+/// Whether kind `id` may be stored as a Smart Filter on a Smart Object. CS6
+/// refuses Liquify and Vanishing Point there; Lens Blur, Displace, and Adaptive
+/// Wide Angle read a session resource a stored record cannot name; HDR Toning
+/// is an Image > Adjustments command. An unknown id is not capable.
+pub fn smart_capable(id: &str) -> bool {
+    descriptor(id).is_some()
+        && !matches!(
+            id,
+            "liquify"
+                | "vanishing-point"
+                | "lens-blur"
+                | "displace"
+                | "adaptive-wide-angle"
+                | "hdr-toning"
+        )
+}
+
 pub fn default_filter(kind: FilterKind) -> Option<Filter> {
     build(kind.spec().id, &[], &NullResources)
 }

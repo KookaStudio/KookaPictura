@@ -62,6 +62,10 @@ public:
     // The stack, first-applied first.
     QList<Effect> effects() const { return effects_; }
 
+    // Replace the stack (first-applied first) and select the top effect, as
+    // re-editing a Filter Gallery Smart Filter opens on its stored stack.
+    void setEffects(const QList<Effect>& effects);
+
     // Index into effects() of the effect whose options are shown.
     int selectedEffect() const { return selected_; }
 

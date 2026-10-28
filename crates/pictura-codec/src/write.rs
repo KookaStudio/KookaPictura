@@ -493,6 +493,12 @@ fn write_container(
     if !authoring.is_empty() {
         extra.extend_from_slice(&crate::smart_writer::author_lnk2_bytes(&authoring, psb));
     }
+    let extra = crate::filter_effects::author_filter_masks(
+        &extra,
+        &doc.layers,
+        u32::from(doc.composite.channels),
+        psb,
+    );
 
     let mut used_layer_keys = Vec::new();
     if doc.layers.is_empty() && doc.global_layer_mask.is_empty() && extra.is_empty() {

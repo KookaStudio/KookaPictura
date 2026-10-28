@@ -380,8 +380,14 @@ public:
         }
         const Node* node = static_cast<const Node*>(index.internalPointer());
         if (node && node->row.synthetic) {
-            // A synthetic row (Smart Filters or layer effects) selects and
-            // expands but neither renames, drags, nor accepts a drop.
+            // A Smart Filter row drags and accepts a drop within its own list
+            // (the panel's validator keeps it there); every other synthetic
+            // row (the Smart Filters group, layer effects) selects and expands
+            // but neither renames, drags, nor accepts a drop.
+            if (node->row.kind == QLatin1String("smart-filter")) {
+                return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled
+                    | Qt::ItemIsDropEnabled;
+            }
             return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
         }
         return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable

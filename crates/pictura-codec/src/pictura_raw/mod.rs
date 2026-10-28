@@ -138,8 +138,21 @@ fn filter_item(filter: &SmartFilter) -> DescValue {
 ///    a non-embedded object, or a legacy `plLd`/`PlLd` placed layer (no `SoLd`
 ///    to carry a filter and the writer does not author one beside it).
 pub fn attach_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(), PsdError> {
+    attach(layer, filter, true)
+}
+
+/// As [`attach_smart_filter`], but always appends a new entry, even when one
+/// with the same `filter_id` exists, to both the preserved `filterFXList` and
+/// the typed `smart_filters`, so their indices stay aligned.
+pub fn append_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(), PsdError> {
+    attach(layer, filter, false)
+}
+
+/// The shared attach; `replace` merges into a same-id entry instead of
+/// appending.
+fn attach(layer: &mut Layer, filter: SmartFilter, replace: bool) -> Result<(), PsdError> {
     if let Some(block_idx) = config_block_index(layer) {
-        return insert_into_config(layer, block_idx, &filter);
+        return insert_into_config(layer, block_idx, &filter, replace);
     }
     if layer
         .extra_blocks
@@ -159,7 +172,7 @@ pub fn attach_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(),
     match so
         .smart_filters
         .iter_mut()
-        .find(|f| f.filter_id == filter.filter_id)
+        .find(|f| replace && f.filter_id == filter.filter_id)
     {
         Some(existing) => *existing = filter,
         None => so.smart_filters.push(filter),
@@ -265,6 +278,7 @@ fn insert_into_config(
     layer: &mut Layer,
     block_idx: usize,
     filter: &SmartFilter,
+    replace: bool,
 ) -> Result<(), PsdError> {
     let data = &layer.extra_blocks[block_idx].data;
     let mut r = Reader::new(data);
@@ -287,7 +301,7 @@ fn insert_into_config(
             Some(DescValue::List(list)) => {
                 match list
                     .iter_mut()
-                    .find(|entry| entry_filter_id(entry) == Some(filter.filter_id))
+                    .find(|entry| replace && entry_filter_id(entry) == Some(filter.filter_id))
                 {
                     Some(entry) => merge_filter_entry(entry, filter),
                     None => list.push(filter_item(filter)),
@@ -326,11 +340,77 @@ fn insert_into_config(
         match so
             .smart_filters
             .iter_mut()
-            .find(|f| f.filter_id == filter.filter_id)
+            .find(|f| replace && f.filter_id == filter.filter_id)
         {
             Some(existing) => *existing = filter.clone(),
             None => so.smart_filters.push(filter.clone()),
         }
+    }
+    Ok(())
+}
+
+/// Replace the smart filter at `index` on `layer` with `filter`, in place: the
+/// entry keeps its position, its enable flag, and (in a preserved
+/// `SoLd`/`SoLE`) its `blendOptions` and unmodeled keys, while `Fltr`, `Nm  `,
+/// and `filterID` take the new values. An out-of-range index is an error and
+/// leaves the layer unchanged.
+pub fn replace_smart_filter(
+    layer: &mut Layer,
+    index: usize,
+    mut filter: SmartFilter,
+) -> Result<(), PsdError> {
+    let Some(existing) = layer
+        .smart_object
+        .as_ref()
+        .and_then(|so| so.smart_filters.get(index))
+    else {
+        return Err(malformed("filter index out of range"));
+    };
+    filter.enabled = existing.enabled;
+    if let Some(block_idx) = config_block_index(layer) {
+        let data = &layer.extra_blocks[block_idx].data;
+        let mut r = Reader::new(data);
+        let _signature = r.take(4)?;
+        let _outer_version = r.u32()?;
+        let mut desc = descriptor::read_descriptor(&mut r)?;
+        let entry = match &mut desc {
+            DescValue::Object { items, .. } => match get_object_item_mut(items, b"filterFX") {
+                Some(DescValue::Object { items: fx, .. }) => {
+                    match get_object_item_mut(fx, b"filterFXList") {
+                        Some(DescValue::List(list)) => list.get_mut(index),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(entry) = entry else {
+            return Err(malformed("filter index out of range"));
+        };
+        // A different `Fltr` class is replaced whole, so no key of the old
+        // record lingers in the new one.
+        if let DescValue::Object { items, .. } = entry {
+            items.retain(|(key, _)| key.as_slice() != b"Fltr");
+            set_object_item(items, b"filterID", DescValue::Long(filter.filter_id));
+        }
+        merge_filter_entry(entry, &filter);
+        let mut new_data = data[..8].to_vec();
+        new_data.extend_from_slice(&descriptor::write_descriptor(&desc));
+        while !new_data.len().is_multiple_of(4) {
+            new_data.push(0);
+        }
+        layer.extra_blocks[block_idx].data = new_data.clone();
+        if let Some(so) = layer.smart_object.as_mut() {
+            so.config_descriptor = new_data;
+        }
+    }
+    if let Some(slot) = layer
+        .smart_object
+        .as_mut()
+        .and_then(|so| so.smart_filters.get_mut(index))
+    {
+        *slot = filter;
     }
     Ok(())
 }
