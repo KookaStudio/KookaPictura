@@ -57,6 +57,8 @@ fn reason_index(err: &GpuError) -> usize {
 static DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 11];
 static RESIDENT_HITS: AtomicU64 = AtomicU64::new(0);
 static RESIDENT_MISSES: AtomicU64 = AtomicU64::new(0);
+static RESIDENT_ENTRIES: AtomicU64 = AtomicU64::new(0);
+static RESIDENT_BYTES: AtomicU64 = AtomicU64::new(0);
 static SOURCE_HITS: AtomicU64 = AtomicU64::new(0);
 static SOURCE_MISSES: AtomicU64 = AtomicU64::new(0);
 static SOURCE_BYTES: AtomicU64 = AtomicU64::new(0);
@@ -76,6 +78,12 @@ pub(crate) fn count_resident(hit: bool) {
     } else {
         RESIDENT_MISSES.fetch_add(1, Relaxed);
     }
+}
+
+/// Publish the resident store's post-eviction size.
+pub(crate) fn set_resident(entries: usize, bytes: u64) {
+    RESIDENT_ENTRIES.store(entries as u64, Relaxed);
+    RESIDENT_BYTES.store(bytes, Relaxed);
 }
 
 pub(crate) fn count_source_hit() {
@@ -124,6 +132,8 @@ pub fn take_device_ms() -> Option<f64> {
 pub struct Counters {
     pub resident_hits: u64,
     pub resident_misses: u64,
+    pub resident_entries: u64,
+    pub resident_bytes: u64,
     pub source_hits: u64,
     pub source_misses: u64,
     pub source_bytes: u64,
@@ -136,6 +146,8 @@ pub fn counters() -> Counters {
     Counters {
         resident_hits: RESIDENT_HITS.load(Relaxed),
         resident_misses: RESIDENT_MISSES.load(Relaxed),
+        resident_entries: RESIDENT_ENTRIES.load(Relaxed),
+        resident_bytes: RESIDENT_BYTES.load(Relaxed),
         source_hits: SOURCE_HITS.load(Relaxed),
         source_misses: SOURCE_MISSES.load(Relaxed),
         source_bytes: SOURCE_BYTES.load(Relaxed),
@@ -249,5 +261,13 @@ mod tests {
         let first = take_device_ms();
         assert!(first.is_some_and(|ms| (ms - 1.5).abs() < 1e-6));
         assert!(take_device_ms().is_none());
+    }
+
+    #[test]
+    fn resident_gauges_are_visible() {
+        set_resident(3, 1234);
+        let counters = counters();
+        assert_eq!(counters.resident_entries, 3);
+        assert_eq!(counters.resident_bytes, 1234);
     }
 }

@@ -10,11 +10,14 @@
 //! # Region compositing
 //!
 //! [`composite_region_active`] runs the same kernel over a clamped document
-//! rectangle: the canvas, each layer source, the mask, and group inner canvases
-//! are region-sized, and each invocation maps a region-local index to document
-//! coordinates for layer-rect and mask sampling. Only the region is dispatched
-//! and read back, so the output is byte-identical to the same slice of the full
-//! composite. `composite_gpu` is just the region kernel over the whole document.
+//! rectangle: the canvas, the mask, and group inner canvases are region-sized,
+//! and each invocation maps a region-local index to document coordinates for
+//! layer-rect and mask sampling. A layer source is region-sized only when it is
+//! built on a miss; a hit binds the whole-document upload kept by a previous
+//! full composite and uses its document-space layout. Only the region is
+//! dispatched and read back, so the output is byte-identical to the same slice
+//! of the full composite. `composite_gpu` is just the region kernel over the
+//! whole document.
 //!
 //! # CPU-only modes
 //!
@@ -1094,7 +1097,7 @@ mod tests {
         println!("gpu_phase build_source {:.3} ms", phase_ms(t));
 
         let t = Instant::now();
-        let masks: Vec<_> = doc.layers.iter().map(|l| gpu.build_mask(l)).collect();
+        let masks: Vec<_> = doc.layers.iter().map(|l| gpu.build_mask(l, &doc)).collect();
         println!("gpu_phase build_mask {:.3} ms", phase_ms(t));
 
         let t = Instant::now();
