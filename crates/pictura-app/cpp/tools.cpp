@@ -985,6 +985,7 @@ void ToolController::handleMoved(const QPointF& imagePos)
 
 void ToolController::handleModifiers(int modifiers)
 {
+    emit modifiersChanged(modifiers);
     if (canvasSampler_ || transformSessionActive() || movingSelection_) {
         return;
     }

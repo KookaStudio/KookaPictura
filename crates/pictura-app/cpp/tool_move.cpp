@@ -142,7 +142,9 @@ public:
             return true;
         }
         const MoveOptions moveOptions = move_->get();
-        if (moveOptions.autoSelectOn) {
+        // A held Ctrl flips Auto-Select for this press, as CS6 does.
+        const bool autoSelect = moveOptions.autoSelectOn != mods.testFlag(Qt::ControlModifier);
+        if (autoSelect) {
             const QString hit = auto_select_layer(
                 *v, qRound(imagePos.x()), qRound(imagePos.y()), moveOptions.autoSelect == 0);
             if (!hit.isEmpty() && hit != layer_selection_anchor(*v)) {
