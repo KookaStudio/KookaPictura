@@ -106,6 +106,7 @@ fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
         depth: BitDepth::Sixteen,
         rect: rect(4, 4),
         planes: vec![(3, Samples::U16(vec![0; 16]))],
+        working_idents: [0; 3],
     });
     let mut doc = doc_with(layer);
     doc.source_depth = Some(BitDepth::Sixteen);

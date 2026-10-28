@@ -582,6 +582,19 @@ fn convert_one_layer(
         .collect();
     channels.extend(others);
     layer.channels = channels;
+    let ids = [0i16, 1, 2].map(|id| {
+        layer
+            .channels
+            .iter()
+            .find(|channel| channel.id == id)
+            .map(|channel| channel.data.ident())
+            .unwrap_or(0)
+    });
+    if ids.iter().all(|&id| id != 0) {
+        if let Some(store) = &mut layer.source_channels {
+            store.working_idents = ids;
+        }
+    }
 }
 
 #[cfg(test)]

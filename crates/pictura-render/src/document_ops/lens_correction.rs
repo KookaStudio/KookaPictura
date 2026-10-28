@@ -131,10 +131,15 @@ mod tests {
     }
 
     fn slots(distortion: f64) -> Vec<f64> {
-        vec![
+        let mut v = vec![
             1.0, 0.0, 0.0, 1.0, 1.0, 0.0, distortion, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0,
             100.0,
-        ]
+        ];
+        // No sub-profile, no coefficients, then the identity model.
+        v.extend([0.0; 8]);
+        v.extend([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        v.extend([0.0; 3]);
+        v
     }
 
     fn channel(doc: &Document, id: i16) -> Vec<u8> {

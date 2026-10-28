@@ -360,6 +360,10 @@ public:
     // True when `path`'s suffix routes to the native PSD/PSB reader rather than
     // the Qt image decode edge.
     static bool isNativeDocumentPath(const QString& path);
+    // True when a save to `path` goes through the shared PSD/PSB worker: every
+    // path that is neither a raster writer nor PDF (an unknown or missing
+    // suffix writes a PSD, as `format_for_path` does).
+    static bool saveRunsOnWorker(const QString& path);
     bool openAsSmartObjectPath(const QString& path);
     // Test seam: hold a started open's completion for `ms` milliseconds so the
     // loading tab, spinner, hover, and cancel are observable.

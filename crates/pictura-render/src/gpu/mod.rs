@@ -10,11 +10,14 @@
 //! # Region compositing
 //!
 //! [`composite_region_active`] runs the same kernel over a clamped document
-//! rectangle: the canvas, each layer source, the mask, and group inner canvases
-//! are region-sized, and each invocation maps a region-local index to document
-//! coordinates for layer-rect and mask sampling. Only the region is dispatched
-//! and read back, so the output is byte-identical to the same slice of the full
-//! composite. `composite_gpu` is just the region kernel over the whole document.
+//! rectangle: the canvas, the mask, and group inner canvases are region-sized,
+//! and each invocation maps a region-local index to document coordinates for
+//! layer-rect and mask sampling. A layer source is region-sized only when it is
+//! built on a miss; a hit binds the whole-document upload kept by a previous
+//! full composite and uses its document-space layout. Only the region is
+//! dispatched and read back, so the output is byte-identical to the same slice
+//! of the full composite. `composite_gpu` is just the region kernel over the
+//! whole document.
 //!
 //! # CPU-only modes
 //!
@@ -88,9 +91,8 @@ pub enum GpuError {
     /// A channel-less smart-object layer is present: it renders from its
     /// embedded source, which the GPU has no path for.
     UnsupportedSmartObject,
-    /// A channel-less type layer is present (it renders from its text model),
-    /// or any type layer while Blend Text Colors Using Gamma is on (the shader
-    /// has no text curve): the GPU has no path for either.
+    /// A channel-less type layer is present (it renders from its text model):
+    /// the GPU has no path for it.
     UnsupportedText,
     /// A visible layer carries an enabled object-based layer effect.
     UnsupportedLayerEffect,
@@ -117,7 +119,7 @@ impl fmt::Display for GpuError {
                 write!(f, "channel-less smart-object source is CPU-only")
             }
             GpuError::UnsupportedText => {
-                write!(f, "channel-less or gamma-blended type layer is CPU-only")
+                write!(f, "channel-less type layer is CPU-only")
             }
             GpuError::UnsupportedLayerEffect => {
                 write!(f, "layer effect is CPU-only")
@@ -441,7 +443,7 @@ fn adjustment_params(adjustment: &Adjustment) -> Option<(u32, i32, i32, i32)> {
 ///
 /// A document with a source depth declines first. Then the first visible layer
 /// in stack order that declines names the reason; within a layer the checks
-/// run effects, content route, Dissolve, advanced blending, text gamma.
+/// run effects, content route, Dissolve, then advanced blending.
 fn check_supported(doc: &Document) -> Result<(), GpuError> {
     fn walk(layer: &Layer) -> Result<(), GpuError> {
         if !layer.visible {
@@ -482,9 +484,6 @@ fn check_supported(doc: &Document) -> Result<(), GpuError> {
             || layer.clipping
         {
             return Err(GpuError::UnsupportedAdvancedBlending);
-        }
-        if layer.type_tool.is_some() && crate::text_gamma::text_gamma().is_some() {
-            return Err(GpuError::UnsupportedText);
         }
         if group {
             for child in &layer.children {
@@ -1098,7 +1097,7 @@ mod tests {
         println!("gpu_phase build_source {:.3} ms", phase_ms(t));
 
         let t = Instant::now();
-        let masks: Vec<_> = doc.layers.iter().map(|l| gpu.build_mask(l)).collect();
+        let masks: Vec<_> = doc.layers.iter().map(|l| gpu.build_mask(l, &doc)).collect();
         println!("gpu_phase build_mask {:.3} ms", phase_ms(t));
 
         let t = Instant::now();
@@ -1112,6 +1111,7 @@ mod tests {
                     layer.blend,
                     layer.opacity,
                     layer.fill,
+                    layer.type_tool.is_some(),
                     NO_ADJ,
                 );
             }

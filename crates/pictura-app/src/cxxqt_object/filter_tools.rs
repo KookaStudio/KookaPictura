@@ -36,6 +36,7 @@ pub(super) mod displace_maps;
 pub(super) mod jobs;
 pub(super) mod lens_blur_depths;
 pub(super) mod lens_correction;
+mod lens_profiles;
 pub(super) mod liquify;
 pub(super) mod vanishing_point;
 mod vanishing_point_file;

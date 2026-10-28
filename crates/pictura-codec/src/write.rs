@@ -1,90 +1,17 @@
 use pictura_core::*;
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use crate::common::*;
 use crate::depth::{apply_prediction, depth_bits, depth_of, output_depth, row_bytes};
 use crate::error::PsdError;
-use crate::write_indexed::{index_layer_plane, writes_indexed};
+use crate::write_cache::{CompositeKey, EncodeCache};
+use crate::write_indexed::writes_indexed;
+use crate::write_layers::write_layer_info;
 
 // ---------------------------------------------------------------------------
 // Layer and mask information section — writing
 // ---------------------------------------------------------------------------
-
-/// A flat record in on-disk order, borrowing the model layer it came from.
-struct OutRecord<'a> {
-    layer: Option<&'a Layer>,
-    section: u32,
-    name: &'a str,
-}
-
-/// A layer channel to emit. Both variants are a complete on-disk stream
-/// (compression word included): `Encoded` is engine-authored PackBits RLE,
-/// `Verbatim` is a preserved `Layer.raw_channels` stream re-emitted unchanged.
-enum OutChannel {
-    Encoded(Vec<u8>),
-    Verbatim(Vec<u8>),
-}
-
-impl OutChannel {
-    fn bytes(&self) -> &[u8] {
-        match self {
-            OutChannel::Encoded(data) | OutChannel::Verbatim(data) => data,
-        }
-    }
-
-    fn declared_len(&self) -> u64 {
-        self.bytes().len() as u64
-    }
-
-    fn write(&self, out: &mut Vec<u8>) {
-        out.extend_from_slice(self.bytes());
-    }
-}
-
-fn flatten(layers: &[Layer]) -> Vec<OutRecord<'_>> {
-    enum Frame<'a> {
-        Visit(&'a Layer),
-        Group(&'a Layer),
-    }
-    let mut out = Vec::new();
-    let mut stack: Vec<Frame> = layers.iter().rev().map(Frame::Visit).collect();
-    while let Some(frame) = stack.pop() {
-        match frame {
-            Frame::Visit(layer) if layer.is_group => {
-                out.push(OutRecord {
-                    layer: None,
-                    section: SECTION_DIVIDER,
-                    name: DIVIDER_NAME,
-                });
-                stack.push(Frame::Group(layer));
-                for child in layer.children.iter().rev() {
-                    stack.push(Frame::Visit(child));
-                }
-            }
-            Frame::Visit(layer) => out.push(OutRecord {
-                layer: Some(layer),
-                section: 0,
-                name: record_name(layer),
-            }),
-            Frame::Group(layer) => out.push(OutRecord {
-                layer: Some(layer),
-                section: SECTION_OPEN_FOLDER,
-                name: record_name(layer),
-            }),
-        }
-    }
-    out
-}
-
-/// A flagged layer is written under the PSD `"Background"` name convention
-/// (design D5); the flag itself has no PSD bit.
-fn record_name(layer: &Layer) -> &str {
-    if layer.background {
-        "Background"
-    } else {
-        &layer.name
-    }
-}
 
 /// The Lab bytes to emit for a Lab output's composite color planes: the
 /// retained Lab planes exactly when every plane's forward RGB conversion still
@@ -111,442 +38,6 @@ fn lab_composite_planes(doc: &Document, depth: u16, plane: usize) -> Vec<u8> {
         }
     }
     crate::color_mode::rgb_to_lab(current)
-}
-
-/// The Lab planes to emit for a layer's three color channels, aligned to
-/// `layer.channels` (a `None` entry for every non-color channel). Prefers the
-/// retained Lab plane when its forward conversion still matches the working
-/// planes; empty when the layer does not carry exactly three id-0/1/2 color
-/// channels of equal length, letting the caller keep the original planes.
-///
-/// ponytail: same grouped ceiling as [`lab_composite_planes`] — one edited
-/// channel re-encodes all three.
-fn lab_layer_color_planes(layer: &Layer, depth: u16) -> Vec<Option<Vec<u8>>> {
-    let positions: Vec<usize> = layer
-        .channels
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| c.id >= 0 && c.id < 3)
-        .map(|(i, _)| i)
-        .collect();
-    if positions.len() != 3 {
-        return Vec::new();
-    }
-    let plane = layer.channels[positions[0]].data.len();
-    if positions
-        .iter()
-        .any(|&i| layer.channels[i].data.len() != plane)
-    {
-        return Vec::new();
-    }
-    let mut current = Vec::with_capacity(plane * 3);
-    for &i in &positions {
-        current.extend_from_slice(&layer.channels[i].data);
-    }
-    let retained: Option<Vec<Vec<u8>>> = positions
-        .iter()
-        .map(|&i| crate::color_mode::layer_retained_8(layer, depth, layer.channels[i].id))
-        .collect();
-    let lab = match retained.map(|planes| planes.concat()) {
-        Some(retained)
-            if retained.len() == plane * 3
-                && crate::color_mode::lab_to_rgb(&retained).as_slice() == current.as_slice() =>
-        {
-            retained
-        }
-        _ => crate::color_mode::rgb_to_lab(&current),
-    };
-    let mut out = vec![None; layer.channels.len()];
-    for (c, &i) in positions.iter().enumerate() {
-        out[i] = Some(lab[c * plane..(c + 1) * plane].to_vec());
-    }
-    out
-}
-
-fn write_layer_info(
-    doc: &Document,
-    psb: bool,
-    lab_mode: bool,
-    cmyk_mode: bool,
-    indexed_mode: bool,
-) -> Result<Vec<u8>, PsdError> {
-    let records = flatten(&doc.layers);
-    if records.len() > i16::MAX as usize {
-        return Err(PsdError::Unsupported("too many layer records".into()));
-    }
-
-    let mut info = Vec::new();
-    info.extend_from_slice(&(records.len() as i16).to_be_bytes());
-
-    let mut channel_data: Vec<Vec<(i16, OutChannel)>> = Vec::with_capacity(records.len());
-    let depth = output_depth(doc)?;
-    let cmyk_profile = crate::icc::cmyk_profile_from_resources(doc);
-    for record in &records {
-        let mut channels: Vec<(i16, OutChannel)> = Vec::new();
-        if let Some(layer) = record.layer {
-            let layer_w = layer.rect.width().max(0) as usize;
-            let layer_h = layer.rect.height().max(0) as usize;
-            let lab_channels = if lab_mode {
-                lab_layer_color_planes(layer, depth)
-            } else {
-                Vec::new()
-            };
-            // A CMYK layer's working channels are three RGB planes; the output
-            // synthesizes `(0,C),(1,M),(2,Y),(3,K)` and keeps the rest.
-            let cmyk_planes = if cmyk_mode {
-                crate::write_cmyk::cmyk_layer_color_planes(layer, depth, cmyk_profile.as_ref())
-            } else {
-                Vec::new()
-            };
-            let cmyk_active = cmyk_planes.len() == 4;
-            if cmyk_active {
-                for (id, data) in cmyk_planes.iter().enumerate() {
-                    let id = id as i16;
-                    let plane = native_plane(
-                        layer_retained(layer, depth, id).as_ref(),
-                        data,
-                        layer_w,
-                        layer_h,
-                        depth,
-                    )?;
-                    channels.push((
-                        id,
-                        OutChannel::Encoded(channel_stream(
-                            doc.layer_compression,
-                            layer_w,
-                            layer_h,
-                            &plane,
-                            depth,
-                            psb,
-                        )?),
-                    ));
-                }
-            }
-            // An Indexed layer's three working RGB channels are reconstructed
-            // from one retained index plane (id 0); the rest are kept below.
-            let indexed_plane = if indexed_mode {
-                index_layer_plane(layer, depth)
-            } else {
-                None
-            };
-            let indexed_active = indexed_plane.is_some();
-            if let Some(data) = &indexed_plane {
-                let plane = native_plane(
-                    layer_retained(layer, depth, 0).as_ref(),
-                    data,
-                    layer_w,
-                    layer_h,
-                    depth,
-                )?;
-                channels.push((
-                    0,
-                    OutChannel::Encoded(channel_stream(
-                        doc.layer_compression,
-                        layer_w,
-                        layer_h,
-                        &plane,
-                        depth,
-                        psb,
-                    )?),
-                ));
-            }
-            for (index, channel) in layer.channels.iter().enumerate() {
-                // The CMYK / Indexed color channels are already synthesized above.
-                if (cmyk_active || indexed_active) && channel.id >= 0 && channel.id < 3 {
-                    continue;
-                }
-                let data = lab_channels
-                    .get(index)
-                    .and_then(|plane| plane.as_deref())
-                    .unwrap_or(&channel.data);
-                let plane = native_plane(
-                    layer_retained(layer, depth, channel.id).as_ref(),
-                    data,
-                    layer_w,
-                    layer_h,
-                    depth,
-                )?;
-                channels.push((
-                    channel.id,
-                    OutChannel::Encoded(channel_stream(
-                        doc.layer_compression,
-                        layer_w,
-                        layer_h,
-                        &plane,
-                        depth,
-                        psb,
-                    )?),
-                ));
-            }
-            for channel in &layer.raw_channels {
-                // A depth-8 read keeps the original on-disk stream verbatim. A
-                // 16/32-bit read re-wrapped it as a raw 8-bit stream, so replay
-                // the retained native plane (or widen) under the output depth.
-                if depth == 8 {
-                    channels.push((channel.id, OutChannel::Verbatim(channel.data.clone())));
-                    continue;
-                }
-                let plane8 = channel.data.get(2..).unwrap_or(&[]);
-                let plane = native_plane(
-                    layer_retained(layer, depth, channel.id).as_ref(),
-                    plane8,
-                    layer_w,
-                    layer_h,
-                    depth,
-                )?;
-                channels.push((
-                    channel.id,
-                    OutChannel::Encoded(channel_stream(
-                        doc.layer_compression,
-                        layer_w,
-                        layer_h,
-                        &plane,
-                        depth,
-                        psb,
-                    )?),
-                ));
-            }
-            if let Some(mask) = &layer.mask {
-                let width = mask.rect.width().max(0) as usize;
-                let height = mask.rect.height().max(0) as usize;
-                let pixels = width
-                    .checked_mul(height)
-                    .ok_or_else(|| PsdError::Invalid("layer mask size overflow".into()))?;
-                let data = match &mask.data {
-                    Some(data) => {
-                        if data.len() != pixels {
-                            return Err(PsdError::Invalid(
-                                "layer mask data length mismatch".into(),
-                            ));
-                        }
-                        data.clone()
-                    }
-                    None => vec![mask.default_color; pixels].into(),
-                };
-                let plane = native_plane(
-                    layer_retained(layer, depth, -2).as_ref(),
-                    &data,
-                    width,
-                    height,
-                    depth,
-                )?;
-                channels.push((
-                    -2,
-                    OutChannel::Encoded(channel_stream(
-                        doc.layer_compression,
-                        width,
-                        height,
-                        &plane,
-                        depth,
-                        psb,
-                    )?),
-                ));
-            }
-        }
-        if channels.len() > MAX_CHANNELS as usize {
-            return Err(PsdError::Invalid(format!(
-                "layer channel count {}",
-                channels.len()
-            )));
-        }
-        write_record(&mut info, record, &channels, doc.width, doc.height, psb);
-        channel_data.push(channels);
-    }
-
-    for channels in &channel_data {
-        for (_, channel) in channels {
-            channel.write(&mut info);
-        }
-    }
-
-    while info.len() % 4 != 0 {
-        info.push(0);
-    }
-    Ok(info)
-}
-
-fn write_record(
-    out: &mut Vec<u8>,
-    record: &OutRecord,
-    channels: &[(i16, OutChannel)],
-    doc_width: u32,
-    doc_height: u32,
-    psb: bool,
-) {
-    match record.layer {
-        Some(layer) => {
-            out.extend_from_slice(&layer.rect.top.to_be_bytes());
-            out.extend_from_slice(&layer.rect.left.to_be_bytes());
-            out.extend_from_slice(&layer.rect.bottom.to_be_bytes());
-            out.extend_from_slice(&layer.rect.right.to_be_bytes());
-            out.extend_from_slice(&(channels.len() as u16).to_be_bytes());
-            for (id, channel) in channels {
-                out.extend_from_slice(&id.to_be_bytes());
-                if psb {
-                    out.extend_from_slice(&channel.declared_len().to_be_bytes());
-                } else {
-                    out.extend_from_slice(&(channel.declared_len() as u32).to_be_bytes());
-                }
-            }
-            out.extend_from_slice(b"8BIM");
-            // Preserve an unrecognized blend key; a recognized key rides along
-            // only while it still matches the mode, so a changed mode wins.
-            let blend_key = layer
-                .blend_key
-                .filter(|k| match BlendMode::from_psd_key(*k) {
-                    // An unknown key is the only representation of its mode, so
-                    // it survives while the mode is still the Normal fallback.
-                    None => layer.blend == BlendMode::Normal,
-                    Some(mode) => mode == layer.blend,
-                })
-                .unwrap_or_else(|| layer.blend.to_psd_key());
-            out.extend_from_slice(&blend_key);
-            out.push(layer.opacity);
-            out.push(u8::from(layer.clipping));
-            let mut record_flags = if layer.visible { 0 } else { 0x02 };
-            if layer.lock.contains(LockFlags::TRANSPARENCY) {
-                record_flags |= 0x01;
-            }
-            out.push(record_flags);
-            out.push(0); // filler
-
-            let mut extra = Vec::new();
-            write_extra(
-                &mut extra,
-                layer,
-                record.name,
-                record.section,
-                doc_width,
-                doc_height,
-                psb,
-            );
-            out.extend_from_slice(&(extra.len() as u32).to_be_bytes());
-            out.extend_from_slice(&extra);
-        }
-        None => {
-            out.extend_from_slice(&[0u8; 16]); // empty rect
-            out.extend_from_slice(&0u16.to_be_bytes()); // no channels
-            out.extend_from_slice(b"8BIM");
-            out.extend_from_slice(&BlendMode::Normal.to_psd_key());
-            out.push(255);
-            out.push(0);
-            out.push(0);
-            out.push(0);
-
-            let mut extra = Vec::new();
-            write_extra(
-                &mut extra,
-                &empty_layer(record.name),
-                record.name,
-                record.section,
-                doc_width,
-                doc_height,
-                psb,
-            );
-            out.extend_from_slice(&(extra.len() as u32).to_be_bytes());
-            out.extend_from_slice(&extra);
-        }
-    }
-}
-
-/// Placeholder used to reuse [`write_extra`] for the (layer-less) divider record.
-fn empty_layer(name: &str) -> Layer {
-    Layer {
-        name: name.to_string(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
-        },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: Vec::new(),
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }
-}
-
-fn write_extra(
-    out: &mut Vec<u8>,
-    layer: &Layer,
-    name: &str,
-    section: u32,
-    doc_width: u32,
-    doc_height: u32,
-    psb: bool,
-) {
-    crate::mask_params::write_record(out, layer);
-    crate::advanced_blending::write_ranges(out, layer);
-    write_pascal(out, name);
-    write_tag(out, b"luni", &luni_data(name), psb);
-    // M36 layer attributes, each omitted at its default so default documents
-    // serialize byte-identically to before.
-    if layer.lock.bits() != 0 {
-        write_tag(
-            out,
-            b"lspf",
-            &(u32::from(layer.lock.bits())).to_be_bytes(),
-            psb,
-        );
-    }
-    if layer.color != ColorLabel::None {
-        let mut lclr = [0u8; 8];
-        lclr[0..2].copy_from_slice(&u16::from(layer.color.to_byte()).to_be_bytes());
-        write_tag(out, b"lclr", &lclr, psb);
-    }
-    if layer.fill != 255 {
-        // psd-tools decodes `iOpa` as a 4-byte ByteElement (`B3x`); the reader
-        // only uses the first byte.
-        write_tag(out, b"iOpa", &[layer.fill, 0, 0, 0], psb);
-    }
-    crate::advanced_blending::write_advanced_tags(out, layer, psb);
-    if let Some(adjustment) = &layer.adjustment {
-        // Adjustment payload is opaque here; write the key and bytes back as read.
-        write_tag(out, &adjustment.key, &adjustment.data, psb);
-    }
-    if section != 0 {
-        // Section-divider setting: kind + '8BIM' + blend key. The reference and
-        // psd-tools read a group's blend mode from here, so `pass` must ride
-        // along with the section marker.
-        let mut lsct = Vec::with_capacity(12);
-        lsct.extend_from_slice(&section.to_be_bytes());
-        lsct.extend_from_slice(b"8BIM");
-        lsct.extend_from_slice(&layer.blend.to_psd_key());
-        write_tag(out, b"lsct", &lsct, psb);
-    }
-    // Unmodeled tagged blocks, re-emitted in encounter order.
-    for block in &layer.extra_blocks {
-        write_tag(out, &block.key, &block.data, psb);
-    }
-    // An embedded smart object with no preserved config block is authored here.
-    if let Some(so) = crate::smart_writer::should_author(layer) {
-        let data = crate::smart_writer::author_sold_block(so, layer, doc_width, doc_height);
-        write_tag(out, b"SoLd", &data, psb);
-    }
-    if out.len() % 2 == 1 {
-        out.push(0);
-    }
-}
-
-fn write_pascal(out: &mut Vec<u8>, name: &str) {
-    let bytes = name.as_bytes();
-    let len = bytes.len().min(255);
-    out.push(len as u8);
-    out.extend_from_slice(&bytes[..len]);
-    let pad = (4 - ((len + 1) % 4)) % 4;
-    for _ in 0..pad {
-        out.push(0);
-    }
 }
 
 pub(crate) fn write_tag(out: &mut Vec<u8>, key: &[u8; 4], data: &[u8], psb: bool) {
@@ -641,16 +132,6 @@ fn reframe_document_extra(bytes: &[u8], src_psb: bool, dst_psb: bool) -> Vec<u8>
     out
 }
 
-fn luni_data(name: &str) -> Vec<u8> {
-    let units: Vec<u16> = name.encode_utf16().collect();
-    let mut data = Vec::with_capacity(4 + units.len() * 2);
-    data.extend_from_slice(&(units.len() as u32).to_be_bytes());
-    for unit in units {
-        data.extend_from_slice(&unit.to_be_bytes());
-    }
-    data
-}
-
 // ---------------------------------------------------------------------------
 // PackBits RLE encoding
 // ---------------------------------------------------------------------------
@@ -691,7 +172,7 @@ fn encode_packbits_row(row: &[u8], out: &mut Vec<u8>) {
 /// samples, when its length matches the plane) is used if narrowing it yields
 /// `current`; otherwise `current` is widened. A length other than exactly
 /// `width * height` is rejected, so widening cannot index out of bounds.
-fn native_plane<'a>(
+pub(crate) fn native_plane<'a>(
     retained: Option<&Samples>,
     current: &'a [u8],
     width: usize,
@@ -767,13 +248,14 @@ pub(crate) fn encode_scanlines(
     let count_width = if psb { 4 } else { 2 };
     let mut counts = Vec::with_capacity(planes.len() * height * count_width);
     let mut rows = Vec::new();
+    let mut packed = Vec::with_capacity(row_bytes + row_bytes / 128 + 1);
     for plane in planes {
         if plane.len() != plane_len {
             return Err(PsdError::Invalid("RLE plane length mismatch".into()));
         }
         for row in 0..height {
             let start = row * row_bytes;
-            let mut packed = Vec::new();
+            packed.clear();
             encode_packbits_row(&plane[start..start + row_bytes], &mut packed);
             // The PSD maximum width (30 000) cannot reach the u16 limit, so the
             // guard only fires for a PSB row approaching u32; it errs rather
@@ -836,7 +318,7 @@ pub(crate) fn zip_scanlines(
 /// The complete on-disk layer-channel stream for one engine-encoded plane: the
 /// compression word followed by the payload for `kind` at `depth`. `plane` is
 /// the native-depth plane (`row_bytes(width, depth) * height` bytes).
-fn channel_stream(
+pub(crate) fn channel_stream(
     kind: Compression,
     width: usize,
     height: usize,
@@ -871,15 +353,32 @@ fn channel_stream(
 /// source document was a PSB or a dimension exceeds the PSD limit.
 pub fn write_psd(doc: &Document) -> Result<Vec<u8>, PsdError> {
     let psb = doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
-    write_container(doc, psb)
+    write_container(doc, psb, None)
 }
 
 /// Serialize a [`Document`] into a version-2 PSB regardless of its dimensions.
 pub fn write_psb(doc: &Document) -> Result<Vec<u8>, PsdError> {
-    write_container(doc, true)
+    write_container(doc, true, None)
 }
 
-fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
+/// As [`write_psd`], reusing encoded layer channels and the composite block from
+/// `cache`. The bytes equal an uncached encode.
+pub fn write_psd_cached(doc: &Document, cache: &EncodeCache) -> Result<Vec<u8>, PsdError> {
+    let psb = doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
+    write_container(doc, psb, Some(cache))
+}
+
+/// As [`write_psb`], reusing encoded layer channels and the composite block from
+/// `cache`. The bytes equal an uncached encode.
+pub fn write_psb_cached(doc: &Document, cache: &EncodeCache) -> Result<Vec<u8>, PsdError> {
+    write_container(doc, true, Some(cache))
+}
+
+fn write_container(
+    doc: &Document,
+    psb: bool,
+    cache: Option<&EncodeCache>,
+) -> Result<Vec<u8>, PsdError> {
     if doc.depth != BitDepth::Eight {
         return Err(PsdError::Unsupported("write supports 8-bit only".into()));
     }
@@ -995,6 +494,7 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
         extra.extend_from_slice(&crate::smart_writer::author_lnk2_bytes(&authoring, psb));
     }
 
+    let mut used_layer_keys = Vec::new();
     if doc.layers.is_empty() && doc.global_layer_mask.is_empty() && extra.is_empty() {
         if psb {
             out.extend_from_slice(&0u64.to_be_bytes()); // zero-length layer/mask section
@@ -1002,7 +502,8 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
             out.extend_from_slice(&0u32.to_be_bytes()); // zero-length layer/mask section
         }
     } else {
-        let info = write_layer_info(doc, psb, lab_mode, cmyk_mode, indexed_mode)?;
+        let (info, keys) = write_layer_info(doc, psb, lab_mode, cmyk_mode, indexed_mode, cache)?;
+        used_layer_keys = keys;
         let len_width = if psb { 8 } else { 4 };
         let section_len = len_width + info.len() + 4 + doc.global_layer_mask.len() + extra.len();
         if psb {
@@ -1021,12 +522,46 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
     // "Maximize Compatibility" off: the source ended after the layer section, so
     // emit no image-data section; the reader then reports no merged composite.
     if !doc.merged_composite_present {
+        if let Some(cache) = cache {
+            cache.prune(&used_layer_keys, None);
+        }
         return Ok(out);
     }
 
-    out.extend_from_slice(&doc.composite_compression.to_code().to_be_bytes());
     let width = doc.width as usize;
     let height = doc.height as usize;
+    let cacheable_composite = cache.is_some()
+        && doc.source_mode.is_none()
+        && depth == 8
+        && !lab_mode
+        && !cmyk_mode
+        && !indexed_mode
+        && flat_source.is_none()
+        && !bitmap_mode;
+    let composite_key = cacheable_composite.then(|| CompositeKey {
+        ident: doc.composite.data.ident(),
+        extra_idents: doc
+            .channels
+            .iter()
+            .map(|channel| channel.data.ident())
+            .collect(),
+        width: doc.width,
+        height: doc.height,
+        channels: channels as u16,
+        mode_code,
+        depth,
+        compression: doc.composite_compression.to_code(),
+        psb,
+    });
+    if let (Some(cache), Some(key)) = (cache, composite_key.as_ref()) {
+        if let Some(bytes) = cache.get_composite(key) {
+            out.extend_from_slice(&bytes);
+            cache.prune(&used_layer_keys, Some(key));
+            return Ok(out);
+        }
+    }
+    let block_start = out.len();
+    out.extend_from_slice(&doc.composite_compression.to_code().to_be_bytes());
     // The Lab, CMYK, or Indexed output re-emits retained planes exactly when
     // they are unchanged, and otherwise re-encodes from the working RGB into a
     // temp buffer (Indexed never re-encodes: an edit already chose the RGB mode).
@@ -1101,6 +636,12 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
         Compression::ZipPrediction => {
             out.extend_from_slice(&zip_scanlines(&planes, width, height, true, depth)?)
         }
+    }
+    if let (Some(cache), Some(key)) = (cache, composite_key.as_ref()) {
+        cache.put_composite(key.clone(), Arc::from(&out[block_start..]));
+        cache.prune(&used_layer_keys, Some(key));
+    } else if let Some(cache) = cache {
+        cache.prune(&used_layer_keys, None);
     }
     Ok(out)
 }

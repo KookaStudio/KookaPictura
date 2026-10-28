@@ -22,7 +22,10 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/gradient_map.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h"
 
+#include <QtCore/QElapsedTimer>
+#include <QtCore/QEventLoop>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
 #include <QtGui/QAction>
@@ -46,6 +49,22 @@ QByteArray block(const char* kind)
     const ::rust::Vec<std::uint8_t> v =
         pictura::image_adjustment_default(QString::fromLatin1(kind), 0x000000u, 0xffffffu);
     return QByteArray(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
+}
+
+// The dialog previews on a worker now: pump until its latest result lands.
+void waitForPreview(pictura::PictureView& view)
+{
+    // The dialog only registers a new request when its 0 ms timer fires; give
+    // it one event pass before the busy check so an already-settled preview
+    // from the previous edit cannot end the wait early.
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (pictura::image_adjust_preview_busy(view) && elapsed.elapsed() < 5000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+    pictura::image_adjust_preview_poll(view);
+    QCoreApplication::processEvents();
 }
 
 // Each (field, page key) of `kind`'s dialog takes its range, default and
@@ -215,6 +234,7 @@ void ImageAdjustmentsTest::dialogPreviewsCancelsAndApplies()
             qobject_cast<QSlider*>(dialog.controlForTest(QStringLiteral("lightness")));
         QVERIFY(lightness);
         lightness->setValue(-100);
+        waitForPreview(*view_);
         QCOMPARE(qGray(view_->composite_argb(5, 5)), 0);
         dialog.reject();
     }
@@ -241,6 +261,7 @@ void ImageAdjustmentsTest::colorLookupPresetRebuildsTheLook()
         QVERIFY(preset);
         QCOMPARE(preset->count(), 7);
         preset->setCurrentIndex(1); // Warm Contrast, not the identity
+        waitForPreview(*view_);
         QVERIFY(view_->composite_argb(5, 5) != before);
         dialog.reject();
     }
@@ -260,6 +281,7 @@ void ImageAdjustmentsTest::brightnessContrastPreviewsAndApplies()
     QVERIFY(dialog->minimumWidth() >= 420);
     slider->setValue(100);
     QCOMPARE(brightness->value(), 100);
+    waitForPreview(*view_);
     QVERIFY(qRed(view_->composite_argb(5, 5)) > 100);
     auto* autoButton = dialog->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
     QVERIFY(autoButton && !autoButton->isEnabled());
@@ -288,6 +310,7 @@ void ImageAdjustmentsTest::exposureAndVibranceUseTheWideLayouts()
         preset->setCurrentIndex(preset->findText(QStringLiteral("Plus 1.0")));
         emit preset->activated(preset->currentIndex());
         QCOMPARE(exposure->value(), 1.0);
+        waitForPreview(*view_);
         QVERIFY(qRed(view_->composite_argb(5, 5)) > qRed(before));
         // Gamma runs 9.99 at the left to 0.01 at the right, 1.00 centred.
         auto* gammaSlider = dialog->findChild<QSlider*>(QStringLiteral("gammaSlider"));
@@ -334,10 +357,12 @@ void ImageAdjustmentsTest::hueSaturationEditsEachRangeAndPresets()
 
     range->setCurrentIndex(range->findText(QStringLiteral("Blues")));
     lightness->setValue(-100);
+    waitForPreview(*view_);
     QCOMPARE(view_->composite_argb(5, 5), before);
     range->setCurrentIndex(range->findText(QStringLiteral("Reds")));
     QCOMPARE(lightness->value(), 0);
     lightness->setValue(-100);
+    waitForPreview(*view_);
     QCOMPARE(qRed(view_->composite_argb(5, 5)), 0);
     QCOMPARE(preset->currentText(), QStringLiteral("Custom"));
     range->setCurrentIndex(0);
@@ -345,6 +370,7 @@ void ImageAdjustmentsTest::hueSaturationEditsEachRangeAndPresets()
 
     preset->setCurrentIndex(preset->findText(QStringLiteral("Default")));
     emit preset->activated(preset->currentIndex());
+    waitForPreview(*view_);
     QCOMPARE(view_->composite_argb(5, 5), before);
     dialog->reject();
 }
@@ -367,6 +393,7 @@ void ImageAdjustmentsTest::colorBalanceEditsEachTone()
     QVERIFY(midtones->isChecked() && luminosity->isChecked());
     luminosity->setChecked(false);
     cyanRed->setValue(100);
+    waitForPreview(*view_);
     QVERIFY(qRed(view_->composite_argb(5, 5)) > qRed(before));
     highlights->click();
     QCOMPARE(cyanRed->value(), 0);
@@ -393,6 +420,7 @@ void ImageAdjustmentsTest::channelMixerColorsItsSourcesAndTotals()
     QCOMPARE(red->value(), 100);
     QCOMPARE(total->text(), QStringLiteral("+100 %"));
     green->setValue(-15);
+    waitForPreview(*view_);
     QCOMPARE(total->text(), QStringLiteral("+85 %"));
     QVERIFY(qRed(view_->composite_argb(5, 5)) < 100);
     output->setCurrentIndex(1);
@@ -462,17 +490,21 @@ void ImageAdjustmentsTest::blackWhiteMixesTintsAndPresets()
     }
     QCOMPARE(preset->currentText(), QStringLiteral("Default"));
     QCOMPARE(reds->value(), 40);
+    waitForPreview(*view_);
     QRgb gray = view_->composite_argb(5, 5);
     QCOMPARE(qRed(gray), qBlue(gray));
     reds->setValue(-200);
+    waitForPreview(*view_);
     QCOMPARE(preset->currentText(), QStringLiteral("Custom"));
     QVERIFY(qRed(view_->composite_argb(5, 5)) < qRed(gray));
     preset->setCurrentIndex(preset->findText(QStringLiteral("Red Filter")));
     emit preset->activated(preset->currentIndex());
+    waitForPreview(*view_);
     QCOMPARE(reds->value(), 300);
     QVERIFY(qRed(view_->composite_argb(5, 5)) > qRed(gray));
     preset->setCurrentIndex(preset->findText(QStringLiteral("Default")));
     emit preset->activated(preset->currentIndex());
+    waitForPreview(*view_);
     QCOMPARE(reds->value(), 40);
     QCOMPARE(view_->composite_argb(5, 5), gray);
 
@@ -480,10 +512,12 @@ void ImageAdjustmentsTest::blackWhiteMixesTintsAndPresets()
     tint->setChecked(true);
     QVERIFY(hue->isEnabled() && saturation->isEnabled());
     QCOMPARE(saturation->value(), 20);
+    waitForPreview(*view_);
     const QRgb tinted = view_->composite_argb(5, 5);
     QVERIFY(qRed(tinted) > qBlue(tinted));
     hue->setValue(220);
     saturation->setValue(60);
+    waitForPreview(*view_);
     const QRgb blue = view_->composite_argb(5, 5);
     QVERIFY(qBlue(blue) > qRed(blue));
     const QColor swatch =
@@ -511,6 +545,7 @@ void ImageAdjustmentsTest::gradientMapEditsItsGradient()
             && dialog->controlForTest(QStringLiteral("sample")));
     QCOMPARE(dialog->spec().stops.size(), 2);
     QCOMPARE(dialog->spec().stops.first().color, QColor(Qt::black));
+    waitForPreview(*view_);
     QCOMPARE(view_->composite_argb(5, 5), qRgb(0, 0, 0));
 
     QAction* redGreen = nullptr;
@@ -521,8 +556,10 @@ void ImageAdjustmentsTest::gradientMapEditsItsGradient()
     }
     QVERIFY(redGreen);
     redGreen->trigger();
+    waitForPreview(*view_);
     QCOMPARE(view_->composite_argb(5, 5), qRgb(255, 0, 0));
     reverse->setChecked(true);
+    waitForPreview(*view_);
     QCOMPARE(view_->composite_argb(5, 5), qRgb(0, 255, 0));
     reverse->setChecked(false);
 
@@ -532,6 +569,7 @@ void ImageAdjustmentsTest::gradientMapEditsItsGradient()
     dialog->openEditor([&](pictura::GradientEditorDialog& editor) {
         QTimer::singleShot(0, &editor, [&]() {
             editor.choosePreset(5); // Blue, Red, Yellow
+            waitForPreview(*view_);
             previewed = view_->composite_argb(5, 5);
             pictura::GradientStopBar* bar = editor.bar();
             const int added = bar->addStop(2048);
@@ -539,15 +577,18 @@ void ImageAdjustmentsTest::gradientMapEditsItsGradient()
             QCOMPARE(editor.spec().name, QStringLiteral("Custom"));
             bar->removeStop(added);
             bar->setStopColor(0, QColor(0, 255, 0));
+            waitForPreview(*view_);
             edited = view_->composite_argb(5, 5);
             editor.smoothnessField()->setValue(0);
             emit editor.smoothnessField()->valueChanged(0);
+            waitForPreview(*view_);
             QCOMPARE(editor.spec().smoothness, 0);
             editor.reject();
         });
     });
     QCOMPARE(previewed, qRgb(0, 0, 255));
     QCOMPARE(edited, qRgb(0, 255, 0));
+    waitForPreview(*view_);
     QCOMPARE(view_->composite_argb(5, 5), qRgb(255, 0, 0));
     QCOMPARE(dialog->spec().name, QStringLiteral("Red, Green"));
 
@@ -563,6 +604,7 @@ void ImageAdjustmentsTest::gradientMapEditsItsGradient()
         });
     });
     QCOMPARE(dialog->spec().type, int(pictura::GradientSpec::Noise));
+    waitForPreview(*view_);
     const QColor first = pictura::resolvedStops(dialog->spec()).first().color;
     QCOMPARE(view_->composite_argb(5, 5), first.rgb());
 
@@ -616,6 +658,7 @@ void ImageAdjustmentsTest::photoFilterUsesAFilterOrAColor()
     QCOMPARE(density->value(), 25);
     filter->setCurrentIndex(filter->findText(QStringLiteral("Cooling Filter (80)")));
     density->setValue(80);
+    waitForPreview(*view_);
     const QRgb cooled = view_->composite_argb(5, 5);
     QVERIFY(qBlue(cooled) > qRed(cooled));
     dialog->reject();
@@ -702,6 +745,7 @@ void ImageAdjustmentsTest::levelsEditsEachChannelAndPresets()
 
     channel->setCurrentIndex(1);
     outWhite->setValue(0);
+    waitForPreview(*view_);
     QRgb now = view_->composite_argb(5, 5);
     QCOMPARE(qRed(now), 0);
     QCOMPARE(qGreen(now), qGreen(before));
@@ -715,6 +759,7 @@ void ImageAdjustmentsTest::levelsEditsEachChannelAndPresets()
 
     preset->setCurrentIndex(preset->findText(QStringLiteral("Default")));
     emit preset->activated(preset->currentIndex());
+    waitForPreview(*view_);
     QCOMPARE(view_->composite_argb(5, 5), before);
     QCOMPARE(inWhite->value(), 255);
 
@@ -744,6 +789,7 @@ void ImageAdjustmentsTest::curvesEditsEachChannelAndTheSelectedPoint()
 
     channel->setCurrentIndex(3);
     curve->setPoints({QPointF(0.0, 0.0), QPointF(200 / 255.0, 100 / 255.0), QPointF(1.0, 1.0)});
+    waitForPreview(*view_);
     QRgb now = view_->composite_argb(5, 5);
     QVERIFY(std::abs(qBlue(now) - 100) <= 1);
     QCOMPARE(qRed(now), qRed(before));
@@ -756,6 +802,7 @@ void ImageAdjustmentsTest::curvesEditsEachChannelAndTheSelectedPoint()
     const int selected = curve->selected();
     input->setValue(input->value());
     output->setValue(60);
+    waitForPreview(*view_);
     QCOMPARE(qRound(curve->points().at(selected).y() * 255.0), 60);
 
     // Delete removes a selected interior point but never an endpoint.

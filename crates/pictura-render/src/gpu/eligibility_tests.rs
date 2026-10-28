@@ -56,9 +56,36 @@ fn every_declining_route_names_its_reason() {
         let doc = doc_of(layer);
         assert_eq!(reason(check_supported(&doc)), expected);
     }
-    for accepted in [adjustment(*b"nvrt", Vec::new()), pixels()] {
+    for accepted in [
+        adjustment(*b"nvrt", Vec::new()),
+        pixels(),
+        type_layer(proxy()),
+    ] {
         assert_eq!(reason(check_supported(&doc_of(accepted))), "ok");
     }
+}
+
+#[test]
+fn proxied_type_layer_with_gamma_is_eligible() {
+    assert!(
+        crate::text_gamma::text_gamma().is_some(),
+        "the default gamma is on"
+    );
+    assert_eq!(reason(check_supported(&doc_of(type_layer(proxy())))), "ok");
+}
+
+#[test]
+fn proxy_less_type_layer_declines_as_type_source() {
+    let doc = doc_of(type_layer(Vec::new()));
+    let before = crate::metrics::decline_count("type_source");
+    assert!(matches!(
+        composite_gpu(&doc),
+        Err(GpuError::UnsupportedText)
+    ));
+    assert!(crate::metrics::decline_count("type_source") > before);
+    let (buf, backend) = composite_active(&doc, true);
+    assert_eq!(backend, Backend::Cpu);
+    assert_eq!(buf, crate::composite_rgba(&doc));
 }
 
 #[test]

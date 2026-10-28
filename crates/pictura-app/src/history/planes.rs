@@ -398,6 +398,37 @@ pub(super) fn hollow(doc: &Document) -> Document {
     meta
 }
 
+/// `source`'s metadata and planes, taking `donor`'s plane for each nonzero
+/// stamp the two agree on and copying the rest; the result and `source` are
+/// stamped equal and share no tracked plane.
+pub(super) fn shared_copy(source: &mut Document, donor: &Document) -> Document {
+    let mut reusable: std::collections::HashMap<u64, Plane<u8>> = std::collections::HashMap::new();
+    each_plane(donor, &mut |p, _, _| {
+        if p.stamp() != 0 {
+            reusable.entry(p.stamp()).or_insert_with(|| p.clone());
+        }
+    });
+    // A duplicated layer reuses one allocation; retire the stamp on later
+    // reuse so `planes_moved`'s unique-stamp map stays meaningful.
+    let mut reused = std::collections::HashSet::new();
+    let mut copy = source.clone();
+    each_plane_mut(&mut copy, &mut |p, _, _| {
+        let stamp = p.stamp();
+        *p = match reusable.get(&stamp) {
+            Some(plane) if !plane.shares(p) => {
+                let mut taken = plane.clone();
+                if !reused.insert(stamp) {
+                    taken.set_stamp(fresh_stamp());
+                }
+                taken
+            }
+            _ => copy_plane(p),
+        };
+    });
+    stamp_agreed(&mut copy, source);
+    copy
+}
+
 /// A copy of `source` in planes it does not share, each pair stamped equal.
 pub(super) fn private_copy(source: &mut Document) -> Document {
     let mut copy = source.clone();

@@ -940,16 +940,18 @@ void LayersPanel::syncControls()
     }
 
     // Set the final enabled state once: a control that stays enabled keeps its
-    // keyboard focus, where a transient disable would drop it.
-    blend_->setEnabled(blendAny);
+    // keyboard focus, where a transient disable would drop it. A pending
+    // transform disables the editing controls until it is resolved.
+    const bool editable = !transformPending_;
+    blend_->setEnabled(blendAny && editable);
     if (!pendingOpacity) {
-        opacity_->setEnabled(opacityAny);
+        opacity_->setEnabled(opacityAny && editable);
     }
     if (!pendingFill) {
-        fill_->setEnabled(fillAny);
+        fill_->setEnabled(fillAny && editable);
     }
     for (QToolButton* button : lockButtons) {
-        button->setEnabled(lockAny);
+        button->setEnabled(lockAny && editable);
     }
     if (forcedLocks) {
         lockTransparency_->setEnabled(false);

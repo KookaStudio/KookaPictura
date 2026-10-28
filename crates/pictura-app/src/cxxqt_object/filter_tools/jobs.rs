@@ -110,6 +110,9 @@ pub mod ffi {
         /// Drop the exact preview; a running worker finishes unobserved.
         fn filter_exact_preview_cancel(view: Pin<&mut PictureView>);
 
+        /// Hold a finished exact preview for `ms` milliseconds (test seam).
+        fn filter_exact_preview_set_delay(view: Pin<&mut PictureView>, ms: u64);
+
         /// The document rect `(x, y, w, h)` with `kind`/`params` applied to the
         /// active layer, at full resolution, without changing the document:
         /// the dialog pane's exact section while the canvas shows a reduced
@@ -132,6 +135,10 @@ pub mod ffi {
 pub(in crate::cxxqt_object) struct FilterJobs {
     preview: Option<ExactPreview>,
     commit: Option<CommitJob>,
+    /// Test seam: hold a finished exact preview before handing it over.
+    pub(in crate::cxxqt_object) exact_delay_for_test: u64,
+    /// Test seam: hold a finished commit before it lands.
+    pub(in crate::cxxqt_object) commit_delay_for_test: u64,
 }
 
 /// What an exact preview filters and shows.
@@ -196,7 +203,38 @@ enum Refresh {
     Nothing,
 }
 
-/// The layer at `path` of `doc` with `filters` applied in order.
+/// The layer at `path` of `doc` with `op` applied.
+fn apply_op(
+    doc: &Document,
+    path: &str,
+    op: &ActiveOp,
+    mask: Option<&LayerMask>,
+    gpu: bool,
+) -> Result<Layer, String> {
+    let mut layer = pictura_render::resolve_path(doc, path)
+        .ok_or("the active layer no longer exists")?
+        .clone();
+    match op {
+        ActiveOp::Filter(filter) => {
+            pictura_render::apply_filter(&mut layer, filter, mask, gpu)
+                .map_err(|e| e.to_string())?;
+        }
+        ActiveOp::Filters(filters) => {
+            for filter in filters {
+                pictura_render::apply_filter(&mut layer, filter, mask, gpu)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        ActiveOp::Adjustment(adjustment) => {
+            let rect = layer.rect;
+            pictura_render::apply_adjustment_region(&mut layer, adjustment, mask, rect)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(layer)
+}
+
+/// The layer at `path` of `doc` with `filters` applied in order (exact preview).
 fn filter_layer(
     doc: &Document,
     path: &str,
@@ -254,7 +292,14 @@ fn advance(rust: &mut PictureViewRust) {
         return;
     };
     let job = request.clone();
-    let handle = std::thread::spawn(move || exact(doc, &job, mask, gpu));
+    let delay = rust.filter_jobs.exact_delay_for_test;
+    let handle = std::thread::spawn(move || {
+        let result = exact(doc, &job, mask, gpu);
+        if delay > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(delay));
+        }
+        result
+    });
     if let Some(preview) = rust.filter_jobs.preview.as_mut() {
         preview.running = Some((request, handle));
     }
@@ -330,6 +375,17 @@ pub(in crate::cxxqt_object) fn commit_start(
     label: String,
     last_filter: Option<(String, Vec<f64>)>,
 ) -> bool {
+    commit_op_start(rust, ActiveOp::Filters(filters), label, last_filter)
+}
+
+/// Start a commit of `op` on a worker; `false` with `filter_error` set when
+/// refused.
+pub(in crate::cxxqt_object) fn commit_op_start(
+    rust: &mut PictureViewRust,
+    op: ActiveOp,
+    label: String,
+    last_filter: Option<(String, Vec<f64>)>,
+) -> bool {
     rust.filter_error = None;
     if rust.modal_transform_blocks_edit() {
         rust.filter_error = Some("a transform is pending".to_string());
@@ -356,26 +412,35 @@ pub(in crate::cxxqt_object) fn commit_start(
         }
     }
     rust.canvas_proxy = None;
-    let matches = |request: &Request| request.path == path && request.filters == filters;
-    let source = match rust.filter_jobs.preview.take() {
-        Some(ExactPreview {
-            done: Some((request, exact)),
-            ..
-        }) if matches(&request) => Source::Filtered(Box::new(exact.layer)),
-        Some(ExactPreview {
-            running: Some((request, handle)),
-            ..
-        }) if matches(&request) => Source::Pending(handle),
+    let source = match &op {
+        ActiveOp::Filters(filters) => match rust.filter_jobs.preview.take() {
+            Some(ExactPreview {
+                done: Some((request, exact)),
+                ..
+            }) if request.path == path && request.filters == *filters => {
+                Source::Filtered(Box::new(exact.layer))
+            }
+            Some(ExactPreview {
+                running: Some((request, handle)),
+                ..
+            }) if request.path == path && request.filters == *filters => Source::Pending(handle),
+            _ => Source::Filter,
+        },
         _ => Source::Filter,
     };
     let selection = rust.session.selection.clone();
     let target = rust.layer_target.clone();
     let history = std::mem::take(&mut rust.session.history);
     let gpu = rust.gpu_compute;
+    let delay = rust.filter_jobs.commit_delay_for_test;
     let handle = std::thread::spawn(move || {
-        commit(
-            doc, history, target, &path, &filters, source, mask, &selection, &label, gpu,
-        )
+        let committed = commit(
+            doc, history, target, &path, op, source, mask, &selection, &label, gpu,
+        );
+        if delay > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(delay));
+        }
+        committed
     });
     rust.filter_jobs.commit = Some(CommitJob {
         handle,
@@ -390,7 +455,7 @@ fn commit(
     mut history: History,
     target: LayerTarget,
     path: &str,
-    filters: &[Filter],
+    op: ActiveOp,
     source: Source,
     mask: Option<LayerMask>,
     selection: &Option<Selection>,
@@ -401,9 +466,9 @@ fn commit(
         Source::Filtered(layer) => Ok(*layer),
         Source::Pending(handle) => match handle.join().ok().flatten() {
             Some(exact) => Ok(exact.layer),
-            None => filter_layer(&doc, path, filters, mask.as_ref(), gpu),
+            None => apply_op(&doc, path, &op, mask.as_ref(), gpu),
         },
-        Source::Filter => filter_layer(&doc, path, filters, mask.as_ref(), gpu),
+        Source::Filter => apply_op(&doc, path, &op, mask.as_ref(), gpu),
     };
     let layer = match filtered {
         Ok(layer) => layer,
@@ -582,6 +647,12 @@ fn filter_stack_commit_start_inner(
 }
 
 impl FilterJobs {
+    /// Drop every pending preview and commit. Detached workers finish unobserved.
+    pub(in crate::cxxqt_object) fn cancel_all(&mut self) {
+        self.preview = None;
+        self.commit = None;
+    }
+
     /// Whether a started commit is still running on its worker.
     pub(in crate::cxxqt_object) fn commit_running(&self) -> bool {
         self.commit
@@ -710,6 +781,10 @@ fn filter_exact_preview_busy(mut view: Pin<&mut PictureView>) -> bool {
 
 fn filter_exact_preview_cancel(mut view: Pin<&mut PictureView>) {
     view.as_mut().rust_mut().filter_jobs.preview = None;
+}
+
+fn filter_exact_preview_set_delay(mut view: Pin<&mut PictureView>, ms: u64) {
+    view.as_mut().rust_mut().filter_jobs.exact_delay_for_test = ms;
 }
 
 #[allow(clippy::too_many_arguments)]

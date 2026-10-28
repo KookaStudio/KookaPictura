@@ -603,6 +603,178 @@ fn geometry_change_uses_a_full_anchor_and_still_undoes() {
 }
 
 #[test]
+fn structural_captures_retain_only_new_planes() {
+    let (w, h) = (32u32, 24u32);
+    let mut live = doc(w, h, 3);
+    live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
+    let mut history = History::default();
+    let selection = None;
+    let target = LayerTarget::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    let base = history.retained_plane_bytes();
+
+    let at = pictura_render::add_layer(&mut live, -1, "added 0");
+    assert!(at >= 0);
+    let layer_bytes: usize = live.layers[at as usize]
+        .channels
+        .iter()
+        .map(|c| c.data.len())
+        .sum();
+    history.capture_live(&mut live, &selection, &target, "New Layer");
+    for i in 1..20 {
+        assert!(pictura_render::add_layer(&mut live, -1, &format!("added {i}")) >= 0);
+        history.capture_live(&mut live, &selection, &target, "New Layer");
+    }
+
+    let retained = history.retained_plane_bytes();
+    assert!(
+        retained <= base + 20 * layer_bytes,
+        "retained {retained} bytes exceeds base {base} + 20 layers of {layer_bytes}"
+    );
+    let current = &history.current.as_ref().expect("current").doc;
+    assert!(
+        shares_no_plane(&live, current),
+        "live shares the current state"
+    );
+    for entry in &history.states {
+        if let Stored::Full(snapshot) = &entry.stored {
+            assert!(
+                shares_no_plane(&live, &snapshot.doc),
+                "live shares a full state"
+            );
+        }
+    }
+}
+
+#[test]
+fn undoing_a_structural_edit_keeps_the_live_planes() {
+    let (w, h) = (32u32, 24u32);
+    let mut live = doc(w, h, 3);
+    live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
+    let mut selection: Option<Selection> = None;
+    let mut target = LayerTarget::default();
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    let open = live.clone();
+    assert!(pictura_render::add_layer(&mut live, -1, "added") >= 0);
+    history.capture_live(&mut live, &selection, &target, "New Layer");
+    let before = live.clone();
+
+    assert_eq!(
+        history.undo_live(&mut live, &mut selection, &mut target),
+        Some(Restored::Everywhere)
+    );
+    assert!(live == open, "undo restores the pre-add document");
+    assert!(
+        live.composite.data.shares(&before.composite.data),
+        "undo keeps the live composite"
+    );
+    assert!(
+        live.layers[0].channels[0]
+            .data
+            .shares(&before.layers[0].channels[0].data),
+        "undo keeps the live layer plane"
+    );
+    let mut before_planes = Vec::new();
+    planes::each_plane(&before, &mut |p, _, _| before_planes.push(p.clone()));
+    let mut index = 0;
+    planes::each_plane(&live, &mut |p, _, _| {
+        assert!(
+            p.is_empty() || p.shares(&before_planes[index]),
+            "live plane {index} was copied instead of reused"
+        );
+        index += 1;
+    });
+    assert!(
+        index < before_planes.len(),
+        "the added layer's planes are gone"
+    );
+    let current = &history.current.as_ref().expect("current").doc;
+    assert!(shares_no_plane(&live, current));
+    for entry in &history.states {
+        if let Stored::Full(snapshot) = &entry.stored {
+            assert!(shares_no_plane(&live, &snapshot.doc));
+        }
+    }
+}
+
+#[test]
+fn structural_capture_with_a_duplicated_layer_round_trips() {
+    let (w, h) = (24u32, 16u32);
+    let mut live = doc(w, h, 5);
+    live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 2)]);
+    let mut selection: Option<Selection> = None;
+    let mut target = LayerTarget::default();
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    let open = live.clone();
+    assert!(pictura_render::duplicate_layer(&mut live, 0) > 0);
+    history.capture_live(&mut live, &selection, &target, "Duplicate Layer");
+    let duplicated = live.clone();
+    assert!(pictura_render::add_layer(&mut live, -1, "added") >= 0);
+    history.capture_live(&mut live, &selection, &target, "New Layer");
+    let after = live.clone();
+
+    assert_eq!(
+        history.undo_live(&mut live, &mut selection, &mut target),
+        Some(Restored::Everywhere)
+    );
+    assert!(live == duplicated, "undo restores the duplicated state");
+    assert_eq!(
+        history.undo_live(&mut live, &mut selection, &mut target),
+        Some(Restored::Everywhere)
+    );
+    assert!(live == open, "undo restores the open state");
+    assert_eq!(
+        history.redo_live(&mut live, &mut selection, &mut target),
+        Some(Restored::Everywhere)
+    );
+    assert!(live == duplicated, "redo restores the duplicated state");
+    assert_eq!(
+        history.redo_live(&mut live, &mut selection, &mut target),
+        Some(Restored::Everywhere)
+    );
+    assert!(live == after, "redo restores the added state");
+    let current = &history.current.as_ref().expect("current").doc;
+    assert!(shares_no_plane(&live, current));
+}
+
+#[test]
+fn a_capture_after_a_duplicate_stays_a_delta() {
+    let (w, h) = (24u32, 16u32);
+    let mut live = doc(w, h, 5);
+    live.layers = pictura_core::LayerStack::from_layers(vec![
+        model_layer("base", w, h, 2),
+        model_layer("other", w, h, 9),
+    ]);
+    let mut selection: Option<Selection> = None;
+    let mut target = LayerTarget::default();
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    assert!(pictura_render::duplicate_layer(&mut live, 0) > 0);
+    history.capture_live(&mut live, &selection, &target, "Duplicate Layer");
+    let anchors = history.anchor_count();
+    let duplicate_byte = live.layers[1].channels[0].data[0];
+
+    let other_byte = live.layers[2].channels[0].data[0];
+    live.layers[2].channels[0].data[0] = other_byte.wrapping_add(1);
+    live.composite.data[0] = other_byte.wrapping_add(2);
+    history.capture_live(&mut live, &selection, &target, "Paint");
+
+    assert_eq!(history.anchor_count(), anchors, "paint must stay a delta");
+    assert_eq!(
+        live.layers[1].channels[0].data[0], duplicate_byte,
+        "the duplicate keeps its byte after an unrelated layer is painted"
+    );
+    assert!(matches!(
+        history.undo_live(&mut live, &mut selection, &mut target),
+        Some(Restored::Region(_))
+    ));
+    let current = &history.current.as_ref().expect("current").doc;
+    assert!(shares_no_plane(&live, current));
+}
+
+#[test]
 fn paint_commit_undo_restores_the_prior_pixels() {
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
@@ -992,6 +1164,11 @@ fn live_restores_match_a_full_snapshot_history() {
                         let _ = live.layers.pop();
                     }
                     7 => live.layers[0].opacity = rng.next() as u8,
+                    8 if live.layers.len() > 1 && rng.below(2) == 0 => {
+                        let from = rng.below(live.layers.len());
+                        let to = rng.below(live.layers.len() + 1);
+                        let _ = live.layers.move_node(&[from], &[], to);
+                    }
                     _ => selection = Some(Selection::rect(w, h, 2, 3, 1 + rng.below(20) as i32, 4)),
                 }
                 history.capture_live(&mut live, &selection, &target, "Edit");

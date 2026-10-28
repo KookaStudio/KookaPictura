@@ -308,8 +308,11 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       EXIF profile search over an in-tree profile format; camera (3,860
       bodies) and lens (lensfun's list) catalogues for the Search Criteria,
       lenses filtered by the photo's focal length
-- [ ] Lens Correction correction profiles for real lenses and sub-profiles
-      (#932)
+- [x] Lens Correction profiles for real lenses (#932): the system's lensfun
+      database read at runtime (none bundled) and user profiles; sub-profiles
+      by focal length, f-stop, and focus distance with the right-click menu;
+      Prefer RAW Profiles; settings carry the resolved coefficients; Search
+      Online and Save Online Profile Locally stay disabled
 - [ ] Lens Correction Save/Load Settings and Set Lens Default (#933)
 - [x] Lens Correction as a Smart Filter (#934): an embedded Smart Object
       attaches a Lens Correction smart filter instead of filtering the proxy

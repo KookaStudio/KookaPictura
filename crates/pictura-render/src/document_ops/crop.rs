@@ -538,6 +538,7 @@ mod tests {
             depth: BitDepth::Sixteen,
             rect: doc.layers[0].rect,
             planes: vec![(0, Samples::U16(vec![0; 16]))],
+            working_idents: [0; 3],
         });
 
         assert!(crop_document(&mut doc, 1, 1, 2, 2));
@@ -640,6 +641,7 @@ mod tests {
             depth: BitDepth::Sixteen,
             rect: full(8, 8),
             planes: Vec::new(),
+            working_idents: [0; 3],
         });
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         assert!(crop_document(&mut doc, 2, 2, 4, 4));

@@ -5,14 +5,17 @@
 //! tilt for the perspective sliders, all in one resample.
 //! *(approximation: behavioural parity only)*
 //!
-//! ponytail: profiles carry one model each (no focal-length, f-stop, or
-//! focus-distance sub-profiles), and the bundled set is a synthetic test
-//! profile; the camera and lens catalogues name what exists but carry no
-//! correction data. No GPU path.
+//! Real profiles come from the system's lensfun database at runtime
+//! (`lensfun.rs`, #932); the bundled set is one synthetic test profile.
+//! ponytail: one sub-profile at the nearest calibration, no interpolation
+//! between them; no GPU path.
 
 mod catalog;
+mod lensfun;
 mod map;
 mod profile;
+#[cfg(test)]
+mod profile_tests;
 mod render;
 #[cfg(test)]
 mod tests;
@@ -25,8 +28,11 @@ pub use catalog::{
     camera_models, cameras, find_camera, find_lens, find_make, lenses, lenses_for, makes,
     parse_lens_name, CameraSpec, LensSpec,
 };
+pub use lensfun::parse_lensfun;
 pub use map::LensMap;
-pub use profile::{builtin_profiles, match_profiles, parse_profiles, LensProfile};
+pub use profile::{
+    builtin_profiles, match_profiles, parse_profiles, pick_subprofile, LensProfile, SubProfile,
+};
 pub use render::LensSource;
 
 /// How blank areas left by the correction are filled.
@@ -40,15 +46,16 @@ pub enum LensEdge {
     White,
 }
 
-/// A profile's coefficients, already gated by the Auto tab's checkboxes.
+/// A profile's coefficients, already gated by the Auto tab's checkboxes,
+/// on the radius `r` over the layer's half-diagonal.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LensModel {
-    /// Brown–Conrady `k1 k2 k3` on the radius over the half-diagonal:
-    /// an undistorted point at radius `r` shows source radius
-    /// `r · (1 + k1 r² + k2 r⁴ + k3 r⁶)`.
-    pub distortion: [f64; 3],
-    /// Radial scale of the red, green, and blue samples (1.0 = none).
-    pub ca_scale: [f64; 3],
+    /// An undistorted point at radius `r` shows source radius
+    /// `r · (1 + c1 r + c2 r² + … + c6 r⁶)`, as `[c1 … c6]`.
+    pub distortion: [f64; 6],
+    /// The red, green, and blue samples' radial scale `v + c r + b r²`, as
+    /// `[v, c, b]` (`[1, 0, 0]` = none).
+    pub ca: [[f64; 3]; 3],
     /// The lens falloff `1 + v1 r² + v2 r⁴ + v3 r⁶`, which the correction
     /// divides out.
     pub vignette: [f64; 3],
@@ -56,10 +63,57 @@ pub struct LensModel {
 
 impl LensModel {
     pub const NONE: LensModel = LensModel {
-        distortion: [0.0; 3],
-        ca_scale: [1.0; 3],
+        distortion: [0.0; 6],
+        ca: [[1.0, 0.0, 0.0]; 3],
         vignette: [0.0; 3],
     };
+
+    /// The slot count of [`Self::to_slots`].
+    pub const SLOTS: usize = 18;
+
+    /// Brown–Conrady `k1 k2 k3` (on `r², r⁴, r⁶`) as distortion terms.
+    pub const fn brown(k: [f64; 3]) -> [f64; 6] {
+        [0.0, k[0], 0.0, k[1], 0.0, k[2]]
+    }
+
+    /// The model for an image whose half-diagonal is `t` times the one the
+    /// coefficients were measured on: each `rⁱ` term scales by `tⁱ`.
+    pub fn rescaled(&self, t: f64) -> LensModel {
+        let mut out = *self;
+        for (i, c) in out.distortion.iter_mut().enumerate() {
+            *c *= t.powi(i as i32 + 1);
+        }
+        for ca in &mut out.ca {
+            ca[1] *= t;
+            ca[2] *= t * t;
+        }
+        for (i, v) in out.vignette.iter_mut().enumerate() {
+            *v *= t.powi(2 * (i as i32 + 1));
+        }
+        out
+    }
+
+    /// Distortion, the three channels' CA, then the vignette.
+    pub fn to_slots(&self) -> [f64; Self::SLOTS] {
+        let mut out = [0.0; Self::SLOTS];
+        out[..6].copy_from_slice(&self.distortion);
+        for (c, ca) in self.ca.iter().enumerate() {
+            out[6 + 3 * c..9 + 3 * c].copy_from_slice(ca);
+        }
+        out[15..].copy_from_slice(&self.vignette);
+        out
+    }
+
+    /// The inverse of [`Self::to_slots`]; `None` for a short slice.
+    pub fn from_slots(v: &[f64]) -> Option<Self> {
+        let v: &[f64; Self::SLOTS] = v.get(..Self::SLOTS)?.try_into().ok()?;
+        let three = |i: usize| [v[i], v[i + 1], v[i + 2]];
+        Some(LensModel {
+            distortion: [v[0], v[1], v[2], v[3], v[4], v[5]],
+            ca: [three(6), three(9), three(12)],
+            vignette: three(15),
+        })
+    }
 }
 
 /// The dialog's settings. Slider values use the dialog's own ranges.
@@ -108,27 +162,37 @@ impl Default for LensCorrectionParams {
 impl LensCorrectionParams {
     /// The dialog's slot count: a parameter set round-trips through this many
     /// values, in the order the `lens-correction` kind stores them.
-    pub const SLOTS: usize = 16;
+    pub const SLOTS: usize = 36;
+
+    /// The first profile slot after the dialog's 16: the sub-profile index,
+    /// whether coefficients follow, then [`LensModel::to_slots`].
+    pub const PROFILE_SLOTS: usize = 16;
 
     /// Build the parameters from the dialog's [`Self::SLOTS`] slots. `None`
-    /// for a wrong count, a non-finite value, or a profile id that is not in
-    /// the bundled set.
+    /// for a wrong count or a non-finite value. The profile is the stored
+    /// coefficients when the slots carry them; otherwise id 1 is the bundled
+    /// profile (a record from before the coefficients were stored) and any
+    /// other non-zero id is refused.
     pub fn from_slots(values: &[f64]) -> Option<Self> {
         if values.len() != Self::SLOTS || values.iter().any(|v| !v.is_finite()) {
             return None;
         }
         let on = |i: usize| values[i] >= 0.5;
         let id = values[5].round();
-        let profile = if id <= 0.0 {
+        let stored = if on(Self::PROFILE_SLOTS + 1) {
+            LensModel::from_slots(&values[Self::PROFILE_SLOTS + 2..])
+        } else if id <= 0.0 {
             None
+        } else if id == 1.0 {
+            Some(builtin_profiles().first()?.subs.first()?.coefficients)
         } else {
-            let p = builtin_profiles().get(id as usize - 1)?.coefficients;
-            Some(LensModel {
-                distortion: if on(0) { p.distortion } else { [0.0; 3] },
-                ca_scale: if on(1) { p.ca_scale } else { [1.0; 3] },
-                vignette: if on(2) { p.vignette } else { [0.0; 3] },
-            })
+            return None;
         };
+        let profile = stored.map(|p| LensModel {
+            distortion: if on(0) { p.distortion } else { [0.0; 6] },
+            ca: if on(1) { p.ca } else { LensModel::NONE.ca },
+            vignette: if on(2) { p.vignette } else { [0.0; 3] },
+        });
         let slider = |i: usize| values[i].clamp(-100.0, 100.0);
         Some(Self {
             profile,

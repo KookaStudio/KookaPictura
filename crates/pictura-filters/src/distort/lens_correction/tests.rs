@@ -338,7 +338,7 @@ fn edge_extension_repeats_the_edge() {
 fn pincushion(auto_scale: bool) -> LensCorrectionParams {
     LensCorrectionParams {
         profile: Some(LensModel {
-            distortion: [0.12, 0.0, 0.0],
+            distortion: LensModel::brown([0.12, 0.0, 0.0]),
             ..LensModel::NONE
         }),
         auto_scale,
@@ -414,7 +414,7 @@ fn builtin_profiles_parse() {
     let all = builtin_profiles();
     assert_eq!(all.len(), 1);
     assert_eq!(all[0].make, "ACME Cameras");
-    assert!(all[0].coefficients.distortion[0] < 0.0);
+    assert!(all[0].subs[0].coefficients.distortion[1] < 0.0);
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn profile_parse_reports_the_line() {
     assert!(parse_profiles("[profile]\nname = A\n").is_err());
     let ok = parse_profiles("# c\n[profile]\nname = A # x\nmake = B\nca = 1 1 1\n").unwrap();
     assert_eq!(ok[0].name, "A");
-    assert_eq!(ok[0].coefficients, LensModel::NONE);
+    assert_eq!(ok[0].subs[0].coefficients, LensModel::NONE);
 }
 
 #[test]
@@ -442,24 +442,25 @@ fn profiles_match_make_then_model_and_lens() {
                 [profile]\nname = Y\nmake = Acme\nmodel = Two\nlens = L2\n\
                 [profile]\nname = X\nmake = Other\nmodel = One\nlens = L1\n";
     let all = parse_profiles(text).unwrap();
-    assert_eq!(match_profiles(&all, "acme", "one", ""), vec![0]);
-    assert_eq!(match_profiles(&all, "ACME", "", ""), vec![1, 0]);
-    assert_eq!(match_profiles(&all, "Acme", "Two", "L1"), vec![0, 1]);
-    assert!(match_profiles(&all, "", "One", "L1").is_empty());
-    assert!(match_profiles(&all, "Nikon", "", "").is_empty());
+    let find = |make, model, lens| match_profiles(&all, make, model, lens, None, false);
+    assert_eq!(find("acme", "one", ""), vec![0]);
+    assert_eq!(find("ACME", "", ""), vec![1, 0]);
+    assert_eq!(find("Acme", "Two", "L1"), vec![0, 1]);
+    assert!(find("", "One", "L1").is_empty());
+    assert!(find("Nikon", "", "").is_empty());
     let acme = builtin_profiles();
     assert_eq!(
-        match_profiles(acme, "ACME Cameras", "ACME One", ""),
+        match_profiles(acme, "ACME Cameras", "ACME One", "", None, false),
         vec![0]
     );
 }
 
 #[test]
 fn profile_composes_with_custom() {
-    let profile = builtin_profiles()[0].coefficients;
+    let profile = builtin_profiles()[0].subs[0].coefficients;
     let vignette_only = LensModel {
-        distortion: [0.0; 3],
-        ca_scale: [1.0; 3],
+        distortion: [0.0; 6],
+        ca: LensModel::NONE.ca,
         ..profile
     };
     // The profile's falloff is divided out: corners brighten.

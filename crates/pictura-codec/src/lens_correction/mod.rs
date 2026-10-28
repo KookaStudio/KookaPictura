@@ -19,16 +19,25 @@ pub const LENS_CORRECTION_FILTER_ID: i32 = 0x5054_4C43; // "PTLC"
 /// The filter's display name as stored in `filterFXList[].Nm  `.
 pub const LENS_CORRECTION_FILTER_NAME: &str = "Lens Correction";
 
-/// The opening slot values, in `LensCorrectionParams::SLOTS` order.
-pub const DEFAULT_SLOTS: [f64; 16] = [
-    1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0,
+/// The opening slot values, in `LensCorrectionParams::SLOTS` order: the
+/// dialog's 16, then the profile's sub-profile index, its coefficients flag
+/// (off, so a record written before #932 resolves its profile by id), and
+/// the identity coefficients.
+pub const DEFAULT_SLOTS: [f64; 36] = [
+    1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0, //
+    0.0, 0.0, //
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, //
+    1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, //
+    0.0, 0.0, 0.0,
 ];
 
-/// Each slot's descriptor key, in order. Slots 0..=3 are booleans, 4 and 5 are
-/// integers, and the rest are doubles.
-const SLOT_KEYS: [&[u8]; 16] = [
+/// Each slot's descriptor key, in order. Slots 0..=3 and 17 are booleans, 4,
+/// 5, and 16 are integers, and the rest are doubles.
+const SLOT_KEYS: [&[u8]; 36] = [
     b"Dstn", b"CAOn", b"VgnO", b"AScl", b"Edge", b"Prof", b"RDis", b"FRCY", b"FGMG", b"FBYL",
-    b"VigA", b"VigM", b"PerV", b"PerH", b"Angl", b"Scal",
+    b"VigA", b"VigM", b"PerV", b"PerH", b"Angl", b"Scal", b"SubP", b"PCoe", b"PDs1", b"PDs2",
+    b"PDs3", b"PDs4", b"PDs5", b"PDs6", b"PCR0", b"PCR1", b"PCR2", b"PCG0", b"PCG1", b"PCG2",
+    b"PCB0", b"PCB1", b"PCB2", b"PVg1", b"PVg2", b"PVg3",
 ];
 
 /// The dialog's slots as a `Fltr` descriptor object.
@@ -45,8 +54,8 @@ pub(crate) fn encode_lens_correction_fltr(slots: &[f64]) -> DescValue {
         .enumerate()
         .map(|(i, key)| {
             let value = match i {
-                0..=3 => DescValue::Bool(slot(i) >= 0.5),
-                4 | 5 => DescValue::Long(slot(i).round() as i32),
+                0..=3 | 17 => DescValue::Bool(slot(i) >= 0.5),
+                4 | 5 | 16 => DescValue::Long(slot(i).round() as i32),
                 _ => DescValue::Double(slot(i)),
             };
             (key.to_vec(), value)

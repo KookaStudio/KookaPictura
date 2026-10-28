@@ -11,13 +11,15 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat, QString, QStringList};
 use pictura_codec::Exif;
 use pictura_filters::{
-    builtin_lens_profiles, camera_models, catalog_makes, find_camera, find_camera_make, find_lens,
-    lenses_for, match_lens_profiles, straighten_angle, LensCorrectionParams, LensMap, LensSource,
+    camera_models, catalog_makes, find_camera, find_camera_make, find_lens, lenses_for,
+    match_lens_profiles, pick_subprofile, straighten_angle, LensCorrectionParams, LensMap,
+    LensSource,
 };
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
 use super::super::qobject::PictureView;
 use super::adaptive_wide_angle::exif_text;
+use super::lens_profiles::{by_id, installed};
 use super::lens_supported;
 
 #[cxx_qt::bridge]
@@ -74,11 +76,31 @@ pub mod ffi {
         /// what lensfun has calibrated for it; empty when nothing is known.
         fn lc_criteria_info(make: &QString, model: &QString, lens: &QString) -> QString;
 
-        /// Profile ids (1-based) that suit the criteria, best first.
-        fn lc_match_profiles(make: &QString, model: &QString, lens: &QString) -> Vec<i32>;
+        /// The ids of the installed profiles that suit the criteria, best
+        /// first; `prefer_raw` ranks raw profiles ahead of equal matches.
+        fn lc_match_profiles(
+            make: &QString,
+            model: &QString,
+            lens: &QString,
+            prefer_raw: bool,
+        ) -> Vec<i32>;
 
-        /// Profile `id`'s name, or empty when there is no such profile.
+        /// Profile `id`'s name, or empty when it is not installed.
         fn lc_profile_name(id: i32) -> QString;
+
+        /// Profile `id`'s sub-profiles as labels ("50 mm, f/2.8, 10 m"),
+        /// in index order; empty when it is not installed.
+        fn lc_subprofiles(id: i32) -> QStringList;
+
+        /// The index of profile `id`'s sub-profile nearest the photo's EXIF
+        /// focal length, f-stop, and focus distance.
+        fn lc_auto_subprofile(id: i32) -> i32;
+
+        /// The profile slots after the dialog's 16 for sub-profile `sub` of
+        /// profile `id` on the camera `make` / `model` names: the index, the
+        /// coefficients flag, and the coefficients rescaled to the camera's
+        /// crop factor. Empty when either is not installed.
+        fn lc_profile_slots(id: i32, sub: i32, make: &QString, model: &QString) -> Vec<f64>;
 
         /// Set the session's slots. False (and unchanged) when they do not
         /// map, e.g. a profile id that is not installed.
@@ -156,8 +178,11 @@ struct Session {
     stored: Vec<f64>,
     map: LensMap,
     exif: [String; 4],
-    /// The photo's focal length in millimetres, from EXIF.
+    /// The photo's focal length in millimetres, f-number, and focus
+    /// distance in metres, from EXIF.
     focal: Option<f64>,
+    aperture: Option<f64>,
+    distance: Option<f64>,
 }
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
@@ -212,13 +237,19 @@ fn lc_begin(view: &PictureView) -> bool {
             &exif_text(&exif, &[0xa434]),
             camera_settings(&exif),
         ),
-        focal: exif
-            .get(0x920a)
-            .and_then(|v| v.as_f64())
-            .filter(|f| f.is_finite() && *f > 0.0),
+        focal: exif_number(&exif, 0x920a),
+        aperture: exif_number(&exif, 0x829d),
+        distance: exif_number(&exif, 0x9206),
     };
     *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     true
+}
+
+/// A positive EXIF number.
+fn exif_number(exif: &Exif, tag: u16) -> Option<f64> {
+    exif.get(tag)
+        .and_then(|v| v.as_f64())
+        .filter(|v| v.is_finite() && *v > 0.0)
 }
 
 /// The planes a dialog session reads: `(width, height, colour, alpha)`.
@@ -312,13 +343,13 @@ fn ordered<'a>(items: impl IntoIterator<Item = &'a str>) -> QStringList {
 }
 
 fn lc_makes() -> QStringList {
-    let profiles = builtin_lens_profiles().iter().map(|p| p.make.as_str());
+    let profiles = installed().iter().map(|p| p.make.as_str());
     list(catalog_makes().into_iter().chain(profiles))
 }
 
 fn lc_models(make: &QString) -> QStringList {
     let make_s = make.to_string();
-    let profiles = builtin_lens_profiles()
+    let profiles = installed()
         .iter()
         .filter(|p| same(&p.make, make))
         .map(|p| p.model.as_str());
@@ -329,9 +360,10 @@ fn lc_lenses(make: &QString, model: &QString) -> QStringList {
     let (make_s, model_s) = (make.to_string(), model.to_string());
     let crop = find_camera(&make_s, &model_s).map(|c| c.crop);
     let focal = with_session(None, |s| s.focal);
-    let profiles = builtin_lens_profiles()
+    // A profile with no camera model suits any.
+    let profiles = installed()
         .iter()
-        .filter(|p| same(&p.make, make) && same(&p.model, model))
+        .filter(|p| same(&p.make, make) && (p.model.is_empty() || same(&p.model, model)))
         .map(|p| p.lens.as_str());
     let catalogue = lenses_for(make_s.trim(), crop, focal);
     ordered(profiles.chain(catalogue.into_iter().map(|l| l.model)))
@@ -394,23 +426,55 @@ fn lc_criteria_info(make: &QString, model: &QString, lens: &QString) -> QString 
     QString::from(info.as_str())
 }
 
-fn lc_match_profiles(make: &QString, model: &QString, lens: &QString) -> Vec<i32> {
-    match_lens_profiles(
-        builtin_lens_profiles(),
-        &make.to_string(),
-        &model.to_string(),
-        &lens.to_string(),
-    )
-    .into_iter()
-    .map(|i| i as i32 + 1)
-    .collect()
+fn lc_match_profiles(
+    make: &QString,
+    model: &QString,
+    lens: &QString,
+    prefer_raw: bool,
+) -> Vec<i32> {
+    let (make, model) = (make.to_string(), model.to_string());
+    let crop = find_camera(&make, &model).map(|c| c.crop);
+    let all = installed();
+    match_lens_profiles(all, &make, &model, &lens.to_string(), crop, prefer_raw)
+        .into_iter()
+        .map(|i| all[i].id())
+        .collect()
 }
 
 fn lc_profile_name(id: i32) -> QString {
-    usize::try_from(id - 1)
-        .ok()
-        .and_then(|i| builtin_lens_profiles().get(i))
-        .map_or_else(QString::default, |p| QString::from(p.name.as_str()))
+    by_id(id).map_or_else(QString::default, |p| QString::from(p.name.as_str()))
+}
+
+fn lc_subprofiles(id: i32) -> QStringList {
+    let mut out = QStringList::default();
+    for sub in by_id(id).map_or(&[][..], |p| p.subs.as_slice()) {
+        out.append(QString::from(sub.label().as_str()));
+    }
+    out
+}
+
+fn lc_auto_subprofile(id: i32) -> i32 {
+    let Some(p) = by_id(id) else {
+        return 0;
+    };
+    let (focal, aperture, distance) =
+        with_session((None, None, None), |s| (s.focal, s.aperture, s.distance));
+    pick_subprofile(&p.subs, focal, aperture, distance) as i32
+}
+
+/// The profile slots after the dialog's 16 for a resolved sub-profile.
+fn profile_slots(id: i32, sub: i32, make: &str, model: &str) -> Vec<f64> {
+    let Some(s) = by_id(id).and_then(|p| p.subs.get(usize::try_from(sub).ok()?)) else {
+        return Vec::new();
+    };
+    let crop = find_camera(make, model).map(|c| c.crop);
+    let mut out = vec![f64::from(sub), 1.0];
+    out.extend(s.resolve(crop).to_slots());
+    out
+}
+
+fn lc_profile_slots(id: i32, sub: i32, make: &QString, model: &QString) -> Vec<f64> {
+    profile_slots(id, sub, &make.to_string(), &model.to_string())
 }
 
 fn lc_set(values: &[f64]) -> bool {
@@ -473,13 +537,11 @@ fn lc_finish(keep: bool) -> Vec<f64> {
 mod tests {
     use super::*;
     use pictura_codec::parse_exif;
-    use pictura_filters::{LensEdge, LensModel};
+    use pictura_filters::{builtin_lens_profiles, LensEdge, LensModel};
 
     /// The descriptor's opening slots.
     fn defaults() -> Vec<f64> {
-        vec![
-            1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0,
-        ]
+        pictura_codec::LENS_CORRECTION_DEFAULT_SLOTS.to_vec()
     }
 
     #[test]
@@ -517,19 +579,22 @@ mod tests {
         assert!(params_of(&v).unwrap().profile.is_some());
         v[5] = 2.0;
         assert!(params_of(&v).is_none());
+        // Stored coefficients map whatever the id.
+        v[17] = 1.0;
+        assert!(params_of(&v).unwrap().profile.is_some());
     }
 
     #[test]
     fn checkboxes_gate_the_profile_parts() {
-        let full = builtin_lens_profiles()[0].coefficients;
+        let full = builtin_lens_profiles()[0].subs[0].coefficients;
         let mut v = defaults();
         v[5] = 1.0;
         v[0] = 0.0;
         v[1] = 1.0;
         v[2] = 1.0;
         let p = params_of(&v).unwrap().profile.unwrap();
-        assert_eq!(p.distortion, [0.0; 3]);
-        assert_eq!(p.ca_scale, full.ca_scale);
+        assert_eq!(p.distortion, [0.0; 6]);
+        assert_eq!(p.ca, full.ca);
         assert_eq!(p.vignette, full.vignette);
         v[1] = 0.0;
         v[2] = 0.0;

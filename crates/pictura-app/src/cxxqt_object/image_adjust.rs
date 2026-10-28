@@ -13,6 +13,7 @@ mod gradient_map;
 mod image_mode;
 mod image_ops;
 mod image_size;
+pub(in crate::cxxqt_object) mod jobs;
 mod new_document;
 
 use super::adjustment_edit::{format_points, page_rows, parse_points};

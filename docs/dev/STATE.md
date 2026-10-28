@@ -11,6 +11,18 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **A layer click resolves a pending transform** (#905, OpenSpec change
+  `apply-pending-transform-on-layer-click`). The `#750` lock no longer disables
+  the whole Layers panel: its layer list stays selectable, and a change of the
+  active layer — a row click, a keyboard row move, a right-click, or a tree
+  gesture — runs the same "Apply the transformation?" prompt a tool switch does
+  (Apply commits one state, Don't Apply cancels, Cancel keeps the transform and
+  the selection; a plain click that does not change the active layer asks
+  nothing). The panel's editing controls (blend, opacity, fill, locks, and the
+  action strip) stay disabled until the transform is resolved, so a lifted
+  transform's commit/cancel still cannot discard a panel edit. The frame wires
+  the panel's resolver to `ToolController::resolvePendingTransform`
+  (`frame_transform_lock.cpp`). Tests: `tst_transform_lock`.
 - **Render performance bundle** (#379, #651, #745, #746, branch
   `perf/379-render-performance-bundle`, OpenSpec changes
   `render-performance-instrumentation` and `gpu-eligibility-from-dispatch`).
@@ -331,8 +343,9 @@ Snapshot for resuming after a context break. Update after each milestone.
     `blend_into_row` before the mask applies (`pictura-render/src/text_gamma.rs`).
     The setting is process-wide, not stored on the document; Color Settings >
     More Options edits it and saves it in the session. Rasterize Type bakes the
-    curve into the layer's alpha. While it is on, the GPU compositor hands type
-    layers back to the CPU.
+    curve into the layer's alpha. The GPU compositor applies the same curve
+    table to a type layer's raster proxy; a proxy-less type layer still takes
+    the CPU (`GpuError::UnsupportedText`, counted as `type_source`).
   - **Missing fonts.** A font counts as missing when it is not the bundled
     Liberation Sans and Qt has no installed family for it (`fontIsInstalled` in
     `type_fonts.cpp`). Opening a document with missing fonts raises one
@@ -576,9 +589,10 @@ Snapshot for resuming after a context break. Update after each milestone.
     since `QTransform::map` clamps a negative one.
   - **Lock and prompt (all transforms):** while a modal transform is pending,
     the Layer menu is gated (`CommandRegistry::setBlockedProvider`, dispatch
-    refused) and the Layers panel is greyed. A tool switch, by click or
-    shortcut, asks "Apply the transformation?" (Apply / Cancel / Don't Apply);
-    headless and the control server answer Don't Apply without a modal.
+    refused) and the Layers panel's editing controls are disabled (the layer
+    list stays selectable; a layer change prompts — see #905). A tool switch, by
+    click or shortcut, asks "Apply the transformation?" (Apply / Cancel / Don't
+    Apply); headless and the control server answer Don't Apply without a modal.
   - **Inferred, not oracle-verified:** the readout sign, the base composition,
     and the pixel layout inside a crossed quad (the recording used a flat
     layer).
@@ -6064,10 +6078,11 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   4000² the composite is now dominated by the per-composite source/mask upload
   (~128 + 16 MB) after M33 removed the per-pixel assembly, while the 64 MB
   readback is ~7 ms (see `docs/dev/canvas-compositing-plan.md` §2.1). Resident
-  per-layer GPU source buffers have since landed (a stamp-keyed LRU in
-  `crates/pictura-render/src/gpu/resident.rs`); the GPU-resident zero-copy
-  present is still deferred — it was planned as M34, which shipped as composite
-  coherence and cheap undo/redo instead.
+  per-layer GPU source buffers have since landed (document-scoped source keys,
+  whole-document-only retention, and insertion-order eviction under a byte and
+  entry cap in `crates/pictura-render/src/gpu/resident.rs`); the GPU-resident
+  zero-copy present is still deferred — it was planned as M34, which shipped as
+  composite coherence and cheap undo/redo instead.
 - M35 (`m35-cpp-region-blit`) removed both the per-pixel `QImage::set_pixel_color`
   blit and the 1 MP `REGION_REFRESH_BUDGET` fallback: the planar composite is the
   authoritative canvas, `refresh_region` signals the region, and C++
