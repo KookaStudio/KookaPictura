@@ -16,7 +16,7 @@ use pictura_core::PsdRect;
 use pictura_paint::stamp::{layer_surface, surface_from_composite};
 use pictura_render::{match_color_stats, Adjustment, MatchColorParams, MatchColorStats};
 
-use super::helpers_composite::current_buffer;
+use super::picture::picture;
 
 use self::ffi::QList_f64;
 
@@ -133,7 +133,7 @@ fn match_color_source_stats(source: &PictureView, path: &QString, use_selection:
         return Vec::new();
     };
     let image = if path.is_empty() {
-        surface_from_composite(&current_buffer(doc, rust.gpu_compute))
+        surface_from_composite(&picture(doc, rust))
     } else {
         match layer_surface(doc, &path.to_string()) {
             Some(image) => image,

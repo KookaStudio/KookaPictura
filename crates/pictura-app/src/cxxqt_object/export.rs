@@ -5,7 +5,8 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers_composite::{buffer_to_rgba_bytes, current_buffer};
+use super::helpers_composite::buffer_to_rgba_bytes;
+use super::picture::picture;
 use super::qobject::PictureView;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -113,7 +114,7 @@ pub fn export_image(
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
-    let buffer = current_buffer(doc, rust.gpu_compute);
+    let buffer = picture(doc, rust);
     let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
     let rgba = buffer_to_rgba_bytes(&srgb);
     encode_raster(

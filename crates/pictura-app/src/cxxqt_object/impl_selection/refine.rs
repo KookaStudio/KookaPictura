@@ -7,8 +7,9 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::super::helpers::active_pixel_layer;
-use super::super::helpers_composite::{current_buffer, selection_to_mask};
+use super::super::helpers_composite::selection_to_mask;
 use super::super::impl_layers::coverage_at;
+use super::super::picture::picture;
 use super::super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -244,10 +245,10 @@ fn refine_edge_available(view: &PictureView) -> bool {
 
 /// Nearest-neighbour shrink of a planar buffer so its longer side is at most
 /// `max_side`; the preview needs the look, not every pixel.
-fn shrink(buffer: pictura_core::PixelBuffer, max_side: u32) -> pictura_core::PixelBuffer {
+fn shrink(buffer: &pictura_core::PixelBuffer, max_side: u32) -> pictura_core::PixelBuffer {
     let longer = buffer.width.max(buffer.height);
     if max_side == 0 || longer <= max_side {
-        return buffer;
+        return buffer.clone();
     }
     let scale = max_side as f64 / longer as f64;
     let w = ((buffer.width as f64 * scale).round() as u32).max(1);
@@ -377,10 +378,7 @@ fn preview(
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let image = shrink(
-        current_buffer(doc, rust.gpu_compute),
-        max_side.max(0) as u32,
-    );
+    let image = shrink(&picture(doc, rust), max_side.max(0) as u32);
     let Some(mask) = source.preview_coverage(view, image.width, image.height) else {
         return Vec::new();
     };
@@ -525,7 +523,7 @@ fn apply(
         let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
-        let image = current_buffer(doc, rust.gpu_compute);
+        let image = picture(doc, rust);
         let refined = match refine(&coverage, &image, &settings) {
             Ok(refined) => refined,
             Err(_) => return false,

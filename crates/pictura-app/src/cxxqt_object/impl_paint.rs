@@ -943,8 +943,7 @@ impl qobject::PictureView {
     }
 
     pub fn is_painting(&self) -> bool {
-        self.rust().session.live.stroke().is_some()
-            || self.rust().session.live.mask_stroke().is_some()
+        self.rust().is_painting()
     }
 }
 

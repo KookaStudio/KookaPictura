@@ -7,7 +7,7 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers_composite::current_buffer;
+use super::picture::picture;
 use super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -60,10 +60,7 @@ impl super::state::PictureViewRust {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            EdgeMap::from_buffer(
-                &current_buffer(doc, rust.gpu_compute),
-                contrast.clamp(1, 100) as u32,
-            )
+            EdgeMap::from_buffer(&picture(doc, rust), contrast.clamp(1, 100) as u32)
         };
         self.session
             .live
