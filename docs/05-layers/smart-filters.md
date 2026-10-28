@@ -18,6 +18,8 @@ Any filter applied to a Smart Object becomes a **Smart Filter**. Smart Filters a
 
 **Which filters are smart-compatible (CS6):** Help says *any* Photoshop filter that has been enabled for Smart Filters, **except Extract, Liquify, Pattern Maker, and Vanishing Point**. In addition, the `Shadow/Highlight` and `Variations` **adjustments** can be applied as Smart Filters (`Image > Adjustments > Shadow/Highlight` or `Image > Adjustments > Variations`). Third-party filters that declare Smart Filter support also work. Filters applied through the **Filter Gallery** appear as a grouped entry named "Filter Gallery"; double-clicking an individual gallery entry edits it. The CS6 What's-New notes that the **Blur Gallery** effects and **Oil Paint** support Smart Objects and can be applied as Smart Filters.
 
+**Pictura exclusions:** besides Liquify and Vanishing Point, Pictura refuses **Lens Blur**, **Displace**, and **Adaptive Wide Angle** on a Smart Object (greyed out in the Filter menu, "Rasterize the Smart Object to apply …" otherwise): each reads a session resource (a depth map, a displacement map, drawn constraints) that a stored Smart Filter cannot name yet (#1001). Image > Adjustments are greyed out on a Smart Object; Shadow/Highlight and Variations as Smart Filters are #996. Linked and legacy placed Smart Objects refuse filters.
+
 **Applying:**
 1. Do one of: select the Smart Object layer for a whole-layer effect; make a selection first to constrain the effect to that area; or, for a **regular layer**, choose `Filter > Convert For Smart Filters` and `OK` (this converts the layer to a Smart Object).
 2. Choose a filter from the `Filter` menu (or `Shadow/Highlight` / `Variations`).
@@ -35,7 +37,7 @@ Any filter applied to a Smart Object becomes a **Smart Filter**. Smart Filters a
 - Delete: drag an individual filter to the Delete icon; `Layer > Smart Filters > Clear Smart Filters` removes all filters from the object.
 
 **Filter mask (one per object, shared by all its Smart Filters):**
-- Applying a Smart Filter to a Smart Object creates an empty (white) mask thumbnail on the Smart Filters line; if a selection existed at apply time, that selection becomes the mask. The mask applies to **all** Smart Filters on the layer — individual filters cannot be masked.
+- Applying a Smart Filter to a Smart Object creates an empty (white) mask thumbnail on the Smart Filters line; if a selection existed at apply time, that selection becomes the mask. With no mask the filters apply everywhere, as a white mask would; Pictura creates a mask only from a selection (the white mask without one is #1000), and a later apply with a selection keeps the existing mask *(inferred)*. The mask applies to **all** Smart Filters on the layer — individual filters cannot be masked.
 - The mask behaves like a layer mask: stored as an alpha channel (visible in the Channels panel, loadable as a selection), painted black to hide, white to show, gray for partial; can be edited with tools and can receive image adjustments/filters.
 - Masks panel controls: **Density** (opacity) and **Feathering**; `Invert`. `Mask Edge` is **not** available for filter masks.
 - Display only the mask: `Alt`/`Option`-click the mask thumbnail.

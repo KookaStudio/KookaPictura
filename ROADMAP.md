@@ -321,6 +321,21 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       their CS6 context menus (Edit Smart Filter…, Delete Filter Mask), and
       smart filter masks are read and rendered (#956); the descriptor is
       Pictura-only
+- [x] Filters on a Smart Object become Smart Filters (#984): every Filter-menu
+      filter, Last Filter and a Filter Gallery stack (one "Filter Gallery"
+      entry) append a Pictura-only Smart Filter; a selection becomes the
+      filter mask, authored as `FEid`/`FMsk` on save; Liquify, Vanishing Point,
+      Lens Blur, Displace, Adaptive Wide Angle and Image > Adjustments are
+      greyed out on a Smart Object
+- [ ] Shadow/Highlight and Variations as Smart Filters (#996)
+- [ ] Re-edit generic and Filter Gallery Smart Filters (#997)
+- [ ] Per-Smart-Filter blend mode and opacity (#998)
+- [ ] Photoshop validation of authored filter masks (#999)
+- [ ] White filter mask without a selection and Add Filter Mask (#1000)
+- [ ] Lens Blur, Displace and Adaptive Wide Angle as Smart Filters (#1001)
+- [ ] Smart Filter chain rendered off the UI thread (#1002)
+- [ ] Dialog pane preview over an existing Smart Filter chain (#1003)
+- [ ] Fade disabled on a Smart Object once Fade ships (#1004)
 - [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
       Grid Size, related planes torn off at 90° with Angle, Render Grids
 - [x] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste
