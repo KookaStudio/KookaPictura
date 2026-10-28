@@ -779,7 +779,7 @@ impl History {
     #[cfg(test)]
     pub(crate) fn retained_plane_bytes(&self) -> usize {
         fn collect(doc: &Document, out: &mut Vec<pictura_core::Plane<u8>>) {
-            planes::each_plane(doc, &mut |p, _, _| {
+            planes::each_plane(doc, &mut |p, _, _, _| {
                 if !p.is_empty() {
                     out.push(p.clone());
                 }
@@ -882,5 +882,4 @@ impl History {
 }
 
 #[cfg(test)]
-#[path = "history/tests.rs"]
 mod tests;

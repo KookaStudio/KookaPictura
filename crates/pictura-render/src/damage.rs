@@ -469,9 +469,8 @@ mod tests {
         for _ in 0..24 {
             let before = d.clone();
             let mut after = before.clone();
-            let damage: Option<PsdRect>;
             let len = before.layers.len();
-            match rng.below(11) {
+            let damage: Option<PsdRect> = match rng.below(11) {
                 0 => {
                     let i = rng.below(len);
                     let delta = if rng.below(2) == 0 { 1 } else { -1 };
@@ -481,7 +480,7 @@ mod tests {
                         continue;
                     }
                     let landed = (i as i32 + delta).clamp(0, len as i32 - 1).to_string();
-                    damage = union(before_rect, total(&after, &[&landed]));
+                    union(before_rect, total(&after, &[&landed]))
                 }
                 1 => {
                     let i = rng.below(len);
@@ -489,10 +488,10 @@ mod tests {
                     if created < 0 {
                         continue;
                     }
-                    damage = union(
+                    union(
                         total(&before, &[&i.to_string()]),
                         total(&after, &[&created.to_string()]),
-                    );
+                    )
                 }
                 2 => {
                     let i = 1 + rng.below(len.saturating_sub(1).max(1));
@@ -504,7 +503,7 @@ mod tests {
                     if crate::delete_paths_report(&mut after, &[&path]).is_empty() {
                         continue;
                     }
-                    damage = before_rect;
+                    before_rect
                 }
                 3 => {
                     let i = rng.below(len);
@@ -514,7 +513,7 @@ mod tests {
                         continue;
                     };
                     layer.visible = !layer.visible;
-                    damage = damage_rect;
+                    damage_rect
                 }
                 4 => {
                     let i = rng.below(len.saturating_sub(1).max(1));
@@ -526,7 +525,7 @@ mod tests {
                     let Some(created) = crate::group_paths(&mut after, &[&a, &b]) else {
                         continue;
                     };
-                    damage = union(before_rect, total(&after, &[&created]));
+                    union(before_rect, total(&after, &[&created]))
                 }
                 5 => {
                     let group_index = (0..len).find(|&i| before.layers[i].is_group);
@@ -546,7 +545,7 @@ mod tests {
                         .map(|offset| (group_index + offset).to_string())
                         .collect();
                     let refs: Vec<&str> = children.iter().map(String::as_str).collect();
-                    damage = union(before_rect, total(&after, &refs));
+                    union(before_rect, total(&after, &refs))
                 }
                 6 => {
                     let i = 1 + rng.below(len.saturating_sub(1).max(1));
@@ -563,7 +562,7 @@ mod tests {
                     if changed == 0 {
                         continue;
                     }
-                    damage = union(before_rect, total(&after, &[&path]));
+                    union(before_rect, total(&after, &[&path]))
                 }
                 7 => {
                     let path = "1";
@@ -572,7 +571,7 @@ mod tests {
                         continue;
                     };
                     let _ = crate::set_layer_style_value(layer, "dropShadow.size", 6.0);
-                    damage = union(before_rect, total(&after, &[path]));
+                    union(before_rect, total(&after, &[path]))
                 }
                 8 => {
                     let path = "5";
@@ -581,7 +580,7 @@ mod tests {
                         continue;
                     };
                     layer.adjustment = Some(crate::encode_brightness_contrast(30, 0));
-                    damage = union(before_rect, total(&after, &[path]));
+                    union(before_rect, total(&after, &[path]))
                 }
                 9 => {
                     let path = "5";
@@ -589,7 +588,7 @@ mod tests {
                     if !crate::set_layer_mask_feather(&mut after, path, 8.0) {
                         continue;
                     }
-                    damage = union(before_rect, total(&after, &[path]));
+                    union(before_rect, total(&after, &[path]))
                 }
                 _ => {
                     let path = "1";
@@ -602,9 +601,9 @@ mod tests {
                     } else {
                         Knockout::None
                     };
-                    damage = union(before_rect, total(&after, &[path]));
+                    union(before_rect, total(&after, &[path]))
                 }
-            }
+            };
             let before_pixels = crate::composite_rgba(&before);
             let after_pixels = crate::composite_rgba(&after);
             assert_covered(&before_pixels, &after_pixels, damage);

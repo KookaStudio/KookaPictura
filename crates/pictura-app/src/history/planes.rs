@@ -403,7 +403,7 @@ pub(super) fn hollow(doc: &Document) -> Document {
 /// stamped equal and share no tracked plane.
 pub(super) fn shared_copy(source: &mut Document, donor: &Document) -> Document {
     let mut reusable: std::collections::HashMap<u64, Plane<u8>> = std::collections::HashMap::new();
-    each_plane(donor, &mut |p, _, _| {
+    each_plane(donor, &mut |p, _, _, _| {
         if p.stamp() != 0 {
             reusable.entry(p.stamp()).or_insert_with(|| p.clone());
         }
@@ -412,7 +412,7 @@ pub(super) fn shared_copy(source: &mut Document, donor: &Document) -> Document {
     // reuse so `planes_moved`'s unique-stamp map stays meaningful.
     let mut reused = std::collections::HashSet::new();
     let mut copy = source.clone();
-    each_plane_mut(&mut copy, &mut |p, _, _| {
+    each_plane_mut(&mut copy, &mut |p, _, _, _| {
         let stamp = p.stamp();
         *p = match reusable.get(&stamp) {
             Some(plane) if !plane.shares(p) => {
