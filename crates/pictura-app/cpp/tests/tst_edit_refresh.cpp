@@ -29,6 +29,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
@@ -148,7 +149,6 @@ void EditRefreshTest::initTestCase()
 
 void EditRefreshTest::cleanup()
 {
-    qunsetenv("PICTURA_TEST_FILTER_COMMIT_DELAY_MS");
     if (window_) {
         closeAll(*window_);
     }
@@ -435,11 +435,11 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     QVERIFY(!busyLayer.isEmpty());
     busy->set_active_layer(busyLayer);
     QTest::qWait(200);
-    qputenv("PICTURA_TEST_FILTER_COMMIT_DELAY_MS", "1000");
+    pictura::image_adjust_apply_set_delay(*busy, 1000);
     const bool started = pictura::filter_commit_start(
         *busy, QStringLiteral("gaussian-blur"), QList<double>{8.0},
         QStringLiteral("Gaussian Blur"));
-    qunsetenv("PICTURA_TEST_FILTER_COMMIT_DELAY_MS");
+    pictura::image_adjust_apply_set_delay(*busy, 0);
     QVERIFY2(started, "filter commit started");
     QVERIFY2(pictura::filter_commit_running(*busy), "filter commit did not start");
     window_->setActiveDocumentIndex(0);
@@ -483,10 +483,10 @@ void EditRefreshTest::aDeferredBindSurvivesClosingTheBoundDocument()
     busy->set_active_layer(layer);
     QTest::qWait(250);
 
-    qputenv("PICTURA_TEST_FILTER_COMMIT_DELAY_MS", "1000");
+    pictura::image_adjust_apply_set_delay(*busy, 1000);
     QVERIFY(pictura::filter_commit_start(*busy, QStringLiteral("gaussian-blur"),
                                          QList<double>{8.0}, QStringLiteral("Gaussian Blur")));
-    qunsetenv("PICTURA_TEST_FILTER_COMMIT_DELAY_MS");
+    pictura::image_adjust_apply_set_delay(*busy, 0);
     QVERIFY(pictura::filter_commit_running(*busy));
     window_->setActiveDocumentIndex(0);
     QTest::qWait(200);
