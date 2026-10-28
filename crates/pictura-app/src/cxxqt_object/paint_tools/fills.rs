@@ -10,7 +10,8 @@ use super::super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, luma_u8, paint_mode_from,
     rgba_from_argb,
 };
-use super::super::helpers_composite::{crop_selection, current_buffer};
+use super::super::helpers_composite::crop_selection;
+use super::super::picture::picture;
 use super::super::qobject::PictureView;
 use super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
@@ -231,7 +232,7 @@ fn bucket_fill_at(
     let tolerance = tolerance.clamp(0, 255) as u8;
     apply(view, "Paint Bucket", |doc, path, rust| {
         let surface = if all_layers {
-            surface_from_composite(&current_buffer(doc, rust.gpu_compute))
+            surface_from_composite(&picture(doc, rust))
         } else {
             layer_surface(doc, path)?
         };

@@ -4,7 +4,8 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
-use super::super::helpers_composite::{buffer_to_rgba_bytes, current_buffer};
+use super::super::helpers_composite::buffer_to_rgba_bytes;
+use super::super::picture::picture;
 use super::super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -63,7 +64,7 @@ fn duplicate_into(
         return false;
     };
     let doc = if merged {
-        let buffer = current_buffer(src, rust.gpu_compute);
+        let buffer = picture(src, rust);
         let rgba = buffer_to_rgba_bytes(&buffer);
         Document::from_rgba(&name.to_string(), src.width, src.height, &rgba)
     } else {
@@ -92,7 +93,7 @@ fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
         }
     }
     let Some((rgba, width, height)) = view.rust().session.doc.as_ref().map(|doc| {
-        let buffer = current_buffer(doc, view.rust().gpu_compute);
+        let buffer = picture(doc, view.rust());
         (buffer_to_rgba_bytes(&buffer), doc.width, doc.height)
     }) else {
         return false;

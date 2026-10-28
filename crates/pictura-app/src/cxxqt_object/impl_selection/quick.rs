@@ -5,7 +5,7 @@
 
 use super::super::edit::Edit;
 use super::super::helpers::combine_mode_from;
-use super::super::helpers_composite::current_buffer;
+use super::super::picture::picture;
 use super::super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -50,14 +50,7 @@ impl qobject::PictureView {
             return None;
         }
         let tolerance = tolerance.clamp(0, 255) as u8;
-        pictura_select::magic_wand(
-            &current_buffer(doc, rust.gpu_compute),
-            x as u32,
-            y as u32,
-            tolerance,
-            true,
-        )
-        .ok()
+        pictura_select::magic_wand(&picture(doc, rust), x as u32, y as u32, tolerance, true).ok()
     }
 
     pub fn quick_select(

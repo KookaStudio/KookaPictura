@@ -1,12 +1,13 @@
 use super::edit::Edit;
 use super::helpers::*;
 use super::helpers_composite::*;
+use super::picture::picture;
 use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_codec::buffer_to_srgb;
-use pictura_core::{Channel, ColorMode, Document, PsdRect};
+use pictura_core::{Channel, ColorMode, Document, PixelBuffer, PsdRect};
 use pictura_select::{CombineMode, Selection};
 
 mod bridge;
@@ -351,7 +352,7 @@ impl qobject::PictureView {
                 return false;
             };
             let tolerance = tolerance.clamp(0, 255) as u8;
-            match pictura_select::grow(sel, &current_buffer(doc, rust.gpu_compute), tolerance) {
+            match pictura_select::grow(sel, &picture(doc, rust), tolerance) {
                 Ok(selection) => selection,
                 Err(_) => return false,
             }
@@ -370,7 +371,7 @@ impl qobject::PictureView {
                 return false;
             };
             let tolerance = tolerance.clamp(0, 255) as u8;
-            match pictura_select::similar(sel, &current_buffer(doc, rust.gpu_compute), tolerance) {
+            match pictura_select::similar(sel, &picture(doc, rust), tolerance) {
                 Ok(selection) => selection,
                 Err(_) => return false,
             }
@@ -424,7 +425,8 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            channel_row_selection(doc, rust.gpu_compute, row, mask as u8)
+            let picture = picture(doc, rust);
+            channel_row_selection(doc, &picture, row, mask as u8)
         };
         let Some(shape) = shape else {
             return false;
@@ -473,7 +475,7 @@ impl qobject::PictureView {
             }
             let tolerance = tolerance.clamp(0, 255) as u8;
             match pictura_select::magic_wand(
-                &current_buffer(doc, rust.gpu_compute),
+                &picture(doc, rust),
                 x as u32,
                 y as u32,
                 tolerance,
@@ -933,7 +935,7 @@ pub(super) fn channel_value(mode: ColorMode, index: usize, r: u8, g: u8, b: u8) 
 // conversions the thumbnails already use, not real separations.
 fn channel_row_selection(
     doc: &Document,
-    gpu_compute: bool,
+    picture: &PixelBuffer,
     row: i32,
     mask: u8,
 ) -> Option<Selection> {
@@ -943,8 +945,7 @@ fn channel_row_selection(
     if row >= channels + usize::from(composite) {
         return None;
     }
-    let buffer = current_buffer(doc, gpu_compute);
-    let srgb = buffer_to_srgb(doc, &buffer);
+    let srgb = buffer_to_srgb(doc, picture);
     let buffer = srgb.as_ref();
     let plane = buffer.pixel_count();
     let depth = buffer.channels as usize;
@@ -1070,23 +1071,23 @@ mod tests {
         // Planes 0/1/2 are R/G/B.
         doc.composite.data = vec![100, 100, 150, 150, 200, 200].into();
 
-        let red = channel_row_selection(&doc, false, 1, 0x7).unwrap();
+        let red = channel_row_selection(&doc, &doc.composite, 1, 0x7).unwrap();
         assert_eq!(red.data, vec![100, 100]);
-        let green = channel_row_selection(&doc, false, 2, 0x7).unwrap();
+        let green = channel_row_selection(&doc, &doc.composite, 2, 0x7).unwrap();
         assert_eq!(green.data, vec![150, 150]);
-        let blue = channel_row_selection(&doc, false, 3, 0x7).unwrap();
+        let blue = channel_row_selection(&doc, &doc.composite, 3, 0x7).unwrap();
         assert_eq!(blue.data, vec![200, 200]);
 
-        let composite = channel_row_selection(&doc, false, 0, 0x7).unwrap();
+        let composite = channel_row_selection(&doc, &doc.composite, 0, 0x7).unwrap();
         assert_eq!(composite.data, vec![140, 140]);
 
         // A hidden red channel is zeroed in the composite row.
-        let hidden = channel_row_selection(&doc, false, 0, 0x6).unwrap();
+        let hidden = channel_row_selection(&doc, &doc.composite, 0, 0x6).unwrap();
         assert_eq!(hidden.data, vec![106, 106]);
 
         // Rows past the colour channels are refused.
-        assert!(channel_row_selection(&doc, false, 4, 0x7).is_none());
-        assert!(channel_row_selection(&doc, false, -1, 0x7).is_none());
+        assert!(channel_row_selection(&doc, &doc.composite, 4, 0x7).is_none());
+        assert!(channel_row_selection(&doc, &doc.composite, -1, 0x7).is_none());
     }
 
     #[test]
@@ -1097,18 +1098,24 @@ mod tests {
         // Row 0 is Cyan (ink 0), rows 1/2 Magenta and Yellow (full ink) — and
         // there is no composite row in Multichannel.
         assert_eq!(
-            channel_row_selection(&doc, false, 0, 0x7).unwrap().data,
+            channel_row_selection(&doc, &doc.composite, 0, 0x7)
+                .unwrap()
+                .data,
             vec![255]
         );
         assert_eq!(
-            channel_row_selection(&doc, false, 1, 0x7).unwrap().data,
+            channel_row_selection(&doc, &doc.composite, 1, 0x7)
+                .unwrap()
+                .data,
             vec![0]
         );
         assert_eq!(
-            channel_row_selection(&doc, false, 2, 0x7).unwrap().data,
+            channel_row_selection(&doc, &doc.composite, 2, 0x7)
+                .unwrap()
+                .data,
             vec![0]
         );
-        assert!(channel_row_selection(&doc, false, 3, 0x7).is_none());
+        assert!(channel_row_selection(&doc, &doc.composite, 3, 0x7).is_none());
     }
 
     #[test]
@@ -1117,9 +1124,11 @@ mod tests {
         doc.composite.data = vec![200].into();
         // The one Gray row is the composite; there is no colour channel after it.
         assert_eq!(
-            channel_row_selection(&doc, false, 0, 0x7).unwrap().data,
+            channel_row_selection(&doc, &doc.composite, 0, 0x7)
+                .unwrap()
+                .data,
             vec![200]
         );
-        assert!(channel_row_selection(&doc, false, 1, 0x7).is_none());
+        assert!(channel_row_selection(&doc, &doc.composite, 1, 0x7).is_none());
     }
 }
