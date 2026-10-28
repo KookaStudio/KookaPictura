@@ -803,10 +803,7 @@ fn begin_tone(
 /// The document's composite as a document-space surface: what Sample All
 /// Layers reads.
 fn composite_surface(doc: &Document, view: &PictureViewRust) -> pictura_paint::healing::RgbaImage {
-    surface_from_composite(&super::helpers_composite::current_buffer(
-        doc,
-        view.gpu_compute,
-    ))
+    surface_from_composite(&super::picture::picture(doc, view))
 }
 
 /// A copy of `doc` with the Background at `path` turned into an ordinary
@@ -850,12 +847,12 @@ fn magic_erase_at(
             return false;
         }
         let sampled = if sample_all {
-            super::helpers_composite::current_buffer(doc, rust.gpu_compute)
+            super::picture::picture(doc, rust)
         } else {
             let Some(surface) = layer_surface(doc, path) else {
                 return false;
             };
-            planar(&surface)
+            std::borrow::Cow::Owned(planar(&surface))
         };
         let tolerance = tolerance.clamp(0, 255) as u8;
         let Ok(flood) =
@@ -1118,4 +1115,33 @@ fn begin_kind(
     }
     tool_recording::begin(label, &cfg.sanitized(), kind);
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::composite_surface;
+    use crate::cxxqt_object::document_session::DocumentSession;
+    use crate::cxxqt_object::picture::composites_so_far;
+    use crate::cxxqt_object::state::PictureViewRust;
+    use pictura_core::Document;
+
+    #[test]
+    fn a_read_only_consumer_composites_nothing() {
+        let rgba = [40u8, 80, 120, 255].repeat(16 * 16);
+        let doc = Document::from_rgba("0", 16, 16, &rgba);
+        let view = PictureViewRust {
+            session: DocumentSession::with_document(doc),
+            ..Default::default()
+        };
+        let doc = view.session.doc.as_ref().expect("document");
+        let before = composites_so_far();
+        let surface = composite_surface(doc, &view);
+        assert_eq!(
+            composites_so_far(),
+            before,
+            "a fresh document is served from its composite"
+        );
+        assert_eq!((surface.width, surface.height), (16, 16));
+        assert_eq!(surface.data[0], [40, 80, 120, 255]);
+    }
 }

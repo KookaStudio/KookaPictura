@@ -5,7 +5,7 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers_composite::current_buffer;
+use super::picture::picture;
 use super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -62,10 +62,10 @@ fn target(rgb: u32) -> [u8; 3] {
 
 /// Nearest-neighbour shrink of a planar buffer so its longer side is at most
 /// `max_side`; the preview needs the look, not every pixel.
-fn shrink(buffer: PixelBuffer, max_side: u32) -> PixelBuffer {
+fn shrink(buffer: &PixelBuffer, max_side: u32) -> PixelBuffer {
     let longer = buffer.width.max(buffer.height);
     if max_side == 0 || longer <= max_side {
-        return buffer;
+        return buffer.clone();
     }
     let scale = max_side as f64 / longer as f64;
     let w = ((buffer.width as f64 * scale).round() as u32).max(1);
@@ -114,10 +114,7 @@ fn color_range_preview(
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let buffer = shrink(
-        current_buffer(doc, rust.gpu_compute),
-        max_side.max(0) as u32,
-    );
+    let buffer = shrink(&picture(doc, rust), max_side.max(0) as u32);
     let mask = color_range(
         &buffer,
         select,
@@ -148,7 +145,7 @@ fn color_range_apply(
         let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
-        let buffer = current_buffer(doc, rust.gpu_compute);
+        let buffer = picture(doc, rust);
         let shape = color_range(
             &buffer,
             select,
@@ -185,10 +182,10 @@ mod tests {
             channels: 3,
             data: data.into(),
         };
-        let small = shrink(buffer.clone(), 4);
+        let small = shrink(&buffer, 4);
         assert_eq!((small.width, small.height), (4, 2));
         assert_eq!(&small.data[..4], &[0, 20, 40, 60]);
-        assert_eq!(shrink(buffer, 100).width, 8, "no upscaling");
+        assert_eq!(shrink(&buffer, 100).width, 8, "no upscaling");
         assert_eq!(target(0x12_34_56), [0x12, 0x34, 0x56]);
     }
 }

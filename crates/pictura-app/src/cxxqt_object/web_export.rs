@@ -2,7 +2,8 @@
 //! and the GIF and WBMP encoders (`pictura_codec::web`). Free functions (their
 //! own bridge). JPEG, PNG-8, and PNG-24 are written by the dialog through Qt.
 
-use super::helpers_composite::{buffer_to_rgba_bytes, current_buffer};
+use super::helpers_composite::buffer_to_rgba_bytes;
+use super::picture::picture;
 use super::qobject::PictureView;
 use cxx_qt::CxxQtType;
 use ffi::WebPalette;
@@ -75,7 +76,7 @@ fn web_flattened(view: &PictureView) -> Vec<u8> {
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let buffer = current_buffer(doc, rust.gpu_compute);
+    let buffer = picture(doc, rust);
     buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(doc, &buffer))
 }
 

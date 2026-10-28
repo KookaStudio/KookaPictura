@@ -372,7 +372,7 @@ fn shape_fill_pixels(view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground: 
     };
     let paint = BucketPaint::Foreground(rgba_from_argb(foreground));
     paint_timing::start("Shape pixels");
-    let applied = apply(view, &label(kind), |doc, path, t, selection| {
+    let applied = apply(view, &label(kind), |doc, path, _rust, t, selection| {
         let t0 = std::time::Instant::now();
         let mask = shape::coverage(&subpath, t.document_size.0, t.document_size.1);
         paint_timing::record("shape_coverage", t0.elapsed());

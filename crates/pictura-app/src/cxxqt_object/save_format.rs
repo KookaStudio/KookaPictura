@@ -6,7 +6,8 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers_composite::{buffer_to_rgba_bytes, current_buffer};
+use super::helpers_composite::buffer_to_rgba_bytes;
+use super::picture::picture;
 use super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -122,7 +123,7 @@ pub fn raster_preview_bytes(
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let buffer = current_buffer(doc, rust.gpu_compute);
+    let buffer = picture(doc, rust);
     let rgba = buffer_to_rgba_bytes(&buffer);
     let format = format.to_string();
     ffi::encode_image_bytes(

@@ -9,8 +9,10 @@
 use super::super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, paint_mode_from, rgba_from_argb,
 };
-use super::super::helpers_composite::{crop_selection, current_buffer};
+use super::super::helpers_composite::crop_selection;
+use super::super::picture::picture;
 use super::super::qobject::PictureView;
+use super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -195,7 +197,7 @@ fn draw_gradient(
         transparency,
     };
     let (start, end) = ((x0 as f32, y0 as f32), (x1 as f32, y1 as f32));
-    apply(view, "Gradient", |doc, path, t, selection| {
+    apply(view, "Gradient", |doc, path, _rust, t, selection| {
         // The drag is in document space; a mask's document sits at its own
         // rectangle, so its points move by the target's origin.
         let (ox, oy) = (t.origin.0 as f32, t.origin.1 as f32);
@@ -232,11 +234,11 @@ fn bucket_fill_at(
     let mode = paint_mode_from(&mode.to_string());
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
     let tolerance = tolerance.clamp(0, 255) as u8;
-    apply(view, "Paint Bucket", |doc, path, t, selection| {
+    apply(view, "Paint Bucket", |doc, path, rust, t, selection| {
         // All Layers samples the composite of the layer's own document; a mask
         // has no composite, so it always floods its own coverage.
         let surface = if all_layers && !t.is_mask {
-            surface_from_composite(&current_buffer(doc, t.gpu_compute))
+            surface_from_composite(&picture(doc, rust))
         } else {
             layer_surface(doc, path)?
         };
@@ -292,7 +294,7 @@ fn edit_fill(
     } else {
         Alpha::Blend
     };
-    apply(view, "Fill", |doc, path, _t, selection| {
+    apply(view, "Fill", |doc, path, _rust, _t, selection| {
         let mask = vec![255u8; (doc.width * doc.height) as usize];
         bucket::fill(doc, path, &mask, paint, mode, opacity, selection, alpha)
     })
@@ -317,7 +319,7 @@ fn edit_stroke(
         2 => bucket::StrokeAlign::Outside,
         _ => bucket::StrokeAlign::Center,
     };
-    apply(view, "Stroke", |doc, path, _t, selection| {
+    apply(view, "Stroke", |doc, path, _rust, _t, selection| {
         bucket::stroke_selection(
             doc,
             path,
@@ -343,8 +345,6 @@ pub(crate) struct FillTarget {
     pub document_size: (u32, u32),
     /// The target's rectangle in the document's coordinates.
     pub rect: PsdRect,
-    /// Whether the GPU compositor is available (the Paint Bucket's All Layers).
-    pub gpu_compute: bool,
     /// Whether the target is a mask, so geometry is translated and a
     /// document-space coverage is confined to the mask's rectangle.
     pub is_mask: bool,
@@ -375,7 +375,13 @@ impl FillTarget {
 pub(crate) fn apply(
     mut view: Pin<&mut PictureView>,
     label: &str,
-    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&[u8]>) -> Option<PsdRect>,
+    edit: impl FnOnce(
+        &mut Document,
+        &str,
+        &PictureViewRust,
+        &FillTarget,
+        Option<&[u8]>,
+    ) -> Option<PsdRect>,
 ) -> bool {
     if view.rust().session.live.stroke().is_some() || view.rust().modal_transform_blocks_edit() {
         return false;
@@ -401,12 +407,11 @@ pub(crate) fn apply(
                 bottom: doc.height as i32,
                 right: doc.width as i32,
             },
-            gpu_compute: rust.gpu_compute,
             is_mask: false,
         };
         let selection = rust.session.selection.as_ref().map(|s| s.data.as_slice());
         let mut edited = doc.clone();
-        edit(&mut edited, path, &target, selection).map(|rect| (edited, rect))
+        edit(&mut edited, path, rust, &target, selection).map(|rect| (edited, rect))
     };
     let Some((doc, rect)) = edited else {
         return false;
@@ -424,7 +429,13 @@ fn apply_mask(
     mut view: Pin<&mut PictureView>,
     label: &str,
     path: &str,
-    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&[u8]>) -> Option<PsdRect>,
+    edit: impl FnOnce(
+        &mut Document,
+        &str,
+        &PictureViewRust,
+        &FillTarget,
+        Option<&[u8]>,
+    ) -> Option<PsdRect>,
 ) -> bool {
     let outcome = view.as_mut().edit(label, |rust| {
         let Some(doc) = rust.session.doc.as_ref() else {
@@ -437,7 +448,6 @@ fn apply_mask(
             origin: (mask.rect.left, mask.rect.top),
             document_size: (doc.width, doc.height),
             rect: mask.rect,
-            gpu_compute: rust.gpu_compute,
             is_mask: true,
         };
         let selection = rust
@@ -446,7 +456,7 @@ fn apply_mask(
             .as_ref()
             .map(|s| crop_selection(&s.data, s.width, s.height, mask.rect));
         let mut document = mask.document;
-        let Some(dirty) = edit(&mut document, "0", &target, selection.as_deref()) else {
+        let Some(dirty) = edit(&mut document, "0", rust, &target, selection.as_deref()) else {
             return Edit::None;
         };
         let Some(real) = rust.session.doc.as_mut() else {

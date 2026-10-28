@@ -9,7 +9,8 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers_composite::{current_buffer, rgba_frame};
+use super::helpers_composite::rgba_frame;
+use super::picture::picture;
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -176,7 +177,7 @@ fn copy_of(view: &PictureView, path: &str, merged: bool) -> Option<Clip> {
     let rust = view.rust();
     let doc = rust.session.doc.as_ref()?;
     if merged {
-        let composite = rgba_frame(&current_buffer(doc, rust.gpu_compute));
+        let composite = rgba_frame(&picture(doc, rust));
         pictura_render::copy_merged(doc, &composite, selection.as_deref())
     } else {
         pictura_render::copy_layer(doc, path, selection.as_deref())

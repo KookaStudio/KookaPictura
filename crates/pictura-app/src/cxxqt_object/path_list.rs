@@ -341,18 +341,22 @@ fn paths_fill(mut view: Pin<&mut PictureView>, foreground: u32) -> bool {
         return false;
     };
     let paint = BucketPaint::Foreground(rgba_from_argb(foreground));
-    let filled = apply(view.as_mut(), "Fill Path", |doc, layer, t, selection| {
-        bucket::fill(
-            doc,
-            layer,
-            &t.coverage(&mask),
-            paint,
-            PaintMode::Normal,
-            1.0,
-            selection,
-            Alpha::Blend,
-        )
-    });
+    let filled = apply(
+        view.as_mut(),
+        "Fill Path",
+        |doc, layer, _rust, t, selection| {
+            bucket::fill(
+                doc,
+                layer,
+                &t.coverage(&mask),
+                paint,
+                PaintMode::Normal,
+                1.0,
+                selection,
+                Alpha::Blend,
+            )
+        },
+    );
     if filled {
         view.as_mut().changed();
     }
@@ -420,31 +424,35 @@ fn paths_stroke(
         ..StrokeConfig::default()
     }
     .sanitized();
-    let stroked = apply(view.as_mut(), "Stroke Path", |doc, layer, t, _selection| {
-        let (ox, oy) = (t.origin.0 as f32, t.origin.1 as f32);
-        runs.iter().fold(None, |dirty, samples| {
-            // A mask's document sits at its rectangle, so a path drawn in
-            // document space moves by the target's origin.
-            let local: Cow<[StrokeSample]> = if t.is_mask {
-                Cow::Owned(
-                    samples
-                        .iter()
-                        .map(|s| StrokeSample {
-                            x: s.x - ox,
-                            y: s.y - oy,
-                            pressure: s.pressure,
-                        })
-                        .collect(),
-                )
-            } else {
-                Cow::Borrowed(samples.as_slice())
-            };
-            match paint_stroke(doc, layer, &cfg, &local) {
-                Some(rect) => Some(union(dirty, rect)),
-                None => dirty,
-            }
-        })
-    });
+    let stroked = apply(
+        view.as_mut(),
+        "Stroke Path",
+        |doc, layer, _rust, t, _selection| {
+            let (ox, oy) = (t.origin.0 as f32, t.origin.1 as f32);
+            runs.iter().fold(None, |dirty, samples| {
+                // A mask's document sits at its rectangle, so a path drawn in
+                // document space moves by the target's origin.
+                let local: Cow<[StrokeSample]> = if t.is_mask {
+                    Cow::Owned(
+                        samples
+                            .iter()
+                            .map(|s| StrokeSample {
+                                x: s.x - ox,
+                                y: s.y - oy,
+                                pressure: s.pressure,
+                            })
+                            .collect(),
+                    )
+                } else {
+                    Cow::Borrowed(samples.as_slice())
+                };
+                match paint_stroke(doc, layer, &cfg, &local) {
+                    Some(rect) => Some(union(dirty, rect)),
+                    None => dirty,
+                }
+            })
+        },
+    );
     if stroked {
         view.as_mut().changed();
     }

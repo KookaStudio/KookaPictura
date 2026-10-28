@@ -52,6 +52,7 @@ mod paint_tools;
 mod path_list;
 mod paths;
 mod pdf_export;
+mod picture;
 mod save_format;
 mod selection_move;
 mod shapes;
@@ -201,7 +202,6 @@ pub mod qobject {
         /// Whether the Layers panel's Selected filter is isolating a set.
         #[qinvokable]
         fn isolation_active(&self) -> bool;
-
         /// Post-open notices (mode, depth, ICC), `"; "`-joined; empty when none.
         #[qinvokable]
         fn open_notice(&self) -> QString;

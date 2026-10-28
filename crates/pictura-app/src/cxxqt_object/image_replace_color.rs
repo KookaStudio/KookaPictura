@@ -7,8 +7,8 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::helpers::active_pixel_layer;
-use super::helpers_composite::current_buffer;
 use super::impl_filters::{apply_op_active_region, cancel_filter_preview, ActiveOp};
+use super::picture::picture;
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -252,11 +252,7 @@ fn image_replace_color_mask(
         0.0,
         0.0,
     );
-    let mask = replace_color_mask(
-        &current_buffer(doc, rust.gpu_compute),
-        &p,
-        size.clamp(1, 512) as usize,
-    );
+    let mask = replace_color_mask(&picture(doc, rust), &p, size.clamp(1, 512) as usize);
     if mask.width == 0 || mask.height == 0 {
         return QImage::default();
     }

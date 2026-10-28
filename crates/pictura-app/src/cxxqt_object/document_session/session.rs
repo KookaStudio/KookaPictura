@@ -334,17 +334,38 @@ impl PictureViewRust {
         self.active_session_kind().is_some()
     }
 
+    /// Whether a paint or mask stroke is writing the document in place.
+    ///
+    /// A layer stroke patches the composite only where it has presented, and a
+    /// mask stroke never patches it, so the composite lags the pixels.
+    pub(in crate::cxxqt_object) fn is_painting(&self) -> bool {
+        self.session.live.stroke().is_some() || self.session.live.mask_stroke().is_some()
+    }
+
+    /// Whether a lifted transform owns the document.
+    ///
+    /// The lift rewrote the layer stack and the session does not recomposite,
+    /// so the cached composite predates the lift until the session ends.
+    pub(in crate::cxxqt_object) fn has_lifted_transform(&self) -> bool {
+        self.lifted_transform_is_live()
+    }
+
+    /// Whether the live transform carries a lifted selection, ignoring whether
+    /// the Move tool's controls box owns it.
+    fn lifted_transform_is_live(&self) -> bool {
+        self.session
+            .live
+            .transform()
+            .is_some_and(|session| session.lifted.is_some())
+    }
+
     /// Whether a **lifted** transform is pending. A non-lifted transform can
     /// accept a document edit: the edit lands in the layer and the transform
     /// commit keeps it. A lifted selection restores its pre-lift snapshot on
     /// cancel/commit, so an edit made under it would be discarded. The Move
     /// tool's controls box commits per gesture and never locks.
     pub(in crate::cxxqt_object) fn modal_transform_blocks_edit(&self) -> bool {
-        self.session
-            .live
-            .transform()
-            .is_some_and(|session| session.lifted.is_some())
-            && !self.transform_controls
+        self.lifted_transform_is_live() && !self.transform_controls
     }
 
     /// Fill and Stroke refuse any pending transform, lifted or not, matching
