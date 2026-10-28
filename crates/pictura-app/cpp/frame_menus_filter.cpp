@@ -511,28 +511,19 @@ void PicturaMainWindow::wireFilterMenu()
             return;
         }
         const WatermarkRow row = read_watermark(*view);
-        setDocumentWatermarkDetected(row.found);
+        const int index = activeDocumentIndex();
+        if (index >= 0 && index < docs_.size()
+            && docs_.at(index)->watermarkDetected != row.found) {
+            docs_.at(index)->watermarkDetected = row.found;
+            updateTabTitle(index);
+            updateWindowTitle();
+        }
         DigimarcReadDialog::showResult(row.found, row.kind, row.creator_id, row.id, this);
     });
     registry_->setEnabledProvider(readWatermark, [this]() {
         PictureView* view = activeView();
         return view && view->has_document();
     });
-}
-
-void PicturaMainWindow::setDocumentWatermarkDetected(bool detected)
-{
-    const int index = activeDocumentIndex();
-    if (index < 0 || index >= docs_.size()) {
-        return;
-    }
-    DocEntry* doc = docs_.at(index);
-    if (doc->watermarkDetected == detected) {
-        return;
-    }
-    doc->watermarkDetected = detected;
-    updateTabTitle(index);
-    updateWindowTitle();
 }
 
 } // namespace pictura
