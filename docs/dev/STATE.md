@@ -11,6 +11,18 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **A layer click resolves a pending transform** (#905, OpenSpec change
+  `apply-pending-transform-on-layer-click`). The `#750` lock no longer disables
+  the whole Layers panel: its layer list stays selectable, and a change of the
+  active layer — a row click, a keyboard row move, a right-click, or a tree
+  gesture — runs the same "Apply the transformation?" prompt a tool switch does
+  (Apply commits one state, Don't Apply cancels, Cancel keeps the transform and
+  the selection; a plain click that does not change the active layer asks
+  nothing). The panel's editing controls (blend, opacity, fill, locks, and the
+  action strip) stay disabled until the transform is resolved, so a lifted
+  transform's commit/cancel still cannot discard a panel edit. The frame wires
+  the panel's resolver to `ToolController::resolvePendingTransform`
+  (`frame_transform_lock.cpp`). Tests: `tst_transform_lock`.
 - **Render performance bundle** (#379, #651, #745, #746, branch
   `perf/379-render-performance-bundle`, OpenSpec changes
   `render-performance-instrumentation` and `gpu-eligibility-from-dispatch`).
@@ -577,9 +589,10 @@ Snapshot for resuming after a context break. Update after each milestone.
     since `QTransform::map` clamps a negative one.
   - **Lock and prompt (all transforms):** while a modal transform is pending,
     the Layer menu is gated (`CommandRegistry::setBlockedProvider`, dispatch
-    refused) and the Layers panel is greyed. A tool switch, by click or
-    shortcut, asks "Apply the transformation?" (Apply / Cancel / Don't Apply);
-    headless and the control server answer Don't Apply without a modal.
+    refused) and the Layers panel's editing controls are disabled (the layer
+    list stays selectable; a layer change prompts — see #905). A tool switch, by
+    click or shortcut, asks "Apply the transformation?" (Apply / Cancel / Don't
+    Apply); headless and the control server answer Don't Apply without a modal.
   - **Inferred, not oracle-verified:** the readout sign, the base composition,
     and the pixel layout inside a crossed quad (the recording used a flat
     layer).
