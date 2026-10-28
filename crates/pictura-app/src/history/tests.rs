@@ -2,6 +2,8 @@ use super::planes::TILE;
 use super::*;
 use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
 
+mod hint;
+
 fn doc(w: u32, h: u32, seed: u8) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = vec![seed; (w * h * 3) as usize].into();
@@ -676,9 +678,9 @@ fn undoing_a_structural_edit_keeps_the_live_planes() {
         "undo keeps the live layer plane"
     );
     let mut before_planes = Vec::new();
-    planes::each_plane(&before, &mut |p, _, _| before_planes.push(p.clone()));
+    planes::each_plane(&before, &mut |p, _, _, _| before_planes.push(p.clone()));
     let mut index = 0;
-    planes::each_plane(&live, &mut |p, _, _| {
+    planes::each_plane(&live, &mut |p, _, _, _| {
         assert!(
             p.is_empty() || p.shares(&before_planes[index]),
             "live plane {index} was copied instead of reused"
@@ -1070,9 +1072,9 @@ fn model_layer(name: &str, w: u32, h: u32, seed: u8) -> Layer {
 /// Every plane of `a` is a different allocation from every plane of `b`.
 fn shares_no_plane(a: &Document, b: &Document) -> bool {
     let mut theirs = Vec::new();
-    planes::each_plane(b, &mut |p, _, _| theirs.push(p.clone()));
+    planes::each_plane(b, &mut |p, _, _, _| theirs.push(p.clone()));
     let mut ok = true;
-    planes::each_plane(a, &mut |p, _, _| {
+    planes::each_plane(a, &mut |p, _, _, _| {
         ok &= p.is_empty() || theirs.iter().all(|q| !p.shares(q));
     });
     ok

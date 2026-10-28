@@ -114,10 +114,7 @@ fn run(
         return false;
     };
     let outcome = match region {
-        Some(rect) => Edit::Regions {
-            rects: vec![rect],
-            notify: false,
-        },
+        Some(rect) => Edit::regions(vec![rect], false),
         None => Edit::Full,
     };
     match label {

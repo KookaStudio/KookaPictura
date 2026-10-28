@@ -10,7 +10,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -254,8 +254,17 @@ fn set_layer_smart_filter_visible(
         None => false,
     };
     if changed {
+        let region = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
         view.as_mut()
-            .edit("Smart Filter Visibility", |_| Edit::Full);
+            .edit("Smart Filter Visibility", |_| match region {
+                Some(rect) => Edit::regions(vec![rect], true),
+                None => Edit::Full,
+            });
     }
     changed
 }
@@ -271,21 +280,42 @@ fn set_layer_smart_filters_enabled(
         None => false,
     };
     if changed {
+        let region = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
         view.as_mut()
-            .edit("Smart Filter Visibility", |_| Edit::Full);
+            .edit("Smart Filter Visibility", |_| match region {
+                Some(rect) => Edit::regions(vec![rect], true),
+                None => Edit::Full,
+            });
     }
     changed
 }
 
 fn convert_for_smart_filters(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let path = path.to_string();
+    let before = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
     let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::convert_for_smart_filters(doc, &path),
         None => false,
     };
     if changed {
+        let after = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
         view.as_mut()
-            .edit("Convert for Smart Filters", |_| Edit::Structural);
+            .edit("Convert for Smart Filters", |_| structural(before, after));
     }
     changed
 }
@@ -301,7 +331,16 @@ fn delete_layer_smart_filter(
         None => false,
     };
     if changed {
-        view.as_mut().edit("Delete Smart Filter", |_| Edit::Full);
+        let region = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
+        view.as_mut().edit("Delete Smart Filter", |_| match region {
+            Some(rect) => Edit::regions(vec![rect], true),
+            None => Edit::Full,
+        });
     }
     changed
 }
@@ -313,7 +352,16 @@ fn clear_layer_smart_filters(mut view: Pin<&mut PictureView>, layer_path: &QStri
         None => false,
     };
     if changed {
-        view.as_mut().edit("Clear Smart Filters", |_| Edit::Full);
+        let region = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
+        view.as_mut().edit("Clear Smart Filters", |_| match region {
+            Some(rect) => Edit::regions(vec![rect], true),
+            None => Edit::Full,
+        });
     }
     changed
 }
@@ -331,7 +379,16 @@ fn delete_layer_smart_filter_mask(mut view: Pin<&mut PictureView>, layer_path: &
         None => false,
     };
     if changed {
-        view.as_mut().edit("Delete Filter Mask", |_| Edit::Full);
+        let region = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
+        view.as_mut().edit("Delete Filter Mask", |_| match region {
+            Some(rect) => Edit::regions(vec![rect], true),
+            None => Edit::Full,
+        });
     }
     changed
 }
@@ -353,7 +410,17 @@ fn reorder_layer_smart_filter(
         None => false,
     };
     if changed {
-        view.as_mut().edit("Reorder Smart Filters", |_| Edit::Full);
+        let region = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, base_path(&path)));
+        view.as_mut()
+            .edit("Reorder Smart Filters", |_| match region {
+                Some(rect) => Edit::regions(vec![rect], true),
+                None => Edit::Full,
+            });
     }
     changed
 }

@@ -6,7 +6,7 @@
 //! [`PictureView`]: super::super::qobject::PictureView
 
 use super::super::qobject::PictureView;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, structural_after, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -63,12 +63,22 @@ fn smart_object_reset_transform(mut view: Pin<&mut PictureView>, path: &QString)
     let path = path.to_string();
     let mut changed = false;
     view.as_mut().edit("Reset Transform", |rust| {
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
         let Some(doc) = rust.session.doc.as_mut() else {
             return Edit::None;
         };
         changed = pictura_render::reset_smart_object_transform(doc, &path);
         if changed {
-            Edit::Structural
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
+            structural(before, after)
         } else {
             Edit::None
         }
@@ -85,6 +95,11 @@ fn layer_can_convert_smart_object_to_layers(view: &PictureView, path: &QString) 
 fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let path = path.to_string();
     let edit = view.as_mut().edit("Convert to Layers", |rust| {
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
         let changed = {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
@@ -102,7 +117,12 @@ fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QStrin
         {
             rust.select_only_layer(&path);
         }
-        Edit::Structural
+        let after = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
+        structural(before, after)
     });
     !matches!(edit, Edit::None)
 }
@@ -127,7 +147,12 @@ fn smart_object_new_via_copy(mut view: Pin<&mut PictureView>, path: &QString) ->
         };
         created = new_path;
         rust.select_only_layer(&created);
-        Edit::Structural
+        let after = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &created));
+        structural_after(after.map(|rect| vec![rect]))
     });
     QString::from(created.as_str())
 }

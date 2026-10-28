@@ -379,10 +379,8 @@ fn fill_mask(
             bottom: dirty.bottom + mask.rect.top,
             right: dirty.right + mask.rect.left,
         };
-        view.as_mut().edit("Fill", |_| Edit::Regions {
-            rects: vec![rect],
-            notify: false,
-        });
+        view.as_mut()
+            .edit("Fill", |_| Edit::regions(vec![rect], false));
     }
     changed
 }

@@ -24,16 +24,56 @@ pub(super) enum Edit {
     /// A preview already presented the change: capture without a new signal.
     Record,
     /// Pixels changed inside these document rectangles.
-    Regions { rects: Vec<PsdRect>, notify: bool },
+    Regions {
+        rects: Vec<PsdRect>,
+        /// The document rectangles history may restrict its scan to. `None`
+        /// means the full scan; an explicit hint is used by a paint commit
+        /// whose refresh rectangles are only the still-pending region.
+        hint: Option<Vec<PsdRect>>,
+        notify: bool,
+    },
     /// Pixels changed with no bound: one full recomposite.
     Full,
-    /// The edit invalidates positional links: clear them and recomposite fully.
-    Structural,
+    /// The edit invalidates positional links. `damage` bounds the regional
+    /// refresh; `None` means full.
+    Structural { damage: Option<Vec<PsdRect>> },
     /// A content-neutral layer or group insertion (see
     /// `pictura_render::insertion_is_content_neutral`): clear the positional
     /// links like [`Edit::Structural`], but the stored composite and the
     /// display already match the new tree, so nothing is composited.
     Inserted,
+}
+
+impl Edit {
+    /// A bounded region edit whose history hint is its refresh rectangles.
+    pub(super) fn regions(rects: Vec<PsdRect>, notify: bool) -> Edit {
+        let hint = (!rects.is_empty()).then(|| rects.clone());
+        Edit::Regions {
+            rects,
+            hint,
+            notify,
+        }
+    }
+
+    /// A bounded region edit whose history hint is explicit. A paint commit
+    /// uses this when its refresh rectangles are only the pending region but
+    /// history must cover the whole stroke.
+    pub(super) fn regions_hinted(rects: Vec<PsdRect>, hint: Vec<PsdRect>, notify: bool) -> Edit {
+        Edit::Regions {
+            rects,
+            hint: (!hint.is_empty()).then_some(hint),
+            notify,
+        }
+    }
+
+    /// The rectangles history may restrict its scan to.
+    pub(super) fn history_hint(&self) -> Option<&[PsdRect]> {
+        match self {
+            Edit::Regions { hint, .. } => hint.as_deref(),
+            Edit::Structural { damage } => damage.as_deref(),
+            _ => None,
+        }
+    }
 }
 
 /// What the QObject must present after a commit.
@@ -51,18 +91,96 @@ pub(super) fn effect_of(edit: &Edit) -> Effect {
         Edit::None => Effect::Nothing,
         Edit::Meta | Edit::SelectionPreview | Edit::Inserted => Effect::Notify,
         Edit::Record => Effect::Nothing,
-        Edit::Regions { notify, .. } => Effect::Blit { notify: *notify },
-        Edit::Full | Edit::Structural => Effect::Rebuild,
+        Edit::Regions {
+            rects,
+            hint,
+            notify,
+        } => {
+            if rects.is_empty() && hint.is_none() {
+                Effect::Rebuild
+            } else {
+                Effect::Blit { notify: *notify }
+            }
+        }
+        Edit::Structural { damage } => {
+            if damage.as_ref().is_some_and(|rects| !rects.is_empty()) {
+                Effect::Blit { notify: true }
+            } else {
+                Effect::Rebuild
+            }
+        }
+        Edit::Full => Effect::Rebuild,
     }
 }
 
 /// The outcome for a node just inserted at `path`: [`Edit::Inserted`] when the
-/// insertion is content-neutral, [`Edit::Structural`] otherwise.
+/// insertion is content-neutral, a bounded structural edit otherwise.
 pub(super) fn insertion_edit(doc: &pictura_core::Document, path: &str) -> Edit {
     if pictura_render::insertion_is_content_neutral(doc, path) {
         Edit::Inserted
     } else {
-        Edit::Structural
+        Edit::Structural {
+            damage: pictura_render::damage::influence(doc, path).map(|rect| vec![rect]),
+        }
+    }
+}
+
+fn merge_rects(rects: Vec<PsdRect>) -> Option<PsdRect> {
+    let mut out: Option<PsdRect> = None;
+    for rect in rects {
+        out = Some(match out {
+            None => rect,
+            Some(current) => pictura_render::damage::union(Some(current), Some(rect))
+                .expect("both rectangles are bounded"),
+        });
+    }
+    out
+}
+
+fn merge_option(rects: Option<Vec<PsdRect>>) -> Option<PsdRect> {
+    rects.and_then(merge_rects)
+}
+
+/// A two-sided structural edit: before and after reach of the same path (or
+/// the source and the created copy).
+pub(super) fn structural(before: Option<PsdRect>, after: Option<PsdRect>) -> Edit {
+    Edit::Structural {
+        damage: pictura_render::damage::union(before, after).map(|rect| vec![rect]),
+    }
+}
+
+/// A structural edit whose affected paths exist only before the mutation.
+pub(super) fn structural_before(damage: Option<Vec<PsdRect>>) -> Edit {
+    Edit::Structural {
+        damage: merge_option(damage).map(|rect| vec![rect]),
+    }
+}
+
+/// A structural edit whose affected paths exist only after the mutation.
+pub(super) fn structural_after(damage: Option<Vec<PsdRect>>) -> Edit {
+    Edit::Structural {
+        damage: merge_option(damage).map(|rect| vec![rect]),
+    }
+}
+
+/// A two-sided structural edit over several paths.
+pub(super) fn structural_paths(before: Option<Vec<PsdRect>>, after: Option<Vec<PsdRect>>) -> Edit {
+    Edit::Structural {
+        damage: pictura_render::damage::union(merge_option(before), merge_option(after))
+            .map(|rect| vec![rect]),
+    }
+}
+
+/// A bounded region edit whose reach is the union of the affected paths before
+/// and after the mutation. Falls back to full when either side is unbounded.
+pub(super) fn regions_influence(
+    before: Option<Vec<PsdRect>>,
+    after: Option<Vec<PsdRect>>,
+    notify: bool,
+) -> Edit {
+    match pictura_render::damage::union(merge_option(before), merge_option(after)) {
+        Some(rect) => Edit::regions(vec![rect], notify),
+        None => Edit::Full,
     }
 }
 
@@ -88,17 +206,33 @@ impl PictureViewRust {
         if matches!(edit, Edit::None) {
             return Applied { edit, blit: None };
         }
-        // A live gesture (stroke, preview, placer) leaves the stored composite
-        // stale and needs the full rebuild to end it, so an insertion made
-        // under one recomposites like any other tree edit.
-        let edit = if matches!(edit, Edit::Inserted) && self.has_active_session() {
-            Edit::Structural
+        let pending = self.pending_previews.any();
+        let force_full = self.has_active_session() || pending || self.mask_solo.is_some();
+        let edit = match edit {
+            // A live gesture leaves the stored composite stale and needs the
+            // full rebuild to end it.
+            Edit::Inserted if self.has_active_session() => Edit::Structural { damage: None },
+            // A pending preview or a soloed mask owns display state the
+            // regional path does not repair.
+            Edit::Structural { .. } if force_full => Edit::Structural { damage: None },
+            // An empty or canvas-sized bound is not worth the regional path;
+            // it also means no history hint.
+            Edit::Structural {
+                damage: Some(rects),
+            } if rects.is_empty() => Edit::Structural { damage: None },
+            Edit::Structural {
+                damage: Some(rects),
+            } if self.structural_is_full(&rects) => Edit::Structural { damage: None },
+            other => other,
+        };
+        let hint = if pending {
+            None
         } else {
-            edit
+            edit.history_hint().map(|rects| rects.to_vec())
         };
         metrics::begin_edit(label);
         let blit = self.refresh_for(&edit);
-        if matches!(edit, Edit::Structural | Edit::Inserted) {
+        if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
             self.link_sets.clear();
             self.solo_snapshot = None;
         }
@@ -108,9 +242,10 @@ impl PictureViewRust {
             self.session.content_revision = self.session.content_revision.wrapping_add(1);
         } else {
             if bump_revision {
-                self.session.record(&target, label);
+                self.session.record_hinted(&target, label, hint.as_deref());
             } else {
-                self.session.record_move(&target, label);
+                self.session
+                    .record_move_with(&target, label, hint.as_deref());
             }
             metrics::record_phase("history_capture", t.elapsed());
         }
@@ -118,14 +253,51 @@ impl PictureViewRust {
         Applied { edit, blit }
     }
 
+    /// Whether a structural damage bound is large enough that the regional
+    /// path is not worth its per-rectangle overhead.
+    fn structural_is_full(&self, rects: &[PsdRect]) -> bool {
+        let Some(doc) = self.session.doc.as_ref() else {
+            return true;
+        };
+        let canvas = u64::from(doc.width) * u64::from(doc.height);
+        if canvas == 0 {
+            return true;
+        }
+        let area: u64 = rects
+            .iter()
+            .map(|rect| {
+                u64::from(rect.width().max(0) as u32) * u64::from(rect.height().max(0) as u32)
+            })
+            .sum();
+        area.saturating_mul(4) >= canvas.saturating_mul(3)
+    }
+
     /// The compositing half of an outcome, shared by commits and previews.
     fn refresh_for(&mut self, edit: &Edit) -> Option<PsdRect> {
         match edit {
-            Edit::Regions { rects, .. } => {
+            Edit::Regions { rects, hint, .. } => {
+                if rects.is_empty() {
+                    if hint.is_none() {
+                        metrics::mark_composited();
+                        self.composite_full();
+                    }
+                    return None;
+                }
                 metrics::mark_composited();
                 self.refresh_regions(rects)
             }
-            Edit::Full | Edit::Structural => {
+            Edit::Structural {
+                damage: Some(rects),
+            } if !rects.is_empty() => {
+                metrics::mark_composited();
+                if self.structural_is_full(rects) {
+                    self.composite_full();
+                    None
+                } else {
+                    self.refresh_regions(rects)
+                }
+            }
+            Edit::Full | Edit::Structural { .. } => {
                 metrics::mark_composited();
                 self.composite_full();
                 None
@@ -268,17 +440,12 @@ impl qobject::PictureView {
 mod tests {
     use super::*;
     use crate::cxxqt_object::tests::pixel_layer;
-    use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PixelBuffer};
+    use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
 
     fn doc_with_layer() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = LayerStack::from_layers(vec![pixel_layer("base", 4, 4, (255, 0, 0))]);
-        doc.composite = PixelBuffer {
-            width: 4,
-            height: 4,
-            channels: 4,
-            data: vec![0u8; 4 * 4 * 4].into(),
-        };
+        doc.composite = pictura_render::composite_rgba(&doc);
         doc
     }
 
@@ -364,10 +531,7 @@ mod tests {
             right: 2,
         };
         assert_eq!(
-            effect_of(&Edit::Regions {
-                rects: vec![rect],
-                notify: false
-            }),
+            effect_of(&Edit::regions(vec![rect], false)),
             Effect::Blit { notify: false }
         );
     }
@@ -387,10 +551,7 @@ mod tests {
             right: 4,
         };
         assert_eq!(
-            effect_of(&Edit::Regions {
-                rects: vec![a, b],
-                notify: false
-            }),
+            effect_of(&Edit::regions(vec![a, b], false)),
             Effect::Blit { notify: false }
         );
     }
@@ -433,11 +594,34 @@ mod tests {
     }
 
     #[test]
-    fn a_structural_outcome_clears_links_and_rebuilds() {
+    fn an_unbounded_structural_outcome_rebuilds() {
         let mut view = view(doc_with_layer());
         view.link_sets.insert("0".into(), 1);
-        let applied = view.apply_edit("Edit", Edit::Structural);
+        let applied = view.apply_edit("Edit", Edit::Structural { damage: None });
         assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
+        assert!(view.link_sets.is_empty());
+        let doc = view.session.doc.as_ref().expect("document");
+        assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+    }
+
+    #[test]
+    fn a_bounded_structural_outcome_clears_links_and_uses_a_region() {
+        let mut view = view(doc_with_layer());
+        view.link_sets.insert("0".into(), 1);
+        let rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        };
+        let applied = view.apply_edit(
+            "Edit",
+            Edit::Structural {
+                damage: Some(vec![rect]),
+            },
+        );
+        assert_eq!(effect_of(&applied.edit), Effect::Blit { notify: true });
+        assert_eq!(applied.blit, Some(rect));
         assert!(view.link_sets.is_empty());
         let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
@@ -520,5 +704,50 @@ mod tests {
         assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
         assert_eq!(view.session.history.count(), 1);
         assert_eq!(view.session.content_revision, 0);
+    }
+
+    #[test]
+    fn a_bounded_edit_hints_its_refresh_rects() {
+        let rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        };
+        let edit = Edit::regions(vec![rect], false);
+        assert_eq!(edit.history_hint(), Some(&[rect][..]));
+        let edit = Edit::Structural {
+            damage: Some(vec![rect]),
+        };
+        assert_eq!(edit.history_hint(), Some(&[rect][..]));
+    }
+
+    #[test]
+    fn empty_hint_is_no_hint() {
+        let rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        };
+        assert_eq!(Edit::regions(Vec::new(), false).history_hint(), None);
+        assert_eq!(
+            Edit::regions_hinted(Vec::new(), vec![rect], false).history_hint(),
+            Some(&[rect][..])
+        );
+    }
+
+    #[test]
+    fn move_commit_hints_its_refresh_rects() {
+        let mut view = view(doc_with_layer());
+        let rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        };
+        let applied = view.apply_edit_move("Move", Edit::regions(vec![rect], false));
+        assert_eq!(applied.blit, Some(rect));
+        assert_eq!(view.session.history.count(), 1);
     }
 }

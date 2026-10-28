@@ -534,13 +534,7 @@ pub(crate) fn replay_tool_stroke(
     };
     match finished {
         Some(rect) => {
-            view.apply_edit(
-                &step.tool,
-                Edit::Regions {
-                    rects: vec![rect],
-                    notify: false,
-                },
-            );
+            view.apply_edit(&step.tool, Edit::regions(vec![rect], false));
             Ok(())
         }
         None => Err(ToolStrokeError::NothingPainted {

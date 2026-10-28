@@ -82,6 +82,18 @@ impl DocumentSession {
         }
     }
 
+    /// A no-op live session for the transaction tests: it exercises the
+    /// full-rebuild fallback without starting a real gesture.
+    #[cfg(test)]
+    pub(in crate::cxxqt_object) fn force_test_session(&mut self) {
+        self.live = ActiveSession::ModePreview(Box::new(Document::new(
+            1,
+            1,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        )));
+    }
+
     /// Install a replacement document, its history, and its PDF password.
     ///
     /// The document generation is bumped, so a panel can drop a gesture whose
@@ -104,25 +116,42 @@ impl DocumentSession {
     /// Capture the live document as a history state under `label`. False
     /// without a document.
     pub(in crate::cxxqt_object) fn record(&mut self, target: &LayerTarget, label: &str) -> bool {
-        self.record_with(target, label, true)
+        self.record_with(target, label, true, None)
     }
 
-    /// As [`Self::record`] for a move of the topmost pixel layer, which leaves
-    /// the cached move-preview base valid: no content-revision bump.
-    pub(in crate::cxxqt_object) fn record_move(
+    /// As [`Self::record`] with a history hint: only tiles intersecting `hint`
+    /// are compared.
+    pub(in crate::cxxqt_object) fn record_hinted(
         &mut self,
         target: &LayerTarget,
         label: &str,
+        hint: Option<&[PsdRect]>,
     ) -> bool {
-        self.record_with(target, label, false)
+        self.record_with(target, label, true, hint)
     }
 
-    fn record_with(&mut self, target: &LayerTarget, label: &str, bump_revision: bool) -> bool {
+    /// As [`Self::record_move`] with a history hint.
+    pub(in crate::cxxqt_object) fn record_move_with(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+        hint: Option<&[PsdRect]>,
+    ) -> bool {
+        self.record_with(target, label, false, hint)
+    }
+
+    fn record_with(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+        bump_revision: bool,
+        hint: Option<&[PsdRect]>,
+    ) -> bool {
         let Some(doc) = self.doc.as_mut() else {
             return false;
         };
         self.history
-            .capture_live(doc, &self.selection, target, label);
+            .capture_live_with(doc, &self.selection, target, label, hint);
         self.dirty = true;
         if bump_revision {
             self.content_revision = self.content_revision.wrapping_add(1);

@@ -335,18 +335,32 @@ fn move_preview_region_guards_empty_and_missing_composite() {
 
 #[test]
 fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
-    // A raster layer is bounded by its own rect (clamped by refresh_region).
-    let raster = pixel_layer("raster", 8, 4, (10, 20, 30));
-    assert_eq!(layer_visibility_region(&raster), Some(raster.rect));
+    fn region(layer: Layer) -> Option<PsdRect> {
+        let mut doc = Document::new(200, 120, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        pictura_render::damage::influence(&doc, "0")
+    }
 
-    // A type layer, with or without its rasterized proxy, draws inside its rect.
+    let raster = pixel_layer("raster", 8, 4, (10, 20, 30));
+    assert_eq!(region(raster.clone()), Some(raster.rect));
+
     let mut doc = Document::new(200, 120, ColorMode::Rgb, BitDepth::Eight);
     let spec = pictura_core::TypeSpec::new("Type", "Liberation Sans", 32.0);
     let path = pictura_render::add_type_layer(&mut doc, "", &spec);
-    let text = pictura_render::resolve_path_mut(&mut doc, &path).expect("type layer");
-    assert_eq!(layer_visibility_region(text), Some(text.rect));
-    text.channels.clear();
-    assert_eq!(layer_visibility_region(text), Some(text.rect));
+    let text = pictura_render::resolve_path(&doc, &path)
+        .expect("type layer")
+        .clone();
+    let text_rect = text.rect;
+    let clipped = |rect: PsdRect| PsdRect {
+        top: rect.top.max(0),
+        left: rect.left.max(0),
+        bottom: rect.bottom.min(120),
+        right: rect.right.min(200),
+    };
+    assert_eq!(region(text.clone()), Some(clipped(text_rect)));
+    let mut no_proxy = text;
+    no_proxy.channels.clear();
+    assert_eq!(region(no_proxy), Some(clipped(text_rect)));
 
     let mask = |t, l, b, r, data: Option<Vec<u8>>, default_color, disabled| LayerMask {
         rect: PsdRect {
@@ -362,15 +376,13 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
         ..Default::default()
     };
 
-    // An adjustment with an enabled, data-carrying, zero-default mask is
-    // bounded by its mask rect.
     let bounded = adjustment_layer(
         "invert",
         Some(mask(2, 3, 6, 9, Some(vec![128; 4 * 6]), 0, false)),
     )
     .expect("known kind");
     assert_eq!(
-        layer_visibility_region(&bounded),
+        region(bounded),
         Some(PsdRect {
             top: 2,
             left: 3,
@@ -379,45 +391,42 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
         })
     );
 
-    // No mask, a disabled mask, missing mask data, and a non-zero default
-    // are all unbounded: full recomposite.
     let unmasked = adjustment_layer("invert", None).expect("known kind");
-    assert_eq!(layer_visibility_region(&unmasked), None);
+    assert_eq!(region(unmasked), None);
     let disabled = adjustment_layer(
         "invert",
         Some(mask(0, 0, 4, 4, Some(vec![128; 16]), 0, true)),
     )
     .expect("known kind");
-    assert_eq!(layer_visibility_region(&disabled), None);
+    assert_eq!(region(disabled), None);
     let no_data =
         adjustment_layer("invert", Some(mask(0, 0, 4, 4, None, 0, false))).expect("known kind");
-    assert_eq!(layer_visibility_region(&no_data), None);
+    assert_eq!(region(no_data), None);
     let non_zero = adjustment_layer(
         "invert",
         Some(mask(0, 0, 4, 4, Some(vec![128; 16]), 255, false)),
     )
     .expect("known kind");
-    assert_eq!(layer_visibility_region(&non_zero), None);
+    assert_eq!(region(non_zero), None);
 
-    // A group is unbounded.
     let mut group = pixel_layer("group", 4, 4, (0, 0, 0));
     group.is_group = true;
-    assert_eq!(layer_visibility_region(&group), None);
+    assert_eq!(region(group), None);
 
-    // A layer effect (lfx2/lrFX) spills past the layer rect, so a bounded
-    // region refresh cannot repair it: full recomposite.
     let mut effected = pixel_layer("effected", 8, 4, (10, 20, 30));
     effected.extra_blocks.push(LayerBlock {
         key: *b"lfx2",
         data: Vec::new(),
     });
-    assert_eq!(layer_visibility_region(&effected), None);
+    let effected_rect = effected.rect;
+    assert_eq!(region(effected), Some(effected_rect));
     let mut legacy = pixel_layer("legacy", 8, 4, (10, 20, 30));
     legacy.extra_blocks.push(LayerBlock {
         key: *b"lrFX",
         data: Vec::new(),
     });
-    assert_eq!(layer_visibility_region(&legacy), None);
+    let legacy_rect = legacy.rect;
+    assert_eq!(region(legacy), Some(legacy_rect));
 }
 
 #[test]

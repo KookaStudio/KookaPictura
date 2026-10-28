@@ -7,7 +7,7 @@
 
 use super::helpers::decode_import;
 use super::qobject;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, structural_after, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -30,12 +30,22 @@ impl qobject::PictureView {
         let path = path.to_string();
         let mut changed = false;
         self.as_mut().edit("Convert to Smart Object", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             changed = pictura_render::convert_to_smart_object(doc, &path);
             if changed {
-                Edit::Structural
+                let after = rust
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::damage::influence(doc, &path));
+                structural(before, after)
             } else {
                 Edit::None
             }
@@ -64,7 +74,12 @@ impl qobject::PictureView {
             };
             created = path;
             rust.select_only_layer(&created);
-            Edit::Structural
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &created));
+            structural_after(after.map(|rect| vec![rect]))
         });
         QString::from(created.as_str())
     }
@@ -115,7 +130,12 @@ impl qobject::PictureView {
             }
             created = path;
             rust.select_only_layer(&created);
-            Edit::Structural
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &created));
+            structural_after(after.map(|rect| vec![rect]))
         });
         QString::from(created.as_str())
     }
@@ -173,6 +193,7 @@ impl qobject::PictureView {
         label: &str,
     ) -> bool {
         let file = file_path.to_string();
+        let path = path.to_string();
         let name = std::path::Path::new(&file)
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
@@ -180,13 +201,22 @@ impl qobject::PictureView {
         let bytes = std::fs::read(&file).ok();
         let mut changed = false;
         self.as_mut().edit(label, |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let (Some(bytes), Some(doc)) = (bytes.as_deref(), rust.session.doc.as_mut()) else {
                 return Edit::None;
             };
-            changed =
-                pictura_render::replace_smart_object_contents(doc, &path.to_string(), &name, bytes);
+            changed = pictura_render::replace_smart_object_contents(doc, &path, &name, bytes);
             if changed {
-                Edit::Structural
+                let after = rust
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::damage::influence(doc, &path));
+                structural(before, after)
             } else {
                 Edit::None
             }
@@ -211,12 +241,22 @@ impl qobject::PictureView {
         let path = path.to_string();
         let mut changed = false;
         self.as_mut().edit("Rasterize Smart Object", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             changed = pictura_render::rasterize_smart_object(doc, &path);
             if changed {
-                Edit::Structural
+                let after = rust
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::damage::influence(doc, &path));
+                structural(before, after)
             } else {
                 Edit::None
             }

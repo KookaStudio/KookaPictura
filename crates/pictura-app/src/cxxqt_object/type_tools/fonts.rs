@@ -4,7 +4,8 @@
 //!
 //! [`PictureView`]: crate::cxxqt_object::qobject::PictureView
 
-use crate::cxxqt_object::edit::Edit;
+use super::type_paths;
+use crate::cxxqt_object::edit::{structural_paths, Edit};
 use crate::cxxqt_object::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -72,12 +73,22 @@ fn type_replace_fonts(view: Pin<&mut PictureView>, missing: &QString) -> i32 {
     }
     let mut replaced = 0;
     view.edit("Replace All Missing Fonts", |rust| {
+        let before = rust.session.doc.as_ref().and_then(|doc| {
+            let paths = type_paths(doc);
+            let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+            pictura_render::damage::influence_paths(doc, &refs)
+        });
         let Some(doc) = rust.session.doc.as_mut() else {
             return Edit::None;
         };
         replaced = pictura_render::replace_type_fonts(doc, &names);
         if replaced > 0 {
-            Edit::Structural
+            let after = rust.session.doc.as_ref().and_then(|doc| {
+                let paths = type_paths(doc);
+                let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+                pictura_render::damage::influence_paths(doc, &refs)
+            });
+            structural_paths(before, after)
         } else {
             Edit::None
         }

@@ -1,9 +1,12 @@
 use super::helpers::rgba_from_argb;
 use super::helpers_composite::buffer_to_image;
 use super::tests::pixel_layer;
+use super::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect};
 use pictura_render::{Planes, ViewPyramid};
+
+mod damage;
 
 /// Viewport the canvas presents into (a typical desktop canvas).
 const VIEW: (u32, u32) = (1280, 800);

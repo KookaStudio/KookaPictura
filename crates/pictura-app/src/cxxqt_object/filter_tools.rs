@@ -19,7 +19,7 @@ use super::impl_filters::{
 };
 use super::qobject::PictureView;
 use super::state::PictureViewRust;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, Edit};
 pub(super) use canvas_proxy::{canvas_proxy_buffer, resolve_stack, scaled_stack_params};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -329,10 +329,7 @@ fn apply_filter_params(
         return false;
     };
     let outcome = match region {
-        Some(rect) => Edit::Regions {
-            rects: vec![rect],
-            notify: false,
-        },
+        Some(rect) => Edit::regions(vec![rect], false),
         None => Edit::Full,
     };
     view.as_mut().edit("Filter", |_| outcome);
@@ -356,6 +353,12 @@ fn apply_lens_correction_smart(
     slots: &[f64],
     label: &str,
 ) -> bool {
+    let before = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, path));
     let applied = {
         let mut rust = view.as_mut().rust_mut();
         let Some(doc) = rust.session.doc.as_mut() else {
@@ -366,7 +369,13 @@ fn apply_lens_correction_smart(
     if !applied {
         return false;
     }
-    view.as_mut().edit(label, |_| Edit::Structural);
+    let after = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, path));
+    view.as_mut().edit(label, |_| structural(before, after));
     true
 }
 
@@ -642,10 +651,7 @@ fn run_stack(
         return false;
     };
     let outcome = match region {
-        Some(rect) => Edit::Regions {
-            rects: vec![rect],
-            notify: false,
-        },
+        Some(rect) => Edit::regions(vec![rect], false),
         None => Edit::Full,
     };
     if commit {

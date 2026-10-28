@@ -43,7 +43,6 @@ impl qobject::PictureView {
         let Some(layer) = adjustment_layer(&kind.to_string(), mask) else {
             return false;
         };
-        let region = layer_visibility_region(&layer);
         let mut created = String::new();
         let pushed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
@@ -53,15 +52,18 @@ impl qobject::PictureView {
             None => false,
         };
         if pushed {
+            let region = self
+                .rust()
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &created));
             // A masked adjustment is confined to its mask; an unmasked one spans
             // the canvas and falls back to a full recomposite.
             let outcome = match region {
-                Some(rect) => Edit::Regions {
-                    rects: vec![rect],
-                    // Creation adds a row, so the panel must refresh even when
-                    // the recomposite is limited to the new mask's region.
-                    notify: true,
-                },
+                // Creation adds a row, so the panel must refresh even when
+                // the recomposite is limited to the new mask's region.
+                Some(rect) => Edit::regions(vec![rect], true),
                 None => Edit::Full,
             };
             self.as_mut().edit("Adjustment", |rust| {
@@ -137,12 +139,9 @@ impl qobject::PictureView {
         if let Some(region) = applied {
             self.as_mut().rust_mut().last_filter = Some((kind.to_string(), Vec::new()));
             let outcome = match region {
-                Some(rect) => Edit::Regions {
-                    rects: vec![rect],
-                    // Creation adds a row, so the panel must refresh even when
-                    // the recomposite is limited to the new mask's region.
-                    notify: true,
-                },
+                // Creation adds a row, so the panel must refresh even when
+                // the recomposite is limited to the new mask's region.
+                Some(rect) => Edit::regions(vec![rect], true),
                 None => Edit::Full,
             };
             self.as_mut().edit("Filter", |_| outcome);
@@ -171,10 +170,7 @@ impl qobject::PictureView {
         };
         self.as_mut().rust_mut().last_filter = Some((kind.to_string(), Vec::new()));
         let outcome = match region {
-            Some(rect) => Edit::Regions {
-                rects: vec![rect],
-                notify: false,
-            },
+            Some(rect) => Edit::regions(vec![rect], false),
             None => Edit::Full,
         };
         self.as_mut().edit("Filter", |_| outcome);

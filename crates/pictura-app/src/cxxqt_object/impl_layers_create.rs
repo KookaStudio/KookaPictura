@@ -9,7 +9,7 @@
 use super::helpers::{as_str_slice, list_of_strings};
 use super::helpers_composite::selection_to_mask;
 use super::qobject;
-use crate::cxxqt_object::edit::{insertion_edit, Edit};
+use crate::cxxqt_object::edit::{insertion_edit, structural, structural_paths, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -138,10 +138,15 @@ impl qobject::PictureView {
         let owned = list_of_strings(paths);
         let mut created = String::new();
         self.as_mut().edit("Group from Layers", |rust| {
+            let refs = as_str_slice(&owned);
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
-            let refs = as_str_slice(&owned);
             let Some(path) = pictura_render::group_paths(doc, &refs) else {
                 return Edit::None;
             };
@@ -154,8 +159,9 @@ impl qobject::PictureView {
                 group.opacity = opacity.clamp(0, 255) as u8;
             }
             created = path;
+            let after = pictura_render::damage::influence(doc, &created);
             rust.select_only_layer(&created);
-            Edit::Structural
+            structural_paths(before, after.map(|rect| vec![rect]))
         });
         QString::from(created.as_str())
     }
@@ -198,6 +204,11 @@ impl qobject::PictureView {
                 "Layer via Copy"
             },
             |rust| {
+                let before = rust
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::damage::influence(doc, source_path));
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
                 };
@@ -209,8 +220,9 @@ impl qobject::PictureView {
                 if created.is_empty() {
                     return Edit::None;
                 }
+                let after = pictura_render::damage::influence(doc, &created);
                 rust.select_only_layer(&created);
-                Edit::Structural
+                structural(before, after)
             },
         );
         QString::from(created.as_str())

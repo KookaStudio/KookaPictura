@@ -7,13 +7,53 @@
 
 use std::collections::HashMap;
 
-use super::edit::Edit;
+use super::edit::{structural_before, Edit};
 use super::helpers::*;
 use super::qobject;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
+
+fn remap_after_delete(path: &str, deleted: &[String]) -> Option<String> {
+    let mut old_parent = String::new();
+    let mut remapped = Vec::new();
+    for segment in path.split('/') {
+        let index: usize = segment.parse().ok()?;
+        let old_path = if old_parent.is_empty() {
+            index.to_string()
+        } else {
+            format!("{old_parent}/{index}")
+        };
+        if deleted.iter().any(|path| path == &old_path) {
+            return None;
+        }
+        let removed_before = deleted
+            .iter()
+            .filter(|path| {
+                let (parent, segment) = path
+                    .rsplit_once('/')
+                    .map_or((None, path.as_str()), |(parent, segment)| {
+                        (Some(parent), segment)
+                    });
+                let same_parent = parent
+                    == if old_parent.is_empty() {
+                        None
+                    } else {
+                        Some(old_parent.as_str())
+                    };
+                same_parent
+                    && segment
+                        .parse::<usize>()
+                        .ok()
+                        .is_some_and(|deleted_index| deleted_index < index)
+            })
+            .count();
+        remapped.push(index.saturating_sub(removed_before).to_string());
+        old_parent = old_path;
+    }
+    Some(remapped.join("/"))
+}
 
 impl qobject::PictureView {
     /// Select the layer and every layer matching it: same node class,
@@ -134,6 +174,9 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
+            let hidden = pictura_render::hidden_layer_paths(doc);
+            let hidden_refs: Vec<&str> = hidden.iter().map(String::as_str).collect();
+            let before = pictura_render::damage::influence_paths(doc, &hidden_refs);
             removed = pictura_render::delete_hidden_layers(doc);
             if removed == 0 {
                 return Edit::None;
@@ -141,7 +184,15 @@ impl qobject::PictureView {
             let target = {
                 let mut target = rust.layer_target.clone();
                 if let Some(doc) = rust.session.doc.as_ref() {
-                    target.retain_resolving(doc);
+                    let selected: Vec<String> = target
+                        .selected()
+                        .iter()
+                        .filter_map(|path| remap_after_delete(path, &hidden))
+                        .collect();
+                    let anchor = target
+                        .anchor()
+                        .and_then(|path| remap_after_delete(path, &hidden));
+                    target.select(selected, anchor, Some(doc));
                 }
                 target
             };
@@ -149,7 +200,18 @@ impl qobject::PictureView {
             if rust.layer_target.is_empty() {
                 select_top_layer(rust);
             }
-            Edit::Structural
+            // Path-keyed view state cannot be remapped reliably after the
+            // indices shift; clear it rather than leave it on another layer.
+            rust.mask_edit_target = None;
+            rust.mask_overlay = None;
+            rust.isolation = None;
+            // The removed layers are hidden, but removing a hidden clipping
+            // base releases its visible run; the pre-delete influence bounds
+            // that change, or falls back to a full recomposite when needed.
+            if rust.mask_solo.is_some() {
+                rust.rebuild_mask_solo_source();
+            }
+            structural_before(before)
         });
         removed as i32
     }

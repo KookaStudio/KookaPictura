@@ -195,10 +195,8 @@ fn healing_commit(
         let mut rust = view.as_mut().rust_mut();
         rust.session.doc = Some(outcome.document);
     }
-    view.as_mut().edit(label, |_| Edit::Regions {
-        rects: vec![outcome.dirty],
-        notify: true,
-    });
+    view.as_mut()
+        .edit(label, |_| Edit::regions(vec![outcome.dirty], true));
     true
 }
 
@@ -240,10 +238,8 @@ fn patch_selection(
             _ => return false,
         }
     };
-    view.as_mut().edit("Patch Tool", |_| Edit::Regions {
-        rects: vec![dirty],
-        notify: true,
-    });
+    view.as_mut()
+        .edit("Patch Tool", |_| Edit::regions(vec![dirty], true));
     true
 }
 
@@ -278,10 +274,8 @@ fn content_aware_move(
             _ => return false,
         }
     };
-    view.as_mut().edit("Content-Aware Move", |_| Edit::Regions {
-        rects: vec![dirty],
-        notify: true,
-    });
+    view.as_mut()
+        .edit("Content-Aware Move", |_| Edit::regions(vec![dirty], true));
     true
 }
 
@@ -313,9 +307,7 @@ fn red_eye(
             _ => return false,
         }
     };
-    view.as_mut().edit("Red Eye Tool", |_| Edit::Regions {
-        rects: vec![dirty],
-        notify: true,
-    });
+    view.as_mut()
+        .edit("Red Eye Tool", |_| Edit::regions(vec![dirty], true));
     true
 }
