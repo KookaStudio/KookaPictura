@@ -20,6 +20,7 @@
 #include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 
 #include <QtCore/QAbstractItemModel>
@@ -76,6 +77,25 @@
 
 
 namespace pictura {
+
+bool LayersPanel::rowControlAt(const QModelIndex& index, const QPoint& pos) const
+{
+    if (!delegate_ || !tree_ || !index.isValid()) {
+        return false;
+    }
+    const QRect vr = tree_->visualRect(index);
+    if (vr.isEmpty()) {
+        return false;
+    }
+    return delegate_->eyeColumnContains(vr, pos)
+        || delegate_->thumbRect(vr, index).contains(pos)
+        || delegate_->maskThumbRect(vr, index).contains(pos)
+        || delegate_->linkGlyphRect(vr, index).contains(pos)
+        || delegate_->vectorMaskThumbRect(vr, index).contains(pos)
+        || delegate_->vectorLinkGlyphRect(vr, index).contains(pos)
+        || delegate_->lockRect(vr).contains(pos)
+        || delegate_->fxRect(vr, index).contains(pos);
+}
 
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
 {
@@ -138,6 +158,17 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     delegate_->chevronRect(tree_->visualRect(index), index);
                 if (chevron.contains(pos)) {
                     tree_->setExpanded(index, !tree_->isExpanded(index));
+                    return true;
+                }
+            }
+            // A transform is pending: a click that changes the active layer or
+            // hits a row control resolves it first, and a Cancel answer leaves
+            // the active layer and the transform alone. A plain click on the
+            // already-active row asks nothing.
+            if (index.isValid() && view_) {
+                const bool mutates = rowControlAt(index, pos)
+                    || pathForProxyIndex(index) != layer_selection_anchor(*view_);
+                if (mutates && !resolvePendingTransform()) {
                     return true;
                 }
             }
@@ -372,6 +403,14 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
         if (mouse->button() == Qt::LeftButton) {
             const QPoint pos = mouse->position().toPoint();
             const QModelIndex index = tree_->indexAt(pos);
+            // A pending transform resolves first, as on the single press.
+            if (index.isValid() && view_) {
+                const bool mutates = rowControlAt(index, pos)
+                    || pathForProxyIndex(index) != layer_selection_anchor(*view_);
+                if (mutates && !resolvePendingTransform()) {
+                    return true;
+                }
+            }
             if (index.isValid()) {
                 const QString rowKind = index.data(KindRole).toString();
                 if (rowKind.startsWith(QLatin1String("smart-filter"))) {
