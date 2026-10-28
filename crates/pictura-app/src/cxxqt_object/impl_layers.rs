@@ -34,6 +34,9 @@ pub(super) fn changed_property_region(
         .zip(before)
         .filter(|(path, before)| property_compositing(doc, path) != **before)
         .try_fold(None, |union: Option<pictura_core::PsdRect>, (path, _)| {
+            if pictura_render::resolve_path(doc, path)?.is_group {
+                return None;
+            }
             let rect = pictura_render::damage::influence(doc, path)?;
             Some(Some(union.map_or(rect, |u| union_rect(u, rect))))
         })
