@@ -1,6 +1,7 @@
 // Options-bars parity (#252): the tool-icon separator on every page, the Move
 // bar's Auto-Select / Show Transform Controls / three-dots Align To, and the
-// Eyedropper's Sample Size / Sample scope / Show Sampling Ring.
+// Eyedropper's Sample Size / Sample scope / Show Sampling Ring. Ctrl's
+// temporary Auto-Select flip (#981).
 
 #include <QtTest/QtTest>
 
@@ -36,6 +37,10 @@ private slots:
     void toolIconSeparatorOnEveryPage();
     void moveControlsAndAlignToCanvas();
     void moveAutoSelectPicksTheTopmostLayer();
+    void moveCtrlClickAutoSelects();
+    void moveCtrlClickSuppressesAutoSelect();
+    void moveCtrlClickFollowsGroupMode();
+    void moveCtrlShowsFlippedAutoSelect();
     void eraserBarMatchesTheBrush();
     void pencilAutoEraseDoesNotLeakToBrush();
     void mixerBarMatchesCc();
@@ -52,6 +57,36 @@ private:
     {
         const QStringList parts = pictura::transform_api::layerRect(*view, path).toString().split(QLatin1Char(' '));
         return parts.size() == 4 ? QPoint(parts[0].toInt(), parts[1].toInt()) : QPoint(-999, -999);
+    }
+
+    // A new document whose Background carries a 6x6 copy over (8, 5), with the
+    // Move tool active and Auto-Select set to `on` with the `target` dropdown
+    // (0 Group, 1 Layer). Returns the copy's path.
+    QString ctrlFixture(const QString& name, bool on, int target)
+    {
+        if (!window_->newDocument(name, 40, 40, QStringLiteral("rgb"), 8, QStringLiteral("white"))) {
+            return {};
+        }
+        pictura::PictureView* view = window_->activeView();
+        view->select_rect(8, 5, 6, 6, QStringLiteral("new"), 0.0);
+        const QString copy = view->layer_via_copy(QStringLiteral("0"));
+        view->deselect();
+        window_->setActiveTool(pictura::ToolId::Move);
+        auto* autoSelectOn =
+            window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveAutoSelectOn"));
+        auto* autoSelect = window_->findChild<QComboBox*>(QStringLiteral("optionsMoveAutoSelect"));
+        if (!autoSelectOn || !autoSelect) {
+            return {};
+        }
+        autoSelect->setCurrentIndex(target);
+        autoSelectOn->setChecked(on);
+        return copy;
+    }
+
+    void ctrlClick(const QPointF& pos)
+    {
+        window_->imageView()->mousePressed(pos, Qt::LeftButton, int(Qt::ControlModifier));
+        window_->imageView()->mouseReleased(pos);
     }
 
     static QAction* menuAction(QToolButton* menuButton, const QString& objectName)
@@ -202,6 +237,90 @@ void OptionsBarsParityTest::moveAutoSelectPicksTheTopmostLayer()
     canvas->mousePressed(QPointF(10, 8), Qt::LeftButton, 0);
     canvas->mouseReleased(QPointF(10, 8));
     QCOMPARE(view->active_layer_path(), QStringLiteral("0"));
+}
+
+// mca_ctrl_click_selects
+void OptionsBarsParityTest::moveCtrlClickAutoSelects()
+{
+    const QString copy = ctrlFixture(QStringLiteral("CtrlSelect"), false, 1);
+    QVERIFY(!copy.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    // An empty layer on top: (10, 8) is transparent there, so the press falls
+    // through to the copy's opaque pixel.
+    const int top = view->add_layer(-1);
+    QVERIFY(top >= 0);
+    const QString empty = QString::number(top);
+    view->set_active_layer(empty);
+    QCOMPARE(view->active_layer_path(), empty);
+
+    ctrlClick(QPointF(10, 8));
+    QCOMPARE(view->active_layer_path(), copy);
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(!tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().autoSelectOn);
+}
+
+// mca_ctrl_disables
+void OptionsBarsParityTest::moveCtrlClickSuppressesAutoSelect()
+{
+    const QString copy = ctrlFixture(QStringLiteral("CtrlSuppress"), true, 1);
+    QVERIFY(!copy.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    view->set_active_layer(QStringLiteral("0"));
+
+    ctrlClick(QPointF(10, 8));
+    QCOMPARE(view->active_layer_path(), QStringLiteral("0"));
+    // Without Ctrl the same press auto-selects the copy.
+    window_->imageView()->mousePressed(QPointF(10, 8), Qt::LeftButton, 0);
+    window_->imageView()->mouseReleased(QPointF(10, 8));
+    QCOMPARE(view->active_layer_path(), copy);
+    window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveAutoSelectOn"))->setChecked(false);
+}
+
+// mca_ctrl_follows_mode
+void OptionsBarsParityTest::moveCtrlClickFollowsGroupMode()
+{
+    const QString copy = ctrlFixture(QStringLiteral("CtrlGroup"), false, 0);
+    QVERIFY(!copy.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    const QString group = view->group_layers(QStringList{copy});
+    QVERIFY(!group.isEmpty());
+    view->set_active_layer(QStringLiteral("0"));
+
+    ctrlClick(QPointF(10, 8));
+    QCOMPARE(view->active_layer_path(), group);
+}
+
+// mca_checkbox_shows_flip
+void OptionsBarsParityTest::moveCtrlShowsFlippedAutoSelect()
+{
+    QVERIFY(!ctrlFixture(QStringLiteral("CtrlShow"), false, 1).isEmpty());
+    auto* canvas = window_->imageView();
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    auto* autoSelectOn =
+        window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveAutoSelectOn"));
+    auto* autoSelect = window_->findChild<QComboBox*>(QStringLiteral("optionsMoveAutoSelect"));
+    auto* move = tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move);
+    QVERIFY(!autoSelectOn->isChecked() && !autoSelect->isEnabled());
+
+    emit canvas->modifierKeyChanged(int(Qt::ControlModifier));
+    QVERIFY(autoSelectOn->isChecked());
+    QVERIFY(autoSelect->isEnabled());
+    QVERIFY(!move->get().autoSelectOn);
+
+    emit canvas->modifierKeyChanged(int(Qt::NoModifier));
+    QVERIFY(!autoSelectOn->isChecked());
+    QVERIFY(!autoSelect->isEnabled());
+    QVERIFY(!move->get().autoSelectOn);
+
+    // A click on the box with Ctrl held still turns the stored option on; the
+    // box then shows it flipped off until Ctrl is released.
+    emit canvas->modifierKeyChanged(int(Qt::ControlModifier));
+    autoSelectOn->setChecked(false);
+    QVERIFY(move->get().autoSelectOn);
+    emit canvas->modifierKeyChanged(int(Qt::NoModifier));
+    QVERIFY(autoSelectOn->isChecked());
+    autoSelectOn->setChecked(false);
+    QVERIFY(!move->get().autoSelectOn);
 }
 
 void OptionsBarsParityTest::pencilAutoEraseDoesNotLeakToBrush()

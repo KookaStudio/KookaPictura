@@ -5,6 +5,7 @@
 
 #include "icons.h"
 
+#include <QtCore/QSignalBlocker>
 #include <QtGui/QAction>
 #include <QtGui/QActionGroup>
 #include <QtWidgets/QCheckBox>
@@ -133,12 +134,25 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     layout->addWidget(menuButton);
 
     if (controller_) {
+        // The box shows Auto-Select as a Ctrl-press would apply it; the stored
+        // option ignores the flip, so a click with Ctrl held still toggles it.
         connect(autoSelectOn, &QCheckBox::toggled, this, [this, autoSelect](bool on) {
             autoSelect->setEnabled(on);
             MoveOptions o = move_->get();
-            o.autoSelectOn = on;
+            o.autoSelectOn = on != moveCtrlFlip_;
             move_->set(o);
         });
+        // ponytail: a Ctrl release while the window is unfocused is never seen,
+        // so the box stays flipped until the next Ctrl key event; presses read
+        // their own modifiers and stay correct.
+        connect(controller_, &ToolController::modifiersChanged, this,
+                [this, autoSelectOn, autoSelect](int modifiers) {
+                    moveCtrlFlip_ = (modifiers & Qt::ControlModifier) != 0;
+                    const bool shown = move_->get().autoSelectOn != moveCtrlFlip_;
+                    const QSignalBlocker block(autoSelectOn);
+                    autoSelectOn->setChecked(shown);
+                    autoSelect->setEnabled(shown);
+                });
         connect(autoSelect, &QComboBox::currentIndexChanged, this, [this, autoSelect](int) {
             MoveOptions o = move_->get();
             o.autoSelect = autoSelect->currentIndex();

@@ -493,6 +493,9 @@ signals:
     void brushSizeChanged(int size);
     void magneticWidthChanged(int width);
     void foregroundSampled(const QColor& color);
+    // The canvas's held modifier keys changed (the Move bar shows Ctrl's
+    // Auto-Select flip).
+    void modifiersChanged(int modifiers);
     void selectionCommitted();
     // A pixel edit was refused because the target layer's pixels are locked.
     void pixelEditRefused(const QString& message);

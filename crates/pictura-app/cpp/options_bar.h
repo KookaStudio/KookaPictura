@@ -212,6 +212,8 @@ private:
     // Transform page state: relative X/Y display and the W/H aspect link.
     bool transformRelative_ = false;
     bool transformLink_ = true;
+    // True while Ctrl is held: the Move bar shows Auto-Select flipped.
+    bool moveCtrlFlip_ = false;
     std::vector<QToolButton*> alignButtons_;
     std::vector<QToolButton*> distributeButtons_;
     // The selection tools' `Select and Mask…` buttons, enabled together.
