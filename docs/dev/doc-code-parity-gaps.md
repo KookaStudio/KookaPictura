@@ -205,8 +205,9 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
 
-De-Interlace (`#344`), NTSC Colors (`#345`), Embed/Read Watermark (`#350`/`#351`)
-are already tracked.
+De-Interlace (`#344`) and NTSC Colors (`#345`) are already tracked. Embed/Read
+Watermark (`#350`/`#351`) shipped as an in-tree approximation
+(`06-filters/digimarc-watermark.md`), so it is no longer a gap.
 
 ### 07-color-painting
 

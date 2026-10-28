@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     AwaParams, BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap,
-    DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType,
-    HalftoneType, HdrToningParams, IrisPin, IrisShape, LensCorrectionParams, LensType,
+    DiffuseMode, DisplaceFit, DisplaceMap, Durability, ExtrudeType, FrameOptions, GlassTexture,
+    GrainType, HalftoneType, HdrToningParams, IrisPin, IrisShape, LensCorrectionParams, LensType,
     LightDirection, Lighting, LiquifyMesh, MezzotintType, NoiseDistribution, PathMotion, PolarKind,
     Quality, RadialMethod, ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
     SpherizeMode, SpinPin, SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin,
-    TonalFade, VpEdit, WaveType, WindMethod, ZigZagStyle,
+    TonalFade, VpEdit, WatermarkKind, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -608,4 +608,12 @@ pub enum Filter {
         highlight: TonalFade,
     },
     HdrToning(HdrToningParams),
+    /// The in-tree approximate watermark (`FILT-105`): our own deterministic
+    /// spread-spectrum carrier, not Digimarc Barcode.
+    EmbedWatermark {
+        kind: WatermarkKind,
+        creator_id: u32,
+        id: u32,
+        durability: Durability,
+    },
 }

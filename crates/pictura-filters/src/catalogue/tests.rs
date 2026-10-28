@@ -35,7 +35,7 @@ fn catalogue_rows_match_kind_order() {
         Plaster, Reticulation, Stamp, TornEdges, WaterPaper, Emboss, Extrude, FindEdges,
         Solarize, Diffuse, GlowingEdges, Tiles, TraceContour, Wind, Craquelure, Grain,
         MosaicTiles, Patchwork, StainedGlass, Texturizer, Custom, HighPass, Maximum, Minimum,
-        Offset, NtscColors, HdrToning,
+        Offset, NtscColors, HdrToning, EmbedWatermark,
     ];
     assert_eq!(FilterKind::ALL, EXPECTED);
     for (kind, row) in FilterKind::ALL.iter().zip(all()) {

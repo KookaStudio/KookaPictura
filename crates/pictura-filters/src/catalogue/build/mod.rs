@@ -15,6 +15,7 @@ pub(crate) use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 
 pub(crate) mod blur;
 mod choices;
+pub(crate) mod digimarc;
 pub(crate) mod distort;
 pub(crate) mod engine_only;
 pub(crate) mod gallery;

@@ -193,4 +193,5 @@ filter_variants! {
     Offset: Filter::Offset { .. } => crate::catalogue::rows::other::OFFSET,
     NtscColors: Filter::NtscColors => crate::catalogue::rows::video::NTSC_COLORS,
     HdrToning: Filter::HdrToning(..) => crate::catalogue::rows::engine_only::HDR_TONING,
+    EmbedWatermark: Filter::EmbedWatermark { .. } => crate::catalogue::rows::digimarc::EMBED_WATERMARK,
 }

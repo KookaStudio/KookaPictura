@@ -625,7 +625,8 @@ fn digest_decision(kind: FilterKind) -> bool {
         | FilterKind::TraceContour
         | FilterKind::Wind
         | FilterKind::SmartSharpen
-        | FilterKind::HdrToning => false,
+        | FilterKind::HdrToning
+        | FilterKind::EmbedWatermark => false,
     }
 }
 

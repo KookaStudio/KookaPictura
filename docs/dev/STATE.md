@@ -11,6 +11,15 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Embed/Read Watermark ship as an in-tree approximation** (#350, #351, OpenSpec
+  change `digimarc-watermark`). `Filter ▸ Digimarc ▸ Embed Watermark` is a
+  catalogue filter whose four controls (Watermark Type, Creator ID, Image ID,
+  Watermark Durability) write a deterministic spread-spectrum carrier
+  (`crates/pictura-filters/src/digimarc.rs`); `Filter ▸ Digimarc ▸ Read
+  Watermark` decodes it from the active layer and marks the document title with a
+  copyright symbol. It is **not** Digimarc-compatible
+  (`docs/06-filters/digimarc-watermark.md`). Tests: `tst_digimarc_watermark` and
+  the `digimarc` unit tests.
 - **A layer click resolves a pending transform** (#905, OpenSpec change
   `apply-pending-transform-on-layer-click`). The `#750` lock no longer disables
   the whole Layers panel: its layer list stays selectable, and a change of the
@@ -1798,8 +1807,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tst_filter_menu`; `commandIdForPath` centralizes the path-derived filter ids.
   Ceilings (`ponytail:`): entries with no engine kernel (Filter Gallery, Liquify,
   Vanishing Point, Lens Correction, Blur Gallery, Lens/Smart Blur, Reduce Noise,
-  Glass, Diffuse Glow, Diffuse, Glowing Edges, De-Interlace, NTSC Colors,
-  Digimarc) stay disabled stubs (Custom has since been exposed, #336); the alpha pass reruns the kernel on the CPU.
+  Glass, Diffuse Glow, Diffuse, Glowing Edges, De-Interlace) stay disabled stubs
+  (Custom has since been exposed, #336; Embed/Read Watermark now ship as an
+  in-tree approximate carrier, #350/#351); the alpha pass reruns the kernel on the CPU.
 - PSD interop roadmap (`docs/dev/psd-support-roadmap.md`): P1 (ZIP/ZIP-prediction
   read) and P2 (opaque lossless open→save) and P2.5 are shipped. P2.5 adds a
   smart-object model and the Camera Raw Filter view on top of the preserved
