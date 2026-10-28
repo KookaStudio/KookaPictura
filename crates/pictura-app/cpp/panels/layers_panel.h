@@ -60,6 +60,13 @@ public:
     void setView(PictureView* view);
     void refresh();
 
+    /// While a transform is pending the layer list stays selectable but the
+    /// panel's editing controls are disabled. A change of the active layer
+    /// resolves the pending transform first through the resolver the frame
+    /// installs with `setPendingTransformResolver`.
+    void setTransformPending(bool pending);
+    void setPendingTransformResolver(std::function<bool()> resolver);
+
     /// Bottom-first top-level index of the selected row, or -1 when nothing is
     /// selected or the selected row is nested below a group.
     int currentLayer() const;
@@ -91,6 +98,8 @@ public:
     /// Select the row whose path matches and sync the controls; false when no
     /// such row exists. Test seam for the selection -> Properties wiring.
     bool selectRowForTest(const QString& path);
+    /// Synthesize a left click on `path`'s row name, as a user would.
+    bool clickRowForTest(const QString& path);
 
     // Self-test hooks (M39). Read the projected model and menus, drive solo and
     // inline rename, and expose the Panel Options values without synthetic
@@ -387,6 +396,13 @@ private:
     void syncControls();
     // Write the tree selection into the document target (user intent only).
     void writeTarget();
+    // Resolve a pending transform before a panel change: true when it is safe to
+    // proceed (none pending, or the user applied/cancelled it), false when the
+    // user cancelled the prompt and the change must not happen.
+    bool resolvePendingTransform();
+    // Whether `pos` hits a row control (the eye, a thumbnail, a link glyph, the
+    // lock badge, or the fx badge) rather than the plain row body.
+    bool rowControlAt(const QModelIndex& index, const QPoint& pos) const;
     // Apply the document target to the tree without writing it back.
     void applyTargetSelection();
     void setTreeSelection(const QStringList& paths, const QString& current);
@@ -544,6 +560,11 @@ private:
     bool refreshQueued_ = false;
     bool applyingTarget_ = false;
     QMetaObject::Connection viewConnection_;
+    // A modal transform is pending: the layer list stays selectable, the
+    // editing controls are disabled, and a change of the active layer resolves
+    // the transform first.
+    bool transformPending_ = false;
+    std::function<bool()> pendingTransformResolver_;
 
     // Test seam: skip the modal Background-conversion dialog and use this result.
     bool bgConvertArmed_ = false;

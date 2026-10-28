@@ -9,7 +9,50 @@
 #include <QtCore/QStringList>
 #include <QtWidgets/QTreeView>
 
+#include <utility>
+
 namespace pictura {
+
+namespace {
+
+// Whether two path lists name the same set, regardless of order.
+bool samePathSet(const QStringList& a, const QStringList& b)
+{
+    if (a.size() != b.size()) {
+        return false;
+    }
+    QStringList left = a;
+    QStringList right = b;
+    left.sort();
+    right.sort();
+    return left == right;
+}
+
+} // namespace
+
+void LayersPanel::setTransformPending(bool pending)
+{
+    if (transformPending_ == pending) {
+        return;
+    }
+    transformPending_ = pending;
+    // The layer list stays selectable; the editing controls follow the flag.
+    syncControls();
+    syncStripButtons();
+}
+
+void LayersPanel::setPendingTransformResolver(std::function<bool()> resolver)
+{
+    pendingTransformResolver_ = std::move(resolver);
+}
+
+bool LayersPanel::resolvePendingTransform()
+{
+    if (!pendingTransformResolver_) {
+        return true;
+    }
+    return pendingTransformResolver_();
+}
 
 void LayersPanel::writeTarget()
 {
@@ -22,6 +65,10 @@ void LayersPanel::writeTarget()
     }
     QStringList paths = selectedPaths();
     if (paths.isEmpty()) {
+        if (!targetPaths().isEmpty() && !resolvePendingTransform()) {
+            applyTargetSelection();
+            return;
+        }
         set_layer_target(*view_, {}, {});
         rememberTarget();
         // The tree's current row projects the target; with no target it must
@@ -35,6 +82,12 @@ void LayersPanel::writeTarget()
     // A current row outside the selection is not a new active layer: keep the
     // target's existing active path instead of resetting it to the first row.
     const QString anchor = paths.contains(current) ? current : layer_selection_anchor(*view_);
+    const bool moved = !samePathSet(paths, targetPaths())
+        || anchor != layer_selection_anchor(*view_);
+    if (moved && !resolvePendingTransform()) {
+        applyTargetSelection();
+        return;
+    }
     set_layer_target(*view_, paths, anchor);
     rememberTarget();
 }
@@ -57,6 +110,10 @@ void LayersPanel::writeCurrentAnchor()
     }
     const QStringList target = targetPaths();
     if (!target.contains(current)) {
+        return;
+    }
+    if (current != layer_selection_anchor(*view_) && !resolvePendingTransform()) {
+        applyTargetSelection();
         return;
     }
     set_layer_target(*view_, target, current);

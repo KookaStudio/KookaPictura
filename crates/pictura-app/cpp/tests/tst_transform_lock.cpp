@@ -1,11 +1,13 @@
-// A pending transform locks layer edits and guards tool switches (#750): while
-// a modal Free Transform / Transform submenu session is uncommitted, every
-// Layer menu command is disabled (and refuses dispatch), the Layers panel is
-// greyed, and a tool switch, by click or keyboard shortcut, asks "Apply the
+// A pending transform locks layer edits and guards tool switches and layer
+// changes (#750, #905): while a modal Free Transform / Transform submenu
+// session is uncommitted, every Layer menu command is disabled (and refuses
+// dispatch), the Layers panel's editing controls are disabled while its layer
+// list stays selectable, and a tool switch or a layer click asks "Apply the
 // transformation?": Apply commits, Don't Apply cancels, Cancel stays.
 
 #include <QtTest/QtTest>
 
+#include "api/layers_api.h"
 #include "commands.h"
 #include "dialogs.h"
 #include "frame.h"
@@ -21,7 +23,9 @@
 
 #include "qt_test_support.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtGui/QAction>
+#include <QtWidgets/QTreeView>
 
 namespace {
 
@@ -62,7 +66,10 @@ private slots:
     void cleanup();
 
     void layerMenuIsLockedWhilePending();
-    void layersPanelIsGreyedWhilePending();
+    void panelEditingControlsLockedWhilePending();
+    void layerClickAppliesThePendingTransform();
+    void layerClickDontApplyCancels();
+    void layerClickCancelKeepsTheTransform();
     void documentEditsDuringPendingTransform();
     void maskFillIsRefusedWhilePending();
     void applyCommitsAndSwitches();
@@ -73,6 +80,8 @@ private slots:
 
 private:
     QString beginLayer(Fixture& fixture);
+    // A document layer path other than `exclude`, or empty when there is none.
+    QString otherLayerPath(Fixture& fixture, const QString& exclude);
     // Answer the next prompts with `decision`, counting how often it is asked.
     void answer(Fixture& fixture, pictura::TransformDecision decision);
 
@@ -86,6 +95,9 @@ void TransformLockTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    // The layer-click tests read row geometry, which needs a laid-out panel.
+    window_->show();
+    QCoreApplication::processEvents();
 }
 
 void TransformLockTest::cleanup()
@@ -120,6 +132,17 @@ QString TransformLockTest::beginLayer(Fixture& fixture)
     }
     view->deselect();
     return layer;
+}
+
+QString TransformLockTest::otherLayerPath(Fixture& fixture, const QString& exclude)
+{
+    const QVector<pictura::layers_api::LayerRow> rows = pictura::layers_api::rows(*fixture.view);
+    for (const pictura::layers_api::LayerRow& row : rows) {
+        if (!row.path.isEmpty() && row.path != exclude) {
+            return row.path;
+        }
+    }
+    return QString();
 }
 
 void TransformLockTest::answer(Fixture& fixture, pictura::TransformDecision decision)
@@ -164,20 +187,111 @@ void TransformLockTest::layerMenuIsLockedWhilePending()
     QVERIFY(action(frame, pictura::command_ids::LayerNewLayer)->isEnabled());
 }
 
-void TransformLockTest::layersPanelIsGreyedWhilePending()
+void TransformLockTest::panelEditingControlsLockedWhilePending()
 {
     pictura::PicturaMainWindow& frame = *window_;
     Fixture f(frame, seed(), QStringLiteral("pictura_lock_panel"));
     QVERIFY(f.ok());
     const QString layer = beginLayer(f);
     QVERIFY(!layer.isEmpty());
-    QVERIFY(frame.layersPanelForTest() != nullptr);
-    QVERIFY(frame.layersPanelForTest()->isEnabled());
+    pictura::LayersPanel* panel = frame.layersPanelForTest();
+    QVERIFY(panel != nullptr);
+    auto* tree = panel->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    QVERIFY(panel->isEnabled());
+    QVERIFY(panel->maskButtonEnabledForTest());
+    QVERIFY(panel->deleteButtonEnabledForTest());
+    QVERIFY(panel->lockToggleEnabledForTest(0));
 
     QVERIFY(f.tools->beginTransformMode(layer, QStringLiteral("perspective")));
-    QVERIFY(!frame.layersPanelForTest()->isEnabled());
+    // The panel and its layer list stay interactive; the editing controls lock.
+    QVERIFY(panel->isEnabled());
+    QVERIFY(tree->isEnabled());
+    QVERIFY(!panel->maskButtonEnabledForTest());
+    QVERIFY(!panel->deleteButtonEnabledForTest());
+    QVERIFY(!panel->lockToggleEnabledForTest(0));
+
     f.tools->cancelFreeTransform();
-    QVERIFY(frame.layersPanelForTest()->isEnabled());
+    QVERIFY(panel->isEnabled());
+    QVERIFY(panel->maskButtonEnabledForTest());
+    QVERIFY(panel->deleteButtonEnabledForTest());
+    QVERIFY(panel->lockToggleEnabledForTest(0));
+}
+
+void TransformLockTest::layerClickAppliesThePendingTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_click_apply"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    const QString other = otherLayerPath(f, layer);
+    QVERIFY(!other.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    answer(f, pictura::TransformDecision::Apply);
+    const int base = f.view->history_index();
+
+    pictura::LayersPanel* panel = frame.layersPanelForTest();
+    QVERIFY(panel != nullptr);
+    QVERIFY(panel->clickRowForTest(other));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(asked_, 1);
+    QVERIFY(!f.view->transform_session_active());
+    QVERIFY(f.committedOnce(base, "Free Transform"));
+    QCOMPARE(f.view->active_layer_path(), other);
+    QVERIFY(!frame.layersLockedForTest());
+}
+
+void TransformLockTest::layerClickDontApplyCancels()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_click_dont"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    const QString other = otherLayerPath(f, layer);
+    QVERIFY(!other.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    answer(f, pictura::TransformDecision::DontApply);
+    const int base = f.view->history_index();
+
+    pictura::LayersPanel* panel = frame.layersPanelForTest();
+    QVERIFY(panel != nullptr);
+    QVERIFY(panel->clickRowForTest(other));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(asked_, 1);
+    QVERIFY(!f.view->transform_session_active());
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(f.view->active_layer_path(), other);
+}
+
+void TransformLockTest::layerClickCancelKeepsTheTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_click_cancel"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    const QString other = otherLayerPath(f, layer);
+    QVERIFY(!other.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    answer(f, pictura::TransformDecision::Cancel);
+
+    pictura::LayersPanel* panel = frame.layersPanelForTest();
+    QVERIFY(panel != nullptr);
+    QVERIFY(panel->clickRowForTest(other));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(asked_, 1);
+    QVERIFY(f.view->transform_session_active());
+    QCOMPARE(f.view->active_layer_path(), layer);
+    QVERIFY(frame.layersLockedForTest());
+    QVERIFY(!panel->maskButtonEnabledForTest());
 }
 
 void TransformLockTest::documentEditsDuringPendingTransform()
