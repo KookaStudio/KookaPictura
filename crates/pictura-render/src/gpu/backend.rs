@@ -474,6 +474,12 @@ impl Gpu {
         }
     }
 
+    /// Whether this composite covers the whole document, the only case whose
+    /// uploads the resident store may retain.
+    fn is_document(&self, doc: &Document) -> bool {
+        self.x0 == 0 && self.y0 == 0 && self.w == doc.width && self.h == doc.height
+    }
+
     pub(super) fn zero_canvas(&self) -> wgpu::Buffer {
         // ponytail: clear_buffer (GPU memset) over a host `vec![0; n*4]` upload;
         // COPY_DST is required by clear_buffer and the readback's COPY_SRC.
@@ -495,47 +501,64 @@ impl Gpu {
         canvas
     }
 
-    /// Assemble the source for one pixel layer over its layer-rect intersection
-    /// with the region, matching `composite_pixels`: planar 8-bit channel
-    /// planes, grayscale replicating channel 0 (one colour plane), and straight
-    /// alpha defaulting to 255 when absent. The shader samples by document
-    /// pixel; outside the intersection the source alpha is 0.
+    /// Assemble the source for one pixel layer, matching `composite_pixels`:
+    /// planar 8-bit channel planes, grayscale replicating channel 0 (one colour
+    /// plane), and straight alpha defaulting to 255 when absent. A
+    /// whole-document upload is looked up by the layer's content key; on a miss
+    /// only the region intersection is assembled, and a region-sized upload is
+    /// not retained. The shader samples by document pixel; outside the layer's
+    /// clipped document rect the source alpha is 0.
     pub(super) fn build_source(
         &self,
         layer: &Layer,
         doc: &Document,
     ) -> Option<(wgpu::Buffer, SrcLayout)> {
         let g = source_geom(self.region(), layer, doc)?;
-        let key = source_key(self.region(), layer, g.gray);
-        let buffer = self.kept_or_upload(key, || {
-            self.upload_with("pictura-src", g.planes * g.n, source_writer(layer, &g))
+        let document = Region {
+            x0: 0,
+            y0: 0,
+            w: doc.width,
+            h: doc.height,
+        };
+        let full = source_geom(document, layer, doc)?;
+        let keep = self.is_document(doc);
+        let key = source_key(layer, (doc.width, doc.height), full.gray);
+        let (buffer, hit) = self.kept_or_upload(key, keep, || {
+            let g = if keep { &full } else { &g };
+            self.upload_with("pictura-src", g.planes * g.n, source_writer(layer, g))
         });
-        Some((buffer, g.layout()))
+        let layout = if hit || keep {
+            full.layout()
+        } else {
+            g.layout()
+        };
+        Some((buffer, layout))
     }
 
-    /// The upload kept under `key`, or `upload()`'s, kept for next time. A
-    /// `None` key (an unstamped plane) always uploads and keeps nothing.
+    /// The upload kept under `key`, or `upload()`'s and whether it came from
+    /// the store. A `None` key (an unstamped plane) always uploads and keeps
+    /// nothing. `keep` is false for a region-sized upload, whose bytes are
+    /// addressable only by that region.
     fn kept_or_upload(
         &self,
         key: Option<UploadKey>,
+        keep: bool,
         upload: impl FnOnce() -> wgpu::Buffer,
-    ) -> wgpu::Buffer {
+    ) -> (wgpu::Buffer, bool) {
         let resident = || devices().ok().and_then(|d| d.resident.lock().ok());
-        if let Some(buffer) = key
-            .as_ref()
-            .and_then(|k| resident().and_then(|mut r| r.get(k)))
-        {
+        if let Some(buffer) = key.as_ref().and_then(|k| resident().and_then(|r| r.get(k))) {
             crate::metrics::count_resident(true);
-            return buffer;
+            return (buffer, true);
         }
         if key.is_some() {
             crate::metrics::count_resident(false);
         }
         let buffer = upload();
-        if let (Some(key), Some(mut r)) = (key, resident()) {
-            r.put(key, buffer.clone());
+        if let (Some(key), true, Some(mut r)) = (key, keep, resident()) {
+            let (entries, bytes) = r.put(key, buffer.clone(), buffer.size());
+            crate::metrics::set_resident(entries, bytes);
         }
-        buffer
+        (buffer, false)
     }
 
     /// A storage buffer of `len` bytes (padded to a word) whose bytes `write`
@@ -580,14 +603,21 @@ impl Gpu {
     /// with the region (outside it the source alpha is 0, so the coverage is
     /// irrelevant).
     ///
+    /// Coverage is retained only for a whole-document composite: the shader
+    /// reads it by region-local index, so a sub-region upload cannot serve
+    /// another region. Constant coverage (no enabled data-carrying raster mask)
+    /// is rebuilt row-wise and never kept; a vector-mask fill carries no stamp
+    /// and is rebuilt for each composite.
+    ///
     /// ponytail: the plane is region-sized even for a rect-scoped layer; bound
     /// it by the rect if a many-small-layers mask profile ever shows up.
-    pub(super) fn build_mask(&self, layer: &Layer) -> wgpu::Buffer {
+    pub(super) fn build_mask(&self, layer: &Layer, doc: &Document) -> wgpu::Buffer {
         let region = self.region();
         let len = region.w as usize * region.h as usize;
-        self.kept_or_upload(mask_key(region, layer), || {
+        self.kept_or_upload(mask_key(region, layer), self.is_document(doc), || {
             self.upload_with("pictura-mask", len, mask_writer(region, layer))
         })
+        .0
     }
 
     pub(super) fn composite_layer(&self, canvas: &wgpu::Buffer, layer: &Layer, doc: &Document) {
@@ -611,7 +641,7 @@ impl Gpu {
             for child in &layer.children {
                 self.composite_layer(&inner, child, doc);
             }
-            let mask = self.build_mask(layer);
+            let mask = self.build_mask(layer, doc);
             // The inner canvas is already packed 8-bit RGBA: bind it directly
             // as the source, no `f32` re-materialization.
             self.dispatch(
@@ -631,7 +661,7 @@ impl Gpu {
             // `check_supported` already rejected every adjustment that has no GPU
             // kind, so this only runs for the five supported kinds.
             if let Some(adj) = decode_adjustment(data).and_then(|a| adjustment_params(&a)) {
-                let mask = self.build_mask(layer);
+                let mask = self.build_mask(layer, doc);
                 // The shader ignores `src` in the adjustment branch; the mask
                 // buffer stands in for it rather than aliasing the read-write
                 // canvas binding.
@@ -651,7 +681,7 @@ impl Gpu {
             return;
         }
         if let Some((src, layout)) = self.build_source(layer, doc) {
-            let mask = self.build_mask(layer);
+            let mask = self.build_mask(layer, doc);
             self.dispatch(
                 canvas,
                 &src,

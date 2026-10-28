@@ -154,9 +154,11 @@ impl Metrics {
         let counters = pictura_render::metrics::counters();
         let _ = write!(
             out,
-            "}},\"counters\":{{\"resident_hits\":{},\"resident_misses\":{},\"source_hits\":{},\"source_misses\":{},\"source_bytes\":{},\"effect_decodes\":{},\"declines\":{{",
+            "}},\"counters\":{{\"resident_hits\":{},\"resident_misses\":{},\"resident_entries\":{},\"resident_bytes\":{},\"source_hits\":{},\"source_misses\":{},\"source_bytes\":{},\"effect_decodes\":{},\"declines\":{{",
             counters.resident_hits,
             counters.resident_misses,
+            counters.resident_entries,
+            counters.resident_bytes,
             counters.source_hits,
             counters.source_misses,
             counters.source_bytes,

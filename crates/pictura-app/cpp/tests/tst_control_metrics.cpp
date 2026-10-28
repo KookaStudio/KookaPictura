@@ -60,8 +60,10 @@ void ControlMetricsTest::snapshotContainsEditRecord()
     const QJsonObject result = response.value(QStringLiteral("result")).toObject();
     QVERIFY(result.value(QStringLiteral("enabled")).toBool());
     QVERIFY(!result.value(QStringLiteral("phases")).toObject().isEmpty());
-    QVERIFY(result.value(QStringLiteral("counters")).toObject().contains(
-        QStringLiteral("declines")));
+    const QJsonObject counters = result.value(QStringLiteral("counters")).toObject();
+    QVERIFY(counters.contains(QStringLiteral("declines")));
+    QVERIFY(counters.contains(QStringLiteral("resident_entries")));
+    QVERIFY(counters.contains(QStringLiteral("resident_bytes")));
     const QJsonArray edits = result.value(QStringLiteral("edits")).toArray();
     QVERIFY(!edits.isEmpty());
     const QJsonObject last = edits.last().toObject();
