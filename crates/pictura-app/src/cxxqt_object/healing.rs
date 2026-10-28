@@ -274,6 +274,7 @@ fn content_aware_move(
             _ => return false,
         }
     };
+    view.as_mut().rust_mut().session.touch_selection();
     view.as_mut()
         .edit("Content-Aware Move", |_| Edit::regions(vec![dirty], true));
     true

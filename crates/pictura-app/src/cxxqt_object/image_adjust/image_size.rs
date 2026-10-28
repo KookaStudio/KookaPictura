@@ -129,7 +129,7 @@ fn image_size_apply(
     }
     view.as_mut().edit("Image Size", |rust| {
         if resized {
-            rust.session.selection = None;
+            rust.session.set_selection(None);
             Edit::Full
         } else {
             Edit::Meta
@@ -167,7 +167,7 @@ fn canvas_size_apply(
             return false;
         }
         pictura_render::extend_background(doc, [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8]);
-        rust.session.selection = None;
+        rust.session.set_selection(None);
     }
     view.as_mut().edit("Canvas Size", |_| Edit::Full);
     true

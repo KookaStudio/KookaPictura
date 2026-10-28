@@ -279,19 +279,15 @@ pub mod qobject {
         /// Width of the loaded document in pixels (0 when none).
         #[qinvokable]
         fn document_width(&self) -> i32;
-
         /// Height of the loaded document in pixels (0 when none).
         #[qinvokable]
         fn document_height(&self) -> i32;
-
         /// Number of top-level layers in the loaded document (0 when none).
         #[qinvokable]
         fn layer_count(&self) -> i32;
-
         /// Index of the topmost pixel layer (neither a group nor an adjustment), or -1 when there is none.
         #[qinvokable]
         fn topmost_pixel_layer_index(&self) -> i32;
-
         /// Name of layer `i`, or empty when out of range.
         #[qinvokable]
         fn layer_name(&self, i: i32) -> QString;
@@ -955,6 +951,11 @@ pub mod qobject {
         /// selected. View-only: no history, no recomposite.
         #[qinvokable]
         fn selection_contour_extents(&self) -> Vec<i32>;
+
+        #[qinvokable]
+        fn selection_revision(&self) -> u64;
+        #[qinvokable]
+        fn selection_contour_compute_count(&self) -> u64;
 
         /// Append an adjustment layer for `kind` (invert, posterize, threshold,
         /// brightness-contrast, hue-saturation), recomposite, and emit

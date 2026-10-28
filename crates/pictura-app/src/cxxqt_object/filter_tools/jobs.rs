@@ -668,21 +668,22 @@ fn filter_commit_running(view: &PictureView) -> bool {
 /// What the canvas needs after [`commit_finish`] landed a commit.
 pub(in crate::cxxqt_object) enum Landed {
     /// Level 0 and the pyramid were patched over this document rectangle.
-    Region {
-        rect: PsdRect,
-    },
+    Region { rect: PsdRect },
     /// The pyramid was rebuilt.
     Everywhere,
+    /// A commit landed with no changed rectangle.
     Nothing,
+    /// There was no commit to finish.
+    NoCommit,
 }
 
 /// Wait for the started commit and swap its document and history in, patching
 /// level 0 and the pyramid: the part of a commit the UI thread still does.
-/// `Ok(Landed::Nothing)` when no commit was running; `Err` (with
+/// `Ok(Landed::NoCommit)` when no commit was running; `Err` (with
 /// `filter_error` set) when the worker refused.
 pub(in crate::cxxqt_object) fn commit_finish(rust: &mut PictureViewRust) -> Result<Landed, ()> {
     let Some(job) = rust.filter_jobs.commit.take() else {
-        return Ok(Landed::Nothing);
+        return Ok(Landed::NoCommit);
     };
     let Ok(committed) = job.handle.join() else {
         rust.filter_error = Some("the filter stopped unexpectedly; history was reset".to_string());
@@ -737,7 +738,8 @@ fn filter_commit_finish(mut view: Pin<&mut PictureView>) -> bool {
                 .region_damaged(rect.left, rect.top, rect.width(), rect.height());
         }
         Ok(Landed::Everywhere) => view.as_mut().changed(),
-        Ok(Landed::Nothing) => {}
+        Ok(Landed::Nothing) => view.as_mut().changed(),
+        Ok(Landed::NoCommit) => {}
     }
     true
 }

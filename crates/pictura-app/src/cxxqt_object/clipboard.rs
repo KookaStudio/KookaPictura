@@ -303,7 +303,7 @@ fn clipboard_paste(
     // CS6 drops the marquee after any paste; Reselect restores it. Into and
     // Outside have already folded it into the layer mask.
     let mut rust = view.as_mut().rust_mut();
-    if let Some(selection) = rust.session.selection.take() {
+    if let Some(selection) = rust.session.take_selection() {
         rust.session.deselected_selection = Some(selection);
     }
     view.as_mut().rust_mut().select_only_layer(&created);

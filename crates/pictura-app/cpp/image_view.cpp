@@ -82,7 +82,8 @@ ImageView::ImageView(QWidget* parent)
     antsTimer_->setInterval(120);
     connect(antsTimer_, &QTimer::timeout, this, [this]() {
         antsPhase_ = (antsPhase_ + 1) % 8;
-        update();
+        ++antsTicks_;
+        update(antsUpdateRect());
     });
 }
 
@@ -165,6 +166,11 @@ void ImageView::clearOverlay()
 
 void ImageView::setSelectionContour(const selection_api::SelectionContour& contour)
 {
+    if (contour.revision == selectionContourRevision_) {
+        return;
+    }
+    selectionContourRevision_ = contour.revision;
+    ++selectionContourSetCount_;
     selectionContours_ = contour.loops;
     selectionContourOffset_ = QPointF();
     updateAntsTimer();
@@ -173,6 +179,7 @@ void ImageView::setSelectionContour(const selection_api::SelectionContour& conto
 
 void ImageView::clearSelectionContour()
 {
+    selectionContourRevision_ = ~quint64(0);
     selectionContours_.clear();
     selectionContourOffset_ = QPointF();
     updateAntsTimer();
@@ -570,8 +577,9 @@ const QImage* ImageView::presentCrop(int level, const QRect& docRect, const QRec
     return &presentCache_.crop;
 }
 
-void ImageView::paintEvent(QPaintEvent*)
+void ImageView::paintEvent(QPaintEvent* event)
 {
+    lastPaintRect_ = event ? event->rect() : rect();
     pictura::ScopedTimer paintTimer("cxx_paintEvent");
     QPainter painter(this);
     painter.fillRect(rect(), canvasColor_);

@@ -35,6 +35,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) doc: Option<Document>,
     /// The live selection.
     pub(in crate::cxxqt_object) selection: Option<Selection>,
+    /// Bumped whenever the selection is written. The committed-outline cache
+    /// keys on it; a history restore counts as a write.
+    pub(in crate::cxxqt_object) selection_revision: u64,
     /// CS6 "last deselected" memory: the selection replaced by Deselect or a
     /// New-mode commit. Restored by `reselect`.
     pub(in crate::cxxqt_object) deselected_selection: Option<Selection>,
@@ -92,6 +95,27 @@ impl DocumentSession {
             pictura_core::ColorMode::Rgb,
             pictura_core::BitDepth::Eight,
         )));
+    }
+
+    /// Replace the live selection and bump its revision.
+    pub(in crate::cxxqt_object) fn set_selection(&mut self, selection: Option<Selection>) {
+        self.selection = selection;
+        self.touch_selection();
+    }
+
+    /// Take the live selection, bumping its revision when there was one.
+    pub(in crate::cxxqt_object) fn take_selection(&mut self) -> Option<Selection> {
+        let selection = self.selection.take();
+        if selection.is_some() {
+            self.touch_selection();
+        }
+        selection
+    }
+
+    /// Mark the selection as written without replacing it. Used for an
+    /// in-place mask edit and after a history step rewrites the selection.
+    pub(in crate::cxxqt_object) fn touch_selection(&mut self) {
+        self.selection_revision = self.selection_revision.wrapping_add(1);
     }
 
     /// Install a replacement document, its history, and its PDF password.
@@ -202,6 +226,7 @@ impl DocumentSession {
                 Restored::Everywhere
             }),
         }?;
+        self.touch_selection();
         self.refresh_dirty();
         self.content_revision = self.content_revision.wrapping_add(1);
         Some(restored)
@@ -415,7 +440,7 @@ impl PictureViewRust {
 
     /// Clear every field that names or belongs to the outgoing document.
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
-        self.session.selection = None;
+        self.session.set_selection(None);
         self.session.deselected_selection = None;
         self.session.quick_selection_snapshot = None;
         self.session.live = ActiveSession::Idle;

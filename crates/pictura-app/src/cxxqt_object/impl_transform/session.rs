@@ -541,7 +541,7 @@ impl qobject::PictureView {
             }
             // ponytail: CS6 carries the selection border through the transform;
             // it is dropped here rather than left outlining the old pixels.
-            self.as_mut().rust_mut().session.selection = None;
+            self.as_mut().rust_mut().session.set_selection(None);
             self.as_mut().rust_mut().last_transform = repeat;
             self.as_mut()
                 .edit(&history_label, |_| Edit::Structural { damage: None });

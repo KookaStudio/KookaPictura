@@ -37,6 +37,45 @@ fn checker_layer(name: &str, w: u32, h: u32) -> pictura_core::Layer {
     layer
 }
 
+#[test]
+#[ignore = "6000x4000 selection-contour cache profile; run explicitly with --ignored --nocapture"]
+fn selection_contour_cache_profile_6000x4000() {
+    use super::PictureViewRust;
+    use pictura_select::Selection;
+
+    let (w, h) = (6000u32, 4000u32);
+    let mut data = vec![0u8; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            if (x / 64 + y / 64) % 2 == 0 {
+                data[(y * w + x) as usize] = 255;
+            }
+        }
+    }
+    let mut rust = PictureViewRust::default();
+    rust.session.set_selection(Some(Selection {
+        width: w,
+        height: h,
+        data,
+    }));
+
+    let t = std::time::Instant::now();
+    let first = rust.selection_contour_extents();
+    let compute = t.elapsed();
+    let t = std::time::Instant::now();
+    let second = rust.selection_contour_extents();
+    let hit = t.elapsed();
+
+    println!(
+        "6000x4000 contour: compute {:.2} ms ({} ints), cache hit {:.2} ms",
+        compute.as_secs_f64() * 1000.0,
+        first.len(),
+        hit.as_secs_f64() * 1000.0
+    );
+    assert_eq!(first, second);
+    assert_eq!(rust.selection_contour_computes.get(), 1);
+}
+
 /// Print-only 4000² Quick Selection profile: the press path (composite,
 /// flood, combine, contour) and the intra-region move lookup. Run with
 /// `cargo test -p pictura_app quick_selection_profile_4000 -- --ignored --nocapture`.

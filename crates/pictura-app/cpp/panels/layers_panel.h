@@ -100,6 +100,13 @@ public:
     bool selectRowForTest(const QString& path);
     /// Synthesize a left click on `path`'s row name, as a user would.
     bool clickRowForTest(const QString& path);
+    int refreshCountForTest() const { return refreshCount_; }
+    bool patternActionEnabledForTest() const;
+
+    /// True while `refresh()` rebuilds the rows. The frame folds a
+    /// `selectionChanged` emitted from inside a refresh into the debounced
+    /// pass instead of recomputing the command registry synchronously.
+    bool refreshInProgress() const { return refreshing_; }
 
     // Self-test hooks (M39). Read the projected model and menus, drive solo and
     // inline rename, and expose the Panel Options values without synthetic
@@ -496,6 +503,9 @@ private:
     void moveCurrent(int delta);
     bool canMovePath(const QString& path, int delta) const;
 
+    // The New Fill > Pattern action follows the document's pattern resources.
+    void refreshPatternAction();
+
     void toggleSolo(const QString& path);
     void restoreSolo();
     void clearSolo();
@@ -552,6 +562,9 @@ private:
     bool useDefaultMasksOnFill_ = true;
     bool addMaskByDefault_ = true;
     bool syncing_ = false;
+    int refreshCount_ = 0;
+    const PictureView* patternView_ = nullptr;
+    quint64 patternGeneration_ = ~quint64(0);
     PendingPreview pendingPreview_;
     PendingPreview gesture_;
     QTimer* previewTimer_ = nullptr;

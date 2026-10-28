@@ -23,6 +23,8 @@ public:
 
     // A null view disables the grid (no document open).
     void setView(PictureView* view);
+    // Refresh the document-dependent entries without changing the view.
+    void refresh();
 
     int buttonCountForTest() const;
     QToolButton* buttonForTest(int index) const;
@@ -37,6 +39,9 @@ signals:
 private:
     QToolButton* makeButton(const AdjustmentKind& entry);
 
+    PictureView* view_ = nullptr;
+    const PictureView* patternView_ = nullptr;
+    quint64 patternGeneration_ = ~quint64(0);
     QVector<QToolButton*> buttons_;
 };
 

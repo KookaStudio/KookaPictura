@@ -432,7 +432,16 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
         }
         updateAlignControls();
         if (registry_) {
-            registry_->refresh();
+            if (refreshingDock_) {
+                registryRefreshPending_ = true;
+            } else if (!panelsRefreshedByChanged_
+                       || !layersPanel_->refreshInProgress()) {
+                // A user-driven selection change must update labels and
+                // enablement immediately, even right after an edit. A
+                // refresh-induced emission after a notifying edit reuses the
+                // edit's synchronous registry recomputation.
+                registry_->refresh();
+            }
         }
         // The Move tool's Show Transform Controls box follows the active layer.
         if (tools_) {

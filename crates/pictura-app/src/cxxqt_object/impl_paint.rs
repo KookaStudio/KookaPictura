@@ -883,7 +883,7 @@ impl qobject::PictureView {
                         let regions = if previewed {
                             hint.clone()
                         } else {
-                            pending.into_iter().collect()
+                            pending.map_or_else(|| vec![rect], |pending| vec![pending])
                         };
                         let t = Instant::now();
                         self.as_mut().edit(&stroke_label, |_| {

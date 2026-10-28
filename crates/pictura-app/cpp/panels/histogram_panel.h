@@ -50,6 +50,12 @@ public:
     int seriesCountForTest() const;
     QVector<QColor> seriesColorsForTest() const;
     void setChannelIndexForTest(int index);
+    quint32 binForTest(int channel, int bin) const
+    {
+        return channel >= 0 && channel < 4 && bin >= 0 && bin < 256
+                   ? bins_[channel][bin]
+                   : 0;
+    }
 
 private:
     void recompute();
