@@ -154,6 +154,6 @@ Marked secondary/inferred: the CS4 removal details from blog sources; the exact 
 - **Pattern Maker 32-bit requirement.** Confirm the exact behavior and whether it worked in 64-bit Windows.
 - **Algorithm fidelity.** Both are closed; if ported, choose a modern matting (Refine Edge-class) and texture-synthesis algorithm and define tolerances, or accept behavioral parity only.
 - **Filter-menu gating default.** Confirm the CS6 default of hidden Filter-Gallery groups and the exact preference wording.
-- **Digimarc and other optional plug-ins.** Decide whether any optional/legacy plug-ins (Digimarc, Texture Fill, TWAIN, JPEG2000) are in scope; likely non-goal.
+- **Digimarc and other optional plug-ins.** **Decided for Digimarc:** Embed/Read Watermark ship as an in-tree approximate carrier that never claims Digimarc compatibility (`06-filters/digimarc-watermark.md`, #350/#351). Texture Fill, TWAIN, and JPEG2000 remain undecided; likely non-goal.
 - **Pattern preset format.** If Pattern Maker/pattern presets are supported, confirm the `.pat` (or equivalent) serialization with `pattern-presets.md`.
 - **Keyboard shortcuts.** Legacy `Alt+Ctrl+X` bindings are unverified against CS6; confirm before exposing them.

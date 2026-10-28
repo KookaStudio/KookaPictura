@@ -324,8 +324,9 @@ centric and dock-heavy; QML's costs are not justified here.
   (black, no chrome), and `Shift+F` reverses the sequence.
 - Given Full Screen Mode, `Space+F` cycles the canvas background colour and
   `Space+Shift+F` reverses it.
-- Given a document with a Digimarc-detected watermark, the copyright symbol
-  appears in the title bar `(contingency; requires watermark plug-in)`.
+- Given a document with a detected watermark, the copyright symbol appears in
+  the title bar (`Filter ▸ Digimarc ▸ Read Watermark`; an in-tree approximation,
+  see `06-filters/digimarc-watermark.md`).
 - Given the status-bar triangle is clicked, the documented view-option list
   appears and selecting `Document Sizes` shows the two size figures.
 - Given the Interface preferences, selecting each of the four brightness levels
