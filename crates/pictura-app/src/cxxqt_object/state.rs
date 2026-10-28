@@ -2,6 +2,7 @@ use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::{PixelBuffer, PsdRect};
 use pictura_render::{CanvasDamage, ViewPyramid};
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 /// A filter dialog's reduced canvas copy and what it was built from.
@@ -16,6 +17,11 @@ pub struct PictureViewRust {
     /// The document, the selection, and the history: the state the document
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
+    /// The encoded committed selection outline and the selection revision it
+    /// was built for. `None` until the outline is first requested.
+    pub(super) selection_contour_cache: RefCell<Option<(u64, Vec<i32>)>>,
+    /// How many times the committed outline has been traced, for the cache test.
+    pub(super) selection_contour_computes: Cell<u64>,
     pub(super) path: Option<String>,
     /// The selected layer paths and the active path. The shared resolver turns
     /// this into the single tool-edit target.
@@ -167,6 +173,8 @@ impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
             session: Default::default(),
+            selection_contour_cache: RefCell::new(None),
+            selection_contour_computes: Cell::new(0),
             path: None,
             layer_target: LayerTarget::default(),
             path_on_layer: false,

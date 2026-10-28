@@ -243,11 +243,11 @@ mod tests {
     #[test]
     fn a_selection_becomes_the_depth_plane() {
         let mut rust = state();
-        rust.session.selection = Some(Selection {
+        rust.session.set_selection(Some(Selection {
             width: 8,
             height: 6,
             data: (0..48u8).map(|i| i * 5).collect(),
-        });
+        }));
         let map = materialize(&rust, 3).expect("selection");
         let expected: Vec<u8> = (0..48u8).map(|i| i * 5).collect();
         assert_eq!(map, DepthMap::new(8, 6, expected).unwrap());

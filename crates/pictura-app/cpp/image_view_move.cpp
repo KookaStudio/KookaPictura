@@ -53,6 +53,35 @@ void ImageView::setMoveOutline(const QRectF& bounds)
     update();
 }
 
+QRect ImageView::antsUpdateRect() const
+{
+    QRectF imageBounds;
+    if (selectionEdgesVisible_) {
+        for (const QPolygonF& loop : selectionContours_) {
+            imageBounds = imageBounds.united(
+                loop.boundingRect().translated(selectionContourOffset_));
+        }
+    }
+    for (const QPolygonF& loop : previewContours_) {
+        imageBounds = imageBounds.united(loop.boundingRect());
+    }
+    if (!moveOutline_.isEmpty() && movePreviewActive_) {
+        imageBounds = imageBounds.united(moveOutline_.translated(moveDelta_));
+    }
+    if (imageBounds.isEmpty() || zoom_ <= 0.0) {
+        return rect();
+    }
+    // The painter maps image coordinates through viewRotation() after the
+    // offset/zoom, so build the same widget-space box before clipping.
+    const QRectF scaled(imageBounds.x() * zoom_ + offset_.x(),
+                        imageBounds.y() * zoom_ + offset_.y(),
+                        imageBounds.width() * zoom_, imageBounds.height() * zoom_);
+    const QRectF widget = viewRotation().mapRect(scaled);
+    return widget.adjusted(-2.0, -2.0, 2.0, 2.0)
+        .toAlignedRect()
+        .intersected(rect());
+}
+
 void ImageView::paintMoveOutline(QPainter& painter)
 {
     if (moveOutline_.isEmpty() || !movePreviewActive_) {

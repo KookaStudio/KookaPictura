@@ -7,6 +7,7 @@
 #include "selftest_paint_fixture.h"
 
 #include "api/selection_api.h"
+#include "commands.h"
 #include "qt_test_support.h"
 #include "selection_geometry.h"
 
@@ -108,6 +109,9 @@ private slots:
     void combineModeShowsTheNewShape();
     void zoomMarqueeStaysUnclipped();
     void committedOutlineStaysVisibleAtBorderAcrossPanAndZoom();
+    void anEditKeepsTheCachedContour();
+    void aSelectionChangeRetracesTheContour();
+    void antsTickRepaintsOnlyTheOutline();
 
 private:
     static QImage seed();
@@ -480,6 +484,98 @@ void SelectionPreviewTest::committedOutlineStaysVisibleAtBorderAcrossPanAndZoom(
             QVERIFY(QList<QPolygonF>(after.loops.begin(), after.loops.end()) == tracedLoops);
         }
     }
+}
+
+void SelectionPreviewTest::anEditKeepsTheCachedContour()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_cache_hit"));
+    QVERIFY2(f.ok(), "selection fixture");
+    QVERIFY(f.view->select_rect(10, 10, 20, 20, QStringLiteral("new"), 0.0));
+    window_->refreshSelectionOverlay();
+
+    const quint64 computes = f.view->selection_contour_compute_count();
+    const int sets = f.canvas->selectionContourSetCountForTest();
+    QVERIFY(!f.view->add_layer_in(QString()).isEmpty());
+
+    QCOMPARE(f.view->selection_contour_compute_count(), computes);
+    QCOMPARE(f.canvas->selectionContourSetCountForTest(), sets);
+}
+
+void SelectionPreviewTest::aSelectionChangeRetracesTheContour()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_cache_change"));
+    QVERIFY2(f.ok(), "selection fixture");
+    QVERIFY(f.view->select_rect(10, 10, 20, 20, QStringLiteral("new"), 0.0));
+    window_->refreshSelectionOverlay();
+
+    const quint64 computes = f.view->selection_contour_compute_count();
+    const int firstSets = f.canvas->selectionContourSetCountForTest();
+
+    const int windows = window_->windowCountForTest(f.doc);
+    QVERIFY(window_->registry()->dispatch(QStringLiteral("window.arrange.new.window.for.file")));
+    QTRY_COMPARE_WITH_TIMEOUT(window_->windowCountForTest(f.doc), windows + 1, 1000);
+    pictura::ImageView* second = window_->windowCanvasForTest(f.doc, 1);
+    QVERIFY(second != nullptr);
+
+    QVERIFY(f.view->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    QCOMPARE(f.view->selection_contour_compute_count(), computes + 1);
+    QVERIFY(f.canvas->selectionContourSetCountForTest() > firstSets);
+    QVERIFY(second->selectionContourSetCountForTest() > 0);
+
+    QVERIFY(!f.canvas->selectionContours().isEmpty());
+    QVERIFY(hasVertex(f.canvas->selectionContours().first(), QPointF(4, 4)));
+    QVERIFY(hasVertex(f.canvas->selectionContours().first(), QPointF(12, 12)));
+    QVERIFY(!second->selectionContours().isEmpty());
+    QVERIFY(hasVertex(second->selectionContours().first(), QPointF(4, 4)));
+    QVERIFY(hasVertex(second->selectionContours().first(), QPointF(12, 12)));
+
+    f.view->deselect();
+    window_->refreshSelectionOverlay();
+    QVERIFY(!f.canvas->hasSelectionContourForTest());
+    QVERIFY(!second->hasSelectionContourForTest());
+}
+
+void SelectionPreviewTest::antsTickRepaintsOnlyTheOutline()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_ants_region"));
+    QVERIFY2(f.ok(), "selection fixture");
+    QVERIFY(f.view->select_rect(10, 10, 20, 20, QStringLiteral("new"), 0.0));
+    window_->refreshSelectionOverlay();
+
+    window_->show();
+    QTest::qWait(200);
+    QVERIFY(f.canvas->isVisible());
+
+    const int ticks = f.canvas->antsTicksForTest();
+    QTRY_VERIFY_WITH_TIMEOUT(f.canvas->antsTicksForTest() > ticks, 1000);
+    QTest::qWait(30);
+
+    const QRect dirty = f.canvas->lastPaintRectForTest();
+    QVERIFY(!dirty.isEmpty());
+    QVERIFY(dirty.width() < f.canvas->width() || dirty.height() < f.canvas->height());
+
+    QRectF selectionBounds;
+    for (const QPolygonF& loop : f.canvas->selectionContours()) {
+        selectionBounds = selectionBounds.united(
+            loop.boundingRect().translated(f.canvas->selectionContourOffsetForTest()));
+    }
+    QVERIFY(!selectionBounds.isEmpty());
+    const QRectF selectionWidget(f.canvas->imageToWidget(selectionBounds.topLeft()),
+                                 f.canvas->imageToWidget(selectionBounds.bottomRight()));
+    QVERIFY(dirty.contains(selectionWidget.normalized().toAlignedRect().adjusted(-2, -2, 2, 2)));
+
+    const QImage moveBase(kCanvas, kCanvas, QImage::Format_ARGB32_Premultiplied);
+    const QImage moveLayer(kCanvas, kCanvas, QImage::Format_ARGB32_Premultiplied);
+    f.canvas->beginMovePreview(moveBase, moveLayer, QPointF(), 1.0);
+    f.canvas->setMoveOutline(QRectF(40, 40, 10, 10));
+    const int moveTicks = f.canvas->antsTicksForTest();
+    QTRY_VERIFY_WITH_TIMEOUT(f.canvas->antsTicksForTest() > moveTicks, 1000);
+    QTest::qWait(30);
+    const QRect moveDirty = f.canvas->lastPaintRectForTest();
+    const QRectF moveWidget(f.canvas->imageToWidget(QPointF(40, 40)),
+                            f.canvas->imageToWidget(QPointF(50, 50)));
+    QVERIFY(moveDirty.contains(moveWidget.normalized().toAlignedRect().adjusted(-2, -2, 2, 2)));
+    f.canvas->endMovePreview();
 }
 
 QTEST_MAIN(SelectionPreviewTest)

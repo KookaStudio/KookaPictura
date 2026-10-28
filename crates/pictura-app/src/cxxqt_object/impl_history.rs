@@ -204,7 +204,7 @@ impl qobject::PictureView {
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions();
         rust.session.doc = Some(detached_copy(&snapshot.doc));
-        rust.session.selection = snapshot.selection;
+        rust.session.set_selection(snapshot.selection);
         if let Some(mut target) = target {
             if let Some(doc) = rust.session.doc.as_ref() {
                 target.retain_resolving(doc);

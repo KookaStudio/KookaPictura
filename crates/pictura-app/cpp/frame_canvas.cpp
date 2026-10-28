@@ -110,9 +110,23 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
 {
     PictureView* view = doc.view;
     connect(view, &PictureView::changed, this, &PicturaMainWindow::refresh);
-    connect(view, &PictureView::sessionCancelled, this, [this]() {
+    // A notifying edit already refreshed the panels that subscribe to it. Scope
+    // the marker to the active view so a background document's notification
+    // cannot suppress the active panels' refresh.
+    connect(view, &PictureView::changed, this, [this, view]() {
+        panelsFreshlyBound_ = false;
+        if (view == activeView()) {
+            panelsRefreshedByChanged_ = true;
+        }
+    });
+    connect(view, &PictureView::sessionCancelled, this, [this, view]() {
         if (tools_) {
             tools_->onSessionCancelled();
+        }
+        if (view == activeView()) {
+            refresh();
+            panelRefreshTimer_->stop();
+            refreshPanels();
         }
     });
     trackRecovery(view);
@@ -120,15 +134,15 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
     // path uses, and never call image()/replaceImage(), so the region path
     // cannot refresh panels faster than a full recomposite.
     const auto afterPresent = [this, view](int index) {
-        panelRefreshTimer_->start();
         // A region update can change the active layer's visibility without a
         // `changed` emission; keep the tool cursor in sync.
         if (tools_) {
             tools_->refreshCursor();
         }
         // Mid-stroke, skip the command-registry and title fan-out on every dab
-        // (Krita's "unnecessary objects per event"). Releasing the stroke emits
-        // `changed`, whose refresh() runs them once.
+        // (Krita's "unnecessary objects per event"). The commit presents one
+        // region after the stroke session is taken; the debounced pass then
+        // refreshes the command table once.
         if (view->is_painting()) {
             // A present arms its own flush: the next event-loop turn folds every
             // dab that arrived since into one region, so the composite and the
@@ -136,11 +150,14 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
             paint_api::presentDeferred(*view);
             return;
         }
+        if (view == activeView()) {
+            panelsRefreshedByChanged_ = false;
+        }
+        panelsFreshlyBound_ = false;
+        panelRefreshTimer_->start();
         updateTabTitle(index);
         updateWindowTitle();
-        if (registry_) {
-            registry_->refresh();
-        }
+        registryRefreshPending_ = true;
     };
     // Document canvases receive the changed rectangle only: their present crop
     // is patched from the pyramid, so no region pixels cross the bridge.

@@ -93,7 +93,7 @@ fn convert_depth_method(
     if converted {
         {
             let mut rust = view.as_mut().rust_mut();
-            rust.session.selection = None;
+            rust.session.set_selection(None);
             if rust
                 .session
                 .doc

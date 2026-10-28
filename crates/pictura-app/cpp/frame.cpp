@@ -652,6 +652,8 @@ void PicturaMainWindow::removeDocument(int index)
             editSessions_.removeAt(i);
         }
     }
+    const bool removedWasActive = entry->view && activeWindow_ && activeWindow_->doc == entry;
+    const bool removedWasBound = entry->view && entry->view == dockView_;
     detachWindows(entry->windows);
     forgetRecovery(entry->view);
     if (entry->view) {
@@ -668,9 +670,11 @@ void PicturaMainWindow::removeDocument(int index)
         destroyWindowWidgets(window);
     }
     qDeleteAll(entry->windows);
-    // A floating or tiled window leaves no tab change to retarget the panels,
-    // and a panel refresh mid-retarget would read the view about to be freed.
-    retargetDock();
+    // Unbind the panels before the active or bound view is freed; closing an
+    // unbound, inactive document leaves the surface untouched.
+    if (removedWasActive || removedWasBound) {
+        retargetDock();
+    }
     delete entry->view;
     delete entry;
     refresh();
@@ -888,6 +892,7 @@ void PicturaMainWindow::refresh()
         pictura::ScopedTimer registryTimer("cxx_registry_refresh");
         registry_->refresh();
     }
+    registryRefreshPending_ = false;
     updateAlignControls();
     updateTabTitle(index);
     updateWindowTitle();

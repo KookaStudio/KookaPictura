@@ -7,6 +7,9 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
+#include <QtCore/QCoreApplication>
+#include <QtCore/QElapsedTimer>
+#include <QtCore/QEventLoop>
 #include <QtCore/QObject>
 #include <QtGui/QImage>
 #include <QtWidgets/QApplication>
@@ -197,9 +200,9 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
     }
 
     // pp_no_registry_refresh (394): while a stroke is active the paint region
-    // handler must not re-run the command registry per dab; releasing the stroke
-    // emits `changed`, whose full refresh runs it exactly once. Krita's
-    // "unnecessary objects per event" hot spot. No wall-clock budget.
+    // handler must not re-run the command registry per dab. The commit's region
+    // requests one refresh through the debounced pass; pump the event loop past
+    // the 120 ms interval before asserting it. No wall-clock budget.
     {
         const bool created = frame.newDocument(QStringLiteral("PaintRefresh"), 128, 128,
                                                QStringLiteral("rgb"), 8,
@@ -222,15 +225,22 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         }
         const int mid = registry->refreshCount();
         const bool ended = view->end_paint();
+        const int afterSync = registry->refreshCount();
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 200) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
         const int after = registry->refreshCount();
         const bool noPerDab = mid == before;
+        const bool noSyncOnCommit = afterSync == mid;
         const bool onceOnCommit = after == mid + 1;
         ST_BEGIN("pp_no_registry_refresh");
-        ST_PASS("pp_no_registry_refresh dabs=%d before=%d mid=%d after=%d", dabs, before, mid,
-                after);
-        if (!begun || !ended || dabs < 16 || !noPerDab || !onceOnCommit) {
+        ST_PASS("pp_no_registry_refresh dabs=%d before=%d mid=%d afterSync=%d after=%d", dabs,
+                before, mid, afterSync, after);
+        if (!begun || !ended || dabs < 16 || !noPerDab || !noSyncOnCommit || !onceOnCommit) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(394, "registry refreshed per dab");
+            return pictura::selfTest().fail(394, "registry refresh timing");
         }
         frame.closeDocument(doc, false);
     }

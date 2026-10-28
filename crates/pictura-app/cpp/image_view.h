@@ -254,6 +254,10 @@ public:
     int selectionContourLoopCountForTest() const { return selectionContours_.size(); }
     const QList<QPolygonF>& selectionContours() const { return selectionContours_; }
     QPointF selectionContourOffsetForTest() const { return selectionContourOffset_; }
+    quint64 selectionContourRevisionForTest() const { return selectionContourRevision_; }
+    int selectionContourSetCountForTest() const { return selectionContourSetCount_; }
+    int antsTicksForTest() const { return antsTicks_; }
+    QRect lastPaintRectForTest() const { return lastPaintRect_; }
 
     // Live selection preview while a tool drags (the rubber band). Drawn with the
     // same animated marching-ants pen as a committed selection, and replaced by
@@ -720,6 +724,9 @@ private:
     void applyInitialView();
     void clampOffset();
     void updateAntsTimer();
+    // The widget region covered by the animated outline(s), for a partial
+    // repaint on each ants tick.
+    QRect antsUpdateRect() const;
 
     struct PresentCache {
         qint64 key = -1;
@@ -787,6 +794,12 @@ private:
 
     QList<QPolygonF> selectionContours_;
     QPointF selectionContourOffset_;
+    // The selection revision the stored contour was built for, and how many
+    // contours have been applied (the cache test's no-repaint signal).
+    quint64 selectionContourRevision_ = ~quint64(0);
+    int selectionContourSetCount_ = 0;
+    // The dirty rect the last paint was asked to draw, for the ants test.
+    QRect lastPaintRect_;
     QList<QPolygonF> previewContours_;
     bool selectionPreviewClosed_ = true;
     bool selectionPreviewSolid_ = false;
@@ -794,6 +807,7 @@ private:
     QPointF previewOrigin_;
     bool selectionEdgesVisible_ = true;
     int antsPhase_ = 0;
+    int antsTicks_ = 0;
     QTimer* antsTimer_ = nullptr;
 
     PresentCache presentCache_;

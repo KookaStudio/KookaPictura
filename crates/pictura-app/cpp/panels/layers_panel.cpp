@@ -503,11 +503,6 @@ void LayersPanel::setView(PictureView* view)
     rememberedGeneration_ = view ? view->document_generation() : 0;
     model_->setView(view);
     tree_->setDragSource(view);
-    if (patternFill_) {
-        const bool hasPatterns = view_ && layer_has_patterns(*view_);
-        patternFill_->setEnabled(hasPatterns);
-        patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
-    }
     if (view_) {
         set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_,
                                  addMaskByDefault_);
@@ -528,9 +523,32 @@ void LayersPanel::setView(PictureView* view)
     refresh();
 }
 
+void LayersPanel::refreshPatternAction()
+{
+    if (!patternFill_) {
+        return;
+    }
+    const quint64 generation = view_ ? view_->document_generation() : 0;
+    if (view_ == patternView_ && generation == patternGeneration_) {
+        return;
+    }
+    patternView_ = view_;
+    patternGeneration_ = generation;
+    const bool hasPatterns = view_ && layer_has_patterns(*view_);
+    patternFill_->setEnabled(hasPatterns);
+    patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
+}
+
+bool LayersPanel::patternActionEnabledForTest() const
+{
+    return patternFill_ && patternFill_->isEnabled();
+}
+
 void LayersPanel::refresh()
 {
     refreshQueued_ = false;
+    ++refreshCount_;
+    refreshPatternAction();
     const MetricsTimer<PictureView> timer(view_, "layers_panel_refresh");
     const bool wasRefreshing = refreshing_;
     const bool wasApplying = applyingTarget_;

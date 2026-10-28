@@ -50,7 +50,8 @@ impl PictureViewRust {
         if delta == (0, 0) {
             return false;
         }
-        self.session.selection = Some(origin.translate(delta.0, delta.1));
+        self.session
+            .set_selection(Some(origin.translate(delta.0, delta.1)));
         true
     }
 

@@ -159,7 +159,11 @@ PathsPanel::PathsPanel(QWidget* parent)
     refresh();
 }
 
-void PathsPanel::setView(PictureView* view) { view_ = view; }
+void PathsPanel::setView(PictureView* view)
+{
+    view_ = view;
+    refresh();
+}
 
 void PathsPanel::refresh()
 {
