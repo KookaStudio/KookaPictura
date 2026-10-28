@@ -6065,10 +6065,11 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   4000² the composite is now dominated by the per-composite source/mask upload
   (~128 + 16 MB) after M33 removed the per-pixel assembly, while the 64 MB
   readback is ~7 ms (see `docs/dev/canvas-compositing-plan.md` §2.1). Resident
-  per-layer GPU source buffers have since landed (a stamp-keyed LRU in
-  `crates/pictura-render/src/gpu/resident.rs`); the GPU-resident zero-copy
-  present is still deferred — it was planned as M34, which shipped as composite
-  coherence and cheap undo/redo instead.
+  per-layer GPU source buffers have since landed (document-scoped source keys,
+  whole-document-only retention, and insertion-order eviction under a byte and
+  entry cap in `crates/pictura-render/src/gpu/resident.rs`); the GPU-resident
+  zero-copy present is still deferred — it was planned as M34, which shipped as
+  composite coherence and cheap undo/redo instead.
 - M35 (`m35-cpp-region-blit`) removed both the per-pixel `QImage::set_pixel_color`
   blit and the 1 MP `REGION_REFRESH_BUDGET` fallback: the planar composite is the
   authoritative canvas, `refresh_region` signals the region, and C++
