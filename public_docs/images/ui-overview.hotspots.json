@@ -1,0 +1,188 @@
+{
+ "width": 1568,
+ "height": 860,
+ "points": [
+  {
+   "n": 1,
+   "label": "Menu bar",
+   "rect": [
+    0,
+    27,
+    380,
+    46
+   ],
+   "badge": [
+    400,
+    36
+   ]
+  },
+  {
+   "n": 2,
+   "label": "Options bar",
+   "rect": [
+    0,
+    50,
+    1280,
+    86
+   ],
+   "badge": [
+    700,
+    68
+   ]
+  },
+  {
+   "n": 3,
+   "label": "Toolbox",
+   "rect": [
+    0,
+    106,
+    36,
+    600
+   ],
+   "badge": [
+    54,
+    240
+   ]
+  },
+  {
+   "n": 4,
+   "label": "Foreground and background colour",
+   "rect": [
+    0,
+    604,
+    36,
+    640
+   ],
+   "badge": [
+    54,
+    626
+   ]
+  },
+  {
+   "n": 5,
+   "label": "Document tab",
+   "rect": [
+    38,
+    88,
+    172,
+    107
+   ],
+   "badge": [
+    192,
+    97
+   ]
+  },
+  {
+   "n": 6,
+   "label": "Canvas",
+   "rect": [
+    38,
+    108,
+    1270,
+    828
+   ],
+   "badge": [
+    150,
+    200
+   ]
+  },
+  {
+   "n": 7,
+   "label": "Collapsed panels",
+   "rect": [
+    1283,
+    108,
+    1310,
+    190
+   ],
+   "badge": [
+    1297,
+    215
+   ]
+  },
+  {
+   "n": 8,
+   "label": "Color and Swatches",
+   "rect": [
+    1313,
+    104,
+    1568,
+    388
+   ],
+   "badge": [
+    1297,
+    300
+   ]
+  },
+  {
+   "n": 9,
+   "label": "Adjustments and Styles",
+   "rect": [
+    1313,
+    390,
+    1568,
+    538
+   ],
+   "badge": [
+    1297,
+    470
+   ]
+  },
+  {
+   "n": 10,
+   "label": "Layers, Channels and Paths",
+   "rect": [
+    1313,
+    540,
+    1568,
+    838
+   ],
+   "badge": [
+    1297,
+    700
+   ]
+  },
+  {
+   "n": 11,
+   "label": "Workspace switcher",
+   "rect": [
+    1498,
+    58,
+    1566,
+    78
+   ],
+   "badge": [
+    1478,
+    68
+   ]
+  },
+  {
+   "n": 12,
+   "label": "Status bar",
+   "rect": [
+    0,
+    840,
+    1568,
+    860
+   ],
+   "badge": [
+    640,
+    849
+   ]
+  },
+  {
+   "n": 13,
+   "label": "Top-right icons",
+   "rect": [
+    1495,
+    27,
+    1568,
+    46
+   ],
+   "badge": [
+    1475,
+    36
+   ]
+  }
+ ]
+}

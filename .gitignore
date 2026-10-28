@@ -43,3 +43,4 @@ __pycache__/
 # Local reference fixtures (real Photoshop-authored; not redistributed)
 # No trailing slash: must also match the symlink a linked worktree gets.
 /reference-fixtures
+site/docs-src/

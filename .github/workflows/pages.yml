@@ -3,6 +3,7 @@ name: Deploy Pages
 on:
   push:
     branches: [master]
+    paths: ["site/**", "public_docs/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Copy the user guide into the site
+        run: |
+          mkdir site/docs-src
+          cp -r public_docs/. site/docs-src/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
