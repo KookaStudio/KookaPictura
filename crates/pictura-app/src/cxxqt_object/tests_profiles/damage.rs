@@ -106,7 +106,7 @@ fn stroke_capture_profile() {
         &None,
         &LayerTarget::default(),
         "Brush",
-        hint.as_ref().map(|rect| std::slice::from_ref(rect)),
+        hint.as_ref().map(std::slice::from_ref),
     );
     ms("stroke_capture history", t.elapsed());
 }

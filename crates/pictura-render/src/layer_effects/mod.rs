@@ -486,6 +486,15 @@ fn grow_rect(rect: PsdRect, pad: i32) -> PsdRect {
     }
 }
 
+/// The extra reach a mask feather adds; no feather adds none.
+fn feather_pad(feather: f64) -> i32 {
+    if feather.is_finite() && feather > 0.0 {
+        crate::mask_refine::reach(feather)
+    } else {
+        0
+    }
+}
+
 fn vector_mask_box(mask: &pictura_core::VectorMask) -> Option<PsdRect> {
     let points = mask
         .subpaths
@@ -517,7 +526,7 @@ fn adjustment_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
             && mask.density == 255
             && mask.rect.width() > 0
             && mask.rect.height() > 0)
-            .then(|| grow_rect(mask.rect, crate::mask_refine::reach(mask.feather())))
+            .then(|| grow_rect(mask.rect, feather_pad(mask.feather())))
     });
     match raster {
         Some(rect) => Some(rect),
@@ -532,9 +541,8 @@ fn adjustment_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
 /// adjustment mask.
 fn masked_fill_bounds(layer: &Layer) -> Option<PsdRect> {
     let pad = effects_pad(layer);
-    let grow = |rect: PsdRect, feather: f64| {
-        grow_rect(rect, pad.saturating_add(crate::mask_refine::reach(feather)))
-    };
+    let grow =
+        |rect: PsdRect, feather: f64| grow_rect(rect, pad.saturating_add(feather_pad(feather)));
     let raster = layer.mask.as_ref().and_then(|mask| {
         (!mask.disabled
             && mask.data.is_some()

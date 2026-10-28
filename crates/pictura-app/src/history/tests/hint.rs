@@ -265,7 +265,7 @@ fn each_bounded_op_hint_matches() {
         }
     });
     assert_hint_matches(|doc| {
-        doc.layers[0].channels[0].data.as_mut_slice()[1 * 16 + 1] = 200;
+        doc.layers[0].channels[0].data.as_mut_slice()[16 + 1] = 200;
         doc.composite = pictura_render::composite_rgba(doc);
         Some(vec![hint_rect()])
     });
@@ -277,7 +277,7 @@ fn each_bounded_op_hint_matches() {
             .data
             .as_mut()
             .expect("mask data")
-            .as_mut_slice()[1 * 4 + 1] = 20;
+            .as_mut_slice()[4 + 1] = 20;
         doc.composite = pictura_render::composite_rgba(doc);
         Some(vec![hint_rect()])
     });

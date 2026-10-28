@@ -257,7 +257,7 @@ mod tests {
             },
         ]);
         let base = influence(&d, "0").expect("bounded");
-        assert!(base.left <= 5 && base.top <= 5 && base.right >= 25 && base.bottom >= 25);
+        assert!(base.left <= 5 && base.top <= 5 && base.right >= 25 && base.bottom >= H as i32);
     }
 
     #[test]
@@ -269,7 +269,7 @@ mod tests {
                 pixel_layer("b", rect(10, 12, 6, 7), 20, 255),
             ],
         )]);
-        assert_eq!(influence(&d, "0").expect("bounded"), rect(2, 3, 14, 16));
+        assert_eq!(influence(&d, "0").expect("bounded"), rect(2, 3, 15, 15));
 
         let mut d = doc(vec![group(
             "g",

@@ -1,6 +1,6 @@
 use super::planes::TILE;
 use super::*;
-use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer, PsdRect};
+use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
 
 mod hint;
 
