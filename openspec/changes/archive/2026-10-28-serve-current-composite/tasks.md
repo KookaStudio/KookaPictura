@@ -34,7 +34,7 @@
 - [x] 5.1 Before archiving, run `python3 scripts/check-test-plan.py` and `openspec validate --all --strict`; verify both pass.
 - [x] 5.2 Archive with `openspec archive serve-current-composite`; verify `scripts/check-openspec-archived.sh` passes and only the archive remains under `openspec/changes/`.
 - [x] 5.3 After archiving, run `bash scripts/verify-fast.sh`; verify it passes with the change already archived.
-- [ ] 5.4 When the user asks, commit with `perf(app): serve the current picture from doc.composite (#1010)`, open the PR, and list the test plan's manual rows as a reviewer checklist.
+- [x] 5.4 When the user asks, commit with `perf(app): serve the current picture from doc.composite (#1010)`, open the PR, and list the test plan's manual rows as a reviewer checklist.
 
 ## 6. Measurement
 
