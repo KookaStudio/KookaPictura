@@ -103,6 +103,11 @@ public:
     int refreshCountForTest() const { return refreshCount_; }
     bool patternActionEnabledForTest() const;
 
+    /// True while `refresh()` rebuilds the rows. The frame folds a
+    /// `selectionChanged` emitted from inside a refresh into the debounced
+    /// pass instead of recomputing the command registry synchronously.
+    bool refreshInProgress() const { return refreshing_; }
+
     // Self-test hooks (M39). Read the projected model and menus, drive solo and
     // inline rename, and expose the Panel Options values without synthetic
     // mouse/key input.

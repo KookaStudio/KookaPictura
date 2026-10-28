@@ -434,7 +434,12 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
         if (registry_) {
             if (refreshingDock_) {
                 registryRefreshPending_ = true;
-            } else {
+            } else if (!panelsRefreshedByChanged_
+                       || !layersPanel_->refreshInProgress()) {
+                // A user-driven selection change must update labels and
+                // enablement immediately, even right after an edit. A
+                // refresh-induced emission after a notifying edit reuses the
+                // edit's synchronous registry recomputation.
                 registry_->refresh();
             }
         }
