@@ -182,6 +182,9 @@ private slots:
     void duplicateGroupNamesStayDistinct();
     void groupIconHasNoOutline();
     void typeThumbnailIsSquareWithoutOutline();
+    void adjustmentThumbnailIsSquareWithoutOutline();
+    void fillThumbnailIsSquareWithOutline();
+    void maskThumbnailMatchesSquareCard();
     void labelGlyphTintFollowsFill();
     void groupIconIsLarger();
     void blendComboArrowAndKeys();
@@ -1234,6 +1237,121 @@ void LayersPanelFixesTest::solidFillUsesForegroundNotBackground()
 
     QVERIFY2(triggerSolidFill(*panel_), "the Solid Color entry is offered");
     QCOMPARE(view_->sample_argb(0, 0), 0xff000000u);
+}
+
+// An adjustment row's card is a square (1:1) icon card with no black outline on
+// a non-square document; a pixel row on the same document stays letterboxed and
+// outlined (#982).
+void LayersPanelFixesTest::adjustmentThumbnailIsSquareWithoutOutline()
+{
+    const bool created = window_->newDocument(QStringLiteral("AdjThumb"), 80, 160,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view_ && panel_, "adjustment thumbnail fixture");
+    const QString pixel = view_->add_layer_in(QString());
+    QVERIFY(!pixel.isEmpty());
+    view_->deselect();
+    QVERIFY(view_->add_adjustment(QStringLiteral("invert")));
+    const QString adjustment = view_->active_layer_path();
+    QVERIFY(!adjustment.isEmpty());
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(50);
+
+    const QRect adjustmentThumb = panel_->rowThumbRectForTest(adjustment);
+    QVERIFY2(!adjustmentThumb.isEmpty(), "adjustment thumbnail laid out");
+    QCOMPARE(adjustmentThumb.width(), adjustmentThumb.height());
+    const QImage adjustmentImage = panel_->rowImageForTest(adjustment);
+    QVERIFY(!adjustmentImage.isNull());
+    const QColor adjustmentBorder =
+        adjustmentImage.pixelColor(adjustmentThumb.left(), adjustmentThumb.top());
+    QVERIFY2(adjustmentBorder.red() > 100 && adjustmentBorder.green() > 100
+                 && adjustmentBorder.blue() > 100,
+             "an icon-only adjustment card has no black outline");
+
+    const QRect pixelThumb = panel_->rowThumbRectForTest(pixel);
+    QVERIFY2(!pixelThumb.isEmpty(), "pixel thumbnail laid out");
+    QVERIFY2(pixelThumb.height() > pixelThumb.width(), "a pixel thumbnail letterboxes");
+    const QImage pixelImage = panel_->rowImageForTest(pixel);
+    QVERIFY(!pixelImage.isNull());
+    const QColor pixelBorder = pixelImage.pixelColor(pixelThumb.left(), pixelThumb.top());
+    QVERIFY2(pixelBorder.red() < 80 && pixelBorder.green() < 80 && pixelBorder.blue() < 80,
+             "a pixel thumbnail keeps its black outline");
+}
+
+// A fill row's card is 1:1 and the square preview fills it; the fill row keeps
+// its black outline (#982).
+void LayersPanelFixesTest::fillThumbnailIsSquareWithOutline()
+{
+    const bool created = window_->newDocument(QStringLiteral("FillThumb"), 80, 160,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view_ && panel_, "fill thumbnail fixture");
+    const QString fill = view_->add_solid_fill(0xff00ff00u);
+    QVERIFY(!fill.isEmpty());
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(50);
+
+    const QRect thumb = panel_->rowThumbRectForTest(fill);
+    QVERIFY2(!thumb.isEmpty(), "fill thumbnail laid out");
+    QCOMPARE(thumb.width(), thumb.height());
+    const QImage image = panel_->rowImageForTest(fill);
+    QVERIFY(!image.isNull());
+    // The square preview fills the card, so a point just inside a corner is the
+    // fill colour rather than a document-aspect margin of checkerboard.
+    const QColor inside = image.pixelColor(thumb.left() + 2, thumb.top() + 2);
+    QVERIFY2(inside.green() > 200 && inside.red() < 60, "the fill preview fills the card");
+    const QColor border = image.pixelColor(thumb.left(), thumb.top());
+    QVERIFY2(border.red() < 80 && border.green() < 80 && border.blue() < 80,
+             "a fill row keeps its black outline");
+}
+
+// An adjustment or fill row's mask thumbnail uses the same 1:1 card as its image
+// thumbnail, so the row's cards share one aspect (#982).
+void LayersPanelFixesTest::maskThumbnailMatchesSquareCard()
+{
+    const bool created = window_->newDocument(QStringLiteral("AdjMaskThumb"), 80, 160,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view_ && panel_, "mask thumbnail fixture");
+    view_->deselect();
+    QVERIFY(view_->add_adjustment(QStringLiteral("invert")));
+    const QString adjustment = view_->active_layer_path();
+    QVERIFY(!adjustment.isEmpty());
+    const QString fill = view_->add_solid_fill(0xff00ff00u);
+    QVERIFY(!fill.isEmpty());
+    for (const QString& path : {adjustment, fill}) {
+        if (!pictura::layers_api::rowForPath(*view_, path).hasMask) {
+            QVERIFY2(pictura::layer_mask_add_path(*view_, path, QStringLiteral("reveal-all")),
+                     "row mask");
+        }
+    }
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(50);
+
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QTreeView* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree && delegate);
+    for (const QString& path : {adjustment, fill}) {
+        const QModelIndex index = indexForPath(tree->model(), path);
+        QVERIFY2(index.isValid(), "row index");
+        const QRect vr = tree->visualRect(index);
+        const QRect row(0, 0, vr.width(), vr.height());
+        const QRect image = delegate->thumbRect(row, index);
+        const QRect mask = delegate->maskThumbRect(row, index);
+        QVERIFY2(!image.isEmpty() && !mask.isEmpty(), "image and mask cards laid out");
+        QCOMPARE(image.width(), image.height());
+        QCOMPARE(mask.width(), mask.height());
+        QCOMPARE(mask.size(), image.size());
+    }
 }
 
 QTEST_MAIN(LayersPanelFixesTest)

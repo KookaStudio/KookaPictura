@@ -587,14 +587,15 @@ pub(super) fn layer_thumbnail_positioned(
     }
     Some(rgba_image(rgba, tw as i32, th as i32))
 }
-/// A fill layer's content preview at the document's thumbnail aspect: a flat
-/// swatch for a solid fill, a scaled ramp for a gradient, or a scaled pattern
-/// tile. `None` for an adjustment or an undecodable block.
+/// A fill layer's square (1:1) content preview: a flat swatch for a solid fill,
+/// a scaled ramp for a gradient, or a scaled pattern tile. `None` for an
+/// adjustment or an undecodable block. The panel draws a fill row's preview in a
+/// 1:1 card (#982), so the preview is rendered square rather than at the
+/// document aspect, which would squash a ramp or tile into the card.
 pub(super) fn fill_thumbnail_image(
     layer: &Layer,
     doc: &Document,
     size: u32,
-    entire_document: bool,
     patterns: &[pictura_codec::PatternPixels],
 ) -> Option<QImage> {
     if size == 0 || doc.width == 0 || doc.height == 0 {
@@ -611,12 +612,7 @@ pub(super) fn fill_thumbnail_image(
             right: doc.width as i32,
         }
     };
-    let (aspect_width, aspect_height) = if entire_document {
-        (doc.width, doc.height)
-    } else {
-        (rect.width().max(1) as u32, rect.height().max(1) as u32)
-    };
-    let (tw, th) = aspect_thumbnail_extent(aspect_width, aspect_height, size);
+    let (tw, th) = (size, size);
     let rgba: Vec<u8> = match adjustment {
         pictura_render::Adjustment::SolidFill([r, g, b, a]) => {
             let mut out = Vec::with_capacity((tw * th * 4) as usize);

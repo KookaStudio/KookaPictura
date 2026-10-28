@@ -296,12 +296,46 @@ public:
                      box.top() + (box.height() - height) / 2, width, height);
     }
 
-    /// The image thumbnail's drawn card rect: a type layer keeps a square (1:1)
-    /// "T" card regardless of the document's aspect, every other non-group
-    /// layer is letterboxed to the document. A group keeps its square box.
+    /// Whether a row paints an icon rather than a raster image: a type "T" card,
+    /// an adjustment-kind icon, a content-less synthetic row (Smart Filters,
+    /// layer effects), or a group's folder glyph. A fill row carries a raster
+    /// preview and a pixel/background/shape row its own, so neither is icon-only.
+    bool iconOnlyRow(const QModelIndex& index) const
+    {
+        const QString kind = index.data(KindRole).toString();
+        if (kind == QLatin1String("group") || kind == QLatin1String("type")) {
+            return true;
+        }
+        if (kind == QLatin1String("adjustment")) {
+            return index.data(ThumbnailRole).value<QImage>().isNull();
+        }
+        return kind.startsWith(QLatin1String("smart-filter"))
+            || kind.startsWith(QLatin1String("layer-effect"));
+    }
+
+    /// Whether a row draws a 1:1 square card rather than a document-aspect
+    /// letterboxed card: an icon-only row (type, adjustment icon, content-less
+    /// synthetic row) or a fill row. A group is excluded so its slot and hit
+    /// rectangle are unchanged.
+    bool squareThumbCard(const QModelIndex& index) const
+    {
+        const QString kind = index.data(KindRole).toString();
+        if (kind == QLatin1String("group")) {
+            return false;
+        }
+        return kind == QLatin1String("adjustment") || iconOnlyRow(index);
+    }
+
+    /// The image thumbnail's drawn card rect: a type card, an adjustment-kind
+    /// icon, a fill preview, and a content-less synthetic row keep a square (1:1)
+    /// card regardless of the document's aspect; every other non-group layer is
+    /// letterboxed to the document. A group keeps its slot.
     QRect thumbnailCard(const QRect& box, const QModelIndex& index) const
     {
-        if (!box.isEmpty() && index.data(KindRole).toString() == QLatin1String("type")) {
+        if (box.isEmpty()) {
+            return box;
+        }
+        if (squareThumbCard(index)) {
             const int side = qMin(box.width(), box.height());
             return QRect(box.left() + (box.width() - side) / 2,
                          box.top() + (box.height() - side) / 2, side, side);
@@ -310,8 +344,8 @@ public:
     }
 
     /// The thumbnail's hit-target, mirroring the x/y math paint() lays out, as
-    /// the drawn card (document-aspect for a regular layer, square for a type
-    /// card). Empty when thumbnails are off.
+    /// the drawn card (document-aspect for a regular layer, square for an icon or
+    /// fill card). Empty when thumbnails are off.
     QRect thumbRect(const QRect& itemRect, const QModelIndex& index) const
     {
         if (thumbSize() <= 0) {
@@ -369,7 +403,7 @@ public:
         }
         const int side = linkSide(thumb);
         const int left = imageSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
-        return letterboxedThumb(thumbSlot(itemRect, left), index);
+        return thumbnailCard(thumbSlot(itemRect, left), index);
     }
 
     /// The x just past the mask thumbnail's square slot (or the image slot when
@@ -408,7 +442,7 @@ public:
         }
         const int side = linkSide(thumb);
         const int left = maskSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
-        return letterboxedThumb(thumbSlot(itemRect, left), index);
+        return thumbnailCard(thumbSlot(itemRect, left), index);
     }
 
     /// The x just past the last thumbnail slot (image, mask, or vector).
@@ -601,7 +635,7 @@ public:
                 const QPixmap glyph =
                     pictura::icon(QStringLiteral("layers.fx")).pixmap(thumb, thumb);
                 if (!glyph.isNull()) {
-                    painter->drawPixmap(box, glyph);
+                    painter->drawPixmap(shaped, glyph);
                 }
             } else if (index.data(KindRole).toString() == QLatin1String("type")) {
                 // CS6 shows a type layer as a T on white, not its pixels; the
@@ -639,7 +673,7 @@ public:
                 const QPixmap glyph =
                     pictura::icon(QStringLiteral("adjustments.") + kind).pixmap(thumb, thumb);
                 if (!glyph.isNull()) {
-                    painter->drawPixmap(box, glyph);
+                    painter->drawPixmap(shaped, glyph);
                 }
             } else {
                 painter->drawTiledPixmap(shaped, checkerTile());
@@ -648,11 +682,11 @@ public:
                     painter->drawImage(shaped, image);
                 }
             }
-            // 1 px black outline around the letterboxed thumbnail. A group's
-            // folder glyph and a type layer's white "T" card keep no outline.
-            const QString outlineKind = index.data(KindRole).toString();
-            if (outlineKind != QLatin1String("group") && outlineKind != QLatin1String("type")
-                && !outlineKind.startsWith(QLatin1String("layer-effect"))) {
+            // 1 px black outline around a raster image thumbnail card. An
+            // icon-only row (a type card, an adjustment-kind icon, a
+            // content-less synthetic row, or a group's folder glyph) has no
+            // raster image to frame.
+            if (!iconOnlyRow(index)) {
                 painter->setPen(QPen(Qt::black, 1));
                 painter->setBrush(Qt::NoBrush);
                 painter->drawRect(shaped.adjusted(0, 0, -1, -1));
@@ -722,7 +756,7 @@ public:
                                     linkPix);
             }
             maskRect = maskThumbRect(rect, index);
-            painter->drawImage(maskRect, mask);
+            drawImageFit(painter, maskRect, mask);
             if (index.data(MaskTargetRole).toBool()) {
                 // The active mask thumbnail wears the CS6 focus border: a dark
                 // outline outside a white line, legible over any coverage.
@@ -749,7 +783,7 @@ public:
                                     linkPix);
             }
             vectorRect = vectorMaskThumbRect(rect, index);
-            painter->drawImage(vectorRect, vectorMask);
+            drawImageFit(painter, vectorRect, vectorMask);
             if (index.data(VectorMaskDisabledRole).toBool()) {
                 paintDisabledCross(painter, vectorRect, thumb);
             }
@@ -864,6 +898,22 @@ private:
         painter->drawLine(r.left(), r.bottom(), r.left() + len, r.bottom());
         painter->drawLine(r.right() - len, r.bottom(), r.right(), r.bottom());
         painter->drawLine(r.right(), r.bottom() - len, r.right(), r.bottom());
+    }
+
+    /// Draw `image` centred in `card`, scaled to fit while preserving its aspect
+    /// ratio, so a document-aspect mask in a square icon-row card is letterboxed
+    /// rather than stretched. A card whose aspect matches the image is filled
+    /// exactly.
+    static void drawImageFit(QPainter* painter, const QRect& card, const QImage& image)
+    {
+        if (card.isEmpty() || image.isNull()) {
+            return;
+        }
+        const QSize scaled = image.size().scaled(card.size(), Qt::KeepAspectRatio);
+        const QRect target(card.left() + (card.width() - scaled.width()) / 2,
+                           card.top() + (card.height() - scaled.height()) / 2,
+                           scaled.width(), scaled.height());
+        painter->drawImage(target, image);
     }
 
     /// The CS6 disabled-mask mark: a red cross over the thumbnail.

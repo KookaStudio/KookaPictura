@@ -4,6 +4,7 @@
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
 #include <QtGui/QAction>
+#include <QtGui/QColor>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QTreeView>
 
@@ -33,6 +34,7 @@ private slots:
     void editSmartFilterRequestsTheDialog();
     void menuTogglesAndClearsFilters();
     void filterRowDisablesAndDeletes();
+    void smartFiltersRowHasNoOutline();
 
 private:
     // A smart object with one camera-raw smart filter; returns its layer path.
@@ -325,6 +327,38 @@ void LayersSmartFiltersTest::filterRowDisablesAndDeletes()
                                                        QStringLiteral("Delete Smart Filter")));
     QCOMPARE(pictura::layer_smart_filter_count(*view, path), 0);
     QVERIFY(window_->closeActiveDocument(false));
+}
+
+// The Smart Filters group row's card is a square (1:1) with no black outline on
+// a non-square document (#982).
+void LayersSmartFiltersTest::smartFiltersRowHasNoOutline()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("SmartFilterOutline"), 40, 80,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    pictura::LayersPanel* panel =
+        window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view && panel);
+
+    const QString path = view->add_solid_fill(0xff808080u);
+    QVERIFY(view->rasterize_fill_content(path));
+    QVERIFY(view->convert_to_smart_object(path));
+    QVERIFY(view->apply_pictura_raw_filter(path, QStringLiteral("Temp=20;Ex12=1.5")));
+
+    panel->setView(view);
+    panel->refresh();
+    QCoreApplication::processEvents();
+    panel->expandForTest(path);
+    QCoreApplication::processEvents();
+
+    const QRect thumb = panel->rowThumbRectForTest(path + QStringLiteral("/@sf"));
+    QVERIFY2(!thumb.isEmpty(), "smart filters row thumbnail laid out");
+    QCOMPARE(thumb.width(), thumb.height());
+    const QImage image = panel->rowImageForTest(path + QStringLiteral("/@sf"));
+    QVERIFY(!image.isNull());
+    const QColor border = image.pixelColor(thumb.left(), thumb.top());
+    QVERIFY2(border.red() > 100 && border.green() > 100 && border.blue() > 100,
+             "a smart filters row card has no black outline");
 }
 
 QTEST_MAIN(LayersSmartFiltersTest)
