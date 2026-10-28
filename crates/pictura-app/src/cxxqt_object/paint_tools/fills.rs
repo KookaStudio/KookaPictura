@@ -7,12 +7,10 @@
 //! [`PictureView`]: super::super::qobject::PictureView
 
 use super::super::helpers::{
-    active_layer_visible, active_mask_target, active_pixel_layer, luma_u8, paint_mode_from,
-    rgba_from_argb,
+    active_layer_visible, active_mask_target, active_pixel_layer, paint_mode_from, rgba_from_argb,
 };
 use super::super::helpers_composite::{crop_selection, current_buffer};
 use super::super::qobject::PictureView;
-use super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -21,10 +19,10 @@ use pictura_core::{Document, Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint};
 use pictura_paint::eraser::antialias_mask;
 use pictura_paint::gradient::{self, GradientOptions, GradientStyle, PRESET_NAMES};
-use pictura_paint::healing::RgbaImage;
 use pictura_paint::pattern;
 use pictura_paint::stamp::{layer_surface, surface_from_composite};
-use pictura_paint::{Alpha, PaintMode, Rgba};
+use pictura_paint::Alpha;
+use std::borrow::Cow;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -197,8 +195,13 @@ fn draw_gradient(
         transparency,
     };
     let (start, end) = ((x0 as f32, y0 as f32), (x1 as f32, y1 as f32));
-    apply(view, "Gradient", |doc, path, rust| {
-        gradient::draw(doc, path, &ramp, &options, start, end, selection(rust))
+    apply(view, "Gradient", |doc, path, t, selection| {
+        // The drag is in document space; a mask's document sits at its own
+        // rectangle, so its points move by the target's origin.
+        let (ox, oy) = (t.origin.0 as f32, t.origin.1 as f32);
+        let start = (start.0 - ox, start.1 - oy);
+        let end = (end.0 - ox, end.1 - oy);
+        gradient::draw(doc, path, &ramp, &options, start, end, selection)
     })
 }
 
@@ -229,13 +232,16 @@ fn bucket_fill_at(
     let mode = paint_mode_from(&mode.to_string());
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
     let tolerance = tolerance.clamp(0, 255) as u8;
-    apply(view, "Paint Bucket", |doc, path, rust| {
-        let surface = if all_layers {
-            surface_from_composite(&current_buffer(doc, rust.gpu_compute))
+    apply(view, "Paint Bucket", |doc, path, t, selection| {
+        // All Layers samples the composite of the layer's own document; a mask
+        // has no composite, so it always floods its own coverage.
+        let surface = if all_layers && !t.is_mask {
+            surface_from_composite(&current_buffer(doc, t.gpu_compute))
         } else {
             layer_surface(doc, path)?
         };
-        let flood = bucket::flood(&surface, (x, y), tolerance, contiguous)?;
+        let (ox, oy) = t.origin;
+        let flood = bucket::flood(&surface, (x - ox, y - oy), tolerance, contiguous)?;
         let mask = if antialias {
             antialias_mask(&flood, surface.width as usize)
         } else {
@@ -248,14 +254,10 @@ fn bucket_fill_at(
             paint,
             mode,
             opacity,
-            selection(rust),
+            selection,
             Alpha::Blend,
         )
     })
-}
-
-pub(crate) fn selection(rust: &PictureViewRust) -> Option<&[u8]> {
-    rust.session.selection.as_ref().map(|s| s.data.as_slice())
 }
 
 fn edit_fill(
@@ -278,133 +280,22 @@ fn edit_fill(
     };
     let mode = paint_mode_from(&mode.to_string());
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
-    // A mask target fills the mask's coverage with the fill colour's luma.
-    if let Some(path) = active_mask_target(view.rust()) {
-        return fill_mask(view, &path, tile.as_ref(), foreground, mode, opacity);
-    }
     let paint = match &tile {
         Some(tile) => BucketPaint::Pattern(tile),
         None => BucketPaint::Foreground(rgba_from_argb(foreground)),
     };
-    apply(view, "Fill", |doc, path, rust| {
-        let (width, height) = (doc.width as i32, doc.height as i32);
-        // Preserve Transparency is the engine's own policy: it keeps every
-        // filled pixel's alpha and leaves the layer's empty pixels alone.
-        let alpha = if preserve_transparency {
-            Alpha::Keep
-        } else {
-            Alpha::Blend
-        };
-        let mask = vec![255u8; (width * height) as usize];
-        bucket::fill(
-            doc,
-            path,
-            &mask,
-            paint,
-            mode,
-            opacity,
-            selection(rust),
-            alpha,
-        )
+    // Preserve Transparency is the engine's own policy: it keeps every filled
+    // pixel's alpha and leaves the layer's empty pixels alone. A mask's
+    // transparency lock already does that, so the policy is a no-op on a mask.
+    let alpha = if preserve_transparency {
+        Alpha::Keep
+    } else {
+        Alpha::Blend
+    };
+    apply(view, "Fill", |doc, path, _t, selection| {
+        let mask = vec![255u8; (doc.width * doc.height) as usize];
+        bucket::fill(doc, path, &mask, paint, mode, opacity, selection, alpha)
     })
-}
-
-/// `Edit ▸ Fill` on the mask of the layer at `path`: the fill colour's luma
-/// (a pattern's per-pixel luma) fills the coverage through the selection, which
-/// is cropped to the mask rectangle. One "Fill" state.
-fn fill_mask(
-    mut view: Pin<&mut PictureView>,
-    path: &str,
-    tile: Option<&RgbaImage>,
-    foreground: u32,
-    mode: PaintMode,
-    opacity: f32,
-) -> bool {
-    let (mut mask, selection) = {
-        let rust = view.rust();
-        let Some(doc) = rust.session.doc.as_ref() else {
-            return false;
-        };
-        let Some(mask) = pictura_render::mask_document(doc, path) else {
-            return false;
-        };
-        let selection = rust
-            .session
-            .selection
-            .as_ref()
-            .map(|s| crop_selection(&s.data, s.width, s.height, mask.rect));
-        (mask, selection)
-    };
-    let gray_tile;
-    let paint = match tile {
-        Some(tile) => {
-            gray_tile = gray_image(tile);
-            BucketPaint::Pattern(&gray_tile)
-        }
-        None => {
-            let color = rgba_from_argb(foreground);
-            let v = luma_u8(color);
-            BucketPaint::Foreground(Rgba {
-                r: v,
-                g: v,
-                b: v,
-                a: color.a,
-            })
-        }
-    };
-    let full = vec![255u8; (mask.document.width * mask.document.height) as usize];
-    let Some(dirty) = bucket::fill(
-        &mut mask.document,
-        "0",
-        &full,
-        paint,
-        mode,
-        opacity,
-        selection.as_deref(),
-        Alpha::Blend,
-    ) else {
-        return false;
-    };
-    let changed = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.session.doc.as_mut() else {
-            return false;
-        };
-        pictura_render::write_mask_back(doc, path, &mask.document, Some(dirty))
-    };
-    if changed {
-        let rect = PsdRect {
-            top: dirty.top + mask.rect.top,
-            left: dirty.left + mask.rect.left,
-            bottom: dirty.bottom + mask.rect.top,
-            right: dirty.right + mask.rect.left,
-        };
-        view.as_mut()
-            .edit("Fill", |_| Edit::regions(vec![rect], false));
-    }
-    changed
-}
-
-/// A pattern tile as its per-pixel luma, so a pattern fill of a mask paints
-/// coverage rather than colour.
-fn gray_image(tile: &RgbaImage) -> RgbaImage {
-    RgbaImage {
-        width: tile.width,
-        height: tile.height,
-        data: tile
-            .data
-            .iter()
-            .map(|px| {
-                let v = luma_u8(Rgba {
-                    r: px[0],
-                    g: px[1],
-                    b: px[2],
-                    a: px[3],
-                });
-                [v, v, v, 255]
-            })
-            .collect(),
-    }
 }
 
 fn edit_stroke(
@@ -418,20 +309,19 @@ fn edit_stroke(
     if view.rust().modal_transform_blocks_fill() {
         return false;
     }
-    let Some(selection) = view.rust().session.selection.as_ref() else {
+    if view.rust().session.selection.is_none() {
         return false;
-    };
-    let selection = selection.data.clone();
+    }
     let align = match position {
         0 => bucket::StrokeAlign::Inside,
         2 => bucket::StrokeAlign::Outside,
         _ => bucket::StrokeAlign::Center,
     };
-    apply(view, "Stroke", |doc, path, _| {
+    apply(view, "Stroke", |doc, path, _t, selection| {
         bucket::stroke_selection(
             doc,
             path,
-            &selection,
+            selection?,
             rgba_from_argb(color),
             width.clamp(0, 250) as u32,
             align,
@@ -441,32 +331,82 @@ fn edit_stroke(
     })
 }
 
+/// Where a shared-path fill lands: the active pixel layer inside the document,
+/// or the active mask as a mask-sized document of its own. A mask's document
+/// holds the coverage in one grayscale channel and sits at the mask's
+/// rectangle, so a document-space point maps to `point - origin` and a
+/// document-space coverage is confined with [`Self::coverage`].
+pub(crate) struct FillTarget {
+    /// The target's top-left corner in the document's coordinates.
+    pub origin: (i32, i32),
+    /// The document's size, for a fill that builds a document-space coverage.
+    pub document_size: (u32, u32),
+    /// The target's rectangle in the document's coordinates.
+    pub rect: PsdRect,
+    /// Whether the GPU compositor is available (the Paint Bucket's All Layers).
+    pub gpu_compute: bool,
+    /// Whether the target is a mask, so geometry is translated and a
+    /// document-space coverage is confined to the mask's rectangle.
+    pub is_mask: bool,
+}
+
+impl FillTarget {
+    /// A document-space coverage as a coverage of the edited document:
+    /// unchanged for a layer, cropped to the mask's rectangle for a mask.
+    pub(crate) fn coverage<'a>(&self, doc_space: &'a [u8]) -> Cow<'a, [u8]> {
+        if self.is_mask {
+            Cow::Owned(crop_selection(
+                doc_space,
+                self.document_size.0,
+                self.document_size.1,
+                self.rect,
+            ))
+        } else {
+            Cow::Borrowed(doc_space)
+        }
+    }
+}
+
 /// Run `edit` on a copy of the document and its visible lone active pixel
-/// layer; when it changed something, adopt the copy and record it as `label`.
-/// False (no state) mid-stroke, without such a layer, or when nothing changed.
+/// layer, or — with a mask edit target — on the mask's coverage; when it
+/// changed something, adopt the result and record it as `label`. `selection` is
+/// the selection cropped to the target. False (no state) mid-stroke, without
+/// such a target, or when nothing changed.
 pub(crate) fn apply(
     mut view: Pin<&mut PictureView>,
     label: &str,
-    edit: impl FnOnce(&mut Document, &str, &PictureViewRust) -> Option<PsdRect>,
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&[u8]>) -> Option<PsdRect>,
 ) -> bool {
+    if view.rust().session.live.stroke().is_some() || view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
+    if let Some(path) = active_mask_target(view.rust()) {
+        return apply_mask(view, label, &path, edit);
+    }
     let edited = {
         let rust = view.rust();
         let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
         else {
             return false;
         };
-        // ponytail: of the fills only Edit > Fill writes a mask (`fill_mask`);
-        // the rest refuse a mask target rather than write the layer's pixels.
-        if rust.session.live.stroke().is_some()
-            || rust.modal_transform_blocks_edit()
-            || active_mask_target(rust).is_some()
-            || active_pixel_layer(doc, Some(path)).is_none()
-            || !active_layer_visible(doc, Some(path))
-        {
+        if active_pixel_layer(doc, Some(path)).is_none() || !active_layer_visible(doc, Some(path)) {
             return false;
         }
+        let target = FillTarget {
+            origin: (0, 0),
+            document_size: (doc.width, doc.height),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: doc.height as i32,
+                right: doc.width as i32,
+            },
+            gpu_compute: rust.gpu_compute,
+            is_mask: false,
+        };
+        let selection = rust.session.selection.as_ref().map(|s| s.data.as_slice());
         let mut edited = doc.clone();
-        edit(&mut edited, path, rust).map(|rect| (edited, rect))
+        edit(&mut edited, path, &target, selection).map(|rect| (edited, rect))
     };
     let Some((doc, rect)) = edited else {
         return false;
@@ -475,6 +415,55 @@ pub(crate) fn apply(
     refresh_edit(view.as_mut(), Some(rect), "");
     view.as_mut().record(label);
     true
+}
+
+/// [`apply`] against the mask at `path`: the fill runs on the mask's coverage
+/// and is written back to the real mask, recorded as one `label` state. A fill
+/// colour and a ramp are reduced to their luma by the grayscale document.
+fn apply_mask(
+    mut view: Pin<&mut PictureView>,
+    label: &str,
+    path: &str,
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&[u8]>) -> Option<PsdRect>,
+) -> bool {
+    let outcome = view.as_mut().edit(label, |rust| {
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return Edit::None;
+        };
+        let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
+            return Edit::None;
+        };
+        let target = FillTarget {
+            origin: (mask.rect.left, mask.rect.top),
+            document_size: (doc.width, doc.height),
+            rect: mask.rect,
+            gpu_compute: rust.gpu_compute,
+            is_mask: true,
+        };
+        let selection = rust
+            .session
+            .selection
+            .as_ref()
+            .map(|s| crop_selection(&s.data, s.width, s.height, mask.rect));
+        let mut document = mask.document;
+        let Some(dirty) = edit(&mut document, "0", &target, selection.as_deref()) else {
+            return Edit::None;
+        };
+        let Some(real) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        if !pictura_render::write_mask_back(real, path, &document, Some(dirty)) {
+            return Edit::None;
+        }
+        let rect = PsdRect {
+            top: dirty.top + mask.rect.top,
+            left: dirty.left + mask.rect.left,
+            bottom: dirty.bottom + mask.rect.top,
+            right: dirty.right + mask.rect.left,
+        };
+        Edit::regions(vec![rect], false)
+    });
+    !matches!(outcome, Edit::None)
 }
 
 /// Present an edit that changed only `rect` of the document: composite that

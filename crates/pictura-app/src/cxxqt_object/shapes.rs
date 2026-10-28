@@ -15,7 +15,7 @@
 
 use super::helpers::{paint_timing, rgba_from_argb};
 use super::helpers_composite::{aspect_thumbnail_extent, rgba_image};
-use super::paint_tools::fills::{apply, refresh_edit, selection};
+use super::paint_tools::fills::{apply, refresh_edit};
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::{structural, Edit};
 use core::pin::Pin;
@@ -372,18 +372,18 @@ fn shape_fill_pixels(view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground: 
     };
     let paint = BucketPaint::Foreground(rgba_from_argb(foreground));
     paint_timing::start("Shape pixels");
-    let applied = apply(view, &label(kind), |doc, path, rust| {
-        let t = std::time::Instant::now();
-        let mask = shape::coverage(&subpath, doc.width, doc.height);
-        paint_timing::record("shape_coverage", t.elapsed());
+    let applied = apply(view, &label(kind), |doc, path, t, selection| {
+        let t0 = std::time::Instant::now();
+        let mask = shape::coverage(&subpath, t.document_size.0, t.document_size.1);
+        paint_timing::record("shape_coverage", t0.elapsed());
         bucket::fill(
             doc,
             path,
-            &mask,
+            &t.coverage(&mask),
             paint,
             PaintMode::Normal,
             1.0,
-            selection(rust),
+            selection,
             Alpha::Blend,
         )
     });
