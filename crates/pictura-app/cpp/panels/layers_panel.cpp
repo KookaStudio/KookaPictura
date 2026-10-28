@@ -525,11 +525,8 @@ void LayersPanel::setView(PictureView* view)
 
 void LayersPanel::refreshPatternAction()
 {
-    if (!patternFill_) {
-        return;
-    }
     const quint64 generation = view_ ? view_->document_generation() : 0;
-    if (view_ == patternView_ && generation == patternGeneration_) {
+    if (!patternFill_ || (view_ == patternView_ && generation == patternGeneration_)) {
         return;
     }
     patternView_ = view_;
