@@ -7,7 +7,7 @@ mod styles;
 
 use planes::{
     adopt_metadata, apply_tiles, diff_into, hollow, plane_kinds, planes_agree, private_copy,
-    stamp_agreed, swap_tiles, tile_rect, PlaneDelta, PlaneKind,
+    shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta, PlaneKind,
 };
 pub(crate) use planes::{copy_plane, detached_copy};
 pub use styles::{
@@ -243,8 +243,15 @@ impl History {
                     })
                 }
                 None => {
+                    let current = Snapshot {
+                        doc: shared_copy(doc, &cur.doc),
+                        selection: selection.clone(),
+                    };
+                    let stored = Stored::Hollow(Snapshot {
+                        doc: hollow(doc),
+                        selection: selection.clone(),
+                    });
                     self.fill_anchor(cur);
-                    let (current, stored) = fresh_segment(doc);
                     self.current = Some(current);
                     stored
                 }
@@ -484,7 +491,8 @@ impl History {
             stamp_agreed(&mut cur.doc, doc);
         } else {
             damage.everywhere = true;
-            *doc = private_copy(&mut cur.doc);
+            let installed = shared_copy(&mut cur.doc, doc);
+            *doc = installed;
         }
         *selection = cur.selection.clone();
         // The target the restore carries: an undo reverses the operation and
@@ -746,6 +754,48 @@ impl History {
             .flat_map(|p| p.tiles.iter())
             .map(|t| t.bytes.len())
             .sum()
+    }
+
+    /// Bytes of the retained documents' tracked planes, counting each shared
+    /// allocation once.
+    #[cfg(test)]
+    pub(crate) fn retained_plane_bytes(&self) -> usize {
+        fn collect(doc: &Document, out: &mut Vec<pictura_core::Plane<u8>>) {
+            planes::each_plane(doc, &mut |p, _, _| {
+                if !p.is_empty() {
+                    out.push(p.clone());
+                }
+            });
+        }
+        let mut all = Vec::new();
+        for entry in &self.states {
+            collect(
+                match &entry.stored {
+                    Stored::Full(s) | Stored::Hollow(s) => &s.doc,
+                    Stored::Delta(d) => &d.meta,
+                },
+                &mut all,
+            );
+        }
+        if let Some(current) = &self.current {
+            collect(&current.doc, &mut all);
+        }
+        if let Some(pinned) = &self.pinned {
+            collect(&pinned.doc, &mut all);
+        }
+        for named in &self.snapshots {
+            collect(&named.snapshot.doc, &mut all);
+        }
+        let mut unique: Vec<&pictura_core::Plane<u8>> = Vec::new();
+        let mut bytes = 0;
+        for plane in &all {
+            if unique.iter().any(|q| q.shares(plane)) {
+                continue;
+            }
+            unique.push(plane);
+            bytes += plane.len();
+        }
+        bytes
     }
 
     /// States retained with their whole pixels: full anchors, plus `current`.

@@ -621,6 +621,76 @@ fn large_document_stroke_profile() {
     );
 }
 
+/// Print-only: structural-edit history cost on a 6000×4000 document with
+/// twenty full-canvas layers (#973) — one New Layer capture and its undo per
+/// round, plus retained tracked-plane bytes after twenty rounds. The retained
+/// figure counts tracked-plane allocations only; tile deltas are not included
+/// (this profile creates none). No pass/fail timing budget; the deterministic
+/// byte bound is asserted in the history unit test.
+#[test]
+#[ignore = "6000x4000 twenty-layer structural-edit profile; run explicitly with --ignored --nocapture"]
+fn large_document_structural_edit_profile() {
+    use crate::history::{History, Restored};
+    use pictura_select::Selection;
+    use std::time::Instant;
+
+    let (w, h) = (6000u32, 4000u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(
+        (0..20)
+            .map(|i| pixel_layer(&format!("Layer {i}"), w, h, ((i * 11) as u8, 60, 90)))
+            .collect(),
+    );
+    doc.composite = pictura_render::composite_active(&doc, false).0;
+    let mut history = History::default();
+    let mut selection: Option<Selection> = None;
+    let mut target = LayerTarget::default();
+
+    let t = Instant::now();
+    history.capture_live(&mut doc, &selection, &target, "Open");
+    let base = history.retained_plane_bytes();
+    println!(
+        "structural_open capture={:.2}ms retained_plane={:.2}GB",
+        t.elapsed().as_secs_f64() * 1000.0,
+        base as f64 / 1e9
+    );
+
+    let (mut worst_add, mut worst_undo) = (0.0f64, 0.0f64);
+    for i in 0..20 {
+        let t = Instant::now();
+        assert!(pictura_render::add_layer(&mut doc, -1, &format!("Layer {}", 20 + i)) >= 0);
+        let add = t.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now();
+        history.capture_live(&mut doc, &selection, &target, "New Layer");
+        let capture = t.elapsed().as_secs_f64() * 1000.0;
+        worst_add = worst_add.max(add + capture);
+
+        let t = Instant::now();
+        assert_eq!(
+            history.undo_live(&mut doc, &mut selection, &mut target),
+            Some(Restored::Everywhere)
+        );
+        let undo = t.elapsed().as_secs_f64() * 1000.0;
+        worst_undo = worst_undo.max(undo);
+        assert_eq!(
+            history.redo_live(&mut doc, &mut selection, &mut target),
+            Some(Restored::Everywhere)
+        );
+        println!(
+            "structural_round round={i} add={add:.2}ms capture={capture:.2}ms undo={undo:.2}ms"
+        );
+    }
+
+    let retained = history.retained_plane_bytes();
+    println!(
+        "structural_edit worst_add_capture={worst_add:.2}ms worst_undo={worst_undo:.2}ms \
+         retained_plane={:.2}GB base_plane={:.2}GB targets add_capture<20.00ms \
+         undo<30.00ms retained<5.00GB",
+        retained as f64 / 1e9,
+        base as f64 / 1e9,
+    );
+}
+
 /// Print-only: the Filter dialog's costs on a document the size of the
 /// 16507×16196 world map (issue #152) — the dialog's full-image reads, a
 /// section preview at fit and at 100% zoom, a re-preview after a parameter
