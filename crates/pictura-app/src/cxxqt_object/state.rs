@@ -144,6 +144,12 @@ pub struct PictureViewRust {
     /// The background crash-recovery snapshot write in flight, if any
     /// (`impl_core/recovery.rs`); its result is whether the file landed.
     pub(super) recovery_write: Option<std::thread::JoinHandle<bool>>,
+    /// The native save worker in flight, if any (`impl_core/save_jobs.rs`).
+    pub(super) save_job: Option<super::impl_core::save_jobs::SaveJob>,
+    /// Test seam: hold a started save's completion for this many milliseconds.
+    pub(super) save_delay_for_test: u64,
+    /// The adjustment dialog's worker jobs (`image_adjust/jobs.rs`).
+    pub(super) adjust_jobs: super::image_adjust::jobs::AdjustJobs,
     /// Set when a loading tab's open is cancelled; the worker's queued result
     /// is dropped instead of applied (`open_jobs`).
     pub(super) open_cancelled: bool,
@@ -216,6 +222,9 @@ impl Default for PictureViewRust {
             add_mask_by_default: true,
             shape_attributes: None,
             recovery_write: None,
+            save_job: None,
+            save_delay_for_test: 0,
+            adjust_jobs: Default::default(),
             open_cancelled: false,
             open_request: 0,
             open_delay_for_test: 0,

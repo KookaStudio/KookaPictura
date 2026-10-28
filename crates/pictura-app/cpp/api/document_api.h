@@ -3,6 +3,7 @@
 #include <QtCore/QSize>
 #include <QtCore/QString>
 #include <QtCore/QVector>
+#include <QtCore/QtGlobal>
 
 namespace pictura {
 class PictureView;
@@ -25,6 +26,12 @@ bool openAsSmartObject(PictureView& view, const QString& path);
 bool newDocument(PictureView& view, int width, int height, const QString& mode, int depth,
                  const QString& background);
 bool save(PictureView& view, const QString& path);
+// Native PSD/PSB save off the GUI thread. `saveStart` is false for a raster or
+// PDF path; `saveFinish` joins and applies the path/dirty result.
+bool saveStart(PictureView& view, const QString& path);
+bool saveRunning(const PictureView& view);
+bool saveFinish(PictureView& view);
+void saveSetDelayForTest(PictureView& view, quint64 ms);
 bool isDirty(const PictureView& view);
 QString filePath(const PictureView& view);
 /// Post-open normalization notices joined for the status bar; empty when none.
