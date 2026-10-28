@@ -266,6 +266,8 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
     }
 }
 
+// Re-edit a generic or Filter Gallery Smart Filter: CS6's notice when filters
+// are stacked above it, then its dialog prefilled; OK replaces it in place.
 void PicturaMainWindow::editSmartFilter(const QString& path, int index)
 {
     PictureView* view = activeView();

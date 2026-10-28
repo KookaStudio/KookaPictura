@@ -249,7 +249,6 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
         if (path.isEmpty()) {
             return QStringList{};
         }
-        // Of the synthetic rows only a Smart Filter drags, within its list.
         const QModelIndex index = model_->indexForPath(path);
         if (index.isValid() && index.data(SyntheticRole).toBool()
             && index.data(KindRole).toString() != QLatin1String("smart-filter")) {
@@ -627,9 +626,9 @@ void LayersPanel::refresh()
             row.vectorMaskDisabled = source.vectorMaskDisabled;
             rows.push_back(std::move(row));
         }
-        // Display-only Smart Filters rows: a group header under each filtered
-        // smart object plus one row per filter. The header carries the filter
-        // count and the group eye; the children carry their own eyes.
+        // Display-only Smart Filters rows: a group header (count, group eye)
+        // under each filtered smart object, then one row per filter, newest on
+        // top as CS6 stacks them; a row's path keeps its chain index.
         QVector<LayerRowNode> synthetic;
         for (int k = 0; k < rows.size(); ++k) {
             LayerRowNode& row = rows[k];
@@ -650,8 +649,6 @@ void LayersPanel::refresh()
             group.childCount = count;
             group.synthetic = true;
             synthetic.push_back(std::move(group));
-            // The newest filter is drawn on top, as CS6 stacks them; the row
-            // path keeps the chain index (0 is applied first).
             for (int j = count - 1; j >= 0; --j) {
                 LayerRowNode child;
                 child.path = row.path + QStringLiteral("/@sf/") + QString::number(j);

@@ -598,8 +598,6 @@ private:
     // Surface why a filter was refused (status bar + stderr) instead of a
     // silent no-op.
     void reportFilterRefusal(PictureView* view);
-    // Re-edit a generic or Filter Gallery Smart Filter: CS6's notice when
-    // filters are stacked above it, then its dialog prefilled; OK replaces it.
     void editSmartFilter(const QString& path, int index);
     // frame_menus_align.cpp: Layer > Align / Align Layers To Selection /
     // Distribute, and the Move tool's buttons, over the selected layers.
