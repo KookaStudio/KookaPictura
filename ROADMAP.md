@@ -328,7 +328,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       Lens Blur, Displace, Adaptive Wide Angle and Image > Adjustments are
       greyed out on a Smart Object
 - [ ] Shadow/Highlight and Variations as Smart Filters (#996)
-- [ ] Re-edit generic and Filter Gallery Smart Filters (#997)
+- [x] Re-edit generic and Filter Gallery Smart Filters (#997): double-click
+      reopens the dialog prefilled, after CS6's stacked-filters notice
 - [ ] Per-Smart-Filter blend mode and opacity (#998)
 - [ ] Photoshop validation of authored filter masks (#999)
 - [ ] White filter mask without a selection and Add Filter Mask (#1000)
