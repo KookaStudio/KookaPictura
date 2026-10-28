@@ -12,6 +12,7 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStringList>
+#include <QtGui/QColor>
 #include <QtWidgets/QDialog>
 
 #include <functional>
@@ -35,6 +36,7 @@ private slots:
     void disableLayerEffectsIsOneState();
     void effectOrderingMatchesTheDialog();
     void adjustmentRowsShowNoFxBadge();
+    void effectsRowHasNoOutline();
 
 private:
     // A 10x10 white square lifted onto layer "1" over a white Background.
@@ -290,6 +292,34 @@ void LayersEffectsTest::adjustmentRowsShowNoFxBadge()
     panel_->refresh();
     QVERIFY2(!panel_->rowFxRectForTest(adjustment).isEmpty(),
              "an off effect is still present, so the badge stays");
+}
+
+// The Effects group row's card is a square (1:1) with no black outline on a
+// non-square document (#982).
+void LayersEffectsTest::effectsRowHasNoOutline()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("EffectsSquare"), 40, 80, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    view_->select_rect(10, 10, 10, 10, QStringLiteral("new"), 0.0);
+    QVERIFY(!view_->layer_via_copy(QStringLiteral("0")).isEmpty());
+    view_->deselect();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    panel_->refresh();
+    QCoreApplication::processEvents();
+
+    const QRect thumb = panel_->rowThumbRectForTest(QStringLiteral("1/@fx"));
+    QVERIFY2(!thumb.isEmpty(), "effects row thumbnail laid out");
+    QCOMPARE(thumb.width(), thumb.height());
+    const QImage image = panel_->rowImageForTest(QStringLiteral("1/@fx"));
+    QVERIFY(!image.isNull());
+    const QColor border = image.pixelColor(thumb.left(), thumb.top());
+    QVERIFY2(border.red() > 100 && border.green() > 100 && border.blue() > 100,
+             "an effects row card has no black outline");
 }
 
 QTEST_MAIN(LayersEffectsTest)

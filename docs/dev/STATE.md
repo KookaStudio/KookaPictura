@@ -11,6 +11,25 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Layers panel thumbnail borders** (#982, OpenSpec change
+  `layers-thumbnail-borders`). A row that paints an icon or fill content instead
+  of a raster image now draws a 1:1 square card: type (already square),
+  adjustment, fill, and the content-less synthetic rows (Smart Filters, layer
+  effects). A pixel, background, or shape row keeps its document-aspect
+  letterboxed card. The adjustment icon and the synthetic rows' `fx` badge are
+  drawn into the square card rather than the taller row slot, so the glyph is not
+  stretched. A fill row's preview is rendered square by the bridge
+  (`fill_thumbnail_image`) rather than at the document aspect, so the square card
+  is filled instead of a document-aspect strip.
+  An **icon-only row draws no 1 px black outline** — the outline frames a raster
+  image — while a fill row keeps its outline. An adjustment or fill row's mask
+  and vector-mask thumbnails use the same 1:1 card, their previews drawn fit
+  inside it. Ceiling (`ponytail:`): a square mask card leaves the card's side
+  margins showing the row surface, and a fill preview no longer honours Entire
+  Document / Layer Bounds for its shape. Tests: `tst_layers_panel_fixes` (3
+  new), `tst_layers_snapshot::fillThumbnailIsSquare`,
+  `tst_layers_effects::effectsRowHasNoOutline`, and
+  `tst_layers_smart_filters::smartFiltersRowHasNoOutline`.
 - **Embed/Read Watermark ship as an in-tree approximation** (#350, #351, OpenSpec
   change `digimarc-watermark`). `Filter ▸ Digimarc ▸ Embed Watermark` is a
   catalogue filter whose four controls (Watermark Type, Creator ID, Image ID,

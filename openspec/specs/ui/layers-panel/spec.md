@@ -1218,7 +1218,11 @@ at its document-relative position, so a full-width layer has no transparent
 padding strip and is not squashed. A shape layer's thumbnail SHALL likewise
 carry the document aspect. The thumbnail outline, the transparency checkerboard,
 the active bracket, and the thumbnail hit-target SHALL all use the letterboxed
-rect. A group's folder glyph keeps its square slot.
+rect. A group's folder glyph keeps its square slot. A **type card, an
+adjustment-kind icon card, a fill preview, and a content-less synthetic row's
+card SHALL be drawn as a 1:1 square** instead of the letterboxed rect (see the
+thumbnail-layout requirement), so an icon is not stretched and a gradient ramp
+or pattern tile is not squashed.
 
 #### Scenario: A non-square document is not stretched [lpr_thumb_aspect]
 
@@ -1232,6 +1236,13 @@ rect. A group's folder glyph keeps its square slot.
   Entire Document thumbnail contents
 - **THEN** the thumbnail image has the document's aspect ratio and its rightmost
   column is layer content rather than transparent padding
+
+#### Scenario: An icon or fill row keeps a square card [lpr_thumb_square_card]
+
+- **WHEN** an adjustment, fill, type, or content-less synthetic row is shown in
+  a document whose width and height differ
+- **THEN** its thumbnail card is 1:1 (width equals height), while a pixel
+  layer's thumbnail is still letterboxed to the document
 
 ### Requirement: Layer drag shows a CS6 drop indicator
 
@@ -1776,8 +1787,11 @@ Alt+clicking a thumbnail SHALL also activate it in the composite. A group row
 SHALL NOT draw brackets around its icon. An **adjustment row's image thumbnail
 SHALL be a neutral card bearing the icon for its decoded adjustment kind**, with
 no checkerboard; a **fill row's image thumbnail SHALL show its content preview**
-(a flat solid swatch, a gradient ramp, or a scaled pattern tile) in the same
-letterboxed geometry as a pixel thumbnail.
+(a flat solid swatch, a gradient ramp, or a scaled pattern tile) **in a 1:1
+square card**, the preview image itself rendered square rather than at the
+document aspect so a ramp or tile is not stretched into the card. An adjustment
+or fill row's mask and vector-mask thumbnails SHALL use that same 1:1 card,
+with their preview drawn fit inside the card.
 
 #### Scenario: Mask thumbnail adjacency [uip_layers_mask_adjacency]
 
@@ -1804,6 +1818,26 @@ letterboxed geometry as a pixel thumbnail.
 
 - **WHEN** a Solid Color, Gradient, or Pattern fill layer is shown
 - **THEN** its thumbnail shows the fill's solid colour, gradient ramp, or scaled pattern tile instead of a generic checkerboard
+
+#### Scenario: An adjustment row's card is 1:1 [lpr_thumb_adjustment_square]
+
+- **WHEN** an adjustment layer is shown in a document whose width and height
+  differ
+- **THEN** its image thumbnail card is 1:1 (width equals height) rather than
+  letterboxed to the document
+
+#### Scenario: A fill preview is a 1:1 card [lpr_thumb_fill_square]
+
+- **WHEN** a Solid Color, Gradient, or Pattern fill layer is shown in a document
+  whose width and height differ
+- **THEN** its card is 1:1, the preview image the bridge supplies is square, and
+  the preview fills the card without a document-aspect margin or distortion
+
+#### Scenario: A mask thumbnail matches the 1:1 card [lpr_thumb_mask_square]
+
+- **WHEN** an adjustment or fill layer carries a layer mask or a vector mask
+- **THEN** the mask and vector-mask thumbnails use the same 1:1 card as the
+  image thumbnail
 
 ### Requirement: Layers panel folder rows
 
@@ -2139,12 +2173,16 @@ glyph and no checkerboard. A **type layer's thumbnail SHALL be drawn as a
 square (1:1) white card bearing a "T"**, sized to the thumbnail's side and
 centred in its slot, regardless of the document's aspect ratio; it SHALL NOT be
 letterboxed to the document, and its hit rectangle SHALL be that square card.
-Every other non-group layer's thumbnail SHALL be laid out in a box `thumb` wide
-and the row's full height minus a small pad, and SHALL be letterboxed to the
+An **adjustment row, a fill row, and a content-less synthetic row (Smart
+Filters, layer effects) SHALL likewise draw a 1:1 card** (see the
+thumbnail-layout requirement), and an icon-only row's hit rectangle SHALL be
+that card. Every other non-group layer's thumbnail SHALL be laid out in a box
+`thumb` wide and the row's full height minus a small pad, and SHALL be letterboxed to the
 document's aspect ratio inside that box, so a tall document's thumbnail fills the
-row vertically rather than floating in a square box. **Every non-group thumbnail
-other than a type layer's SHALL carry a 1 px black outline**; a type layer's
-card and a group's folder glyph SHALL draw no outline, and **when exactly one
+row vertically rather than floating in a square box. **Every non-group row whose image thumbnail is a
+raster image SHALL carry a 1 px black outline**; an icon-only row — a type
+card, an adjustment-kind icon card, or a content-less synthetic row — and a
+group's folder glyph SHALL draw no outline, and **when exactly one
 layer is active** (the same singular
 active-layer resolution tool edits use) its thumbnail SHALL additionally show
 white 1 px corner brackets drawn one pixel outside the thumbnail card (for a
@@ -2319,6 +2357,13 @@ rather than fail.
 - **WHEN** a layer carries a non-empty `blending_ranges` block that cannot be
   parsed into a typed Blend If view
 - **THEN** its row still draws the `Blend If` chip
+
+#### Scenario: An icon-only row draws no outline [lpr_thumb_icon_no_outline]
+
+- **WHEN** an adjustment, type, Smart Filters, or layer-effects row with no
+  raster image thumbnail is shown
+- **THEN** its card carries no 1 px black outline, while a pixel or fill row
+  with a raster image thumbnail keeps its outline
 
 ### Requirement: Disabled opacity and fill show the default
 

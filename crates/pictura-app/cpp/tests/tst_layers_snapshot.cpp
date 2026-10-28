@@ -162,6 +162,7 @@ private slots:
     void entireDocumentPlacement();
     void adjustmentThumbnailKindIcon();
     void fillThumbnailPreviews();
+    void fillThumbnailIsSquare();
 };
 
 void LayersSnapshotTest::fixtureExpectations()
@@ -310,6 +311,23 @@ void LayersSnapshotTest::fillThumbnailPreviews()
     }
     QCOMPARE(gradientRow.adjustmentKind, QStringLiteral("gradient"));
     QVERIFY(!gradientRow.thumbnail.isNull());
+}
+
+// A fill row's preview image is square (1:1) for a non-square document,
+// matching the panel's square fill card (#982).
+void LayersSnapshotTest::fillThumbnailIsSquare()
+{
+    auto view = std::make_unique<pictura::PictureView>();
+    QVERIFY(pictura::create_document(*view, 20, 10, QStringLiteral("rgb"), 8, 0xffffffu, false,
+                                     72.0, false));
+    const QString fill = view->add_solid_fill(0xff00ff00u);
+    QVERIFY(!fill.isEmpty());
+    for (const bool entireDocument : {false, true}) {
+        const Snapshot snap = pictura::layers_api::snapshot(*view, 24, entireDocument);
+        const LayerRow& row = rowFor(snap, *view, QStringLiteral("Color Fill 1"));
+        QVERIFY2(!row.thumbnail.isNull(), "the fill preview is present");
+        QCOMPARE(row.thumbnail.width(), row.thumbnail.height());
+    }
 }
 
 QTEST_MAIN(LayersSnapshotTest)
