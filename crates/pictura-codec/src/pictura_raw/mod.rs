@@ -138,8 +138,21 @@ fn filter_item(filter: &SmartFilter) -> DescValue {
 ///    a non-embedded object, or a legacy `plLd`/`PlLd` placed layer (no `SoLd`
 ///    to carry a filter and the writer does not author one beside it).
 pub fn attach_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(), PsdError> {
+    attach(layer, filter, true)
+}
+
+/// As [`attach_smart_filter`], but always appends a new entry, even when one
+/// with the same `filter_id` exists, to both the preserved `filterFXList` and
+/// the typed `smart_filters`, so their indices stay aligned.
+pub fn append_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(), PsdError> {
+    attach(layer, filter, false)
+}
+
+/// The shared attach; `replace` merges into a same-id entry instead of
+/// appending.
+fn attach(layer: &mut Layer, filter: SmartFilter, replace: bool) -> Result<(), PsdError> {
     if let Some(block_idx) = config_block_index(layer) {
-        return insert_into_config(layer, block_idx, &filter);
+        return insert_into_config(layer, block_idx, &filter, replace);
     }
     if layer
         .extra_blocks
@@ -159,7 +172,7 @@ pub fn attach_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(),
     match so
         .smart_filters
         .iter_mut()
-        .find(|f| f.filter_id == filter.filter_id)
+        .find(|f| replace && f.filter_id == filter.filter_id)
     {
         Some(existing) => *existing = filter,
         None => so.smart_filters.push(filter),
@@ -265,6 +278,7 @@ fn insert_into_config(
     layer: &mut Layer,
     block_idx: usize,
     filter: &SmartFilter,
+    replace: bool,
 ) -> Result<(), PsdError> {
     let data = &layer.extra_blocks[block_idx].data;
     let mut r = Reader::new(data);
@@ -287,7 +301,7 @@ fn insert_into_config(
             Some(DescValue::List(list)) => {
                 match list
                     .iter_mut()
-                    .find(|entry| entry_filter_id(entry) == Some(filter.filter_id))
+                    .find(|entry| replace && entry_filter_id(entry) == Some(filter.filter_id))
                 {
                     Some(entry) => merge_filter_entry(entry, filter),
                     None => list.push(filter_item(filter)),
@@ -326,7 +340,7 @@ fn insert_into_config(
         match so
             .smart_filters
             .iter_mut()
-            .find(|f| f.filter_id == filter.filter_id)
+            .find(|f| replace && f.filter_id == filter.filter_id)
         {
             Some(existing) => *existing = filter.clone(),
             None => so.smart_filters.push(filter.clone()),

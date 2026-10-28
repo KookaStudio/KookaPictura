@@ -73,7 +73,9 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
     region: PsdRect,
     scale: f64,
 ) -> Option<PixelBuffer> {
-    if active_mask_target(rust).is_some() {
+    // A Smart Object's preview is its chain on the canvas, so the dialog falls
+    // back to the section preview.
+    if active_mask_target(rust).is_some() || super::smart_apply::on_smart_object(rust) {
         return None;
     }
     let path = rust.layer_target.single().map(str::to_string)?;

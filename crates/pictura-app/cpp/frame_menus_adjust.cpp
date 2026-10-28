@@ -21,9 +21,10 @@ namespace pictura {
 
 void PicturaMainWindow::wireImageAdjustments()
 {
+    // A Smart Object takes no destructive adjustment (CS6 greys them out).
     const auto ready = [this]() {
         PictureView* view = activeView();
-        return view && filter_target_ready(*view);
+        return view && filter_target_ready(*view) && !filter_target_smart(*view);
     };
     for (const AdjustmentKind& entry : adjustmentCatalogue()) {
         if (entry.image.isEmpty()) {
@@ -150,7 +151,7 @@ void PicturaMainWindow::wireImageAdjustments()
         });
         registry_->setEnabledProvider(id, [this]() {
             PictureView* view = activeView();
-            return view && filter_target_ready(*view)
+            return view && filter_target_ready(*view) && !filter_target_smart(*view)
                 && document_api::documentMode(*view) == QStringLiteral("rgb");
         });
     }

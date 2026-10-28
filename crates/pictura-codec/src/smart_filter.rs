@@ -323,6 +323,27 @@ pub fn set_smart_filters_enabled(layer: &mut Layer, enabled: bool) -> Result<(),
     Ok(())
 }
 
+/// Enable or disable the filter mask on `layer`.
+///
+/// A preserved `SoLd`/`SoLE` descriptor's `filterFX.filterMaskEnable` is
+/// rewritten in place; the typed view is synced in both cases. Without a
+/// preserved block (or before a `filterFX` exists) only the typed view changes
+/// and the writer authors the flag with the block.
+pub fn set_filter_mask_enabled(layer: &mut Layer, enabled: bool) -> Result<(), PsdError> {
+    if let Some(block_idx) = config_block_index(layer) {
+        let mut desc = parse_config(layer, block_idx)?;
+        if let Some(filter_fx) = filter_fx_mut(&mut desc) {
+            set_object_item(filter_fx, b"filterMaskEnable", DescValue::Bool(enabled));
+            let data = serialize_config(&layer.extra_blocks[block_idx].data, &desc);
+            store_config(layer, block_idx, data);
+        }
+    }
+    if let Some(so) = layer.smart_object.as_mut() {
+        so.filter_mask_enabled = enabled;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -773,5 +794,69 @@ mod tests {
         let mut missing = layer_with_preserved_filter_list(None, 2);
         assert!(reorder_smart_filters(&mut missing, 0, 1).is_err());
         assert_eq!(filter_ids(&missing), vec![2683, 2683]);
+    }
+
+    #[test]
+    fn filter_mask_enable_flag_round_trips() {
+        let mut layer = pictura_core::Layer {
+            name: "L".into(),
+            rect: pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 2,
+            },
+            smart_object: Some(
+                {
+                    let mut so = SmartObject::default();
+                    so.kind = pictura_core::SmartObjectKind::Embedded;
+                    so.filename = "src.psd".into();
+                    so
+                }
+                .with_payload(b"8BPS\x00\x01x".to_vec()),
+            ),
+            ..Default::default()
+        };
+        let so = layer.smart_object.clone().unwrap();
+        let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
+        layer.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data,
+        });
+        crate::append_smart_filter(
+            &mut layer,
+            SmartFilter {
+                filter_id: 4242,
+                name: "F".into(),
+                enabled: true,
+                options: Vec::new(),
+            },
+        )
+        .expect("appends");
+        let preserved_flag = |layer: &pictura_core::Layer| {
+            let idx = config_block_index(layer).expect("block");
+            let mut desc = parse_config(layer, idx).expect("parses");
+            match filter_fx_mut(&mut desc)
+                .and_then(|fx| get_object_item(fx, b"filterMaskEnable").cloned())
+            {
+                Some(DescValue::Bool(v)) => v,
+                other => panic!("no flag: {other:?}"),
+            }
+        };
+        for enabled in [false, true] {
+            set_filter_mask_enabled(&mut layer, enabled).expect("sets");
+            assert_eq!(preserved_flag(&layer), enabled);
+            let mut doc = pictura_core::Document::new(
+                2,
+                2,
+                pictura_core::ColorMode::Rgb,
+                pictura_core::BitDepth::Eight,
+            );
+            doc.layers = pictura_core::LayerStack::from_layers(vec![layer.clone()]);
+            let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
+            let so = back.layers[0].smart_object.as_ref().expect("smart object");
+            assert_eq!(so.filter_mask_enabled, enabled);
+            assert_eq!(preserved_flag(&back.layers[0]), enabled);
+        }
     }
 }

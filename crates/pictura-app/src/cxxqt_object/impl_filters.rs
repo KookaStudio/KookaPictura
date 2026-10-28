@@ -98,6 +98,15 @@ impl qobject::PictureView {
         let Some(filter) = filter_from_kind(&kind.to_string()) else {
             return false;
         };
+        let routed = super::filter_tools::smart_apply::route_commit(
+            self.as_mut(),
+            &kind.to_string(),
+            &[],
+            "Filter",
+        );
+        if let Some(applied) = routed {
+            return applied;
+        }
         if let Some(path) = active_mask_target(self.rust()) {
             return self
                 .as_mut()
@@ -210,6 +219,11 @@ pub(super) fn apply_filter_active_region(
     preview_region: Option<pictura_core::PsdRect>,
 ) -> Option<Option<pictura_core::PsdRect>> {
     rust.filter_error = None;
+    if !commit {
+        if let Some(region) = super::filter_tools::smart_apply::preview_kind(rust, kind, params) {
+            return region;
+        }
+    }
     let Some(filter) = filter_from_kind_params(kind, params) else {
         rust.filter_error = Some(format!(
             "filter '{kind}' is not recognised or its parameters are wrong"
@@ -402,6 +416,11 @@ pub(super) fn pixel_filter_target(rust: &mut PictureViewRust) -> Option<String> 
     };
     if layer_pixel_locked(layer) {
         rust.filter_error = Some("the active layer is pixel-locked".to_string());
+        return None;
+    }
+    // A Smart Object takes Smart Filters only (`filter_tools::smart_apply`).
+    if layer.smart_object.is_some() {
+        rust.filter_error = Some("the smart object is not directly editable".to_string());
         return None;
     }
     if layer.is_group || layer.adjustment.is_some() {

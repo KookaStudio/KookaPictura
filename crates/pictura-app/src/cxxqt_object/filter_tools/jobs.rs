@@ -266,7 +266,8 @@ pub(in crate::cxxqt_object) fn exact_preview_start(
     region: PsdRect,
     scale: f64,
 ) -> bool {
-    if active_mask_target(rust).is_some() {
+    // A Smart Object previews its chain on the canvas instead.
+    if active_mask_target(rust).is_some() || super::smart_apply::on_smart_object(rust) {
         return false;
     }
     let Some(path) = rust.layer_target.single().map(str::to_string) else {
@@ -527,19 +528,11 @@ fn filter_commit_start_inner(
         return false;
     }
     let params: Vec<f64> = params.into_iter().copied().collect();
-    // Lens Correction on an embedded smart object attaches a smart filter
-    // instead of filtering the proxy destructively; the apply is synchronous.
-    if kind == "lens-correction" {
-        if let Some(path) = super::lens_correction_smart_target(view.rust()) {
-            let label = label.to_string();
-            if super::apply_lens_correction_smart(view.as_mut(), &path, &params, &label) {
-                view.as_mut().rust_mut().last_filter = Some((kind, params));
-                return true;
-            }
-            view.as_mut().rust_mut().filter_error =
-                Some("the lens correction could not be applied".to_string());
-            return false;
-        }
+    // On a Smart Object the filter becomes a Smart Filter, synchronously.
+    if let Some(applied) =
+        super::smart_apply::route_commit(view.as_mut(), &kind, &params, &label.to_string())
+    {
+        return applied;
     }
     let params = super::super::filter_map::commit_params(&kind, &params);
     let params = super::lens_blur_depths::commit_slots(&kind, view.rust(), &params);
@@ -569,6 +562,19 @@ fn filter_stack_commit_start_inner(
     label: &QString,
 ) -> bool {
     let params: Vec<f64> = params.into_iter().copied().collect();
+    let kind_list: Vec<String> = QList::<QString>::from(kinds)
+        .iter()
+        .map(|k| k.to_string())
+        .collect();
+    if let Some(applied) = super::smart_apply::route_stack(
+        view.as_mut(),
+        &kind_list,
+        &params,
+        true,
+        &label.to_string(),
+    ) {
+        return applied;
+    }
     match resolve_stack(kinds, &params) {
         Some(filters) if !filters.is_empty() => {
             commit_filters(view, filters, label.to_string(), None)

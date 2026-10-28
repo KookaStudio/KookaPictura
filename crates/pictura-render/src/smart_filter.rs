@@ -1,17 +1,19 @@
 //! Apply a smart object's `filterFX` chain to its rendered source.
 //!
-//! Models the camera-raw smart filter and the Pictura-only Lens Correction
-//! smart filter. Unknown ids are skipped, so an unsupported stack leaves the
-//! caller on its proxy/source path unchanged.
+//! Models the camera-raw smart filter, the Pictura-only Lens Correction smart
+//! filter, and the Pictura-only generic record (any smart-capable catalogue
+//! filter or a Filter Gallery stack). Unknown ids are skipped, so an
+//! unsupported stack leaves the caller on its proxy/source path unchanged.
 
 use pictura_adjust::render_pictura_raw;
 use pictura_codec::{
-    decode_lens_correction_slots, decode_pictura_raw_settings, CAMERA_RAW_FILTER_ID,
-    LENS_CORRECTION_FILTER_ID,
+    decode_lens_correction_slots, decode_pictura_filter, decode_pictura_raw_settings,
+    CAMERA_RAW_FILTER_ID, LENS_CORRECTION_FILTER_ID, PICTURA_FILTER_ID,
 };
 use pictura_core::{
-    Document, Layer, PicturaRawSettings, PixelBuffer, PsdRect, SmartFilter, SmartObject,
+    Channel, Document, Layer, PicturaRawSettings, PixelBuffer, PsdRect, SmartFilter, SmartObject,
 };
+use pictura_filters::catalogue::{self, NullResources};
 use pictura_filters::{Filter, LensCorrectionParams};
 
 use crate::composite::{blend_into, render_smart_source, Canvas};
@@ -21,11 +23,14 @@ use crate::composite::{blend_into, render_smart_source, Canvas};
 pub enum SmartFilterOp {
     CameraRaw(Box<PicturaRawSettings>),
     LensCorrection(Box<LensCorrectionParams>),
+    /// A generic record's filters, applied in order.
+    Filters(Vec<Filter>),
 }
 
 /// Decode a [`SmartFilter`]'s options into a renderable op, or `None` for an
-/// id this engine does not model, or a Lens Correction record whose slots do
-/// not map (an unknown profile id).
+/// id this engine does not model, a Lens Correction record whose slots do not
+/// map (an unknown profile id), or a generic record naming a kind that is not
+/// smart-capable or whose slots do not build.
 pub fn decode_smart_filter(filter: &SmartFilter) -> Option<SmartFilterOp> {
     match filter.filter_id {
         CAMERA_RAW_FILTER_ID => Some(SmartFilterOp::CameraRaw(Box::new(
@@ -34,6 +39,18 @@ pub fn decode_smart_filter(filter: &SmartFilter) -> Option<SmartFilterOp> {
         LENS_CORRECTION_FILTER_ID => Some(SmartFilterOp::LensCorrection(Box::new(
             LensCorrectionParams::from_slots(&decode_lens_correction_slots(&filter.options))?,
         ))),
+        PICTURA_FILTER_ID => {
+            let (steps, _) = decode_pictura_filter(&filter.options)?;
+            let filters = steps
+                .iter()
+                .map(|step| {
+                    catalogue::smart_capable(&step.kind)
+                        .then(|| catalogue::build(&step.kind, &step.slots, &NullResources))
+                        .flatten()
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(SmartFilterOp::Filters(filters))
+        }
         _ => None,
     }
 }
@@ -71,7 +88,48 @@ fn apply_op(base: &PixelBuffer, op: SmartFilterOp) -> PixelBuffer {
                 .map(|()| out)
                 .unwrap_or_else(|_| base.clone())
         }
+        SmartFilterOp::Filters(filters) => apply_filters(base, &filters),
     }
+}
+
+/// `filters` applied in order to `base` through the destructive path on a
+/// scratch layer, so the alpha handling matches a destructive apply. CPU only:
+/// the composite is a golden oracle, and GPU is an accelerator.
+fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> PixelBuffer {
+    let (w, h) = (base.width as usize, base.height as usize);
+    let plane = w * h;
+    if base.channels != 4 || base.data.len() != 4 * plane {
+        return base.clone();
+    }
+    let mut layer = Layer {
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h as i32,
+            right: w as i32,
+        },
+        ..Default::default()
+    };
+    for (c, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
+        layer.channels.push(Channel {
+            id,
+            data: base.data[c * plane..(c + 1) * plane].to_vec().into(),
+        });
+    }
+    for filter in filters {
+        if crate::filter::apply_filter(&mut layer, filter, None, false).is_err() {
+            return base.clone();
+        }
+    }
+    let mut out = base.clone();
+    for (c, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
+        if let Some(channel) = layer.channels.iter().find(|ch| ch.id == id) {
+            if channel.data.len() == plane {
+                out.data[c * plane..(c + 1) * plane].copy_from_slice(&channel.data);
+            }
+        }
+    }
+    out
 }
 
 /// Apply the chain to `base`, then mix it back through the smart object's
@@ -448,5 +506,128 @@ mod tests {
                 "masked-out pixel keeps the unfiltered source"
             );
         }
+    }
+
+    fn generic_record(kinds: &[&str], gallery: bool) -> SmartFilter {
+        let steps: Vec<_> = kinds
+            .iter()
+            .map(|kind| pictura_codec::FilterStep {
+                kind: kind.to_string(),
+                slots: catalogue::descriptor(kind).expect("kind").defaults(),
+            })
+            .collect();
+        SmartFilter {
+            filter_id: PICTURA_FILTER_ID,
+            name: "x".into(),
+            enabled: true,
+            options: pictura_codec::encode_pictura_filter(&steps, gallery),
+        }
+    }
+
+    /// An 8x8 gradient whose right half is partly transparent.
+    fn translucent() -> PixelBuffer {
+        let mut data: Vec<u8> = (0..8 * 8 * 4).map(|i| (i * 11 % 251) as u8).collect();
+        for y in 0..8 {
+            for x in 0..8 {
+                data[3 * 64 + y * 8 + x] = if x < 4 { 255 } else { 90 };
+            }
+        }
+        PixelBuffer {
+            width: 8,
+            height: 8,
+            channels: 4,
+            data: data.into(),
+        }
+    }
+
+    /// `base` filtered destructively, as a raster layer.
+    fn destructive(base: &PixelBuffer, kinds: &[&str]) -> Vec<u8> {
+        let plane = 64;
+        let mut layer = Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 8,
+                right: 8,
+            },
+            ..Default::default()
+        };
+        for (c, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
+            layer.channels.push(Channel {
+                id,
+                data: base.data[c * plane..(c + 1) * plane].to_vec().into(),
+            });
+        }
+        for kind in kinds {
+            let filter = pictura_filters::catalogue::default_filter(
+                catalogue::descriptor(kind).unwrap().kind,
+            )
+            .unwrap();
+            crate::apply_filter(&mut layer, &filter, None, false).expect("applies");
+        }
+        let mut out = Vec::new();
+        for id in [0i16, 1, 2, -1] {
+            out.extend_from_slice(&layer.channels.iter().find(|c| c.id == id).unwrap().data);
+        }
+        out
+    }
+
+    #[test]
+    fn generic_record_matches_destructive_apply() {
+        let base = translucent();
+        let record = generic_record(&["gaussian-blur"], false);
+        assert!(matches!(
+            decode_smart_filter(&record),
+            Some(SmartFilterOp::Filters(_))
+        ));
+        let out = apply_smart_filter_chain(&base, std::slice::from_ref(&record), true);
+        assert_ne!(
+            out.data.as_ref(),
+            base.data.as_ref(),
+            "the blur changes pixels"
+        );
+        assert_eq!(out.data.to_vec(), destructive(&base, &["gaussian-blur"]));
+    }
+
+    #[test]
+    fn gallery_steps_apply_in_order() {
+        let base = translucent();
+        let kinds = ["gaussian-blur", "emboss"];
+        let record = generic_record(&kinds, true);
+        let out = apply_smart_filter_chain(&base, std::slice::from_ref(&record), true);
+        assert_eq!(out.data.to_vec(), destructive(&base, &kinds));
+        assert_ne!(
+            out.data.to_vec(),
+            destructive(&base, &["emboss", "gaussian-blur"]),
+            "the order matters"
+        );
+    }
+
+    #[test]
+    fn excluded_kind_is_undecodable() {
+        let record = SmartFilter {
+            filter_id: PICTURA_FILTER_ID,
+            name: "Liquify".into(),
+            enabled: true,
+            options: pictura_codec::encode_pictura_filter(
+                &[pictura_codec::FilterStep {
+                    kind: "liquify".into(),
+                    slots: Vec::new(),
+                }],
+                false,
+            ),
+        };
+        assert!(decode_smart_filter(&record).is_none());
+        let unknown = SmartFilter {
+            options: pictura_codec::encode_pictura_filter(
+                &[pictura_codec::FilterStep {
+                    kind: "no-such-filter".into(),
+                    slots: Vec::new(),
+                }],
+                false,
+            ),
+            ..record
+        };
+        assert!(decode_smart_filter(&unknown).is_none());
     }
 }

@@ -18,7 +18,6 @@ use super::impl_filters::{
     ActiveOp,
 };
 use super::qobject::PictureView;
-use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 pub(super) use canvas_proxy::{canvas_proxy_buffer, resolve_stack, scaled_stack_params};
 use core::pin::Pin;
@@ -38,6 +37,7 @@ pub(super) mod lens_blur_depths;
 pub(super) mod lens_correction;
 mod lens_profiles;
 pub(super) mod liquify;
+pub(super) mod smart_apply;
 pub(super) mod vanishing_point;
 mod vanishing_point_file;
 mod vanishing_point_retouch;
@@ -150,8 +150,13 @@ pub mod ffi {
 
         /// Whether the document's depth and mode are ones filter `kind`
         /// takes (Adaptive Wide Angle, Vanishing Point, and Lens Correction
-        /// restrict them; every other kind takes any).
+        /// restrict them; every other kind takes any), and, on a Smart
+        /// Object, whether `kind` can be a Smart Filter.
         fn filter_document_takes(view: &PictureView, kind: &QString) -> bool;
+
+        /// Whether the edit target is a Smart Object's pixels (no layer mask
+        /// targeted), where Image > Adjustments do not apply.
+        fn filter_target_smart(view: &PictureView) -> bool;
 
         /// Whether the active pixel layer has nothing to filter: no opaque
         /// pixel at all, or none inside the selection. False when there is no
@@ -306,16 +311,9 @@ fn apply_filter_params(
         return false;
     }
     let params_v: Vec<f64> = params.into_iter().copied().collect();
-    // Lens Correction on an embedded smart object attaches a smart filter
-    // instead of filtering the proxy destructively.
-    if kind_s == "lens-correction" {
-        if let Some(path) = lens_correction_smart_target(view.rust()) {
-            if apply_lens_correction_smart(view.as_mut(), &path, &params_v, "Filter") {
-                view.as_mut().rust_mut().last_filter = Some((kind_s, params_v));
-                return true;
-            }
-            return false;
-        }
+    // On a Smart Object the filter becomes a Smart Filter.
+    if let Some(applied) = smart_apply::route_commit(view.as_mut(), &kind_s, &params_v, "Filter") {
+        return applied;
     }
     let params_v = super::filter_map::commit_params(&kind_s, &params_v);
     let params_v = lens_blur_depths::commit_slots(&kind_s, view.rust(), &params_v);
@@ -336,37 +334,6 @@ fn apply_filter_params(
         None => Edit::Full,
     };
     view.as_mut().edit("Filter", |_| outcome);
-    true
-}
-
-/// Whether the active layer is an embedded smart object a Lens Correction smart
-/// filter can attach to, and its path.
-fn lens_correction_smart_target(rust: &PictureViewRust) -> Option<String> {
-    let doc = rust.session.doc.as_ref()?;
-    let path = rust.layer_target.single()?.to_string();
-    pictura_render::can_replace_smart_object_contents(doc, &path).then_some(path)
-}
-
-/// Attach a Lens Correction smart filter carrying `slots` to the smart object at
-/// `path` and bake its proxy, recording one `label` history state. `false` (no
-/// state) when the engine refuses.
-fn apply_lens_correction_smart(
-    mut view: Pin<&mut PictureView>,
-    path: &str,
-    slots: &[f64],
-    label: &str,
-) -> bool {
-    let applied = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.session.doc.as_mut() else {
-            return false;
-        };
-        pictura_render::apply_lens_correction(doc, path, slots)
-    };
-    if !applied {
-        return false;
-    }
-    view.as_mut().edit(label, |_| Edit::Structural);
     true
 }
 
@@ -500,6 +467,10 @@ fn filter_target_ready(view: Pin<&mut PictureView>) -> bool {
         && active_pixel_layer(doc, active).is_some_and(|layer| !layer_pixel_locked(layer))
 }
 
+fn filter_target_smart(view: &PictureView) -> bool {
+    smart_apply::on_smart_object(view.rust())
+}
+
 fn filter_target_empty(view: Pin<&mut PictureView>) -> bool {
     let rust = view.rust();
     let Some(doc) = rust.session.doc.as_ref() else {
@@ -620,6 +591,19 @@ fn run_stack(
     section: Option<pictura_core::PsdRect>,
 ) -> bool {
     let params_v: Vec<f64> = params.into_iter().copied().collect();
+    let kind_list: Vec<String> = QList::<QString>::from(kinds)
+        .iter()
+        .map(|k| k.to_string())
+        .collect();
+    if let Some(applied) = smart_apply::route_stack(
+        view.as_mut(),
+        &kind_list,
+        &params_v,
+        commit,
+        "Filter Gallery",
+    ) {
+        return applied;
+    }
     let Some(filters) = resolve_stack(kinds, &params_v) else {
         view.as_mut().rust_mut().filter_error =
             Some("the gallery stack has an unknown filter or wrong parameters".to_string());

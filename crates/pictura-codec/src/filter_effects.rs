@@ -1,12 +1,13 @@
 //! The document-level filter mask: the `FEid` (`FilterEffects`) coverage and
 //! the `FMsk` display block. Both live in `Document::layer_section_extra` and
-//! are preserved verbatim; this module reads the coverage and can drop a mask's
-//! blocks. The reference's rendered RGB channels in `FEid` are not modelled.
+//! are preserved verbatim; this module reads the coverage, can drop a mask's
+//! blocks, and authors a mask on save. The reference's rendered RGB channels in
+//! `FEid` are not modelled.
 //!
 //! The format is grounded on a Photoshop-authored fixture (#956), used only as
 //! a black-box reference; see the change design.
 
-use pictura_core::PsdRect;
+use pictura_core::{FilterMask, Layer, PsdRect, SmartObject};
 
 use crate::common::{
     is_psb_big_key, Reader, COMPRESSION_RAW, COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION,
@@ -90,6 +91,179 @@ pub fn remove_filter_mask(layer_section_extra: &[u8], uuid: &str, is_psb: bool) 
         out.extend_from_slice(&layer_section_extra[r.pos..]);
     }
     Some(out)
+}
+
+/// `extra` (the output's document-level tagged blocks, framed for `psb`) with
+/// every smart object's `filter_mask` authored into `FEid`.
+///
+/// An entry whose rect and coverage already equal the mask is kept verbatim; a
+/// changed one is replaced and a missing one appended, every other entry kept.
+/// An `FMsk` block is added only when none exists. `extra` is returned
+/// unchanged when nothing needs authoring or its `FEid` is malformed.
+///
+/// ponytail: the entry carries no rendered colour cache and the `FMsk` colour
+/// and opacity are unverified defaults; Photoshop has not opened the result.
+pub(crate) fn author_filter_masks(
+    extra: &[u8],
+    layers: &[Layer],
+    color_channels: u32,
+    psb: bool,
+) -> Vec<u8> {
+    let mut wanted: Vec<(String, &FilterMask)> = Vec::new();
+    collect_wanted(layers, &mut wanted);
+    if wanted.is_empty() {
+        return extra.to_vec();
+    }
+
+    let mut existing: Option<FilterEffectEntries> = None;
+    let mut has_fmsk = false;
+    let mut malformed = false;
+    for_each_block(extra, psb, |key, data| match &key {
+        b"FEid" if existing.is_none() => match split_filter_effects(data) {
+            Some(split) => existing = Some(split),
+            None => malformed = true,
+        },
+        b"FMsk" => has_fmsk = true,
+        _ => {}
+    });
+    if malformed {
+        return extra.to_vec();
+    }
+    let had_feid = existing.is_some();
+    let (version, mut entries) = existing.unwrap_or((3, Vec::new()));
+    let mut changed = false;
+    for (uuid, mask) in wanted {
+        let Some(raw) = encode_entry(&uuid, mask, color_channels) else {
+            continue;
+        };
+        match entries.iter_mut().find(|(id, _)| *id == uuid) {
+            Some((_, old)) if same_mask(old, mask) => {}
+            Some((_, old)) => {
+                *old = raw;
+                changed = true;
+            }
+            None => {
+                entries.push((uuid, raw));
+                changed = true;
+            }
+        }
+    }
+    if !changed {
+        return extra.to_vec();
+    }
+    let mut feid = version.to_be_bytes().to_vec();
+    for (_, raw) in &entries {
+        feid.extend_from_slice(raw);
+    }
+
+    let mut out = Vec::with_capacity(extra.len() + feid.len() + 32);
+    let mut r = Reader::new(extra);
+    let mut replaced = false;
+    while let Some((key, start, end, _)) = next_block(&mut r, psb) {
+        if &key == b"FEid" && !replaced {
+            crate::write::write_tag_document(&mut out, b"FEid", &feid, psb);
+            replaced = true;
+            continue;
+        }
+        out.extend_from_slice(&extra[start..end]);
+    }
+    if !had_feid {
+        crate::write::write_tag_document(&mut out, b"FEid", &feid, psb);
+    }
+    if !has_fmsk {
+        crate::write::write_tag_document(&mut out, b"FMsk", &FMSK_DEFAULT, psb);
+    }
+    out.extend_from_slice(&extra[r.pos..]);
+    out
+}
+
+/// The `FMsk` block authored beside a new mask: colour space RGB, red, then
+/// 50% opacity (psd-tools' `FilterMask` layout). Unverified defaults.
+const FMSK_DEFAULT: [u8; 12] = [0, 0, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 50];
+
+/// The `(uuid, mask)` of every masked smart object under `layers`, keyed as
+/// the re-read object will be: the authored uuid when its `SoLd` is authored
+/// this save, else the `placed` uuid, falling back to `Idnt`.
+fn collect_wanted<'a>(layers: &'a [Layer], out: &mut Vec<(String, &'a FilterMask)>) {
+    for layer in layers {
+        if let Some(so) = layer.smart_object.as_ref() {
+            if let Some(mask) = so.filter_mask.as_ref() {
+                let uuid = mask_key(layer, so);
+                if !uuid.is_empty() && !out.iter().any(|(id, _)| *id == uuid) {
+                    out.push((uuid, mask));
+                }
+            }
+        }
+        collect_wanted(&layer.children, out);
+    }
+}
+
+fn mask_key(layer: &Layer, so: &SmartObject) -> String {
+    if crate::smart_writer::should_author(layer).is_some() {
+        crate::smart_writer::author_uuid(so)
+    } else if so.placed_uuid.is_empty() {
+        so.uuid.clone()
+    } else {
+        so.placed_uuid.clone()
+    }
+}
+
+/// Whether a raw `FEid` entry (length prefix, body, padding) already holds
+/// `mask`.
+fn same_mask(raw: &[u8], mask: &FilterMask) -> bool {
+    let Some(len) = raw
+        .get(..8)
+        .and_then(|b| usize::try_from(u64::from_be_bytes(b.try_into().ok()?)).ok())
+    else {
+        return false;
+    };
+    raw.get(8..8 + len)
+        .and_then(|body| parse_filter_effect(body).ok())
+        .is_some_and(|record| record.rect == mask.rect && record.coverage[..] == mask.data[..])
+}
+
+/// One raw `FEid` entry for `mask`: the colour channels unwritten and the
+/// coverage, ZIP-with-prediction, in the last channel, as the reader expects.
+/// `None` when the mask's plane does not match its rect.
+fn encode_entry(uuid: &str, mask: &FilterMask, color_channels: u32) -> Option<Vec<u8>> {
+    let (w, h) = (
+        mask.rect.width().max(0) as usize,
+        mask.rect.height().max(0) as usize,
+    );
+    if w == 0 || h == 0 || mask.data.len() != w * h || uuid.len() > 255 {
+        return None;
+    }
+    let mut channel = COMPRESSION_ZIP_PREDICTION.to_be_bytes().to_vec();
+    channel.extend(crate::write::zip_scanlines(&[&mask.data[..]], w, h, true, 8).ok()?);
+
+    let mut body = Vec::new();
+    for v in [
+        mask.rect.top,
+        mask.rect.left,
+        mask.rect.bottom,
+        mask.rect.right,
+    ] {
+        body.extend_from_slice(&v.to_be_bytes());
+    }
+    body.extend_from_slice(&8u32.to_be_bytes());
+    body.extend_from_slice(&color_channels.to_be_bytes());
+    for _ in 0..=color_channels {
+        body.extend_from_slice(&0u32.to_be_bytes());
+    }
+    body.extend_from_slice(&1u32.to_be_bytes());
+    body.extend_from_slice(&(channel.len() as u64).to_be_bytes());
+    body.extend_from_slice(&channel);
+
+    let mut entry = vec![uuid.len() as u8];
+    entry.extend_from_slice(uuid.as_bytes());
+    entry.extend_from_slice(&1u32.to_be_bytes());
+    entry.extend_from_slice(&(body.len() as u64).to_be_bytes());
+    entry.extend_from_slice(&body);
+
+    let mut raw = (entry.len() as u64).to_be_bytes().to_vec();
+    raw.extend_from_slice(&entry);
+    raw.extend(std::iter::repeat_n(0u8, (4 - entry.len() % 4) % 4));
+    Some(raw)
 }
 
 /// Walk the global tagged blocks, calling `f` with each `(key, data)`.
@@ -258,7 +432,7 @@ mod tests {
     use crate::descriptor::DescValue;
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
-    use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerBlock, LayerStack, SmartObject};
+    use pictura_core::{BitDepth, ColorMode, Document, LayerBlock, LayerStack};
     use std::io::Write;
 
     fn block(key: &[u8; 4], data: &[u8]) -> Vec<u8> {
@@ -455,5 +629,171 @@ mod tests {
         assert_eq!(so.uuid, "idnt-1");
         assert_eq!(so.placed_uuid, "placed-1");
         assert!(so.filter_mask.is_some(), "the mask attaches by placed");
+    }
+
+    fn masked_layer(filename: &str, coverage: Vec<u8>) -> Layer {
+        let mut layer = Layer {
+            name: filename.into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 3,
+                right: 4,
+            },
+            smart_object: Some(
+                {
+                    let mut so = SmartObject::default();
+                    so.kind = pictura_core::SmartObjectKind::Embedded;
+                    so.filename = filename.into();
+                    so.filter_mask_enabled = true;
+                    so.filter_mask = Some(FilterMask {
+                        rect: PsdRect {
+                            top: 0,
+                            left: 0,
+                            bottom: 3,
+                            right: 4,
+                        },
+                        data: coverage.into(),
+                    });
+                    so
+                }
+                .with_payload(format!("8BPS\x00\x01{filename}").into_bytes()),
+            ),
+            ..Default::default()
+        };
+        for id in 0..3i16 {
+            layer.channels.push(pictura_core::Channel {
+                id,
+                data: vec![90u8; 12].into(),
+            });
+        }
+        layer
+    }
+
+    fn masked_doc(layers: Vec<Layer>) -> Document {
+        let mut doc = Document::new(4, 3, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = LayerStack::from_layers(layers);
+        doc
+    }
+
+    fn feid_entries(extra: &[u8], psb: bool) -> Vec<(String, Vec<u8>)> {
+        let mut out = Vec::new();
+        for_each_block(extra, psb, |key, data| {
+            if &key == b"FEid" {
+                out = split_filter_effects(data).expect("FEid splits").1;
+            }
+        });
+        out
+    }
+
+    fn block_bytes(extra: &[u8], wanted: &[u8; 4]) -> Vec<Vec<u8>> {
+        let mut out = Vec::new();
+        for_each_block(extra, false, |key, data| {
+            if &key == wanted {
+                out.push(data.to_vec());
+            }
+        });
+        out
+    }
+
+    #[test]
+    fn authored_mask_reads_back() {
+        let doc = masked_doc(vec![masked_layer("a.psd", plane())]);
+        let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
+        let so = back.layers[0].smart_object.as_ref().expect("smart object");
+        let mask = so.filter_mask.as_ref().expect("the mask attaches");
+        assert_eq!(
+            mask.rect,
+            doc.layers[0]
+                .smart_object
+                .as_ref()
+                .unwrap()
+                .filter_mask
+                .as_ref()
+                .unwrap()
+                .rect
+        );
+        assert_eq!(mask.data.to_vec(), plane());
+        assert!(so.filter_mask_enabled);
+        assert_eq!(block_bytes(&back.layer_section_extra, b"FMsk").len(), 1);
+    }
+
+    #[test]
+    fn converted_object_keyed_by_authored_uuid() {
+        let doc = masked_doc(vec![masked_layer("a.psd", plane())]);
+        let uuid = crate::smart_writer::author_uuid(doc.layers[0].smart_object.as_ref().unwrap());
+        let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
+        let entries = feid_entries(&back.layer_section_extra, false);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, uuid);
+        assert_eq!(
+            back.layers[0].smart_object.as_ref().unwrap().placed_uuid,
+            uuid
+        );
+        assert!(back.layers[0]
+            .smart_object
+            .as_ref()
+            .unwrap()
+            .filter_mask
+            .is_some());
+    }
+
+    #[test]
+    fn unchanged_mask_bytes_preserved() {
+        let doc = masked_doc(vec![masked_layer("a.psd", plane())]);
+        let once = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
+        assert_eq!(
+            author_filter_masks(&once.layer_section_extra, &once.layers, 3, false),
+            once.layer_section_extra,
+            "an unedited mask authors nothing"
+        );
+        let twice = crate::read_psd(&crate::write_psd(&once).expect("writes")).expect("reads");
+        for key in [b"FEid", b"FMsk"] {
+            assert_eq!(
+                block_bytes(&twice.layer_section_extra, key),
+                block_bytes(&once.layer_section_extra, key)
+            );
+        }
+    }
+
+    #[test]
+    fn changed_mask_replaces_entry_only() {
+        let doc = masked_doc(vec![
+            masked_layer("a.psd", plane()),
+            masked_layer("b.psd", plane()),
+        ]);
+        let mut once = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
+        let before = feid_entries(&once.layer_section_extra, false);
+        assert_eq!(before.len(), 2);
+        let edited = vec![128u8; 12];
+        once.layers[1]
+            .smart_object
+            .as_mut()
+            .unwrap()
+            .filter_mask
+            .as_mut()
+            .unwrap()
+            .data = edited.clone().into();
+        let extra = author_filter_masks(&once.layer_section_extra, &once.layers, 3, false);
+        let after = feid_entries(&extra, false);
+        assert_eq!(after.len(), 2);
+        assert_eq!(after[0], before[0], "the other entry keeps its bytes");
+        assert_ne!(after[1].1, before[1].1);
+        let masks = collect_filter_masks(&extra, false);
+        assert_eq!(masks[1].coverage, edited);
+        assert_eq!(block_bytes(&extra, b"FMsk").len(), 1, "no second FMsk");
+    }
+
+    #[test]
+    fn authored_mask_round_trips_psb() {
+        let doc = masked_doc(vec![masked_layer("a.psd", plane())]);
+        let back = crate::read_psd(&crate::write_psb(&doc).expect("writes")).expect("reads");
+        assert!(back.is_psb);
+        let mask = back.layers[0]
+            .smart_object
+            .as_ref()
+            .and_then(|so| so.filter_mask.as_ref())
+            .expect("the mask attaches");
+        assert_eq!(mask.data.to_vec(), plane());
     }
 }

@@ -48,6 +48,7 @@ mod path_resources;
 mod patterns;
 mod patterns_write;
 pub mod pdf;
+mod pictura_filter;
 mod pictura_raw;
 mod png;
 mod probe;
@@ -116,10 +117,14 @@ pub use metadata::{
 };
 pub use patterns::{decode_patterns, PatternPixels};
 pub use patterns_write::{add_document_pattern, encode_rgb_pattern};
+pub use pictura_filter::{
+    decode_pictura_filter, encode_pictura_filter, FilterStep, FILTER_GALLERY_NAME,
+    PICTURA_FILTER_ID,
+};
 pub use pictura_raw::{
-    attach_pictura_raw_filter, attach_smart_filter, decode_pictura_raw_settings,
-    encode_pictura_raw_fltr, pictura_raw_from_text, pictura_raw_to_text, CAMERA_RAW_FILTER_ID,
-    CAMERA_RAW_FILTER_NAME,
+    append_smart_filter, attach_pictura_raw_filter, attach_smart_filter,
+    decode_pictura_raw_settings, encode_pictura_raw_fltr, pictura_raw_from_text,
+    pictura_raw_to_text, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
 };
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
@@ -143,7 +148,7 @@ pub use read::{
 };
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
-    set_smart_filter_enabled, set_smart_filters_enabled,
+    set_filter_mask_enabled, set_smart_filter_enabled, set_smart_filters_enabled,
 };
 pub use smart_object::remove_linked_source;
 pub use svg::{
