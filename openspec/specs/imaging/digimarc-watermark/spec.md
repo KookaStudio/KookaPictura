@@ -1,7 +1,12 @@
 # imaging/digimarc-watermark Specification
 
 ## Purpose
-TBD - created by archiving change digimarc-watermark. Update Purpose after archive.
+An in-tree approximate watermark: a deterministic spread-spectrum carrier that
+embeds a payload (watermark type, creator ID, and ID) into a layer's colour
+planes and reads it back, the `Filter ▸ Digimarc ▸ Embed Watermark` filter
+command and its dialog, and the `▸ Read Watermark` command. This is the
+project's own scheme, not Digimarc Barcode, and it never claims compatibility
+with it.
 
 ## Requirements
 
