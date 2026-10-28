@@ -16,6 +16,7 @@ use std::time::Instant;
 mod display;
 mod recovery;
 mod save;
+pub(in crate::cxxqt_object) mod save_jobs;
 
 /// The output format remembered for `path`: its lowercased extension, or
 /// `"psd"` when it has none.

@@ -330,6 +330,7 @@ mod tests {
             depth: BitDepth::Sixteen,
             rect: rect(0, 0, 4, 4),
             planes: vec![(3, Samples::U16(vec![0; 16]))],
+            working_idents: [0; 3],
         });
 
         // A no-op resize (unchanged dimensions) keeps the channel.

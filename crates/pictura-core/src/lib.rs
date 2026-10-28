@@ -646,7 +646,7 @@ pub struct SourcePlanes {
 /// A layer's retained native-depth channel samples, keyed by channel id and
 /// carrying the layer rect they were decoded for. A saved layer whose rect
 /// still matches can re-emit them; a moved layer falls back to widening.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct SourceChannels {
     pub depth: BitDepth,
     pub rect: PsdRect,
@@ -654,6 +654,16 @@ pub struct SourceChannels {
     /// holds the color channels, `-1` transparency, `-2` mask, and unmodeled
     /// ids; an 8-bit Lab store holds only the color channels (`0..3`).
     pub planes: Vec<(i16, Samples)>,
+    /// Identity tokens of the three working RGB planes captured after mode
+    /// normalization. Zero means unknown. This is a cache hint: equality below
+    /// ignores it so document equality still depends only on bytes and rect.
+    pub working_idents: [u64; 3],
+}
+
+impl PartialEq for SourceChannels {
+    fn eq(&self, other: &Self) -> bool {
+        self.depth == other.depth && self.rect == other.rect && self.planes == other.planes
+    }
 }
 
 impl SourceChannels {
@@ -665,6 +675,7 @@ impl SourceChannels {
             depth,
             rect,
             planes,
+            working_idents: [0; 3],
         }
     }
 }

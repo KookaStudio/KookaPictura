@@ -455,7 +455,10 @@ fn clamp_to(rect: pictura_core::PsdRect, bounds: pictura_core::PsdRect) -> pictu
 impl PreviewBaseline {
     /// Keep what a preview over `section` (the whole layer for `None`) is
     /// about to overwrite.
-    fn save(layer: &Layer, section: Option<pictura_core::PsdRect>) -> Self {
+    pub(in crate::cxxqt_object) fn save(
+        layer: &Layer,
+        section: Option<pictura_core::PsdRect>,
+    ) -> Self {
         let Some(rect) = section else {
             return Self::Layer(Box::new(layer.clone()));
         };

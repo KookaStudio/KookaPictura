@@ -67,6 +67,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// installed and written into it by a save. Kept out of the document so
     /// undo leaves them alone, as no history state records them.
     pub(in crate::cxxqt_object) vanishing_planes: Option<pictura_filters::VpPlanes>,
+    /// Encoded PSD channel streams for this document session. Shared with the
+    /// save and recovery workers; replaced when a document is installed.
+    pub(in crate::cxxqt_object) encode_cache: std::sync::Arc<pictura_codec::EncodeCache>,
 }
 
 impl DocumentSession {
@@ -92,6 +95,7 @@ impl DocumentSession {
         self.doc = doc;
         self.history = history;
         self.pdf_password = pdf_password;
+        self.encode_cache = std::sync::Arc::new(pictura_codec::EncodeCache::new());
         self.document_generation = self.document_generation.wrapping_add(1);
         self.saved_id = self.history.current_id();
         self.refresh_dirty();
@@ -418,6 +422,9 @@ impl PictureViewRust {
         self.filter_error = None;
         self.save_embed_profile = None;
         self.save_raster_options = None;
+        self.filter_jobs.cancel_all();
+        self.adjust_jobs.cancel();
+        self.save_job = None;
     }
 
     /// Drop the panel previews that were never committed.

@@ -581,6 +581,18 @@ bool PicturaMainWindow::isNativeDocumentPath(const QString& path)
     return suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
 }
 
+bool PicturaMainWindow::saveRunsOnWorker(const QString& path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    static const QStringList raster = {
+        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
+        QStringLiteral("jpe"), QStringLiteral("tif"),  QStringLiteral("tiff"),
+        QStringLiteral("webp"), QStringLiteral("bmp"),
+    };
+    return suffix != QStringLiteral("pdf") && suffix != QStringLiteral("pdp")
+        && !raster.contains(suffix);
+}
+
 quint64 PicturaMainWindow::startOpenDocumentAtPath(const QString& path, bool interactive,
                                                    bool reportFailure)
 {

@@ -89,8 +89,15 @@ merged image. The `write_psd` byte layout and its use of `doc.composite.channels
 to derive the PSD colour-plane count MUST NOT change; an RGB document's merged
 composite is RGBA (four planes) after a canvas rebuild, while a grayscale
 document keeps its composite colour-plane count. Save on an untitled document
-SHALL behave as Save As. A successful save SHALL record the file path and clear
-the modified state.
+SHALL behave as Save As. On success the save SHALL record the file path. It
+SHALL clear the modified state only when the document is the same document that
+was snapshotted when the write started — the same history identity, content
+revision, and document generation — and that snapshot is still current; a
+document changed after the snapshot SHALL keep the recorded path and remain
+modified. When the document generation changed during the save (the document was
+replaced), the replacement document's path and modified state SHALL be
+unchanged. On failure the path and modified state SHALL be unchanged and no
+temporary file SHALL remain.
 
 #### Scenario: Save As writes a file
 
@@ -142,26 +149,54 @@ the modified state.
 - **WHEN** a document is saved to a `.psb` path
 - **THEN** the written file is a version-2 PSB
 
+#### Scenario: A completed save writes the snapshot and clears modified [dl_save_current]
+
+- **WHEN** a modified document is saved through the worker and the document does not change while it runs
+- **THEN** the file reopens with the snapshot's layers and composite, the recorded path is the saved path, and the document is unmodified
+
+#### Scenario: An edit during a save leaves the document modified [dl_save_stale]
+
+- **WHEN** the document's history or content revision changes while the save worker runs
+- **THEN** the file holds the saved snapshot, the recorded path is the saved path, and the document remains modified
+
+#### Scenario: A failed write leaves the document untouched [dl_save_failed]
+
+- **WHEN** the target cannot be written
+- **THEN** the save returns false, the path and modified state are unchanged, and no temporary file remains
+
+#### Scenario: A replaced document keeps its path and dirty state [dl_save_replaced]
+
+- **WHEN** the document is replaced while the save worker runs
+- **THEN** the file holds the original document's snapshot, and the replacement document keeps its own path and modified state
+
 ### Requirement: Modified state tracking
+
 The system SHALL expose `is_dirty()` for the active document. Every successful
-mutating command SHALL mark the document modified. Saving, opening, New, and a
-successful Revert SHALL establish the document as unmodified at the current
-history state. Undo, redo, history jump, and named-snapshot restore SHALL mark
-the document modified unless the resulting history state is the state recorded
-as saved. Returning to the saved state SHALL clear the modified state. When the
-saved state is no longer retained by the bounded history, the document SHALL
-report modified. A rejected command SHALL NOT change the modified state. A view
-with no document SHALL report unmodified.
+mutating command SHALL mark the document modified. Saving SHALL establish the
+document as unmodified at the current history state only when the saved
+document's history identity and its recorded content revision are still current;
+a save that sees a later edit SHALL leave the document modified, and a save
+whose document was replaced SHALL leave the replacement unchanged. Opening, New, and a successful Revert
+SHALL establish the document as unmodified at the current history state. Undo,
+redo, history jump, and named-snapshot restore SHALL mark the document modified
+unless the resulting history state is the state recorded as saved. Returning to
+the saved state SHALL clear the modified state. When the saved state is no
+longer retained by the bounded history, the document SHALL report modified. A
+rejected command SHALL NOT change the modified state. A view with no document
+SHALL report unmodified.
 
 #### Scenario: A mutating command marks modified
+
 - **WHEN** a filter, adjustment, document op, or selection command succeeds
 - **THEN** the document reports modified
 
 #### Scenario: Save clears modified
-- **WHEN** a modified document is saved successfully
+
+- **WHEN** a modified document is saved successfully and does not change while the save runs
 - **THEN** the document reports unmodified
 
 #### Scenario: Open clears modified
+
 - **WHEN** a document is opened
 - **THEN** it reports unmodified
 
@@ -569,3 +604,22 @@ actually written.
 
 - **WHEN** Save As has the PNG filter selected and the user types `report.jpg`
 - **THEN** the written file is `report.png`, it decodes as PNG, and `report.jpg` is not created
+
+### Requirement: Native saves run off the GUI thread
+
+After the destination and format are chosen, a native `.psd` or `.psb` save
+SHALL clone the document and perform the composite refresh, encode, and atomic
+write on a worker thread. The GUI thread SHALL keep processing events and SHALL
+NOT accept user input until the save lands; a busy indicator SHALL appear when
+the write outlasts 250 ms. The worker SHALL NOT touch the live document. A save
+through the synchronous API SHALL write the same bytes as the worker path.
+
+#### Scenario: The event loop stays live during a save [dl_save_worker]
+
+- **WHEN** a native save is held in flight by the test seam
+- **THEN** a repeating timer keeps firing with no gap over 50 ms and the canvas keeps repainting
+
+#### Scenario: The synchronous API writes the worker bytes [dl_save_sync_bytes]
+
+- **WHEN** two identical documents are saved, one through the synchronous API and one through a held worker save
+- **THEN** the two files are byte-identical

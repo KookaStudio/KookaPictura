@@ -383,6 +383,7 @@ fn retains_source_depth_tracks_the_retained_store() {
                 right: 1,
             },
             planes: vec![(0, Samples::U16(vec![0]))],
+            working_idents: [0; 3],
         }),
         ..Default::default()
     }]);

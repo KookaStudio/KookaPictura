@@ -68,9 +68,11 @@ mod web;
 mod webp;
 mod write;
 mod write_bitmap;
+mod write_cache;
 mod write_cmyk;
 mod write_duotone;
 mod write_indexed;
+mod write_layers;
 mod xmp;
 
 #[cfg(test)]
@@ -161,7 +163,8 @@ pub use web::{
     PaletteOptions,
 };
 pub use webp::{decode_webp, encode_webp};
-pub use write::{write_psb, write_psd};
+pub use write::{write_psb, write_psb_cached, write_psd, write_psd_cached};
+pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};
 
 /// Read a Pictura Raw filter's `Fltr` options from a
