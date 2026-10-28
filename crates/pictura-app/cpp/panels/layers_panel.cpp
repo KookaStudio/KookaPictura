@@ -249,18 +249,20 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
         if (path.isEmpty()) {
             return QStringList{};
         }
+        // Of the synthetic rows only a Smart Filter drags, within its list.
         const QModelIndex index = model_->indexForPath(path);
-        if (index.isValid() && index.data(SyntheticRole).toBool()) {
+        if (index.isValid() && index.data(SyntheticRole).toBool()
+            && index.data(KindRole).toString() != QLatin1String("smart-filter")) {
             return QStringList{};
         }
         return QStringList{path};
     });
     tree_->setPathResolver([this](const QModelIndex& index) { return pathForProxyIndex(index); });
     tree_->setDropHandler([this](const QString& dragged, const QString& target, int mode) {
-        return view_ && view_->move_layer_to(dragged, target, mode);
+        return dropRow(dragged, target, mode);
     });
     tree_->setDropValidator([this](const QString& dragged, const QString& target, int mode) {
-        return view_ && view_->can_move_layer_to(dragged, target, mode);
+        return canDropRow(dragged, target, mode);
     });
     layout->addWidget(tree_, 1);
 

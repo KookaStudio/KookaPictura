@@ -18,6 +18,7 @@
 #include <QtCore/QModelIndex>
 #include <QtCore/QPoint>
 #include <QtCore/QStringList>
+#include <QtCore/QTimer>
 #include <QtGui/QAction>
 #include <QtGui/QIcon>
 #include <QtGui/QPixmap>
@@ -216,7 +217,61 @@ int smartFilterIndex(const QString& path)
     return at < 0 ? 0 : path.mid(at + 1).toInt();
 }
 
+// The chain index a filter dragged from `from` lands at when dropped on the
+// filter row `target` with `mode` (0 above, 1 below, 2 onto it). Rows list the
+// newest filter on top, so "above" means applied after the target; dropping
+// onto a row takes its place.
+int smartFilterDropIndex(int from, int target, int mode)
+{
+    int insert = mode == 0 ? target + 1 : mode == 1 ? target : (from < target ? target + 1 : target);
+    if (from < insert) {
+        --insert;
+    }
+    return insert;
+}
+
+// Whether `dragged` and `target` are filter rows of one smart object.
+bool sameSmartFilterList(const QString& dragged, const QString& target)
+{
+    return dragged.contains(QStringLiteral("/@sf/")) && target.contains(QStringLiteral("/@sf/"))
+        && smartFilterBase(dragged) == smartFilterBase(target);
+}
+
 } // namespace
+
+bool LayersPanel::canDropRow(const QString& dragged, const QString& target, int mode) const
+{
+    if (!view_) {
+        return false;
+    }
+    if (dragged.contains(QStringLiteral("/@sf/"))) {
+        return sameSmartFilterList(dragged, target)
+            && smartFilterDropIndex(smartFilterIndex(dragged), smartFilterIndex(target), mode)
+                   != smartFilterIndex(dragged);
+    }
+    return view_->can_move_layer_to(dragged, target, mode);
+}
+
+bool LayersPanel::dropRow(const QString& dragged, const QString& target, int mode)
+{
+    if (!view_) {
+        return false;
+    }
+    if (!dragged.contains(QStringLiteral("/@sf/"))) {
+        return view_->move_layer_to(dragged, target, mode);
+    }
+    if (!sameSmartFilterList(dragged, target)) {
+        return false;
+    }
+    const int from = smartFilterIndex(dragged);
+    const int to = smartFilterDropIndex(from, smartFilterIndex(target), mode);
+    if (!reorder_layer_smart_filter(*view_, smartFilterBase(dragged), from, to)) {
+        return false;
+    }
+    // Rebuilt after the view finishes the drop.
+    QTimer::singleShot(0, this, [this] { refresh(); });
+    return true;
+}
 
 void LayersPanel::showContextMenu(const QPoint& pos)
 {

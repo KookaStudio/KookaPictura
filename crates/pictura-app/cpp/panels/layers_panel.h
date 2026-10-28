@@ -444,6 +444,10 @@ private:
     // The Smart Filters group row and each smart-filter row.
     void populateSmartFiltersGroupMenu(QMenu& menu, const QString& path);
     void populateSmartFilterMenu(QMenu& menu, const QString& path);
+    // A row drop: a Smart Filter row reorders its object's chain; any other
+    // row moves the layer (layers_panel_menu.cpp).
+    bool canDropRow(const QString& dragged, const QString& target, int mode) const;
+    bool dropRow(const QString& dragged, const QString& target, int mode);
     // The synthetic layer-effects rows for `snap`'s styled layers. A layer that
     // first appears styled is appended to `autoExpand` unless `newDocument`.
     QVector<LayerRowNode> appendEffectRows(const layers_api::Snapshot& snap,

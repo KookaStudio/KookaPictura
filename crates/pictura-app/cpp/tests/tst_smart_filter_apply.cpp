@@ -42,6 +42,7 @@ private slots:
     void editSmartFilterEnabledForGenericEntry();
     void filterRowsShowNewestFirst();
     void doubleClickReopensTheFilterDialog();
+    void dragReordersSmartFilters();
 
 private:
     // A new document whose active layer is an embedded Smart Object; returns
@@ -309,6 +310,35 @@ void SmartFilterApplyTest::doubleClickReopensTheFilterDialog()
     QCOMPARE(pictura::layer_smart_filter_count(*view, path), 2);
     QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Gaussian Blur"));
     QCOMPARE(pictura::layer_smart_filter_name(*view, path, 1), QStringLiteral("Emboss"));
+}
+
+void SmartFilterApplyTest::dragReordersSmartFilters()
+{
+    const QString path = smartObject(QStringLiteral("Drag"));
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(applyGaussianBlur(2.0));
+    QVERIFY(applyEmboss());
+    pictura::LayersPanel* panel = panelOn(view, path);
+    QVERIFY(panel);
+    const QString bottom = path + QStringLiteral("/@sf/0");
+    const QString top = path + QStringLiteral("/@sf/1");
+
+    // Gaussian Blur (the bottom row) dragged above Emboss applies last.
+    QVERIFY(panel->dropAtForTest(bottom, top, true));
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Emboss"));
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 1), QStringLiteral("Gaussian Blur"));
+
+    QVERIFY(view->undo());
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Gaussian Blur"));
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 1), QStringLiteral("Emboss"));
+
+    // A filter row only drops inside its own list.
+    panel->refresh();
+    QCoreApplication::processEvents();
+    QVERIFY(!panel->dropAtForTest(bottom, QStringLiteral("0"), true));
+    QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Gaussian Blur"));
 }
 
 QTEST_MAIN(SmartFilterApplyTest)
