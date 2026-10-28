@@ -17,7 +17,7 @@ use super::helpers::{paint_timing, rgba_from_argb};
 use super::helpers_composite::{aspect_thumbnail_extent, rgba_image};
 use super::paint_tools::fills::{apply, refresh_edit, selection};
 use super::qobject::PictureView;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString};
@@ -426,12 +426,18 @@ fn edit_active(
         else {
             return Edit::None;
         };
+        let path = path.to_string();
+        let before = pictura_render::damage::influence(doc, &path);
         let (width, height) = (doc.width, doc.height);
-        let changed = pictura_render::resolve_path_mut(doc, path)
+        let changed = pictura_render::resolve_path_mut(doc, path.as_str())
             .filter(|layer| pictura_render::is_shape_layer(layer))
             .is_some_and(|layer| edit(layer, width, height));
         if changed {
-            Edit::Full
+            let after = pictura_render::damage::influence(doc, &path);
+            match pictura_render::damage::union(before, after) {
+                Some(rect) => Edit::regions(vec![rect], true),
+                None => Edit::Full,
+            }
         } else {
             Edit::None
         }
@@ -588,13 +594,22 @@ fn shape_paste_attributes(mut view: Pin<&mut PictureView>, path: &QString) -> bo
     let path = path.to_string();
     let mut changed = false;
     view.as_mut().edit("Paste Shape Attributes", |rust| {
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
         let Some(doc) = rust.session.doc.as_mut() else {
             return Edit::None;
         };
         changed = pictura_render::resolve_path_mut(doc, &path)
             .is_some_and(|layer| pictura_render::paste_shape_attributes(layer, &attributes));
         if changed {
-            Edit::Full
+            let after = pictura_render::damage::influence(doc, &path);
+            match pictura_render::damage::union(before, after) {
+                Some(rect) => Edit::regions(vec![rect], true),
+                None => Edit::Full,
+            }
         } else {
             Edit::None
         }
@@ -612,12 +627,18 @@ fn shape_rasterize(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let path = path.to_string();
     let mut changed = false;
     view.as_mut().edit("Rasterize Shape", |rust| {
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
         let Some(doc) = rust.session.doc.as_mut() else {
             return Edit::None;
         };
         changed = pictura_render::rasterize_shape(doc, &path);
         if changed {
-            Edit::Structural
+            let after = pictura_render::damage::influence(doc, &path);
+            structural(before, after)
         } else {
             Edit::None
         }

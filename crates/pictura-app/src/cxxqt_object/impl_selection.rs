@@ -186,10 +186,7 @@ impl qobject::PictureView {
                 rust.session.selection = Some(moved_selection);
             }
             let outcome = match dirty {
-                Some(rect) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: false,
-                },
+                Some(rect) => Edit::regions(vec![rect], false),
                 None => Edit::Full,
             };
             self.as_mut().edit("Move Selection", |_| outcome);
@@ -245,10 +242,7 @@ impl qobject::PictureView {
             }
         }
         let outcome = match dirty {
-            Some(rect) => Edit::Regions {
-                rects: vec![rect],
-                notify: false,
-            },
+            Some(rect) => Edit::regions(vec![rect], false),
             None => Edit::Full,
         };
         self.as_mut().edit("Move Selection", |_| outcome);

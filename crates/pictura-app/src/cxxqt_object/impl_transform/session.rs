@@ -543,7 +543,8 @@ impl qobject::PictureView {
             // it is dropped here rather than left outlining the old pixels.
             self.as_mut().rust_mut().session.selection = None;
             self.as_mut().rust_mut().last_transform = repeat;
-            self.as_mut().edit(&history_label, |_| Edit::Structural);
+            self.as_mut()
+                .edit(&history_label, |_| Edit::Structural { damage: None });
             self.as_mut().clear_transform_preview();
             return true;
         }
@@ -883,10 +884,7 @@ impl qobject::PictureView {
             return false;
         };
         self.as_mut()
-            .commit_move_edit("Move Layer", |_| Edit::Regions {
-                rects: vec![dirty],
-                notify: false,
-            });
+            .commit_move_edit("Move Layer", |_| Edit::regions(vec![dirty], false));
         true
     }
 

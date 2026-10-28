@@ -394,43 +394,6 @@ pub(super) fn layer_has_effects(layer: &Layer) -> bool {
         || layer.children.iter().any(layer_has_effects)
 }
 
-/// A rectangle that provably bounds a visibility toggle's effect, or `None` when
-/// the toggle can change a pixel outside any such rectangle.
-///
-/// A pixel layer's channels cover its `rect`, so hiding it changes the composite
-/// only there. An adjustment layer transforms the whole backdrop, but a mask
-/// that is enabled, carries data, and has a zero `default_color` confines it to
-/// its mask `rect` (outside, `mask_alpha` returns the default 0). Everything
-/// else — groups, effect-bearing layers (whose effects spill past the rect),
-/// unmasked/disabled/data-less/non-zero-default adjustments — is unbounded and
-/// returns `None`. `refresh_region` clamps the returned rect.
-pub(super) fn layer_visibility_region(layer: &Layer) -> Option<PsdRect> {
-    if layer.is_group || layer_has_effects(layer) {
-        return None;
-    }
-    if layer.adjustment.is_some() {
-        let mask = layer.mask.as_ref()?;
-        if mask.disabled || mask.data.is_none() || mask.default_color != 0 {
-            return None;
-        }
-        return Some(mask.rect);
-    }
-    // A type layer without a rasterized proxy renders its text inside its
-    // rect, so it reaches no further than a pixel layer does.
-    if layer.type_tool.is_none()
-        && !layer
-            .channels
-            .iter()
-            .any(|c| c.id >= 0 && !c.data.is_empty())
-    {
-        return None;
-    }
-    match &layer.mask {
-        None => Some(layer.rect),
-        Some(mask) if mask.disabled || mask.default_color == 0 => Some(layer.rect),
-        Some(_) => None,
-    }
-}
 /// The bounding box of two document-space rects.
 pub(super) fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
     PsdRect {
@@ -474,6 +437,27 @@ impl TileSet {
                 self.set[y * self.cols + x] = true;
             }
         }
+    }
+
+    /// The union of the marked tiles, or `None` when none are marked. A paint
+    /// commit uses it as the history hint: the pending refresh may be only the
+    /// last fringe, while history must cover the whole stroke.
+    pub(super) fn bounds(&self) -> Option<PsdRect> {
+        let tile = pictura_render::TILE;
+        let mut bounds: Option<PsdRect> = None;
+        for y in 0..self.rows {
+            for x in 0..self.cols {
+                if !self.set[y * self.cols + x] {
+                    continue;
+                }
+                let rect = tile_rect(x, x + 1, y, y + 1, tile);
+                bounds = Some(match bounds {
+                    None => rect,
+                    Some(current) => union_rect(current, rect),
+                });
+            }
+        }
+        bounds
     }
 
     /// The dirty tiles as disjoint rectangles, or `[union]` when the area is not
@@ -551,7 +535,7 @@ fn tile_rect(x0: usize, x1: usize, y0: usize, y1: usize, tile: i32) -> PsdRect {
     }
 }
 /// Apply `set_visible_paths` and return the changed count plus the union of the
-/// changed layers' bounded [`layer_visibility_region`]s.
+/// changed layers' bounded influence regions.
 ///
 /// The second value is `None` when any changed layer is unbounded (a group, or
 /// a channel-less/unmasked adjustment), which forces the caller's full
@@ -567,7 +551,7 @@ pub(super) fn set_visible_paths_union(
     for path in paths {
         if let Some(layer) = pictura_render::resolve_path(doc, path) {
             if layer.visible != visible {
-                match layer_visibility_region(layer) {
+                match pictura_render::damage::influence(doc, path) {
                     Some(rect) => union = Some(union.map_or(rect, |u| union_rect(u, rect))),
                     None => unbounded = true,
                 }

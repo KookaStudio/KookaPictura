@@ -394,6 +394,18 @@ pub(crate) fn effects_reach(layer: &Layer) -> PsdRect {
         }
         _ => (rect.left, rect.top, rect.right, rect.bottom),
     };
+    let pad = effects_pad(layer);
+    PsdRect {
+        top: t - pad,
+        left: l - pad,
+        bottom: b + pad,
+        right: r + pad,
+    }
+}
+
+/// The padding a layer's effects add around its content, without adding it to
+/// a particular base box.
+fn effects_pad(layer: &Layer) -> i32 {
     let effects = crate::layer_source::decoded_effects(layer);
     let mut reach = 0.0f32;
     if let Some(shadow) = effects.drop_shadow.as_ref() {
@@ -410,28 +422,24 @@ pub(crate) fn effects_reach(layer: &Layer) -> PsdRect {
     if let Some(bevel) = effects.bevel.as_ref() {
         reach = reach.max(bevel::reach(bevel));
     }
-    let pad = if reach > 0.0 {
+    if reach > 0.0 {
         reach.min(1.0e6).ceil() as i32 + 2
     } else {
         0
-    };
-    PsdRect {
-        top: t - pad,
-        left: l - pad,
-        bottom: b + pad,
-        right: r + pad,
     }
 }
 
 /// The document-space box a Layer Style change on `path` can affect, or `None`
-/// for a missing path or an empty group. A pixel, smart-object, type, or fill
-/// layer is its rect unioned with its effect reach; a group is its descendants'
-/// union; an adjustment layer is the document canvas.
+/// for a missing path or an empty group. A pixel, smart-object, or type layer
+/// is its rect unioned with its effect reach; a fill or shape layer carrying a
+/// confining mask is that mask's box plus its effect pad; a group is its
+/// descendants' union; an adjustment layer is its confining raster mask or the
+/// document canvas.
 pub fn layer_paint_bounds(doc: &Document, path: &str) -> Option<PsdRect> {
     paint_bounds(crate::resolve_path(doc, path)?, doc)
 }
 
-fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
+pub(crate) fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
     if layer.is_group {
         return layer
             .children
@@ -440,23 +448,15 @@ fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
             .reduce(union_rect);
     }
     if is_destructive_adjustment(layer) {
-        // A zero-default raster mask confines the adjustment to its rect.
-        if let Some(mask) = layer.mask.as_ref() {
-            if !mask.disabled
-                && mask.data.is_some()
-                && mask.default_color == 0
-                && mask.rect.width() > 0
-                && mask.rect.height() > 0
-            {
-                return Some(mask.rect);
-            }
+        return adjustment_bounds(layer, doc);
+    }
+    if layer.channels.is_empty()
+        && (crate::document_ops::is_fill_content_layer(layer)
+            || crate::document_ops::is_shape_layer(layer))
+    {
+        if let Some(rect) = masked_fill_bounds(layer) {
+            return Some(rect);
         }
-        return Some(PsdRect {
-            top: 0,
-            left: 0,
-            bottom: doc.height.min(i32::MAX as u32) as i32,
-            right: doc.width.min(i32::MAX as u32) as i32,
-        });
     }
     let reach = effects_reach(layer);
     let rect = PsdRect {
@@ -466,6 +466,95 @@ fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
         bottom: layer.rect.bottom.max(reach.bottom),
     };
     (!rect_empty((rect.left, rect.top, rect.right, rect.bottom))).then_some(rect)
+}
+
+fn canvas_rect(doc: &Document) -> PsdRect {
+    PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height.min(i32::MAX as u32) as i32,
+        right: doc.width.min(i32::MAX as u32) as i32,
+    }
+}
+
+fn grow_rect(rect: PsdRect, pad: i32) -> PsdRect {
+    PsdRect {
+        top: rect.top.saturating_sub(pad),
+        left: rect.left.saturating_sub(pad),
+        bottom: rect.bottom.saturating_add(pad),
+        right: rect.right.saturating_add(pad),
+    }
+}
+
+fn vector_mask_box(mask: &pictura_core::VectorMask) -> Option<PsdRect> {
+    let points = mask
+        .subpaths
+        .iter()
+        .filter(|s| s.closed)
+        .flat_map(|s| s.points.iter());
+    let (l, t, r, b) = points.fold(
+        (i32::MAX, i32::MAX, i32::MIN, i32::MIN),
+        |(l, t, r, b), p| (l.min(p[0]), t.min(p[1]), r.max(p[0]), b.max(p[1])),
+    );
+    (l != i32::MAX).then_some(PsdRect {
+        left: l.div_euclid(256),
+        top: t.div_euclid(256),
+        right: r / 256 + 1,
+        bottom: b / 256 + 1,
+    })
+}
+
+/// An adjustment layer's reach. A raster mask confines it only when it is
+/// enabled, carries data, has a zero default, and has full density: a lower
+/// density lifts the outside-mask sample above zero, and feather spreads it.
+/// A vector mask does not confine an adjustment here; the spec keeps the full
+/// recomposite for it.
+fn adjustment_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
+    let raster = layer.mask.as_ref().and_then(|mask| {
+        (!mask.disabled
+            && mask.data.is_some()
+            && mask.default_color == 0
+            && mask.density == 255
+            && mask.rect.width() > 0
+            && mask.rect.height() > 0)
+            .then(|| grow_rect(mask.rect, crate::mask_refine::reach(mask.feather())))
+    });
+    match raster {
+        Some(rect) => Some(rect),
+        None => Some(canvas_rect(doc)),
+    }
+}
+
+/// The bounds of a fill/shape layer whose content is confined by its mask.
+/// These layers carry no pixel channels and their `rect` is the canvas, so the
+/// mask is what makes the reach reportable. A vector mask bounds only at full
+/// density and without inversion; a raster mask follows the same rules as an
+/// adjustment mask.
+fn masked_fill_bounds(layer: &Layer) -> Option<PsdRect> {
+    let pad = effects_pad(layer);
+    let grow = |rect: PsdRect, feather: f64| {
+        grow_rect(rect, pad.saturating_add(crate::mask_refine::reach(feather)))
+    };
+    let raster = layer.mask.as_ref().and_then(|mask| {
+        (!mask.disabled
+            && mask.data.is_some()
+            && mask.default_color == 0
+            && mask.density == 255
+            && mask.rect.width() > 0
+            && mask.rect.height() > 0)
+            .then(|| grow(mask.rect, mask.feather()))
+    });
+    let vector = layer
+        .vector_mask
+        .as_ref()
+        .filter(|mask| mask.has_fill() && !mask.invert && mask.density == 255)
+        .and_then(|mask| vector_mask_box(mask).map(|rect| grow(rect, mask.feather())));
+    match (raster, vector) {
+        // The product of the two masks is within either one.
+        (Some(rect), _) => Some(rect),
+        (None, Some(rect)) => Some(rect),
+        (None, None) => None,
+    }
 }
 
 fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {

@@ -119,7 +119,7 @@ fn radius(feather: f64) -> f64 {
 }
 
 /// How far a feather of `radius` spreads: three standard deviations.
-fn reach(radius: f64) -> i32 {
+pub(crate) fn reach(radius: f64) -> i32 {
     (1.5 * radius).ceil() as i32 + 1
 }
 

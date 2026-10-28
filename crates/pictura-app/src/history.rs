@@ -206,6 +206,19 @@ impl History {
         target: &LayerTarget,
         label: &str,
     ) {
+        self.capture_live_with(doc, selection, target, label, None);
+    }
+
+    /// As [`Self::capture_live`] with a history hint: only tiles intersecting
+    /// the hint are compared. An empty hint falls back to the full scan.
+    pub fn capture_live_with(
+        &mut self,
+        doc: &mut Document,
+        selection: &Option<Selection>,
+        target: &LayerTarget,
+        label: &str,
+        hint: Option<&[PsdRect]>,
+    ) {
         if matches!(self.brush_source, BrushSource::State(i) if i > self.cursor) {
             self.pin_source();
         }
@@ -230,7 +243,7 @@ impl History {
                 self.current = Some(current);
                 stored
             }
-            Some(mut cur) => match diff_into(&mut cur.doc, doc) {
+            Some(mut cur) => match diff_into(&mut cur.doc, doc, hint) {
                 Some(tiles) => {
                     adopt_metadata(&mut cur.doc, doc);
                     cur.selection = selection.clone();
@@ -430,6 +443,11 @@ impl History {
             }
             self.snapshots.remove(0);
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn current_snapshot(&self) -> Option<&Snapshot> {
+        self.current.as_ref()
     }
 
     pub fn snapshot_count(&self) -> usize {

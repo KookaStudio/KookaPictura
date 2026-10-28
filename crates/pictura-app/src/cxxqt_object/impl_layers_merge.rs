@@ -5,11 +5,44 @@
 
 use super::helpers::*;
 use super::qobject;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural_before, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_core::ColorLabel;
+
+/// The pre-merge paths whose pixels the scope can change. `None` keeps the
+/// full recomposite (Merge Visible, an unresolvable path, or a refusal).
+fn merge_scope_paths(
+    doc: &pictura_core::Document,
+    scope: &pictura_render::MergeScope<'_>,
+) -> Option<Vec<String>> {
+    match scope {
+        pictura_render::MergeScope::Down(path) => {
+            let parent = pictura_render::parent_path(path).unwrap_or("").to_string();
+            let index: usize = path.rsplit('/').next()?.parse().ok()?;
+            if index == 0 {
+                return None;
+            }
+            Some(vec![(*path).to_string(), join_path(&parent, index - 1)])
+        }
+        pictura_render::MergeScope::Selected(paths) => Some(paths.to_vec()),
+        pictura_render::MergeScope::ClippingMask(path) => {
+            let parent = pictura_render::parent_path(path).unwrap_or("").to_string();
+            let index: usize = path.rsplit('/').next()?.parse().ok()?;
+            let siblings: &[pictura_core::Layer] = if parent.is_empty() {
+                &doc.layers
+            } else {
+                &pictura_render::resolve_path(doc, &parent)?.children
+            };
+            let base = (0..=index)
+                .rev()
+                .find(|&i| siblings.get(i).is_some_and(|layer| !layer.clipping))?;
+            Some(vec![join_path(&parent, base)])
+        }
+        pictura_render::MergeScope::Visible(_) => None,
+    }
+}
 
 impl qobject::PictureView {
     /// Merge Down when `paths` names one layer, Merge Layers when it names two
@@ -100,7 +133,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             rust.select_only_layer("0");
-            Edit::Structural
+            Edit::Structural { damage: None }
         });
         replaced as i32
     }
@@ -119,7 +152,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             rust.select_only_layer(&path);
-            Edit::Structural
+            Edit::Structural { damage: None }
         });
         changed
     }
@@ -156,7 +189,7 @@ impl qobject::PictureView {
             }
             changed = true;
             rust.select_only_layer(&path);
-            Edit::Structural
+            Edit::Structural { damage: None }
         });
         changed
     }
@@ -177,7 +210,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             rust.select_only_layer("0");
-            Edit::Structural
+            Edit::Structural { damage: None }
         });
         changed
     }
@@ -189,6 +222,11 @@ impl qobject::PictureView {
     ) -> Option<pictura_render::MergeOutcome> {
         let mut result = None;
         self.as_mut().edit(label, |rust| {
+            let before = rust.session.doc.as_ref().and_then(|doc| {
+                let paths = merge_scope_paths(doc, &scope)?;
+                let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+                pictura_render::damage::influence_paths(doc, &refs)
+            });
             let outcome = {
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
@@ -205,7 +243,7 @@ impl qobject::PictureView {
             result = outcome;
             let target = rust.merge_target(&path);
             rust.set_layer_target(target);
-            Edit::Structural
+            structural_before(before)
         });
         result
     }

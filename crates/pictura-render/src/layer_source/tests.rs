@@ -506,7 +506,7 @@ fn paint_bounds_unions_a_group_and_bounds_a_masked_adjustment() {
         rect: rect(12, 14, 30, 32),
         default_color: 0,
         disabled: false,
-        data: Some(vec![255u8; 18 * 18].into()),
+        data: Some(vec![255u8; 30 * 32].into()),
         ..Default::default()
     };
     let adjustment = Layer {
@@ -534,4 +534,126 @@ fn paint_bounds_unions_a_group_and_bounds_a_masked_adjustment() {
         Some(rect(0, 0, 80, 80))
     );
     assert_eq!(crate::layer_paint_bounds(&bounded_doc, "missing"), None);
+}
+
+#[test]
+fn density_and_feather_bounds() {
+    let _guard = locked();
+    let mask = LayerMask {
+        rect: rect(12, 14, 30, 32),
+        default_color: 0,
+        disabled: false,
+        data: Some(vec![255u8; 18 * 18].into()),
+        density: 255,
+        feather_bits: 8.0f64.to_bits(),
+        ..Default::default()
+    };
+    let adjustment = Layer {
+        name: "adjustment".into(),
+        rect: rect(0, 0, 80, 80),
+        adjustment: Some(crate::encode_brightness_contrast(0, 0)),
+        mask: Some(mask),
+        ..Default::default()
+    };
+    let d = doc(80, 80, vec![adjustment.clone()]);
+    let bounds = crate::layer_paint_bounds(&d, "0").expect("feathered adjustment bounds");
+    assert!(bounds.left < 14 && bounds.top < 12);
+    assert!(bounds.right > 32 && bounds.bottom > 30);
+
+    let mut low_density = adjustment;
+    low_density.mask.as_mut().expect("mask").density = 128;
+    let d = doc(80, 80, vec![low_density]);
+    assert_eq!(
+        crate::layer_paint_bounds(&d, "0"),
+        Some(rect(0, 0, 80, 80)),
+        "a non-full-density mask applies outside its rect"
+    );
+}
+
+#[test]
+fn vector_mask_bounds() {
+    let _guard = locked();
+    let mask = pictura_core::VectorMask {
+        subpaths: vec![pictura_core::VectorSubpath {
+            closed: true,
+            points: vec![[2560, 2560], [5120, 2560], [5120, 5120], [2560, 5120]],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let adjustment = Layer {
+        name: "adjustment".into(),
+        rect: rect(0, 0, 80, 80),
+        adjustment: Some(crate::encode_brightness_contrast(0, 0)),
+        vector_mask: Some(mask.clone()),
+        ..Default::default()
+    };
+    let d = doc(80, 80, vec![adjustment.clone()]);
+    assert_eq!(
+        crate::layer_paint_bounds(&d, "0"),
+        Some(rect(0, 0, 80, 80)),
+        "a vector mask does not confine an adjustment"
+    );
+
+    let inverted = Layer {
+        vector_mask: Some(pictura_core::VectorMask {
+            invert: true,
+            ..mask.clone()
+        }),
+        ..adjustment
+    };
+    let d = doc(80, 80, vec![inverted]);
+    assert_eq!(
+        crate::layer_paint_bounds(&d, "0"),
+        Some(rect(0, 0, 80, 80)),
+        "an inverted vector mask applies everywhere"
+    );
+
+    let fill = Layer {
+        name: "shape".into(),
+        rect: rect(0, 0, 80, 80),
+        adjustment: Some(crate::encode_solid_color_fill([255, 0, 0])),
+        vector_mask: Some(mask.clone()),
+        ..Default::default()
+    };
+    let d = doc(80, 80, vec![fill.clone()]);
+    assert_eq!(
+        crate::layer_paint_bounds(&d, "0"),
+        Some(rect(10, 10, 21, 21)),
+        "a fill/shape layer is confined by its full-density vector mask"
+    );
+
+    let mut low_density = fill;
+    low_density.vector_mask.as_mut().expect("mask").density = 128;
+    let d = doc(80, 80, vec![low_density]);
+    assert_eq!(
+        crate::layer_paint_bounds(&d, "0"),
+        Some(rect(0, 0, 80, 80)),
+        "a non-full-density vector mask applies outside its box"
+    );
+}
+
+#[test]
+fn raster_mask_bounds_a_fill_layer() {
+    let _guard = locked();
+    let fill = Layer {
+        name: "fill".into(),
+        rect: rect(0, 0, 80, 80),
+        adjustment: Some(crate::encode_solid_color_fill([255, 0, 0])),
+        mask: Some(LayerMask {
+            rect: rect(12, 14, 30, 32),
+            default_color: 0,
+            disabled: false,
+            data: Some(vec![255u8; 30 * 32].into()),
+            density: 255,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let d = doc(80, 80, vec![fill]);
+    assert_eq!(
+        crate::layer_paint_bounds(&d, "0"),
+        Some(rect(12, 14, 30, 32)),
+        "a fill layer is confined by a full-density raster mask"
+    );
 }

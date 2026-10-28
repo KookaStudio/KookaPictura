@@ -42,6 +42,20 @@ pub(super) enum PlaneKind {
     Other,
 }
 
+/// Where a plane's tile grid sits in document coordinates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PlanePlacement {
+    /// The composite: rows are channel blocks stacked vertically.
+    Composite,
+    /// A document channel: origin 0, one plane.
+    Canvas,
+    /// A layer channel or raster mask: its rect's top-left is the origin.
+    Rect(PsdRect),
+    /// A degenerate plane whose geometry does not map cleanly; a hint must not
+    /// skip it.
+    Unmapped,
+}
+
 /// The kind of every tracked plane, in traversal order.
 pub(super) fn plane_kinds(doc: &Document) -> Vec<PlaneKind> {
     fn visit(layer: &Layer, out: &mut Vec<PlaneKind>) {
@@ -69,7 +83,12 @@ pub(super) fn plane_kinds(doc: &Document) -> Vec<PlaneKind> {
 /// A pair with the same nonzero stamp, or one allocation, is equal and skipped
 /// without a look at its bytes; every other pair is compared tile by tile on
 /// every core, and only the changed tiles are copied in.
-pub(super) fn diff_into(current: &mut Document, next: &Document) -> Option<Vec<PlaneDelta>> {
+pub(super) fn diff_into(
+    current: &mut Document,
+    next: &Document,
+    hint: Option<&[PsdRect]>,
+) -> Option<Vec<PlaneDelta>> {
+    let hint = hint.filter(|hint| !hint.is_empty());
     let prev_planes = planes(current);
     let next_planes = planes(next);
     if prev_planes.len() != next_planes.len()
@@ -83,13 +102,21 @@ pub(super) fn diff_into(current: &mut Document, next: &Document) -> Option<Vec<P
     if planes_moved(&prev_planes, &next_planes) {
         return None;
     }
+    let doc_height = current.height as usize;
     drop(prev_planes);
     let mut out = Vec::new();
     let mut index = 0;
-    each_plane_mut(current, &mut |plane, width, _| {
-        let (after, _, _) = &next_planes[index];
+    each_plane_mut(current, &mut |plane, width, _, placement| {
+        let (after, _, _, _) = &next_planes[index];
         if !known_equal(plane, after) {
-            let bands = changed_tiles(plane.as_slice(), after.as_slice(), width);
+            let bands = changed_tiles(
+                plane.as_slice(),
+                after.as_slice(),
+                width,
+                placement,
+                doc_height,
+                hint,
+            );
             if bands.iter().any(|band| !band.is_empty()) {
                 write_bands(plane.as_mut_slice(), after.as_slice(), width, &bands);
                 out.push(PlaneDelta {
@@ -107,7 +134,10 @@ pub(super) fn diff_into(current: &mut Document, next: &Document) -> Option<Vec<P
 /// Whether a stamped plane of `next` sits at a different index than the
 /// `prev` plane carrying its stamp. Stamps travel with a plane and are unique
 /// per plane, so this catches a reorder that keeps every count and size.
-fn planes_moved(prev: &[(Plane<u8>, usize, usize)], next: &[(Plane<u8>, usize, usize)]) -> bool {
+fn planes_moved(
+    prev: &[(Plane<u8>, usize, usize, PlanePlacement)],
+    next: &[(Plane<u8>, usize, usize, PlanePlacement)],
+) -> bool {
     let index: std::collections::HashMap<u64, usize> = prev
         .iter()
         .enumerate()
@@ -125,7 +155,14 @@ fn known_equal(a: &Plane<u8>, b: &Plane<u8>) -> bool {
 
 /// The tiles of `before` that differ from `after`, per 64-row band, each
 /// holding `before`'s bytes.
-fn changed_tiles(before: &[u8], after: &[u8], width: usize) -> Vec<Vec<TileDelta>> {
+fn changed_tiles(
+    before: &[u8],
+    after: &[u8],
+    width: usize,
+    placement: PlanePlacement,
+    doc_height: usize,
+    hint: Option<&[PsdRect]>,
+) -> Vec<Vec<TileDelta>> {
     if width == 0 {
         return Vec::new();
     }
@@ -136,6 +173,16 @@ fn changed_tiles(before: &[u8], after: &[u8], width: usize) -> Vec<Vec<TileDelta
         .map(|band| {
             let y0 = band * TILE;
             let h = TILE.min(height - y0);
+            let hinted: Vec<bool> = (0..columns)
+                .map(|c| {
+                    let x0 = c * TILE;
+                    let w = TILE.min(width - x0);
+                    tile_hits(hint, placement, doc_height, x0, y0, w, h)
+                })
+                .collect();
+            if hinted.iter().all(|hit| !hit) {
+                return Vec::new();
+            }
             let mut changed = vec![false; columns];
             for row in y0..y0 + h {
                 let start = row * width;
@@ -144,6 +191,9 @@ fn changed_tiles(before: &[u8], after: &[u8], width: usize) -> Vec<Vec<TileDelta
                     continue;
                 }
                 for (c, flag) in changed.iter_mut().enumerate() {
+                    if !hinted[c] {
+                        continue;
+                    }
                     let x0 = c * TILE;
                     let x1 = (x0 + TILE).min(width);
                     *flag = *flag || b[x0..x1] != a[x0..x1];
@@ -174,6 +224,66 @@ fn changed_tiles(before: &[u8], after: &[u8], width: usize) -> Vec<Vec<TileDelta
         .collect()
 }
 
+fn tile_hits(
+    hint: Option<&[PsdRect]>,
+    placement: PlanePlacement,
+    doc_height: usize,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) -> bool {
+    let Some(hint) = hint else {
+        return true;
+    };
+    if matches!(placement, PlanePlacement::Unmapped) {
+        return true;
+    }
+    let tile = tile_doc_rect(placement, doc_height, x, y, w, h);
+    hint.iter().any(|rect| intersects(*rect, tile))
+}
+
+fn tile_doc_rect(
+    placement: PlanePlacement,
+    doc_height: usize,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) -> PsdRect {
+    let (left, origin_top) = match placement {
+        PlanePlacement::Composite | PlanePlacement::Canvas | PlanePlacement::Unmapped => {
+            (x as i32, y as i32)
+        }
+        PlanePlacement::Rect(rect) => (
+            rect.left.saturating_add(x as i32),
+            rect.top.saturating_add(y as i32),
+        ),
+    };
+    let (top, bottom) = if matches!(placement, PlanePlacement::Composite) && doc_height > 0 {
+        let first = y / doc_height;
+        let last = (y + h.saturating_sub(1)) / doc_height;
+        if first == last {
+            let top = y % doc_height;
+            (top as i32, (top + h) as i32)
+        } else {
+            (0, doc_height as i32)
+        }
+    } else {
+        (origin_top, origin_top.saturating_add(h as i32))
+    };
+    PsdRect {
+        top,
+        left,
+        bottom,
+        right: left.saturating_add(w as i32),
+    }
+}
+
+fn intersects(a: PsdRect, b: PsdRect) -> bool {
+    a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+}
+
 /// Copy `after`'s bytes into `plane` over each band's changed tiles, band by
 /// band on every core.
 fn write_bands(plane: &mut [u8], after: &[u8], width: usize, bands: &[Vec<TileDelta>]) {
@@ -196,7 +306,7 @@ fn write_bands(plane: &mut [u8], after: &[u8], width: usize, bands: &[Vec<TileDe
 pub(super) fn apply_tiles(doc: &mut Document, deltas: &[PlaneDelta]) {
     for delta in deltas {
         let mut index = 0;
-        each_plane_mut(doc, &mut |plane, _, _| {
+        each_plane_mut(doc, &mut |plane, _, _, _| {
             if index == delta.index {
                 for tile in &delta.tiles {
                     write_tile(plane, delta.width, tile, &tile.bytes);
@@ -220,7 +330,7 @@ pub(super) fn swap_tiles(
     }
     for delta in deltas.iter_mut() {
         let mut index = 0;
-        each_plane_mut(doc, &mut |plane, _, _| {
+        each_plane_mut(doc, &mut |plane, _, _, _| {
             if index == delta.index {
                 for tile in delta.tiles.iter_mut() {
                     swap_tile(plane, delta.width, tile);
@@ -270,10 +380,10 @@ pub(super) fn tile_rect(tile: &TileDelta) -> PsdRect {
 /// Replace `doc`'s metadata with `meta`'s, keeping `doc`'s tracked-plane bytes.
 pub(super) fn adopt_metadata(doc: &mut Document, meta: &Document) {
     let mut planes: Vec<Plane<u8>> = Vec::new();
-    each_plane(doc, &mut |p, _, _| planes.push(p.clone()));
+    each_plane(doc, &mut |p, _, _, _| planes.push(p.clone()));
     *doc = meta.clone();
     let mut index = 0;
-    each_plane_mut(doc, &mut |p, _, _| {
+    each_plane_mut(doc, &mut |p, _, _, _| {
         if let Some(src) = planes.get(index) {
             *p = src.clone();
         }
@@ -284,7 +394,7 @@ pub(super) fn adopt_metadata(doc: &mut Document, meta: &Document) {
 /// `doc` with every tracked plane cleared: its metadata alone.
 pub(super) fn hollow(doc: &Document) -> Document {
     let mut meta = doc.clone();
-    each_plane_mut(&mut meta, &mut |p, _, _| *p = Plane::default());
+    each_plane_mut(&mut meta, &mut |p, _, _, _| *p = Plane::default());
     meta
 }
 
@@ -292,7 +402,7 @@ pub(super) fn hollow(doc: &Document) -> Document {
 pub(super) fn private_copy(source: &mut Document) -> Document {
     let mut copy = source.clone();
     let mut stamps = Vec::new();
-    each_plane_mut(&mut copy, &mut |p, _, _| {
+    each_plane_mut(&mut copy, &mut |p, _, _, _| {
         let stamp = fresh_stamp();
         let mut fresh = copy_plane(p);
         fresh.set_stamp(stamp);
@@ -300,7 +410,7 @@ pub(super) fn private_copy(source: &mut Document) -> Document {
         stamps.push(stamp);
     });
     let mut index = 0;
-    each_plane_mut(source, &mut |p, _, _| {
+    each_plane_mut(source, &mut |p, _, _, _| {
         p.set_stamp(stamps[index]);
         index += 1;
     });
@@ -311,7 +421,7 @@ pub(super) fn private_copy(source: &mut Document) -> Document {
 /// write copies a whole plane.
 pub(crate) fn detached_copy(doc: &Document) -> Document {
     let mut copy = doc.clone();
-    each_plane_mut(&mut copy, &mut |p, _, _| *p = copy_plane(p));
+    each_plane_mut(&mut copy, &mut |p, _, _, _| *p = copy_plane(p));
     copy
 }
 
@@ -342,7 +452,7 @@ pub(super) fn stamp_agreed(private: &mut Document, live: &mut Document) {
     let theirs = planes(live);
     let mut stamps = Vec::new();
     let mut index = 0;
-    each_plane_mut(private, &mut |p, _, _| {
+    each_plane_mut(private, &mut |p, _, _, _| {
         let other = &theirs[index].0;
         index += 1;
         if p.len() == other.len() && p.shares(other) {
@@ -357,15 +467,17 @@ pub(super) fn stamp_agreed(private: &mut Document, live: &mut Document) {
     });
     drop(theirs);
     let mut index = 0;
-    each_plane_mut(live, &mut |p, _, _| {
+    each_plane_mut(live, &mut |p, _, _, _| {
         p.set_stamp(stamps[index]);
         index += 1;
     });
 }
 
-fn planes(doc: &Document) -> Vec<(Plane<u8>, usize, usize)> {
+fn planes(doc: &Document) -> Vec<(Plane<u8>, usize, usize, PlanePlacement)> {
     let mut out = Vec::new();
-    each_plane(doc, &mut |p, w, h| out.push((p.clone(), w, h)));
+    each_plane(doc, &mut |p, w, h, placement| {
+        out.push((p.clone(), w, h, placement))
+    });
     out
 }
 
@@ -374,23 +486,27 @@ fn plane_height(len: usize, width: usize) -> usize {
 }
 
 /// Visit every tracked plane (composite, document channels, layer channels,
-/// layer masks, depth-first) with its row stride and height. The traversal is
-/// fixed by the document structure, not the plane lengths, so it enumerates the
-/// same indices before and after a plane is cleared or written.
-pub(super) fn each_plane(doc: &Document, f: &mut impl FnMut(&Plane<u8>, usize, usize)) {
+/// layer masks, depth-first) with its row stride, height, and document
+/// placement. The traversal is fixed by the document structure, not the plane
+/// lengths, so it enumerates the same indices before and after a plane is
+/// cleared or written.
+pub(super) fn each_plane(
+    doc: &Document,
+    f: &mut impl FnMut(&Plane<u8>, usize, usize, PlanePlacement),
+) {
     let width = doc.width as usize;
     let h = plane_height(doc.composite.data.len(), width);
-    f(&doc.composite.data, width, h);
+    f(&doc.composite.data, width, h, PlanePlacement::Composite);
     for channel in &doc.channels {
         let h = plane_height(channel.data.len(), width);
-        f(&channel.data, width, h);
+        f(&channel.data, width, h, PlanePlacement::Canvas);
     }
     for layer in &doc.layers {
         each_layer_plane(layer, f);
     }
 }
 
-fn each_layer_plane(layer: &Layer, f: &mut impl FnMut(&Plane<u8>, usize, usize)) {
+fn each_layer_plane(layer: &Layer, f: &mut impl FnMut(&Plane<u8>, usize, usize, PlanePlacement)) {
     let layer_width = layer.rect.width().max(0) as usize;
     for channel in &layer.channels {
         let width = if layer_width > 0 {
@@ -399,7 +515,12 @@ fn each_layer_plane(layer: &Layer, f: &mut impl FnMut(&Plane<u8>, usize, usize))
             channel.data.len()
         };
         let h = plane_height(channel.data.len(), width);
-        f(&channel.data, width, h);
+        let placement = if layer_width > 0 {
+            PlanePlacement::Rect(layer.rect)
+        } else {
+            PlanePlacement::Unmapped
+        };
+        f(&channel.data, width, h, placement);
     }
     if let Some(mask) = &layer.mask {
         if let Some(data) = &mask.data {
@@ -410,7 +531,12 @@ fn each_layer_plane(layer: &Layer, f: &mut impl FnMut(&Plane<u8>, usize, usize))
                 data.len()
             };
             let h = plane_height(data.len(), width);
-            f(data, width, h);
+            let placement = if mask_width > 0 {
+                PlanePlacement::Rect(mask.rect)
+            } else {
+                PlanePlacement::Unmapped
+            };
+            f(data, width, h, placement);
         }
     }
     for child in &layer.children {
@@ -418,20 +544,26 @@ fn each_layer_plane(layer: &Layer, f: &mut impl FnMut(&Plane<u8>, usize, usize))
     }
 }
 
-pub(super) fn each_plane_mut(doc: &mut Document, f: &mut impl FnMut(&mut Plane<u8>, usize, usize)) {
+pub(super) fn each_plane_mut(
+    doc: &mut Document,
+    f: &mut impl FnMut(&mut Plane<u8>, usize, usize, PlanePlacement),
+) {
     let width = doc.width as usize;
     let h = plane_height(doc.composite.data.len(), width);
-    f(&mut doc.composite.data, width, h);
+    f(&mut doc.composite.data, width, h, PlanePlacement::Composite);
     for channel in doc.channels.iter_mut() {
         let h = plane_height(channel.data.len(), width);
-        f(&mut channel.data, width, h);
+        f(&mut channel.data, width, h, PlanePlacement::Canvas);
     }
     for layer in doc.layers.iter_mut() {
         each_layer_plane_mut(layer, f);
     }
 }
 
-fn each_layer_plane_mut(layer: &mut Layer, f: &mut impl FnMut(&mut Plane<u8>, usize, usize)) {
+fn each_layer_plane_mut(
+    layer: &mut Layer,
+    f: &mut impl FnMut(&mut Plane<u8>, usize, usize, PlanePlacement),
+) {
     let layer_width = layer.rect.width().max(0) as usize;
     for channel in layer.channels.iter_mut() {
         let width = if layer_width > 0 {
@@ -440,7 +572,12 @@ fn each_layer_plane_mut(layer: &mut Layer, f: &mut impl FnMut(&mut Plane<u8>, us
             channel.data.len()
         };
         let h = plane_height(channel.data.len(), width);
-        f(&mut channel.data, width, h);
+        let placement = if layer_width > 0 {
+            PlanePlacement::Rect(layer.rect)
+        } else {
+            PlanePlacement::Unmapped
+        };
+        f(&mut channel.data, width, h, placement);
     }
     if let Some(mask) = layer.mask.as_mut() {
         if let Some(data) = mask.data.as_mut() {
@@ -451,7 +588,12 @@ fn each_layer_plane_mut(layer: &mut Layer, f: &mut impl FnMut(&mut Plane<u8>, us
                 data.len()
             };
             let h = plane_height(data.len(), width);
-            f(data, width, h);
+            let placement = if mask_width > 0 {
+                PlanePlacement::Rect(mask.rect)
+            } else {
+                PlanePlacement::Unmapped
+            };
+            f(data, width, h, placement);
         }
     }
     for child in layer.children.iter_mut() {

@@ -274,12 +274,9 @@ fn set_fill_adjustment(
         layer.adjustment = Some(data);
         changed = true;
         match layer_rect(layer) {
-            Some(rect) => Edit::Regions {
-                rects: vec![rect],
-                // The fill preview lives in the row thumbnail, so the panel
-                // must refresh after an accepted edit.
-                notify: true,
-            },
+            // The fill preview lives in the row thumbnail, so the panel
+            // must refresh after an accepted edit.
+            Some(rect) => Edit::regions(vec![rect], true),
             None => Edit::Full,
         }
     });
@@ -507,7 +504,7 @@ fn add_fill_layer(
             return Edit::None;
         }
         rust.select_only_layer(&created);
-        Edit::Structural
+        Edit::Structural { damage: None }
     });
     QString::from(created.as_str())
 }

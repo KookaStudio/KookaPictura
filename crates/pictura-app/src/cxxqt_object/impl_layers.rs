@@ -1,4 +1,6 @@
-use super::edit::{insertion_edit, Edit};
+use super::edit::{
+    insertion_edit, regions_influence, structural, structural_before, structural_paths, Edit,
+};
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
@@ -32,7 +34,7 @@ pub(super) fn changed_property_region(
         .zip(before)
         .filter(|(path, before)| property_compositing(doc, path) != **before)
         .try_fold(None, |union: Option<pictura_core::PsdRect>, (path, _)| {
-            let rect = pictura_render::resolve_path(doc, path).and_then(layer_visibility_region)?;
+            let rect = pictura_render::damage::influence(doc, path)?;
             Some(Some(union.map_or(rect, |u| union_rect(u, rect))))
         })
 }
@@ -84,11 +86,8 @@ impl qobject::PictureView {
                 return Edit::None;
             };
             layer.visible = visible;
-            match layer_visibility_region(layer) {
-                Some(rect) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: false,
-                },
+            match pictura_render::damage::influence(doc, &i.to_string()) {
+                Some(rect) => Edit::regions(vec![rect], false),
                 None => Edit::Full,
             }
         });
@@ -215,21 +214,34 @@ impl qobject::PictureView {
     /// layers or the Background are refused.
     pub fn move_layer(mut self: Pin<&mut Self>, i: i32, delta: i32) -> bool {
         let edit = self.as_mut().edit("Reorder Layer", |rust| {
+            let path = i.to_string();
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let moved = {
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
                 };
-                pictura_render::move_path(doc, &i.to_string(), delta)
+                pictura_render::move_path(doc, &path, delta)
             };
             if !moved {
                 return Edit::None;
             }
             let len = rust.session.doc.as_ref().map_or(0, |doc| doc.layers.len());
-            if len > 0 {
+            let after = if len > 0 {
                 let index = (i + delta).clamp(0, len as i32 - 1) as usize;
-                rust.select_only_layer(&index.to_string());
-            }
-            Edit::Structural
+                let landed = index.to_string();
+                rust.select_only_layer(&landed);
+                rust.session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::damage::influence(doc, &landed))
+            } else {
+                None
+            };
+            structural(before, after)
         });
         !matches!(edit, Edit::None)
     }
@@ -279,13 +291,16 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
+            let path = index.to_string();
+            let before = pictura_render::damage::influence(doc, &path);
             created = pictura_render::duplicate_layer(doc, index);
             if created >= 0 && !add_copy {
                 doc.layers[created as usize].name = doc.layers[index as usize].name.clone();
             }
             if created >= 0 {
+                let after = pictura_render::damage::influence(doc, &created.to_string());
                 rust.layer_target.select_only(&created.to_string());
-                Edit::Structural
+                structural(before, after)
             } else {
                 Edit::None
             }
@@ -299,10 +314,13 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
+            let path = index.to_string();
+            let before = pictura_render::damage::influence(doc, &path);
             created = pictura_render::group_layer(doc, index);
             if created >= 0 {
+                let after = pictura_render::damage::influence(doc, &created.to_string());
                 rust.layer_target.select_only(&created.to_string());
-                Edit::Structural
+                structural(before, after)
             } else {
                 Edit::None
             }
@@ -312,6 +330,15 @@ impl qobject::PictureView {
 
     pub fn ungroup_layer(mut self: Pin<&mut Self>, index: i32) -> bool {
         let edit = self.as_mut().edit("Ungroup Layers", |rust| {
+            let path = index.to_string();
+            let (before, child_count) = match rust.session.doc.as_ref() {
+                Some(doc) => (
+                    pictura_render::damage::influence(doc, &path),
+                    pictura_render::resolve_path(doc, &path)
+                        .map_or(0, |layer| layer.children.len()),
+                ),
+                None => (None, 0),
+            };
             let ungrouped = {
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
@@ -328,7 +355,20 @@ impl qobject::PictureView {
             } else {
                 rust.layer_target.clear();
             }
-            Edit::Structural
+            if child_count == 0 {
+                return structural_before(before.map(|rect| vec![rect]));
+            }
+            let index = index.max(0) as usize;
+            let children: Vec<String> = (0..child_count)
+                .map(|offset| (index + offset).to_string())
+                .collect();
+            let refs: Vec<&str> = children.iter().map(String::as_str).collect();
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
+            structural_paths(before.map(|rect| vec![rect]), after)
         });
         !matches!(edit, Edit::None)
     }
@@ -548,6 +588,11 @@ impl qobject::PictureView {
     pub fn move_layer_path(mut self: Pin<&mut Self>, path: &QString, delta: i32) -> bool {
         let path = path.to_string();
         let edit = self.as_mut().edit("Move Layer", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let moved = {
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
@@ -557,21 +602,30 @@ impl qobject::PictureView {
             if !moved {
                 return Edit::None;
             }
-            if let Some(doc) = rust.session.doc.as_ref() {
-                let parent = pictura_render::parent_path(&path).unwrap_or("");
-                if let (Some(index), Some(len)) = (
-                    path.rsplit('/')
-                        .next()
-                        .and_then(|segment| segment.parse::<usize>().ok()),
-                    container_len(doc, parent),
-                ) {
+            let parent = pictura_render::parent_path(&path).unwrap_or("").to_string();
+            let after = if let (Some(index), Some(doc)) = (
+                path.rsplit('/')
+                    .next()
+                    .and_then(|segment| segment.parse::<usize>().ok()),
+                rust.session.doc.as_ref(),
+            ) {
+                if let Some(len) = container_len(doc, &parent) {
                     if len > 0 {
                         let index = (index as i32 + delta).clamp(0, len as i32 - 1) as usize;
-                        rust.select_only_layer(&join_path(parent, index));
+                        let landed = join_path(&parent, index);
+                        let after = pictura_render::damage::influence(doc, &landed);
+                        rust.select_only_layer(&landed);
+                        after
+                    } else {
+                        None
                     }
+                } else {
+                    None
                 }
-            }
-            Edit::Structural
+            } else {
+                None
+            };
+            structural(before, after)
         });
         !matches!(edit, Edit::None)
     }
@@ -585,6 +639,11 @@ impl qobject::PictureView {
         let path = path.to_string();
         let target = target.to_string();
         let edit = self.as_mut().edit("Move Layer", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let moved = {
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
@@ -595,7 +654,12 @@ impl qobject::PictureView {
                 return Edit::None;
             };
             rust.select_only_layer(&moved);
-            Edit::Structural
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &moved));
+            structural(before, after)
         });
         !matches!(edit, Edit::None)
     }
@@ -623,10 +687,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             match region {
-                Some(rect) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: false,
-                },
+                Some(rect) => Edit::regions(vec![rect], false),
                 None => Edit::Full,
             }
         });
@@ -712,7 +773,6 @@ impl qobject::PictureView {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
         let pending = self.rust().pending_previews.opacity_changed;
-        self.as_mut().rust_mut().pending_previews.opacity_changed = false;
         let mut changed = 0;
         self.as_mut().edit("Opacity", |rust| {
             let Some(doc) = rust.session.doc.as_mut() else {
@@ -727,13 +787,11 @@ impl qobject::PictureView {
                 return if pending { Edit::Record } else { Edit::None };
             }
             match changed_property_region(doc, &refs, &before) {
-                Some(Some(rect)) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: true,
-                },
+                Some(Some(rect)) => Edit::regions(vec![rect], true),
                 _ => Edit::Full,
             }
         });
+        self.as_mut().rust_mut().pending_previews.opacity_changed = false;
         changed as i32
     }
 
@@ -775,7 +833,6 @@ impl qobject::PictureView {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
         let pending = self.rust().pending_previews.fill_changed;
-        self.as_mut().rust_mut().pending_previews.fill_changed = false;
         let mut changed = 0;
         self.as_mut().edit("Fill Opacity", |rust| {
             let Some(doc) = rust.session.doc.as_mut() else {
@@ -790,13 +847,11 @@ impl qobject::PictureView {
                 return if pending { Edit::Record } else { Edit::None };
             }
             match changed_property_region(doc, &refs, &before) {
-                Some(Some(rect)) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: true,
-                },
+                Some(Some(rect)) => Edit::regions(vec![rect], true),
                 _ => Edit::Full,
             }
         });
+        self.as_mut().rust_mut().pending_previews.fill_changed = false;
         changed as i32
     }
 
@@ -839,6 +894,11 @@ impl qobject::PictureView {
         let refs = as_str_slice(&owned);
         let mut created: Vec<String> = Vec::new();
         self.as_mut().edit("Duplicate Layer", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
             created = {
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
@@ -860,7 +920,13 @@ impl qobject::PictureView {
             }
             let target = rust.duplicate_target(&created);
             rust.set_layer_target(target);
-            Edit::Structural
+            let created_refs: Vec<&str> = created.iter().map(String::as_str).collect();
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &created_refs));
+            structural_paths(before, after)
         });
         created.into_iter().map(QString::from).collect()
     }
@@ -929,11 +995,8 @@ impl qobject::PictureView {
             if !f(layer, background) {
                 return Edit::None;
             }
-            match layer_visibility_region(layer) {
-                Some(rect) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: false,
-                },
+            match pictura_render::damage::influence(doc, &i.to_string()) {
+                Some(rect) => Edit::regions(vec![rect], false),
                 None => Edit::Full,
             }
         });
@@ -979,15 +1042,24 @@ impl qobject::PictureView {
         let refs = as_str_slice(&owned);
         let mut changed = 0;
         self.as_mut().edit(label, |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             changed = op(doc, &refs);
-            if changed > 0 {
-                Edit::Full
-            } else {
-                Edit::None
+            if changed == 0 {
+                return Edit::None;
             }
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
+            regions_influence(before, after, true)
         });
         changed as i32
     }
@@ -1023,10 +1095,7 @@ impl qobject::PictureView {
                 return Edit::Meta;
             }
             match changed_property_region(doc, &refs, &before) {
-                Some(Some(rect)) => Edit::Regions {
-                    rects: vec![rect],
-                    notify: true,
-                },
+                Some(Some(rect)) => Edit::regions(vec![rect], true),
                 _ => Edit::Full,
             }
         });

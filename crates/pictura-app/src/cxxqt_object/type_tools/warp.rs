@@ -7,7 +7,7 @@
 //! [`PictureView`]: crate::cxxqt_object::qobject::PictureView
 
 use super::{ffi::TypeSetting, layer_spec};
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::structural;
 use crate::cxxqt_object::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -183,10 +183,24 @@ fn type_warp_commit(
     v: f64,
     vertical: bool,
 ) -> bool {
+    let path_string = path.to_string();
+    let before = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::damage::influence(doc, &path_string));
     let committed = set_warp(view.as_mut(), path, warp_of(style, bend, h, v, vertical));
     view.as_mut().rust_mut().warp_text_original = None;
     if committed {
-        view.as_mut().edit("Warp Text", |_| Edit::Structural);
+        let after = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path_string));
+        view.as_mut()
+            .edit("Warp Text", |_| structural(before, after));
     }
     committed
 }

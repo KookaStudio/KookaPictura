@@ -46,6 +46,7 @@ set(PICTURA_QT_TESTS
     tst_layers_snapshot
     tst_canvas_backdrop
     tst_present_cache
+    tst_damage_bounds
     tst_fill_layer_editor
     tst_align_distribute
     tst_options_bars_parity

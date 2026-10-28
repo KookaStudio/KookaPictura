@@ -8,7 +8,7 @@
 use super::helpers_composite::{default_layer_mask, selection_to_mask};
 use super::qobject;
 use crate::cxxqt_object::document_session::DocumentSession;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, structural_paths, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -60,7 +60,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             rust.select_only_layer(&created);
-            Edit::Structural
+            Edit::Structural { damage: None }
         });
         QString::from(created.as_str())
     }
@@ -83,7 +83,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             rust.select_only_layer(&created);
-            Edit::Structural
+            Edit::Structural { damage: None }
         });
         QString::from(created.as_str())
     }
@@ -130,13 +130,19 @@ impl qobject::PictureView {
         };
         let mut changed = false;
         self.as_mut().edit(label, |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             changed = pictura_render::render_text_layer(doc, &path)
                 || pictura_render::rasterize_fill_content(doc, &path);
             if changed {
-                Edit::Structural
+                let after = pictura_render::damage::influence(doc, &path);
+                structural(before, after)
             } else {
                 Edit::None
             }
@@ -153,11 +159,26 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
+            let paths: Vec<String> = pictura_render::flatten_rows(doc)
+                .into_iter()
+                .filter(|(path, _)| {
+                    pictura_render::resolve_path(doc, path).is_some_and(|layer| {
+                        layer.is_type() || pictura_render::is_fill_content_layer(layer)
+                    })
+                })
+                .map(|(path, _)| path)
+                .collect();
+            let before = pictura_render::damage::influence_paths(
+                doc,
+                &paths.iter().map(String::as_str).collect::<Vec<_>>(),
+            );
             count = pictura_render::rasterize_all_layers(doc);
             if count == 0 {
                 Edit::None
             } else {
-                Edit::Structural
+                let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+                let after = pictura_render::damage::influence_paths(doc, &refs);
+                structural_paths(before, after)
             }
         });
         count as i32
@@ -173,12 +194,18 @@ impl qobject::PictureView {
         }
         let mut changed = false;
         self.as_mut().edit("Rasterize Type", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             changed = pictura_render::render_text_layer(doc, &path);
             if changed {
-                Edit::Structural
+                let after = pictura_render::damage::influence(doc, &path);
+                structural(before, after)
             } else {
                 Edit::None
             }
@@ -203,12 +230,18 @@ impl qobject::PictureView {
         let path = path.to_string();
         let mut changed = false;
         self.as_mut().edit(label, |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             changed = pictura_render::rasterize_fill_content(doc, &path);
             if changed {
-                Edit::Structural
+                let after = pictura_render::damage::influence(doc, &path);
+                structural(before, after)
             } else {
                 Edit::None
             }

@@ -7,7 +7,7 @@
 
 use super::helpers::{join_path, list_of_strings};
 use super::qobject::PictureView;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, structural_paths, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -115,11 +115,21 @@ fn arrange_layer_run(mut view: Pin<&mut PictureView>, path: &QString, arrange: i
     };
     let path = path.to_string();
     let edit = view.as_mut().edit("Arrange Layer", |rust| {
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
         let Some(landed) = arrange_landed(rust, &path, op) else {
             return Edit::None;
         };
         rust.select_only_layer(&landed);
-        Edit::Structural
+        let after = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &landed));
+        structural(before, after)
     });
     !matches!(edit, Edit::None)
 }
@@ -128,6 +138,11 @@ fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> b
     let owned = list_of_strings(paths);
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
     let edit = view.as_mut().edit("Reverse Layers", |rust| {
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
         let Some(reversed) = (match rust.session.doc.as_mut() {
             Some(doc) => pictura_render::reverse_paths_result(doc, &refs),
             None => None,
@@ -136,9 +151,15 @@ fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> b
         };
         let mut target = rust.layer_target.clone();
         let anchor = target.anchor().map(str::to_string);
-        target.select(reversed, anchor, rust.session.doc.as_ref());
+        target.select(reversed.clone(), anchor, rust.session.doc.as_ref());
         rust.set_layer_target(target);
-        Edit::Structural
+        let reversed_refs: Vec<&str> = reversed.iter().map(String::as_str).collect();
+        let after = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence_paths(doc, &reversed_refs));
+        structural_paths(before, after)
     });
     !matches!(edit, Edit::None)
 }
@@ -157,7 +178,7 @@ fn stamp_visible_run(mut view: Pin<&mut PictureView>, path: &QString) -> QString
         };
         created = path;
         rust.select_only_layer(&created);
-        Edit::Structural
+        Edit::Structural { damage: None }
     });
     QString::from(created.as_str())
 }
@@ -181,7 +202,7 @@ fn stamp_selected_run(
         };
         created = path;
         rust.select_only_layer(&created);
-        Edit::Structural
+        Edit::Structural { damage: None }
     });
     QString::from(created.as_str())
 }

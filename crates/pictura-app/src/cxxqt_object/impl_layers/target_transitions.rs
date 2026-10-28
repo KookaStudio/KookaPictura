@@ -6,7 +6,7 @@ use super::super::helpers::{
     as_str_slice, join_path, list_of_strings, survivor_after_delete, topmost_path,
 };
 use super::super::qobject;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural_before, structural_paths, Edit};
 use crate::cxxqt_object::state::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
@@ -29,6 +29,11 @@ impl qobject::PictureView {
         };
         let mut created = String::new();
         self.as_mut().edit("Group Layers", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
             let Some(path) = ({
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
@@ -40,7 +45,12 @@ impl qobject::PictureView {
             created = path.clone();
             let target = rust.group_target(&grouped, &selected, &path);
             rust.set_layer_target(target);
-            Edit::Structural
+            let after = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
+            structural_paths(before, after.map(|rect| vec![rect]))
         });
         QString::from(created.as_str())
     }
@@ -50,6 +60,11 @@ impl qobject::PictureView {
         let refs = as_str_slice(&owned);
         let mut changed = 0;
         self.as_mut().edit("Delete Layers", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
@@ -67,7 +82,7 @@ impl qobject::PictureView {
                 Some(path) => rust.select_only_layer(&path),
                 None => rust.layer_target.clear(),
             }
-            Edit::Structural
+            structural_before(before)
         });
         changed as i32
     }
@@ -77,6 +92,11 @@ impl qobject::PictureView {
         let refs = as_str_slice(&owned);
         let mut changed = 0;
         self.as_mut().edit("Ungroup Layers", |rust| {
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence_paths(doc, &refs));
             let mut groups: Vec<(String, usize, usize)> = Vec::new();
             let mut survivors: Vec<(String, usize)> = Vec::new();
             if let Some(doc) = rust.session.doc.as_ref() {
@@ -128,7 +148,7 @@ impl qobject::PictureView {
             }
             let target = rust.ungroup_target(&groups, &survivors);
             rust.set_layer_target(target);
-            Edit::Structural
+            structural_before(before)
         });
         changed as i32
     }
@@ -142,6 +162,11 @@ impl qobject::PictureView {
             if i < 0 {
                 return Edit::None;
             }
+            let before = rust
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
@@ -158,9 +183,9 @@ impl qobject::PictureView {
                 Some(path) => rust.select_only_layer(&path),
                 None => rust.layer_target.clear(),
             }
-            Edit::Structural
+            structural_before(before.map(|rect| vec![rect]))
         });
-        matches!(removed, Edit::Structural)
+        matches!(removed, Edit::Structural { .. })
     }
 }
 

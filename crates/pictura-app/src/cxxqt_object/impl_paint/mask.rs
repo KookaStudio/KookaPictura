@@ -350,10 +350,7 @@ impl qobject::PictureView {
             Some(rect) => {
                 let rect = to_document(rect, ctx.rect);
                 let regions = tiles.regions(rect);
-                self.as_mut().edit(label, |_| Edit::Regions {
-                    rects: regions,
-                    notify: false,
-                });
+                self.as_mut().edit(label, |_| Edit::regions(regions, false));
                 true
             }
         }

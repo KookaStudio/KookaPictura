@@ -139,13 +139,7 @@ fn paint(
     };
     match finished {
         Some(rect) => {
-            let _ = view.apply_edit(
-                "Brush",
-                Edit::Regions {
-                    rects: vec![rect],
-                    notify: false,
-                },
-            );
+            let _ = view.apply_edit("Brush", Edit::regions(vec![rect], false));
             tool_recording::finish(record);
             true
         }

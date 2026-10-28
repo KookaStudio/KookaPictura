@@ -223,12 +223,16 @@ fn deletable(doc: &Document, segments: &[usize], path: &str) -> bool {
 /// one removal. Returns the number of nodes removed; a tree with no hidden
 /// layer is left untouched. *(match inferred: CS6 does not state the nested
 /// count or the Background/locked exemptions inherited from [`delete_paths`].)*
-pub fn delete_hidden_layers(doc: &mut Document) -> usize {
-    let hidden: Vec<String> = flatten_rows(doc)
+pub fn hidden_layer_paths(doc: &Document) -> Vec<String> {
+    flatten_rows(doc)
         .into_iter()
         .filter(|(path, _)| !is_visible_in_panel(doc, path))
         .map(|(path, _)| path)
-        .collect();
+        .collect()
+}
+
+pub fn delete_hidden_layers(doc: &mut Document) -> usize {
+    let hidden = hidden_layer_paths(doc);
     if hidden.is_empty() {
         return 0;
     }

@@ -36,6 +36,7 @@ mod composite_knockout;
 mod composite_region;
 mod composite_route;
 mod composite_rows;
+pub mod damage;
 mod layer_source;
 pub use layer_effects::layer_paint_bounds;
 pub use layer_source::purge_source_cache;
@@ -164,14 +165,15 @@ pub use document_ops::{
     delete_smart_filter_mask, delete_vector_mask, distribute_layers, document_bit_depth,
     document_color_mode, duplicate_layer, duplicate_paths, extend_background, flatten,
     flatten_rows, flip_document, group_layer, group_paths, has_forced_locks, has_layer_mask,
-    has_layer_style, has_smart_filter_mask, has_vector_mask, indexed_exact_available, insert_layer,
-    insertion_is_content_neutral, invert_layer_mask, is_background, is_fill_content_layer,
-    is_shape_layer, is_visible_in_panel, layer_content_bounds, layer_from_background,
-    layer_live_shape, layer_mask_disabled, layer_mask_linked, layer_mask_refinement,
-    layer_shape_paths, layer_style_effect_names, layer_style_pattern_names, layer_style_value,
-    layer_via_copy, layer_via_cut, lens_correction_slots, lift_selection, lock_group_layers,
-    mask_document, mask_document_coverage, merge_lifted, merge_scope, move_mask_selection_content,
-    move_path, move_path_to, move_path_to_result, move_selection_content, neutral_color,
+    has_layer_style, has_smart_filter_mask, has_vector_mask, hidden_layer_paths,
+    indexed_exact_available, insert_layer, insertion_is_content_neutral, invert_layer_mask,
+    is_background, is_fill_content_layer, is_shape_layer, is_visible_in_panel,
+    layer_content_bounds, layer_from_background, layer_live_shape, layer_mask_disabled,
+    layer_mask_linked, layer_mask_refinement, layer_shape_paths, layer_style_effect_names,
+    layer_style_pattern_names, layer_style_value, layer_via_copy, layer_via_cut,
+    lens_correction_slots, lift_selection, lock_group_layers, mask_document,
+    mask_document_coverage, merge_lifted, merge_scope, move_mask_selection_content, move_path,
+    move_path_to, move_path_to_result, move_selection_content, neutral_color,
     new_smart_object_via_copy, next_layer_name, open_as_smart_object, parent_path, paste_clip,
     paste_layer_style, paste_shape_attributes, perspective_crop, perspective_crop_refusal,
     perspective_crop_size, perspective_crop_sized, place_smart_object, preview_pictura_raw,

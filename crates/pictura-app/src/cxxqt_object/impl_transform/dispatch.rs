@@ -234,10 +234,7 @@ impl qobject::PictureView {
         let edit = if effects {
             Edit::Full
         } else {
-            Edit::Regions {
-                rects: vec![dirty],
-                notify: false,
-            }
+            Edit::regions(vec![dirty], false)
         };
         self.as_mut().commit_move_edit("Move Layer", |_| edit);
         true
