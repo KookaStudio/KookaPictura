@@ -604,5 +604,11 @@ pub fn all() -> Vec<Filter> {
             highlight: TonalFade::default(),
         },
         Filter::HdrToning(HdrToningParams::default()),
+        Filter::EmbedWatermark {
+            kind: WatermarkKind::ImageId,
+            creator_id: 42,
+            id: 1234,
+            durability: Durability::Medium,
+        },
     ]
 }

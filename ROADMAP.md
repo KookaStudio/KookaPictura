@@ -346,7 +346,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       project-owned image resource; reopening restores them
 - [x] NTSC Colors (#345)
 - [ ] De-Interlace (#344)
-- [ ] Embed and Read Watermark (#350, #351)
+- [x] Embed and Read Watermark (#350, #351): an in-tree approximate
+      spread-spectrum carrier (not Digimarc-compatible), with the copyright
+      title indicator on detection
 - [ ] Edit ▸ Fade, the post-filter opacity and blend mode (#491)
 
 ## Colour and painting

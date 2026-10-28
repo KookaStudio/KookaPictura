@@ -71,6 +71,9 @@ QString fullLabel(const DocWindow* window)
             label += QStringLiteral(" (%1/%2)").arg(mode).arg(bits);
         }
     }
+    if (doc.watermarkDetected) {
+        label += QStringLiteral(" \u00A9");
+    }
     return label;
 }
 

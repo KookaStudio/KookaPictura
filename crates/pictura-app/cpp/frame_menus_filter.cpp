@@ -9,6 +9,7 @@
 
 #include "awa_dialog.h"
 #include "blur_gallery_dialog.h"
+#include "digimarc_read_dialog.h"
 #include "filter_commands.h"
 #include "filter_commit.h"
 #include "filter_gallery_dialog.h"
@@ -497,6 +498,41 @@ void PicturaMainWindow::wireFilterMenu()
                                }
                                return applied;
                            });
+
+    // Filter > Digimarc > Read Watermark: report the active layer's in-tree
+    // watermark and mark the document when one is found. The reader is the
+    // project's own approximate carrier, not Digimarc Barcode.
+    const QString readWatermark = commandIdForPath(
+        {QStringLiteral("Filter"), QStringLiteral("Digimarc"), QStringLiteral("Read Watermark")});
+    registry_->setImplemented(readWatermark, true);
+    registry_->setHandler(readWatermark, [this]() {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return;
+        }
+        const WatermarkRow row = read_watermark(*view);
+        setDocumentWatermarkDetected(row.found);
+        DigimarcReadDialog::showResult(row.found, row.kind, row.creator_id, row.id, this);
+    });
+    registry_->setEnabledProvider(readWatermark, [this]() {
+        PictureView* view = activeView();
+        return view && view->has_document();
+    });
+}
+
+void PicturaMainWindow::setDocumentWatermarkDetected(bool detected)
+{
+    const int index = activeDocumentIndex();
+    if (index < 0 || index >= docs_.size()) {
+        return;
+    }
+    DocEntry* doc = docs_.at(index);
+    if (doc->watermarkDetected == detected) {
+        return;
+    }
+    doc->watermarkDetected = detected;
+    updateTabTitle(index);
+    updateWindowTitle();
 }
 
 } // namespace pictura

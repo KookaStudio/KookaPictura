@@ -1,4 +1,5 @@
 pub(crate) mod blur;
+pub(crate) mod digimarc;
 pub(crate) mod distort;
 pub(crate) mod engine_only;
 pub(crate) mod other;

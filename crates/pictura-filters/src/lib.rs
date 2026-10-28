@@ -15,6 +15,7 @@ use pictura_core::PixelBuffer;
 
 pub mod blur;
 pub mod catalogue;
+pub mod digimarc;
 mod distort;
 pub mod hdr_toning;
 pub mod kernel;
@@ -37,6 +38,7 @@ pub use blur::path::{BlurPath, PathMotion, MAX_END_POINT_SPEED, MAX_PATH_POINTS,
 pub use blur::spin::{SpinPin, SpinStrobe, MAX_SPIN_ANGLE};
 pub use blur::tilt::{TiltPin, MAX_TILT_EXTENT};
 pub use blur::SmartBlurMode;
+pub use digimarc::{Durability, WatermarkKind, WatermarkPayload};
 pub use distort::adaptive_wide_angle::{
     awa_two_to_one, AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
 };

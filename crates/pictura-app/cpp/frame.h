@@ -718,6 +718,7 @@ private:
     void updateToolHint();
     void updateTabTitle(int index);
     void updateWindowTitle();
+    void setDocumentWatermarkDetected(bool detected);
     // Restore the persisted window geometry (and maximized state) at startup, or
     // fall back to the default size when the stored position is off-screen.
     void restoreSessionWindowGeometry(const SessionState& state);

@@ -233,6 +233,20 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
             *highlight,
         ),
         Filter::HdrToning(params) => hdr_toning::hdr_toning(buf, params),
+        Filter::EmbedWatermark {
+            kind,
+            creator_id,
+            id,
+            durability,
+        } => crate::digimarc::embed(
+            buf,
+            &crate::digimarc::WatermarkPayload {
+                kind: *kind,
+                creator_id: *creator_id,
+                id: *id,
+            },
+            *durability,
+        ),
         Filter::Average
         | Filter::SurfaceBlur { .. }
         | Filter::SharpenEdges

@@ -732,6 +732,11 @@ const MAPPING: &[Mapping] = &[
         "no ImageMagick HDR tone-mapping operator with Pictura's local adaptation; guarded by \
          the HDR toning tests",
     ),
+    none(
+        "EmbedWatermark",
+        "no ImageMagick watermark operator; the in-tree approximate carrier is guarded by the \
+         digimarc round-trip tests",
+    ),
 ];
 
 #[test]

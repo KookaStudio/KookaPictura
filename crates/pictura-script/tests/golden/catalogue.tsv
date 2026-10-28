@@ -475,8 +475,8 @@ filter.other.high.pass	Filter/Other/High Pass	High Pass		1	0
 filter.other.maximum	Filter/Other/Maximum	Maximum		1	0
 filter.other.minimum	Filter/Other/Minimum	Minimum		1	0
 filter.other.offset	Filter/Other/Offset	Offset		1	0
-filter.digimarc.embed.watermark	Filter/Digimarc/Embed Watermark	Embed Watermark		0	0
-filter.digimarc.read.watermark	Filter/Digimarc/Read Watermark	Read Watermark		0	0
+filter.digimarc.embed.watermark	Filter/Digimarc/Embed Watermark	Embed Watermark		1	0
+filter.digimarc.read.watermark	Filter/Digimarc/Read Watermark	Read Watermark		1	0
 filter.extract	Filter/Extract…	Extract…		0	0
 filter.pattern.maker	Filter/Pattern Maker…	Pattern Maker…		0	0
 filter.browse.filters.online	Filter/Browse Filters Online…	Browse Filters Online…		0	0

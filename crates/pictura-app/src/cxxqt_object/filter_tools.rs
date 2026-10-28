@@ -11,7 +11,8 @@
 use super::filter_map::filter_from_kind_params;
 use super::helpers::{active_layer_visible, active_mask_target, active_pixel_layer};
 use super::helpers_composite::{
-    buffer_to_image, patch_buffer_region, premultiplied_display_image, selection_to_mask,
+    buffer_to_image, layer_buffer, patch_buffer_region, premultiplied_display_image,
+    selection_to_mask,
 };
 use super::impl_filters::{
     apply_filter_active, apply_filter_active_region, apply_op_active_region, cancel_filter_preview,
@@ -97,6 +98,17 @@ pub mod ffi {
         gallery_rank: i32,
     }
 
+    /// The result of reading the active pixel layer's in-tree watermark
+    /// (`FILT-105`). `kind` is the watermark type's label, empty when none was
+    /// found.
+    #[namespace = "pictura"]
+    struct WatermarkRow {
+        found: bool,
+        kind: QString,
+        creator_id: i32,
+        id: i32,
+    }
+
     #[namespace = "pictura"]
     extern "Rust" {
         /// Commit a filter `kind` with an ordered `params` slot list. When a
@@ -172,6 +184,10 @@ pub mod ffi {
 
         /// The filter parameter descriptors, in the C++ table's order.
         fn filter_descriptors() -> Vec<FilterDescriptorRow>;
+
+        /// Read the active pixel layer's in-tree watermark (`FILT-105`), if any.
+        /// This is the project's own approximate carrier, not Digimarc Barcode.
+        fn read_watermark(view: &PictureView) -> WatermarkRow;
 
         /// Whether a Picture Frame frame number draws lines that the Number of
         /// Lines control sets the density of; CS6 greys the control out for the
@@ -562,6 +578,34 @@ fn filter_param_arity(kind: &QString) -> i32 {
     super::filter_map::filter_param_arity(&kind.to_string())
         .map(|n| n as i32)
         .unwrap_or(-1)
+}
+
+/// Read the active pixel layer's in-tree watermark. The reader inspects the
+/// layer's own buffer, so embed and read share the layer's origin.
+fn read_watermark(view: &PictureView) -> ffi::WatermarkRow {
+    let rust = view.rust();
+    let payload = rust.session.doc.as_ref().and_then(|doc| {
+        let layer = active_pixel_layer(doc, rust.layer_target.single())?;
+        let buffer = layer_buffer(layer)?;
+        pictura_filters::digimarc::read(&buffer)
+    });
+    match payload {
+        Some(payload) => ffi::WatermarkRow {
+            found: true,
+            kind: QString::from(match payload.kind {
+                pictura_filters::WatermarkKind::ImageId => "Image ID",
+                pictura_filters::WatermarkKind::TransactionId => "Transaction ID",
+            }),
+            creator_id: payload.creator_id as i32,
+            id: payload.id as i32,
+        },
+        None => ffi::WatermarkRow {
+            found: false,
+            kind: QString::default(),
+            creator_id: 0,
+            id: 0,
+        },
+    }
 }
 
 fn filter_picture_frame_uses_lines(frame: i32) -> bool {

@@ -40,6 +40,9 @@ struct DocEntry {
     // The user selected another tab while this one loaded; do not steal the
     // activation when it finishes.
     bool userMovedAway = false;
+    // Set when Filter > Digimarc > Read Watermark decoded a watermark on this
+    // document; the title then carries a copyright symbol.
+    bool watermarkDetected = false;
     // The document that was active when this open started; a failure or
     // cancel restores it. Guarded because the user may close it mid-load.
     QPointer<PictureView> previousActiveView;

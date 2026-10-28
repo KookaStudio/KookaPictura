@@ -251,6 +251,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/acr/acr_presets_panel.cpp
     crates/pictura-app/cpp/filter_commands.cpp
     crates/pictura-app/cpp/filter_commands.h
+    crates/pictura-app/cpp/digimarc_read_dialog.cpp
+    crates/pictura-app/cpp/digimarc_read_dialog.h
     crates/pictura-app/cpp/busy_job.cpp
     crates/pictura-app/cpp/filter_commit.cpp
     crates/pictura-app/cpp/filter_commit.h

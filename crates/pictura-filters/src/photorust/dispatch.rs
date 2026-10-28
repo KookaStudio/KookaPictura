@@ -1027,7 +1027,8 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
         | Filter::Lighting { .. }
         | Filter::OilPaint { .. }
         | Filter::SmartSharpen { .. }
-        | Filter::HdrToning(..) => return None,
+        | Filter::HdrToning(..)
+        | Filter::EmbedWatermark { .. } => return None,
     };
     Some(plan)
 }
