@@ -150,11 +150,18 @@ fn placed(name: &str, x: i32, y: i32, rgb: (u8, u8, u8)) -> Layer {
 }
 
 fn bounded_view() -> PictureViewRust {
-    view(vec![
+    let mut doc = Document::new(200, 120, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![
         pixel_layer("base", 8, 8, (0, 0, 0)),
         placed("a", 1, 1, (20, 0, 0)),
         placed("b", 2, 2, (0, 20, 0)),
-    ])
+    ]);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    }
 }
 
 fn assert_bounded(label: &str, apply: fn(&mut PictureViewRust) -> Edit) {

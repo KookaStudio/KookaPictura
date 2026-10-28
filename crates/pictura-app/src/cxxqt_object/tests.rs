@@ -351,10 +351,16 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
         .expect("type layer")
         .clone();
     let text_rect = text.rect;
-    assert_eq!(region(text.clone()), Some(text_rect));
+    let clipped = |rect: PsdRect| PsdRect {
+        top: rect.top.max(0),
+        left: rect.left.max(0),
+        bottom: rect.bottom.min(120),
+        right: rect.right.min(200),
+    };
+    assert_eq!(region(text.clone()), Some(clipped(text_rect)));
     let mut no_proxy = text;
     no_proxy.channels.clear();
-    assert_eq!(region(no_proxy), Some(text_rect));
+    assert_eq!(region(no_proxy), Some(clipped(text_rect)));
 
     let mask = |t, l, b, r, data: Option<Vec<u8>>, default_color, disabled| LayerMask {
         rect: PsdRect {

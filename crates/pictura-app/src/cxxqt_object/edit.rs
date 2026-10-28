@@ -440,17 +440,12 @@ impl qobject::PictureView {
 mod tests {
     use super::*;
     use crate::cxxqt_object::tests::pixel_layer;
-    use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PixelBuffer};
+    use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
 
     fn doc_with_layer() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = LayerStack::from_layers(vec![pixel_layer("base", 4, 4, (255, 0, 0))]);
-        doc.composite = PixelBuffer {
-            width: 4,
-            height: 4,
-            channels: 4,
-            data: vec![0u8; 4 * 4 * 4].into(),
-        };
+        doc.composite = pictura_render::composite_rgba(&doc);
         doc
     }
 
