@@ -44,7 +44,7 @@ mod mask_refine;
 pub use mask_refine::mask_feather_reach;
 mod smart_source;
 mod view_pyramid;
-pub(crate) use composite::{channel, mask_alpha, render_smart_source, sample};
+pub(crate) use composite::{channel, channel_plane, mask_alpha, render_smart_source};
 pub use composite::{
     composite_rgba, composite_rgba_region, decode_adjustment, encode_brightness_contrast,
     encode_hue_saturation, encode_invert, encode_photo_filter, encode_posterize,

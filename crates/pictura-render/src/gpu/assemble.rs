@@ -5,7 +5,7 @@ use pictura_core::{ColorMode, Document, Layer, PsdRect};
 use wgpu::WriteOnly;
 
 use super::backend::SrcLayout;
-use crate::{channel, mask_alpha, sample};
+use crate::{channel_plane, mask_alpha};
 
 /// The region origin and dimensions a composite runs over. Pure assembly (no
 /// device) so the row-wise and per-pixel paths are unit-testable without a GPU.
@@ -94,25 +94,31 @@ pub(super) fn source_geom(region: Region, layer: &Layer, doc: &Document) -> Opti
 /// plane fallback.
 pub(super) fn assemble_source_per_pixel(layer: &Layer, g: &SourceGeom) -> Vec<u8> {
     let lw = layer.rect.width() as usize;
-    let ch0 = channel(layer, 0);
-    let ch1 = channel(layer, 1).or(ch0);
-    let ch2 = channel(layer, 2).or(ch0);
-    let alpha = channel(layer, -1);
+    let ch0 = channel_plane(layer, 0);
+    let ch1 = channel_plane(layer, 1).or(ch0);
+    let ch2 = channel_plane(layer, 2).or(ch0);
+    let alpha = channel_plane(layer, -1);
     let n = g.n;
     let mut data = vec![0u8; g.planes * n];
     for y in g.y0..g.y1 {
         let row = (y - g.y0) as usize;
+        let ly = (y - layer.rect.top) as usize;
+        let r0 = ch0.and_then(|p| p.row(ly, lw));
+        let r1 = ch1.and_then(|p| p.row(ly, lw));
+        let r2 = ch2.and_then(|p| p.row(ly, lw));
+        let ra = alpha.and_then(|p| p.row(ly, lw));
         for (col, x) in (g.x0..g.x1).enumerate() {
-            let li = (y - layer.rect.top) as usize * lw + (x - layer.rect.left) as usize;
+            let lx = (x - layer.rect.left) as usize;
+            let at = |r: Option<&[u8]>| r.and_then(|r| r.get(lx)).copied();
             let d = row * g.cw + col;
-            let a = sample(alpha, li).unwrap_or(255);
+            let a = at(ra).unwrap_or(255);
             if g.gray {
-                data[d] = sample(ch0, li).unwrap_or(0);
+                data[d] = at(r0).unwrap_or(0);
                 data[n + d] = a;
             } else {
-                data[d] = sample(ch0, li).unwrap_or(0);
-                data[n + d] = sample(ch1, li).unwrap_or(0);
-                data[2 * n + d] = sample(ch2, li).unwrap_or(0);
+                data[d] = at(r0).unwrap_or(0);
+                data[n + d] = at(r1).unwrap_or(0);
+                data[2 * n + d] = at(r2).unwrap_or(0);
                 data[3 * n + d] = a;
             }
         }
@@ -125,8 +131,9 @@ pub(super) fn assemble_source_per_pixel(layer: &Layer, g: &SourceGeom) -> Vec<u8
 /// (`None` is a constant-255 alpha), the first row's offset into them, and the
 /// layer's row stride.
 pub(super) struct RowSource<'l> {
-    planes: Vec<Option<&'l [u8]>>,
-    base: usize,
+    planes: Vec<Option<&'l pictura_core::Plane<u8>>>,
+    first_row: usize,
+    x0: usize,
     lw: usize,
 }
 
@@ -135,12 +142,13 @@ pub(super) struct RowSource<'l> {
 /// or channel 0 is absent.
 pub(super) fn row_source<'l>(layer: &'l Layer, g: &SourceGeom) -> Option<RowSource<'l>> {
     let lw = layer.rect.width() as usize;
-    let base = (g.y0 - layer.rect.top) as usize * lw + (g.x0 - layer.rect.left) as usize;
-    let last_end = base + (g.ch - 1) * lw + g.cw;
-    let ch0 = channel(layer, 0)?;
-    let ch1 = channel(layer, 1).unwrap_or(ch0);
-    let ch2 = channel(layer, 2).unwrap_or(ch0);
-    let alpha = channel(layer, -1);
+    let first_row = (g.y0 - layer.rect.top) as usize;
+    let x0 = (g.x0 - layer.rect.left) as usize;
+    let last_end = (first_row + (g.ch - 1)) * lw + x0 + g.cw;
+    let ch0 = channel_plane(layer, 0)?;
+    let ch1 = channel_plane(layer, 1).unwrap_or(ch0);
+    let ch2 = channel_plane(layer, 2).unwrap_or(ch0);
+    let alpha = channel_plane(layer, -1);
     if ch0.len() < last_end || ch1.len() < last_end || ch2.len() < last_end {
         return None;
     }
@@ -152,7 +160,12 @@ pub(super) fn row_source<'l>(layer: &'l Layer, g: &SourceGeom) -> Option<RowSour
     } else {
         vec![Some(ch0), Some(ch1), Some(ch2), alpha]
     };
-    Some(RowSource { planes, base, lw })
+    Some(RowSource {
+        planes,
+        first_row,
+        x0,
+        lw,
+    })
 }
 
 /// Bytes per parallel piece of an upload: a multiple of the 4-byte copy
@@ -196,8 +209,14 @@ fn write_source_range(
         let mut dst = out.slice(at - start..stop - start);
         match src.planes[plane] {
             Some(p) => {
-                let from = src.base + row * src.lw + col;
-                dst.copy_from_slice(&p[from..from + (stop - at)]);
+                let bytes = p.row(src.first_row + row, src.lw).unwrap_or(&[]);
+                let from = src.x0 + col;
+                let n = stop - at;
+                if from + n <= bytes.len() {
+                    dst.copy_from_slice(&bytes[from..from + n]);
+                } else {
+                    dst.fill(0);
+                }
             }
             None => dst.fill(255),
         }

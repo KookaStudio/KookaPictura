@@ -73,7 +73,7 @@ pub(crate) fn content_route(layer: &Layer) -> ContentRoute {
     if smart_filters_apply(layer) {
         return ContentRoute::SmartFiltered;
     }
-    let proxy = crate::channel(layer, 0).is_some();
+    let proxy = crate::channel_plane(layer, 0).is_some();
     if layer.smart_object.is_some() && !proxy {
         return ContentRoute::SmartSource;
     }

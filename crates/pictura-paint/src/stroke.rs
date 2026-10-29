@@ -15,9 +15,7 @@ use crate::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, PsdRect,
 };
-use raster::{
-    plane_slices, split_bands, write_band, BandPlanes, DabRaster, BAND_PX, PARALLEL_MIN_PX,
-};
+use raster::{plane_slices, split_bands, write_band, BandPlanes, DabRaster};
 use rayon::prelude::*;
 
 /// Deterministic stroke seed; Dissolve randomness must not vary between runs.
@@ -138,9 +136,17 @@ impl Saved {
                         continue;
                     };
                     for y in top as usize..bottom {
+                        // Read the row, not the whole plane: a banded plane
+                        // must not be materialized just to save one tile row.
+                        let Some(row) = src.data.row(y, w) else {
+                            continue;
+                        };
                         let (a, b) = (y * w + left as usize, (y * w + right).min(plane.len()));
-                        if a < b {
-                            plane[a..b].copy_from_slice(&src.data[a..b]);
+                        let from = (left as usize).min(row.len());
+                        let to = right.min(row.len());
+                        if a < b && from < to {
+                            let n = (to - from).min(b - a);
+                            plane[a..a + n].copy_from_slice(&row[from..from + n]);
                         }
                     }
                 }
@@ -522,7 +528,6 @@ impl Stroke {
             rect: *rect,
         };
 
-        let mut planes = plane_slices(work_layer, *ch, w * h);
         for (dab_x, dab_y, jittered) in placed {
             // The hoisted profile is exact when the dynamics left the tip
             // alone; a jittered dab rebuilds it from its own tip.
@@ -536,12 +541,6 @@ impl Stroke {
                 continue;
             }
             let rows = (y1 - y0 + 1) as usize;
-            let span = ((2.0 * radius).ceil() as usize + 2).min(w);
-            let band_rows = if serial || rows * span < PARALLEL_MIN_PX {
-                rows
-            } else {
-                (BAND_PX / span.max(1)).max(4)
-            };
             let dab = DabRaster {
                 params: &params,
                 dab_x,
@@ -550,20 +549,21 @@ impl Stroke {
                 width: w,
                 stencil: &stencil,
             };
-            let bands = split_bands(
-                y0 as usize,
-                rows,
-                band_rows,
-                w,
-                scratch,
-                applied,
-                &mut planes,
-            );
+            let planes = plane_slices(work_layer, *ch, w, h, y0 as usize, (y1 + 1) as usize);
+            let bands = split_bands(y0 as usize, rows, w, scratch, applied, planes);
             let bbox = if bands.len() == 1 {
                 bands
                     .into_iter()
                     .next()
                     .and_then(|band| dab.band(band, serial.then_some(&mut *rng)))
+            } else if serial {
+                let mut acc: Option<PsdRect> = None;
+                for band in bands {
+                    if let Some(rect) = dab.band(band, Some(&mut *rng)) {
+                        acc = Some(acc.map_or(rect, |b| union_rect(b, rect)));
+                    }
+                }
+                acc
             } else {
                 bands
                     .into_par_iter()
@@ -719,28 +719,32 @@ impl Stroke {
             return false;
         };
         self.saved.save(layer, ch, left, top, right - 1, bottom - 1);
-        let mut dst: [Option<&mut [u8]>; 4] = [None, None, None, None];
         for (idx, c) in layer.channels.iter_mut().enumerate() {
-            if let Some(k) = ch.iter().position(|&x| x == Some(idx)) {
-                dst[k] = Some(c.data.as_mut_slice());
+            if ch.contains(&Some(idx)) {
+                c.data.fracture(lw.max(0) as usize);
             }
         }
         let mut changed: Option<PsdRect> = None;
         for (row, ly) in (top..bottom).enumerate() {
             let src = (first_row + row) * bw + runner;
-            let d = ly as usize * lw as usize + left as usize;
             let mut row_changed = false;
-            for (k, plane) in dst.iter_mut().enumerate() {
-                let Some(plane) = plane.as_deref_mut() else {
+            for (idx, c) in layer.channels.iter_mut().enumerate() {
+                let Some(k) = ch.iter().position(|&x| x == Some(idx)) else {
                     continue;
                 };
                 let Some(bytes) = planes.get(k * plane_stride + src..) else {
                     continue;
                 };
-                if let (Some(slot), Some(chunk)) = (plane.get_mut(d..d + run), bytes.get(..run)) {
-                    if slot[..] != chunk[..] {
-                        slot.copy_from_slice(chunk);
-                        row_changed = true;
+                let Some(slot) = c.data.row_mut(ly as usize, lw.max(0) as usize) else {
+                    continue;
+                };
+                let at = left as usize;
+                if at + run <= slot.len() {
+                    if let Some(chunk) = bytes.get(..run) {
+                        if slot[at..at + run] != chunk[..] {
+                            slot[at..at + run].copy_from_slice(chunk);
+                            row_changed = true;
+                        }
                     }
                 }
             }

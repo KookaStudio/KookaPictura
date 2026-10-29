@@ -6,7 +6,7 @@ mod planes;
 mod styles;
 
 use planes::{
-    adopt_metadata, apply_tiles, diff_into, hollow, plane_kinds, planes_agree, private_copy,
+    adopt_metadata, apply_tiles, diff_into, fracture_planes, hollow, plane_kinds, planes_agree,
     shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta, PlaneKind,
 };
 pub(crate) use planes::{copy_plane, detached_copy};
@@ -100,9 +100,9 @@ pub enum BrushSource {
 /// [`MAX_SNAPSHOTS`] named restore points.
 ///
 /// History keeps one materialized state, `current`, the state at the cursor,
-/// in tracked planes the live document never shares: a write to a live tracked
-/// plane then happens in place rather than copying a whole plane, and a capture
-/// finds what changed by comparing the two. Untracked stores (native samples,
+/// in planes that share every unchanged band with the live document: a write
+/// then forks only the bands it touches, and a capture finds what changed by
+/// comparing the two band by band. Untracked stores (native samples,
 /// smart-object payloads, preserved byte blocks, and the selection) stay shared
 /// with the live document until one side writes them. Every other state is
 /// stored as the 64×64 tiles that changed against its predecessor, so retention
@@ -199,9 +199,10 @@ impl History {
     }
 
     /// Capture the live document as the next state: diff it against the
-    /// private current state and store the changed tiles, or start a new
-    /// segment when the tracked-plane geometry changed. `doc` is left sharing
-    /// no plane with the history, so its next write is in place.
+    /// current state band by band and store the changed tiles, or start a new
+    /// segment when the tracked-plane geometry changed. `doc` keeps sharing its
+    /// unchanged bands with the history, so a write forks only the bands it
+    /// touches.
     pub fn capture_live(
         &mut self,
         doc: &mut Document,
@@ -229,15 +230,19 @@ impl History {
         let target_before = self.current_target.clone();
         self.current_target = target.clone();
         let fresh_segment = |doc: &mut Document| {
+            fracture_planes(doc);
+            let mut current = doc.clone();
+            let stored = Stored::Hollow(Snapshot {
+                doc: hollow(doc),
+                selection: selection.clone(),
+            });
+            stamp_agreed(&mut current, doc);
             (
                 Snapshot {
-                    doc: private_copy(doc),
+                    doc: current,
                     selection: selection.clone(),
                 },
-                Stored::Hollow(Snapshot {
-                    doc: hollow(doc),
-                    selection: selection.clone(),
-                }),
+                stored,
             )
         };
         let stored = match self.current.take() {
@@ -486,8 +491,8 @@ impl History {
     }
 
     /// Move to `target` and bring the live document there: in place when it
-    /// agreed with `current` and no anchor was crossed, otherwise as a fresh
-    /// private copy.
+    /// agreed with `current` and no anchor was crossed, otherwise from a shared
+    /// copy.
     fn restore_live(
         &mut self,
         target: usize,
@@ -781,6 +786,18 @@ impl History {
     /// allocation once.
     #[cfg(test)]
     pub(crate) fn retained_plane_bytes(&self) -> usize {
+        self.retained_bytes_with(None)
+    }
+
+    /// [`Self::retained_plane_bytes`] counting the live document's planes too,
+    /// so a profile shows how much of the retained set is shared with live.
+    #[cfg(test)]
+    pub(crate) fn retained_plane_bytes_with(&self, live: &Document) -> usize {
+        self.retained_bytes_with(Some(live))
+    }
+
+    #[cfg(test)]
+    fn retained_bytes_with(&self, live: Option<&Document>) -> usize {
         fn collect(doc: &Document, out: &mut Vec<pictura_core::Plane<u8>>) {
             planes::each_plane(doc, &mut |p, _, _, _| {
                 if !p.is_empty() {
@@ -789,6 +806,9 @@ impl History {
             });
         }
         let mut all = Vec::new();
+        if let Some(live) = live {
+            collect(live, &mut all);
+        }
         for entry in &self.states {
             collect(
                 match &entry.stored {
@@ -807,14 +827,19 @@ impl History {
         for named in &self.snapshots {
             collect(&named.snapshot.doc, &mut all);
         }
-        let mut unique: Vec<&pictura_core::Plane<u8>> = Vec::new();
+        let mut bases = std::collections::HashSet::new();
+        let mut owned = std::collections::HashSet::new();
         let mut bytes = 0;
         for plane in &all {
-            if unique.iter().any(|q| q.shares(plane)) {
-                continue;
+            let (ptr, len) = plane.base_allocation();
+            if bases.insert(ptr) {
+                bytes += len;
             }
-            unique.push(plane);
-            bytes += plane.len();
+            for (ptr, len) in plane.owned_bands() {
+                if owned.insert(ptr) {
+                    bytes += len;
+                }
+            }
         }
         bytes
     }

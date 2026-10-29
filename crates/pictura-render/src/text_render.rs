@@ -377,7 +377,7 @@ fn has_type_pixels(layer: &Layer) -> bool {
     area > 0
         && [0, 1, 2, -1]
             .iter()
-            .all(|&id| crate::channel(layer, id).is_some_and(|data| data.len() == area))
+            .all(|&id| crate::channel_plane(layer, id).is_some_and(|plane| plane.len() == area))
 }
 
 /// Rasterize a type layer as it shows on the canvas, then drop the type tool:
@@ -734,7 +734,7 @@ pub(crate) fn composite_type_source(
     layer: &Layer,
     doc: &Document,
 ) -> bool {
-    if layer.type_tool.is_none() || crate::channel(layer, 0).is_some() {
+    if layer.type_tool.is_none() || crate::channel_plane(layer, 0).is_some() {
         return false;
     }
     let region = PsdRect {

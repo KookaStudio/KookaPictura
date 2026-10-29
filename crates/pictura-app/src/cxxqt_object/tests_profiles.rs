@@ -7,6 +7,7 @@ use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect};
 use pictura_render::{Planes, ViewPyramid};
 
 mod damage;
+mod open;
 
 /// Viewport the canvas presents into (a typical desktop canvas).
 const VIEW: (u32, u32) = (1280, 800);
@@ -579,11 +580,18 @@ fn large_document_stroke_profile() {
                 pressure: 1.0,
             },
         );
+        let sample_ms = t.elapsed().as_secs_f64() * 1000.0;
+        let mut refresh_ms = 0.0;
         if let Some(rect) = stroke.take_dirty() {
+            let r = Instant::now();
             rust.session.live.mark_stroke_tile(rect);
             if let Some((x0, y0, clipped, srgb)) = rust.refresh_region_buffer(rect) {
                 rust.apply_refreshed_region(x0, y0, clipped, srgb);
             }
+            refresh_ms = r.elapsed().as_secs_f64() * 1000.0;
+        }
+        if i == 0 {
+            println!("large_document_first_dab sample={sample_ms:.2}ms refresh={refresh_ms:.2}ms");
         }
         t.elapsed().as_secs_f64() * 1000.0
     };

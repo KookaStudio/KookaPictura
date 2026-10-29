@@ -2,6 +2,7 @@ use super::planes::TILE;
 use super::*;
 use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
 
+mod bands;
 mod hint;
 
 fn doc(w: u32, h: u32, seed: u8) -> Document {
@@ -635,14 +636,14 @@ fn structural_captures_retain_only_new_planes() {
     );
     let current = &history.current.as_ref().expect("current").doc;
     assert!(
-        shares_no_plane(&live, current),
-        "live shares the current state"
+        shares_a_band(&live, current),
+        "live and the current state share a band"
     );
     for entry in &history.states {
         if let Stored::Full(snapshot) = &entry.stored {
             assert!(
-                shares_no_plane(&live, &snapshot.doc),
-                "live shares a full state"
+                shares_a_band(&live, &snapshot.doc),
+                "live and the full state share a band"
             );
         }
     }
@@ -692,10 +693,10 @@ fn undoing_a_structural_edit_keeps_the_live_planes() {
         "the added layer's planes are gone"
     );
     let current = &history.current.as_ref().expect("current").doc;
-    assert!(shares_no_plane(&live, current));
+    assert!(shares_a_band(&live, current));
     for entry in &history.states {
         if let Stored::Full(snapshot) = &entry.stored {
-            assert!(shares_no_plane(&live, &snapshot.doc));
+            assert!(shares_a_band(&live, &snapshot.doc));
         }
     }
 }
@@ -738,7 +739,7 @@ fn structural_capture_with_a_duplicated_layer_round_trips() {
     );
     assert!(live == after, "redo restores the added state");
     let current = &history.current.as_ref().expect("current").doc;
-    assert!(shares_no_plane(&live, current));
+    assert!(shares_a_band(&live, current));
 }
 
 #[test]
@@ -773,7 +774,7 @@ fn a_capture_after_a_duplicate_stays_a_delta() {
         Some(Restored::Region(_))
     ));
     let current = &history.current.as_ref().expect("current").doc;
-    assert!(shares_no_plane(&live, current));
+    assert!(shares_a_band(&live, current));
 }
 
 #[test]
@@ -1069,15 +1070,20 @@ fn model_layer(name: &str, w: u32, h: u32, seed: u8) -> Layer {
     }
 }
 
-/// Every plane of `a` is a different allocation from every plane of `b`.
-fn shares_no_plane(a: &Document, b: &Document) -> bool {
+/// Some plane of `a` shares at least one band with a plane of `b`.
+fn shares_a_band(a: &Document, b: &Document) -> bool {
     let mut theirs = Vec::new();
     planes::each_plane(b, &mut |p, _, _, _| theirs.push(p.clone()));
-    let mut ok = true;
+    let mut shared = false;
     planes::each_plane(a, &mut |p, _, _, _| {
-        ok &= p.is_empty() || theirs.iter().all(|q| !p.shares(q));
+        if p.is_empty() {
+            return;
+        }
+        shared |= theirs
+            .iter()
+            .any(|q| (0..p.band_count()).any(|i| p.shares_band(i, q)));
     });
-    ok
+    shared
 }
 
 #[test]
@@ -1194,13 +1200,6 @@ fn live_restores_match_a_full_snapshot_history() {
                 selection == reference[cursor].selection,
                 "seed {seed} step {step}: selection differs"
             );
-            if op < 12 {
-                let current = &history.current.as_ref().expect("current").doc;
-                assert!(
-                    shares_no_plane(&live, current),
-                    "seed {seed} step {step} op {op}: live shares a plane with history"
-                );
-            }
             assert!(
                 history.full_state_count() <= history.anchor_count() + 1,
                 "seed {seed} step {step}: the cursor's anchor must be hollow"
