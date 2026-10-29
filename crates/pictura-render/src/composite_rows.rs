@@ -7,7 +7,7 @@
 //! `openspec/changes/canvas-view-performance/design.md`.
 
 #[cfg(test)]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use pictura_core::{BlendMode, ColorMode, Document, Layer};
 use rayon::prelude::*;
@@ -15,10 +15,40 @@ use rayon::prelude::*;
 use crate::composite::{blend, blend_if_factor, channel, sample, Canvas, Px};
 use crate::composite_native::{mask_alpha_unit, native_unit};
 
-/// Test-only switch that routes [`for_each_row`] through its serial branch, so a
-/// test can compare the parallel and sequential outputs on the same stack.
+/// Test-only switch that routes [`for_each_row`] and the chunked kernels
+/// through their serial branch, so a test can compare the parallel and
+/// sequential outputs on the same stack.
 #[cfg(test)]
 pub(crate) static FORCE_SERIAL: AtomicBool = AtomicBool::new(false);
+/// Test-only count of parallel branch entries, so a test can prove the parallel
+/// path actually runs when [`FORCE_SERIAL`] is off.
+#[cfg(test)]
+pub(crate) static PARALLEL_RUNS: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether the test-only switch forces the serial branch. Always `false` in a
+/// production build.
+#[cfg(test)]
+pub(crate) fn serial() -> bool {
+    let forced = FORCE_SERIAL.load(Ordering::Relaxed);
+    if !forced {
+        PARALLEL_RUNS.fetch_add(1, Ordering::Relaxed);
+    }
+    forced
+}
+
+/// Serializes the tests that toggle [`FORCE_SERIAL`], so a single-process
+/// `cargo test` run does not race the process-global switch.
+#[cfg(test)]
+pub(crate) fn serial_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(not(test))]
+#[inline]
+pub(crate) fn serial() -> bool {
+    false
+}
 
 /// splitmix64 noise for Dissolve and the effects' Noise; pure in `(x, y)`.
 pub(crate) fn dissolve_noise(x: usize, y: usize) -> f32 {
@@ -51,7 +81,7 @@ where
     let rows = &mut px[start..end];
 
     #[cfg(test)]
-    let serial = cover.is_some() || FORCE_SERIAL.load(Ordering::Relaxed);
+    let serial = cover.is_some() || serial();
     #[cfg(not(test))]
     let serial = cover.is_some();
 
@@ -267,6 +297,7 @@ mod tests {
 
     #[test]
     fn parallel_row_equals_sequential_row() {
+        let _guard = serial_test_lock();
         let mut parallel = Canvas::new(8, 5);
         let mut sequential = Canvas::new(8, 5);
         for (i, p) in parallel.px.iter_mut().enumerate() {

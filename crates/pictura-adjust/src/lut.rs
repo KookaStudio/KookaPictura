@@ -12,7 +12,7 @@
 
 use pictura_core::PixelBuffer;
 
-use crate::common::{planes_mut, validate};
+use crate::common::{map_rgb, validate};
 use crate::types::{AdjustError, ColorLookupParams, Lut3d};
 
 /// Parse the `.CUBE` text format. Returns `None` for a missing or out-of-range
@@ -115,20 +115,10 @@ pub(crate) fn color_lookup(
             "non-finite LUT component".into(),
         ));
     }
-    let (r, g, b) = planes_mut(buf, n);
-    for i in 0..n {
-        let sampled = sample(
-            lut,
-            [
-                r[i] as f32 / 255.0,
-                g[i] as f32 / 255.0,
-                b[i] as f32 / 255.0,
-            ],
-        );
-        r[i] = to_u8(sampled[0]);
-        g[i] = to_u8(sampled[1]);
-        b[i] = to_u8(sampled[2]);
-    }
+    map_rgb(buf, n, |r, g, b| {
+        let sampled = sample(lut, [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0]);
+        [to_u8(sampled[0]), to_u8(sampled[1]), to_u8(sampled[2])]
+    });
     Ok(())
 }
 

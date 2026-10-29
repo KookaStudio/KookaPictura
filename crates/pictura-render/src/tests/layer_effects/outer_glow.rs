@@ -735,3 +735,7 @@ fn gpu_reports_the_effect_for_a_glow_fill_layer() {
         "the effect error wins over UnsupportedAdjustment"
     );
 }
+
+pub(super) fn parallel_layer() -> Layer {
+    spec_glow(&GlowSpec::default())
+}

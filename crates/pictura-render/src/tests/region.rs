@@ -558,3 +558,39 @@ fn pattern_effects_disable_banding_and_stay_identical() {
         "without the pattern overlay the same tall document is bandable"
     );
 }
+
+#[test]
+fn short_region_composite_matches_serial() {
+    use crate::composite_rows::{serial_test_lock, FORCE_SERIAL, PARALLEL_RUNS};
+    use std::sync::atomic::Ordering;
+
+    let _guard = serial_test_lock();
+
+    // 100 rows is under the banded threshold, so the region takes the canvas
+    // path the stroke frames use.
+    let d = doc(
+        40,
+        100,
+        vec![
+            solid(
+                "Background",
+                full(40, 100),
+                (10, 20, 30),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            adjustment_layer("invert", *b"nvrt", Vec::new(), 255, None),
+        ],
+    );
+    FORCE_SERIAL.store(true, Ordering::Relaxed);
+    let serial = composite_rgba_region(&d, 0, 0, 40, 100);
+    FORCE_SERIAL.store(false, Ordering::Relaxed);
+    let before = PARALLEL_RUNS.load(Ordering::Relaxed);
+    let parallel = composite_rgba_region(&d, 0, 0, 40, 100);
+    assert!(PARALLEL_RUNS.load(Ordering::Relaxed) > before);
+    assert_eq!(
+        serial.data, parallel.data,
+        "short region composite differs between serial and parallel"
+    );
+}

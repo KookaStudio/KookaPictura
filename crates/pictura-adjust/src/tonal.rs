@@ -1,7 +1,8 @@
 use pictura_core::PixelBuffer;
 
 use crate::common::{
-    hermite_eval, linear_to_srgb, luma, map_lut, monotone_tangents, planes_mut, srgb_to_linear,
+    hermite_eval, linear_to_srgb, luma, map_lut, map_lut_plane, map_rgb, monotone_tangents,
+    planes_mut, srgb_to_linear,
 };
 use crate::types::{
     AdjustError, BrightnessContrastParams, CurvesParams, ExposureParams, GradientMapParams,
@@ -20,9 +21,7 @@ pub(crate) fn levels(p: &LevelsParams, buf: &mut PixelBuffer, n: usize) -> Resul
         let (r, g, b) = planes_mut(buf, n);
         for (plane, lut) in [(r, red), (g, green), (b, blue)] {
             if let Some(lut) = lut {
-                for v in plane.iter_mut() {
-                    *v = lut[*v as usize];
-                }
+                map_lut_plane(plane, &lut);
             }
         }
     }
@@ -71,9 +70,7 @@ pub(crate) fn curves(p: &CurvesParams, buf: &mut PixelBuffer, n: usize) -> Resul
         let (r, g, b) = planes_mut(buf, n);
         for (plane, lut) in [(r, red), (g, green), (b, blue)] {
             if let Some(lut) = lut {
-                for v in plane.iter_mut() {
-                    *v = lut[*v as usize];
-                }
+                map_lut_plane(plane, &lut);
             }
         }
     }
@@ -187,27 +184,25 @@ pub(crate) fn shadows_highlights(
         let highlight_delta = hw * (ha / 100.0) * 0.30 * 255.0;
         *slot = shadow_delta - highlight_delta;
     }
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let y = luma(*rv as f64, *gv as f64, *bv as f64);
+    map_rgb(buf, n, |rv, gv, bv| {
+        let y = luma(rv as f64, gv as f64, bv as f64);
         let delta = lut[y.round().clamp(0.0, 255.0) as usize];
-        *rv = (*rv as f64 + delta).round().clamp(0.0, 255.0) as u8;
-        *gv = (*gv as f64 + delta).round().clamp(0.0, 255.0) as u8;
-        *bv = (*bv as f64 + delta).round().clamp(0.0, 255.0) as u8;
-    }
+        [
+            (rv as f64 + delta).round().clamp(0.0, 255.0) as u8,
+            (gv as f64 + delta).round().clamp(0.0, 255.0) as u8,
+            (bv as f64 + delta).round().clamp(0.0, 255.0) as u8,
+        ]
+    });
     Ok(())
 }
 
 pub(crate) fn desaturate(buf: &mut PixelBuffer, n: usize) {
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
+    map_rgb(buf, n, |rv, gv, bv| {
         // (min + max) / 2 == HSL with S = 0, matching the CS6 spec.
-        let v = ((*rv).min(*gv).min(*bv) as u16 + (*rv).max(*gv).max(*bv) as u16) as f64 / 2.0;
+        let v = (rv.min(gv).min(bv) as u16 + rv.max(gv).max(bv) as u16) as f64 / 2.0;
         let v = v.round() as u8;
-        *rv = v;
-        *gv = v;
-        *bv = v;
-    }
+        [v, v, v]
+    });
 }
 
 /// One lookup from the cumulative histogram of every colour sample, applied to
@@ -260,15 +255,12 @@ pub(crate) fn threshold(level: u8, buf: &mut PixelBuffer, n: usize) -> Result<()
         ));
     }
     let t = level as f64;
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let y = luma(*rv as f64, *gv as f64, *bv as f64);
+    map_rgb(buf, n, |rv, gv, bv| {
+        let y = luma(rv as f64, gv as f64, bv as f64);
         // Equality falls to black (spec's boundary is unspecified).
         let v = if y > t { 255 } else { 0 };
-        *rv = v;
-        *gv = v;
-        *bv = v;
-    }
+        [v, v, v]
+    });
     Ok(())
 }
 
@@ -345,16 +337,13 @@ pub(crate) fn gradient_map(
     n: usize,
 ) -> Result<(), AdjustError> {
     let lut = gradient_lut(p)?;
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let y = luma(*rv as f64, *gv as f64, *bv as f64);
+    map_rgb(buf, n, |rv, gv, bv| {
+        let y = luma(rv as f64, gv as f64, bv as f64);
         let (c, a) = lut[y.round().clamp(0.0, 255.0) as usize];
         let blend =
             |orig: u8, mapped: u8| (orig as f64 + (mapped as f64 - orig as f64) * a).round() as u8;
-        *rv = blend(*rv, c[0]);
-        *gv = blend(*gv, c[1]);
-        *bv = blend(*bv, c[2]);
-    }
+        [blend(rv, c[0]), blend(gv, c[1]), blend(bv, c[2])]
+    });
     Ok(())
 }
 

@@ -913,8 +913,10 @@ fn drop_shadow_fixture_decodes_and_composites() {
 /// and a knockout stack (the `cover` canvas).
 #[test]
 fn parallel_composite_equals_sequential() {
-    use crate::composite_rows::FORCE_SERIAL;
+    use crate::composite_rows::{serial_test_lock, FORCE_SERIAL, PARALLEL_RUNS};
     use std::sync::atomic::Ordering;
+
+    let _guard = serial_test_lock();
 
     let effect = ShadowSpec {
         distance: 1.0,
@@ -964,10 +966,70 @@ fn parallel_composite_equals_sequential() {
         FORCE_SERIAL.store(true, Ordering::Relaxed);
         let sequential = composite_rgba(&d);
         FORCE_SERIAL.store(false, Ordering::Relaxed);
+        let before = PARALLEL_RUNS.load(Ordering::Relaxed);
         let parallel = composite_rgba(&d);
+        assert!(
+            PARALLEL_RUNS.load(Ordering::Relaxed) > before,
+            "the parallel branch must run"
+        );
         assert_eq!(
             sequential.data, parallel.data,
             "parallel rows must equal the sequential composite"
+        );
+    }
+}
+
+/// Every effect's matte mask multiply is byte-identical whether it runs on
+/// rayon or serially.
+#[test]
+fn every_effect_parallel_matches_serial() {
+    use crate::composite_rows::{serial_test_lock, FORCE_SERIAL, PARALLEL_RUNS};
+    use std::sync::atomic::Ordering;
+
+    let _guard = serial_test_lock();
+
+    let layers = [
+        (
+            "drop_shadow",
+            spec_shadow(&ShadowSpec {
+                distance: 1.0,
+                size: 2.0,
+                ..Default::default()
+            }),
+        ),
+        ("inner_shadow", inner_shadow::parallel_layer()),
+        ("outer_glow", outer_glow::parallel_layer()),
+        ("inner_glow", inner_glow::parallel_layer()),
+        ("bevel", bevel::parallel_layer()),
+        ("satin", satin::parallel_layer()),
+        ("color_overlay", color_overlay::parallel_layer()),
+        ("stroke", stroke::parallel_layer()),
+    ];
+    for (name, layer) in layers {
+        // A half mask makes the multiply non-trivial, so a wrong row stride or
+        // origin changes bytes.
+        let layer = half_mask(layer);
+        let backdrop = solid(
+            "backdrop",
+            full(16, 16),
+            (255, 255, 255),
+            255,
+            BlendMode::Normal,
+            255,
+        );
+        let d = doc(16, 16, vec![backdrop, layer]);
+        FORCE_SERIAL.store(true, Ordering::Relaxed);
+        let sequential = composite_rgba(&d);
+        FORCE_SERIAL.store(false, Ordering::Relaxed);
+        let before = PARALLEL_RUNS.load(Ordering::Relaxed);
+        let parallel = composite_rgba(&d);
+        assert!(
+            PARALLEL_RUNS.load(Ordering::Relaxed) > before,
+            "{name}: the parallel mask must run"
+        );
+        assert_eq!(
+            sequential.data, parallel.data,
+            "{name}: parallel mask differs from serial"
         );
     }
 }
@@ -1188,5 +1250,52 @@ fn rasterized_styled_object_bakes_the_effect_reach() {
     assert!(
         after.width() > before.width(),
         "the bake includes the shadow/stroke reach: {before:?} -> {after:?}"
+    );
+}
+
+#[test]
+#[ignore = "profiling: times the parallel effect composite against the serial branch"]
+fn effect_parallel_speedup_profile() {
+    use crate::composite_rows::FORCE_SERIAL;
+    use std::sync::atomic::Ordering;
+    use std::time::Instant;
+
+    let mut layer = solid(
+        "Shadowed",
+        rect(100, 100, 1900, 1900),
+        (255, 0, 0),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    layer.extra_blocks = vec![spec_block(&ShadowSpec {
+        distance: 20.0,
+        size: 30.0,
+        ..Default::default()
+    })];
+    let backdrop = solid(
+        "backdrop",
+        full(2048, 2048),
+        (255, 255, 255),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let d = doc(2048, 2048, vec![backdrop, layer]);
+
+    FORCE_SERIAL.store(true, Ordering::Relaxed);
+    let start = Instant::now();
+    let serial = composite_rgba(&d);
+    let serial_time = start.elapsed();
+    FORCE_SERIAL.store(false, Ordering::Relaxed);
+
+    let start = Instant::now();
+    let parallel = composite_rgba(&d);
+    let parallel_time = start.elapsed();
+    assert_eq!(serial.data, parallel.data, "outputs must match");
+
+    eprintln!(
+        "pictura perf: drop-shadow composite 2048x2048 serial={serial_time:?} parallel={parallel_time:?} speedup={:.2}x",
+        serial_time.as_secs_f64() / parallel_time.as_secs_f64()
     );
 }

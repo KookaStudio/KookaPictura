@@ -830,3 +830,99 @@ fn grayscale_output_keeps_a_matching_gray_profile() {
         "the matching GRAY profile is re-emitted byte-for-byte"
     );
 }
+
+#[test]
+fn parallel_display_transform_matches_serial() {
+    use std::sync::atomic::Ordering;
+
+    let profile = Profile::adobe_rgb().to_icc();
+    let (w, h) = (200u32, 100u32);
+    let n = (w * h) as usize;
+    let mut data = vec![0u8; n * 3];
+    for (i, v) in data.iter_mut().enumerate() {
+        *v = (i as u32).wrapping_mul(2_654_435_761) as u8;
+    }
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.composite.data = data.into();
+    doc.document_icc = Some(profile.clone());
+
+    super::FORCE_SERIAL.store(true, Ordering::Relaxed);
+    let serial = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    super::FORCE_SERIAL.store(false, Ordering::Relaxed);
+    let before = super::PARALLEL_RUNS.load(Ordering::Relaxed);
+    let parallel = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    assert!(
+        super::PARALLEL_RUNS.load(Ordering::Relaxed) > before,
+        "the parallel branch must run"
+    );
+    assert_eq!(
+        serial.data, parallel.data,
+        "3-channel display conversion differs between serial and parallel"
+    );
+
+    // A 4-channel buffer keeps its alpha plane byte-identical.
+    let mut data4 = vec![0u8; n * 4];
+    for (i, v) in data4.iter_mut().enumerate() {
+        *v = (i as u32).wrapping_mul(40_503) as u8;
+    }
+    let mut doc4 = doc.clone();
+    doc4.composite = PixelBuffer {
+        width: w,
+        height: h,
+        channels: 4,
+        data: data4.into(),
+    };
+    let alpha = doc4.composite.data[3 * n..].to_vec();
+
+    super::FORCE_SERIAL.store(true, Ordering::Relaxed);
+    let serial = buffer_to_srgb(&doc4, &doc4.composite).into_owned();
+    super::FORCE_SERIAL.store(false, Ordering::Relaxed);
+    let before = super::PARALLEL_RUNS.load(Ordering::Relaxed);
+    let parallel = buffer_to_srgb(&doc4, &doc4.composite).into_owned();
+    assert!(
+        super::PARALLEL_RUNS.load(Ordering::Relaxed) > before,
+        "the parallel branch must run"
+    );
+    assert_eq!(
+        serial.data, parallel.data,
+        "4-channel display conversion differs between serial and parallel"
+    );
+    assert_eq!(
+        &parallel.data[3 * n..],
+        alpha.as_slice(),
+        "the alpha plane must be untouched"
+    );
+}
+
+#[test]
+#[ignore = "profiling: times the parallel display transform against the serial branch"]
+fn display_transform_speedup_profile() {
+    use std::sync::atomic::Ordering;
+    use std::time::Instant;
+
+    let (w, h) = (4000u32, 3000u32);
+    let n = (w * h) as usize;
+    let mut data = vec![0u8; n * 3];
+    for (i, v) in data.iter_mut().enumerate() {
+        *v = (i as u32).wrapping_mul(2_654_435_761) as u8;
+    }
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.composite.data = data.into();
+    doc.document_icc = Some(Profile::adobe_rgb().to_icc());
+
+    super::FORCE_SERIAL.store(true, Ordering::Relaxed);
+    let start = Instant::now();
+    let serial = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    let serial_time = start.elapsed();
+    super::FORCE_SERIAL.store(false, Ordering::Relaxed);
+
+    let start = Instant::now();
+    let parallel = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    let parallel_time = start.elapsed();
+    assert_eq!(serial.data, parallel.data, "outputs must match");
+
+    eprintln!(
+        "pictura perf: display transform 4000x3000 serial={serial_time:?} parallel={parallel_time:?} speedup={:.2}x",
+        serial_time.as_secs_f64() / parallel_time.as_secs_f64()
+    );
+}

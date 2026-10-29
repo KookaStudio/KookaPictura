@@ -536,6 +536,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Edition gating for Standard and Extended (#650)
 - [x] Opt-in performance metrics: phase timings, edit records and GPU counters
       (#651)
+- [x] Parallel CPU kernels for adjustments, effect mattes, clipping and the
+      display colour transform, byte-identical to the serial path (#1011)
 - [ ] Frame-budget instrumentation (#941)
 - [ ] A tile cache with hit-rate accounting (#942)
 - [ ] Scratch paging and Efficiency accounting (#943)

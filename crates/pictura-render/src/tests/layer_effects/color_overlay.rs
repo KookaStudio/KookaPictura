@@ -446,3 +446,7 @@ fn color_overlay_fixture_decodes_and_composites() {
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the overlay renders");
 }
+
+pub(super) fn parallel_layer() -> Layer {
+    spec_layer(&ColorSpec::default())
+}

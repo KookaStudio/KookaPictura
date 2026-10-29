@@ -870,3 +870,10 @@ fn inner_shadow_fixture_decodes_and_composites() {
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the shadow renders");
 }
+
+pub(super) fn parallel_layer() -> Layer {
+    spec_inner(&InnerSpec {
+        size: 3.0,
+        ..Default::default()
+    })
+}

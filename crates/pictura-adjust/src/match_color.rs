@@ -16,7 +16,7 @@
 
 use pictura_core::PixelBuffer;
 
-use crate::common::{linear_to_srgb, srgb_to_linear};
+use crate::common::{linear_to_srgb, map_rgb, srgb_to_linear};
 use crate::types::AdjustError;
 
 /// Per-channel Lab statistics (mean, then standard deviation) of an image,
@@ -210,8 +210,7 @@ pub(crate) fn match_color(
         let o = f64::from(orig) / 255.0;
         ((o + (new - o) * (1.0 - keep)).clamp(0.0, 1.0) * 255.0 + 0.5) as u8
     };
-    for i in 0..n {
-        let (r, g, b) = (buf.data[i], buf.data[n + i], buf.data[2 * n + i]);
+    map_rgb(buf, n, |r, g, b| {
         let lab = rgb_to_lab([r, g, b].map(|v| f64::from(v) / 255.0));
         let mut out = [0.0f64; 3];
         for c in 0..3 {
@@ -221,10 +220,8 @@ pub(crate) fn match_color(
         out[1] *= c_scale;
         out[2] *= c_scale;
         let rgb = lab_to_rgb(out).map(|v| v.clamp(0.0, 1.0));
-        buf.data[i] = blend(r, rgb[0]);
-        buf.data[n + i] = blend(g, rgb[1]);
-        buf.data[2 * n + i] = blend(b, rgb[2]);
-    }
+        [blend(r, rgb[0]), blend(g, rgb[1]), blend(b, rgb[2])]
+    });
     Ok(())
 }
 

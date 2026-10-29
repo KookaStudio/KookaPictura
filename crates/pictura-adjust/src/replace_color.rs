@@ -8,8 +8,9 @@
 //! refuses the operation (the [`crate::native`] catch-all).
 
 use pictura_core::PixelBuffer;
+use rayon::prelude::*;
 
-use crate::common::{hsl_to_rgb, rgb_to_hsl};
+use crate::common::{hsl_to_rgb, note_parallel, planes_mut, rgb_to_hsl, serial};
 use crate::types::AdjustError;
 
 /// One eyedropper reading: the document position it was taken at (negative
@@ -201,28 +202,56 @@ pub(crate) fn replace_color(
     }
     let sigma = sigma_sq(buf.width, buf.height);
     let width = buf.width as usize;
-    for i in 0..n {
-        let x = (i % width) as i32;
-        let y = (i / width) as i32;
-        let (r, g, b) = (buf.data[i], buf.data[n + i], buf.data[2 * n + i]);
-        let weight = match_weight(r, g, b, x, y, &p.samples, p.fuzziness, p.localized, sigma);
-        if weight <= 0.0 {
-            continue;
+    let (r, g, b) = planes_mut(buf, n);
+    let run = |y: usize, r: &mut [u8], g: &mut [u8], b: &mut [u8]| {
+        for x in 0..width {
+            let (rv, gv, bv) = (r[x], g[x], b[x]);
+            let weight = match_weight(
+                rv,
+                gv,
+                bv,
+                x as i32,
+                y as i32,
+                &p.samples,
+                p.fuzziness,
+                p.localized,
+                sigma,
+            );
+            if weight <= 0.0 {
+                continue;
+            }
+            let [nr, ng, nb] = shift(
+                [rv, gv, bv].map(|v| v as f64 / 255.0),
+                p.hue,
+                p.saturation / 100.0,
+                p.lightness / 100.0,
+            );
+            let blend = |orig: u8, new: f64| -> u8 {
+                let o = orig as f64 / 255.0;
+                ((o + (new - o) * weight).clamp(0.0, 1.0) * 255.0 + 0.5) as u8
+            };
+            r[x] = blend(rv, nr);
+            g[x] = blend(gv, ng);
+            b[x] = blend(bv, nb);
         }
-        let [nr, ng, nb] = shift(
-            [r, g, b].map(|v| v as f64 / 255.0),
-            p.hue,
-            p.saturation / 100.0,
-            p.lightness / 100.0,
-        );
-        let blend = |orig: u8, new: f64| -> u8 {
-            let o = orig as f64 / 255.0;
-            ((o + (new - o) * weight).clamp(0.0, 1.0) * 255.0 + 0.5) as u8
-        };
-        buf.data[i] = blend(r, nr);
-        buf.data[n + i] = blend(g, ng);
-        buf.data[2 * n + i] = blend(b, nb);
+    };
+    if serial() {
+        for (y, ((rc, gc), bc)) in r
+            .chunks_mut(width)
+            .zip(g.chunks_mut(width))
+            .zip(b.chunks_mut(width))
+            .enumerate()
+        {
+            run(y, rc, gc, bc);
+        }
+        return Ok(());
     }
+    note_parallel();
+    r.par_chunks_mut(width)
+        .zip(g.par_chunks_mut(width))
+        .zip(b.par_chunks_mut(width))
+        .enumerate()
+        .for_each(|(y, ((rc, gc), bc))| run(y, rc, gc, bc));
     Ok(())
 }
 

@@ -936,3 +936,7 @@ fn inner_glow_fixture_decodes_and_composites() {
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the glow renders");
 }
+
+pub(super) fn parallel_layer() -> Layer {
+    spec_inner(&InnerGlowSpec::default())
+}

@@ -125,3 +125,31 @@ fn a_region_composite_matches_the_full_one() {
         }
     }
 }
+
+#[test]
+fn clipping_parallel_matches_serial() {
+    use crate::composite_rows::{serial_test_lock, FORCE_SERIAL, PARALLEL_RUNS};
+    use std::sync::atomic::Ordering;
+
+    let _guard = serial_test_lock();
+    let d = clipped_doc();
+    FORCE_SERIAL.store(true, Ordering::Relaxed);
+    let serial = composite_rgba(&d);
+    FORCE_SERIAL.store(false, Ordering::Relaxed);
+    let before = PARALLEL_RUNS.load(Ordering::Relaxed);
+    let parallel = composite_rgba(&d);
+    assert!(PARALLEL_RUNS.load(Ordering::Relaxed) > before);
+    assert_eq!(
+        serial.data, parallel.data,
+        "clipping lerp differs between serial and parallel"
+    );
+
+    FORCE_SERIAL.store(true, Ordering::Relaxed);
+    let serial = composite_rgba_region(&d, 1, 1, 6, 6);
+    FORCE_SERIAL.store(false, Ordering::Relaxed);
+    let parallel = composite_rgba_region(&d, 1, 1, 6, 6);
+    assert_eq!(
+        serial.data, parallel.data,
+        "clipping region differs between serial and parallel"
+    );
+}
