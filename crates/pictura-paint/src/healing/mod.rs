@@ -5,10 +5,14 @@
 //!
 //! Spot Healing's three CS6 types:
 //!
-//! * **Proximity Match** — a Laplace solve over the hole with the surrounding
-//!   ring as a fixed boundary, so the fill continues the shading seamlessly.
-//! * **Create Texture** — the same smooth base plus noise matched to the
-//!   roughness of the ring (fixed seed).
+//! * **Proximity Match** — a search around the hole for the source whose
+//!   surroundings match ([`proximity`]), transplanted with the Healing Brush's
+//!   Poisson solve; a Laplace solve over the hole when no source fits.
+//! * **Create Texture** — a Laplace solve with the surrounding ring as a fixed
+//!   boundary, plus noise matched to the roughness of the ring (fixed seed).
+//!
+//! Both rebuild a margin past the brush core, so a defect's soft rim is part of
+//! the hole rather than its boundary.
 //! * **Content-Aware** — patch synthesis ([`synthesis`]): an inward onion-peel
 //!   fill refined by PatchMatch search-and-vote.
 //!
@@ -26,6 +30,7 @@
 mod content_move;
 mod layer;
 mod patch;
+mod proximity;
 mod red_eye;
 mod stroke;
 mod synthesis;
@@ -152,25 +157,31 @@ const BORDER: i32 = 4;
 /// Gauss-Seidel sweeps; ample for the small regions a brush covers.
 const RELAX_SWEEPS: usize = 96;
 
-/// The working area: the region grown by [`BORDER`], its covered pixels marked
-/// as the hole.
+/// Over-relaxation factor of the Poisson solve. A source lit differently from
+/// the destination starts a whole level off, and plain Gauss-Seidel leaves part
+/// of that step after [`RELAX_SWEEPS`] on a brush-sized hole.
+const POISSON_OMEGA: f32 = 1.85;
+
+/// The working area: the region grown by `margin` and [`BORDER`], its covered
+/// pixels and those within `margin` of the brush core marked as the hole.
 struct Work {
     rect: PsdRect,
     w: usize,
     h: usize,
-    coverage: Vec<f32>,
+    /// How much of the fill each pixel takes on write-back.
+    weight: Vec<f32>,
     hole: Vec<bool>,
 }
 
 impl Work {
     /// `None` when nothing is covered, or the hole fills the whole working area
     /// (no boundary to reconstruct from).
-    fn new(canvas: PsdRect, region: PsdRect, coverage: &[f32]) -> Option<Work> {
+    fn new(canvas: PsdRect, region: PsdRect, coverage: &[f32], margin: i32) -> Option<Work> {
         let rw = region.width().max(0) as usize;
         if coverage.len() != rw * region.height().max(0) as usize {
             return None;
         }
-        let rect = intersect(inflate(region, BORDER), canvas);
+        let rect = intersect(inflate(region, margin + BORDER), canvas);
         if rect.width() <= 0 || rect.height() <= 0 {
             return None;
         }
@@ -186,6 +197,16 @@ impl Work {
                 hole[i] = c >= HOLE_THRESHOLD;
             }
         }
+        if margin > 0 {
+            let near = proximity::distance_to(&proximity::core(&cov), w, h);
+            for (i, &d) in near.iter().enumerate() {
+                let t = proximity::margin_weight(d, margin);
+                if t > 0.0 {
+                    hole[i] = true;
+                    cov[i] = cov[i].max(t);
+                }
+            }
+        }
         if !hole.iter().any(|&h| h) || hole.iter().all(|&h| h) {
             return None;
         }
@@ -193,7 +214,7 @@ impl Work {
             rect,
             w,
             h,
-            coverage: cov,
+            weight: cov,
             hole,
         })
     }
@@ -212,12 +233,12 @@ impl Work {
         out
     }
 
-    /// Blend `solved` over `original` by coverage, so a soft edge fades in.
+    /// Blend `solved` over `original` by weight, so a soft edge fades in.
     fn write_back(&self, img: &mut RgbaImage, original: &[[f32; 4]], solved: &[[f32; 4]]) {
         for y in self.rect.top..self.rect.bottom {
             for x in self.rect.left..self.rect.right {
                 let i = (y - self.rect.top) as usize * self.w + (x - self.rect.left) as usize;
-                let t = self.coverage[i];
+                let t = self.weight[i];
                 if t <= 0.0 {
                     continue;
                 }
@@ -249,10 +270,23 @@ fn heal_region_adapted(
     mode: HealMode,
     adaptation: Adaptation,
 ) -> Option<PsdRect> {
-    let work = Work::new(img.rect(), region, coverage)?;
+    let margin = match mode {
+        HealMode::ContentAware => 0,
+        HealMode::ProximityMatch | HealMode::CreateTexture => proximity::margin(region, coverage),
+    };
+    let work = Work::new(img.rect(), region, coverage, margin)?;
     let rgba = work.read(img, (0, 0));
     let filled = match mode {
-        HealMode::ProximityMatch => laplace_fill(&rgba, &work.hole, work.w, work.h),
+        HealMode::ProximityMatch => {
+            let smooth = laplace_fill(&rgba, &work.hole, work.w, work.h);
+            match proximity::best_source(img, &work, &rgba, &smooth) {
+                Some(offset) => {
+                    let src = work.read(img, offset);
+                    poisson_fill(&rgba, &src, &work.hole, work.w, work.h)
+                }
+                None => smooth,
+            }
+        }
         HealMode::CreateTexture => {
             let mut smooth = laplace_fill(&rgba, &work.hole, work.w, work.h);
             add_matched_noise(&mut smooth, &rgba, &work.hole, work.w, work.h);
@@ -263,7 +297,7 @@ fn heal_region_adapted(
         }
     };
     work.write_back(img, &rgba, &filled);
-    Some(intersect(region, img.rect()))
+    Some(intersect(inflate(region, margin), img.rect()))
 }
 
 /// Transplant the texture at `source` (an offset added to each destination
@@ -282,15 +316,29 @@ pub fn clone_region(
     if source == (0, 0) {
         return None;
     }
-    let work = Work::new(img.rect(), region, coverage)?;
-    let (w, h, hole) = (work.w, work.h, &work.hole);
+    let work = Work::new(img.rect(), region, coverage, 0)?;
     let dest = work.read(img, (0, 0));
     let src = work.read(img, source);
+    let mut out = poisson_fill(&dest, &src, &work.hole, work.w, work.h);
+    if transfer == Transfer::TextureOnly {
+        keep_destination_colour(&mut out, &dest, &work.hole);
+    }
+    work.write_back(img, &dest, &out);
+    Some(intersect(region, img.rect()))
+}
 
-    // Gauss-Seidel on the Poisson equation: each unknown becomes the mean of its
-    // neighbours plus the mean source difference to them, which carries the
-    // source's detail over.
-    let mut out = dest.clone();
+/// Successive over-relaxation on the Poisson equation: each unknown moves past
+/// the mean of its neighbours plus the mean source difference to them, which
+/// carries the source's detail over while `dest` around the hole stays the
+/// boundary.
+fn poisson_fill(
+    dest: &[[f32; 4]],
+    src: &[[f32; 4]],
+    hole: &[bool],
+    w: usize,
+    h: usize,
+) -> Vec<[f32; 4]> {
+    let mut out = dest.to_vec();
     for i in 0..out.len() {
         if hole[i] {
             out[i] = src[i];
@@ -312,16 +360,15 @@ pub fn clone_region(
                     n += 1.0;
                 }
                 if n > 0.0 {
-                    out[i] = acc.map(|v| (v / n).clamp(0.0, 255.0));
+                    let was = out[i];
+                    out[i] = std::array::from_fn(|c| {
+                        (was[c] + POISSON_OMEGA * (acc[c] / n - was[c])).clamp(0.0, 255.0)
+                    });
                 }
             }
         }
     }
-    if transfer == Transfer::TextureOnly {
-        keep_destination_colour(&mut out, &dest, hole);
-    }
-    work.write_back(img, &dest, &out);
-    Some(intersect(region, img.rect()))
+    out
 }
 
 /// The 4-neighbours of `(x, y)` inside a `w`×`h` grid; outside ones are skipped

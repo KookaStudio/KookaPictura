@@ -69,7 +69,8 @@ fn a_blemish_on_a_flat_field_disappears() {
         &all_ones(region),
         HealMode::ProximityMatch,
     );
-    assert_eq!(done, Some(region));
+    // The fully covered 8×8 square has the minimum 3 px margin.
+    assert_eq!(done, Some(inflate(region, 3)));
     // Every healed pixel returns to the flat field; the blemish is gone.
     for y in 12..20 {
         for x in 12..20 {
@@ -175,10 +176,12 @@ fn create_texture_adds_grain_where_the_surroundings_have_grain() {
 }
 
 #[test]
-fn healing_leaves_pixels_outside_the_brush_alone() {
+fn healing_leaves_pixels_beyond_the_margin_alone() {
+    // The 8×8 square's margin is 3 px, so columns 9..23 may change and
+    // 8 and 23 must not.
     let mut img = flat(32, 32, BASE);
-    img.set(11, 16, [1, 2, 3, 255]);
-    img.set(20, 16, [4, 5, 6, 255]);
+    img.set(8, 16, [1, 2, 3, 255]);
+    img.set(23, 16, [4, 5, 6, 255]);
     let region = PsdRect {
         top: 12,
         left: 12,
@@ -191,8 +194,8 @@ fn healing_leaves_pixels_outside_the_brush_alone() {
         &all_ones(region),
         HealMode::ProximityMatch,
     );
-    assert_eq!(px(&img, 11, 16), [1, 2, 3, 255]);
-    assert_eq!(px(&img, 20, 16), [4, 5, 6, 255]);
+    assert_eq!(px(&img, 8, 16), [1, 2, 3, 255]);
+    assert_eq!(px(&img, 23, 16), [4, 5, 6, 255]);
 }
 
 #[test]
@@ -424,7 +427,7 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
         |img, local, cov| heal_region(img, local, cov, HealMode::ProximityMatch),
     )
     .unwrap();
-    assert_eq!(done, Some(region));
+    assert_eq!(done, Some(inflate(region, 3)));
     assert_eq!(channel(&doc, 0, 0, 16, 16), BASE[0]);
     assert_eq!(channel(&doc, 0, 1, 16, 16), BASE[1]);
     assert_eq!(channel(&doc, 0, 2, 16, 16), BASE[2]);
@@ -495,6 +498,150 @@ fn a_transparency_lock_keeps_alpha() {
     .unwrap();
     assert!(done.is_some());
     assert_eq!(channel(&doc, 0, -1, 8, 8), 40, "alpha was not preserved");
+}
+
+/// A sky: a vertical blue gradient, the same along every row.
+fn sky(w: i32, h: i32) -> RgbaImage {
+    let mut img = flat(w, h, BASE);
+    for y in 0..h {
+        let v = (110 + y) as u8;
+        for x in 0..w {
+            img.set(x, y, [v / 2, v - 20, v + 40, 255]);
+        }
+    }
+    img
+}
+
+/// Paint an anti-aliased black dot of `radius` centred on `(cx, cy)`.
+fn dot(img: &mut RgbaImage, cx: f32, cy: f32, radius: f32) {
+    for y in 0..img.height {
+        for x in 0..img.width {
+            let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+            let a = (radius - d + 0.5).clamp(0.0, 1.0);
+            if a > 0.0 {
+                let p = img.get(x, y);
+                let ink = |c: u8| (f32::from(c) * (1.0 - a)).round() as u8;
+                img.set(x, y, [ink(p[0]), ink(p[1]), ink(p[2]), 255]);
+            }
+        }
+    }
+}
+
+/// A one-layer document holding `img`.
+fn image_doc(img: &RgbaImage) -> Document {
+    let mut doc = layer_doc(img.width as u32, img.height as u32, BASE);
+    for (i, p) in img.data.iter().enumerate() {
+        for (channel, &v) in doc.layers[0].channels[..3].iter_mut().zip(p) {
+            channel.data[i] = v;
+        }
+    }
+    doc
+}
+
+/// One spot dab of a hard `diameter` brush at `(x, y)`, committed in `mode`.
+fn spot_click(img: &RgbaImage, x: f32, y: f32, diameter: u32, mode: HealMode) -> RgbaImage {
+    let mut doc = image_doc(img);
+    let mut stroke = HealStroke::begin(&doc, "0", diameter, 100).unwrap();
+    stroke.dab(x, y);
+    stroke
+        .commit(&mut doc, mode, None, Transfer::Full)
+        .unwrap()
+        .expect("a populated mask commits");
+    let mut out = img.clone();
+    for (i, p) in out.data.iter_mut().enumerate() {
+        for (v, channel) in p.iter_mut().zip(&doc.layers[0].channels[..3]) {
+            *v = channel.data[i];
+        }
+    }
+    out
+}
+
+/// The largest channel difference between `a` and `b` within `r` of `(cx, cy)`.
+fn worst_near(a: &RgbaImage, b: &RgbaImage, cx: i32, cy: i32, r: i32) -> i32 {
+    let mut worst = 0;
+    for y in (cy - r).max(0)..(cy + r).min(a.height) {
+        for x in (cx - r).max(0)..(cx + r).min(a.width) {
+            let (p, q) = (px(a, x, y), px(b, x, y));
+            for c in 0..3 {
+                worst = worst.max((p[c] as i32 - q[c] as i32).abs());
+            }
+        }
+    }
+    worst
+}
+
+#[test]
+fn a_click_with_a_dot_sized_brush_removes_the_dot() {
+    // #1023: the brush is the dot's size, so the dot's soft rim lies just
+    // outside the footprint and used to grey the fill.
+    let clean = sky(64, 64);
+    let mut img = clean.clone();
+    dot(&mut img, 32.0, 32.0, 4.0);
+    // Centred with the dot's own size, and a pixel off with a slightly larger one.
+    for (x, y, diameter) in [(32.0, 32.0, 8), (33.0, 31.0, 10)] {
+        let healed = spot_click(&img, x, y, diameter, HealMode::ProximityMatch);
+        let worst = worst_near(&healed, &clean, 32, 32, 8);
+        assert!(
+            worst <= 6,
+            "click at ({x}, {y}) left the dot: off by {worst}"
+        );
+    }
+}
+
+#[test]
+fn create_texture_click_removes_the_dot() {
+    let clean = sky(64, 64);
+    let mut img = clean.clone();
+    dot(&mut img, 32.0, 32.0, 4.0);
+    let healed = spot_click(&img, 32.0, 32.0, 8, HealMode::CreateTexture);
+    // The sky has no grain, so the matched noise is near zero.
+    let worst = worst_near(&healed, &clean, 32, 32, 8);
+    assert!(worst <= 8, "create texture left the dot: off by {worst}");
+}
+
+#[test]
+fn a_heal_next_to_an_edge_leaves_no_trace() {
+    // A dark mane left of x = 28, sky right of it; the dot sits on the sky
+    // and the brush overlaps the edge.
+    let mut clean = sky(64, 64);
+    for y in 0..64 {
+        for x in 0..28 {
+            clean.set(x, y, [40, 30, 20, 255]);
+        }
+    }
+    let mut img = clean.clone();
+    dot(&mut img, 31.0, 32.0, 3.0);
+    let healed = spot_click(&img, 30.0, 32.0, 10, HealMode::ProximityMatch);
+    // The edge stays a step on every healed row instead of a smear (a Laplace
+    // fill keeps under a tenth of it here).
+    for y in 24..41 {
+        let step = px(&healed, 28, y)[2] as i32 - px(&healed, 27, y)[2] as i32;
+        let want = px(&clean, 28, y)[2] as i32 - px(&clean, 27, y)[2] as i32;
+        assert!(
+            step * 5 >= want * 4,
+            "edge softened at row {y}: {step} vs {want}"
+        );
+    }
+    // The nearest clean source is lit differently above the dot; the Poisson
+    // solve reconciles that smoothly, so a few levels of shading remain.
+    let worst = worst_near(&healed, &clean, 30, 32, 10);
+    assert!(
+        worst <= 12,
+        "the edge smeared into the heal: off by {worst}"
+    );
+}
+
+#[test]
+fn another_dot_is_not_used_as_the_source() {
+    let clean = sky(80, 64);
+    let mut img = clean.clone();
+    dot(&mut img, 26.0, 32.0, 4.0);
+    dot(&mut img, 40.0, 32.0, 4.0);
+    let healed = spot_click(&img, 26.0, 32.0, 8, HealMode::ProximityMatch);
+    let worst = worst_near(&healed, &clean, 26, 32, 6);
+    assert!(worst <= 6, "the healed dot is off by {worst}");
+    // The other dot is untouched.
+    assert_eq!(px(&healed, 40, 32), px(&img, 40, 32));
 }
 
 #[test]
