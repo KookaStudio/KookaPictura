@@ -254,7 +254,7 @@ fn write_working_rgb(
     let flat: Vec<u8> = planes
         .iter()
         .filter_map(|p| match p {
-            Samples::U8(v) => Some(v.clone()),
+            Samples::U8(v) => Some(v.to_vec()),
             _ => None,
         })
         .collect::<Vec<_>>()
@@ -285,7 +285,7 @@ fn convert_cmyk_samples(
     let planes: Vec<Samples> = (0..4)
         .map(|c| {
             let n = values.len() / 4;
-            Samples::U8(values[c * n..(c + 1) * n].to_vec())
+            Samples::U8(values[c * n..(c + 1) * n].to_vec().into())
         })
         .collect();
     let Some(converted) = convert_cmyk_planes(&planes, src, dst, options) else {
@@ -298,7 +298,7 @@ fn convert_cmyk_samples(
         };
         out.extend_from_slice(&plane);
     }
-    *values = out;
+    *values = out.into();
 }
 
 fn convert_cmyk_planes(
@@ -310,7 +310,7 @@ fn convert_cmyk_planes(
     let flat: Vec<u8> = planes
         .iter()
         .map(|p| match p {
-            Samples::U8(v) => Some(v.clone()),
+            Samples::U8(v) => Some(v.to_vec()),
             _ => None,
         })
         .collect::<Option<Vec<_>>>()?
@@ -334,7 +334,7 @@ fn convert_cmyk_planes(
     let n = planar.len() / 4;
     Some(
         (0..4)
-            .map(|c| Samples::U8(planar[c * n..(c + 1) * n].to_vec()))
+            .map(|c| Samples::U8(planar[c * n..(c + 1) * n].to_vec().into()))
             .collect(),
     )
 }
@@ -401,7 +401,8 @@ fn lab_byte(value: f64) -> u8 {
 /// Retain a Lab document's decoded 8-bit Lab layer color channels before
 /// `normalize` converts them to RGB, so `write_psd` re-emits an unedited layer
 /// exactly. Only color channels (ids `0..3`) are stored; masks and alpha are not
-/// Lab-encoded. No-op at any depth other than 8.
+/// Lab-encoded. The retained planes share the channel allocation until a later
+/// channel write forks it. No-op at any depth other than 8.
 pub(crate) fn retain_lab_layer_planes(layers: &mut LayerStack, depth: u16) {
     if depth != 8 {
         return;
@@ -412,7 +413,7 @@ pub(crate) fn retain_lab_layer_planes(layers: &mut LayerStack, depth: u16) {
                 .channels
                 .iter()
                 .filter(|c| c.id >= 0 && c.id < 3)
-                .map(|c| (c.id, Samples::U8(c.data.to_vec())))
+                .map(|c| (c.id, Samples::U8(c.data.clone())))
                 .collect();
             if planes.len() == 3 {
                 layer.source_channels =
@@ -426,7 +427,8 @@ pub(crate) fn retain_lab_layer_planes(layers: &mut LayerStack, depth: u16) {
 /// Retain a CMYK document's decoded 8-bit CMYK layer color channels before
 /// `normalize` converts them to RGB, so `write_psd` re-emits an unedited layer
 /// exactly. Only color channels (ids `0..4`) are stored; masks and alpha are not
-/// CMYK-encoded. No-op at any depth other than 8.
+/// CMYK-encoded. The retained planes share the channel allocation until a later
+/// channel write forks it. No-op at any depth other than 8.
 pub(crate) fn retain_cmyk_layer_planes(layers: &mut LayerStack, depth: u16) {
     if depth != 8 {
         return;
@@ -437,7 +439,7 @@ pub(crate) fn retain_cmyk_layer_planes(layers: &mut LayerStack, depth: u16) {
                 .channels
                 .iter()
                 .filter(|c| c.id >= 0 && c.id < 4)
-                .map(|c| (c.id, Samples::U8(c.data.to_vec())))
+                .map(|c| (c.id, Samples::U8(c.data.clone())))
                 .collect();
             if planes.len() == 4 {
                 layer.source_channels =
@@ -462,7 +464,7 @@ pub(crate) fn retain_indexed_layer_planes(layers: &mut LayerStack, depth: u16) {
                 .channels
                 .iter()
                 .filter(|c| c.id == 0)
-                .map(|c| (c.id, Samples::U8(c.data.to_vec())))
+                .map(|c| (c.id, Samples::U8(c.data.clone())))
                 .collect();
             if planes.len() == 1 {
                 layer.source_channels =

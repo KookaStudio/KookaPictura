@@ -119,12 +119,12 @@ fn real_mask_document() -> (Document, Vec<u8>) {
         .collect();
     layer.raw_channels.push(RawChannel {
         id: -3,
-        data: vec![0, 0, 9, 9, 9, 9],
+        data: vec![0, 0, 9, 9, 9, 9].into(),
     });
     layer.mask = Some(LayerMask {
         rect: rect(2, 2),
         data: Some(vec![200u8; 4].into()),
-        extra: real.clone(),
+        extra: real.clone().into(),
         density: 64,
         ..Default::default()
     });

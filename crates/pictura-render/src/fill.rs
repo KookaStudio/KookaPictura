@@ -335,7 +335,7 @@ pub fn encode_gradient_fill_params(params: &GradientFillParams) -> AdjustmentDat
     };
     AdjustmentData {
         key: *b"GdFl",
-        data: pictura_codec::write_descriptor(&desc),
+        data: pictura_codec::write_descriptor(&desc).into(),
     }
 }
 
@@ -374,7 +374,8 @@ pub fn encode_pattern_fill(params: &PatternFillParams) -> AdjustmentData {
             name: String::new(),
             class_id: b"PtFl".to_vec(),
             items,
-        }),
+        })
+        .into(),
     }
 }
 

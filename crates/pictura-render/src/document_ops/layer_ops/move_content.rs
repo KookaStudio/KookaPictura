@@ -688,7 +688,7 @@ mod tests {
         layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage().into();
         layer.extra_blocks.push(pictura_core::LayerBlock {
             key: *b"TySh",
-            data: Vec::new(),
+            data: Vec::new().into(),
         });
         let mut doc = doc_with(vec![layer]);
         assert!(!trim_to_content(&mut doc, "0"));

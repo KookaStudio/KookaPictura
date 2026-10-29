@@ -34,15 +34,24 @@ pub(super) fn extend_samples(
 ) -> Samples {
     let plane = old_w * old_h;
     match samples {
-        Samples::U8(v) => Samples::U8(each_plane(v, plane, |p| {
-            extend_plane(p, old_w, old_h, new_w, new_h, dx, dy)
-        })),
-        Samples::U16(v) => Samples::U16(each_plane(v, plane, |p| {
-            extend_plane(p, old_w, old_h, new_w, new_h, dx, dy)
-        })),
-        Samples::F32(v) => Samples::F32(each_plane(v, plane, |p| {
-            extend_plane(p, old_w, old_h, new_w, new_h, dx, dy)
-        })),
+        Samples::U8(v) => Samples::U8(
+            each_plane(v, plane, |p| {
+                extend_plane(p, old_w, old_h, new_w, new_h, dx, dy)
+            })
+            .into(),
+        ),
+        Samples::U16(v) => Samples::U16(
+            each_plane(v, plane, |p| {
+                extend_plane(p, old_w, old_h, new_w, new_h, dx, dy)
+            })
+            .into(),
+        ),
+        Samples::F32(v) => Samples::F32(
+            each_plane(v, plane, |p| {
+                extend_plane(p, old_w, old_h, new_w, new_h, dx, dy)
+            })
+            .into(),
+        ),
     }
 }
 
@@ -84,15 +93,15 @@ pub(super) fn resize_samples(
     }
     let plane = sw * sh;
     match samples {
-        Samples::U8(v) => Samples::U8(each_plane(v, plane, |p| {
-            resize_plane(p, sw, sh, dw, dh, resample)
-        })),
-        Samples::U16(v) => Samples::U16(each_plane(v, plane, |p| {
-            resize_plane(p, sw, sh, dw, dh, resample)
-        })),
-        Samples::F32(v) => Samples::F32(each_plane(v, plane, |p| {
-            resize_plane(p, sw, sh, dw, dh, resample)
-        })),
+        Samples::U8(v) => {
+            Samples::U8(each_plane(v, plane, |p| resize_plane(p, sw, sh, dw, dh, resample)).into())
+        }
+        Samples::U16(v) => {
+            Samples::U16(each_plane(v, plane, |p| resize_plane(p, sw, sh, dw, dh, resample)).into())
+        }
+        Samples::F32(v) => {
+            Samples::F32(each_plane(v, plane, |p| resize_plane(p, sw, sh, dw, dh, resample)).into())
+        }
     }
 }
 
@@ -197,9 +206,13 @@ fn sample_plane<T: Sample>(
 pub(super) fn remap_samples(samples: &Samples, w: usize, h: usize, kind: Remap) -> Samples {
     let plane = w * h;
     match samples {
-        Samples::U8(v) => Samples::U8(each_plane(v, plane, |p| remap_plane(p, w, h, kind))),
-        Samples::U16(v) => Samples::U16(each_plane(v, plane, |p| remap_plane(p, w, h, kind))),
-        Samples::F32(v) => Samples::F32(each_plane(v, plane, |p| remap_plane(p, w, h, kind))),
+        Samples::U8(v) => Samples::U8(each_plane(v, plane, |p| remap_plane(p, w, h, kind)).into()),
+        Samples::U16(v) => {
+            Samples::U16(each_plane(v, plane, |p| remap_plane(p, w, h, kind)).into())
+        }
+        Samples::F32(v) => {
+            Samples::F32(each_plane(v, plane, |p| remap_plane(p, w, h, kind)).into())
+        }
     }
 }
 

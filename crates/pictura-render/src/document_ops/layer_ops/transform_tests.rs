@@ -100,12 +100,12 @@ fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
     let mut layer = pixel_layer(4, 4);
     layer.raw_channels = vec![RawChannel {
         id: 3,
-        data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into(),
     }];
     layer.source_channels = Some(SourceChannels {
         depth: BitDepth::Sixteen,
         rect: rect(4, 4),
-        planes: vec![(3, Samples::U16(vec![0; 16]))],
+        planes: vec![(3, Samples::U16(vec![0; 16].into()))],
         working_idents: [0; 3],
     });
     let mut doc = doc_with(layer);
@@ -114,7 +114,7 @@ fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
         depth: BitDepth::Sixteen,
         width: 4,
         height: 4,
-        samples: Samples::U16(vec![0; 3 * 4 * 4]),
+        samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
     });
 
     // A pure integer translation keeps the channel and re-anchors the store.
@@ -196,7 +196,7 @@ fn pure_move_reemits_native_samples_on_save() {
             (0, native_color_store(3)),
             (1, native_color_store(11)),
             (2, native_color_store(29)),
-            (-1, Samples::U16(vec![65535; 16])),
+            (-1, Samples::U16(vec![65535; 16].into())),
         ],
     ));
     let mut doc = doc_with(layer);
@@ -205,7 +205,7 @@ fn pure_move_reemits_native_samples_on_save() {
         depth: BitDepth::Sixteen,
         width: 4,
         height: 4,
-        samples: Samples::U16(vec![0; 3 * 16]),
+        samples: Samples::U16(vec![0; 3 * 16].into()),
     });
 
     assert!(transform_layer(
@@ -365,7 +365,7 @@ fn refusals_leave_the_document_bit_identical() {
             doc_with(Layer {
                 adjustment: Some(pictura_core::AdjustmentData {
                     key: *b"nvrt",
-                    data: Vec::new(),
+                    data: Vec::new().into(),
                 }),
                 ..Default::default()
             }),
@@ -609,7 +609,7 @@ fn quad_refusals_leave_the_document_bit_identical() {
             doc_with(Layer {
                 adjustment: Some(pictura_core::AdjustmentData {
                     key: *b"nvrt",
-                    data: Vec::new(),
+                    data: Vec::new().into(),
                 }),
                 ..Default::default()
             }),

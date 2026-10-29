@@ -57,7 +57,7 @@ pub(crate) fn write_ranges(out: &mut Vec<u8>, layer: &Layer) {
         Some(view) if parse_blend_if(&layer.blending_ranges).as_ref() != Some(view) => {
             encode_blend_if(view)
         }
-        _ => layer.blending_ranges.clone(),
+        _ => layer.blending_ranges.to_vec(),
     };
     out.extend_from_slice(&(ranges.len() as u32).to_be_bytes());
     out.extend_from_slice(&ranges);

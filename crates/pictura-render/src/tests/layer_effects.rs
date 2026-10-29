@@ -52,7 +52,7 @@ fn lfx2_with(top: DescValue, data_version: u32) -> LayerBlock {
     data.extend_from_slice(&inner);
     LayerBlock {
         key: *b"lfx2",
-        data,
+        data: data.into(),
     }
 }
 
@@ -646,7 +646,7 @@ fn solid_fill_shadow_follows_payload_alpha() {
             rect: rect(3, 3, 6, 6),
             adjustment: Some(AdjustmentData {
                 key: *b"SoCo",
-                data: vec![255, 0, 0, alpha],
+                data: vec![255, 0, 0, alpha].into(),
             }),
             ..Default::default()
         };
@@ -863,7 +863,7 @@ fn gpu_reports_the_effect_for_a_fill_layer() {
         rect: rect(3, 3, 6, 6),
         adjustment: Some(AdjustmentData {
             key: *b"SoCo",
-            data: vec![255, 0, 0, 255],
+            data: vec![255, 0, 0, 255].into(),
         }),
         ..Default::default()
     };

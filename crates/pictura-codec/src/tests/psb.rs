@@ -107,7 +107,7 @@ fn psb_widens_preserved_verbatim_channel_length() {
     let stream = vec![0u8, 3, 1, 2, 3, 0xFF, 0xFE];
     layer.raw_channels = vec![RawChannel {
         id: -3,
-        data: stream.clone(),
+        data: stream.clone().into(),
     }];
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
@@ -140,7 +140,7 @@ fn psb_preserved_big_key_block_uses_u64_length() {
     let mut layer = pixel("Big", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     layer.extra_blocks = vec![LayerBlock {
         key: *b"Lr16",
-        data: vec![1, 2, 3, 4, 5],
+        data: vec![1, 2, 3, 4, 5].into(),
     }];
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
@@ -160,7 +160,7 @@ fn psb_preserved_big_key_block_uses_u64_length() {
     assert_eq!(back.layers[0].extra_blocks[0].key, *b"Lr16");
     let mut expected = doc.clone();
     expected.is_psb = true;
-    expected.layers[0].extra_blocks[0].data = vec![1, 2, 3, 4, 5, 0];
+    expected.layers[0].extra_blocks[0].data = vec![1, 2, 3, 4, 5, 0].into();
     assert_eq!(
         back, expected,
         "preserved big-key block round-trips in a PSB"
@@ -303,7 +303,7 @@ fn psb_non_big_key_block_keeps_u32_length() {
     let mut layer = pixel("Small", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     layer.extra_blocks = vec![LayerBlock {
         key: *b"lfx2",
-        data: vec![1, 2, 3, 4],
+        data: vec![1, 2, 3, 4].into(),
     }];
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
@@ -328,7 +328,7 @@ fn psb_reframes_preserved_psd_big_key_block() {
     let mut block = b"8BIMlnk2".to_vec();
     block.extend_from_slice(&4u32.to_be_bytes());
     block.extend_from_slice(&[1, 2, 3, 4]);
-    doc.layer_section_extra = block;
+    doc.layer_section_extra = block.into();
     doc.is_psb = false;
 
     let psb = write_psb(&doc).unwrap();

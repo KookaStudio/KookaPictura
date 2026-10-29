@@ -20,14 +20,14 @@ fn type_layer(style: Option<TextStyle>) -> Layer {
         },
         extra_blocks: vec![LayerBlock {
             key: *b"TySh",
-            data: vec![1, 2, 3],
+            data: vec![1, 2, 3].into(),
         }],
         type_tool: Some(TypeTool {
             transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
             text: "Hi".into(),
             bounds: [0, 0, 80, 200],
-            text_desc: Vec::new(),
-            warp_desc: Vec::new(),
+            text_desc: Vec::new().into(),
+            warp_desc: Vec::new().into(),
             fonts: vec!["Arial".into()],
             style,
             vertical: false,

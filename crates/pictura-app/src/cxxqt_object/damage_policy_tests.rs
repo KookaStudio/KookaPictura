@@ -106,7 +106,7 @@ fn unbounded_effect_recomposites_fully() {
     knockout.knockout = Knockout::Shallow;
     knockout.extra_blocks.push(LayerBlock {
         key: *b"lfx2",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     let mut d = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     d.layers = LayerStack::from_layers(vec![pixel_layer("base", 64, 64, (0, 0, 0)), knockout]);

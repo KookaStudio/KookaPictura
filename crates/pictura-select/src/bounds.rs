@@ -176,7 +176,7 @@ mod tests {
         let sel = Selection {
             width: 0,
             height: 0,
-            data: Vec::new(),
+            data: Vec::new().into(),
         };
         assert_eq!(sel.bounds(), None);
     }

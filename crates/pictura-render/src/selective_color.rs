@@ -75,7 +75,7 @@ pub fn encode_selective_color(
     }
     AdjustmentData {
         key: *b"selc",
-        data,
+        data: data.into(),
     }
 }
 

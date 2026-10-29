@@ -111,7 +111,7 @@ pub fn color_range(
     let n = img.width as usize * img.height as usize;
     // As a fraction: how far past an exact match a pixel may be and still count.
     let fuzz = (fuzziness.min(200) as f32 / 200.0).max(0.001);
-    let data = (0..n)
+    let data: Vec<u8> = (0..n)
         .map(|p| {
             let px = rgb_at(img, p);
             let coverage = if select == ColorRangeSelect::Sampled {
@@ -144,7 +144,7 @@ pub fn color_range(
     Selection {
         width: img.width,
         height: img.height,
-        data,
+        data: data.into(),
     }
 }
 

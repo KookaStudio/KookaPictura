@@ -445,7 +445,7 @@ mod tests {
         let adjustment = Layer {
             adjustment: Some(AdjustmentData {
                 key: *b"levl",
-                data: Vec::new(),
+                data: Vec::new().into(),
             }),
             ..Default::default()
         };

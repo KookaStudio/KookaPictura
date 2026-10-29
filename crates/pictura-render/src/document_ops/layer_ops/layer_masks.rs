@@ -101,7 +101,7 @@ pub fn add_layer_mask(
         disabled: false,
         flags: MASK_FLAG_LINKED,
         data: Some(data.into()),
-        extra: Vec::new(),
+        extra: Vec::new().into(),
         ..Default::default()
     });
     true

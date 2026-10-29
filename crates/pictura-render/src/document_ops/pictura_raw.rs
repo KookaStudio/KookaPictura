@@ -475,7 +475,7 @@ mod tests {
         let mut adjustment = destructive_doc(None);
         adjustment.layers[0].adjustment = Some(AdjustmentData {
             key: *b"adj?",
-            data: Vec::new(),
+            data: Vec::new().into(),
         });
         assert!(!apply_pictura_raw_destructive(
             &mut adjustment,

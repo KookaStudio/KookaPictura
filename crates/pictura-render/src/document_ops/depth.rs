@@ -96,13 +96,13 @@ pub fn convert_depth(
                 depth: BitDepth::Sixteen,
                 width: doc.width,
                 height: doc.height,
-                samples: Samples::U16(Samples::F32(samples).to_u16()),
+                samples: Samples::U16(Samples::F32(samples.into()).to_u16().into()),
             };
             let narrowed = store.samples.narrow_to_u8();
             (Some(store), narrowed[..color_len].to_vec())
         }
         _ => {
-            let narrowed = Samples::F32(samples).narrow_to_u8();
+            let narrowed = Samples::F32(samples.into()).narrow_to_u8();
             (None, narrowed[..color_len].to_vec())
         }
     };
@@ -206,7 +206,7 @@ pub fn convert_depth_exposure_gamma(
 fn source_samples(doc: &Document, color_len: usize) -> Result<Vec<f32>, OpsError> {
     if let Some(Samples::F32(v)) = doc.source_planes.as_ref().map(|s| &s.samples) {
         if v.len() >= color_len && store_matches_composite(doc, &v[..color_len]) {
-            return Ok(v.clone());
+            return Ok(v.to_vec());
         }
     }
     current_composite_samples(doc, color_len)
@@ -220,7 +220,7 @@ fn store_matches_composite(doc: &Document, store: &[f32]) -> bool {
     if doc.composite.data.len() < color_len {
         return false;
     }
-    let narrowed = Samples::F32(store.to_vec()).narrow_to_u8();
+    let narrowed = Samples::F32(store.to_vec().into()).narrow_to_u8();
     narrowed[..color_len] == doc.composite.data[..color_len]
 }
 
@@ -237,7 +237,7 @@ fn current_composite_samples(doc: &Document, color_len: usize) -> Result<Vec<f32
         }
     } else if let Some(Samples::F32(v)) = crate::composite_native(doc) {
         if v.len() >= color_len {
-            v
+            v.to_vec()
         } else {
             Vec::new()
         }

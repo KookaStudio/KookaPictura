@@ -166,7 +166,7 @@ fn live_type_and_high_depth_refuse() {
     let mut d = doc(8, 8, 10);
     d.layers[0].extra_blocks.push(LayerBlock {
         key: *b"TySh",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     assert!(perspective_crop_refusal(&d).is_some());
     let before = d.clone();

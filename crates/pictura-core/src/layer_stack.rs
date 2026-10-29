@@ -5,13 +5,14 @@
 //! primitives here, which restore the invariants before returning.
 
 use std::ops::{Deref, Index, IndexMut};
+use std::sync::Arc;
 
 use crate::Layer;
 
 /// A bottom-first layer container used for both `Document.layers` and every
 /// group's `Layer.children`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct LayerStack(Vec<Layer>);
+pub struct LayerStack(Arc<Vec<Layer>>);
 
 /// The first well-formedness violation found in a tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,11 +56,15 @@ impl LayerStack {
     /// by the codec, scratch documents, and test fixtures. A malformed vendor
     /// file therefore loads exactly as authored.
     pub fn from_layers(layers: Vec<Layer>) -> Self {
-        Self(layers)
+        Self(Arc::new(layers))
+    }
+
+    fn vec_mut(&mut self) -> &mut Vec<Layer> {
+        Arc::make_mut(&mut self.0)
     }
 
     pub fn as_slice(&self) -> &[Layer] {
-        &self.0
+        self.0.as_slice()
     }
 
     pub fn len(&self) -> usize {
@@ -75,15 +80,15 @@ impl LayerStack {
     }
 
     pub fn get_mut(&mut self, index: usize) -> Option<&mut Layer> {
-        self.0.get_mut(index)
+        self.vec_mut().get_mut(index)
     }
 
     pub fn first_mut(&mut self) -> Option<&mut Layer> {
-        self.0.first_mut()
+        self.vec_mut().first_mut()
     }
 
     pub fn last_mut(&mut self) -> Option<&mut Layer> {
-        self.0.last_mut()
+        self.vec_mut().last_mut()
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, Layer> {
@@ -91,7 +96,7 @@ impl LayerStack {
     }
 
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Layer> {
-        self.0.iter_mut()
+        self.vec_mut().iter_mut()
     }
 
     /// The first invariant violation in the tree, or `Ok(())`.
@@ -184,13 +189,13 @@ impl LayerStack {
         if index > layers.len() {
             return Err(StackError::NoSuchPath);
         }
-        if index < background_floor(&layers.0) {
+        if index < background_floor(layers.0.as_slice()) {
             return Err(StackError::BackgroundFloor);
         }
-        if node.clipping && !clipping_base_allowed(&layers.0, index) {
+        if node.clipping && !clipping_base_allowed(layers.0.as_slice(), index) {
             node.clipping = false;
         }
-        layers.0.insert(index, node);
+        layers.vec_mut().insert(index, node);
         layers.normalize(None);
         self.debug_check(was_well_formed);
         Ok(())
@@ -217,8 +222,8 @@ impl LayerStack {
             return None;
         }
         let was_clipped = layers.0[index].clipping;
-        release_run_above(&mut layers.0, index, was_clipped);
-        let removed = layers.0.remove(index);
+        release_run_above(layers.vec_mut(), index, was_clipped);
+        let removed = layers.vec_mut().remove(index);
         layers.normalize(None);
         self.debug_check(was_well_formed);
         Some(removed)
@@ -243,21 +248,21 @@ impl LayerStack {
             return Err(StackError::IllegalBackgroundNode);
         }
         let same_container = src_parent == to_parent;
-        if same_container && src_index < background_floor(&source.0) {
+        if same_container && src_index < background_floor(source.0.as_slice()) {
             return Err(StackError::BackgroundFloor);
         }
         if to_parent.len() >= from.len() && to_parent[..from.len()] == *from {
             return Err(StackError::NoSuchPath);
         }
         let destination = self.container(to_parent).ok_or(StackError::NoSuchPath)?;
-        let destination_floor = background_floor(&destination.0);
+        let destination_floor = background_floor(destination.0.as_slice());
         if to_index != usize::MAX && to_index < destination_floor {
             return Err(StackError::BackgroundFloor);
         }
         let post_parent = post_removal_parent(to_parent, src_parent, src_index);
         let was_clipped = source.0[src_index].clipping;
         let former_base = if same_container {
-            base_below(&source.0, src_index)
+            base_below(source.0.as_slice(), src_index)
         } else {
             None
         };
@@ -266,8 +271,8 @@ impl LayerStack {
             let layers = self
                 .container_mut(src_parent)
                 .ok_or(StackError::NoSuchPath)?;
-            release_run_above(&mut layers.0, src_index, was_clipped);
-            let removed = layers.0.remove(src_index);
+            release_run_above(layers.vec_mut(), src_index, was_clipped);
+            let removed = layers.vec_mut().remove(src_index);
             if !same_container {
                 layers.normalize(None);
             }
@@ -290,7 +295,7 @@ impl LayerStack {
         let layers = self
             .container_mut(&post_parent)
             .ok_or(StackError::NoSuchPath)?;
-        layers.0.insert(at, removed);
+        layers.vec_mut().insert(at, removed);
         let same_base_below = former_base.is_some_and(|base| {
             let base = if at <= base { base + 1 } else { base };
             at > 0 && at - 1 == base
@@ -396,7 +401,7 @@ impl LayerStack {
             return Err(StackError::NoSuchPath);
         }
         for (offset, node) in replacement.into_iter().enumerate() {
-            layers.0.insert(at + offset, node);
+            layers.vec_mut().insert(at + offset, node);
         }
         layers.normalize(None);
         self.debug_check(was_well_formed);
@@ -443,12 +448,12 @@ impl LayerStack {
             return Err(StackError::IllegalBackgroundNode);
         }
         for &index in indices.iter().rev() {
-            children.push(layers.0.remove(index));
+            children.push(layers.vec_mut().remove(index));
         }
         children.reverse();
         group.children = LayerStack::from_layers(children);
         group.children.normalize_tree();
-        layers.0.insert(at, group);
+        layers.vec_mut().insert(at, group);
         layers.normalize(None);
         self.debug_check(was_well_formed);
         Ok(at)
@@ -466,7 +471,7 @@ impl LayerStack {
         if layers.0[start..end].iter().any(|layer| layer.background) {
             return false;
         }
-        layers.0[start..end].reverse();
+        layers.vec_mut()[start..end].reverse();
         layers.normalize(None);
         self.debug_check(was_well_formed);
         true
@@ -482,7 +487,7 @@ impl LayerStack {
             return 0;
         }
         let removed = layers.len() - len;
-        layers.0.truncate(len);
+        layers.vec_mut().truncate(len);
         layers.normalize(None);
         self.debug_check(was_well_formed);
         removed
@@ -505,7 +510,7 @@ impl LayerStack {
     }
 
     fn retain_recursive(&mut self, predicate: &mut impl FnMut(&Layer) -> bool) -> usize {
-        let old = std::mem::take(&mut self.0);
+        let old = Arc::unwrap_or_clone(std::mem::take(&mut self.0));
         let mut kept = Vec::with_capacity(old.len());
         let mut removed_here = 0;
         let mut removed_children = 0;
@@ -527,7 +532,7 @@ impl LayerStack {
             removed_children += layer.children.retain_recursive(predicate);
             kept.push(layer);
         }
-        self.0 = kept;
+        self.0 = Arc::new(kept);
         if removed_here > 0 {
             self.normalize(None);
         }
@@ -547,10 +552,12 @@ impl LayerStack {
         if index >= layers.len() || layers.0[index].clipping == clipped {
             return false;
         }
-        if clipped && (layers.0[index].background || !clipping_base_allowed(&layers.0, index)) {
+        if clipped
+            && (layers.0[index].background || !clipping_base_allowed(layers.0.as_slice(), index))
+        {
             return false;
         }
-        layers.0[index].clipping = clipped;
+        layers.vec_mut()[index].clipping = clipped;
         self.debug_check(was_well_formed);
         true
     }
@@ -574,14 +581,14 @@ impl LayerStack {
                 return Err(StackError::NoSuchPath);
             }
             let was_clipped = layers.0[index].clipping;
-            release_run_above(&mut layers.0, index, was_clipped);
-            let mut node = layers.0.remove(index);
+            release_run_above(layers.vec_mut(), index, was_clipped);
+            let mut node = layers.vec_mut().remove(index);
             layers.normalize(None);
             node.clipping = false;
             node.background = true;
             node
         };
-        self.0.insert(0, node);
+        self.vec_mut().insert(0, node);
         self.normalize(None);
         self.debug_check(was_well_formed);
         Ok(())
@@ -600,7 +607,7 @@ impl LayerStack {
     }
 
     fn normalize(&mut self, moved: Option<Moved>) -> bool {
-        let container = self.0.as_mut_slice();
+        let container = self.vec_mut().as_mut_slice();
         let mut changed = false;
         if container.first().is_some_and(|layer| layer.clipping) {
             container[0].clipping = false;
@@ -640,7 +647,7 @@ impl LayerStack {
     }
 
     fn normalize_tree(&mut self) {
-        for layer in &mut self.0 {
+        for layer in self.vec_mut() {
             layer.children.normalize_tree();
         }
         self.normalize(None);
@@ -745,7 +752,7 @@ impl Deref for LayerStack {
     type Target = [Layer];
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0.as_slice()
     }
 }
 
@@ -759,7 +766,7 @@ impl Index<usize> for LayerStack {
 
 impl IndexMut<usize> for LayerStack {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.0[index]
+        &mut self.vec_mut()[index]
     }
 }
 
@@ -768,7 +775,7 @@ impl IntoIterator for LayerStack {
     type IntoIter = std::vec::IntoIter<Layer>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        Arc::unwrap_or_clone(self.0).into_iter()
     }
 }
 
@@ -786,7 +793,7 @@ impl<'a> IntoIterator for &'a mut LayerStack {
     type IntoIter = std::slice::IterMut<'a, Layer>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.iter_mut()
+        self.vec_mut().iter_mut()
     }
 }
 

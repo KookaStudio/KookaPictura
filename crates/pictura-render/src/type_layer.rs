@@ -268,8 +268,8 @@ pub(crate) fn render_view(spec: &TypeSpec) -> TypeTool {
         transform: [1.0, 0.0, 0.0, 1.0, spec.origin.0, spec.origin.1],
         text: spec.text.clone(),
         bounds: [0; 4],
-        text_desc: Vec::new(),
-        warp_desc: Vec::new(),
+        text_desc: Vec::new().into(),
+        warp_desc: Vec::new().into(),
         fonts: Vec::new(),
         style: Some(TextStyle {
             font: Some(spec.character.font_family.clone()),
@@ -522,7 +522,7 @@ pub fn add_type_layer(doc: &mut Document, selection_path: &str, spec: &TypeSpec)
         channels,
         extra_blocks: vec![LayerBlock {
             key: *b"TySh",
-            data: pictura_codec::encode_type_tool(&tool),
+            data: pictura_codec::encode_type_tool(&tool).into(),
         }],
         type_tool: Some(tool),
         ..Default::default()
@@ -695,7 +695,7 @@ pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bo
     layer.source_channels = None;
     let block = LayerBlock {
         key: *b"TySh",
-        data: pictura_codec::encode_type_tool(&tool),
+        data: pictura_codec::encode_type_tool(&tool).into(),
     };
     match layer.extra_blocks.iter_mut().find(|b| &b.key == b"TySh") {
         Some(existing) => *existing = block,

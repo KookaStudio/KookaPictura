@@ -448,8 +448,8 @@ mod tests {
             transform: [1.0, 0.0, 0.0, 1.0, 10.0, 20.0],
             text: "Hi".into(),
             bounds: [0; 4],
-            text_desc: Vec::new(),
-            warp_desc: Vec::new(),
+            text_desc: Vec::new().into(),
+            warp_desc: Vec::new().into(),
             fonts: Vec::new(),
             style: None,
             vertical: false,
@@ -537,7 +537,7 @@ mod tests {
                     .collect(),
                 extra_blocks: vec![LayerBlock {
                     key: *b"TySh",
-                    data: crate::type_tool::encode_type_tool(&tool),
+                    data: crate::type_tool::encode_type_tool(&tool).into(),
                 }],
                 type_tool: Some(tool),
                 ..Default::default()

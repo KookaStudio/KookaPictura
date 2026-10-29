@@ -241,10 +241,10 @@ fn read_container(
             is_psb,
             layers,
             channels: Vec::new(),
-            color_mode_data,
-            image_resources,
-            global_layer_mask,
-            layer_section_extra,
+            color_mode_data: color_mode_data.into(),
+            image_resources: image_resources.into(),
+            global_layer_mask: global_layer_mask.into(),
+            layer_section_extra: layer_section_extra.into(),
             slices: Vec::new(),
             annotations: Default::default(),
             guides: Vec::new(),
@@ -333,10 +333,10 @@ fn read_container(
         is_psb,
         layers,
         channels,
-        color_mode_data,
-        image_resources,
-        global_layer_mask,
-        layer_section_extra,
+        color_mode_data: color_mode_data.into(),
+        image_resources: image_resources.into(),
+        global_layer_mask: global_layer_mask.into(),
+        layer_section_extra: layer_section_extra.into(),
         slices: Vec::new(),
         annotations: Default::default(),
         guides: Vec::new(),
@@ -488,7 +488,7 @@ fn normalize(
                 } else {
                     crate::icc::set_icc_resource(&mut doc, None);
                 }
-                doc.source_icc = source_bytes;
+                doc.source_icc = source_bytes.map(Into::into);
             }
         }
     }
@@ -708,7 +708,10 @@ fn read_layer_info(
                         retained.push((id, native));
                     }
                 }
-                raw_channels.push(RawChannel { id, data });
+                raw_channels.push(RawChannel {
+                    id,
+                    data: data.into(),
+                });
                 continue;
             }
             // The user layer mask channel (-2) is sized by the mask rect, which
@@ -903,7 +906,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
                 disabled: mask_flags & mask_params::FLAG_DISABLED != 0,
                 flags: mask_flags,
                 data: None,
-                extra: tail.extra,
+                extra: tail.extra.into(),
                 density: tail.user.0,
                 feather_bits: tail.user.1,
             });
@@ -984,19 +987,19 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
                 if adjustment.is_none() {
                     adjustment = Some(AdjustmentData {
                         key: tag_key,
-                        data: data.to_vec(),
+                        data: data.to_vec().into(),
                     });
                 } else {
                     // A second adjustment key is not modeled twice; keep it raw.
                     extra_blocks.push(LayerBlock {
                         key: tag_key,
-                        data: data.to_vec(),
+                        data: data.to_vec().into(),
                     });
                 }
             }
             _ => extra_blocks.push(LayerBlock {
                 key: tag_key,
-                data: data.to_vec(),
+                data: data.to_vec().into(),
             }),
         }
     }
@@ -1031,7 +1034,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
             is_group: false,
             background: false,
             blend_key,
-            blending_ranges,
+            blending_ranges: blending_ranges.into(),
             knockout,
             blend_clipping,
             blend_interior,

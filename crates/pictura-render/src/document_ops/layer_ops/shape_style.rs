@@ -182,7 +182,7 @@ pub fn set_shape_stroke(layer: &mut Layer, stroke: Option<&ShapeStroke>) -> bool
         )));
         layer.extra_blocks.push(pictura_core::LayerBlock {
             key: *b"lfx2",
-            data,
+            data: data.into(),
         });
     }
     true

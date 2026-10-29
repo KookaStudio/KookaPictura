@@ -338,7 +338,7 @@ mod tests {
             filter_id: LENS_CORRECTION_FILTER_ID,
             name: LENS_CORRECTION_FILTER_NAME.to_string(),
             enabled: true,
-            options,
+            options: options.into(),
         };
         assert!(decode_smart_filter(&filter).is_none());
 

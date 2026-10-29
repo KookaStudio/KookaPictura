@@ -139,6 +139,6 @@ pub fn encode_gradient_map(p: &GradientMapParams, dither: bool) -> AdjustmentDat
     }
     AdjustmentData {
         key: *b"grdm",
-        data,
+        data: data.into(),
     }
 }

@@ -61,7 +61,8 @@ impl qobject::PictureView {
                 } else {
                     doc.document_icc
                         .clone()
-                        .unwrap_or_else(|| pictura_codec::Profile::srgb().to_icc())
+                        .unwrap_or_else(|| pictura_codec::Profile::srgb().to_icc().into())
+                        .to_vec()
                 });
             }
             (rgba, buffer.width, buffer.height, metadata)

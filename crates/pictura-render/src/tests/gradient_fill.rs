@@ -118,7 +118,8 @@ fn gradient_layer(params: &GradientFillParams, w: u32, h: u32) -> Layer {
             params.reverse,
             params.scale as f64,
         )
-        .data,
+        .data
+        .to_vec(),
         255,
         None,
     );
@@ -354,7 +355,7 @@ fn gradient_fill_decode_rejects_malformed() {
             *v = DescValue::Double(f64::NAN);
         }
     }
-    bad_angle.data = write_descriptor(&desc_object("", b"GdFl", items));
+    bad_angle.data = write_descriptor(&desc_object("", b"GdFl", items)).into();
     assert_eq!(decode_adjustment(&bad_angle), None);
 
     // A payload that is not a descriptor at all.
@@ -371,14 +372,14 @@ fn gradient_fill_decode_rejects_malformed() {
         let mut missing = gradient_fill_data(GradientKind::Linear, &bw_stops(), 0.0, false, 100.0);
         let mut obj = pictura_codec::read_descriptor(&missing.data).expect("descriptor");
         drop_key(&mut obj, key);
-        missing.data = write_descriptor(&obj);
+        missing.data = write_descriptor(&obj).into();
         assert_eq!(decode_adjustment(&missing), None, "missing {key:?}");
     }
     // A non-finite stop component.
     let mut bad_red = gradient_fill_data(GradientKind::Linear, &bw_stops(), 0.0, false, 100.0);
     let mut obj = pictura_codec::read_descriptor(&bad_red.data).expect("descriptor");
     assert!(replace_key(&mut obj, b"Rd  ", &DescValue::Double(f64::NAN)));
-    bad_red.data = write_descriptor(&obj);
+    bad_red.data = write_descriptor(&obj).into();
     assert_eq!(decode_adjustment(&bad_red), None);
 }
 

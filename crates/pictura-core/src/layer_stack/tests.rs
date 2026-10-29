@@ -425,3 +425,23 @@ fn refusals_leave_the_tree_unchanged() {
     assert!(tree.promote_background(&[1]).is_err());
     assert_eq!(tree, before);
 }
+
+#[test]
+fn a_clone_shares_and_a_structural_edit_forks() {
+    let mut a = LayerStack::from_layers(vec![layer("A", false), layer("B", false)]);
+    let b = a.clone();
+    assert_eq!(
+        a.as_slice().as_ptr(),
+        b.as_slice().as_ptr(),
+        "a clone must only bump the refcount"
+    );
+    a.push(layer("C", false)).unwrap();
+    assert_ne!(
+        a.as_slice().as_ptr(),
+        b.as_slice().as_ptr(),
+        "a structural edit must fork the tree"
+    );
+    assert_eq!(a.len(), 3);
+    assert_eq!(b.len(), 2);
+    assert_eq!(b[0].name, "A");
+}

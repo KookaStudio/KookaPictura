@@ -35,9 +35,15 @@ pub(super) fn resample_native<M: PlaneMap>(
     interpolation: Interpolation,
 ) -> Samples {
     match samples {
-        Samples::U8(v) => Samples::U8(resample_plane(v, w, h, map, rect, dest, interpolation)),
-        Samples::U16(v) => Samples::U16(resample_typed(v, w, h, map, rect, dest, interpolation)),
-        Samples::F32(v) => Samples::F32(resample_typed(v, w, h, map, rect, dest, interpolation)),
+        Samples::U8(v) => {
+            Samples::U8(resample_plane(v, w, h, map, rect, dest, interpolation).into())
+        }
+        Samples::U16(v) => {
+            Samples::U16(resample_typed(v, w, h, map, rect, dest, interpolation).into())
+        }
+        Samples::F32(v) => {
+            Samples::F32(resample_typed(v, w, h, map, rect, dest, interpolation).into())
+        }
     }
 }
 

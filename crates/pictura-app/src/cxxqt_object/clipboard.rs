@@ -168,7 +168,7 @@ fn coverage(view: &PictureView) -> Option<Vec<u8>> {
         .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
-        .map(|s| s.data.clone())
+        .map(|s| s.data.to_vec())
 }
 
 /// The clip `Copy`/`Copy Merged` would take, without storing it.

@@ -19,7 +19,7 @@ fn an_empty_layer_or_an_empty_selected_area_has_nothing_to_filter() {
     let mut selection = Selection {
         width: 4,
         height: 4,
-        data: vec![0; 16],
+        data: vec![0; 16].into(),
     };
     selection.data[0] = 255;
     assert!(

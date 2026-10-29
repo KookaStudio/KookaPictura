@@ -102,7 +102,7 @@ pub fn attach_lens_correction_filter(
             filter_id: LENS_CORRECTION_FILTER_ID,
             name: LENS_CORRECTION_FILTER_NAME.to_string(),
             enabled: true,
-            options,
+            options: options.into(),
         },
     )
 }

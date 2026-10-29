@@ -167,8 +167,11 @@ pub(crate) fn map_shape_layer(
 fn set_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>) {
     let slot = layer.extra_blocks.iter().position(|b| &b.key == key);
     match (slot, data) {
-        (Some(i), Some(data)) => layer.extra_blocks[i].data = data,
-        (None, Some(data)) => layer.extra_blocks.push(LayerBlock { key: *key, data }),
+        (Some(i), Some(data)) => layer.extra_blocks[i].data = data.into(),
+        (None, Some(data)) => layer.extra_blocks.push(LayerBlock {
+            key: *key,
+            data: data.into(),
+        }),
         (Some(i), None) => {
             layer.extra_blocks.remove(i);
         }
@@ -261,11 +264,11 @@ mod tests {
             extra_blocks: vec![
                 LayerBlock {
                     key: *b"vmsk",
-                    data: vmsk,
+                    data: vmsk.into(),
                 },
                 LayerBlock {
                     key: *b"vscg",
-                    data: vscg,
+                    data: vscg.into(),
                 },
             ],
             ..Default::default()

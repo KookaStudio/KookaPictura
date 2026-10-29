@@ -176,7 +176,7 @@ pub(crate) mod tests {
             filter_id,
             name: "f".into(),
             enabled,
-            options: Vec::new(),
+            options: Vec::new().into(),
         }
     }
 
@@ -202,8 +202,8 @@ pub(crate) mod tests {
                 transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
                 text: "Hi".into(),
                 bounds: [0, 0, 2, 2],
-                text_desc: Vec::new(),
-                warp_desc: Vec::new(),
+                text_desc: Vec::new().into(),
+                warp_desc: Vec::new().into(),
                 fonts: vec!["Arial".into()],
                 style: None,
                 vertical: false,
@@ -217,7 +217,10 @@ pub(crate) mod tests {
     pub(crate) fn adjustment(key: [u8; 4], data: Vec<u8>) -> Layer {
         Layer {
             rect: rect(),
-            adjustment: Some(AdjustmentData { key, data }),
+            adjustment: Some(AdjustmentData {
+                key,
+                data: data.into(),
+            }),
             ..Default::default()
         }
     }
@@ -239,7 +242,7 @@ pub(crate) mod tests {
                 rect: rect(),
                 extra_blocks: vec![LayerBlock {
                     key: *b"vscg",
-                    data: vec![0xFF; 3],
+                    data: vec![0xFF; 3].into(),
                 }],
                 ..Default::default()
             },

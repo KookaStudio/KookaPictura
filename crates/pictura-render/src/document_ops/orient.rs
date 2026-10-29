@@ -422,7 +422,7 @@ mod tests {
             .iter()
             .map(|v| *v as u16 * 257 + 5)
             .collect();
-        assert_eq!(samples, &Samples::U16(want), "exact 90° index remap");
+        assert_eq!(samples, &Samples::U16(want.into()), "exact 90° index remap");
         let planes = doc.source_planes.as_ref().unwrap();
         assert_eq!((planes.width, planes.height), (2, 3));
         doc.composite = crate::composite_rgba(&doc);

@@ -633,7 +633,7 @@ fn type_commit_mask(
         Selection {
             width: doc.width,
             height: doc.height,
-            data,
+            data: data.into(),
         }
     };
     let label = if spec.vertical {

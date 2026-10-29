@@ -502,7 +502,7 @@ pub(super) fn write_layer(
                 &prepared.old_uuid,
                 doc.is_psb,
             ) {
-                doc.layer_section_extra = cleaned;
+                doc.layer_section_extra = cleaned.into();
             }
         }
     }

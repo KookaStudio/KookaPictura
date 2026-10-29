@@ -628,7 +628,7 @@ fn short_high_depth_layer_plane_is_a_typed_error() {
         depth: BitDepth::Sixteen,
         width: 2,
         height: 2,
-        samples: Samples::U16(vec![0; 12]),
+        samples: Samples::U16(vec![0; 12].into()),
     });
     {
         let _ = doc.layers.push(Layer {
@@ -653,7 +653,7 @@ fn short_high_depth_layer_plane_is_a_typed_error() {
     doc.layers[0].channels.clear();
     doc.layers[0].raw_channels = vec![RawChannel {
         id: 3,
-        data: vec![0, 0, 1],
+        data: vec![0, 0, 1].into(),
     }];
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 }
@@ -670,7 +670,7 @@ fn depth1_store_without_bitmap_write_back_is_a_typed_error() {
         depth: BitDepth::One,
         width: 1,
         height: 1,
-        samples: Samples::U8(vec![0]),
+        samples: Samples::U8(vec![0].into()),
     });
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 
@@ -738,11 +738,11 @@ fn read_conversion_reaches_native_composite() {
         depth: BitDepth::Sixteen,
         width: 2,
         height: 1,
-        samples: Samples::U16(vec![10000, 60000, 10000, 60000, 10000, 60000]),
+        samples: Samples::U16(vec![10000, 60000, 10000, 60000, 10000, 60000].into()),
     });
     doc.composite.data = vec![0, 255, 0, 255, 0, 255].into();
     doc.image_resources =
-        encode_image_resources(&[frame_image_resource(ICC_PROFILE, "", &profile)]);
+        encode_image_resources(&[frame_image_resource(ICC_PROFILE, "", &profile)]).into();
     let before = doc.source_planes.clone();
 
     let out = apply_icc(doc);
@@ -828,9 +828,17 @@ fn profile_conversion_preserves_native_samples() {
             .map(|(_, samples)| samples.clone())
             .expect("plane")
     };
-    assert_ne!(plane(0), Samples::U16(vec![0]), "red is converted");
-    assert_eq!(plane(-1), Samples::U16(vec![65535]), "alpha is untouched");
-    assert_eq!(plane(-2), Samples::U16(vec![32768]), "mask is untouched");
+    assert_ne!(plane(0), Samples::U16(vec![0].into()), "red is converted");
+    assert_eq!(
+        plane(-1),
+        Samples::U16(vec![65535].into()),
+        "alpha is untouched"
+    );
+    assert_eq!(
+        plane(-2),
+        Samples::U16(vec![32768].into()),
+        "mask is untouched"
+    );
     let narrow = plane(0).narrow_to_u8();
     let working = layer
         .channels
@@ -904,13 +912,25 @@ fn profile_conversion_does_not_clamp_32bit() {
             .map(|(_, samples)| samples.clone())
             .expect("plane")
     };
-    assert_eq!(plane(0), Samples::F32(vec![1.5]), "out-of-range restored");
+    assert_eq!(
+        plane(0),
+        Samples::F32(vec![1.5].into()),
+        "out-of-range restored"
+    );
     let Samples::F32(blue) = plane(2) else {
         panic!("the layer stays 32-bit");
     };
     assert!(blue[0] > 0.01, "layer color is converted: {}", blue[0]);
-    assert_eq!(plane(-1), Samples::F32(vec![1.0]), "alpha is untouched");
-    assert_eq!(plane(-2), Samples::F32(vec![0.5]), "mask is untouched");
+    assert_eq!(
+        plane(-1),
+        Samples::F32(vec![1.0].into()),
+        "alpha is untouched"
+    );
+    assert_eq!(
+        plane(-2),
+        Samples::F32(vec![0.5].into()),
+        "mask is untouched"
+    );
 }
 
 #[test]

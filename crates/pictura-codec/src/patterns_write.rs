@@ -119,7 +119,7 @@ pub fn add_document_pattern(doc: &mut Document, id: &str, record: &[u8]) -> bool
     if !added {
         push_block(&mut out, b"Patt", &entry);
     }
-    doc.layer_section_extra = out;
+    doc.layer_section_extra = out.into();
     true
 }
 
@@ -167,8 +167,9 @@ mod tests {
     #[test]
     fn other_blocks_are_kept_and_a_save_keeps_the_patterns() {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layer_section_extra =
-            [b"8BIM".as_slice(), b"Xyzw", &[0, 0, 0, 2], &[9, 9, 0, 0]].concat();
+        doc.layer_section_extra = [b"8BIM".as_slice(), b"Xyzw", &[0, 0, 0, 2], &[9, 9, 0, 0]]
+            .concat()
+            .into();
         let rec = encode_rgb_pattern("P", "kooka-p", 4, 3, &tile(5)).unwrap();
         assert!(add_document_pattern(&mut doc, "kooka-p", &rec));
         assert!(doc

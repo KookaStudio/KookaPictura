@@ -96,9 +96,9 @@ fn apply_icc_with_options(doc: Document, options: ConversionOptions) -> Document
     doc.composite = composite;
     convert_layers(&mut doc.layers, &src, &dst, options, true);
     convert_native_document(&mut doc, &src, &dst, options);
-    doc.source_icc = Some(profile_bytes);
+    doc.source_icc = Some(profile_bytes.into());
     let section = rebuild_resources(&doc, resources, consumed, None);
-    doc.image_resources = section;
+    doc.image_resources = section.into();
     doc
 }
 
@@ -154,9 +154,9 @@ fn apply_passthrough_policy(mut doc: Document, preserve: bool) -> Document {
         }
         // The embedded bytes stay resource 1039 and drive the display
         // conversion; `source_icc` records only a conversion the read threw away.
-        doc.document_icc = Some(profile.data.clone());
+        doc.document_icc = Some(profile.data.clone().into());
     } else {
-        doc.image_resources = rebuild_resources(&doc, resources, consumed, None);
+        doc.image_resources = rebuild_resources(&doc, resources, consumed, None).into();
     }
     doc
 }
@@ -242,7 +242,7 @@ pub(crate) fn cmyk_profile_from_resources(doc: &Document) -> Option<Profile> {
 /// the unparsed tail byte-for-byte.
 pub(crate) fn set_icc_resource(doc: &mut Document, icc: Option<&[u8]>) {
     let (resources, consumed) = decode_image_resources_with_len(doc);
-    doc.image_resources = rebuild_resources(doc, resources, consumed, icc);
+    doc.image_resources = rebuild_resources(doc, resources, consumed, icc).into();
 }
 
 /// Remove image resource 1039 without touching any other resource.
@@ -266,7 +266,7 @@ pub fn assign_cmyk_profile(doc: &mut Document, profile: &Profile) {
 /// `1039` is returned unchanged.
 pub(crate) fn resources_for_output(doc: &Document, mode_code: u16) -> Vec<u8> {
     let Some(expected) = output_data_space(mode_code) else {
-        return doc.image_resources.clone();
+        return doc.image_resources.to_vec();
     };
     let (resources, consumed) = decode_image_resources_with_len(doc);
     let mismatched = |r: &ImageResource| {
@@ -276,7 +276,7 @@ pub(crate) fn resources_for_output(doc: &Document, mode_code: u16) -> Vec<u8> {
                 .is_some_and(|sig| sig != expected.as_slice())
     };
     if !resources.iter().any(mismatched) {
-        return doc.image_resources.clone();
+        return doc.image_resources.to_vec();
     }
     let kept: Vec<ImageResource> = resources.into_iter().filter(|r| !mismatched(r)).collect();
     let mut section = encode_image_resources(&kept);
@@ -379,8 +379,8 @@ pub fn assign_document_profile(doc: &mut Document, target: &Profile) {
     };
     let (resources, consumed) = decode_image_resources_with_len(doc);
     let section = rebuild_resources(doc, resources, consumed, icc.as_deref());
-    doc.image_resources = section;
-    doc.document_icc = icc;
+    doc.image_resources = section.into();
+    doc.document_icc = icc.map(Into::into);
 }
 
 /// Convert to Profile: transform the composite and every layer's color channels

@@ -189,9 +189,9 @@ impl Feathered {
         let selection = pictura_select::Selection {
             width: self.width as u32,
             height: self.height as u32,
-            data: std::mem::take(&mut self.data),
+            data: std::mem::take(&mut self.data).into(),
         };
-        self.data = selection.feather(radius).data;
+        self.data = selection.feather(radius).data.to_vec();
         self
     }
 }

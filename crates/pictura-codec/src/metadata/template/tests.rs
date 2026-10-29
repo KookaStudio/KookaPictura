@@ -55,7 +55,8 @@ fn document_with(packet: &str) -> Document {
     doc.image_resources = encode_image_resources(&[
         resource(XMP_METADATA, packet.as_bytes()),
         resource(EXIF_DATA_1, &tiff_with_make()),
-    ]);
+    ])
+    .into();
     doc
 }
 
@@ -197,7 +198,8 @@ const CREATOR_PACKET: &str = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\
 
 fn document_without_xmp() -> Document {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.image_resources = encode_image_resources(&[resource(EXIF_DATA_1, &tiff_with_make())]);
+    doc.image_resources =
+        encode_image_resources(&[resource(EXIF_DATA_1, &tiff_with_make())]).into();
     doc
 }
 

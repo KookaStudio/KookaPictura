@@ -98,7 +98,7 @@ fn to_samples(like: &Samples, plane: Vec<f32>) -> Samples {
                 .map(|v| u16::from_unit(f64::from(v)))
                 .collect(),
         ),
-        Samples::F32(_) => Samples::F32(plane),
+        Samples::F32(_) => Samples::F32(plane.into()),
     }
 }
 

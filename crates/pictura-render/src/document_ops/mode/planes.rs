@@ -149,7 +149,7 @@ pub(super) fn expand_gray(doc: &mut Document) {
     };
     if let Some(store) = doc.source_planes.as_mut() {
         if store.samples.len() >= plane {
-            store.samples = map_samples!(&store.samples, |v| gray_store_to_rgb(v, plane));
+            store.samples = map_samples!(&store.samples, |v| gray_store_to_rgb(v, plane).into());
         }
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
@@ -205,7 +205,7 @@ pub(super) fn reduce_to_gray(doc: &mut Document) {
     };
     if let Some(store) = doc.source_planes.as_mut() {
         if store.samples.len() >= 3 * plane {
-            store.samples = map_samples!(&store.samples, |v| rgb_store_to_gray(v, plane));
+            store.samples = map_samples!(&store.samples, |v| rgb_store_to_gray(v, plane).into());
         }
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
@@ -228,13 +228,13 @@ pub(super) fn reduce_to_gray(doc: &mut Document) {
                 let n = planes[0].len();
                 let flat = match (&planes[0], &planes[1], &planes[2]) {
                     (Samples::U8(r), Samples::U8(g), Samples::U8(b)) => {
-                        Samples::U8(rgb_store_to_gray(&[&r[..], g, b].concat(), n))
+                        Samples::U8(rgb_store_to_gray(&[&r[..], g, b].concat(), n).into())
                     }
                     (Samples::U16(r), Samples::U16(g), Samples::U16(b)) => {
-                        Samples::U16(rgb_store_to_gray(&[&r[..], g, b].concat(), n))
+                        Samples::U16(rgb_store_to_gray(&[&r[..], g, b].concat(), n).into())
                     }
                     (Samples::F32(r), Samples::F32(g), Samples::F32(b)) => {
-                        Samples::F32(rgb_store_to_gray(&[&r[..], g, b].concat(), n))
+                        Samples::F32(rgb_store_to_gray(&[&r[..], g, b].concat(), n).into())
                     }
                     _ => return,
                 };
@@ -320,7 +320,7 @@ pub(super) fn encode_document(
             depth: BitDepth::Eight,
             width: doc.width,
             height: doc.height,
-            samples: Samples::U8(encoded),
+            samples: Samples::U8(encoded.into()),
         });
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
@@ -353,7 +353,12 @@ fn encode_layer(
         }
     }
     let planes = (0..encoded.len() / n.max(1))
-        .map(|c| (c as i16, Samples::U8(encoded[c * n..(c + 1) * n].to_vec())))
+        .map(|c| {
+            (
+                c as i16,
+                Samples::U8(encoded[c * n..(c + 1) * n].to_vec().into()),
+            )
+        })
         .collect();
     layer.source_channels = Some(SourceChannels::new(BitDepth::Eight, layer.rect, planes));
 }
@@ -379,7 +384,7 @@ pub(super) fn ensure_stores(doc: &mut Document) {
                     depth: BitDepth::Eight,
                     width: doc.width,
                     height: doc.height,
-                    samples: Samples::U8(encoded),
+                    samples: Samples::U8(encoded.into()),
                 });
             }
             for_each_layer(&mut doc.layers, &mut |layer| {
@@ -404,7 +409,7 @@ pub(super) fn ensure_stores(doc: &mut Document) {
                     depth: BitDepth::Eight,
                     width: doc.width,
                     height: doc.height,
-                    samples: Samples::U8(doc.composite.data[..colors * plane].to_vec()),
+                    samples: Samples::U8(doc.composite.data[..colors * plane].to_vec().into()),
                 });
             }
             for_each_layer(&mut doc.layers, &mut |layer| {
@@ -418,7 +423,7 @@ pub(super) fn ensure_stores(doc: &mut Document) {
                     .iter()
                     .map(|&i| {
                         let c = &layer.channels[i];
-                        (c.id, Samples::U8(c.data.to_vec()))
+                        (c.id, Samples::U8(c.data.clone()))
                     })
                     .collect();
                 layer.source_channels =
@@ -434,8 +439,8 @@ pub(super) fn ensure_stores(doc: &mut Document) {
 pub(super) fn restore_depth(doc: &mut Document, depth: BitDepth) {
     let convert = |samples: &Samples| -> Samples {
         match depth {
-            BitDepth::Eight => Samples::U8(samples.narrow_to_u8()),
-            BitDepth::Sixteen => Samples::U16(samples.to_u16()),
+            BitDepth::Eight => Samples::U8(samples.narrow_to_u8().into()),
+            BitDepth::Sixteen => Samples::U16(samples.to_u16().into()),
             BitDepth::ThirtyTwo => match samples {
                 Samples::U8(v) => Samples::widen_from_u8(v, depth),
                 Samples::U16(v) => Samples::F32(v.iter().map(|&s| s.to_unit() as f32).collect()),

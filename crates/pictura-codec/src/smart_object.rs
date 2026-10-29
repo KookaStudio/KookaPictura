@@ -110,7 +110,11 @@ fn build_smart_object(
     match &record.kind {
         b"liFD" => {
             so.kind = SmartObjectKind::Embedded;
-            so.crs_xmp = record.payload.as_deref().and_then(extract_crs);
+            so.crs_xmp = record
+                .payload
+                .as_deref()
+                .and_then(extract_crs)
+                .map(Into::into);
             so.crs = so.crs_xmp.as_deref().map(crate::crs_xmp::parse_crs);
             if let Some(payload) = record.payload.clone() {
                 so.set_payload(payload);
@@ -190,7 +194,7 @@ fn parse_filter_fx(items: &[(Vec<u8>, DescValue)]) -> (Vec<SmartFilter>, FilterF
                 filter_id,
                 name,
                 enabled,
-                options,
+                options: options.into(),
             })
         })
         .collect();
@@ -705,7 +709,7 @@ mod tests {
             name: "L".into(),
             extra_blocks: vec![LayerBlock {
                 key: *b"PlLd",
-                data: plld(uuid),
+                data: plld(uuid).into(),
             }],
             ..Default::default()
         }

@@ -1,14 +1,14 @@
 //! Native-depth sample storage and the shared narrowing/widening rules
 //! (`psd-bit-depth`). Split from `lib.rs` for the file-size cap.
 
-use crate::BitDepth;
+use crate::{BitDepth, Plane};
 
 /// A planar buffer of document-depth samples: `u8`, `u16`, or `f32` per channel.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Samples {
-    U8(Vec<u8>),
-    U16(Vec<u16>),
-    F32(Vec<f32>),
+    U8(Plane<u8>),
+    U16(Plane<u16>),
+    F32(Plane<f32>),
 }
 
 impl Samples {
@@ -44,7 +44,8 @@ impl Samples {
                     .0
                     .iter()
                     .map(|b| u16::from_be_bytes(*b))
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into(),
             ),
             BitDepth::ThirtyTwo => Samples::F32(
                 bytes
@@ -52,9 +53,10 @@ impl Samples {
                     .0
                     .iter()
                     .map(|b| f32::from_be_bytes(*b))
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into(),
             ),
-            _ => Samples::U8(bytes.to_vec()),
+            _ => Samples::U8(bytes.to_vec().into()),
         }
     }
 
@@ -62,7 +64,7 @@ impl Samples {
     /// [`Samples::from_bytes`].
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            Samples::U8(v) => v.clone(),
+            Samples::U8(v) => v.to_vec(),
             Samples::U16(v) => v.iter().flat_map(|s| s.to_be_bytes()).collect(),
             Samples::F32(v) => v.iter().flat_map(|s| s.to_be_bytes()).collect(),
         }
@@ -72,7 +74,7 @@ impl Samples {
     /// `clamp(trunc(v * 256), 0, 255)`, depth 1/8 is the bytes unchanged.
     pub fn narrow_to_u8(&self) -> Vec<u8> {
         match self {
-            Samples::U8(v) => v.clone(),
+            Samples::U8(v) => v.to_vec(),
             Samples::U16(v) => v.iter().map(|&s| (s >> 8) as u8).collect(),
             Samples::F32(v) => v
                 .iter()
@@ -86,7 +88,7 @@ impl Samples {
     pub fn to_u16(&self) -> Vec<u16> {
         match self {
             Samples::U8(v) => v.iter().map(|&s| s as u16 * 257).collect(),
-            Samples::U16(v) => v.clone(),
+            Samples::U16(v) => v.to_vec(),
             Samples::F32(v) => v
                 .iter()
                 .map(|&s| (s.clamp(0.0, 1.0) * 65535.0).round() as u16)
@@ -98,9 +100,21 @@ impl Samples {
     /// into `[0, 1]` at depth 32, the bytes unchanged at depth 1/8.
     pub fn widen_from_u8(bytes: &[u8], depth: BitDepth) -> Samples {
         match depth {
-            BitDepth::Sixteen => Samples::U16(bytes.iter().map(|&v| v as u16 * 257).collect()),
-            BitDepth::ThirtyTwo => Samples::F32(bytes.iter().map(|&v| v as f32 / 255.0).collect()),
-            _ => Samples::U8(bytes.to_vec()),
+            BitDepth::Sixteen => Samples::U16(
+                bytes
+                    .iter()
+                    .map(|&v| v as u16 * 257)
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            BitDepth::ThirtyTwo => Samples::F32(
+                bytes
+                    .iter()
+                    .map(|&v| v as f32 / 255.0)
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            _ => Samples::U8(bytes.to_vec().into()),
         }
     }
 
@@ -111,9 +125,9 @@ impl Samples {
             return None;
         }
         Some(match self {
-            Samples::U8(v) => Samples::U8(v[range].to_vec()),
-            Samples::U16(v) => Samples::U16(v[range].to_vec()),
-            Samples::F32(v) => Samples::F32(v[range].to_vec()),
+            Samples::U8(v) => Samples::U8(v[range].to_vec().into()),
+            Samples::U16(v) => Samples::U16(v[range].to_vec().into()),
+            Samples::F32(v) => Samples::F32(v[range].to_vec().into()),
         })
     }
 
@@ -121,7 +135,7 @@ impl Samples {
     /// Bitmap plane; `None` for a native `u16`/`f32` store.
     pub fn as_u8(&self) -> Option<&[u8]> {
         match self {
-            Samples::U8(v) => Some(v),
+            Samples::U8(v) => Some(v.as_slice()),
             _ => None,
         }
     }
@@ -268,7 +282,7 @@ mod tests {
 
     #[test]
     fn map_color_planes_leaves_alpha_untouched() {
-        let mut store = Samples::U8(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let mut store = Samples::U8(vec![1, 2, 3, 4, 5, 6, 7, 8].into());
         store.map_color_planes(2, 1, 4, |p| p.map(|v| 1.0 - v));
         let Samples::U8(v) = store else { panic!() };
         assert_eq!(v, vec![254, 253, 252, 251, 250, 249, 7, 8]);
@@ -276,30 +290,30 @@ mod tests {
 
     #[test]
     fn narrow_u16_matches_the_byte_rule() {
-        let store = Samples::U16(vec![0, 255, 256, 32768, 65535]);
+        let store = Samples::U16(vec![0, 255, 256, 32768, 65535].into());
         assert_eq!(store.narrow_to_u8(), vec![0, 0, 1, 128, 255]);
     }
 
     #[test]
     fn narrow_f32_matches_the_clipped_rule() {
-        let store = Samples::F32(vec![1.5, -0.5, 0.0, 0.5]);
+        let store = Samples::F32(vec![1.5, -0.5, 0.0, 0.5].into());
         assert_eq!(store.narrow_to_u8(), vec![255, 0, 0, 128]);
     }
 
     #[test]
     fn to_u16_quantizes_and_widens() {
         assert_eq!(
-            Samples::F32(vec![0.0, 0.5, 1.0, 1.5, -0.5]).to_u16(),
+            Samples::F32(vec![0.0, 0.5, 1.0, 1.5, -0.5].into()).to_u16(),
             vec![0, 32768, 65535, 65535, 0],
             "clamp then round v * 65535"
         );
         assert_eq!(
-            Samples::U8(vec![0, 1, 255]).to_u16(),
+            Samples::U8(vec![0, 1, 255].into()).to_u16(),
             vec![0, 257, 65535],
             "8-bit widens v * 257"
         );
         assert_eq!(
-            Samples::U16(vec![5, 60000]).to_u16(),
+            Samples::U16(vec![5, 60000].into()).to_u16(),
             vec![5, 60000],
             "16-bit is unchanged"
         );
@@ -309,7 +323,7 @@ mod tests {
     fn widen_u8_to_u16_is_257_times() {
         assert_eq!(
             Samples::widen_from_u8(&[0, 1, 255], BitDepth::Sixteen),
-            Samples::U16(vec![0, 257, 65535])
+            Samples::U16(vec![0, 257, 65535].into())
         );
     }
 
@@ -317,18 +331,21 @@ mod tests {
     fn widen_u8_to_f32_scales_to_unit_range() {
         assert_eq!(
             Samples::widen_from_u8(&[0, 1, 255], BitDepth::ThirtyTwo),
-            Samples::F32(vec![0.0, 1.0 / 255.0, 1.0])
+            Samples::F32(vec![0.0, 1.0 / 255.0, 1.0].into())
         );
     }
 
     #[test]
     fn len_depth_and_empty_follow_the_variant() {
-        assert_eq!(Samples::U8(vec![0; 3]).depth(), BitDepth::Eight);
-        assert_eq!(Samples::U16(vec![0; 3]).depth(), BitDepth::Sixteen);
-        assert_eq!(Samples::F32(vec![0.0; 3]).depth(), BitDepth::ThirtyTwo);
-        assert_eq!(Samples::U16(vec![0; 3]).len(), 3);
-        assert!(Samples::U8(Vec::new()).is_empty());
-        assert!(!Samples::F32(vec![0.0]).is_empty());
+        assert_eq!(Samples::U8(vec![0; 3].into()).depth(), BitDepth::Eight);
+        assert_eq!(Samples::U16(vec![0; 3].into()).depth(), BitDepth::Sixteen);
+        assert_eq!(
+            Samples::F32(vec![0.0; 3].into()).depth(),
+            BitDepth::ThirtyTwo
+        );
+        assert_eq!(Samples::U16(vec![0; 3].into()).len(), 3);
+        assert!(Samples::U8(Vec::new().into()).is_empty());
+        assert!(!Samples::F32(vec![0.0].into()).is_empty());
     }
 
     #[test]
@@ -351,11 +368,56 @@ mod tests {
     }
 
     #[test]
+    fn a_sample_store_clone_shares_its_allocation() {
+        let stores = [
+            Samples::U8(vec![1, 2, 3].into()),
+            Samples::U16(vec![1, 2, 3].into()),
+            Samples::F32(vec![1.0, 2.0, 3.0].into()),
+        ];
+        for store in stores {
+            let clone = store.clone();
+            let shares = match (&store, &clone) {
+                (Samples::U8(a), Samples::U8(b)) => a.shares(b),
+                (Samples::U16(a), Samples::U16(b)) => a.shares(b),
+                (Samples::F32(a), Samples::F32(b)) => a.shares(b),
+                _ => panic!("clone changed the variant"),
+            };
+            assert!(shares, "a clone must only bump the refcount");
+            assert_eq!(store, clone);
+        }
+    }
+
+    #[test]
+    fn a_shared_sample_store_forks_on_write() {
+        let mut a = Samples::U16(vec![1, 2, 3].into());
+        let b = a.clone();
+        let Samples::U16(av) = &mut a else { panic!() };
+        av.as_mut_slice()[0] = 9;
+        let Samples::U16(bv) = &b else { panic!() };
+        assert!(!av.shares(bv), "a write must fork the shared store");
+        assert_eq!(a, Samples::U16(vec![9, 2, 3].into()));
+        assert_eq!(b, Samples::U16(vec![1, 2, 3].into()));
+    }
+
+    #[test]
+    fn a_unique_sample_store_writes_in_place() {
+        let mut a = Samples::U16(vec![1, 2, 3].into());
+        let Samples::U16(v) = &mut a else { panic!() };
+        let before = v.as_slice().as_ptr();
+        v.as_mut_slice()[0] = 9;
+        assert_eq!(
+            v.as_slice().as_ptr(),
+            before,
+            "a unique store keeps its allocation"
+        );
+    }
+
+    #[test]
     fn slice_is_bounds_checked() {
-        let store = Samples::U16(vec![1, 2, 3, 4]);
-        assert_eq!(store.slice(1..3), Some(Samples::U16(vec![2, 3])));
+        let store = Samples::U16(vec![1, 2, 3, 4].into());
+        assert_eq!(store.slice(1..3), Some(Samples::U16(vec![2, 3].into())));
         assert_eq!(store.slice(2..5), None);
-        assert_eq!(Samples::U8(vec![1, 2]).as_u8(), Some(&[1u8, 2][..]));
-        assert_eq!(Samples::F32(vec![0.0]).as_u8(), None);
+        assert_eq!(Samples::U8(vec![1, 2].into()).as_u8(), Some(&[1u8, 2][..]));
+        assert_eq!(Samples::F32(vec![0.0].into()).as_u8(), None);
     }
 }

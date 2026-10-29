@@ -106,6 +106,6 @@ pub fn encode_channel_mixer(
     }
     AdjustmentData {
         key: *b"mixr",
-        data,
+        data: data.into(),
     }
 }

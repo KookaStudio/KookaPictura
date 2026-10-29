@@ -230,7 +230,7 @@ pub(super) fn indexed_doc() -> Document {
         depth: BitDepth::Eight,
         width: 4,
         height: 3,
-        samples: Samples::U8(index),
+        samples: Samples::U8(index.into()),
     });
     doc
 }
@@ -270,7 +270,7 @@ pub(super) fn bitmap_doc() -> Document {
         depth: BitDepth::One,
         width: w as u32,
         height: h as u32,
-        samples: Samples::U8(packed),
+        samples: Samples::U8(packed.into()),
     });
     doc
 }
@@ -297,7 +297,7 @@ fn pdf_multichannel_is_refused() {
 fn pdf_icc_profile_embedding_follows_option() {
     let mut doc = rgb_doc(3, 2, 72.0, None);
     let adobe = pictura_color::Profile::adobe_rgb().to_icc();
-    doc.document_icc = Some(adobe.clone());
+    doc.document_icc = Some(adobe.clone().into());
     let tagged = write(
         &doc,
         &PdfOptions {
@@ -384,7 +384,7 @@ fn sixteen_bit_doc() -> (Document, Vec<u16>) {
         depth: BitDepth::Sixteen,
         width: 3,
         height: 2,
-        samples: Samples::U16(native.clone()),
+        samples: Samples::U16(native.clone().into()),
     });
     (doc, native)
 }

@@ -308,7 +308,7 @@ fn attach_inserts_into_a_preserved_sold_and_preserves_other_keys() {
     layer.smart_object.as_mut().unwrap().uuid = so.uuid.clone();
     layer.extra_blocks.push(LayerBlock {
         key: *b"SoLd",
-        data,
+        data: data.into(),
     });
 
     let settings = PicturaRawSettings {
@@ -440,7 +440,7 @@ fn reattach_a_generic_filter_replaces_only_its_own_entry() {
             filter_id: 4242,
             name: "First".to_string(),
             enabled: true,
-            options,
+            options: options.into(),
         }];
         so
     }
@@ -450,14 +450,15 @@ fn reattach_a_generic_filter_replaces_only_its_own_entry() {
     let mut layer = layer0;
     layer.extra_blocks.push(LayerBlock {
         key: *b"SoLd",
-        data,
+        data: data.into(),
     });
 
     let replacement = SmartFilter {
         filter_id: 4242,
         name: "Second".to_string(),
         enabled: false,
-        options: descriptor::write_descriptor(&object(b"null", vec![(b"New", DescValue::Long(9))])),
+        options: descriptor::write_descriptor(&object(b"null", vec![(b"New", DescValue::Long(9))]))
+            .into(),
     };
     attach_smart_filter(&mut layer, replacement).expect("same-id attach replaces the entry");
 

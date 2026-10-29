@@ -156,7 +156,10 @@ fn adjustment_layer(name: &str, key: [u8; 4], data: Vec<u8>) -> Layer {
         name: name.to_string(),
         rect: full_rect(),
         mask: Some(default_mask()),
-        adjustment: Some(AdjustmentData { key, data }),
+        adjustment: Some(AdjustmentData {
+            key,
+            data: data.into(),
+        }),
         ..Default::default()
     }
 }
@@ -233,7 +236,7 @@ fn smoke_type_layer() -> Layer {
         ],
         extra_blocks: vec![LayerBlock {
             key: *b"TySh",
-            data: encode_type_tool(&tool),
+            data: encode_type_tool(&tool).into(),
         }],
         ..Default::default()
     }
@@ -505,7 +508,7 @@ fn camera_raw_filter() -> SmartFilter {
         filter_id: pictura_codec::CAMERA_RAW_FILTER_ID,
         name: pictura_codec::CAMERA_RAW_FILTER_NAME.to_string(),
         enabled: true,
-        options: camera_raw_options(),
+        options: camera_raw_options().into(),
     }
 }
 

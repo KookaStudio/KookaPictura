@@ -46,11 +46,14 @@ fn set_vmsk_block(layer: &mut Layer, data: Option<Vec<u8>>) -> bool {
     let slot = layer.extra_blocks.iter().position(|b| &b.key == VMSK);
     match (slot, data) {
         (Some(i), Some(data)) => {
-            layer.extra_blocks[i].data = data;
+            layer.extra_blocks[i].data = data.into();
             true
         }
         (None, Some(data)) => {
-            layer.extra_blocks.push(LayerBlock { key: *VMSK, data });
+            layer.extra_blocks.push(LayerBlock {
+                key: *VMSK,
+                data: data.into(),
+            });
             true
         }
         (Some(i), None) => {

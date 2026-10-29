@@ -292,7 +292,7 @@ fn sample_mask(mask: &LayerMask, doc_w: u32, doc_h: u32, w: u32, h: u32) -> Sele
     Selection {
         width: w,
         height: h,
-        data,
+        data: data.into(),
     }
 }
 
@@ -309,7 +309,7 @@ fn shrink_selection(sel: &Selection, w: u32, h: u32) -> Selection {
     Selection {
         width: w,
         height: h,
-        data,
+        data: data.into(),
     }
 }
 
@@ -390,7 +390,7 @@ fn preview(
         Ok(refined) => {
             *width = refined.width as i32;
             *height = refined.height as i32;
-            refined.data
+            refined.data.to_vec()
         }
         Err(_) => Vec::new(),
     }
@@ -570,7 +570,7 @@ fn apply(
                 if !eligible {
                     return false;
                 }
-                set_layer_mask(doc, &path, refined.data.clone());
+                set_layer_mask(doc, &path, refined.data.to_vec());
                 true
             }
             OutputTarget::NewLayer | OutputTarget::NewLayerWithMask => {
@@ -589,7 +589,7 @@ fn apply(
                     write_decontaminated(doc, &new_path, &refined, decon);
                 }
                 if target == OutputTarget::NewLayerWithMask {
-                    set_layer_mask(doc, &new_path, refined.data.clone());
+                    set_layer_mask(doc, &new_path, refined.data.to_vec());
                 }
                 new_layer_path = Some(new_path);
                 true

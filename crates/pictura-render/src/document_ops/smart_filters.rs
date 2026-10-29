@@ -41,7 +41,7 @@ pub fn add_smart_filter(
             filter_id,
             name: name.to_string(),
             enabled: true,
-            options: options.to_vec(),
+            options: options.to_vec().into(),
         },
     )
     .is_ok()
@@ -96,7 +96,7 @@ pub fn delete_smart_filter_mask(doc: &mut Document, path: &str) -> bool {
     if let Some(extra) =
         pictura_codec::remove_filter_mask(&doc.layer_section_extra, &key, doc.is_psb)
     {
-        doc.layer_section_extra = extra;
+        doc.layer_section_extra = extra.into();
     }
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;

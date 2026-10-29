@@ -299,9 +299,9 @@ fn native_u8_equals_apply_for_every_covered_adjustment() {
     for adjustment in covered() {
         let mut expected = base.clone();
         apply(&adjustment, &mut expected).unwrap();
-        let mut store = Samples::U8(base.data.to_vec());
+        let mut store = Samples::U8(base.data.clone());
         apply_native(&adjustment, &mut store, W as usize, H as usize, 3).unwrap();
-        assert_eq!(store, Samples::U8(expected.data.to_vec()), "{adjustment:?}");
+        assert_eq!(store, Samples::U8(expected.data), "{adjustment:?}");
     }
 }
 
@@ -317,16 +317,19 @@ fn native_u8_leaves_alpha_untouched() {
         data: data.clone(),
     };
     apply(&Adjustment::Invert, &mut expected).unwrap();
-    let mut store = Samples::U8(data.to_vec());
+    let mut store = Samples::U8(data);
     apply_native(&Adjustment::Invert, &mut store, W as usize, H as usize, 4).unwrap();
-    assert_eq!(store, Samples::U8(expected.data.to_vec()));
+    assert_eq!(store, Samples::U8(expected.data));
 }
 
 #[test]
 fn depth16_native_edit_is_not_the_widened_byte() {
-    let mut store = Samples::U16(vec![
-        1000, 5000, 20000, 40000, 60000, 12345, 1, 255, 256, 257, 32768, 65535,
-    ]);
+    let mut store = Samples::U16(
+        vec![
+            1000, 5000, 20000, 40000, 60000, 12345, 1, 255, 256, 257, 32768, 65535,
+        ]
+        .into(),
+    );
     let levels = Adjustment::Levels(LevelsParams {
         input_black: 0,
         input_white: 255,
@@ -347,7 +350,7 @@ fn depth16_native_edit_is_not_the_widened_byte() {
 
 #[test]
 fn depth32_native_edit_keeps_values_above_one() {
-    let mut store = Samples::F32(vec![1.0, 0.5, 0.25, 0.0, 0.75, 1.0]);
+    let mut store = Samples::F32(vec![1.0, 0.5, 0.25, 0.0, 0.75, 1.0].into());
     let exposure = Adjustment::Exposure(ExposureParams {
         exposure: 2.0,
         offset: 0.0,
@@ -363,9 +366,12 @@ fn depth32_native_edit_keeps_values_above_one() {
 
 #[test]
 fn depth16_color_adjustment_is_not_the_widened_byte() {
-    let mut store = Samples::U16(vec![
-        1000, 5000, 20000, 40000, 60000, 12345, 1, 255, 256, 257, 32768, 65535,
-    ]);
+    let mut store = Samples::U16(
+        vec![
+            1000, 5000, 20000, 40000, 60000, 12345, 1, 255, 256, 257, 32768, 65535,
+        ]
+        .into(),
+    );
     let vibrance = Adjustment::Vibrance(VibranceParams {
         vibrance: 70,
         saturation: 0,
@@ -380,7 +386,7 @@ fn depth16_color_adjustment_is_not_the_widened_byte() {
 
 #[test]
 fn native_exposure_linear() {
-    let mut store = Samples::F32(vec![0.5; 3]);
+    let mut store = Samples::F32(vec![0.5; 3].into());
     let exposure = Adjustment::Exposure(ExposureParams {
         exposure: 1.0,
         offset: 0.0,
@@ -394,7 +400,13 @@ fn native_exposure_linear() {
 #[test]
 fn native_posterize_16bit() {
     let levels = [0u16, 16384, 32768, 49151, 65535];
-    let mut store = Samples::U16(levels.iter().flat_map(|&v| [v; 3]).collect());
+    let mut store = Samples::U16(
+        levels
+            .iter()
+            .flat_map(|&v| [v; 3])
+            .collect::<Vec<_>>()
+            .into(),
+    );
     apply_native(&Adjustment::Posterize(5), &mut store, 5, 1, 3).unwrap();
     let Samples::U16(v) = &store else { panic!() };
     for (i, &expected) in levels.iter().enumerate() {
@@ -407,7 +419,12 @@ fn native_posterize_16bit() {
 
 #[test]
 fn native_bw_channel_mixer() {
-    let mut store = Samples::U16((0..12).map(|i| (i * 5000) as u16).collect::<Vec<_>>());
+    let mut store = Samples::U16(
+        (0..12)
+            .map(|i| (i * 5000) as u16)
+            .collect::<Vec<_>>()
+            .into(),
+    );
     let bw = Adjustment::BlackWhite(BlackWhiteParams {
         red: 120.0,
         yellow: -30.0,
@@ -425,7 +442,12 @@ fn native_bw_channel_mixer() {
         "B&W must not stay on the 8-bit grid: {v:?}"
     );
 
-    let mut store = Samples::U16((0..12).map(|i| (i * 5000) as u16).collect::<Vec<_>>());
+    let mut store = Samples::U16(
+        (0..12)
+            .map(|i| (i * 5000) as u16)
+            .collect::<Vec<_>>()
+            .into(),
+    );
     let mix = Adjustment::ChannelMixer(ChannelMixerParams {
         monochrome: false,
         red: [120.0, -20.0, 10.0],
@@ -443,7 +465,7 @@ fn native_bw_channel_mixer() {
 
 #[test]
 fn unsupported_adjustment_is_refused_without_mutation() {
-    let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60]);
+    let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60].into());
     let before = store.clone();
     let fill = Adjustment::SolidFill([1, 2, 3, 4]);
     let err = apply_native(&fill, &mut store, 2, 1, 3).unwrap_err();
@@ -454,7 +476,7 @@ fn unsupported_adjustment_is_refused_without_mutation() {
 #[test]
 fn match_color_is_refused_at_native_depth() {
     // Dialog-only, like Replace Color: no PSD encoding, no native arm.
-    let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60]);
+    let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60].into());
     let before = store.clone();
     let p = MatchColorParams {
         target: MatchColorStats::ZERO,
@@ -474,7 +496,7 @@ fn depth16_color_lookup_keeps_precision() {
     let input = vec![
         1000, 5000, 20000, 40000, 60000, 12345, 1, 255, 256, 257, 32768, 65535,
     ];
-    let mut store = Samples::U16(input.clone());
+    let mut store = Samples::U16(input.clone().into());
     apply_native(
         &Adjustment::ColorLookup(color_lookup_params()),
         &mut store,
@@ -494,7 +516,7 @@ fn depth16_color_lookup_keeps_precision() {
 
 #[test]
 fn unparseable_color_lookup_is_a_noop_at_native_depth() {
-    let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60]);
+    let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60].into());
     let before = store.clone();
     let params = ColorLookupParams {
         kind: ColorLookupKind::AbstractProfile,

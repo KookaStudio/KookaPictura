@@ -149,7 +149,7 @@ fn fill_at<T: Sample + PartialEq + Send + Sync>(
     }
     // The transparency plane: the store's own when it has one, else the
     // layer's 8-bit channel widened to the store's width.
-    let mut widened = Samples::U8(Vec::new());
+    let mut widened = Samples::U8(Vec::new().into());
     let alpha_plane: Option<&mut [T]> = match a {
         Some(a) => Some(a),
         None => match channels.iter().find(|c| c.id == -1) {
@@ -314,16 +314,16 @@ pub(crate) mod tests {
                 .enumerate()
                 .map(|(i, p)| Channel {
                     id: i as i16,
-                    data: Samples::U16(p.clone()).narrow_to_u8().into(),
+                    data: Samples::U16(p.clone().into()).narrow_to_u8().into(),
                 })
                 .collect(),
             source_channels: Some(SourceChannels::new(
                 BitDepth::Sixteen,
                 rect,
                 vec![
-                    (0, Samples::U16(red)),
-                    (1, Samples::U16(green)),
-                    (2, Samples::U16(blue)),
+                    (0, Samples::U16(red.into())),
+                    (1, Samples::U16(green.into())),
+                    (2, Samples::U16(blue.into())),
                 ],
             )),
             ..Default::default()
@@ -350,16 +350,16 @@ pub(crate) mod tests {
                 .enumerate()
                 .map(|(i, p)| Channel {
                     id: i as i16,
-                    data: Samples::F32(p.clone()).narrow_to_u8().into(),
+                    data: Samples::F32(p.clone().into()).narrow_to_u8().into(),
                 })
                 .collect(),
             source_channels: Some(SourceChannels::new(
                 BitDepth::ThirtyTwo,
                 rect,
                 vec![
-                    (0, Samples::F32(red)),
-                    (1, Samples::F32(green)),
-                    (2, Samples::F32(blue)),
+                    (0, Samples::F32(red.into())),
+                    (1, Samples::F32(green.into())),
+                    (2, Samples::F32(blue.into())),
                 ],
             )),
             ..Default::default()
@@ -379,7 +379,7 @@ pub(crate) mod tests {
         let Samples::F32(values) = samples else {
             panic!("an f32 store")
         };
-        values.clone()
+        values.to_vec()
     }
 
     /// The store's colour plane for `id`.
@@ -393,7 +393,7 @@ pub(crate) mod tests {
         let Samples::U16(values) = samples else {
             panic!("a u16 store")
         };
-        values.clone()
+        values.to_vec()
     }
 
     #[test]

@@ -178,7 +178,7 @@ mod tests {
             frame_image_resource(GRID_AND_GUIDES, "", &encode_guides(&sample(), (100, 200)));
         let section = encode_image_resources(&[other.clone(), stored]);
         let mut doc = Document::new(200, 100, ColorMode::Rgb, BitDepth::Eight);
-        doc.image_resources = section.clone();
+        doc.image_resources = section.clone().into();
         resolve_guides(&mut doc);
         assert_eq!(doc.guides, sample());
         assert_eq!(with_document_guides(&doc, section.clone()), section);

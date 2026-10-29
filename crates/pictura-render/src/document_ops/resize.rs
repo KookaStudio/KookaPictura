@@ -320,16 +320,16 @@ mod tests {
             depth: BitDepth::Sixteen,
             width: 4,
             height: 4,
-            samples: Samples::U16(vec![0; 3 * 4 * 4]),
+            samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
         });
         doc.layers[0].raw_channels = vec![RawChannel {
             id: 3,
-            data: vec![0, 0, 1],
+            data: vec![0, 0, 1].into(),
         }];
         doc.layers[0].source_channels = Some(SourceChannels {
             depth: BitDepth::Sixteen,
             rect: rect(0, 0, 4, 4),
-            planes: vec![(3, Samples::U16(vec![0; 16]))],
+            planes: vec![(3, Samples::U16(vec![0; 16].into()))],
             working_idents: [0; 3],
         });
 
@@ -354,7 +354,7 @@ mod tests {
         assert_eq!(store.rect, doc.layers[0].rect);
         assert_eq!(
             store.planes.iter().find(|(id, _)| *id == 3).unwrap().1,
-            Samples::U16(vec![0; 64])
+            Samples::U16(vec![0; 64].into())
         );
         let planes = doc.source_planes.as_ref().unwrap();
         assert_eq!((planes.width, planes.height), (8, 8));

@@ -60,7 +60,7 @@ fn extra_block_finds_present_key_and_none_for_absent() {
     let layer = Layer {
         extra_blocks: vec![LayerBlock {
             key: *b"lfx2",
-            data: vec![1, 2, 3, 4],
+            data: vec![1, 2, 3, 4].into(),
         }],
         ..Default::default()
     };
@@ -366,7 +366,7 @@ fn retains_source_depth_tracks_the_retained_store() {
         depth: BitDepth::Sixteen,
         width: 1,
         height: 1,
-        samples: Samples::U16(vec![0]),
+        samples: Samples::U16(vec![0].into()),
     });
     assert!(doc.retains_source_depth());
 
@@ -382,7 +382,7 @@ fn retains_source_depth_tracks_the_retained_store() {
                 bottom: 1,
                 right: 1,
             },
-            planes: vec![(0, Samples::U16(vec![0]))],
+            planes: vec![(0, Samples::U16(vec![0].into()))],
             working_idents: [0; 3],
         }),
         ..Default::default()
@@ -482,4 +482,271 @@ fn smart_object_equality_ignores_the_payload_digest() {
     let b = a.clone();
     a.payload_digest = 42;
     assert_eq!(a, b, "the digest is cache metadata, not content");
+}
+
+fn cow_layer() -> Layer {
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 2,
+        right: 2,
+    };
+    Layer {
+        rect,
+        extra_blocks: vec![LayerBlock {
+            key: *b"lfx2",
+            data: vec![1, 2, 3].into(),
+        }],
+        raw_channels: vec![RawChannel {
+            id: 3,
+            data: vec![4, 5, 6].into(),
+        }],
+        blending_ranges: vec![7, 8].into(),
+        mask: Some(LayerMask {
+            rect,
+            data: Some(vec![9, 10].into()),
+            extra: vec![11].into(),
+            ..Default::default()
+        }),
+        adjustment: Some(AdjustmentData {
+            key: *b"levl",
+            data: vec![12, 13].into(),
+        }),
+        smart_object: Some(SmartObject {
+            config_descriptor: vec![14, 15].into(),
+            payload: Some(vec![9, 9, 9].into()),
+            smart_filters: vec![SmartFilter {
+                options: vec![16].into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+        type_tool: Some(TypeTool {
+            transform: [0.0; 6],
+            text: String::new(),
+            bounds: [0; 4],
+            text_desc: vec![17].into(),
+            warp_desc: vec![18].into(),
+            fonts: Vec::new(),
+            style: None,
+            vertical: false,
+            box_bounds: None,
+            path: None,
+        }),
+        children: LayerStack::from_layers(vec![Layer {
+            name: "child".into(),
+            ..Default::default()
+        }]),
+        source_channels: Some(SourceChannels::new(
+            BitDepth::Sixteen,
+            rect,
+            vec![
+                (0, Samples::U16(vec![1; 4].into())),
+                (1, Samples::U16(vec![2; 4].into())),
+            ],
+        )),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_bare_pixel_buffer_is_8_bit() {
+    let buf = PixelBuffer::new(2, 2, 3);
+    let _: &Plane<u8> = &buf.data;
+    assert_eq!(buf.data.len(), 12);
+}
+
+#[test]
+fn a_wider_sample_buffer_is_expressible() {
+    let buf: PixelBuffer<u16> = PixelBuffer::new(2, 2, 3);
+    let _: &Plane<u16> = &buf.data;
+    assert_eq!(buf.data.len(), 12);
+}
+
+#[test]
+fn a_document_clone_shares_retained_samples() {
+    let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Sixteen);
+    doc.source_depth = Some(BitDepth::Sixteen);
+    doc.source_planes = Some(SourcePlanes {
+        depth: BitDepth::Sixteen,
+        width: 2,
+        height: 2,
+        samples: Samples::U16(vec![1; 12].into()),
+    });
+    let clone = doc.clone();
+    let a = &doc.source_planes.as_ref().unwrap().samples;
+    let b = &clone.source_planes.as_ref().unwrap().samples;
+    assert!(matches!((a, b), (Samples::U16(a), Samples::U16(b)) if a.shares(b)));
+}
+
+#[test]
+fn a_document_clone_shares_native_samples_and_payload() {
+    let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Sixteen);
+    doc.source_depth = Some(BitDepth::Sixteen);
+    doc.source_planes = Some(SourcePlanes {
+        depth: BitDepth::Sixteen,
+        width: 2,
+        height: 2,
+        samples: Samples::U16(vec![1; 12].into()),
+    });
+    doc.layers = LayerStack::from_layers(vec![cow_layer()]);
+    let clone = doc.clone();
+    assert_eq!(doc, clone);
+    let a = &doc.layers[0].source_channels.as_ref().unwrap().planes[0].1;
+    let b = &clone.layers[0].source_channels.as_ref().unwrap().planes[0].1;
+    assert!(matches!((a, b), (Samples::U16(a), Samples::U16(b)) if a.shares(b)));
+    let a = doc.layers[0]
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .payload
+        .as_ref()
+        .unwrap();
+    let b = clone.layers[0]
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .payload
+        .as_ref()
+        .unwrap();
+    assert!(a.shares(b));
+}
+
+#[test]
+fn a_smart_object_payload_and_raw_section_share() {
+    let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.layer_section_extra = vec![1, 2, 3].into();
+    doc.layers = LayerStack::from_layers(vec![Layer {
+        smart_object: Some(SmartObject::default().with_payload(vec![4, 5, 6])),
+        ..Default::default()
+    }]);
+    let clone = doc.clone();
+    assert!(doc.layer_section_extra.shares(&clone.layer_section_extra));
+    let a = doc.layers[0]
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .payload
+        .as_ref()
+        .unwrap();
+    let b = clone.layers[0]
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .payload
+        .as_ref()
+        .unwrap();
+    assert!(a.shares(b));
+}
+
+#[test]
+fn a_layer_clone_shares_blocks_and_children() {
+    let layer = cow_layer();
+    let clone = layer.clone();
+    assert!(layer.extra_blocks[0]
+        .data
+        .shares(&clone.extra_blocks[0].data));
+    assert!(layer.raw_channels[0]
+        .data
+        .shares(&clone.raw_channels[0].data));
+    assert!(layer.blending_ranges.shares(&clone.blending_ranges));
+    assert!(layer
+        .mask
+        .as_ref()
+        .unwrap()
+        .extra
+        .shares(&clone.mask.as_ref().unwrap().extra));
+    assert!(layer
+        .mask
+        .as_ref()
+        .unwrap()
+        .data
+        .as_ref()
+        .unwrap()
+        .shares(clone.mask.as_ref().unwrap().data.as_ref().unwrap()));
+    assert!(layer
+        .adjustment
+        .as_ref()
+        .unwrap()
+        .data
+        .shares(&clone.adjustment.as_ref().unwrap().data));
+    assert!(layer
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .config_descriptor
+        .shares(&clone.smart_object.as_ref().unwrap().config_descriptor));
+    assert!(layer.smart_object.as_ref().unwrap().smart_filters[0]
+        .options
+        .shares(&clone.smart_object.as_ref().unwrap().smart_filters[0].options));
+    assert!(layer
+        .type_tool
+        .as_ref()
+        .unwrap()
+        .text_desc
+        .shares(&clone.type_tool.as_ref().unwrap().text_desc));
+    assert!(layer
+        .type_tool
+        .as_ref()
+        .unwrap()
+        .warp_desc
+        .shares(&clone.type_tool.as_ref().unwrap().warp_desc));
+    assert_eq!(
+        layer.children.as_slice().as_ptr(),
+        clone.children.as_slice().as_ptr()
+    );
+}
+
+#[test]
+fn a_document_clone_shares_preserved_blocks() {
+    let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.source_icc = Some(vec![1, 2].into());
+    doc.document_icc = Some(vec![3, 4].into());
+    doc.color_mode_data = vec![5].into();
+    doc.image_resources = vec![6].into();
+    doc.global_layer_mask = vec![7].into();
+    doc.layer_section_extra = vec![8].into();
+    let clone = doc.clone();
+    assert!(doc
+        .source_icc
+        .as_ref()
+        .unwrap()
+        .shares(clone.source_icc.as_ref().unwrap()));
+    assert!(doc
+        .document_icc
+        .as_ref()
+        .unwrap()
+        .shares(clone.document_icc.as_ref().unwrap()));
+    assert!(doc.color_mode_data.shares(&clone.color_mode_data));
+    assert!(doc.image_resources.shares(&clone.image_resources));
+    assert!(doc.global_layer_mask.shares(&clone.global_layer_mask));
+    assert!(doc.layer_section_extra.shares(&clone.layer_section_extra));
+}
+
+#[test]
+fn a_written_store_forks_alone() {
+    let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.layer_section_extra = vec![1, 2].into();
+    doc.layers = LayerStack::from_layers(vec![Layer {
+        smart_object: Some(SmartObject::default().with_payload(vec![3, 4])),
+        ..Default::default()
+    }]);
+    let clone = doc.clone();
+    doc.layer_section_extra.as_mut_slice()[0] = 9;
+    assert!(!doc.layer_section_extra.shares(&clone.layer_section_extra));
+    let a = doc.layers[0]
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .payload
+        .as_ref()
+        .unwrap();
+    let b = clone.layers[0]
+        .smart_object
+        .as_ref()
+        .unwrap()
+        .payload
+        .as_ref()
+        .unwrap();
+    assert!(a.shares(b), "an unrelated store must keep sharing");
 }

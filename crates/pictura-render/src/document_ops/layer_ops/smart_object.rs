@@ -23,7 +23,7 @@ fn remove_link_if_unreferenced(doc: &mut Document, uuid: &str) {
     if let Some(cleaned) =
         pictura_codec::remove_linked_source(&doc.layer_section_extra, uuid, doc.is_psb)
     {
-        doc.layer_section_extra = cleaned;
+        doc.layer_section_extra = cleaned.into();
     }
 }
 
@@ -269,6 +269,16 @@ pub fn can_rasterize_smart_object(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
         !layer.is_group && layer.adjustment.is_none() && layer.smart_object.is_some()
     })
+}
+
+/// Whether a smart-object layer's embedded source can materialize into pixels,
+/// without cloning or mutating the document. The caller handles the raster-proxy
+/// case (a channel id `0`) separately.
+pub fn can_materialize_smart_source(layer: &Layer) -> bool {
+    layer
+        .smart_object
+        .as_ref()
+        .is_some_and(|so| crate::render_smart_source(so, layer.rect, layer.rect).is_some())
 }
 
 /// Rasterize the smart-object layer at `path` back into a plain pixel layer.

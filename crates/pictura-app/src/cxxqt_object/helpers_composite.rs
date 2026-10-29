@@ -160,7 +160,7 @@ pub(super) fn selection_to_mask(selection: &Selection, doc: &Document) -> LayerM
         default_color: 0,
         disabled: false,
         flags: 0,
-        data: Some(selection.data.clone().into()),
+        data: Some(selection.data.clone()),
         ..Default::default()
     }
 }

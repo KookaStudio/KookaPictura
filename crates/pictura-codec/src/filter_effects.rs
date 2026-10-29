@@ -536,7 +536,7 @@ mod tests {
     fn a_mask_survives_a_document_round_trip() {
         let extra = mask_extra("u-1", (0, 0, 3, 4), &plane(), 4, 3);
         let mut doc = Document::new(4, 3, ColorMode::Rgb, BitDepth::Eight);
-        doc.layer_section_extra = extra;
+        doc.layer_section_extra = extra.into();
         let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("re-reads");
         let masks = collect_filter_masks(&back.layer_section_extra, false);
         assert_eq!(masks.len(), 1);
@@ -581,7 +581,7 @@ mod tests {
         let sold = crate::smart_writer::author_sold_block(&so, &layer, 4, 3);
         layer.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
-            data: sold,
+            data: sold.into(),
         });
         let mut layers = LayerStack::from_layers(vec![layer]);
         let extra = mask_extra(&uuid, (0, 0, 3, 4), &plane(), 4, 3);
@@ -620,7 +620,7 @@ mod tests {
         };
         layer.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
-            data: sold,
+            data: sold.into(),
         });
         let mut layers = LayerStack::from_layers(vec![layer]);
         let extra = mask_extra("placed-1", (0, 0, 3, 4), &plane(), 4, 3);

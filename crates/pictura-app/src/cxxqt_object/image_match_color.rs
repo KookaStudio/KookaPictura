@@ -101,7 +101,7 @@ fn selection_plane(view: &PictureView, use_selection: bool) -> Option<Vec<u8>> {
         .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
-        .map(|s| s.data.clone())
+        .map(|s| s.data.to_vec())
 }
 
 fn stats_vec(stats: MatchColorStats) -> Vec<f64> {

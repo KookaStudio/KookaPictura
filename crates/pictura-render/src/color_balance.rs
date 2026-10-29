@@ -57,6 +57,6 @@ pub fn encode_color_balance(
     data.push(0);
     AdjustmentData {
         key: *b"blnc",
-        data,
+        data: data.into(),
     }
 }

@@ -701,7 +701,7 @@ fn desc_long_or(obj: &DescValue, key: &[u8], default: f64) -> Option<f64> {
 pub fn encode_invert() -> AdjustmentData {
     AdjustmentData {
         key: *b"nvrt",
-        data: Vec::new(),
+        data: Vec::new().into(),
     }
 }
 
@@ -731,7 +731,7 @@ pub fn encode_brightness_contrast(brightness: i16, contrast: i16) -> AdjustmentD
     data.push(0);
     AdjustmentData {
         key: *b"brit",
-        data,
+        data: data.into(),
     }
 }
 
@@ -760,7 +760,7 @@ pub fn encode_hue_saturation(hue: i16, saturation: i16, lightness: i16) -> Adjus
     }
     AdjustmentData {
         key: *b"hue2",
-        data,
+        data: data.into(),
     }
 }
 
@@ -785,7 +785,7 @@ pub fn encode_photo_filter(
     data.extend_from_slice(&[0u8; 3]);
     AdjustmentData {
         key: *b"phfl",
-        data,
+        data: data.into(),
     }
 }
 
@@ -809,7 +809,7 @@ pub fn encode_solid_color_fill(color: [u8; 3]) -> AdjustmentData {
     };
     AdjustmentData {
         key: *b"SoCo",
-        data: pictura_codec::write_descriptor(&desc),
+        data: pictura_codec::write_descriptor(&desc).into(),
     }
 }
 
@@ -817,7 +817,10 @@ pub fn encode_solid_color_fill(color: [u8; 3]) -> AdjustmentData {
 fn encode_short(key: [u8; 4], value: u16) -> AdjustmentData {
     let mut data = value.to_be_bytes().to_vec();
     data.extend_from_slice(&[0, 0]);
-    AdjustmentData { key, data }
+    AdjustmentData {
+        key,
+        data: data.into(),
+    }
 }
 
 /// The Blend If weight for a source colour over a running backdrop: `1.0` when

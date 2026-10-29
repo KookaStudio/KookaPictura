@@ -521,7 +521,7 @@ mod tests {
         let mut layer = pixel_layer("styled", 1, 1, (0, 0, 0));
         layer.extra_blocks.push(LayerBlock {
             key: *b"lfx2",
-            data: Vec::new(),
+            data: Vec::new().into(),
         });
         layer
     }

@@ -33,7 +33,7 @@ fn every_declining_route_names_its_reason() {
         rect: rect(),
         extra_blocks: vec![LayerBlock {
             key: *b"vscg",
-            data: vec![0xFF; 3],
+            data: vec![0xFF; 3].into(),
         }],
         ..Default::default()
     };

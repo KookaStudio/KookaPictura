@@ -583,7 +583,7 @@ fn solid_fill_glow_follows_payload_alpha() {
             rect: rect(3, 3, 6, 6),
             adjustment: Some(AdjustmentData {
                 key: *b"SoCo",
-                data: vec![255, 0, 0, alpha],
+                data: vec![255, 0, 0, alpha].into(),
             }),
             ..Default::default()
         };
@@ -724,7 +724,7 @@ fn gpu_reports_the_effect_for_a_glow_fill_layer() {
         rect: rect(3, 3, 6, 6),
         adjustment: Some(AdjustmentData {
             key: *b"SoCo",
-            data: vec![255, 0, 0, 255],
+            data: vec![255, 0, 0, 255].into(),
         }),
         ..Default::default()
     };

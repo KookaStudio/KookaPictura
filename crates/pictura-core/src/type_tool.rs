@@ -6,6 +6,8 @@
 //! the full version-16 descriptor bytes from the input so a re-encode is
 //! framing-only.
 
+use crate::Plane;
+
 /// Anti-aliasing method, the `TySh` text descriptor's `AntA` enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AntiAlias {
@@ -754,8 +756,8 @@ pub struct TypeTool {
     pub transform: [f64; 6],
     pub text: String,
     pub bounds: [i32; 4],
-    pub text_desc: Vec<u8>,
-    pub warp_desc: Vec<u8>,
+    pub text_desc: Plane<u8>,
+    pub warp_desc: Plane<u8>,
     pub fonts: Vec<String>,
     pub style: Option<TextStyle>,
     pub vertical: bool,

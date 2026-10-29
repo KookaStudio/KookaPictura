@@ -88,7 +88,7 @@ pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result
     layer.source_channels = Some(SourceChannels::new(
         BitDepth::Eight,
         layer.rect,
-        vec![(0, Samples::U8(indexed.indices.clone()))],
+        vec![(0, Samples::U8(indexed.indices.clone().into()))],
     ));
     doc.composite = PixelBuffer {
         width: w,
@@ -100,7 +100,7 @@ pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result
         depth: BitDepth::Eight,
         width: w,
         height: h,
-        samples: Samples::U8(indexed.indices),
+        samples: Samples::U8(indexed.indices.into()),
     });
     doc.source_mode = Some(ColorMode::Indexed);
     doc.source_palette = Some(palette);
@@ -229,7 +229,7 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(),
         depth: BitDepth::One,
         width: doc.width,
         height: doc.height,
-        samples: Samples::U8(packed),
+        samples: Samples::U8(packed.into()),
     });
     doc.document_icc = None;
     Ok(())

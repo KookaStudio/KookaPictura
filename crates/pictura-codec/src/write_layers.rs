@@ -356,7 +356,7 @@ fn layer_plans<'a>(
                 // 16/32-bit read re-wrapped it as a raw 8-bit stream, so replay
                 // the retained native plane (or widen) under the output depth.
                 if depth == 8 {
-                    channels.push(ChannelPlan::verbatim(channel.id, channel.data.clone()));
+                    channels.push(ChannelPlan::verbatim(channel.id, channel.data.to_vec()));
                     continue;
                 }
                 let plane8 = channel.data.get(2..).unwrap_or(&[]);
@@ -790,9 +790,9 @@ mod tests {
                 .ident()
         });
         let retained = [
-            Samples::U8(vec![1, 2, 3, 4]),
-            Samples::U8(vec![5, 6, 7, 8]),
-            Samples::U8(vec![9, 10, 11, 12]),
+            Samples::U8(vec![1, 2, 3, 4].into()),
+            Samples::U8(vec![5, 6, 7, 8].into()),
+            Samples::U8(vec![9, 10, 11, 12].into()),
         ];
         let mut store = SourceChannels::new(
             BitDepth::Eight,
@@ -809,7 +809,7 @@ mod tests {
         let expected: Vec<Vec<u8>> = retained
             .iter()
             .map(|samples| match samples {
-                Samples::U8(values) => values.clone(),
+                Samples::U8(values) => values.to_vec(),
                 _ => unreachable!("the store is 8-bit"),
             })
             .collect();

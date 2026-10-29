@@ -476,7 +476,7 @@ fn paths_make_selection(mut view: Pin<&mut PictureView>, feather: f64, mode: &QS
         Selection {
             width,
             height,
-            data: mask,
+            data: mask.into(),
         },
         feather,
     );

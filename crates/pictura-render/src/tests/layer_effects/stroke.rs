@@ -1168,7 +1168,7 @@ fn solid_fill_stroke_follows_payload_alpha() {
             rect: rect(4, 4, 8, 8),
             adjustment: Some(AdjustmentData {
                 key: *b"SoCo",
-                data: vec![255, 0, 0, alpha],
+                data: vec![255, 0, 0, alpha].into(),
             }),
             ..Default::default()
         };

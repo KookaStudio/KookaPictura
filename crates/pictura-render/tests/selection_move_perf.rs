@@ -98,7 +98,7 @@ fn masked_document() -> Document {
         disabled: false,
         flags: 0,
         data: Some(plane(128, (W * H) as usize).into()),
-        extra: Vec::new(),
+        extra: Vec::new().into(),
         ..Default::default()
     });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);

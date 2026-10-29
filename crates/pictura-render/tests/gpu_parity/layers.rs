@@ -185,11 +185,11 @@ fn unsupported_adjustment_falls_back_or_errors() {
     let cases = [
         AdjustmentData {
             key: *b"clrL",
-            data: vec![1, 2, 3],
+            data: vec![1, 2, 3].into(),
         },
         AdjustmentData {
             key: *b"levl",
-            data: levels,
+            data: levels.into(),
         },
     ];
     for data in cases {

@@ -55,8 +55,8 @@ pub(crate) fn decode_type_tool(data: &[u8]) -> Option<TypeTool> {
         transform,
         text: extract_text(&text_value),
         bounds,
-        text_desc,
-        warp_desc,
+        text_desc: text_desc.into(),
+        warp_desc: warp_desc.into(),
         fonts,
         style,
         vertical: is_vertical(&text_value),
@@ -415,7 +415,7 @@ mod tests {
         let mut layers = LayerStack::from_layers(vec![Layer {
             extra_blocks: vec![pictura_core::LayerBlock {
                 key: *b"TySh",
-                data: bad_version,
+                data: bad_version.into(),
             }],
             ..Default::default()
         }]);

@@ -56,7 +56,7 @@ fn selection_contour_cache_profile_6000x4000() {
     rust.session.set_selection(Some(Selection {
         width: w,
         height: h,
-        data,
+        data: data.into(),
     }));
 
     let t = std::time::Instant::now();

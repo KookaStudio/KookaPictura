@@ -652,7 +652,7 @@ fn filter_confines_to_selection_and_skips_adjustment_layer() {
     let selection = Selection {
         width: 8,
         height: 1,
-        data: vec![255, 255, 255, 0, 0, 0, 0, 0],
+        data: vec![255, 255, 255, 0, 0, 0, 0, 0].into(),
     };
     let mask = selection_to_mask(&selection, &doc);
     let layer = active_pixel_layer_mut(&mut doc, Some("0")).expect("pixel layer");
@@ -1100,7 +1100,7 @@ fn convert_profile_is_byte_reversible_through_history() {
         &mut doc,
         &pictura_codec::Profile::adobe_rgb()
     ));
-    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc());
+    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
     assert_eq!(doc.document_icc, adobe);
     assert_ne!(
         doc.composite, original.composite,
@@ -1146,7 +1146,7 @@ fn assign_profile_retags_and_is_reversible_through_history() {
     );
 
     pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
-    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc());
+    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
     assert_eq!(
         doc.composite, original.composite,
         "assign leaves the composite bytes untouched"
@@ -1186,7 +1186,7 @@ fn open_first_frame_converts_the_document_profile() {
     doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (200, 100, 50))]);
-    doc.document_icc = Some(pictura_codec::Profile::adobe_rgb().to_icc());
+    doc.document_icc = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
 
     let rendered = current_buffer(&doc, false);
     let converted = pictura_codec::buffer_to_srgb(&doc, &rendered);

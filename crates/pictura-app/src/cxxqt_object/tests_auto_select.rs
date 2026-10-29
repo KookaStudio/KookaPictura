@@ -49,7 +49,7 @@ fn auto_select_skips_hidden_transparent_and_adjustment_layers() {
     let mut adjustment = pixel_layer("adjust", 2, 2, (0, 0, 255));
     adjustment.adjustment = Some(pictura_core::AdjustmentData {
         key: *b"inv ",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 4, 4, (255, 0, 0)),

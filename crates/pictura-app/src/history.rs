@@ -100,11 +100,14 @@ pub enum BrushSource {
 /// [`MAX_SNAPSHOTS`] named restore points.
 ///
 /// History keeps one materialized state, `current`, the state at the cursor,
-/// in planes the live document never shares: a write to the live document then
-/// happens in place rather than copying a whole plane, and a capture finds what
-/// changed by comparing the two. Every other state is stored as the 64×64 tiles
-/// that changed against its predecessor, so retention scales with the edited
-/// area. A geometry or structure change starts a new segment at an anchor.
+/// in tracked planes the live document never shares: a write to a live tracked
+/// plane then happens in place rather than copying a whole plane, and a capture
+/// finds what changed by comparing the two. Untracked stores (native samples,
+/// smart-object payloads, preserved byte blocks, and the selection) stay shared
+/// with the live document until one side writes them. Every other state is
+/// stored as the 64×64 tiles that changed against its predecessor, so retention
+/// scales with the edited area. A geometry or structure change starts a new
+/// segment at an anchor.
 #[derive(Default)]
 pub struct History {
     states: Vec<Entry>,
@@ -883,3 +886,5 @@ impl History {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_retention;
