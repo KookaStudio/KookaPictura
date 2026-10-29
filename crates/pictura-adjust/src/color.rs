@@ -1,6 +1,6 @@
 use pictura_core::PixelBuffer;
 
-use crate::common::{hsl_to_rgb, luma, planes_mut, rgb_to_hsl};
+use crate::common::{hsl_to_rgb, luma, map_rgb, rgb_to_hsl};
 use crate::types::{
     AdjustError, BlackWhiteParams, ChannelMixerParams, ColorBalanceParams, HueSaturationParams,
     PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange, VibranceParams,
@@ -85,18 +85,15 @@ pub(crate) fn hue_saturation(
     if hue_saturation_is_identity(p) {
         return Ok(());
     }
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let [nr, ng, nb] = hue_saturation_rgb(
-            p,
-            *rv as f64 / 255.0,
-            *gv as f64 / 255.0,
-            *bv as f64 / 255.0,
-        );
-        *rv = (nr * 255.0).round().clamp(0.0, 255.0) as u8;
-        *gv = (ng * 255.0).round().clamp(0.0, 255.0) as u8;
-        *bv = (nb * 255.0).round().clamp(0.0, 255.0) as u8;
-    }
+    map_rgb(buf, n, |rv, gv, bv| {
+        let [nr, ng, nb] =
+            hue_saturation_rgb(p, rv as f64 / 255.0, gv as f64 / 255.0, bv as f64 / 255.0);
+        [
+            (nr * 255.0).round().clamp(0.0, 255.0) as u8,
+            (ng * 255.0).round().clamp(0.0, 255.0) as u8,
+            (nb * 255.0).round().clamp(0.0, 255.0) as u8,
+        ]
+    });
     Ok(())
 }
 
@@ -120,9 +117,8 @@ pub(crate) fn vibrance(
     }
     let kv = p.vibrance as f64 / 100.0;
     let ks = p.saturation as f64 / 100.0;
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let (h, s, l) = rgb_to_hsl(*rv as f64 / 255.0, *gv as f64 / 255.0, *bv as f64 / 255.0);
+    map_rgb(buf, n, |rv, gv, bv| {
+        let (h, s, l) = rgb_to_hsl(rv as f64 / 255.0, gv as f64 / 255.0, bv as f64 / 255.0);
         // Approximation: boost falls off as (1 - S) (the spec's `S*(1-S)` text
         // contradicts its own acceptance criteria) and is damped in the skin
         // hue band. The exact falloff/skin model is closed.
@@ -136,10 +132,12 @@ pub(crate) fn vibrance(
         };
         let s = (s * (1.0 + ks)).clamp(0.0, 1.0);
         let (nr, ng, nb) = hsl_to_rgb(h, s, l);
-        *rv = (nr * 255.0).round().clamp(0.0, 255.0) as u8;
-        *gv = (ng * 255.0).round().clamp(0.0, 255.0) as u8;
-        *bv = (nb * 255.0).round().clamp(0.0, 255.0) as u8;
-    }
+        [
+            (nr * 255.0).round().clamp(0.0, 255.0) as u8,
+            (ng * 255.0).round().clamp(0.0, 255.0) as u8,
+            (nb * 255.0).round().clamp(0.0, 255.0) as u8,
+        ]
+    });
     Ok(())
 }
 
@@ -168,9 +166,8 @@ pub(crate) fn color_balance(
     if p.shadows == [0.0; 3] && p.midtones == [0.0; 3] && p.highlights == [0.0; 3] {
         return Ok(());
     }
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let (ir, ig, ib) = (*rv as f64, *gv as f64, *bv as f64);
+    map_rgb(buf, n, |rv, gv, bv| {
+        let (ir, ig, ib) = (rv as f64, gv as f64, bv as f64);
         let y = luma(ir, ig, ib) / 255.0;
         // Overlapping parabola windows: shadow=1 at Y=0, highlight=1 at Y=1,
         // midtone peaks at Y=0.5. The exact falloffs are closed.
@@ -192,10 +189,12 @@ pub(crate) fn color_balance(
                 }
             }
         }
-        *rv = out[0].round() as u8;
-        *gv = out[1].round() as u8;
-        *bv = out[2].round() as u8;
-    }
+        [
+            out[0].round() as u8,
+            out[1].round() as u8,
+            out[2].round() as u8,
+        ]
+    });
     Ok(())
 }
 
@@ -237,9 +236,8 @@ pub(crate) fn black_white(
     } else {
         None
     };
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let (mut cr, mut cg, mut cb) = (*rv as f64, *gv as f64, *bv as f64);
+    map_rgb(buf, n, |rv, gv, bv| {
+        let (mut cr, mut cg, mut cb) = (rv as f64, gv as f64, bv as f64);
         let neutral = cr.min(cg).min(cb);
         cr -= neutral;
         cg -= neutral;
@@ -262,21 +260,18 @@ pub(crate) fn black_white(
             gray += yellow * yw + cr * rw + cg * gw;
         }
         let out = gray.round().clamp(0.0, 255.0) as u8;
-        let (nr, ng, nb) = match tint_hsl {
+        match tint_hsl {
             Some((h, s)) => {
                 let (tr, tg, tb) = hsl_to_rgb(h, s, out as f64 / 255.0);
-                (
+                [
                     (tr * 255.0).round() as u8,
                     (tg * 255.0).round() as u8,
                     (tb * 255.0).round() as u8,
-                )
+                ]
             }
-            None => (out, out, out),
-        };
-        *rv = nr;
-        *gv = ng;
-        *bv = nb;
-    }
+            None => [out, out, out],
+        }
+    });
     Ok(())
 }
 
@@ -295,9 +290,8 @@ pub(crate) fn photo_filter(
     }
     let d = p.density / 100.0;
     let f = [p.color[0] as f64, p.color[1] as f64, p.color[2] as f64];
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let (ir, ig, ib) = (*rv as f64, *gv as f64, *bv as f64);
+    map_rgb(buf, n, |rv, gv, bv| {
+        let (ir, ig, ib) = (rv as f64, gv as f64, bv as f64);
         let mut out = [
             ir * (1.0 - d) + f[0] * d,
             ig * (1.0 - d) + f[1] * d,
@@ -312,10 +306,12 @@ pub(crate) fn photo_filter(
                 }
             }
         }
-        *rv = out[0].round().clamp(0.0, 255.0) as u8;
-        *gv = out[1].round().clamp(0.0, 255.0) as u8;
-        *bv = out[2].round().clamp(0.0, 255.0) as u8;
-    }
+        [
+            out[0].round().clamp(0.0, 255.0) as u8,
+            out[1].round().clamp(0.0, 255.0) as u8,
+            out[2].round().clamp(0.0, 255.0) as u8,
+        ]
+    });
     Ok(())
 }
 
@@ -334,32 +330,31 @@ pub(crate) fn channel_mixer(
             "channel mixer weights must be -200..=200 percent".into(),
         ));
     }
-    let (r, g, b) = planes_mut(buf, n);
     if p.monochrome {
         // Monochrome applies one source mix to every output; use the Red row.
         let w = p.red;
         let c = p.constant[0] / 100.0 * 255.0;
-        for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-            let (ir, ig, ib) = (*rv as f64, *gv as f64, *bv as f64);
+        map_rgb(buf, n, |rv, gv, bv| {
+            let (ir, ig, ib) = (rv as f64, gv as f64, bv as f64);
             let v = ((w[0] * ir + w[1] * ig + w[2] * ib) / 100.0 + c)
                 .round()
                 .clamp(0.0, 255.0) as u8;
-            *rv = v;
-            *gv = v;
-            *bv = v;
-        }
+            [v, v, v]
+        });
     } else {
-        for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-            let (ir, ig, ib) = (*rv as f64, *gv as f64, *bv as f64);
+        map_rgb(buf, n, |rv, gv, bv| {
+            let (ir, ig, ib) = (rv as f64, gv as f64, bv as f64);
             let mix = |w: &[f64; 3], k: f64| {
                 ((w[0] * ir + w[1] * ig + w[2] * ib) / 100.0 + k / 100.0 * 255.0)
                     .round()
                     .clamp(0.0, 255.0) as u8
             };
-            *rv = mix(&p.red, p.constant[0]);
-            *gv = mix(&p.green, p.constant[1]);
-            *bv = mix(&p.blue, p.constant[2]);
-        }
+            [
+                mix(&p.red, p.constant[0]),
+                mix(&p.green, p.constant[1]),
+                mix(&p.blue, p.constant[2]),
+            ]
+        });
     }
     Ok(())
 }
@@ -389,13 +384,10 @@ pub(crate) fn selective_color(
     if p.ranges.iter().all(|r| *r == SelectiveRange::default()) {
         return Ok(());
     }
-    let (r, g, b) = planes_mut(buf, n);
-    for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
-        let (nr, ng, nb) = selective_color_pixel(p, *rv as i32, *gv as i32, *bv as i32);
-        *rv = nr;
-        *gv = ng;
-        *bv = nb;
-    }
+    map_rgb(buf, n, |rv, gv, bv| {
+        let (nr, ng, nb) = selective_color_pixel(p, rv as i32, gv as i32, bv as i32);
+        [nr, ng, nb]
+    });
     Ok(())
 }
 

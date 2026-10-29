@@ -968,6 +968,7 @@ version = "0.2.0"
 dependencies = [
  "pictura-core",
  "pictura-testkit",
+ "rayon",
  "thiserror 2.0.20",
 ]
 

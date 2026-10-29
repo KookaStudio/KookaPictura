@@ -1,10 +1,43 @@
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
 use pictura_core::PixelBuffer;
+use rayon::prelude::*;
 
 use crate::types::AdjustError;
 
 const COLOR_CHANNELS: usize = 3;
 /// Rec.601 luma weights; the specs leave the exact set undocumented.
 const LUMA: [f64; 3] = [0.299, 0.587, 0.114];
+/// Pixels per parallel chunk. Every kernel is pointwise, so the chunk boundary
+/// is arbitrary; this keeps the task count in the thousands on a 16 MP image.
+const CHUNK: usize = 8192;
+
+/// Test-only switch that routes the chunked kernels through their serial
+/// branch, so a test can compare both on the same stack.
+#[cfg(test)]
+pub(crate) static FORCE_SERIAL: AtomicBool = AtomicBool::new(false);
+/// Test-only count of parallel branch entries, so a test can prove the parallel
+/// path actually runs when [`FORCE_SERIAL`] is off.
+#[cfg(test)]
+pub(crate) static PARALLEL_RUNS: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn serial() -> bool {
+    FORCE_SERIAL.load(Ordering::Relaxed)
+}
+
+#[cfg(not(test))]
+#[inline]
+pub(crate) fn serial() -> bool {
+    false
+}
+
+#[inline]
+pub(crate) fn note_parallel() {
+    #[cfg(test)]
+    PARALLEL_RUNS.fetch_add(1, Ordering::Relaxed);
+}
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -38,22 +71,75 @@ pub(crate) fn planes_mut(buf: &mut PixelBuffer, n: usize) -> (&mut [u8], &mut [u
     (r, g, b)
 }
 
+pub(crate) fn map_lut_plane(plane: &mut [u8], lut: &[u8; 256]) {
+    if serial() {
+        for v in plane.iter_mut() {
+            *v = lut[*v as usize];
+        }
+        return;
+    }
+    note_parallel();
+    plane.par_chunks_mut(CHUNK).for_each(|chunk| {
+        for v in chunk.iter_mut() {
+            *v = lut[*v as usize];
+        }
+    });
+}
+
 pub(crate) fn map_lut(buf: &mut PixelBuffer, n: usize, lut: &[u8; 256]) {
     for c in 0..COLOR_CHANNELS {
         let s = c * n;
-        for v in &mut buf.data[s..s + n] {
-            *v = lut[*v as usize];
-        }
+        map_lut_plane(&mut buf.data[s..s + n], lut);
     }
 }
 
-pub(crate) fn map_float(buf: &mut PixelBuffer, n: usize, f: impl Fn(u8) -> u8) {
-    for c in 0..COLOR_CHANNELS {
-        let s = c * n;
-        for v in &mut buf.data[s..s + n] {
+pub(crate) fn map_plane(plane: &mut [u8], f: impl Fn(u8) -> u8 + Sync + Send) {
+    if serial() {
+        for v in plane.iter_mut() {
             *v = f(*v);
         }
+        return;
     }
+    note_parallel();
+    plane.par_chunks_mut(CHUNK).for_each(|chunk| {
+        for v in chunk.iter_mut() {
+            *v = f(*v);
+        }
+    });
+}
+
+pub(crate) fn map_float(buf: &mut PixelBuffer, n: usize, f: impl Fn(u8) -> u8 + Sync + Send) {
+    for c in 0..COLOR_CHANNELS {
+        let s = c * n;
+        map_plane(&mut buf.data[s..s + n], &f);
+    }
+}
+
+/// Apply `f` to every `(r, g, b)` triple of the three colour planes, in
+/// parallel chunks. Alpha is untouched.
+pub(crate) fn map_rgb(
+    buf: &mut PixelBuffer,
+    n: usize,
+    f: impl Fn(u8, u8, u8) -> [u8; 3] + Sync + Send,
+) {
+    let (r, g, b) = planes_mut(buf, n);
+    let run = |r: &mut [u8], g: &mut [u8], b: &mut [u8]| {
+        for ((rv, gv), bv) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
+            let [nr, ng, nb] = f(*rv, *gv, *bv);
+            *rv = nr;
+            *gv = ng;
+            *bv = nb;
+        }
+    };
+    if serial() {
+        run(r, g, b);
+        return;
+    }
+    note_parallel();
+    r.par_chunks_mut(CHUNK)
+        .zip(g.par_chunks_mut(CHUNK))
+        .zip(b.par_chunks_mut(CHUNK))
+        .for_each(|((r, g), b)| run(r, g, b));
 }
 
 pub(crate) fn luma(r: f64, g: f64, b: f64) -> f64 {

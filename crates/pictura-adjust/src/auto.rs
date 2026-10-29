@@ -1,6 +1,6 @@
 use pictura_core::PixelBuffer;
 
-use crate::common::{luma, planes_mut};
+use crate::common::{luma, map_lut_plane, map_plane, planes_mut};
 use crate::types::{AdjustError, AutoKind};
 
 // ---------------------------------------------------------------------------
@@ -83,9 +83,7 @@ pub(crate) fn auto_per_channel(
         if let Some((lo, hi)) = percentile_bounds(&hist, total, clip) {
             if lo < hi {
                 let lut = stretch_lut(lo, hi);
-                for v in plane.iter_mut() {
-                    *v = lut[*v as usize];
-                }
+                map_lut_plane(plane, &lut);
             }
         }
     }
@@ -107,9 +105,7 @@ pub(crate) fn auto_joint(buf: &mut PixelBuffer, n: usize, clip: f64, coverage: O
         if lo < hi {
             let lut = stretch_lut(lo, hi);
             for plane in [r, g, b] {
-                for v in plane.iter_mut() {
-                    *v = lut[*v as usize];
-                }
+                map_lut_plane(plane, &lut);
             }
         }
     }
@@ -151,10 +147,10 @@ pub(crate) fn snap_neutral_midtones(buf: &mut PixelBuffer, n: usize, coverage: O
             continue;
         }
         let gamma = ((m / 255.0).ln() / (target / 255.0).ln()).clamp(0.1, 9.99);
-        for v in plane.iter_mut() {
-            *v = (255.0 * (*v as f64 / 255.0).powf(1.0 / gamma))
+        map_plane(plane, |v| {
+            (255.0 * (v as f64 / 255.0).powf(1.0 / gamma))
                 .round()
-                .clamp(0.0, 255.0) as u8;
-        }
+                .clamp(0.0, 255.0) as u8
+        });
     }
 }

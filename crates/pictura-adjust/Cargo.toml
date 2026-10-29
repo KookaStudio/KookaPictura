@@ -8,6 +8,9 @@ rust-version.workspace = true
 [dependencies]
 pictura-core = { path = "../pictura-core" }
 thiserror.workspace = true
+# Chunked per-pixel kernels. Already a workspace dependency used by
+# pictura-filters, pictura-render and pictura-codec.
+rayon = "1"
 
 [dev-dependencies]
 pictura-testkit = { path = "../pictura-testkit" }

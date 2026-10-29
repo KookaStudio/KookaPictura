@@ -6,6 +6,7 @@ use pictura_core::PixelBuffer;
 mod gradient_map;
 mod hue_ranges;
 mod levels;
+mod parallel;
 
 fn buf3(w: u32, h: u32, px: &[[u8; 3]]) -> PixelBuffer {
     let n = (w * h) as usize;
