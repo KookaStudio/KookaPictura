@@ -3,7 +3,7 @@
 //! cap.
 
 use pictura_adjust::{AdjustError, Adjustment};
-use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, Samples};
+use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, PsdRect, Samples};
 
 use rayon::prelude::*;
 
@@ -35,14 +35,12 @@ fn sample_unit(samples: &Samples, i: usize) -> Option<f32> {
 /// raster byte, combined with the vector-mask coverage. Mirrors `mask_alpha`'s
 /// absent/disabled/no-data (`1.0`) and out-of-rect/empty (`default_color/255`)
 /// branches through its raster fallback.
-pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> f32 {
+pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, clip: PsdRect, x: i32, y: i32) -> f32 {
     // No native `-2` sample (8-bit document, or absent/disabled/out-of-rect
     // mask) keeps the exact 8-bit combine, so the fallback is byte-identical.
     let Some(raster) = native_mask_unit(doc, layer, x, y) else {
-        return crate::composite::mask_alpha(layer, crate::mask_refine::canvas(doc), x, y) as f32
-            / 255.0;
+        return crate::composite::mask_alpha(layer, clip, x, y) as f32 / 255.0;
     };
-    let clip = crate::mask_refine::canvas(doc);
     let vector = crate::mask_refine::vector(layer.vector_mask.as_ref(), clip, x, y) as f32 / 255.0;
     raster * vector
 }
@@ -162,6 +160,7 @@ pub(crate) fn composite_adjustment(
     let x1 = canvas.x1();
     let y0 = canvas.y0();
     let y1 = canvas.y1();
+    let clip = canvas.clip();
     let buf = &buf;
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         let base = (y - oy) as usize * w;
@@ -185,6 +184,7 @@ pub(crate) fn composite_adjustment(
                 ox,
                 &gated,
                 doc,
+                clip,
                 x,
                 y,
                 cs,
@@ -233,6 +233,7 @@ fn gate_adjusted(canvas: &mut Canvas, layer: &Layer, doc: &Document, adjusted: &
     let x1 = canvas.x1();
     let y0 = canvas.y0();
     let y1 = canvas.y1();
+    let clip = canvas.clip();
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         let base = (y - oy) as usize * w;
         for x in x0..x1 {
@@ -248,6 +249,7 @@ fn gate_adjusted(canvas: &mut Canvas, layer: &Layer, doc: &Document, adjusted: &
                 ox,
                 layer,
                 doc,
+                clip,
                 x,
                 y,
                 adjusted[i],

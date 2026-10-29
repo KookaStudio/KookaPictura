@@ -575,3 +575,25 @@ fn encode_gradient_fill_params_omits_defaults() {
         Some(Adjustment::GradientFill(source))
     );
 }
+
+#[test]
+fn gradient_region_matches_the_full_buffer_slice() {
+    let params = GradientFillParams {
+        stops: bw_stops().to_vec(),
+        reverse: false,
+        kind: GradientKind::Linear,
+        angle_deg: 33.0,
+        scale: 100.0,
+    };
+    let full = crate::fill::gradient_rgba(40, 30, &params);
+    let region = (5, 7, 25, 20);
+    let part = crate::fill::gradient_rgba_region(40, 30, region, &params);
+    let sw = (region.2 - region.0) as usize;
+    for y in region.1..region.3 {
+        for x in region.0..region.2 {
+            let fi = y as usize * 40 + x as usize;
+            let pi = (y - region.1) as usize * sw + (x - region.0) as usize;
+            assert_eq!(part[pi], full[fi], "({x},{y})");
+        }
+    }
+}

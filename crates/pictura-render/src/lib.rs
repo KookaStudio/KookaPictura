@@ -41,6 +41,7 @@ mod layer_source;
 pub use layer_effects::layer_paint_bounds;
 pub use layer_source::purge_source_cache;
 mod mask_refine;
+pub use mask_refine::mask_feather_reach;
 mod smart_source;
 mod view_pyramid;
 pub(crate) use composite::{channel, mask_alpha, render_smart_source, sample};
@@ -110,8 +111,8 @@ pub mod layer_effects;
 pub use layer_effects::{
     decode_bevel_emboss, decode_color_overlay, decode_drop_shadow, decode_gradient_overlay,
     decode_inner_glow, decode_inner_shadow, decode_outer_glow, decode_pattern_overlay,
-    decode_satin, decode_stroke, BevelDirection, BevelEmboss, BevelHighlight, BevelShadow,
-    BevelStyle, BevelTechnique, ColorOverlay, DropShadow, GlowSource, GlowTechnique,
+    decode_satin, decode_stroke, paint_reach, BevelDirection, BevelEmboss, BevelHighlight,
+    BevelShadow, BevelStyle, BevelTechnique, ColorOverlay, DropShadow, GlowSource, GlowTechnique,
     GradientOverlay, InnerGlow, InnerShadow, OuterGlow, PatternOverlay, Satin, Stroke, StrokeFill,
     StrokePosition,
 };

@@ -190,3 +190,82 @@ fn warm_region_is_ten_times_faster() {
         full_counters.effect_decodes
     );
 }
+
+fn canvas_styled_layer(size: u32) -> Layer {
+    let n = (size as usize) * (size as usize);
+    let mut layer = Layer {
+        name: "canvas-styled".into(),
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: size as i32,
+            right: size as i32,
+        },
+        channels: vec![
+            Channel {
+                id: 0,
+                data: vec![200u8; n].into(),
+            },
+            Channel {
+                id: 1,
+                data: vec![60u8; n].into(),
+            },
+            Channel {
+                id: 2,
+                data: vec![30u8; n].into(),
+            },
+            Channel {
+                id: -1,
+                data: vec![255u8; n].into(),
+            },
+        ],
+        ..Default::default()
+    };
+    pictura_render::set_layer_style_value(&mut layer, "dropShadow.on", 1.0);
+    pictura_render::set_layer_style_value(&mut layer, "dropShadow.size", 20.0);
+    layer
+}
+
+#[test]
+#[ignore = "profile: cargo test -p pictura-render --test source_cache_profile -- --ignored --nocapture"]
+fn canvas_sized_styled_present_is_faster_than_a_full_composite() {
+    const SIZE: u32 = 4000;
+    let mut d = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
+    d.layers = LayerStack::from_layers(vec![canvas_styled_layer(SIZE)]);
+    // A dab invalidates the pass exactly as a stroke present does.
+    d.layers[0].channels[3].data.as_mut_slice()[100 * SIZE as usize + 100] = 0;
+    let start = Instant::now();
+    let region = pictura_render::composite_rgba_region(&d, 100, 100, 128, 128);
+    let region_time = start.elapsed();
+    let start = Instant::now();
+    let full = pictura_render::composite_rgba(&d);
+    let full_time = start.elapsed();
+    let start = Instant::now();
+    let _ = pictura_render::composite_rgba(&d);
+    let warm_full_time = start.elapsed();
+    let fp = (SIZE as usize) * (SIZE as usize);
+    for y in 0..128usize {
+        for x in 0..128usize {
+            let fi = (100 + y) * SIZE as usize + (100 + x);
+            let ri = y * 128 + x;
+            for c in 0..4 {
+                assert_eq!(
+                    region.data.as_slice()[c * 128 * 128 + ri],
+                    full.data.as_slice()[c * fp + fi],
+                    "pixel ({x},{y}) channel {c}"
+                );
+            }
+        }
+    }
+    eprintln!(
+        "canvas 4000x4000 styled (after a dab): cold_full={:.1}ms warm_full={:.1}ms region={:.2}ms ratio={:.1}x",
+        full_time.as_secs_f64() * 1000.0,
+        warm_full_time.as_secs_f64() * 1000.0,
+        region_time.as_secs_f64() * 1000.0,
+        full_time.as_secs_f64() / region_time.as_secs_f64()
+    );
+    assert!(
+        region_time * 10 <= full_time,
+        "region {region_time:?} full {full_time:?}: a dab-sized present must be 10x faster"
+    );
+}

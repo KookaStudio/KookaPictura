@@ -240,6 +240,11 @@ impl ActiveSession {
 
     // --- the paint session -------------------------------------------------
 
+    /// The paint-change reach of the live stroke, or 0 outside one.
+    pub(in crate::cxxqt_object) fn paint_pad(&self) -> i32 {
+        self.stroke_session().map_or(0, |session| session.paint_pad)
+    }
+
     /// The live paint session, when a stroke is live.
     pub(in crate::cxxqt_object) fn stroke_session(&self) -> Option<&StrokeSession> {
         match self {

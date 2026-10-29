@@ -76,6 +76,13 @@ pub(crate) struct Canvas {
     /// Multiplier for effect alpha while a layer's effects are drawn. `1.0`
     /// outside an effect pass; the layer's opacity inside one.
     pub(crate) effect_scale: f32,
+    /// The overall requested composite region, used as the mask-feather clip.
+    /// A band inherits the whole requested region, not its own rows.
+    pub(crate) clip: PsdRect,
+    /// The transient effect-pass build region, or `None` for the cached
+    /// whole-layer pass. A banded composite keeps `None` so one pass serves
+    /// every band.
+    pub(crate) effect_region: Option<PsdRect>,
 }
 
 impl Canvas {
@@ -95,7 +102,28 @@ impl Canvas {
             cover: None,
             skip_effects: false,
             effect_scale: 1.0,
+            clip: PsdRect {
+                top: oy,
+                left: ox,
+                bottom: oy + h as i32,
+                right: ox + w as i32,
+            },
+            effect_region: None,
         }
+    }
+
+    /// A same-region canvas that inherits the parent's clip and effect region.
+    pub(crate) fn derived(&self, ox: i32, oy: i32, w: usize, h: usize) -> Canvas {
+        let mut canvas = Canvas::new_region(ox, oy, w, h);
+        canvas.clip = self.clip;
+        canvas.effect_region = self.effect_region;
+        canvas.skip_effects = self.skip_effects;
+        canvas
+    }
+
+    /// The overall requested composite region.
+    pub(crate) fn clip(&self) -> PsdRect {
+        self.clip
     }
 
     /// A copy of `base`'s pixels with a fresh all-false coverage mask, so a
@@ -110,6 +138,8 @@ impl Canvas {
             cover: Some(vec![false; base.px.len()]),
             skip_effects: base.skip_effects,
             effect_scale: base.effect_scale,
+            clip: base.clip,
+            effect_region: base.effect_region,
         }
     }
 
@@ -188,7 +218,7 @@ pub(crate) fn composite_layer_inner(
     let passes = (!canvas.skip_effects
         && !layer.is_group
         && !crate::layer_effects::is_destructive_adjustment(layer))
-    .then(|| crate::layer_source::effect_passes(layer, doc, &effects));
+    .then(|| crate::layer_source::effect_passes(layer, doc, &effects, canvas.effect_region));
     // Below-content effects (drop shadow, outer glow) render behind the content.
     let effect_scale = canvas.effect_scale;
     canvas.effect_scale = effect_scale * layer.opacity as f32 / 255.0;
@@ -219,10 +249,10 @@ pub(crate) fn composite_layer_inner(
         // back to the group's own backdrop) and that backdrop is also the
         // `Shallow` stopping point; the incoming bases are ignored.
         ContentRoute::IsolatedGroup => {
-            let mut inner = Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h);
+            let mut inner = canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h);
             inner.skip_effects = canvas.skip_effects;
             let ko_base = has_knockout(layer)
-                .then(|| Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h));
+                .then(|| canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h));
             crate::composite_clipping::composite_siblings(
                 &mut inner,
                 &layer.children,
@@ -872,10 +902,13 @@ pub(crate) fn blend_into(
     let ox = canvas.ox;
     let w = canvas.w;
     let start = (y - canvas.oy as usize) * w;
+    let clip = canvas.clip;
     let Canvas { px, cover, .. } = canvas;
     let row = &mut px[start..start + w];
     let cov = cover.as_deref_mut().map(|c| &mut c[start..start + w]);
-    crate::composite_rows::blend_into_row(row, cov, ox, layer, doc, x as i32, y as i32, cs, src_a);
+    crate::composite_rows::blend_into_row(
+        row, cov, ox, layer, doc, clip, x as i32, y as i32, cs, src_a,
+    );
 }
 
 /// Composite an opacity-weighted source sample over the backdrop with a blend mode.

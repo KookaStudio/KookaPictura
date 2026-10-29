@@ -361,3 +361,28 @@ fn encode_pattern_fill_omits_default_origin() {
         Some(Adjustment::PatternFill(source))
     );
 }
+
+#[test]
+fn pattern_region_matches_the_full_tile_slice() {
+    use pictura_codec::PatternPixels;
+    let patterns = vec![PatternPixels {
+        pattern_id: "p".into(),
+        width: 2,
+        height: 2,
+        rgba: vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+        ],
+    }];
+    let p = params("p", 100.0, true, (1, 2));
+    let full = crate::fill::pattern_tile_rgba(&patterns, &p, 10, 20, 40, 30);
+    let region = (15, 25, 30, 40);
+    let part = crate::fill::pattern_tile_region(&patterns, &p, (10, 20), region);
+    let sw = (region.2 - region.0) as usize;
+    for y in region.1..region.3 {
+        for x in region.0..region.2 {
+            let fi = (y - 20) as usize * 40 + (x - 10) as usize;
+            let pi = (y - region.1) as usize * sw + (x - region.0) as usize;
+            assert_eq!(part[pi], full[fi], "({x},{y})");
+        }
+    }
+}

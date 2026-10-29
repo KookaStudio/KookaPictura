@@ -1,7 +1,7 @@
 //! Region and banded compositing. Split from `composite.rs` for the file-size
 //! cap; the per-layer dispatch and canvas model stay there.
 
-use pictura_core::{Document, PixelBuffer};
+use pictura_core::{Document, PixelBuffer, PsdRect};
 
 use crate::composite::Canvas;
 use crate::composite_knockout::composite_layers;
@@ -23,6 +23,15 @@ pub fn composite_rgba_region(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32)
         return composite_banded(doc, x0, y0, rw, rh);
     }
     let mut canvas = Canvas::new_region(x0 as i32, y0 as i32, rw as usize, rh as usize);
+    canvas.clip = PsdRect {
+        top: y0 as i32,
+        left: x0 as i32,
+        bottom: (y0 + rh) as i32,
+        right: (x0 + rw) as i32,
+    };
+    if x0 != 0 || y0 != 0 || rw != doc.width || rh != doc.height {
+        canvas.effect_region = Some(canvas.clip);
+    }
     composite_layers(&mut canvas, doc);
     canvas.into_pixel_buffer()
 }
@@ -66,6 +75,13 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
             .for_each(|(band, (((r, g), b), a))| {
                 let top = y0 as i32 + (band * BAND as usize) as i32;
                 let mut canvas = Canvas::new_region(x0 as i32, top, w, r.len() / w);
+                canvas.clip = PsdRect {
+                    top: y0 as i32,
+                    left: x0 as i32,
+                    bottom: (y0 + rh) as i32,
+                    right: (x0 + rw) as i32,
+                };
+                canvas.effect_region = None;
                 composite_layers(&mut canvas, doc);
                 for (i, p) in canvas.px.iter().enumerate() {
                     r[i] = crate::composite::to_u8(p.r);

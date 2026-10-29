@@ -5,6 +5,7 @@ use crate::composite::desc_item;
 
 use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
+use super::BuildRegion;
 use super::{
     blur_matte, blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color,
     dilate_matte, effect_blend_mode, erode_matte, noise_factor, num_clamped, pad_rect, rect_empty,
@@ -180,7 +181,12 @@ pub fn decode_inner_glow(layer: &Layer) -> Option<InnerGlow> {
     })
 }
 
-pub(super) fn build_outer_glow(layer: &Layer, doc: &Document, glow: &OuterGlow) -> Vec<EffectPass> {
+pub(super) fn build_outer_glow(
+    layer: &Layer,
+    doc: &Document,
+    glow: &OuterGlow,
+    build: BuildRegion,
+) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
         doc.height.min(i32::MAX as u32) as i32,
@@ -200,14 +206,14 @@ pub(super) fn build_outer_glow(layer: &Layer, doc: &Document, glow: &OuterGlow) 
     // Content can only be non-zero inside `source`; dilate and blur spread it by
     // at most `reach`, so the matte is built and processed over `padded` only.
     let padded = pad_rect(source, dilate_radius + blur_pad, w, h);
-    if rect_empty(padded) {
+    let Some(padded) = build.buffer(padded, dilate_radius + blur_pad) else {
         return Vec::new();
-    }
+    };
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    apply_mask(&mut matte, pw, px0, py0, layer, doc);
+    apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -231,9 +237,12 @@ pub(super) fn build_outer_glow(layer: &Layer, doc: &Document, glow: &OuterGlow) 
         bottom: py1,
         right: px1,
     };
+    let Some(rect) = build.output(rect) else {
+        return Vec::new();
+    };
     let mut writer = PassWriter::constant(rect, glow.blend_mode, color);
-    for y in py0..py1 {
-        for x in px0..px1 {
+    for y in rect.top..rect.bottom {
+        for x in rect.left..rect.right {
             let i = (y - py0) as usize * pw + (x - px0) as usize;
             let alpha = blurred[i] * exterior[i] * opacity * noise_factor(glow.noise, x, y);
             if alpha > 0.0 {
@@ -244,7 +253,12 @@ pub(super) fn build_outer_glow(layer: &Layer, doc: &Document, glow: &OuterGlow) 
     vec![writer.finish()]
 }
 
-pub(super) fn build_inner_glow(layer: &Layer, doc: &Document, glow: &InnerGlow) -> Vec<EffectPass> {
+pub(super) fn build_inner_glow(
+    layer: &Layer,
+    doc: &Document,
+    glow: &InnerGlow,
+    build: BuildRegion,
+) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
         doc.height.min(i32::MAX as u32) as i32,
@@ -269,14 +283,14 @@ pub(super) fn build_inner_glow(layer: &Layer, doc: &Document, glow: &InnerGlow) 
     // Content can only be non-zero inside `source`; erode and blur spread the
     // matte by at most `reach`, so it is built and processed over `padded` only.
     let padded = pad_rect(source, erode_radius + blur_pad, w, h);
-    if rect_empty(padded) {
+    let Some(padded) = build.buffer(padded, erode_radius + blur_pad) else {
         return Vec::new();
-    }
+    };
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    apply_mask(&mut matte, pw, px0, py0, layer, doc);
+    apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -298,9 +312,12 @@ pub(super) fn build_inner_glow(layer: &Layer, doc: &Document, glow: &InnerGlow) 
         bottom: source.3,
         right: source.2,
     };
+    let Some(rect) = build.output(rect) else {
+        return Vec::new();
+    };
     let mut writer = PassWriter::constant(rect, glow.blend_mode, color);
-    for y in source.1..source.3 {
-        for x in source.0..source.2 {
+    for y in rect.top..rect.bottom {
+        for x in rect.left..rect.right {
             let i = (y - py0) as usize * pw + (x - px0) as usize;
             let field = match glow.source {
                 GlowSource::Edge => 1.0 - blurred[i],

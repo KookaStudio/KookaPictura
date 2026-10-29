@@ -5,6 +5,7 @@ use crate::composite::desc_item;
 
 use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
+use super::BuildRegion;
 use super::{
     blur_matte, blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color,
     dilate_matte, effect_blend_mode, erode_matte, noise_factor, num_clamped, num_or, pad_rect,
@@ -148,6 +149,7 @@ pub(super) fn build_drop_shadow(
     layer: &Layer,
     doc: &Document,
     shadow: &DropShadow,
+    build: BuildRegion,
 ) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
@@ -176,12 +178,15 @@ pub(super) fn build_drop_shadow(
     let blur_pad = blur_support(size);
     // Content can only be non-zero inside `source`; dilate and blur spread it by
     // at most `reach`, so the matte is built and processed over `padded` only.
+    let ox = dx.round() as i64;
+    let oy = dy.round() as i64;
     let padded = pad_rect(source, dilate_radius + blur_pad, w, h);
+    let Some(padded) = build.buffer(padded, dilate_radius + blur_pad + ox.abs() + oy.abs()) else {
+        return Vec::new();
+    };
     let (px0, py0, px1, py1) = padded;
     // The shadow at document `(x, y)` is the matte at `(x - dx, y - dy)`; only
     // the shifted region can be non-zero.
-    let ox = dx.round() as i64;
-    let oy = dy.round() as i64;
     let cx0 = (px0 as i64 + ox).max(0);
     let cy0 = (py0 as i64 + oy).max(0);
     let cx1 = (px1 as i64 + ox).min(w as i64);
@@ -192,7 +197,7 @@ pub(super) fn build_drop_shadow(
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    apply_mask(&mut matte, pw, px0, py0, layer, doc);
+    apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -214,15 +219,17 @@ pub(super) fn build_drop_shadow(
         bottom: cy1 as i32,
         right: cx1 as i32,
     };
+    let Some(rect) = build.output(rect) else {
+        return Vec::new();
+    };
     let mut writer = PassWriter::constant(rect, shadow.blend_mode, color);
-    for y in cy0..cy1 {
-        for x in cx0..cx1 {
-            let sx = (x - ox - px0 as i64) as usize;
-            let sy = (y - oy - py0 as i64) as usize;
-            let alpha =
-                blurred[sy * pw + sx] * opacity * noise_factor(shadow.noise, x as i32, y as i32);
+    for y in rect.top..rect.bottom {
+        for x in rect.left..rect.right {
+            let sx = (x as i64 - ox - px0 as i64) as usize;
+            let sy = (y as i64 - oy - py0 as i64) as usize;
+            let alpha = blurred[sy * pw + sx] * opacity * noise_factor(shadow.noise, x, y);
             if alpha > 0.0 {
-                writer.emit(x as i32, y as i32, color, alpha);
+                writer.emit(x, y, color, alpha);
             }
         }
     }
@@ -233,6 +240,7 @@ pub(super) fn build_inner_shadow(
     layer: &Layer,
     doc: &Document,
     shadow: &InnerShadow,
+    build: BuildRegion,
 ) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
@@ -259,9 +267,14 @@ pub(super) fn build_inner_shadow(
     let size = clamp_finite(shadow.size, MAX_SIZE) as f64;
     let erode_radius = (choke / 100.0 * size).round() as i64;
     let blur_pad = blur_support(size);
+    let ox = dx.round() as i64;
+    let oy = dy.round() as i64;
     // Content can only be non-zero inside `source`; erode and blur spread the
     // inverted matte by at most `reach`, so it is built over `padded` only.
     let padded = pad_rect(source, erode_radius + blur_pad, w, h);
+    let Some(padded) = build.buffer(padded, erode_radius + blur_pad + ox.abs() + oy.abs()) else {
+        return Vec::new();
+    };
     if rect_empty(padded) {
         return Vec::new();
     }
@@ -269,7 +282,7 @@ pub(super) fn build_inner_shadow(
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    apply_mask(&mut matte, pw, px0, py0, layer, doc);
+    apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -286,17 +299,18 @@ pub(super) fn build_inner_shadow(
         shadow.color[2] as f32 / 255.0,
     ];
     let opacity = clamp_finite(shadow.opacity, MAX_OPACITY) / 100.0;
-    let ox = dx.round() as i64;
-    let oy = dy.round() as i64;
     let rect = PsdRect {
         top: source.1,
         left: source.0,
         bottom: source.3,
         right: source.2,
     };
+    let Some(rect) = build.output(rect) else {
+        return Vec::new();
+    };
     let mut writer = PassWriter::constant(rect, shadow.blend_mode, color);
-    for y in source.1..source.3 {
-        for x in source.0..source.2 {
+    for y in rect.top..rect.bottom {
+        for x in rect.left..rect.right {
             let sx = x as i64 - ox - px0 as i64;
             let sy = y as i64 - oy - py0 as i64;
             let b = if sx >= 0 && sy >= 0 && sx < pw as i64 && sy < ph as i64 {

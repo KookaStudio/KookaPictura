@@ -109,6 +109,8 @@ mod shadows;
 mod strokes;
 
 pub(crate) use legacy::{decode_legacy_effects, LegacyEffects};
+#[cfg(test)]
+pub(crate) use planes::EffectColor;
 pub(crate) use planes::EffectPass;
 
 pub use bevel::{
@@ -596,13 +598,161 @@ pub(crate) fn composite_layer_effects_above(
     }
 }
 
+/// The region an effect pass is built for, plus the one mask clip shared by
+/// every enabled family. `region = None` keeps the whole-layer build.
+#[derive(Clone, Copy)]
+pub(super) struct BuildRegion {
+    pub(super) region: Option<PsdRect>,
+    pub(super) mask_clip: PsdRect,
+}
+
+impl BuildRegion {
+    /// `padded` clipped to the requested region grown by `reach`; `None` when
+    /// they miss.
+    pub(super) fn buffer(
+        self,
+        padded: (i32, i32, i32, i32),
+        reach: i64,
+    ) -> Option<(i32, i32, i32, i32)> {
+        let b = match self.region {
+            None => padded,
+            Some(r) => intersect(padded, grow_tuple(r, reach)),
+        };
+        (!rect_empty(b)).then_some(b)
+    }
+
+    /// `rect` clipped to the requested region; `None` when they miss.
+    pub(super) fn output(self, rect: PsdRect) -> Option<PsdRect> {
+        let r = match self.region {
+            None => rect,
+            Some(r) => PsdRect {
+                top: rect.top.max(r.top),
+                left: rect.left.max(r.left),
+                bottom: rect.bottom.min(r.bottom),
+                right: rect.right.min(r.right),
+            },
+        };
+        (r.right > r.left && r.bottom > r.top).then_some(r)
+    }
+
+    /// A tuple rect clipped to the requested region; `None` when they miss.
+    pub(super) fn output_tuple(self, rect: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        let r = match self.region {
+            None => rect,
+            Some(r) => (
+                rect.0.max(r.left),
+                rect.1.max(r.top),
+                rect.2.min(r.right),
+                rect.3.min(r.bottom),
+            ),
+        };
+        (!rect_empty(r)).then_some(r)
+    }
+}
+
+fn grow_tuple(r: PsdRect, pad: i64) -> (i32, i32, i32, i32) {
+    let pad = pad as i32;
+    (
+        r.left.saturating_sub(pad),
+        r.top.saturating_sub(pad),
+        r.right.saturating_add(pad),
+        r.bottom.saturating_add(pad),
+    )
+}
+
+fn intersect(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+    (a.0.max(b.0), a.1.max(b.1), a.2.min(b.2), a.3.min(b.3))
+}
+
+fn angle_offset(distance: f32, angle_deg: f32) -> (i32, i32) {
+    let theta = f64::from(angle_deg).to_radians();
+    let dx = -(f64::from(distance)) * theta.cos();
+    let dy = f64::from(distance) * theta.sin();
+    (dx.round().abs() as i32, dy.round().abs() as i32)
+}
+
+/// How far an enabled effect can move a changed pixel, including inner effects
+/// and sample offsets. Unlike `effects_pad` (the outer paint bounds), this
+/// bounds the paint refresh and the shared mask clip.
+fn effect_change_reach(effects: &LayerEffects) -> i32 {
+    let on = |enabled: bool, present: bool| enabled && present;
+    let mut reach = 0i32;
+    if let Some(s) = effects
+        .drop_shadow
+        .as_ref()
+        .filter(|e| on(e.enabled, e.present))
+    {
+        let (ox, oy) = angle_offset(s.distance, s.angle_deg);
+        reach = reach.max(
+            ((ox + oy) as f32 + spread_pad(s.spread as f64, s.size as f64) as f32).ceil() as i32,
+        );
+    }
+    if let Some(g) = effects
+        .outer_glow
+        .as_ref()
+        .filter(|e| on(e.enabled, e.present))
+    {
+        reach = reach.max(spread_pad(g.spread as f64, g.size as f64) as i32);
+    }
+    if let Some(s) = effects.stroke.as_ref().filter(|e| on(e.enabled, e.present)) {
+        reach = reach.max(s.size as i32);
+    }
+    if let Some(b) = effects.bevel.as_ref().filter(|e| on(e.enabled, e.present)) {
+        reach = reach.max(bevel::reach(b).ceil() as i32);
+    }
+    if let Some(s) = effects
+        .inner_shadow
+        .as_ref()
+        .filter(|e| on(e.enabled, e.present))
+    {
+        let (ox, oy) = angle_offset(s.distance, s.angle_deg);
+        let erode = (f64::from(s.choke) / 100.0 * f64::from(s.size)).round() as i32;
+        reach = reach.max(ox + oy + erode + blur_support(s.size as f64) as i32);
+    }
+    if let Some(g) = effects
+        .inner_glow
+        .as_ref()
+        .filter(|e| on(e.enabled, e.present))
+    {
+        let erode = (f64::from(g.choke) / 100.0 * f64::from(g.size)).round() as i32;
+        reach = reach.max(erode + blur_support(g.size as f64) as i32);
+    }
+    if let Some(s) = effects.satin.as_ref().filter(|e| on(e.enabled, e.present)) {
+        let (ox, oy) = angle_offset(s.distance, s.angle_deg);
+        reach = reach.max(ox + oy + blur_support(s.size as f64) as i32);
+    }
+    if reach == 0 {
+        0
+    } else {
+        reach.saturating_add(2)
+    }
+}
+
+/// The paint-change reach: how far a dab's effect halo can move outside the
+/// dab, including inner effects and sample offsets.
+pub fn paint_reach(layer: &Layer) -> i32 {
+    effect_change_reach(&crate::layer_source::decoded_effects(layer))
+}
+
+fn build_mask_clip(region: Option<PsdRect>, effects: &LayerEffects, doc: &Document) -> PsdRect {
+    match region {
+        None => canvas_rect(doc),
+        Some(r) => grow_rect(r, effect_change_reach(effects)),
+    }
+}
+
 /// Build every enabled pass group in draw order. Called once per layer per
 /// composite by the source cache.
 pub(crate) fn build_layer_passes(
     layer: &Layer,
     doc: &Document,
     effects: &LayerEffects,
+    region: Option<PsdRect>,
 ) -> crate::layer_source::LayerPasses {
+    let build = BuildRegion {
+        region,
+        mask_clip: build_mask_clip(region, effects, doc),
+    };
     let mut out = crate::layer_source::LayerPasses::default();
     if let Some(shadow) = effects
         .drop_shadow
@@ -610,14 +760,15 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| effect.enabled && effect.present)
     {
         out.below
-            .extend(shadows::build_drop_shadow(layer, doc, shadow));
+            .extend(shadows::build_drop_shadow(layer, doc, shadow, build));
     }
     if let Some(glow) = effects
         .outer_glow
         .as_ref()
         .filter(|effect| effect.enabled && effect.present)
     {
-        out.below.extend(glows::build_outer_glow(layer, doc, glow));
+        out.below
+            .extend(glows::build_outer_glow(layer, doc, glow, build));
     }
     let on = |enabled: bool, present: bool| enabled && present;
     if let Some(overlay) = effects
@@ -626,7 +777,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(overlays::build_pattern_overlay(layer, doc, overlay));
+            .extend(overlays::build_pattern_overlay(layer, doc, overlay, build));
     }
     if let Some(overlay) = effects
         .gradient_overlay
@@ -634,7 +785,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(overlays::build_gradient_overlay(layer, doc, overlay));
+            .extend(overlays::build_gradient_overlay(layer, doc, overlay, build));
     }
     if let Some(overlay) = effects
         .color_overlay
@@ -642,21 +793,23 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(overlays::build_color_overlay(layer, doc, overlay));
+            .extend(overlays::build_color_overlay(layer, doc, overlay, build));
     }
     if let Some(satin) = effects
         .satin
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above.extend(satin::build_satin(layer, doc, satin));
+        out.above
+            .extend(satin::build_satin(layer, doc, satin, build));
     }
     if let Some(glow) = effects
         .inner_glow
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above.extend(glows::build_inner_glow(layer, doc, glow));
+        out.above
+            .extend(glows::build_inner_glow(layer, doc, glow, build));
     }
     if let Some(shadow) = effects
         .inner_shadow
@@ -664,14 +817,15 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(shadows::build_inner_shadow(layer, doc, shadow));
+            .extend(shadows::build_inner_shadow(layer, doc, shadow, build));
     }
     if let Some(stroke) = effects
         .stroke
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above.extend(strokes::build_stroke(layer, doc, stroke));
+        out.above
+            .extend(strokes::build_stroke(layer, doc, stroke, build));
     }
     if let Some(bevel) = effects
         .bevel
@@ -679,7 +833,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(bevel::build_bevel_emboss(layer, doc, bevel));
+            .extend(bevel::build_bevel_emboss(layer, doc, bevel, build));
     }
     out
 }
@@ -774,7 +928,11 @@ pub(crate) fn composite_satin_for_test(
     satin: &Satin,
 ) -> PixelBuffer {
     let mut canvas = Canvas::new(doc.width as usize, doc.height as usize);
-    let passes = satin::build_satin(layer, doc, satin);
+    let build = BuildRegion {
+        region: None,
+        mask_clip: canvas_rect(doc),
+    };
+    let passes = satin::build_satin(layer, doc, satin, build);
     planes::apply(&mut canvas, &passes);
     canvas.into_pixel_buffer()
 }
@@ -788,7 +946,11 @@ pub(crate) fn composite_bevel_emboss_for_test(
     bevel: &BevelEmboss,
 ) -> PixelBuffer {
     let mut canvas = Canvas::new(doc.width as usize, doc.height as usize);
-    let passes = bevel::build_bevel_emboss(layer, doc, bevel);
+    let build = BuildRegion {
+        region: None,
+        mask_clip: canvas_rect(doc),
+    };
+    let passes = bevel::build_bevel_emboss(layer, doc, bevel, build);
     planes::apply(&mut canvas, &passes);
     canvas.into_pixel_buffer()
 }
@@ -1003,12 +1165,11 @@ pub(super) fn apply_mask(
     x0: i32,
     y0: i32,
     layer: &Layer,
-    doc: &Document,
+    clip: PsdRect,
 ) {
     if w == 0 || matte.is_empty() {
         return;
     }
-    let clip = crate::mask_refine::canvas(doc);
     let run = |row: usize, row_matte: &mut [f32]| {
         let y = y0 + row as i32;
         for (i, v) in row_matte.iter_mut().enumerate() {
@@ -1028,155 +1189,4 @@ pub(super) fn apply_mask(
 }
 
 #[cfg(test)]
-mod matte_differential {
-    use super::{dilate_matte, erode_matte};
-
-    fn axis(
-        src: &[f32],
-        w: usize,
-        h: usize,
-        r: isize,
-        horizontal: bool,
-        want_max: bool,
-    ) -> Vec<f32> {
-        let mut out = vec![0.0f32; src.len()];
-        if horizontal {
-            for y in 0..h {
-                for x in 0..w {
-                    let lo = (x as isize - r).max(0) as usize;
-                    let hi = (x as isize + r).min(w as isize - 1) as usize;
-                    let mut v = if want_max {
-                        f32::NEG_INFINITY
-                    } else {
-                        f32::INFINITY
-                    };
-                    for k in lo..=hi {
-                        v = if want_max {
-                            v.max(src[y * w + k])
-                        } else {
-                            v.min(src[y * w + k])
-                        };
-                    }
-                    out[y * w + x] = v;
-                }
-            }
-        } else {
-            for x in 0..w {
-                for y in 0..h {
-                    let lo = (y as isize - r).max(0) as usize;
-                    let hi = (y as isize + r).min(h as isize - 1) as usize;
-                    let mut v = if want_max {
-                        f32::NEG_INFINITY
-                    } else {
-                        f32::INFINITY
-                    };
-                    for k in lo..=hi {
-                        v = if want_max {
-                            v.max(src[k * w + x])
-                        } else {
-                            v.min(src[k * w + x])
-                        };
-                    }
-                    out[y * w + x] = v;
-                }
-            }
-        }
-        out
-    }
-
-    fn naive(src: &[f32], w: usize, h: usize, r: isize, want_max: bool) -> Vec<f32> {
-        let horizontal = axis(src, w, h, r, true, want_max);
-        axis(&horizontal, w, h, r, false, want_max)
-    }
-
-    #[test]
-    fn spread_and_choke_mattes_match_the_pre_migration_scan() {
-        let (w, h) = (37usize, 29usize);
-        let mut state = 0x5eed_1234u64;
-        let mut src = vec![0.0f32; w * h];
-        for value in &mut src {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            *value = (state % 1000) as f32 / 1000.0;
-        }
-        for r in [0isize, 1, 3, 10, 50] {
-            assert_eq!(
-                dilate_matte(&src, w, h, r as i64),
-                naive(&src, w, h, r, true),
-                "dilate r={r}"
-            );
-            assert_eq!(
-                erode_matte(&src, w, h, r as i64),
-                naive(&src, w, h, r, false),
-                "erode r={r}"
-            );
-        }
-    }
-}
-
-#[cfg(test)]
-mod matte_parallel {
-    use super::blur_matte;
-    use pictura_core::PixelBuffer;
-
-    /// The pre-change blur: the quantized matte in three identical planes.
-    fn blur_three(src: &[f32], w: usize, h: usize, size: f64) -> Vec<f32> {
-        let n = w * h;
-        let mut buf = PixelBuffer::new(w as u32, h as u32, 3);
-        for (i, &v) in src.iter().enumerate() {
-            let q = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            buf.data[i] = q;
-            buf.data[n + i] = q;
-            buf.data[2 * n + i] = q;
-        }
-        pictura_filters::blur::gaussian(&mut buf, size).expect("valid radius");
-        buf.data[..n].iter().map(|&b| b as f32 / 255.0).collect()
-    }
-
-    #[test]
-    fn one_plane_matte_blur_matches_three_planes() {
-        let mut seed = 0x2545_f491_4f6c_dd1du64;
-        let mut next = || {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            (seed >> 40) as f32 / 16_777_216.0
-        };
-        for &(w, h) in &[(1usize, 1usize), (3, 5), (17, 9), (64, 33)] {
-            let src: Vec<f32> = (0..w * h).map(|_| next()).collect();
-            for &size in &[0.5f64, 2.0, 7.0] {
-                assert_eq!(
-                    blur_matte(&src, w, h, size),
-                    blur_three(&src, w, h, size),
-                    "{w}x{h} size {size}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    #[ignore = "profiling: times the one-plane matte blur against the three-plane blur"]
-    fn matte_blur_speedup_profile() {
-        use std::time::Instant;
-
-        let (w, h) = (1800usize, 1800usize);
-        let src: Vec<f32> = (0..w * h)
-            .map(|i| ((i as u64).wrapping_mul(2_654_435_761) % 1000) as f32 / 1000.0)
-            .collect();
-
-        let start = Instant::now();
-        let three = blur_three(&src, w, h, 30.0);
-        let three_time = start.elapsed();
-
-        let start = Instant::now();
-        let one = blur_matte(&src, w, h, 30.0);
-        let one_time = start.elapsed();
-        assert_eq!(one, three, "one plane must match the three-plane blur");
-
-        eprintln!(
-            "pictura perf: matte blur 1800x1800 three-plane={three_time:?} one-plane={one_time:?} speedup={:.2}x",
-            three_time.as_secs_f64() / one_time.as_secs_f64()
-        );
-    }
-}
+mod matte_tests;

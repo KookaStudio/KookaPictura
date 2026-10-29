@@ -35,6 +35,9 @@ pub(in crate::cxxqt_object) struct StrokeSession {
     pub(in crate::cxxqt_object) preview: Option<PreviewStroke>,
     /// The history label the commit records.
     pub(in crate::cxxqt_object) stroke_label: String,
+    /// How far the painted layer's effects and mask feather can move the change
+    /// outside a dab; every refresh rectangle grows by this.
+    pub(in crate::cxxqt_object) paint_pad: i32,
     /// The document before a stroke that had to change its structure to begin
     /// (the Background Eraser layering a Background); cancelling restores it.
     pub(in crate::cxxqt_object) stroke_base: Option<Document>,

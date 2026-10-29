@@ -29,6 +29,7 @@ use crate::composite::desc_item;
 
 use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
+use super::BuildRegion;
 use super::{
     blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode,
     num_clamped, num_or, pad_rect, rect_empty, MAX_ALTITUDE, MAX_DEPTH, MAX_OPACITY, MAX_SIZE,
@@ -206,6 +207,7 @@ pub(super) fn build_bevel_emboss(
     layer: &Layer,
     doc: &Document,
     bevel: &BevelEmboss,
+    build: BuildRegion,
 ) -> Vec<EffectPass> {
     // Stroke Emboss lights only a Stroke effect's band, which is not modelled.
     if bevel.style == BevelStyle::Stroke {
@@ -241,20 +243,16 @@ pub(super) fn build_bevel_emboss(
     let round = rounding(bevel.technique, size);
     // The chamfer reaches `size` past the edge (half for the straddling styles);
     // the rounding and soften blurs reach a little further.
-    let padded = pad_rect(
-        source,
-        size.ceil() as i64 + blur_support(round) + blur_support(soften) + 2,
-        w,
-        h,
-    );
-    if rect_empty(padded) {
+    let pad = size.ceil() as i64 + blur_support(round) + blur_support(soften) + 2;
+    let padded = pad_rect(source, pad, w, h);
+    let Some(padded) = build.buffer(padded, pad) else {
         return Vec::new();
-    }
+    };
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    apply_mask(&mut matte, pw, px0, py0, layer, doc);
+    apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -298,11 +296,24 @@ pub(super) fn build_bevel_emboss(
     } else {
         padded
     };
-    let rw = (region.2 - region.0) as usize;
-    let rh = (region.3 - region.1) as usize;
-    let mut shading = vec![0.0f32; rw * rh];
-    for y in region.1..region.3 {
-        for x in region.0..region.2 {
+    let Some(region) = build.output_tuple(region) else {
+        return Vec::new();
+    };
+    // The soften blur must read the true neighbours of the requested region,
+    // so build the shading over the region grown by the blur support and emit
+    // only the requested region.
+    let soften_pad = blur_support(soften) as i32;
+    let shade = (
+        (region.0 - soften_pad).max(px0),
+        (region.1 - soften_pad).max(py0),
+        (region.2 + soften_pad).min(px1),
+        (region.3 + soften_pad).min(py1),
+    );
+    let sw = (shade.2 - shade.0) as usize;
+    let sh = (shade.3 - shade.1) as usize;
+    let mut shading = vec![0.0f32; sw * sh];
+    for y in shade.1..shade.3 {
+        for x in shade.0..shade.2 {
             let gx = (at(x + 1, y) - at(x - 1, y)) / 2.0;
             let gy = (at(x, y + 1) - at(x, y - 1)) / 2.0;
             let (nx, ny) = (-gx * scale, -gy * scale);
@@ -311,7 +322,7 @@ pub(super) fn build_bevel_emboss(
             if down {
                 s = -s;
             }
-            shading[(y - region.1) as usize * rw + (x - region.0) as usize] = s as f32;
+            shading[(y - shade.1) as usize * sw + (x - shade.0) as usize] = s as f32;
         }
     }
     // The highlight and shadow soften apart, so where they meet they spread
@@ -319,8 +330,8 @@ pub(super) fn build_bevel_emboss(
     let (mut lights, mut darks): (Vec<f32>, Vec<f32>) =
         shading.iter().map(|&s| (s.max(0.0), (-s).max(0.0))).unzip();
     if soften > 0.0 {
-        lights = blur_f32(&lights, rw, rh, soften);
-        darks = blur_f32(&darks, rw, rh, soften);
+        lights = blur_f32(&lights, sw, sh, soften);
+        darks = blur_f32(&darks, sw, sh, soften);
     }
     let unit = |c: [u8; 3]| c.map(|v| v as f32 / 255.0);
     let shadow_color = unit(bevel.shadow.color);
@@ -349,7 +360,7 @@ pub(super) fn build_bevel_emboss(
     for y in region.1..region.3 {
         for x in region.0..region.2 {
             let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
-            let i = (y - region.1) as usize * rw + (x - region.0) as usize;
+            let i = (y - shade.1) as usize * sw + (x - shade.0) as usize;
             for (slot, (coverage, sign)) in lit(m).into_iter().enumerate() {
                 if coverage <= 0.0 || slot >= shadows.len() {
                     continue;

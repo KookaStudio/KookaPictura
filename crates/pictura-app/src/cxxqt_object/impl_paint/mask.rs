@@ -221,12 +221,21 @@ impl PictureViewRust {
             None => mask_preview(self, path, cfg.sanitized()),
         };
         let has_gpu = gpu.is_some();
+        let paint_pad = {
+            let rust = &*self;
+            rust.session
+                .doc
+                .as_ref()
+                .map(|doc| mask_paint_pad_for(doc, path))
+                .unwrap_or(0)
+        };
         let rust = &mut *self;
         // The mask stroke's own session takes the slot: the stroke, its
         // backend, and the present state it accumulates travel together.
         let session = StrokeSession {
             mask_stroke: Some(mask_stroke),
             stroke_label: label.to_string(),
+            paint_pad,
             gpu_stroke: gpu,
             gpu_placer: if has_gpu {
                 Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32))
@@ -288,11 +297,9 @@ impl qobject::PictureView {
             };
             pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
         }
-        if let Some(region) = self
-            .as_mut()
-            .rust_mut()
-            .queue_present(to_document(dirty, rect))
-        {
+        let pad = self.rust().session.live.paint_pad();
+        let present = grow_rect(to_document(dirty, rect), pad);
+        if let Some(region) = self.as_mut().rust_mut().queue_present(present) {
             self.as_mut().refresh_region(region);
         }
         true
@@ -313,6 +320,7 @@ impl qobject::PictureView {
         preview: Option<PreviewStroke>,
         label: &str,
         mut tiles: TileSet,
+        paint_pad: i32,
     ) -> bool {
         if let Some(preview) = preview {
             let t = Instant::now();
@@ -334,7 +342,7 @@ impl qobject::PictureView {
                 if let Some(rect) = ctx.stroke.take_dirty() {
                     // The paint session left the slot before this replay, so
                     // mark the tiles it was taken with, not the slot's.
-                    tiles.mark(to_document(rect, ctx.rect));
+                    tiles.mark(grow_rect(to_document(rect, ctx.rect), paint_pad));
                 }
             }
             if let (Some(dirty), Some(doc)) = (ctx.stroke.dirty(), rust.session.doc.as_mut()) {
@@ -348,7 +356,7 @@ impl qobject::PictureView {
                 false
             }
             Some(rect) => {
-                let rect = to_document(rect, ctx.rect);
+                let rect = grow_rect(to_document(rect, ctx.rect), paint_pad);
                 let regions = tiles.regions(rect);
                 self.as_mut().edit(label, |_| Edit::regions(regions, false));
                 true

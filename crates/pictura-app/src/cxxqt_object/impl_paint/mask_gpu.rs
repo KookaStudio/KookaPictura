@@ -6,6 +6,7 @@
 //! through the exact stroke's `patch_working_layer`, then copied into the real
 //! mask, mirroring the pixel GPU stroke but for the 1-channel mask plane.
 
+use super::super::helpers::grow_rect;
 use super::super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -105,12 +106,16 @@ impl qobject::PictureView {
             };
             pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
         }
-        let present = PsdRect {
-            top: dirty.top + rect.top,
-            left: dirty.left + rect.left,
-            bottom: dirty.bottom + rect.top,
-            right: dirty.right + rect.left,
-        };
+        let pad = self.rust().session.live.paint_pad();
+        let present = grow_rect(
+            PsdRect {
+                top: dirty.top + rect.top,
+                left: dirty.left + rect.left,
+                bottom: dirty.bottom + rect.top,
+                right: dirty.right + rect.left,
+            },
+            pad,
+        );
         if let Some(region) = self.as_mut().rust_mut().queue_present(present) {
             self.as_mut().refresh_region(region);
         }

@@ -1099,9 +1099,20 @@ fn begin_kind(
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
+    let paint_pad = rust
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| {
+            rust.layer_target
+                .single()
+                .map(|path| super::helpers::paint_pad_for(doc, path))
+        })
+        .unwrap_or(0);
     let session = super::document_session::StrokeSession {
         stroke: Some(stroke),
         stroke_label: label.to_string(),
+        paint_pad,
         ..Default::default()
     };
     rust.session.live.set_stroke_session(session);

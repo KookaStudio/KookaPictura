@@ -1,6 +1,7 @@
 //! The described-damage policy: bounded edits use a region, unbounded ones a
 //! full recomposite.
 
+use crate::cxxqt_object::document_session::StrokeSession;
 use crate::cxxqt_object::edit::{
     effect_of, insertion_edit, regions_influence, structural_paths, Edit, Effect,
 };
@@ -13,6 +14,7 @@ use pictura_core::{
     BitDepth, ColorMode, Document, Knockout, Layer, LayerBlock, LayerMask, LayerStack, PsdRect,
     TypeSpec,
 };
+use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 
 fn view(layers: Vec<Layer>) -> PictureViewRust {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
@@ -579,4 +581,294 @@ fn bounded_region_after_pending_preview_passes_no_hint() {
 #[test]
 fn mask_refine_commit_after_preview_passes_no_hint() {
     assert_pending_preview_forces_full_capture(true);
+}
+
+fn view_sized(w: u32, h: u32, layers: Vec<Layer>) -> PictureViewRust {
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(layers);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    }
+}
+
+fn styled_layer_at(at: PsdRect, effects: &[(&str, f64)]) -> Layer {
+    let mut layer = pixel_layer(
+        "styled",
+        at.width() as u32,
+        at.height() as u32,
+        (200, 10, 10),
+    );
+    layer.rect = at;
+    for (key, value) in effects {
+        pictura_render::set_layer_style_value(&mut layer, key, *value);
+    }
+    layer
+}
+
+fn write_layer_dab(doc: &mut Document, path: &str, dab: PsdRect) {
+    let layer = pictura_render::resolve_path_mut(doc, path).expect("layer");
+    let w = layer.rect.width() as usize;
+    for y in dab.top..dab.bottom {
+        for x in dab.left..dab.right {
+            let li = (y - layer.rect.top) as usize * w + (x - layer.rect.left) as usize;
+            for channel in layer.channels.iter_mut() {
+                if channel.id == -1 {
+                    channel.data.as_mut_slice()[li] = 0;
+                }
+            }
+        }
+    }
+}
+
+fn commit_region_equals_full(mut view: PictureViewRust, dab: PsdRect, pad: i32) {
+    write_layer_dab(view.session.doc.as_mut().expect("doc"), "1", dab);
+    let grown = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    view.apply_edit("Paint", Edit::regions(vec![grown], false));
+    let doc = view.session.doc.as_ref().expect("doc");
+    let full = pictura_render::composite_rgba(doc);
+    assert_eq!(
+        doc.composite.data.as_ref(),
+        full.data.as_ref(),
+        "the grown commit region must equal a full recomposite"
+    );
+}
+
+#[test]
+fn styled_layer_dab_commit_equals_full_recomposite() {
+    let layer = styled_layer_at(
+        PsdRect {
+            top: 20,
+            left: 20,
+            bottom: 30,
+            right: 30,
+        },
+        &[("dropShadow.on", 1.0), ("dropShadow.distance", 6.0)],
+    );
+    let view = view_sized(64, 64, vec![pixel_layer("base", 64, 64, (0, 0, 0)), layer]);
+    let pad = pictura_render::paint_reach(
+        pictura_render::resolve_path(view.session.doc.as_ref().expect("doc"), "1").expect("layer"),
+    );
+    commit_region_equals_full(
+        view,
+        PsdRect {
+            top: 24,
+            left: 24,
+            bottom: 26,
+            right: 26,
+        },
+        pad,
+    );
+}
+
+#[test]
+fn inner_effect_dab_commit_equals_full_recomposite() {
+    let layer = styled_layer_at(
+        PsdRect {
+            top: 20,
+            left: 20,
+            bottom: 30,
+            right: 30,
+        },
+        &[
+            ("innerShadow.on", 1.0),
+            ("innerShadow.distance", 6.0),
+            ("innerShadow.size", 8.0),
+        ],
+    );
+    let view = view_sized(64, 64, vec![pixel_layer("base", 64, 64, (0, 0, 0)), layer]);
+    let pad = pictura_render::paint_reach(
+        pictura_render::resolve_path(view.session.doc.as_ref().expect("doc"), "1").expect("layer"),
+    );
+    commit_region_equals_full(
+        view,
+        PsdRect {
+            top: 24,
+            left: 24,
+            bottom: 26,
+            right: 26,
+        },
+        pad,
+    );
+}
+
+#[test]
+fn feathered_mask_dab_commit_equals_full_recomposite() {
+    let mut layer = styled_layer_at(
+        PsdRect {
+            top: 20,
+            left: 20,
+            bottom: 60,
+            right: 60,
+        },
+        &[],
+    );
+    layer.mask = Some(LayerMask {
+        rect: layer.rect,
+        default_color: 0,
+        disabled: false,
+        data: Some(vec![255u8; 40 * 40].into()),
+        density: 255,
+        feather_bits: 8.0f64.to_bits(),
+        ..Default::default()
+    });
+    let mut view = view_sized(
+        100,
+        100,
+        vec![pixel_layer("base", 100, 100, (0, 0, 0)), layer],
+    );
+    let layer =
+        pictura_render::resolve_path(view.session.doc.as_ref().expect("doc"), "1").expect("layer");
+    let pad = pictura_render::paint_reach(layer)
+        + layer
+            .mask
+            .as_ref()
+            .map(pictura_render::mask_feather_reach)
+            .unwrap_or(0);
+    let dab = PsdRect {
+        top: 30,
+        left: 30,
+        bottom: 40,
+        right: 40,
+    };
+    {
+        let doc = view.session.doc.as_mut().expect("doc");
+        let layer = pictura_render::resolve_path_mut(doc, "1").expect("layer");
+        let mask = layer.mask.as_mut().expect("mask");
+        let w = mask.rect.width() as usize;
+        let data = mask.data.as_mut().expect("data").as_mut_slice();
+        for y in 10..20 {
+            for x in 10..20 {
+                data[y * w + x] = 0;
+            }
+        }
+    }
+    let grown = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    view.apply_edit("Paint", Edit::regions(vec![grown], false));
+    let doc = view.session.doc.as_ref().expect("doc");
+    let full = pictura_render::composite_rgba(doc);
+    assert_eq!(doc.composite.data.as_ref(), full.data.as_ref());
+}
+
+#[test]
+fn cancel_styled_stroke_restores_the_halo() {
+    let layer = styled_layer_at(
+        PsdRect {
+            top: 20,
+            left: 20,
+            bottom: 30,
+            right: 30,
+        },
+        &[("dropShadow.on", 1.0), ("dropShadow.distance", 6.0)],
+    );
+    let mut view = view_sized(64, 64, vec![pixel_layer("base", 64, 64, (0, 0, 0)), layer]);
+    let pad = pictura_render::paint_reach(
+        pictura_render::resolve_path(view.session.doc.as_ref().expect("doc"), "1").expect("layer"),
+    );
+    let mut stroke = Stroke::begin_at(
+        view.session.doc.as_ref().expect("doc"),
+        "1",
+        StrokeConfig::default(),
+    )
+    .expect("stroke");
+    assert!(stroke.sample(
+        view.session.doc.as_mut().expect("doc"),
+        StrokeSample {
+            x: 25.0,
+            y: 25.0,
+            pressure: 1.0,
+        },
+    ));
+    let dirty = stroke.dirty().expect("dirty");
+    let grown = crate::cxxqt_object::helpers::grow_rect(dirty, pad);
+    let _ = view.refresh_region_buffer(grown);
+    let session = StrokeSession {
+        stroke: Some(stroke),
+        paint_pad: pad,
+        ..Default::default()
+    };
+    let _restored = view.cancel_stroke_session(session).expect("restored");
+    let doc = view.session.doc.as_ref().expect("doc");
+    let full = pictura_render::composite_rgba(doc);
+    assert_eq!(doc.composite.data.as_ref(), full.data.as_ref());
+}
+
+#[test]
+fn dab_near_the_canvas_edge_clips_the_grown_rect() {
+    let grown = crate::cxxqt_object::helpers::grow_rect(
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 4,
+            right: 4,
+        },
+        20,
+    );
+    assert!(grown.top < 0 && grown.left < 0);
+    let (x0, y0, w, h) = crate::cxxqt_object::helpers::clamp_region(grown, 8, 8).expect("clamped");
+    assert_eq!((x0, y0, w, h), (0, 0, 8, 8));
+}
+
+#[test]
+fn paint_present_covers_the_dab_union_plus_reach() {
+    let mut layer = pixel_layer("styled", 10, 10, (200, 10, 10));
+    layer.rect = PsdRect {
+        top: 20,
+        left: 20,
+        bottom: 30,
+        right: 30,
+    };
+    pictura_render::set_layer_style_value(&mut layer, "dropShadow.on", 1.0);
+    pictura_render::set_layer_style_value(&mut layer, "dropShadow.distance", 6.0);
+    let pad = pictura_render::paint_reach(&layer);
+    assert!(pad >= 6, "the shadow distance is in the paint reach");
+    let dab = PsdRect {
+        top: 24,
+        left: 24,
+        bottom: 25,
+        right: 25,
+    };
+    let present = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    assert!(present.left <= dab.left - 6 && present.top <= dab.top - 6);
+    assert!(present.right >= dab.right + 6 && present.bottom >= dab.bottom + 6);
+    let session = StrokeSession {
+        paint_pad: pad,
+        ..Default::default()
+    };
+    assert_eq!(session.paint_pad, pad);
+}
+
+#[test]
+fn mask_present_covers_the_feather_reach() {
+    let mut layer = pixel_layer("masked", 10, 10, (200, 10, 10));
+    layer.rect = PsdRect {
+        top: 20,
+        left: 20,
+        bottom: 30,
+        right: 30,
+    };
+    let mask = LayerMask {
+        rect: layer.rect,
+        default_color: 0,
+        disabled: false,
+        data: Some(vec![255u8; 100].into()),
+        density: 255,
+        feather_bits: 8.0f64.to_bits(),
+        ..Default::default()
+    };
+    let feather = pictura_render::mask_feather_reach(&mask);
+    assert!(feather > 0);
+    layer.mask = Some(mask);
+    let pad = pictura_render::paint_reach(&layer) + feather;
+    let dab = PsdRect {
+        top: 24,
+        left: 24,
+        bottom: 25,
+        right: 25,
+    };
+    let present = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    assert!(present.left <= dab.left - feather);
+    assert!(present.top <= dab.top - feather);
 }

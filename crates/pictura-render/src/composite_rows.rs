@@ -9,7 +9,7 @@
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use pictura_core::{BlendMode, ColorMode, Document, Layer};
+use pictura_core::{BlendMode, ColorMode, Document, Layer, PsdRect};
 use rayon::prelude::*;
 
 use crate::composite::{blend, blend_if_factor, channel, sample, Canvas, Px};
@@ -115,6 +115,7 @@ pub(crate) fn blend_into_row(
     ox: i32,
     layer: &Layer,
     doc: &Document,
+    clip: PsdRect,
     x: i32,
     y: i32,
     cs: [f32; 3],
@@ -126,7 +127,7 @@ pub(crate) fn blend_into_row(
     } else {
         layer.fill as f32 / 255.0
     };
-    let mask = mask_alpha_unit(doc, layer, x, y);
+    let mask = mask_alpha_unit(doc, layer, clip, x, y);
     let gate = match layer.blend_if.as_ref() {
         Some(view) if !view.is_default() => {
             let backdrop = row[(x - ox) as usize];
@@ -230,6 +231,7 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     let alpha = channel(layer, -1);
     let ox = canvas.ox;
     let rect = layer.rect;
+    let clip = canvas.clip();
 
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         for x in x0..x1 {
@@ -254,6 +256,7 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
                 ox,
                 layer,
                 doc,
+                clip,
                 x,
                 y,
                 [r, g, b],
@@ -271,6 +274,7 @@ pub(crate) fn composite_canvas(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     let x1 = canvas.x1();
     let y0 = canvas.y0();
     let y1 = canvas.y1();
+    let clip = canvas.clip();
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         for x in x0..x1 {
             let p = inner.px[inner.idx(x as usize, y as usize)];
@@ -281,6 +285,7 @@ pub(crate) fn composite_canvas(canvas: &mut Canvas, layer: &Layer, doc: &Documen
                     ox,
                     layer,
                     doc,
+                    clip,
                     x,
                     y,
                     [p.r, p.g, p.b],

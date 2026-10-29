@@ -21,6 +21,7 @@ use crate::composite::desc_item;
 
 use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
+use super::BuildRegion;
 use super::{
     bool_or, clamp_finite, clip_rect, content_matte, effect_blend_mode, num_clamped, num_or,
     rect_empty, MAX_OPACITY,
@@ -191,7 +192,7 @@ type Region = (i32, i32, i32, i32);
 /// The content region, its masked coverage matte, and the clamped opacity.
 type Coverage = (Region, Vec<f32>, f32);
 
-fn coverage(layer: &Layer, doc: &Document, opacity: f32) -> Option<Coverage> {
+fn coverage(layer: &Layer, doc: &Document, opacity: f32, build: BuildRegion) -> Option<Coverage> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
         doc.height.min(i32::MAX as u32) as i32,
@@ -203,6 +204,7 @@ fn coverage(layer: &Layer, doc: &Document, opacity: f32) -> Option<Coverage> {
     if rect_empty(region) {
         return None;
     }
+    let region = build.output_tuple(region)?;
     let opacity = clamp_finite(opacity, MAX_OPACITY) / 100.0;
     if opacity == 0.0 {
         return None;
@@ -210,7 +212,7 @@ fn coverage(layer: &Layer, doc: &Document, opacity: f32) -> Option<Coverage> {
     let (x0, y0, x1, _) = region;
     let rw = (x1 - x0) as usize;
     let mut matte = content_matte(layer, doc, region);
-    apply_mask(&mut matte, rw, x0, y0, layer, doc);
+    apply_mask(&mut matte, rw, x0, y0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return None;
     }
@@ -229,8 +231,9 @@ pub(super) fn build_color_overlay(
     layer: &Layer,
     doc: &Document,
     overlay: &ColorOverlay,
+    build: BuildRegion,
 ) -> Vec<EffectPass> {
-    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity) else {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build) else {
         return Vec::new();
     };
     let (x0, y0, x1, y1) = region;
@@ -262,8 +265,9 @@ pub(super) fn build_gradient_overlay(
     layer: &Layer,
     doc: &Document,
     overlay: &GradientOverlay,
+    build: BuildRegion,
 ) -> Vec<EffectPass> {
-    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity) else {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build) else {
         return Vec::new();
     };
     let params = GradientFillParams {
@@ -291,10 +295,14 @@ pub(super) fn build_gradient_overlay(
     if gw <= 0 || gh <= 0 {
         return Vec::new();
     }
-    let grad = crate::fill::gradient_rgba(gw, gh, &params);
-    let grow = gw as usize;
     let (x0, y0, x1, y1) = region;
     let w = (x1 - x0) as usize;
+    let grad = crate::fill::gradient_rgba_region(
+        gw,
+        gh,
+        (x0 - left, y0 - top, x1 - left, y1 - top),
+        &params,
+    );
     let rect = PsdRect {
         top: y0,
         left: x0,
@@ -310,8 +318,7 @@ pub(super) fn build_gradient_overlay(
             }
             // The sample is in range for both rects; the guard makes a craft
             // struct's non-finite `scale` (an all-zero gradient) a bounded no-op.
-            let Some(c) = grad.get((y - top).max(0) as usize * grow + (x - left).max(0) as usize)
-            else {
+            let Some(c) = grad.get((y - y0) as usize * w + (x - x0) as usize) else {
                 continue;
             };
             writer.emit(x, y, rgb(*c), m * opacity);
@@ -324,8 +331,9 @@ pub(super) fn build_pattern_overlay(
     layer: &Layer,
     doc: &Document,
     overlay: &PatternOverlay,
+    build: BuildRegion,
 ) -> Vec<EffectPass> {
-    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity) else {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build) else {
         return Vec::new();
     };
     let (lw, lh) = (layer.rect.width(), layer.rect.height());
@@ -340,11 +348,14 @@ pub(super) fn build_pattern_overlay(
         origin,
     };
     let patterns = pictura_codec::decode_patterns(doc);
-    let tile =
-        crate::fill::pattern_tile_rgba(&patterns, &params, layer.rect.left, layer.rect.top, lw, lh);
-    let trow = lw as usize;
     let (x0, y0, x1, y1) = region;
     let w = (x1 - x0) as usize;
+    let tile = crate::fill::pattern_tile_region(
+        &patterns,
+        &params,
+        (layer.rect.left, layer.rect.top),
+        (x0, y0, x1, y1),
+    );
     let rect = PsdRect {
         top: y0,
         left: x0,
@@ -358,9 +369,7 @@ pub(super) fn build_pattern_overlay(
             if m <= 0.0 {
                 continue;
             }
-            let li =
-                (y - layer.rect.top).max(0) as usize * trow + (x - layer.rect.left).max(0) as usize;
-            let Some(c) = tile.get(li) else {
+            let Some(c) = tile.get((y - y0) as usize * w + (x - x0) as usize) else {
                 continue;
             };
             let alpha = m * (c[3] as f32 / 255.0) * opacity;

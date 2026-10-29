@@ -42,7 +42,7 @@ pub(crate) fn composite_siblings(
             i += 1 + run;
             continue;
         }
-        let mut group = Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h);
+        let mut group = canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h);
         group.skip_effects = canvas.skip_effects;
         let opaque = Layer {
             opacity: 255,
@@ -93,7 +93,7 @@ pub(crate) fn composite_siblings(
 /// The base's coverage over `canvas`'s region: its alpha composited alone onto
 /// transparency at full opacity and Fill, without effects.
 fn coverage(canvas: &Canvas, base: &Layer, doc: &Document) -> Vec<f32> {
-    let mut alone = Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h);
+    let mut alone = canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h);
     alone.skip_effects = true;
     let full = Layer {
         opacity: 255,

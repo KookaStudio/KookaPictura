@@ -19,6 +19,7 @@ use crate::composite::desc_item;
 
 use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
+use super::BuildRegion;
 use super::{
     blur_matte, bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode,
     num_clamped, num_or, pad_rect, rect_empty, MAX_DISTANCE, MAX_OPACITY, MAX_SIZE,
@@ -85,7 +86,12 @@ pub fn decode_satin(layer: &Layer) -> Option<Satin> {
     })
 }
 
-pub(super) fn build_satin(layer: &Layer, doc: &Document, satin: &Satin) -> Vec<EffectPass> {
+pub(super) fn build_satin(
+    layer: &Layer,
+    doc: &Document,
+    satin: &Satin,
+    build: BuildRegion,
+) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
         doc.height.min(i32::MAX as u32) as i32,
@@ -117,14 +123,14 @@ pub(super) fn build_satin(layer: &Layer, doc: &Document, satin: &Satin) -> Vec<E
     // `|dx| + |dy|` and the blur spreads by `blur_support`, so the matte is
     // built over `padded` only.
     let padded = pad_rect(source, ox.abs() + oy.abs() + blur_support, w, h);
-    if rect_empty(padded) {
+    let Some(padded) = build.buffer(padded, ox.abs() + oy.abs() + blur_support) else {
         return Vec::new();
-    }
+    };
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    apply_mask(&mut matte, pw, px0, py0, layer, doc);
+    apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -153,9 +159,12 @@ pub(super) fn build_satin(layer: &Layer, doc: &Document, satin: &Satin) -> Vec<E
         bottom: source.3,
         right: source.2,
     };
+    let Some(rect) = build.output(rect) else {
+        return Vec::new();
+    };
     let mut writer = PassWriter::constant(rect, satin.blend_mode, color);
-    for y in source.1..source.3 {
-        for x in source.0..source.2 {
+    for y in rect.top..rect.bottom {
+        for x in rect.left..rect.right {
             let band = (sample(x as i64 - ox, y as i64 - oy)
                 - sample(x as i64 + ox, y as i64 + oy))
             .abs()
