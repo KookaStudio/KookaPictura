@@ -19,6 +19,7 @@
 #include <QtCore/QScopeGuard>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QImage>
+#include <QtGui/QShortcut>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QLineEdit>
@@ -31,6 +32,7 @@ private slots:
     void deleteAndBackspaceClearTheSelection();
     void deleteKeyDeletesTheActiveLayerAwayFromTheCanvas();
     void deleteKeyLeavesAFocusedTextFieldAlone();
+    void deleteKeyActsAfterAFieldLosesFocus();
     void ctrlZWorksWhileHistoryIconFlyoutIsOpen();
     void textFieldKeepsNativeCtrlZUndo();
     void ctrlEqualsZoomsIn();
@@ -131,6 +133,47 @@ void EditShortcutsTest::deleteKeyLeavesAFocusedTextFieldAlone()
     QTest::keyClick(&edit, Qt::Key_Backspace);
     QCOMPARE(edit.text(), QStringLiteral("c"));
     QCOMPARE(view->layer_count(), 2);
+    frame.closeDocument(doc, false);
+}
+
+// The field gate follows the newly focused widget: leaving a field gives
+// Delete back to the workspace. The frame's key fallback also deletes, so the
+// shortcut's enabled state is the only observable sign of an inverted gate.
+void EditShortcutsTest::deleteKeyActsAfterAFieldLosesFocus()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QShortcut* deleteShortcut = nullptr;
+    for (QShortcut* shortcut : frame.findChildren<QShortcut*>()) {
+        if (shortcut->key() == QKeySequence(Qt::Key_Delete)) {
+            deleteShortcut = shortcut;
+        }
+    }
+    QVERIFY(deleteShortcut);
+    QVERIFY(frame.newDocument(QStringLiteral("After Field"), 40, 30, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    QCOMPARE(view->duplicate_layer(0), 1);
+    frame.selectLayerPath(QStringLiteral("1"));
+
+    QLineEdit edit(&frame);
+    edit.show();
+    edit.setFocus();
+    QTRY_VERIFY(QApplication::focusWidget() == &edit);
+    QVERIFY(!deleteShortcut->isEnabled());
+    // A widget with no Delete handling of its own: only the frame's shortcut
+    // can delete the layer.
+    QWidget plain(&frame);
+    plain.setFocusPolicy(Qt::StrongFocus);
+    plain.show();
+    plain.setFocus();
+    QTRY_VERIFY(QApplication::focusWidget() == &plain);
+    QVERIFY(deleteShortcut->isEnabled());
+    const int history = view->history_count();
+    QTest::keyClick(&plain, Qt::Key_Delete);
+    QCOMPARE(view->layer_count(), 1);
+    QCOMPARE(view->history_count(), history + 1);
     frame.closeDocument(doc, false);
 }
 

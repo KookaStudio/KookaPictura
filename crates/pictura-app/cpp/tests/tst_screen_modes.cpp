@@ -11,6 +11,7 @@
 #include <QtWidgets/QMenuBar>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStatusBar>
 
 #include <functional>
@@ -20,6 +21,8 @@
 #include "frame.h"
 #include "image_view.h"
 #include "panels/panel_column.h"
+#include "panels/properties_panel.h"
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "session.h"
 #include "tools.h"
 
@@ -107,6 +110,8 @@ private slots:
     void toolCancelWinsOverEsc();
     void fullWithMenuBarKeepsPanels();
     void tabRevealsFullScreenChrome();
+    void tabInFieldMovesFocus();
+    void tabOnCanvasTogglesPanels();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -351,6 +356,74 @@ void ScreenModesTest::tabRevealsFullScreenChrome()
     QVERIFY(!tools->isVisible());
     QVERIFY(!panels->isVisible());
     window_->setPanelsHidden(false);
+}
+
+// #1028: Tab in a Properties field commits and moves focus; it must not reach
+// the Show/Hide Panels shortcut. Keys go through QTest's shortcut-map path.
+void ScreenModesTest::tabInFieldMovesFocus()
+{
+    window_->setScreenMode(ScreenMode::Standard);
+    window_->setPanelsHidden(false);
+    window_->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window_.get()));
+    pictura::PanelColumn* tools = window_->toolsColumn();
+    pictura::PanelColumn* panels = window_->panelColumn();
+    QVERIFY(tools && panels);
+
+    const QString name = QStringLiteral("propertiesPanel");
+    pictura::PanelColumn* owner = window_->columnForPanel(name);
+    QVERIFY(owner != nullptr);
+    owner->setRailMode(false);
+    QVERIFY(owner->showPanel(name, true));
+    auto* properties = window_->findChild<pictura::PropertiesPanel*>(name);
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(properties && view);
+    view->set_active_layer(QString());
+    properties->setView(view);
+    QSpinBox* width = properties->canvasWidthForTest();
+    QSpinBox* height = properties->canvasHeightForTest();
+    QVERIFY(width && height);
+    QTRY_VERIFY(width->isVisible() && height->isVisible());
+
+    width->setFocus(Qt::MouseFocusReason);
+    QTRY_VERIFY(width->hasFocus());
+    width->selectAll();
+    QTest::keyClicks(width, QStringLiteral("64"));
+    QTest::keyClick(width, Qt::Key_Tab);
+    QVERIFY(!window_->panelsHidden());
+    QVERIFY(tools->isVisible());
+    QVERIFY(panels->isVisible());
+    QCOMPARE(view->document_width(), 64);
+    QTRY_VERIFY(height->hasFocus());
+
+    QTest::keyClick(height, Qt::Key_Backtab, Qt::ShiftModifier);
+    QVERIFY(!window_->panelsHidden());
+    QVERIFY(tools->isVisible());
+    QVERIFY(panels->isVisible());
+    QTRY_VERIFY(width->hasFocus());
+}
+
+void ScreenModesTest::tabOnCanvasTogglesPanels()
+{
+    window_->setScreenMode(ScreenMode::Standard);
+    window_->setPanelsHidden(false);
+    window_->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window_.get()));
+    pictura::PanelColumn* tools = window_->toolsColumn();
+    pictura::PanelColumn* panels = window_->panelColumn();
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(tools && panels && canvas);
+    canvas->setFocus(Qt::MouseFocusReason);
+    QTRY_VERIFY(canvas->hasFocus());
+
+    QTest::keyClick(canvas, Qt::Key_Tab);
+    QVERIFY(window_->panelsHidden());
+    QVERIFY(!tools->isVisible());
+    QVERIFY(!panels->isVisible());
+    QTest::keyClick(canvas, Qt::Key_Tab);
+    QVERIFY(!window_->panelsHidden());
+    QVERIFY(tools->isVisible());
+    QVERIFY(panels->isVisible());
 }
 
 QTEST_MAIN(ScreenModesTest)
