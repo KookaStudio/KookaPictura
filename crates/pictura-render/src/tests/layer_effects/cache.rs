@@ -271,10 +271,11 @@ fn dab_region_pass_is_bounded_and_equal() {
 fn banded_sub_region_reuses_one_pass() {
     let d = banded_styled_doc();
     let (x0, y0, rw, rh) = (90u32, 80u32, 120u32, 160u32);
+    let _guard = crate::layer_source::cache_test_guard();
     crate::purge_source_cache();
     let region = crate::composite::composite_rgba_region(&d, x0, y0, rw, rh);
     assert_eq!(
-        crate::layer_source::pass_cache_len(),
+        crate::layer_source::pass_build_count(&d.layers[1], &d),
         1,
         "the banded composite builds one whole-layer pass"
     );

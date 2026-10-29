@@ -157,6 +157,38 @@ fn cache() -> &'static Mutex<Cache> {
     CACHE.get_or_init(|| Mutex::new(Cache::new()))
 }
 
+/// Test-only purge lock: a cache test can hold this so another test's
+/// `purge_source_cache` cannot clear the entry it is asserting on. Lookups are
+/// not gated, so rayon workers never block on it.
+#[cfg(test)]
+static PURGE_LOCK: Mutex<()> = Mutex::new(());
+
+#[cfg(test)]
+thread_local! {
+    static HOLDING_PURGE_LOCK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) struct CacheTestGuard {
+    _guard: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl Drop for CacheTestGuard {
+    fn drop(&mut self) {
+        HOLDING_PURGE_LOCK.with(|h| h.set(false));
+    }
+}
+
+/// Hold the purge lock for the rest of the test's cache-sensitive section.
+#[cfg(test)]
+pub(crate) fn cache_test_guard() -> CacheTestGuard {
+    HOLDING_PURGE_LOCK.with(|h| h.set(true));
+    CacheTestGuard {
+        _guard: PURGE_LOCK.lock().unwrap_or_else(|e| e.into_inner()),
+    }
+}
+
 fn lookup(key: Key, build: impl FnOnce() -> Artifact) -> Artifact {
     let cell = {
         let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
@@ -179,7 +211,16 @@ fn lookup(key: Key, build: impl FnOnce() -> Artifact) -> Artifact {
         }
         cell
     };
-    let artifact = cell.get_or_init(build).clone();
+    let artifact = cell
+        .get_or_init(|| {
+            #[cfg(test)]
+            {
+                let mut builds = pass_builds().lock().unwrap_or_else(|e| e.into_inner());
+                *builds.entry(key.hash).or_insert(0) += 1;
+            }
+            build()
+        })
+        .clone();
     let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
     cache.note_size(key, artifact.size());
     artifact
@@ -187,6 +228,12 @@ fn lookup(key: Key, build: impl FnOnce() -> Artifact) -> Artifact {
 
 /// Drop every cached artifact. The next request rebuilds it.
 pub fn purge_source_cache() {
+    #[cfg(test)]
+    let _guard = if HOLDING_PURGE_LOCK.with(|h| h.get()) {
+        None
+    } else {
+        Some(PURGE_LOCK.lock().unwrap_or_else(|e| e.into_inner()))
+    };
     let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
     cache.entries.clear();
     cache.bytes = 0;
@@ -300,6 +347,14 @@ pub(crate) fn decoded_effects(layer: &Layer) -> Arc<LayerEffects> {
     }
 }
 
+/// The content key of `layer`'s whole-layer effect passes.
+fn pass_key_hash(layer: &Layer, doc: &Document) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    key::content_key(layer, doc).hash(&mut hasher);
+    key::effect_digest(layer).hash(&mut hasher);
+    hasher.finish()
+}
+
 /// The built pass groups for `layer`. Pattern-driven passes are rebuilt on
 /// every call instead of cached.
 pub(crate) fn effect_passes(
@@ -327,11 +382,7 @@ pub(crate) fn effect_passes(
             }
         };
     }
-    let mut hasher = DefaultHasher::new();
-    key::content_key(layer, doc).hash(&mut hasher);
-    key::effect_digest(layer).hash(&mut hasher);
-    let hash = hasher.finish();
-    match lookup(Key::new(Kind::Passes, hash), build) {
+    match lookup(Key::new(Kind::Passes, pass_key_hash(layer, doc)), build) {
         Artifact::Passes(passes) => passes,
         Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
             Arc::new(LayerPasses::default())
@@ -371,9 +422,24 @@ fn cache_has_key(key: Key) -> bool {
         .any(|entry| entry.key == key)
 }
 
+/// Pass-cache entries for one layer's content key, so a test that asserts a
+/// single pass is not racing every other test that builds a styled layer.
 #[cfg(test)]
-pub(crate) fn pass_cache_len() -> usize {
-    cache_kind_count(Kind::Passes)
+fn pass_builds() -> &'static Mutex<std::collections::HashMap<u64, usize>> {
+    static BUILDS: OnceLock<Mutex<std::collections::HashMap<u64, usize>>> = OnceLock::new();
+    BUILDS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+/// How many times `layer`'s whole-layer pass was actually built, so a test
+/// that asserts one build is not racing every other cache test's purge.
+#[cfg(test)]
+pub(crate) fn pass_build_count(layer: &Layer, doc: &Document) -> usize {
+    pass_builds()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&pass_key_hash(layer, doc))
+        .copied()
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
