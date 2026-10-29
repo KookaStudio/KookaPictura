@@ -722,3 +722,10 @@ fn satin_fixture_decodes_and_composites() {
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the satin renders");
 }
+
+pub(super) fn parallel_layer() -> Layer {
+    spec_satin(&SatinSpec {
+        size: 3.0,
+        ..Default::default()
+    })
+}

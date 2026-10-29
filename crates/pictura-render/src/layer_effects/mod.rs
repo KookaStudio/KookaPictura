@@ -94,8 +94,10 @@ use pictura_adjust::Adjustment;
 use pictura_codec::DescValue;
 use pictura_core::mask_ops::{self, Border};
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
+use rayon::prelude::*;
 
-use crate::composite::{channel, Canvas};
+use crate::composite::{channel, mask_alpha, Canvas};
+use crate::composite_rows::serial;
 
 mod bevel;
 mod glows;
@@ -975,24 +977,54 @@ fn erode_matte(src: &[f32], w: usize, h: usize, r: i64) -> Vec<f32> {
     mask_ops::erode(src, w, h, r.max(0) as usize, Border::Clamp)
 }
 
-/// Gaussian-blur the matte with the crate blur, carrying the quantized matte in
-/// all three planes of a `PixelBuffer`. `size <= 0` is a no-op.
+/// Gaussian-blur the matte with the crate blur, quantized to 8 bits. The matte
+/// is one plane, so the blur does one plane of work. `size <= 0` is a no-op.
 fn blur_matte(src: &[f32], w: usize, h: usize, size: f64) -> Vec<f32> {
     if !size.is_finite() || size <= 0.0 {
         return src.to_vec();
     }
-    let n = w * h;
-    let mut buf = PixelBuffer::new(w as u32, h as u32, 3);
+    let mut buf = PixelBuffer::new(w as u32, h as u32, 1);
     for (i, &v) in src.iter().enumerate() {
-        let q = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-        buf.data[i] = q;
-        buf.data[n + i] = q;
-        buf.data[2 * n + i] = q;
+        buf.data[i] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     }
-    if pictura_filters::blur::gaussian(&mut buf, size).is_err() {
-        return src.to_vec();
+    pictura_filters::kernel::gaussian_blur_planes(
+        &mut buf,
+        pictura_filters::kernel::sigma_from_radius(size),
+    );
+    buf.data.iter().map(|&b| b as f32 / 255.0).collect()
+}
+
+/// Multiply `matte`, a `w`-wide region whose first sample is document
+/// `(x0, y0)`, by the layer's mask coverage. Rows are independent, so they run
+/// in parallel unless the test switch forces the serial branch.
+pub(super) fn apply_mask(
+    matte: &mut [f32],
+    w: usize,
+    x0: i32,
+    y0: i32,
+    layer: &Layer,
+    doc: &Document,
+) {
+    if w == 0 || matte.is_empty() {
+        return;
     }
-    buf.data[..n].iter().map(|&b| b as f32 / 255.0).collect()
+    let clip = crate::mask_refine::canvas(doc);
+    let run = |row: usize, row_matte: &mut [f32]| {
+        let y = y0 + row as i32;
+        for (i, v) in row_matte.iter_mut().enumerate() {
+            *v *= mask_alpha(layer, clip, x0 + i as i32, y) as f32 / 255.0;
+        }
+    };
+    if serial() {
+        for (row, row_matte) in matte.chunks_mut(w).enumerate() {
+            run(row, row_matte);
+        }
+        return;
+    }
+    matte
+        .par_chunks_mut(w)
+        .enumerate()
+        .for_each(|(row, row_matte)| run(row, row_matte));
 }
 
 #[cfg(test)]
@@ -1080,5 +1112,71 @@ mod matte_differential {
                 "erode r={r}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod matte_parallel {
+    use super::blur_matte;
+    use pictura_core::PixelBuffer;
+
+    /// The pre-change blur: the quantized matte in three identical planes.
+    fn blur_three(src: &[f32], w: usize, h: usize, size: f64) -> Vec<f32> {
+        let n = w * h;
+        let mut buf = PixelBuffer::new(w as u32, h as u32, 3);
+        for (i, &v) in src.iter().enumerate() {
+            let q = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            buf.data[i] = q;
+            buf.data[n + i] = q;
+            buf.data[2 * n + i] = q;
+        }
+        pictura_filters::blur::gaussian(&mut buf, size).expect("valid radius");
+        buf.data[..n].iter().map(|&b| b as f32 / 255.0).collect()
+    }
+
+    #[test]
+    fn one_plane_matte_blur_matches_three_planes() {
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 40) as f32 / 16_777_216.0
+        };
+        for &(w, h) in &[(1usize, 1usize), (3, 5), (17, 9), (64, 33)] {
+            let src: Vec<f32> = (0..w * h).map(|_| next()).collect();
+            for &size in &[0.5f64, 2.0, 7.0] {
+                assert_eq!(
+                    blur_matte(&src, w, h, size),
+                    blur_three(&src, w, h, size),
+                    "{w}x{h} size {size}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "profiling: times the one-plane matte blur against the three-plane blur"]
+    fn matte_blur_speedup_profile() {
+        use std::time::Instant;
+
+        let (w, h) = (1800usize, 1800usize);
+        let src: Vec<f32> = (0..w * h)
+            .map(|i| ((i as u64).wrapping_mul(2_654_435_761) % 1000) as f32 / 1000.0)
+            .collect();
+
+        let start = Instant::now();
+        let three = blur_three(&src, w, h, 30.0);
+        let three_time = start.elapsed();
+
+        let start = Instant::now();
+        let one = blur_matte(&src, w, h, 30.0);
+        let one_time = start.elapsed();
+        assert_eq!(one, three, "one plane must match the three-plane blur");
+
+        eprintln!(
+            "pictura perf: matte blur 1800x1800 three-plane={three_time:?} one-plane={one_time:?} speedup={:.2}x",
+            three_time.as_secs_f64() / one_time.as_secs_f64()
+        );
     }
 }

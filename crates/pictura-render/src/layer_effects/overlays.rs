@@ -17,8 +17,9 @@ use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFill
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{desc_item, mask_alpha};
+use crate::composite::desc_item;
 
+use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
 use super::{
     bool_or, clamp_finite, clip_rect, content_matte, effect_blend_mode, num_clamped, num_or,
@@ -206,15 +207,10 @@ fn coverage(layer: &Layer, doc: &Document, opacity: f32) -> Option<Coverage> {
     if opacity == 0.0 {
         return None;
     }
-    let (x0, y0, x1, y1) = region;
+    let (x0, y0, x1, _) = region;
     let rw = (x1 - x0) as usize;
     let mut matte = content_matte(layer, doc, region);
-    for y in y0..y1 {
-        for x in x0..x1 {
-            matte[(y - y0) as usize * rw + (x - x0) as usize] *=
-                mask_alpha(layer, crate::mask_refine::canvas(doc), x, y) as f32 / 255.0;
-        }
-    }
+    apply_mask(&mut matte, rw, x0, y0, layer, doc);
     if matte.iter().all(|&v| v <= 0.0) {
         return None;
     }

@@ -5,8 +5,10 @@
 use pictura_adjust::{AdjustError, Adjustment};
 use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, Samples};
 
+use rayon::prelude::*;
+
 use crate::composite::{composite_layers, to_u8, Canvas};
-use crate::composite_rows::{blend_into_row, for_each_row};
+use crate::composite_rows::{blend_into_row, for_each_row, serial};
 
 /// The layer's native sample for channel `id` at layer-pixel index `li`, in the
 /// unit `f32` domain, when the document's native store is authoritative for
@@ -129,10 +131,26 @@ pub(crate) fn composite_adjustment(
         }
     }
     let mut buf = PixelBuffer::new(canvas.w as u32, canvas.h as u32, 3);
-    for (i, p) in canvas.px.iter().enumerate() {
-        buf.data[i] = to_u8(p.r);
-        buf.data[n + i] = to_u8(p.g);
-        buf.data[2 * n + i] = to_u8(p.b);
+    {
+        let (r, rest) = buf.data.split_at_mut(n);
+        let (g, b) = rest.split_at_mut(n);
+        if serial() {
+            for (i, p) in canvas.px.iter().enumerate() {
+                r[i] = to_u8(p.r);
+                g[i] = to_u8(p.g);
+                b[i] = to_u8(p.b);
+            }
+        } else {
+            r.par_iter_mut()
+                .zip(g.par_iter_mut())
+                .zip(b.par_iter_mut())
+                .zip(canvas.px.par_iter())
+                .for_each(|(((r, g), b), p)| {
+                    *r = to_u8(p.r);
+                    *g = to_u8(p.g);
+                    *b = to_u8(p.b);
+                });
+        }
     }
     if pictura_adjust::apply(adjustment, &mut buf).is_err() {
         return; // invalid/unsupported parameters: no-op, never an error

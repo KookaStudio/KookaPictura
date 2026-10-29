@@ -25,8 +25,9 @@
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
-use crate::composite::{desc_item, mask_alpha};
+use crate::composite::desc_item;
 
+use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
 use super::{
     blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode,
@@ -253,12 +254,7 @@ pub(super) fn build_bevel_emboss(
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    for y in py0..py1 {
-        for x in px0..px1 {
-            matte[(y - py0) as usize * pw + (x - px0) as usize] *=
-                mask_alpha(layer, crate::mask_refine::canvas(doc), x, y) as f32 / 255.0;
-        }
-    }
+    apply_mask(&mut matte, pw, px0, py0, layer, doc);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }

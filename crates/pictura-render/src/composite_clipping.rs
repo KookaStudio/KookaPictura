@@ -16,9 +16,10 @@
 //! the base and the clipped layers below it, not the backdrop under the base.
 
 use pictura_core::{BlendMode, Document, Layer};
+use rayon::prelude::*;
 
-use crate::composite::{composite_layer_inner, Canvas};
-use crate::composite_rows::composite_canvas;
+use crate::composite::{composite_layer_inner, Canvas, Px};
+use crate::composite_rows::{composite_canvas, serial};
 
 /// Composite `layers` (bottom-first) onto `canvas` through `composite`, which
 /// receives each layer's index; a base and the clipped layers above it
@@ -53,11 +54,23 @@ pub(crate) fn composite_siblings(
         for (j, layer) in layers.iter().enumerate().skip(i + 1).take(run) {
             let mut clipped = group.clone();
             composite(&mut clipped, j, layer);
-            for ((out, inside), &k) in group.px.iter_mut().zip(&clipped.px).zip(&cover) {
+            let lerp = |out: &mut Px, inside: &Px, k: f32| {
                 out.r += (inside.r - out.r) * k;
                 out.g += (inside.g - out.g) * k;
                 out.b += (inside.b - out.b) * k;
                 out.a += (inside.a - out.a) * k;
+            };
+            if serial() {
+                for ((out, inside), &k) in group.px.iter_mut().zip(&clipped.px).zip(&cover) {
+                    lerp(out, inside, k);
+                }
+            } else {
+                group
+                    .px
+                    .par_iter_mut()
+                    .zip(clipped.px.par_iter())
+                    .zip(cover.par_iter())
+                    .for_each(|((out, inside), &k)| lerp(out, inside, k));
             }
         }
         let proxy = Layer {
@@ -89,5 +102,9 @@ fn coverage(canvas: &Canvas, base: &Layer, doc: &Document) -> Vec<f32> {
         ..base.clone()
     };
     composite_layer_inner(&mut alone, &full, doc, None, None);
-    alone.px.iter().map(|p| p.a.clamp(0.0, 1.0)).collect()
+    if serial() {
+        alone.px.iter().map(|p| p.a.clamp(0.0, 1.0)).collect()
+    } else {
+        alone.px.par_iter().map(|p| p.a.clamp(0.0, 1.0)).collect()
+    }
 }
