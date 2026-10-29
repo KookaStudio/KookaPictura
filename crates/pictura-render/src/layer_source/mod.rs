@@ -306,18 +306,20 @@ pub(crate) fn effect_passes(
     layer: &Layer,
     doc: &Document,
     effects: &LayerEffects,
+    region: Option<PsdRect>,
 ) -> Arc<LayerPasses> {
     if crate::layer_effects::no_passes(layer, effects) {
         return Arc::new(LayerPasses::default());
     }
     let build = || {
         Artifact::Passes(Arc::new(crate::layer_effects::build_layer_passes(
-            layer, doc, effects,
+            layer, doc, effects, region,
         )))
     };
-    // ponytail: pattern passes are rebuilt; add the resolved pattern bytes to
-    // the key if a profile shows they matter.
-    if crate::layer_effects::reads_pattern(layer, effects) {
+    // A sub-region pass is built for this composite only: retaining it would
+    // let a stroke's ever-changing rectangles evict other layers' sources.
+    // Pattern-driven passes are rebuilt for the same reason.
+    if crate::layer_effects::reads_pattern(layer, effects) || region.is_some() {
         return match build() {
             Artifact::Passes(passes) => passes,
             Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
@@ -367,6 +369,11 @@ fn cache_has_key(key: Key) -> bool {
         .entries
         .iter()
         .any(|entry| entry.key == key)
+}
+
+#[cfg(test)]
+pub(crate) fn pass_cache_len() -> usize {
+    cache_kind_count(Kind::Passes)
 }
 
 #[cfg(test)]

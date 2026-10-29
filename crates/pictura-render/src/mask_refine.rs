@@ -22,14 +22,15 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use pictura_core::{Document, LayerMask, PsdRect, VectorMask};
+use pictura_core::{LayerMask, PsdRect, VectorMask};
 
 /// The selection feather's maximum radius, which the blur clamps to.
 const FEATHER_MAX: f64 = 250.0;
 const CAPACITY: usize = 4;
 
 /// The document canvas, the `clip` for samples taken over it.
-pub(crate) fn canvas(doc: &Document) -> PsdRect {
+#[cfg(test)]
+pub(crate) fn canvas(doc: &pictura_core::Document) -> PsdRect {
     PsdRect {
         top: 0,
         left: 0,
@@ -121,6 +122,38 @@ fn radius(feather: f64) -> f64 {
 /// How far a feather of `radius` spreads: three standard deviations.
 pub(crate) fn reach(radius: f64) -> i32 {
     (1.5 * radius).ceil() as i32 + 1
+}
+
+/// How far a mask's feather can spread a changed sample, or 0 without a
+/// feather. Used to grow a mask stroke's paint refresh rectangle.
+pub fn mask_feather_reach(mask: &LayerMask) -> i32 {
+    if mask.disabled {
+        return 0;
+    }
+    let radius = radius(mask.feather());
+    if radius > 0.0 {
+        reach(radius)
+    } else {
+        0
+    }
+}
+
+/// Test-only: the extent of the feathered plane a raster mask would build for
+/// `clip`, so a test can assert a region build does not cover the whole mask.
+#[cfg(test)]
+pub(crate) fn raster_plane_bounds(mask: &LayerMask, clip: PsdRect) -> Option<[i32; 4]> {
+    let data = mask.data.as_ref()?;
+    let radius = radius(mask.feather());
+    if radius <= 0.0 {
+        return None;
+    }
+    let plane = feather_raster(mask, data, radius, clip);
+    Some([
+        plane.left,
+        plane.top,
+        plane.left + plane.width as i32,
+        plane.top + plane.height as i32,
+    ])
 }
 
 fn rect_key(r: PsdRect) -> [i32; 4] {

@@ -394,6 +394,39 @@ pub(super) fn layer_has_effects(layer: &Layer) -> bool {
         || layer.children.iter().any(layer_has_effects)
 }
 
+/// The paint-change reach of the layer at `path`, or 0 when it does not resolve.
+pub(super) fn paint_pad_for(doc: &pictura_core::Document, path: &str) -> i32 {
+    pictura_render::resolve_path(doc, path)
+        .map(pictura_render::paint_reach)
+        .unwrap_or(0)
+}
+
+/// The paint-change reach plus the mask feather reach of the layer at `path`.
+pub(super) fn mask_paint_pad_for(doc: &pictura_core::Document, path: &str) -> i32 {
+    let Some(layer) = pictura_render::resolve_path(doc, path) else {
+        return 0;
+    };
+    pictura_render::paint_reach(layer)
+        + layer
+            .mask
+            .as_ref()
+            .map(pictura_render::mask_feather_reach)
+            .unwrap_or(0)
+}
+
+/// Grow a document-space rect by `pad` on every side.
+pub(super) fn grow_rect(rect: PsdRect, pad: i32) -> PsdRect {
+    if pad <= 0 {
+        return rect;
+    }
+    PsdRect {
+        top: rect.top.saturating_sub(pad),
+        left: rect.left.saturating_sub(pad),
+        bottom: rect.bottom.saturating_add(pad),
+        right: rect.right.saturating_add(pad),
+    }
+}
+
 /// The bounding box of two document-space rects.
 pub(super) fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
     PsdRect {

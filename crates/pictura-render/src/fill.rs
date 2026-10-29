@@ -412,8 +412,23 @@ fn encode_stop(stop: &GradientStop) -> DescValue {
 /// Mirrors psd-tools' `draw_gradient_fill` coordinate convention and the five
 /// kind geometries; alpha is always 255.
 pub fn gradient_rgba(w: i32, h: i32, params: &GradientFillParams) -> Vec<[u8; 4]> {
-    let mut out = vec![[0u8, 0, 0, 255]; w.max(0) as usize * h.max(0) as usize];
-    if w <= 0 || h <= 0 {
+    gradient_rgba_region(w, h, (0, 0, w.max(0), h.max(0)), params)
+}
+
+/// Generate the same gradient as [`gradient_rgba`] for only the local
+/// sub-rectangle `region`, in `w × h` coordinates. The full extent still sets
+/// the geometry, so every sample matches the full buffer's slice.
+pub fn gradient_rgba_region(
+    w: i32,
+    h: i32,
+    region: (i32, i32, i32, i32),
+    params: &GradientFillParams,
+) -> Vec<[u8; 4]> {
+    let (sx0, sy0, sx1, sy1) = region;
+    let sw = (sx1 - sx0).max(0) as usize;
+    let sh = (sy1 - sy0).max(0) as usize;
+    let mut out = vec![[0u8, 0, 0, 255]; sw * sh];
+    if w <= 0 || h <= 0 || sw == 0 || sh == 0 {
         return out;
     }
     let wf = w as f64;
@@ -438,10 +453,9 @@ pub fn gradient_rgba(w: i32, h: i32, params: &GradientFillParams) -> Vec<[u8; 4]
     } else {
         0.0
     };
-    let row = w as usize;
-    for j in 0..h as usize {
+    for j in sy0..sy1 {
         let y = y0 + j as f64 * y_step;
-        for i in 0..row {
+        for i in sx0..sx1 {
             let x = x0 + i as f64 * x_step;
             let mut z = match params.kind {
                 GradientKind::Linear => 0.5 * (cos_t * x - sin_t * y + 1.0),
@@ -459,7 +473,7 @@ pub fn gradient_rgba(w: i32, h: i32, params: &GradientFillParams) -> Vec<[u8; 4]
             if params.reverse {
                 z = 1.0 - z;
             }
-            out[j * row + i] = sample_stops(&params.stops, z);
+            out[(j - sy0) as usize * sw + (i - sx0) as usize] = sample_stops(&params.stops, z);
         }
     }
     out

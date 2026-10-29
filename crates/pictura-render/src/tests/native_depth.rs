@@ -410,7 +410,7 @@ fn mask_alpha_unit_matches_the_eight_bit_fallbacks() {
     d.source_depth = Some(BitDepth::Sixteen);
 
     assert_eq!(
-        mask_alpha_unit(&d, &plain, 0, 0),
+        mask_alpha_unit(&d, &plain, crate::mask_refine::canvas(&d), 0, 0),
         1.0,
         "no mask is full coverage"
     );
@@ -424,7 +424,11 @@ fn mask_alpha_unit_matches_the_eight_bit_fallbacks() {
         data: Some(vec![0].into()),
         ..Default::default()
     });
-    assert_eq!(mask_alpha_unit(&d, &disabled, 0, 0), 1.0, "disabled mask");
+    assert_eq!(
+        mask_alpha_unit(&d, &disabled, crate::mask_refine::canvas(&d), 0, 0),
+        1.0,
+        "disabled mask"
+    );
 
     let mut no_data = plain.clone();
     no_data.mask = Some(LayerMask {
@@ -435,7 +439,11 @@ fn mask_alpha_unit_matches_the_eight_bit_fallbacks() {
         data: None,
         ..Default::default()
     });
-    assert_eq!(mask_alpha_unit(&d, &no_data, 0, 0), 1.0, "data-less mask");
+    assert_eq!(
+        mask_alpha_unit(&d, &no_data, crate::mask_refine::canvas(&d), 0, 0),
+        1.0,
+        "data-less mask"
+    );
 
     let mut out_of_rect = plain.clone();
     out_of_rect.mask = Some(LayerMask {
@@ -447,14 +455,14 @@ fn mask_alpha_unit_matches_the_eight_bit_fallbacks() {
         ..Default::default()
     });
     assert_eq!(
-        mask_alpha_unit(&d, &out_of_rect, 0, 0),
+        mask_alpha_unit(&d, &out_of_rect, crate::mask_refine::canvas(&d), 0, 0),
         200.0 / 255.0,
         "outside the mask rect uses the default colour"
     );
 
     let eight = doc(1, 1, vec![plain.clone()]);
     assert_eq!(
-        mask_alpha_unit(&eight, &plain, 0, 0),
+        mask_alpha_unit(&eight, &plain, crate::mask_refine::canvas(&eight), 0, 0),
         crate::composite::mask_alpha(&plain, full(1, 1), 0, 0) as f32 / 255.0,
         "an 8-bit document keeps the rounded mask_alpha path"
     );

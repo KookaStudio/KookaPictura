@@ -658,3 +658,68 @@ fn raster_mask_bounds_a_fill_layer() {
         "a fill layer is confined by a full-density raster mask"
     );
 }
+
+#[test]
+fn sub_region_pass_is_not_retained() {
+    let _guard = locked();
+    let d = doc(80, 80, vec![styled_layer()]);
+    let before = cache_kind_count(Kind::Passes);
+    let _ = crate::composite::composite_rgba_region(&d, 12, 12, 20, 20);
+    assert_eq!(
+        cache_kind_count(Kind::Passes),
+        before,
+        "a non-banded sub-region pass must not be retained"
+    );
+}
+
+#[test]
+fn editing_text_invalidates_the_composite() {
+    let _guard = locked();
+    let mut d = doc(60, 60, vec![type_layer(Some(type_style()))]);
+    let first = crate::composite_rgba(&d);
+    d.layers[0].type_tool.as_mut().expect("type").text = "Changed".into();
+    let warm = crate::composite_rgba(&d);
+    purge_source_cache();
+    let cold = crate::composite_rgba(&d);
+    assert_eq!(warm.data.as_ref(), cold.data.as_ref());
+    assert_ne!(
+        first.data.as_ref(),
+        warm.data.as_ref(),
+        "the edit moves pixels"
+    );
+}
+
+#[test]
+fn replacing_smart_object_contents_invalidates_the_composite() {
+    let _guard = locked();
+    let mut d = doc(60, 60, vec![smart_layer(rect(10, 10, 30, 30))]);
+    let first = crate::composite_rgba(&d);
+    let mut other = doc(
+        4,
+        4,
+        vec![solid(
+            "s",
+            rect(0, 0, 4, 4),
+            (10, 200, 30),
+            255,
+            pictura_core::BlendMode::Normal,
+            255,
+        )],
+    );
+    other.composite = crate::composite_rgba(&other);
+    let payload = pictura_codec::write_psd(&other).expect("other writes");
+    d.layers[0]
+        .smart_object
+        .as_mut()
+        .expect("smart object")
+        .set_payload(payload);
+    let warm = crate::composite_rgba(&d);
+    purge_source_cache();
+    let cold = crate::composite_rgba(&d);
+    assert_eq!(warm.data.as_ref(), cold.data.as_ref());
+    assert_ne!(
+        first.data.as_ref(),
+        warm.data.as_ref(),
+        "the replaced payload moves pixels"
+    );
+}

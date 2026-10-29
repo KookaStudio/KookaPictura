@@ -594,3 +594,108 @@ fn short_region_composite_matches_serial() {
         "short region composite differs between serial and parallel"
     );
 }
+
+fn feathered_mask_layer(feather: f64) -> Layer {
+    let mut layer = solid(
+        "Masked",
+        rect(20, 20, 60, 60),
+        (10, 20, 200),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let w = layer.rect.width() as usize;
+    let h = layer.rect.height() as usize;
+    layer.mask = Some(pictura_core::LayerMask {
+        rect: layer.rect,
+        default_color: 0,
+        disabled: false,
+        data: Some(vec![255u8; w * h].into()),
+        density: 255,
+        feather_bits: feather.to_bits(),
+        ..Default::default()
+    });
+    layer
+}
+
+fn masked_doc() -> Document {
+    doc(
+        100,
+        100,
+        vec![
+            solid(
+                "Backdrop",
+                full(100, 100),
+                (255, 255, 255),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            feathered_mask_layer(8.0),
+        ],
+    )
+}
+
+#[test]
+fn mask_feather_region_equals_the_full_slice() {
+    let d = masked_doc();
+    let region = PsdRect {
+        top: 30,
+        left: 30,
+        bottom: 50,
+        right: 50,
+    };
+    let full = composite_rgba(&d);
+    let part = crate::composite::composite_rgba_region(&d, 30, 30, 20, 20);
+    for y in 0..20 {
+        for x in 0..20 {
+            assert_eq!(px(&part, x, y), px(&full, 30 + x, 30 + y));
+        }
+    }
+    let mask = d.layers[1].mask.as_ref().expect("mask");
+    let reach = crate::mask_refine::mask_feather_reach(mask);
+    let bounds = crate::mask_refine::raster_plane_bounds(mask, region).expect("plane");
+    assert!(
+        bounds[0] >= region.left - reach
+            && bounds[1] >= region.top - reach
+            && bounds[2] <= region.right + reach
+            && bounds[3] <= region.bottom + reach,
+        "plane {bounds:?} is not bounded by {region:?} + {reach}"
+    );
+}
+
+#[test]
+fn mask_dab_region_equals_the_full_slice() {
+    let mut d = masked_doc();
+    let mask = d.layers[1].mask.as_mut().expect("mask");
+    let w = mask.rect.width() as usize;
+    let data = mask.data.as_mut().expect("data").as_mut_slice();
+    for y in 10..20 {
+        for x in 10..20 {
+            data[y * w + x] = 0;
+        }
+    }
+    let region = PsdRect {
+        top: 30,
+        left: 30,
+        bottom: 50,
+        right: 50,
+    };
+    let full = composite_rgba(&d);
+    let part = crate::composite::composite_rgba_region(&d, 30, 30, 20, 20);
+    for y in 0..20 {
+        for x in 0..20 {
+            assert_eq!(px(&part, x, y), px(&full, 30 + x, 30 + y));
+        }
+    }
+    let mask = d.layers[1].mask.as_ref().expect("mask");
+    let reach = crate::mask_refine::mask_feather_reach(mask);
+    let bounds = crate::mask_refine::raster_plane_bounds(mask, region).expect("plane");
+    assert!(
+        bounds[0] >= region.left - reach
+            && bounds[1] >= region.top - reach
+            && bounds[2] <= region.right + reach
+            && bounds[3] <= region.bottom + reach,
+        "plane {bounds:?} is not bounded by {region:?} + {reach}"
+    );
+}

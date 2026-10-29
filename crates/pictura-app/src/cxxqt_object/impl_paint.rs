@@ -116,21 +116,27 @@ impl PictureViewRust {
     /// whole pre-stroke document when the stroke changed its structure), and
     /// return the document rectangle it had painted.
     pub(super) fn cancel_stroke_session(&mut self, session: StrokeSession) -> Option<PsdRect> {
+        let pad = session.paint_pad;
         if let Some(mut ctx) = session.mask_stroke {
             let dirty = ctx.stroke.dirty();
             ctx.stroke.cancel(&mut ctx.document);
             if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, None);
             }
-            return dirty.map(|rect| PsdRect {
-                top: rect.top + ctx.rect.top,
-                left: rect.left + ctx.rect.left,
-                bottom: rect.bottom + ctx.rect.top,
-                right: rect.right + ctx.rect.left,
+            return dirty.map(|rect| {
+                grow_rect(
+                    PsdRect {
+                        top: rect.top + ctx.rect.top,
+                        left: rect.left + ctx.rect.left,
+                        bottom: rect.bottom + ctx.rect.top,
+                        right: rect.right + ctx.rect.left,
+                    },
+                    pad,
+                )
             });
         }
         let stroke = session.stroke?;
-        let dirty = stroke.dirty();
+        let dirty = stroke.dirty().map(|rect| grow_rect(rect, pad));
         match (session.stroke_base, self.session.doc.as_mut()) {
             (Some(base), _) => self.session.doc = Some(base),
             (None, Some(doc)) => {
@@ -461,12 +467,25 @@ impl PictureViewRust {
         };
         match begun {
             Ok(stroke) => {
+                let paint_pad = {
+                    let rust = &*self;
+                    rust.session
+                        .doc
+                        .as_ref()
+                        .and_then(|doc| {
+                            rust.layer_target
+                                .single()
+                                .map(|path| paint_pad_for(doc, path))
+                        })
+                        .unwrap_or(0)
+                };
                 let rust = &mut *self;
                 // The stroke's own session takes the slot: the payload and the
                 // present state it accumulates travel together.
                 let session = StrokeSession {
                     stroke: Some(stroke),
                     stroke_label: label.to_string(),
+                    paint_pad,
                     ..Default::default()
                 };
                 rust.session.live.set_stroke_session(session);
@@ -597,6 +616,8 @@ impl qobject::PictureView {
                 return false;
             }
             let dirty = rust.session.live.stroke_mut().and_then(Stroke::take_dirty);
+            let pad = rust.session.live.paint_pad();
+            let dirty = dirty.map(|rect| grow_rect(rect, pad));
             if let Some(rect) = dirty {
                 rust.session.live.mark_stroke_tile(rect);
             }
@@ -761,8 +782,9 @@ impl qobject::PictureView {
                 if !patched {
                     continue;
                 }
-                rust.session.live.mark_stroke_tile(rect);
-                changed = Some(changed.map_or(rect, |u| union_rect(u, rect)));
+                let grown = grow_rect(rect, rust.session.live.paint_pad());
+                rust.session.live.mark_stroke_tile(grown);
+                changed = Some(changed.map_or(grown, |u| union_rect(u, grown)));
             }
         }
         let Some(rect) = changed else {
@@ -820,13 +842,14 @@ impl qobject::PictureView {
             preview,
             stroke_label,
             stroke_base,
+            paint_pad,
             mut stroke_tiles,
             ..
         } = session;
         if let Some(ctx) = mask_stroke {
-            let ok = self
-                .as_mut()
-                .end_mask_paint(ctx, preview, &stroke_label, stroke_tiles);
+            let ok =
+                self.as_mut()
+                    .end_mask_paint(ctx, preview, &stroke_label, stroke_tiles, paint_pad);
             tool_recording::finish(ok);
             paint_timing::record("end_paint_total", t0.elapsed());
             paint_timing::report();
@@ -848,7 +871,7 @@ impl qobject::PictureView {
                         for sample in preview.samples {
                             stroke.sample(doc, sample);
                             if let Some(rect) = stroke.take_dirty() {
-                                stroke_tiles.mark(rect);
+                                stroke_tiles.mark(grow_rect(rect, paint_pad));
                             }
                         }
                     }
@@ -868,6 +891,7 @@ impl qobject::PictureView {
                         false
                     }
                     Some(rect) => {
+                        let rect = grow_rect(rect, paint_pad);
                         // A previewed stroke never presented full resolution:
                         // refresh its dirty tiles. Decomposing them into
                         // disjoint rectangles keeps a diagonal stroke from

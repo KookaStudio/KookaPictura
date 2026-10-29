@@ -6,6 +6,7 @@ use crate::composite::desc_item;
 
 use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
+use super::BuildRegion;
 use super::{
     bool_or, clamp_finite, clip_rect, content_matte, decode_color, dilate_matte, effect_blend_mode,
     erode_matte, num_clamped, num_or, pad_rect, rect_empty, with_gradient_defaults, MAX_OPACITY,
@@ -166,7 +167,12 @@ pub fn decode_stroke(layer: &Layer) -> Option<Stroke> {
     })
 }
 
-pub(super) fn build_stroke(layer: &Layer, doc: &Document, stroke: &Stroke) -> Vec<EffectPass> {
+pub(super) fn build_stroke(
+    layer: &Layer,
+    doc: &Document,
+    stroke: &Stroke,
+    build: BuildRegion,
+) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
         doc.height.min(i32::MAX as u32) as i32,
@@ -193,14 +199,14 @@ pub(super) fn build_stroke(layer: &Layer, doc: &Document, stroke: &Stroke) -> Ve
     // bounds the outside half of the band and supplies the zero content beyond
     // the source edge that the erode min filter needs.
     let padded = pad_rect(source, size, w, h);
-    if rect_empty(padded) {
+    let Some(padded) = build.buffer(padded, size) else {
         return Vec::new();
-    }
+    };
     let (px0, py0, px1, py1) = padded;
     let pw = (px1 - px0) as usize;
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded);
-    apply_mask(&mut matte, pw, px0, py0, layer, doc);
+    apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -297,12 +303,15 @@ pub(super) fn build_stroke(layer: &Layer, doc: &Document, stroke: &Stroke) -> Ve
         bottom: py1,
         right: px1,
     };
+    let Some(rect) = build.output(rect) else {
+        return Vec::new();
+    };
     let mut writer = match &stroke.fill {
         StrokeFill::Solid(color) => PassWriter::constant(rect, stroke.blend_mode, rgb_f32(*color)),
         _ => PassWriter::per_pixel(rect, stroke.blend_mode),
     };
-    for y in py0..py1 {
-        for x in px0..px1 {
+    for y in rect.top..rect.bottom {
+        for x in rect.left..rect.right {
             let i = (y - py0) as usize * pw + (x - px0) as usize;
             let (rgb, src_a) = match &stroke.fill {
                 StrokeFill::Solid(c) => (rgb_f32(*c), 1.0),
