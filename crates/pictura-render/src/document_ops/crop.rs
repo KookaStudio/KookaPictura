@@ -488,7 +488,7 @@ mod tests {
             mask: None,
             adjustment: Some(pictura_core::AdjustmentData {
                 key: *b"nvrt",
-                data: vec![],
+                data: vec![].into(),
             }),
             channels: Vec::new(),
             children: pictura_core::LayerStack::default(),
@@ -537,7 +537,7 @@ mod tests {
         doc.layers[0].source_channels = Some(SourceChannels {
             depth: BitDepth::Sixteen,
             rect: doc.layers[0].rect,
-            planes: vec![(0, Samples::U16(vec![0; 16]))],
+            planes: vec![(0, Samples::U16(vec![0; 16].into()))],
             working_idents: [0; 3],
         });
 
@@ -545,7 +545,7 @@ mod tests {
 
         let store = doc.source_planes.as_ref().unwrap();
         assert_eq!((store.width, store.height), (2, 2));
-        assert_eq!(store.samples, Samples::U16(vec![5, 6, 9, 10]));
+        assert_eq!(store.samples, Samples::U16(vec![5, 6, 9, 10].into()));
         assert_eq!(
             doc.layers[0].source_channels.as_ref().unwrap().rect,
             doc.layers[0].rect,

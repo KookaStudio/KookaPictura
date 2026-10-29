@@ -229,8 +229,8 @@ mod tests {
             transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
             text: text.into(),
             bounds: [0; 4],
-            text_desc: Vec::new(),
-            warp_desc: Vec::new(),
+            text_desc: Vec::new().into(),
+            warp_desc: Vec::new().into(),
             fonts: vec!["Liberation Sans".into()],
             style: Some(TextStyle {
                 font: Some("Liberation Sans".into()),

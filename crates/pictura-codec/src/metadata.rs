@@ -96,7 +96,7 @@ pub fn set_iptc_fields(document: &mut Document, fields: &[(u8, u8, String)]) -> 
     }
     let mut section = encode_image_resources(&resources);
     section.extend_from_slice(&document.image_resources[consumed..]);
-    document.image_resources = section;
+    document.image_resources = section.into();
     true
 }
 
@@ -159,7 +159,7 @@ pub fn set_xmp_values(document: &mut Document, updates: &[(XmpField, Vec<String>
     }
     let mut section = encode_image_resources(&resources);
     section.extend_from_slice(&document.image_resources[consumed..]);
-    document.image_resources = section;
+    document.image_resources = section.into();
     true
 }
 
@@ -296,7 +296,7 @@ mod tests {
 
     fn document_with(resources: &[crate::image_resources::ImageResource]) -> Document {
         let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-        doc.image_resources = encode_image_resources(resources);
+        doc.image_resources = encode_image_resources(resources).into();
         doc
     }
 

@@ -213,7 +213,7 @@ fn apply_native_rgb(
     for p in &canvas.px {
         samples.push(p.b);
     }
-    let mut store = Samples::F32(samples);
+    let mut store = Samples::F32(samples.into());
     pictura_adjust::apply_native(adjustment, &mut store, canvas.w, canvas.h, 3)?;
     let Samples::F32(v) = store else {
         return Err(AdjustError::InvalidParams(
@@ -281,7 +281,7 @@ fn emit_native(canvas: &Canvas, depth: BitDepth) -> Samples {
                 out[2 * n + i] = to_u16(p.b);
                 out[3 * n + i] = to_u16(p.a);
             }
-            Samples::U16(out)
+            Samples::U16(out.into())
         }
         _ => {
             let mut out = vec![0f32; n * 4];
@@ -291,7 +291,7 @@ fn emit_native(canvas: &Canvas, depth: BitDepth) -> Samples {
                 out[2 * n + i] = p.b.clamp(0.0, 1.0);
                 out[3 * n + i] = p.a.clamp(0.0, 1.0);
             }
-            Samples::F32(out)
+            Samples::F32(out.into())
         }
     }
 }

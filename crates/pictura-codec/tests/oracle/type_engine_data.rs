@@ -285,7 +285,7 @@ fn authored_type_layer_psd_round_trips_through_psd_tools() {
         ],
         extra_blocks: vec![LayerBlock {
             key: *b"TySh",
-            data: tysh,
+            data: tysh.into(),
         }],
         ..Default::default()
     }]);

@@ -16,7 +16,7 @@ fn vscg(key: &[u8; 4], descriptor: &[u8]) -> LayerBlock {
     data.extend_from_slice(descriptor);
     LayerBlock {
         key: *b"vscg",
-        data,
+        data: data.into(),
     }
 }
 
@@ -118,7 +118,7 @@ fn undecodable_adjustment_block_wins_over_vector_fill() {
     let mut shape = shaped_layer("shape", 4, 4, fill);
     shape.adjustment = Some(AdjustmentData {
         key: *b"zzzz",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     let base = solid(
         "Base",
@@ -180,7 +180,7 @@ fn malformed_vector_fill_is_a_no_op() {
         let mut pixel = base.clone();
         pixel.extra_blocks.push(LayerBlock {
             key: *b"vscg",
-            data,
+            data: data.into(),
         });
         let with = doc(4, 4, vec![base.clone(), pixel]);
         let without = doc(4, 4, vec![base]);

@@ -51,8 +51,8 @@ pub fn author_type_tool(
         // ponytail: the trailing four integers are written as the rounded text
         // box; photorust writes zeros. Settle against a CS6-authored corpus.
         bounds: bounds.map(|v| v.round() as i32),
-        text_desc: text_descriptor(spec, bounds, existing, font_name),
-        warp_desc: warp_descriptor(&spec.warp),
+        text_desc: text_descriptor(spec, bounds, existing, font_name).into(),
+        warp_desc: warp_descriptor(&spec.warp).into(),
         fonts: Vec::new(),
         style: None,
         vertical: spec.vertical,

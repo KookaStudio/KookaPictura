@@ -20,7 +20,7 @@ fn descriptor(key: [u8; 4], items: Vec<(&[u8], DescValue)>) -> AdjustmentData {
     };
     AdjustmentData {
         key,
-        data: pictura_codec::write_descriptor(&obj),
+        data: pictura_codec::write_descriptor(&obj).into(),
     }
 }
 
@@ -31,7 +31,7 @@ pub fn encode_shadows_highlights(shadows: u16, highlights: u16) -> AdjustmentDat
     data.extend_from_slice(&highlights.to_be_bytes());
     AdjustmentData {
         key: *b"shdH",
-        data,
+        data: data.into(),
     }
 }
 
@@ -55,7 +55,7 @@ pub fn default_adjustment_block(
             }
             AdjustmentData {
                 key: *b"levl",
-                data,
+                data: data.into(),
             }
         }
         "curves" => encode_curves(&[(0, 0), (255, 255)], None, None, None),
@@ -66,7 +66,7 @@ pub fn default_adjustment_block(
             }
             AdjustmentData {
                 key: *b"expA",
-                data,
+                data: data.into(),
             }
         }
         "vibrance" => descriptor(

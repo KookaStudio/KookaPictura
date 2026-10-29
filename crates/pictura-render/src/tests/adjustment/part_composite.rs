@@ -135,7 +135,7 @@ fn fill_layer_keeps_fill() {
     let mut fill = adjustment_layer(
         "fill",
         *b"SoCo",
-        crate::encode_solid_color_fill([255, 0, 0]).data,
+        crate::encode_solid_color_fill([255, 0, 0]).data.to_vec(),
         255,
         None,
     );
@@ -201,7 +201,9 @@ fn color_lookup_identity_is_neutral_and_a_cube_changes_the_composite() {
     let identity = adjustment_layer(
         "lookup",
         *b"clrL",
-        crate::encode_color_lookup(&crate::identity_cube(), "Identity").data,
+        crate::encode_color_lookup(&crate::identity_cube(), "Identity")
+            .data
+            .to_vec(),
         255,
         None,
     );
@@ -214,7 +216,9 @@ fn color_lookup_identity_is_neutral_and_a_cube_changes_the_composite() {
     let inverting = adjustment_layer(
         "lookup",
         *b"clrL",
-        crate::encode_color_lookup(&inverting_cube(), "Invert").data,
+        crate::encode_color_lookup(&inverting_cube(), "Invert")
+            .data
+            .to_vec(),
         255,
         None,
     );
@@ -230,7 +234,7 @@ fn descriptor_solid_fill_layer_composites_to_its_color() {
     let mut fill = adjustment_layer(
         "fill",
         *b"SoCo",
-        encode_solid_color_fill([10, 20, 30]).data,
+        encode_solid_color_fill([10, 20, 30]).data.to_vec(),
         255,
         None,
     );
@@ -336,7 +340,9 @@ fn photo_filter_layer_warms_and_preserves_luminance() {
             adjustment_layer(
                 "photo-filter",
                 *b"phfl",
-                encode_photo_filter([255, 180, 80], 25.0, true).data,
+                encode_photo_filter([255, 180, 80], 25.0, true)
+                    .data
+                    .to_vec(),
                 255,
                 None,
             ),
@@ -411,7 +417,8 @@ fn gradient_map_layer_changes_non_uniform_backdrop() {
                     },
                     false,
                 )
-                .data,
+                .data
+                .to_vec(),
                 255,
                 None,
             ),
@@ -465,7 +472,9 @@ fn color_balance_layer_changes_non_uniform_backdrop() {
             adjustment_layer(
                 "color-balance",
                 *b"blnc",
-                encode_color_balance([0.0; 3], [25.0, 0.0, 0.0], [0.0; 3], true).data,
+                encode_color_balance([0.0; 3], [25.0, 0.0, 0.0], [0.0; 3], true)
+                    .data
+                    .to_vec(),
                 255,
                 None,
             ),
@@ -512,7 +521,8 @@ fn channel_mixer_layer_changes_non_uniform_backdrop() {
                     [0.0, 0.0, 100.0],
                     [0.0; 3],
                 )
-                .data,
+                .data
+                .to_vec(),
                 255,
                 None,
             ),
@@ -552,7 +562,7 @@ fn curves_layer_changes_backdrop_and_per_channel_isolates() {
         vec![
             base.clone(),
             patch.clone(),
-            adjustment_layer("curves", *b"curv", composite, 255, None),
+            adjustment_layer("curves", *b"curv", composite.to_vec(), 255, None),
         ],
     ));
     assert_ne!(
@@ -568,7 +578,7 @@ fn curves_layer_changes_backdrop_and_per_channel_isolates() {
         vec![
             base,
             patch,
-            adjustment_layer("red-curve", *b"curv", red_only, 255, None),
+            adjustment_layer("red-curve", *b"curv", red_only.to_vec(), 255, None),
         ],
     ));
     for x in 0..2 {

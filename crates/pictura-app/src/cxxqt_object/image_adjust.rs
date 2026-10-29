@@ -75,14 +75,20 @@ pub mod ffi {
 }
 
 fn to_block(data: Option<AdjustmentData>) -> Vec<u8> {
-    data.map(|d| d.key.iter().copied().chain(d.data).collect())
-        .unwrap_or_default()
+    data.map(|d| {
+        d.key
+            .iter()
+            .copied()
+            .chain(d.data.iter().copied())
+            .collect()
+    })
+    .unwrap_or_default()
 }
 
 fn from_block(block: &[u8]) -> Option<AdjustmentData> {
     Some(AdjustmentData {
         key: block.get(..4)?.try_into().ok()?,
-        data: block.get(4..)?.to_vec(),
+        data: block.get(4..)?.to_vec().into(),
     })
 }
 

@@ -19,7 +19,7 @@ fn vibrance_neutral_pixel_stays_neutral() {
     apply(&params(100, 0), &mut buf).unwrap();
     assert_eq!(&buf.data[..], &[128, 128, 128]);
 
-    let mut store = Samples::U16(vec![32768; 3]);
+    let mut store = Samples::U16(vec![32768; 3].into());
     apply_native(&params(100, 0), &mut store, 1, 1, 3).unwrap();
-    assert_eq!(store, Samples::U16(vec![32768; 3]));
+    assert_eq!(store, Samples::U16(vec![32768; 3].into()));
 }

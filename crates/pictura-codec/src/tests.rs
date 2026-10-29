@@ -475,7 +475,7 @@ fn adjustment_layers_round_trip_key_and_bytes() {
             mask: None,
             adjustment: Some(AdjustmentData {
                 key: *key,
-                data: data.clone(),
+                data: data.clone().into(),
             }),
             channels: Vec::new(),
             children: pictura_core::LayerStack::default(),
@@ -517,7 +517,7 @@ fn solid_fill_layer_round_trips_its_payload() {
         mask: None,
         adjustment: Some(AdjustmentData {
             key: *b"SoCo",
-            data: vec![10, 20, 30, 255],
+            data: vec![10, 20, 30, 255].into(),
         }),
         channels: Vec::new(),
         children: pictura_core::LayerStack::default(),
@@ -559,7 +559,7 @@ fn descriptor_shaped_soco_is_preserved_verbatim() {
         mask: None,
         adjustment: Some(AdjustmentData {
             key: *b"SoCo",
-            data: descriptor.clone(),
+            data: descriptor.clone().into(),
         }),
         channels: Vec::new(),
         children: pictura_core::LayerStack::default(),
@@ -667,7 +667,7 @@ fn default_document() -> Document {
         mask: None,
         adjustment: Some(AdjustmentData {
             key: *b"nvrt",
-            data: Vec::new(),
+            data: Vec::new().into(),
         }),
         channels: Vec::new(),
         children: pictura_core::LayerStack::default(),
@@ -781,7 +781,7 @@ fn verbatim_channels_stay_unchanged() {
     let stream = vec![0u8, 3, 1, 2, 3, 0xFF, 0xFE];
     layer.raw_channels = vec![RawChannel {
         id: -3,
-        data: stream.clone(),
+        data: stream.clone().into(),
     }];
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
@@ -997,7 +997,7 @@ fn tysh_forces_type_locks_and_round_trips() {
         .with(LockFlags::PIXELS, true);
     type_layer.extra_blocks = vec![LayerBlock {
         key: *b"TySh",
-        data: vec![9, 8, 7, 6],
+        data: vec![9, 8, 7, 6].into(),
     }];
     out.layers = pictura_core::LayerStack::from_layers(vec![type_layer]);
     let back = read_psd(&write_psd(&out).unwrap()).unwrap();
@@ -1024,8 +1024,8 @@ fn synthetic_tysh() -> Vec<u8> {
         transform: [1.0, 0.0, 0.0, 1.0, 10.0, 20.0],
         text: "Hi\rThere".into(),
         bounds: [0, 0, 100, 50],
-        text_desc,
-        warp_desc,
+        text_desc: text_desc.into(),
+        warp_desc: warp_desc.into(),
         fonts: Vec::new(),
         style: None,
         vertical: false,
@@ -1044,7 +1044,7 @@ fn type_tool_open_save_preserves_bytes() {
         .with(LockFlags::PIXELS, true);
     type_layer.extra_blocks = vec![LayerBlock {
         key: *b"TySh",
-        data: tysh.clone(),
+        data: tysh.clone().into(),
     }];
     doc.layers = pictura_core::LayerStack::from_layers(vec![type_layer]);
 
@@ -1342,10 +1342,10 @@ fn bad_zip_payload_errors() {
 fn opaque_document_sections_round_trip() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = (0..12).collect();
-    doc.color_mode_data = vec![1, 2, 3];
-    doc.image_resources = vec![4, 5];
-    doc.global_layer_mask = vec![6, 7, 8, 9];
-    doc.layer_section_extra = vec![10, 11];
+    doc.color_mode_data = vec![1, 2, 3].into();
+    doc.image_resources = vec![4, 5].into();
+    doc.global_layer_mask = vec![6, 7, 8, 9].into();
+    doc.layer_section_extra = vec![10, 11].into();
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back.color_mode_data, doc.color_mode_data);
     assert_eq!(back.image_resources, doc.image_resources);
@@ -1359,14 +1359,14 @@ fn opaque_layer_blocks_round_trip() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("Opaque", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     layer.blend_key = Some(*b"zzzz");
-    layer.blending_ranges = vec![1, 2, 3, 4];
+    layer.blending_ranges = vec![1, 2, 3, 4].into();
     layer.extra_blocks = vec![LayerBlock {
         key: *b"lfx2",
-        data: vec![1, 2, 3, 4],
+        data: vec![1, 2, 3, 4].into(),
     }];
     layer.raw_channels = vec![RawChannel {
         id: -3,
-        data: vec![0, 0, 9, 9],
+        data: vec![0, 0, 9, 9].into(),
     }];
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
@@ -1400,7 +1400,7 @@ fn mask_extra_round_trips() {
     layer.mask = Some(LayerMask {
         rect: rect(0, 0, 2, 2),
         data: Some(vec![9u8; 4].into()),
-        extra: vec![7, 8, 9],
+        extra: vec![7, 8, 9].into(),
         ..Default::default()
     });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
@@ -1412,7 +1412,7 @@ fn mask_extra_round_trips() {
 #[test]
 fn truncated_preserved_blocks_error() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    doc.global_layer_mask = vec![1, 2, 3, 4];
+    doc.global_layer_mask = vec![1, 2, 3, 4].into();
     let bytes = write_psd(&doc).unwrap();
     // Drop the composite and the last two global-mask bytes.
     let cut = bytes.len() - doc.composite.data.len() - 2 - 2;

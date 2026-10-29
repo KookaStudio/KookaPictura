@@ -263,7 +263,7 @@ fn depth16_warp_resamples_and_keeps_the_native_store() {
         BitDepth::Sixteen,
         r,
         vec![
-            (-1, Samples::U16(vec![65535; 64])),
+            (-1, Samples::U16(vec![65535; 64].into())),
             (0, native(3)),
             (1, native(11)),
             (2, native(29)),
@@ -275,7 +275,7 @@ fn depth16_warp_resamples_and_keeps_the_native_store() {
         depth: BitDepth::Sixteen,
         width: 64,
         height: 64,
-        samples: Samples::U16(vec![0; 3 * 64 * 64]),
+        samples: Samples::U16(vec![0; 3 * 64 * 64].into()),
     });
     let b = bounds(r);
     let mut mesh = BezierMesh::identity(b, 1, 1);

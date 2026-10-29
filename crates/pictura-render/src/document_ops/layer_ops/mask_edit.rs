@@ -275,7 +275,7 @@ mod tests {
                     .collect::<Vec<_>>()
                     .into(),
             ),
-            extra: Vec::new(),
+            extra: Vec::new().into(),
             ..Default::default()
         });
         doc_with(vec![layer])

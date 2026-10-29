@@ -237,8 +237,7 @@ fn can_free_transform(doc: &pictura_core::Document, path: &str) -> bool {
     if layer.channels.iter().any(|c| c.id == 0) {
         return true;
     }
-    let mut clone = doc.clone();
-    pictura_render::rasterize_smart_object(&mut clone, path)
+    pictura_render::can_materialize_smart_source(layer)
 }
 
 /// The selection's coverage when it is document-sized and not empty: Free
@@ -250,7 +249,7 @@ fn lift_coverage(rust: &super::super::state::PictureViewRust) -> Option<Vec<u8>>
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
         .filter(|s| pictura_render::coverage_bounds(&s.data, doc.width, doc.height).is_some())
-        .map(|s| s.data.clone())
+        .map(|s| s.data.to_vec())
 }
 
 /// Whether a selection on `path` lifts its pixels for the transform (CS6
@@ -1150,3 +1149,6 @@ mod tests {
         assert!(!can_free_transform(&doc, &path));
     }
 }
+
+#[cfg(test)]
+mod cow_tests;

@@ -21,11 +21,12 @@ fn shape_layer(rgb: [u8; 3]) -> Layer {
         extra_blocks: vec![
             LayerBlock {
                 key: *b"vmsk",
-                data: pictura_codec::encode_vector_mask(std::slice::from_ref(&outline), SIZE, SIZE),
+                data: pictura_codec::encode_vector_mask(std::slice::from_ref(&outline), SIZE, SIZE)
+                    .into(),
             },
             LayerBlock {
                 key: *b"vscg",
-                data: vscg_solid(rgb),
+                data: vscg_solid(rgb).into(),
             },
         ],
         ..Default::default()
@@ -52,7 +53,7 @@ fn adjustment() -> Layer {
     Layer {
         adjustment: Some(AdjustmentData {
             key: *b"nvrt",
-            data: Vec::new(),
+            data: Vec::new().into(),
         }),
         ..Default::default()
     }
@@ -116,7 +117,7 @@ fn a_shape_with_effects_is_rasterized() {
     let mut layer = shape_layer([1, 2, 3]);
     layer.extra_blocks.push(LayerBlock {
         key: *b"lfx2",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     let (nodes, _) = nodes(vec![layer]);
     raster_fill(&nodes[0]);
@@ -256,7 +257,7 @@ fn a_type_layer_uses_its_raster_fallback() {
     let mut text = pixel("text");
     text.extra_blocks.push(LayerBlock {
         key: *b"TySh",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     let (nodes, _) = nodes(vec![text]);
     raster_fill(&nodes[0]);

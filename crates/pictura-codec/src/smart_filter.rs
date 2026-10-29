@@ -82,12 +82,12 @@ pub fn set_camera_raw_option(
     while !new_data.len().is_multiple_of(4) {
         new_data.push(0);
     }
-    layer.extra_blocks[block_idx].data = new_data.clone();
+    layer.extra_blocks[block_idx].data = new_data.clone().into();
 
     if let Some(so) = layer.smart_object.as_mut() {
-        so.config_descriptor = new_data;
+        so.config_descriptor = new_data.into();
         if let Some(filter) = so.smart_filters.get_mut(filter_index) {
-            filter.options = options;
+            filter.options = options.into();
         }
     }
     Ok(())
@@ -135,9 +135,9 @@ fn serialize_config(data: &[u8], desc: &DescValue) -> Vec<u8> {
 /// Store rewritten block bytes on the layer and keep the typed view's
 /// `config_descriptor` consistent.
 fn store_config(layer: &mut Layer, block_idx: usize, data: Vec<u8>) {
-    layer.extra_blocks[block_idx].data = data.clone();
+    layer.extra_blocks[block_idx].data = data.clone().into();
     if let Some(so) = layer.smart_object.as_mut() {
-        so.config_descriptor = data;
+        so.config_descriptor = data.into();
     }
 }
 
@@ -466,7 +466,7 @@ mod tests {
                     filter_id: 2683,
                     name: "Camera Raw Filter".to_string(),
                     enabled: true,
-                    options: Vec::new(),
+                    options: Vec::new().into(),
                 }];
                 so.smart_filters_enabled = true;
                 so
@@ -553,7 +553,7 @@ mod tests {
         let mut layer = Layer::default();
         layer.extra_blocks.push(LayerBlock {
             key: *b"SoLE",
-            data,
+            data: data.into(),
         });
         set_camera_raw_option(&mut layer, 0, b"Ex12", DescValue::Double(2.5)).expect("SoLE edit");
         assert_eq!(&layer.extra_blocks[0].data[..4], b"soLE");
@@ -593,7 +593,7 @@ mod tests {
         let mut layer = Layer::default();
         layer.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
-            data: b"junk\x00\x00\x00\x00".to_vec(),
+            data: b"junk\x00\x00\x00\x00".to_vec().into(),
         });
         let err =
             set_camera_raw_option(&mut layer, 0, b"Ex12", DescValue::Double(1.0)).unwrap_err();
@@ -665,7 +665,7 @@ mod tests {
             filter_id: 4242,
             name: "Second".to_string(),
             enabled: true,
-            options: Vec::new(),
+            options: Vec::new().into(),
         };
         crate::attach_smart_filter(fixture_layer_mut(&mut doc), second).expect("append second");
         assert_eq!(filter_ids(fixture_layer_mut(&mut doc)), vec![2683, 4242]);
@@ -691,7 +691,7 @@ mod tests {
                 filter_id: 4242,
                 name: "Second".to_string(),
                 enabled: true,
-                options: Vec::new(),
+                options: Vec::new().into(),
             },
         )
         .expect("append second");
@@ -735,7 +735,7 @@ mod tests {
                     filter_id: 2683,
                     name: "only".to_string(),
                     enabled: true,
-                    options: Vec::new(),
+                    options: Vec::new().into(),
                 }];
                 so
             }),
@@ -761,7 +761,7 @@ mod tests {
         Layer {
             extra_blocks: vec![LayerBlock {
                 key: *b"SoLd",
-                data,
+                data: data.into(),
             }],
             smart_object: Some({
                 let mut so = SmartObject::default();
@@ -770,7 +770,7 @@ mod tests {
                         filter_id: 2683,
                         name: "f".to_string(),
                         enabled: true,
-                        options: Vec::new(),
+                        options: Vec::new().into(),
                     })
                     .collect();
                 so
@@ -821,7 +821,7 @@ mod tests {
         let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
         layer.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
-            data,
+            data: data.into(),
         });
         crate::append_smart_filter(
             &mut layer,
@@ -829,7 +829,7 @@ mod tests {
                 filter_id: 4242,
                 name: "F".into(),
                 enabled: true,
-                options: Vec::new(),
+                options: Vec::new().into(),
             },
         )
         .expect("appends");

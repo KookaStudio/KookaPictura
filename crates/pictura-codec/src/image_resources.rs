@@ -68,7 +68,7 @@ pub fn set_vanishing_point_data(document: &mut Document, data: Option<&[u8]>) {
     }
     let mut section = encode_image_resources(&resources);
     section.extend_from_slice(&document.image_resources[consumed..]);
-    document.image_resources = section;
+    document.image_resources = section.into();
 }
 
 /// The document's horizontal resolution from its ResolutionInfo resource.
@@ -127,7 +127,7 @@ pub fn set_document_resolution(document: &mut Document, resolution: Resolution) 
     }
     let mut section = encode_image_resources(&resources);
     section.extend_from_slice(&document.image_resources[consumed..]);
-    document.image_resources = section;
+    document.image_resources = section.into();
 }
 
 /// One image-resource block.
@@ -273,7 +273,7 @@ mod tests {
 
     fn document_with(section: Vec<u8>) -> Document {
         let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-        doc.image_resources = section;
+        doc.image_resources = section.into();
         doc
     }
 

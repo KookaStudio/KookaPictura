@@ -416,14 +416,14 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
     let mut effected = pixel_layer("effected", 8, 4, (10, 20, 30));
     effected.extra_blocks.push(LayerBlock {
         key: *b"lfx2",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     let effected_rect = effected.rect;
     assert_eq!(region(effected), Some(effected_rect));
     let mut legacy = pixel_layer("legacy", 8, 4, (10, 20, 30));
     legacy.extra_blocks.push(LayerBlock {
         key: *b"lrFX",
-        data: Vec::new(),
+        data: Vec::new().into(),
     });
     let legacy_rect = legacy.rect;
     assert_eq!(region(legacy), Some(legacy_rect));
@@ -712,7 +712,7 @@ fn selection_becomes_full_frame_mask_that_confines_adjustment() {
     let selection = Selection {
         width: 4,
         height: 1,
-        data: vec![255, 255, 0, 0],
+        data: vec![255, 255, 0, 0].into(),
     };
     let mask = selection_to_mask(&selection, &doc);
     assert_eq!(mask.rect.right, 4);
@@ -1326,7 +1326,7 @@ fn type_layer_kind_reports_type() {
     let mut layer = pixel_layer("type", 2, 2, (10, 20, 30));
     layer.extra_blocks = vec![LayerBlock {
         key: *b"TySh",
-        data: vec![1, 2, 3, 4],
+        data: vec![1, 2, 3, 4].into(),
     }];
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     assert_eq!(

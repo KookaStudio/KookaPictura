@@ -173,9 +173,15 @@ fn resample_store(
             let sw = src_rect.width().max(0) as usize;
             let sh = src_rect.height().max(0) as usize;
             let out = match samples {
-                Samples::U8(v) => Samples::U8(resample_samples(v, sw, sh, src_rect, dest, rot)),
-                Samples::U16(v) => Samples::U16(resample_samples(v, sw, sh, src_rect, dest, rot)),
-                Samples::F32(v) => Samples::F32(resample_samples(v, sw, sh, src_rect, dest, rot)),
+                Samples::U8(v) => {
+                    Samples::U8(resample_samples(v, sw, sh, src_rect, dest, rot).into())
+                }
+                Samples::U16(v) => {
+                    Samples::U16(resample_samples(v, sw, sh, src_rect, dest, rot).into())
+                }
+                Samples::F32(v) => {
+                    Samples::F32(resample_samples(v, sw, sh, src_rect, dest, rot).into())
+                }
             };
             Some((*id, out))
         })
@@ -409,21 +415,21 @@ fn resample_doc_store(
             for chunk in v.chunks(plane.max(1)) {
                 out.extend(resample_samples(chunk, sw, sh, src_rect, dest, rot));
             }
-            Samples::U8(out)
+            Samples::U8(out.into())
         }
         Samples::U16(v) => {
             let mut out = Vec::with_capacity(plane * (v.len() / plane.max(1)));
             for chunk in v.chunks(plane.max(1)) {
                 out.extend(resample_samples(chunk, sw, sh, src_rect, dest, rot));
             }
-            Samples::U16(out)
+            Samples::U16(out.into())
         }
         Samples::F32(v) => {
             let mut out = Vec::with_capacity(plane * (v.len() / plane.max(1)));
             for chunk in v.chunks(plane.max(1)) {
                 out.extend(resample_samples(chunk, sw, sh, src_rect, dest, rot));
             }
-            Samples::F32(out)
+            Samples::F32(out.into())
         }
     };
     SourcePlanes {
@@ -553,7 +559,7 @@ mod tests {
         layer.source_channels = Some(SourceChannels::new(
             BitDepth::Sixteen,
             layer.rect,
-            vec![(0, Samples::U16(vec![100u16; 6]))],
+            vec![(0, Samples::U16(vec![100u16; 6].into()))],
         ));
         d.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         d.composite = crate::composite_rgba(&d);

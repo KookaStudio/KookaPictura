@@ -338,7 +338,7 @@ mod tests {
             filter_id: LENS_CORRECTION_FILTER_ID,
             name: LENS_CORRECTION_FILTER_NAME.to_string(),
             enabled: true,
-            options,
+            options: options.into(),
         };
         assert!(decode_smart_filter(&filter).is_none());
 
@@ -520,7 +520,7 @@ mod tests {
             filter_id: PICTURA_FILTER_ID,
             name: "x".into(),
             enabled: true,
-            options: pictura_codec::encode_pictura_filter(&steps, gallery),
+            options: pictura_codec::encode_pictura_filter(&steps, gallery).into(),
         }
     }
 
@@ -615,7 +615,8 @@ mod tests {
                     slots: Vec::new(),
                 }],
                 false,
-            ),
+            )
+            .into(),
         };
         assert!(decode_smart_filter(&record).is_none());
         let unknown = SmartFilter {
@@ -625,7 +626,8 @@ mod tests {
                     slots: Vec::new(),
                 }],
                 false,
-            ),
+            )
+            .into(),
             ..record
         };
         assert!(decode_smart_filter(&unknown).is_none());

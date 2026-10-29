@@ -698,7 +698,7 @@ fn solid_fill_inner_shadow_follows_payload_alpha() {
             rect: rect(2, 2, 10, 10),
             adjustment: Some(AdjustmentData {
                 key: *b"SoCo",
-                data: vec![255, 0, 0, alpha],
+                data: vec![255, 0, 0, alpha].into(),
             }),
             ..Default::default()
         };

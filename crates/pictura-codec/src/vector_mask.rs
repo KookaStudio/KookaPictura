@@ -320,7 +320,7 @@ mod tests {
         Layer {
             extra_blocks: vec![LayerBlock {
                 key: *b"vmsk",
-                data,
+                data: data.into(),
             }],
             ..Default::default()
         }

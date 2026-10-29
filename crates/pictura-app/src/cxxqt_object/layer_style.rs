@@ -375,7 +375,7 @@ mod tests {
         assert!(layer_is_blend_if_customised(&layer), "narrowed range");
 
         let raw = Layer {
-            blending_ranges: vec![1, 2, 3],
+            blending_ranges: vec![1, 2, 3].into(),
             ..Layer::default()
         };
         assert!(

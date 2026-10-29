@@ -164,7 +164,7 @@ fn rasterize_refuses_non_fill_targets() {
     let mut fill = adjustment_layer(
         "soco",
         *b"SoCo",
-        encode_solid_color_fill([4, 5, 6]).data,
+        encode_solid_color_fill([4, 5, 6]).data.to_vec(),
         255,
         None,
     );
@@ -438,8 +438,8 @@ fn rasterize_all_layers_rasterizes_a_type_layer() {
                 transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
                 text: "Hi".into(),
                 bounds: [0, 0, 200, 80],
-                text_desc: Vec::new(),
-                warp_desc: Vec::new(),
+                text_desc: Vec::new().into(),
+                warp_desc: Vec::new().into(),
                 fonts: Vec::new(),
                 style: Some(pictura_core::TextStyle {
                     font: Some("Arial".into()),

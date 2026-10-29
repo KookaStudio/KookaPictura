@@ -9,7 +9,7 @@
 //! marked below.
 
 use pictura_core::mask_ops::{self, Border};
-use pictura_core::{Channel, Layer, LayerMask, PixelBuffer};
+use pictura_core::{Channel, Layer, LayerMask, PixelBuffer, Plane};
 use rayon::prelude::*;
 
 mod color_range;
@@ -46,7 +46,7 @@ pub enum SelectError {
 pub struct Selection {
     pub width: u32,
     pub height: u32,
-    pub data: Vec<u8>,
+    pub data: Plane<u8>,
 }
 
 /// How a new selection combines with the existing one.
@@ -88,7 +88,7 @@ impl Selection {
         Self {
             width,
             height,
-            data: vec![0; width as usize * height as usize],
+            data: vec![0; width as usize * height as usize].into(),
         }
     }
 
@@ -96,7 +96,7 @@ impl Selection {
         Self {
             width,
             height,
-            data: vec![255; width as usize * height as usize],
+            data: vec![255; width as usize * height as usize].into(),
         }
     }
 
@@ -178,6 +178,7 @@ impl Selection {
             return sel;
         }
         let n = points.len();
+        let data = sel.data.as_mut_slice();
         for py in 0..height {
             let cy = py as f64 + 0.5;
             for px in 0..width {
@@ -196,7 +197,7 @@ impl Selection {
                     j = i;
                 }
                 if inside {
-                    sel.data[py as usize * width as usize + px as usize] = 255;
+                    data[py as usize * width as usize + px as usize] = 255;
                 }
             }
         }
@@ -208,7 +209,7 @@ impl Selection {
     pub fn to_channel(&self, id: i16) -> Channel {
         Channel {
             id,
-            data: self.data.clone().into(),
+            data: self.data.clone(),
         }
     }
 
@@ -226,7 +227,7 @@ impl Selection {
         Ok(Selection {
             width,
             height,
-            data: ch.data.to_vec(),
+            data: ch.data.clone(),
         })
     }
 
@@ -285,7 +286,7 @@ impl Selection {
         Selection {
             width: self.width,
             height: self.height,
-            data: self.data.iter().map(|v| 255 - v).collect(),
+            data: self.data.iter().map(|v| 255 - v).collect::<Vec<_>>().into(),
         }
     }
 
@@ -302,7 +303,7 @@ impl Selection {
         Selection {
             width: self.width,
             height: self.height,
-            data: blur::blur(&self.data, self.width as usize, self.height as usize, sigma),
+            data: blur::blur(&self.data, self.width as usize, self.height as usize, sigma).into(),
         }
     }
 
@@ -321,7 +322,8 @@ impl Selection {
                 self.height as usize,
                 r,
                 Border::Zero(0u8),
-            ),
+            )
+            .into(),
         }
     }
 
@@ -340,7 +342,8 @@ impl Selection {
                 self.height as usize,
                 r,
                 Border::Zero(0u8),
-            ),
+            )
+            .into(),
         }
     }
 
@@ -362,7 +365,8 @@ impl Selection {
                 .iter()
                 .zip(&eroded.data)
                 .map(|(a, b)| a.abs_diff(*b))
-                .collect(),
+                .collect::<Vec<_>>()
+                .into(),
         }
     }
 
@@ -375,7 +379,7 @@ impl Selection {
         Selection {
             width: self.width,
             height: self.height,
-            data: mask_ops::median(&self.data, self.width as usize, self.height as usize, r),
+            data: mask_ops::median(&self.data, self.width as usize, self.height as usize, r).into(),
         }
     }
 }
@@ -446,7 +450,7 @@ pub fn magic_wand(
     Ok(Selection {
         width: img.width,
         height: img.height,
-        data,
+        data: data.into(),
     })
 }
 
@@ -463,9 +467,10 @@ pub fn grow(sel: &Selection, img: &PixelBuffer, tolerance: u8) -> Result<Selecti
     }) else {
         return Ok(out);
     };
+    let data = out.data.as_mut_slice();
     for (p, &value) in reached.iter().enumerate() {
-        if value != 0 && out.data[p] == 0 {
-            out.data[p] = 255;
+        if value != 0 && data[p] == 0 {
+            data[p] = 255;
         }
     }
     Ok(out)

@@ -132,11 +132,11 @@ fn psd_tools_parses_block_after_odd_length_block_in_psb() {
     doc.layers[0].extra_blocks = vec![
         LayerBlock {
             key: *b"zzzz",
-            data: vec![1, 2, 3, 4, 5],
+            data: vec![1, 2, 3, 4, 5].into(),
         },
         LayerBlock {
             key: *b"yyyy",
-            data: vec![1, 2, 3, 4, 5, 6],
+            data: vec![1, 2, 3, 4, 5, 6].into(),
         },
     ];
     let bytes = write_psb(&doc).unwrap();
@@ -182,7 +182,7 @@ fn psd_tools_parses_doc_level_block_not_multiple_of_four_in_psb() {
     block.extend_from_slice(&6u32.to_be_bytes());
     block.extend_from_slice(&[1, 2, 3, 4, 5, 6]);
     block.extend_from_slice(&[0, 0]);
-    doc.layer_section_extra = block;
+    doc.layer_section_extra = block.into();
 
     let bytes = write_psb(&doc).unwrap();
     let stdout = psd_tools_reads("psb-doc-block-not-mult-of-four", &bytes);

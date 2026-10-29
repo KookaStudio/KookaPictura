@@ -225,14 +225,14 @@ fn lr_fx_data(version: u16, records: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
 fn lr_fx(records: &[(&[u8; 4], Vec<u8>)]) -> LayerBlock {
     LayerBlock {
         key: *b"lrFX",
-        data: lr_fx_data(0, records),
+        data: lr_fx_data(0, records).into(),
     }
 }
 
 fn raw_block(data: Vec<u8>) -> LayerBlock {
     LayerBlock {
         key: *b"lrFX",
-        data,
+        data: data.into(),
     }
 }
 

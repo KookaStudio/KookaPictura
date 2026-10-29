@@ -47,7 +47,7 @@ fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
         id,
         data: vec![value].into(),
     };
-    let f32_plane = |value: f32| Samples::F32(vec![value]);
+    let f32_plane = |value: f32| Samples::F32(vec![value].into());
     let layer = Layer {
         name: "HDR".to_string(),
         rect,
@@ -77,7 +77,7 @@ fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
         depth: BitDepth::ThirtyTwo,
         width: 1,
         height: 1,
-        samples: Samples::F32(vec![1.0, 1.0, 1.0]),
+        samples: Samples::F32(vec![1.0, 1.0, 1.0].into()),
     });
     doc.composite = pictura_core::PixelBuffer {
         width: 1,

@@ -705,10 +705,10 @@ fn cmyk_layer_color_channels_write_back_as_cmyk() {
     assert_eq!(
         retained.planes,
         vec![
-            (0, Samples::U8(vec![128])),
-            (1, Samples::U8(vec![64])),
-            (2, Samples::U8(vec![32])),
-            (3, Samples::U8(vec![200])),
+            (0, Samples::U8(vec![128].into())),
+            (1, Samples::U8(vec![64].into())),
+            (2, Samples::U8(vec![32].into())),
+            (3, Samples::U8(vec![200].into())),
         ]
     );
 
@@ -787,9 +787,9 @@ fn lab_layer_color_channels_write_back_as_lab() {
     assert_eq!(
         retained.planes,
         vec![
-            (0, Samples::U8(vec![225])),
-            (1, Samples::U8(vec![82])),
-            (2, Samples::U8(vec![114])),
+            (0, Samples::U8(vec![225].into())),
+            (1, Samples::U8(vec![82].into())),
+            (2, Samples::U8(vec![114].into())),
         ]
     );
 
@@ -1154,7 +1154,7 @@ fn indexed_layer_color_channel_writes_back_as_indexed() {
     );
     let retained = layer.source_channels.as_ref().expect("index retained");
     assert_eq!(retained.depth, BitDepth::Eight);
-    assert_eq!(retained.planes, vec![(0, Samples::U8(vec![5]))]);
+    assert_eq!(retained.planes, vec![(0, Samples::U8(vec![5].into()))]);
 
     let out = write_psd(&doc).unwrap();
     assert_eq!(
@@ -1200,7 +1200,7 @@ fn grouped_indexed_layer_round_trips() {
     );
     assert_eq!(
         child.source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5]))],
+        vec![(0, Samples::U8(vec![5].into()))],
         "the nested index channel is retained"
     );
 
@@ -1295,7 +1295,7 @@ fn indexed_layer_with_raster_mask_round_trips_as_indexed() {
     );
     assert_eq!(
         back.layers[0].source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5]))],
+        vec![(0, Samples::U8(vec![5].into()))],
         "the index channel is byte-identical"
     );
 }
@@ -1333,7 +1333,7 @@ fn indexed_document_without_a_merged_composite_writes_indexed() {
     assert_eq!(back.source_palette, Some(palette));
     assert_eq!(
         back.layers[0].source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5]))],
+        vec![(0, Samples::U8(vec![5].into()))],
         "the layer index channel is byte-identical"
     );
 }
@@ -1370,7 +1370,7 @@ fn added_empty_layer_keeps_indexed_on_save() {
     assert_eq!(back.layers.len(), 2, "both layers survive the save");
     assert_eq!(
         back.layers[0].source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5]))],
+        vec![(0, Samples::U8(vec![5].into()))],
         "the original index channel is byte-identical"
     );
 }
@@ -1389,7 +1389,7 @@ fn short_indexed_composite_data_is_a_typed_error_not_a_panic() {
         depth: BitDepth::Eight,
         width: 2,
         height: 2,
-        samples: Samples::U8(vec![0u8; 4]),
+        samples: Samples::U8(vec![0u8; 4].into()),
     });
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 }

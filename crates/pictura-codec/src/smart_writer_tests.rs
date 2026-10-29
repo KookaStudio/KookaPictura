@@ -131,7 +131,7 @@ fn authored_smart_object_with_filter_round_trips() {
         filter_id: crate::CAMERA_RAW_FILTER_ID,
         name: crate::CAMERA_RAW_FILTER_NAME.to_string(),
         enabled: false,
-        options,
+        options: options.into(),
     }];
     so.filter_mask_enabled = false;
     so.filter_mask_linked = true;
@@ -176,7 +176,7 @@ fn authored_disabled_filter_group_round_trips() {
         filter_id: crate::CAMERA_RAW_FILTER_ID,
         name: crate::CAMERA_RAW_FILTER_NAME.to_string(),
         enabled: true,
-        options,
+        options: options.into(),
     }];
     so.smart_filters_enabled = false;
 

@@ -273,12 +273,12 @@ fn apply_raster_profile(
         return;
     }
     match policy {
-        Policy::Preserve => doc.document_icc = Some(icc),
+        Policy::Preserve => doc.document_icc = Some(icc.into()),
         Policy::Convert => {
-            doc.document_icc = Some(icc.clone());
+            doc.document_icc = Some(icc.clone().into());
             let _ =
                 pictura_codec::convert_document_with(doc, &pictura_codec::Profile::srgb(), options);
-            doc.source_icc = Some(icc);
+            doc.source_icc = Some(icc.into());
         }
         Policy::Off => {}
     }
@@ -305,7 +305,7 @@ pub(super) fn convert_placed_rgba(
         return rgba;
     }
     let mut doc = Document::from_rgba("place", width, height, &rgba);
-    doc.document_icc = Some(icc);
+    doc.document_icc = Some(icc.into());
     if !pictura_codec::convert_document_with(
         &mut doc,
         &pictura_codec::Profile::srgb(),
@@ -361,7 +361,7 @@ pub(super) fn decode_image_with_options(
     apply_raster_profile(&mut doc, &bytes, policy, options);
     finalize_import(&mut doc, &rgba);
     if let Some(section) = pictura_codec::raster_image_resources(&bytes) {
-        doc.image_resources = section;
+        doc.image_resources = section.into();
     }
     store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");

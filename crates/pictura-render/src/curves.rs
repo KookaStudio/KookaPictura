@@ -121,7 +121,7 @@ pub fn encode_curves(
     }
     AdjustmentData {
         key: *b"curv",
-        data,
+        data: data.into(),
     }
 }
 

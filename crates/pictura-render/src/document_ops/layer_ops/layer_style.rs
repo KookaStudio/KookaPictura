@@ -319,7 +319,7 @@ fn write_lfx2(layer: &mut Layer, items: Vec<(Vec<u8>, DescValue)>) {
     data.extend_from_slice(&pictura_codec::write_descriptor(&object(b"null", items)));
     let block = LayerBlock {
         key: *b"lfx2",
-        data,
+        data: data.into(),
     };
     match at {
         Some(i) => layer.extra_blocks.insert(i, block),

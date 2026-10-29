@@ -306,7 +306,7 @@ mod tests {
             disabled: false,
             flags: 0,
             data: Some(vec![255u8; 128 * 128].into()),
-            extra: Vec::new(),
+            extra: Vec::new().into(),
             ..Default::default()
         });
         rust.mask_edit_target = Some("0".to_string());

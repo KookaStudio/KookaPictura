@@ -41,7 +41,7 @@ fn preview_cancel_restores_layer() {
     rust.session.selection = Some(pictura_select::Selection {
         width: 16,
         height: 16,
-        data: vec![255; 256],
+        data: vec![255; 256].into(),
     });
     assert!(apply_filter_active_region(&mut rust, "gaussian-blur", &[3.0], false, None).is_some());
     assert_eq!(filters(&rust).len(), 1, "the preview pushes the record");
@@ -198,6 +198,6 @@ fn set_selection_everywhere(rust: &mut PictureViewRust) {
     rust.session.selection = Some(pictura_select::Selection {
         width: 16,
         height: 16,
-        data: vec![255; 256],
+        data: vec![255; 256].into(),
     });
 }

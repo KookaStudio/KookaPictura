@@ -456,7 +456,7 @@ mod tests {
 
     fn doc_with(extra: Vec<u8>) -> Document {
         let mut d = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        d.layer_section_extra = extra;
+        d.layer_section_extra = extra.into();
         d
     }
 

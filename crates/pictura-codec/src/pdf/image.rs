@@ -83,7 +83,7 @@ fn working_icc(doc: &Document) -> Vec<u8> {
         Some(icc)
             if Profile::from_icc(icc).is_ok_and(|p| p.channels() == Some(color_of(doc) as u8)) =>
         {
-            icc.clone()
+            icc.to_vec()
         }
         _ => working_profile(doc).to_icc(),
     }

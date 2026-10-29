@@ -599,7 +599,7 @@ fn write(data: &mut AdjustmentData, field: Field, value: f64) -> Option<()> {
                 Some((_, slot)) => *slot = item,
                 None => items.push((key.to_vec(), item)),
             }
-            *d = pictura_codec::write_descriptor(&obj);
+            *d = pictura_codec::write_descriptor(&obj).into();
             Some(())
         }
         // Rebuilt wholesale by `set_adjustment_param`, never patched in place.

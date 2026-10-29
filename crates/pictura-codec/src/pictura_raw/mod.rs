@@ -203,7 +203,7 @@ fn new_filter(settings: &PicturaRawSettings) -> SmartFilter {
         filter_id: CAMERA_RAW_FILTER_ID,
         name: CAMERA_RAW_FILTER_NAME.to_string(),
         enabled: true,
-        options: descriptor::write_descriptor(&encode_pictura_raw_fltr(settings)),
+        options: descriptor::write_descriptor(&encode_pictura_raw_fltr(settings)).into(),
     }
 }
 
@@ -334,9 +334,9 @@ fn insert_into_config(
     while !new_data.len().is_multiple_of(4) {
         new_data.push(0);
     }
-    layer.extra_blocks[block_idx].data = new_data.clone();
+    layer.extra_blocks[block_idx].data = new_data.clone().into();
     if let Some(so) = layer.smart_object.as_mut() {
-        so.config_descriptor = new_data;
+        so.config_descriptor = new_data.into();
         match so
             .smart_filters
             .iter_mut()
@@ -400,9 +400,9 @@ pub fn replace_smart_filter(
         while !new_data.len().is_multiple_of(4) {
             new_data.push(0);
         }
-        layer.extra_blocks[block_idx].data = new_data.clone();
+        layer.extra_blocks[block_idx].data = new_data.clone().into();
         if let Some(so) = layer.smart_object.as_mut() {
-            so.config_descriptor = new_data;
+            so.config_descriptor = new_data.into();
         }
     }
     if let Some(slot) = layer

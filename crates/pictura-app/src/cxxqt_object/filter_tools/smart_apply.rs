@@ -107,7 +107,7 @@ fn selection_mask(rust: &PictureViewRust) -> Option<FilterMask> {
             bottom: selection.height as i32,
             right: selection.width as i32,
         },
-        data: selection.data.clone().into(),
+        data: selection.data.clone(),
     })
 }
 

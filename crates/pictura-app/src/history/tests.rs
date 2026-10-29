@@ -27,7 +27,7 @@ fn capture_undo_round_trip_restores_doc_and_selection() {
     let selection = Selection {
         width: 2,
         height: 1,
-        data: vec![255, 0],
+        data: vec![255, 0].into(),
     };
     let selected = Snapshot {
         doc: doc(2, 1, 7),
@@ -245,7 +245,7 @@ fn selection_none_round_trips() {
             selection: Some(Selection {
                 width: 2,
                 height: 2,
-                data: vec![255; 4],
+                data: vec![255; 4].into(),
             }),
         },
         "Select All",
@@ -549,7 +549,7 @@ fn every_state_matches_a_reference_copy() {
         let selection = Some(Selection {
             width: 200,
             height: 130,
-            data: vec![seed; 200 * 130],
+            data: vec![seed; 200 * 130].into(),
         });
         doc.composite.data[0] = seed;
         let snapshot = Snapshot {

@@ -500,7 +500,7 @@ fn rasterize_keeps_proxy_channels_and_drops_config() {
     layer.smart_object = Some(embedded(payload_of([1, 2, 3])));
     layer.extra_blocks = vec![LayerBlock {
         key: *b"SoLd",
-        data: vec![9, 9, 9, 9],
+        data: vec![9, 9, 9, 9].into(),
     }];
     let mut d = doc(4, 4, vec![layer]);
     let before = d.clone();
@@ -842,7 +842,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
         disabled: true,
         flags: 0,
         data: Some(vec![0, 64, 128, 255].into()),
-        extra: Vec::new(),
+        extra: Vec::new().into(),
         ..Default::default()
     });
     d.layers[index].color = ColorLabel::Violet;

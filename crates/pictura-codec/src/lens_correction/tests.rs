@@ -197,7 +197,7 @@ fn reattaching_keeps_unmodeled_keys() {
             filter_id: LENS_CORRECTION_FILTER_ID,
             name: LENS_CORRECTION_FILTER_NAME.to_string(),
             enabled: true,
-            options: crate::write_descriptor(&fltr),
+            options: crate::write_descriptor(&fltr).into(),
         }];
         so
     }
@@ -206,7 +206,7 @@ fn reattaching_keeps_unmodeled_keys() {
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     layer.extra_blocks.push(LayerBlock {
         key: *b"SoLd",
-        data,
+        data: data.into(),
     });
 
     let new_slots = slots();
@@ -247,7 +247,8 @@ fn a_foreign_filter_id_is_left_alone() {
             name: String::new(),
             class_id: b"null".to_vec(),
             items: vec![(b"Keep".to_vec(), DescValue::Long(7))],
-        }),
+        })
+        .into(),
     };
     let so = {
         let mut so = SmartObject::default();
@@ -260,7 +261,7 @@ fn a_foreign_filter_id_is_left_alone() {
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     layer.extra_blocks.push(LayerBlock {
         key: *b"SoLd",
-        data,
+        data: data.into(),
     });
 
     attach_lens_correction_filter(&mut layer, &DEFAULT_SLOTS).expect("attaches");

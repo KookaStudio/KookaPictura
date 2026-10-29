@@ -529,7 +529,7 @@ fn ag_psd_reads_authored_text_path() {
                 .collect(),
             extra_blocks: vec![LayerBlock {
                 key: *b"TySh",
-                data: pictura_codec::encode_type_tool(&tool),
+                data: pictura_codec::encode_type_tool(&tool).into(),
             }],
             type_tool: Some(tool),
             ..Default::default()

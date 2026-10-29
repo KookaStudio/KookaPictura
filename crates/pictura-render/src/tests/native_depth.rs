@@ -39,7 +39,7 @@ fn levels_opacity_doc(output_white: u16, opacity: u8) -> Document {
 
 fn native_u16(d: &Document) -> Vec<u16> {
     match composite_native(d) {
-        Some(Samples::U16(v)) => v,
+        Some(Samples::U16(v)) => v.to_vec(),
         other => panic!("expected a u16 native composite, got {other:?}"),
     }
 }
@@ -49,7 +49,7 @@ fn native_u16(d: &Document) -> Vec<u16> {
 fn hdr_doc(width: u32, height: u32, samples: Vec<f32>) -> Document {
     let plane = (width * height) as usize;
     let color_len = plane * 3;
-    let narrowed = Samples::F32(samples[..color_len].to_vec()).narrow_to_u8();
+    let narrowed = Samples::F32(samples[..color_len].to_vec().into()).narrow_to_u8();
     let mut d = doc(width, height, Vec::new());
     d.source_depth = Some(BitDepth::ThirtyTwo);
     d.composite = PixelBuffer {
@@ -62,7 +62,7 @@ fn hdr_doc(width: u32, height: u32, samples: Vec<f32>) -> Document {
         depth: BitDepth::ThirtyTwo,
         width,
         height,
-        samples: Samples::F32(samples),
+        samples: Samples::F32(samples.into()),
     });
     d
 }
@@ -282,7 +282,7 @@ fn auto_adjustment_on_depth16_uses_the_native_path() {
 fn native_store_layer(rgb: (u8, u8, u8), low: u16) -> Layer {
     let mut layer = solid("base", full(4, 4), rgb, 255, BlendMode::Normal, 255);
     let n = 16;
-    let plane = |v: u8| Samples::U16(vec![v as u16 * 257 + low; n]);
+    let plane = |v: u8| Samples::U16(vec![v as u16 * 257 + low; n].into());
     layer.source_channels = Some(SourceChannels::new(
         BitDepth::Sixteen,
         layer.rect,
@@ -290,7 +290,7 @@ fn native_store_layer(rgb: (u8, u8, u8), low: u16) -> Layer {
             (0, plane(rgb.0)),
             (1, plane(rgb.1)),
             (2, plane(rgb.2)),
-            (-1, Samples::U16(vec![65535; n])),
+            (-1, Samples::U16(vec![65535; n].into())),
         ],
     ));
     layer
@@ -383,7 +383,7 @@ fn masked_red(mask_byte: u8, native: Option<u16>) -> Layer {
         layer.source_channels = Some(SourceChannels::new(
             BitDepth::Sixteen,
             layer.rect,
-            vec![(-2, Samples::U16(vec![sample]))],
+            vec![(-2, Samples::U16(vec![sample].into()))],
         ));
     }
     layer
@@ -508,7 +508,7 @@ fn local_adaptation_leaves_alpha_untouched() {
         panic!("expected an f32 store");
     };
     let alpha: Vec<f32> = source[12..16].to_vec();
-    let expected = Samples::F32(alpha).to_u16();
+    let expected = Samples::F32(alpha.into()).to_u16();
 
     crate::convert_depth(
         &mut d,
@@ -541,7 +541,7 @@ fn hdr_conversion_copies_extra_planes() {
         let Samples::F32(source) = &d.source_planes.as_ref().unwrap().samples else {
             panic!("expected an f32 store");
         };
-        let expected = Samples::F32(source[12..16].to_vec()).to_u16();
+        let expected = Samples::F32(source[12..16].to_vec().into()).to_u16();
         crate::convert_depth(&mut d, BitDepth::Sixteen, method).unwrap();
         let Samples::U16(v) = &d.source_planes.as_ref().unwrap().samples else {
             panic!("expected a u16 store");

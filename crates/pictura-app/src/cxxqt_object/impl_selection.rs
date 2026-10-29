@@ -981,7 +981,7 @@ fn channel_row_selection(
     Some(Selection {
         width: doc.width,
         height: doc.height,
-        data,
+        data: data.into(),
     })
 }
 

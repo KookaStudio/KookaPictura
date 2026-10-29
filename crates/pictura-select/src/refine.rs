@@ -308,7 +308,8 @@ pub fn refine(
         data: coverage
             .iter()
             .map(|&v| v.round().clamp(0.0, 255.0) as u8)
-            .collect(),
+            .collect::<Vec<_>>()
+            .into(),
     };
 
     // 2/3. Smooth and Feather use the existing modify operations.
@@ -322,7 +323,7 @@ pub fn refine(
     // 4. Contrast: steepen the coverage ramp about 128.
     if settings.contrast > 0 {
         let c = settings.contrast as f64 / 100.0;
-        for v in &mut sel.data {
+        for v in sel.data.as_mut_slice() {
             let x = *v as f64 / 255.0;
             // S-curve whose slope at 0.5 grows with c; c=0 keeps the identity.
             let steepened = if x < 0.5 {
@@ -436,7 +437,7 @@ fn shift_edge(sel: &Selection, signed: &[i32], percent: i32) -> Selection {
     Selection {
         width: sel.width,
         height: sel.height,
-        data: out,
+        data: out.into(),
     }
 }
 
@@ -546,7 +547,7 @@ pub fn decontaminate(
 /// Build a full-frame [`Plane`] from refined coverage (used by the app to write
 /// a layer mask).
 pub fn coverage_plane(sel: &Selection) -> Plane<u8> {
-    sel.data.clone().into()
+    sel.data.clone()
 }
 
 #[cfg(test)]

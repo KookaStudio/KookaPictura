@@ -111,7 +111,7 @@ fn round_trip_with_vmsk(data: Vec<u8>) -> Layer {
     let mut layer = solid("L", full(2, 2), (10, 20, 30), 255, BlendMode::Normal, 255);
     layer.extra_blocks.push(LayerBlock {
         key: *b"vmsk",
-        data,
+        data: data.into(),
     });
     let bytes = pictura_codec::write_psd(&doc(2, 2, vec![layer])).expect("writes");
     pictura_codec::read_psd(&bytes).expect("re-reads").layers[0].clone()

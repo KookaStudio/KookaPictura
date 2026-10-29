@@ -271,7 +271,7 @@ fn sixteen_bit_grayscale_is_computed_at_native_depth() {
     let store = doc.layers[0].source_channels.as_ref().expect("store");
     assert_eq!(store.planes.len(), 1);
     // 0.299 * 65535 = 19594.965, not the 8-bit 76 * 257 = 19532.
-    assert_eq!(store.planes[0].1, Samples::U16(vec![19595]));
+    assert_eq!(store.planes[0].1, Samples::U16(vec![19595].into()));
 }
 
 #[test]

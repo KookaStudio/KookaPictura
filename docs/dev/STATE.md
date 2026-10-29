@@ -67,6 +67,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   transform's commit/cancel still cannot discard a panel edit. The frame wires
   the panel's resolver to `ToolController::resolvePendingTransform`
   (`frame_transform_lock.cpp`). Tests: `tst_transform_lock`.
+- **Copy-on-write bulk stores** (#1012, OpenSpec change
+  `cow-samples-payload-selections`). Native `Samples`, smart-object payloads,
+  `Document.layer_section_extra` and the other preserved byte buffers, the
+  selection mask, and the layer tree are refcounted; a clone shares them and a
+  write forks only the touched store. Measured on a 2000² 16-bit document with
+  an 8 MiB payload and an 8 MiB raw section: `Document::clone` 19.3 ms → 0.2 µs,
+  `Layer::clone` 858 µs → 0.2 µs, and 20 history captures 471 ms / 1.15 GiB peak
+  → 1.9 ms / 104 MiB peak. The per-band clipping composite dropped 23.4 ms →
+  19.6 ms on a 1024² two-layer probe; the remaining per-band `Layer::clone`
+  copies only small container vectors.
 - **Render performance bundle** (#379, #651, #745, #746, branch
   `perf/379-render-performance-bundle`, OpenSpec changes
   `render-performance-instrumentation` and `gpu-eligibility-from-dispatch`).
@@ -6067,8 +6077,11 @@ small, app-local region-blit slice landed as M35 above):
   `docs/dev/m35-cpp-region-blit.md`. The per-pixel `QImage::set_pixel_color` loop
   and the budget fallback are gone; a dirty region of any size takes the region
   path.
-- **History copy-on-write / tile diffs** — the history capture still clones
-  the whole document (~60 ms per state at 4000², and holds up to 20 states).
+- **History copy-on-write / tile diffs** — landed for bulk stores (#1012):
+  native samples, smart-object payloads, preserved byte blocks, the layer tree's
+  nodes, and the selection share until written. A capture still forks the tree
+  container and copies small metadata vectors; retained bytes scale with the
+  edited data.
 - **Resident per-layer GPU source buffers** — deferred from M33; the
   shader-side planar output landed as the M33 A2 follow-up above. Keeping a
   layer's source plane resident on the GPU across a composite session needs
@@ -6142,9 +6155,11 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
 - History capture is copy-on-write with tile diffs: one materialized state is
   kept and every other state stores the 64×64 tiles that changed against its
   predecessor, so retention scales with the edited area rather than with the
-  document (up to 20 states).
+  document (up to 20 states). Native sample stores, smart-object payloads,
+  preserved byte buffers, the layer tree's nodes, and the selection are shared
+  across states until written (#1012).
 - The GPU path still silently falls back to the CPU on any `GpuError`.
-- `pictura-app` has 18 `#[ignore]`d tests, all profiling harnesses (4000²/16000²
+- `pictura-app` has 19 `#[ignore]`d tests, all profiling harnesses (4000²/16000²
   region, dab, visibility, filter-dialog, crop, marquee and undo profiles) that
   run only with `--ignored --nocapture`.
 - The recent-files submenu is repopulated each time it opens, so a file opened

@@ -305,9 +305,9 @@ mod tests {
     #[test]
     fn convert_options_dither_is_8bit_only() {
         let planes = vec![
-            Samples::U16(vec![0, 1000, 65535]),
-            Samples::U16(vec![500, 2000, 40000]),
-            Samples::U16(vec![900, 3000, 50000]),
+            Samples::U16(vec![0, 1000, 65535].into()),
+            Samples::U16(vec![500, 2000, 40000].into()),
+            Samples::U16(vec![900, 3000, 50000].into()),
         ];
         let base = ConversionOptions {
             intent: Intent::RelativeColorimetric,

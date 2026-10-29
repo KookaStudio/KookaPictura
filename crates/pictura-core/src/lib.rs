@@ -168,8 +168,11 @@ impl<T> PixelBuffer<T> {
 /// A minimal document: dimensions, mode, depth, one composite image, and a
 /// layer tree (bottom-first, matching PSD z-order on disk).
 ///
-/// Cloning is a refcount bump over the pixel planes: the copy shares every
-/// plane until one of them is written, and only that plane forks ([`Plane`]).
+/// Cloning is a refcount bump over the bulk stores: pixel planes, retained
+/// native samples, smart-object payloads, preserved byte buffers, and the
+/// layer tree are shared until one of them is written, and only that store
+/// forks ([`Plane`], `Arc`). Small container vectors (channel lists, block
+/// lists, strings) are still copied.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
     pub width: u32,
@@ -206,13 +209,13 @@ pub struct Document {
     /// file with no decodable non-sRGB profile and for a constructed document.
     /// Deliberately not re-emitted on save: the profile is removed from
     /// `image_resources` so the converted sRGB pixels are not mis-tagged.
-    pub source_icc: Option<Vec<u8>>,
+    pub source_icc: Option<Plane<u8>>,
     /// The ICC bytes of the working profile the stored composite and layer color
     /// numbers are in. `None` means the sRGB working space. Set by an
     /// assign/convert command, or by a Preserve incoming-policy read that kept the
     /// embedded non-sRGB profile; distinct from `source_icc`, which records a
     /// profile a read converted away.
-    pub document_icc: Option<Vec<u8>>,
+    pub document_icc: Option<Plane<u8>>,
     pub composite: PixelBuffer,
     /// True when the file carried a merged composite image-data section. False
     /// when the file ended after the layer section (maximize-compatibility off),
@@ -235,14 +238,14 @@ pub struct Document {
     /// live after the color channels in the PSD image-data section.
     pub channels: Vec<Channel>,
     /// Verbatim color-mode-data section bytes, preserved for lossless re-save.
-    pub color_mode_data: Vec<u8>,
+    pub color_mode_data: Plane<u8>,
     /// Verbatim image-resource section bytes, preserved for lossless re-save.
-    pub image_resources: Vec<u8>,
+    pub image_resources: Plane<u8>,
     /// Global layer mask payload, preserved verbatim for lossless re-save.
-    pub global_layer_mask: Vec<u8>,
+    pub global_layer_mask: Plane<u8>,
     /// Bytes after the global layer mask up to the layer-section end, preserved
     /// verbatim for lossless re-save.
-    pub layer_section_extra: Vec<u8>,
+    pub layer_section_extra: Plane<u8>,
     /// User slices drawn with the Slice tool, in document pixels; auto slices
     /// are derived from them. ponytail: not yet written to or read from the
     /// slices image resource (1050), which stays preserved verbatim.
@@ -287,10 +290,10 @@ impl Document {
             is_psb: false,
             layers: LayerStack::default(),
             channels: Vec::new(),
-            color_mode_data: Vec::new(),
-            image_resources: Vec::new(),
-            global_layer_mask: Vec::new(),
-            layer_section_extra: Vec::new(),
+            color_mode_data: Plane::default(),
+            image_resources: Plane::default(),
+            global_layer_mask: Plane::default(),
+            layer_section_extra: Plane::default(),
             slices: Vec::new(),
             annotations: Annotations::default(),
             guides: Vec::new(),
@@ -609,7 +612,7 @@ pub struct Channel {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdjustmentData {
     pub key: [u8; 4],
-    pub data: Vec<u8>,
+    pub data: Plane<u8>,
 }
 
 /// An additional-layer-info tagged block the engine does not model, preserved
@@ -617,7 +620,7 @@ pub struct AdjustmentData {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LayerBlock {
     pub key: [u8; 4],
-    pub data: Vec<u8>,
+    pub data: Plane<u8>,
 }
 
 /// A layer channel the engine does not decode, stored as its full on-disk
@@ -625,7 +628,7 @@ pub struct LayerBlock {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RawChannel {
     pub id: i16,
-    pub data: Vec<u8>,
+    pub data: Plane<u8>,
 }
 
 /// Retained source-depth samples of a document's color planes and extra
@@ -705,7 +708,7 @@ pub struct SmartFilter {
     pub filter_id: i32,
     pub name: String,
     pub enabled: bool,
-    pub options: Vec<u8>,
+    pub options: Plane<u8>,
 }
 
 /// A smart filter stack's mask: the coverage that limits where the filters
@@ -738,15 +741,15 @@ pub struct SmartObject {
     pub creator: [u8; 4],
     pub kind: SmartObjectKind,
     /// Raw `SoLd`/`SoLE`/`plLd`/`PlLd` block data, kept verbatim.
-    pub config_descriptor: Vec<u8>,
+    pub config_descriptor: Plane<u8>,
     /// Embedded source bytes; `Some` only for [`SmartObjectKind::Embedded`].
-    payload: Option<Vec<u8>>,
+    payload: Option<Plane<u8>>,
     /// Cached identity of [`SmartObject::payload`]; `0` means "not set", and
     /// [`SmartObject::payload_digest`] hashes on demand. Excluded from
     /// equality: this is cache metadata, not document content.
     pub payload_digest: u64,
     /// The `crs:` XMP packet found in an embedded payload, if any.
-    pub crs_xmp: Option<Vec<u8>>,
+    pub crs_xmp: Option<Plane<u8>>,
     /// Typed view of the fixed `crs:` property set in [`SmartObject::crs_xmp`].
     pub crs: Option<CrsSettings>,
     /// Smart filters derived from the descriptor's `filterFX` list. The raw
@@ -775,7 +778,7 @@ impl Default for SmartObject {
             filetype: [0; 4],
             creator: [0; 4],
             kind: SmartObjectKind::default(),
-            config_descriptor: Vec::new(),
+            config_descriptor: Plane::default(),
             payload: None,
             payload_digest: 0,
             crs_xmp: None,
@@ -828,9 +831,19 @@ impl SmartObject {
         self.payload.as_deref()
     }
 
+    /// Whether `self` and `other` share one embedded payload allocation.
+    /// `None` payloads share trivially.
+    pub fn payload_shares(&self, other: &Self) -> bool {
+        match (&self.payload, &other.payload) {
+            (Some(a), Some(b)) => a.shares(b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
     /// Mutable access to the payload. Clears the stored digest so the next
     /// [`SmartObject::payload_digest`] hashes the new bytes.
-    pub fn payload_mut(&mut self) -> &mut Option<Vec<u8>> {
+    pub fn payload_mut(&mut self) -> &mut Option<Plane<u8>> {
         self.payload_digest = 0;
         &mut self.payload
     }
@@ -838,7 +851,7 @@ impl SmartObject {
     /// Replace the embedded payload and stamp its cache identity.
     pub fn set_payload(&mut self, bytes: Vec<u8>) {
         self.payload_digest = content_digest(&bytes);
-        self.payload = Some(bytes);
+        self.payload = Some(bytes.into());
     }
 
     /// [`SmartObject::set_payload`] as a builder, for literals.
@@ -859,7 +872,7 @@ pub struct LayerMask {
     /// The real-user-mask header (when the layer has a `-3` channel) and any
     /// unknown bytes after the mask parameters, preserved verbatim; the
     /// parameters and the record padding are parsed out.
-    pub extra: Vec<u8>,
+    pub extra: Plane<u8>,
     /// PSD user-mask density, 0-255; 255 is the mask as painted.
     pub density: u8,
     /// [`f64::to_bits`] of the feather radius in pixels; read it through
@@ -892,7 +905,7 @@ impl Default for LayerMask {
             disabled: false,
             flags: 0,
             data: None,
-            extra: Vec::new(),
+            extra: Plane::default(),
             density: 255,
             feather_bits: 0,
         }
@@ -1016,7 +1029,7 @@ pub struct Layer {
     /// [`BlendMode`], preserved for lossless re-save.
     pub blend_key: Option<[u8; 4]>,
     /// Raw blending-ranges block bytes, preserved verbatim for lossless re-save.
-    pub blending_ranges: Vec<u8>,
+    pub blending_ranges: Plane<u8>,
     /// `knko` knockout mode (`None` when the block is absent).
     pub knockout: Knockout,
     /// `clbl` blend clipped elements (CS6 default `true` when absent).
@@ -1075,7 +1088,7 @@ impl Default for Layer {
             is_group: false,
             background: false,
             blend_key: None,
-            blending_ranges: Vec::new(),
+            blending_ranges: Plane::default(),
             knockout: Knockout::None,
             blend_clipping: true,
             blend_interior: true,

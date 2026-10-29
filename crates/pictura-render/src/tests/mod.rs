@@ -141,7 +141,10 @@ fn assert_blend(mode: BlendMode, cb: [f32; 3], cs: [f32; 3], expected: [f32; 3])
 }
 
 fn adjdata(key: [u8; 4], data: Vec<u8>) -> AdjustmentData {
-    AdjustmentData { key, data }
+    AdjustmentData {
+        key,
+        data: data.into(),
+    }
 }
 
 fn adjustment_layer(

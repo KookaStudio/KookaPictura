@@ -114,7 +114,7 @@ pub fn encode_color_lookup(file_data: &[u8], name: &str) -> AdjustmentData {
     data.extend_from_slice(&pictura_codec::write_descriptor(&desc));
     AdjustmentData {
         key: *b"clrL",
-        data,
+        data: data.into(),
     }
 }
 
@@ -279,7 +279,7 @@ mod tests {
         ] {
             let block = AdjustmentData {
                 key: *b"clrL",
-                data: block_with_lookup_type(value),
+                data: block_with_lookup_type(value).into(),
             };
             assert!(
                 set_color_lookup_preset(&block, 1).is_none(),

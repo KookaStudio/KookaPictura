@@ -209,10 +209,10 @@ pub fn set_crs_property(
 
     let so = find_smart_object_mut(&mut doc.layers, uuid)
         .ok_or_else(|| PsdError::Invalid(format!("smart object {uuid} vanished")))?;
-    so.crs_xmp = Some(new_packet);
+    so.crs_xmp = Some(new_packet.into());
     so.set_payload(new_payload);
     so.crs = Some(new_crs);
-    doc.layer_section_extra = new_section;
+    doc.layer_section_extra = new_section.into();
     Ok(())
 }
 
@@ -394,13 +394,13 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
             ],
             extra_blocks: vec![LayerBlock {
                 key: *b"PlLd",
-                data: plld(UUID),
+                data: plld(UUID).into(),
             }],
             ..Default::default()
         };
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         crate::smart_object::resolve_smart_objects(&mut doc.layers, &section, false);
-        doc.layer_section_extra = section;
+        doc.layer_section_extra = section.into();
         doc
     }
 

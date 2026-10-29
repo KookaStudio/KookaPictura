@@ -863,7 +863,7 @@ fn magic_erase_at(
         let mask = if antialias {
             antialias_mask(&flood.data, flood.width as usize)
         } else {
-            flood.data
+            flood.data.to_vec()
         };
         let mut edited = unlocked_background(doc, path).unwrap_or_else(|| doc.clone());
         let opacity = opacity.clamp(0, 100) as f32 / 100.0;

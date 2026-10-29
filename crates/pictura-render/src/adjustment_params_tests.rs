@@ -31,7 +31,7 @@ fn levels(input_black: u16, input_white: u16, gamma: u16) -> AdjustmentData {
     data.extend(std::iter::repeat_n(7u8, 250));
     AdjustmentData {
         key: *b"levl",
-        data,
+        data: data.into(),
     }
 }
 
@@ -145,7 +145,7 @@ fn descriptor_items_are_edited_and_added_in_place() {
     };
     let vib = AdjustmentData {
         key: *b"vibA",
-        data: pictura_codec::write_descriptor(&obj),
+        data: pictura_codec::write_descriptor(&obj).into(),
     };
     assert_eq!(
         value(&vib, "saturation"),
@@ -217,7 +217,7 @@ fn photo_filter_colour_is_editable_in_version_two_only() {
     v3.extend_from_slice(&[1, 0, 0]);
     let v3 = AdjustmentData {
         key: *b"phfl",
-        data: v3,
+        data: v3.into(),
     };
     let editor = adjustment_editor(&v3).unwrap();
     assert!(editor.params.iter().all(|p| p.key != "color"));

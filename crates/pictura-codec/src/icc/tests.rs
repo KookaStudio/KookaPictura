@@ -36,7 +36,7 @@ fn rgb_document() -> Document {
 fn non_srgb_profile_converts_and_drops_the_resource() {
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = rgb_document();
-    doc.image_resources = icc_resource(&profile);
+    doc.image_resources = icc_resource(&profile).into();
     let original = doc.composite.data.clone();
 
     let out = apply_icc(doc);
@@ -57,7 +57,7 @@ fn cmyk_document_is_left_to_color_mode_pass() {
     let mut doc = Document::new(1, 1, ColorMode::Cmyk, BitDepth::Eight);
     doc.source_mode = Some(ColorMode::Cmyk);
     doc.composite.data = vec![10, 20, 30, 40].into();
-    doc.image_resources = icc_resource(&profile);
+    doc.image_resources = icc_resource(&profile).into();
     let before = doc.composite.data.to_vec();
     let out = apply_icc_policy(doc, Policy::Convert);
     assert_eq!(out.composite.data.to_vec(), before);
@@ -70,7 +70,7 @@ fn srgb_profile_is_left_untouched() {
     let profile = Profile::srgb().to_icc();
     let mut doc = rgb_document();
     let section = icc_resource(&profile);
-    doc.image_resources = section.clone();
+    doc.image_resources = section.clone().into();
     let original = doc.composite.data.clone();
 
     let out = apply_icc(doc);
@@ -82,7 +82,7 @@ fn srgb_profile_is_left_untouched() {
 #[test]
 fn undecodable_profile_is_ignored() {
     let mut doc = rgb_document();
-    doc.image_resources = icc_resource(b"not an ICC profile");
+    doc.image_resources = icc_resource(b"not an ICC profile").into();
     let original = doc.composite.data.clone();
     let out = apply_icc(doc);
     assert!(out.source_icc.is_none());
@@ -93,7 +93,7 @@ fn undecodable_profile_is_ignored() {
 fn a_layer_with_incomplete_color_channels_is_skipped() {
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = rgb_document();
-    doc.image_resources = icc_resource(&profile);
+    doc.image_resources = icc_resource(&profile).into();
     {
         let _ = doc.layers.push(Layer {
             name: "partial".into(),
@@ -121,7 +121,7 @@ fn grayscale_document_is_left_untouched() {
     let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
     doc.composite.data = vec![10, 200].into();
     let section = icc_resource(&profile);
-    doc.image_resources = section.clone();
+    doc.image_resources = section.clone().into();
 
     let out = apply_icc(doc);
     assert!(out.source_icc.is_none(), "grayscale is not converted");
@@ -135,7 +135,7 @@ fn other_resources_survive_conversion() {
     let mut doc = rgb_document();
     let mut section = icc_resource(&profile);
     section.extend(xmp_resource(b"<x/>"));
-    doc.image_resources = section;
+    doc.image_resources = section.into();
 
     let out = apply_icc(doc);
     let resources = decode_image_resources(&out);
@@ -150,7 +150,7 @@ fn other_resources_survive_conversion() {
 #[test]
 fn malformed_section_is_a_noop() {
     let mut doc = rgb_document();
-    doc.image_resources = b"not a resource section".to_vec();
+    doc.image_resources = b"not a resource section".to_vec().into();
     let original = doc.composite.data.clone();
     let out = apply_icc(doc);
     assert!(out.source_icc.is_none());
@@ -161,7 +161,7 @@ fn malformed_section_is_a_noop() {
 fn layer_channels_are_selected_by_id_not_storage_order() {
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = rgb_document();
-    doc.image_resources = icc_resource(&profile);
+    doc.image_resources = icc_resource(&profile).into();
     {
         let _ = doc.layers.push(Layer {
             name: "bgr".into(),
@@ -236,8 +236,8 @@ fn assign_frames_a_1039_block_for_a_non_srgb_profile() {
 fn assigning_srgb_removes_1039_and_clears_document_icc() {
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.image_resources = icc_resource(&profile);
-    doc.document_icc = Some(profile);
+    doc.image_resources = icc_resource(&profile).into();
+    doc.document_icc = Some(profile.into());
     assign_document_profile(&mut doc, &Profile::srgb());
     assert!(doc.document_icc.is_none());
     assert!(decode_image_resources(&doc)
@@ -248,7 +248,7 @@ fn assigning_srgb_removes_1039_and_clears_document_icc() {
 #[test]
 fn assign_preserves_other_resources() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.image_resources = xmp_resource(b"<x/>");
+    doc.image_resources = xmp_resource(b"<x/>").into();
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
     let resources = decode_image_resources(&doc);
     let xmp = resources
@@ -310,7 +310,7 @@ fn buffer_to_srgb_is_identity_without_a_document_profile() {
 fn buffer_to_srgb_converts_a_profiled_document() {
     let mut doc = rgb_document();
     let before = doc.composite.data.clone();
-    doc.document_icc = Some(Profile::adobe_rgb().to_icc());
+    doc.document_icc = Some(Profile::adobe_rgb().to_icc().into());
     let out = buffer_to_srgb(&doc, &doc.composite);
     assert_ne!(out.data, before);
     assert_eq!(out.channels, doc.composite.channels);
@@ -322,7 +322,7 @@ fn buffer_to_srgb_reuses_the_transform_and_follows_profile_changes() {
     doc.composite.data = (0..doc.composite.data.len())
         .map(|i| (i * 7 % 251) as u8)
         .collect();
-    doc.document_icc = Some(Profile::adobe_rgb().to_icc());
+    doc.document_icc = Some(Profile::adobe_rgb().to_icc().into());
 
     let first = buffer_to_srgb(&doc, &doc.composite).into_owned();
     let second = buffer_to_srgb(&doc, &doc.composite).into_owned();
@@ -334,7 +334,7 @@ fn buffer_to_srgb_reuses_the_transform_and_follows_profile_changes() {
     assert_eq!(first.data, fresh.data, "cached path equals a fresh parse");
 
     // Changing the working profile invalidates the cached transform.
-    doc.document_icc = Some(Profile::pro_photo().to_icc());
+    doc.document_icc = Some(Profile::pro_photo().to_icc().into());
     let changed = buffer_to_srgb(&doc, &doc.composite).into_owned();
     assert_ne!(changed.data, first.data, "a new profile is used");
 }
@@ -390,7 +390,7 @@ fn convert_reaches_pixel_layers_nested_in_groups() {
 fn read_conversion_reaches_pixel_layers_nested_in_groups() {
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = rgb_document();
-    doc.image_resources = icc_resource(&profile);
+    doc.image_resources = icc_resource(&profile).into();
     let child = rgb_layer("child");
     let before = child.channels[0].data.clone();
     {
@@ -412,7 +412,7 @@ fn assign_preserves_an_unparsed_resource_tail() {
     let mut section = icc_resource(&profile);
     let tail = b"nope\x00\x01\x02\x03tail".to_vec();
     section.extend_from_slice(&tail);
-    doc.image_resources = section;
+    doc.image_resources = section.into();
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
     assert!(
         doc.image_resources.ends_with(&tail),
@@ -431,7 +431,7 @@ fn read_conversion_preserves_an_unparsed_resource_tail() {
     let mut section = icc_resource(&profile);
     let tail = b"nope\x00\x01\x02\x03tail".to_vec();
     section.extend_from_slice(&tail);
-    doc.image_resources = section;
+    doc.image_resources = section.into();
     let out = apply_icc(doc);
     assert_eq!(
         out.image_resources, tail,
@@ -541,7 +541,7 @@ fn policy_leaves_an_srgb_profile_unchanged() {
     for policy in [Policy::Preserve, Policy::Convert, Policy::Off] {
         let mut doc = rgb_document();
         let section = icc_resource(&profile);
-        doc.image_resources = section.clone();
+        doc.image_resources = section.clone().into();
         let original = doc.composite.data.clone();
 
         let out = apply_icc_policy(doc, policy);
@@ -559,7 +559,7 @@ fn policy_leaves_a_grayscale_document_unchanged() {
         let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
         doc.composite.data = vec![10, 200].into();
         let section = icc_resource(&profile);
-        doc.image_resources = section.clone();
+        doc.image_resources = section.clone().into();
 
         let out = apply_icc_policy(doc, policy);
         assert_eq!(out.composite.data, vec![10, 200], "{policy:?}");
@@ -573,7 +573,7 @@ fn policy_leaves_a_grayscale_document_unchanged() {
 fn policy_leaves_an_undecodable_profile_unchanged() {
     for policy in [Policy::Preserve, Policy::Convert, Policy::Off] {
         let mut doc = rgb_document();
-        doc.image_resources = icc_resource(b"not an ICC profile");
+        doc.image_resources = icc_resource(b"not an ICC profile").into();
         let original = doc.image_resources.clone();
 
         let out = apply_icc_policy(doc, policy);
@@ -590,7 +590,7 @@ fn policy_preserve_rejects_a_profile_the_pixels_cannot_transform() {
     let mut profile = include_bytes!("../../tests/fixtures/psd_icc_rgb.icc").to_vec();
     profile[16..20].copy_from_slice(b"CMYK");
     let mut doc = rgb_document();
-    doc.image_resources = icc_resource(&profile);
+    doc.image_resources = icc_resource(&profile).into();
     let composite = doc.composite.data.clone();
     let resources = doc.image_resources.clone();
 
@@ -648,14 +648,14 @@ fn header_mode(psd: &[u8]) -> u16 {
 
 fn decode_section(section: Vec<u8>) -> Vec<ImageResource> {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.image_resources = section;
+    doc.image_resources = section.into();
     decode_image_resources(&doc)
 }
 
 #[test]
 fn converted_sixteen_bit_cmyk_saves_as_rgb_without_its_profile() {
     let mut doc = converted_cmyk_document(Some(BitDepth::Sixteen));
-    doc.image_resources = icc_resource(&profiled(b"CMYK"));
+    doc.image_resources = icc_resource(&profiled(b"CMYK")).into();
 
     let out = crate::write_psd(&doc).expect("writes");
     assert_eq!(header_mode(&out), MODE_RGB, "the converted mode is RGB");
@@ -670,7 +670,7 @@ fn converted_sixteen_bit_cmyk_saves_as_rgb_without_its_profile() {
 fn eight_bit_cmyk_keeps_its_profile() {
     let mut doc = converted_cmyk_document(None);
     let section = icc_resource(&profiled(b"CMYK"));
-    doc.image_resources = section.clone();
+    doc.image_resources = section.clone().into();
 
     let out = crate::write_psd(&doc).expect("writes");
     assert_eq!(header_mode(&out), MODE_CMYK, "the CMYK header is kept");
@@ -685,7 +685,7 @@ fn eight_bit_cmyk_keeps_its_profile() {
 fn matching_rgb_profile_is_re_emitted_byte_for_byte() {
     let mut doc = rgb_document();
     let section = icc_resource(&profiled(b"RGB "));
-    doc.image_resources = section.clone();
+    doc.image_resources = section.clone().into();
 
     let out = crate::write_psd(&doc).expect("writes");
     assert_eq!(header_mode(&out), MODE_RGB);
@@ -697,7 +697,7 @@ fn mismatched_profile_leaves_a_sibling_xmp_intact() {
     let mut doc = converted_cmyk_document(Some(BitDepth::Sixteen));
     let mut section = icc_resource(&profiled(b"CMYK"));
     section.extend(xmp_resource(b"<x/>"));
-    doc.image_resources = section;
+    doc.image_resources = section.into();
     let xmp = xmp_resource(b"<x/>");
 
     let out = crate::write_psd(&doc).expect("writes");
@@ -714,7 +714,7 @@ fn mismatched_profile_leaves_a_sibling_xmp_intact() {
 fn profile_too_short_to_classify_is_preserved() {
     let mut doc = rgb_document();
     let section = icc_resource(b"short");
-    doc.image_resources = section.clone();
+    doc.image_resources = section.clone().into();
 
     let out = crate::write_psd(&doc).expect("writes");
     assert_eq!(written_resources(&out), section);
@@ -766,7 +766,7 @@ fn read_sixteen_bit_cmyk_then_write_keeps_cmyk_and_its_profile() {
         assert_eq!(doc.source_depth, Some(BitDepth::Sixteen), "{policy}");
         assert_eq!(doc.mode, ColorMode::Rgb, "{policy}");
         assert!(
-            decode_section(doc.image_resources.clone())
+            decode_section(doc.image_resources.to_vec())
                 .iter()
                 .any(|r| r.id == ICC_PROFILE),
             "the CMYK profile is retained on read ({policy})"
@@ -796,7 +796,7 @@ fn read_sixteen_bit_lab_then_write_keeps_lab_and_its_profile() {
         assert_eq!(doc.source_depth, Some(BitDepth::Sixteen), "{policy}");
         assert_eq!(doc.mode, ColorMode::Rgb, "{policy}");
         assert!(
-            decode_section(doc.image_resources.clone())
+            decode_section(doc.image_resources.to_vec())
                 .iter()
                 .any(|r| r.id == ICC_PROFILE),
             "the Lab profile is retained on read ({policy})"
@@ -820,7 +820,7 @@ fn grayscale_output_keeps_a_matching_gray_profile() {
     let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
     doc.composite.data = vec![10, 200].into();
     let section = icc_resource(&profiled(b"GRAY"));
-    doc.image_resources = section.clone();
+    doc.image_resources = section.clone().into();
 
     let out = crate::write_psd(&doc).expect("writes");
     assert_eq!(header_mode(&out), MODE_GRAYSCALE);
@@ -844,7 +844,7 @@ fn parallel_display_transform_matches_serial() {
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = data.into();
-    doc.document_icc = Some(profile.clone());
+    doc.document_icc = Some(profile.clone().into());
 
     super::FORCE_SERIAL.store(true, Ordering::Relaxed);
     let serial = buffer_to_srgb(&doc, &doc.composite).into_owned();
@@ -908,7 +908,7 @@ fn display_transform_speedup_profile() {
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = data.into();
-    doc.document_icc = Some(Profile::adobe_rgb().to_icc());
+    doc.document_icc = Some(Profile::adobe_rgb().to_icc().into());
 
     super::FORCE_SERIAL.store(true, Ordering::Relaxed);
     let start = Instant::now();

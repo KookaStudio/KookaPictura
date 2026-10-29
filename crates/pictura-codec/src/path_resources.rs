@@ -198,7 +198,7 @@ mod tests {
         let mut doc = Document::new(100, 100, ColorMode::Rgb, BitDepth::Eight);
         doc.work_path = curve();
         let section = with_document_paths(&doc, Vec::new());
-        doc.image_resources = section.clone();
+        doc.image_resources = section.clone().into();
         resolve_paths(&mut doc);
         assert_eq!(with_document_paths(&doc, section.clone()), section);
     }
