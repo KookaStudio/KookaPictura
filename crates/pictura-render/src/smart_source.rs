@@ -4,7 +4,7 @@
 
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect, SmartObject};
 
-use crate::composite::{blend_into, channel, Canvas};
+use crate::composite::{blend_into, channel_plane, Canvas};
 
 /// Render an embedded smart object's source over `region` (document
 /// coordinates, within `rect`), scaling with the renderer's integer ratio.
@@ -91,7 +91,7 @@ pub(crate) fn composite_smart_source(canvas: &mut Canvas, layer: &Layer, doc: &D
     let Some(so) = layer.smart_object.as_ref() else {
         return false;
     };
-    if channel(layer, 0).is_some() {
+    if channel_plane(layer, 0).is_some() {
         return false;
     }
     let region = PsdRect {

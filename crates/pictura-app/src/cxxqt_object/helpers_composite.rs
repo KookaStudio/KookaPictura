@@ -107,26 +107,25 @@ pub(super) fn patch_buffer_region(dst: &mut PixelBuffer, region: &PixelBuffer, x
     if x0 + rw > fw || y0 + rh > fh {
         return;
     }
-    use rayon::prelude::*;
     let fplane = fw * fh;
     let rplane = rw * rh;
     let planes = (dst.channels as usize).min(4);
     if fplane == 0 || rw == 0 {
         return;
     }
-    // A whole-document region is a gigabyte on a large image: rows go to
-    // every core.
-    for (c, plane) in dst.data.as_mut_slice()[..planes * fplane]
-        .chunks_mut(fplane)
-        .enumerate()
-    {
-        plane[y0 * fw..(y0 + rh) * fw]
-            .par_chunks_mut(fw)
-            .enumerate()
-            .for_each(|(ry, row)| {
-                let src = c * rplane + ry * rw;
+    // Write row by row: a region patch must not flatten a banded composite
+    // plane that history still shares.
+    for c in 0..planes {
+        for ry in 0..rh {
+            let y = c * fh + y0 + ry;
+            let Some(row) = dst.data.row_mut(y, fw) else {
+                continue;
+            };
+            let src = c * rplane + ry * rw;
+            if x0 + rw <= row.len() {
                 row[x0..x0 + rw].copy_from_slice(&region.data[src..src + rw]);
-            });
+            }
+        }
     }
 }
 /// The `w × h` region of planar `buffer` at `(x0, y0)`, every channel kept.
@@ -134,11 +133,18 @@ pub(super) fn patch_buffer_region(dst: &mut PixelBuffer, region: &PixelBuffer, x
 pub(super) fn crop_planar(buffer: &PixelBuffer, x0: i32, y0: i32, w: u32, h: u32) -> PixelBuffer {
     let (fw, plane) = (buffer.width as usize, buffer.pixel_count());
     let (x0, y0, w, h) = (x0 as usize, y0 as usize, w as usize, h as usize);
+    let fh = plane.checked_div(fw).unwrap_or(0);
     let mut data = Vec::with_capacity(w * h * buffer.channels as usize);
     for c in 0..buffer.channels as usize {
         for y in y0..y0 + h {
-            let at = c * plane + y * fw + x0;
-            data.extend_from_slice(&buffer.data[at..at + w]);
+            // Read the stacked row, not the whole plane: a banded composite
+            // plane must not be materialized just to crop a region.
+            let Some(row) = buffer.data.row(c * fh + y, fw) else {
+                continue;
+            };
+            if x0 + w <= row.len() {
+                data.extend_from_slice(&row[x0..x0 + w]);
+            }
         }
     }
     PixelBuffer {

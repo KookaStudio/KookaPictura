@@ -13,8 +13,11 @@ The history SHALL store the oldest state as a materialized base and each later
 state as the 64×64 tiles whose bytes differ from the previous state, for the
 layer channel planes, the document composite, and the layer mask planes, plus
 the state's selection and non-pixel metadata. The retained history memory SHALL
-scale with the edited area rather than with the document area. The public
-`History` API (`capture`, `undo`, `redo`, `jump`, `can_undo`/`can_redo`, the
+scale with the edited area rather than with the document area. The single
+materialized base MAY share unchanged bands with the live document; bands that
+differ SHALL be copied. Smart-object filter masks and native-depth `Samples` are
+not tracked planes and SHALL remain outside this contract. The public `History`
+API (`capture`, `undo`, `redo`, `jump`, `can_undo`/`can_redo`, the
 label/index/depth/count accessors, and the named-snapshot accessors) and the
 20-state and 10-snapshot bounds SHALL be unchanged.
 
@@ -55,33 +58,36 @@ bound, and redo truncation SHALL be unchanged.
 - **WHEN** a geometry-changing state is captured and then undone
 - **THEN** the restored document equals the pre-change document exactly
 
-### Requirement: Structural anchors share unchanged tracked planes
+### Requirement: Structural anchors share unchanged tracked bands
 
 Tracked planes are the composite, the document channels, the layer channels, and
-the layer masks. When a capture starts a new geometry segment because the
-tracked-plane count, size, or order changed, the history SHALL build the new
-private current state from the previous current state's tracked planes, matching
-them to the live tracked planes by nonzero stamp, and SHALL copy only tracked
-planes that are new or whose stamp no longer matches. Tracked planes shared this
-way SHALL be copy-on-write, so a later write forks only the plane it touches.
-The live document SHALL NOT share a tracked plane with any history state after a
-capture or an in-place restore (`undo_live`, `redo_live`, or `jump_live`); the
-legacy `undo`, `redo`, and `jump` return a shared snapshot by design.
+the layer masks; smart-object filter masks and native-depth `Samples` are not
+tracked. When a capture starts a new geometry segment because the tracked-plane
+count, size, or order changed, the history SHALL build the new current state
+from the previous current state's tracked planes, matching them to the live
+tracked planes by nonzero stamp or by shared band, and SHALL copy only the
+tracked planes or bands that are new or no longer shared. Tracked planes shared
+this way SHALL be band-granular copy-on-write, so a later write forks only the
+bands it touches. The live document SHALL NOT share a written band with any
+history state after a capture or an in-place restore (`undo_live`, `redo_live`,
+or `jump_live`); untouched bands MAY remain shared. The legacy `undo`, `redo`,
+and `jump` return a shared snapshot by design.
 
 Restoring a state into the live document SHALL likewise keep the live
-document's own tracked planes where their stamps match the target and copy only
-tracked planes that are new or whose live stamp no longer matches the target's;
-an unstamped tracked plane is copied even when its bytes match. Retained
-tracked-plane bytes after a series of structural captures SHALL be bounded by
-the base state plus the tracked planes those captures changed and their tile
-deltas, not by the number of captures times the document's tracked-plane size.
+document's own tracked planes and bands where their allocations match the target
+and copy only the tracked planes or bands that are new or no longer match; an
+unstamped tracked plane has only its unshared bands copied even when its bytes
+match. Retained tracked-plane bytes after a series of structural captures SHALL
+be bounded by the base state plus the bands those captures changed and their
+tile deltas, not by the number of captures times the document's tracked-plane
+size.
 
 #### Scenario: Twenty added layers retain one copy of the base [hr_structural_sharing]
 
 - **WHEN** twenty New Layer captures are made on an N-layer document and no
   other pixels change
-- **THEN** the history retains one copy of the base document's planes, one copy
-  of each added layer's planes, and the changed tile deltas, rather than twenty
+- **THEN** the history retains one copy of the base document's bands, one copy
+  of each added layer's bands, and the changed tile deltas, rather than twenty
   full documents
 
 #### Scenario: Structural states stay byte-exact [hr_structural_exact]
@@ -91,19 +97,19 @@ deltas, not by the number of captures times the document's tracked-plane size.
 - **THEN** every restored state is byte-identical to its captured document and
   selection
 
-#### Scenario: Live stays private through structural captures [hr_live_private]
+#### Scenario: Live writes stay private through structural captures [hr_live_private]
 
-- **WHEN** any structural capture or any in-place restore (`undo_live`,
-  `redo_live`, or `jump_live`) completes
-- **THEN** no tracked plane of the live document shares an allocation with a
-  tracked plane of any retained history state
+- **WHEN** a band of the live document is written after any structural capture
+  or any in-place restore (`undo_live`, `redo_live`, or `jump_live`)
+- **THEN** that band does not share an allocation with any retained history
+  state, while bands the live document did not write may stay shared
 
-#### Scenario: Undo of an add keeps the live planes [hr_restore_reuses_live]
+#### Scenario: Undo of an add keeps the live bands [hr_restore_reuses_live]
 
 - **WHEN** a state that added a layer is undone and the target state still
   contains the other layers and the composite
-- **THEN** the live document keeps its own allocations for those planes and
-  copies only the planes that the target changes or removes
+- **THEN** the live document keeps its own allocations for those bands and
+  copies only the bands that the target changes or removes
 
 ### Requirement: Untracked stores are shared across history states
 

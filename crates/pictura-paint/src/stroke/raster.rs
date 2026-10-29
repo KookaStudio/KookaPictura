@@ -4,19 +4,20 @@
 use super::{union_rect, PlaneIndex, Stencil};
 use crate::tip::TipParams;
 use crate::PaintMode;
-use pictura_core::{Layer, PsdRect};
-
-/// A dab's area at which its rows are split across threads: below it the
-/// split costs more than the raster it shares out.
-pub(super) const PARALLEL_MIN_PX: usize = 128 * 128;
-
-/// Roughly the pixels of a dab one band covers, so a band is worth a task
-/// whatever the brush width.
-pub(super) const BAND_PX: usize = 16 * 1024;
+use pictura_core::{Layer, PsdRect, BAND_ROWS};
 
 /// The target layer's R, G, B and alpha planes, or a cut of the same rows of
 /// each, in that order.
 pub(super) type BandPlanes<'a> = [Option<&'a mut [u8]>; 4];
+
+/// The mutable bands of one channel covering a dab's rows, in band order.
+pub(super) struct PlaneCut<'a> {
+    bands: Vec<&'a mut [u8]>,
+    first_band: usize,
+}
+
+/// The per-channel band cuts for a dab.
+pub(super) type PlaneCuts<'a> = [Option<PlaneCut<'a>>; 4];
 
 /// Whole rows `y .. y + scratch.len() / width` of the layer: the coverage
 /// buffers and the planes a band of a dab writes, disjoint from every other
@@ -25,7 +26,7 @@ pub(super) struct Band<'a> {
     pub(super) y: usize,
     pub(super) scratch: &'a mut [u8],
     applied: &'a mut [u8],
-    planes: BandPlanes<'a>,
+    pub(super) planes: BandPlanes<'a>,
 }
 
 /// One dab's raster inputs, shared by its bands.
@@ -112,50 +113,93 @@ impl DabRaster<'_> {
     }
 }
 
-/// The target layer's planes as mutable slices in R, G, B, alpha order. A
-/// plane that is not the layer's size is left out, as `fill_layer` does.
-pub(super) fn plane_slices(layer: &mut Layer, ch: PlaneIndex, len: usize) -> BandPlanes<'_> {
-    let mut out: BandPlanes<'_> = [None, None, None, None];
+/// The target layer's planes fractured and cut to the bands covering rows
+/// `y0 .. y1`, so a dab forks only the bands it touches.
+pub(super) fn plane_slices<'a>(
+    layer: &'a mut Layer,
+    ch: PlaneIndex,
+    width: usize,
+    height: usize,
+    y0: usize,
+    y1: usize,
+) -> PlaneCuts<'a> {
+    let len = width * height;
+    let mut out: PlaneCuts<'a> = [None, None, None, None];
+    let first = y0 / BAND_ROWS;
+    let last = y1.saturating_sub(1) / BAND_ROWS;
+    let indices: Vec<usize> = (first..=last).collect();
     for (idx, c) in layer.channels.iter_mut().enumerate() {
         if let Some(k) = ch.iter().position(|&x| x == Some(idx)) {
             if c.data.len() == len {
-                out[k] = Some(c.data.as_mut_slice());
+                c.data.fracture(width);
+                if let Some(bands) = c.data.write_bands(&indices) {
+                    out[k] = Some(PlaneCut {
+                        bands,
+                        first_band: first,
+                    });
+                }
             }
         }
     }
     out
 }
 
-/// Cut rows `y0 .. y0 + rows` of the coverage buffers and the planes into
-/// bands of `band_rows` rows.
+/// Cut rows `y0 .. y0 + rows` of the coverage buffers and the plane bands into
+/// one band per plane band. Rows of a band outside the dab are harmless: the
+/// tip has no coverage there.
 pub(super) fn split_bands<'a>(
     y0: usize,
     rows: usize,
-    band_rows: usize,
     w: usize,
     scratch: &'a mut [u8],
     applied: &'a mut [u8],
-    planes: &'a mut BandPlanes<'_>,
+    cuts: PlaneCuts<'a>,
 ) -> Vec<Band<'a>> {
-    let (a, b) = (y0 * w, (y0 + rows) * w);
-    let n = band_rows.max(1) * w;
-    let mut scratch = scratch[a..b].chunks_mut(n);
-    let mut applied = applied[a..b].chunks_mut(n);
-    let mut cut = planes
-        .each_mut()
-        .map(|p| p.as_deref_mut().map(|p| p[a..b].chunks_mut(n)));
-    let mut bands = Vec::with_capacity(rows.div_ceil(band_rows.max(1)));
-    let mut y = y0;
-    while let (Some(scratch), Some(applied)) = (scratch.next(), applied.next()) {
-        let planes = cut.each_mut().map(|c| c.as_mut().and_then(Iterator::next));
-        let next = y + scratch.len() / w;
+    let end = y0 + rows;
+    let first_band = cuts
+        .iter()
+        .flatten()
+        .next()
+        .map_or(y0 / BAND_ROWS, |cut| cut.first_band);
+    let mut iters: [Option<std::vec::IntoIter<&'a mut [u8]>>; 4] =
+        cuts.map(|cut| cut.map(|cut| cut.bands.into_iter()));
+    let total = scratch.len();
+    let applied_total = applied.len();
+    let height = total.checked_div(w).unwrap_or(0);
+    let mut scratch_rest = scratch;
+    let mut applied_rest = applied;
+    let mut row = 0usize;
+    let mut bands = Vec::new();
+    let mut band = first_band;
+    while band * BAND_ROWS < end {
+        let sy = band * BAND_ROWS;
+        let ey = (sy + BAND_ROWS).min(height);
+        if ey <= sy {
+            break;
+        }
+        let b = ey * w;
+        if b > total || b > applied_total || sy < row {
+            break;
+        }
+        let slice = std::mem::take(&mut scratch_rest);
+        let (_, rest) = slice.split_at_mut((sy - row) * w);
+        let (band_scratch, rest) = rest.split_at_mut((ey - sy) * w);
+        scratch_rest = rest;
+        let slice = std::mem::take(&mut applied_rest);
+        let (_, rest) = slice.split_at_mut((sy - row) * w);
+        let (band_applied, rest) = rest.split_at_mut((ey - sy) * w);
+        applied_rest = rest;
+        let planes = iters
+            .each_mut()
+            .map(|it| it.as_mut().and_then(|it| it.next()));
         bands.push(Band {
-            y,
-            scratch,
-            applied,
+            y: sy,
+            scratch: band_scratch,
+            applied: band_applied,
             planes,
         });
-        y = next;
+        row = ey;
+        band += 1;
     }
     bands
 }

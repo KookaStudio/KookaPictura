@@ -947,8 +947,10 @@ pub(crate) fn channel(layer: &Layer, id: i16) -> Option<&[u8]> {
         .map(|c| c.data.as_slice())
 }
 
-pub(crate) fn sample(data: Option<&[u8]>, idx: usize) -> Option<u8> {
-    data.and_then(|d| d.get(idx).copied())
+/// The plane of `layer`'s channel `id`, for readers that walk rows instead of
+/// materializing a banded plane into one contiguous slice.
+pub(crate) fn channel_plane(layer: &Layer, id: i16) -> Option<&pictura_core::Plane<u8>> {
+    layer.channels.iter().find(|c| c.id == id).map(|c| &c.data)
 }
 
 /// Mask value at a canvas pixel inside `clip` (see [`crate::mask_refine`]);

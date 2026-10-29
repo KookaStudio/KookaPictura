@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use pictura_core::{BlendMode, ColorMode, Document, Layer, PsdRect};
 use rayon::prelude::*;
 
-use crate::composite::{blend, blend_if_factor, channel, sample, Canvas, Px};
+use crate::composite::{blend, blend_if_factor, channel_plane, Canvas, Px};
 use crate::composite_native::{mask_alpha_unit, native_unit};
 
 /// Test-only switch that routes [`for_each_row`] and the chunked kernels
@@ -204,7 +204,7 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     // embedded-source branch in `composite_layer_inner` handles it; if that
     // source is unusable, leave the backdrop unchanged instead of painting the
     // channel-less rect black.
-    if layer.smart_object.is_some() && channel(layer, 0).is_none() {
+    if layer.smart_object.is_some() && channel_plane(layer, 0).is_none() {
         return;
     }
     let lw = layer.rect.width();
@@ -225,31 +225,41 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
         doc.mode,
         ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone
     );
-    let ch0 = channel(layer, 0);
-    let ch1 = channel(layer, 1).or(ch0);
-    let ch2 = channel(layer, 2).or(ch0);
-    let alpha = channel(layer, -1);
+    let ch0 = channel_plane(layer, 0);
+    let ch1 = channel_plane(layer, 1).or(ch0);
+    let ch2 = channel_plane(layer, 2).or(ch0);
+    let alpha = channel_plane(layer, -1);
     let ox = canvas.ox;
     let rect = layer.rect;
     let clip = canvas.clip();
 
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
+        // A row lies inside one band, so reading rows keeps a banded plane
+        // shared instead of materializing it into one contiguous slice.
+        let ly = (y - rect.top) as usize;
+        let r0 = ch0.and_then(|p| p.row(ly, lw));
+        let r1 = ch1.and_then(|p| p.row(ly, lw));
+        let r2 = ch2.and_then(|p| p.row(ly, lw));
+        let ra = alpha.and_then(|p| p.row(ly, lw));
         for x in x0..x1 {
-            let li = (y - rect.top) as usize * lw + (x - rect.left) as usize;
+            let lx = (x - rect.left) as usize;
+            let li = ly * lw + lx;
             // A high-depth Grayscale/RGB layer reads its native samples; a
             // channel missing from the store falls back to its 8-bit plane.
-            let unit = |id: i16, ch: Option<&[u8]>| {
-                native_unit(layer, doc, id, li)
-                    .unwrap_or_else(|| sample(ch, li).unwrap_or(0) as f32 / 255.0)
+            let unit = |id: i16, r: Option<&[u8]>| {
+                native_unit(layer, doc, id, li).unwrap_or_else(|| {
+                    r.and_then(|r| r.get(lx)).copied().unwrap_or(0) as f32 / 255.0
+                })
             };
             let (r, g, b) = if gray {
-                let v = unit(0, ch0);
+                let v = unit(0, r0);
                 (v, v, v)
             } else {
-                (unit(0, ch0), unit(1, ch1), unit(2, ch2))
+                (unit(0, r0), unit(1, r1), unit(2, r2))
             };
-            let a = native_unit(layer, doc, -1, li)
-                .unwrap_or_else(|| sample(alpha, li).unwrap_or(255) as f32 / 255.0);
+            let a = native_unit(layer, doc, -1, li).unwrap_or_else(|| {
+                ra.and_then(|r| r.get(lx)).copied().unwrap_or(255) as f32 / 255.0
+            });
             blend_into_row(
                 row,
                 cover.as_deref_mut(),
