@@ -400,9 +400,9 @@ pub fn replace_smart_filter(
         while !new_data.len().is_multiple_of(4) {
             new_data.push(0);
         }
-        layer.extra_blocks[block_idx].data = new_data.clone();
+        layer.extra_blocks[block_idx].data = new_data.clone().into();
         if let Some(so) = layer.smart_object.as_mut() {
-            so.config_descriptor = new_data;
+            so.config_descriptor = new_data.into();
         }
     }
     if let Some(slot) = layer

@@ -844,7 +844,7 @@ fn parallel_display_transform_matches_serial() {
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = data.into();
-    doc.document_icc = Some(profile.clone());
+    doc.document_icc = Some(profile.clone().into());
 
     super::FORCE_SERIAL.store(true, Ordering::Relaxed);
     let serial = buffer_to_srgb(&doc, &doc.composite).into_owned();
@@ -908,7 +908,7 @@ fn display_transform_speedup_profile() {
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = data.into();
-    doc.document_icc = Some(Profile::adobe_rgb().to_icc());
+    doc.document_icc = Some(Profile::adobe_rgb().to_icc().into());
 
     super::FORCE_SERIAL.store(true, Ordering::Relaxed);
     let start = Instant::now();

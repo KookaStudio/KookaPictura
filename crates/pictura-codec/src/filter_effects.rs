@@ -744,7 +744,7 @@ mod tests {
         let once = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
         assert_eq!(
             author_filter_masks(&once.layer_section_extra, &once.layers, 3, false),
-            once.layer_section_extra,
+            once.layer_section_extra.to_vec(),
             "an unedited mask authors nothing"
         );
         let twice = crate::read_psd(&crate::write_psd(&once).expect("writes")).expect("reads");

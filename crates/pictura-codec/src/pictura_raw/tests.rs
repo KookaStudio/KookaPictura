@@ -636,7 +636,7 @@ fn generic(name: &str) -> SmartFilter {
         filter_id: 4242,
         name: name.into(),
         enabled: true,
-        options: Vec::new(),
+        options: Vec::new().into(),
     }
 }
 
@@ -663,7 +663,7 @@ fn append_stacks_same_id_preserved() {
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     layer.extra_blocks.push(LayerBlock {
         key: *b"SoLd",
-        data,
+        data: data.into(),
     });
     append_smart_filter(&mut layer, generic("A")).expect("appends");
     append_smart_filter(&mut layer, generic("B")).expect("appends");
@@ -708,7 +708,7 @@ fn replace_keeps_position_flag_and_blend_options() {
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     layer.extra_blocks.push(LayerBlock {
         key: *b"SoLd",
-        data,
+        data: data.into(),
     });
     append_smart_filter(&mut layer, generic("A")).expect("appends");
     append_smart_filter(&mut layer, generic("B")).expect("appends");
@@ -717,7 +717,7 @@ fn replace_keeps_position_flag_and_blend_options() {
         filter_id: 77,
         name: "C".into(),
         enabled: true,
-        options: Vec::new(),
+        options: Vec::new().into(),
     };
     assert!(replace_smart_filter(&mut layer, 5, replacement.clone()).is_err());
     replace_smart_filter(&mut layer, 0, replacement).expect("replaces");

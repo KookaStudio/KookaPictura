@@ -22,7 +22,7 @@ pub fn smart_filter_record(steps: &[FilterStep], gallery: bool) -> Option<SmartF
         filter_id: PICTURA_FILTER_ID,
         name,
         enabled: true,
-        options: pictura_codec::encode_pictura_filter(steps, gallery),
+        options: pictura_codec::encode_pictura_filter(steps, gallery).into(),
     };
     crate::smart_filter::decode_smart_filter(&filter).map(|_| filter)
 }
@@ -231,7 +231,7 @@ mod tests {
             .retain(|b| &b.key != b"SoLd" && &b.key != b"SoLE");
         legacy.layers[0].extra_blocks.push(LayerBlock {
             key: *b"PlLd",
-            data: vec![0; 8],
+            data: vec![0; 8].into(),
         });
         assert!(!apply_smart_filter(&mut legacy, "0", blur(2.0), None));
         assert!(so(&legacy).smart_filters.is_empty());

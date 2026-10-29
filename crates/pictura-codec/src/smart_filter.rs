@@ -821,7 +821,7 @@ mod tests {
         let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
         layer.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
-            data,
+            data: data.into(),
         });
         crate::append_smart_filter(
             &mut layer,
@@ -829,7 +829,7 @@ mod tests {
                 filter_id: 4242,
                 name: "F".into(),
                 enabled: true,
-                options: Vec::new(),
+                options: Vec::new().into(),
             },
         )
         .expect("appends");
