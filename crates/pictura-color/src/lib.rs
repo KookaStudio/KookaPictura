@@ -9,8 +9,8 @@
 //! so no Adobe profile files are distributed.
 
 use lcms2::{
-    CIExyY, CIExyYTRIPLE, ColorSpaceSignature, Flags, InfoType, Intent as LcmsIntent, Locale,
-    PixelFormat, Profile as LcmsProfile, ToneCurve, Transform,
+    CIExyY, CIExyYTRIPLE, ColorSpaceSignature, DisallowCache, Flags, GlobalContext, InfoType,
+    Intent as LcmsIntent, Locale, PixelFormat, Profile as LcmsProfile, ToneCurve, Transform,
 };
 
 pub mod model;
@@ -431,8 +431,13 @@ pub fn assign(data: &[u8], profile: Profile) -> (Vec<u8>, Profile) {
 /// Building a transform parses both profiles and their tone curves, so a caller
 /// that converts the same document on every display refresh holds one of these
 /// and reapplies it instead of rebuilding it. `apply` is per-pixel and writes
-/// `out` from `data` without touching either profile again.
-pub struct ByteTransform(Transform<u8, u8>);
+/// `out` from `data` without touching either profile again. The transform
+/// disables lcms2's one-pixel cache, which is what makes it `Sync`; callers may
+/// therefore share one and split the pixels across threads.
+pub struct ByteTransform {
+    transform: Transform<u8, u8, GlobalContext, DisallowCache>,
+    channels: u8,
+}
 
 impl ByteTransform {
     /// Build a transform for 1-, 3-, or 4-channel 8-bit samples. A 4-channel
@@ -445,14 +450,17 @@ impl ByteTransform {
         black_point_compensation: bool,
     ) -> Result<Self, ColorError> {
         let (in_format, out_format) = formats(channels, 8)?;
-        let mut flags = Flags::default();
+        // `Flags::NO_CACHE` is what makes the transform `Sync`; the other flags
+        // only steer the conversion itself.
+        let mut flags = Flags::NO_CACHE;
         if black_point_compensation {
             flags = flags | Flags::BLACKPOINT_COMPENSATION;
         }
         if channels == 4 {
             flags = flags | Flags::COPY_ALPHA;
         }
-        Transform::new_flags(
+        Transform::new_flags_context(
+            GlobalContext::new(),
             &src.0,
             in_format,
             &dst.0,
@@ -460,14 +468,22 @@ impl ByteTransform {
             intent.to_lcms(),
             flags,
         )
-        .map(ByteTransform)
+        .map(|transform| ByteTransform {
+            transform,
+            channels,
+        })
         .map_err(|e| ColorError::Unsupported(e.to_string()))
+    }
+
+    /// The channel count the transform was built for.
+    pub fn channels(&self) -> u8 {
+        self.channels
     }
 
     /// Apply the transform to `data`, writing exactly `data.len()` bytes to
     /// `out`.
     pub fn apply(&self, data: &[u8], out: &mut [u8]) {
-        self.0.transform_pixels(data, out);
+        self.transform.transform_pixels(data, out);
     }
 }
 
@@ -1013,5 +1029,42 @@ mod tests {
         dither_plane(&mut second, 4);
         assert_eq!(first, second, "the ordered pattern is stable");
         assert_ne!(first, vec![0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    }
+
+    #[test]
+    fn byte_transform_cache_flag_does_not_change_output() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<ByteTransform>();
+
+        let src = Profile::adobe_rgb();
+        let dst = Profile::srgb();
+        let (in_format, out_format) = formats(3, 8).expect("rgb8");
+        let mut data = Vec::with_capacity(256 * 3);
+        for i in 0..256u32 {
+            data.push(i as u8);
+            data.push(i.wrapping_mul(7) as u8);
+            data.push(255u32.wrapping_sub(i) as u8);
+        }
+
+        let cached = Transform::new(
+            &src.0,
+            in_format,
+            &dst.0,
+            out_format,
+            LcmsIntent::RelativeColorimetric,
+        )
+        .expect("cached transform");
+        let mut cached_out = vec![0u8; data.len()];
+        cached.transform_pixels(&data, &mut cached_out);
+
+        let byte = ByteTransform::new(&src, &dst, 3, Intent::RelativeColorimetric, false)
+            .expect("reentrant transform");
+        let mut byte_out = vec![0u8; data.len()];
+        byte.apply(&data, &mut byte_out);
+
+        assert_eq!(
+            cached_out, byte_out,
+            "disabling lcms2's cache must not change a single byte"
+        );
     }
 }

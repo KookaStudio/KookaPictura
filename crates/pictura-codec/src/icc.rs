@@ -14,10 +14,41 @@
 use pictura_color::{
     convert, dither_plane, ByteTransform, ConversionOptions, Intent, Policy, Profile,
 };
-use pictura_core::{ColorMode, Document, PixelBuffer};
+use pictura_core::{ColorMode, Document, PixelBuffer, Plane};
+use rayon::prelude::*;
 
 use std::borrow::Cow;
 use std::cell::RefCell;
+
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+/// Test-only switch that routes [`convert_planes_with`] through its serial
+/// branch, so a test can compare both on the same buffer.
+#[cfg(test)]
+static FORCE_SERIAL: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PARALLEL_RUNS: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+fn serial() -> bool {
+    let forced = FORCE_SERIAL.load(Ordering::Relaxed);
+    if !forced {
+        PARALLEL_RUNS.fetch_add(1, Ordering::Relaxed);
+    }
+    forced
+}
+
+#[cfg(not(test))]
+#[inline]
+fn serial() -> bool {
+    false
+}
+
+/// Pixels per parallel chunk in [`convert_planes_with`]. Chunks are whole
+/// pixels, because lcms2 asserts a `u8` slice's length is a multiple of the
+/// pixel format's bytes per pixel.
+const CHUNK_PIXELS: usize = 4096;
 
 use crate::common::{MODE_CMYK, MODE_GRAYSCALE, MODE_LAB, MODE_RGB};
 use crate::icc_convert::{convert_layers, convert_native_document};
@@ -456,23 +487,80 @@ fn build_display_transform(icc: &[u8]) -> Option<ByteTransform> {
 }
 
 /// Convert a buffer's three color planes (leaving any alpha plane untouched)
-/// through an already-built transform.
+/// through an already-built transform. The transform is reentrant, so the
+/// pixels are interleaved, converted and de-interleaved in parallel chunks, and
+/// the result is built without forking the whole buffer.
 fn convert_planes_with(transform: &ByteTransform, buf: &PixelBuffer, n: usize) -> PixelBuffer {
+    debug_assert_eq!(
+        transform.channels(),
+        3,
+        "the interleave and chunking below assume an RGB transform"
+    );
+    let (r, g, b) = (&buf.data[..n], &buf.data[n..2 * n], &buf.data[2 * n..3 * n]);
+
     let mut packed = vec![0u8; n * 3];
-    for (i, pixel) in packed.as_chunks_mut::<3>().0.iter_mut().enumerate() {
-        pixel[0] = buf.data[i];
-        pixel[1] = buf.data[n + i];
-        pixel[2] = buf.data[2 * n + i];
-    }
-    let mut out_packed = vec![0u8; n * 3];
-    transform.apply(&packed, &mut out_packed);
-    let mut out = buf.clone();
-    for (ch, plane) in out.data[..3 * n].chunks_exact_mut(n).enumerate() {
-        for (i, value) in plane.iter_mut().enumerate() {
-            *value = out_packed[i * 3 + ch];
+    let interleave = |chunk: &mut [u8], start: usize| {
+        for (k, pixel) in chunk.as_chunks_mut::<3>().0.iter_mut().enumerate() {
+            let i = start + k;
+            pixel[0] = r[i];
+            pixel[1] = g[i];
+            pixel[2] = b[i];
         }
+    };
+    if serial() {
+        interleave(&mut packed, 0);
+    } else {
+        packed
+            .par_chunks_mut(CHUNK_PIXELS * 3)
+            .enumerate()
+            .for_each(|(chunk, bytes)| interleave(bytes, chunk * CHUNK_PIXELS));
     }
-    out
+
+    let mut out_packed = vec![0u8; n * 3];
+    if serial() {
+        transform.apply(&packed, &mut out_packed);
+    } else {
+        packed
+            .par_chunks(CHUNK_PIXELS * 3)
+            .zip(out_packed.par_chunks_mut(CHUNK_PIXELS * 3))
+            .for_each(|(source, out)| transform.apply(source, out));
+    }
+
+    let channels = buf.channels as usize;
+    let alpha = (channels == 4).then(|| buf.data[3 * n..].to_vec());
+    let data = Plane::build(n * channels, |data| {
+        let (r, rest) = data.split_at_mut(n);
+        let (g, rest) = rest.split_at_mut(n);
+        let (b, a) = rest.split_at_mut(n);
+        let deinterleave = |r: &mut [u8], g: &mut [u8], b: &mut [u8], start: usize| {
+            for (k, (rv, gv)) in r.iter_mut().zip(g.iter_mut()).enumerate() {
+                let i = (start + k) * 3;
+                *rv = out_packed[i];
+                *gv = out_packed[i + 1];
+            }
+            for (k, bv) in b.iter_mut().enumerate() {
+                *bv = out_packed[(start + k) * 3 + 2];
+            }
+        };
+        if serial() {
+            deinterleave(r, g, b, 0);
+        } else {
+            r.par_chunks_mut(CHUNK_PIXELS)
+                .zip(g.par_chunks_mut(CHUNK_PIXELS))
+                .zip(b.par_chunks_mut(CHUNK_PIXELS))
+                .enumerate()
+                .for_each(|(chunk, ((r, g), b))| deinterleave(r, g, b, chunk * CHUNK_PIXELS));
+        }
+        if let Some(alpha) = alpha {
+            a.copy_from_slice(&alpha);
+        }
+    });
+    PixelBuffer {
+        width: buf.width,
+        height: buf.height,
+        channels: buf.channels,
+        data,
+    }
 }
 
 #[cfg(test)]
