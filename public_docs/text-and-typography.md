@@ -66,8 +66,8 @@ Here, the right end of the words has been hidden:
 
 ![Part of the text hidden by its mask](images/type-mask-result.jpg)
 
-A gradient tool cannot paint directly on the mask of a text layer in this version. Use a selection and
-**Edit ▸ Fill…** instead.
+A gradient tool paints directly on the mask of a text layer: drag across it and the
+text fades along the ramp. A selection with **Edit ▸ Fill…** does the same for a solid fill.
 
 ## Rasterizing text
 

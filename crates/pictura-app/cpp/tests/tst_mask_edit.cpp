@@ -9,6 +9,8 @@
 #include <QtWidgets/QToolButton>
 #include "api/layers_api.h"
 #include "api/selection_api.h"
+#include "api/transform_api.h"
+#include "api/type_api.h"
 
 #include "frame.h"
 #include "panels/color_panel.h"
@@ -20,8 +22,12 @@
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -68,6 +74,17 @@ bool setUpMaskedLayer(paint_fixture::Fixture& f, QString& layer)
     return f.view->end_paint();
 }
 
+// A closed square from (l, t) to (r, b) on the Work Path, one subpath.
+void workPathSquare(pictura::PictureView& v, double l, double t, double r, double b)
+{
+    const QList<QPointF> corners {QPointF(l, t), QPointF(r, t), QPointF(r, b), QPointF(l, b)};
+    for (const QPointF& p : corners) {
+        pictura::path_append_corner(v, p.x(), p.y(), false);
+        pictura::path_commit_anchor(v);
+    }
+    pictura::path_close(v);
+}
+
 } // namespace
 
 class MaskEditTest : public QObject {
@@ -81,6 +98,8 @@ private slots:
     void invertOnMaskTarget();
     void paintAndFillWriteCoverage();
     void canvasToolsWriteCoverage();
+    void fillToolsWriteCoverage();
+    void gradientFillsALockedLayersMask();
     void healingRefusesMaskTarget();
     void colorsFollowTheEditTarget();
     void resetColorsFollowTheEditTarget();
@@ -329,13 +348,10 @@ void MaskEditTest::canvasToolsWriteCoverage()
              "erase to history refuses a mask target");
     QCOMPARE(view->history_count(), base + 2);
 
-    // Tools that cannot paint a mask refuse instead of editing the pixels.
+    // A tool that cannot paint a mask refuses instead of editing the pixels.
     QVERIFY2(!pictura::begin_pattern_stamp(*view, tip, 100, 100, QStringLiteral("normal"), 0, 0,
                                            0),
              "pattern stamp refuses a mask target");
-    QVERIFY2(!pictura::bucket_fill_at(*view, 16, 16, 0xff000000u, -1, QStringLiteral("normal"),
-                                      100, 32, false, true, false),
-             "paint bucket refuses a mask target");
     QCOMPARE(view->history_count(), base + 2);
 
     frame.closeDocument(doc, false);
@@ -1029,6 +1045,140 @@ void MaskEditTest::addLayerMaskStripInverts()
     QVERIFY2(view->sample_argb(16, 16) != fill, "Alt-click added a Hide All (black) mask");
 
     frame.closeDocument(doc, false);
+}
+
+// With a mask edit target, the shared fill path writes the mask's coverage
+// instead of refusing it: the Gradient, the Paint Bucket, Edit > Stroke, Fill
+// Path, Stroke Path, and a shape's Fill Pixels each record their own state and
+// leave the layer's pixels unchanged (#1022).
+void MaskEditTest::fillToolsWriteCoverage()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const bool created = frame.newDocument(QStringLiteral("MaskFillTools"), 32, 32,
+                                           QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY2(created && view, "fill tools fixture");
+    const int doc = frame.activeDocumentIndex();
+    const QString path = addUnmaskedFill(*view);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(view->rasterize_fill_content(path));
+    frame.selectLayerPath(path);
+    QVERIFY2(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")), "add mask");
+    QVERIFY2(pictura::mask_edit_target_set(*view, path), "target the mask");
+
+    const quint32 fill = view->sample_argb(16, 16);
+
+    // The Gradient hides the layer at its black end and keeps it at the white
+    // one, all through the mask.
+    int base = view->history_count();
+    QVERIFY(pictura::draw_gradient(*view, 0, 0xff000000u, 0xffffffffu, 0,
+                                   QStringLiteral("normal"), 100, false, false, true, 0.0, 16.0,
+                                   31.0, 16.0));
+    QCOMPARE(view->history_label(base), QStringLiteral("Gradient"));
+    QCOMPARE(view->history_count(), base + 1);
+    QVERIFY2(view->sample_argb(0, 16) != fill, "the gradient hid the layer's left edge");
+    QCOMPARE(view->sample_argb(31, 16), fill);
+
+    // The Paint Bucket hides the layer at the click.
+    base = view->history_count();
+    QVERIFY(pictura::bucket_fill_at(*view, 16, 16, 0xff000000u, -1, QStringLiteral("normal"), 100,
+                                    32, false, true, false));
+    QCOMPARE(view->history_label(base), QStringLiteral("Paint Bucket"));
+    QVERIFY2(view->sample_argb(16, 16) != fill, "the bucket hid the layer");
+
+    // Edit > Stroke bands the mask around a selection.
+    QVERIFY(view->select_rect(20, 20, 8, 8, QStringLiteral("new"), 0.0));
+    base = view->history_count();
+    QVERIFY(pictura::edit_stroke(*view, 0xff000000u, 2, 1, QStringLiteral("normal"), 100));
+    QCOMPARE(view->history_label(base), QStringLiteral("Stroke"));
+    QVERIFY2(view->sample_argb(19, 24) != fill, "the stroke banded the mask");
+    view->deselect();
+
+    // Fill Path and Stroke Path fill and band a work-path square.
+    workPathSquare(*view, 4, 4, 12, 12);
+    QVERIFY(pictura::paths_set_active(*view, -1));
+    base = view->history_count();
+    QVERIFY(pictura::paths_fill(*view, 0xff000000u));
+    QCOMPARE(view->history_label(base), QStringLiteral("Fill Path"));
+    QVERIFY2(view->sample_argb(8, 8) != fill, "the path fill hid the layer");
+    base = view->history_count();
+    QVERIFY(pictura::paths_stroke(*view, 0xff000000u, 4, 100, 100, 100, 25));
+    QCOMPARE(view->history_label(base), QStringLiteral("Stroke Path"));
+
+    // A shape's Fill Pixels paints the mask with the shape.
+    pictura::ShapeSpec spec{};
+    spec.kind = 0;
+    spec.boxed = true;
+    spec.x0 = 24;
+    spec.y0 = 24;
+    spec.x1 = 30;
+    spec.y1 = 30;
+    base = view->history_count();
+    QVERIFY(pictura::shape_fill_pixels(*view, spec, 0xff000000u));
+    QCOMPARE(view->history_label(base), QStringLiteral("Rectangle Tool"));
+    QVERIFY2(view->sample_argb(27, 27) != fill, "the shape hid the layer");
+
+    // The layer's own pixels never changed.
+    QVERIFY(pictura::layer_mask_delete_path(*view, path));
+    QCOMPARE(view->sample_argb(16, 16), fill);
+    QCOMPARE(view->sample_argb(0, 16), fill);
+    QCOMPARE(view->sample_argb(8, 8), fill);
+
+    frame.closeDocument(doc, false);
+}
+
+// A type layer's pixels are locked, but its mask is not: the Gradient fills the
+// mask instead of refusing with "the layer's pixels are locked" (#1022).
+void MaskEditTest::gradientFillsALockedLayersMask()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(64, 64, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    paint_fixture::Fixture f(frame, seed, QStringLiteral("pictura_mask_type_gradient"));
+    QVERIFY2(f.ok(), "type gradient fixture");
+
+    pictura::TypeSetting setting{};
+    setting.x = 8.0;
+    setting.y = 40.0;
+    setting.xx = 1.0;
+    setting.yy = 1.0;
+    pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
+    character.size = 28.0;
+    const QString path = pictura::type_api::commitLayer(
+        *f.view, {QStringLiteral("Mask"), QStringLiteral("Liberation Sans"), setting, character,
+                  pictura::type_api::defaultParagraphSetting()});
+    QVERIFY2(!path.isEmpty(), "a text layer");
+    QVERIFY2((pictura::layer_lock_path(*f.view, path) & 0x02) != 0,
+             "the text layer's pixels are locked");
+    QVERIFY2(pictura::layer_mask_add(*f.view, QStringLiteral("reveal-all")), "add mask");
+    QVERIFY2(pictura::mask_edit_target_set(*f.view, path), "target the mask");
+
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    QSignalSpy refused(f.tools, &pictura::ToolController::pixelEditRefused);
+    const int base = f.view->history_count();
+    f.drag({QPointF(0, 32), QPointF(63, 32)});
+    QCOMPARE(refused.count(), 0);
+    QCOMPARE(f.view->history_count(), base + 1);
+    QCOMPARE(f.view->history_label(base), QStringLiteral("Gradient"));
+
+    // The mask is the text layer's own rectangle, so sample inside it — clamped
+    // to the canvas, since a type layer's rect may overflow it. The ramp runs
+    // black at the left end to white at the right.
+    const QStringList bounds =
+        pictura::transform_api::layerRect(*f.view, path).toString().split(QLatin1Char(' '));
+    QCOMPARE(bounds.size(), 4);
+    const int left = bounds[0].toInt();
+    const int top = bounds[1].toInt();
+    const int right = qMin(bounds[2].toInt(), f.view->document_width());
+    const int bottom = qMin(bounds[3].toInt(), f.view->document_height());
+    const int y = (top + bottom) / 2;
+    QVERIFY(f.view->mask_selection(path, QStringLiteral("new")));
+    const int nearLeft = f.view->selection_coverage(left + 1, y);
+    const int nearRight = f.view->selection_coverage(right - 2, y);
+    QVERIFY2(nearLeft < nearRight, "the ramp runs left to right across the mask");
+    QVERIFY2(nearLeft < 128, "the ramp's black end hid the text there");
+    QVERIFY2(nearRight > 128, "the ramp's white end revealed the text there");
+    f.view->deselect();
 }
 
 QTEST_MAIN(MaskEditTest)
