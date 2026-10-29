@@ -1,5 +1,5 @@
 // The retouch and toning tools: Blur (#26), Sharpen (#27), Smudge (#28), Dodge
-// (#29), Burn (#30), and Sponge (#31).
+// (#29), Burn (#30), and Sponge (#31), plus the Spot Healing Brush click (#1023).
 
 #include <QtTest/QtTest>
 
@@ -14,11 +14,45 @@
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QToolButton>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+
 #include "qt_test_support.h"
 
 namespace {
 using paint_fixture::BrushState;
 using paint_fixture::Fixture;
+
+// A sky: a blue gradient down the image, the same along every row.
+QImage skySeed(int w, int h)
+{
+    QImage img(w, h, QImage::Format_RGB32);
+    for (int y = 0; y < h; ++y) {
+        const int v = 110 + y;
+        for (int x = 0; x < w; ++x) {
+            img.setPixel(x, y, qRgb(v / 2, v - 20, v + 40));
+        }
+    }
+    return img;
+}
+
+// `img` with an anti-aliased black dot of `radius` centred on (cx, cy).
+QImage withDot(QImage img, double cx, double cy, double radius)
+{
+    for (int y = 0; y < img.height(); ++y) {
+        for (int x = 0; x < img.width(); ++x) {
+            const double d = std::hypot(x + 0.5 - cx, y + 0.5 - cy);
+            const double a = std::clamp(radius - d + 0.5, 0.0, 1.0);
+            if (a > 0.0) {
+                const QRgb p = img.pixel(x, y);
+                const auto ink = [a](int c) { return int(std::lround(c * (1.0 - a))); };
+                img.setPixel(x, y, qRgb(ink(qRed(p)), ink(qGreen(p)), ink(qBlue(p))));
+            }
+        }
+    }
+    return img;
+}
 } // namespace
 
 class RetouchToolsTest : public QObject {
@@ -32,6 +66,7 @@ private slots:
     void dodgeTool();
     void burnTool();
     void spongeTool();
+    void spotHealingClickRemovesADot();
     void brushTipBarIsCompact();
 
 private:
@@ -333,6 +368,48 @@ void RetouchToolsTest::brushTipBarIsCompact()
              "brush tip does not set the bar height");
     QVERIFY2(page->sizeHint().height() <= peer->sizeHint().height() + 12,
              "options bar hugs its controls");
+}
+
+void RetouchToolsTest::spotHealingClickRemovesADot()
+{
+    // #1023: a click with a brush the dot's size used to leave a grey smudge,
+    // because the dot's soft rim lay just outside the brush.
+    pictura::PicturaMainWindow& frame = *window_;
+    const QImage clean = skySeed(64, 64);
+    Fixture f(frame, withDot(clean, 32.0, 32.0, 4.0), QStringLiteral("pictura_spot_heal_dot"));
+    QVERIFY2(f.ok(), "spot healing fixture");
+    auto* paint = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::SpotHealingBrush);
+    auto* healing = f.tools->optionsFor<pictura::HealingGroup>(pictura::ToolId::SpotHealingBrush);
+    QVERIFY(paint && healing);
+    const int size = paint->size();
+    const int hardness = paint->hardness();
+    const pictura::HealingOptions options = healing->get();
+    paint->setSize(8);
+    paint->setHardness(100);
+    pictura::HealingOptions proximity = options;
+    proximity.spotType = 0;
+    healing->set(proximity);
+
+    frame.setActiveTool(pictura::ToolId::SpotHealingBrush);
+    const int base = f.view->history_index();
+    f.drag({QPointF(32, 32)});
+    const bool committed = f.committedOnce(base, "Spot Healing Brush");
+    int worst = 0;
+    for (int y = 25; y < 40; ++y) {
+        for (int x = 25; x < 40; ++x) {
+            const QRgb got = f.view->sample_argb(x, y);
+            const QRgb want = clean.pixel(x, y);
+            worst = std::max({worst, std::abs(qRed(got) - qRed(want)),
+                              std::abs(qGreen(got) - qGreen(want)),
+                              std::abs(qBlue(got) - qBlue(want))});
+        }
+    }
+
+    paint->setSize(size);
+    paint->setHardness(hardness);
+    healing->set(options);
+    QVERIFY2(committed, "one Spot Healing Brush state");
+    QVERIFY2(worst <= 6, qPrintable(QStringLiteral("dot left behind: off by %1").arg(worst)));
 }
 
 QTEST_MAIN(RetouchToolsTest)
