@@ -206,42 +206,58 @@ impl PictureViewRust {
     /// A `max_side`-bounded grayscale thumbnail of the active layer's raster mask
     /// coverage, for the Channels panel's mask channel row; `None` without a
     /// document or an active layer carrying a raster mask. A disabled mask still
-    /// shows its stored coverage (see [`mask_sample`]).
+    /// shows its stored coverage (see [`mask_sample`]). Cost is O(thumbnail), not
+    /// O(document): the panel refreshes this after every edit, so a full-pixel
+    /// scan here is a per-edit UI stall (#1038).
     pub(crate) fn mask_channel_thumbnail(&self, max_side: u32) -> Option<(Vec<u8>, u32, u32)> {
         let doc = self.session.doc.as_ref()?;
         let path = self.layer_target.anchor()?;
         let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
-        let (width, height) = (doc.width, doc.height);
-        if width == 0 || height == 0 || max_side == 0 {
-            return None;
-        }
-        let mut plane = vec![0u8; (width * height) as usize];
-        for y in 0..height as i32 {
-            for x in 0..width as i32 {
-                plane[y as usize * width as usize + x as usize] = mask_sample(mask, x, y);
-            }
-        }
-        let (tw, th) = if width >= height {
-            (
-                max_side,
-                ((height as u64 * max_side as u64) / width as u64).max(1) as u32,
-            )
-        } else {
-            (
-                ((width as u64 * max_side as u64) / height as u64).max(1) as u32,
-                max_side,
-            )
-        };
-        let mut out = Vec::with_capacity((tw * th) as usize);
-        for ty in 0..th {
-            let sy = ty as usize * height as usize / th as usize;
-            for tx in 0..tw {
-                let sx = (tx as usize * width as usize / tw as usize).min(width as usize - 1);
-                out.push(plane[sy * width as usize + sx]);
-            }
-        }
-        Some((out, tw, th))
+        mask_thumbnail_samples(mask, doc.width, doc.height, max_side)
     }
+}
+
+/// A `max_side`-bounded, aspect-kept grayscale thumbnail of `mask` over a
+/// `width`×`height` document, one nearest-neighbour [`mask_sample`] per output
+/// pixel. `None` for an empty document or `max_side`. Sampling the grid
+/// directly is O(output) rather than O(document); the earlier build-a-full-plane
+/// step took the same nearest-neighbour sample, so the pixels are unchanged.
+fn mask_thumbnail_samples(
+    mask: &LayerMask,
+    width: u32,
+    height: u32,
+    max_side: u32,
+) -> Option<(Vec<u8>, u32, u32)> {
+    if width == 0 || height == 0 || max_side == 0 {
+        return None;
+    }
+    let (tw, th) = if width >= height {
+        (
+            max_side,
+            ((height as u64 * max_side as u64) / width as u64).max(1) as u32,
+        )
+    } else {
+        (
+            ((width as u64 * max_side as u64) / height as u64).max(1) as u32,
+            max_side,
+        )
+    };
+    let mut out = Vec::with_capacity((tw * th) as usize);
+    for ty in 0..th {
+        let sy = ty as usize * height as usize / th as usize;
+        for tx in 0..tw {
+            let sx = (tx as usize * width as usize / tw as usize).min(width as usize - 1);
+            out.push(mask_sample(mask, sx as i32, sy as i32));
+        }
+    }
+    Some((out, tw, th))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test-only: mask samples touched since the last reset. Proves the Channels
+    /// thumbnail samples its own grid rather than scanning the whole document.
+    static MASK_SAMPLE_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// The mask's stored coverage at a document pixel, for display: `data` in-rect,
@@ -250,6 +266,8 @@ impl PictureViewRust {
 /// the Channels mask thumbnail keep showing the mask's raster even while the mask
 /// is switched off (the compositor instead reveals where a disabled mask sits).
 fn mask_sample(mask: &LayerMask, x: i32, y: i32) -> u8 {
+    #[cfg(test)]
+    MASK_SAMPLE_CALLS.with(|calls| calls.set(calls.get() + 1));
     let Some(data) = mask.data.as_ref() else {
         return 255;
     };
@@ -371,5 +389,51 @@ mod tests {
         };
         assert_eq!(at(1, 1), [64, 64, 64, 255], "in-rect sample, opaque");
         assert_eq!(at(2, 0), [128, 128, 128, 255], "off-rect default_color");
+    }
+
+    #[test]
+    fn mask_thumbnail_samples_match_the_full_plane_downsample() {
+        // A document larger than the mask rect, so the off-rect default_color
+        // shows through in the reference as well.
+        let m = mask(RECT, 7, false, Some(vec![0, 128, 255, 64]));
+        let (width, height, max_side) = (6u32, 4u32, 3u32);
+        let (out, tw, th) = mask_thumbnail_samples(&m, width, height, max_side).expect("thumb");
+        assert_eq!((tw, th), (3, 2));
+
+        // The reference: the document-sized plane the old code built, then the
+        // same nearest-neighbour sample.
+        let mut plane = vec![0u8; (width * height) as usize];
+        for y in 0..height as i32 {
+            for x in 0..width as i32 {
+                plane[y as usize * width as usize + x as usize] = mask_sample(&m, x, y);
+            }
+        }
+        let mut reference = Vec::new();
+        for ty in 0..th {
+            let sy = ty as usize * height as usize / th as usize;
+            for tx in 0..tw {
+                let sx = (tx as usize * width as usize / tw as usize).min(width as usize - 1);
+                reference.push(plane[sy * width as usize + sx]);
+            }
+        }
+        assert_eq!(out, reference, "the thumbnail is unchanged by the rewrite");
+    }
+
+    #[test]
+    fn mask_thumbnail_samples_touch_only_the_grid() {
+        // A 4096² document would cost 16.7 M samples if the whole document were
+        // scanned; the thumbnail grid is 24×24. This is the regression guard for
+        // the per-edit Channels-panel stall (#1038).
+        let (width, height) = (4096u32, 4096u32);
+        let m = mask(RECT, 7, false, Some(vec![0, 128, 255, 64]));
+        MASK_SAMPLE_CALLS.with(|calls| calls.set(0));
+        let (out, tw, th) = mask_thumbnail_samples(&m, width, height, 24).expect("thumb");
+        let calls = MASK_SAMPLE_CALLS.with(std::cell::Cell::get);
+        assert_eq!(out.len() as u32, tw * th);
+        assert_eq!(calls, u64::from(tw * th), "one sample per thumbnail pixel");
+        assert!(
+            calls < u64::from(width) * u64::from(height) / 1000,
+            "the thumbnail must not scan the document: {calls} samples"
+        );
     }
 }
