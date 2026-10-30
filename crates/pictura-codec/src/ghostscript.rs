@@ -24,6 +24,10 @@ pub(crate) const MIN_VERSION: (u32, u32) = (9, 55);
 const MAX_TEXT_OUTPUT: u64 = 16 << 20;
 /// The most bytes one rendered page file may hold when it is read back.
 const MAX_RASTER_FILE: u64 = 4 << 30;
+/// The largest page bitmap Ghostscript holds whole (#646); a larger page is
+/// rendered in bands, so its memory follows the band, not the page, and stays
+/// under [`MAX_ADDRESS_SPACE`]. An RGBA page about 11 500 px square fits.
+const MAX_PAGE_BITMAP: u64 = 512 << 20;
 /// The address space one Ghostscript process may map (Unix `RLIMIT_AS`).
 #[cfg(unix)]
 const MAX_ADDRESS_SPACE: u64 = 8 << 30;
@@ -453,6 +457,7 @@ pub(crate) fn png_args(
         format!("-r{rx:.4}x{ry:.4}"),
         format!("-dTextAlphaBits={bits}"),
         format!("-dGraphicsAlphaBits={bits}"),
+        format!("-dMaxBitmap={MAX_PAGE_BITMAP}"),
         format!("-sOutputFile={}", out.display()),
         "-f".into(),
         input.display().to_string(),
@@ -462,6 +467,17 @@ pub(crate) fn png_args(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn render_arguments_band_large_pages() {
+        let (out, input) = (Path::new("/o.png"), Path::new("/i.pdf"));
+        for res in [72.0, 2400.0] {
+            let args = png_args(res, res, true, out, input);
+            let cap = args.iter().position(|a| a == "-dMaxBitmap=536870912");
+            let file = args.iter().position(|a| a == "-f");
+            assert!(cap.zip(file).is_some_and(|(c, f)| c < f), "{args:?}");
+        }
+    }
 
     #[test]
     fn sniff_recognizes_pdf_and_eps() {

@@ -237,6 +237,10 @@ to protect model context; the original dimensions are still reported.
 - `new`: `name?`, `width`, `height`, `mode?` (default `rgb`), `depth?` (8),
   `background?` (`white`|`transparent`)
 - `save_as`: `path`; `save`: active path (or `path` → Save As)
+- A `path` must be absolute, free of control characters, and without a `..`
+  component; a save path, or the active path of a `save` with none, must not
+  be a symlink. Anything else is `invalid_param`. Paths are not confined to a root: the session token
+  already limits callers to the same user (#646).
 - `close`/`activate`: `index`
 - **Never** uses `showOpenDialog()`/`showNewDocumentDialog()` (modal). Always
   the non-interactive overloads, matching `--self-test`.

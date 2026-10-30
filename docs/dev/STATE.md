@@ -11,6 +11,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Security limits** (#646, OpenSpec change `security-limits`; the decode
+  budgets themselves shipped with #844). The PNG `iCCP` profile probe inflates
+  at most 16 MiB and no longer panics on a chunk that ends at its keyword.
+  Ghostscript raster renders pass `-dMaxBitmap=512 MiB`, so a large page is
+  rendered in bands and stays under the 8 GiB address-space limit. The control
+  server's `document` `open`/`save_as`/`save <path>` refuse a relative path, a
+  control character, or a `..` component; a save, with or without a path,
+  also refuses a final symlink. There is no root confinement, by owner decision. Parity row XC-6 is
+  now SHIPPED. Tests: `pictura_codec::{a_png_profile_bomb_is_refused,
+  a_truncated_png_profile_chunk_does_not_panic,
+  render_arguments_band_large_pages}`,
+  `tst_untrusted_input::{controlRefusesAmbiguousDocumentPaths,
+  controlRefusesASaveOverASymlink, controlAcceptsAPlainAbsolutePath}`.
 - **Faster builds and tests** (#1042, OpenSpec change `faster-builds-and-tests`;
   the Qt Test fixture and C++ compile-flag work moved to #1043). An optimized
   development CMake build compiles the Rust library with the `dev-app` Cargo

@@ -286,7 +286,7 @@ Raw file open is tracked by `#400`; DNG output by `#402`.
 | XC-3 | `logging-and-telemetry.md` | `tracing` + file sink + Qt→Rust bridge + History Log | MISSING | `main.cpp:104-107` | #643 |
 | XC-4 | `logging-and-telemetry.md` | Opt-in telemetry + `KOOKA_PICTURA_NO_TELEMETRY` | MISSING | none found | #644 |
 | XC-5 | `error-handling.md` | Stable error-code registry + FFI `OpStatus`/`catch_unwind` boundaries | MISSING | no `pictura-error` | #645 |
-| XC-6 | `security-and-sandboxing.md` | Safe paths, decoder decompression-bomb guards | PARTIAL | `png.rs` only | #646 |
+| XC-6 | `security-and-sandboxing.md` | Safe paths, decoder decompression-bomb guards (guards shipped, sandbox proposed) | SHIPPED | `crates/pictura-codec/src/budget.rs` (#844); `profile_probe.rs` bounded `iCCP`, Ghostscript `-dMaxBitmap`, control `document` path checks in `control_server.cpp` (#646). Not covered here: the out-of-process decode helper is proposal-only; fuzzing is #648 | #646 |
 | XC-7 | `security-and-sandboxing.md` | Flatpak packaging + portal confinement | PARTIAL | `flatpak/io.github.KookaStudio.KookaPictura.yml`; bundle/smoke ship, portal dialogs unproven | #647 |
 | XC-8 | `testing-strategy.md` | DSSIM/PSNR/ΔE2000, property tests, fuzzing, Criterion benches | MISSING | `testkit` abs-diff only | #648 |
 | XC-9 | `update-and-versioning.md` | `--version`, About dialog with Qt/GPU info, update checker | MISSING | `main.cpp` | #649 |

@@ -527,7 +527,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Opt-in telemetry and `KOOKA_PICTURA_NO_TELEMETRY` (#644)
 - [ ] A stable error-code registry, and the FFI `OpStatus` and `catch_unwind`
       boundaries (#645)
-- [ ] Safe paths and decoder decompression-bomb guards (#646)
+- [x] Safe paths and decoder decompression-bomb guards (#646)
 - [ ] Flatpak portal confinement (#647)
 - [ ] DSSIM, PSNR and ΔE2000, property tests, fuzzing, and Criterion benches
       (#648)

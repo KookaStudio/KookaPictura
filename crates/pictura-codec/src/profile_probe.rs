@@ -122,6 +122,10 @@ pub fn probe_jpeg_profile(bytes: &[u8]) -> ProfileProbe {
     }
 }
 
+/// The most an `iCCP` chunk may inflate to (#646): the largest profile a JPEG
+/// can carry in its 255 APP2 segments, the only container with a format limit.
+const MAX_PNG_PROFILE: u64 = 16 << 20;
+
 /// Probe a PNG `iCCP` chunk.
 pub fn probe_png_profile(bytes: &[u8]) -> ProfileProbe {
     const SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
@@ -143,14 +147,19 @@ pub fn probe_png_profile(bytes: &[u8]) -> ProfileProbe {
             let Some(nul) = data.iter().position(|b| *b == 0) else {
                 return ProfileProbe::default();
             };
-            let compressed = &data[nul + 2..];
-            let mut decoder = flate2::read::ZlibDecoder::new(compressed);
+            let unreadable = ProfileProbe {
+                present: true,
+                ..ProfileProbe::default()
+            };
+            let Some(compressed) = data.get(nul + 2..) else {
+                return unreadable;
+            };
             let mut profile = Vec::new();
-            if decoder.read_to_end(&mut profile).is_err() {
-                return ProfileProbe {
-                    present: true,
-                    ..ProfileProbe::default()
-                };
+            let inflated = flate2::read::ZlibDecoder::new(compressed)
+                .take(MAX_PNG_PROFILE + 1)
+                .read_to_end(&mut profile);
+            if inflated.is_err() || profile.len() as u64 > MAX_PNG_PROFILE {
+                return unreadable;
             }
             return ProfileProbe::from_bytes(profile);
         }
@@ -251,6 +260,54 @@ mod tests {
     fn missing_signature_is_empty() {
         assert_eq!(probe_raster_profile(b"nope"), ProfileProbe::default());
         assert_eq!(probe_psd_profile(b"nope"), ProfileProbe::default());
+    }
+
+    /// A PNG signature, an `IHDR`, and one `iCCP` chunk holding `data`. The
+    /// probe reads no CRCs, so they are zero.
+    fn png_with_iccp(data: &[u8]) -> Vec<u8> {
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        for (kind, body) in [(b"IHDR", &[0u8; 13][..]), (b"iCCP", data)] {
+            png.extend_from_slice(&(body.len() as u32).to_be_bytes());
+            png.extend_from_slice(kind);
+            png.extend_from_slice(body);
+            png.extend_from_slice(&[0; 4]);
+        }
+        png
+    }
+
+    fn iccp(profile: &[u8]) -> Vec<u8> {
+        use std::io::Write as _;
+        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+        encoder.write_all(profile).unwrap();
+        let mut data = b"icc\0\0".to_vec();
+        data.extend(encoder.finish().unwrap());
+        data
+    }
+
+    #[test]
+    fn a_png_profile_bomb_is_refused() {
+        let data = iccp(&vec![0u8; 64 << 20]);
+        assert!(data.len() < 256 << 10, "{} bytes", data.len());
+        let probe = probe_png_profile(&png_with_iccp(&data));
+        assert!(probe.present);
+        assert_eq!(probe.embedded, None);
+    }
+
+    #[test]
+    fn a_truncated_png_profile_chunk_does_not_panic() {
+        for data in [&b"icc\0"[..], b"\0"] {
+            let probe = probe_png_profile(&png_with_iccp(data));
+            assert!(probe.present);
+            assert_eq!(probe.embedded, None);
+        }
+    }
+
+    #[test]
+    fn a_png_profile_within_the_limit_is_read() {
+        let srgb = Profile::srgb().to_icc();
+        let probe = probe_png_profile(&png_with_iccp(&iccp(&srgb)));
+        assert_eq!(probe.embedded, Some(srgb));
+        assert!(probe.is_srgb);
     }
 
     #[test]
