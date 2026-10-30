@@ -3,7 +3,7 @@
 // True for the editable text widgets an application-level key must leave
 // alone: line edits, spin boxes, plain/multi-line text edits, and editable
 // combo boxes. Shared by the Type session's key filter and the frame's
-// Delete-key routing.
+// Delete-key and Tab panel-toggle routing.
 
 #include <QtWidgets/QAbstractSpinBox>
 #include <QtWidgets/QComboBox>

@@ -11,6 +11,7 @@
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
+#include "text_input.h"
 #include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
@@ -218,6 +219,14 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     connect(hidePanels, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     auto* hidePanelsBack = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Tab), this);
     connect(hidePanelsBack, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
+    // A focused field owns Tab / Shift+Tab: it commits and moves focus to the
+    // next field instead of hiding the panels (#1028). Each connection's context
+    // is its shortcut, so teardown disconnects it with the shortcut.
+    for (QShortcut* shortcut : {hidePanels, hidePanelsBack}) {
+        shortcut->setEnabled(!isTextInput(QApplication::focusWidget()));
+        connect(qApp, &QApplication::focusChanged, shortcut,
+                [shortcut](QWidget*, QWidget* now) { shortcut->setEnabled(!isTextInput(now)); });
+    }
     wireDocumentCycling();
     wireDocumentMenus();
     wireWindowArrange();

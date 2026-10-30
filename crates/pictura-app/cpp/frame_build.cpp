@@ -663,7 +663,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     // shortcuts are off, so the key reaches the field instead of being
     // swallowed by the shortcut map.
     deleteShortcutsFocusConn_ = connect(qApp, &QApplication::focusChanged, this,
-            [deleteShortcuts](QWidget* now, QWidget*) {
+            [deleteShortcuts](QWidget*, QWidget* now) {
                 const bool field = isTextInput(now);
                 for (QShortcut* shortcut : deleteShortcuts) {
                     if (shortcut) {
