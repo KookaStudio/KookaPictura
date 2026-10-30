@@ -448,6 +448,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **A local control server** on a Unix socket, with twenty JSON methods for
       documents, layers, selections, filters, and pointer and key input.
       `crates/pictura-app/cpp/control_server.cpp`.
+- [x] **Live agent sessions with permissions:** a control server in the running
+      app, off by default, with permission tiers, allowed folders, and approval
+      prompts. `crates/pictura-app/cpp/agent_control.cpp`.
 - [x] **A Rust command catalogue and the shared command-recording bus** — the
       catalogue drives the menu tree and the checked-in `command_ids.h`; the
       C++ command bus gains executors, context handlers, a recording sink, and

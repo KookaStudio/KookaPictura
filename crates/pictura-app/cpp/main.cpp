@@ -1,5 +1,6 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
@@ -39,6 +40,9 @@
 #include <optional>
 
 #include "commands.h"
+#include <QtCore/QFileInfo>
+
+#include "agent_control.h"
 #include "control_server.h"
 #include "dialog_chrome.h"
 #include "dialogs.h"
@@ -115,6 +119,9 @@ int main(int argc, char* argv[])
     bool dumpTheme = false;
     QString psdPath;
     QString controlSocket;
+    QString controlTier;
+    QString controlApproval;
+    QStringList controlRoots;
     QString stateHome;
     for (int i = 1; i < args.size(); ++i) {
         if (args.at(i) == QStringLiteral("--self-test")) {
@@ -129,6 +136,12 @@ int main(int argc, char* argv[])
             control = true;
         } else if (args.at(i) == QStringLiteral("--control-socket") && i + 1 < args.size()) {
             controlSocket = args.at(++i);
+        } else if (args.at(i) == QStringLiteral("--control-tier") && i + 1 < args.size()) {
+            controlTier = args.at(++i);
+        } else if (args.at(i) == QStringLiteral("--control-root") && i + 1 < args.size()) {
+            controlRoots.append(args.at(++i));
+        } else if (args.at(i) == QStringLiteral("--control-approval") && i + 1 < args.size()) {
+            controlApproval = args.at(++i);
         } else if (args.at(i) == QStringLiteral("--state-home") && i + 1 < args.size()) {
             stateHome = args.at(++i);
         } else if (!args.at(i).startsWith(QLatin1Char('-'))) {
@@ -268,6 +281,7 @@ int main(int argc, char* argv[])
     frame.show();
     if (recovery) {
         QTimer::singleShot(0, &frame, &pictura::PicturaMainWindow::offerRecovery);
+        new pictura::AgentControl(&frame);
     }
 
     if (selfTest) {
@@ -295,6 +309,26 @@ int main(int argc, char* argv[])
         pictura::setTransformPromptInteractive(false);
         pictura::setCropPromptInteractive(false);
         pictura::ControlServer controlServer(&frame, controlSocket);
+        if (!controlTier.isEmpty()) {
+            pictura::ControlPolicy policy;
+            policy.restricted = true;
+            policy.allowEdit =
+                controlTier == QStringLiteral("edit") || controlTier == QStringLiteral("save");
+            policy.allowSave = controlTier == QStringLiteral("save");
+            if (!policy.allowEdit && controlTier != QStringLiteral("read")) {
+                std::fprintf(stderr, "pictura control: FAIL: tier must be read, edit, or save\n");
+                return 2;
+            }
+            if (controlApproval == QStringLiteral("allow-all")) {
+                policy.approval = pictura::ApprovalMode::AllowAll;
+            }
+            for (const QString& root : controlRoots) {
+                policy.roots.append(QFileInfo(root).canonicalFilePath());
+            }
+            policy.denied =
+                pictura::protectedDirectories(pictura::sessionFilePath(), controlServer.socketPath());
+            controlServer.setPolicy(policy);
+        }
         if (!controlServer.listen()) {
             std::fprintf(stderr, "pictura control: FAIL: cannot listen on %s\n",
                          qPrintable(controlServer.socketPath()));

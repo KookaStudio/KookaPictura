@@ -7,15 +7,21 @@
 #include <QtCore/QLockFile>
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
+#include <QtCore/QSet>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 #include <memory>
 
+#include "control_policy.h"
+
 class QLocalServer;
 class QLocalSocket;
+class QTimer;
 
 namespace pictura {
 
+class ControlApprovalBar;
 class PicturaMainWindow;
 
 // Opt-in JSON control endpoint for agentic testing. Serves newline-delimited
@@ -70,6 +76,17 @@ public:
     QString tokenPath() const;
     QByteArray token() const { return token_; }
 
+    // What socket requests may do; the default is unrestricted.
+    void setPolicy(const ControlPolicy& policy);
+    const ControlPolicy& policy() const { return policy_; }
+    // The method table, and the tier a request needs (some depend on its op).
+    static QStringList methodNames();
+    ControlTier tierOf(const QString& method, const QJsonObject& params) const;
+
+    static constexpr int kApprovalTimeoutMs = 60000;
+    void setApprovalTimeoutMs(int ms) { approvalTimeoutMs_ = ms; }
+    ControlApprovalBar* approvalBar() const;
+
     // Dispatch one method call; returns the full {ok,result} or {ok,error}
     // wrapper. A dialog the call reaches is cancelled and answered `refused`.
     // Also drives the in-process self-test block.
@@ -85,12 +102,49 @@ private slots:
     void onDisconnected();
 
 private:
+    using MethodHandler = QJsonObject (ControlServer::*)(const QJsonObject&);
+    struct MethodRow {
+        const char* name;
+        MethodHandler handler;
+        ControlTier tier;
+    };
+    struct PendingApproval {
+        QPointer<QLocalSocket> socket;
+        int id = 0;
+        QString method;
+        QJsonObject params;
+        QString target;
+    };
+    struct OpeningRequest {
+        QPointer<QLocalSocket> socket;
+        int id = 0;
+        QString path;
+        quint64 token = 0;
+    };
     struct QueuedLine {
         QPointer<QLocalSocket> socket;
         QByteArray line;
     };
 
+    static const QList<MethodRow>& methodTable();
+    static bool isMethod(const QString& method);
     QJsonObject route(const QString& method, const QJsonObject& params);
+    QJsonObject documentResult(bool applied) const;
+    QJsonObject admit(const QString& method, const QJsonObject& params);
+    QString fileTarget(const QString& method, const QJsonObject& params) const;
+    PathVerdict verdictFor(const QString& method, const QJsonObject& params,
+                           const QString& target) const;
+    void serve(const QPointer<QLocalSocket>& socket, int id, const QString& method,
+               const QJsonObject& params);
+    void run(const QPointer<QLocalSocket>& socket, int id, const QString& method,
+             const QJsonObject& params);
+    void reply(const QPointer<QLocalSocket>& socket, int id, QJsonObject response);
+    void park(const QPointer<QLocalSocket>& socket, int id, const QString& method,
+              const QJsonObject& params, const QString& target);
+    PendingApproval takePending();
+    void onOpenFinished(quint64 token, int outcome);
+    void resolveApproval(bool allow);
+    void onApprovalTimeout();
     QJsonObject ok(const QJsonObject& result) const;
     QJsonObject error(const QString& code, const QString& message) const;
     QJsonObject methodStatus(const QJsonObject& params);
@@ -135,6 +189,17 @@ private:
     // Set while pump() runs, so a nested event loop in a request only enqueues.
     bool running_ = false;
     int lassoPoints_ = 0;
+    ControlPolicy policy_;
+    // Set while a request waits for a person or a load; later ones stay queued.
+    bool parked_ = false;
+    PendingApproval pending_;
+    OpeningRequest opening_;
+    // Files the agent made or the person approved, this session.
+    QSet<QString> known_;
+    // Owned by the window, which can go first during teardown.
+    QPointer<ControlApprovalBar> bar_;
+    QTimer* approvalTimer_ = nullptr;
+    int approvalTimeoutMs_ = kApprovalTimeoutMs;
     // Tracked unsaved-prompt policy, mirrored from the global set in dialogs.cpp.
     bool unsavedInteractive_ = false;
     QString unsavedChoice_ = QStringLiteral("discard");

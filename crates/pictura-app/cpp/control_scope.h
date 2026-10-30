@@ -5,6 +5,8 @@
 
 namespace pictura {
 
+enum class UnsavedChoice;
+
 // Spans one control request. A dialog or menu shown meanwhile would wait on a
 // person, so it is cancelled and recorded; the request is then answered
 // `refused`. Catches what `isModalCommand` does not list.
@@ -13,7 +15,9 @@ namespace pictura {
 // past; the denylist still names every known file-dialog command.
 class ControlScope : public QObject {
 public:
-    ControlScope();
+    // With `unsavedChoice`, an unsaved prompt reached by this request resolves
+    // to it. Null leaves the process-wide policy in charge.
+    explicit ControlScope(const UnsavedChoice* unsavedChoice = nullptr);
     ~ControlScope() override;
 
     // The title of the first dialog or menu cancelled, or empty.

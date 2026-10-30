@@ -64,6 +64,13 @@ struct SessionState {
     // Information Every <n> minutes (CS6 choices 5/10/15/30/60, default 10).
     bool autoSaveRecovery = true;
     int autoSaveMinutes = 10;
+    // Agent control: what an agent attached to this window may do. Off, and
+    // read-only, until the person says otherwise.
+    bool agentControlEnabled = false;
+    bool agentAllowEdit = false;
+    bool agentAllowSave = false;
+    int agentApprovalMode = 1;  // ApprovalMode; 1 Auto-approve
+    QStringList agentRoots;
     // View > Rulers / Show > Guides / Lock Guides, and the Guides, Grid, &
     // Slices guide colour (#rrggbb) and Dashed Lines style.
     bool rulersVisible = false;

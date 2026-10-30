@@ -6,15 +6,19 @@
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QMenu>
 
+#include "dialogs.h"
+
 namespace pictura {
 
-ControlScope::ControlScope()
+ControlScope::ControlScope(const UnsavedChoice* unsavedChoice)
 {
     qApp->installEventFilter(this);
+    setRequestUnsavedChoice(unsavedChoice);
 }
 
 ControlScope::~ControlScope()
 {
+    setRequestUnsavedChoice(nullptr);
     qApp->removeEventFilter(this);
 }
 
