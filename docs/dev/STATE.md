@@ -22,6 +22,37 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Cheaper Qt fixtures and C++ compiles** (#1043, OpenSpec change
+  `qt-fixture-and-compile-cost`).
+  - **Qt Test layer.** Wall time is 72–74 s instead of 249 s.
+    - **Theme.** A main window applies the restored theme before it builds its
+      menus, panels and tools. `Theme::apply` skips when the live style,
+      palette and style sheet already match, which was 55% of every
+      construction. The first-run Adjustments group is 8 px taller as a
+      result.
+    - **Parallelism.** CTest runs on 80% of the CPUs (CI: every CPU).
+      `tst_ui_scale` (8 shares), `tst_print`, `tst_edit_refresh` and
+      `tst_loading_tab` are sharded.
+    - **Shared windows.** `tst_document_float`, `tst_document_windows`,
+      `tst_document_arrange` and `tst_import_pdf` now share one window per
+      suite, reset in `cleanup()`; `tst_edit_refresh` and `tst_loading_tab`
+      already did and stay sharded under the same rule. `shardedMain` runs only
+      the functions named on its command line.
+    - **Waits.** 16 fixed waits became condition waits and 102 became event
+      flushes (`qWait(0)`); the 64 left carry a reason comment, enforced by
+      `qt_test_waits_are_justified`.
+  - **Bridge files hold declarations only.** The bodies live in `<name>/imp.rs`,
+    enforced by `bridge_files_hold_declarations_only`. A body edit no longer
+    reruns the cxx-qt build script: 24 s instead of 52 s.
+  - **C++ compile.** The optimized development C++ build uses a precompiled
+    header and `-Og -g1`. A cold C++ build is 151 s and 1,666 CPU-s, against
+    258 s and 3,009 CPU-s. A warm full rebuild from sccache is 44 s instead of
+    23 s, a recorded trade. CI builds without the precompiled header.
+  - **Clean rebuild.** `ninja -t clean` followed by a build works again.
+  - **CI.** `lint` and `test` cache compiled Rust targets.
+  - **Measured and declined:** lazy panels, lazy options-bar pages, split
+    DWARF, direct moc for the tests, per-test single linking, and engine
+    profile overrides (a `dev-app` core edit is 7 s of cargo time).
 - **Security limits** (#646, OpenSpec change `security-limits`; the decode
   budgets themselves shipped with #844). The PNG `iCCP` profile probe inflates
   at most 16 MiB and no longer panics on a chunk that ends at its keyword.
