@@ -30,6 +30,20 @@ Snapshot for resuming after a context break. Update after each milestone.
   `pictura_app::build_config::{bridge_modules_end_at_column_zero,
   dev_app_profile_keeps_release_semantics,
   every_workspace_library_disables_doctests}`.
+- **Channels mask thumbnail is O(thumbnail), not O(document)** (#1038, OpenSpec
+  change `brush-popup-solo-mask`). Opening the brush popup on a solo-mask layer
+  and hovering back onto the canvas stalled ~170 ms because the debounced
+  `refreshPanels` after every edit rebuilt the Channels mask row's thumbnail by
+  scanning every document pixel: `mask_channel_thumbnail` built a document-sized
+  grayscale plane and then downsampled it. It now samples the thumbnail grid
+  directly (`mask_thumbnail_samples`, one `mask_sample` per output pixel, the
+  same nearest-neighbour sample), so the pixels are unchanged and the cost is
+  O(24×18). Tests:
+  `pictura-app::mask_thumbnail_samples_touch_only_the_grid` and
+  `mask_thumbnail_samples_match_the_full_plane_downsample`. Ceiling: the solo
+  display plane (`mask_display_plane`) is still O(document) but runs only on
+  entering solo and a genuine recomposite, and the GPU mask-stroke path remains
+  #665.
 - **The shared fill path fills a mask** (#1022, OpenSpec change
   `fill-path-mask-target`). With a mask edit target, the Gradient, the Paint
   Bucket, `Edit ▸ Stroke`, Fill Path, Stroke Path, and the shape tools' Fill
