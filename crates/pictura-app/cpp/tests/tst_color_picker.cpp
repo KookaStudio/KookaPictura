@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QTimer>
 #include <QtGui/QColor>
 #include <QtWidgets/QApplication>
@@ -64,6 +65,7 @@ private slots:
     void gamutAlertAppliesClosest();
     void cmykFieldsUpdate();
     void alertsHiddenInGamut();
+    void fieldDragUpdatesEverySample();
     void defaultAdobePicker();
     void pickerPreferenceSurvivesRestart();
     void systemPickerReturnsColor();
@@ -257,6 +259,55 @@ void ColorPickerTest::alertsHiddenInGamut()
     QVERIFY(web && gamut);
     QVERIFY(web->isHidden());
     QVERIFY(gamut->isHidden());
+}
+
+// #1037: every drag sample re-ran the gamut test, which rebuilt two lcms2
+// transforms per call. The readouts must still follow each sample, and the
+// sample cost must stay interactive.
+void ColorPickerTest::fieldDragUpdatesEverySample()
+{
+    // Pure red keeps the plane's hue at exactly 0 (the Hue axis): the field
+    // then runs saturation along x and brightness down y.
+    pictura::ColorPickerDialog dialog(QColor(255, 0, 0));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    auto* plane = dialog.findChild<pictura::ColorPlane*>();
+    auto* hex = dialog.findChild<QLineEdit*>(QStringLiteral("colorPickerHex"));
+    QVERIFY(plane && hex);
+    const int w = plane->width();
+    const int h = plane->height();
+    QVERIFY(w > 1 && h > 1);
+
+    const auto expectedHex = [w, h](const QPoint& pos) {
+        const auto to255 = [](double t) { return int(qBound(0.0, t, 1.0) * 255.0 + 0.5); };
+        const QColor c =
+            QColor::fromHsv(0, to255(pos.x() / double(w - 1)), to255(1.0 - pos.y() / double(h - 1)));
+        return c.name().mid(1).toUpper();
+    };
+    const auto send = [plane](QEvent::Type type, const QPoint& pos, Qt::MouseButton button) {
+        QMouseEvent event(type, QPointF(pos), QPointF(plane->mapToGlobal(pos)), button,
+                          Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(plane, &event);
+    };
+
+    constexpr int kSamples = 200;
+    QElapsedTimer timer;
+    timer.start();
+    send(QEvent::MouseButtonPress, QPoint(0, 0), Qt::LeftButton);
+    for (int i = 1; i <= kSamples; ++i) {
+        // A zig-zag diagonal: saturated (out-of-gamut) reds through greys.
+        const QPoint pos((i * 7) % w, (i * (h - 1)) / kSamples);
+        send(QEvent::MouseMove, pos, Qt::NoButton);
+        QCoreApplication::processEvents();
+        QCOMPARE(hex->text(), expectedHex(pos));
+    }
+    const qint64 elapsed = timer.elapsed();
+    send(QEvent::MouseButtonRelease, QPoint(0, h - 1), Qt::LeftButton);
+    qInfo().noquote() << "color picker drag:" << kSamples << "samples in" << elapsed << "ms";
+    // ponytail: a wall-clock budget; generous so a loaded CI runner passes, and
+    // far under the per-sample transform rebuilds it guards against.
+    QVERIFY2(elapsed < 3000, qPrintable(QStringLiteral("%1 ms").arg(elapsed)));
+    dialog.reject();
 }
 
 void ColorPickerTest::defaultAdobePicker()
