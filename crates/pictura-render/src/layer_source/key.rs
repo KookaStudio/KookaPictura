@@ -69,6 +69,7 @@ pub(super) fn text_state_hash() -> u64 {
 pub(super) fn embedded_key(so: &SmartObject) -> u64 {
     let mut hasher = DefaultHasher::new();
     so.payload_digest().hash(&mut hasher);
+    so.nesting.hash(&mut hasher);
     text_state_hash().hash(&mut hasher);
     hasher.finish()
 }

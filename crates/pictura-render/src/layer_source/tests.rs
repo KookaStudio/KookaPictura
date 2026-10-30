@@ -723,3 +723,226 @@ fn replacing_smart_object_contents_invalidates_the_composite() {
         "the replaced payload moves pixels"
     );
 }
+
+/// Run `work` on its own thread and return its result, failing the test if it
+/// does not finish within `secs`: a wedged pool fails, it does not hang CI.
+fn finishes_within<T: Send + 'static>(
+    secs: u64,
+    what: &str,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> T {
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    let (done, finished) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let out = work();
+        let _ = done.send(());
+        out
+    });
+    if let Err(RecvTimeoutError::Timeout) =
+        finished.recv_timeout(std::time::Duration::from_secs(secs))
+    {
+        panic!("{what} deadlocked the pool");
+    }
+    worker.join().expect("lookup thread")
+}
+
+fn passes() -> Artifact {
+    Artifact::Passes(Arc::new(LayerPasses::default()))
+}
+
+fn same_passes(a: Artifact, b: Artifact) -> bool {
+    let (Artifact::Passes(a), Artifact::Passes(b)) = (a, b) else {
+        panic!("cache kind collision");
+    };
+    Arc::ptr_eq(&a, &b)
+}
+
+/// A rayon worker that is building a cached artifact can, while its build
+/// waits inside the pool, run a queued job that looks up the same key. That
+/// lookup must build its own copy instead of waiting on the in-flight build it
+/// sits on top of (#1044). One worker and `yield_now` make the steal
+/// deterministic.
+#[test]
+fn same_key_lookup_stolen_mid_build_does_not_deadlock() {
+    let (outer, inner, ran) = finishes_within(30, "a same-key lookup run mid-build", || {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("one-thread pool");
+        let key = Key::new(Kind::Passes, 0x1044_dead_10c5_u64);
+        let ran = std::sync::atomic::AtomicBool::new(false);
+        let (outer, inner) = pool.install(|| {
+            rayon::join(
+                || {
+                    lookup(key, || {
+                        // The queued same-key lookup runs here, on top of this
+                        // build, as a band job is run by a worker joining
+                        // inside an effect kernel.
+                        let executed = rayon::yield_now() == Some(rayon::Yield::Executed);
+                        ran.store(executed, Ordering::SeqCst);
+                        passes()
+                    })
+                },
+                || lookup(key, passes),
+            )
+        });
+        (outer, inner, ran.load(Ordering::SeqCst))
+    });
+    assert!(ran, "the same-key lookup ran inside the build");
+    assert!(
+        same_passes(outer, inner),
+        "both lookups return the one published artifact"
+    );
+}
+
+/// The cross-thread shape of #1044: a build joins on parallel work, another
+/// worker steals that work and looks up the key being built. Waiting there
+/// would leave the build waiting on its own stolen half. The build holds its
+/// half until the other worker has finished the stolen lookup, so the steal is
+/// forced, not left to timing.
+#[test]
+fn same_key_lookup_in_a_stolen_half_of_the_build_does_not_deadlock() {
+    let (outer, inner, threads) = finishes_within(30, "a same-key lookup in a stolen half", || {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .expect("two-thread pool");
+        let key = Key::new(Kind::Passes, 0x1044_c055_74ea_u64);
+        let stolen_done = std::sync::atomic::AtomicBool::new(false);
+        pool.install(|| {
+            let mut inner = None;
+            let mut threads = (None, None);
+            let outer = lookup(key, || {
+                rayon::join(
+                    || {
+                        threads.0 = rayon::current_thread_index();
+                        while !stolen_done.load(Ordering::SeqCst) {
+                            std::thread::yield_now();
+                        }
+                    },
+                    || {
+                        threads.1 = rayon::current_thread_index();
+                        inner = Some(lookup(key, passes));
+                        stolen_done.store(true, Ordering::SeqCst);
+                    },
+                );
+                passes()
+            });
+            (outer, inner.expect("the stolen half ran"), threads)
+        })
+    });
+    assert_ne!(threads.0, threads.1, "the other worker ran the lookup");
+    assert!(
+        same_passes(outer, inner),
+        "both lookups return the one published artifact"
+    );
+}
+
+/// A build that panics gives its claim back, so the next lookup of the key
+/// builds instead of waiting forever on an abandoned build.
+#[test]
+fn panicking_build_releases_its_claim() {
+    let rebuilt = finishes_within(30, "a lookup after a panicked build", || {
+        let key = Key::new(Kind::Passes, 0x1044_0bad_b11d_u64);
+        let panicked = std::panic::catch_unwind(|| lookup(key, || panic!("build failed")));
+        assert!(panicked.is_err(), "the build panic reaches the caller");
+        matches!(lookup(key, passes), Artifact::Passes(_))
+    });
+    assert!(rebuilt, "the next lookup builds the artifact");
+}
+
+/// A payload whose only layer is a no-proxy smart object wrapping the payload
+/// `levels - 1` deep, around `source_doc`. The merged composite is cut off at
+/// every wrapping level, so each one renders through its embedded source.
+fn nested_payload(levels: usize) -> Vec<u8> {
+    let mut payload = pictura_codec::write_psd(&source_doc()).expect("source writes");
+    for _ in 0..levels {
+        let mut so = SmartObject::default();
+        so.kind = SmartObjectKind::Embedded;
+        so.set_payload(payload);
+        let mut wrapper = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        wrapper.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+            name: "nest".into(),
+            rect: rect(0, 0, 4, 4),
+            smart_object: Some(so),
+            ..Default::default()
+        }]);
+        let bytes = pictura_codec::write_psd(&wrapper).expect("wrapper writes");
+        let layer_section = u32::from_be_bytes(bytes[34..38].try_into().unwrap()) as usize;
+        payload = bytes[..38 + layer_section].to_vec();
+    }
+    payload
+}
+
+fn nested_top(levels: usize) -> Document {
+    let mut so = SmartObject::default();
+    so.kind = SmartObjectKind::Embedded;
+    so.set_payload(nested_payload(levels));
+    doc(
+        4,
+        4,
+        vec![Layer {
+            name: "top".into(),
+            rect: rect(0, 0, 4, 4),
+            smart_object: Some(so),
+            ..Default::default()
+        }],
+    )
+}
+
+fn centre(buf: &PixelBuffer) -> [u8; 4] {
+    let plane = (buf.width * buf.height) as usize;
+    let i = (buf.width + 1) as usize;
+    std::array::from_fn(|c| buf.data[c * plane + i])
+}
+
+#[test]
+fn nesting_up_to_the_limit_renders_the_innermost_source() {
+    let _guard = locked();
+    let levels = usize::from(MAX_EMBED_NESTING) - 1;
+    let out = crate::composite_rgba(&nested_top(levels));
+    assert_eq!(centre(&out), [200, 50, 0, 255], "{levels} wrapping levels");
+}
+
+#[test]
+fn nesting_past_the_limit_stops_decoding() {
+    let _guard = locked();
+    let out = crate::composite_rgba(&nested_top(usize::from(MAX_EMBED_NESTING)));
+    assert_eq!(
+        centre(&out)[3],
+        0,
+        "the object past the limit does not paint"
+    );
+}
+
+// A crafted file can nest payloads hundreds deep; on a pool worker with a
+// small stack the render must stop at the limit instead of overflowing it.
+#[test]
+fn a_deeply_nested_payload_renders_on_a_small_pool_stack() {
+    let _guard = locked();
+    let top = nested_top(200);
+    let out = finishes_within(60, "a deeply nested render", move || {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .stack_size(512 * 1024)
+            .build()
+            .expect("small-stack pool");
+        pool.install(|| crate::composite_rgba(&top))
+    });
+    assert_eq!(centre(&out)[3], 0);
+}
+
+// A payload whose digest collides with an enclosing one re-enters its own key
+// on the building thread; outside the pool that must not wait on itself.
+#[test]
+fn a_build_that_re_enters_its_own_key_does_not_wait_on_itself() {
+    let _guard = locked();
+    let key = Key::new(Kind::Embedded, 0x1044_c011_1de5_u64);
+    let out = finishes_within(30, "a build re-entering its own key", move || {
+        lookup(key, || {
+            lookup(key, || Artifact::Missing);
+            Artifact::Missing
+        })
+    });
+    assert!(matches!(out, Artifact::Missing));
+}

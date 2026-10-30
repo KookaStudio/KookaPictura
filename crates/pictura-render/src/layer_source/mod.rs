@@ -1,16 +1,17 @@
 //! Content-keyed cache for per-layer render sources and effect passes.
 //!
-//! One process-wide map from a content key to an `Arc<OnceLock<Artifact>>`.
-//! A lookup holds the map lock only long enough to clone the cell; the build
-//! runs outside it, so a recursive source (an embedded document composited by
-//! the renderer) cannot deadlock the cache. There is no thread-local front
-//! cache: lookups happen once per layer per composite, not once per pixel, and
-//! a front cache would defeat the byte budget.
+//! One process-wide map from a content key to an `Arc<Slot>`. A lookup holds
+//! the map lock only long enough to clone the slot, and the build runs outside
+//! every lock, so a recursive source (an embedded document composited by the
+//! renderer) cannot deadlock the cache. A rayon worker never waits on another
+//! caller's in-flight build (see [`Slot::resolve`]). There is no thread-local
+//! front cache: lookups happen once per layer per composite, not once per
+//! pixel, and a front cache would defeat the byte budget.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect, SmartObject};
 
@@ -103,9 +104,93 @@ pub(crate) struct CachedBuffer {
     pub(crate) buffer: Arc<PixelBuffer>,
 }
 
+enum State {
+    Empty,
+    /// Claimed by the named thread's build.
+    Building(std::thread::ThreadId),
+    Ready(Artifact),
+}
+
+/// One key's artifact, built at most once by callers outside the worker pool.
+struct Slot {
+    state: Mutex<State>,
+    ready: Condvar,
+}
+
+/// Resets an abandoned claim, so a build that panics lets a waiter retry.
+struct Claim<'a>(&'a Slot);
+
+impl Drop for Claim<'_> {
+    fn drop(&mut self) {
+        let mut state = self.0.lock();
+        if matches!(*state, State::Building(_)) {
+            *state = State::Empty;
+        }
+        self.0.ready.notify_all();
+    }
+}
+
+impl Slot {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(State::Empty),
+            ready: Condvar::new(),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The published artifact, building it on a miss.
+    ///
+    /// A caller outside the pool waits for an in-flight build instead of
+    /// duplicating it. A rayon worker never waits: builds run rayon work, so a
+    /// worker waiting inside a join can run a queued job that looks up the key
+    /// it is itself building, or one whose build waits on the half of its
+    /// join that this worker holds (#1044). Such a worker builds its own copy;
+    /// the first artifact published is the one every caller returns. No thread
+    /// waits on a build it owns either: a crafted payload whose digest
+    /// collides with an enclosing one re-enters its own key.
+    fn resolve(&self, build: impl FnOnce() -> Artifact) -> Artifact {
+        let mut state = self.lock();
+        if let State::Ready(artifact) = &*state {
+            crate::metrics::count_source_hit();
+            return artifact.clone();
+        }
+        crate::metrics::count_source_miss();
+        let me = std::thread::current().id();
+        if rayon::current_thread_index().is_none() {
+            while matches!(*state, State::Building(owner) if owner != me) {
+                state = self.ready.wait(state).unwrap_or_else(|e| e.into_inner());
+            }
+            if let State::Ready(artifact) = &*state {
+                return artifact.clone();
+            }
+        }
+        let claim = matches!(*state, State::Empty).then(|| {
+            *state = State::Building(me);
+            Claim(self)
+        });
+        drop(state);
+        let built = build();
+        let mut state = self.lock();
+        let artifact = match &*state {
+            State::Ready(first) => first.clone(),
+            State::Empty | State::Building(_) => {
+                *state = State::Ready(built.clone());
+                built
+            }
+        };
+        drop(state);
+        drop(claim);
+        artifact
+    }
+}
+
 struct Entry {
     key: Key,
-    cell: Arc<OnceLock<Artifact>>,
+    cell: Arc<Slot>,
     bytes: usize,
 }
 
@@ -122,7 +207,7 @@ impl Cache {
         }
     }
 
-    fn touch(&mut self, i: usize) -> Arc<OnceLock<Artifact>> {
+    fn touch(&mut self, i: usize) -> Arc<Slot> {
         let entry = self.entries.remove(i);
         let cell = Arc::clone(&entry.cell);
         self.entries.push(entry);
@@ -193,10 +278,10 @@ fn lookup(key: Key, build: impl FnOnce() -> Artifact) -> Artifact {
     let cell = {
         let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
         let found = cache.entries.iter().position(|entry| entry.key == key);
-        let cell = match found {
+        match found {
             Some(i) => cache.touch(i),
             None => {
-                let cell = Arc::new(OnceLock::new());
+                let cell = Arc::new(Slot::new());
                 cache.entries.push(Entry {
                     key,
                     cell: Arc::clone(&cell),
@@ -204,23 +289,16 @@ fn lookup(key: Key, build: impl FnOnce() -> Artifact) -> Artifact {
                 });
                 cell
             }
-        };
-        match cell.get() {
-            Some(_) => crate::metrics::count_source_hit(),
-            None => crate::metrics::count_source_miss(),
         }
-        cell
     };
-    let artifact = cell
-        .get_or_init(|| {
-            #[cfg(test)]
-            {
-                let mut builds = pass_builds().lock().unwrap_or_else(|e| e.into_inner());
-                *builds.entry(key.hash).or_insert(0) += 1;
-            }
-            build()
-        })
-        .clone();
+    let artifact = cell.resolve(|| {
+        #[cfg(test)]
+        {
+            let mut builds = pass_builds().lock().unwrap_or_else(|e| e.into_inner());
+            *builds.entry(key.hash).or_insert(0) += 1;
+        }
+        build()
+    });
     let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
     cache.note_size(key, artifact.size());
     artifact
@@ -258,23 +336,37 @@ fn cached_buffer(
     }
 }
 
+/// The deepest embedded object that still decodes. A payload comes from the
+/// opened file, so nesting is attacker-controlled; each level renders on the
+/// stack of the level that encloses it.
+pub(crate) const MAX_EMBED_NESTING: u8 = 8;
+
 /// The decoded embedded source of `so` at its own resolution, or `None` when
-/// it is not an embedded object, has an empty payload, or does not decode.
+/// it is not an embedded object, has an empty payload, does not decode, or is
+/// nested deeper than [`MAX_EMBED_NESTING`].
 pub(crate) fn embedded_source(so: &SmartObject) -> Option<Arc<PixelBuffer>> {
-    if so.kind != pictura_core::SmartObjectKind::Embedded {
+    if so.kind != pictura_core::SmartObjectKind::Embedded || so.nesting >= MAX_EMBED_NESTING {
         return None;
     }
     so.payload().filter(|p| !p.is_empty())?;
     cached_buffer(Kind::Embedded, key::embedded_key(so), || {
-        decode_embedded(so.payload()?)
+        decode_embedded(so)
     })
 }
 
-fn decode_embedded(payload: &[u8]) -> Option<PixelBuffer> {
-    // ponytail: an embedded source that itself holds a no-proxy smart object
-    // recurses without a depth guard; a crafted cyclic payload can re-enter
-    // this OnceLock. Add a depth pass-through when untrusted embeddings appear.
-    let embedded = pictura_codec::read_psd(payload).ok()?;
+fn decode_embedded(so: &SmartObject) -> Option<PixelBuffer> {
+    let mut embedded = pictura_codec::read_psd(so.payload()?).ok()?;
+    // The depth travels in the data, not the call stack: a nested composite
+    // may run on another pool thread.
+    let mut stacks = vec![&mut embedded.layers];
+    while let Some(stack) = stacks.pop() {
+        for layer in stack.iter_mut() {
+            if let Some(inner) = layer.smart_object.as_mut() {
+                inner.nesting = so.nesting + 1;
+            }
+            stacks.push(&mut layer.children);
+        }
+    }
     let comp = &embedded.composite;
     let usable = comp.width > 0
         && comp.height > 0
