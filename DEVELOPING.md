@@ -144,7 +144,10 @@ a thin Qt shell around it.
   helpers; concern submodules live under `src/cxxqt_object/`
   (`impl_{core,layers,selection,transform,paint,history,filters}.rs`, and so
   on). Keep the root-plus-directory layout — the generated header path and the
-  C++ includes depend on it.
+  C++ includes depend on it. A bridge file holds declarations only: the bodies
+  of the functions it declares, their helpers and tests live in its child
+  module `<name>/imp.rs`, so editing them does not rerun the cxx-qt build
+  script (guarded by `build_config::bridge_files_hold_declarations_only`).
 - **Boundary.** Qt decodes images to packed RGBA8888 at the app edge
   (`cpp/decode_image.cpp`); the engine never sees a Qt type.
 - **Shell.** `cpp/main.cpp` is startup only: it selects the offscreen QPA plugin
@@ -267,8 +270,13 @@ The slow Qt Test suites are registered in several entries each
 (`crates/pictura-app/cpp/tests/CMakeLists.txt`): an entry runs a share of the
 suite's test functions, chosen by the `PICTURA_TEST_SHARD` environment
 variable, so the layer's wall time is set by the parallel level rather than by
-one suite. A suite whose test functions share state keeps one entry.
-`CTEST_PARALLEL_LEVEL` overrides the level, which is four by default.
+one suite. A suite may share one window across its test functions and stay
+sharded when its per-function reset (`init()` and `cleanup()`) makes every
+function independent; a suite whose functions build on each other's state
+keeps one entry.
+`CTEST_PARALLEL_LEVEL` overrides the level, which `scripts/test-report.sh`
+sets to 80% of the CPUs (at least one) and CI to every CPU; plain `ctest` runs
+serially unless given `-j`.
 
 ## Headless
 
@@ -412,7 +420,15 @@ A Debug configure uses `dev`; release and packaging keep the static shell and
 `--release`. When a build tree's cached linker flags hide an installed mold,
 configure warns once with the `-U` command above.
 
-CTest suites run four at a time; set `CTEST_PARALLEL_LEVEL` to override it. The
+The same optimized development build compiles C++ at `-Og -g1` and, with GCC or
+Clang, behind a precompiled header of the Qt and std headers
+(`crates/pictura-app/cpp/pictura_pch.h`). C++ profiling therefore wants a
+packaging configure (`-DBUILD_TESTING=OFF`). The header can hide a missing
+`#include`; configure a throwaway tree with
+`-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` to check, as CI does.
+
+`scripts/test-report.sh` runs the CTest suites on 80% of the CPUs; set
+`CTEST_PARALLEL_LEVEL` to override it. The
 local build-caching check reuses a user-level FetchContent checkout cache under
 `${XDG_CACHE_HOME:-$HOME/.cache}/kooka-pictura/fetchcontent`, so repeated
 configures do not re-clone cxx-qt-cmake or Corrosion. In its default mode the

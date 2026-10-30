@@ -59,7 +59,8 @@ shared library, and an optimized one compiles the Rust library with the
 incremental `dev-app` Cargo profile (it inherits `release`). Doctests are
 disabled workspace-wide (`doctest = false`). Release and packaging builds pass
 `-DBUILD_TESTING=OFF`, keep the static shell, and are the only installable form.
-CTest runs four suites at a time by default; override with
+`scripts/test-report.sh` runs the Qt suites on 80% of the CPUs and CI on every
+runner CPU (plain `ctest` runs serially without `-j`); override with
 `CTEST_PARALLEL_LEVEL`. Each QObject header's matching `.cpp` ends with
 `#include "moc_<name>.cpp"`, so header edits avoid a central moc unit.
 
@@ -128,7 +129,10 @@ offscreen-compatible. See `DEVELOPING.md` for the self-test token protocol.
 - **The slow Qt suites are registered in several entries each.** An entry runs a
   share of the suite's test functions, chosen by `PICTURA_TEST_SHARD`, so the
   layer's wall time is set by the parallel level and not by one suite. A suite
-  whose test functions share state keeps one entry.
+  may share one window across its test functions and stay sharded when its
+  per-function reset (`init()` and `cleanup()`) makes every function
+  independent; a suite whose functions build on each other's state keeps one
+  entry.
 
 ## Spec workflow (OpenSpec)
 
