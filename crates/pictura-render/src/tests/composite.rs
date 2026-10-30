@@ -797,9 +797,20 @@ fn proxy_less_type_layer_composites_live_coverage() {
         covered < plane,
         "a proxy-less type layer is not an opaque black rect"
     );
+    let expected = if gpu_available() {
+        Backend::Gpu
+    } else {
+        Backend::Cpu
+    };
     let (active, backend) = composite_active(&d, true);
-    assert_eq!(backend, Backend::Cpu);
-    assert_eq!(active, out);
+    assert_eq!(backend, expected);
+    if backend == Backend::Gpu {
+        for (i, (a, b)) in out.data.iter().zip(active.data.iter()).enumerate() {
+            assert!(a.abs_diff(*b) <= 1, "GPU parity at sample {i}: {a} vs {b}");
+        }
+    } else {
+        assert_eq!(active, out);
+    }
 }
 
 #[test]
@@ -833,9 +844,16 @@ fn type_layer_with_channel_composites_from_the_raster() {
 }
 
 #[test]
-fn gpu_declines_a_proxy_less_type_layer() {
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+fn gpu_composites_a_proxy_less_type_layer() {
     let d = doc(200, 80, vec![type_layer(Some(type_style()))]);
-    assert!(matches!(composite_gpu(&d), Err(GpuError::UnsupportedText)));
+    let gpu = composite_gpu(&d).expect("the cached type raster composites on the GPU");
+    let cpu = composite_rgba(&d);
+    assert!(gpu
+        .data
+        .iter()
+        .zip(cpu.data.iter())
+        .all(|(g, c)| g.abs_diff(*c) <= 1));
 }
 
 // --- Knockout ------------------------------------------------------------

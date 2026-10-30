@@ -12,7 +12,7 @@ mod clipping;
 pub(crate) mod composite;
 mod composite_ctx;
 mod gradient_fill;
-mod layer_effects;
+pub(crate) mod layer_effects;
 mod native_depth;
 mod pattern_fill;
 mod raster_import;

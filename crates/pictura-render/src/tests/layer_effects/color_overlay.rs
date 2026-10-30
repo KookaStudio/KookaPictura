@@ -386,11 +386,7 @@ fn gpu_rejects_a_color_overlay_layer_and_falls_back() {
             spec_layer(&ColorSpec::default()),
         ],
     );
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "check_supported rejects before dispatch"
-    );
-    assert_eq!(composite_gpu_or_cpu(&d), composite_rgba(&d));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 #[test]
@@ -404,20 +400,14 @@ fn gpu_does_not_reject_an_inert_or_undecodable_color_overlay() {
             ..Default::default()
         })],
     );
-    assert!(!matches!(
-        composite_gpu(&disabled),
-        Err(GpuError::UnsupportedLayerEffect)
-    ));
+    assert_gpu_accepts_and_matches_cpu(&disabled);
     // A malformed effect (wrong class id) does not decode and does not reject.
     let malformed = lfx2_effect(
         b"SoFi",
         object(b"SoCo", vec![(b"enab".to_vec(), DescValue::Bool(true))]),
     );
     let d = doc(12, 12, vec![overlay_layer(Some(malformed))]);
-    assert!(!matches!(
-        composite_gpu(&d),
-        Err(GpuError::UnsupportedLayerEffect)
-    ));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 // --- Fixture ---------------------------------------------------------------

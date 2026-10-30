@@ -55,6 +55,7 @@ fn reason_index(err: &GpuError) -> usize {
 }
 
 static DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 11];
+static LAYER_DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 11];
 static RESIDENT_HITS: AtomicU64 = AtomicU64::new(0);
 static RESIDENT_MISSES: AtomicU64 = AtomicU64::new(0);
 static RESIDENT_ENTRIES: AtomicU64 = AtomicU64::new(0);
@@ -70,6 +71,12 @@ static DEVICE_NS: AtomicU64 = AtomicU64::new(u64::MAX);
 /// Count one GPU decline under its reason.
 pub(crate) fn count_decline(err: &GpuError) {
     DECLINES[reason_index(err)].fetch_add(1, Relaxed);
+}
+
+/// Count one declining layer the plan walk sees. A corpus run ranks reasons
+/// without stopping at the first declining layer.
+pub(crate) fn count_layer_decline(err: &GpuError) {
+    LAYER_DECLINES[reason_index(err)].fetch_add(1, Relaxed);
 }
 
 pub(crate) fn count_resident(hit: bool) {
@@ -140,6 +147,9 @@ pub struct Counters {
     pub effect_decodes: u64,
     /// One `(reason, count)` per [`DECLINE_REASONS`] entry, in that order.
     pub declines: Vec<(&'static str, u64)>,
+    /// One `(reason, count)` per [`DECLINE_REASONS`] entry, counted per
+    /// declining layer rather than per composite.
+    pub layer_declines: Vec<(&'static str, u64)>,
 }
 
 pub fn counters() -> Counters {
@@ -155,6 +165,11 @@ pub fn counters() -> Counters {
         declines: DECLINE_REASONS
             .iter()
             .zip(&DECLINES)
+            .map(|(reason, n)| (*reason, n.load(Relaxed)))
+            .collect(),
+        layer_declines: DECLINE_REASONS
+            .iter()
+            .zip(&LAYER_DECLINES)
             .map(|(reason, n)| (*reason, n.load(Relaxed)))
             .collect(),
     }
@@ -217,6 +232,26 @@ mod tests {
             Err(GpuError::UnsupportedMode(BlendMode::Dissolve))
         ));
         assert!(decline_count("unsupported_mode") > before);
+    }
+
+    #[test]
+    fn layer_decline_is_counted() {
+        let doc = solid_doc(4, 4, BlendMode::Dissolve);
+        let before = counters()
+            .layer_declines
+            .iter()
+            .find(|(reason, _)| *reason == "unsupported_mode")
+            .map_or(0, |(_, n)| *n);
+        assert!(matches!(
+            crate::composite_gpu(&doc),
+            Err(GpuError::UnsupportedMode(BlendMode::Dissolve))
+        ));
+        let after = counters()
+            .layer_declines
+            .iter()
+            .find(|(reason, _)| *reason == "unsupported_mode")
+            .map_or(0, |(_, n)| *n);
+        assert!(after > before);
     }
 
     #[test]

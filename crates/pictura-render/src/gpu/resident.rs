@@ -38,6 +38,14 @@ pub(super) enum UploadKey {
         /// feather bits)`.
         sampled: (u64, Edges, u8, u8, u64),
     },
+    Raster {
+        /// A content hash for a cached CPU raster (a type raster, a smart
+        /// source, or a fill). `0` is never cached.
+        content: u64,
+        rect: Edges,
+        doc: (u32, u32),
+        gray: bool,
+    },
 }
 
 fn rect_key(r: PsdRect) -> Edges {

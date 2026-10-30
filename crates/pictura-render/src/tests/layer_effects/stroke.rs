@@ -1279,38 +1279,20 @@ fn gpu_rejects_a_stroke_layer_and_falls_back() {
             spec_stroke(&StrokeSpec::default()),
         ],
     );
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "check_supported rejects before dispatch"
-    );
-    assert_eq!(composite_gpu_or_cpu(&d), composite_rgba(&d));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 #[test]
-fn gpu_rejects_a_gradient_or_pattern_stroke_and_falls_back() {
+fn gpu_accepts_a_gradient_or_pattern_stroke() {
     let gradient = doc(
         12,
         12,
         vec![stroke_layer(Some(gradient_stroke_block(true, true)))],
     );
-    assert!(
-        matches!(
-            composite_gpu(&gradient),
-            Err(GpuError::UnsupportedLayerEffect)
-        ),
-        "a gradient stroke is effect-bearing"
-    );
-    assert_eq!(composite_gpu_or_cpu(&gradient), composite_rgba(&gradient));
+    assert_gpu_accepts_and_matches_cpu(&gradient);
 
     let pattern = pattern_stroke_doc("pictura-pattern", true);
-    assert!(
-        matches!(
-            composite_gpu(&pattern),
-            Err(GpuError::UnsupportedLayerEffect)
-        ),
-        "a pattern stroke is effect-bearing"
-    );
-    assert_eq!(composite_gpu_or_cpu(&pattern), composite_rgba(&pattern));
+    assert_gpu_accepts_and_matches_cpu(&pattern);
 }
 
 #[test]
@@ -1331,10 +1313,7 @@ fn gpu_does_not_reject_an_inert_or_malformed_stroke() {
         },
     ] {
         let d = doc(12, 12, vec![spec_stroke(&spec)]);
-        assert!(
-            !matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-            "an inert or malformed stroke must not reject the GPU"
-        );
+        assert_gpu_accepts_and_matches_cpu(&d);
     }
     // A disabled gradient stroke does not reject either.
     let disabled = doc(
@@ -1342,13 +1321,7 @@ fn gpu_does_not_reject_an_inert_or_malformed_stroke() {
         12,
         vec![stroke_layer(Some(gradient_stroke_block(true, false)))],
     );
-    assert!(
-        !matches!(
-            composite_gpu(&disabled),
-            Err(GpuError::UnsupportedLayerEffect)
-        ),
-        "a disabled gradient stroke must not reject the GPU"
-    );
+    assert_gpu_accepts_and_matches_cpu(&disabled);
 }
 
 // --- Fixture ---------------------------------------------------------------

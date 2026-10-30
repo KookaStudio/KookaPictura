@@ -193,18 +193,17 @@ fn malformed_vector_fill_is_a_no_op() {
 }
 
 #[test]
-fn vector_fill_forces_the_cpu_backend() {
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+fn vector_fill_composites_on_the_gpu() {
     let fill = vscg(b"SoCo", &encode_solid_color_fill([1, 2, 3]).data);
     let shape = shaped_layer("shape", 4, 4, fill);
     let doc = doc(4, 4, vec![shape]);
 
-    assert!(
-        matches!(composite_gpu(&doc), Err(GpuError::UnsupportedAdjustment)),
-        "the GPU rejects a layer carrying a vector fill"
-    );
-    assert_eq!(
-        composite_active(&doc, true).1,
-        Backend::Cpu,
-        "the active composite falls back to the CPU"
-    );
+    let gpu = composite_gpu(&doc).expect("the decoded vector fill composites on the GPU");
+    let cpu = composite_rgba(&doc);
+    assert!(gpu
+        .data
+        .iter()
+        .zip(cpu.data.iter())
+        .all(|(g, c)| g.abs_diff(*c) <= 1));
 }

@@ -3,12 +3,10 @@ use std::sync::{Mutex, OnceLock};
 
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer};
 
-use crate::decode_adjustment;
-
 use super::assemble::{mask_writer, padded, source_geom, source_writer, Region, RUN};
 use super::resident::{mask_key, source_key, Resident, UploadKey};
 use super::shader::{PLANAR_SHADER, SHADER, STROKE_SHADER};
-use super::{adjustment_params, mode_id, storage_entry, GpuError, NO_ADJ};
+use super::{mode_id, storage_entry, GpuError, NO_ADJ};
 
 /// Bind-group layout and compute pipeline, both size-independent (buffer sizes
 /// travel as bindings), so created once per shared device instead of rebuilt on
@@ -38,6 +36,8 @@ impl ComputeResources {
                     count: None,
                 },
                 storage_entry(4, true),
+                storage_entry(5, true),
+                storage_entry(6, true),
             ],
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -161,6 +161,9 @@ pub(super) struct Devices {
     resources: OnceLock<ComputeResources>,
     planar: OnceLock<PlanarResources>,
     stroke: OnceLock<StrokeResources>,
+    /// The CPU's exact Gradient Map luma-index correction, one bit per RGB
+    /// triple. Built lazily: only a Gradient Map layer needs it.
+    gradient_luma: OnceLock<wgpu::Buffer>,
     /// The last composite's readback buffer, kept for the next one.
     ///
     /// ponytail: a fresh gigabyte mapping costs ~0.8 s of page faults on the
@@ -191,6 +194,44 @@ impl Devices {
         self.stroke
             .get_or_init(|| StrokeResources::new(&self.device))
     }
+
+    pub(super) fn gradient_luma(&'static self) -> &'static wgpu::Buffer {
+        self.gradient_luma.get_or_init(|| {
+            let words = gradient_luma_half_up_bits();
+            let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("pictura-gradient-luma"),
+                size: bytes.len() as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.queue.write_buffer(&buffer, 0, &bytes);
+            buffer
+        })
+    }
+}
+
+/// One bit per RGB triple: set when the CPU's f64 luma lands exactly on a half
+/// and rounds up. For every other triple the exact integer `(n + 500) / 1000`
+/// rounding matches the CPU; this table only corrects the ties.
+fn gradient_luma_half_up_bits() -> Vec<u32> {
+    let mut words = vec![0u32; (1 << 24) / 32];
+    for r in 0..256u32 {
+        for g in 0..256u32 {
+            for b in 0..256u32 {
+                let n = 299 * r + 587 * g + 114 * b;
+                if n % 1000 != 500 {
+                    continue;
+                }
+                let idx = (r << 16) | (g << 8) | b;
+                let y = pictura_adjust::gradient_luma_index(r as u8, g as u8, b as u8) as u32;
+                if y == n / 1000 + 1 {
+                    words[(idx >> 5) as usize] |= 1 << (idx & 31);
+                }
+            }
+        }
+    }
+    words
 }
 
 async fn request_device() -> Option<Devices> {
@@ -251,6 +292,7 @@ async fn request_device() -> Option<Devices> {
         resources: OnceLock::new(),
         planar: OnceLock::new(),
         stroke: OnceLock::new(),
+        gradient_luma: OnceLock::new(),
         readback: Mutex::new(None),
         resident: Mutex::new(Resident::default()),
     })
@@ -373,6 +415,10 @@ pub(super) struct Gpu {
     params: wgpu::Buffer,
     /// The current text-gamma table; one zero entry while the setting is off.
     text_lut: wgpu::Buffer,
+    /// The current adjustment lookup table (256 `vec4<f32>` entries).
+    lut: wgpu::Buffer,
+    /// The shared device, for the lazily built Gradient Map tie table.
+    shared: &'static Devices,
     text_on: bool,
     /// Present only when the device was created with timestamp queries.
     timing: Option<Timing>,
@@ -427,6 +473,12 @@ impl Gpu {
             mapped_at_creation: false,
         });
         queue.write_buffer(&text_lut, 0, &bytes);
+        let lut = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("pictura-adj-lut"),
+            size: 256 * 16,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let timing = device
             .features()
             .contains(wgpu::Features::TIMESTAMP_QUERY)
@@ -438,6 +490,8 @@ impl Gpu {
             planar: shared.planar_resources(),
             params,
             text_lut,
+            lut,
+            shared,
             text_on,
             timing,
             x0,
@@ -474,9 +528,21 @@ impl Gpu {
         }
     }
 
+    /// The layout of a packed source that covers this whole region.
+    pub(super) fn packed_layout(&self) -> SrcLayout {
+        SrcLayout {
+            x0: self.x0,
+            y0: self.y0,
+            w: self.w,
+            h: self.h,
+            gray: false,
+            packed: true,
+        }
+    }
+
     /// Whether this composite covers the whole document, the only case whose
     /// uploads the resident store may retain.
-    fn is_document(&self, doc: &Document) -> bool {
+    pub(super) fn is_document(&self, doc: &Document) -> bool {
         self.x0 == 0 && self.y0 == 0 && self.w == doc.width && self.h == doc.height
     }
 
@@ -539,7 +605,7 @@ impl Gpu {
     /// the store. A `None` key (an unstamped plane) always uploads and keeps
     /// nothing. `keep` is false for a region-sized upload, whose bytes are
     /// addressable only by that region.
-    fn kept_or_upload(
+    pub(super) fn kept_or_upload(
         &self,
         key: Option<UploadKey>,
         keep: bool,
@@ -565,7 +631,7 @@ impl Gpu {
     /// produces straight into the queue's staging memory, a [`RUN`] per staging
     /// write, the runs in parallel: a large layer is never first assembled
     /// into a host buffer and then copied again.
-    fn upload_with(
+    pub(super) fn upload_with(
         &self,
         label: &str,
         len: usize,
@@ -620,52 +686,54 @@ impl Gpu {
         .0
     }
 
-    pub(super) fn composite_layer(&self, canvas: &wgpu::Buffer, layer: &Layer, doc: &Document) {
-        if !layer.visible {
-            return;
+    pub(super) fn composite_plan(
+        &self,
+        canvas: &wgpu::Buffer,
+        plan: &super::plan::LayerPlan,
+        doc: &Document,
+    ) {
+        let layer = plan.layer;
+        if let Some(passes) = &plan.effects {
+            for pass in &passes.below {
+                self.composite_effect_pass(canvas, pass, layer.opacity, doc);
+            }
         }
-        if layer.is_group {
-            // True pass-through: recurse onto the running canvas (matches the
-            // CPU exactness condition).
-            if matches!(layer.blend, BlendMode::PassThrough)
-                && layer.opacity == 255
-                && layer.mask.is_none()
-                && layer.vector_mask.is_none()
-            {
-                for child in &layer.children {
-                    self.composite_layer(canvas, child, doc);
+        match &plan.body {
+            super::plan::Body::Pixels => {
+                if let Some((src, layout)) = self.build_source(layer, doc) {
+                    let mask = self.build_mask(layer, doc);
+                    self.dispatch(
+                        canvas,
+                        &src,
+                        &mask,
+                        layout,
+                        layer.blend,
+                        layer.opacity,
+                        layer.fill,
+                        layer.type_tool.is_some(),
+                        NO_ADJ,
+                        None,
+                    );
                 }
-                return;
             }
-            let inner = self.zero_canvas();
-            for child in &layer.children {
-                self.composite_layer(&inner, child, doc);
-            }
-            let mask = self.build_mask(layer, doc);
-            // The inner canvas is already packed 8-bit RGBA: bind it directly
-            // as the source, no `f32` re-materialization.
-            self.dispatch(
-                canvas,
-                &inner,
-                &mask,
-                PACKED_SRC,
-                layer.blend,
-                layer.opacity,
-                255,
-                layer.type_tool.is_some(),
-                NO_ADJ,
-            );
-            return;
-        }
-        if let Some(data) = &layer.adjustment {
-            // `check_supported` already rejected every adjustment that has no GPU
-            // kind, so this only runs for the five supported kinds.
-            if let Some(adj) = decode_adjustment(data).and_then(|a| adjustment_params(&a)) {
+            super::plan::Body::Raster(cached) | super::plan::Body::Fill(cached) => {
+                let (src, layout) = self.build_cached_source(cached, doc);
                 let mask = self.build_mask(layer, doc);
-                // The shader ignores `src` in the adjustment branch; the mask
-                // buffer stands in for it rather than aliasing the read-write
-                // canvas binding.
-                // Adjustments have no Fill in CS6; scale by opacity only.
+                self.dispatch(
+                    canvas,
+                    &src,
+                    &mask,
+                    layout,
+                    layer.blend,
+                    layer.opacity,
+                    layer.fill,
+                    layer.type_tool.is_some(),
+                    NO_ADJ,
+                    None,
+                );
+            }
+            super::plan::Body::Adjustment(super::plan::AdjustmentPlan::Inline(adj)) => {
+                let mask = self.build_mask(layer, doc);
                 self.dispatch(
                     canvas,
                     &mask,
@@ -675,24 +743,65 @@ impl Gpu {
                     layer.opacity,
                     255,
                     layer.type_tool.is_some(),
-                    adj,
+                    *adj,
+                    None,
                 );
             }
-            return;
+            super::plan::Body::Adjustment(super::plan::AdjustmentPlan::Lut(lut)) => {
+                let mask = self.build_mask(layer, doc);
+                let kind = super::lut::kind(lut);
+                self.dispatch(
+                    canvas,
+                    &mask,
+                    &mask,
+                    PACKED_SRC,
+                    layer.blend,
+                    layer.opacity,
+                    255,
+                    layer.type_tool.is_some(),
+                    (kind, 0, 0, 0),
+                    Some(lut),
+                );
+            }
+            super::plan::Body::Group {
+                pass_through: true,
+                children,
+            } => {
+                for child in children {
+                    self.composite_plan(canvas, child, doc);
+                }
+            }
+            super::plan::Body::Group {
+                pass_through: false,
+                children,
+            } => {
+                let inner = self.zero_canvas();
+                for child in children {
+                    self.composite_plan(&inner, child, doc);
+                }
+                let mask = self.build_mask(layer, doc);
+                self.dispatch(
+                    canvas,
+                    &inner,
+                    &mask,
+                    self.packed_layout(),
+                    layer.blend,
+                    layer.opacity,
+                    255,
+                    layer.type_tool.is_some(),
+                    NO_ADJ,
+                    None,
+                );
+            }
+            super::plan::Body::ClipGroup { base, clipped } => {
+                self.composite_clip_group(canvas, base, clipped, doc);
+            }
+            super::plan::Body::Decline(_) => {}
         }
-        if let Some((src, layout)) = self.build_source(layer, doc) {
-            let mask = self.build_mask(layer, doc);
-            self.dispatch(
-                canvas,
-                &src,
-                &mask,
-                layout,
-                layer.blend,
-                layer.opacity,
-                layer.fill,
-                layer.type_tool.is_some(),
-                NO_ADJ,
-            );
+        if let Some(passes) = &plan.effects {
+            for pass in &passes.above {
+                self.composite_effect_pass(canvas, pass, layer.opacity, doc);
+            }
         }
     }
 
@@ -708,7 +817,12 @@ impl Gpu {
         fill: u8,
         text: bool,
         adj: (u32, i32, i32, i32),
+        lut_table: Option<&pictura_adjust::AdjustmentLut>,
     ) {
+        if let Some(table) = lut_table {
+            self.queue
+                .write_buffer(&self.lut, 0, &super::lut::bytes(table));
+        }
         let text_on = text && self.text_on;
         let flags = u32::from(layout.packed) | (u32::from(layout.gray) << 1);
         let (gx, gy) = grid_2d(
@@ -762,6 +876,18 @@ impl Gpu {
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: self.text_lut.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.lut.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: if adj.0 == 7 {
+                        self.shared.gradient_luma().as_entire_binding()
+                    } else {
+                        self.lut.as_entire_binding()
+                    },
                 },
             ],
         });
@@ -981,7 +1107,7 @@ pub(super) struct SrcLayout {
 }
 
 /// A group's inner canvas: one packed RGBA word per region pixel.
-const PACKED_SRC: SrcLayout = SrcLayout {
+pub(super) const PACKED_SRC: SrcLayout = SrcLayout {
     x0: 0,
     y0: 0,
     w: 0,
@@ -989,3 +1115,36 @@ const PACKED_SRC: SrcLayout = SrcLayout {
     gray: false,
     packed: true,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gradient_luma_bitset_matches_cpu_for_every_triple() {
+        let bits = gradient_luma_half_up_bits();
+        for r in 0..256u32 {
+            for g in 0..256u32 {
+                for b in 0..256u32 {
+                    let n = 299 * r + 587 * g + 114 * b;
+                    let mut y = n / 1000;
+                    let rem = n % 1000;
+                    if rem > 500 {
+                        y += 1;
+                    } else if rem == 500 {
+                        let idx = (r << 16) | (g << 8) | b;
+                        let bit = (bits[(idx >> 5) as usize] >> (idx & 31)) & 1;
+                        y += bit;
+                    }
+                    assert_eq!(
+                        y,
+                        u32::from(pictura_adjust::gradient_luma_index(
+                            r as u8, g as u8, b as u8
+                        )),
+                        "RGB {r},{g},{b}"
+                    );
+                }
+            }
+        }
+    }
+}

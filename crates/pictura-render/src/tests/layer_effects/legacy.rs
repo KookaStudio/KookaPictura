@@ -818,11 +818,7 @@ fn gpu_rejects_a_legacy_effect_and_falls_back() {
             ])),
         ],
     );
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "a renderable legacy effect rejects before dispatch"
-    );
-    assert_eq!(composite_gpu_or_cpu(&d), composite_rgba(&d));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 #[test]
@@ -841,9 +837,6 @@ fn gpu_does_not_reject_disabled_or_unmapped_legacy() {
     let malformed = legacy_layer(raw_block(vec![0, 0, 0, 1]));
     for layer in [disabled, unmapped, malformed] {
         let d = doc(9, 9, vec![layer]);
-        assert!(
-            !matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-            "an inert legacy block must not reject the GPU"
-        );
+        assert_gpu_accepts_and_matches_cpu(&d);
     }
 }
