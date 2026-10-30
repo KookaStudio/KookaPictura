@@ -748,6 +748,10 @@ pub struct SmartObject {
     /// [`SmartObject::payload_digest`] hashes on demand. Excluded from
     /// equality: this is cache metadata, not document content.
     pub payload_digest: u64,
+    /// How many embedded documents enclose this object: `0` in an opened file,
+    /// set by the renderer when it decodes a payload. Render metadata, like
+    /// `payload_digest`, so excluded from equality and never written.
+    pub nesting: u8,
     /// The `crs:` XMP packet found in an embedded payload, if any.
     pub crs_xmp: Option<Plane<u8>>,
     /// Typed view of the fixed `crs:` property set in [`SmartObject::crs_xmp`].
@@ -781,6 +785,7 @@ impl Default for SmartObject {
             config_descriptor: Plane::default(),
             payload: None,
             payload_digest: 0,
+            nesting: 0,
             crs_xmp: None,
             crs: None,
             smart_filters: Vec::new(),

@@ -105,6 +105,7 @@ Both were run against the unfixed `lookup` and failed on their 30 s watchdogs.
 - `ponytail:` a smart-filter or type source looked up only by bands below the
   first can still be built by several bands at once on a cold composite. That
   costs time, not correctness. Warm those too if profiling shows it.
-- A crafted cyclic embedded payload still waits on its own build outside the
-  pool, as it did on the once-lock, and recurses without bound on a worker.
-  The `ponytail:` in `decode_embedded` names the depth guard as the ceiling.
+- A crafted nested or digest-colliding embedded payload could recurse without
+  bound on a worker or wait on its own build outside the pool. The follow-up
+  change `embedded-nesting-limit` bounds the nesting and stops a thread waiting
+  on its own build.
