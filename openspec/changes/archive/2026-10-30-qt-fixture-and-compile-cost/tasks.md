@@ -86,11 +86,11 @@ There are two declared exceptions to "compile once":
 - [x] 10.1 Add a precompiled header for `pictura_shell` (Qt Core/Gui/Widgets and common std headers; the generated cxx-qt headers stay out, design §7), plus a separate `pictura_test_pch` target that the Qt Test targets `REUSE_FROM`. The test target is separate because of PIC vs PIE and `-g1`. Use both only in the optimized development configuration with GCC or Clang. Verify in group 12 that the compile commands for `-DBUILD_TESTING=OFF` and for a Debug configure carry no PCH.
 - [x] 10.2 Measure removing the per-test `mocs_compilation` TU and the AUTOMOC scan cost for the Qt Test targets. Measured; skipped (design §7): no measurable gain, so the change was reverted.
 - [x] 10.3 Add `-Og -g1` for the optimized development configuration as target-level options, so the per-source `-O1` (`filter_commands.cpp`) and the tests' `-g1` still come last. Verify from `ninja -t commands` in group 12. `-gsplit-dwarf` was measured; skipped (design §7). `command_tree.cpp` no longer exists.
-- [ ] 10.4 In the `qt-headless` job of `.github/workflows/ci.yml`, configure with `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON`, so CI compiles every source without the PCH. Verify from the PR's CI configure log and a green build.
+- [x] 10.4 In the `qt-headless` job of `.github/workflows/ci.yml`, configure with `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON`, so CI compiles every source without the PCH. Verify from the PR's CI configure log and a green build.
 
 ## 11. CI target cache (design §9)
 
-- [ ] 11.1 Split the shared `*rustcache` anchor in `.github/workflows/ci.yml`:
+- [x] 11.1 Split the shared `*rustcache` anchor in `.github/workflows/ci.yml`:
   - `lint` and `test` get `cache-targets: "true"`, a per-job `shared-key` and `save-if: ${{ github.ref == 'refs/heads/master' }}`;
   - `qt-headless` keeps `cache-targets: "false"` (Corrosion builds outside `target/`).
 
