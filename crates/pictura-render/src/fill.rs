@@ -17,7 +17,7 @@ use pictura_adjust::{
 use pictura_codec::{DescValue, PatternPixels};
 use pictura_core::{AdjustmentData, Document, Layer};
 
-use crate::composite::{blend_into, desc_item, Canvas};
+use crate::composite::{blend_into_ctx, desc_item, Canvas};
 
 /// The decoded `GdFl` descriptor, or `None` when it is not a custom-stop
 /// gradient this crate understands. Never panics; every failure is a no-op.
@@ -517,7 +517,7 @@ fn sample_stops(stops: &[GradientStop], z: f64) -> [u8; 4] {
 ///
 /// Unlike a destructive adjustment, every in-rect pixel is source content at
 /// the payload's alpha; the layer's mask, opacity, fill, and blend still apply
-/// through [`blend_into`]. Pixels outside the rect are untouched.
+/// through [`blend_into_ctx`]. Pixels outside the rect are untouched.
 pub(crate) fn composite_solid_fill(
     canvas: &mut Canvas,
     layer: &Layer,
@@ -537,15 +537,19 @@ pub(crate) fn composite_solid_fill(
         rgba[2] as f32 / 255.0,
     ];
     let src_a = rgba[3] as f32 / 255.0;
+    let clip = canvas.clip();
+    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in y0..y1 {
         for x in x0..x1 {
-            blend_into(canvas, layer, doc, x as usize, y as usize, cs, src_a);
+            blend_into_ctx(
+                canvas, &ctx, layer, doc, clip, x as usize, y as usize, cs, src_a,
+            );
         }
     }
 }
 
 /// Composite a gradient fill across the layer's rect (clamped to the canvas),
-/// generating an opaque colour per pixel and blending it through [`blend_into`].
+/// generating an opaque colour per pixel and blending it through [`blend_into_ctx`].
 pub(crate) fn composite_gradient_fill(
     canvas: &mut Canvas,
     layer: &Layer,
@@ -566,14 +570,18 @@ pub(crate) fn composite_gradient_fill(
     }
     let px = gradient_rgba(w, h, params);
     let row = w as usize;
+    let clip = canvas.clip();
+    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in y0..y1 {
         for x in x0..x1 {
             let li = (y - layer.rect.top) as usize * row + (x - layer.rect.left) as usize;
             let c = px[li];
-            blend_into(
+            blend_into_ctx(
                 canvas,
+                &ctx,
                 layer,
                 doc,
+                clip,
                 x as usize,
                 y as usize,
                 [
@@ -678,7 +686,7 @@ fn tile_for<'a>(pattern: Option<&'a PatternPixels>, params: &PatternFillParams) 
 }
 
 /// Composite a pattern fill across the layer's rect (clamped to the canvas),
-/// tiling through [`blend_into`] so the layer's mask, opacity, fill, and blend
+/// tiling through [`blend_into_ctx`] so the layer's mask, opacity, fill, and blend
 /// apply and pixels outside the rect are untouched.
 pub(crate) fn composite_pattern_fill(
     canvas: &mut Canvas,
@@ -698,13 +706,17 @@ pub(crate) fn composite_pattern_fill(
     let patterns = pictura_codec::decode_patterns(doc);
     let pattern = patterns.iter().find(|p| p.pattern_id == params.pattern_id);
     let tile = tile_for(pattern, params);
+    let clip = canvas.clip();
+    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in y0..y1 {
         for x in x0..x1 {
             let c = tile.sample(x, y, layer.rect.left, layer.rect.top);
-            blend_into(
+            blend_into_ctx(
                 canvas,
+                &ctx,
                 layer,
                 doc,
+                clip,
                 x as usize,
                 y as usize,
                 [

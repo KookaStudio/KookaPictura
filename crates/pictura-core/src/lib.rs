@@ -41,7 +41,7 @@ pub use raw_settings::{
     CameraCalibration, Detail, Effects, Hsl, Lens, PicturaRawSettings, RawMode, SplitToning,
     ToneCurve, HSL_RANGES,
 };
-pub use samples::{Sample, Samples};
+pub use samples::{Sample, SampleRow, Samples};
 pub use text_render::{
     layout_lines, FontPolicy, GlyphMask, LayoutLine, LayoutParams, PlacedGlyph, RasterRequest,
     Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
@@ -52,7 +52,7 @@ pub use type_tool::{
     StyleOverrides, TextDirection, TextPath, TextPathKind, TextStyle, TextStyleSheet, TypeSpec,
     TypeTool, BASIC_PARAGRAPH, DEFAULT_LANGUAGE,
 };
-pub use vector::{VectorFillRule, VectorMask, VectorSubpath};
+pub use vector::{VectorCoverage, VectorFillRule, VectorMask, VectorSubpath};
 
 /// PSD color modes (`header.color_mode`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -389,6 +389,7 @@ impl Document {
     /// carries a layer's colour planes but no transparency plane still owns
     /// the colour. A tool that edits a layer's pixels must write the same copy
     /// the compositor reads, or its edit never reaches the display.
+    #[inline]
     pub fn authoritative_plane<'a>(&self, layer: &'a Layer, id: i16) -> Option<&'a Samples> {
         let depth = self.source_depth?;
         if !matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {

@@ -16,7 +16,7 @@ use pictura_core::{
 use pictura_filters::catalogue::{self, NullResources};
 use pictura_filters::{Filter, LensCorrectionParams};
 
-use crate::composite::{blend_into, render_smart_source, Canvas};
+use crate::composite::{blend_into_ctx, render_smart_source, Canvas};
 
 /// A decoded smart filter ready to render.
 #[derive(Debug, Clone)]
@@ -229,6 +229,8 @@ pub(crate) fn composite_smart_filtered_source(
     let full = &cached.buffer;
     let fw = full.width as usize;
     let plane = fw * full.height as usize;
+    let clip = canvas.clip();
+    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in region.top..region.bottom {
         for x in region.left..region.right {
             let i = (y - cached.rect.top) as usize * fw + (x - cached.rect.left) as usize;
@@ -248,10 +250,12 @@ pub(crate) fn composite_smart_filtered_source(
                     }
                 }
             }
-            blend_into(
+            blend_into_ctx(
                 canvas,
+                &ctx,
                 layer,
                 doc,
+                clip,
                 x as usize,
                 y as usize,
                 [

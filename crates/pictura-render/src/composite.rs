@@ -889,11 +889,14 @@ pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f
     factor
 }
 
-/// Composite one source sample over the backdrop with the layer's opacity, fill, mask, and gate.
-pub(crate) fn blend_into(
+/// Composite one source sample over the backdrop with a resolved layer context.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn blend_into_ctx(
     canvas: &mut Canvas,
+    ctx: &crate::composite_blend::BlendCtx<'_>,
     layer: &Layer,
     doc: &Document,
+    clip: PsdRect,
     x: usize,
     y: usize,
     cs: [f32; 3],
@@ -902,12 +905,11 @@ pub(crate) fn blend_into(
     let ox = canvas.ox;
     let w = canvas.w;
     let start = (y - canvas.oy as usize) * w;
-    let clip = canvas.clip;
     let Canvas { px, cover, .. } = canvas;
     let row = &mut px[start..start + w];
     let cov = cover.as_deref_mut().map(|c| &mut c[start..start + w]);
-    crate::composite_rows::blend_into_row(
-        row, cov, ox, layer, doc, clip, x as i32, y as i32, cs, src_a,
+    crate::composite_blend::blend_into_row_ctx(
+        row, cov, ox, ctx, layer, doc, clip, x as i32, y as i32, cs, src_a,
     );
 }
 

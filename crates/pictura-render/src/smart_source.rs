@@ -4,7 +4,7 @@
 
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect, SmartObject};
 
-use crate::composite::{blend_into, channel_plane, Canvas};
+use crate::composite::{blend_into_ctx, channel_plane, Canvas};
 
 /// Render an embedded smart object's source over `region` (document
 /// coordinates, within `rect`), scaling with the renderer's integer ratio.
@@ -110,13 +110,17 @@ pub(crate) fn composite_smart_source(canvas: &mut Canvas, layer: &Layer, doc: &D
     let rw = region.width() as usize;
     let rh = region.height() as usize;
     let plane = rw * rh;
+    let clip = canvas.clip();
+    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for by in 0..rh {
         for bx in 0..rw {
             let i = by * rw + bx;
-            blend_into(
+            blend_into_ctx(
                 canvas,
+                &ctx,
                 layer,
                 doc,
+                clip,
                 region.left as usize + bx,
                 region.top as usize + by,
                 [
