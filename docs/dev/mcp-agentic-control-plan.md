@@ -159,8 +159,15 @@ Why this shape:
 - JSON is serialized **compact** (`QJsonDocument::Compact`) so a message never
   contains a raw newline.
 - Unknown/malformed line → `bad_request` (never crashes the app).
-- Multiple in-flight requests are not required for v1; process sequentially per
-  socket. The MCP frontend has one connection.
+- Requests run one at a time, in arrival order, across all connections. A
+  connection holds at most 64 queued requests and the server serves at most 4
+  connections; an excess request is `refused` and an excess connection closed.
+- A dialog or menu reached during a request is cancelled and the request is
+  answered `refused`. A pathless `save` that would need a dialog is refused.
+- `listen()` fails while another live process holds the endpoint, and reclaims
+  an endpoint left by a dead one.
+- These rules, and the input limits, are specified in
+  `openspec/specs/interop/agentic-control/spec.md` (#1061).
 
 ### 4.2 Error codes
 

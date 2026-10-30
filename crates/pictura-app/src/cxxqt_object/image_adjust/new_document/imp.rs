@@ -5,11 +5,29 @@ use crate::history::History;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_codec::{set_document_resolution, Resolution};
+use pictura_codec::{set_document_resolution, ImageBudget, Resolution};
 use pictura_core::{BitDepth, ColorMode, Document};
 use pictura_render::BitmapMethod;
 
 pub(super) const DEFAULT_PPI: f64 = 72.0;
+
+pub(super) fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool {
+    fits_budget(width, height, bits, &ImageBudget::default())
+}
+
+/// Sized like `ImageBudget`'s decoded allocation: four 8-bit planes, scaled
+/// by depth.
+fn fits_budget(width: i32, height: i32, bits: i32, budget: &ImageBudget) -> bool {
+    if width < 1 || height < 1 || bits < 1 {
+        return false;
+    }
+    let (width, height) = (width as u64, height as u64);
+    if width > u64::from(budget.max_dimension) || height > u64::from(budget.max_dimension) {
+        return false;
+    }
+    let bytes = width * height * 4 * (bits as u64).div_ceil(8);
+    bytes <= budget.max_alloc_bytes && bytes <= budget.max_document_bytes
+}
 
 /// The finishing steps for `mode` at `bits` on an 8-bit base, or `None` when
 /// the pair is refused. Bitmap is 1-bit only, and the 1-bit depth is
@@ -164,6 +182,32 @@ mod tests {
             Some(("grayscale", None, Some(BitDepth::ThirtyTwo)))
         );
         assert_eq!(plan("indexed", 8), None);
+    }
+
+    #[test]
+    fn budget_judges_sides_then_bytes() {
+        let budget = ImageBudget {
+            max_dimension: 30_000,
+            max_alloc_bytes: 2 * 1024 * 1024 * 1024,
+            max_document_bytes: 2 * 1024 * 1024 * 1024,
+        };
+        assert!(fits_budget(17_000, 17_000, 8, &budget));
+        assert!(!fits_budget(17_000, 17_000, 16, &budget));
+        assert!(!fits_budget(30_000, 30_000, 8, &budget));
+        assert!(!fits_budget(30_001, 1, 8, &budget));
+        assert!(!fits_budget(0, 10, 8, &budget));
+        assert!(fits_budget(30_000, 1, 1, &budget));
+    }
+
+    #[test]
+    fn budget_honours_the_document_limit() {
+        let budget = ImageBudget {
+            max_dimension: 30_000,
+            max_alloc_bytes: 2 * 1024 * 1024 * 1024,
+            max_document_bytes: 1024,
+        };
+        assert!(fits_budget(10, 10, 8, &budget));
+        assert!(!fits_budget(100, 100, 8, &budget));
     }
 
     #[test]

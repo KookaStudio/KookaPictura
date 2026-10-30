@@ -1,4 +1,6 @@
 #include "control_server.h"
+#include "control_scope.h"
+#include "control_server_support.h"
 
 #include "api/document_api.h"
 #include "api/history_api.h"
@@ -128,6 +130,10 @@ QString screenModeName(PicturaMainWindow::ScreenMode mode)
     }
 }
 
+} // namespace
+
+namespace control_detail {
+
 QJsonObject documentInfo(PicturaMainWindow* frame, int index)
 {
     PictureView* view = frame->viewAt(index);
@@ -147,118 +153,9 @@ QJsonObject documentInfo(PicturaMainWindow* frame, int index)
     return info;
 }
 
-// In-memory PNG encode; returns empty on failure.
-QByteArray encodePngBase64(const QImage& image)
-{
-    QByteArray bytes;
-    QBuffer buffer(&bytes);
-    buffer.open(QIODevice::WriteOnly);
-    if (!image.save(&buffer, "PNG")) {
-        return QByteArray();
-    }
-    buffer.close();
-    return bytes.toBase64();
-}
+} // namespace control_detail
 
-// ponytail: one capped JSON line is the whole response-size guard; the long
-// edge is bounded to maxDim before encoding.
-QImage scaleToMaxDim(const QImage& image, int maxDim)
-{
-    if (qMax(image.width(), image.height()) <= maxDim) {
-        return image;
-    }
-    return image.scaled(maxDim, maxDim, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-}
-
-QString widgetText(QWidget* widget)
-{
-    if (const QAbstractButton* button = qobject_cast<QAbstractButton*>(widget)) {
-        if (!button->text().isEmpty()) {
-            return button->text();
-        }
-    }
-    if (const QLabel* label = qobject_cast<QLabel*>(widget)) {
-        if (!label->text().isEmpty()) {
-            return label->text();
-        }
-    }
-    if (const QMenu* menu = qobject_cast<QMenu*>(widget)) {
-        if (!menu->title().isEmpty()) {
-            return menu->title();
-        }
-    }
-    if (const QGroupBox* group = qobject_cast<QGroupBox*>(widget)) {
-        if (!group->title().isEmpty()) {
-            return group->title();
-        }
-    }
-    if (!widget->windowTitle().isEmpty()) {
-        return widget->windowTitle();
-    }
-    return QString();
-}
-
-// Pre-order DFS of the QWidget hierarchy, capped in depth and children per
-// node. Rects are window-local to `root`.
-void appendWidgetTree(QWidget* widget, QWidget* root, int depth, int maxDepth, int maxChildren,
-                      QJsonArray& nodes)
-{
-    const QPoint origin = widget->mapTo(root, QPoint(0, 0));
-    const QSize size = widget->size();
-    nodes.append(QJsonObject{
-        {QStringLiteral("class"), QString::fromUtf8(widget->metaObject()->className())},
-        {QStringLiteral("objectName"), widget->objectName()},
-        {QStringLiteral("rect"),
-         QJsonObject{{QStringLiteral("x"), origin.x()},
-                     {QStringLiteral("y"), origin.y()},
-                     {QStringLiteral("w"), size.width()},
-                     {QStringLiteral("h"), size.height()}}},
-        {QStringLiteral("visible"), widget->isVisible()},
-        {QStringLiteral("enabled"), widget->isEnabled()},
-        {QStringLiteral("text"), widgetText(widget)},
-        {QStringLiteral("tooltip"), widget->toolTip()}});
-
-    if (depth >= maxDepth) {
-        return;
-    }
-    int taken = 0;
-    for (QObject* child : widget->children()) {
-        if (taken >= maxChildren) {
-            break;
-        }
-        QWidget* childWidget = qobject_cast<QWidget*>(child);
-        if (!childWidget) {
-            continue;
-        }
-        ++taken;
-        appendWidgetTree(childWidget, root, depth + 1, maxDepth, maxChildren, nodes);
-    }
-}
-
-// Why `path` may not be opened (or, when `writes`, saved to), or empty. The
-// session token already limits callers to the same user, so any absolute
-// path is allowed; these refuse only spellings that land somewhere other
-// than the one named (#646).
-QString pathProblem(const QString& path, bool writes)
-{
-    if (!QDir::isAbsolutePath(path)) {
-        return QStringLiteral("path must be absolute");
-    }
-    for (const QChar c : path) {
-        if (c.unicode() < 0x20 || c.unicode() == 0x7f) {
-            return QStringLiteral("path must not contain control characters");
-        }
-    }
-    if (QDir::fromNativeSeparators(path).split(QLatin1Char('/')).contains(QStringLiteral(".."))) {
-        return QStringLiteral("path must not contain '..'");
-    }
-    if (writes && QFileInfo(path).isSymLink()) {
-        return QStringLiteral("path must not be a symbolic link");
-    }
-    return {};
-}
-
-} // namespace
+using control_detail::documentInfo;
 
 ControlServer::ControlServer(PicturaMainWindow* frame, const QString& socketPath,
                              QObject* parent)
@@ -307,12 +204,21 @@ bool ControlServer::listen()
         return false;
     }
 #endif
+    // Before removeServer: a live holder's socket must survive this attempt.
+    // A stale time of 0 leaves a dead holder to the PID check alone.
+    lock_ = std::make_unique<QLockFile>(lockPath());
+    lock_->setStaleLockTime(0);
+    if (!lock_->tryLock(0)) {
+        lock_.reset();
+        return false;
+    }
     QLocalServer::removeServer(socketPath_);
     server_ = new QLocalServer(this);
     server_->setSocketOptions(QLocalServer::UserAccessOption);
     if (!server_->listen(socketPath_)) {
         delete server_;
         server_ = nullptr;
+        lock_.reset();
         return false;
     }
     if (!writeTokenFile()) {
@@ -330,6 +236,15 @@ QString ControlServer::tokenPath() const
     return QDir::tempPath() + QStringLiteral("/") + socketPath_ + QStringLiteral(".token");
 #else
     return socketPath_ + QStringLiteral(".token");
+#endif
+}
+
+QString ControlServer::lockPath() const
+{
+#ifdef _WIN32
+    return QDir::tempPath() + QStringLiteral("/") + socketPath_ + QStringLiteral(".lock");
+#else
+    return socketPath_ + QStringLiteral(".lock");
 #endif
 }
 
@@ -383,6 +298,9 @@ bool ControlServer::authorized(const QJsonObject& request) const
 
 void ControlServer::shutdown()
 {
+    queue_.clear();
+    queuedCounts_.clear();
+    buffers_.clear();
     if (tokenWritten_) {
         QFile::remove(tokenPath());
         tokenWritten_ = false;
@@ -406,6 +324,7 @@ void ControlServer::shutdown()
         QLocalServer::removeServer(socketPath_);
 #endif
     }
+    lock_.reset();
 }
 
 void ControlServer::onNewConnection()
@@ -414,6 +333,11 @@ void ControlServer::onNewConnection()
         return;
     }
     while (QLocalSocket* socket = server_->nextPendingConnection()) {
+        if (buffers_.size() >= kMaxConnections) {
+            socket->abort();
+            socket->deleteLater();
+            continue;
+        }
         buffers_.insert(socket, QByteArray());
         connect(socket, &QLocalSocket::readyRead, this, &ControlServer::onReadyRead);
         connect(socket, &QLocalSocket::disconnected, this, &ControlServer::onDisconnected);
@@ -442,16 +366,54 @@ void ControlServer::onReadyRead()
     for (;;) {
         const auto it = buffers_.find(socket);
         if (it == buffers_.end()) {
-            return;
+            break;
         }
         const int newline = it->indexOf('\n');
         if (newline < 0) {
-            return;
+            break;
         }
         const QByteArray line = it->left(newline);
         it->remove(0, newline + 1);
-        handleLine(socket, line);
+        int& queued = queuedCounts_[socket];
+        if (queued >= kMaxQueuedPerConnection) {
+            refuseLine(socket, line);
+            continue;
+        }
+        ++queued;
+        queue_.append({socket, line});
     }
+    // Queued, not called: a request can spin a nested event loop, and a
+    // disconnect in there frees the socket while this readyRead is on the stack.
+    QMetaObject::invokeMethod(this, &ControlServer::pump, Qt::QueuedConnection);
+}
+
+void ControlServer::pump()
+{
+    if (running_) {
+        return;
+    }
+    running_ = true;
+    while (!queue_.isEmpty()) {
+        const QueuedLine next = queue_.takeFirst();
+        // A client that left needs no answer, and its queued work is unwanted.
+        if (!next.socket || !buffers_.contains(next.socket.data())) {
+            continue;
+        }
+        --queuedCounts_[next.socket.data()];
+        handleLine(next.socket, next.line);
+    }
+    running_ = false;
+}
+
+void ControlServer::refuseLine(QLocalSocket* socket, const QByteArray& line)
+{
+    QJsonObject response =
+        error(QStringLiteral("refused"), QStringLiteral("too many requests are waiting"));
+    const QJsonValue id = QJsonDocument::fromJson(line).object().value(QStringLiteral("id"));
+    if (id.isDouble()) {
+        response.insert(QStringLiteral("id"), id);
+    }
+    writeLine(socket, response);
 }
 
 void ControlServer::onDisconnected()
@@ -461,10 +423,11 @@ void ControlServer::onDisconnected()
         return;
     }
     buffers_.remove(socket);
+    queuedCounts_.remove(socket);
     socket->deleteLater();
 }
 
-void ControlServer::handleLine(QLocalSocket* socket, const QByteArray& line)
+void ControlServer::handleLine(const QPointer<QLocalSocket>& socket, const QByteArray& line)
 {
     if (line.size() > kMaxRequestBytes) {
         writeLine(socket, error(QStringLiteral("bad_request"),
@@ -528,6 +491,10 @@ void ControlServer::handleLine(QLocalSocket* socket, const QByteArray& line)
 
 void ControlServer::writeLine(QLocalSocket* socket, const QJsonObject& response)
 {
+    // A nested event loop in the request can have freed the socket.
+    if (!socket) {
+        return;
+    }
     socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact));
     socket->write("\n");
     socket->flush();
@@ -547,6 +514,19 @@ QJsonObject ControlServer::error(const QString& code, const QString& message) co
 }
 
 QJsonObject ControlServer::dispatch(const QString& method, const QJsonObject& params)
+{
+    // ponytail: the scope also spans `open`'s wait, so in a visible --control
+    // window a dialog a person opens during a load is cancelled too.
+    const ControlScope scope;
+    const QJsonObject response = route(method, params);
+    if (scope.cancelledAny()) {
+        return error(QStringLiteral("refused"),
+                     QStringLiteral("request reached a dialog: %1").arg(scope.cancelled()));
+    }
+    return response;
+}
+
+QJsonObject ControlServer::route(const QString& method, const QJsonObject& params)
 {
     if (method == QStringLiteral("status")) {
         return methodStatus(params);
@@ -759,295 +739,6 @@ QJsonObject ControlServer::methodDispatchCommand(const QJsonObject& params)
     QJsonObject result;
     result.insert(QStringLiteral("dispatched"), dispatched);
     result.insert(QStringLiteral("enabled"), action ? action->isEnabled() : false);
-    return ok(result);
-}
-
-QJsonObject ControlServer::methodDocument(const QJsonObject& params)
-{
-    const QString op = params.value(QStringLiteral("op")).toString();
-    if (op.isEmpty()) {
-        return error(QStringLiteral("invalid_param"), QStringLiteral("op is required"));
-    }
-
-    if (op == QStringLiteral("list")) {
-        QJsonArray documents;
-        for (int i = 0; i < frame_->documentCount(); ++i) {
-            documents.append(documentInfo(frame_, i));
-        }
-        QJsonObject result;
-        result.insert(QStringLiteral("documents"), documents);
-        result.insert(QStringLiteral("active"), frame_->activeDocumentIndex());
-        result.insert(QStringLiteral("count"), frame_->documentCount());
-        return ok(result);
-    }
-
-    bool applied = false;
-    if (op == QStringLiteral("open")) {
-        const QString path = params.value(QStringLiteral("path")).toString();
-        if (path.isEmpty()) {
-            return error(QStringLiteral("invalid_param"), QStringLiteral("path is required"));
-        }
-        if (const QString problem = pathProblem(path, false); !problem.isEmpty()) {
-            return error(QStringLiteral("invalid_param"), problem);
-        }
-        const PicturaMainWindow::OpenOutcome outcome =
-            frame_->openDocumentAtPathOutcome(path, false);
-        applied = outcome == PicturaMainWindow::OpenOutcome::Opened;
-        if (!applied) {
-            return error(outcome == PicturaMainWindow::OpenOutcome::Cancelled
-                             ? QStringLiteral("cancelled")
-                             : QStringLiteral("io_error"),
-                         QStringLiteral("could not open %1").arg(path));
-        }
-    } else if (op == QStringLiteral("new")) {
-        const int width = params.value(QStringLiteral("width")).toInt(0);
-        const int height = params.value(QStringLiteral("height")).toInt(0);
-        if (width <= 0 || height <= 0) {
-            return error(QStringLiteral("invalid_param"),
-                         QStringLiteral("width and height must be positive"));
-        }
-        const QString name =
-            params.value(QStringLiteral("name")).toString(QStringLiteral("Untitled"));
-        const QString mode =
-            params.value(QStringLiteral("mode")).toString(QStringLiteral("rgb"));
-        const int depth = params.value(QStringLiteral("depth")).toInt(8);
-        const QString background =
-            params.value(QStringLiteral("background")).toString(QStringLiteral("white"));
-        applied = frame_->newDocument(name, width, height, mode, depth, background);
-        if (!applied) {
-            return error(QStringLiteral("internal"), QStringLiteral("could not create document"));
-        }
-    } else if (op == QStringLiteral("save") || op == QStringLiteral("save_as")) {
-        if (!frame_->activeView()) {
-            return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
-        }
-        const QString path = params.value(QStringLiteral("path")).toString();
-        if (const QString problem = path.isEmpty() ? QString() : pathProblem(path, true);
-            !problem.isEmpty()) {
-            return error(QStringLiteral("invalid_param"), problem);
-        }
-        if (op == QStringLiteral("save_as")) {
-            if (path.isEmpty()) {
-                return error(QStringLiteral("invalid_param"), QStringLiteral("path is required"));
-            }
-            applied = frame_->saveActiveAs(path);
-        } else if (path.isEmpty()) {
-            // `saveActive()` opens Save-As for an untitled document; refuse
-            // instead of reaching a modal file dialog.
-            if (frame_->activeFilePath().isEmpty()) {
-                return error(QStringLiteral("invalid_param"),
-                             QStringLiteral("save requires a path for an untitled document"));
-            }
-            // `open` keeps the path as given, so the active path can be a link.
-            if (QFileInfo(frame_->activeFilePath()).isSymLink()) {
-                return error(QStringLiteral("invalid_param"),
-                             QStringLiteral("path must not be a symbolic link"));
-            }
-            applied = frame_->saveActive();
-        } else {
-            applied = frame_->saveActiveAs(path);
-        }
-        if (!applied) {
-            return error(QStringLiteral("io_error"), QStringLiteral("save failed"));
-        }
-    } else if (op == QStringLiteral("revert")) {
-        if (!frame_->activeView()) {
-            return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
-        }
-        applied = frame_->revertActive();
-        if (!applied) {
-            return error(QStringLiteral("io_error"), QStringLiteral("revert failed"));
-        }
-    } else if (op == QStringLiteral("close")) {
-        const int index = params.contains(QStringLiteral("index"))
-                              ? params.value(QStringLiteral("index")).toInt(-1)
-                              : frame_->activeDocumentIndex();
-        if (index < 0 || index >= frame_->documentCount()) {
-            return error(QStringLiteral("invalid_param"), QStringLiteral("invalid document index"));
-        }
-        applied = frame_->closeDocument(index, false);
-        if (!applied) {
-            return error(QStringLiteral("internal"), QStringLiteral("close failed"));
-        }
-    } else if (op == QStringLiteral("activate")) {
-        const int index = params.value(QStringLiteral("index")).toInt(-1);
-        if (index < 0 || index >= frame_->documentCount()) {
-            return error(QStringLiteral("invalid_param"), QStringLiteral("invalid document index"));
-        }
-        frame_->setActiveDocumentIndex(index);
-        applied = frame_->activeDocumentIndex() == index;
-    } else {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("unknown op: %1").arg(op));
-    }
-
-    QJsonObject result;
-    result.insert(QStringLiteral("applied"), applied);
-    result.insert(QStringLiteral("active"), frame_->activeDocumentIndex());
-    result.insert(QStringLiteral("count"), frame_->documentCount());
-    result.insert(QStringLiteral("path"), frame_->activeFilePath());
-    result.insert(QStringLiteral("name"), frame_->activeDocumentName());
-    return ok(result);
-}
-
-QJsonObject ControlServer::methodEdit(const QJsonObject& params)
-{
-    PictureView* view = frame_->activeView();
-    if (!view || !view->has_document()) {
-        return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
-    }
-    const QString op = params.value(QStringLiteral("op")).toString();
-    bool applied = false;
-    if (op == QStringLiteral("undo")) {
-        applied = history_api::undo(*view);
-    } else if (op == QStringLiteral("redo")) {
-        applied = history_api::redo(*view);
-    } else {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("op must be undo or redo"));
-    }
-    QJsonObject result;
-    result.insert(QStringLiteral("success"), applied);
-    result.insert(QStringLiteral("can_undo"), history_api::canUndo(*view));
-    result.insert(QStringLiteral("can_redo"), history_api::canRedo(*view));
-    result.insert(QStringLiteral("depth"), history_api::depth(*view));
-    return ok(result);
-}
-
-QJsonObject ControlServer::methodSetUnsavedPolicy(const QJsonObject& params)
-{
-    bool interactive = params.contains(QStringLiteral("interactive"))
-                           ? params.value(QStringLiteral("interactive")).toBool(unsavedInteractive_)
-                           : unsavedInteractive_;
-    QString choice = params.contains(QStringLiteral("choice"))
-                         ? params.value(QStringLiteral("choice")).toString(unsavedChoice_)
-                         : unsavedChoice_;
-    if (choice != QStringLiteral("cancel") && choice != QStringLiteral("discard")) {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("choice must be cancel or discard"));
-    }
-    setUnsavedPromptInteractive(interactive);
-    if (params.contains(QStringLiteral("choice"))) {
-        setNonInteractiveUnsavedChoice(choice == QStringLiteral("cancel")
-                                           ? UnsavedChoice::Cancel
-                                           : UnsavedChoice::Discard);
-    }
-    unsavedInteractive_ = interactive;
-    unsavedChoice_ = choice;
-    QJsonObject result;
-    result.insert(QStringLiteral("interactive"), interactive);
-    result.insert(QStringLiteral("choice"), choice);
-    return ok(result);
-}
-
-QJsonObject ControlServer::methodScreenshot(const QJsonObject& params)
-{
-    const QString scope = params.value(QStringLiteral("scope")).toString(QStringLiteral("window"));
-    const int maxDim =
-        params.contains(QStringLiteral("max_dim"))
-            ? params.value(QStringLiteral("max_dim")).toInt(1280)
-            : 1280;
-    if (maxDim <= 0 || maxDim > kMaxScreenshotDim) {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("max_dim must be in 1..%1").arg(kMaxScreenshotDim));
-    }
-
-    QImage image;
-    if (scope == QStringLiteral("window")) {
-        image = frame_->grab().toImage();
-    } else if (scope == QStringLiteral("canvas")) {
-        ImageView* canvas = frame_->imageView();
-        if (!canvas) {
-            return error(QStringLiteral("no_document"), QStringLiteral("no active canvas"));
-        }
-        image = canvas->grab().toImage();
-    } else if (scope == QStringLiteral("document")) {
-        PictureView* view = frame_->activeView();
-        if (!view || !view->has_document()) {
-            return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
-        }
-        image = view->image();
-    } else {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("unknown scope: %1").arg(scope));
-    }
-    if (image.isNull()) {
-        return error(QStringLiteral("internal"), QStringLiteral("could not capture image"));
-    }
-
-    const int sourceWidth = image.width();
-    const int sourceHeight = image.height();
-    image = scaleToMaxDim(image, maxDim);
-    const QByteArray base64 = encodePngBase64(image);
-    if (base64.isEmpty()) {
-        return error(QStringLiteral("internal"), QStringLiteral("PNG encode failed"));
-    }
-    QJsonObject result;
-    result.insert(QStringLiteral("mime"), QStringLiteral("image/png"));
-    result.insert(QStringLiteral("base64"), QString::fromLatin1(base64));
-    result.insert(QStringLiteral("width"), image.width());
-    result.insert(QStringLiteral("height"), image.height());
-    result.insert(QStringLiteral("source_width"), sourceWidth);
-    result.insert(QStringLiteral("source_height"), sourceHeight);
-    return ok(result);
-}
-
-QJsonObject ControlServer::methodUiTree(const QJsonObject& params)
-{
-    const int maxDepth =
-        params.contains(QStringLiteral("max_depth"))
-            ? params.value(QStringLiteral("max_depth")).toInt(12)
-            : 12;
-    const int maxChildren =
-        params.contains(QStringLiteral("max_children"))
-            ? params.value(QStringLiteral("max_children")).toInt(64)
-            : 64;
-    if (maxDepth < 0 || maxChildren < 0) {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("max_depth and max_children must be non-negative"));
-    }
-    QJsonArray nodes;
-    appendWidgetTree(frame_, frame_, 0, maxDepth, maxChildren, nodes);
-    QJsonObject result;
-    result.insert(QStringLiteral("nodes"), nodes);
-    result.insert(QStringLiteral("count"), nodes.size());
-    return ok(result);
-}
-
-QJsonObject ControlServer::methodLayerThumbnail(const QJsonObject& params)
-{
-    PictureView* view = frame_->activeView();
-    if (!view || !view->has_document()) {
-        return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
-    }
-    if (!params.contains(QStringLiteral("index"))) {
-        return error(QStringLiteral("invalid_param"), QStringLiteral("index is required"));
-    }
-    const int index = params.value(QStringLiteral("index")).toInt(-1);
-    const int size = params.contains(QStringLiteral("size"))
-                         ? params.value(QStringLiteral("size")).toInt(64)
-                         : 64;
-    if (index < 0 || size <= 0 || size > kMaxThumbnailDim) {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("index must be non-negative and size must be in 1..%1")
-                         .arg(kMaxThumbnailDim));
-    }
-    const QImage image = view->layer_thumbnail(index, size);
-    if (image.isNull()) {
-        return error(QStringLiteral("invalid_param"),
-                     QStringLiteral("layer has no thumbnail (group, adjustment, or out of range)"));
-    }
-    const QByteArray base64 = encodePngBase64(image);
-    if (base64.isEmpty()) {
-        return error(QStringLiteral("internal"), QStringLiteral("PNG encode failed"));
-    }
-    QJsonObject result;
-    result.insert(QStringLiteral("mime"), QStringLiteral("image/png"));
-    result.insert(QStringLiteral("base64"), QString::fromLatin1(base64));
-    result.insert(QStringLiteral("width"), image.width());
-    result.insert(QStringLiteral("height"), image.height());
-    result.insert(QStringLiteral("source_width"), image.width());
-    result.insert(QStringLiteral("source_height"), image.height());
     return ok(result);
 }
 

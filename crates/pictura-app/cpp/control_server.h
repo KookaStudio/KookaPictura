@@ -3,8 +3,13 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QHash>
 #include <QtCore/QJsonObject>
+#include <QtCore/QList>
+#include <QtCore/QLockFile>
 #include <QtCore/QObject>
+#include <QtCore/QPointer>
 #include <QtCore/QString>
+
+#include <memory>
 
 class QLocalServer;
 class QLocalSocket;
@@ -40,9 +45,21 @@ public:
     static constexpr int kMaxThumbnailDim = 1024;
     static constexpr int kMaxScreenshotDim = 4096;
 
+    // Requests a client may have waiting, and clients served at once.
+    // ponytail: with kMaxRequestBytes that pins at most 64 MiB per client and
+    // 256 MiB in all; lower the line cap if a tighter memory budget matters.
+    static constexpr int kMaxQueuedPerConnection = 64;
+    static constexpr int kMaxConnections = 4;
+
+    // Caller-supplied sizes that reach the engine unchecked otherwise.
+    static constexpr int kMaxLassoPoints = 4096;
+    static constexpr int kMaxNameChars = 255;
+    static constexpr int kMaxUiTreeDepth = 64;
+    static constexpr int kMaxUiTreeChildren = 1024;
+
     // Listen on the socket and write a fresh session token to tokenPath(),
     // readable by the owner only. Fails, listening on nothing, when either
-    // cannot be created.
+    // cannot be created, or while another live process holds the endpoint.
     bool listen();
     QString socketPath() const { return socketPath_; }
 
@@ -54,7 +71,8 @@ public:
     QByteArray token() const { return token_; }
 
     // Dispatch one method call; returns the full {ok,result} or {ok,error}
-    // wrapper. Also drives the in-process self-test block.
+    // wrapper. A dialog the call reaches is cancelled and answered `refused`.
+    // Also drives the in-process self-test block.
     QJsonObject dispatch(const QString& method, const QJsonObject& params);
 
 public slots:
@@ -67,6 +85,12 @@ private slots:
     void onDisconnected();
 
 private:
+    struct QueuedLine {
+        QPointer<QLocalSocket> socket;
+        QByteArray line;
+    };
+
+    QJsonObject route(const QString& method, const QJsonObject& params);
     QJsonObject ok(const QJsonObject& result) const;
     QJsonObject error(const QString& code, const QString& message) const;
     QJsonObject methodStatus(const QJsonObject& params);
@@ -91,7 +115,10 @@ private:
     QJsonObject methodPointer(const QJsonObject& params);
     QJsonObject methodKey(const QJsonObject& params);
 
-    void handleLine(QLocalSocket* socket, const QByteArray& line);
+    void pump();
+    void handleLine(const QPointer<QLocalSocket>& socket, const QByteArray& line);
+    void refuseLine(QLocalSocket* socket, const QByteArray& line);
+    QString lockPath() const;
     bool writeTokenFile();
     bool authorized(const QJsonObject& request) const;
     void writeLine(QLocalSocket* socket, const QJsonObject& response);
@@ -101,7 +128,13 @@ private:
     QString socketPath_;
     QByteArray token_;
     bool tokenWritten_ = false;
+    std::unique_ptr<QLockFile> lock_;
     QHash<QLocalSocket*, QByteArray> buffers_;
+    QHash<QLocalSocket*, int> queuedCounts_;
+    QList<QueuedLine> queue_;
+    // Set while pump() runs, so a nested event loop in a request only enqueues.
+    bool running_ = false;
+    int lassoPoints_ = 0;
     // Tracked unsaved-prompt policy, mirrored from the global set in dialogs.cpp.
     bool unsavedInteractive_ = false;
     QString unsavedChoice_ = QStringLiteral("discard");

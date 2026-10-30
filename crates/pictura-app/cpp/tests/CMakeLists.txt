@@ -17,8 +17,11 @@ set(PICTURA_QT_TESTS
     tst_mask_edit
     tst_layers_mask_commands
     tst_last_layer
+    tst_control_limits
     tst_control_metrics
     tst_control_metrics_off
+    tst_control_modal_guard
+    tst_control_serial
     tst_image_ops
     tst_image_rotate
     tst_crop_straighten
