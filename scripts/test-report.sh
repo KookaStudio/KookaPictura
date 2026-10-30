@@ -2,8 +2,8 @@
 #
 # test-report.sh - run every test layer and print the unified report.
 #
-# Runs nextest (which writes target/nextest/default/junit.xml), the doctests,
-# and both app self-test invocations, then hands the captured output to
+# Runs nextest (which writes target/nextest/default/junit.xml) and both app
+# self-test invocations, then hands the captured output to
 # report_tests.py. Exits non-zero when the reporter reports a failure, so a
 # failing layer fails this script.
 #
@@ -23,12 +23,6 @@ echo "== nextest =="
 set +e
 cargo nextest run --workspace --no-fail-fast 2>&1 | tee "$tmp/nextest.log"
 nextest_rc=${PIPESTATUS[0]}
-set -e
-
-echo "== doctests =="
-set +e
-cargo test --workspace --doc 2>&1 | tee "$tmp/doctests.log"
-doctest_rc=${PIPESTATUS[0]}
 set -e
 
 # The two self-test invocations and the Qt Test layer are independent, so they
@@ -87,15 +81,13 @@ echo "== report =="
 set +e
 python3 scripts/report_tests.py \
   --junit "$junit" \
-  --doctests "$tmp/doctests.log" \
   "${selftest_args[@]}" \
   "${qt_args[@]}" \
   --color "$color"
 report_rc=$?
 set -e
 
-if [ "$nextest_rc" -ne 0 ] || [ "$doctest_rc" -ne 0 ] || [ "$qt_rc" -ne 0 ] \
-  || [ "$selftest_rc" -ne 0 ]; then
+if [ "$nextest_rc" -ne 0 ] || [ "$qt_rc" -ne 0 ] || [ "$selftest_rc" -ne 0 ]; then
   exit 1
 fi
 exit "$report_rc"

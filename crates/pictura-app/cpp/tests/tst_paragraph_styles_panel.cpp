@@ -16,8 +16,8 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <ctime>
 
-#include <QtCore/QElapsedTimer>
 #include <QtGui/QAction>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QRawFont>
@@ -51,6 +51,16 @@ QString typeLayer(const Fixture& f)
         }
     }
     return QString();
+}
+
+// CPU milliseconds `paint` spends in this process. The paint budgets below
+// guard against costly rendering, and CTest runs suites in parallel, so wall
+// time would also count the time spent waiting for a core.
+template <typename Paint> qint64 cpuMs(Paint paint)
+{
+    const std::clock_t start = std::clock();
+    paint();
+    return static_cast<qint64>(std::clock() - start) * 1000 / CLOCKS_PER_SEC;
 }
 
 } // namespace
@@ -389,10 +399,7 @@ void ParagraphStylesPanelTest::dialogFontFamilyPopup()
         if (!color.isEmpty()) {
             family->setCurrentFont(QFont(color));
             family->showPopup();
-            QElapsedTimer timer;
-            timer.start();
-            family->view()->window()->grab();
-            colorRenderMs = timer.elapsed();
+            colorRenderMs = cpuMs([&] { family->view()->window()->grab(); });
             family->hidePopup();
         }
         dialog->reject();
@@ -403,7 +410,7 @@ void ParagraphStylesPanelTest::dialogFontFamilyPopup()
         QSKIP("no color font installed");
     }
     QVERIFY2(colorRenderMs < 150,
-             qPrintable(QStringLiteral("%1 row render took %2 ms").arg(colorFace).arg(colorRenderMs)));
+             qPrintable(QStringLiteral("%1 row render took %2 CPU ms").arg(colorFace).arg(colorRenderMs)));
 }
 
 // A family's name is drawn in the UI font, as in CS6's font menu: in the open
@@ -467,19 +474,17 @@ void ParagraphStylesPanelTest::fontPopupPaintsPromptlyAcrossTheList()
     for (int i = 0; i < family->count(); i += step) {
         family->setCurrentIndex(i);
         family->showPopup();
-        QElapsedTimer timer;
-        timer.start();
-        family->view()->window()->grab();
-        if (timer.elapsed() > worst) {
-            worst = timer.elapsed();
+        const qint64 ms = cpuMs([&] { family->view()->window()->grab(); });
+        if (ms > worst) {
+            worst = ms;
             worstAt = family->itemText(i);
         }
         family->hidePopup();
     }
     family->setCurrentIndex(saved);
-    qInfo("worst popup paint %lld ms at %s (%d families)", worst, qPrintable(worstAt),
+    qInfo("worst popup paint %lld CPU ms at %s (%d families)", worst, qPrintable(worstAt),
           family->count());
-    QVERIFY2(worst < 250, qPrintable(QStringLiteral("popup at %1 took %2 ms")
+    QVERIFY2(worst < 250, qPrintable(QStringLiteral("popup at %1 took %2 CPU ms")
                                          .arg(worstAt)
                                          .arg(worst)));
 }

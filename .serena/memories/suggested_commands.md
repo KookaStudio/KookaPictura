@@ -20,7 +20,7 @@ cmake -S . -B build -G Ninja && cmake --build build --parallel
 ```bash
 bash scripts/verify-fast.sh    # fmt, clippy, test-report, file-size, guard, openspec
 bash scripts/verify-full.sh    # CMake build first, then verify-fast (CI-equivalent)
-bash scripts/test-report.sh [auto|always|never]   # nextest + doctests + both self-test runs
+bash scripts/test-report.sh [auto|always|never]   # nextest + both self-test runs + Qt JUnit
 bash scripts/guard.sh          # docs guard + milestone-name + file-size checks
 ```
 
@@ -28,7 +28,6 @@ bash scripts/guard.sh          # docs guard + milestone-name + file-size checks
 
 ```bash
 cargo nextest run --workspace                  # preferred; -p <crate> [name] for one crate/test
-cargo test --workspace --doc                   # doctests (nextest skips them)
 cargo test -p pictura-render --test document_oracle          # one integration suite
 cargo test -p pictura-core -- <name> --ignored --nocapture   # ignored profiling/GPU tests
 ```

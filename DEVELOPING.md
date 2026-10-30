@@ -225,7 +225,6 @@ Rust tests are std `#[test]` only (no framework); nextest runs them.
 cargo fmt --all                                  # CI runs --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace                    # one crate/test: -p <crate> [name]
-cargo test --workspace --doc                     # doctests; nextest skips them
 
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, guards, openspec
 bash scripts/verify-full.sh                      # CMake build first, then verify-fast
@@ -405,9 +404,13 @@ default; macOS and Windows keep the native linker. A build directory that cached
 an explicit `-DCMAKE_EXE_LINKER_FLAGS` needs `-U CMAKE_EXE_LINKER_FLAGS` (or a
 fresh directory) to re-probe; `verify-full.sh` does that for you, so force a
 choice through the `CMAKE_EXE_LINKER_FLAGS` environment variable instead of a
-cached `-D` value. Development builds link `pictura_shell` as a shared library,
-and the Rust app builds with the `dev` profile; release and packaging keep the
-static shell and `--release`.
+cached `-D` value. Development builds link `pictura_shell` as a shared library.
+An optimized development build (Release or RelWithDebInfo) compiles the Rust
+app with the `dev-app` profile: it inherits `release`, so runtime behaviour
+matches the shipped app, but compiles incrementally with more codegen units.
+A Debug configure uses `dev`; release and packaging keep the static shell and
+`--release`. When a build tree's cached linker flags hide an installed mold,
+configure warns once with the `-U` command above.
 
 CTest suites run four at a time; set `CTEST_PARALLEL_LEVEL` to override it. The
 local build-caching check reuses a user-level FetchContent checkout cache under
@@ -425,6 +428,10 @@ Rust compilation through it too, export the wrapper before building or testing:
 ```bash
 export RUSTC_WRAPPER=sccache
 ```
+
+sccache does not cache incrementally compiled crates, so with `dev-app` the
+workspace crates in the CMake build pass through it uncached; dependencies are
+still cached.
 
 `sccache` persists its cache between sessions: on Linux `~/.cache/sccache`
 (macOS `~/Library/Caches/Mozilla.sccache`, Windows

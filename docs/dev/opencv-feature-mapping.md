@@ -13,7 +13,7 @@ Three distinct modes, cheapest first:
 - **Oracle.** Run OpenCV in the Python test layer as a second implementation and
   diff against our output. No Rust, Cargo, or CMake change. Fits the existing
   oracle design: `scripts/*_oracle.py` subcommands, tests that self-skip when the
-  tool is missing, the CI `oracles` job installs it.
+  tool is missing, the CI `test` job installs it.
 - **Reference.** Read OpenCV's formula or output, then implement the algorithm in
   Rust. No dependency. Use when the CS6 algorithm is closed and OpenCV has the
   standard version.
@@ -141,7 +141,7 @@ color-management replacement.
 ## Costs
 
 - Oracle only: `opencv-python-headless` is about 60 MB on Linux x86_64. Add it to
-  the CI `oracles` job next to ImageMagick and psd-tools. Locally the tests
+  the CI `test` job next to ImageMagick and psd-tools. Locally the tests
   self-skip when `cv2` is absent, same as today.
 - Runtime: the `opencv` crate, a system OpenCV, and a licensing-inventory update.
   OpenCV is Apache-2.0, so the license is compatible. The build cost is the
@@ -155,7 +155,7 @@ color-management replacement.
 
 ## Recommendation
 
-Start with the oracle. Add `cv2` to the CI oracles job and wire subcommands for
+Start with the oracle. Add `cv2` to the CI `test` job and wire subcommands for
 the places ImageMagick cannot reach:
 
 1. Selection mask geometry: `distanceTransform`, `findContours`,

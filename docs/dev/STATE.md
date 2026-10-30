@@ -11,6 +11,25 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Faster builds and tests** (#1042, OpenSpec change `faster-builds-and-tests`;
+  the Qt Test fixture and C++ compile-flag work moved to #1043). An optimized
+  development CMake build compiles the Rust library with the `dev-app` Cargo
+  profile (inherits `release`, incremental, 256 codegen units, line tables), so
+  a one-line edit in a non-bridge app file costs 5.3 s of cargo time instead of
+  13.2 s. The bridge stamp hashes only each file's `#[cxx_qt::bridge]` module
+  (checked: balanced braces, even quotes, no `/*`, else the whole file), so a
+  body edit in a bridge file recompiles 0 C++ objects instead of 325. An edit
+  re-runs the configure step only in a bridge file, a file `build.rs` lists, or
+  `build.rs` itself; adding or removing a `.rs` file re-runs it too. The cargo
+  step of a bridge-file edit stays at about 55 s: any bridge-file edit reruns
+  the cxx-qt build script for all 77 bridges.
+  Doctests are disabled workspace-wide and gone from the report; CI's `oracles`
+  job is folded into `test` (ImageMagick cached, `ag-psd` pinned), and the
+  `software-vulkan` clippy runs in `lint`. A cached `-fuse-ld=` that hides an
+  installed mold warns once per build tree. Tests:
+  `pictura_app::build_config::{bridge_modules_end_at_column_zero,
+  dev_app_profile_keeps_release_semantics,
+  every_workspace_library_disables_doctests}`.
 - **The shared fill path fills a mask** (#1022, OpenSpec change
   `fill-path-mask-target`). With a mask edit target, the Gradient, the Paint
   Bucket, `Edit ▸ Stroke`, Fill Path, Stroke Path, and the shape tools' Fill
@@ -3938,8 +3957,7 @@ Snapshot for resuming after a context break. Update after each milestone.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace          # preferred; cargo test --workspace is the fallback
-cargo test --workspace --doc           # doctests (nextest does not run them)
-cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld && cmake --build build --parallel
+cmake -S . -B build -G Ninja && cmake --build build --parallel
 ./build/pictura --headless --self-test
 ./build/pictura --headless --self-test crates/pictura-codec/tests/fixtures/two_layers.psd
 bash scripts/guard.sh

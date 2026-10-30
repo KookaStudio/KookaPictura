@@ -4,6 +4,8 @@
 //! `main` (see `cpp/main.cpp`) links the static library, reads the composite
 //! image from the Rust object, and shows it in a zoom/pan widget.
 
+#[cfg(test)]
+mod build_config;
 pub mod cxxqt_object;
 mod decode_bridge;
 pub mod gpu;

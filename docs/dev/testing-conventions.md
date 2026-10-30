@@ -33,7 +33,7 @@ test-runner crates outside Qt Test.
 
 `.config/nextest.toml` makes nextest the local and CI runner: fail-fast off, every
 status streamed, JUnit written to `target/nextest/default/junit.xml`.
-`scripts/test-report.sh` folds that XML, the doctest summary, the self-test token
+`scripts/test-report.sh` folds that XML, the self-test token
 streams, and the per-executable Qt JUnit (`build/qt-test-results/*.xml`) into one
 pytest/vitest-like report through `scripts/report_tests.py` (§6); CI uploads the
 JUnit file as an artifact.
@@ -52,9 +52,10 @@ JUnit file as an artifact.
   - `scripts/verify-fast.sh:25` routes the test step through
     `scripts/test-report.sh`, which runs `cargo nextest run --workspace
     --no-fail-fast` (writing `target/nextest/default/junit.xml`), then
-    `cargo test --workspace --doc` — **nextest does not run doctests** — then
     both self-test invocations, then the reporter. One nextest run per gate.
-  - CI (`.github/workflows/ci.yml:52`) runs the same pair and uploads the JUnit
+    Doctests are disabled in every crate (`doctest = false`), so no separate
+    `cargo test --doc` run exists.
+  - CI's `test` job runs the same nextest invocation and uploads the JUnit
     report as the `nextest-junit` artifact.
 - `cargo test --workspace` stays the fallback when nextest is unavailable, but
   the gate no longer parses its `test result: ok` text; the reporter reads the
@@ -96,8 +97,8 @@ Shared rules:
        return;
    }
    ```
-   CI has a dedicated `oracles` job (`.github/workflows/ci.yml:88`) that installs
-   ImageMagick 7 and `psd-tools` so these run for real.
+   CI's `test` job installs ImageMagick 7, `psd-tools`, and `ag-psd` before its
+   nextest run, so these run for real.
 2. **Prove the harness has teeth.** Every oracle includes a test that a wrong
    output actually fails (`differential_harness_detects_perturbation`,
    `dimension_check_bites`, `reference_script_is_present`). An oracle that cannot
@@ -291,12 +292,12 @@ bash scripts/verify-fast.sh
 # Full gate (CI-equivalent; builds the CMake app first so the self-test runs):
 bash scripts/verify-full.sh
 
-# Unified report on its own (nextest + doctests + both self-test invocations + Qt Test):
+# Unified report on its own (nextest + both self-test invocations + Qt Test):
 bash scripts/test-report.sh [auto|always|never]
 
 # Reporter only, against captured logs (writes nothing):
 python3 scripts/report_tests.py --junit target/nextest/default/junit.xml \
-    --doctests <log> --selftest <log> --color never
+    --selftest <log> --color never
 
 # Counts only (no per-test lines) for CI/log-tight use:
 python3 scripts/report_tests.py --quiet --junit target/nextest/default/junit.xml
@@ -306,7 +307,6 @@ python3 scripts/report_tests.py --self-check
 
 # Tests the way CI runs them:
 cargo nextest run --workspace         # writes target/nextest/default/junit.xml
-cargo test --workspace --doc          # nextest skips doctests
 
 # One oracle suite explicitly:
 cargo test -p pictura-render --test document_oracle
