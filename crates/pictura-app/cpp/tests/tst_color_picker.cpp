@@ -7,6 +7,7 @@
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QTimer>
 #include <QtGui/QColor>
+#include <QtGui/QCursor>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QColorDialog>
@@ -66,6 +67,7 @@ private slots:
     void cmykFieldsUpdate();
     void alertsHiddenInGamut();
     void fieldDragUpdatesEverySample();
+    void fieldCursorIsACircle();
     void defaultAdobePicker();
     void pickerPreferenceSurvivesRestart();
     void systemPickerReturnsColor();
@@ -308,6 +310,17 @@ void ColorPickerTest::fieldDragUpdatesEverySample()
     // far under the per-sample transform rebuilds it guards against.
     QVERIFY2(elapsed < 3000, qPrintable(QStringLiteral("%1 ms").arg(elapsed)));
     dialog.reject();
+}
+
+// The field's pointer is the ring the field paints, not the platform crosshair.
+void ColorPickerTest::fieldCursorIsACircle()
+{
+    pictura::ColorPickerDialog dialog(QColor(255, 0, 0));
+    auto* plane = dialog.findChild<pictura::ColorPlane*>();
+    QVERIFY2(plane, "colour field present");
+    const QCursor c = plane->cursor();
+    QVERIFY2(!c.pixmap().isNull(), "the field loads the circular cursor asset");
+    QCOMPARE(c.shape(), Qt::BitmapCursor);
 }
 
 void ColorPickerTest::defaultAdobePicker()

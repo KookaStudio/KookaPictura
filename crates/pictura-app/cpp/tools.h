@@ -625,6 +625,9 @@ private:
     ShapeGroup* shape_ = nullptr;
 
     std::function<void(const QPointF&)> canvasSampler_;
+    // True while a press with an armed `canvasSampler_` has the left button
+    // down, so `handleMoved` samples on every move and `handleReleased` ends it.
+    bool canvasSampling_ = false;
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
     bool maskActive_ = false;

@@ -836,6 +836,8 @@ void ToolController::applyToolPolicy()
 void ToolController::setCanvasSampler(std::function<void(const QPointF&)> sampler)
 {
     canvasSampler_ = std::move(sampler);
+    // A replaced or disarmed sampler must not leave a press gesture live.
+    canvasSampling_ = false;
     refreshCursor();
 }
 
@@ -845,6 +847,7 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
         return;
     }
     if (canvasSampler_) {
+        canvasSampling_ = true;
         canvasSampler_(imagePos);
         return;
     }
@@ -905,6 +908,11 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
 void ToolController::handleMoved(const QPointF& imagePos)
 {
     if (canvasSampler_) {
+        // A held drag samples continuously; a plain hover only re-asserts the
+        // eyedropper cursor.
+        if (canvasSampling_) {
+            canvasSampler_(imagePos);
+        }
         refreshCursor();
         return;
     }
@@ -997,6 +1005,7 @@ void ToolController::handleModifiers(int modifiers)
 void ToolController::handleReleased(const QPointF& imagePos)
 {
     if (canvasSampler_) {
+        canvasSampling_ = false;
         return;
     }
     if (transformSessionActive()) {
