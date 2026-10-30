@@ -46,7 +46,9 @@ The engine SHALL convert sRGB to CMYK and back through the CMYK working profile,
 using the relative colorimetric intent with black-point compensation. It SHALL
 NOT use a fixed `1 − max(R, G, B)` formula. Components SHALL be percentages in
 0–100. Until Color Settings exposes a CMYK working-space choice, the working
-profile SHALL be the bundled coated CMYK profile.
+profile SHALL be the bundled coated CMYK profile. Every CMYK readout, CMYK field
+edit, gamut alert, and closest printable colour SHALL convert through the one
+working CMYK profile that Color Settings installs.
 
 #### Scenario: White has no ink [cmyk_white]
 
@@ -64,6 +66,18 @@ profile SHALL be the bundled coated CMYK profile.
 - **WHEN** an in-gamut sRGB colour is converted to CMYK and back
 - **THEN** each channel is within the profile's round-trip tolerance of the
   original
+
+#### Scenario: Every conversion follows the installed profile [cmyk_installed_profile]
+
+- **WHEN** a working CMYK profile other than the bundled coated one is installed
+- **THEN** the CMYK readout, the CMYK edit, the gamut test, and the closest
+  printable colour each equal that profile's conversion
+
+#### Scenario: Picker fields use the installed pair [cmyk_fields_installed_pair]
+
+- **WHEN** the picker shows a colour
+- **THEN** its C, M, Y and K fields and the shared readout conversion equal the
+  picker's working-profile projection of that colour
 
 ### Requirement: Colour readouts and fields use the shared conversions
 

@@ -1,5 +1,5 @@
-//! The colour-model bridge: the picker and the Info panel read Lab and CMYK
-//! from `pictura_color::model`, and the Channels panel thumbnails read the
+//! The colour-model bridge: the picker and the Info panel read Lab from
+//! `pictura_color::model`, and the Channels panel thumbnails read the
 //! engine's plate split, so the shell keeps no colour formula of its own.
 
 mod imp;
@@ -21,15 +21,6 @@ pub mod ffi {
         b: f64,
     }
 
-    /// CMYK ink percentages, 0–100 each.
-    #[namespace = "pictura"]
-    struct CmykValue {
-        c: f64,
-        m: f64,
-        y: f64,
-        k: f64,
-    }
-
     #[namespace = "pictura"]
     extern "Rust" {
         /// 8-bit sRGB → CIELAB in the D50 connection space.
@@ -37,9 +28,6 @@ pub mod ffi {
 
         /// CIELAB D50 → 8-bit sRGB packed `0xRRGGBB`; out-of-gamut clamps.
         fn lab_to_srgb(l: f64, a: f64, b: f64) -> u32;
-
-        /// 8-bit sRGB → CMYK through the CMYK working profile.
-        fn srgb_to_cmyk(r: u8, g: u8, b: u8) -> CmykValue;
 
         /// The Channels panel row `row`'s grey value for each `0xAARRGGBB`
         /// pixel of a `mode` document (`mode` as `channels_mode` names it):

@@ -1,8 +1,8 @@
 use super::super::super::channels::mode_name;
 use super::super::super::impl_selection::{channel_value, color_rows, q_gray};
-use super::ffi::{CmykValue, LabValue};
+use super::ffi::LabValue;
 use cxx_qt_lib::QString;
-use pictura_color::model::{self, CmykConverter};
+use pictura_color::model;
 use pictura_core::ColorMode;
 
 pub(super) fn srgb_to_lab(r: u8, g: u8, b: u8) -> LabValue {
@@ -13,11 +13,6 @@ pub(super) fn srgb_to_lab(r: u8, g: u8, b: u8) -> LabValue {
 pub(super) fn lab_to_srgb(l: f64, a: f64, b: f64) -> u32 {
     let [r, g, b] = model::lab_to_srgb([l, a, b]);
     (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
-}
-
-pub(super) fn srgb_to_cmyk(r: u8, g: u8, b: u8) -> CmykValue {
-    let [c, m, y, k] = CmykConverter::working().srgb_to_cmyk([r, g, b]);
-    CmykValue { c, m, y, k }
 }
 
 pub(super) const MODES: [ColorMode; 8] = [
@@ -109,13 +104,9 @@ mod tests {
     }
 
     #[test]
-    fn bridge_lab_and_cmyk_follow_the_model() {
+    fn bridge_lab_follows_the_model() {
         let white = srgb_to_lab(255, 255, 255);
         assert_eq!(white.l.round(), 100.0);
         assert_eq!(lab_to_srgb(100.0, 0.0, 0.0), 0x00ff_ffff);
-        let inks = srgb_to_cmyk(255, 255, 255);
-        assert!([inks.c, inks.m, inks.y, inks.k]
-            .iter()
-            .all(|v| v.round() == 0.0));
     }
 }

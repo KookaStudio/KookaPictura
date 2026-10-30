@@ -15,6 +15,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 
+#include "color_models.h"
 #include "color_picker_dialog.h"
 #include "panels/color_panel.h"
 #include "panels/swatches_panel.h"
@@ -64,6 +65,7 @@ private slots:
     void webAlertAppearsAndSnaps();
     void gamutAlertAppliesClosest();
     void cmykFieldsUpdate();
+    void cmykFieldsUsePickerService();
     void alertsHiddenInGamut();
     void fieldDragUpdatesEverySample();
     void defaultAdobePicker();
@@ -249,6 +251,26 @@ void ColorPickerTest::cmykFieldsUpdate()
              QColor::fromRgb(QRgb(expected)).rgb() & 0xFFFFFFu);
     auto* alert = dialog.findChild<QPushButton*>(QStringLiteral("colorPickerGamutAlert"));
     QVERIFY2(alert && alert->isHidden(), "a profile CMYK value is printable");
+}
+
+// #1047: the fields, the Info panel's shared conversion, the edits and the
+// alerts all read one installed pair.
+void ColorPickerTest::cmykFieldsUsePickerService()
+{
+    const QColor color(200, 50, 100);
+    pictura::ColorPickerDialog dialog(color);
+    const auto expected = pictura::picker_cmyk(color.red(), color.green(), color.blue());
+    const char* const names[] = {"colorPickerC", "colorPickerM", "colorPickerY", "colorPickerK"};
+    for (int i = 0; i < 4; ++i) {
+        auto* field = dialog.findChild<QSpinBox*>(QLatin1String(names[i]));
+        QVERIFY(field);
+        QCOMPARE(field->value(), int(expected[std::size_t(i)]));
+    }
+    const pictura::CmykPercent inks = pictura::rgbToCmyk(color);
+    QCOMPARE(inks.c, double(expected[0]));
+    QCOMPARE(inks.m, double(expected[1]));
+    QCOMPARE(inks.y, double(expected[2]));
+    QCOMPARE(inks.k, double(expected[3]));
 }
 
 void ColorPickerTest::alertsHiddenInGamut()
