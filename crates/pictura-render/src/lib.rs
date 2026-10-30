@@ -31,6 +31,7 @@ mod blend;
 mod canvas_damage;
 pub use canvas_damage::CanvasDamage;
 mod composite;
+mod composite_blend;
 mod composite_clipping;
 mod composite_knockout;
 mod composite_region;

@@ -753,15 +753,19 @@ pub(crate) fn composite_type_source(
     let plane = buf.pixel_count();
     let rw = region.width() as usize;
     let rh = region.height() as usize;
+    let clip = canvas.clip();
+    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for by in 0..rh {
         for bx in 0..rw {
             let lx = (region.left - layer.rect.left) as usize + bx;
             let ly = (region.top - layer.rect.top) as usize + by;
             let i = ly * lw + lx;
-            crate::composite::blend_into(
+            crate::composite::blend_into_ctx(
                 canvas,
+                &ctx,
                 layer,
                 doc,
+                clip,
                 region.left as usize + bx,
                 region.top as usize + by,
                 [

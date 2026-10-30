@@ -22,7 +22,7 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use pictura_core::{LayerMask, PsdRect, VectorMask};
+use pictura_core::{LayerMask, Plane, PsdRect, Samples, VectorMask};
 
 /// The selection feather's maximum radius, which the blur clamps to.
 const FEATHER_MAX: f64 = 250.0;
@@ -107,7 +107,213 @@ pub(crate) fn is_refined(density: u8, feather: f64) -> bool {
 }
 
 fn density(m: u8, d: u8) -> u8 {
+    if d == 255 {
+        return m;
+    }
     255 - ((u32::from(d) * u32::from(255 - m) + 127) / 255) as u8
+}
+
+/// A mask's raster part resolved for a whole layer pass: the plain plane, a
+/// feathered plane built once, or a high-depth native `-2` plane.
+pub(crate) enum RasterGate<'a> {
+    None,
+    Plain {
+        plane: &'a Plane<u8>,
+        rect: PsdRect,
+        default_color: u8,
+        density: u8,
+    },
+    Feathered {
+        plane: Arc<OnceLock<Feathered>>,
+        density: u8,
+    },
+    Native {
+        samples: &'a Samples,
+        rect: PsdRect,
+        default_color: u8,
+    },
+}
+
+impl RasterGate<'_> {
+    /// The 8-bit raster sample (density applied), or `255` when the mask
+    /// reveals the layer. For `Native`, this is the out-of-rect fallback.
+    pub(crate) fn u8_at(&self, x: i32, y: i32) -> u8 {
+        match self {
+            RasterGate::None => 255,
+            RasterGate::Plain {
+                plane,
+                rect,
+                default_color,
+                density,
+            } => plain_mask_at(plane, *rect, *default_color, *density, x, y),
+            RasterGate::Feathered { plane, density: d } => {
+                let m = plane
+                    .get()
+                    .expect("the feathered plane is resolved eagerly")
+                    .at(x, y);
+                density(m, *d)
+            }
+            RasterGate::Native { default_color, .. } => *default_color,
+        }
+    }
+
+    /// The native `-2` sample in unit space, when the pixel is inside the
+    /// native mask rect; `None` keeps the 8-bit fallback.
+    pub(crate) fn native_at(&self, x: i32, y: i32) -> Option<f32> {
+        let RasterGate::Native { samples, rect, .. } = self else {
+            return None;
+        };
+        native_mask_sample(samples, *rect, x, y)
+    }
+}
+
+/// The mask's vector part resolved for a whole layer pass.
+pub(crate) enum VectorGate<'a> {
+    None,
+    Coverage {
+        coverage: pictura_core::VectorCoverage<'a>,
+        invert: bool,
+        density: u8,
+    },
+    Feathered {
+        plane: Arc<OnceLock<Feathered>>,
+        invert: bool,
+        density: u8,
+    },
+}
+
+impl VectorGate<'_> {
+    pub(crate) fn u8_at(&self, x: i32, y: i32) -> u8 {
+        match self {
+            VectorGate::None => 255,
+            VectorGate::Coverage {
+                coverage,
+                invert,
+                density: d,
+            } => {
+                let c = coverage.level(x, y);
+                let c = if *invert { 255 - c } else { c };
+                density(c, *d)
+            }
+            VectorGate::Feathered {
+                plane,
+                invert,
+                density: d,
+            } => {
+                let c = plane
+                    .get()
+                    .expect("the feathered plane is resolved eagerly")
+                    .at(x, y);
+                let c = if *invert { 255 - c } else { c };
+                density(c, *d)
+            }
+        }
+    }
+}
+
+/// The layer's raster mask resolved once for `clip`.
+pub(crate) fn resolve_raster(mask: Option<&LayerMask>, clip: PsdRect) -> RasterGate<'_> {
+    let Some(mask) = mask else {
+        return RasterGate::None;
+    };
+    if mask.disabled {
+        return RasterGate::None;
+    }
+    let Some(data) = mask.data.as_ref() else {
+        return RasterGate::None;
+    };
+    let radius = radius(mask.feather());
+    let empty = i64::from(mask.rect.right) <= i64::from(mask.rect.left)
+        || i64::from(mask.rect.bottom) <= i64::from(mask.rect.top);
+    if radius > 0.0 && !empty {
+        let key = Key {
+            source: data.ident(),
+            rect: [
+                mask.rect.left,
+                mask.rect.top,
+                mask.rect.right,
+                mask.rect.bottom,
+            ],
+            clip: rect_key(clip),
+            outside: mask.default_color,
+            feather: radius.to_bits(),
+        };
+        let plane = shared_cell(key);
+        plane.get_or_init(|| feather_raster(mask, data, radius, clip));
+        RasterGate::Feathered {
+            plane,
+            density: mask.density,
+        }
+    } else {
+        RasterGate::Plain {
+            plane: data,
+            rect: mask.rect,
+            default_color: mask.default_color,
+            density: mask.density,
+        }
+    }
+}
+
+/// The layer's vector mask resolved once for `clip`.
+pub(crate) fn resolve_vector(mask: Option<&VectorMask>, clip: PsdRect) -> VectorGate<'_> {
+    let Some(mask) = mask.filter(|m| m.has_fill()) else {
+        return VectorGate::None;
+    };
+    let radius = radius(mask.feather());
+    if radius > 0.0 {
+        let key = Key {
+            source: mask.ident(),
+            rect: [0; 4],
+            clip: rect_key(clip),
+            outside: 0,
+            feather: radius.to_bits(),
+        };
+        let plane = shared_cell(key);
+        plane.get_or_init(|| feather_vector(mask, radius, clip));
+        VectorGate::Feathered {
+            plane,
+            invert: mask.invert,
+            density: mask.density,
+        }
+    } else {
+        VectorGate::Coverage {
+            coverage: mask.coverage_sampler(clip),
+            invert: mask.invert,
+            density: mask.density,
+        }
+    }
+}
+
+fn plain_mask_at(plane: &Plane<u8>, rect: PsdRect, default_color: u8, d: u8, x: i32, y: i32) -> u8 {
+    let mw = rect.width();
+    let mh = rect.height();
+    let m = if mw <= 0 || mh <= 0 {
+        default_color
+    } else {
+        let mx = x - rect.left;
+        let my = y - rect.top;
+        if mx < 0 || my < 0 || mx >= mw || my >= mh {
+            default_color
+        } else {
+            let idx = my as usize * mw as usize + mx as usize;
+            plane.get(idx).copied().unwrap_or(default_color)
+        }
+    };
+    density(m, d)
+}
+
+fn native_mask_sample(samples: &Samples, rect: PsdRect, x: i32, y: i32) -> Option<f32> {
+    let mw = rect.width();
+    let mh = rect.height();
+    if mw <= 0 || mh <= 0 {
+        return None;
+    }
+    let mx = x - rect.left;
+    let my = y - rect.top;
+    if mx < 0 || my < 0 || mx >= mw || my >= mh {
+        return None;
+    }
+    samples.row(my as usize, mw as usize)?.unit(mx as usize)
 }
 
 /// The usable feather radius: `0` for none, negative, or non-finite.
@@ -180,7 +386,7 @@ struct Key {
 }
 
 /// A blurred coverage plane at a document offset; `outside` beyond it.
-struct Feathered {
+pub(crate) struct Feathered {
     left: i32,
     top: i32,
     width: usize,
@@ -537,5 +743,66 @@ mod tests {
         assert!(is_refined(255, 0.5));
         assert!(is_refined(254, 0.0));
         assert_eq!(radius(1000.0), FEATHER_MAX);
+    }
+
+    #[test]
+    fn a_resolved_raster_gate_matches_the_per_pixel_raster() {
+        let mut mask = step(16, 0);
+        let plain = resolve_raster(Some(&mask), CANVAS);
+        for y in 0..16 {
+            for x in 0..16 {
+                assert_eq!(
+                    plain.u8_at(x, y),
+                    raster(&mask, CANVAS, x, y),
+                    "plain ({x}, {y})"
+                );
+            }
+        }
+        mask.set_feather(4.0);
+        let feathered = resolve_raster(Some(&mask), CANVAS);
+        for y in 0..16 {
+            for x in 0..16 {
+                assert_eq!(
+                    feathered.u8_at(x, y),
+                    raster(&mask, CANVAS, x, y),
+                    "feathered ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_resolved_vector_gate_matches_the_per_pixel_vector() {
+        let p = |x: i32, y: i32| [x * 256, y * 256];
+        let mut mask = VectorMask {
+            subpaths: vec![VectorSubpath {
+                closed: true,
+                operation: 1,
+                fill_rule: VectorFillRule::EvenOdd,
+                points: vec![p(0, 0), p(32, 0), p(32, 32), p(0, 32)],
+            }],
+            ..Default::default()
+        };
+        let plain = resolve_vector(Some(&mask), CANVAS);
+        for y in 0..32 {
+            for x in 0..32 {
+                assert_eq!(
+                    plain.u8_at(x, y),
+                    vector(Some(&mask), CANVAS, x, y),
+                    "plain ({x}, {y})"
+                );
+            }
+        }
+        mask.set_feather(6.0);
+        let feathered = resolve_vector(Some(&mask), CANVAS);
+        for y in 0..32 {
+            for x in 0..32 {
+                assert_eq!(
+                    feathered.u8_at(x, y),
+                    vector(Some(&mask), CANVAS, x, y),
+                    "feathered ({x}, {y})"
+                );
+            }
+        }
     }
 }

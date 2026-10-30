@@ -11,6 +11,26 @@ pub enum Samples {
     F32(Plane<f32>),
 }
 
+/// One row of a native sample plane, for row-wise compositing.
+#[derive(Clone, Copy)]
+pub enum SampleRow<'a> {
+    U8(&'a [u8]),
+    U16(&'a [u16]),
+    F32(&'a [f32]),
+}
+
+impl SampleRow<'_> {
+    /// The row's sample at `i` in the unit `f32` domain, `None` past the row.
+    /// The conversions match the per-index native sample path.
+    pub fn unit(&self, i: usize) -> Option<f32> {
+        match self {
+            SampleRow::U8(v) => v.get(i).map(|&x| x as f32 / 255.0),
+            SampleRow::U16(v) => v.get(i).map(|&x| x as f32 / 65535.0),
+            SampleRow::F32(v) => v.get(i).map(|&x| x.clamp(0.0, 1.0)),
+        }
+    }
+}
+
 impl Samples {
     /// The bit depth this store holds.
     pub fn depth(&self) -> BitDepth {
@@ -139,6 +159,32 @@ impl Samples {
             _ => None,
         }
     }
+
+    /// Row `y`'s samples for a `width`-wide plane, or `None` when the row start
+    /// is out of range. A short plane keeps a short row, so a caller's per-index
+    /// bounds check still sees the samples the per-index path would.
+    pub fn row(&self, y: usize, width: usize) -> Option<SampleRow<'_>> {
+        match self {
+            Samples::U8(v) => available_row(v, y, width).map(SampleRow::U8),
+            Samples::U16(v) => available_row(v, y, width).map(SampleRow::U16),
+            Samples::F32(v) => available_row(v, y, width).map(SampleRow::F32),
+        }
+    }
+}
+
+/// Row `y` of `plane`, keeping the available slice when the plane is shorter
+/// than `y * width + width`. `None` only when the row start is out of range.
+fn available_row<T: Clone>(plane: &Plane<T>, y: usize, width: usize) -> Option<&[T]> {
+    if width == 0 {
+        return None;
+    }
+    let start = y.checked_mul(width)?;
+    if start >= plane.len() {
+        return None;
+    }
+    plane
+        .row(y, width)
+        .or_else(|| plane.as_slice().get(start..))
 }
 
 /// A scalar sample that converts to and from the `[0, 1]` unit domain.
@@ -419,5 +465,37 @@ mod tests {
         assert_eq!(store.slice(2..5), None);
         assert_eq!(Samples::U8(vec![1, 2].into()).as_u8(), Some(&[1u8, 2][..]));
         assert_eq!(Samples::F32(vec![0.0].into()).as_u8(), None);
+    }
+
+    #[test]
+    fn sample_rows_match_the_per_index_conversion() {
+        let u16s = Samples::U16(vec![0, 65535, 32768, 100].into());
+        let row = u16s.row(1, 2).expect("row 1 is in range");
+        assert_eq!(row.unit(0), Some(32768.0 / 65535.0));
+        assert_eq!(row.unit(1), Some(100.0 / 65535.0));
+        assert_eq!(row.unit(2), None, "past the row");
+        assert!(u16s.row(2, 2).is_none(), "a row start past the plane");
+
+        let f32s = Samples::F32(vec![-0.5, 0.25, 1.5].into());
+        let row = f32s.row(0, 3).expect("row 0");
+        assert_eq!(row.unit(0), Some(0.0), "f32 clamps like the index path");
+        assert_eq!(row.unit(1), Some(0.25));
+        assert_eq!(row.unit(2), Some(1.0));
+
+        // A truncated plane keeps its short last row instead of dropping it.
+        let short = Samples::U8(vec![1, 2, 3].into());
+        let row = short.row(1, 2).expect("the row start is in range");
+        assert_eq!(row.unit(0), Some(3.0 / 255.0));
+        assert_eq!(row.unit(1), None);
+    }
+
+    #[test]
+    fn sample_rows_read_a_banded_plane() {
+        let mut plane = Plane::from((0..800).map(|i| (i % 256) as u8).collect::<Vec<_>>());
+        plane.fracture(10);
+        let samples = Samples::U8(plane);
+        let row = samples.row(70, 10).expect("row 70 is in range");
+        assert_eq!(row.unit(0), Some(188.0 / 255.0));
+        assert_eq!(row.unit(9), Some(197.0 / 255.0));
     }
 }

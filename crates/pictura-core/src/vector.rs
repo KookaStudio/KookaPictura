@@ -378,6 +378,20 @@ impl SmoothRows {
     }
 }
 
+/// A resolved vector-mask coverage table for one clip, sampled per pixel.
+/// Obtained from [`VectorMask::coverage_sampler`].
+pub struct VectorCoverage<'a> {
+    rows: &'a SmoothRows,
+}
+
+impl VectorCoverage<'_> {
+    /// The antialiased coverage (0–255) of pixel `(x, y)`, ignoring `invert`.
+    pub fn level(&self, x: i32, y: i32) -> u8 {
+        let share = self.rows.level(x, y) / SAMPLE_LINES as f32;
+        (share * 255.0).round().clamp(0.0, 255.0) as u8
+    }
+}
+
 impl VectorMask {
     /// The antialiased coverage (0–255) of pixel `(x, y)` by the mask's closed
     /// subpaths, under the same fill rule as [`VectorMask::inside`]: the share
@@ -385,12 +399,18 @@ impl VectorMask {
     /// Ignores `invert` and `disabled`; `clip` bounds the cached rows as it
     /// does for `inside`.
     pub fn coverage(&self, x: i32, y: i32, clip: PsdRect) -> u8 {
+        self.coverage_sampler(clip).level(x, y)
+    }
+
+    /// A resolved coverage table for `clip`, so a compositor can sample the
+    /// same mask over a whole layer without rebuilding the row table per pixel.
+    /// Ignores `invert` and `disabled`, like [`VectorMask::coverage`].
+    pub fn coverage_sampler(&self, clip: PsdRect) -> VectorCoverage<'_> {
         let rows = self
             .rows
             .smooth
             .get_or_init(|| SmoothRows::build(&self.subpaths, clip));
-        let share = rows.level(x, y) / SAMPLE_LINES as f32;
-        (share * 255.0).round().clamp(0.0, 255.0) as u8
+        VectorCoverage { rows }
     }
 
     /// The feather radius in pixels.
@@ -603,5 +623,20 @@ mod tests {
         let rows = mask.rows.smooth.get().expect("the query built the rows");
         assert_eq!(rows.rows.len(), 258, "the clip plus one row each side");
         assert_eq!(mask.coverage(1, 100_000, clip(256)), 255, "an uncached row");
+    }
+
+    #[test]
+    fn a_coverage_sampler_matches_the_per_call_coverage() {
+        let mask = rectangle(vec![[0, 0], [2048, 2048], [0, 2048]]);
+        let sampler = mask.coverage_sampler(clip(8));
+        for y in 0..8 {
+            for x in 0..8 {
+                assert_eq!(
+                    sampler.level(x, y),
+                    mask.coverage(x, y, clip(8)),
+                    "sample ({x}, {y})"
+                );
+            }
+        }
     }
 }

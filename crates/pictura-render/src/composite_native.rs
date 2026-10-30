@@ -8,7 +8,8 @@ use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, PsdRect, S
 use rayon::prelude::*;
 
 use crate::composite::{composite_layers, to_u8, Canvas};
-use crate::composite_rows::{blend_into_row, for_each_row, serial};
+use crate::composite_blend::{blend_into_row_ctx, BlendCtx};
+use crate::composite_rows::{for_each_row, serial};
 
 /// The layer's native sample for channel `id` at layer-pixel index `li`, in the
 /// unit `f32` domain, when the document's native store is authoritative for
@@ -17,11 +18,13 @@ use crate::composite_rows::{blend_into_row, for_each_row, serial};
 /// retains a store matching its rect and that depth. `None` otherwise, so the
 /// caller keeps the 8-bit channel path. A converted mode (Lab/CMYK) is
 /// excluded because its store holds source-mode planes, not working RGB.
+#[cfg(test)]
 pub(crate) fn native_unit(layer: &Layer, doc: &Document, id: i16, li: usize) -> Option<f32> {
     let samples = doc.authoritative_plane(layer, id)?;
     sample_unit(samples, li)
 }
 
+#[cfg(test)]
 fn sample_unit(samples: &Samples, i: usize) -> Option<f32> {
     match samples {
         Samples::U16(v) => v.get(i).map(|&x| x as f32 / 65535.0),
@@ -35,6 +38,7 @@ fn sample_unit(samples: &Samples, i: usize) -> Option<f32> {
 /// raster byte, combined with the vector-mask coverage. Mirrors `mask_alpha`'s
 /// absent/disabled/no-data (`1.0`) and out-of-rect/empty (`default_color/255`)
 /// branches through its raster fallback.
+#[cfg(test)]
 pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, clip: PsdRect, x: i32, y: i32) -> f32 {
     // No native `-2` sample (8-bit document, or absent/disabled/out-of-rect
     // mask) keeps the exact 8-bit combine, so the fallback is byte-identical.
@@ -48,6 +52,7 @@ pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, clip: PsdRect, x: i
 /// The `-2` mask sample at a canvas pixel in unit space, only for a high-depth
 /// document whose layer retains a plane whose length matches the mask rect.
 /// Masks are valid in any high-depth mode, so `source_mode` is not gated.
+#[cfg(test)]
 fn native_mask_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> Option<f32> {
     doc.source_depth?;
     let mask = layer.mask.as_ref()?;
@@ -79,6 +84,48 @@ fn native_mask_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> Option<f32
         return None;
     }
     sample_unit(samples, my as usize * mw as usize + mx as usize)
+}
+
+/// A high-depth layer mask's retained native `-2` plane, resolved once per
+/// layer pass.
+pub(crate) struct NativeMask<'a> {
+    pub(crate) samples: &'a Samples,
+    pub(crate) rect: PsdRect,
+    pub(crate) default_color: u8,
+}
+
+/// The layer's native `-2` mask when the high-depth document retains one whose
+/// length matches the mask rect. Mirrors the per-pixel `native_mask_unit` gate,
+/// so the
+/// compositor can resolve it once instead of per pixel.
+pub(crate) fn resolve_native_mask<'a>(doc: &Document, layer: &'a Layer) -> Option<NativeMask<'a>> {
+    doc.source_depth?;
+    let mask = layer.mask.as_ref()?;
+    if mask.disabled
+        || mask.data.is_none()
+        || crate::mask_refine::is_refined(mask.density, mask.feather())
+    {
+        return None;
+    }
+    let mw = mask.rect.width();
+    let mh = mask.rect.height();
+    if mw <= 0 || mh <= 0 {
+        return None;
+    }
+    let (_, samples) = layer
+        .source_channels
+        .as_ref()?
+        .planes
+        .iter()
+        .find(|(id, _)| *id == -2)?;
+    if samples.len() != mw as usize * mh as usize {
+        return None;
+    }
+    Some(NativeMask {
+        samples,
+        rect: mask.rect,
+        default_color: mask.default_color,
+    })
 }
 
 /// Apply a decoded adjustment to the running backdrop, then gate the result by
@@ -162,6 +209,7 @@ pub(crate) fn composite_adjustment(
     let y1 = canvas.y1();
     let clip = canvas.clip();
     let buf = &buf;
+    let ctx = BlendCtx::new(&gated, doc, clip);
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         let base = (y - oy) as usize * w;
         for x in x0..x1 {
@@ -178,10 +226,11 @@ pub(crate) fn composite_adjustment(
                 buf.data[n + i] as f32 / 255.0,
                 buf.data[2 * n + i] as f32 / 255.0,
             ];
-            blend_into_row(
+            blend_into_row_ctx(
                 row,
                 cover.as_deref_mut(),
                 ox,
+                &ctx,
                 &gated,
                 doc,
                 clip,
@@ -234,6 +283,7 @@ fn gate_adjusted(canvas: &mut Canvas, layer: &Layer, doc: &Document, adjusted: &
     let y0 = canvas.y0();
     let y1 = canvas.y1();
     let clip = canvas.clip();
+    let ctx = BlendCtx::new(layer, doc, clip);
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         let base = (y - oy) as usize * w;
         for x in x0..x1 {
@@ -243,10 +293,11 @@ fn gate_adjusted(canvas: &mut Canvas, layer: &Layer, doc: &Document, adjusted: &
             if backdrop_alpha <= 0.0 {
                 continue;
             }
-            blend_into_row(
+            blend_into_row_ctx(
                 row,
                 cover.as_deref_mut(),
                 ox,
+                &ctx,
                 layer,
                 doc,
                 clip,

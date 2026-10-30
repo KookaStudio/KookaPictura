@@ -9,11 +9,11 @@
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use pictura_core::{BlendMode, ColorMode, Document, Layer, PsdRect};
+use pictura_core::{BlendMode, ColorMode, Document, Layer, SampleRow};
 use rayon::prelude::*;
 
-use crate::composite::{blend, blend_if_factor, channel_plane, Canvas, Px};
-use crate::composite_native::{mask_alpha_unit, native_unit};
+use crate::composite::{blend, channel_plane, Canvas, Px};
+use crate::composite_blend::{blend_into_row_ctx, BlendCtx, SourcePlanes};
 
 /// Test-only switch that routes [`for_each_row`] and the chunked kernels
 /// through their serial branch, so a test can compare the parallel and
@@ -105,47 +105,6 @@ where
     }
 }
 
-/// Composite one source sample over `row`'s backdrop with the layer's opacity,
-/// fill, mask, and gate. `row[0]` is document x `ox`; `x`/`y` are document
-/// coordinates.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn blend_into_row(
-    row: &mut [Px],
-    cover: Option<&mut [bool]>,
-    ox: i32,
-    layer: &Layer,
-    doc: &Document,
-    clip: PsdRect,
-    x: i32,
-    y: i32,
-    cs: [f32; 3],
-    src_a: f32,
-) {
-    let opacity = layer.opacity as f32 / 255.0;
-    let fill = if layer.is_group {
-        1.0
-    } else {
-        layer.fill as f32 / 255.0
-    };
-    let mask = mask_alpha_unit(doc, layer, clip, x, y);
-    let gate = match layer.blend_if.as_ref() {
-        Some(view) if !view.is_default() => {
-            let backdrop = row[(x - ox) as usize];
-            blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
-        }
-        _ => 1.0,
-    };
-    let mut content = src_a * opacity * fill;
-    if let Some(curve) = layer
-        .type_tool
-        .as_ref()
-        .and_then(|_| crate::text_gamma::current_curve())
-    {
-        content = curve.apply(content);
-    }
-    blend_parts_row(row, cover, ox, x, y, cs, content * mask * gate, layer.blend);
-}
-
 /// Composite an opacity-weighted source sample over the backdrop at
 /// `row[x - ox]` with a blend mode.
 #[allow(clippy::too_many_arguments)]
@@ -198,6 +157,21 @@ pub(crate) fn blend_parts_row(
     };
 }
 
+/// A source sample from the resolved native row, or the 8-bit plane.
+#[inline]
+fn source_unit(native: Option<SampleRow<'_>>, bytes: Option<&[u8]>, lx: usize, default: u8) -> f32 {
+    if let Some(row) = native {
+        if let Some(v) = row.unit(lx) {
+            return v;
+        }
+    }
+    bytes
+        .and_then(|row| row.get(lx))
+        .copied()
+        .unwrap_or(default) as f32
+        / 255.0
+}
+
 /// Paint a pixel layer's own channels over the canvas, row-parallel.
 pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
     // A smart-object layer with no raster proxy has no channel to draw from. The
@@ -205,6 +179,11 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     // source is unusable, leave the backdrop unchanged instead of painting the
     // channel-less rect black.
     if layer.smart_object.is_some() && channel_plane(layer, 0).is_none() {
+        return;
+    }
+    #[cfg(test)]
+    if crate::composite_blend::legacy_source() {
+        composite_pixels_legacy(canvas, layer, doc);
         return;
     }
     let lw = layer.rect.width();
@@ -232,6 +211,8 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     let ox = canvas.ox;
     let rect = layer.rect;
     let clip = canvas.clip();
+    let ctx = BlendCtx::new(layer, doc, clip);
+    let source = SourcePlanes::resolve(layer, doc);
 
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         // A row lies inside one band, so reading rows keeps a banded plane
@@ -241,13 +222,83 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
         let r1 = ch1.and_then(|p| p.row(ly, lw));
         let r2 = ch2.and_then(|p| p.row(ly, lw));
         let ra = alpha.and_then(|p| p.row(ly, lw));
+        let native = source.row(ly, lw);
+        for x in x0..x1 {
+            let lx = (x - rect.left) as usize;
+            // A high-depth Grayscale/RGB layer reads its native samples; a
+            // channel missing from the store falls back to its 8-bit plane.
+            let a = source_unit(native[3], ra, lx, 255);
+            if a <= 0.0 {
+                continue;
+            }
+            let (r, g, b) = if gray {
+                let v = source_unit(native[0], r0, lx, 0);
+                (v, v, v)
+            } else {
+                (
+                    source_unit(native[0], r0, lx, 0),
+                    source_unit(native[1], r1, lx, 0),
+                    source_unit(native[2], r2, lx, 0),
+                )
+            };
+            blend_into_row_ctx(
+                row,
+                cover.as_deref_mut(),
+                ox,
+                &ctx,
+                layer,
+                doc,
+                clip,
+                x,
+                y,
+                [r, g, b],
+                a,
+            );
+        }
+    });
+}
+
+/// The pre-change pixel loop, kept as the source-sampling oracle.
+#[cfg(test)]
+fn composite_pixels_legacy(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
+    if layer.smart_object.is_some() && channel_plane(layer, 0).is_none() {
+        return;
+    }
+    let lw = layer.rect.width();
+    let lh = layer.rect.height();
+    if lw <= 0 || lh <= 0 {
+        return;
+    }
+    let lw = lw as usize;
+    let x0 = layer.rect.left.max(canvas.x0());
+    let y0 = layer.rect.top.max(canvas.y0());
+    let x1 = layer.rect.right.min(canvas.x1());
+    let y1 = layer.rect.bottom.min(canvas.y1());
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+    let gray = matches!(
+        doc.mode,
+        ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone
+    );
+    let ch0 = channel_plane(layer, 0);
+    let ch1 = channel_plane(layer, 1).or(ch0);
+    let ch2 = channel_plane(layer, 2).or(ch0);
+    let alpha = channel_plane(layer, -1);
+    let ox = canvas.ox;
+    let rect = layer.rect;
+    let clip = canvas.clip();
+    for_each_row(canvas, y0, y1, |y, row, mut cover| {
+        let ly = (y - rect.top) as usize;
+        let r0 = ch0.and_then(|p| p.row(ly, lw));
+        let r1 = ch1.and_then(|p| p.row(ly, lw));
+        let r2 = ch2.and_then(|p| p.row(ly, lw));
+        let ra = alpha.and_then(|p| p.row(ly, lw));
         for x in x0..x1 {
             let lx = (x - rect.left) as usize;
             let li = ly * lw + lx;
-            // A high-depth Grayscale/RGB layer reads its native samples; a
-            // channel missing from the store falls back to its 8-bit plane.
             let unit = |id: i16, r: Option<&[u8]>| {
-                native_unit(layer, doc, id, li).unwrap_or_else(|| {
+                crate::composite_native::native_unit(layer, doc, id, li).unwrap_or_else(|| {
                     r.and_then(|r| r.get(lx)).copied().unwrap_or(0) as f32 / 255.0
                 })
             };
@@ -257,10 +308,10 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
             } else {
                 (unit(0, r0), unit(1, r1), unit(2, r2))
             };
-            let a = native_unit(layer, doc, -1, li).unwrap_or_else(|| {
+            let a = crate::composite_native::native_unit(layer, doc, -1, li).unwrap_or_else(|| {
                 ra.and_then(|r| r.get(lx)).copied().unwrap_or(255) as f32 / 255.0
             });
-            blend_into_row(
+            crate::composite_blend::blend_into_row(
                 row,
                 cover.as_deref_mut(),
                 ox,
@@ -285,14 +336,16 @@ pub(crate) fn composite_canvas(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     let y0 = canvas.y0();
     let y1 = canvas.y1();
     let clip = canvas.clip();
+    let ctx = BlendCtx::new(layer, doc, clip);
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         for x in x0..x1 {
             let p = inner.px[inner.idx(x as usize, y as usize)];
             if p.a > 0.0 {
-                blend_into_row(
+                blend_into_row_ctx(
                     row,
                     cover.as_deref_mut(),
                     ox,
+                    &ctx,
                     layer,
                     doc,
                     clip,
