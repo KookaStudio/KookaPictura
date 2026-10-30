@@ -163,6 +163,10 @@ ControlServer::ControlServer(PicturaMainWindow* frame, const QString& socketPath
     , frame_(frame)
     , socketPath_(socketPath.isEmpty() ? defaultSocketPath() : socketPath)
 {
+    connect(frame_, &PicturaMainWindow::documentOpenFinished, this,
+            [this](quint64 token, int outcome, const QString&) {
+                onOpenFinished(token, outcome);
+            });
 }
 
 ControlServer::~ControlServer()
@@ -301,6 +305,9 @@ void ControlServer::shutdown()
     queue_.clear();
     queuedCounts_.clear();
     buffers_.clear();
+    takePending();
+    opening_ = {};
+    parked_ = false;
     if (tokenWritten_) {
         QFile::remove(tokenPath());
         tokenWritten_ = false;
@@ -389,11 +396,11 @@ void ControlServer::onReadyRead()
 
 void ControlServer::pump()
 {
-    if (running_) {
+    if (running_ || parked_) {
         return;
     }
     running_ = true;
-    while (!queue_.isEmpty()) {
+    while (!queue_.isEmpty() && !parked_) {
         const QueuedLine next = queue_.takeFirst();
         // A client that left needs no answer, and its queued work is unwanted.
         if (!next.socket || !buffers_.contains(next.socket.data())) {
@@ -424,6 +431,10 @@ void ControlServer::onDisconnected()
     }
     buffers_.remove(socket);
     queuedCounts_.remove(socket);
+    if (pending_.socket == socket && !pending_.target.isEmpty()) {
+        takePending();
+        QMetaObject::invokeMethod(this, &ControlServer::pump, Qt::QueuedConnection);
+    }
     socket->deleteLater();
 }
 
@@ -484,9 +495,7 @@ void ControlServer::handleLine(const QPointer<QLocalSocket>& socket, const QByte
     }
     const QString method = request.value(QStringLiteral("method")).toString();
     const QJsonObject params = request.value(QStringLiteral("params")).toObject();
-    QJsonObject response = dispatch(method, params);
-    response.insert(QStringLiteral("id"), id);
-    writeLine(socket, response);
+    serve(socket, id, method, params);
 }
 
 void ControlServer::writeLine(QLocalSocket* socket, const QJsonObject& response)
@@ -515,9 +524,8 @@ QJsonObject ControlServer::error(const QString& code, const QString& message) co
 
 QJsonObject ControlServer::dispatch(const QString& method, const QJsonObject& params)
 {
-    // ponytail: the scope also spans `open`'s wait, so in a visible --control
-    // window a dialog a person opens during a load is cancelled too.
-    const ControlScope scope;
+    const UnsavedChoice cancel = UnsavedChoice::Cancel;
+    const ControlScope scope(policy_.live ? &cancel : nullptr);
     const QJsonObject response = route(method, params);
     if (scope.cancelledAny()) {
         return error(QStringLiteral("refused"),
@@ -526,70 +534,55 @@ QJsonObject ControlServer::dispatch(const QString& method, const QJsonObject& pa
     return response;
 }
 
+const QList<ControlServer::MethodRow>& ControlServer::methodTable()
+{
+    // `document` and `pointer` refine their tier by op in tierOf().
+    static const QList<MethodRow> table = {
+        {"status", &ControlServer::methodStatus, ControlTier::Read},
+        {"get_pixel", &ControlServer::methodGetPixel, ControlTier::Read},
+        {"list_layers", &ControlServer::methodListLayers, ControlTier::Read},
+        {"list_commands", &ControlServer::methodListCommands, ControlTier::Read},
+        {"dispatch_command", &ControlServer::methodDispatchCommand, ControlTier::Edit},
+        {"document", &ControlServer::methodDocument, ControlTier::Read},
+        {"edit", &ControlServer::methodEdit, ControlTier::Edit},
+        {"set_unsaved_policy", &ControlServer::methodSetUnsavedPolicy, ControlTier::Admin},
+        {"screenshot", &ControlServer::methodScreenshot, ControlTier::Read},
+        {"ui_tree", &ControlServer::methodUiTree, ControlTier::Read},
+        {"layer_thumbnail", &ControlServer::methodLayerThumbnail, ControlTier::Read},
+        {"set_tool", &ControlServer::methodSetTool, ControlTier::Edit},
+        {"tool_options", &ControlServer::methodToolOptions, ControlTier::Edit},
+        {"selection", &ControlServer::methodSelection, ControlTier::Edit},
+        {"filter", &ControlServer::methodFilter, ControlTier::Edit},
+        {"adjustment", &ControlServer::methodAdjustment, ControlTier::Edit},
+        {"layer_op", &ControlServer::methodLayerOp, ControlTier::Edit},
+        {"set_gpu_compute", &ControlServer::methodSetGpuCompute, ControlTier::Admin},
+        {"metrics", &ControlServer::methodMetrics, ControlTier::Read},
+        {"pointer", &ControlServer::methodPointer, ControlTier::Admin},
+        {"key", &ControlServer::methodKey, ControlTier::Admin},
+    };
+    return table;
+}
+
+QStringList ControlServer::methodNames()
+{
+    QStringList names;
+    for (const MethodRow& row : methodTable()) {
+        names.append(QString::fromLatin1(row.name));
+    }
+    return names;
+}
+
+bool ControlServer::isMethod(const QString& method)
+{
+    return methodNames().contains(method);
+}
+
 QJsonObject ControlServer::route(const QString& method, const QJsonObject& params)
 {
-    if (method == QStringLiteral("status")) {
-        return methodStatus(params);
-    }
-    if (method == QStringLiteral("get_pixel")) {
-        return methodGetPixel(params);
-    }
-    if (method == QStringLiteral("list_layers")) {
-        return methodListLayers(params);
-    }
-    if (method == QStringLiteral("list_commands")) {
-        return methodListCommands(params);
-    }
-    if (method == QStringLiteral("dispatch_command")) {
-        return methodDispatchCommand(params);
-    }
-    if (method == QStringLiteral("document")) {
-        return methodDocument(params);
-    }
-    if (method == QStringLiteral("edit")) {
-        return methodEdit(params);
-    }
-    if (method == QStringLiteral("set_unsaved_policy")) {
-        return methodSetUnsavedPolicy(params);
-    }
-    if (method == QStringLiteral("screenshot")) {
-        return methodScreenshot(params);
-    }
-    if (method == QStringLiteral("ui_tree")) {
-        return methodUiTree(params);
-    }
-    if (method == QStringLiteral("layer_thumbnail")) {
-        return methodLayerThumbnail(params);
-    }
-    if (method == QStringLiteral("set_tool")) {
-        return methodSetTool(params);
-    }
-    if (method == QStringLiteral("tool_options")) {
-        return methodToolOptions(params);
-    }
-    if (method == QStringLiteral("selection")) {
-        return methodSelection(params);
-    }
-    if (method == QStringLiteral("filter")) {
-        return methodFilter(params);
-    }
-    if (method == QStringLiteral("adjustment")) {
-        return methodAdjustment(params);
-    }
-    if (method == QStringLiteral("layer_op")) {
-        return methodLayerOp(params);
-    }
-    if (method == QStringLiteral("set_gpu_compute")) {
-        return methodSetGpuCompute(params);
-    }
-    if (method == QStringLiteral("metrics")) {
-        return methodMetrics(params);
-    }
-    if (method == QStringLiteral("pointer")) {
-        return methodPointer(params);
-    }
-    if (method == QStringLiteral("key")) {
-        return methodKey(params);
+    for (const MethodRow& row : methodTable()) {
+        if (method == QLatin1String(row.name)) {
+            return (this->*row.handler)(params);
+        }
     }
     return error(QStringLiteral("unknown_method"),
                  QStringLiteral("unknown method: %1").arg(method));

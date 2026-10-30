@@ -7,14 +7,15 @@ An opt-in local control mode exposing a newline-delimited JSON protocol for non-
 
 ### Requirement: Opt-in control mode over a local socket
 
-The application SHALL start a control server only when invoked with `--control`.
-On POSIX the server SHALL listen on a per-user Unix-domain socket whose default
-path is `$XDG_RUNTIME_DIR/pictura-control.sock`; on Windows it SHALL listen on a
+The application SHALL start a control server only when invoked with `--control`,
+or when the person has enabled agent control. On POSIX the `--control` server
+SHALL listen on a per-user Unix-domain socket whose default path is
+`$XDG_RUNTIME_DIR/pictura-control.sock`; on Windows it SHALL listen on a
 machine-local named pipe. The resolved endpoint SHALL be printed to stderr and
 `--control-socket ENDPOINT` SHALL override it. `--state-home DIR` SHALL isolate
 the session store to `DIR`. `--headless --control` SHALL run offscreen without a
-display. Without `--control`, no socket SHALL be created and startup, the
-self-test, and normal runs SHALL be unchanged.
+display. With neither, no socket SHALL be created and startup, the self-test, and
+normal runs SHALL be unchanged.
 
 #### Scenario: Control mode starts and reports its socket
 
@@ -24,7 +25,7 @@ self-test, and normal runs SHALL be unchanged.
 
 #### Scenario: No control server without the flag
 
-- **WHEN** the app is launched without `--control`
+- **WHEN** the app is launched without `--control` and agent control is off
 - **THEN** no socket path is printed and the default socket is not created
 
 #### Scenario: A custom socket path is honored
@@ -164,8 +165,9 @@ include any arbitrary-code-evaluation method. On POSIX the socket SHALL be a
 Unix-domain socket created with user-only access (owner read/write and no group
 or other access; Qt's `UserAccessOption` creates it with mode `0700`). On Windows
 the endpoint SHALL be a machine-local named pipe. The control server SHALL exist
-only under `--control`. A line or buffered request larger than a fixed bound
-SHALL be rejected with `bad_request` rather than growing without limit.
+only under `--control` or while agent control is enabled. A line or buffered
+request larger than a fixed bound SHALL be rejected with `bad_request` rather
+than growing without limit.
 
 #### Scenario: The socket is user-only
 
@@ -627,9 +629,10 @@ without opening or writing anything, an `open`, `save_as`, or `save` path
 that is not absolute, contains a character below U+0020 or U+007F, or has a
 `..` component. A `save_as`, or a `save` with a path, SHALL also refuse a
 path whose final component is a symbolic link, and a `save` with no path
-SHALL refuse the same way when the active document's path is one. Any other
-absolute path SHALL be accepted, so the server SHALL NOT confine paths to a
-root directory.
+SHALL refuse the same way when the active document's path is one. Under bare
+`--control` any other absolute path SHALL be accepted, so that mode SHALL NOT
+confine paths to a root directory; a restricted session follows
+`interop/agent-permissions`.
 
 #### Scenario: Ambiguous paths are refused [ac_path_refused]
 

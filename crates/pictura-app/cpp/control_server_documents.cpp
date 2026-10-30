@@ -186,6 +186,11 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
                      QStringLiteral("unknown op: %1").arg(op));
     }
 
+    return documentResult(applied);
+}
+
+QJsonObject ControlServer::documentResult(bool applied) const
+{
     QJsonObject result;
     result.insert(QStringLiteral("applied"), applied);
     result.insert(QStringLiteral("active"), frame_->activeDocumentIndex());

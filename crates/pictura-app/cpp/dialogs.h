@@ -57,6 +57,9 @@ UnsavedChoice askUnsaved(QWidget* parent, const QString& documentName);
 // Test hook: when interactive is false, askUnsaved does not show a dialog and
 // returns the configured choice. Defaults: interactive true, Discard.
 void setUnsavedPromptInteractive(bool interactive);
+// While set, askUnsaved answers this. A control request sets it for its own
+// span, so a person's Close in the same process still prompts.
+void setRequestUnsavedChoice(const UnsavedChoice* choice);
 void setNonInteractiveUnsavedChoice(UnsavedChoice choice);
 // How many times askUnsaved has answered without a dialog, so a test can count
 // the prompts an operation raises.

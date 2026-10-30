@@ -167,6 +167,14 @@ SessionState loadSession()
     state.showSmartFilterEditMessage =
         obj.value(QStringLiteral("showSmartFilterEditMessage")).toBool(true);
     state.autoSaveRecovery = obj.value(QStringLiteral("autoSaveRecovery")).toBool(true);
+    state.agentControlEnabled = obj.value(QStringLiteral("agentControlEnabled")).toBool(false);
+    state.agentAllowEdit = obj.value(QStringLiteral("agentAllowEdit")).toBool(false);
+    state.agentAllowSave = obj.value(QStringLiteral("agentAllowSave")).toBool(false);
+    state.agentApprovalMode =
+        qBound(0, obj.value(QStringLiteral("agentApprovalMode")).toInt(1), 2);
+    for (const QJsonValue& root : obj.value(QStringLiteral("agentRoots")).toArray()) {
+        state.agentRoots.append(root.toString());
+    }
     const int autoSaveMinutes = obj.value(QStringLiteral("autoSaveMinutes")).toInt(10);
     state.autoSaveMinutes = kAutoSaveMinuteChoices.contains(autoSaveMinutes) ? autoSaveMinutes : 10;
     state.rulersVisible = obj.value(QStringLiteral("rulersVisible")).toBool(false);
@@ -319,6 +327,11 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("showFullScreenMessage"), state.showFullScreenMessage);
     obj.insert(QStringLiteral("showSmartFilterEditMessage"), state.showSmartFilterEditMessage);
     obj.insert(QStringLiteral("autoSaveRecovery"), state.autoSaveRecovery);
+    obj.insert(QStringLiteral("agentControlEnabled"), state.agentControlEnabled);
+    obj.insert(QStringLiteral("agentAllowEdit"), state.agentAllowEdit);
+    obj.insert(QStringLiteral("agentAllowSave"), state.agentAllowSave);
+    obj.insert(QStringLiteral("agentApprovalMode"), state.agentApprovalMode);
+    obj.insert(QStringLiteral("agentRoots"), QJsonArray::fromStringList(state.agentRoots));
     obj.insert(QStringLiteral("autoSaveMinutes"), state.autoSaveMinutes);
     obj.insert(QStringLiteral("rulersVisible"), state.rulersVisible);
     obj.insert(QStringLiteral("rulerUnit"), state.rulerUnit);
