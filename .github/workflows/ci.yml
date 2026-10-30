@@ -92,10 +92,15 @@ jobs:
       - &sccache
         uses: mozilla-actions/sccache-action@v0.0.11
 
-      - &rustcache
+      # lint and test restore their compiled targets, so an unchanged
+      # dependency graph is not recompiled on every run. Only master saves, to
+      # keep the shared Actions cache quota for the default branch.
+      - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          cache-targets: "false"
+          cache-targets: "true"
+          shared-key: lint
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Format
         run: cargo fmt --all --check
@@ -126,7 +131,13 @@ jobs:
       - *apt
       - *qt
       - *sccache
-      - *rustcache
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "true"
+          shared-key: test
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - uses: taiki-e/install-action@nextest
 
@@ -193,7 +204,12 @@ jobs:
         run: sudo apt-get install -y mesa-vulkan-drivers libvulkan1
 
       - *sccache
-      - *rustcache
+      # gpu-parity and qt-headless cache only the registry; qt-headless builds
+      # its Rust through Corrosion into the CMake tree, outside target/.
+      - &rustcache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
 
       - uses: taiki-e/install-action@nextest
 
@@ -219,7 +235,9 @@ jobs:
       - *rustcache
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        # CI compiles every source without precompiled headers, so a header a
+        # local precompiled header would mask cannot break the release build.
+        run: cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -232,7 +250,8 @@ jobs:
 
       - name: CTest
         run: |
-          level="${CTEST_PARALLEL_LEVEL:-4}"
+          # The runner runs nothing else here, so every CPU takes a suite.
+          level="${CTEST_PARALLEL_LEVEL:-$(nproc)}"
           echo "ctest -j $level"
           ctest --test-dir build --output-on-failure -j "$level"
 
