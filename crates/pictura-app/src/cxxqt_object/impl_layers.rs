@@ -17,6 +17,7 @@ pub(in crate::cxxqt_object) use mask_commands::coverage_at;
 mod layers_surface;
 mod mask_refine;
 mod matting;
+mod opacity_fill;
 mod smart_object_actions;
 mod target_transitions;
 mod vector_masks;
@@ -733,130 +734,6 @@ impl qobject::PictureView {
 
     // ponytail: the preview flag is sticky, so a drag that returns to its start
     // value records one redundant state; store per-path originals if that matters.
-    pub fn preview_layers_opacity(
-        mut self: Pin<&mut Self>,
-        paths: &QStringList,
-        value: i32,
-    ) -> i32 {
-        let value = value.clamp(0, 255) as u8;
-        let owned = list_of_strings(paths);
-        let refs = as_str_slice(&owned);
-        let (changed, region) = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                let before: Vec<_> = refs
-                    .iter()
-                    .map(|path| property_compositing(doc, path))
-                    .collect();
-                let changed = pictura_render::set_opacity_paths(doc, &refs, value);
-                let region = if changed > 0 {
-                    changed_property_region(doc, &refs, &before)
-                } else {
-                    Some(None)
-                };
-                (changed, region)
-            }
-            None => (0, None),
-        };
-        if changed > 0 {
-            match region {
-                Some(Some(rect)) => self.as_mut().refresh_region(rect),
-                _ => self.as_mut().recomposite(),
-            }
-            let mut rust = self.as_mut().rust_mut();
-            rust.session.dirty = true;
-            rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
-            rust.pending_previews.opacity_changed = true;
-        }
-        changed as i32
-    }
-
-    pub fn commit_layers_opacity(mut self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32 {
-        let value = value.clamp(0, 255) as u8;
-        let owned = list_of_strings(paths);
-        let refs = as_str_slice(&owned);
-        let pending = self.rust().pending_previews.opacity_changed;
-        let mut changed = 0;
-        self.as_mut().edit("Opacity", |rust| {
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return Edit::None;
-            };
-            let before: Vec<_> = refs
-                .iter()
-                .map(|path| property_compositing(doc, path))
-                .collect();
-            changed = pictura_render::set_opacity_paths(doc, &refs, value);
-            if changed == 0 {
-                return if pending { Edit::Record } else { Edit::None };
-            }
-            match changed_property_region(doc, &refs, &before) {
-                Some(Some(rect)) => Edit::regions(vec![rect], true),
-                _ => Edit::Full,
-            }
-        });
-        self.as_mut().rust_mut().pending_previews.opacity_changed = false;
-        changed as i32
-    }
-
-    pub fn preview_layers_fill(mut self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32 {
-        let value = value.clamp(0, 255) as u8;
-        let owned = list_of_strings(paths);
-        let refs = as_str_slice(&owned);
-        let (changed, region) = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                let before: Vec<_> = refs
-                    .iter()
-                    .map(|path| property_compositing(doc, path))
-                    .collect();
-                let changed = pictura_render::set_fill_paths(doc, &refs, value);
-                let region = if changed > 0 {
-                    changed_property_region(doc, &refs, &before)
-                } else {
-                    Some(None)
-                };
-                (changed, region)
-            }
-            None => (0, None),
-        };
-        if changed > 0 {
-            match region {
-                Some(Some(rect)) => self.as_mut().refresh_region(rect),
-                _ => self.as_mut().recomposite(),
-            }
-            let mut rust = self.as_mut().rust_mut();
-            rust.session.dirty = true;
-            rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
-            rust.pending_previews.fill_changed = true;
-        }
-        changed as i32
-    }
-
-    pub fn commit_layers_fill(mut self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32 {
-        let value = value.clamp(0, 255) as u8;
-        let owned = list_of_strings(paths);
-        let refs = as_str_slice(&owned);
-        let pending = self.rust().pending_previews.fill_changed;
-        let mut changed = 0;
-        self.as_mut().edit("Fill Opacity", |rust| {
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return Edit::None;
-            };
-            let before: Vec<_> = refs
-                .iter()
-                .map(|path| property_compositing(doc, path))
-                .collect();
-            changed = pictura_render::set_fill_paths(doc, &refs, value);
-            if changed == 0 {
-                return if pending { Edit::Record } else { Edit::None };
-            }
-            match changed_property_region(doc, &refs, &before) {
-                Some(Some(rect)) => Edit::regions(vec![rect], true),
-                _ => Edit::Full,
-            }
-        });
-        self.as_mut().rust_mut().pending_previews.fill_changed = false;
-        changed as i32
-    }
-
     pub fn set_layers_lock(
         mut self: Pin<&mut Self>,
         paths: &QStringList,

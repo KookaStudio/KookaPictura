@@ -206,6 +206,7 @@ impl PictureViewRust {
         if matches!(edit, Edit::None) {
             return Applied { edit, blit: None };
         }
+        self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         let pending = self.pending_previews.any();
         let force_full = self.has_active_session() || pending || self.mask_solo.is_some();
         let edit = match edit {
@@ -321,6 +322,7 @@ impl PictureViewRust {
         if matches!(edit, Edit::None) {
             return None;
         }
+        self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         let blit = self.refresh_for(edit);
         self.session.content_revision = self.session.content_revision.wrapping_add(1);
         blit

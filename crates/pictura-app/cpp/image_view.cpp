@@ -670,6 +670,9 @@ void ImageView::paintEvent(QPaintEvent* event)
         QRect cropDoc;
         QRect sourceRect;
         const bool haveRect = level >= 0 && presentLevelRect(level, cropDoc, sourceRect);
+        if (haveRect && levelProvider_.reportView) {
+            levelProvider_.reportView(level, cropDoc);
+        }
         // A stored level is drawn from a zero-copy view for this paint only: a
         // view retained across paints would force a level copy on the next
         // update. Without a view (single-channel, or an old provider) the crop

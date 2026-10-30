@@ -11,6 +11,7 @@ mod color_management;
 mod color_range;
 mod command_catalogue;
 mod crop_group;
+mod display_preview;
 mod document_session;
 mod edit;
 mod engine_tables;
@@ -272,6 +273,8 @@ pub mod qobject {
         #[qinvokable]
         fn canvas_revision(&self) -> u64;
         #[qinvokable]
+        fn set_presented_view(self: Pin<&mut Self>, level: i32, x: i32, y: i32, w: i32, h: i32);
+        #[qinvokable]
         fn document_generation(&self) -> u64; // document load/replace epoch
         /// Whether a document is loaded; drives shell command enablement.
         #[qinvokable]
@@ -433,8 +436,7 @@ pub mod qobject {
         #[qinvokable]
         fn commit_layers_fill(self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32;
 
-        /// Set one lock flag on every path (`flag` is `"transparency"`, `"pixels"`,
-        /// `"position"`, or `"all"`). Returns the number changed; records one state.
+        /// Set one lock flag on every path. Returns the number changed; records one state.
         #[qinvokable]
         fn set_layers_lock(
             self: Pin<&mut Self>,
@@ -455,8 +457,7 @@ pub mod qobject {
         #[qinvokable]
         fn delete_layers(self: Pin<&mut Self>, paths: &QStringList) -> i32;
 
-        /// Deep-copy every path directly above itself, returning the new paths.
-        /// Records one undo state only when at least one copy was created.
+        /// Deep-copy every path above itself; records one state when a copy is created.
         #[qinvokable]
         fn duplicate_layers(self: Pin<&mut Self>, paths: &QStringList) -> QStringList;
 
@@ -464,8 +465,7 @@ pub mod qobject {
         #[qinvokable]
         fn group_layers(self: Pin<&mut Self>, paths: &QStringList) -> QString;
 
-        /// Splice each selected group's children in place. Returns the number
-        /// of groups changed; records one undo state only when non-zero.
+        /// Splice each selected group's children in place. Returns the number changed.
         #[qinvokable]
         fn ungroup_layers(self: Pin<&mut Self>, paths: &QStringList) -> i32;
 

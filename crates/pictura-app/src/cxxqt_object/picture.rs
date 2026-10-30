@@ -54,6 +54,7 @@ pub(super) fn picture<'a>(doc: &'a Document, view: &PictureViewRust) -> Cow<'a, 
 fn is_current(doc: &Document, view: &PictureViewRust) -> bool {
     !view.is_painting()
         && !view.has_lifted_transform()
+        && !view.display_preview_presented()
         && doc.mode == ColorMode::Rgb
         && doc.source_depth.is_none()
         && doc.composite.channels == 4
@@ -184,6 +185,22 @@ mod tests {
             .is_some());
         let doc = view.session.doc.as_ref().expect("document");
         assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn a_display_preview_is_composited() {
+        let mut view = view_of(doc_with_layer());
+        view.presented_level = 0;
+        view.presented_rect = doc_rect();
+        view.reset_pyramid();
+        view.begin_display_preview(
+            vec!["0".to_string()],
+            crate::cxxqt_object::display_preview::PreviewKind::Adjustment,
+        );
+        assert!(view.present_display_preview().is_some());
+        let doc = view.session.doc.as_ref().expect("document");
+        assert!(matches!(picture(doc, &view), Cow::Owned(_)));
+        assert_eq!(served(doc, &view), current_buffer(doc, false));
     }
 
     #[test]

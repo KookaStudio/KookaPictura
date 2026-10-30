@@ -123,6 +123,9 @@ public:
         // empty image for level 0 / past the end. The image keeps the level
         // storage alive; do not retain it past the current paint.
         std::function<QImage(int level)> levelImage;
+        // Report the level and document rect about to be presented, so a Rust
+        // render session can composite a preview for exactly that frame.
+        std::function<void(int level, const QRect& docRect)> reportView;
     };
     void setLevelProvider(LevelProvider provider);
 

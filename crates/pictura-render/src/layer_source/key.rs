@@ -7,7 +7,7 @@ use pictura_core::{Document, Layer, PsdRect, SmartObject, TypeTool};
 
 use super::rect_key;
 
-pub(super) fn content_key(layer: &Layer, doc: &Document) -> u64 {
+pub(crate) fn content_key(layer: &Layer, doc: &Document) -> u64 {
     let mut hasher = DefaultHasher::new();
     rect_key(layer.rect).hash(&mut hasher);
     doc.width.hash(&mut hasher);

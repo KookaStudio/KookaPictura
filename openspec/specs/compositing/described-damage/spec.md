@@ -13,17 +13,22 @@ The app SHALL refresh only a bounded dirty rectangle, through the same regional
 composition path used by visibility toggles and move previews, for a
 pixel-changing operation whose effect it can bound: a filter or adjustment
 applied to a pixel layer with a bounded destination rectangle, a blend mode,
-opacity, or fill-opacity change (including a live preview and the commit that
-finishes it) on a layer whose rectangle bounds its effect (a canvas-sized
-rectangle is allowed and uses the region path), a clipboard clear or paste on
-a bounded rectangle, a paint stroke commit or cancel on the stroke's changed
-rectangle, and a layer move or free-transform commit on the union of the source
-and destination rectangles. The refreshed canvas MUST be byte-identical to a
-full recomposite of the document, every pixel outside the rectangle MUST keep
-its previous value, and the operation MUST NOT run the full-document recomposite
-path. A layer whose rectangle equals the canvas MAY composite that rectangle
-through the region path; its cost then equals a full composite, but the region
-path and its signals are still used.
+opacity, or fill-opacity change (including a live preview that updates the
+document composite and the commit that finishes it) on a layer whose rectangle
+bounds its effect (a canvas-sized rectangle is allowed and uses the region
+path), a clipboard clear or paste on a bounded rectangle, a paint stroke commit
+or cancel on the stroke's changed rectangle, and a layer move or free-transform
+commit on the union of the source and destination rectangles. The refreshed
+canvas MUST be byte-identical to a full recomposite of the document, every pixel
+outside the rectangle MUST keep its previous value, and the operation MUST NOT
+run the full-document recomposite path. A layer whose rectangle equals the canvas
+MAY composite that rectangle through the region path; its cost then equals a
+full composite, but the region path and its signals are still used.
+
+A display-only preview, which presents an approximate frame and defers the
+composite to the commit, is governed by `compositing/render-session` and is not
+a pixel-changing operation under this requirement; the commit that finishes it
+is.
 
 #### Scenario: A filter on a bounded layer updates only its rectangle
 
@@ -37,16 +42,18 @@ path and its signals are still used.
 
 #### Scenario: A live opacity preview updates only its rectangle [dd_preview_region]
 
-- **WHEN** a layer's opacity or fill is previewed during a drag and the layer has
-  a bounded rectangle
-- **THEN** only that rectangle is composited, every pixel outside it keeps its
-  previous value, and the result equals a full recomposite
+- **WHEN** a layer's opacity or fill is previewed during a drag, the preview updates the document composite, and the layer has a bounded rectangle
+- **THEN** only that rectangle is composited, every pixel outside it keeps its previous value, and the result equals a full recomposite
 
 #### Scenario: A canvas-sized layer uses the region path [dd_canvas_region]
 
-- **WHEN** a full-canvas pixel layer's opacity or fill changes
-- **THEN** the region path is used even though the rectangle equals the canvas,
-  and the full-document recomposite path is not run
+- **WHEN** a full-canvas pixel layer's opacity or fill changes and the change updates the document composite
+- **THEN** the region path is used even though the rectangle equals the canvas, and the full-document recomposite path is not run
+
+#### Scenario: A display-only preview is not a region edit [dd_display_preview]
+
+- **WHEN** a canvas-sized adjustment or opacity change is previewed display-only
+- **THEN** the preview presents an approximate frame without updating the document composite, and the commit that finishes it follows this requirement or the full-recomposite requirement according to the committed change's bound
 
 #### Scenario: A paste updates only the pasted rectangle
 

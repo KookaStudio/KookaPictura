@@ -28,12 +28,27 @@ pub(crate) fn composite_siblings(
     canvas: &mut Canvas,
     layers: &[Layer],
     doc: &Document,
+    composite: impl FnMut(&mut Canvas, usize, &Layer),
+) {
+    composite_siblings_range(canvas, layers, doc, 0, layers.len(), composite);
+}
+
+/// [`composite_siblings`] over `layers[start..end]`. `start` must be a clipping
+/// boundary (a non-clipped base or a run start); a resume inside a clipped run
+/// is not expressible.
+pub(crate) fn composite_siblings_range(
+    canvas: &mut Canvas,
+    layers: &[Layer],
+    doc: &Document,
+    start: usize,
+    end: usize,
     mut composite: impl FnMut(&mut Canvas, usize, &Layer),
 ) {
-    let mut i = 0;
-    while i < layers.len() {
+    let end = end.min(layers.len());
+    let mut i = start;
+    while i < end {
         let base = &layers[i];
-        let run = layers[i + 1..].iter().take_while(|l| l.clipping).count();
+        let run = layers[i + 1..end].iter().take_while(|l| l.clipping).count();
         if run == 0 || !base.visible {
             // A hidden base hides the clipped layers above it.
             if base.visible || run == 0 {

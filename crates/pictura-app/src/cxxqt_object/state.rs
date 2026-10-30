@@ -106,6 +106,16 @@ pub struct PictureViewRust {
     /// the shell as a `region_damaged`. A shell whose copy of the frame carries
     /// this revision needs no full image on `changed`.
     pub(super) frame_revision: u64,
+    /// The interactive render session: the preview backdrop and reduced document.
+    pub(super) render_session: pictura_render::RenderSession,
+    /// The live display-only preview, if one is in progress.
+    pub(super) display_preview: Option<super::display_preview::DisplayPreview>,
+    /// The view-pyramid level and document rectangle the canvas last presented.
+    pub(super) presented_level: i32,
+    pub(super) presented_rect: PsdRect,
+    /// Bumped by every committed edit, undo/redo, and non-display preview, so
+    /// the session drops a reduced document the gesture no longer matches.
+    pub(super) non_preview_revision: u64,
     /// The halved-level view of the composite, fed by `recomposite` and
     /// `refresh_region`.
     pub(super) pyramid: ViewPyramid,
@@ -218,6 +228,16 @@ impl Default for PictureViewRust {
             damage: CanvasDamage::default(),
             canvas_revision: 0,
             frame_revision: 0,
+            render_session: pictura_render::RenderSession::default(),
+            display_preview: None,
+            presented_level: 0,
+            presented_rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            non_preview_revision: 0,
             pyramid: ViewPyramid::default(),
             level0: None,
             mask_level0: None,
