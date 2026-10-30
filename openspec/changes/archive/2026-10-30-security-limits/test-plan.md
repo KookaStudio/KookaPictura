@@ -7,4 +7,5 @@
 | `ui_gs_max_bitmap` | Build `png_args` at two resolutions | Both contain `-dMaxBitmap=536870912` before `-f` | `pictura-codec::render_arguments_band_large_pages` |
 | `ac_path_refused` | Dispatch `document` `open` with `rel.psd`, `/tmp/a\nb.psd`, `<tmp>/x/../y.psd` | Each `invalid_param`; document count unchanged | `tst_untrusted_input::controlRefusesAmbiguousDocumentPaths` |
 | `ac_path_save_link` | Plant a symlink to a victim file; `save_as` on the link | `invalid_param`; victim bytes unchanged | `tst_untrusted_input::controlRefusesASaveOverASymlink` |
+| `ac_path_save_active_link` | Save a document, link to it, open the link, `save` with no path | `invalid_param`; target bytes unchanged; link kept | `tst_untrusted_input::controlRefusesAPathlessSaveThroughAnOpenedSymlink` |
 | `ac_path_accepted` | `save_as` a new `<tmp>/plain.psd`, then `open` it | Both ok; file exists | `tst_untrusted_input::controlAcceptsAPlainAbsolutePath` |

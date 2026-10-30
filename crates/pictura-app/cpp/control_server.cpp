@@ -838,6 +838,11 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
                 return error(QStringLiteral("invalid_param"),
                              QStringLiteral("save requires a path for an untitled document"));
             }
+            // `open` keeps the path as given, so the active path can be a link.
+            if (QFileInfo(frame_->activeFilePath()).isSymLink()) {
+                return error(QStringLiteral("invalid_param"),
+                             QStringLiteral("path must not be a symbolic link"));
+            }
             applied = frame_->saveActive();
         } else {
             applied = frame_->saveActiveAs(path);

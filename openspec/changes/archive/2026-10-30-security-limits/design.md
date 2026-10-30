@@ -39,6 +39,13 @@ empty string or the reason for a refusal, and the call site answers
    target refuses. The atomic rename would replace the link rather than
    follow it, but the Qt-side exporters do not all go through that path, and
    a client meaning to save over a link's target can name the target.
+   `open` keeps the path as given, so a `save` with no path applies the same
+   symlink check to the active path. Only that check: the other three would
+   refuse a path the app opened by other means.
+
+The symlink check is advisory. A link planted between the check and the write
+is still followed, which the same-user model accepts: a process that can plant
+it already has the session's file access.
 
 No root confinement, by owner decision: the token already limits callers to
 the same user, and scripted workflows open and save anywhere. Reading through

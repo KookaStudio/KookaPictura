@@ -141,6 +141,7 @@ private slots:
     void thumbnailUnpackRejectsHostileSizes();
     void controlRefusesAmbiguousDocumentPaths();
     void controlRefusesASaveOverASymlink();
+    void controlRefusesAPathlessSaveThroughAnOpenedSymlink();
     void controlAcceptsAPlainAbsolutePath();
 
 private:
@@ -299,6 +300,28 @@ void UntrustedInputTest::controlRefusesASaveOverASymlink()
     QCOMPARE(errorCode(response), QStringLiteral("invalid_param"));
     QVERIFY(file.open(QIODevice::ReadOnly));
     QCOMPARE(file.readAll(), QByteArray("keep"));
+    QVERIFY(QFileInfo(link).isSymLink());
+}
+
+void UntrustedInputTest::controlRefusesAPathlessSaveThroughAnOpenedSymlink()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Linked"), 8, 8, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    const QString target = dir_.filePath(QStringLiteral("target.psd"));
+    const QString link = dir_.filePath(QStringLiteral("opened-link.psd"));
+    QVERIFY(document(QStringLiteral("save_as"), target).value(QStringLiteral("ok")).toBool());
+    QVERIFY(QFile::link(target, link));
+    QFile file(target);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray saved = file.readAll();
+    file.close();
+
+    QVERIFY(document(QStringLiteral("open"), link).value(QStringLiteral("ok")).toBool());
+    QCOMPARE(window_->activeFilePath(), link);
+    const QJsonObject response = document(QStringLiteral("save"), QString());
+    QCOMPARE(errorCode(response), QStringLiteral("invalid_param"));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), saved);
     QVERIFY(QFileInfo(link).isSymLink());
 }
 

@@ -25,8 +25,8 @@ with #844 (`harden-untrusted-input`). Three gaps remain:
   Ghostscript renders the page in bands instead of one full-page bitmap.
 - The control server's `document` `open`, `save_as`, and `save` with a path
   refuse a path that is not absolute, holds a control character, or has a
-  `..` component. A save also refuses a path whose final component is a
-  symlink. Paths are not confined to a root.
+  `..` component. A save, with or without a path, also refuses a target whose
+  final component is a symlink. Paths are not confined to a root.
 - Parity register row XC-6 points at #844 and #646 and lists what is still
   open: the out-of-process sandbox and fuzzing.
 
