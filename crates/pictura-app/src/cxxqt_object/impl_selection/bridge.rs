@@ -4,9 +4,10 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
+mod imp;
+
 use super::super::qobject::PictureView;
-use core::pin::Pin;
-use cxx_qt_lib::QString;
+use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -71,63 +72,4 @@ pub mod ffi {
         /// Restore the selection captured at the start of the Quick Selection stroke.
         fn quick_select_cancel(view: Pin<&mut PictureView>) -> bool;
     }
-}
-
-fn begin_selection_move(view: Pin<&mut PictureView>) -> bool {
-    view.begin_selection_move()
-}
-
-fn preview_selection_move(view: Pin<&mut PictureView>, dx: i32, dy: i32) -> bool {
-    view.preview_selection_move(dx, dy)
-}
-
-fn commit_selection_move(view: Pin<&mut PictureView>) -> bool {
-    view.commit_selection_move()
-}
-
-fn cancel_selection_move(view: Pin<&mut PictureView>) -> bool {
-    view.cancel_selection_move()
-}
-
-fn move_selection_content(
-    view: Pin<&mut PictureView>,
-    dx: i32,
-    dy: i32,
-    duplicate: bool,
-    background: u32,
-) -> bool {
-    view.move_selection_content(dx, dy, duplicate, background)
-}
-
-fn quick_select(
-    view: Pin<&mut PictureView>,
-    x: i32,
-    y: i32,
-    tolerance: i32,
-    mode: &QString,
-) -> bool {
-    view.quick_select(x, y, tolerance, mode)
-}
-
-fn quick_select_begin(view: Pin<&mut PictureView>) -> bool {
-    view.quick_select_begin()
-}
-
-fn quick_select_preview(
-    view: Pin<&mut PictureView>,
-    x: i32,
-    y: i32,
-    tolerance: i32,
-    mode: &QString,
-    is_move: bool,
-) -> bool {
-    view.quick_select_preview(x, y, tolerance, mode, is_move)
-}
-
-fn quick_select_commit(view: Pin<&mut PictureView>) -> bool {
-    view.quick_select_commit()
-}
-
-fn quick_select_cancel(view: Pin<&mut PictureView>) -> bool {
-    view.quick_select_cancel()
 }

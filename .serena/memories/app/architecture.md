@@ -14,6 +14,16 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
   `impl_{core,layers,selection,transform,paint,history,filters}.rs`, `helpers.rs`,
   `helpers_composite.rs`, `tests.rs`, `tests_impl.rs`.
 - Keep the root + directory layout: the generated-header path and the 14 C++ includes depend on it.
+- **Bridge files hold declarations only.** Every file build.rs hands to cxx-qt (`cxxqt_object.rs`,
+  `decode_bridge.rs`, `cxxqt_object/**/<name>.rs` with a `#[cxx_qt::bridge]`) keeps only the bridge
+  module, body-less `mod` declarations, `use`/`pub use` items, and empty trait impls;
+  the guard `build_config::bridge_files_hold_declarations_only` enforces it. Bodies, helpers, types
+  and tests live in the child module `<name>/imp.rs` (out-of-line test files under
+  `<name>/imp/`), so editing them does not rerun the cxx-qt build script. `<name>.rs` declares
+  `mod imp;` and re-exports with a glob (`use imp::*;`, or a `pub(...)`/`pub` glob matching the
+  widest item, e.g. `pub(in crate::cxxqt_object) use imp::*;`), and `imp.rs` starts with
+  `use super::*;` to see the bridge module, the kept imports and the sibling child modules. An item that was private in `<name>.rs` is `pub(super)` in
+  `imp.rs`; one that was `pub(super)` is `pub(in crate::<parent>)`.
 - Qt decodes images at the app boundary to packed RGBA8888 (`cpp/decode_image.cpp`); the engine
   never sees Qt types.
 

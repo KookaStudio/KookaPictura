@@ -2,9 +2,10 @@
 //! [`PictureView`] with its own bridge, so the `PictureView` declaration list
 //! does not grow (matching [`align`](super::align)).
 
-use super::helpers_composite::sample_argb_scoped as sample_scoped;
+mod imp;
+
 use super::qobject::PictureView;
-use cxx_qt::CxxQtType;
+use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -22,13 +23,4 @@ pub mod ffi {
         /// without a document or when nothing is sampled.
         fn sample_argb_scoped(view: &PictureView, x: i32, y: i32, size: i32, scope: i32) -> u32;
     }
-}
-
-fn sample_argb_scoped(view: &PictureView, x: i32, y: i32, size: i32, scope: i32) -> u32 {
-    let rust = view.rust();
-    let Some(doc) = rust.session.doc.as_ref() else {
-        return 0;
-    };
-    let path = rust.layer_target.single().unwrap_or_default();
-    sample_scoped(doc, path, x, y, size, scope)
 }

@@ -1,0 +1,355 @@
+use super::*;
+
+use super::super::super::channels::mode_name;
+use crate::cxxqt_object::edit::Edit;
+use core::pin::Pin;
+use cxx_qt::CxxQtType;
+use cxx_qt_lib::QString;
+use pictura_codec::{ColorReduction, Dither, PaletteOptions};
+use pictura_core::{BitDepth, ColorMode, Document};
+use pictura_render::BitmapMethod;
+
+pub(super) const HISTORY_LABEL: &str = "Convert Mode";
+
+pub(super) fn mode_from_name(name: &str) -> Option<ColorMode> {
+    Some(match name {
+        "bitmap" => ColorMode::Bitmap,
+        "grayscale" => ColorMode::Grayscale,
+        "duotone" => ColorMode::Duotone,
+        "indexed" => ColorMode::Indexed,
+        "rgb" => ColorMode::Rgb,
+        "cmyk" => ColorMode::Cmyk,
+        "lab" => ColorMode::Lab,
+        "multichannel" => ColorMode::Multichannel,
+        _ => return None,
+    })
+}
+
+pub(super) fn depth_from_bits(bits: i32) -> Option<BitDepth> {
+    Some(match bits {
+        8 => BitDepth::Eight,
+        16 => BitDepth::Sixteen,
+        32 => BitDepth::ThirtyTwo,
+        _ => return None,
+    })
+}
+
+pub(crate) fn palette_options(
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+) -> PaletteOptions {
+    let (reduction, colors) = match palette {
+        0 => (ColorReduction::Adaptive, 256),
+        1 => (ColorReduction::Restrictive, 216),
+        2 => (ColorReduction::Perceptual, colors),
+        3 => (ColorReduction::Selective, colors),
+        _ => (ColorReduction::Adaptive, colors),
+    };
+    // Exact keeps every color as it is, so there is nothing to dither.
+    let dither = match (palette, dither) {
+        (0, _) => Dither::None,
+        (_, 1) => Dither::Diffusion,
+        (_, 2) => Dither::Pattern,
+        (_, 3) => Dither::Noise,
+        _ => Dither::None,
+    };
+    PaletteOptions {
+        reduction,
+        colors: colors.clamp(2, 256) as u16,
+        dither,
+        amount: amount.clamp(0, 100) as u8,
+        transparency: false,
+        matte: [255, 255, 255],
+    }
+}
+
+pub(super) fn bitmap_method(method: i32) -> BitmapMethod {
+    match method {
+        1 => BitmapMethod::Pattern,
+        2 => BitmapMethod::Diffusion,
+        _ => BitmapMethod::Threshold,
+    }
+}
+
+pub(super) fn image_mode(view: &PictureView) -> QString {
+    let rust = view.rust();
+    let name = rust.session.doc.as_ref().map_or("", |doc| {
+        mode_name(pictura_render::document_color_mode(doc))
+    });
+    QString::from(name)
+}
+
+pub(super) fn image_depth_bits(view: &PictureView) -> i32 {
+    match view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .map(pictura_render::document_bit_depth)
+    {
+        Some(BitDepth::One) => 1,
+        Some(BitDepth::Eight) => 8,
+        Some(BitDepth::Sixteen) => 16,
+        Some(BitDepth::ThirtyTwo) => 32,
+        None => 0,
+    }
+}
+
+pub(super) fn image_resolution(view: &PictureView) -> QString {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .map_or_else(QString::default, |doc| {
+            QString::from(&resolution_label(pictura_codec::document_resolution(doc)))
+        })
+}
+
+/// A file without ResolutionInfo reads as CS6's 72 ppi default.
+pub(super) fn resolution_label(resolution: Option<pictura_codec::Resolution>) -> String {
+    let format = |value: f64| {
+        let text = format!("{value:.2}");
+        text.trim_end_matches('0').trim_end_matches('.').to_string()
+    };
+    match resolution {
+        Some(r) if r.per_cm => format!("{} pixels/cm", format(r.ppi / 2.54)),
+        Some(r) => format!("{} pixels/inch", format(r.ppi)),
+        None => "72 pixels/inch".to_string(),
+    }
+}
+
+pub(super) fn image_mode_available(view: &PictureView, mode: &QString) -> bool {
+    let Some(mode) = mode_from_name(&mode.to_string()) else {
+        return false;
+    };
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::can_convert_mode(doc, mode))
+}
+
+pub(super) fn image_depth_available(view: &PictureView, bits: i32) -> bool {
+    let Some(out) = depth_from_bits(bits) else {
+        return false;
+    };
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::can_convert_depth(doc, out))
+}
+
+/// Run `convert` on the document and, when it succeeds, recomposite and record
+/// one state. A flattening conversion leaves at most a Background, so the
+/// active layer is re-pointed at it (or cleared for a flat Bitmap).
+pub(super) fn commit(
+    mut view: Pin<&mut PictureView>,
+    convert: impl FnOnce(&mut Document) -> bool,
+) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
+    let converted = {
+        let mut rust = view.as_mut().rust_mut();
+        if let Some(base) = rust.session.live.take_mode_preview() {
+            rust.session.doc = Some(base);
+        }
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return false;
+        };
+        convert(doc)
+    };
+    if !converted {
+        view.as_mut().recomposite();
+        return false;
+    }
+    refresh_active_layer(view.as_mut());
+    view.as_mut().edit(HISTORY_LABEL, |_| Edit::Full);
+    true
+}
+
+pub(super) fn refresh_active_layer(mut view: Pin<&mut PictureView>) {
+    let mut rust = view.as_mut().rust_mut();
+    let Some(count) = rust.session.doc.as_ref().map(|doc| doc.layers.len()) else {
+        return;
+    };
+    let target = {
+        let mut target = rust.layer_target.clone();
+        if let Some(doc) = rust.session.doc.as_ref() {
+            target.retain_resolving(doc);
+        }
+        target
+    };
+    rust.set_layer_target(target);
+    if rust.layer_target.is_empty() && count > 0 {
+        rust.select_only_layer(&(count - 1).to_string());
+    }
+}
+
+pub(super) fn convert_image_mode(view: Pin<&mut PictureView>, mode: &QString) -> bool {
+    match mode_from_name(&mode.to_string()) {
+        Some(mode @ (ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Cmyk | ColorMode::Lab)) => {
+            let (profile, options) = {
+                let rust = view.rust();
+                (
+                    pictura_codec::Profile::from_icc(&rust.working_cmyk).ok(),
+                    rust.conversion_options,
+                )
+            };
+            commit(view, |doc| {
+                pictura_render::convert_mode_with_profiles(doc, mode, profile.as_ref(), options)
+                    .is_ok()
+            })
+        }
+        _ => false,
+    }
+}
+
+pub(super) fn convert_image_depth(view: Pin<&mut PictureView>, bits: i32) -> bool {
+    match depth_from_bits(bits) {
+        Some(out) => commit(view, |doc| {
+            pictura_render::convert_bit_depth(doc, out).is_ok()
+        }),
+        None => false,
+    }
+}
+
+pub(super) fn indexed_exact_available(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(pictura_render::indexed_exact_available)
+}
+
+pub(super) fn convert_to_indexed(
+    view: Pin<&mut PictureView>,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+) -> bool {
+    let options = palette_options(palette, colors, dither, amount);
+    commit(view, |doc| {
+        pictura_render::convert_to_indexed(doc, options).is_ok()
+    })
+}
+
+pub(super) fn preview_indexed(
+    mut view: Pin<&mut PictureView>,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+) -> bool {
+    let options = palette_options(palette, colors, dither, amount);
+    let previewed = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(mut converted) = rust.mode_preview_base() else {
+            return false;
+        };
+        let ok = pictura_render::convert_to_indexed(&mut converted, options).is_ok();
+        if ok {
+            rust.session.doc = Some(converted);
+        }
+        ok
+    };
+    if previewed {
+        view.as_mut().recomposite();
+    }
+    previewed
+}
+
+impl super::super::super::state::PictureViewRust {
+    /// The document a mode preview converts from: the first base, kept so an
+    /// update re-converts the original instead of the last preview.
+    pub(in crate::cxxqt_object) fn mode_preview_base(&mut self) -> Option<pictura_core::Document> {
+        if !self.slot_allows(super::super::super::document_session::SessionKind::ModePreview) {
+            return None;
+        }
+        if self.session.live.mode_preview().is_none() {
+            if let Some(base) = self.session.doc.clone() {
+                self.session.live.set_mode_preview(base);
+            }
+        }
+        self.session.live.mode_preview().cloned()
+    }
+
+    /// Drop the live mode preview, restoring the pre-preview document.
+    pub(in crate::cxxqt_object) fn cancel_mode_preview(&mut self) -> bool {
+        let Some(base) = self.session.live.take_mode_preview() else {
+            return false;
+        };
+        self.session.doc = Some(base);
+        true
+    }
+}
+
+pub(super) fn cancel_mode_preview(mut view: Pin<&mut PictureView>) -> bool {
+    if !view.as_mut().rust_mut().cancel_mode_preview() {
+        return false;
+    }
+    view.as_mut().recomposite();
+    true
+}
+
+pub(super) fn convert_to_bitmap(view: Pin<&mut PictureView>, method: i32) -> bool {
+    let method = bitmap_method(method);
+    commit(view, |doc| {
+        pictura_render::convert_to_bitmap(doc, method).is_ok()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exact_ignores_the_dither_and_web_ignores_the_count() {
+        let exact = palette_options(0, 12, 1, 75);
+        assert_eq!((exact.colors, exact.dither), (256, Dither::None));
+        let web = palette_options(1, 12, 2, 40);
+        assert_eq!(web.reduction, ColorReduction::Restrictive);
+        assert_eq!((web.dither, web.amount), (Dither::Pattern, 40));
+        let local = palette_options(3, 1, 9, 400);
+        assert_eq!(
+            (local.reduction, local.colors, local.dither, local.amount),
+            (ColorReduction::Selective, 2, Dither::None, 100)
+        );
+    }
+
+    #[test]
+    fn resolution_labels_follow_the_display_unit() {
+        use pictura_codec::Resolution;
+        assert_eq!(resolution_label(None), "72 pixels/inch");
+        let inch = Resolution {
+            ppi: 300.0,
+            per_cm: false,
+        };
+        assert_eq!(resolution_label(Some(inch)), "300 pixels/inch");
+        let cm = Resolution {
+            ppi: 72.0,
+            per_cm: true,
+        };
+        assert_eq!(resolution_label(Some(cm)), "28.35 pixels/cm");
+    }
+
+    #[test]
+    fn names_and_depths_map_both_ways() {
+        for mode in [
+            ColorMode::Grayscale,
+            ColorMode::Indexed,
+            ColorMode::Cmyk,
+            ColorMode::Lab,
+        ] {
+            assert_eq!(mode_from_name(mode_name(mode)), Some(mode));
+        }
+        assert_eq!(mode_from_name("hsv"), None);
+        assert_eq!(depth_from_bits(16), Some(BitDepth::Sixteen));
+        assert_eq!(depth_from_bits(1), None);
+        assert_eq!(bitmap_method(2), BitmapMethod::Diffusion);
+    }
+}

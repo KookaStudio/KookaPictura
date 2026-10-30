@@ -4,6 +4,10 @@
 //! size budget. `decode_image.cpp` includes the generated header and calls
 //! `copy_bytes` to hand a whole decoded frame to Rust in one operation.
 
+mod imp;
+
+use imp::*;
+
 #[cxx_qt::bridge]
 pub mod ffi {
     extern "Rust" {
@@ -11,8 +15,4 @@ pub mod ffi {
         /// decoder copies whole rows or frames instead of one byte per call.
         fn copy_bytes(bytes: &[u8]) -> Vec<u8>;
     }
-}
-
-fn copy_bytes(bytes: &[u8]) -> Vec<u8> {
-    bytes.to_vec()
 }
