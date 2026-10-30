@@ -52,10 +52,10 @@ Workspace layout/commands: `mem:core`, `mem:suggested_commands`.
 ## Test/report/spec tooling
 
 - **nextest** is the runner (`.config/nextest.toml`: fail-fast off, JUnit to
-  `target/nextest/default/junit.xml`). `cargo test --workspace` is the fallback; **nextest skips
-  doctests**, so `cargo test --workspace --doc` is a separate step.
-- `scripts/test-report.sh` + `scripts/report_tests.py` fold JUnit + doctests + the C++ self-test
-  token streams into one report. The two self-test invocations run concurrently
+  `target/nextest/default/junit.xml`). `cargo test --workspace` is the fallback. Doctests are
+  disabled in every crate (`[lib] doctest = false`), so there is no separate doctest step.
+- `scripts/test-report.sh` + `scripts/report_tests.py` fold nextest JUnit, the C++ self-test
+  token streams, and the Qt Test JUnit into one report. The two self-test invocations run concurrently
   with each other and with the CTest layer, and a registered suite that produced
   no report fails the run.
 - `scripts/check-build-tree.sh` fails the full gate (and warns in the fast one)

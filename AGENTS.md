@@ -38,10 +38,9 @@ must be added to `CMakeLists.txt` explicitly — there is no globbing.**
 cargo fmt --all                                  # CI runs --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace                    # one crate/test: -p <crate> [name]
-cargo test --workspace --doc                     # doctests; nextest skips them
 cargo test -p pictura-render --test document_oracle       # one integration suite
 cargo test -p pictura-core -- <name> --ignored --nocapture # ignored profiling/GPU
-bash scripts/test-report.sh                      # nextest + doctests + app self-test + Qt JUnit -> unified report
+bash scripts/test-report.sh                      # nextest + app self-test + Qt JUnit -> unified report
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, file-size, guard, openspec
 bash scripts/verify-full.sh                      # CMake build first, then verify-fast
 openspec validate --all --strict                 # openspec 1.13.2
@@ -56,9 +55,12 @@ the compiler default, and builds with Ninja. `deny.toml` gates licenses and
 dependencies; CI runs `cargo deny check`.
 
 Development builds (`BUILD_TESTING` on, the default) build `pictura_shell` as a
-shared library. Release and packaging builds pass `-DBUILD_TESTING=OFF`, keep
-the static shell, and are the only installable form. CTest runs four suites at a time by default; override
-with `CTEST_PARALLEL_LEVEL`. Each QObject header's matching `.cpp` ends with
+shared library, and an optimized one compiles the Rust library with the
+incremental `dev-app` Cargo profile (it inherits `release`). Doctests are
+disabled workspace-wide (`doctest = false`). Release and packaging builds pass
+`-DBUILD_TESTING=OFF`, keep the static shell, and are the only installable form.
+CTest runs four suites at a time by default; override with
+`CTEST_PARALLEL_LEVEL`. Each QObject header's matching `.cpp` ends with
 `#include "moc_<name>.cpp"`, so header edits avoid a central moc unit.
 
 Local C++ builds use `sccache` automatically when it is installed. Sharing that
@@ -113,7 +115,7 @@ offscreen-compatible. See `DEVELOPING.md` for the self-test token protocol.
   budget in `scripts/selftest-budget.txt`, run by `verify-fast.sh` and the
   guards CI workflow.
 - Rust tests are std `#[test]` only (no framework). Oracle tests self-skip when
-  `magick` / `psd-tools` are absent; CI's `oracles` job installs both. Profiling
+  `magick` / `psd-tools` are absent; CI's `test` job installs both. Profiling
   and GPU tests are `#[ignore]`d with a reason string (`--ignored --nocapture`).
 - **The report is honest about missing suites.** A CTest-registered suite that
   produced no JUnit report fails the run and is named: a suite that never

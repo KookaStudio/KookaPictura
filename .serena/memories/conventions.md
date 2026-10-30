@@ -35,7 +35,7 @@ Commands: `mem:suggested_commands`.
   names how to run it (`--ignored --nocapture`). Never use `#[ignore]` to hide unimplemented work.
 - **Oracle tests are differential** (our impl vs a second independent impl). Rules:
   - **Self-skip, never fail-to-run**: if the external tool is missing, `eprintln!("skipping: ...")`
-    and `return`. CI's `oracles` job installs `magick` + `psd-tools` so they run for real.
+    and `return`. CI's `test` job installs `magick`, `psd-tools`, and `ag-psd` so they run for real.
   - **Prove the harness has teeth**: include a test that a wrong output actually fails.
   - Compare through `pictura-testkit::compare` with an explicit per-class tolerance; never hand-roll
     a byte diff.

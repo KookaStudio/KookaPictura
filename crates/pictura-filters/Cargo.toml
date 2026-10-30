@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[lib]
+doctest = false
+
 [dependencies]
 pictura-core = { path = "../pictura-core" }
 pictura-color = { path = "../pictura-color" }

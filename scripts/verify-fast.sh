@@ -5,9 +5,9 @@
 # Format, lint, one test run, the non-goal guard, and spec validation. No Qt
 # build and no app self-tests; use verify-full.sh for those.
 #
-# The test step routes through scripts/test-report.sh (nextest + doctests +
-# the app self-tests when ./build/pictura exists), which prints the unified
-# report. One nextest run per gate.
+# The test step routes through scripts/test-report.sh (nextest + the app
+# self-tests when ./build/pictura exists), which prints the unified report.
+# One nextest run per gate.
 #
 # Docs-only fast path: when the working diff (against the merge base with the
 # default branch, plus untracked files) touches only docs/, openspec/, *.md, or

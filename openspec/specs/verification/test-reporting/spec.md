@@ -8,10 +8,10 @@ The unified test report: structured C++ self-test output and nextest JUnit outpu
 ### Requirement: Unified test report
 
 The system SHALL provide a unified end-of-run test report spanning every test
-layer: Rust unit, integration, and oracle tests, Rust doctests, the C++
+layer: Rust unit, integration, and oracle tests, the C++
 application self-test, and the C++ Qt Test executables. `scripts/test-report.sh`
 SHALL run the workspace suite under `cargo nextest run --workspace --no-fail-fast`,
-run the doctests, run the self-test both with and without a document fixture, run
+run the self-test both with and without a document fixture, run
 the Qt Test layer through `ctest --test-dir build -R '^tst_' --output-on-failure -j
 <level>` (CTest registers each executable under
 `build/crates/pictura-app/cpp/tests/` and passes
@@ -35,9 +35,9 @@ executes.
 
 #### Scenario: Every layer is summarised
 
-- **WHEN** all Rust tests, doctests, self-test checks, and Qt Test cases pass
+- **WHEN** all Rust tests, self-test checks, and Qt Test cases pass
 - **THEN** the report lists a line per Rust suite with its pass count, an
-  app-self-test subtotal, a Qt Test subtotal, a doctest line, and a TOTAL with
+  app-self-test subtotal, a Qt Test subtotal, and a TOTAL with
   the aggregate passed, skipped, and failed counts, and the reporter exits 0
 
 #### Scenario: A failure is listed and fails the run

@@ -8,6 +8,7 @@ rust-version.workspace = true
 # Cargo builds the Rust bridge as a static library; CMake links it into the
 # C++ executable. `rlib` keeps the crate usable from Rust tests.
 [lib]
+doctest = false
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]

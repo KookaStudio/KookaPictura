@@ -64,21 +64,22 @@ the "Jobs are skipped when the change cannot affect them" requirement skips a
 job because the changed paths cannot affect it. Format and
 clippy SHALL run in a `lint` job and the test suite SHALL run in a separate
 `test` job, so the two run in parallel. The `test` job SHALL run the whole
-workspace under `cargo nextest run --workspace` and SHALL run doctests
-explicitly with `cargo test --workspace --doc`; because that suite includes the
-Qt application, the job SHALL install Qt. `scripts/verify-fast.sh` SHALL run the
-same nextest invocation plus the explicit doctest run, so the local fast gate and
-CI agree on the runner. The nextest run SHALL emit a JUnit XML artifact through
+workspace under `cargo nextest run --workspace`; because that suite includes
+the Qt application, the job SHALL install Qt. The workspace libraries SHALL
+disable doctests, so no gate runs a separate doctest pass and no doc example
+can become a test that nothing runs. `scripts/verify-fast.sh` SHALL run the
+same nextest invocation, so the local fast gate and CI agree on the runner. The nextest run SHALL emit a JUnit XML artifact through
 the repository's `.config/nextest.toml`, and CI SHALL upload that artifact. CI
 SHALL build the Qt application under a pinned Qt 6 in a headless job and SHALL
 run its `--headless --self-test` mode there. That job SHALL run the Qt Test layer
 through CTest with the same bounded parallel level as the local report, and SHALL
-install mold so the linker path used locally is exercised in CI. CI SHALL run a
-separate job that
-installs the external comparison tools (ImageMagick and `psd-tools`) and runs the
-workspace suite excluding the Qt application (`cargo test --workspace --exclude
-pictura_app`), so that job neither installs Qt nor rebuilds the application, and
-SHALL cache Rust registry sources and compiled artifacts between runs. The
+install mold so the linker path used locally is exercised in CI. The `test` job
+SHALL install the external comparison tools (ImageMagick, `psd-tools`, and
+`ag-psd`) before its nextest run, so the oracle tests compare against those
+tools in the same compile and run as the rest of the workspace, and no separate
+job recompiles the workspace to run them. The job SHALL cache the ImageMagick
+download between runs. CI SHALL cache Rust registry sources and compiled
+artifacts between runs. The
 system SHALL run `cargo deny check` when a `deny.toml` is present, installing
 cargo-deny from a prebuilt release rather than compiling it from source. Every
 CI job SHALL set a `timeout-minutes` bound.
@@ -96,7 +97,7 @@ CI job SHALL set a `timeout-minutes` bound.
 #### Scenario: Tests run under nextest
 
 - **WHEN** the workflow runs the test step
-- **THEN** the workspace suite runs under `cargo nextest run --workspace` and doctests run explicitly
+- **THEN** the workspace suite runs under `cargo nextest run --workspace` and no separate doctest run follows
 
 #### Scenario: Lint and test run in parallel
 
@@ -106,7 +107,7 @@ CI job SHALL set a `timeout-minutes` bound.
 #### Scenario: The local fast gate uses nextest
 
 - **WHEN** `scripts/verify-fast.sh` runs the test step
-- **THEN** it runs `cargo nextest run --workspace --no-fail-fast` followed by `cargo test --workspace --doc`
+- **THEN** it runs `cargo nextest run --workspace --no-fail-fast` and no `cargo test --doc` run
 
 #### Scenario: The JUnit artifact is uploaded
 
@@ -120,8 +121,13 @@ CI job SHALL set a `timeout-minutes` bound.
 
 #### Scenario: External oracles are exercised
 
-- **WHEN** the oracle job runs with ImageMagick and `psd-tools` installed and `pictura_app` excluded
-- **THEN** the tests that otherwise self-skip compare against the external tools instead of passing vacuously, without a Qt install
+- **WHEN** the `test` job runs its nextest step
+- **THEN** ImageMagick, `psd-tools`, and `ag-psd` are installed, the tests that otherwise self-skip compare against the external tools instead of passing vacuously, and no other job compiles the workspace to run them
+
+#### Scenario: Doctests are disabled [vh_no_doctests]
+
+- **WHEN** the workspace manifests are inspected
+- **THEN** every workspace library sets `doctest = false`, and neither CI nor `scripts/test-report.sh` runs `cargo test --doc`
 
 #### Scenario: Compiled artifacts are reused
 
@@ -238,7 +244,7 @@ The repository SHALL provide `scripts/check-worktree-hook.sh` that proves the ho
 
 ### Requirement: Docs-only changes run guards, not builds
 
-The build jobs (format/lint/test, Qt headless, and oracles) SHALL be skipped when
+The build jobs (format/lint/test and Qt headless) SHALL be skipped when
 every changed path matches `docs/**`, `openspec/**`, `**/*.md`, or `.serena/**`,
 using workflow-level `paths-ignore`. A separate workflow with no path filter
 SHALL run `scripts/guard.sh`, `openspec validate --all --strict`,
@@ -280,7 +286,7 @@ full gate alongside the other script checks.
 For a change that is not docs-only (the docs-only case is governed by
 "Docs-only changes run guards, not builds"), CI SHALL evaluate the changed
 paths — the pull request diff, or the commits of a push — and SHALL skip each
-build job (`lint`, `test`, `qt-headless`, `oracles`) whose inputs the change
+build job (`lint`, `test`, `qt-headless`) whose inputs the change
 cannot affect, while still starting the workflow. Skipping SHALL happen per job
 inside a workflow that runs on the event, so a skipped job reports a successful
 conclusion instead of reporting nothing at all; a skipped job MUST NOT depend on
@@ -293,21 +299,21 @@ these rules:
 - Any change under `.github/workflows/**` SHALL cause every job to run.
 - Any change to Rust sources or other inputs that feed the Rust build SHALL
   cause every job to run, because the Rust staticlib is linked into the Qt
-  application and exercised by the test and oracle suites.
+  application and exercised by the test suite.
 - A change limited to the hand-written C++ sources under
   `crates/pictura-app/cpp/` SHALL run `qt-headless` (and the guards workflow
-  continues to run as before) and SHALL skip `lint`, `test`, and `oracles`,
+  continues to run as before) and SHALL skip `lint` and `test`,
   because the cargo build does not compile those translation units.
 - The CI workflow file itself SHALL be treated as a path that causes every job
   to run, so editing the gating rules re-runs the full suite.
 
 #### Scenario: C++-only change
 - **WHEN** a pull request changes only files under `crates/pictura-app/cpp/`
-- **THEN** `qt-headless` runs, `lint`, `test`, and `oracles` are skipped, and the guards workflow still runs
+- **THEN** `qt-headless` runs, `lint` and `test` are skipped, and the guards workflow still runs
 
 #### Scenario: Rust change runs everything
 - **WHEN** a pull request changes any file under `crates/` outside `crates/pictura-app/cpp/`
-- **THEN** `lint`, `test`, `qt-headless`, and `oracles` all run
+- **THEN** `lint`, `test`, and `qt-headless` all run
 
 #### Scenario: Mixed change runs everything
 - **WHEN** a pull request changes both C++ sources and any other recognized input

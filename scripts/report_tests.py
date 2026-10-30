@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Unified Kooka Pictura test report (python3 standard library only).
 
-Aggregates four layers into one pytest/vitest-like report:
+Aggregates three layers into one pytest/vitest-like report:
 
   * nextest JUnit XML      (--junit)
-  * cargo test --doc text  (--doctests)
   * C++ self-test tokens   (--selftest)
   * Qt Test JUnit XML      (--qt-junit)
 
@@ -24,11 +23,6 @@ RULE = "\u2500" * 48
 TOKEN_PREFIX_RE = re.compile(
     r"^pictura self-test: (SUITE|PASS|SKIP|FAIL|SUMMARY)(?:\s+(.*))?$"
 )
-DOCTEST_RESULT_RE = re.compile(
-    r"test result: (?:ok|FAILED)\.\s+(\d+) passed;\s+(\d+) failed"
-    r"(?:;\s+(\d+) ignored)?"
-)
-DOCTEST_HEADER_RE = re.compile(r"^---- (.+?) stdout ----$", re.MULTILINE)
 
 
 class Counts:
@@ -187,28 +181,6 @@ def parse_qt_junit(xml_text):
     return suites, kept, kept_failures
 
 
-def parse_doctests(text):
-    """Return (Counts, [(test_id, message)], summary_seen)."""
-    counts = Counts()
-    seen = False
-    for match in DOCTEST_RESULT_RE.finditer(text):
-        seen = True
-        counts.passed += int(match.group(1))
-        counts.failed += int(match.group(2))
-        counts.skipped += int(match.group(3) or 0)
-
-    failures = []
-    headers = list(DOCTEST_HEADER_RE.finditer(text))
-    for index, header in enumerate(headers):
-        end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
-        body = text[header.end():end]
-        message = "\n".join(line for line in body.splitlines() if line.strip())
-        failures.append((f"doctests::{header.group(1)}", message[:800]))
-    if counts.failed and not headers:
-        failures.append(("doctests", "one or more doctests failed"))
-    return counts, failures, seen
-
-
 def parse_selftest_stream(text):
     """Parse one self-test stream into (order, checks, summary).
 
@@ -343,11 +315,10 @@ def _style(text, code, color):
 
 
 class Layer:
-    def __init__(self, title, suites=None, totals=None, single=False, entries=None):
+    def __init__(self, title, suites=None, totals=None, entries=None):
         self.title = title
         self.suites = suites or {}
         self.totals = totals if totals is not None else sum_counts(self.suites)
-        self.single = single
         self.entries = entries or []
 
     def empty(self):
@@ -392,19 +363,12 @@ def _render_summary(visible, failures, color):
     for layer in visible:
         labels.extend(layer.suites)
         labels.append("subtotal")
-        if layer.single:
-            labels.append(layer.title)
     width = max([24] + [len(label) for label in labels])
 
     lines = [_style("pictura test report", "1", color), RULE]
     totals = Counts()
     for layer in visible:
         totals.add(layer.totals)
-        if layer.single:
-            lines.append(
-                f"{layer.title:<{width + 2}}{_counts_compact(layer.totals)}"
-            )
-            continue
         lines.append(_style(layer.title, "1", color))
         for name, counts in layer.suites.items():
             lines.append(f"  {name:<{width}}{_counts_compact(counts)}")
@@ -425,21 +389,16 @@ def render(layers, failures, color, show_tests=True):
     last = len(visible) - 1
     for index, layer in enumerate(visible):
         totals.add(layer.totals)
-        if layer.single:
-            lines.append(
-                _style(f"{layer.title} ({_counts_compact(layer.totals)})", "1", color)
-            )
-        else:
-            lines.append(
-                _style(f"{layer.title} \u2014 {_counts_brief(layer.totals)}", "1", color)
-            )
-            by_suite = {}
-            for suite, name, status, detail in layer.entries:
-                by_suite.setdefault(suite, []).append((name, status, detail))
-            for suite, counts in layer.suites.items():
-                lines.append(f"  {suite} ({_counts_compact(counts)})")
-                lines.extend(_test_lines(by_suite.get(suite, []), color))
-            lines.append(f"  subtotal {_counts_brief(layer.totals)}")
+        lines.append(
+            _style(f"{layer.title} \u2014 {_counts_brief(layer.totals)}", "1", color)
+        )
+        by_suite = {}
+        for suite, name, status, detail in layer.entries:
+            by_suite.setdefault(suite, []).append((name, status, detail))
+        for suite, counts in layer.suites.items():
+            lines.append(f"  {suite} ({_counts_compact(counts)})")
+            lines.extend(_test_lines(by_suite.get(suite, []), color))
+        lines.append(f"  subtotal {_counts_brief(layer.totals)}")
         if index != last:
             lines.append("")
     lines.append(RULE)
@@ -515,18 +474,6 @@ def build_layers(args, errors):
                 Layer("Qt shell tests (offscreen)", qt_suites, entries=qt_entries)
             )
 
-    if args.doctests:
-        text = _read(args.doctests, errors)
-        if text is not None:
-            counts, doctest_failures, seen = parse_doctests(text)
-            if not seen:
-                errors.append(
-                    f"{args.doctests}: no 'test result:' summary line found"
-                )
-            elif counts.total():
-                layers.append(Layer("Doctests", totals=counts, single=True))
-            failures.extend(doctest_failures)
-
     return layers, failures
 
 
@@ -545,7 +492,6 @@ def _color_enabled(mode):
 def _parse_args(argv):
     parser = argparse.ArgumentParser(description="Unified Kooka Pictura test report")
     parser.add_argument("--junit", help="nextest JUnit XML path")
-    parser.add_argument("--doctests", help="cargo test --doc output path")
     parser.add_argument(
         "--selftest",
         action="append",
@@ -620,19 +566,6 @@ CTEST_JSON = """{
   ]
 }"""
 
-DOCTEST_OK = (
-    "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; "
-    "0 filtered out; finished in 0.01s\n"
-)
-
-DOCTEST_FAIL = """test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
-
-failures:
-
----- foo::bar (line 3) stdout ----
-Error: assertion failed
-"""
-
 SELFTEST = """pictura self-test: document_size=4000
 pictura self-test: SUITE core document_size
 pictura self-test: PASS core document_size 4000x4000
@@ -689,15 +622,6 @@ def run_self_check():
     missing = missing_ctest_reports("not json at all", errors)
     assert len(errors) == 1, errors
     assert not missing, missing
-
-    counts, failures, seen = parse_doctests(DOCTEST_OK)
-    assert seen and counts.passed == 3 and counts.failed == 0, (counts, failures)
-    counts, failures, seen = parse_doctests(DOCTEST_FAIL)
-    assert seen and counts.passed == 2 and counts.failed == 1, counts
-    assert len(failures) == 1 and "foo::bar" in failures[0][0], failures
-
-    _, _, seen = parse_doctests("no summary here")
-    assert not seen
 
     suites, totals, failures, entries = parse_selftest(SELFTEST)
     assert suites["core"].passed == 1, suites

@@ -103,6 +103,10 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The GPU parity feature's code, linted here so gpu-parity only runs tests.
+      - name: Clippy with software-vulkan
+        run: cargo clippy -p pictura-render --all-targets --features software-vulkan -- -D warnings
+
       - name: Install cargo-deny
         if: ${{ hashFiles('deny.toml') != '' }}
         uses: taiki-e/install-action@cargo-deny
@@ -126,11 +130,44 @@ jobs:
 
       - uses: taiki-e/install-action@nextest
 
+      # The external oracles: without these tools the oracle tests self-skip.
+      # The AppImage is cached in the runner user's home, since a cache restore
+      # into /opt would lack permissions, and extracted on every run.
+      - name: Cache ImageMagick
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/imagemagick
+          key: imagemagick-7.1.2-31
+
+      - name: Install ImageMagick 7
+        run: |
+          appimage=~/.cache/imagemagick/ImageMagick-7.1.2-31-gcc-x86_64.AppImage
+          if [ ! -f "$appimage" ]; then
+            mkdir -p ~/.cache/imagemagick
+            curl -fsSL -o "$appimage" \
+              https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-31/ImageMagick-7.1.2-31-gcc-x86_64.AppImage
+          fi
+          chmod +x "$appimage"
+          ( cd "$RUNNER_TEMP" && "$appimage" --appimage-extract >/dev/null )
+          sudo mv "$RUNNER_TEMP/squashfs-root" /opt/imagemagick
+          sudo tee /usr/local/bin/magick >/dev/null <<'EOF'
+          #!/usr/bin/env bash
+          exec /opt/imagemagick/AppRun "$@"
+          EOF
+          sudo chmod +x /usr/local/bin/magick
+          magick -version
+
+      - name: Install psd-tools
+        run: python3 -m pip install --user --break-system-packages "psd-tools>=1.19"
+
+      # Installed outside the checkout; the ag-psd oracle resolves it via NODE_PATH.
+      - name: Install ag-psd
+        run: npm i --no-save --prefix "$RUNNER_TEMP/agpsd" ag-psd@34.1.0
+
       - name: Test
         run: cargo nextest run --workspace
-
-      - name: Doctests
-        run: cargo test --workspace --doc
+        env:
+          NODE_PATH: ${{ runner.temp }}/agpsd/node_modules
 
       - name: Upload nextest JUnit
         if: always()
@@ -159,9 +196,6 @@ jobs:
       - *rustcache
 
       - uses: taiki-e/install-action@nextest
-
-      - name: Clippy with software-vulkan
-        run: cargo clippy -p pictura-render --all-targets --features software-vulkan -- -D warnings
 
       - name: GPU parity
         run: cargo nextest run -p pictura-render --features software-vulkan --profile gpu --run-ignored all
@@ -215,41 +249,3 @@ jobs:
 
       - name: Control e2e
         run: bash scripts/verify-control.sh
-
-  oracles:
-    runs-on: ubuntu-24.04
-    needs: changes
-    if: needs.changes.outputs.cpp_only != 'true'
-    timeout-minutes: 30
-    steps:
-      - *checkout
-      - *toolchain
-
-      - name: Install lld, lcms2, and the PDF oracle tools
-        run: sudo apt-get update && sudo apt-get install -y lld liblcms2-dev poppler-utils ghostscript qpdf
-
-      - *sccache
-      - *rustcache
-
-      - name: Install ImageMagick 7
-        run: |
-          curl -fsSL -o /tmp/magick.AppImage \
-            https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-31/ImageMagick-7.1.2-31-gcc-x86_64.AppImage
-          chmod +x /tmp/magick.AppImage
-          ( cd /tmp && /tmp/magick.AppImage --appimage-extract >/dev/null )
-          sudo mv /tmp/squashfs-root /opt/imagemagick
-          sudo tee /usr/local/bin/magick >/dev/null <<'EOF'
-          #!/usr/bin/env bash
-          exec /opt/imagemagick/AppRun "$@"
-          EOF
-          sudo chmod +x /usr/local/bin/magick
-          magick -version
-
-      - name: Install psd-tools
-        run: python3 -m pip install --user --break-system-packages "psd-tools>=1.19"
-
-      - name: Install ag-psd
-        run: npm i ag-psd
-
-      - name: Test
-        run: cargo test --workspace --exclude pictura_app

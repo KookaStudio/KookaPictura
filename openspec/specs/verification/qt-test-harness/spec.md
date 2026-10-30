@@ -83,8 +83,8 @@ and `Qt6::Test`, and SHALL register each executable with `add_test` under
 pass `-o <CMAKE_BINARY_DIR>/qt-test-results/<name>.xml,junitxml` so CTest itself
 emits a per-executable JUnit report. The harness SHALL be gated on
 `BUILD_TESTING` with no effect when it is off. CTest SHALL own only the Qt Test
-executables and SHALL NOT wrap or replace `cargo nextest`; the Rust suite and
-doctests stay with `scripts/test-report.sh`.
+executables and SHALL NOT wrap or replace `cargo nextest`; the Rust suite stays with
+`scripts/test-report.sh`.
 
 #### Scenario: Configure builds the suites
 
@@ -112,7 +112,7 @@ doctests stay with `scripts/test-report.sh`.
 #### Scenario: CTest does not wrap nextest
 
 - **WHEN** the harness is built
-- **THEN** no CTest test invokes `cargo nextest` or the doctests
+- **THEN** no CTest test invokes `cargo nextest`
 
 ### Requirement: Per-suite state isolation
 

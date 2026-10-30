@@ -68,12 +68,13 @@ opt-level = 2
 [profile.test.package.pictura_app]
 opt-level = 2
 
-# The app links this staticlib with the dev profile (Corrosion maps a CMake
-# `Debug` build to it), so without these overrides every engine loop runs at
-# opt-level 0 in a local build: a 4000x4000 selection bounds scan cost 334 ms
-# per pointer move and a mask content move 727 ms. Dependencies stay at 0 so the
-# cold build does not pay for the whole graph. `pictura-app` is left
-# unoptimised so the UI stays debuggable; its hot paths are bulk copies.
+# A Debug CMake configure links this staticlib with the dev profile (Corrosion's
+# default mapping; optimized configures use `dev-app` below), so without these
+# overrides every engine loop runs at opt-level 0 in a local build: a 4000x4000
+# selection bounds scan cost 334 ms per pointer move and a mask content move
+# 727 ms. Dependencies stay at 0 so the cold build does not pay for the whole
+# graph. `pictura-app` is left unoptimised so the UI stays debuggable; its hot
+# paths are bulk copies.
 [profile.dev.package.pictura-core]
 opt-level = 2
 
@@ -99,4 +100,20 @@ opt-level = 2
 opt-level = 2
 
 [profile.dev.package.pictura-render]
+opt-level = 2
+
+# The optimized development CMake build (BUILD_TESTING on, Release or
+# RelWithDebInfo) compiles the staticlib with this profile. It inherits release,
+# not dev: a panic inside a cxx-qt call aborts the process, so dev's overflow
+# checks and debug assertions would crash the development app where the shipped
+# build wraps. The speed comes from incremental compilation and more codegen
+# units; line tables give panic backtraces line numbers. The app crate at
+# opt-level 2 recompiles as fast as at 1 (measured).
+[profile.dev-app]
+inherits = "release"
+incremental = true
+codegen-units = 256
+debug = "line-tables-only"
+
+[profile.dev-app.package.pictura_app]
 opt-level = 2

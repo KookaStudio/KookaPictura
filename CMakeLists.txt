@@ -66,6 +66,36 @@ if(UNIX AND NOT APPLE AND NOT MSVC
         add_link_options("${_pictura_linker_flag}")
         message(STATUS "C++ linker flag: ${_pictura_linker_flag}")
     endif()
+elseif(UNIX AND NOT APPLE AND NOT MSVC AND NOT CMAKE_LINKER_TYPE)
+    # The cached -fuse-ld= wins, but a build tree configured before the mold
+    # preference keeps an old -fuse-ld=lld without saying so. Say so once per
+    # build tree and flag value, so a deliberate choice is not nagged. The
+    # first non-mold -fuse-ld= in either the EXE or the SHARED flags counts.
+    string(REGEX MATCHALL "-fuse-ld=[^ ]+" _pictura_cached_lds
+        "${CMAKE_EXE_LINKER_FLAGS} ${CMAKE_SHARED_LINKER_FLAGS}")
+    set(_pictura_cached_ld "")
+    foreach(_ld IN LISTS _pictura_cached_lds)
+        if(NOT _ld STREQUAL "-fuse-ld=mold")
+            set(_pictura_cached_ld "${_ld}")
+            break()
+        endif()
+    endforeach()
+    if(_pictura_cached_ld
+       AND NOT _pictura_cached_ld STREQUAL "$CACHE{PICTURA_LINKER_MASK_WARNED}")
+        find_program(MOLD_EXECUTABLE mold)
+        if(MOLD_EXECUTABLE)
+            check_linker_flag(CXX "-fuse-ld=mold" PICTURA_LINKER_ACCEPTS_MOLD)
+        endif()
+        if(PICTURA_LINKER_ACCEPTS_MOLD)
+            message(WARNING
+                "The cached linker flags carry ${_pictura_cached_ld}, so mold is "
+                "not used although it is installed. To let the build pick mold, "
+                "reconfigure with: cmake -U CMAKE_EXE_LINKER_FLAGS "
+                "-U CMAKE_SHARED_LINKER_FLAGS ${CMAKE_BINARY_DIR}")
+            set(PICTURA_LINKER_MASK_WARNED "${_pictura_cached_ld}" CACHE INTERNAL
+                "The cached -fuse-ld= flag the mold warning was printed for")
+        endif()
+    endif()
 endif()
 
 # Bound concurrent link steps: a highly parallel compile can otherwise start
@@ -117,8 +147,18 @@ if(NOT QMAKE_EXECUTABLE)
     message(FATAL_ERROR "qmake not found — install qt6-base-dev")
 endif()
 
+# An optimized development build compiles the Rust library with the incremental
+# `dev-app` profile (see Cargo.toml). Packaging (BUILD_TESTING off), Debug, and
+# multi-config generators keep Corrosion's default release/dev mapping.
+set(_pictura_cargo_profile "")
+if(BUILD_TESTING AND NOT CMAKE_CONFIGURATION_TYPES
+   AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
+    set(_pictura_cargo_profile PROFILE dev-app)
+endif()
+
 cxx_qt_import_crate(
     MANIFEST_PATH crates/pictura-app/Cargo.toml
+    ${_pictura_cargo_profile}
     CRATES pictura_app
     QT_MODULES Qt::Core Qt::Gui Qt::Widgets
 )
@@ -134,31 +174,107 @@ cxx_qt_import_crate(
 # header depend on it.
 set(PICTURA_BRIDGE_STAMP "${CMAKE_BINARY_DIR}/pictura_bridge.stamp")
 
-# The bridge sources are the Rust files carrying the cxx-qt bridge macro.
-# Scanning for it keeps this list in step with the build script's own list
-# without duplicating it.
-file(GLOB_RECURSE _pictura_rs_files RELATIVE "${CMAKE_SOURCE_DIR}"
+# The text of a bridge file that the generated C++ depends on: the
+# `#[cxx_qt::bridge]` module, with the outer attributes and doc comments
+# directly above it (cxx-gen attaches those to the module too). Everything else
+# in the file is implementation, so an edit there leaves the stamp alone. The
+# module ends at the first column-0 `}`, which rustfmt guarantees. A string or
+# block comment inside the module could hold such a line and end the slice
+# early, so the slice must have balanced braces, an even number of quotes, and
+# no `/*`; when it does not, or the attribute or the closing brace is missing,
+# the whole file is hashed, which rebuilds too much rather than too little. The
+# pictura_app test `bridge_modules_end_at_column_zero` pins the same shape from
+# the Rust side.
+function(pictura_bridge_hash_text path out_var)
+    file(READ "${path}" _src)
+    set(${out_var} "${_src}" PARENT_SCOPE)
+    string(FIND "${_src}" "#[cxx_qt::bridge" _attr)
+    if(_attr EQUAL -1)
+        return()
+    endif()
+
+    set(_start ${_attr})
+    while(_start GREATER 0)
+        math(EXPR _newline "${_start} - 1")
+        string(SUBSTRING "${_src}" ${_newline} 1 _char)
+        if(NOT _char STREQUAL "\n")
+            break()
+        endif()
+        string(SUBSTRING "${_src}" 0 ${_newline} _head)
+        string(FIND "${_head}" "\n" _previous REVERSE)
+        math(EXPR _line_start "${_previous} + 1")
+        math(EXPR _line_length "${_newline} - ${_line_start}")
+        string(SUBSTRING "${_src}" ${_line_start} ${_line_length} _line)
+        if(NOT _line MATCHES "^(#\\[|///)")
+            break()
+        endif()
+        set(_start ${_line_start})
+    endwhile()
+
+    string(SUBSTRING "${_src}" ${_attr} -1 _tail)
+    string(FIND "${_tail}" "\n}\n" _close)
+    if(_close EQUAL -1)
+        return()
+    endif()
+    math(EXPR _length "${_attr} + ${_close} + 2 - ${_start}")
+    string(SUBSTRING "${_src}" ${_start} ${_length} _module)
+
+    string(REGEX MATCHALL "{" _opens "${_module}")
+    string(REGEX MATCHALL "}" _closes "${_module}")
+    list(LENGTH _opens _open_count)
+    list(LENGTH _closes _close_count)
+    string(REPLACE "\\\\" "" _unescaped "${_module}")
+    string(REPLACE "\\\"" "" _unescaped "${_unescaped}")
+    string(REGEX MATCHALL "\"" _quotes "${_unescaped}")
+    list(LENGTH _quotes _quote_count)
+    math(EXPR _odd_quotes "${_quote_count} % 2")
+    string(FIND "${_module}" "/*" _block_comment)
+    if(_open_count EQUAL _close_count AND _odd_quotes EQUAL 0
+       AND _block_comment EQUAL -1)
+        set(${out_var} "${_module}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+# The bridge sources are the Rust files carrying the cxx-qt bridge macro, plus
+# every file the build script's `.files([...])` list names. The scan finds a
+# bridge wherever it is; the list catches a listed file before it has one, so
+# the bridge it gains later is a configure dependency from the start. A listed
+# file without a bridge is hashed whole. CONFIGURE_DEPENDS re-runs the configure
+# step when a Rust file is added or removed.
+file(GLOB_RECURSE _pictura_rs_files RELATIVE "${CMAKE_SOURCE_DIR}" CONFIGURE_DEPENDS
     "crates/pictura-app/src/*.rs")
 set(_pictura_bridge_files "")
-set(_pictura_bridge_digest "")
 foreach(_file IN LISTS _pictura_rs_files)
     file(READ "${CMAKE_SOURCE_DIR}/${_file}" _content)
     string(FIND "${_content}" "cxx_qt::bridge" _bridge_at)
     if(NOT _bridge_at EQUAL -1)
         list(APPEND _pictura_bridge_files "${_file}")
-        file(SHA256 "${CMAKE_SOURCE_DIR}/${_file}" _file_digest)
-        string(APPEND _pictura_bridge_digest "${_file_digest} ${_file}\n")
     endif()
+endforeach()
+file(STRINGS "${CMAKE_SOURCE_DIR}/crates/pictura-app/build.rs" _pictura_listed
+    REGEX "^[ \t]*\"src/[^\"]+\\.rs\",?[ \t]*$")
+foreach(_line IN LISTS _pictura_listed)
+    string(REGEX REPLACE "^[ \t]*\"([^\"]+)\".*$" "crates/pictura-app/\\1" _file "${_line}")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/${_file}")
+        list(APPEND _pictura_bridge_files "${_file}")
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES _pictura_bridge_files)
+list(SORT _pictura_bridge_files)
+set(_pictura_bridge_digest "")
+foreach(_file IN LISTS _pictura_bridge_files)
+    pictura_bridge_hash_text("${CMAKE_SOURCE_DIR}/${_file}" _bridge_text)
+    string(SHA256 _file_digest "${_bridge_text}")
+    string(APPEND _pictura_bridge_digest "${_file_digest} ${_file}\n")
 endforeach()
 string(SHA256 _pictura_bridge_hash "${_pictura_bridge_digest}")
 
-# A change to any Rust source re-runs the configure step, so a file that
-# becomes a bridge is picked up, and so the stamp is refreshed when a bridge
-# changes.
+# Only a bridge file, or build.rs, re-runs the configure step on an edit, so the
+# stamp is refreshed when a bridge changes. A file named in build.rs's list is
+# a configure dependency even before it carries a bridge.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${_pictura_rs_files}
-    "crates/pictura-app/src/*.rs"
-    "crates/pictura-app/src/**/*.rs")
+    ${_pictura_bridge_files}
+    crates/pictura-app/build.rs)
 
 # Rewrite the stamp only when the bridge content changed: a re-configure that
 # finds the same bridge must not dirty the whole C++ tree.
