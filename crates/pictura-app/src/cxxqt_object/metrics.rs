@@ -170,6 +170,13 @@ impl Metrics {
             }
             let _ = write!(out, "{}:{n}", json_string(reason));
         }
+        out.push_str("},\"layer_declines\":{");
+        for (i, (reason, n)) in counters.layer_declines.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let _ = write!(out, "{}:{n}", json_string(reason));
+        }
         out.push_str("}},\"edits\":[");
         for (i, e) in self.edits.iter().enumerate() {
             if i > 0 {

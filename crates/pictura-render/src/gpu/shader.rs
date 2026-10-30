@@ -25,6 +25,8 @@ struct Params {
 @group(0) @binding(2) var<storage, read> mask: array<u32>;
 @group(0) @binding(3) var<uniform> params: Params;
 @group(0) @binding(4) var<storage, read> text_lut: array<f32>;
+@group(0) @binding(5) var<storage, read> lut: array<vec4<f32>>;
+@group(0) @binding(6) var<storage, read> luma_half_up: array<u32>;
 
 // Both the packed canvas and a group's inner canvas are one u32 per pixel with
 // bytes laid out R,G,B,A (little-endian word). Planar pixel-layer sources and
@@ -201,9 +203,6 @@ fn doc_y(i: u32) -> u32 {
 // intersection with the region, with the grayscale colour replicated from plane
 // 0 and alpha defaulted by the host.
 fn sample_src(i: u32) -> vec4<f32> {
-    if ((params.flags & 1u) != 0u) {
-        return unpack_word(src[i]);
-    }
     let x = doc_x(i);
     let y = doc_y(i);
     if (x < params.src_x0 || x >= params.src_x0 + params.src_w
@@ -211,6 +210,9 @@ fn sample_src(i: u32) -> vec4<f32> {
         return vec4<f32>(0.0);
     }
     let li = (y - params.src_y0) * params.src_w + (x - params.src_x0);
+    if ((params.flags & 1u) != 0u) {
+        return unpack_word(src[li]);
+    }
     let n = params.src_w * params.src_h;
     var rgb = vec3<f32>(
         f32(src_byte(li)), f32(src_byte(li)), f32(src_byte(li)),
@@ -313,6 +315,25 @@ fn adj_hs(rgb: vec3<f32>, hue: i32, saturation: i32, lightness: i32) -> vec3<f32
 
 fn adjust(kind: u32, rgb: vec3<f32>, p0: i32, p1: i32, p2: i32) -> vec3<f32> {
     let q = vec3<u32>(quant(rgb.x), quant(rgb.y), quant(rgb.z));
+    if (kind == 6u) {
+        return vec3<f32>(lut[q.x].x, lut[q.y].y, lut[q.z].z);
+    }
+    if (kind == 7u) {
+        let n = 299u * q.x + 587u * q.y + 114u * q.z;
+        var y = n / 1000u;
+        let rem = n % 1000u;
+        if (rem > 500u) {
+            y = y + 1u;
+        } else if (rem == 500u) {
+            let idx = (q.x << 16u) | (q.y << 8u) | q.z;
+            let word = luma_half_up[idx >> 5u];
+            if (((word >> (idx & 31u)) & 1u) != 0u) {
+                y = y + 1u;
+            }
+        }
+        let e = lut[min(y, 255u)];
+        return rgb + (e.rgb - rgb) * e.a;
+    }
     if (kind == 1u) {
         return vec3<f32>(to_f(255u - q.x), to_f(255u - q.y), to_f(255u - q.z));
     }

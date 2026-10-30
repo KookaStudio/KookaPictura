@@ -174,7 +174,7 @@ pub(crate) fn apply_masked_chain(
 /// The mask coverage at document pixel `(x, y)`, `1.0` when the filter applies.
 /// Outside the mask rect the extend value is used (`filterMaskExtendWithWhite`
 /// white, otherwise transparent). `1.0` when there is no enabled mask.
-fn mask_value(so: &SmartObject, x: i32, y: i32) -> f32 {
+pub(crate) fn mask_value(so: &SmartObject, x: i32, y: i32) -> f32 {
     let Some(mask) = so.filter_mask.as_ref().filter(|_| so.filter_mask_enabled) else {
         return 1.0;
     };

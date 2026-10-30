@@ -51,14 +51,17 @@ use std::sync::OnceLock;
 
 use pictura_adjust::Adjustment;
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Knockout, Layer, LockFlags,
-    PixelBuffer, PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
+    PsdRect,
 };
-
-use crate::composite_route::{content_route, ContentRoute};
 
 mod assemble;
 mod backend;
+mod clip;
+mod effect;
+mod lut;
+mod plan;
+mod raster;
 mod resident;
 mod shader;
 mod stroke;
@@ -76,7 +79,7 @@ use assemble::{
 };
 
 /// Why the GPU compositor could not run. The caller falls back to CPU.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GpuError {
     /// No Vulkan adapter, or the device could not be created.
     Unavailable,
@@ -175,7 +178,15 @@ fn composite_gpu_region(
     // A stack the GPU cannot composite exactly must report why, even when the
     // device is unusable, so the eligibility check precedes the availability
     // gate.
-    check_supported(doc).inspect_err(crate::metrics::count_decline)?;
+    let region = PsdRect {
+        left: x0 as i32,
+        top: y0 as i32,
+        right: (x0 + rw) as i32,
+        bottom: (y0 + rh) as i32,
+    };
+    let full = x0 == 0 && y0 == 0 && rw == doc.width && rh == doc.height;
+    let plans = plan::plan_stack(doc, (!full).then_some(region))
+        .inspect_err(crate::metrics::count_decline)?;
     // A device that cannot reproduce the CPU oracle on the validation scene is
     // treated as no device: a wrong-but-plausible composite is worse than the
     // CPU path. See `gpu_composite_verified`.
@@ -183,15 +194,16 @@ fn composite_gpu_region(
         crate::metrics::count_decline(&GpuError::Unavailable);
         return Err(GpuError::Unavailable);
     }
-    composite_gpu_region_raw(doc, x0, y0, rw, rh).inspect_err(crate::metrics::count_decline)
+    composite_gpu_region_raw(doc, &plans, x0, y0, rw, rh).inspect_err(crate::metrics::count_decline)
 }
 
-/// The ungated region kernel. Callers own `check_supported`: [`composite_gpu_region`]
-/// runs it before the availability gate, and [`gpu_composite_verified`] checks its
-/// static validation scene. Splitting it out lets the validation bypass
-/// [`gpu_available`] without recursing.
+/// The ungated region kernel. Callers own the plan: [`composite_gpu_region`]
+/// builds it before the availability gate, and [`gpu_composite_verified`]
+/// checks its static validation scene. Splitting it out lets the validation
+/// bypass [`gpu_available`] without recursing.
 fn composite_gpu_region_raw(
     doc: &Document,
+    plans: &[plan::LayerPlan<'_>],
     x0: u32,
     y0: u32,
     rw: u32,
@@ -202,8 +214,8 @@ fn composite_gpu_region_raw(
     }
     let gpu = Gpu::new(x0, y0, rw, rh)?;
     let canvas = gpu.zero_canvas();
-    for layer in &doc.layers {
-        gpu.composite_layer(&canvas, layer, doc);
+    for layer_plan in plans {
+        gpu.composite_plan(&canvas, layer_plan, doc);
     }
     let pixels = gpu.read_canvas(&canvas)?;
     Ok(pixels)
@@ -303,11 +315,11 @@ fn gpu_composite_verified() -> bool {
         #[cfg(test)]
         VALIDATION_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let doc = validation_document();
-        if check_supported(&doc).is_err() {
+        let Ok(plans) = plan::plan_stack(&doc, None) else {
             return false;
-        }
+        };
         let cpu = crate::composite_rgba(&doc);
-        let Ok(gpu) = composite_gpu_region_raw(&doc, 0, 0, doc.width, doc.height) else {
+        let Ok(gpu) = composite_gpu_region_raw(&doc, &plans, 0, 0, doc.width, doc.height) else {
             return false;
         };
         gpu.width == cpu.width
@@ -440,114 +452,9 @@ fn adjustment_params(adjustment: &Adjustment) -> Option<(u32, i32, i32, i32)> {
 }
 
 /// Whether the GPU can composite `doc` exactly as the CPU oracle would.
-///
-/// A document with a source depth declines first. Then the first visible layer
-/// in stack order that declines names the reason; within a layer the checks
-/// run effects, content route, Dissolve, then advanced blending.
+#[cfg(test)]
 fn check_supported(doc: &Document) -> Result<(), GpuError> {
-    fn walk(layer: &Layer) -> Result<(), GpuError> {
-        if !layer.visible {
-            return Ok(());
-        }
-        // The resolved set comes from the same `lfx2`-over-`lrFX` path the CPU
-        // compositor uses.
-        if has_rendering_effect(layer) {
-            return Err(GpuError::UnsupportedLayerEffect);
-        }
-        let group = match content_route(layer) {
-            ContentRoute::PassThroughGroup | ContentRoute::IsolatedGroup => true,
-            // Only a real adjustment block of a shader kind runs on the GPU; a
-            // fill-content block or a decoded `vscg` vector fill has no shader.
-            ContentRoute::Fill(adjustment) => {
-                if layer.adjustment.is_none()
-                    || adjustment_params(&adjustment).is_none()
-                    || layer.extra_block(b"vscg").is_some()
-                {
-                    return Err(GpuError::UnsupportedAdjustment);
-                }
-                false
-            }
-            ContentRoute::UndecodedAdjustment | ContentRoute::UndecodedVectorFill => {
-                return Err(GpuError::UnsupportedAdjustment);
-            }
-            ContentRoute::SmartFiltered => return Err(GpuError::UnsupportedSmartFilter),
-            ContentRoute::SmartSource => return Err(GpuError::UnsupportedSmartObject),
-            ContentRoute::TypeSource => return Err(GpuError::UnsupportedText),
-            ContentRoute::Pixels => false,
-        };
-        if matches!(layer.blend, BlendMode::Dissolve) {
-            return Err(GpuError::UnsupportedMode(layer.blend));
-        }
-        // Clipping groups composite on the CPU (`composite_clipping`).
-        if layer.blend_if.as_ref().is_some_and(|v| !v.is_default())
-            || layer.knockout != Knockout::None
-            || layer.clipping
-        {
-            return Err(GpuError::UnsupportedAdvancedBlending);
-        }
-        if group {
-            for child in &layer.children {
-                walk(child)?;
-            }
-        }
-        Ok(())
-    }
-    // The CPU reads native samples (pixels, masks, adjustments) whenever a
-    // source depth is recorded.
-    if doc.source_depth.is_some() {
-        return Err(GpuError::UnsupportedDepth);
-    }
-    for layer in &doc.layers {
-        walk(layer)?;
-    }
-    Ok(())
-}
-
-/// An enabled, present object-based effect that renders. Stroke Emboss is a
-/// CPU no-op, so a bevel in that style does not count.
-fn has_rendering_effect(layer: &Layer) -> bool {
-    let effects = crate::layer_effects::decode_layer_effects(layer);
-    let on = |enabled: bool, present: bool| enabled && present;
-    let bevel = effects.bevel.as_ref().is_some_and(|bevel| {
-        bevel.enabled && bevel.present && bevel.style != crate::layer_effects::BevelStyle::Stroke
-    });
-    bevel
-        || effects
-            .drop_shadow
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .outer_glow
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .inner_shadow
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .inner_glow
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .satin
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .stroke
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .color_overlay
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .gradient_overlay
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-        || effects
-            .pattern_overlay
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
+    plan::plan_stack(doc, None).map(|_| ())
 }
 
 /// Fail a device-dependent test that has no usable GPU. Such tests are
@@ -927,7 +834,7 @@ mod tests {
     }
 
     #[test]
-    fn channel_less_smart_object_falls_back_to_cpu() {
+    fn channel_less_smart_object_is_accepted() {
         let (w, h) = (2u32, 2u32);
         let n = (w * h) as usize;
         let mut source = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
@@ -955,16 +862,10 @@ mod tests {
             ..Default::default()
         }]);
 
-        // `check_supported` rejects the stack before any device is touched, so
-        // this holds on a device-less host too.
-        assert!(matches!(
-            composite_gpu(&doc),
-            Err(GpuError::UnsupportedSmartObject)
-        ));
-
-        // The caller falls back to the CPU oracle, which renders the embedded
-        // source rather than the channel-less layer's opaque black.
-        let (out, backend) = composite_active(&doc, true);
+        // The cached smart source is accepted; the CPU oracle renders the
+        // embedded source rather than the channel-less layer's opaque black.
+        assert!(check_supported(&doc).is_ok());
+        let (out, backend) = composite_active(&doc, false);
         assert_eq!(backend, Backend::Cpu);
         for i in 0..n {
             assert_eq!(
@@ -1113,6 +1014,7 @@ mod tests {
                     layer.fill,
                     layer.type_tool.is_some(),
                     NO_ADJ,
+                    None,
                 );
             }
         }

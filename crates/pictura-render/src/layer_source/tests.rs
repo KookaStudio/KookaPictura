@@ -946,3 +946,103 @@ fn a_build_that_re_enters_its_own_key_does_not_wait_on_itself() {
     });
     assert!(matches!(out, Artifact::Missing));
 }
+
+fn other_source_doc() -> Document {
+    let mut d = doc(
+        4,
+        4,
+        vec![solid(
+            "other",
+            rect(0, 0, 4, 4),
+            (10, 200, 30),
+            255,
+            pictura_core::BlendMode::Normal,
+            255,
+        )],
+    );
+    d.composite = crate::composite_rgba(&d);
+    d
+}
+
+fn filtered_with_mask() -> Layer {
+    let mut layer = filtered_layer(rect(0, 0, 4, 4));
+    let so = layer.smart_object.as_mut().expect("smart object");
+    so.filter_mask_enabled = true;
+    so.filter_mask_extend_with_white = true;
+    so.filter_mask = Some(pictura_core::FilterMask {
+        rect: rect(0, 0, 4, 4),
+        data: (0..16).map(|i| (i * 17) as u8).collect::<Vec<u8>>().into(),
+    });
+    layer
+}
+
+#[test]
+fn composited_smart_filter_mask_mix_is_cached() {
+    let _guard = locked();
+    let layer = filtered_with_mask();
+    let d = doc(4, 4, vec![layer.clone()]);
+    let first = composited_source(&layer, &d, RasterRoute::SmartFiltered).expect("mix");
+    let second = composited_source(&layer, &d, RasterRoute::SmartFiltered).expect("mix");
+    assert!(Arc::ptr_eq(&first.buffer, &second.buffer));
+}
+
+#[test]
+fn composited_smart_source_is_cached() {
+    let _guard = locked();
+    let layer = smart_layer(rect(0, 0, 4, 4));
+    let d = doc(4, 4, vec![layer.clone()]);
+    let first = composited_source(&layer, &d, RasterRoute::SmartSource).expect("source");
+    let second = composited_source(&layer, &d, RasterRoute::SmartSource).expect("source");
+    assert!(Arc::ptr_eq(&first.buffer, &second.buffer));
+}
+
+#[test]
+fn composited_type_raster_is_cached() {
+    let _guard = locked();
+    let layer = type_layer(Some(type_style()));
+    let d = doc(4, 4, vec![layer.clone()]);
+    let first = composited_source(&layer, &d, RasterRoute::Type).expect("raster");
+    let second = composited_source(&layer, &d, RasterRoute::Type).expect("raster");
+    assert!(Arc::ptr_eq(&first.buffer, &second.buffer));
+}
+
+#[test]
+fn composited_source_invalidates_on_filter_mask() {
+    let _guard = locked();
+    let mut layer = filtered_with_mask();
+    let d = doc(4, 4, vec![layer.clone()]);
+    let first = composited_source(&layer, &d, RasterRoute::SmartFiltered).expect("mix");
+    layer
+        .smart_object
+        .as_mut()
+        .expect("smart object")
+        .filter_mask
+        .as_mut()
+        .expect("mask")
+        .data
+        .as_mut_slice()[0] ^= 0xFF;
+    let second = composited_source(&layer, &d, RasterRoute::SmartFiltered).expect("mix");
+    assert!(!Arc::ptr_eq(&first.buffer, &second.buffer));
+}
+
+#[test]
+fn composited_source_invalidates_on_payload_or_text() {
+    let _guard = locked();
+    let mut smart = smart_layer(rect(0, 0, 4, 4));
+    let d = doc(4, 4, vec![smart.clone()]);
+    let first = composited_source(&smart, &d, RasterRoute::SmartSource).expect("source");
+    smart
+        .smart_object
+        .as_mut()
+        .expect("smart object")
+        .set_payload(pictura_codec::write_psd(&other_source_doc()).expect("payload"));
+    let second = composited_source(&smart, &d, RasterRoute::SmartSource).expect("source");
+    assert!(!Arc::ptr_eq(&first.buffer, &second.buffer));
+
+    let mut text = type_layer(Some(type_style()));
+    let d = doc(4, 4, vec![text.clone()]);
+    let first = composited_source(&text, &d, RasterRoute::Type).expect("raster");
+    text.type_tool.as_mut().expect("type").text = "Changed".into();
+    let second = composited_source(&text, &d, RasterRoute::Type).expect("raster");
+    assert!(!Arc::ptr_eq(&first.buffer, &second.buffer));
+}

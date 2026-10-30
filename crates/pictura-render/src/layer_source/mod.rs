@@ -38,6 +38,7 @@ enum Kind {
     Text,
     Effects,
     Passes,
+    Composited,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -102,6 +103,12 @@ impl LayerPasses {
 pub(crate) struct CachedBuffer {
     pub(crate) rect: PsdRect,
     pub(crate) buffer: Arc<PixelBuffer>,
+    /// A content identity for the buffer, so the GPU resident store can key an
+    /// upload without plane stamps.
+    pub(crate) content: u64,
+    /// Whether a whole-document composite may retain the upload. A pattern
+    /// fill reads the document pattern library, which the key does not cover.
+    pub(crate) retain: bool,
 }
 
 enum State {
@@ -403,7 +410,118 @@ pub(crate) fn filtered_source(layer: &Layer, doc: &Document) -> Option<CachedBuf
             so.smart_filters_enabled,
         ))
     })?;
-    Some(CachedBuffer { rect, buffer })
+    Some(CachedBuffer {
+        rect,
+        buffer,
+        content: hash,
+        retain: true,
+    })
+}
+
+/// Which cached raster a GPU route needs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RasterRoute {
+    Type,
+    SmartSource,
+    SmartFiltered,
+}
+
+/// The exact straight-alpha RGBA the CPU blends for a proxy-less type layer, a
+/// channel-less smart-object source, or a smart-filtered source (including the
+/// smart-filter mask mix), cached by content.
+pub(crate) fn composited_source(
+    layer: &Layer,
+    doc: &Document,
+    route: RasterRoute,
+) -> Option<CachedBuffer> {
+    match route {
+        RasterRoute::Type => {
+            let type_tool = layer.type_tool.as_ref()?;
+            let buffer = text_raster(layer)?;
+            // ponytail: the CPU text renderer is box-sized, so it builds the
+            // full layer raster; the GPU upload clips it to the document.
+            Some(CachedBuffer {
+                rect: layer.rect,
+                buffer,
+                content: key::text_key(type_tool, layer.rect),
+                retain: true,
+            })
+        }
+        RasterRoute::SmartSource => {
+            let so = layer.smart_object.as_ref()?;
+            let rect = clip_to_document(layer.rect, doc);
+            if rect.width() <= 0 || rect.height() <= 0 {
+                return None;
+            }
+            let mut hasher = DefaultHasher::new();
+            key::embedded_key(so).hash(&mut hasher);
+            rect_key(layer.rect).hash(&mut hasher);
+            rect_key(rect).hash(&mut hasher);
+            doc.width.hash(&mut hasher);
+            doc.height.hash(&mut hasher);
+            let hash = hasher.finish();
+            let buffer = cached_buffer(Kind::Composited, hash, || {
+                crate::smart_source::render_smart_source(so, layer.rect, rect)
+            })?;
+            Some(CachedBuffer {
+                rect,
+                buffer,
+                content: hash,
+                retain: true,
+            })
+        }
+        RasterRoute::SmartFiltered => {
+            let so = layer.smart_object.as_ref()?;
+            let filtered = filtered_source(layer, doc)?;
+            let has_mask = so
+                .filter_mask
+                .as_ref()
+                .is_some_and(|_| so.filter_mask_enabled);
+            if !has_mask {
+                return Some(filtered);
+            }
+            let mut hasher = DefaultHasher::new();
+            filtered.content.hash(&mut hasher);
+            if let Some(mask) = so.filter_mask.as_ref() {
+                rect_key(mask.rect).hash(&mut hasher);
+                mask.data.ident().hash(&mut hasher);
+                mask.data.len().hash(&mut hasher);
+            }
+            so.filter_mask_enabled.hash(&mut hasher);
+            so.filter_mask_extend_with_white.hash(&mut hasher);
+            let hash = hasher.finish();
+            let buffer = cached_buffer(Kind::Composited, hash, || {
+                let base = crate::smart_source::render_smart_source(so, layer.rect, filtered.rect)?;
+                let full = &filtered.buffer;
+                let fw = full.width as usize;
+                let plane = fw * full.height as usize;
+                let mut out = PixelBuffer::new(full.width, full.height, full.channels);
+                out.data.copy_from_slice(&full.data);
+                for y in filtered.rect.top..filtered.rect.bottom {
+                    for x in filtered.rect.left..filtered.rect.right {
+                        let i = (y - filtered.rect.top) as usize * fw
+                            + (x - filtered.rect.left) as usize;
+                        let m = crate::smart_filter::mask_value(so, x, y);
+                        if m < 1.0 {
+                            for k in 0..4 {
+                                let b = f32::from(base.data[k * plane + i]);
+                                let f = f32::from(full.data[k * plane + i]);
+                                out.data[k * plane + i] =
+                                    (b + (f - b) * m).round().clamp(0.0, 255.0) as u8;
+                            }
+                        }
+                    }
+                }
+                Some(out)
+            })?;
+            Some(CachedBuffer {
+                rect: filtered.rect,
+                buffer,
+                content: hash,
+                retain: true,
+            })
+        }
+    }
 }
 
 /// The type-layer raster at `layer.rect`, or `None` when nothing paints.

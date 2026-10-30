@@ -15,7 +15,7 @@
 //! ponytail: isolating the group means a clipped layer's blend mode sees only
 //! the base and the clipped layers below it, not the backdrop under the base.
 
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 use rayon::prelude::*;
 
 use crate::composite::{composite_layer_inner, Canvas, Px};
@@ -57,37 +57,25 @@ pub(crate) fn composite_siblings_range(
             i += 1 + run;
             continue;
         }
-        let mut group = canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h);
-        group.skip_effects = canvas.skip_effects;
-        let opaque = Layer {
-            opacity: 255,
-            blend: BlendMode::Normal,
-            ..base.clone()
+        let bounds = PsdRect {
+            top: canvas.y0(),
+            left: canvas.x0(),
+            bottom: canvas.y1(),
+            right: canvas.x1(),
         };
-        composite(&mut group, i, &opaque);
-        let cover = coverage(canvas, base, doc);
-        for (j, layer) in layers.iter().enumerate().skip(i + 1).take(run) {
-            let mut clipped = group.clone();
-            composite(&mut clipped, j, layer);
-            let lerp = |out: &mut Px, inside: &Px, k: f32| {
-                out.r += (inside.r - out.r) * k;
-                out.g += (inside.g - out.g) * k;
-                out.b += (inside.b - out.b) * k;
-                out.a += (inside.a - out.a) * k;
-            };
-            if serial() {
-                for ((out, inside), &k) in group.px.iter_mut().zip(&clipped.px).zip(&cover) {
-                    lerp(out, inside, k);
-                }
-            } else {
-                group
-                    .px
-                    .par_iter_mut()
-                    .zip(clipped.px.par_iter())
-                    .zip(cover.par_iter())
-                    .for_each(|((out, inside), &k)| lerp(out, inside, k));
-            }
-        }
+        let clipped: Vec<(usize, &Layer)> =
+            layers.iter().enumerate().skip(i + 1).take(run).collect();
+        let group = build_sibling_group(
+            bounds,
+            canvas.clip(),
+            canvas.effect_region,
+            canvas.skip_effects,
+            base,
+            i,
+            &clipped,
+            doc,
+            &mut composite,
+        );
         let proxy = Layer {
             opacity: base.opacity,
             blend: base.blend,
@@ -103,6 +91,67 @@ pub(crate) fn composite_siblings_range(
         composite_canvas(canvas, &proxy, doc, &group);
         i += 1 + run;
     }
+}
+
+/// Build the raw clipped group over `bounds` with the CPU sibling-group
+/// algorithm, without blending it onto a parent canvas. `clip` is the parent's
+/// mask-feather clip and `effect_region` its transient-pass setting. Both the CPU
+/// compositor and the GPU clip dispatch call this so the two cannot drift.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_sibling_group(
+    bounds: PsdRect,
+    clip: PsdRect,
+    effect_region: Option<PsdRect>,
+    skip_effects: bool,
+    base: &Layer,
+    base_index: usize,
+    clipped: &[(usize, &Layer)],
+    doc: &Document,
+    mut composite: impl FnMut(&mut Canvas, usize, &Layer),
+) -> Canvas {
+    let mut group = Canvas::new_region(
+        bounds.left,
+        bounds.top,
+        bounds.width().max(0) as usize,
+        bounds.height().max(0) as usize,
+    );
+    group.clip = clip;
+    group.effect_region = effect_region;
+    group.skip_effects = skip_effects;
+    let opaque = Layer {
+        opacity: 255,
+        blend: BlendMode::Normal,
+        ..base.clone()
+    };
+    composite(&mut group, base_index, &opaque);
+    let cover = coverage(&group, base, doc);
+    for &(index, layer) in clipped {
+        if !layer.visible {
+            continue;
+        }
+        let mut tmp = group.clone();
+        composite(&mut tmp, index, layer);
+        if serial() {
+            for ((out, inside), &k) in group.px.iter_mut().zip(&tmp.px).zip(&cover) {
+                lerp(out, inside, k);
+            }
+        } else {
+            group
+                .px
+                .par_iter_mut()
+                .zip(tmp.px.par_iter())
+                .zip(cover.par_iter())
+                .for_each(|((out, inside), &k)| lerp(out, inside, k));
+        }
+    }
+    group
+}
+
+fn lerp(out: &mut Px, inside: &Px, k: f32) {
+    out.r += (inside.r - out.r) * k;
+    out.g += (inside.g - out.g) * k;
+    out.b += (inside.b - out.b) * k;
+    out.a += (inside.a - out.a) * k;
 }
 
 /// The base's coverage over `canvas`'s region: its alpha composited alone onto

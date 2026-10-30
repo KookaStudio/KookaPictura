@@ -879,11 +879,7 @@ fn gpu_rejects_an_inner_glow_layer_and_falls_back() {
             spec_inner(&InnerGlowSpec::default()),
         ],
     );
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "check_supported rejects before dispatch"
-    );
-    assert_eq!(composite_gpu_or_cpu(&d), composite_rgba(&d));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 #[test]
@@ -899,10 +895,7 @@ fn gpu_does_not_reject_a_disabled_or_not_present_inner_glow() {
         },
     ] {
         let d = doc(12, 12, vec![spec_inner(&spec)]);
-        assert!(
-            !matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-            "an inert effect must not reject the GPU"
-        );
+        assert_gpu_accepts_and_matches_cpu(&d);
     }
 }
 

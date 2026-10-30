@@ -33,15 +33,20 @@ composite SHALL keep matching the CPU oracle within ±1 LSB.
 
 The GPU compositor SHALL keep a layer's source upload between composites, keyed
 by the stamps of the planes it was built from, the layer rect, the document size,
-and the grayscale flag. It SHALL keep a sampled mask coverage upload keyed by the
-mask plane, its region, and its influence rectangle, and MUST retain it only for
-a composite over the whole document. A source or coverage upload built for a
-composite over a sub-region SHALL NOT be retained. The constant coverage of a
-layer with no enabled data-carrying mask SHALL NOT be retained; it is rebuilt
-row-wise from the layer geometry. An upload whose planes carry no stamp SHALL NOT
-be kept or reused, so a written plane is always uploaded again. Retention SHALL
-be bounded by a byte budget and an entry cap, evicting the oldest retained
-uploads first.
+and the grayscale flag. A source built from a cached CPU raster (a proxy-less
+type layer, a smart-filtered smart object, a channel-less smart-object source, or
+a Solid/Gradient fill) SHALL instead be keyed by that raster's content identity,
+the raster rectangle, the document size, and the grayscale flag; it MUST NOT be
+keyed by a plane stamp the raster does not carry. A Pattern fill upload SHALL NOT
+be retained, because the pattern library is not part of the key. It SHALL keep a
+sampled mask coverage upload keyed by the mask plane, its region, and its
+influence rectangle, and MUST retain it only for a composite over the whole
+document. A source or coverage upload built for a composite over a sub-region
+SHALL NOT be retained. The constant coverage of a layer with no enabled
+data-carrying mask SHALL NOT be retained; it is rebuilt row-wise from the layer
+geometry. An upload whose planes carry no stamp SHALL NOT be kept or reused, so a
+written plane is always uploaded again. Retention SHALL be bounded by a byte
+budget and an entry cap, evicting the oldest retained uploads first.
 
 #### Scenario: Reused, never stale [gt_resident]
 
@@ -76,6 +81,33 @@ uploads first.
 - **WHEN** a layer with an enabled raster mask is composited over the whole
   document twice with unchanged mask bytes
 - **THEN** the second composite reports a resident hit for the mask upload
+
+#### Scenario: A cached raster source is reused
+
+- **WHEN** a document containing a proxy-less type layer, a smart-filtered smart
+  object, or a Solid/Gradient fill layer is composited twice on the GPU with
+  unchanged content
+- **THEN** the second composite reports a resident hit for each cached raster
+  source and does not re-upload it
+
+#### Scenario: A pattern fill upload is not retained
+
+- **WHEN** a document containing a Pattern fill layer is composited on the GPU
+- **THEN** the fill upload is used for that composite and is not offered to the
+  resident store
+
+#### Scenario: A cached raster source changes when its content changes
+
+- **WHEN** the type text, the smart-filter chain, the smart-object payload, or
+  the fill parameters change and the document is composited again
+- **THEN** the new raster is uploaded and the result matches a
+  purge-then-composite
+
+#### Scenario: A cached raster upload is not retained for a sub-region build
+
+- **WHEN** a cached raster source is first uploaded for a composite over a
+  sub-region
+- **THEN** the upload is used for that composite and is not retained
 
 ### Requirement: The resident store is bounded and observable
 

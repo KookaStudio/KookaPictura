@@ -518,11 +518,7 @@ fn gpu_rejects_an_outer_glow_layer_and_falls_back() {
             spec_glow(&GlowSpec::default()),
         ],
     );
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "check_supported rejects before dispatch"
-    );
-    assert_eq!(composite_gpu_or_cpu(&d), composite_rgba(&d));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 #[test]
@@ -538,10 +534,7 @@ fn gpu_does_not_reject_a_disabled_or_not_present_glow() {
         },
     ] {
         let d = doc(9, 9, vec![spec_glow(&spec)]);
-        assert!(
-            !matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-            "an inert glow must not reject the GPU"
-        );
+        assert_gpu_accepts_and_matches_cpu(&d);
     }
 }
 
@@ -730,10 +723,7 @@ fn gpu_reports_the_effect_for_a_glow_fill_layer() {
     };
     layer.extra_blocks = vec![glow_block(&GlowSpec::default())];
     let d = doc(9, 9, vec![layer]);
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "the effect error wins over UnsupportedAdjustment"
-    );
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 pub(super) fn parallel_layer() -> Layer {

@@ -2,6 +2,34 @@ use pictura_core::{Knockout, LayerBlock};
 
 use super::*;
 
+/// The GPU accepts an enabled effect and either matches the CPU within ±1 LSB
+/// or falls back to the exact CPU oracle.
+pub(crate) fn assert_gpu_accepts_and_matches_cpu(doc: &Document) {
+    let cpu = composite_rgba(doc);
+    let (out, backend) = composite_active(doc, true);
+    let expected = if gpu_available() {
+        Backend::Gpu
+    } else {
+        Backend::Cpu
+    };
+    assert_eq!(
+        backend, expected,
+        "an accepted effect must run on the available backend"
+    );
+    match backend {
+        Backend::Gpu => {
+            for (i, (a, b)) in cpu.data.iter().zip(out.data.iter()).enumerate() {
+                assert!(a.abs_diff(*b) <= 1, "GPU parity at sample {i}: {a} vs {b}");
+            }
+        }
+        Backend::Cpu => assert_eq!(
+            out.data.as_ref(),
+            cpu.data.as_ref(),
+            "the CPU fallback must equal the oracle"
+        ),
+    }
+}
+
 mod cache;
 
 const PRC: [u8; 4] = *b"#Prc";
@@ -168,7 +196,7 @@ fn half_mask(mut layer: Layer) -> Layer {
 }
 
 #[derive(Clone)]
-struct ShadowSpec {
+pub(crate) struct ShadowSpec {
     enabled: bool,
     present: bool,
     blend: Vec<u8>,
@@ -196,7 +224,7 @@ impl Default for ShadowSpec {
     }
 }
 
-fn spec_block(spec: &ShadowSpec) -> LayerBlock {
+pub(crate) fn spec_block(spec: &ShadowSpec) -> LayerBlock {
     lfx2(top_with(drsh(vec![
         (b"enab".to_vec(), DescValue::Bool(spec.enabled)),
         (b"present".to_vec(), DescValue::Bool(spec.present)),
@@ -829,11 +857,7 @@ fn gpu_rejects_a_drop_shadow_layer_and_falls_back() {
             spec_shadow(&ShadowSpec::default()),
         ],
     );
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "check_supported rejects before dispatch"
-    );
-    assert_eq!(composite_gpu_or_cpu(&d), composite_rgba(&d));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 #[test]
@@ -849,10 +873,7 @@ fn gpu_does_not_reject_a_disabled_or_not_present_effect() {
         },
     ] {
         let d = doc(9, 9, vec![spec_shadow(&spec)]);
-        assert!(
-            !matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-            "an inert effect must not reject the GPU"
-        );
+        assert_gpu_accepts_and_matches_cpu(&d);
     }
 }
 
@@ -869,10 +890,7 @@ fn gpu_reports_the_effect_for_a_fill_layer() {
     };
     layer.extra_blocks = vec![spec_block(&ShadowSpec::default())];
     let d = doc(9, 9, vec![layer]);
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "the effect error wins over UnsupportedAdjustment"
-    );
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 // --- Fixture ---------------------------------------------------------------

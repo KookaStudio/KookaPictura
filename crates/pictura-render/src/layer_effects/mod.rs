@@ -109,7 +109,6 @@ mod shadows;
 mod strokes;
 
 pub(crate) use legacy::{decode_legacy_effects, LegacyEffects};
-#[cfg(test)]
 pub(crate) use planes::EffectColor;
 pub(crate) use planes::EffectPass;
 

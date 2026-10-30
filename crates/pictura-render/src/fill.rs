@@ -15,7 +15,7 @@ use pictura_adjust::{
     Adjustment, GradientFillParams, GradientKind, GradientStop, PatternFillParams,
 };
 use pictura_codec::{DescValue, PatternPixels};
-use pictura_core::{AdjustmentData, Document, Layer};
+use pictura_core::{AdjustmentData, Document, Layer, PixelBuffer};
 
 use crate::composite::{blend_into_ctx, desc_item, Canvas};
 
@@ -859,5 +859,184 @@ pub(crate) fn fill_coverage_matte(
             true
         }
         _ => false,
+    }
+}
+
+/// Rasterize a fill layer's content into the straight-alpha RGBA buffer the GPU
+/// uploads, or `None` when the layer is not a decoded fill.
+pub(crate) fn fill_source(
+    layer: &Layer,
+    doc: &Document,
+) -> Option<crate::layer_source::CachedBuffer> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::sync::Arc;
+
+    let adjustment = decode_layer_fill(layer)?;
+    let full_rect = layer.rect;
+    let (full_w, full_h) = (full_rect.width(), full_rect.height());
+    let rect = crate::layer_source::clip_to_document(full_rect, doc);
+    let (w, h) = (rect.width(), rect.height());
+    // A fill with no on-canvas area is the CPU's no-op; keep it on the GPU as an
+    // empty source rather than declining the whole document.
+    let (buffer, retain) = if w <= 0 || h <= 0 || full_w <= 0 || full_h <= 0 {
+        (PixelBuffer::new(0, 0, 4), false)
+    } else {
+        match &adjustment {
+            Adjustment::SolidFill(rgba) => {
+                let mut buf = PixelBuffer::new(w as u32, h as u32, 4);
+                let n = buf.pixel_count();
+                for i in 0..n {
+                    buf.data[i] = rgba[0];
+                    buf.data[n + i] = rgba[1];
+                    buf.data[2 * n + i] = rgba[2];
+                    buf.data[3 * n + i] = rgba[3];
+                }
+                (buf, true)
+            }
+            Adjustment::GradientFill(params) => {
+                let px = gradient_rgba_region(
+                    full_w,
+                    full_h,
+                    (
+                        rect.left - full_rect.left,
+                        rect.top - full_rect.top,
+                        rect.right - full_rect.left,
+                        rect.bottom - full_rect.top,
+                    ),
+                    params,
+                );
+                (rgba_to_planar(&px, w, h), true)
+            }
+            Adjustment::PatternFill(params) => {
+                let patterns = pictura_codec::decode_patterns(doc);
+                let px = pattern_tile_region(
+                    &patterns,
+                    params,
+                    (full_rect.left, full_rect.top),
+                    (rect.left, rect.top, rect.right, rect.bottom),
+                );
+                (rgba_to_planar(&px, w, h), false)
+            }
+            _ => return None,
+        }
+    };
+    let mut hasher = DefaultHasher::new();
+    [
+        full_rect.left,
+        full_rect.top,
+        full_rect.right,
+        full_rect.bottom,
+    ]
+    .hash(&mut hasher);
+    doc.width.hash(&mut hasher);
+    doc.height.hash(&mut hasher);
+    doc.mode.hash(&mut hasher);
+    if let Some(data) = layer.adjustment.as_ref() {
+        data.key.hash(&mut hasher);
+        data.data.hash(&mut hasher);
+    }
+    if let Some(block) = layer.extra_block(b"vscg") {
+        block.data.hash(&mut hasher);
+    }
+    Some(crate::layer_source::CachedBuffer {
+        rect,
+        buffer: Arc::new(buffer),
+        content: hasher.finish(),
+        retain,
+    })
+}
+
+fn rgba_to_planar(px: &[[u8; 4]], w: i32, h: i32) -> PixelBuffer {
+    let n = (w.max(0) as usize) * (h.max(0) as usize);
+    let mut buf = PixelBuffer::new(w.max(0) as u32, h.max(0) as u32, 4);
+    for (i, c) in px.iter().take(n).enumerate() {
+        buf.data[i] = c[0];
+        buf.data[n + i] = c[1];
+        buf.data[2 * n + i] = c[2];
+        buf.data[3 * n + i] = c[3];
+    }
+    buf
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pictura_adjust::Adjustment;
+
+    #[test]
+    fn pattern_fill_upload_is_not_retained() {
+        let bytes = include_bytes!("../../pictura-codec/tests/fixtures/pattern_fill.psd");
+        let doc = pictura_codec::read_psd(bytes).expect("fixture parses");
+        let layer = doc
+            .layers
+            .iter()
+            .find(|layer| matches!(decode_layer_fill(layer), Some(Adjustment::PatternFill(_))))
+            .expect("a pattern fill layer");
+        let cached = fill_source(layer, &doc).expect("the fill rasterizes");
+        assert!(!cached.retain, "a pattern fill is not retained");
+    }
+
+    #[test]
+    fn all_fill_fixtures_rasterize() {
+        for (name, bytes) in [
+            (
+                "solid",
+                include_bytes!("../../pictura-codec/tests/fixtures/solid_fill.psd").as_slice(),
+            ),
+            (
+                "gradient",
+                include_bytes!("../../pictura-codec/tests/fixtures/gradient_fill.psd").as_slice(),
+            ),
+            (
+                "pattern",
+                include_bytes!("../../pictura-codec/tests/fixtures/pattern_fill.psd").as_slice(),
+            ),
+            (
+                "vector",
+                include_bytes!("../../pictura-codec/tests/fixtures/vector_fill.psd").as_slice(),
+            ),
+        ] {
+            let doc = pictura_codec::read_psd(bytes).expect("fixture parses");
+            for layer in doc.layers.iter() {
+                if decode_layer_fill(layer).is_some() {
+                    assert!(fill_source(layer, &doc).is_some(), "{name}: {}", layer.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn changing_the_pattern_content_changes_the_raster() {
+        let bytes = include_bytes!("../../pictura-codec/tests/fixtures/pattern_fill.psd");
+        let mut doc = pictura_codec::read_psd(bytes).expect("fixture parses");
+        let mut layer = doc
+            .layers
+            .iter()
+            .find(|layer| matches!(decode_layer_fill(layer), Some(Adjustment::PatternFill(_))))
+            .expect("a pattern fill layer")
+            .clone();
+        let Some(Adjustment::PatternFill(mut params)) = decode_layer_fill(&layer) else {
+            unreachable!()
+        };
+        let first = fill_source(&layer, &doc).expect("first raster");
+        params.pattern_id = "pictura-changed".into();
+        layer.adjustment = Some(encode_pattern_fill(&params));
+        let record = pictura_codec::encode_rgb_pattern(
+            "changed",
+            "pictura-changed",
+            4,
+            4,
+            &[255u8; 4 * 4 * 4],
+        )
+        .expect("pattern encodes");
+        assert!(pictura_codec::add_document_pattern(
+            &mut doc,
+            "pictura-changed",
+            &record
+        ));
+        let second = fill_source(&layer, &doc).expect("second raster");
+        assert_ne!(first.content, second.content);
+        assert_ne!(first.buffer.data.as_ref(), second.buffer.data.as_ref());
     }
 }

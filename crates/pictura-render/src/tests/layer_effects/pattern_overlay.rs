@@ -434,11 +434,7 @@ fn gpu_rejects_a_pattern_overlay_layer_and_falls_back() {
         ),
         spec_layer(&PatternSpec::default()),
     ]);
-    assert!(
-        matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
-        "check_supported rejects before dispatch"
-    );
-    assert_eq!(composite_gpu_or_cpu(&d), composite_rgba(&d));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 #[test]
@@ -451,10 +447,7 @@ fn gpu_does_not_reject_an_inert_or_undecodable_pattern_overlay() {
             ..Default::default()
         })],
     );
-    assert!(!matches!(
-        composite_gpu(&d),
-        Err(GpuError::UnsupportedLayerEffect)
-    ));
+    assert_gpu_accepts_and_matches_cpu(&d);
     // A missing `Idnt` is undecodable and must not reject.
     let malformed = lfx2_effect(
         b"patternFill",
@@ -464,10 +457,7 @@ fn gpu_does_not_reject_an_inert_or_undecodable_pattern_overlay() {
         ]),
     );
     let d = doc(8, 8, vec![overlay_layer(Some(malformed))]);
-    assert!(!matches!(
-        composite_gpu(&d),
-        Err(GpuError::UnsupportedLayerEffect)
-    ));
+    assert_gpu_accepts_and_matches_cpu(&d);
 }
 
 // --- Fixture ---------------------------------------------------------------
