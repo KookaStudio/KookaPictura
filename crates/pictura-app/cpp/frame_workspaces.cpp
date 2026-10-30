@@ -150,19 +150,11 @@ PanelColumn* PicturaMainWindow::restoreLegacyDefaultForTest()
     return panelColumn_;
 }
 
-void PicturaMainWindow::applyFreshSessionDefault(const SessionState& state)
+void PicturaMainWindow::applyFreshSessionDefault(const SessionState& state,
+                                                 const QList<PanelGroup*>& staged)
 {
-    bool layoutHasGroups = false;
-    for (const QJsonValue& value : state.panelColumns) {
-        const QJsonObject entry = value.toObject();
-        if (!entry.value(QStringLiteral("tools")).toBool()
-            && !entry.value(QStringLiteral("groups")).toArray().isEmpty()) {
-            layoutHasGroups = true;
-            break;
-        }
-    }
-    if (state.panelGroups.isEmpty() && !layoutHasGroups) {
-        regroupAndApply(workspacePresets(QStringLiteral("Essentials")));
+    if (!sessionHasPanelLayout(state)) {
+        regroupAndApply(workspacePresets(QStringLiteral("Essentials")), true, staged);
     }
 }
 
@@ -211,7 +203,8 @@ void PicturaMainWindow::applyPendingFloatRestores()
     }
 }
 
-void PicturaMainWindow::regroupAndApply(const QJsonArray& columns, bool persist)
+void PicturaMainWindow::regroupAndApply(const QJsonArray& columns, bool persist,
+                                        QList<PanelGroup*> staged)
 {
     if (!panelColumn_ || !centerSplitter_) {
         return;
@@ -261,6 +254,13 @@ void PicturaMainWindow::regroupAndApply(const QJsonArray& columns, bool persist)
         }
     };
 
+    // Groups buildPanels staged for a fresh session first; they never joined a
+    // column, so nothing else removes them.
+    for (PanelGroup* group : staged) {
+        harvest(group);
+        group->hide();
+        group->deleteLater();
+    }
     // Docked groups first, then the overlays. The tools column never takes part.
     for (PanelColumn* column : allPanelColumns()) {
         if (!column || column->isToolsColumn() || column->isColumnFloating()) {

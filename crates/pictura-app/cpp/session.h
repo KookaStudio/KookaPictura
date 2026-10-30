@@ -137,4 +137,11 @@ SessionState loadSession();
 // Write the session state atomically via QSaveFile. Returns false on failure.
 bool saveSession(const SessionState& state);
 
+// Whether a stored column other than the tools column holds groups.
+bool sessionHasColumnLayout(const SessionState& state);
+
+// Whether the session carries a panel layout: legacy groups, or a column with
+// groups other than the tools column. A session without one is fresh.
+bool sessionHasPanelLayout(const SessionState& state);
+
 } // namespace pictura

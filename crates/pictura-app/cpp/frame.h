@@ -574,7 +574,7 @@ private:
     void buildMenus();
     void buildUiSizeMenu();
     void updateUiSizeMenu();
-    void buildPanels(const SessionState& state);
+    QList<PanelGroup*> buildPanels(const SessionState& state);
     // `toolOptions` is the session's saved tool options, restored before the
     // options bar is built so its controls start from them.
     void buildTools(int toolsColumns, bool useShiftKeyForToolSwitch,
@@ -662,8 +662,8 @@ private:
     void applyPanelSession(const SessionState& state);
     // Rebuild the widget columns from a workspace-shaped spec, moving panels
     // between groups and restoring floating groups/columns. Shared by session
-    // restore and workspace apply.
-    void regroupAndApply(const QJsonArray& columns, bool persist = true);
+    // restore and workspace apply; `staged` are first-run groups never docked.
+    void regroupAndApply(const QJsonArray& columns, bool persist = true, QList<PanelGroup*> staged = {});
     // A float restored while the frame is hidden waits for `showEvent` so its
     // stored position is interpreted against the restored window geometry.
     void queueOrRestoreFloat(PanelColumn* column, PanelGroup* group, const QRect& geometry);
@@ -697,7 +697,7 @@ private:
     QStringList deleteWorkspaceChoices() const;
     // Apply the Essentials factory layout when the session has no saved or
     // legacy panel layout (a fresh session); a stored layout is left untouched.
-    void applyFreshSessionDefault(const SessionState& state);
+    void applyFreshSessionDefault(const SessionState& state, const QList<PanelGroup*>& staged);
     void wirePanelColumn(PanelColumn* column);
     void clearDynamicColumns();
     void reapplyColumnStretch();

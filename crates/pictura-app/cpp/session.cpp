@@ -81,6 +81,23 @@ QString sessionFilePath()
     return root + QStringLiteral("/kooka-pictura/state.json");
 }
 
+bool sessionHasColumnLayout(const SessionState& state)
+{
+    for (const QJsonValue& value : state.panelColumns) {
+        const QJsonObject entry = value.toObject();
+        if (!entry.value(QStringLiteral("tools")).toBool()
+            && !entry.value(QStringLiteral("groups")).toArray().isEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool sessionHasPanelLayout(const SessionState& state)
+{
+    return !state.panelGroups.isEmpty() || sessionHasColumnLayout(state);
+}
+
 SessionState loadSession()
 {
     SessionState state;

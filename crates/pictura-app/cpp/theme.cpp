@@ -1,5 +1,6 @@
 #include "theme.h"
 
+#include <QtCore/QPointer>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QString>
 
@@ -79,6 +80,10 @@ quint64 g_paletteGeneration = 0;
 int g_level = Theme::kDefaultLevel;
 Theme::ThemeFamily g_family = Theme::kDefaultFamily;
 int g_uiScalePercent = Theme::kDefaultUiScalePercent;
+// The application style the last full `Theme::apply` left installed. Qt wraps
+// the style in its style-sheet style, so the type alone cannot say whether the
+// theme's style is still in place; a replaced style also clears the pointer.
+QPointer<QStyle> g_appliedStyle;
 
 struct Ramp {
     // Text and accent colours are constant across brightness levels.
@@ -796,11 +801,21 @@ void Theme::apply(Theme::ThemeFamily family, int level)
     const int clamped = clampLevel(level);
     g_family = family;
     g_level = clamped;
+    const QPalette palette = paletteFor(family, rampFor(family, clamped));
+    const QString sheet = styleSheet(family, clamped);
+    // Installing a style re-polishes every widget, so an application that
+    // already shows this theme is left alone. The check reads the live state:
+    // anything that changed the style, palette or sheet since makes it apply.
+    if (g_appliedStyle && QApplication::style() == g_appliedStyle && qApp->styleSheet() == sheet
+        && qApp->palette() == palette) {
+        return;
+    }
     ++g_paletteGeneration;
     QPixmapCache::clear();
     QApplication::setStyle(new SpinArrowStyle(QStyleFactory::create(QStringLiteral("Fusion"))));
-    qApp->setPalette(paletteFor(family, rampFor(family, clamped)));
-    qApp->setStyleSheet(styleSheet(family, clamped));
+    qApp->setPalette(palette);
+    qApp->setStyleSheet(sheet);
+    g_appliedStyle = QApplication::style();
 }
 
 void Theme::apply(int level)

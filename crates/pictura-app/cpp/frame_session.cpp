@@ -375,16 +375,7 @@ void PicturaMainWindow::applyPanelSession(const SessionState& state)
     // A new session apply supersedes any float restore still waiting for show.
     pendingFloatRestores_.clear();
 
-    bool layoutHasGroups = false;
-    for (const QJsonValue& value : state.panelColumns) {
-        const QJsonObject entry = value.toObject();
-        if (!entry.value(QStringLiteral("tools")).toBool()
-            && !entry.value(QStringLiteral("groups")).toArray().isEmpty()) {
-            layoutHasGroups = true;
-            break;
-        }
-    }
-    if (state.panelColumns.isEmpty() || !layoutHasGroups) {
+    if (!sessionHasColumnLayout(state)) {
         // No per-column layout: keep the legacy flat-state behaviour and reset
         // the tools column to its default left slot.
         // An empty layout carries no float state: dock every live group and
