@@ -333,7 +333,7 @@ so an unchanged dependency graph is not recompiled on every run. Each of those
 jobs SHALL use its own cache key. The caches SHALL be saved only by runs on the
 default branch, so pull requests restore them without adding entries. Because
 only a default-branch run can save the first cache, the jobs' wall time and
-cache size after that run SHALL be recorded in a follow-up issue rather than
+cache size after that run SHALL be recorded in a follow-up issue (#1056) rather than
 in the change that adds the caching.
 
 #### Scenario: a pull request restores but does not save [bp_ci_target_cache]

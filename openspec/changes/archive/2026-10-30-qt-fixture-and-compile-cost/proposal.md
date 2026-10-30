@@ -50,7 +50,7 @@ recompiles the C++ for every bridge.
   behind the PCH.
 - **Rust targets cached in CI** for the `lint` and `test` jobs, saved only on
   `master`. Their effect after the first `master` run is recorded in a
-  follow-up issue.
+  follow-up issue (#1056).
 - **A clean rebuild works.** `ninja -t clean` followed by a build regenerates the
   cxx-qt export directory instead of failing the shell link.
 - **Engine-crate edit cost is measured first**, under `dev-app` and `--release`.

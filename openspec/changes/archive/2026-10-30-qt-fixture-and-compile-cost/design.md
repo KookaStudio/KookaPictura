@@ -594,7 +594,7 @@ The `*rustcache` anchor (`ci.yml:95-98`) was shared by `lint`, `test`,
 Only a run on `master` saves, so no pull request, this one included, can see a
 restore of the new caches. The pull request's CI shows the per-job keys and the
 skipped save. The job wall times and cache sizes after the first `master` run,
-against the 10 GB quota, are recorded in a follow-up issue. The quota is shared
+against the 10 GB quota, are recorded in a follow-up issue (#1056). The quota is shared
 with sccache's GHA backend, `install-qt-action`'s Qt cache and the ImageMagick
 cache.
 
@@ -628,7 +628,7 @@ layer time.
   not changed here: `regroupAndApply` deletes the groups that carry the
   Actions, Character and Paragraph panel-menu hooks (`frame_build.cpp`), and
   the first-run layout has always gone through a regroup. Tracked in a
-  follow-up issue.
+  follow-up issue (#1057).
 - **[A test relied on the theme being reset by the next window]** → The live
   comparison in Decision 1. The full Qt layer must pass at `-j1` and at the new
   default level.

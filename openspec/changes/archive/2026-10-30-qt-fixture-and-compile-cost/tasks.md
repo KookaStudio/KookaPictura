@@ -94,7 +94,7 @@ There are two declared exceptions to "compile once":
   - `lint` and `test` get `cache-targets: "true"`, a per-job `shared-key` and `save-if: ${{ github.ref == 'refs/heads/master' }}`;
   - `qt-headless` keeps `cache-targets: "false"` (Corrosion builds outside `target/`).
 
-  Verify from the PR's CI log that both jobs restore with their key and that the save step is skipped on the pull request. The wall times and cache sizes after the first `master` run are recorded under the follow-up issue (design §9).
+  Verify from the PR's CI log that both jobs restore with their key and that the save step is skipped on the pull request. The wall times and cache sizes after the first `master` run are recorded under #1056 (design §9).
 
 ## 12. Compile once, measure, decide
 
@@ -105,4 +105,4 @@ There are two declared exceptions to "compile once":
 - [x] 12.5 Decide on engine profile overrides from task 1.3's numbers and the Qt layer's wall time (design §10), and record the decision.
 - [x] 12.6 Run the clean-rebuild check (`ninja -C build -t clean && cmake --build build --parallel 12`), a configure with `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` into a throwaway build dir, and the remaining manual rows of `test-plan.md`.
 - [x] 12.7 Update `docs/dev/STATE.md` with the new numbers in a commit of its own whose message carries `TASK-ALLOWS-DOCS`. Verify with `GUARD_BASE=master bash scripts/guard.sh`.
-- [ ] 12.8 Run `bash scripts/verify-fast.sh`, archive the change with `openspec archive qt-fixture-and-compile-cost`, and list the plan's manual rows in the PR body. Verify that `scripts/check-openspec-archived.sh` passes.
+- [x] 12.8 Run `bash scripts/verify-fast.sh`, archive the change with `openspec archive qt-fixture-and-compile-cost`, and list the plan's manual rows in the PR body. Verify that `scripts/check-openspec-archived.sh` passes.
