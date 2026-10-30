@@ -250,7 +250,16 @@ ICC profile that an external ICC reader accepts and can name by its description.
 
 ### Requirement: Conversion options are shared by every profile operation
 
-`pictura-color` SHALL expose `ConversionOptions` carrying a rendering intent, a black-point-compensation flag, and a dither flag. The same options SHALL drive the document Convert to Profile operation, the incoming-policy conversion on open, and the picker's working-CMYK evaluation. Dither SHALL be deterministic and SHALL be applied only to 8-bit conversions; a 16- or 32-bit conversion SHALL ignore it. The default SHALL be relative colorimetric, black-point compensation on, and dither on, matching the CS6 documented defaults; callers that need the historical no-BPC behaviour SHALL pass it explicitly.
+`pictura-color` SHALL expose `ConversionOptions` carrying a rendering intent, a
+black-point-compensation flag, and a dither flag. The rendering intent and the
+black-point-compensation flag SHALL drive the document Convert to Profile
+operation, the incoming-policy conversion on open, and the picker's working-CMYK
+evaluation. Dither SHALL be deterministic and SHALL be applied only to 8-bit
+conversions; a 16- or 32-bit conversion SHALL ignore it, and dither SHALL NOT
+apply to the picker, which converts one colour rather than a plane. The default
+SHALL be relative colorimetric, black-point compensation on, and dither on,
+matching the CS6 documented defaults; callers that need the historical no-BPC
+behaviour SHALL pass it explicitly.
 
 #### Scenario: Every intent produces a transform
 
@@ -266,3 +275,8 @@ ICC profile that an external ICC reader accepts and can name by its description.
 
 - **WHEN** the same 8-bit conversion is run twice with dither on
 - **THEN** the two outputs are byte-identical and differ from the undithered output; a 16-bit conversion with dither on equals the undithered 16-bit output
+
+#### Scenario: The picker evaluates with the shared intent and BPC [picker_shared_options]
+
+- **WHEN** the shared options carry a rendering intent and a black-point-compensation flag
+- **THEN** the picker's CMYK conversion uses that intent and flag, and its dither flag is ignored

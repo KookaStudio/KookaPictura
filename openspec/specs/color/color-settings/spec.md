@@ -199,10 +199,13 @@ without recording a history state. On Cancel nothing SHALL change.
 ### Requirement: Conversion options are persisted and applied
 
 The application SHALL persist the rendering intent, black-point-compensation
-flag, and dither flag as application preferences separate from any document, and
-SHALL apply them to the incoming Convert policy, Convert to Profile, and the
-picker's working-CMYK evaluation. Changing them SHALL NOT create a history state
-or mark a document dirty; it SHALL affect subsequent conversions only.
+flag, and dither flag as application preferences separate from any document. It
+SHALL apply the rendering intent and the black-point-compensation flag to the
+incoming Convert policy, Convert to Profile, and the picker's working-CMYK
+evaluation, and the dither flag to the incoming Convert policy and Convert to
+Profile. Dither SHALL NOT apply to the picker, which evaluates a single colour
+rather than a plane. Changing them SHALL NOT create a history state or mark a
+document dirty; it SHALL affect subsequent conversions only.
 
 #### Scenario: The defaults match CS6
 
@@ -218,3 +221,9 @@ or mark a document dirty; it SHALL affect subsequent conversions only.
 
 - **WHEN** an option is changed with a document open
 - **THEN** the document's history count and dirty state are unchanged
+
+#### Scenario: The picker follows a changed option [cs_picker_follows_options]
+
+- **WHEN** the rendering intent or black-point compensation changes
+- **THEN** the picker's CMYK readout and gamut alert change to that option's
+  conversion, and the document's history count and dirty state are unchanged
