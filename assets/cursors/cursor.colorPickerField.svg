@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- A ring centred on the (12, 12) hotspot: the Color Picker's colour-field
+       pointer, matching the circular marker the field paints at the current
+       colour. The white halo keeps it legible over any field colour. -->
+  <circle cx="12" cy="12" r="7" fill="none" stroke="#ffffff" stroke-width="4"/>
+  <circle cx="12" cy="12" r="7" fill="none" stroke="#202020" stroke-width="1.5"/>
+</svg>

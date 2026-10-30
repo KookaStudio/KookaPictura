@@ -2,6 +2,7 @@
 #include "color_picker_math.h"
 #include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
 #include "dialogs.h"
+#include "icons.h"
 #include "panels/color_swatch_widget.h"
 #include "panels/swatches_panel.h"
 #include "tools.h"
@@ -168,6 +169,8 @@ void drawPlaneMarker(QPainter& p, const QPointF& pos)
 
 QPointer<SwatchGrid> g_swatchGrid;
 int g_pickerChoice = 0;
+std::function<ToolController*()> g_defaultTools;
+std::function<QColor(const QPoint&)> g_defaultColorAt;
 
 bool promptForSwatchName(QWidget* parent, const QColor& color, const QString& suggested,
                          QString* name)
@@ -228,7 +231,10 @@ bool promptForSwatchName(QWidget* parent, const QColor& color, const QString& su
 ColorPlane::ColorPlane(QWidget* parent)
     : QWidget(parent)
 {
-    setCursor(Qt::CrossCursor);
+    // The field's pointer is the ring the field paints at the current colour,
+    // not the platform crosshair ("target") cursor.
+    const QCursor fieldCursor = pictura::cursor(QStringLiteral("cursor.colorPickerField"), 12, 12);
+    setCursor(fieldCursor.pixmap().isNull() ? QCursor(Qt::CrossCursor) : fieldCursor);
     // Flexible so the inline picker in the Color panel can shrink to the dock;
     // the dialog gives it its 256px sizeHint.
     setMinimumSize(120, 120);
@@ -1077,6 +1083,11 @@ void ColorPickerDialog::sampleCanvas(ToolController* tools,
     if (!tools || !colorAt) {
         return;
     }
+    // A nested picker (Replace Color's Result Color swatch) must not clobber a
+    // sampler its parent dialog already armed: closing would clear the parent's.
+    if (tools->canvasSamplerActive()) {
+        return;
+    }
     m_tools = tools;
     tools->setCanvasSampler([this, colorAt = std::move(colorAt)](const QPointF& imagePos) {
         const QColor color = colorAt(imagePos.toPoint());
@@ -1090,6 +1101,13 @@ void ColorPickerDialog::sampleCanvas(ToolController* tools,
             m_tools = nullptr;
         }
     });
+}
+
+void ColorPickerDialog::setDefaultCanvasSampler(std::function<ToolController*()> tools,
+                                                std::function<QColor(const QPoint&)> colorAt)
+{
+    g_defaultTools = std::move(tools);
+    g_defaultColorAt = std::move(colorAt);
 }
 
 void ColorPickerDialog::setPickerPreference(int choice)
@@ -1122,7 +1140,10 @@ QColor ColorPickerDialog::getColor(const QColor& initial, QWidget* parent, const
         return dialog.selectedColor();
     }
     ColorPickerDialog dialog(initial, parent, title, defaultSwatchGrid());
-    dialog.sampleCanvas(tools, std::move(colorAt));
+    ToolController* samplerTools = tools ? tools : (g_defaultTools ? g_defaultTools() : nullptr);
+    std::function<QColor(const QPoint&)> samplerAt =
+        colorAt ? std::move(colorAt) : g_defaultColorAt;
+    dialog.sampleCanvas(samplerTools, std::move(samplerAt));
     if (onLive) {
         connect(dialog.m_picker, &ColorPicker::colorChanged, &dialog, onLive);
     }

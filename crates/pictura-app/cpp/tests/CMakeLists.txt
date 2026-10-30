@@ -97,6 +97,7 @@ set(PICTURA_QT_TESTS
     tst_tool_hint_bar
     tst_swatches_panel
     tst_color_picker
+    tst_eyedropper
     tst_color_settings
     tst_profile_dialog
     tst_profile_warnings

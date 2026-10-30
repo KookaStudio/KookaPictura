@@ -489,6 +489,23 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     tools_ = new ToolController(this);
     applyToolOptionsJson(*tools_, toolOptions);
     tools_->setViewProvider([this]() { return activeView(); });
+    // Every picker opened without its own sampler (the toolbox and Color panel
+    // swatches, options bars, filter dialogs) samples the active document's
+    // composite through this pair, as CS6's picker eyedropper does. The window
+    // is held weakly, so a destroyed window leaves the functions inert.
+    {
+        QPointer<PicturaMainWindow> self(this);
+        ColorPickerDialog::setDefaultCanvasSampler(
+            [self]() -> ToolController* { return self ? self->tools_ : nullptr; },
+            [self](const QPoint& pos) -> QColor {
+                PictureView* view = self ? self->activeView() : nullptr;
+                if (!view) {
+                    return {};
+                }
+                const quint32 argb = view->sample_argb(pos.x(), pos.y());
+                return argb != 0 ? QColor::fromRgb(argb) : QColor();
+            });
+    }
     connect(tools_, &ToolController::commandRequested, this, [this](const QString& id) {
         if (registry_) {
             registry_->dispatch(id);

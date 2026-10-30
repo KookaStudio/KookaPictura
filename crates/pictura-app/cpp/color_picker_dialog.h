@@ -260,6 +260,15 @@ public:
     static void setPickerPreference(int choice);
     static int pickerPreference();
 
+    /// The frame installs a default canvas sampler, so a picker opened without
+    /// an explicit `tools`/`colorAt` (the toolbox and Color panel swatches,
+    /// options bars, and filter dialogs) samples the active document like CS6's
+    /// picker eyedropper. `tools` returns the active tool controller or null;
+    /// `colorAt` samples the document composite at a pixel and returns an
+    /// invalid colour when nothing is there.
+    static void setDefaultCanvasSampler(std::function<ToolController*()> tools,
+                                        std::function<QColor(const QPoint&)> colorAt);
+
     /// While the dialog is open, a canvas click (through `tools`' canvas
     /// sampler) takes `colorAt` of the clicked document pixel; an invalid
     /// colour (outside the document) is ignored.

@@ -28,18 +28,29 @@ public:
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
-        PictureView* v = ctx.view();
-        if (!v) {
-            return true;
-        }
-        const EyedropperOptions options = options_->get();
-        const quint32 argb = sample_argb_scoped(*v, qRound(imagePos.x()), qRound(imagePos.y()),
-                                                options.sampleSize, options.scope);
-        if (argb != 0) {
-            ctx.sampledForeground(QColor::fromRgb(argb));
-        }
+        dragging_ = true;
+        // A fresh press always samples, even at the pixel of the last gesture.
+        lastSample_ = QPoint(-1, -1);
+        sample(ctx, imagePos);
         return true;
     }
+
+    // A held drag samples continuously, as CS6's Eyedropper does ("press the
+    // mouse button over the image, drag to the target, release").
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    {
+        if (dragging_) {
+            sample(ctx, imagePos);
+        }
+    }
+
+    void onRelease(ToolServices&, const QPointF&, Qt::KeyboardModifiers) override
+    {
+        dragging_ = false;
+    }
+
+    void onDeactivate(ToolServices&) override { dragging_ = false; }
+    void onSessionCancelled(ToolServices&) override { dragging_ = false; }
 
     // The Eyedropper canvas menu: the documented Sample Size ladder and the
     // Sample source list, both writing through the same options group the
@@ -92,7 +103,32 @@ public:
     }
 
 private:
+    void sample(ToolServices& ctx, const QPointF& imagePos)
+    {
+        PictureView* v = ctx.view();
+        if (!v) {
+            return;
+        }
+        // Skip a move that lands on the pixel last sampled, so a jitter within
+        // one pixel does not recomposite. ponytail: a scope-aware sample still
+        // runs the compositor per distinct pixel; reading the maintained
+        // composite for every scope is a later optimisation.
+        const QPoint point(qRound(imagePos.x()), qRound(imagePos.y()));
+        if (point == lastSample_) {
+            return;
+        }
+        lastSample_ = point;
+        const EyedropperOptions options = options_->get();
+        const quint32 argb = sample_argb_scoped(*v, point.x(), point.y(), options.sampleSize,
+                                                options.scope);
+        if (argb != 0) {
+            ctx.sampledForeground(QColor::fromRgb(argb));
+        }
+    }
+
     std::shared_ptr<EyedropperGroup> options_;
+    bool dragging_ = false;
+    QPoint lastSample_{-1, -1};
 };
 
 } // namespace

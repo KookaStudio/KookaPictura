@@ -144,6 +144,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Crop Settings menu: Classic mode, shield colour and opacity, Show Cropped
       Area, Auto Center Preview (#104)
 - [x] Eyedropper, colour sampler, ruler, note and count
+- [x] The Eyedropper and the Color Picker's eyedropper sample continuously
+      while dragging (#1040)
 - [x] Spot healing, healing brush, patch, content-aware move and red eye
 - [x] Brush, pencil, colour replacement and mixer brush
 - [x] Clone stamp and pattern stamp

@@ -136,3 +136,15 @@ The application SHALL persist a Color Picker preference with `Adobe` and `System
 
 - **WHEN** a colour is accepted through the System picker
 - **THEN** the caller receives the same RGB colour value it selected and no history state is added
+
+### Requirement: The colour field's pointer is a circle
+
+The Color Picker's colour field SHALL show a circular pointer while the pointer
+is over it, matching the ring the field paints at the current colour, rather
+than the platform crosshair. The field SHALL fall back to the crosshair when
+the cursor asset cannot be loaded.
+
+#### Scenario: The field pointer is a ring [cp_field_cursor]
+
+- **WHEN** a `ColorPickerDialog` or the Color panel builds its colour field
+- **THEN** the field's cursor is the circular asset, not the crosshair
