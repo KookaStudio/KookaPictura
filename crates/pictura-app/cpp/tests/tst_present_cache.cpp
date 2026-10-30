@@ -106,7 +106,7 @@ bool PresentCacheTest::newDoc(int width, int height)
     }
     view_ = window_->activeView();
     canvas_ = window_->imageView();
-    QTest::qWait(50);
+    QTest::qWait(0);
     QCoreApplication::processEvents();
     return view_ && canvas_;
 }

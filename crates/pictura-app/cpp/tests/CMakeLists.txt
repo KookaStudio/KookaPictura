@@ -180,6 +180,8 @@ set(PICTURA_QT_TESTS
     tst_canvas_context_menus
     tst_brush_tip_preview
     tst_untrusted_input
+    tst_theme_apply
+    tst_test_support
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
@@ -191,18 +193,38 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 # functions are distributed over the shares in declaration order.
 #
 # Only suites whose test functions are independent of each other belong here.
-# A suite that shares its window between the test functions keeps one entry:
-# its functions build on each other's state.
+# A suite may share one window between its test functions and stay here when
+# its per-function reset (init() and cleanup()) makes every function
+# independent, so each passes run alone by name and in any share; a suite
+# whose functions build on each other's state keeps one entry.
 set(PICTURA_QT_TEST_SHARDS
     tst_document_arrange
     tst_document_float
     tst_document_windows
+    tst_edit_refresh
     tst_floating_workspaces
     tst_import_pdf
+    tst_loading_tab
+    tst_print
     tst_save_pdf
+    tst_ui_scale
     tst_workspaces
 )
 set(PICTURA_QT_TEST_SHARD_COUNT 4)
+# A suite whose slowest functions land in one share of four gets more shares.
+set(tst_ui_scale_SHARD_COUNT 8)
+
+# The suites share one precompiled header, built by this object library with
+# their own flags: they cannot reuse the shell's, which is compiled position
+# independent for the shared library and with full debug info.
+if(PICTURA_DEV_PCH)
+    add_library(pictura_test_pch OBJECT test_pch.cpp)
+    set_target_properties(pictura_test_pch PROPERTIES AUTOMOC OFF)
+    target_link_libraries(pictura_test_pch PRIVATE pictura_shell Qt6::Test)
+    target_compile_options(pictura_test_pch PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS}
+        "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
+    target_precompile_headers(pictura_test_pch PRIVATE "${PICTURA_PCH_HEADER}")
+endif()
 
 set(PICTURA_QT_TEST_SOURCES "")
 foreach(test_name IN LISTS PICTURA_QT_TESTS)
@@ -215,16 +237,24 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
     endif()
     # Test debug info only needs line tables; the suites are not debugged through
     # full variable info, and this keeps the test objects and their links small.
-    target_compile_options(${test_name} PRIVATE "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
+    target_compile_options(${test_name} PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS}
+        "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
+    if(TARGET pictura_test_pch)
+        target_precompile_headers(${test_name} REUSE_FROM pictura_test_pch)
+    endif()
 
     if(test_name IN_LIST PICTURA_QT_TEST_SHARDS)
-        math(EXPR _pictura_last_shard "${PICTURA_QT_TEST_SHARD_COUNT} - 1")
+        set(_pictura_shard_count ${PICTURA_QT_TEST_SHARD_COUNT})
+        if(DEFINED ${test_name}_SHARD_COUNT)
+            set(_pictura_shard_count ${${test_name}_SHARD_COUNT})
+        endif()
+        math(EXPR _pictura_last_shard "${_pictura_shard_count} - 1")
         foreach(_shard RANGE 0 ${_pictura_last_shard})
             set(_entry "${test_name}_${_shard}")
             add_test(NAME ${_entry} COMMAND ${test_name}
                 -o ${CMAKE_BINARY_DIR}/qt-test-results/${_entry}.xml,junitxml)
             set_tests_properties(${_entry} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PICTURA_TEST_SHARD=${_shard}/${PICTURA_QT_TEST_SHARD_COUNT}"
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PICTURA_TEST_SHARD=${_shard}/${_pictura_shard_count}"
                 TIMEOUT 120
             )
         endforeach()

@@ -68,7 +68,7 @@ bool DamageBoundsTest::newDoc(int width, int height)
         return false;
     }
     view_ = window_->activeView();
-    QTest::qWait(20);
+    QTest::qWait(0);
     QCoreApplication::processEvents();
     return view_ != nullptr;
 }

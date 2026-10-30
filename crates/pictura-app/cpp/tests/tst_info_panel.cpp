@@ -353,7 +353,7 @@ void InfoPanelTest::menuOpensBesideItsButton()
     openDocument(QStringLiteral("MenuPos"));
     // The reposition needs the button's screen, so the window must be up.
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QToolButton* button = nullptr;
     for (QToolButton* candidate : panel_->findChildren<QToolButton*>()) {

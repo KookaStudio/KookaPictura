@@ -599,9 +599,8 @@ void LayersMaskCommandsTest::groupMaskThumbnailActivates()
     panel_->refresh();
     QCoreApplication::processEvents();
     const bool clicked = panel_->clickMaskThumbnailForTest(group);
-    QTest::qWait(50);
     QVERIFY2(clicked, "the group mask thumbnail is clickable");
-    QCOMPARE(pictura::mask_edit_target_get(*view), group);
+    QTRY_COMPARE(pictura::mask_edit_target_get(*view), group);
 }
 
 void LayersMaskCommandsTest::groupMaskPaintRoundTrip()

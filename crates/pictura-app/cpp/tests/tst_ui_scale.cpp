@@ -403,5 +403,8 @@ void UiScaleTest::preferencesMirrorScale()
     QCOMPARE(combo->currentData().toInt(), 130);
 }
 
-QTEST_MAIN(UiScaleTest)
+int main(int argc, char* argv[])
+{
+    return pictura::test::shardedMain<UiScaleTest>(argc, argv);
+}
 #include "tst_ui_scale.moc"

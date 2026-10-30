@@ -161,7 +161,7 @@ void LayersPreviewCoalescingTest::opacityDragCoalescesPreview()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
@@ -194,7 +194,7 @@ void LayersPreviewCoalescingTest::fillDragCoalescesPreview()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersFillField"));
     QVERIFY2(slider != nullptr, "fill slider");
@@ -225,7 +225,7 @@ void LayersPreviewCoalescingTest::midDragPausePreviewsWhileHeld()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
@@ -252,7 +252,7 @@ void LayersPreviewCoalescingTest::fastOpacityRoundTripRecordsNothing()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
@@ -265,6 +265,7 @@ void LayersPreviewCoalescingTest::fastOpacityRoundTripRecordsNothing()
     slider->setValue(100);
     slider->setSliderDown(false);
     emit slider->sliderReleased();
+    // negative window: proves the round trip neither previews nor records a state
     QTest::qWait(250);
     QCOMPARE(previewSignals(changed, blitted), 0);
     QCOMPARE(view_->history_count(), base);
@@ -278,7 +279,7 @@ void LayersPreviewCoalescingTest::fillFastRoundTripRecordsNothing()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersFillField"));
     QVERIFY2(slider != nullptr, "fill slider");
@@ -291,6 +292,7 @@ void LayersPreviewCoalescingTest::fillFastRoundTripRecordsNothing()
     slider->setValue(100);
     slider->setSliderDown(false);
     emit slider->sliderReleased();
+    // negative window: proves the round trip neither previews nor records a state
     QTest::qWait(250);
     QCOMPARE(previewSignals(changed, blitted), 0);
     QCOMPARE(view_->history_count(), base);
@@ -304,7 +306,7 @@ void LayersPreviewCoalescingTest::pendingPreviewSurvivesPanelRefresh()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
@@ -336,7 +338,7 @@ void LayersPreviewCoalescingTest::documentSwitchCancelsPendingPreview()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* field = panel_->findChild<pictura::NumericField*>(QStringLiteral("layersOpacityField"));
     QVERIFY(field != nullptr);
@@ -362,6 +364,7 @@ void LayersPreviewCoalescingTest::documentSwitchCancelsPendingPreview()
 
     slider->setSliderDown(false);
     emit slider->sliderReleased();
+    // negative window: proves the cancelled preview never commits
     QTest::qWait(220);
     QCOMPARE(committed.count(), 0);
     QCOMPARE(first->history_count(), firstBase);
@@ -377,7 +380,7 @@ void LayersPreviewCoalescingTest::selectionChangeCancelsPendingPreview()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* field = panel_->findChild<pictura::NumericField*>(QStringLiteral("layersOpacityField"));
     QVERIFY(field != nullptr);
@@ -397,6 +400,7 @@ void LayersPreviewCoalescingTest::selectionChangeCancelsPendingPreview()
     QCoreApplication::processEvents();
     slider->setSliderDown(false);
     emit slider->sliderReleased();
+    // negative window: proves the cancelled preview never commits
     QTest::qWait(220);
     QCOMPARE(committed.count(), 0);
     QCOMPARE(view_->history_count(), base);
@@ -419,7 +423,7 @@ void LayersPreviewCoalescingTest::sameViewReplacementCancelsPendingPreview()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* field = panel_->findChild<pictura::NumericField*>(QStringLiteral("layersOpacityField"));
     QVERIFY(field != nullptr);
@@ -446,6 +450,7 @@ void LayersPreviewCoalescingTest::sameViewReplacementCancelsPendingPreview()
 
     slider->setSliderDown(false);
     emit slider->sliderReleased();
+    // negative window: proves the cancelled preview never commits
     QTest::qWait(220);
     QCOMPARE(committed.count(), 0);
     QCOMPARE(view_->history_count(), replacementBase);
@@ -459,7 +464,7 @@ void LayersPreviewCoalescingTest::continuousTicksDoNotRestartTheTimer()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
@@ -469,6 +474,7 @@ void LayersPreviewCoalescingTest::continuousTicksDoNotRestartTheTimer()
     slider->setSliderDown(true);
     for (int value = 35; value <= 95; value += 10) {
         slider->setValue(value);
+        // drag cadence: ticks 40 ms apart, inside the 120 ms preview delay, are the input
         QTest::qWait(40);
     }
     QTRY_VERIFY_WITH_TIMEOUT(previewSignals(changed, blitted) >= 2, 500);
@@ -488,7 +494,7 @@ void LayersPreviewCoalescingTest::fastRoundTripAtNonFixedByteRecordsOneState()
     QVERIFY(view_->set_layers_opacity(QStringList{a_}, 127) == 1);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* slider = fieldSlider(panel_, QStringLiteral("layersOpacityField"));
     QVERIFY2(slider != nullptr, "opacity slider");
@@ -508,7 +514,7 @@ void LayersPreviewCoalescingTest::noSelectionShowsDefaultPercent()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     panel_->selectPaths({}, QString());
     QCoreApplication::processEvents();
@@ -527,7 +533,7 @@ void LayersPreviewCoalescingTest::ineligibleTargetsShowDefaultPercent()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     auto* opacity = panel_->findChild<pictura::PercentField*>(QStringLiteral("layersOpacityField"));
     auto* fill = panel_->findChild<pictura::PercentField*>(QStringLiteral("layersFillField"));
     QVERIFY(opacity != nullptr && fill != nullptr);
@@ -587,7 +593,7 @@ void LayersPreviewCoalescingTest::multiSelectionKeepsEligibleFieldEnabled()
     QVERIFY(view_->set_layers_fill(QStringList{a_}, 102) == 1);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QString bg = ensureBackground(*view_);
     QVERIFY2(!bg.isEmpty(), "background row");
@@ -620,7 +626,7 @@ void LayersPreviewCoalescingTest::opacityPreviewUsesTheRegionPath()
     panel_->selectPaths({placed}, placed);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const auto rect = pictura::transform_api::layerRect(*view_, placed);
     QVERIFY2(rect.valid, "placed rect");

@@ -78,6 +78,7 @@ private slots:
     void applyLeavesToolsColumnUntouched();
     void applyKeepsOmittedPanelReachable();
     void freshSessionUsesEssentialsDefault();
+    void freshLayoutMatchesEssentialsApply();
     void presetSwitchRegroups();
     void presetCommandsReflectActive();
     void switchingPresetRearrangesAndChecks();
@@ -259,6 +260,53 @@ void WorkspacesTest::freshSessionUsesEssentialsDefault()
 
     const QList<pictura::PanelColumn*> columns = window->panelColumns();
     QVERIFY(columns.indexOf(secondary) < columns.indexOf(main));
+}
+
+namespace {
+
+// The arrangement without sizes: columns, groups, panel order, active tabs,
+// and iconic, visible, collapsed and floating state.
+QJsonValue arrangementOf(const QJsonValue& value)
+{
+    if (value.isArray()) {
+        QJsonArray items;
+        for (const QJsonValue& item : value.toArray()) {
+            items.append(arrangementOf(item));
+        }
+        return items;
+    }
+    if (!value.isObject()) {
+        return value;
+    }
+    QJsonObject object;
+    const QJsonObject source = value.toObject();
+    for (auto it = source.begin(); it != source.end(); ++it) {
+        if (it.key() == QLatin1String("width") || it.key() == QLatin1String("height")
+            || it.key() == QLatin1String("floatGeometry")) {
+            continue;
+        }
+        object.insert(it.key(), arrangementOf(it.value()));
+    }
+    return object;
+}
+
+} // namespace
+
+void WorkspacesTest::freshLayoutMatchesEssentialsApply()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    window->resize(1100, 700);
+    window->show();
+    QCoreApplication::processEvents();
+    const QJsonValue fresh = arrangementOf(window->workspaceLayoutForTest());
+
+    window->applyWorkspaceLayoutForTest(pictura::workspacePresets(QStringLiteral("Essentials")));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(arrangementOf(window->workspaceLayoutForTest()), fresh);
 }
 
 void WorkspacesTest::presetSwitchRegroups()

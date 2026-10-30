@@ -271,15 +271,16 @@ void AcrDialogTest::previewPaneAndHistogram()
     AcrHistogram* hist = dialog.histogramForTest();
     QCOMPARE(hist->seriesCountForTest(), 3);
 
+    const QImage initial = pane->image();
     QVERIFY(setSlider(&dialog, acr::Exposure, 1.5));
-    QTest::qWait(80);
+    QTRY_VERIFY(pane->image() != initial);
     const QImage bright = pane->image();
     QVERIFY(!bright.isNull());
     const QString brightReadout = hist->readoutForTest();
     QVERIFY2(brightReadout.contains(QStringLiteral("R:")), qPrintable(brightReadout));
 
     QVERIFY(setSlider(&dialog, acr::Exposure, -2.0));
-    QTest::qWait(80);
+    QTRY_VERIFY(pane->image() != bright);
     const QImage dark = pane->image();
     QVERIFY(!dark.isNull());
     QVERIFY2(bright != dark, "editing a control changes the preview image");

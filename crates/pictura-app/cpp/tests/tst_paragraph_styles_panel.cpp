@@ -373,6 +373,7 @@ void ParagraphStylesPanelTest::dialogFontFamilyPopup()
         // An editable combo opens from its arrow, not its text field.
         QTest::mouseClick(family, Qt::LeftButton, Qt::NoModifier,
                           QPoint(family->width() - 6, family->height() / 2));
+        // negative window: proves the popup stays open after the click
         QTest::qWait(200);
         stayedOpen = family->view()->isVisible();
         family->hidePopup();
@@ -530,14 +531,15 @@ void ParagraphStylesPanelTest::doubleClickOpensDialog()
     const QRect rect = list->visualItemRect(list->item(1));
     QVERIFY2(rect.isValid() && !rect.isEmpty(), "the style row has no rect");
     // A real double-click is a press/release then a double-click event;
-    // `mouseDClick` alone synthesizes only the latter. The wait lets the
-    // debounced panel refresh land between the two clicks.
+    // `mouseDClick` alone synthesizes only the latter.
     QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, rect.center());
+    // Lets the debounced panel refresh land between the two clicks; no hook marks it.
     QTest::qWait(250);
     QTest::mouseDClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, rect.center());
-    QTest::qWait(900);
+    // The 700 ms timer above sets `opened` once it finds the dialog open.
+    QVERIFY2(QTest::qWaitFor([&opened] { return opened; }),
+             "double-click did not open the options dialog");
     QVERIFY2(doubleClicked, "the item double-click signal did not fire");
-    QVERIFY2(opened, "double-click did not open the options dialog");
 }
 
 void ParagraphStylesPanelTest::fontHoverDoesNotPreview()
