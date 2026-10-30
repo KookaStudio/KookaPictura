@@ -45,5 +45,10 @@ pub mod ffi {
             ppi: f64,
             per_cm: bool,
         ) -> bool;
+
+        /// Whether a `width` × `height` document at `bits` per channel fits
+        /// `ImageBudget`, so a caller can refuse before allocating: an
+        /// allocation failure aborts the process.
+        fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool;
     }
 }

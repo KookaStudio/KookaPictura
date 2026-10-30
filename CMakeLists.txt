@@ -370,8 +370,11 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/encode_image.h
     crates/pictura-app/cpp/interop.cpp
     crates/pictura-app/cpp/commands.cpp
+    crates/pictura-app/cpp/control_scope.cpp
     crates/pictura-app/cpp/control_server.cpp
     crates/pictura-app/cpp/control_server_actions.cpp
+    crates/pictura-app/cpp/control_server_capture.cpp
+    crates/pictura-app/cpp/control_server_documents.cpp
     crates/pictura-app/cpp/control_server_input.cpp
     crates/pictura-app/cpp/theme.cpp
     crates/pictura-app/cpp/fonts.cpp
@@ -726,7 +729,9 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/design_system_dialog.h
     crates/pictura-app/cpp/commands.h
     crates/pictura-app/cpp/command_ids.h
+    crates/pictura-app/cpp/control_scope.h
     crates/pictura-app/cpp/control_server.h
+    crates/pictura-app/cpp/control_server_support.h
     crates/pictura-app/cpp/theme.h
     crates/pictura-app/cpp/fonts.h
     crates/pictura-app/cpp/session.h

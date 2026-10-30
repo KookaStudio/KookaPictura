@@ -116,8 +116,14 @@ QJsonObject ControlServer::methodSelection(const QJsonObject& params)
         applied = view->select_ellipse(x, y, w, h, mode, feather);
     } else if (op == QStringLiteral("lasso_begin")) {
         applied = view->begin_lasso(mode);
+        lassoPoints_ = 0;
     } else if (op == QStringLiteral("lasso_point")) {
+        if (lassoPoints_ >= kMaxLassoPoints) {
+            return error(QStringLiteral("invalid_param"),
+                         QStringLiteral("a lasso holds at most %1 points").arg(kMaxLassoPoints));
+        }
         view->lasso_add_point(x, y);
+        ++lassoPoints_;
     } else if (op == QStringLiteral("lasso_end")) {
         applied = view->end_lasso(feather);
     } else if (op == QStringLiteral("quick")) {
@@ -227,6 +233,9 @@ QJsonObject ControlServer::methodLayerOp(const QJsonObject& params)
         const QString name = params.value(QStringLiteral("name")).toString();
         if (name.isEmpty()) {
             return invalid(QStringLiteral("set_name requires a non-empty name"));
+        }
+        if (name.size() > kMaxNameChars) {
+            return invalid(QStringLiteral("name is too long"));
         }
         if (!view->set_layer_name(index, name)) {
             return refused(QStringLiteral("set_name refused"));
