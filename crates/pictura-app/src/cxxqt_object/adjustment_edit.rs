@@ -6,6 +6,7 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+use super::display_preview::{commit_display_preview, PreviewKind};
 use super::edit::Edit;
 use super::qobject::PictureView;
 use core::pin::Pin;
@@ -56,6 +57,9 @@ pub mod ffi {
 
         /// Record the edits since the last state as one "Modify `title` Layer" state.
         fn adjustment_commit(view: Pin<&mut PictureView>, title: &QString);
+
+        /// Abandon a live adjustment preview and restore the pre-gesture display.
+        fn adjustment_cancel(view: Pin<&mut PictureView>);
     }
 }
 
@@ -113,19 +117,34 @@ fn edit_adjustment(
     edit: impl FnOnce(&AdjustmentData) -> Option<AdjustmentData>,
 ) -> bool {
     let path = path.to_string();
-    let applied = view.as_mut().preview(|rust| {
+    {
+        let mut rust = view.as_mut().rust_mut();
+        rust.begin_display_preview(vec![path.clone()], PreviewKind::Adjustment);
         let Some(layer) = rust
             .session
             .doc
             .as_mut()
             .and_then(|doc| pictura_render::resolve_path_mut(doc, &path))
         else {
-            return Edit::None;
+            return false;
         };
         let Some(next) = layer.adjustment.as_ref().and_then(edit) else {
-            return Edit::None;
+            return false;
         };
         layer.adjustment = Some(next);
+    }
+    if let Some(rect) = view.as_mut().rust_mut().present_display_preview() {
+        view.as_mut()
+            .region_damaged(rect.left, rect.top, rect.width(), rect.height());
+        let mut rust = view.as_mut().rust_mut();
+        rust.session.dirty = true;
+        rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
+        return true;
+    }
+    // The exact path runs instead: keep the pre-gesture preview state so the
+    // commit can still detect a no-op and record the change.
+    let saved = view.as_mut().rust_mut().display_preview.take();
+    let applied = view.as_mut().preview(|rust| {
         match rust
             .session
             .doc
@@ -136,6 +155,9 @@ fn edit_adjustment(
             None => Edit::Full,
         }
     });
+    if let Some(saved) = saved {
+        view.as_mut().rust_mut().display_preview = Some(saved);
+    }
     !matches!(applied, Edit::None)
 }
 
@@ -195,7 +217,16 @@ fn adjustment_reset(view: Pin<&mut PictureView>, path: &QString) -> bool {
 
 fn adjustment_commit(mut view: Pin<&mut PictureView>, title: &QString) {
     let label = format!("Modify {title} Layer");
-    view.as_mut().edit(&label, |_| Edit::Record);
+    if commit_display_preview(view.as_mut(), &label).is_none() {
+        // A fallback preview already composited the exact frame; capture it
+        // without recompositing.
+        view.as_mut().edit(&label, |_| Edit::Record);
+    }
+}
+
+fn adjustment_cancel(mut view: Pin<&mut PictureView>) {
+    view.as_mut().rust_mut().cancel_display_preview();
+    view.as_mut().changed();
 }
 
 #[cfg(test)]

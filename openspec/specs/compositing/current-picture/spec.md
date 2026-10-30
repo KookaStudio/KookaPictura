@@ -12,10 +12,12 @@ the layer stack only when the cache cannot stand in for it.
 The application SHALL answer a request for the picture as currently shown with
 the document's maintained composite, without compositing the layer stack, when
 that composite is the current picture. The maintained composite is the current
-picture after every pixel-changing committed edit, every presented preview, and
-every history navigation, because the edit transaction refreshes it regionally or
-stores it whole for each of those. An edit that changes no pixel leaves it
-current by definition.
+picture after every pixel-changing committed edit, every presented preview that
+updates it, and every history navigation, because the edit transaction refreshes
+it regionally or stores it whole for each of those. A display-only preview does
+not update it (see `compositing/render-session`), so the composite cannot stand
+in while one is live. An edit that changes no pixel leaves it current by
+definition.
 
 The answer SHALL borrow the document's composite rather than copy it, so serving
 the current picture costs no document-sized allocation.
@@ -27,7 +29,7 @@ the current picture costs no document-sized allocation.
 
 #### Scenario: A presented preview leaves the composite current [cp_after_preview]
 
-- **WHEN** a live preview (filter, adjustment, opacity, fill, or mask refinement) has been presented and the current picture is requested
+- **WHEN** a live preview that updates the document composite (filter, a bounded or masked adjustment, opacity, fill, or mask refinement) has been presented and the current picture is requested
 - **THEN** the answer is the document's composite, which already includes the preview
 
 #### Scenario: History navigation leaves the composite current [cp_after_history]
@@ -45,6 +47,8 @@ when:
 - a live stroke is writing the layer pixels or the mask coverage in place (a
   layer stroke's composite lags its unpresented regions, and a mask stroke
   deliberately leaves the composite at its pre-stroke value);
+- a display-only preview is live (it presents an approximate frame and the
+  maintained composite predates it);
 - a lifted transform is live (lifting moves the selection's pixels into a
   floating layer and clears the source, so the composite predates the lift);
 - the document's working mode is not RGB (its composite keeps the document's own
@@ -63,6 +67,11 @@ when:
 
 - **WHEN** a mask stroke is live and the current picture is requested
 - **THEN** the answer is a fresh composite of the layer stack, not the maintained pre-stroke composite
+
+#### Scenario: A display-only preview is not served from the composite [cp_display_preview]
+
+- **WHEN** a display-only preview is live and the current picture is requested
+- **THEN** the answer is a fresh composite of the layer stack, not the maintained composite that predates the preview
 
 #### Scenario: A lifted transform is not served from the composite [cp_lifted_transform]
 

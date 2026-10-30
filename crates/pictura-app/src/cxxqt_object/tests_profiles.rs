@@ -8,6 +8,7 @@ use pictura_render::{Planes, ViewPyramid};
 
 mod damage;
 mod open;
+mod preview;
 
 /// Viewport the canvas presents into (a typical desktop canvas).
 const VIEW: (u32, u32) = (1280, 800);
@@ -16,6 +17,8 @@ fn ms(label: &str, d: std::time::Duration) {
     println!("{label}: {:.2} ms", d.as_secs_f64() * 1000.0);
 }
 
+/// Time one preview tick the old way (a full composite) and the new way (a
+/// display preview at `level` over `rect`), on a 4000² eight-layer document.
 /// A one-layer checkerboard (8 px cells) so a Quick Selection flood covers a
 /// small region inside a large document.
 fn checker_layer(name: &str, w: u32, h: u32) -> pictura_core::Layer {

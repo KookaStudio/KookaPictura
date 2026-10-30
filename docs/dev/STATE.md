@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Interactive preview session** (#1015, OpenSpec change
+  `render-session-backdrop`). A Properties-panel slider or curve drag, and a
+  canvas-sized opacity/fill drag, present a display-only preview: the visible
+  document rectangle at the presented view-pyramid level, composited from the
+  cached backdrop below the edited layer. `doc.composite` is untouched until the
+  commit, which runs the exact composite and records one state. A release flushes
+  the pending value, Esc restores the pre-gesture frame, and a display-only
+  preview is a current-picture guard. Measured on 4000²×8: a Curves tick
+  670 ms → 9.7 ms at fit (69×) and 680 ms → 8.8 ms at 100% (77×); a canvas-sized
+  opacity tick 150 ms → 10.6 ms at fit (14×) and 148 ms → 8.9 ms at 100% (17×).
+  Tests: `render_session`, `display_preview`, `tst_properties_preview`.
 - Repo: `github.com/KookaStudio/KookaPictura`, branch `master`.
   A working Rust/Qt engine and the documentation-first corpus it was built
   from. Licensed GPL-3.0-or-later; the corpus is a documentation-first

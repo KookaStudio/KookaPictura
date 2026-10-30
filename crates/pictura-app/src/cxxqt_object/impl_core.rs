@@ -655,6 +655,25 @@ impl qobject::PictureView {
         self.rust().canvas_revision
     }
 
+    /// Record the view-pyramid level and document rectangle the canvas presents.
+    pub fn set_presented_view(
+        mut self: Pin<&mut Self>,
+        level: i32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    ) {
+        let mut rust = self.as_mut().rust_mut();
+        rust.presented_level = level;
+        rust.presented_rect = PsdRect {
+            top: y,
+            left: x,
+            bottom: y + h,
+            right: x + w,
+        };
+    }
+
     /// Identity of the loaded document; bumped when the view loads or replaces it.
     pub fn document_generation(&self) -> u64 {
         self.rust().session.document_generation
@@ -908,6 +927,8 @@ impl super::PictureViewRust {
     /// (`recomposite`, `undo`, `redo`, `history_jump`, `history_restore_snapshot`,
     /// the move-preview commit, and a fresh open) routes through this.
     pub(super) fn reset_pyramid(&mut self) {
+        self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
+        self.clear_display_preview();
         self.damage = pictura_render::CanvasDamage::default();
         // A full rebuild supersedes any reduced-level or GPU stroke present.
         self.session.live.clear_preview();

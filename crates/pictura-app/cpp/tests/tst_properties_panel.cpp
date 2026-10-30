@@ -18,6 +18,9 @@
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
 
+#include <QtCore/QCoreApplication>
+#include <QtGui/QImage>
+
 #include "qt_test_support.h"
 
 class PropertiesPanelTest : public QObject {
@@ -124,6 +127,7 @@ bool PropertiesPanelTest::setupAdjustment(const QString& kind)
     if (path_.isEmpty() || !layers_->selectRowForTest(path_)) {
         return false;
     }
+    view_->set_presented_view(0, 0, 0, 16, 16);
     panel_->refresh();
     return panel_->pathForTest() == path_;
 }
@@ -169,10 +173,14 @@ void PropertiesPanelTest::slidersEditLiveAndCommitOnce()
     const int history = view_->history_count();
     lightness->setValue(-50);
     lightness->setValue(-100);
-    QCOMPARE(qGray(view_->composite_argb(4, 4)), 0);
+    QCoreApplication::processEvents();
+    const QImage shown = view_->display_image(0, 0, 0, 16, 16);
+    QVERIFY(!shown.isNull());
+    QCOMPARE(qGray(shown.pixel(4, 4)), 0);
     QCOMPARE(view_->history_count(), history);
     panel_->commitForTest();
     QCOMPARE(view_->history_count(), history + 1);
+    QCOMPARE(qGray(view_->composite_argb(4, 4)), 0);
     QCOMPARE(view_->history_label(view_->history_index()),
              QStringLiteral("Modify Hue/Saturation Layer"));
 

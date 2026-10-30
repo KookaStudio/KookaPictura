@@ -400,7 +400,8 @@ void LayersPreviewCoalescingTest::selectionChangeCancelsPendingPreview()
     QTest::qWait(220);
     QCOMPARE(committed.count(), 0);
     QCOMPARE(view_->history_count(), base);
-    QCOMPARE(pictura::layers_api::rowForPath(*view_, a_).opacity, 179);
+    // A cancelled gesture restores the pre-gesture opacity.
+    QCOMPARE(pictura::layers_api::rowForPath(*view_, a_).opacity, 102);
     QCOMPARE(pictura::layers_api::rowForPath(*view_, group_).opacity, 255);
 }
 

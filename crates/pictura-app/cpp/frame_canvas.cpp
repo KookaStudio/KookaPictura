@@ -46,6 +46,12 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
             // A zero-copy view of a stored level; the canvas drops it after the
             // paint so the next update can write the level in place.
             return levelView ? levelView->canvas_level_image(level) : QImage();
+        },
+        [levelView](int level, const QRect& docRect) {
+            if (levelView) {
+                levelView->set_presented_view(level, docRect.x(), docRect.y(),
+                                              docRect.width(), docRect.height());
+            }
         }});
 }
 

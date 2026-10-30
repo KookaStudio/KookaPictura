@@ -68,8 +68,17 @@ impl FilterProxy {
         proxy.source_planes = None;
         proxy.channels.clear();
         for_each_layer(&mut proxy.layers, &mut |layer| reduce_layer(layer, &map));
-        // A layerless document composites from its flat image.
-        proxy.composite = reduce_flat(&doc.composite, &map, full);
+        // A layerless document composites from its flat image; a layered one
+        // composites its layers, so the reduced composite is unused.
+        proxy.composite = if proxy.layers.is_empty() {
+            reduce_flat(&doc.composite, &map, full)
+        } else {
+            PixelBuffer::new(
+                full.width() as u32,
+                full.height() as u32,
+                doc.composite.channels,
+            )
+        };
         let selection = selection.map(|mask| reduce_mask(mask, &map));
         Some(Self {
             doc: proxy,
@@ -83,6 +92,11 @@ impl FilterProxy {
 
     pub fn height(&self) -> u32 {
         self.doc.height
+    }
+
+    /// The reduced document, for a caller that composites it itself.
+    pub(crate) fn into_document(self) -> Document {
+        self.doc
     }
 
     /// The proxy composited with `filters` applied in order to the layer at
@@ -253,7 +267,15 @@ fn reduce_layer(layer: &mut Layer, map: &Map) {
             None => channel.data = Vec::new().into(),
         }
     }
-    layer.rect = reduced.unwrap_or(EMPTY);
+    layer.rect = match reduced {
+        Some(rect) => rect,
+        // A channel-less fill layer draws from its rect; an adjustment layer
+        // ignores it, so only fills need the mapped rect.
+        None if crate::document_ops::is_fill_content_layer(layer) => {
+            intersect(rect, map.region).map_or(EMPTY, |r| map.rect(r))
+        }
+        None => EMPTY,
+    };
     if let Some(mask) = &mut layer.mask {
         *mask = reduce_mask(mask, map);
     }

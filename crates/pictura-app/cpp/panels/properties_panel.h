@@ -89,6 +89,10 @@ private:
     void applyCanvasSize();
     // Write one parameter live, then (re)arm the commit.
     void push(const QString& key, double value);
+    // Apply the coalesced preview (latest value or curve) and re-arm the commit.
+    void applyPendingPreview();
+    // Apply a pending preview immediately, before a commit.
+    void flushPendingPreview();
     void edited();
     void commit();
 
@@ -100,6 +104,13 @@ private:
     QLabel* header_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     QTimer* commitTimer_ = nullptr;
+    QTimer* previewTimer_ = nullptr;
+    QString pendingKey_;
+    double pendingValue_ = 0.0;
+    bool pendingValueValid_ = false;
+    int pendingCurveChannel_ = -1;
+    QString pendingCurvePoints_;
+    bool pendingCurveValid_ = false;
 
     AdjustmentControls* controls_ = nullptr;
     QWidget* footer_ = nullptr;

@@ -42,6 +42,8 @@ pub use layer_effects::layer_paint_bounds;
 pub use layer_source::purge_source_cache;
 mod mask_refine;
 pub use mask_refine::mask_feather_reach;
+mod render_session;
+pub use render_session::{RenderSession, DEFAULT_PREVIEW_BUDGET};
 mod smart_source;
 mod view_pyramid;
 pub(crate) use composite::{channel, channel_plane, mask_alpha, render_smart_source};

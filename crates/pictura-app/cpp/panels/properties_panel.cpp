@@ -18,6 +18,7 @@
 
 #include <QtCore/QTimer>
 #include <QtGui/QPainter>
+#include <QtGui/QShortcut>
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -165,9 +166,17 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     connect(controls_, &AdjustmentControls::valueChanged, this, &PropertiesPanel::push);
     connect(controls_, &AdjustmentControls::curveChanged, this,
             [this](int channel, const QString& points) {
-                if (view_ && adjustment_set_curve(*view_, path_, channel, points)) {
-                    edited();
+                if (!view_ || path_.isEmpty()) {
+                    return;
                 }
+                pendingCurveChannel_ = channel;
+                pendingCurvePoints_ = points;
+                pendingCurveValid_ = true;
+                dirty_ = true;
+                if (!previewTimer_->isActive()) {
+                    previewTimer_->start();
+                }
+                commitTimer_->start();
             });
     connect(controls_, &AdjustmentControls::gestureEnded, this, &PropertiesPanel::commit);
     stack_->addWidget(controls_);
@@ -391,6 +400,30 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     commitTimer_->setSingleShot(true);
     commitTimer_->setInterval(kCommitDelayMs);
     connect(commitTimer_, &QTimer::timeout, this, &PropertiesPanel::commit);
+
+    // Coalesce slider and curve events to one preview per event-loop turn, so a
+    // drag composites the presented frame once, not once per input event.
+    previewTimer_ = new QTimer(this);
+    previewTimer_->setSingleShot(true);
+    previewTimer_->setInterval(0);
+    connect(previewTimer_, &QTimer::timeout, this, &PropertiesPanel::applyPendingPreview);
+
+    // Esc abandons a live adjustment gesture and restores the pre-gesture frame.
+    // Widget-scoped so it never steals Esc from the canvas (free transform).
+    auto* cancel = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    cancel->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(cancel, &QShortcut::activated, this, [this]() {
+        if (!view_) {
+            return;
+        }
+        previewTimer_->stop();
+        pendingValueValid_ = false;
+        pendingCurveValid_ = false;
+        adjustment_cancel(*view_);
+        dirty_ = false;
+        commitTimer_->stop();
+        refresh();
+    });
 
     connect(clip_, &QToolButton::clicked, this, [this]() {
         commit();
@@ -726,9 +759,48 @@ void PropertiesPanel::push(const QString& key, double value)
     if (!view_ || path_.isEmpty()) {
         return;
     }
-    if (adjustment_set(*view_, path_, key, value)) {
-        edited();
+    pendingKey_ = key;
+    pendingValue_ = value;
+    pendingValueValid_ = true;
+    dirty_ = true;
+    if (!previewTimer_->isActive()) {
+        previewTimer_->start();
     }
+    commitTimer_->start();
+}
+
+void PropertiesPanel::applyPendingPreview()
+{
+    if (!view_ || path_.isEmpty()) {
+        pendingValueValid_ = false;
+        pendingCurveValid_ = false;
+        return;
+    }
+    while (pendingValueValid_ || pendingCurveValid_) {
+        if (pendingValueValid_) {
+            const QString key = pendingKey_;
+            const double value = pendingValue_;
+            pendingValueValid_ = false;
+            if (adjustment_set(*view_, path_, key, value)) {
+                edited();
+            }
+            continue;
+        }
+        const int channel = pendingCurveChannel_;
+        const QString points = pendingCurvePoints_;
+        pendingCurveValid_ = false;
+        if (adjustment_set_curve(*view_, path_, channel, points)) {
+            edited();
+        }
+    }
+}
+
+void PropertiesPanel::flushPendingPreview()
+{
+    if (previewTimer_) {
+        previewTimer_->stop();
+    }
+    applyPendingPreview();
 }
 
 void PropertiesPanel::edited()
@@ -739,6 +811,9 @@ void PropertiesPanel::edited()
 
 void PropertiesPanel::commit()
 {
+    // A slider release can beat the 0 ms preview timer; apply the latest value
+    // before the exact commit so the recorded state is the one on screen.
+    flushPendingPreview();
     commitTimer_->stop();
     if (!dirty_) {
         return;

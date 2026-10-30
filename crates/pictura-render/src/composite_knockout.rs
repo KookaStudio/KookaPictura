@@ -17,25 +17,48 @@ use crate::composite::{composite_layer_inner, Canvas};
 /// Composite `doc.layers` (bottom-first) onto `canvas`, applying each non-bottom
 /// layer's knockout against its stopping-point base.
 pub(crate) fn composite_layers(canvas: &mut Canvas, doc: &Document) {
-    let background = knockout_base(canvas, doc);
-    crate::composite_clipping::composite_siblings(canvas, &doc.layers, doc, |canvas, i, layer| {
-        // At the document root both bases are the same document background, so
-        // `Shallow` and `Deep` are byte-identical there.
-        let (deep, shallow) = if i == 0 {
-            (None, None)
-        } else {
-            (background.as_ref(), background.as_ref())
-        };
-        composite_layer(canvas, layer, doc, deep, shallow);
-    });
+    composite_layers_range(canvas, doc, 0, doc.layers.len());
+}
+
+/// Composite `doc.layers[start..end]` onto `canvas`. `start` must be a clipping
+/// boundary; the caller owns the prefix already present on `canvas`.
+pub(crate) fn composite_layers_range(
+    canvas: &mut Canvas,
+    doc: &Document,
+    start: usize,
+    end: usize,
+) {
+    let end = end.min(doc.layers.len());
+    if start >= end {
+        return;
+    }
+    let background = knockout_base(canvas, doc, start, end);
+    crate::composite_clipping::composite_siblings_range(
+        canvas,
+        &doc.layers,
+        doc,
+        start,
+        end,
+        |canvas, i, layer| {
+            // At the document root both bases are the same document background, so
+            // `Shallow` and `Deep` are byte-identical there.
+            let (deep, shallow) = if i == 0 {
+                (None, None)
+            } else {
+                (background.as_ref(), background.as_ref())
+            };
+            composite_layer(canvas, layer, doc, deep, shallow);
+        },
+    );
 }
 
 /// The document background (the bottom layer composited alone), built only when
-/// a non-bottom layer knocks out. ponytail: no Background flag in the model, so
-/// the bottom layer is assumed to be the background; a non-background bottom
+/// a layer in `start..end` knocks out. ponytail: no Background flag in the model,
+/// so the bottom layer is assumed to be the background; a non-background bottom
 /// resolves to its content rather than transparency.
-fn knockout_base(region: &Canvas, doc: &Document) -> Option<Canvas> {
-    let present = doc.layers.iter().skip(1).any(has_knockout);
+fn knockout_base(region: &Canvas, doc: &Document, start: usize, end: usize) -> Option<Canvas> {
+    let skip = start.max(1);
+    let present = doc.layers.iter().take(end).skip(skip).any(has_knockout);
     present.then(|| {
         let mut base = region.derived(region.ox, region.oy, region.w, region.h);
         base.skip_effects = region.skip_effects;
