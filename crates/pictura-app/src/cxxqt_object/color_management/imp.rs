@@ -421,6 +421,7 @@ mod tests {
 
     #[test]
     fn picker_service_cmyk_round_trips_through_the_working_profile() {
+        let _turn = take_turn();
         let cmyk = picker_cmyk(200, 50, 100);
         assert_eq!(cmyk.len(), 4);
         assert!(cmyk.iter().all(|v| (0..=100).contains(v)));
@@ -445,6 +446,7 @@ mod tests {
 
     #[test]
     fn picker_service_gamut_is_the_round_trip_test() {
+        let _turn = take_turn();
         let gray = picker_in_gamut(128, 128, 128);
         assert!(gray, "neutral grey is printable");
         assert_eq!(
@@ -458,9 +460,35 @@ mod tests {
         );
     }
 
-    // nextest isolates each test in a process; under `cargo test` the two
-    // counter tests share one, so they take turns.
-    static COUNTER_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // nextest isolates each test in a process; under `cargo test` these share
+    // one installed pair and build counter, so they take turns.
+    static PICKER_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn take_turn() -> std::sync::MutexGuard<'static, ()> {
+        PICKER_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn percents(inks: &[u8]) -> Vec<i32> {
+        inks.iter()
+            .map(|v| (u32::from(*v) * 100 + 127) as i32 / 255)
+            .collect()
+    }
+
+    // The repo has one CMYK ICC: repoint its relative-colorimetric `B2A1` tag
+    // at the different `B2A0` table to get a second profile.
+    fn second_cmyk_icc() -> Vec<u8> {
+        let mut icc = Profile::coated_cmyk_icc().to_vec();
+        let count = u32::from_be_bytes(icc[128..132].try_into().unwrap()) as usize;
+        let entry = |tag: &[u8; 4]| {
+            (0..count)
+                .map(|i| 132 + 12 * i)
+                .find(|at| &icc[*at..*at + 4] == tag)
+                .expect("bundled profile carries the tag")
+        };
+        let (from, to) = (entry(b"B2A0"), entry(b"B2A1"));
+        icc.copy_within(from + 4..from + 12, to + 4);
+        icc
+    }
 
     fn builds() -> usize {
         PICKER_BUILDS.load(std::sync::atomic::Ordering::Relaxed)
@@ -489,7 +517,7 @@ mod tests {
 
     #[test]
     fn picker_services_reuse_their_transforms() {
-        let _turn = COUNTER_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let _turn = take_turn();
         assert!(picker_in_gamut(128, 128, 128));
         let first = builds();
         assert!(first >= 1, "the first call builds the pair");
@@ -506,11 +534,7 @@ mod tests {
                 let in_gamut = rgb.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= 1);
                 assert_eq!(picker_in_gamut(r, 40, b), in_gamut, "{rgb:?}");
                 assert_eq!(picker_closest_rgb(r, 40, b), packed(&back), "{rgb:?}");
-                let percent: Vec<i32> = inks
-                    .iter()
-                    .map(|v| (u32::from(*v) * 100 + 127) as i32 / 255)
-                    .collect();
-                assert_eq!(picker_cmyk(r, 40, b), percent, "{rgb:?}");
+                assert_eq!(picker_cmyk(r, 40, b), percents(&inks), "{rgb:?}");
             }
         }
         sweep();
@@ -522,8 +546,93 @@ mod tests {
     }
 
     #[test]
+    fn picker_cmyk_white_has_no_ink() {
+        let _turn = take_turn();
+        assert_eq!(picker_cmyk(255, 255, 255), vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn picker_cmyk_black_follows_profile() {
+        let _turn = take_turn();
+        let inks = picker_cmyk(0, 0, 0);
+        let direct = pictura_codec::rgb_to_cmyk_with_profile(
+            &[0, 0, 0],
+            &Profile::coated_cmyk(),
+            picker_options(),
+        )
+        .expect("one-shot cmyk");
+        assert_eq!(inks, percents(&direct));
+        assert!(inks[3] > 50, "black carries heavy K: {inks:?}");
+        assert_ne!(inks, vec![0, 0, 0, 100], "not the naive formula");
+    }
+
+    #[test]
+    fn picker_cmyk_round_trips_in_gamut() {
+        let _turn = take_turn();
+        // Muted colours a coated press reproduces; saturated sRGB blues and
+        // yellows fall outside its gamut and map to the nearest ink.
+        for [r, g, b] in [
+            [200, 120, 80],
+            [128, 128, 128],
+            [150, 130, 110],
+            [120, 140, 160],
+            [180, 170, 150],
+        ] {
+            let back = picker_closest_rgb(r, g, b);
+            for (channel, shift) in [(r, 16), (g, 8), (b, 0)] {
+                let came_back = ((back >> shift) & 0xFF) as i32;
+                assert!(
+                    (came_back - channel).abs() <= 3,
+                    "{r},{g},{b} came back as {back:06x}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn picker_services_follow_the_installed_profile() {
+        let _turn = take_turn();
+        let options = picker_options();
+        let icc = second_cmyk_icc();
+        let second = Profile::from_icc(&icc).expect("patched profile parses");
+        let coated = Profile::coated_cmyk();
+        install_picker_profile(&icc);
+        let mut differs = false;
+        for r in (0..=255).step_by(51) {
+            for b in (0..=255).step_by(51) {
+                let rgb = rgb_bytes(r, 40, b);
+                let inks = pictura_codec::rgb_to_cmyk_with_profile(&rgb, &second, options)
+                    .expect("one-shot cmyk");
+                let back = pictura_codec::cmyk_to_rgb_with_profile(&inks, &second, options)
+                    .expect("one-shot rgb");
+                let shown = percents(&inks);
+                let edited = pictura_codec::cmyk_to_rgb_with_profile(
+                    &cmyk_bytes(shown[0], shown[1], shown[2], shown[3]),
+                    &second,
+                    options,
+                )
+                .expect("one-shot edit");
+                let in_gamut = rgb.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= 1);
+                assert_eq!(picker_cmyk(r, 40, b), shown, "{rgb:?}");
+                assert_eq!(
+                    picker_rgb(shown[0], shown[1], shown[2], shown[3]),
+                    packed(&edited),
+                    "{rgb:?}"
+                );
+                assert_eq!(picker_in_gamut(r, 40, b), in_gamut, "{rgb:?}");
+                assert_eq!(picker_closest_rgb(r, 40, b), packed(&back), "{rgb:?}");
+                differs |= pictura_codec::rgb_to_cmyk_with_profile(&rgb, &coated, options)
+                    .expect("one-shot coated")
+                    != inks;
+            }
+        }
+        install_picker_profile(&coated.to_icc());
+        assert!(differs, "the second profile converts differently");
+    }
+
+    #[test]
     fn installing_a_profile_rebuilds_the_picker_pair() {
-        let _turn = COUNTER_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let _turn = take_turn();
         let before = sweep();
         let built = builds();
         install_picker_profile(&Profile::coated_cmyk().to_icc());

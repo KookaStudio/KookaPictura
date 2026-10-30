@@ -1,12 +1,6 @@
 //! Scalar colour-model conversions shared by every colour readout: sRGB to and
-//! from CIELAB in the D50 ICC connection space, and sRGB to and from CMYK
-//! through the CMYK working profile (`docs/07-color-painting/color-models.md`).
-
-use std::sync::OnceLock;
-
-use lcms2::{DisallowCache, Flags, GlobalContext, PixelFormat, Transform};
-
-use crate::{Intent, Profile};
+//! from CIELAB in the D50 ICC connection space
+//! (`docs/07-color-painting/color-models.md`).
 
 /// D50 reference white (ICC PCS), `Y = 1`.
 const XN: f64 = 0.96422;
@@ -58,70 +52,6 @@ pub fn xyz_d50_to_srgb(xyz: [f64; 3]) -> [u8; 3] {
     XYZ_D50_TO_LINEAR_SRGB.map(|row| srgb_encode(dot(row, xyz)))
 }
 
-/// sRGB ↔ CMYK through the CMYK working profile: relative colorimetric with
-/// black-point compensation, CS6's default Color Settings intent. CMYK is ink
-/// percent, 0–100 per component.
-pub struct CmykConverter {
-    to_cmyk: Transform<[f64; 3], [f64; 4], GlobalContext, DisallowCache>,
-    to_rgb: Transform<[f64; 4], [f64; 3], GlobalContext, DisallowCache>,
-}
-
-impl CmykConverter {
-    /// The converter for the working CMYK profile. ponytail: Color Settings
-    /// has no CMYK working-space choice yet, so this is the bundled modelled
-    /// press (`Profile::coated_cmyk`), not SWOP; CMYK numbers follow a profile
-    /// but do not equal CS6's.
-    pub fn working() -> &'static CmykConverter {
-        static WORKING: OnceLock<CmykConverter> = OnceLock::new();
-        WORKING.get_or_init(|| {
-            CmykConverter::new(&Profile::srgb(), &Profile::coated_cmyk())
-                .expect("bundled CMYK profile builds a transform")
-        })
-    }
-
-    fn new(rgb: &Profile, cmyk: &Profile) -> Option<CmykConverter> {
-        let flags = Flags::NO_CACHE | Flags::BLACKPOINT_COMPENSATION;
-        let intent = Intent::RelativeColorimetric.to_lcms();
-        let to_cmyk = Transform::new_flags_context(
-            GlobalContext::new(),
-            &rgb.0,
-            PixelFormat::RGB_DBL,
-            &cmyk.0,
-            PixelFormat::CMYK_DBL,
-            intent,
-            flags,
-        )
-        .ok()?;
-        let to_rgb = Transform::new_flags_context(
-            GlobalContext::new(),
-            &cmyk.0,
-            PixelFormat::CMYK_DBL,
-            &rgb.0,
-            PixelFormat::RGB_DBL,
-            intent,
-            flags,
-        )
-        .ok()?;
-        Some(CmykConverter { to_cmyk, to_rgb })
-    }
-
-    /// 8-bit sRGB → CMYK ink percentages, each clamped to 0–100.
-    pub fn srgb_to_cmyk(&self, rgb: [u8; 3]) -> [f64; 4] {
-        let src = [rgb.map(|v| f64::from(v) / 255.0)];
-        let mut dst = [[0.0f64; 4]];
-        self.to_cmyk.transform_pixels(&src, &mut dst);
-        dst[0].map(|v| v.clamp(0.0, 100.0))
-    }
-
-    /// CMYK ink percentages → 8-bit sRGB.
-    pub fn cmyk_to_srgb(&self, cmyk: [f64; 4]) -> [u8; 3] {
-        let src = [cmyk.map(|v| v.clamp(0.0, 100.0))];
-        let mut dst = [[0.0f64; 3]];
-        self.to_rgb.transform_pixels(&src, &mut dst);
-        dst[0].map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
-    }
-}
-
 fn dot(row: [f64; 3], v: [f64; 3]) -> f64 {
     row[0] * v[0] + row[1] * v[1] + row[2] * v[2]
 }
@@ -165,7 +95,8 @@ fn srgb_decode(value: u8) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lcms2::{CIExyY, Profile as LcmsProfile};
+    use crate::{Intent, Profile};
+    use lcms2::{CIExyY, GlobalContext, PixelFormat, Profile as LcmsProfile, Transform};
 
     /// lcms2's own sRGB → Lab (D50) for `rgb`, the connection-space reference.
     fn lcms_lab(rgb: [u8; 3]) -> [f64; 3] {
@@ -239,48 +170,5 @@ mod tests {
         assert_eq!(lab_to_srgb([50.0, 127.0, -128.0])[1], 0);
         assert_eq!(lab_to_srgb([100.0, 0.0, 0.0]), [255, 255, 255]);
         assert_eq!(lab_to_srgb([120.0, 0.0, 0.0]), [255, 255, 255]);
-    }
-
-    #[test]
-    fn cmyk_white_has_no_ink() {
-        let inks = CmykConverter::working().srgb_to_cmyk([255, 255, 255]);
-        assert!(inks.iter().all(|v| v.round() == 0.0), "white inks {inks:?}");
-    }
-
-    #[test]
-    fn cmyk_black_follows_profile() {
-        let inks = CmykConverter::working().srgb_to_cmyk([0, 0, 0]);
-        let direct = CmykConverter::new(&Profile::srgb(), &Profile::coated_cmyk())
-            .unwrap()
-            .srgb_to_cmyk([0, 0, 0]);
-        assert_eq!(inks, direct);
-        assert!(inks[3] > 50.0, "black carries heavy K: {inks:?}");
-        assert_ne!(
-            inks.map(f64::round),
-            [0.0, 0.0, 0.0, 100.0],
-            "not the naive formula"
-        );
-    }
-
-    #[test]
-    fn cmyk_round_trips_in_gamut() {
-        // Muted colours a coated press reproduces; saturated sRGB blues and
-        // yellows fall outside its gamut and map to the nearest ink.
-        let cmyk = CmykConverter::working();
-        for rgb in [
-            [200, 120, 80],
-            [128, 128, 128],
-            [150, 130, 110],
-            [120, 140, 160],
-            [180, 170, 150],
-        ] {
-            let back = cmyk.cmyk_to_srgb(cmyk.srgb_to_cmyk(rgb));
-            for c in 0..3 {
-                assert!(
-                    back[c].abs_diff(rgb[c]) <= 3,
-                    "{rgb:?} came back as {back:?}"
-                );
-            }
-        }
     }
 }

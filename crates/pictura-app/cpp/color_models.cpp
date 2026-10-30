@@ -1,5 +1,6 @@
 #include "color_models.h"
 
+#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/engine_tables/color_models.cxxqt.h"
 
 #include <cstdint>
@@ -26,9 +27,8 @@ QColor labToRgb(double l, double a, double b)
 CmykPercent rgbToCmyk(const QColor& color)
 {
     const QColor rgb = color.toRgb();
-    const CmykValue inks = srgb_to_cmyk(std::uint8_t(rgb.red()), std::uint8_t(rgb.green()),
-                                        std::uint8_t(rgb.blue()));
-    return {inks.c, inks.m, inks.y, inks.k};
+    const ::rust::Vec<std::int32_t> inks = picker_cmyk(rgb.red(), rgb.green(), rgb.blue());
+    return {double(inks[0]), double(inks[1]), double(inks[2]), double(inks[3])};
 }
 
 QVector<uchar> channelPlane(const QImage& image, const QString& mode, int row)

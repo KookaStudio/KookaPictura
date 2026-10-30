@@ -7,15 +7,15 @@
 
 namespace pictura {
 
-// The colour-model conversions every readout shares. The math lives in
-// `pictura_color::model`; these only adapt QColor/QImage to the bridge.
+// The colour-model conversions every readout shares. The math lives in the
+// engine; these only adapt QColor/QImage to the bridge.
 
 /// sRGB -> CIE L*a*b* (D50), the space Photoshop's Lab readout uses.
 void rgbToLab(const QColor& color, double* l, double* a, double* b);
 /// CIE L*a*b* (D50) -> sRGB, clamped into gamut.
 QColor labToRgb(double l, double a, double b);
 
-/// CMYK ink percentages (0-100) through the CMYK working profile.
+/// Whole CMYK ink percentages (0-100) through the installed working CMYK profile.
 struct CmykPercent {
     double c = 0.0;
     double m = 0.0;
