@@ -15,6 +15,10 @@ use lcms2::{
 
 pub mod model;
 pub mod ntsc;
+mod space;
+
+use space::space_format;
+pub use space::SpaceTransform;
 
 /// Rendering intent (ICC).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -385,14 +389,8 @@ pub fn convert_space(
     intent: Intent,
     black_point_compensation: bool,
 ) -> Result<Vec<u8>, ColorError> {
-    let format = |profile: &Profile| match profile.0.color_space() {
-        ColorSpaceSignature::GrayData => Ok((PixelFormat::GRAY_8, 1usize)),
-        ColorSpaceSignature::RgbData => Ok((PixelFormat::RGB_8, 3)),
-        ColorSpaceSignature::CmykData => Ok((PixelFormat::CMYK_8, 4)),
-        other => Err(ColorError::Unsupported(format!("colour space {other:?}"))),
-    };
-    let (in_format, in_channels) = format(src)?;
-    let (out_format, out_channels) = format(dst)?;
+    let (_, in_channels) = space_format(src)?;
+    let (_, out_channels) = space_format(dst)?;
     if !data.len().is_multiple_of(in_channels) {
         return Err(ColorError::Unsupported(format!(
             "{} bytes is not a whole number of {in_channels}-channel pixels",
@@ -404,20 +402,7 @@ pub fn convert_space(
     if pixels == 0 {
         return Ok(out);
     }
-    let mut flags = Flags::default();
-    if black_point_compensation {
-        flags = flags | Flags::BLACKPOINT_COMPENSATION;
-    }
-    let transform: Transform<u8, u8> = Transform::new_flags(
-        &src.0,
-        in_format,
-        &dst.0,
-        out_format,
-        intent.to_lcms(),
-        flags,
-    )
-    .map_err(|e| ColorError::Unsupported(e.to_string()))?;
-    transform.transform_pixels(data, &mut out);
+    SpaceTransform::new(src, dst, intent, black_point_compensation)?.apply(data, &mut out);
     Ok(out)
 }
 

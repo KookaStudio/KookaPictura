@@ -9,6 +9,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_codec::{ConversionOptions, Intent, Policy, Profile};
+use pictura_color::SpaceTransform;
 use pictura_core::ColorMode;
 
 use std::sync::{OnceLock, RwLock};
@@ -110,10 +111,64 @@ pub mod ffi {
     }
 }
 
-static PICKER_CMYK: OnceLock<RwLock<Vec<u8>>> = OnceLock::new();
+/// The picker's sRGB <-> working-CMYK transforms. A drag in the picker asks for
+/// the gamut test on every mouse move, so they are built once per working
+/// profile rather than per call.
+struct PickerTransforms {
+    to_cmyk: SpaceTransform,
+    to_rgb: SpaceTransform,
+}
 
-fn picker_store() -> &'static RwLock<Vec<u8>> {
-    PICKER_CMYK.get_or_init(|| RwLock::new(Profile::coated_cmyk().to_icc()))
+impl PickerTransforms {
+    fn cmyk(&self, rgb: [u8; 3]) -> [u8; 4] {
+        let mut inks = [0; 4];
+        self.to_cmyk.apply(&rgb, &mut inks);
+        inks
+    }
+
+    fn rgb(&self, cmyk: [u8; 4]) -> [u8; 3] {
+        let mut rgb = [0; 3];
+        self.to_rgb.apply(&cmyk, &mut rgb);
+        rgb
+    }
+}
+
+static PICKER: OnceLock<RwLock<Option<PickerTransforms>>> = OnceLock::new();
+
+#[cfg(test)]
+static PICKER_BUILDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn picker_slot() -> &'static RwLock<Option<PickerTransforms>> {
+    PICKER.get_or_init(|| RwLock::new(picker_transforms(&Profile::coated_cmyk().to_icc())))
+}
+
+fn picker_transforms(icc: &[u8]) -> Option<PickerTransforms> {
+    #[cfg(test)]
+    PICKER_BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let profile = Profile::from_icc(icc).unwrap_or_else(|_| Profile::coated_cmyk());
+    let srgb = Profile::srgb();
+    let ConversionOptions {
+        intent,
+        black_point_compensation: bpc,
+        ..
+    } = picker_options();
+    Some(PickerTransforms {
+        to_cmyk: SpaceTransform::new(&srgb, &profile, intent, bpc).ok()?,
+        to_rgb: SpaceTransform::new(&profile, &srgb, intent, bpc).ok()?,
+    })
+}
+
+fn install_picker_profile(icc: &[u8]) {
+    let transforms = picker_transforms(icc);
+    if let Ok(mut slot) = picker_slot().write() {
+        *slot = transforms;
+    }
+}
+
+/// `None` when the picker transforms could not be built (or the lock is
+/// poisoned); each service then returns its fallback.
+fn with_picker<T>(f: impl FnOnce(&PickerTransforms) -> T) -> Option<T> {
+    picker_slot().read().ok()?.as_ref().map(f)
 }
 
 fn intent_from_code(code: i32) -> Intent {
@@ -132,11 +187,6 @@ fn builtin_profile(index: i32) -> Option<Profile> {
         2 => Some(Profile::pro_photo()),
         _ => None,
     }
-}
-
-fn working_profile() -> Profile {
-    let bytes = picker_store().read().map(|v| v.clone()).unwrap_or_default();
-    Profile::from_icc(&bytes).unwrap_or_else(|_| Profile::coated_cmyk())
 }
 
 fn picker_options() -> ConversionOptions {
@@ -195,9 +245,7 @@ pub fn set_color_settings(
         rust.ask_mismatch_open = ask_mismatch;
         rust.ask_missing_open = ask_missing;
     }
-    if let Ok(mut slot) = picker_store().write() {
-        *slot = profile;
-    }
+    install_picker_profile(&profile);
 }
 
 pub fn cmyk_policy(view: &PictureView) -> i32 {
@@ -359,38 +407,29 @@ pub fn cancel_convert_preview(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 pub fn picker_cmyk(r: i32, g: i32, b: i32) -> Vec<i32> {
-    let profile = working_profile();
-    let rgb = rgb_bytes(r, g, b);
-    pictura_codec::rgb_to_cmyk_with_profile(&rgb, &profile, picker_options())
-        .map(|cmyk| {
-            cmyk.into_iter()
-                .map(|v| (u32::from(v) * 100 + 127) as i32 / 255)
-                .collect()
-        })
-        .unwrap_or_else(|| vec![0, 0, 0, 100])
+    with_picker(|picker| {
+        picker
+            .cmyk(rgb_bytes(r, g, b))
+            .into_iter()
+            .map(|v| (u32::from(v) * 100 + 127) as i32 / 255)
+            .collect()
+    })
+    .unwrap_or_else(|| vec![0, 0, 0, 100])
 }
 
 pub fn picker_rgb(c: i32, m: i32, y: i32, k: i32) -> u32 {
-    let profile = working_profile();
-    let cmyk = cmyk_bytes(c, m, y, k);
-    pictura_codec::cmyk_to_rgb_with_profile(&cmyk, &profile, picker_options())
-        .map(|rgb| packed(&rgb))
-        .unwrap_or(u32::MAX)
+    with_picker(|picker| packed(&picker.rgb(cmyk_bytes(c, m, y, k)))).unwrap_or(u32::MAX)
 }
 
 pub fn picker_in_gamut(r: i32, g: i32, b: i32) -> bool {
-    let profile = working_profile();
-    let options = picker_options();
     let rgb = rgb_bytes(r, g, b);
-    let Some(cmyk) = pictura_codec::rgb_to_cmyk_with_profile(&rgb, &profile, options) else {
-        return true;
-    };
-    let Some(back) = pictura_codec::cmyk_to_rgb_with_profile(&cmyk, &profile, options) else {
-        return true;
-    };
-    rgb.iter()
-        .zip(back.iter())
-        .all(|(a, b)| (*a as i16 - *b as i16).abs() <= 1)
+    with_picker(|picker| {
+        let back = picker.rgb(picker.cmyk(rgb));
+        rgb.iter()
+            .zip(back.iter())
+            .all(|(a, b)| (*a as i16 - *b as i16).abs() <= 1)
+    })
+    .unwrap_or(true)
 }
 
 pub fn probe_file_profile(path: &QString) -> QStringList {
@@ -472,13 +511,7 @@ pub fn set_open_policy_override(mut view: Pin<&mut PictureView>, code: i32) {
 }
 
 pub fn picker_closest_rgb(r: i32, g: i32, b: i32) -> u32 {
-    let profile = working_profile();
-    let options = picker_options();
-    let rgb = rgb_bytes(r, g, b);
-    pictura_codec::rgb_to_cmyk_with_profile(&rgb, &profile, options)
-        .and_then(|cmyk| pictura_codec::cmyk_to_rgb_with_profile(&cmyk, &profile, options))
-        .map(|back| packed(&back))
-        .unwrap_or(u32::MAX)
+    with_picker(|picker| packed(&picker.rgb(picker.cmyk(rgb_bytes(r, g, b))))).unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]
@@ -522,5 +555,79 @@ mod tests {
                 picker_cmyk(0, 0, 255)[3],
             )
         );
+    }
+
+    // nextest isolates each test in a process; under `cargo test` the two
+    // counter tests share one, so they take turns.
+    static COUNTER_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn builds() -> usize {
+        PICKER_BUILDS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    // The services' values for a sweep of colours, through whatever pair is
+    // installed.
+    fn sweep() -> Vec<(bool, u32, Vec<i32>, u32)> {
+        let mut out = Vec::new();
+        for r in (0..=255).step_by(51) {
+            for g in (0..=255).step_by(85) {
+                for b in (0..=255).step_by(85) {
+                    let cmyk = picker_cmyk(r, g, b);
+                    let back = picker_rgb(cmyk[0], cmyk[1], cmyk[2], cmyk[3]);
+                    out.push((
+                        picker_in_gamut(r, g, b),
+                        picker_closest_rgb(r, g, b),
+                        cmyk,
+                        back,
+                    ));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn picker_services_reuse_their_transforms() {
+        let _turn = COUNTER_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(picker_in_gamut(128, 128, 128));
+        let first = builds();
+        assert!(first >= 1, "the first call builds the pair");
+
+        let options = picker_options();
+        let coated = Profile::coated_cmyk();
+        for r in (0..=255).step_by(51) {
+            for b in (0..=255).step_by(51) {
+                let rgb = rgb_bytes(r, 40, b);
+                let inks = pictura_codec::rgb_to_cmyk_with_profile(&rgb, &coated, options)
+                    .expect("one-shot cmyk");
+                let back = pictura_codec::cmyk_to_rgb_with_profile(&inks, &coated, options)
+                    .expect("one-shot rgb");
+                let in_gamut = rgb.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= 1);
+                assert_eq!(picker_in_gamut(r, 40, b), in_gamut, "{rgb:?}");
+                assert_eq!(picker_closest_rgb(r, 40, b), packed(&back), "{rgb:?}");
+                let percent: Vec<i32> = inks
+                    .iter()
+                    .map(|v| (u32::from(*v) * 100 + 127) as i32 / 255)
+                    .collect();
+                assert_eq!(picker_cmyk(r, 40, b), percent, "{rgb:?}");
+            }
+        }
+        sweep();
+        assert_eq!(
+            builds(),
+            first,
+            "no call after the first builds a transform"
+        );
+    }
+
+    #[test]
+    fn installing_a_profile_rebuilds_the_picker_pair() {
+        let _turn = COUNTER_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let before = sweep();
+        let built = builds();
+        install_picker_profile(&Profile::coated_cmyk().to_icc());
+        assert_eq!(builds(), built + 1, "an install rebuilds the pair once");
+        assert_eq!(sweep(), before, "the rebuilt pair converts alike");
+        assert_eq!(builds(), built + 1, "calls after the install reuse it");
     }
 }
