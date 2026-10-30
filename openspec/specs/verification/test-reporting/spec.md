@@ -17,9 +17,12 @@ the Qt Test layer through `ctest --test-dir build -R '^tst_' --output-on-failure
 `build/crates/pictura-app/cpp/tests/` and passes
 `-o <CMAKE_BINARY_DIR>/qt-test-results/<name>.xml,junitxml`, so each emits a
 per-executable JUnit report), capture each layer's output, and invoke
-`scripts/report_tests.py`. The CTest parallel level SHALL default to four and
-SHALL be overridable through `CTEST_PARALLEL_LEVEL`, so the suites run
-concurrently without launching every offscreen process at once. The script SHALL
+`scripts/report_tests.py`. The CTest parallel level SHALL default to 80% of the
+CPUs available to the run, rounded down and at least one, and SHALL be
+overridable through `CTEST_PARALLEL_LEVEL`, so the suites use the machine
+without launching every offscreen process at once. The CI Qt Test job, which
+has its runner to itself, SHALL default to the runner's CPU count, keeping the
+same override. The script SHALL
 clear `build/qt-test-results/*.xml` before the CTest run so a removed, renamed,
 or crashed suite cannot be counted from a stale file. The reporter
 SHALL fold the per-executable JUnit from `build/qt-test-results/*.xml` and SHALL
@@ -63,8 +66,18 @@ executes.
 
 #### Scenario: Qt Test suites run concurrently [tr_qt_parallel]
 
-- **WHEN** `scripts/test-report.sh` runs with the default parallel level
-- **THEN** CTest runs up to four suites at once, each suite still writes its own JUnit file, and a failure in any suite fails the report
+- **WHEN** `scripts/test-report.sh` runs with the default parallel level on a machine with 16 available CPUs
+- **THEN** CTest runs up to twelve suites at once, each suite still writes its own JUnit file, and a failure in any suite fails the report
+
+#### Scenario: the parallel level stays overridable [tr_qt_parallel_override]
+
+- **WHEN** `scripts/test-report.sh` runs with `CTEST_PARALLEL_LEVEL=2`
+- **THEN** CTest runs up to two suites at once regardless of the CPU count
+
+#### Scenario: a one-CPU machine still runs the layer [tr_qt_parallel_floor]
+
+- **WHEN** `scripts/test-report.sh` runs on a machine with one available CPU and no override
+- **THEN** CTest runs with a parallel level of one
 
 #### Scenario: stale Qt Test results are not counted [tr_stale_junit]
 

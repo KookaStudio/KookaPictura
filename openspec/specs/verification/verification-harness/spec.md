@@ -72,8 +72,11 @@ same nextest invocation, so the local fast gate and CI agree on the runner. The 
 the repository's `.config/nextest.toml`, and CI SHALL upload that artifact. CI
 SHALL build the Qt application under a pinned Qt 6 in a headless job and SHALL
 run its `--headless --self-test` mode there. That job SHALL run the Qt Test layer
-through CTest with the same bounded parallel level as the local report, and SHALL
-install mold so the linker path used locally is exercised in CI. The `test` job
+through CTest with a parallel level equal to the runner's CPU count, overridable
+through `CTEST_PARALLEL_LEVEL`, SHALL configure the C++ build with precompiled
+headers disabled, so a source that compiles only through a precompiled header
+fails CI, and SHALL install mold so the linker path used locally is exercised
+in CI. The `test` job
 SHALL install the external comparison tools (ImageMagick, `psd-tools`, and
 `ag-psd`) before its nextest run, so the oracle tests compare against those
 tools in the same compile and run as the rest of the workspace, and no separate
@@ -142,7 +145,12 @@ CI job SHALL set a `timeout-minutes` bound.
 #### Scenario: CI runs Qt Test suites concurrently [vh_ci_ctest_parallel]
 
 - **WHEN** the CI headless job runs CTest after the build
-- **THEN** it passes a bounded parallel level and every registered suite still emits its own JUnit file
+- **THEN** it passes the runner's CPU count as the parallel level unless `CTEST_PARALLEL_LEVEL` is set, and every registered suite still emits its own JUnit file
+
+#### Scenario: CI builds without precompiled headers [vh_ci_no_pch]
+
+- **WHEN** the CI headless job configures and builds the C++
+- **THEN** precompiled headers are disabled in its configure and every source compiles without one
 
 #### Scenario: CI exercises the configured linker [vh_ci_mold]
 
