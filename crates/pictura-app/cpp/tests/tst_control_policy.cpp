@@ -40,7 +40,7 @@ ControlPolicy restricted(bool edit, bool save)
     return policy;
 }
 
-const QJsonObject kFilter{{QStringLiteral("kind"), QStringLiteral("invert")}};
+const QJsonObject kFilter{{QStringLiteral("kind"), QStringLiteral("gaussian-blur")}};
 
 } // namespace
 
@@ -148,7 +148,7 @@ void ControlPolicyTest::editWithoutSaveRefusesSaving()
 void ControlPolicyTest::everyMethodHasATier()
 {
     const QStringList names = pictura::ControlServer::methodNames();
-    QCOMPARE(names.size(), 21);
+    QCOMPARE(names.size(), 30);
     QCOMPARE(server_->tierOf(QStringLiteral("key"), {}), ControlTier::Admin);
     QCOMPARE(server_->tierOf(QStringLiteral("set_unsaved_policy"), {}), ControlTier::Admin);
     QCOMPARE(server_->tierOf(QStringLiteral("status"), {}), ControlTier::Read);

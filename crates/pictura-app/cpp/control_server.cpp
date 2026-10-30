@@ -134,12 +134,18 @@ QString screenModeName(PicturaMainWindow::ScreenMode mode)
 
 namespace control_detail {
 
+QString documentId(const PictureView* view)
+{
+    return QString::number(quintptr(view), 16);
+}
+
 QJsonObject documentInfo(PicturaMainWindow* frame, int index)
 {
     PictureView* view = frame->viewAt(index);
     ImageView* canvas = frame->canvasAt(index);
     QJsonObject info;
     info.insert(QStringLiteral("index"), index);
+    info.insert(QStringLiteral("id"), documentId(view));
     info.insert(QStringLiteral("name"), frame->documentName(index));
     info.insert(QStringLiteral("path"), frame->documentPath(index));
     info.insert(QStringLiteral("width"), view ? view->document_width() : 0);
@@ -559,6 +565,15 @@ const QList<ControlServer::MethodRow>& ControlServer::methodTable()
         {"metrics", &ControlServer::methodMetrics, ControlTier::Read},
         {"pointer", &ControlServer::methodPointer, ControlTier::Admin},
         {"key", &ControlServer::methodKey, ControlTier::Admin},
+        {"list_filters", &ControlServer::methodListFilters, ControlTier::Read},
+        {"list_adjustments", &ControlServer::methodListAdjustments, ControlTier::Read},
+        {"layer_tree", &ControlServer::methodLayerTree, ControlTier::Read},
+        {"adjust_apply", &ControlServer::methodAdjustApply, ControlTier::Edit},
+        {"run_command", &ControlServer::methodRunCommand, ControlTier::Edit},
+        {"set_active_layer", &ControlServer::methodSetActiveLayer, ControlTier::Edit},
+        {"history", &ControlServer::methodHistory, ControlTier::Edit},
+        {"commit_crop", &ControlServer::methodCommitCrop, ControlTier::Edit},
+        {"export_png", &ControlServer::methodExportPng, ControlTier::Save},
     };
     return table;
 }
@@ -669,6 +684,7 @@ QJsonObject ControlServer::methodListLayers(const QJsonObject&)
     QJsonObject result;
     result.insert(QStringLiteral("layers"), layers);
     result.insert(QStringLiteral("count"), count);
+    result.insert(QStringLiteral("active"), view->active_layer_path());
     return ok(result);
 }
 

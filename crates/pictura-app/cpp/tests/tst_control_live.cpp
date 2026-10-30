@@ -194,7 +194,7 @@ void ControlLiveTest::editsWaitForAPerson()
     QDialog dialog(window_.get());
     dialog.show();
     QCOMPARE(errorCode(client.call(QStringLiteral("filter"),
-                                   {{QStringLiteral("kind"), QStringLiteral("invert")}})),
+                                   {{QStringLiteral("kind"), QStringLiteral("gaussian-blur")}})),
              QStringLiteral("human_busy"));
     QVERIFY(succeeded(client.call(QStringLiteral("status"))));
     QVERIFY(dialog.isVisible());

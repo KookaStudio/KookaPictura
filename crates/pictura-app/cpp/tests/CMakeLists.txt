@@ -18,6 +18,7 @@ set(PICTURA_QT_TESTS
     tst_layers_mask_commands
     tst_last_layer
     tst_control_approval
+    tst_control_editing
     tst_control_limits
     tst_control_live
     tst_control_metrics

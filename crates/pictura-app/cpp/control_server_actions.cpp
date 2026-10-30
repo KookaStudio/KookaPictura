@@ -1,5 +1,7 @@
 #include "control_server.h"
 
+#include <QtCore/QJsonArray>
+
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonValue>
@@ -114,6 +116,18 @@ QJsonObject ControlServer::methodSelection(const QJsonObject& params)
         applied = view->select_rect(x, y, w, h, mode, feather);
     } else if (op == QStringLiteral("ellipse")) {
         applied = view->select_ellipse(x, y, w, h, mode, feather);
+    } else if (op == QStringLiteral("lasso")) {
+        const QJsonArray points = params.value(QStringLiteral("points")).toArray();
+        if (points.size() < 3 || points.size() > kMaxLassoPoints) {
+            return error(QStringLiteral("invalid_param"),
+                         QStringLiteral("a lasso takes 3..%1 points").arg(kMaxLassoPoints));
+        }
+        applied = view->begin_lasso(mode);
+        for (const QJsonValue& point : points) {
+            const QJsonArray pair = point.toArray();
+            view->lasso_add_point(pair.at(0).toInt(), pair.at(1).toInt());
+        }
+        applied = applied && view->end_lasso(feather);
     } else if (op == QStringLiteral("lasso_begin")) {
         applied = view->begin_lasso(mode);
         lassoPoints_ = 0;
@@ -161,7 +175,7 @@ QJsonObject ControlServer::methodFilter(const QJsonObject& params)
     // pixel target, hidden, or pixel-locked) to report `refused`; a false after
     // that is an unknown kind.
     //
-    // ponytail: the app fixes the filter seed; typed params/seed are future work.
+    // ponytail: the app fixes the filter seed; a typed seed is future work.
     const QString activePath = view->active_layer_path();
     const QString activeKind = layer_kind_path(*view, activePath);
     const bool editablePixel = !activeKind.isEmpty()
@@ -171,6 +185,9 @@ QJsonObject ControlServer::methodFilter(const QJsonObject& params)
     if (!editablePixel || !view->active_layer_visible() || pixelLocked) {
         return error(QStringLiteral("refused"),
                      QStringLiteral("filter target layer is unavailable, hidden, or locked"));
+    }
+    if (params.contains(QStringLiteral("params"))) {
+        return applyFilterWithParams(kind, params.value(QStringLiteral("params")));
     }
     if (!view->apply_filter(kind)) {
         // ponytail: `apply_filter` also returns false for a malformed layer

@@ -207,6 +207,11 @@ QJsonObject ControlServer::methodEdit(const QJsonObject& params)
         return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
     }
     const QString op = params.value(QStringLiteral("op")).toString();
+    if (params.contains(QStringLiteral("expected_index"))
+        && params.value(QStringLiteral("expected_index")).toInt(-1) != history_api::index(*view)) {
+        return error(QStringLiteral("stale_history"),
+                     QStringLiteral("history has moved since that index"));
+    }
     bool applied = false;
     if (op == QStringLiteral("undo")) {
         applied = history_api::undo(*view);
@@ -221,6 +226,7 @@ QJsonObject ControlServer::methodEdit(const QJsonObject& params)
     result.insert(QStringLiteral("can_undo"), history_api::canUndo(*view));
     result.insert(QStringLiteral("can_redo"), history_api::canRedo(*view));
     result.insert(QStringLiteral("depth"), history_api::depth(*view));
+    result.insert(QStringLiteral("index"), history_api::index(*view));
     return ok(result);
 }
 

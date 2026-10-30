@@ -63,6 +63,9 @@ public:
     static constexpr int kMaxUiTreeDepth = 64;
     static constexpr int kMaxUiTreeChildren = 1024;
 
+    // Kinds `adjust_apply` takes, each with a default block.
+    static QStringList adjustmentKinds();
+
     // Listen on the socket and write a fresh session token to tokenPath(),
     // readable by the owner only. Fails, listening on nothing, when either
     // cannot be created, or while another live process holds the endpoint.
@@ -162,12 +165,22 @@ private:
     QJsonObject methodToolOptions(const QJsonObject& params);
     QJsonObject methodSelection(const QJsonObject& params);
     QJsonObject methodFilter(const QJsonObject& params);
+    QJsonObject applyFilterWithParams(const QString& kind, const QJsonValue& values);
     QJsonObject methodAdjustment(const QJsonObject& params);
     QJsonObject methodLayerOp(const QJsonObject& params);
     QJsonObject methodSetGpuCompute(const QJsonObject& params);
     QJsonObject methodMetrics(const QJsonObject& params);
     QJsonObject methodPointer(const QJsonObject& params);
     QJsonObject methodKey(const QJsonObject& params);
+    QJsonObject methodListFilters(const QJsonObject& params);
+    QJsonObject methodListAdjustments(const QJsonObject& params);
+    QJsonObject methodAdjustApply(const QJsonObject& params);
+    QJsonObject methodRunCommand(const QJsonObject& params);
+    QJsonObject methodLayerTree(const QJsonObject& params);
+    QJsonObject methodSetActiveLayer(const QJsonObject& params);
+    QJsonObject methodExportPng(const QJsonObject& params);
+    QJsonObject methodHistory(const QJsonObject& params);
+    QJsonObject methodCommitCrop(const QJsonObject& params);
 
     void pump();
     void handleLine(const QPointer<QLocalSocket>& socket, const QByteArray& line);
@@ -189,6 +202,8 @@ private:
     // Set while pump() runs, so a nested event loop in a request only enqueues.
     bool running_ = false;
     int lassoPoints_ = 0;
+    // This session's `pointer` started the pending crop, so it may finish it.
+    bool agentCrop_ = false;
     ControlPolicy policy_;
     // Set while a request waits for a person or a load; later ones stay queued.
     bool parked_ = false;
