@@ -483,7 +483,11 @@ mod tests {
 
     #[test]
     fn sample_all_layers_reads_the_composite_it_is_given() {
-        let composite = crate::stamp::layer_surface(&edge(), "0").unwrap();
+        let edge = edge();
+        let composite = crate::art_history::layer_local(
+            &crate::stamp::layer_surface(&edge, "0").unwrap(),
+            edge.layers[0].rect,
+        );
         let out = blur(&doc(40, 40, WHITE), full(), Some(composite), 1);
         assert!(
             pixel(&out, 21, 20)[0] < 200,

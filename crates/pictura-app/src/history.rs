@@ -1,6 +1,10 @@
 use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
+use pictura_paint::healing::RgbaImage;
+use pictura_paint::stamp::layer_surface;
 use pictura_select::Selection;
+use std::cell::RefCell;
+use std::sync::Arc;
 
 mod planes;
 mod styles;
@@ -78,6 +82,7 @@ enum TargetMode {
 }
 
 struct Named {
+    id: u64,
     label: String,
     snapshot: Snapshot,
     target: LayerTarget,
@@ -117,6 +122,8 @@ pub struct History {
     current: Option<Snapshot>,
     brush_source: BrushSource,
     pinned: Option<Snapshot>,
+    pinned_id: Option<u64>,
+    brush_cache: RefCell<Option<((u64, String), Arc<RgbaImage>)>>,
     current_target: LayerTarget,
 }
 
@@ -362,6 +369,7 @@ impl History {
         self.purge_states();
         self.snapshots.clear();
         self.pinned = None;
+        self.pinned_id = None;
         if let BrushSource::Snapshot(_) = self.brush_source {
             self.brush_source = BrushSource::Oldest;
         }
@@ -389,6 +397,7 @@ impl History {
             self.cursor = 0;
         }
         self.pinned = None;
+        self.pinned_id = None;
         if matches!(
             self.brush_source,
             BrushSource::Oldest | BrushSource::State(_)
@@ -445,7 +454,10 @@ impl History {
     }
 
     pub fn add_snapshot(&mut self, label: &str, snapshot: Snapshot, target: LayerTarget) {
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
         self.snapshots.push(Named {
+            id,
             label: label.to_string(),
             snapshot,
             target,
@@ -880,6 +892,7 @@ impl History {
         if exists {
             self.brush_source = source;
             self.pinned = None;
+            self.pinned_id = None;
         }
         exists
     }
@@ -894,10 +907,37 @@ impl History {
         }
     }
 
+    /// The id of the state or snapshot the brush reads, if it still exists.
+    pub(crate) fn brush_source_key(&self) -> Option<u64> {
+        match self.brush_source {
+            BrushSource::Oldest => self.states.first().map(|entry| entry.id),
+            BrushSource::State(i) => self.states.get(i).map(|entry| entry.id),
+            BrushSource::Snapshot(i) => self.snapshots.get(i).map(|snapshot| snapshot.id),
+            BrushSource::Pinned => self.pinned_id,
+        }
+    }
+
+    /// The layer source surface for the brush's current source and `path`,
+    /// reused until the source or path changes.
+    pub(crate) fn brush_source_surface(&self, path: &str) -> Option<Arc<RgbaImage>> {
+        let id = self.brush_source_key()?;
+        let cached = self.brush_cache.borrow().as_ref().and_then(|(key, image)| {
+            (key.0 == id && key.1.as_str() == path).then(|| Arc::clone(image))
+        });
+        if let Some(image) = cached {
+            return Some(image);
+        }
+        let past = self.brush_source_doc()?;
+        let image = Arc::new(layer_surface(&past.doc, path)?);
+        *self.brush_cache.borrow_mut() = Some(((id, path.to_string()), Arc::clone(&image)));
+        Some(image)
+    }
+
     fn pin_source(&mut self) {
         if matches!(self.brush_source, BrushSource::Pinned) {
             return;
         }
+        let id = self.brush_source_key();
         let snapshot = match self.brush_source {
             BrushSource::Oldest => Some(self.materialize(0)),
             BrushSource::State(i) => (i < self.states.len()).then(|| self.materialize(i)),
@@ -905,6 +945,7 @@ impl History {
             BrushSource::Pinned => None,
         };
         self.pinned = snapshot;
+        self.pinned_id = id;
         self.brush_source = BrushSource::Pinned;
     }
 }

@@ -20,17 +20,31 @@
 //! no photorust source and reuses the same stroke.
 
 use crate::healing::RgbaImage;
-use crate::stroke::{layer_at, layer_rgba, parse_layer_path};
+use crate::stroke::{layer_at, layer_planes, parse_layer_path};
 use crate::Rgba;
-use pictura_core::{Document, PixelBuffer};
+use pictura_core::{Document, PixelBuffer, PsdRect};
+use rayon::prelude::*;
+use std::sync::Arc;
 
 /// Where a stamp stroke reads its paint: a document-space image and the offset
 /// added to a destination pixel to find its source, so `(-40, 0)` paints what
-/// lies forty pixels to the left.
+/// lies forty pixels to the left, or a pattern tile read per dab.
 pub struct StampSource {
-    image: RgbaImage,
-    offset: (i32, i32),
-    transform: Option<(SourceTransform, (f32, f32))>,
+    kind: SourceKind,
+}
+
+enum SourceKind {
+    Image {
+        image: Arc<RgbaImage>,
+        offset: (i32, i32),
+        transform: Option<(SourceTransform, (f32, f32))>,
+    },
+    Pattern {
+        tile: Arc<RgbaImage>,
+        origin: (i32, i32),
+        width: u32,
+        height: u32,
+    },
 }
 
 /// The Clone Source panel's transform of the source: W / H as scale factors
@@ -60,11 +74,13 @@ impl SourceTransform {
 }
 
 impl StampSource {
-    pub fn new(image: RgbaImage, offset: (i32, i32)) -> StampSource {
+    pub fn new(image: impl Into<Arc<RgbaImage>>, offset: (i32, i32)) -> StampSource {
         StampSource {
-            image,
-            offset,
-            transform: None,
+            kind: SourceKind::Image {
+                image: image.into(),
+                offset,
+                transform: None,
+            },
         }
     }
 
@@ -72,38 +88,89 @@ impl StampSource {
     /// `anchor`, where the offset was measured: the anchor paints its source
     /// point, and the source around it is scaled, flipped, and rotated.
     pub fn transformed(
-        image: RgbaImage,
+        image: impl Into<Arc<RgbaImage>>,
         offset: (i32, i32),
         anchor: (f32, f32),
         transform: SourceTransform,
     ) -> StampSource {
         let transform = (!transform.is_identity()).then_some((transform, anchor));
         StampSource {
-            image,
-            offset,
-            transform,
+            kind: SourceKind::Image {
+                image: image.into(),
+                offset,
+                transform,
+            },
         }
+    }
+
+    /// The pattern source for `tile` pinned to document point `origin` inside
+    /// the `width × height` document; `None` for an empty tile.
+    pub fn pattern(
+        tile: impl Into<Arc<RgbaImage>>,
+        origin: (i32, i32),
+        width: u32,
+        height: u32,
+    ) -> Option<StampSource> {
+        let tile = tile.into();
+        (tile.width > 0 && tile.height > 0).then(|| StampSource {
+            kind: SourceKind::Pattern {
+                tile,
+                origin,
+                width,
+                height,
+            },
+        })
     }
 
     /// The source for document pixel `(x, y)`, or `None` off the image: there
     /// is nothing to copy there, and painting transparency instead would punch
     /// holes in the layer.
     pub(crate) fn at(&self, x: i32, y: i32) -> Option<Rgba> {
-        let Some((t, anchor)) = self.transform else {
-            let (sx, sy) = (x + self.offset.0, y + self.offset.1);
-            if sx < 0 || sy < 0 || sx >= self.image.width || sy >= self.image.height {
-                return None;
+        match &self.kind {
+            SourceKind::Image {
+                image,
+                offset,
+                transform,
+            } => {
+                let Some((t, anchor)) = transform else {
+                    let (sx, sy) = (x + offset.0, y + offset.1);
+                    if sx < 0 || sy < 0 || sx >= image.width || sy >= image.height {
+                        return None;
+                    }
+                    let [r, g, b, a] = image.get(sx, sy);
+                    return Some(Rgba { r, g, b, a });
+                };
+                // Invert the forward map (scale, then rotate) at the pixel centre.
+                let (dx, dy) = (x as f32 + 0.5 - anchor.0, y as f32 + 0.5 - anchor.1);
+                let (sin, cos) = t.angle_deg.to_radians().sin_cos();
+                let (ux, uy) = (dx * cos - dy * sin, dx * sin + dy * cos);
+                let sx = anchor.0 + offset.0 as f32 + ux / t.scale_x;
+                let sy = anchor.1 + offset.1 as f32 + uy / t.scale_y;
+                bilinear(image, sx - 0.5, sy - 0.5)
             }
-            let [r, g, b, a] = self.image.get(sx, sy);
-            return Some(Rgba { r, g, b, a });
-        };
-        // Invert the forward map (scale, then rotate) at the pixel centre.
-        let (dx, dy) = (x as f32 + 0.5 - anchor.0, y as f32 + 0.5 - anchor.1);
-        let (sin, cos) = t.angle_deg.to_radians().sin_cos();
-        let (ux, uy) = (dx * cos - dy * sin, dx * sin + dy * cos);
-        let sx = anchor.0 + self.offset.0 as f32 + ux / t.scale_x;
-        let sy = anchor.1 + self.offset.1 as f32 + uy / t.scale_y;
-        bilinear(&self.image, sx - 0.5, sy - 0.5)
+            SourceKind::Pattern {
+                tile,
+                origin,
+                width,
+                height,
+            } => {
+                if x < 0 || y < 0 || x >= *width as i32 || y >= *height as i32 {
+                    return None;
+                }
+                let tx = (x - origin.0).rem_euclid(tile.width);
+                let ty = (y - origin.1).rem_euclid(tile.height);
+                let [r, g, b, a] = tile.get(tx, ty);
+                Some(Rgba { r, g, b, a })
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn transform(&self) -> Option<&(SourceTransform, (f32, f32))> {
+        match &self.kind {
+            SourceKind::Image { transform, .. } => transform.as_ref(),
+            SourceKind::Pattern { .. } => None,
+        }
     }
 }
 
@@ -222,14 +289,57 @@ fn strip_adjustments(layers: &mut pictura_core::LayerStack) {
 
 /// A planar RGBA composite (`pictura_render::composite_rgba`) as a surface.
 pub fn surface_from_composite(buf: &PixelBuffer) -> RgbaImage {
-    let n = buf.pixel_count();
-    let plane = |c: usize, i: usize| buf.data.get(c * n + i).copied().unwrap_or(0);
+    surface_from_composite_rect(
+        buf,
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: buf.height as i32,
+            right: buf.width as i32,
+        },
+    )
+}
+
+/// The part of a planar composite inside `rect`, interleaved row by row.
+pub fn surface_from_composite_rect(buf: &PixelBuffer, rect: PsdRect) -> RgbaImage {
+    let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
+    let mut data = vec![[0u8; 4]; w * h];
+    if w == 0 || h == 0 {
+        return RgbaImage {
+            width: w as i32,
+            height: h as i32,
+            data,
+        };
+    }
+    let (bw, bh) = (buf.width as usize, buf.height as usize);
+    data.par_chunks_mut(w).enumerate().for_each(|(ly, row)| {
+        let sy = rect.top + ly as i32;
+        if sy < 0 || sy >= bh as i32 {
+            return;
+        }
+        let sy = sy as usize;
+        let r = buf.data.row(sy, bw).unwrap_or(&[]);
+        let g = buf.data.row(bh + sy, bw).unwrap_or(&[]);
+        let b = buf.data.row(2 * bh + sy, bw).unwrap_or(&[]);
+        let a = buf.data.row(3 * bh + sy, bw).unwrap_or(&[]);
+        for (lx, px) in row.iter_mut().enumerate() {
+            let sx = rect.left + lx as i32;
+            if sx < 0 || sx >= bw as i32 {
+                continue;
+            }
+            let sx = sx as usize;
+            *px = [
+                r.get(sx).copied().unwrap_or(0),
+                g.get(sx).copied().unwrap_or(0),
+                b.get(sx).copied().unwrap_or(0),
+                a.get(sx).copied().unwrap_or(0),
+            ];
+        }
+    });
     RgbaImage {
-        width: buf.width as i32,
-        height: buf.height as i32,
-        data: (0..n)
-            .map(|i| [plane(0, i), plane(1, i), plane(2, i), plane(3, i)])
-            .collect(),
+        width: w as i32,
+        height: h as i32,
+        data,
     }
 }
 
@@ -248,18 +358,47 @@ pub fn layer_surface(doc: &Document, path: &str) -> Option<RgbaImage> {
         height: h,
         data: vec![[0; 4]; (w * h) as usize],
     };
-    let pixels = layer_rgba(layer);
-    let rect = layer.rect;
-    for y in rect.top.max(0)..rect.bottom.min(h) {
-        for x in rect.left.max(0)..rect.right.min(w) {
-            out.set(x, y, pixels.get(x - rect.left, y - rect.top));
-        }
+    let (uw, uh) = (w.max(0) as usize, h.max(0) as usize);
+    if uw == 0 || uh == 0 {
+        return Some(out);
     }
+    let rect = layer.rect;
+    let (lw, lh) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
+    if lw == 0 || lh == 0 {
+        return Some(out);
+    }
+    let planes = layer_planes(layer);
+    out.data.par_chunks_mut(uw).enumerate().for_each(|(dy, row)| {
+        let ly = dy as i32 - rect.top;
+        if ly < 0 || ly >= lh as i32 {
+            return;
+        }
+        let ly = ly as usize;
+        let r = planes[0].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+        let g = planes[1].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+        let b = planes[2].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+        let a = planes[3].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+        for (dx, px) in row.iter_mut().enumerate() {
+            let lx = dx as i32 - rect.left;
+            if lx < 0 || lx >= lw as i32 {
+                continue;
+            }
+            let lx = lx as usize;
+            *px = [
+                r.get(lx).copied().unwrap_or(0),
+                g.get(lx).copied().unwrap_or(0),
+                b.get(lx).copied().unwrap_or(0),
+                a.get(lx).copied().unwrap_or(255),
+            ];
+        }
+    });
     Some(out)
 }
 
 /// `tile` repeated over a `width × height` surface with its top-left corner on
-/// document point `origin`; `None` for an empty tile.
+/// document point `origin`; `None` for an empty tile. Test-only oracle for the
+/// lazy Pattern source.
+#[cfg(test)]
 pub fn tiled(tile: &RgbaImage, width: u32, height: u32, origin: (i32, i32)) -> Option<RgbaImage> {
     if tile.width <= 0 || tile.height <= 0 {
         return None;
@@ -282,6 +421,7 @@ pub fn tiled(tile: &RgbaImage, width: u32, height: u32, origin: (i32, i32)) -> O
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stroke::{layer_at, layer_rgba, layer_rgba_serial, parse_layer_path};
     use crate::{pattern, Stroke, StrokeConfig, StrokeSample};
     use pictura_core::{AdjustmentData, BitDepth, Channel, ColorMode, Layer, PsdRect};
 
@@ -436,7 +576,7 @@ mod tests {
             "90° did not rotate the mark up"
         );
         assert!(StampSource::transformed(img, (-16, 0), anchor, identity)
-            .transform
+            .transform()
             .is_none());
     }
 
@@ -503,5 +643,269 @@ mod tests {
             ..Default::default()
         }]);
         assert!(layer_surface(&grouped, "0").is_none());
+    }
+
+    fn composite(w: u32, h: u32, seed: u8) -> PixelBuffer {
+        let mut buf = PixelBuffer::new(w, h, 4);
+        let n = (w * h) as usize;
+        buf.data = (0..n * 4)
+            .map(|i| (i as u8).wrapping_add(seed))
+            .collect::<Vec<u8>>()
+            .into();
+        buf
+    }
+
+    fn composite_surface_serial(buf: &PixelBuffer) -> RgbaImage {
+        let n = buf.pixel_count();
+        let at = |c: usize, i: usize| buf.data.get(c * n + i).copied().unwrap_or(0);
+        RgbaImage {
+            width: buf.width as i32,
+            height: buf.height as i32,
+            data: (0..n)
+                .map(|i| [at(0, i), at(1, i), at(2, i), at(3, i)])
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn surface_from_composite_matches_serial_builder() {
+        for (w, h) in [(8, 6), (1, 1), (0, 0)] {
+            let mut buf = composite(w, h, 7);
+            buf.data.fracture(w.max(1) as usize);
+            assert_eq!(
+                surface_from_composite(&buf),
+                composite_surface_serial(&buf),
+                "{w}x{h}"
+            );
+        }
+        let mut three = PixelBuffer::new(8, 6, 3);
+        let n = 8 * 6 * 3;
+        three.data = (0..n)
+            .map(|i| (i as u8).wrapping_add(9))
+            .collect::<Vec<u8>>()
+            .into();
+        three.data.fracture(8);
+        assert_eq!(
+            surface_from_composite(&three),
+            composite_surface_serial(&three),
+            "three channels"
+        );
+    }
+
+    fn offset_layer(w: i32, h: i32, rect: PsdRect, px: impl Fn(i32, i32) -> [u8; 4]) -> Layer {
+        let plane = |c: usize| (0..w * h).map(|i| px(i % w, i / w)[c]).collect::<Vec<u8>>();
+        let width = w.max(1) as usize;
+        Layer {
+            rect,
+            channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
+                .map(|(id, c)| {
+                    let mut channel = Channel {
+                        id,
+                        data: plane(c).into(),
+                    };
+                    channel.data.fracture(width);
+                    channel
+                })
+                .into(),
+            ..Default::default()
+        }
+    }
+
+    fn layer_surface_serial(doc: &Document, path: &str) -> Option<RgbaImage> {
+        let layer = layer_at(doc, &parse_layer_path(path)?)?;
+        if layer.is_group || layer.adjustment.is_some() {
+            return None;
+        }
+        let (w, h) = (doc.width as i32, doc.height as i32);
+        let mut out = RgbaImage {
+            width: w,
+            height: h,
+            data: vec![[0; 4]; (w * h) as usize],
+        };
+        let pixels = layer_rgba_serial(layer);
+        let rect = layer.rect;
+        for y in rect.top.max(0)..rect.bottom.min(h) {
+            for x in rect.left.max(0)..rect.right.min(w) {
+                out.set(x, y, pixels.get(x - rect.left, y - rect.top));
+            }
+        }
+        Some(out)
+    }
+
+    #[test]
+    fn layer_surface_matches_serial_builder() {
+        for rect in [
+            PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 32,
+                right: 32,
+            },
+            PsdRect {
+                top: 2,
+                left: 3,
+                bottom: 7,
+                right: 8,
+            },
+            PsdRect {
+                top: -2,
+                left: -3,
+                bottom: 3,
+                right: 4,
+            },
+        ] {
+            let (w, h) = (rect.width().max(1), rect.height().max(1));
+            let layer = offset_layer(w, h, rect, |x, y| {
+                [(x * 3) as u8, (y * 5) as u8, (x + y) as u8, 200]
+            });
+            let doc = doc(vec![layer]);
+            assert_eq!(
+                layer_surface(&doc, "0"),
+                layer_surface_serial(&doc, "0"),
+                "{rect:?}"
+            );
+        }
+        let zero = doc(vec![offset_layer(
+            0,
+            0,
+            PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            |_, _| [0; 4],
+        )]);
+        assert_eq!(layer_surface(&zero, "0"), layer_surface_serial(&zero, "0"));
+
+        let mut zero_doc = Document::new(0, 0, ColorMode::Rgb, BitDepth::Eight);
+        zero_doc.layers = pictura_core::LayerStack::from_layers(vec![offset_layer(
+            0,
+            0,
+            PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            |_, _| [0; 4],
+        )]);
+        assert_eq!(
+            layer_surface(&zero_doc, "0"),
+            layer_surface_serial(&zero_doc, "0")
+        );
+
+        let no_alpha = Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 4,
+                right: 4,
+            },
+            channels: [(0, 10u8), (1, 20), (2, 30)]
+                .map(|(id, value)| {
+                    let mut channel = Channel {
+                        id,
+                        data: vec![value; 16].into(),
+                    };
+                    channel.data.fracture(4);
+                    channel
+                })
+                .into(),
+            ..Default::default()
+        };
+        let no_alpha_doc = doc(vec![no_alpha]);
+        assert_eq!(
+            layer_surface(&no_alpha_doc, "0"),
+            layer_surface_serial(&no_alpha_doc, "0"),
+            "a layer without alpha"
+        );
+    }
+
+    #[test]
+    fn pattern_source_matches_tiled_image() {
+        let tile = pattern::tile(0).expect("the checkerboard");
+        let blank = doc(vec![layer(32, 32, |_, _| [0; 4])]);
+        for origin in [(0, 0), (-3, -5), (5, 7)] {
+            let from_image = stamp(
+                &blank,
+                StampSource::new(tiled(&tile, 32, 32, origin).unwrap(), (0, 0)),
+                &[16.0],
+            );
+            let from_tile = stamp(
+                &blank,
+                StampSource::pattern(tile.clone(), origin, 32, 32).unwrap(),
+                &[16.0],
+            );
+            assert_eq!(from_image, from_tile, "origin {origin:?}");
+        }
+        // A layer that hangs off the document must not paint where the
+        // document-sized pre-tiled image had no source.
+        let off = doc(vec![offset_layer(
+            40,
+            40,
+            PsdRect {
+                top: -4,
+                left: -4,
+                bottom: 36,
+                right: 36,
+            },
+            |_, _| [0; 4],
+        )]);
+        for origin in [(0, 0), (-3, -5), (5, 7)] {
+            let from_image = stamp(
+                &off,
+                StampSource::new(tiled(&tile, 32, 32, origin).unwrap(), (0, 0)),
+                &[0.0],
+            );
+            let from_tile = stamp(
+                &off,
+                StampSource::pattern(tile.clone(), origin, 32, 32).unwrap(),
+                &[0.0],
+            );
+            assert_eq!(from_image, from_tile, "off-canvas origin {origin:?}");
+        }
+        let empty = RgbaImage {
+            width: 0,
+            height: 0,
+            data: Vec::new(),
+        };
+        assert!(StampSource::pattern(empty, (0, 0), 32, 32).is_none());
+    }
+
+    #[test]
+    fn zero_size_sources_are_empty() {
+        let empty = Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            ..Default::default()
+        };
+        assert!(layer_rgba(&empty).data.is_empty());
+        let buf = PixelBuffer::new(0, 0, 4);
+        assert!(surface_from_composite(&buf).data.is_empty());
+        let img = RgbaImage {
+            width: 0,
+            height: 0,
+            data: Vec::new(),
+        };
+        let empty_rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        };
+        assert!(crate::art_history::layer_local(&img, empty_rect)
+            .data
+            .is_empty());
+        let mut zero_doc = Document::new(0, 0, ColorMode::Rgb, BitDepth::Eight);
+        zero_doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+            rect: empty_rect,
+            ..Default::default()
+        }]);
+        assert!(layer_surface(&zero_doc, "0").unwrap().data.is_empty());
     }
 }
