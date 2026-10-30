@@ -2,12 +2,12 @@
 //! recording cursor, playback cursor, and function-key reservations. Every
 //! structural change emits `changed`; the panel takes one snapshot per refresh.
 
-use cxx_qt_lib::QString;
-use pictura_script::{ActionLibrary, DocumentFacts, Platform, PlaybackSpeed, Player, Recorder};
-
+mod imp;
 mod library_ops;
 mod session_ops;
 mod snapshot;
+
+pub use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -317,51 +317,4 @@ pub mod ffi {
         #[qinvokable]
         fn clear_actions(self: Pin<&mut Self>);
     }
-}
-
-/// Backing state for [`ffi::ActionsEngine`].
-pub struct ActionsEngineRust {
-    library: ActionLibrary,
-    recorder: Recorder,
-    player: Option<Player>,
-    allow_tool_recording: bool,
-    facts: DocumentFacts,
-    speed: PlaybackSpeed,
-    pause_seconds: f64,
-    platform: Platform,
-    last_error: String,
-}
-
-impl Default for ActionsEngineRust {
-    fn default() -> Self {
-        Self {
-            library: ActionLibrary::with_default(),
-            recorder: Recorder::new(),
-            player: None,
-            allow_tool_recording: false,
-            facts: DocumentFacts::default(),
-            speed: PlaybackSpeed::Accelerated,
-            pause_seconds: 0.0,
-            platform: Platform::Linux,
-            last_error: String::new(),
-        }
-    }
-}
-
-impl ActionsEngineRust {
-    pub(super) fn end_sessions(&mut self) {
-        self.recorder.stop();
-        if let Some(player) = self.player.as_mut() {
-            player.cancel();
-        }
-        self.player = None;
-    }
-}
-
-fn index(value: i32) -> Option<usize> {
-    usize::try_from(value).ok()
-}
-
-pub(super) fn q(value: &str) -> QString {
-    QString::from(value)
 }

@@ -47,7 +47,9 @@ Workspace layout/commands: `mem:core`, `mem:suggested_commands`.
 - The cxx-qt build script watches only the bridge sources and the hand-written
   bridge edges; CMake hashes the bridge sources into `build/pictura_bridge.stamp`
   at configure time, and the translation units that include a generated header
-  depend on it, so a bridge change rebuilds the C++ in the same build.
+  depend on it, so a bridge change rebuilds the C++ in the same build. Bridge files
+  hold declarations only (implementation in each bridge's `imp.rs` child), so an
+  implementation edit reruns neither the build script nor the generated C++.
 
 ## Test/report/spec tooling
 

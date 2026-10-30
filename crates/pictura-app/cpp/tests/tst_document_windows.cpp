@@ -1,7 +1,8 @@
 // Document windows (#317): the active window is the command target, tabs
 // open and close documents, Ctrl+Tab / Shift+Ctrl+Tab cycle every document
-// window (#499), and the tab context menu acts on the clicked tab. Each test
-// function builds its own frame; floats are hosted in the frame.
+// window (#499), and the tab context menu acts on the clicked tab. The suite
+// shares one frame, which cleanup() returns to no documents and the Move tool;
+// floats are hosted in the frame.
 
 #include <QtTest/QtTest>
 
@@ -98,6 +99,7 @@ private slots:
     void initTestCase();
     void init();
     void cleanup();
+    void cleanupTestCase();
 
     void openAddsTab();
     void switchingTabsChangesCanvas();
@@ -172,16 +174,19 @@ void DocumentWindowsTest::initTestCase()
 {
     QVERIFY(stateHome_.isValid());
     setUnsavedPromptInteractive(false);
+    PanelFloat::setForceChildOverlayForTest(true);
+    window_ = pictura::test::makeMainWindow();
+    QVERIFY(window_ != nullptr);
+    window_->resize(1100, 700);
+    window_->show();
 }
 
 void DocumentWindowsTest::init()
 {
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
     PanelFloat::setForceChildOverlayForTest(true);
-    window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
-    window_->resize(1100, 700);
-    window_->show();
+    QCOMPARE(window_->documentCount(), 0);
     window_->activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(window_.get()));
 }
@@ -193,12 +198,20 @@ void DocumentWindowsTest::cleanup()
             menu->close();
         }
         window_->setActiveTool(ToolId::Move);
+        window_->setPanelsHidden(false);
+        window_->setOpenDelayForTest(0);
+        window_->setUrlOpenerForTest({});
         window_->cancelAllOpens();
         closeAll();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
-    window_.reset();
     PanelFloat::setForceChildOverlayForTest(false);
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
+}
+
+void DocumentWindowsTest::cleanupTestCase()
+{
+    window_.reset();
 }
 
 void DocumentWindowsTest::openAddsTab()
@@ -286,6 +299,7 @@ void DocumentWindowsTest::closeDirtyCancelKeepsTab()
     auto* close = qobject_cast<QAbstractButton*>(bar->tabButton(0, QTabBar::RightSide));
     QVERIFY(close != nullptr);
     QTest::mouseClick(close, Qt::LeftButton);
+    // negative window: proves the cancelled close leaves the document open
     QTest::qWait(50);
     QCOMPARE(window_->documentCount(), 1);
     QCOMPARE(bar->count(), 1);

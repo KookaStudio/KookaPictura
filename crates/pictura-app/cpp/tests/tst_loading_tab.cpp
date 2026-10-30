@@ -259,8 +259,7 @@ void LoadingTabTest::loadingTabShowsWhileWorkerRuns()
     TabSpinner* spinner = spinnerAt(0);
     QVERIFY(spinner != nullptr);
     const int angle = spinner->angleForTest();
-    QTest::qWait(200);
-    QVERIFY2(spinner->angleForTest() != angle, "the spinner advances while the worker runs");
+    QTRY_VERIFY2(spinner->angleForTest() != angle, "the spinner advances while the worker runs");
 
     QTRY_VERIFY(!window_->isLoadingDocument(0));
     QVERIFY(window_->activeView()->has_document());
@@ -418,8 +417,7 @@ void LoadingTabTest::spinnerAnimates()
     TabSpinner* spinner = spinnerAt(0);
     QVERIFY(spinner != nullptr);
     const int first = spinner->angleForTest();
-    QTest::qWait(200);
-    QVERIFY(spinner->angleForTest() != first);
+    QTRY_VERIFY(spinner->angleForTest() != first);
     window_->closeDocument(0, false);
 }
 
@@ -465,6 +463,7 @@ void LoadingTabTest::progressCardCancelCancels()
     QTRY_COMPARE(window_->documentCount(), 1);
     QCOMPARE(window_->activeDocumentIndex(), 0);
     QCOMPARE(window_->documentName(0), QStringLiteral("card-a.psd"));
+    // negative window: proves the held worker's late result adds nothing
     QTest::qWait(kOpenDelayMs + 150);
     QCOMPARE(window_->documentCount(), 1);
 }
@@ -529,6 +528,7 @@ void LoadingTabTest::middleClickCancels()
     const QRect rect = bar->tabRect(0);
     QTest::mouseClick(bar, Qt::MiddleButton, Qt::NoModifier, rect.center());
     QTRY_COMPARE(window_->documentCount(), 0);
+    // negative window: proves the held worker's late result adds nothing
     QTest::qWait(kOpenDelayMs + 150);
     QCOMPARE(window_->documentCount(), 0);
 }
@@ -548,8 +548,7 @@ void LoadingTabTest::middleClickClosesNormalTab()
     // The loading filter only cancels loading tabs; a ready tab closes.
     const QRect rect = bar->tabRect(0);
     QTest::mouseClick(bar, Qt::MiddleButton, Qt::NoModifier, rect.center());
-    QTest::qWait(100);
-    QCOMPARE(window_->documentCount(), 0);
+    QTRY_COMPARE(window_->documentCount(), 0);
 }
 
 void LoadingTabTest::closeButtonClosesTheDocument()
@@ -663,6 +662,7 @@ void LoadingTabTest::cancelledResultIsDiscarded()
     QTRY_VERIFY(window_->isLoadingDocument(0));
     window_->closeDocument(0, false);
     QTRY_COMPARE(outcome, int(PicturaMainWindow::OpenOutcome::Cancelled));
+    // negative window: proves the held worker's late result adds nothing
     QTest::qWait(kOpenDelayMs + 150);
     QCOMPARE(window_->documentCount(), 0);
     QVERIFY(window_->statusBar()->currentMessage().isEmpty());
@@ -782,5 +782,8 @@ void LoadingTabTest::bannerIsGone()
     QVERIFY(window_->findChild<QLabel*>(QStringLiteral("documentOpenBanner")) == nullptr);
 }
 
-QTEST_MAIN(LoadingTabTest)
+int main(int argc, char* argv[])
+{
+    return pictura::test::shardedMain<LoadingTabTest>(argc, argv);
+}
 #include "tst_loading_tab.moc"

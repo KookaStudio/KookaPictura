@@ -162,7 +162,7 @@ void PanelsParityTest::layerHoverCursor()
     QVERIFY2(setupLayers(), "layers fixture");
     const int doc = window_->activeDocumentIndex();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     QTreeView* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
     QWidget* viewport = tree->viewport();
@@ -199,7 +199,7 @@ void PanelsParityTest::lockBadgeClickUnlocks()
     panel_->selectPaths({path}, path);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QVERIFY2(panel_->clickLockBadgeForTest(path), "lock badge click");
     QCoreApplication::processEvents();
@@ -272,7 +272,7 @@ void PanelsParityTest::thumbnailAdjacencyAndActiveThumb()
     panel_->selectPaths({path}, path);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QTreeView* tree = panel_->findChild<QTreeView*>();
     auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
@@ -362,7 +362,7 @@ void PanelsParityTest::visibilityToggleIsResponsive()
     panel_->selectPaths({path}, path);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QTreeView* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
@@ -390,7 +390,7 @@ void PanelsParityTest::channelHoverAndCtrlOverlay()
     panel->setView(view_);
     panel->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QCOMPARE(panel->hoverChannelForTest(0, Qt::NoModifier),
              static_cast<int>(Qt::PointingHandCursor));
@@ -431,11 +431,11 @@ void PanelsParityTest::compactFlyoutClosesWhenGroupTearsOff()
 {
     window_->resize(1100, 700);
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     pictura::PanelColumn* column = window_->columnForPanel(QStringLiteral("layersPanel"));
     QVERIFY(column != nullptr);
     column->setRailMode(true);
-    QTest::qWait(20);
+    QTest::qWait(0);
 
     QVERIFY(column->openIconFlyoutForTest(QStringLiteral("layersPanel")));
     QVERIFY(column->iconFlyoutVisibleForTest());
@@ -470,11 +470,11 @@ void PanelsParityTest::compactFlyoutStaysOpenForTabTearOff()
 {
     window_->resize(1100, 700);
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     pictura::PanelColumn* column = window_->columnForPanel(QStringLiteral("layersPanel"));
     QVERIFY(column != nullptr);
     column->setRailMode(true);
-    QTest::qWait(20);
+    QTest::qWait(0);
 
     QVERIFY(column->openIconFlyoutForTest(QStringLiteral("layersPanel")));
     QVERIFY(column->iconFlyoutVisibleForTest());
@@ -509,11 +509,11 @@ void PanelsParityTest::compactFlyoutClosesWhenTabEmptiesIt()
 {
     window_->resize(1100, 700);
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     pictura::PanelColumn* column = window_->columnForPanel(QStringLiteral("propertiesPanel"));
     QVERIFY(column != nullptr);
     column->setRailMode(true);
-    QTest::qWait(20);
+    QTest::qWait(0);
 
     QVERIFY(column->openIconFlyoutForTest(QStringLiteral("propertiesPanel")));
     QVERIFY(column->iconFlyoutVisibleForTest());

@@ -1,8 +1,10 @@
 // Window > Arrange (#500) and the document window preferences (#317): Float in
 // Window, Float All in Windows, Consolidate All to Tabs, Cascade, Tile, the
 // Match commands, Open Documents As Tabs, Enable Floating Document Window Docking,
-// and crash recovery reopening as tabs. Each test function builds its own
-// frame; floats are hosted in the frame, so their geometry is the frame's.
+// and crash recovery reopening as tabs. The suite shares one frame, which
+// cleanup() returns to no documents and both preferences on; the persistence
+// and recovery checks build their own frames. Floats are hosted in the frame,
+// so their geometry is the frame's.
 
 #include <QtTest/QtTest>
 
@@ -165,6 +167,7 @@ private slots:
     void initTestCase();
     void init();
     void cleanup();
+    void cleanupTestCase();
 
     void arrangeFloatInWindow();
     void arrangeFloatAllThenConsolidate();
@@ -315,16 +318,22 @@ void DocumentArrangeTest::initTestCase()
 {
     QVERIFY(stateHome_.isValid());
     setUnsavedPromptInteractive(false);
+    PanelFloat::setForceChildOverlayForTest(true);
+    window_ = pictura::test::makeMainWindow();
+    QVERIFY(window_ != nullptr);
+    window_->resize(1100, 700);
+    window_->show();
 }
 
 void DocumentArrangeTest::init()
 {
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
     PanelFloat::setForceChildOverlayForTest(true);
-    window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    QCOMPARE(window_->documentCount(), 0);
+    // cascadeKeepsHeadersReachable shrinks the frame.
     window_->resize(1100, 700);
-    window_->show();
+    QTRY_COMPARE(window_->size(), QSize(1100, 700));
     window_->activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(window_.get()));
 }
@@ -332,19 +341,24 @@ void DocumentArrangeTest::init()
 void DocumentArrangeTest::cleanup()
 {
     if (window_) {
-        // Turn both preferences back on, so the shared session store the next
-        // frame loads keeps the defaults.
         if (PreferencesDialog* prefs = window_->preferencesDialog()) {
             prefs->setCheckboxForTest(kTabsPref, true);
             prefs->setCheckboxForTest(kDockingPref, true);
             prefs->close();
         }
+        window_->setActiveTool(ToolId::Move);
+        window_->setOpenDelayForTest(0);
         window_->cancelAllOpens();
         closeAll();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
-    window_.reset();
     PanelFloat::setForceChildOverlayForTest(false);
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
+}
+
+void DocumentArrangeTest::cleanupTestCase()
+{
+    window_.reset();
 }
 
 void DocumentArrangeTest::arrangeFloatInWindow()

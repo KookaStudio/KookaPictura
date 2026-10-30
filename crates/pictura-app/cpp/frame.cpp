@@ -142,6 +142,12 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     // The window predates the application font, so it keeps the default face
     // until told otherwise; the menu bar is created below and inherits it.
     setFont(QApplication::font());
+    // Apply the restored theme before the menus, panels, and tools exist, so
+    // they are built under it instead of re-polished by a later application.
+    // Its style sheet reads the scale and the application font set above.
+    brightnessLevel_ = Theme::clampLevel(state.brightnessLevel);
+    Theme::apply(themeFamily_ == 1 ? Theme::ThemeFamily::Light : Theme::ThemeFamily::Dark,
+                 brightnessLevel_);
     // Probe the adapter once so the toggle can be offered without a document.
     {
         PictureView probe;
@@ -154,7 +160,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     registry_->setExecutor(command_ids::FileSave, saveToRecordedPath);
     registry_->setExecutor(command_ids::FileSaveAs, saveToRecordedPath);
     buildMenus();
-    buildPanels(state);
+    const QList<PanelGroup*> stagedGroups = buildPanels(state);
     buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch, state.toolOptions);
     if (tools_) {
         tools_->setTypePlaceholderText(state.typePlaceholderText);
@@ -185,7 +191,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     }
     applyBrightness(state.brightnessLevel);
     applyPanelSession(state);
-    applyFreshSessionDefault(state);
+    applyFreshSessionDefault(state, stagedGroups);
     const bool sessionHadLayout = !state.panelColumns.isEmpty() || !state.panelGroups.isEmpty();
     initWorkspaces(sessionHadLayout);
     // Persist every column change through the same path as the Window toggles,

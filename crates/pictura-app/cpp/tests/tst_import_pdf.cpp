@@ -1,7 +1,9 @@
 // Generic PDF / EPS import and File > Open As (#627, `interop/pdf-eps-import`,
 // `interop/open-as`): the Import PDF and Rasterize Generic EPS Format dialogs,
 // the password prompt, the warnings box, and decoder selection. Cases that
-// rasterize need Ghostscript (`gs`) and skip without it; CI installs it.
+// rasterize need Ghostscript (`gs`) and skip without it; CI installs it. The
+// suite shares one frame, never shown; cleanup() closes its documents and
+// clears the dialog drivers, the open delay and the status message.
 
 #include <QtTest/QtTest>
 
@@ -215,6 +217,11 @@ class ImportPdfTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
+    void init();
+    void cleanup();
+    void cleanupTestCase();
+
     void genericPdfShowsDialog();
     void picturaPdfSkipsDialog();
     void protectedPicturaPdfKeepsLayers();
@@ -247,17 +254,53 @@ private slots:
     void openFiltersListPdfEps();
     void pdfEntryPointUsesLoadingTab();
     void epsEntryPointUsesLoadingTab();
+
+private:
+    test::ScopedStateHome stateHome_;
+    std::unique_ptr<PicturaMainWindow> window_;
 };
+
+void ImportPdfTest::initTestCase()
+{
+    QVERIFY(stateHome_.isValid());
+    window_ = test::makeMainWindow();
+    QVERIFY(window_ != nullptr);
+}
+
+void ImportPdfTest::init()
+{
+    QVERIFY(window_ != nullptr);
+    QCOMPARE(window_->documentCount(), 0);
+}
+
+void ImportPdfTest::cleanup()
+{
+    if (!window_) {
+        return;
+    }
+    window_->cancelAllOpens();
+    while (window_->documentCount() > 0) {
+        window_->closeDocument(0, false);
+    }
+    window_->setImportDialogDriverForTest({});
+    window_->setPdfDialogDriverForTest({});
+    window_->setOpenDelayForTest(0);
+    window_->statusBar()->clearMessage();
+}
+
+void ImportPdfTest::cleanupTestCase()
+{
+    window_.reset();
+}
 
 // pdf_import_dialog_shown
 void ImportPdfTest::genericPdfShowsDialog()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen));
+    window->setImportDialogDriverForTest(driver(window, &seen));
     QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("sample.pdf"), redPage())));
     QCOMPARE(seen.pdfDialogs, 1);
     QCOMPARE(seen.documentsAtDialog, 0);
@@ -267,9 +310,8 @@ void ImportPdfTest::genericPdfShowsDialog()
 // pdf_pictura_skips_dialog
 void ImportPdfTest::picturaPdfSkipsDialog()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     QImage image(16, 12, QImage::Format_RGB32);
     image.fill(QColor(30, 140, 220));
     const QString png = dir.filePath(QStringLiteral("blue.png"));
@@ -280,7 +322,7 @@ void ImportPdfTest::picturaPdfSkipsDialog()
     window->setPdfDialogDriverForTest([](QDialog&) { return true; });
     QVERIFY(window->savePdfWithDialog(path));
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen));
+    window->setImportDialogDriverForTest(driver(window, &seen));
     QVERIFY(window->openDocumentAtPath(path));
     PictureView* view = window->activeView();
     QCOMPARE(view->layer_count(), 2);
@@ -323,18 +365,17 @@ QString saveLayeredPdf(PicturaMainWindow* window, const QTemporaryDir& dir, cons
 // pdf_encrypted_layers, pdf_encrypted_revert
 void ImportPdfTest::protectedPicturaPdfKeepsLayers()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     const QString path =
-        saveLayeredPdf(window.get(), dir, QStringLiteral("kooka"), QStringLiteral("owner"));
+        saveLayeredPdf(window, dir, QStringLiteral("kooka"), QStringLiteral("owner"));
     QVERIFY(!path.isEmpty());
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     QVERIFY(file.readAll().contains("/Encrypt"));
     Seen seen;
     window->setImportDialogDriverForTest(
-        driver(window.get(), &seen, {}, {}, {QStringLiteral("wrong"), QStringLiteral("kooka")}));
+        driver(window, &seen, {}, {}, {QStringLiteral("wrong"), QStringLiteral("kooka")}));
     QVERIFY(window->openDocumentAtPath(path));
     QCOMPARE(seen.prompts, 2);
     QCOMPARE(seen.pdfDialogs, 0);
@@ -351,15 +392,14 @@ void ImportPdfTest::protectedPicturaPdfKeepsLayers()
 // pdf_encrypted_revert_failure
 void ImportPdfTest::wrongPasswordRevertKeepsTheDocument()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     const QString path =
-        saveLayeredPdf(window.get(), dir, QStringLiteral("kooka"), QStringLiteral("owner"));
+        saveLayeredPdf(window, dir, QStringLiteral("kooka"), QStringLiteral("owner"));
     QVERIFY(!path.isEmpty());
     Seen seen;
     window->setImportDialogDriverForTest(
-        driver(window.get(), &seen, {}, {}, {QStringLiteral("kooka")}));
+        driver(window, &seen, {}, {}, {QStringLiteral("kooka")}));
     QVERIFY(window->openDocumentAtPath(path));
     QCOMPARE(seen.prompts, 1);
     PictureView* view = window->activeView();
@@ -398,13 +438,12 @@ void ImportPdfTest::wrongPasswordRevertKeepsTheDocument()
 // pdf_permissions_only_layers
 void ImportPdfTest::permissionsOnlyPdfOpensWithoutPrompt()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
-    const QString path = saveLayeredPdf(window.get(), dir, QString(), QStringLiteral("owner"));
+    PicturaMainWindow* window = window_.get();
+    const QString path = saveLayeredPdf(window, dir, QString(), QStringLiteral("owner"));
     QVERIFY(!path.isEmpty());
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen));
+    window->setImportDialogDriverForTest(driver(window, &seen));
     QVERIFY(window->openDocumentAtPath(path));
     QCOMPARE(seen.prompts, 0);
     QCOMPARE(seen.pdfDialogs, 0);
@@ -415,11 +454,10 @@ void ImportPdfTest::permissionsOnlyPdfOpensWithoutPrompt()
 void ImportPdfTest::pdfRecognizedBySignature()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen, {}, {}, {}, false));
+    window->setImportDialogDriverForTest(driver(window, &seen, {}, {}, {}, false));
     QVERIFY(!window->openDocumentAtPath(write(dir, QStringLiteral("art.ai"), redPage())));
     QCOMPARE(seen.pdfDialogs, 1);
 }
@@ -428,11 +466,10 @@ void ImportPdfTest::pdfRecognizedBySignature()
 void ImportPdfTest::cancelOpensNothing()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen, {}, {}, {}, false));
+    window->setImportDialogDriverForTest(driver(window, &seen, {}, {}, {}, false));
     QVERIFY(!window->openDocumentAtPath(write(dir, QStringLiteral("sample.pdf"), redPage())));
     QCOMPARE(seen.pdfDialogs, 1);
     QCOMPARE(window->documentCount(), 0);
@@ -442,9 +479,8 @@ void ImportPdfTest::cancelOpensNothing()
 void ImportPdfTest::dialogDefaults()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     const QStringList read = {
         QStringLiteral("pagesChecked"), QStringLiteral("threeDEnabled"),
@@ -456,7 +492,7 @@ void ImportPdfTest::dialogDefaults()
         QStringLiteral("thumbnailSize"), QStringLiteral("suppress"),
         QStringLiteral("constrain"),
     };
-    window->setImportDialogDriverForTest(driver(window.get(), &seen, {}, read, {}, false));
+    window->setImportDialogDriverForTest(driver(window, &seen, {}, read, {}, false));
     window->openDocumentAtPath(write(dir, QStringLiteral("sample.pdf"), redPage()));
     QCOMPARE(seen.fields.value(QStringLiteral("pagesChecked")), QStringLiteral("1"));
     QCOMPARE(seen.fields.value(QStringLiteral("threeDEnabled")), QStringLiteral("0"));
@@ -480,9 +516,8 @@ void ImportPdfTest::dialogDefaults()
 void ImportPdfTest::thumbnailSizeChangesGrid()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     QStringList sizes;
     window->setImportDialogDriverForTest([&sizes](QDialog& dialog) {
         auto* pdf = qobject_cast<ImportPdfDialog*>(&dialog);
@@ -507,12 +542,11 @@ void ImportPdfTest::thumbnailSizeChangesGrid()
 void ImportPdfTest::boundingBoxSetsSize()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(driver(
-        window.get(), &seen, {}, {QStringLiteral("width"), QStringLiteral("height")}, {}, false));
+        window, &seen, {}, {QStringLiteral("width"), QStringLiteral("height")}, {}, false));
     window->openDocumentAtPath(write(dir, QStringLiteral("sample.pdf"), redPage()));
     QVERIFY(qAbs(seen.fields.value(QStringLiteral("width")).toDouble() - 60.0 / 72.0) < 0.01);
     QVERIFY(qAbs(seen.fields.value(QStringLiteral("height")).toDouble() - 30.0 / 72.0) < 0.01);
@@ -522,9 +556,8 @@ void ImportPdfTest::boundingBoxSetsSize()
 void ImportPdfTest::constrainKeepsAspect()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     QStringList heights;
     window->setImportDialogDriverForTest([&heights](QDialog& dialog) {
         auto* pdf = qobject_cast<ImportPdfDialog*>(&dialog);
@@ -547,9 +580,8 @@ void ImportPdfTest::constrainKeepsAspect()
 void ImportPdfTest::resolutionKeepsPhysicalSize()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     QStringList seen;
     window->setImportDialogDriverForTest([&seen](QDialog& dialog) {
         auto* pdf = qobject_cast<ImportPdfDialog*>(&dialog);
@@ -576,12 +608,11 @@ void ImportPdfTest::resolutionKeepsPhysicalSize()
 void ImportPdfTest::multiPageShowsLargestBox()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(driver(
-        window.get(), &seen,
+        window, &seen,
         {{QStringLiteral("cropTo"), QStringLiteral("Media Box")},
          {QStringLiteral("select"), QStringLiteral("1,2")}},
         {QStringLiteral("width"), QStringLiteral("height")}));
@@ -600,12 +631,11 @@ void ImportPdfTest::multiPageShowsLargestBox()
 void ImportPdfTest::opensPageOnTransparentLayer()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(driver(
-        window.get(), &seen,
+        window, &seen,
         {{QStringLiteral("cropTo"), QStringLiteral("Media Box")},
          {QStringLiteral("resolution"), QStringLiteral("72")}}));
     QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("sample.pdf"), redPage())));
@@ -627,13 +657,12 @@ void ImportPdfTest::opensPageOnTransparentLayer()
 void ImportPdfTest::modeAndDepthApply()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     const QString path = write(dir, QStringLiteral("sample.pdf"), redPage());
     Seen seen;
     window->setImportDialogDriverForTest(driver(
-        window.get(), &seen,
+        window, &seen,
         {{QStringLiteral("resolution"), QStringLiteral("72")},
          {QStringLiteral("mode"), QStringLiteral("CMYK Color")},
          {QStringLiteral("depth"), QStringLiteral("16 bit")}}));
@@ -642,7 +671,7 @@ void ImportPdfTest::modeAndDepthApply()
     QCOMPARE(image_depth_bits(*window->activeView()), 16);
 
     window->setImportDialogDriverForTest(driver(
-        window.get(), &seen,
+        window, &seen,
         {{QStringLiteral("resolution"), QStringLiteral("72")},
          {QStringLiteral("mode"), QStringLiteral("Grayscale")}}));
     QVERIFY(window->openDocumentAtPath(path));
@@ -654,12 +683,11 @@ void ImportPdfTest::modeAndDepthApply()
 void ImportPdfTest::multiSelectOpensDocuments()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(driver(
-        window.get(), &seen,
+        window, &seen,
         {{QStringLiteral("resolution"), QStringLiteral("36")},
          {QStringLiteral("select"), QStringLiteral("1,3")}},
         {QStringLiteral("selectedLabel")}));
@@ -677,12 +705,11 @@ void ImportPdfTest::multiSelectOpensDocuments()
 void ImportPdfTest::imagesModeListsImages()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(
-        driver(window.get(), &seen, {{QStringLiteral("images"), QStringLiteral("1")}},
+        driver(window, &seen, {{QStringLiteral("images"), QStringLiteral("1")}},
                {QStringLiteral("selectedLabel"), QStringLiteral("count"),
                 QStringLiteral("imagesEnabled")},
                {}, false));
@@ -697,12 +724,11 @@ void ImportPdfTest::imagesModeListsImages()
 void ImportPdfTest::imagesModeOpensImage()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(
-        driver(window.get(), &seen, {{QStringLiteral("images"), QStringLiteral("1")}}));
+        driver(window, &seen, {{QStringLiteral("images"), QStringLiteral("1")}}));
     QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("pictures.pdf"), imagesPdf())));
     PictureView* view = window->activeView();
     QCOMPARE(view->document_width(), 40);
@@ -739,13 +765,12 @@ QString encryptedPdf(const QTemporaryDir& dir)
 void ImportPdfTest::passwordPromptOpens()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     const QString locked = encryptedPdf(dir);
     QVERIFY(QFile::exists(locked));
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen,
+    window->setImportDialogDriverForTest(driver(window, &seen,
                                                 {{QStringLiteral("resolution"), QStringLiteral("72")}},
                                                 {QStringLiteral("count")},
                                                 {QStringLiteral("kooka")}));
@@ -759,13 +784,12 @@ void ImportPdfTest::passwordPromptOpens()
 void ImportPdfTest::wrongPasswordAsksAgain()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     const QString locked = encryptedPdf(dir);
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(
-        driver(window.get(), &seen, {}, {}, {QStringLiteral("wrong")}));
+        driver(window, &seen, {}, {}, {QStringLiteral("wrong")}));
     QVERIFY(!window->openDocumentAtPath(locked));
     QCOMPARE(seen.prompts, 2);
     QCOMPARE(seen.pdfDialogs, 0);
@@ -776,7 +800,6 @@ void ImportPdfTest::wrongPasswordAsksAgain()
 void ImportPdfTest::suppressWarningsHidesMessage()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     // Every cross-reference offset is off by five: Ghostscript repairs the
     // file and says so.
@@ -794,15 +817,15 @@ void ImportPdfTest::suppressWarningsHidesMessage()
     }
     damaged = damaged.left(xref) + shifted;
     const QString path = write(dir, QStringLiteral("damaged.pdf"), damaged);
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen loud;
     window->setImportDialogDriverForTest(driver(
-        window.get(), &loud, {{QStringLiteral("resolution"), QStringLiteral("72")}}));
+        window, &loud, {{QStringLiteral("resolution"), QStringLiteral("72")}}));
     QVERIFY(window->openDocumentAtPath(path));
     QCOMPARE(loud.warnings, 1);
     Seen quiet;
     window->setImportDialogDriverForTest(
-        driver(window.get(), &quiet,
+        driver(window, &quiet,
                {{QStringLiteral("resolution"), QStringLiteral("72")},
                 {QStringLiteral("suppress"), QStringLiteral("1")}}));
     QVERIFY(window->openDocumentAtPath(path));
@@ -813,12 +836,11 @@ void ImportPdfTest::suppressWarningsHidesMessage()
 // gs_missing_reports
 void ImportPdfTest::missingGhostscriptReports()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     qputenv("PICTURA_GHOSTSCRIPT", "/nonexistent/pictura-gs");
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen));
+    window->setImportDialogDriverForTest(driver(window, &seen));
     const bool pdfOpened =
         window->openDocumentAtPath(write(dir, QStringLiteral("sample.pdf"), redPage()));
     const QString pdfStatus = status(*window);
@@ -836,12 +858,11 @@ void ImportPdfTest::missingGhostscriptReports()
 // eps_dialog_defaults
 void ImportPdfTest::epsDialogDefaults()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(driver(
-        window.get(), &seen, {},
+        window, &seen, {},
         {QStringLiteral("width"), QStringLiteral("height"), QStringLiteral("widthUnit"),
          QStringLiteral("resolution"), QStringLiteral("resolutionUnit"), QStringLiteral("mode"),
          QStringLiteral("constrain"), QStringLiteral("antiAliased")},
@@ -862,12 +883,11 @@ void ImportPdfTest::epsDialogDefaults()
 void ImportPdfTest::epsOpensAtSize()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
     window->setImportDialogDriverForTest(
-        driver(window.get(), &seen, {{QStringLiteral("resolution"), QStringLiteral("72")}}));
+        driver(window, &seen, {{QStringLiteral("resolution"), QStringLiteral("72")}}));
     QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("blue.eps"), kBlueEps)));
     PictureView* view = window->activeView();
     QCOMPARE(view->document_width(), 144);
@@ -881,11 +901,10 @@ void ImportPdfTest::epsOpensAtSize()
 // eps_cancel
 void ImportPdfTest::epsCancelOpensNothing()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     Seen seen;
-    window->setImportDialogDriverForTest(driver(window.get(), &seen, {}, {}, {}, false));
+    window->setImportDialogDriverForTest(driver(window, &seen, {}, {}, {}, false));
     QVERIFY(!window->openDocumentAtPath(write(dir, QStringLiteral("blue.eps"), kBlueEps)));
     QCOMPARE(seen.epsDialogs, 1);
     QCOMPARE(window->documentCount(), 0);
@@ -894,8 +913,7 @@ void ImportPdfTest::epsCancelOpensNothing()
 // open_as_command
 void ImportPdfTest::openAsIsLive()
 {
-    test::ScopedStateHome stateHome;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     QAction* action = window->registry()->action(QString::fromLatin1(command_ids::FileOpenAs));
     QVERIFY(action);
     QVERIFY(action->isEnabled());
@@ -905,13 +923,12 @@ void ImportPdfTest::openAsIsLive()
 // open_as_forces_format
 void ImportPdfTest::openAsForcesFormat()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     QImage image(12, 8, QImage::Format_RGB32);
     image.fill(QColor(10, 200, 30));
     const QString path = dir.filePath(QStringLiteral("photo.dat"));
     QVERIFY(image.save(path, "PNG"));
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     const int png = int(openAsFileFilters().indexOf(QStringLiteral("PNG (*.PNG)")));
     QVERIFY(png >= 0);
     QVERIFY(window->openAsPath(path, png));
@@ -922,13 +939,12 @@ void ImportPdfTest::openAsForcesFormat()
 // open_as_mismatch
 void ImportPdfTest::openAsReportsMismatch()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     QImage image(4, 4, QImage::Format_RGB32);
     image.fill(Qt::red);
     const QString path = dir.filePath(QStringLiteral("photo.png"));
     QVERIFY(image.save(path));
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     const int pdfFormat =
         int(openAsFileFilters().indexOf(QStringLiteral("Generic PDF (*.PDF *.PDP *.AI)")));
     QVERIFY(pdfFormat >= 0);
@@ -942,11 +958,10 @@ void ImportPdfTest::openAsReportsMismatch()
 // fails still reports the mismatch message instead of removing the tab silently.
 void ImportPdfTest::openAsReportsCorruptDecode()
 {
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     const QString path = write(dir, QStringLiteral("corrupt.png"),
                                QByteArray("\x89PNG\r\n\x1a\nnot a png"));
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     const int pngFormat = int(openAsFileFilters().indexOf(QStringLiteral("PNG (*.PNG)")));
     QVERIFY(pngFormat >= 0);
     QVERIFY(!window->openAsPath(path, pngFormat));
@@ -972,13 +987,14 @@ void ImportPdfTest::openFiltersListPdfEps()
 void ImportPdfTest::pdfEntryPointUsesLoadingTab()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     window->setOpenDelayForTest(200);
     bool sawLoadingTab = false;
+    // The shared frame outlives this function; the timer must not.
+    QObject alive;
     window->setImportDialogDriverForTest([&](QDialog&) {
-        QTimer::singleShot(50, window.get(), [&] {
+        QTimer::singleShot(50, &alive, [&] {
             sawLoadingTab = window->documentCount() == 1 && window->isLoadingDocument(0);
         });
         return true;
@@ -990,13 +1006,14 @@ void ImportPdfTest::pdfEntryPointUsesLoadingTab()
 void ImportPdfTest::epsEntryPointUsesLoadingTab()
 {
     REQUIRE_GS();
-    test::ScopedStateHome stateHome;
     QTemporaryDir dir;
-    auto window = test::makeMainWindow();
+    PicturaMainWindow* window = window_.get();
     window->setOpenDelayForTest(200);
     bool sawLoadingTab = false;
+    // The shared frame outlives this function; the timer must not.
+    QObject alive;
     window->setImportDialogDriverForTest([&](QDialog&) {
-        QTimer::singleShot(50, window.get(), [&] {
+        QTimer::singleShot(50, &alive, [&] {
             sawLoadingTab = window->documentCount() == 1 && window->isLoadingDocument(0);
         });
         return true;

@@ -151,6 +151,9 @@ void EditRefreshTest::cleanup()
 {
     if (window_) {
         closeAll(*window_);
+        // A closed document's views go through deleteLater; flush them so the
+        // next function starts from no documents and no pending deletes.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
 }
 
@@ -319,6 +322,7 @@ void EditRefreshTest::anEditRefreshesTheDockInPlace()
 {
     QVERIFY(window_->newDocument(QStringLiteral("DockInPlace"), 64, 64, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     pictura::PictureView* view = window_->activeView();
     auto* layers = window_->layersPanelForTest();
@@ -329,6 +333,7 @@ void EditRefreshTest::anEditRefreshesTheDockInPlace()
     const QString layer = view->add_layer_in(QString());
     QVERIFY(!layer.isEmpty());
     QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), base + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), base + 1);
     QCOMPARE(window_->dockRetargetCountForTest(), retarget);
@@ -336,6 +341,7 @@ void EditRefreshTest::anEditRefreshesTheDockInPlace()
     const int previewBase = layers->refreshCountForTest();
     QVERIFY(view->preview_layers_opacity(QStringList{layer}, 200) > 0);
     QTRY_VERIFY_WITH_TIMEOUT(layers->refreshCountForTest() > previewBase, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(window_->dockRetargetCountForTest(), retarget);
 
@@ -346,6 +352,7 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
 {
     QVERIFY(window_->newDocument(QStringLiteral("SwitchA"), 16, 16, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     auto* paths = window_->findChild<pictura::PathsPanel*>(QStringLiteral("pathsPanel"));
     QVERIFY(paths);
@@ -353,6 +360,7 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     QCOMPARE(paths->listForTest()->count(), 1);
     QVERIFY(window_->newDocument(QStringLiteral("SwitchB"), 512, 512, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     QCOMPARE(paths->listForTest()->count(), 0);
     auto* layers = window_->layersPanelForTest();
@@ -363,6 +371,7 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     window_->setActiveDocumentIndex(0);
     QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > retargetA, 1000);
     QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), layersA + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), layersA + 1);
     QCOMPARE(paths->listForTest()->count(), 1);
@@ -372,6 +381,7 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     window_->setActiveDocumentIndex(1);
     QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > retargetB, 1000);
     QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), layersB + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), layersB + 1);
     QCOMPARE(paths->listForTest()->count(), 0);
@@ -382,6 +392,7 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     QVERIFY(window_->registry()->dispatch(QStringLiteral("window.arrange.new.window.for.file")));
     QTRY_COMPARE_WITH_TIMEOUT(window_->windowCountForTest(1), windows + 1, 1000);
     QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > retargetWindow, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), layersBeforeWindow + 1);
 
@@ -390,6 +401,7 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     window_->activateWindowForTest(1, 0);
     QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > windowRetargetA, 1000);
     QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), windowSwitchA + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), windowSwitchA + 1);
 
@@ -398,6 +410,7 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     window_->activateWindowForTest(1, 1);
     QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > windowRetargetB, 1000);
     QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), windowSwitchB + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), windowSwitchB + 1);
 
@@ -405,12 +418,14 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     QVERIFY(window_->activeView()->new_document(512, 512, QStringLiteral("rgb"), 8,
                                                 QStringLiteral("white")));
     QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > generationRetarget, 1000);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     QCOMPARE(paths->listForTest()->count(), 0);
 
     const QString fixture = patternFixture();
     QVERIFY2(!fixture.isEmpty(), "pattern fixture");
     QVERIFY(window_->openDocumentAtPath(fixture));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     auto* adjustments =
         window_->findChild<pictura::AdjustmentsPanel*>(QStringLiteral("adjustmentsPanel"));
@@ -421,19 +436,21 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     QVERIFY(layers->patternActionEnabledForTest());
 
     window_->setActiveDocumentIndex(1);
-    QTest::qWait(250);
+    QTRY_VERIFY(!pattern->isEnabled() && !layers->patternActionEnabledForTest());
     QVERIFY(!pattern->isEnabled());
     QVERIFY(!layers->patternActionEnabledForTest());
 
     // A document switch whose new view has a filter commit running defers the
     // bind until the commit lands.
     window_->setActiveDocumentIndex(1);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(200);
     pictura::PictureView* busy = window_->activeView();
     QVERIFY(busy);
     const QString busyLayer = busy->add_layer_in(QString());
     QVERIFY(!busyLayer.isEmpty());
     busy->set_active_layer(busyLayer);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(200);
     pictura::image_adjust_apply_set_delay(*busy, 1000);
     const bool started = pictura::filter_commit_start(
@@ -443,9 +460,11 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     QVERIFY2(started, "filter commit started");
     QVERIFY2(pictura::filter_commit_running(*busy), "filter commit did not start");
     window_->setActiveDocumentIndex(0);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(200);
     const int deferred = window_->dockRetargetCountForTest();
     window_->setActiveDocumentIndex(1);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(200);
     QCOMPARE(window_->dockRetargetCountForTest(), deferred);
     QVERIFY(pictura::filter_commit_finish(*busy));
@@ -458,6 +477,7 @@ void EditRefreshTest::aNewDocumentRefreshesLayersOnce()
 {
     QVERIFY(window_->newDocument(QStringLiteral("First"), 16, 16, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     auto* layers = window_->layersPanelForTest();
     QVERIFY(layers);
@@ -465,6 +485,7 @@ void EditRefreshTest::aNewDocumentRefreshesLayersOnce()
 
     QVERIFY(window_->newDocument(QStringLiteral("Second"), 16, 16, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), base + 1);
 }
@@ -475,12 +496,14 @@ void EditRefreshTest::aDeferredBindSurvivesClosingTheBoundDocument()
                                  QStringLiteral("white")));
     QVERIFY(window_->newDocument(QStringLiteral("Busy"), 64, 64, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     pictura::PictureView* busy = window_->activeView();
     QVERIFY(busy);
     const QString layer = busy->add_layer_in(QString());
     QVERIFY(!layer.isEmpty());
     busy->set_active_layer(layer);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
 
     pictura::image_adjust_apply_set_delay(*busy, 1000);
@@ -489,8 +512,10 @@ void EditRefreshTest::aDeferredBindSurvivesClosingTheBoundDocument()
     pictura::image_adjust_apply_set_delay(*busy, 0);
     QVERIFY(pictura::filter_commit_running(*busy));
     window_->setActiveDocumentIndex(0);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(200);
     window_->setActiveDocumentIndex(1);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(200);
     const int deferred = window_->dockRetargetCountForTest();
 
@@ -498,6 +523,7 @@ void EditRefreshTest::aDeferredBindSurvivesClosingTheBoundDocument()
     QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > deferred, 1000);
     QVERIFY(window_->activeView() == busy);
     QVERIFY(pictura::filter_commit_finish(*busy));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
 
     closeAll(*window_);
@@ -507,9 +533,11 @@ void EditRefreshTest::anEditDoesNotRebindTheDock()
 {
     QVERIFY(window_->newDocument(QStringLiteral("NoRebind"), 32, 32, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     const int retarget = window_->dockRetargetCountForTest();
     QVERIFY(!window_->activeView()->add_layer_in(QString()).isEmpty());
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(window_->dockRetargetCountForTest(), retarget);
     closeAll(*window_);
@@ -519,6 +547,7 @@ void EditRefreshTest::aCommittedEditRefreshesLayersOnce()
 {
     QVERIFY(window_->newDocument(QStringLiteral("LayersOnce"), 32, 32, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     auto* layers = window_->layersPanelForTest();
     QVERIFY(layers);
@@ -526,25 +555,30 @@ void EditRefreshTest::aCommittedEditRefreshesLayersOnce()
     const int base = layers->refreshCountForTest();
     QVERIFY(!window_->activeView()->add_layer_in(QString()).isEmpty());
     QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), base + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), base + 1);
 
     QVERIFY(window_->newDocument(QStringLiteral("Background"), 16, 16, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     window_->setActiveDocumentIndex(0);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     pictura::PictureView* active = window_->activeView();
     pictura::PictureView* background = window_->viewAt(1);
     QVERIFY(active && background);
     const int beforeBackground = layers->refreshCountForTest();
     QVERIFY(!background->add_layer_in(QString()).isEmpty());
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     QVERIFY2(layers->refreshCountForTest() > beforeBackground,
              "background change suppressed the active Layers panel");
     const int beforeActive = layers->refreshCountForTest();
     QVERIFY(!active->add_layer_in(QString()).isEmpty());
     QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), beforeActive + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), beforeActive + 1);
 
@@ -555,6 +589,7 @@ void EditRefreshTest::aStrokeCommitRefreshesPanels()
 {
     QVERIFY(window_->newDocument(QStringLiteral("StrokePanels"), 64, 64, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     pictura::PictureView* view = window_->activeView();
     auto* layers = window_->layersPanelForTest();
@@ -569,6 +604,7 @@ void EditRefreshTest::aStrokeCommitRefreshesPanels()
     QVERIFY(historyList);
 
     view->set_gpu_compute(false);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     const int layerBase = layers->refreshCountForTest();
     const int historyRows = historyList->count();
@@ -580,6 +616,7 @@ void EditRefreshTest::aStrokeCommitRefreshesPanels()
                               QStringLiteral("normal"), false, false));
     QVERIFY(view->paint_dab(32.0, 32.0, 1.0));
     const int midStroke = layers->refreshCountForTest();
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), midStroke);
     QVERIFY(view->end_paint());
@@ -597,6 +634,7 @@ void EditRefreshTest::aStrokeCommitDoesNotRetraceTheContour()
 {
     QVERIFY(window_->newDocument(QStringLiteral("StrokeContour"), 64, 64, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     pictura::PictureView* view = window_->activeView();
     QVERIFY(view);
@@ -609,6 +647,7 @@ void EditRefreshTest::aStrokeCommitDoesNotRetraceTheContour()
                               QStringLiteral("normal"), false, false));
     QVERIFY(view->paint_dab(32.0, 32.0, 1.0));
     QVERIFY(view->end_paint());
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     window_->refreshSelectionOverlay();
 
@@ -620,12 +659,14 @@ void EditRefreshTest::previewTicksCoalesceTheRegistry()
 {
     QVERIFY(window_->newDocument(QStringLiteral("PreviewRegistry"), 64, 64,
                                  QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     pictura::PictureView* view = window_->activeView();
     QVERIFY(view);
     view->set_gpu_compute(false);
     const QString layer = paintedLayer(view);
     QVERIFY(!layer.isEmpty());
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     pictura::CommandRegistry* registry = window_->registry();
     QVERIFY(registry);
@@ -634,6 +675,7 @@ void EditRefreshTest::previewTicksCoalesceTheRegistry()
     for (const int value : {240, 230, 220, 210}) {
         QVERIFY(view->preview_layers_opacity(QStringList{layer}, value) > 0);
     }
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     const int after = registry->refreshCount();
     QVERIFY(after - before >= 1);
@@ -646,12 +688,14 @@ void EditRefreshTest::aCommitRefreshIsNotDelayedByPreviews()
 {
     QVERIFY(window_->newDocument(QStringLiteral("CommitAfterPreview"), 64, 64,
                                  QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     pictura::PictureView* view = window_->activeView();
     QVERIFY(view);
     view->set_gpu_compute(false);
     const QString layer = paintedLayer(view);
     QVERIFY(!layer.isEmpty());
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     pictura::CommandRegistry* registry = window_->registry();
     QVERIFY(registry);
@@ -661,6 +705,7 @@ void EditRefreshTest::aCommitRefreshIsNotDelayedByPreviews()
     QVERIFY(!view->add_layer_in(QString()).isEmpty());
     const int after = registry->refreshCount();
     QCOMPARE(after - before, 1);
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     QCOMPARE(registry->refreshCount(), after);
 
@@ -673,13 +718,18 @@ void EditRefreshTest::anInactiveCloseDoesNotRebindTheDock()
                                  QStringLiteral("white")));
     QVERIFY(window_->newDocument(QStringLiteral("Inactive"), 16, 16, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
     QTest::qWait(250);
     const int before = window_->dockRetargetCountForTest();
     QVERIFY(window_->closeDocument(0, false));
+    // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(window_->dockRetargetCountForTest(), before);
     closeAll(*window_);
 }
 
-QTEST_MAIN(EditRefreshTest)
+int main(int argc, char* argv[])
+{
+    return pictura::test::shardedMain<EditRefreshTest>(argc, argv);
+}
 #include "tst_edit_refresh.moc"

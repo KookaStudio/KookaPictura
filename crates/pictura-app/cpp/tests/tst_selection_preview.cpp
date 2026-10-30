@@ -543,11 +543,11 @@ void SelectionPreviewTest::antsTickRepaintsOnlyTheOutline()
     window_->refreshSelectionOverlay();
 
     window_->show();
-    QTest::qWait(200);
-    QVERIFY(f.canvas->isVisible());
+    QTRY_VERIFY(f.canvas->isVisible());
 
     const int ticks = f.canvas->antsTicksForTest();
     QTRY_VERIFY_WITH_TIMEOUT(f.canvas->antsTicksForTest() > ticks, 1000);
+    // lets the tick's update() reach paintEvent; no hook marks that paint
     QTest::qWait(30);
 
     const QRect dirty = f.canvas->lastPaintRectForTest();
@@ -570,6 +570,7 @@ void SelectionPreviewTest::antsTickRepaintsOnlyTheOutline()
     f.canvas->setMoveOutline(QRectF(40, 40, 10, 10));
     const int moveTicks = f.canvas->antsTicksForTest();
     QTRY_VERIFY_WITH_TIMEOUT(f.canvas->antsTicksForTest() > moveTicks, 1000);
+    // lets the tick's update() reach paintEvent; no hook marks that paint
     QTest::qWait(30);
     const QRect moveDirty = f.canvas->lastPaintRectForTest();
     const QRectF moveWidget(f.canvas->imageToWidget(QPointF(40, 40)),

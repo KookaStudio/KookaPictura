@@ -2,7 +2,8 @@
 // a float keeps its view, tear-out and dock-back, Ctrl+drag and double-click
 // docking, the Wayland window drag, the dock zone and its dock line, the header
 // and its menu, keys in a top-level float, and how the screen modes and panel
-// controls treat floats. Each test function builds its own frame. Geometry
+// controls treat floats. The suite shares one frame; cleanup() returns it to
+// no documents, the Standard screen mode, Essentials, and docking on. Geometry
 // checks force the in-frame hosting; the checks named "top-level" or "under
 // Wayland" run top-level floats. Offscreen runs no platform drag: the dock
 // drag hook receives the drag data, and synthetic drag events stand in for
@@ -171,6 +172,7 @@ private slots:
     void initTestCase();
     void init();
     void cleanup();
+    void cleanupTestCase();
 
     void hostMoveKeepsView();
     void inactiveFloatRepaints();
@@ -357,16 +359,23 @@ void DocumentFloatTest::initTestCase()
 {
     QVERIFY(stateHome_.isValid());
     setUnsavedPromptInteractive(false);
+    PanelFloat::setForceChildOverlayForTest(true);
+    window_ = pictura::test::makeMainWindow();
+    QVERIFY(window_ != nullptr);
+    window_->resize(1100, 700);
+    window_->show();
 }
 
 void DocumentFloatTest::init()
 {
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
     PanelFloat::setForceChildOverlayForTest(true);
-    window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    QCOMPARE(window_->documentCount(), 0);
+    // A screen mode or a top-level float of the last function may have left
+    // the frame resized or inactive.
     window_->resize(1100, 700);
-    window_->show();
+    QTRY_COMPARE(window_->size(), QSize(1100, 700));
     window_->activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(window_.get()));
 }
@@ -377,25 +386,37 @@ void DocumentFloatTest::cleanup()
         if (QMenu* menu = window_->documentMenuForTest()) {
             menu->close();
         }
-        // The next frame loads the same session store, so docking goes back on.
         if (!window_->floatingDocumentDocking()) {
             setDocking(true);
         }
+        window_->setWindowDockDragForTest(nullptr);
         window_->setScreenMode(ScreenMode::Standard);
         window_->setPanelsHidden(false);
+        if (window_->activeWorkspaceForTest() != QStringLiteral("Essentials")) {
+            window_->switchWorkspaceForTest(QStringLiteral("Essentials"));
+        }
         window_->setActiveTool(ToolId::Move);
         window_->cancelAllOpens();
         closeAll();
         // A synthetic drag that ended without a drop leaves Qt's drag manager
-        // targeting a widget of this frame; a leave clears it before the frame
-        // goes, or the next test's drag events reach the freed widget.
+        // targeting a widget of this frame; a leave clears it, or the next
+        // test's drag events reach a freed float.
         QDragLeaveEvent leave;
         QCoreApplication::sendEvent(window_.get(), &leave);
+        // A drag move that ended without a leave or a drop keeps the dock line.
+        if (QWidget* line = dockLine()) {
+            line->hide();
+        }
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
-    window_.reset();
     PanelFloat::setForceChildOverlayForTest(false);
     DocumentFloatWindow::setWindowDragForTest(false);
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
+}
+
+void DocumentFloatTest::cleanupTestCase()
+{
+    window_.reset();
 }
 
 void DocumentFloatTest::hostMoveKeepsView()

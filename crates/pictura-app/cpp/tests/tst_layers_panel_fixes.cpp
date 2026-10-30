@@ -261,7 +261,7 @@ void LayersPanelFixesTest::opacityLabelRightAligned()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     QVERIFY2((panel_->opacityLabelAlignmentForTest() & Qt::AlignRight) != 0,
              "the Opacity label is right-aligned");
     auto* field = panel_->findChild<pictura::PercentField*>(QStringLiteral("layersOpacityField"));
@@ -290,7 +290,7 @@ void LayersPanelFixesTest::dropIntoOpenGroupKeepsExpanded()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     panel_->expandForTest(group);
     QCoreApplication::processEvents();
     QTreeView* tree = panel_->findChild<QTreeView*>();
@@ -344,7 +344,7 @@ void LayersPanelFixesTest::addingLayerKeepsGroupExpanded()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     panel_->expandForTest(group);
     QCoreApplication::processEvents();
 
@@ -392,7 +392,7 @@ void LayersPanelFixesTest::renameKeepsGroupExpanded()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     panel_->expandForTest(group_);
     QCoreApplication::processEvents();
     auto* tree = panel_->findChild<QTreeView*>();
@@ -449,7 +449,7 @@ void LayersPanelFixesTest::duplicateGroupNamesStayDistinct()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     panel_->expandForTest(second);
     QCoreApplication::processEvents();
 
@@ -491,7 +491,7 @@ void LayersPanelFixesTest::groupIconHasNoOutline()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     panel_->expandForTest(group_);
     QCoreApplication::processEvents();
 
@@ -543,7 +543,7 @@ void LayersPanelFixesTest::typeThumbnailIsSquareWithoutOutline()
     panel->setView(f.view);
     panel->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // The portrait document letterboxes a regular thumbnail and outlines it...
     const QRect pixelThumb = panel->rowThumbRectForTest(pixelPath);
@@ -593,7 +593,7 @@ void LayersPanelFixesTest::groupIconIsLarger()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
     QVERIFY(delegate != nullptr);
     const int side = delegate->groupIconSide();
@@ -614,7 +614,7 @@ void LayersPanelFixesTest::thumbnailFillsRow()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QString layer = pictura::layers_api::rowAt(*view_, 0).path;
     const QRect thumb = panel_->rowThumbRectForTest(layer);
@@ -659,7 +659,7 @@ void LayersPanelFixesTest::linkGlyphRotatedAndLarger()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QCOMPARE(panel_->linkIconSideForTest(), pictura::LayerRowDelegate::linkSide(24) + 2);
 
@@ -703,7 +703,7 @@ void LayersPanelFixesTest::blendComboArrowAndKeys()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     auto* combo = panel_->findChild<QComboBox*>(QStringLiteral("layersBlendCombo"));
     QVERIFY(combo != nullptr);
     QVERIFY2(combo->isEnabled(), "the blend combo is enabled for the selected layer");
@@ -772,7 +772,7 @@ void LayersPanelFixesTest::blendChangeHistoryLabel()
     panel_->selectPaths({a_}, a_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     auto* combo = panel_->findChild<QComboBox*>(QStringLiteral("layersBlendCombo"));
     QVERIFY(combo != nullptr);
 
@@ -889,8 +889,7 @@ void LayersPanelFixesTest::actionStripStaysFixedAndCentred()
     const int wide = narrow + 240;
     panel.resize(narrow, 420);
     panel.show();
-    QTest::qWait(50);
-    QCOMPARE(panel.width(), narrow);
+    QTRY_COMPARE(panel.width(), narrow);
 
     const QList<QRect> narrowRects = actionStripRects(panel);
     QCOMPARE(narrowRects.size(), 7);
@@ -901,8 +900,7 @@ void LayersPanelFixesTest::actionStripStaysFixedAndCentred()
     panel.resize(wide, panel.height());
     QVERIFY(panel.layout() != nullptr);
     panel.layout()->activate();
-    QTest::qWait(50);
-    QCOMPARE(panel.width(), wide);
+    QTRY_COMPARE(panel.width(), wide);
 
     const QList<QRect> wideRects = actionStripRects(panel);
     QCOMPARE(wideRects.size(), 7);
@@ -997,7 +995,7 @@ void LayersPanelFixesTest::dropBelowBackgroundRefused()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QVERIFY2(!panel_->canMoveForTest(layer, QStringLiteral("0"), 1),
              "can_move_layer_to rejects a drop below the Background");
@@ -1258,7 +1256,7 @@ void LayersPanelFixesTest::adjustmentThumbnailIsSquareWithoutOutline()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QRect adjustmentThumb = panel_->rowThumbRectForTest(adjustment);
     QVERIFY2(!adjustmentThumb.isEmpty(), "adjustment thumbnail laid out");
@@ -1295,7 +1293,7 @@ void LayersPanelFixesTest::fillThumbnailIsSquareWithOutline()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QRect thumb = panel_->rowThumbRectForTest(fill);
     QVERIFY2(!thumb.isEmpty(), "fill thumbnail laid out");
@@ -1335,7 +1333,7 @@ void LayersPanelFixesTest::maskThumbnailMatchesSquareCard()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
     QTreeView* tree = panel_->findChild<QTreeView*>();

@@ -244,7 +244,7 @@ void TransformSkewTest::previewKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QString layer = beginLayer(frame);
     QVERIFY(!layer.isEmpty());
@@ -256,18 +256,16 @@ void TransformSkewTest::previewKeepsTheLayerColor()
     canvas->setZoom(0.83, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
 
     QCoreApplication::processEvents();
-    QTest::qWait(50);
     const QPoint plain = canvas->imageToWidget(QPointF(20.0, 15.0)).toPoint();
-    QVERIFY2(canvas->grab().toImage().pixelColor(plain) == QColor(Qt::black),
-             "the plain document shows the filled layer");
+    QTRY_VERIFY2(canvas->grab().toImage().pixelColor(plain) == QColor(Qt::black),
+                 "the plain document shows the filled layer");
 
     QVERIFY(tools->beginTransformMode(layer, QStringLiteral("skew")));
     pictura::transform_set_show_pivot(*view, false);
     QCoreApplication::processEvents();
-    QTest::qWait(50);
     const QPoint preview = canvas->imageToWidget(QPointF(20.0, 15.0)).toPoint();
-    QVERIFY2(canvas->grab().toImage().pixelColor(preview) == QColor(Qt::black),
-             "the live preview keeps the filled layer");
+    QTRY_VERIFY2(canvas->grab().toImage().pixelColor(preview) == QColor(Qt::black),
+                 "the live preview keeps the filled layer");
 
     const QPolygonF quad = quadOf(view);
     QCOMPARE(quad.size(), 4);
@@ -276,11 +274,10 @@ void TransformSkewTest::previewKeepsTheLayerColor()
     QCOMPARE(view->transform_press(corner.x(), corner.y(), zoom, false, false), 1);
     QVERIFY(view->transform_move(corner.x(), corner.y() + 22.0, zoom, false, false));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
 
     const QPoint moved = canvas->imageToWidget(QPointF(20.0, 20.0)).toPoint();
-    QVERIFY2(canvas->grab().toImage().pixelColor(moved) == QColor(Qt::black),
-             "the drag keeps the filled layer");
+    QTRY_VERIFY2(canvas->grab().toImage().pixelColor(moved) == QColor(Qt::black),
+                 "the drag keeps the filled layer");
     view->transform_release();
     tools->cancelFreeTransform();
 }
@@ -292,7 +289,7 @@ void TransformSkewTest::twoCornerDragsKeepTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QString layer = beginLayer(frame);
     QVERIFY(!layer.isEmpty());
@@ -315,7 +312,7 @@ void TransformSkewTest::twoCornerDragsKeepTheLayerColor()
     canvas->mouseMoved(quad.at(1) + QPointF(0.0, 6.0));
     canvas->mouseReleased(quad.at(1) + QPointF(0.0, 6.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*view);
     QVERIFY(matrix.valid);
@@ -398,7 +395,7 @@ void TransformSkewTest::strongPerspectiveKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
     QVERIFY(frame.newDocument(QStringLiteral("StrongPerspective"), 1280, 800, QStringLiteral("rgb"), 8,
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
@@ -414,7 +411,7 @@ void TransformSkewTest::strongPerspectiveKeepsTheLayerColor()
                                false));
     view->deselect();
     QCoreApplication::processEvents();
-    QTest::qWait(100);
+    QTest::qWait(0);
     canvas->grab();
     QCoreApplication::processEvents();
 
@@ -426,7 +423,7 @@ void TransformSkewTest::strongPerspectiveKeepsTheLayerColor()
     canvas->mousePressed(corner, Qt::LeftButton, 0);
     canvas->mouseMoved(QPointF(corner.x(), 500.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*view);
     QVERIFY(matrix.valid);
@@ -462,7 +459,7 @@ void TransformSkewTest::pixelsShapeToolKeepsTheLayerColor()
     frame.resize(1600, 1100);
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
     QImage seed(1280, 800, QImage::Format_RGB32);
     seed.fill(Qt::white);
     paint_fixture::Fixture f(frame, seed, QStringLiteral("pictura_pixels_shape"));
@@ -493,7 +490,7 @@ void TransformSkewTest::pixelsShapeToolKeepsTheLayerColor()
     f.canvas->mousePressed(corner, Qt::LeftButton, 0);
     f.canvas->mouseMoved(corner + QPointF(-60.0, 0.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*f.view);
     QVERIFY(matrix.valid);
@@ -527,7 +524,7 @@ void TransformSkewTest::vectorMaskKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QString layer = beginLayer(frame);
     QVERIFY(!layer.isEmpty());
@@ -553,7 +550,7 @@ void TransformSkewTest::vectorMaskKeepsTheLayerColor()
     canvas->mousePressed(corner, Qt::LeftButton, 0);
     canvas->mouseMoved(corner + QPointF(-15.0, 0.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*view);
     QVERIFY(matrix.valid);
@@ -583,7 +580,7 @@ void TransformSkewTest::maskedLayerKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QString layer = beginLayer(frame);
     QVERIFY(!layer.isEmpty());
@@ -602,7 +599,7 @@ void TransformSkewTest::maskedLayerKeepsTheLayerColor()
     canvas->mousePressed(corner, Qt::LeftButton, 0);
     canvas->mouseMoved(corner + QPointF(-15.0, 0.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*view);
     QVERIFY(matrix.valid);
@@ -633,7 +630,7 @@ void TransformSkewTest::styleKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
     QVERIFY(frame.newDocument(QStringLiteral("StyleSkew"), 100, 80, QStringLiteral("rgb"), 8,
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
@@ -656,10 +653,9 @@ void TransformSkewTest::styleKeepsTheLayerColor()
     QVERIFY(tools->beginTransformMode(layer, QStringLiteral("skew")));
     pictura::transform_set_show_pivot(*view, false);
     QCoreApplication::processEvents();
-    QTest::qWait(50);
     const QPoint inside = canvas->imageToWidget(QPointF(20.0, 15.0)).toPoint();
-    QVERIFY2(canvas->grab().toImage().pixelColor(inside) == QColor(Qt::black),
-             "the layer style stays in the live preview");
+    QTRY_VERIFY2(canvas->grab().toImage().pixelColor(inside) == QColor(Qt::black),
+                 "the layer style stays in the live preview");
 
     const QPolygonF quad = quadOf(view);
     QCOMPARE(quad.size(), 4);
@@ -667,7 +663,7 @@ void TransformSkewTest::styleKeepsTheLayerColor()
     canvas->mousePressed(corner, Qt::LeftButton, 0);
     canvas->mouseMoved(corner + QPointF(-15.0, 0.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*view);
     QVERIFY(matrix.valid);
     const auto map = [&matrix](double x, double y) {
@@ -696,7 +692,7 @@ void TransformSkewTest::clippedFillKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
     QVERIFY(frame.newDocument(QStringLiteral("ClipSkew"), 100, 80, QStringLiteral("rgb"), 8,
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
@@ -720,14 +716,14 @@ void TransformSkewTest::clippedFillKeepsTheLayerColor()
     QVERIFY(tools->beginTransformMode(base, QStringLiteral("skew")));
     pictura::transform_set_show_pivot(*view, false);
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
     const QPolygonF quad = quadOf(view);
     QCOMPARE(quad.size(), 4);
     const QPointF corner = quad.at(1);
     canvas->mousePressed(corner, Qt::LeftButton, 0);
     canvas->mouseMoved(corner + QPointF(0.0, 22.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*view);
     QVERIFY(matrix.valid);
@@ -752,7 +748,7 @@ void TransformSkewTest::thinLineKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
     QVERIFY(frame.newDocument(QStringLiteral("LineSkew"), 100, 80, QStringLiteral("rgb"), 8,
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
@@ -776,14 +772,14 @@ void TransformSkewTest::thinLineKeepsTheLayerColor()
     QVERIFY(tools->beginTransformMode(layer, QStringLiteral("skew")));
     pictura::transform_set_show_pivot(*view, false);
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
     const QPolygonF quad = quadOf(view);
     QCOMPARE(quad.size(), 4);
     const QPointF corner = quad.at(1);
     canvas->mousePressed(corner, Qt::LeftButton, 0);
     canvas->mouseMoved(corner + QPointF(0.0, 27.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*view);
     QVERIFY(matrix.valid);
@@ -829,7 +825,7 @@ void TransformSkewTest::typeKeepsTheLayerColor()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // The solid-pixel probe below reads the composite; Blend Text Colors Using
     // Gamma thins this small type's edges past it, and the check is about the
@@ -878,7 +874,7 @@ void TransformSkewTest::typeKeepsTheLayerColor()
     QVERIFY(f.tools->beginTransformMode(path, QStringLiteral("skew")));
     pictura::transform_set_show_pivot(*f.view, false);
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const QPolygonF quad = quadOf(f.view);
     QCOMPARE(quad.size(), 4);
@@ -886,7 +882,7 @@ void TransformSkewTest::typeKeepsTheLayerColor()
     f.canvas->mousePressed(corner, Qt::LeftButton, 0);
     f.canvas->mouseMoved(corner + QPointF(6.0, 3.0));
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*f.view);
     QVERIFY(matrix.valid);
@@ -915,7 +911,7 @@ void TransformSkewTest::statusShowsTheSkewAction()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
     const QString layer = beginLayer(frame);
     QVERIFY(!layer.isEmpty());
     auto* tools = frame.findChild<pictura::ToolController*>();
@@ -974,7 +970,7 @@ void TransformSkewTest::ctrlShiftSideKeepsType()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
     QImage seed(200, 160, QImage::Format_RGB32);
     seed.fill(Qt::white);
     paint_fixture::Fixture f(frame, seed, QStringLiteral("pictura_skew_ctrl_type"));

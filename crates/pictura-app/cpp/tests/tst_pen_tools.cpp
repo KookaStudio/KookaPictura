@@ -345,6 +345,7 @@ void PenToolsTest::pathsPanelListsTheWorkPath()
     QVERIFY(list->item(0)->isSelected());
     QVERIFY(!list->item(0)->icon().isNull());
     click(f, QPointF(60, 60));
+    // negative window: proves another anchor adds no second Work Path row
     QTest::qWait(300);
     QCOMPARE(list->count(), 1);
 

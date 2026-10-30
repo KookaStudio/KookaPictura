@@ -768,8 +768,12 @@ void LayerTargetTest::clickingEmptySpaceClearsCurrentRow()
     QVERIFY(model != nullptr);
     const QModelIndex last = model->index(model->rowCount() - 1, 0);
     QVERIFY(last.isValid());
-    const int y = tree->visualRect(last).bottom() + 10;
-    QVERIFY2(y < tree->viewport()->height(), "the tree leaves no empty space below the rows");
+    // Click in the middle of the empty band below the last row; its height
+    // follows the panel's share of the column, not a fixed margin.
+    const int rowsBottom = tree->visualRect(last).bottom();
+    QVERIFY2(rowsBottom + 2 < tree->viewport()->height(),
+             "the tree leaves no empty space below the rows");
+    const int y = (rowsBottom + tree->viewport()->height()) / 2;
 
     QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(10, y));
     QCoreApplication::processEvents();

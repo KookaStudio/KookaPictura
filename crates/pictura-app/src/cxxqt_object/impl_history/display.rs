@@ -4,8 +4,10 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
+mod imp;
+
 use super::super::qobject::PictureView;
-use cxx_qt::CxxQtType;
+use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -22,8 +24,4 @@ pub mod ffi {
         /// took `image()` at this revision is still current.
         fn frame_revision(view: &PictureView) -> u64;
     }
-}
-
-fn frame_revision(view: &PictureView) -> u64 {
-    view.rust().frame_revision
 }

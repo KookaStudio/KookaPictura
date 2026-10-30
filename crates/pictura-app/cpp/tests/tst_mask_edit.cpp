@@ -395,7 +395,7 @@ void MaskEditTest::colorsFollowTheEditTarget()
     QVERIFY2(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")), "add mask");
     frame.show();
     panel->refresh();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // The mask pair is global across documents; start from the CS6 defaults.
     auto* toolbox = frame.findChild<pictura::Toolbox*>();
@@ -457,7 +457,7 @@ void MaskEditTest::resetColorsFollowTheEditTarget()
     QVERIFY(panel && colors && toolbox);
     frame.show();
     panel->refresh();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // The mask pair is global across documents; start from the CS6 defaults.
     toolbox->resetForegroundBackground();
@@ -491,7 +491,7 @@ void MaskEditTest::moveSelectionOnMaskMovesCoverage()
     auto* toolbox = frame.findChild<pictura::Toolbox*>();
     QVERIFY(panel && colors && toolbox);
     panel->refresh();
-    QTest::qWait(50);
+    QTest::qWait(0);
     toolbox->resetForegroundBackground();
     QCOMPARE(colors->foreground(), QColor(Qt::white));
     QCOMPARE(colors->background(), QColor(Qt::black));
@@ -551,7 +551,7 @@ void MaskEditTest::altDragCopiesMaskCoverage()
     auto* toolbox = frame.findChild<pictura::Toolbox*>();
     QVERIFY(panel && toolbox);
     panel->refresh();
-    QTest::qWait(50);
+    QTest::qWait(0);
     toolbox->resetForegroundBackground();
 
     const quint32 blue = f.view->sample_argb(8, 8);
@@ -587,7 +587,7 @@ void MaskEditTest::ctrlDragOnMaskMovesCoverage()
     auto* toolbox = frame.findChild<pictura::Toolbox*>();
     QVERIFY(panel && toolbox);
     panel->refresh();
-    QTest::qWait(50);
+    QTest::qWait(0);
     toolbox->resetForegroundBackground();
 
     const quint32 blue = f.view->sample_argb(8, 8);
@@ -646,7 +646,7 @@ void MaskEditTest::maskSoloView()
     panel->selectPaths({layer}, layer);
     panel->refresh();
     frame.show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     QVERIFY2(panel->altClickMaskThumbnailForTest(layer), "mask thumbnail exists");
     QCoreApplication::processEvents();
     QCOMPARE(pictura::mask_solo_get(*view), layer);
@@ -709,7 +709,7 @@ void MaskEditTest::maskContextMenu()
     panel->selectPaths({layer}, layer);
     panel->refresh();
     frame.show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // The menu lists the CS6 items and order.
     QCOMPARE(panel->maskMenuTextsForPathForTest(layer),
@@ -993,7 +993,7 @@ void MaskEditTest::maskSoloFollowsLayerChange()
     panel->selectPaths({masked}, masked);
     panel->refresh();
     frame.show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     QVERIFY(pictura::mask_solo_set(*view, masked));
 
     // Selecting another layer ends the solo.
@@ -1034,7 +1034,7 @@ void MaskEditTest::addLayerMaskStripInverts()
     panel->selectPaths({layer}, layer);
     panel->refresh();
     frame.show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     auto* button = frame.findChild<QToolButton*>(QStringLiteral("layersStripMask"));
     QVERIFY(button != nullptr);

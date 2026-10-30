@@ -1,0 +1,118 @@
+use super::*;
+
+use super::super::impl_filters::apply_filter_obj_active_region;
+use crate::cxxqt_object::edit::Edit;
+use core::pin::Pin;
+use cxx_qt::CxxQtType;
+use cxx_qt_lib::QString;
+use pictura_core::PsdRect;
+use pictura_filters::{Filter, HdrToningParams};
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn params(
+    radius: f64,
+    strength: f64,
+    gamma: f64,
+    exposure: f64,
+    detail: f64,
+    shadow: f64,
+    highlight: f64,
+    vibrance: f64,
+    saturation: f64,
+) -> HdrToningParams {
+    HdrToningParams {
+        radius,
+        strength,
+        gamma,
+        exposure,
+        detail,
+        shadow,
+        highlight,
+        vibrance,
+        saturation,
+    }
+}
+
+/// Run HDR Toning (a preview over `preview` when given) and refresh the canvas;
+/// records `label` on a commit.
+pub(super) fn run(
+    mut view: Pin<&mut PictureView>,
+    params: HdrToningParams,
+    preview: Option<PsdRect>,
+    label: Option<&str>,
+) -> bool {
+    let commit = label.is_some();
+    let region = {
+        let mut rust = view.as_mut().rust_mut();
+        apply_filter_obj_active_region(&mut rust, Filter::HdrToning(params), commit, preview)
+    };
+    let Some(region) = region else {
+        return false;
+    };
+    let outcome = match region {
+        Some(rect) => Edit::regions(vec![rect], false),
+        None => Edit::Full,
+    };
+    match label {
+        Some(label) => {
+            view.as_mut().edit(label, |_| outcome);
+        }
+        None => {
+            view.as_mut().preview(|_| outcome);
+        }
+    }
+    true
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn hdr_toning_preview(
+    view: Pin<&mut PictureView>,
+    radius: f64,
+    strength: f64,
+    gamma: f64,
+    exposure: f64,
+    detail: f64,
+    shadow: f64,
+    highlight: f64,
+    vibrance: f64,
+    saturation: f64,
+    _x: i32,
+    _y: i32,
+    _w: i32,
+    _h: i32,
+) -> bool {
+    // The global pivot makes a cropped section differ from the commit, so a
+    // preview always runs the whole layer, still without recording history.
+    run(
+        view,
+        params(
+            radius, strength, gamma, exposure, detail, shadow, highlight, vibrance, saturation,
+        ),
+        None,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn hdr_toning_apply(
+    view: Pin<&mut PictureView>,
+    radius: f64,
+    strength: f64,
+    gamma: f64,
+    exposure: f64,
+    detail: f64,
+    shadow: f64,
+    highlight: f64,
+    vibrance: f64,
+    saturation: f64,
+    label: &QString,
+) -> bool {
+    run(
+        view,
+        params(
+            radius, strength, gamma, exposure, detail, shadow, highlight, vibrance, saturation,
+        ),
+        None,
+        Some(&label.to_string()),
+    )
+}

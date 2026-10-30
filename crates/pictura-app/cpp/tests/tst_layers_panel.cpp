@@ -275,7 +275,7 @@ void LayersPanelTest::layerRowSurface()
     panel_->setView(view_);
     panel_->refresh();
     panel_->expandForTest(group_);
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // The paint helper seeds the palette with a fixed neutral grey, so the
     // exact surfaces are deterministic without depending on the live palette.
@@ -324,7 +324,7 @@ void LayersPanelTest::gutterClickTogglesWithoutSelecting()
     panel_->refresh();
     panel_->expandForTest(group_);
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QTreeView* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
@@ -428,7 +428,7 @@ void LayersPanelTest::dropAnywhereOnLayerRowReorders()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     QTreeView* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
 
@@ -473,7 +473,7 @@ void LayersPanelTest::dropOnGroupRowEdgesPlacesSibling()
     panel_->setView(view_);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     QTreeView* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
 
@@ -518,7 +518,7 @@ void LayersPanelTest::dragLayerOntoAnotherDocument()
     pictura::PictureView* gray = window_->activeView();
     window_->setActiveDocumentIndex(0);
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
     QVERIFY(bar != nullptr && bar->count() == 3);
     const int srcRows = pictura::layers_api::rowCount(*src);
@@ -787,7 +787,7 @@ void LayersPanelTest::maskRowIndicators()
     panel_->selectPaths({layer}, layer);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QVERIFY2(panel_->rowMaskLinkedForTest(layer), "row reports linked");
     QVERIFY2(!panel_->rowMaskDisabledForTest(layer), "row reports enabled");
@@ -834,7 +834,7 @@ void LayersPanelTest::maskEditTargetActivation()
     panel_->selectPaths({layer}, layer);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // Adding a mask selects its thumbnail: the mask becomes the active target,
     // so its brackets follow the mask and the bridge target is set.
@@ -885,7 +885,7 @@ void LayersPanelTest::maskRowActionsTargetTheClickedRow()
     panel_->selectPaths({active}, active);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QVERIFY2(panel_->clickLinkGlyphForTest(clicked), "clicked row has a link glyph");
     QCoreApplication::processEvents();
@@ -930,7 +930,7 @@ void LayersPanelTest::vectorMaskRowIndicators()
     panel_->selectPaths({layer}, layer);
     panel_->refresh();
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QVERIFY2(panel_->rowHasVectorMaskForTest(layer), "row reports a vector mask");
     QVERIFY2(panel_->rowVectorMaskLinkedForTest(layer), "row reports linked");
@@ -1024,7 +1024,7 @@ void LayersPanelTest::layerSurfaceCompleteness()
     panel_->refresh();
     panel_->expandForTest(group_);
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const int column = pictura::LayerRowDelegate::kEyeColumn;
     const QColor plainLeft = panel_->rowGutterColorForTest(a_, 1);
@@ -1109,7 +1109,7 @@ void LayersPanelTest::renameTabNavigation()
     panel_->refresh();
     panel_->expandForTest(group_);
     window_->show();
-    QTest::qWait(50);
+    QTest::qWait(0);
     auto* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
     auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());

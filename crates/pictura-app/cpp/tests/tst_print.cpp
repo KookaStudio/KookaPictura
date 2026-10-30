@@ -190,5 +190,8 @@ void PrintTest::menuCommands()
     QCOMPARE(QColor(image.pixel(8, 8)), QColor(Qt::white));
 }
 
-QTEST_MAIN(PrintTest)
+int main(int argc, char* argv[])
+{
+    return pictura::test::shardedMain<PrintTest>(argc, argv);
+}
 #include "tst_print.moc"

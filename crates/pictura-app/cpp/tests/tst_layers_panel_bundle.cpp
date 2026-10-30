@@ -251,7 +251,7 @@ void LayersPanelBundleTest::fillThumbnailPaintsPreview()
     const QString fill = view_->add_solid_fill(0xff00ff00u);
     QVERIFY(!fill.isEmpty());
     panel_->refresh();
-    QTest::qWait(20);
+    QTest::qWait(0);
     const QImage row = panel_->rowImageForTest(fill);
     const QRect thumb = panel_->rowThumbRectForTest(fill);
     QVERIFY(!row.isNull() && !thumb.isEmpty());

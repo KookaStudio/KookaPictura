@@ -39,7 +39,7 @@ QColor PicturaMainWindow::backgroundColor() const
     return colorState_ ? colorState_->background() : QColor(Qt::white);
 }
 
-void PicturaMainWindow::buildPanels(const SessionState& state)
+QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
 {
     colorState_ = new ColorState(this);
 
@@ -311,13 +311,25 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
                        const QString& iconId) {
         group->addPanel(panel, title, pictura::icon(iconId));
     };
+    // A fresh session is regrouped into the Essentials layout right after
+    // (applyFreshSessionDefault), so its groups are staged rather than laid out
+    // in the column only to be taken apart again.
+    const bool freshLayout = !sessionHasPanelLayout(state);
+    QList<PanelGroup*> staged;
+    auto attachGroup = [this, freshLayout, &staged](PanelGroup* group) {
+        if (freshLayout) {
+            staged.append(group);
+        } else {
+            panelColumn_->addGroup(group);
+        }
+    };
 
     auto* colorGroup = new PanelGroup(this);
     addPanel(colorGroup, colorPanel_, tr("Color"), QString::fromLatin1(command_ids::WindowPanelsColor));
     addPanel(colorGroup, swatchesPanel_, tr("Swatches"),
              QString::fromLatin1(command_ids::WindowPanelsSwatches));
     addPanel(colorGroup, stylesPanel_, tr("Styles"), QStringLiteral("window.panels.styles"));
-    panelColumn_->addGroup(colorGroup);
+    attachGroup(colorGroup);
 
     // Properties folds into the Adjustments group; its tab starts hidden.
     auto* adjustmentsGroup = new PanelGroup(this);
@@ -325,7 +337,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
              QString::fromLatin1(command_ids::WindowPanelsAdjustments));
     addPanel(adjustmentsGroup, propertiesPanel_, tr("Properties"),
              QString::fromLatin1(command_ids::WindowPanelsProperties));
-    panelColumn_->addGroup(adjustmentsGroup);
+    attachGroup(adjustmentsGroup);
 
     auto* layersGroup = new PanelGroup(this);
     addPanel(layersGroup, layersPanel_, tr("Layers"),
@@ -334,7 +346,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
              QString::fromLatin1(command_ids::WindowPanelsChannels));
     addPanel(layersGroup, pathsPanel_, tr("Paths"),
              QString::fromLatin1(command_ids::WindowPanelsPaths));
-    panelColumn_->addGroup(layersGroup);
+    attachGroup(layersGroup);
 
     auto* navigatorGroup = new PanelGroup(this);
     addPanel(navigatorGroup, navigatorPanel_, tr("Navigator"),
@@ -343,20 +355,20 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
              QString::fromLatin1(command_ids::WindowPanelsHistogram));
     addPanel(navigatorGroup, infoPanel_, tr("Info"),
              QString::fromLatin1(command_ids::WindowPanelsInfo));
-    panelColumn_->addGroup(navigatorGroup);
+    attachGroup(navigatorGroup);
 
     // Iconic single-panel groups.
     auto* historyGroup = new PanelGroup(this);
     addPanel(historyGroup, historyPanel_, tr("History"),
              QString::fromLatin1(command_ids::WindowPanelsHistory));
-    panelColumn_->addGroup(historyGroup);
+    attachGroup(historyGroup);
 
     auto* actionsGroup = new PanelGroup(this);
     addPanel(actionsGroup, actionsPanel_, tr("Actions"),
              QString::fromLatin1(command_ids::WindowPanelsActions));
     actionsGroup->setPanelMenuHook(QStringLiteral("actionsPanel"),
                                    [this](QMenu* menu) { actionsPanel_->updatePanelMenu(menu); });
-    panelColumn_->addGroup(actionsGroup);
+    attachGroup(actionsGroup);
     actionsPanel_->applySessionState(state);
 
     // Kept registered and Window-menu reachable, but out of the default groups.
@@ -372,7 +384,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
              QString::fromLatin1(command_ids::WindowPanelsBrush));
     addPanel(overflowGroup, cloneSourcePanel_, tr("Clone Source"),
              QString::fromLatin1(command_ids::WindowPanelsCloneSource));
-    panelColumn_->addGroup(overflowGroup);
+    attachGroup(overflowGroup);
 
     // CS6 docks Character and Paragraph as one group, opened from the Window
     // or Type menu or the Type options bar's panel toggle; Glyphs (post-CS6)
@@ -392,7 +404,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
              QString::fromLatin1(command_ids::WindowPanelsParagraph));
     addPanel(typeGroup, characterStylesPanel_, tr("Character Styles"),
              QString::fromLatin1(command_ids::WindowPanelsCharacterStyles));
-    panelColumn_->addGroup(typeGroup);
+    attachGroup(typeGroup);
 
     // Default visibility matches the pre-M41 layout: Color/Swatches/Styles,
     // Adjustments, Layers/Channels/Paths and Navigator/Histogram/Info visible;
@@ -470,6 +482,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
             characterStylesPanel_->refresh();
         }
     });
+    return staged;
 }
 
 void PicturaMainWindow::togglePanel(const QString& objectName)

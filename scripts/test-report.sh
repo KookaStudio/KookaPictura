@@ -52,7 +52,11 @@ fi
 # executables are missing has to be reported as a failure, not skipped.
 qt_args=()
 qt_rc=0
-qt_parallel="${CTEST_PARALLEL_LEVEL:-4}"
+# Default to 80% of the CPUs (at least one), the share AGENTS.md allows the
+# build, leaving room for the self-test runs that go alongside the layer.
+qt_default_parallel=$(( $(nproc) * 8 / 10 ))
+[ "$qt_default_parallel" -ge 1 ] || qt_default_parallel=1
+qt_parallel="${CTEST_PARALLEL_LEVEL:-$qt_default_parallel}"
 ctest_json="$tmp/ctest.json"
 if ctest --test-dir build --show-only=json-v1 >"$ctest_json" 2>/dev/null; then
   echo "== qt tests (ctest -j ${qt_parallel}) =="

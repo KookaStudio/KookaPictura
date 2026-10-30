@@ -336,7 +336,7 @@ void TransformDistortTest::steepQuadKeepsTheWholeShape()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QImage seed(500, 400, QImage::Format_RGB32);
     seed.fill(Qt::white);
@@ -363,7 +363,7 @@ void TransformDistortTest::steepQuadKeepsTheWholeShape()
     moveCorner(3, QPointF(240.0, 380.0));
     QVERIFY2(convex(quadOf(f.view)), "the test quad is convex");
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*f.view);
     QVERIFY(matrix.valid);
@@ -396,7 +396,7 @@ void TransformDistortTest::steepVectorMaskQuadKeepsTheWholeShape()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QImage seed(400, 300, QImage::Format_RGB32);
     seed.fill(Qt::white);
@@ -430,7 +430,7 @@ void TransformDistortTest::steepVectorMaskQuadKeepsTheWholeShape()
     moveCorner(3, QPointF(150.0, 250.0));
     QVERIFY2(convex(quadOf(f.view)), "the test quad is convex");
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*f.view);
     QVERIFY(matrix.valid);
@@ -463,7 +463,7 @@ void TransformDistortTest::steepClippedFillQuadKeepsTheWholeShape()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QImage seed(500, 400, QImage::Format_RGB32);
     seed.fill(Qt::white);
@@ -493,7 +493,7 @@ void TransformDistortTest::steepClippedFillQuadKeepsTheWholeShape()
     moveCorner(3, QPointF(240.0, 380.0));
     QVERIFY2(convex(quadOf(f.view)), "the test quad is convex");
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*f.view);
     QVERIFY(matrix.valid);
@@ -526,7 +526,7 @@ void TransformDistortTest::steepMaskedQuadKeepsTheWholeShape()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QImage seed(500, 400, QImage::Format_RGB32);
     seed.fill(Qt::white);
@@ -554,7 +554,7 @@ void TransformDistortTest::steepMaskedQuadKeepsTheWholeShape()
     moveCorner(3, QPointF(240.0, 380.0));
     QVERIFY2(convex(quadOf(f.view)), "the test quad is convex");
     QCoreApplication::processEvents();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     const pictura::transform_api::Matrix matrix = pictura::transform_api::previewMatrix(*f.view);
     QVERIFY(matrix.valid);
@@ -710,7 +710,7 @@ void TransformDistortTest::projectivePreviewFollowsTheViewport()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QImage seed(500, 400, QImage::Format_RGB32);
     seed.fill(Qt::white);
@@ -758,7 +758,7 @@ void TransformDistortTest::warpPresetPreviewKeepsContentOutsideTheBox()
     pictura::PicturaMainWindow& frame = *window_;
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     QImage seed(500, 400, QImage::Format_RGB32);
     seed.fill(Qt::white);

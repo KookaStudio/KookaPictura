@@ -58,6 +58,7 @@ bool CanvasBackdropTest::newDoc(const QString& name, const QString& background)
     }
     view_ = window_->activeView();
     canvas_ = window_->imageView();
+    // settle: lets the new document's 120 ms panel refresh land; no hook marks it
     QTest::qWait(150);
     QCoreApplication::processEvents();
     if (canvas_) {
@@ -101,12 +102,11 @@ void CanvasBackdropTest::hiddenBackgroundShowsCheckerboard()
     QVERIFY(newDoc(QStringLiteral("HideBg"), QStringLiteral("white")));
     QCOMPARE(view_->image().pixelColor(8, 8).alpha(), 255);
     QVERIFY(view_->set_layers_visible(QStringList{QStringLiteral("0")}, false) == 1);
-    QTest::qWait(100);
     QCoreApplication::processEvents();
     canvas_->repaint();
     QCoreApplication::processEvents();
-    QCOMPARE(view_->image().pixelColor(8, 8).alpha(), 0);
-    QVERIFY2(checker(centerPixel()), "hiding the Background reveals the checkerboard");
+    QTRY_COMPARE(view_->image().pixelColor(8, 8).alpha(), 0);
+    QTRY_VERIFY2(checker(centerPixel()), "hiding the Background reveals the checkerboard");
 }
 
 QTEST_MAIN(CanvasBackdropTest)

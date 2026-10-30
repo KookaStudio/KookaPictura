@@ -400,6 +400,7 @@ void OffthreadJobsTest::adjustmentPreviewKeepsTheEventLoopLive()
 {
     pictura::PictureView* view = newDoc(512, 512);
     QVERIFY(view);
+    // drains the new-document startup so its first paint is not read as a stall
     QTest::qWait(20);
     const QImage before = view->image();
     const QByteArray block = lightnessBlock(-100.0);
@@ -441,6 +442,7 @@ void OffthreadJobsTest::adjustmentApplyKeepsTheEventLoopLive()
 {
     pictura::PictureView* view = newDoc(512, 512);
     QVERIFY(view);
+    // drains the new-document startup so its first paint is not read as a stall
     QTest::qWait(20);
     const int history = view->history_count();
     const QByteArray block = lightnessBlock(-100.0);

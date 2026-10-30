@@ -399,7 +399,7 @@ void CropPreviewTest::paddedMoveShowsTheBackdrop()
     auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY(panel);
     panel->refresh();
-    QTest::qWait(50);
+    QTest::qWait(0);
 
     // A box that extends 10px past every canvas edge; the frame follows it.
     canvas->setCropBox(QRectF(-10, -10, 60, 60));
