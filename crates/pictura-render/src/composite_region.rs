@@ -63,33 +63,48 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
     use rayon::prelude::*;
     let (w, plane) = (rw as usize, rw as usize * rh as usize);
     let run = BAND as usize * w;
+    let clip = PsdRect {
+        top: y0 as i32,
+        left: x0 as i32,
+        bottom: (y0 + rh) as i32,
+        right: (x0 + rw) as i32,
+    };
+    let band_into = |band: usize, r: &mut [u8], g: &mut [u8], b: &mut [u8], a: &mut [u8]| {
+        let top = y0 as i32 + (band * BAND as usize) as i32;
+        let mut canvas = Canvas::new_region(x0 as i32, top, w, r.len() / w);
+        canvas.clip = clip;
+        canvas.effect_region = None;
+        composite_layers(&mut canvas, doc);
+        for (i, p) in canvas.px.iter().enumerate() {
+            r[i] = crate::composite::to_u8(p.r);
+            g[i] = crate::composite::to_u8(p.g);
+            b[i] = crate::composite::to_u8(p.b);
+            a[i] = crate::composite::to_u8(p.a);
+        }
+    };
     let data = pictura_core::Plane::build(plane * 4, |out| {
         let (r, rest) = out.split_at_mut(plane);
         let (g, rest) = rest.split_at_mut(plane);
         let (b, a) = rest.split_at_mut(plane);
+        // Every band looks up every visible layer's whole-layer effect passes,
+        // so the first band, composited before the others fan out, builds
+        // each one once; the rest replay it from the cache instead of each
+        // racing to build its own copy (a pool worker never waits on an
+        // in-flight build, #1044). ponytail: a smart-filter or type source
+        // looked up only by bands below the first can still be built by
+        // several bands at once; warm those too if a cold first composite
+        // shows it.
+        let (r0, r) = r.split_at_mut(run.min(plane));
+        let (g0, g) = g.split_at_mut(run.min(plane));
+        let (b0, b) = b.split_at_mut(run.min(plane));
+        let (a0, a) = a.split_at_mut(run.min(plane));
+        band_into(0, r0, g0, b0, a0);
         r.par_chunks_mut(run)
             .zip(g.par_chunks_mut(run))
             .zip(b.par_chunks_mut(run))
             .zip(a.par_chunks_mut(run))
             .enumerate()
-            .for_each(|(band, (((r, g), b), a))| {
-                let top = y0 as i32 + (band * BAND as usize) as i32;
-                let mut canvas = Canvas::new_region(x0 as i32, top, w, r.len() / w);
-                canvas.clip = PsdRect {
-                    top: y0 as i32,
-                    left: x0 as i32,
-                    bottom: (y0 + rh) as i32,
-                    right: (x0 + rw) as i32,
-                };
-                canvas.effect_region = None;
-                composite_layers(&mut canvas, doc);
-                for (i, p) in canvas.px.iter().enumerate() {
-                    r[i] = crate::composite::to_u8(p.r);
-                    g[i] = crate::composite::to_u8(p.g);
-                    b[i] = crate::composite::to_u8(p.b);
-                    a[i] = crate::composite::to_u8(p.a);
-                }
-            });
+            .for_each(|(band, (((r, g), b), a))| band_into(band + 1, r, g, b, a));
     });
     PixelBuffer {
         width: rw,

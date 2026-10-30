@@ -723,3 +723,130 @@ fn replacing_smart_object_contents_invalidates_the_composite() {
         "the replaced payload moves pixels"
     );
 }
+
+/// Run `work` on its own thread and return its result, failing the test if it
+/// does not finish within `secs`: a wedged pool fails, it does not hang CI.
+fn finishes_within<T: Send + 'static>(
+    secs: u64,
+    what: &str,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> T {
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    let (done, finished) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let out = work();
+        let _ = done.send(());
+        out
+    });
+    if let Err(RecvTimeoutError::Timeout) =
+        finished.recv_timeout(std::time::Duration::from_secs(secs))
+    {
+        panic!("{what} deadlocked the pool");
+    }
+    worker.join().expect("lookup thread")
+}
+
+fn passes() -> Artifact {
+    Artifact::Passes(Arc::new(LayerPasses::default()))
+}
+
+fn same_passes(a: Artifact, b: Artifact) -> bool {
+    let (Artifact::Passes(a), Artifact::Passes(b)) = (a, b) else {
+        panic!("cache kind collision");
+    };
+    Arc::ptr_eq(&a, &b)
+}
+
+/// A rayon worker that is building a cached artifact can, while its build
+/// waits inside the pool, run a queued job that looks up the same key. That
+/// lookup must build its own copy instead of waiting on the in-flight build it
+/// sits on top of (#1044). One worker and `yield_now` make the steal
+/// deterministic.
+#[test]
+fn same_key_lookup_stolen_mid_build_does_not_deadlock() {
+    let (outer, inner, ran) = finishes_within(30, "a same-key lookup run mid-build", || {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("one-thread pool");
+        let key = Key::new(Kind::Passes, 0x1044_dead_10c5_u64);
+        let ran = std::sync::atomic::AtomicBool::new(false);
+        let (outer, inner) = pool.install(|| {
+            rayon::join(
+                || {
+                    lookup(key, || {
+                        // The queued same-key lookup runs here, on top of this
+                        // build, as a band job is run by a worker joining
+                        // inside an effect kernel.
+                        let executed = rayon::yield_now() == Some(rayon::Yield::Executed);
+                        ran.store(executed, Ordering::SeqCst);
+                        passes()
+                    })
+                },
+                || lookup(key, passes),
+            )
+        });
+        (outer, inner, ran.load(Ordering::SeqCst))
+    });
+    assert!(ran, "the same-key lookup ran inside the build");
+    assert!(
+        same_passes(outer, inner),
+        "both lookups return the one published artifact"
+    );
+}
+
+/// The cross-thread shape of #1044: a build joins on parallel work, another
+/// worker steals that work and looks up the key being built. Waiting there
+/// would leave the build waiting on its own stolen half. The build holds its
+/// half until the other worker has finished the stolen lookup, so the steal is
+/// forced, not left to timing.
+#[test]
+fn same_key_lookup_in_a_stolen_half_of_the_build_does_not_deadlock() {
+    let (outer, inner, threads) = finishes_within(30, "a same-key lookup in a stolen half", || {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .expect("two-thread pool");
+        let key = Key::new(Kind::Passes, 0x1044_c055_74ea_u64);
+        let stolen_done = std::sync::atomic::AtomicBool::new(false);
+        pool.install(|| {
+            let mut inner = None;
+            let mut threads = (None, None);
+            let outer = lookup(key, || {
+                rayon::join(
+                    || {
+                        threads.0 = rayon::current_thread_index();
+                        while !stolen_done.load(Ordering::SeqCst) {
+                            std::thread::yield_now();
+                        }
+                    },
+                    || {
+                        threads.1 = rayon::current_thread_index();
+                        inner = Some(lookup(key, passes));
+                        stolen_done.store(true, Ordering::SeqCst);
+                    },
+                );
+                passes()
+            });
+            (outer, inner.expect("the stolen half ran"), threads)
+        })
+    });
+    assert_ne!(threads.0, threads.1, "the other worker ran the lookup");
+    assert!(
+        same_passes(outer, inner),
+        "both lookups return the one published artifact"
+    );
+}
+
+/// A build that panics gives its claim back, so the next lookup of the key
+/// builds instead of waiting forever on an abandoned build.
+#[test]
+fn panicking_build_releases_its_claim() {
+    let rebuilt = finishes_within(30, "a lookup after a panicked build", || {
+        let key = Key::new(Kind::Passes, 0x1044_0bad_b11d_u64);
+        let panicked = std::panic::catch_unwind(|| lookup(key, || panic!("build failed")));
+        assert!(panicked.is_err(), "the build panic reaches the caller");
+        matches!(lookup(key, passes), Artifact::Passes(_))
+    });
+    assert!(rebuilt, "the next lookup builds the artifact");
+}
