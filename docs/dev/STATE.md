@@ -179,12 +179,13 @@ Snapshot for resuming after a context break. Update after each milestone.
     `Edit::Inserted`: links are dropped and one state is captured, with no
     composite and no pyramid rebuild. The Layers panel coalesces its queued
     refresh with the synchronous one.
-  - **GPU eligibility.** `ContentRoute` (`composite_route.rs`) drives both the
-    CPU content dispatch and `check_supported`. High-bit-depth documents and
-    smart-filtered layers decline (`UnsupportedDepth`,
-    `UnsupportedSmartFilter`). Device-dependent GPU tests are `#[ignore]`d and
-    run in the `gpu-parity` CI job on lavapipe (`software-vulkan` feature,
-    nextest `gpu` profile).
+  - **GPU eligibility.** One per-layer plan (`gpu/plan.rs`) drives both
+    eligibility and dispatch. The GPU accepts cached type, smart-object, and
+    fill rasters; Levels, Curves, Exposure, and Gradient Map through lookup
+    tables; effect passes; and clipping groups. High-bit-depth documents,
+    knockout, Blend If, and Dissolve still decline. Device-dependent GPU tests
+    are `#[ignore]`d and run in the `gpu-parity` CI job on lavapipe
+    (`software-vulkan` feature, nextest `gpu` profile).
 - **Rust single-source tables** (#269, #271, #272, #274, #403, branch
   `refactor/269-rust-single-source-bundle`, OpenSpec change
   `rust-single-source-bundle`). The shell's duplicated tables and colour math
