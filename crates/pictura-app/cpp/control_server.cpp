@@ -9,6 +9,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QProcessEnvironment>
 #include <QtCore/QRandomGenerator>
 #include <QtCore/QSet>
@@ -232,6 +233,29 @@ void appendWidgetTree(QWidget* widget, QWidget* root, int depth, int maxDepth, i
         ++taken;
         appendWidgetTree(childWidget, root, depth + 1, maxDepth, maxChildren, nodes);
     }
+}
+
+// Why `path` may not be opened (or, when `writes`, saved to), or empty. The
+// session token already limits callers to the same user, so any absolute
+// path is allowed; these refuse only spellings that land somewhere other
+// than the one named (#646).
+QString pathProblem(const QString& path, bool writes)
+{
+    if (!QDir::isAbsolutePath(path)) {
+        return QStringLiteral("path must be absolute");
+    }
+    for (const QChar c : path) {
+        if (c.unicode() < 0x20 || c.unicode() == 0x7f) {
+            return QStringLiteral("path must not contain control characters");
+        }
+    }
+    if (QDir::fromNativeSeparators(path).split(QLatin1Char('/')).contains(QStringLiteral(".."))) {
+        return QStringLiteral("path must not contain '..'");
+    }
+    if (writes && QFileInfo(path).isSymLink()) {
+        return QStringLiteral("path must not be a symbolic link");
+    }
+    return {};
 }
 
 } // namespace
@@ -763,6 +787,9 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
         if (path.isEmpty()) {
             return error(QStringLiteral("invalid_param"), QStringLiteral("path is required"));
         }
+        if (const QString problem = pathProblem(path, false); !problem.isEmpty()) {
+            return error(QStringLiteral("invalid_param"), problem);
+        }
         const PicturaMainWindow::OpenOutcome outcome =
             frame_->openDocumentAtPathOutcome(path, false);
         applied = outcome == PicturaMainWindow::OpenOutcome::Opened;
@@ -795,6 +822,10 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
             return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
         }
         const QString path = params.value(QStringLiteral("path")).toString();
+        if (const QString problem = path.isEmpty() ? QString() : pathProblem(path, true);
+            !problem.isEmpty()) {
+            return error(QStringLiteral("invalid_param"), problem);
+        }
         if (op == QStringLiteral("save_as")) {
             if (path.isEmpty()) {
                 return error(QStringLiteral("invalid_param"), QStringLiteral("path is required"));

@@ -1,6 +1,6 @@
 // The app's C++ edges with untrusted input (#844): the control socket's
-// session token, Qt image decode under the import budget, and the packed
-// thumbnail unpacking of the Import PDF dialog.
+// session token and document paths (#646), Qt image decode under the import
+// budget, and the packed thumbnail unpacking of the Import PDF dialog.
 
 #include <QtTest/QtTest>
 
@@ -139,8 +139,13 @@ private slots:
     void controlTokenFileNeverFollowsAPlantedLink();
     void qtDecodeRefusesSizesOverTheBudget();
     void thumbnailUnpackRejectsHostileSizes();
+    void controlRefusesAmbiguousDocumentPaths();
+    void controlRefusesASaveOverASymlink();
+    void controlAcceptsAPlainAbsolutePath();
 
 private:
+    QJsonObject document(const QString& op, const QString& path);
+
     std::unique_ptr<pictura::test::ScopedStateHome> stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
     QTemporaryDir dir_;
@@ -258,6 +263,53 @@ void UntrustedInputTest::thumbnailUnpackRejectsHostileSizes()
     QVERIFY(pictura::unpackThumbnails(packedThumbnail(0x40000000u, 4, 16)).isEmpty());
     QVERIFY(pictura::unpackThumbnails(packedThumbnail(40000, 1, 16)).isEmpty());
     QVERIFY(pictura::unpackThumbnails(QByteArray(7, '\x01')).isEmpty());
+}
+
+QJsonObject UntrustedInputTest::document(const QString& op, const QString& path)
+{
+    pictura::ControlServer server(window_.get(), QString());
+    return server.dispatch(QStringLiteral("document"),
+                           {{QStringLiteral("op"), op}, {QStringLiteral("path"), path}});
+}
+
+void UntrustedInputTest::controlRefusesAmbiguousDocumentPaths()
+{
+    const int count = window_->documentCount();
+    for (const QString& path : {QStringLiteral("relative.psd"), QStringLiteral("/tmp/a\nb.psd"),
+                                dir_.filePath(QStringLiteral("x/../y.psd"))}) {
+        const QJsonObject response = document(QStringLiteral("open"), path);
+        QCOMPARE(errorCode(response), QStringLiteral("invalid_param"));
+    }
+    QCOMPARE(window_->documentCount(), count);
+}
+
+void UntrustedInputTest::controlRefusesASaveOverASymlink()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Paths"), 8, 8, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    const QString victim = dir_.filePath(QStringLiteral("victim.txt"));
+    const QString link = dir_.filePath(QStringLiteral("link.psd"));
+    QFile file(victim);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("keep");
+    file.close();
+    QVERIFY(QFile::link(victim, link));
+
+    const QJsonObject response = document(QStringLiteral("save_as"), link);
+    QCOMPARE(errorCode(response), QStringLiteral("invalid_param"));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("keep"));
+    QVERIFY(QFileInfo(link).isSymLink());
+}
+
+void UntrustedInputTest::controlAcceptsAPlainAbsolutePath()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Plain"), 8, 8, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    const QString path = dir_.filePath(QStringLiteral("plain.psd"));
+    QVERIFY(document(QStringLiteral("save_as"), path).value(QStringLiteral("ok")).toBool());
+    QVERIFY(QFileInfo(path).isFile());
+    QVERIFY(document(QStringLiteral("open"), path).value(QStringLiteral("ok")).toBool());
 }
 
 QTEST_MAIN(UntrustedInputTest)
