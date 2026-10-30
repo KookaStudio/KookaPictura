@@ -127,6 +127,17 @@ fn main() {
         println!("cargo::rerun-if-changed={edge}");
     }
 
+    // A generator clean deletes the exported initializer object while cargo
+    // still holds this script fresh; CMake touches this stamp when the object is
+    // missing so the script reruns and writes it again. Watched only once it
+    // exists, since a missing watched file would rerun the script every build.
+    if let Some(export) = std::env::var_os("CXX_QT_EXPORT_DIR") {
+        let stamp = PathBuf::from(export).join("pictura_app.regenerate");
+        if stamp.exists() {
+            println!("cargo::rerun-if-changed={}", stamp.display());
+        }
+    }
+
     // The headers the C++ build includes are rewritten by every build-script
     // run; remember them so a run that changes nothing leaves their
     // timestamps alone.

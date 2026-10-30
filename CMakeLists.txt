@@ -150,11 +150,32 @@ endif()
 # An optimized development build compiles the Rust library with the incremental
 # `dev-app` profile (see Cargo.toml). Packaging (BUILD_TESTING off), Debug, and
 # multi-config generators keep Corrosion's default release/dev mapping.
-set(_pictura_cargo_profile "")
+set(PICTURA_DEV_OPTIMIZED OFF)
 if(BUILD_TESTING AND NOT CMAKE_CONFIGURATION_TYPES
    AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
+    set(PICTURA_DEV_OPTIMIZED ON)
+endif()
+set(_pictura_cargo_profile "")
+if(PICTURA_DEV_OPTIMIZED)
     set(_pictura_cargo_profile PROFILE dev-app)
 endif()
+
+# The optimized development build compiles C++ at -Og -g1 behind a precompiled
+# header: measured cold and warm, both pay (openspec change
+# qt-fixture-and-compile-cost, design section 7). Packaging and Debug configures
+# keep their settings. Split DWARF was measured slower, and GCC rejects a
+# precompiled header for a unit built with it.
+set(PICTURA_DEV_COMPILE_OPTIONS "")
+if(PICTURA_DEV_OPTIMIZED)
+    set(PICTURA_DEV_COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-Og;-g1>")
+endif()
+# The precompiled header was measured with GCC only; it follows the flags'
+# compiler scope, so AppleClang and MSVC builds keep compiling without one.
+set(PICTURA_DEV_PCH OFF)
+if(PICTURA_DEV_OPTIMIZED AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+    set(PICTURA_DEV_PCH ON)
+endif()
+set(PICTURA_PCH_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/crates/pictura-app/cpp/pictura_pch.h")
 
 cxx_qt_import_crate(
     MANIFEST_PATH crates/pictura-app/Cargo.toml
@@ -162,6 +183,24 @@ cxx_qt_import_crate(
     CRATES pictura_app
     QT_MODULES Qt::Core Qt::Gui Qt::Widgets
 )
+
+# A generator clean (`ninja -t clean`) deletes the exported initializer object,
+# whose real producer is the crate's build script, and cargo still calls that
+# script fresh, so the next link fails. The build script watches a stamp in the
+# export directory; before each cargo step, the check touches the stamp when
+# the object is missing, so cargo reruns the script and writes it again.
+get_target_property(_pictura_cxx_qt_export_root pictura_app CXX_QT_EXPORT_DIR)
+set(_pictura_cxxqt_regenerate "${_pictura_cxx_qt_export_root}/pictura_app.regenerate")
+if(NOT EXISTS "${_pictura_cxxqt_regenerate}")
+    file(TOUCH "${_pictura_cxxqt_regenerate}")
+endif()
+add_custom_target(pictura_cxxqt_export_check
+    COMMAND ${CMAKE_COMMAND}
+        "-DOBJECT=${_pictura_cxx_qt_export_root}/crates/pictura_app/initializers.o"
+        "-DSTAMP=${_pictura_cxxqt_regenerate}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cxxqt_export_check.cmake"
+    VERBATIM)
+add_dependencies(cargo-prebuild_pictura_app pictura_cxxqt_export_check)
 
 # The bridge stamp.
 #
@@ -809,6 +848,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/dialog_chrome.h
     crates/pictura-app/cpp/dialogs.h
     crates/pictura-app/cpp/keyboard_shortcuts_dialog.h
+    crates/pictura-app/cpp/pictura_pch.h
 )
 
 # A shared shell lets each Qt Test executable link one small library instead of
@@ -826,6 +866,12 @@ endif()
 # The translation units that include a generated cxx-qt header follow the
 # bridge stamp.
 pictura_depend_on_bridge_stamp(${PICTURA_SHELL_SOURCES})
+
+# Target-level, so the per-source -O1 below still comes after them.
+target_compile_options(pictura_shell PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS})
+if(PICTURA_DEV_PCH)
+    target_precompile_headers(pictura_shell PRIVATE "${PICTURA_PCH_HEADER}")
+endif()
 
 target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
@@ -952,12 +998,18 @@ set(PICTURA_SELF_TEST_SOURCES
 )
 
 add_executable(pictura ${PICTURA_SELF_TEST_SOURCES})
+# No precompiled header here: the self-test sources do not see Qt's keyword
+# macros (selftest_report.h declares an `emit` function).
+target_compile_options(pictura PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS})
 # Menu construction is not on a hot path but compiles slowly; a lighter
 # optimization level keeps it off the development critical path.
-if(BUILD_TESTING AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
+if(PICTURA_DEV_OPTIMIZED)
+    # Its -O1 does not match the precompiled header, which GCC would then read
+    # as plain text.
     set_source_files_properties(
             crates/pictura-app/cpp/filter_commands.cpp
-        PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O1>")
+        PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O1>"
+                   SKIP_PRECOMPILE_HEADERS ON)
 endif()
 
 target_link_libraries(pictura PRIVATE pictura_shell)
