@@ -126,7 +126,7 @@ its output for a CPU-only stack MUST be byte-identical to
 
 #### Scenario: No Vulkan adapter
 
-- **WHEN** `composite_gpu` runs on a machine with no usable Vulkan adapter
+- **WHEN** `composite_gpu` runs on a machine with no usable adapter on the selected backend
 - **THEN** it returns `Err(GpuError::Unavailable)` and does not panic, and
   `composite_gpu_or_cpu` returns the CPU composite
 
@@ -384,35 +384,36 @@ buffer limits.
 
 ### Requirement: The GPU compositor is validated against the CPU oracle before use
 
-`gpu_available()` SHALL report a GPU as available only when a usable Vulkan
-device exists AND that device reproduces the CPU oracle `composite_rgba` on a
-representative scene within ±1 LSB per channel. The representative scene SHALL
-include partial alpha and a separable blend, so a device that composites only a
-few pixels or drops alpha is detected. The check SHALL run at most once per
-process and its result SHALL be cached. When the check fails, `composite_gpu`
-SHALL return `GpuError::Unavailable` for a supported document, `composite_active`
-and `composite_gpu_or_cpu` SHALL keep the CPU path, `shared_device()` SHALL
-return `None` so the GPU filter kernels also fall back to the CPU, and the GPU
-paint stroke SHALL fall back to the CPU: `GpuStroke::available()` SHALL report
-false and `GpuStroke::new` SHALL return `GpuError::Unavailable`, so a
-miscompiled `STROKE_SHADER` never commits wrong paint pixels. The eligibility
-check SHALL still precede the availability gate, so a `Dissolve` stack SHALL
-report `GpuError::UnsupportedMode` even when the device is unusable. The public
+`gpu_available()` SHALL report a GPU as available only when a usable device
+exists on the backend selected by `compositing/gpu-backend-selection` AND that
+device reproduces the CPU oracle `composite_rgba` on a representative scene
+within ±1 LSB per channel. The representative scene SHALL include partial alpha
+and a separable blend, so a device that composites only a few pixels or drops
+alpha is detected. The check SHALL run at most once per process and its result
+SHALL be cached. When the check fails, `composite_gpu` SHALL return
+`GpuError::Unavailable` for a supported document, `composite_active` and
+`composite_gpu_or_cpu` SHALL keep the CPU path, `shared_device()` SHALL return
+`None` so the GPU filter kernels also fall back to the CPU, and the GPU paint
+stroke SHALL fall back to the CPU: `GpuStroke::available()` SHALL report false
+and `GpuStroke::new` SHALL return `GpuError::Unavailable`, so a miscompiled
+`STROKE_SHADER` never commits wrong paint pixels. The eligibility check SHALL
+still precede the availability gate, so a `Dissolve` stack SHALL report
+`GpuError::UnsupportedMode` even when the device is unusable. The public
 signatures of `composite_gpu`, `composite_active`, `gpu_available`, and
 `Backend` SHALL be unchanged. `GpuError` MAY gain variants that name a reason
 for declining; its existing variants SHALL be unchanged.
 
 #### Scenario: A device that matches the oracle stays enabled
 
-- **WHEN** a usable Vulkan device composites the representative scene and every
-  channel differs from `composite_rgba` by at most 1 LSB
+- **WHEN** a usable device on the selected backend composites the representative
+  scene and every channel differs from `composite_rgba` by at most 1 LSB
 - **THEN** `gpu_available()` returns true, `composite_gpu` returns `Ok`, and
   `composite_active(doc, true)` reports `Backend::Gpu`
 
 #### Scenario: A device that diverges is treated as absent
 
-- **WHEN** a usable Vulkan device composites the representative scene and any
-  channel differs from `composite_rgba` by more than 1 LSB
+- **WHEN** a usable device on the selected backend composites the representative
+  scene and any channel differs from `composite_rgba` by more than 1 LSB
 - **THEN** `gpu_available()` returns false, `composite_gpu` returns
   `Err(GpuError::Unavailable)`, `composite_active(doc, true)` reports
   `Backend::Cpu` with bytes equal to `composite_rgba(doc)`, and `shared_device()`

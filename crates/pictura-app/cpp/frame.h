@@ -138,6 +138,7 @@ public:
     const QSet<QString>& panelObjectNames() const { return panelNames_; }
     PanelColumn* panelColumn() const { return panelColumn_; }
     PreferencesDialog* preferencesDialog() const { return preferencesDialog_; }
+    void showPreferences(const QString& page);
 
     // M43 multi-column host. Columns live in the central splitter around the
     // document tabs; a column's side is its splitter order relative to the
@@ -709,7 +710,6 @@ private:
     // column's frame-side border so it does not double the 1 px line.
     void layoutWorkspaceFrame();
     void updateColumnFrameEdges();
-    void showPreferences(const QString& page);
     void retargetDock();
     void refreshDock(bool includeSelfRefreshing);
     bool dockNeedsRebind() const;
@@ -1103,6 +1103,7 @@ private:
     bool typeMiddleEastern_ = false;
     bool typeMissingGlyphProtection_ = true;
     bool gpuAvailable_ = true;
+    bool gpuCandidatesAvailable_ = false;
     bool useShiftKeyForToolSwitch_ = true;
     bool openDocumentsAsTabs_ = true;
     bool floatingDocumentDocking_ = true;
@@ -1196,5 +1197,4 @@ private:
     std::function<void(const QString&)> pdfViewer_;
     std::function<void(const QUrl&)> urlOpener_;
 };
-
 } // namespace pictura

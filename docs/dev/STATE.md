@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Windows GPU backend chain** (#1086, OpenSpec change
+  `windows-gpu-backend-fallback`). Windows pins one backend (DX12 -> Vulkan ->
+  CPU), probes candidates in a child process, caches outcomes in
+  `gpu-backend.json`, and uses `gpu-init.marker` to turn a parent init crash into
+  a one-launch fallback. Linux keeps the direct Vulkan path; interop stays
+  Vulkan-only. Tests: `pictura-render::select`, `backend_pin`, `backend_cpu`,
+  `tst_gpu_backend`.
 - **Filter Gallery wheel zoom anchors at the pointer** (#840, OpenSpec change
   `filter-gallery-wheel-zoom`). The gallery's preview is a `QScrollArea`, so a
   wheel step resized the canvas and left the scrollbars at their old pixel

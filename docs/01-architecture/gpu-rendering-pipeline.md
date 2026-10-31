@@ -256,6 +256,20 @@ background or a plain widget blit). The CPU path must reproduce the blend
 formulas and color handling within tolerance, at lower performance. The pipeline
 must expose backend availability and a user-visible indicator.
 
+### Windows backend selection
+
+On Windows the compositor defaults to Direct3D 12, then Vulkan, then the CPU.
+A launch pins exactly one backend: `wgpu::Instance::new` initializes every
+backend named in its bitmask, so a multi-backend instance would still load the
+Vulkan ICD that crashes on Intel Gen9 hardware. The launcher probes each
+candidate in a child process (`pictura --gpu-probe dx12|vulkan`), records the
+outcome in `kooka-pictura/gpu-backend.json` beside `state.json`, and pins the
+winner in the parent. A `gpu-init.marker` left by a crash during the parent's
+own init marks that backend `crashed` on the next launch. `WGPU_BACKEND`
+replaces the candidate order but still probes and still honors a `crashed`
+entry; `WGPU_BACKEND=none` forces the CPU. Linux keeps the direct Vulkan path,
+and the zero-copy interop probe stays Vulkan-only.
+
 ## Rust module mapping
 
 - `pictura_render::tile` — tile grid, dirty rectangles, cache keys, generation.

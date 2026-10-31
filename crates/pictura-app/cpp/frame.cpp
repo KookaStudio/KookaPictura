@@ -8,6 +8,7 @@
 #include "file_drop_router.h"
 #include "fonts.h"
 #include "frame_canvas.h"
+#include "gpu_probe.h"
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
@@ -149,10 +150,17 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     Theme::apply(themeFamily_ == 1 ? Theme::ThemeFamily::Light : Theme::ThemeFamily::Dark,
                  brightnessLevel_);
     // Probe the adapter once so the toggle can be offered without a document.
+    // The marker makes a parent crash during init a one-launch fallback; the
+    // cache records a clean failure so the next launch advances.
     {
         PictureView probe;
+        const bool marked = beginDeviceInit();
         gpuAvailable_ = probe.gpu_available();
+        if (marked) {
+            endDeviceInit(gpuAvailable_);
+        }
     }
+    gpuCandidatesAvailable_ = gpuAvailable_ || gpuChainHasResetPath();
     registerHandlers();
     const auto saveToRecordedPath = [this](const CommandParams& params) {
         return saveActiveAs(params.values.value(QStringLiteral("in")).toString());
@@ -1049,7 +1057,8 @@ void PicturaMainWindow::updateStatus()
     if (backendLabel_) {
         backendLabel_->setVisible(hasDoc);
         PictureView* view = activeView();
-        backendLabel_->setText(view ? view->active_backend() : QStringLiteral("—"));
+        backendLabel_->setText(view ? activeBackendLabel(view->gpu_compute())
+                                     : QStringLiteral("—"));
     }
     if (actionLabel_) {
         QString action;

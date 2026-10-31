@@ -126,8 +126,11 @@ pub mod gpu;
 /// workspace manifest enables it; only the `gpu-parity` CI job passes it.
 pub const SOFTWARE_VULKAN: bool = cfg!(feature = "software-vulkan");
 pub use gpu::{
-    composite_active, composite_gpu, composite_gpu_or_cpu, composite_region_active,
-    gpu_adapter_info, gpu_available, Backend, GpuAdapterInfo, GpuError,
+    backend_label, compiled_backends, composite_active, composite_gpu, composite_gpu_or_cpu,
+    composite_region_active, device_available, env_candidates, gpu_adapter_info, gpu_available,
+    gpu_backend_status, platform, probe_backend, probe_backend_outcome, resolve_candidates,
+    selected_backend, set_backend, set_safe_mode, Backend, GpuAdapterInfo, GpuBackend,
+    GpuBackendStatus, GpuError, Platform, ProbeOutcome,
 };
 
 mod filter;

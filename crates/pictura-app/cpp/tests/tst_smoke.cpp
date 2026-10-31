@@ -154,6 +154,12 @@ void SmokeTest::statusBarChromeAndZoom()
                                  QStringLiteral("white")));
     QVERIFY2(zoom->isVisible() && size->isVisible() && backend->isVisible(), "readouts restored");
     QVERIFY2(hint->isVisible() && options->isVisible(), "footer restored");
+    QVERIFY2(backend->text() == QStringLiteral("GPU (DX12)")
+                 || backend->text() == QStringLiteral("GPU (Vulkan)")
+                 || backend->text() == QStringLiteral("CPU")
+                 || backend->text() == QStringLiteral("CPU (no GPU)")
+                 || backend->text() == QStringLiteral("CPU (safe mode)"),
+             qPrintable(backend->text()));
 
     pictura::ImageView* canvas = window_->imageView();
     QVERIFY(canvas != nullptr);
