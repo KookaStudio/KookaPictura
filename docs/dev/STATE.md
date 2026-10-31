@@ -6314,3 +6314,6 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   GPU kernel for it; the CPU model remains the oracle.
 - The OS font picker (the type tool's `QFontComboBox`) and the Filter Gallery
   are both present.
+- Agent Control shipped (#1053): `pictura --mcp` over a permissioned control server,
+  with a Preferences page. See `docs/11-cross-cutting/agent-control.md`. Open:
+  Flatpak and Snap (#1079), MCP revision 2026-07-28 (#1080).

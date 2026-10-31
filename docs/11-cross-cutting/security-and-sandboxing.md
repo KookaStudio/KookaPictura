@@ -62,6 +62,7 @@ Assets: the user's document contents and pixel data; other files on the machine;
 | Malicious document | PSD/PSB/TIFF/RAW/PDF/EPS/EXR parsing, embedded XMP/ICC/EXIF | Rust safe parsers; resource limits; fuzzing; optional out-of-process decode; XXE-safe XML |
 | Malicious plug-in | Native C ABI module in the plug-ins folder | Capability bits; default in-process (trusted) vs out-of-process sandbox for untrusted; no `dlclose`; crash isolation |
 | Malicious script | `.jsx`/script run by the user or an event notifier | Default-deny FS/network; per-script grant; QuickJS memory/stack/timeout limits; module allowlist |
+| Misled agent | Prompt injection through a document, or a malicious MCP client | Off by default; enforcement in `ControlServer`; permission tiers, allowed folders, approval prompts (`XC-022`). Does not cover an agent that also has a shell |
 | Compromised dependency | Crate/toolchain supply chain | `cargo-audit`/`cargo-deny`, lockfile, vendoring, `cargo-auditable` SBOM |
 | Network attacker | Telemetry/update endpoints | HTTPS only; no silent endpoints; opt-in (`XC-003`) |
 | Local attacker / another app | Same-user files, `/tmp`, X11 sniffing | Flatpak sandbox; Wayland (or `fallback-x11`); XDG dirs `0700`; portals |

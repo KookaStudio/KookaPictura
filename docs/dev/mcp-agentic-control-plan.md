@@ -1,22 +1,21 @@
 # Agentic MCP Control — implementation plan
 
-- **Status:** P0–P3 shipped — the app-side control server is archived as
-  `2026-09-22-app-control-server` (`--control`, the JSON socket protocol, and the
-  `status`/`get_pixel`/`list_layers`/`list_commands`/`dispatch_command`/
-  `document`/`edit`/`set_unsaved_policy` methods), its vision half as
-  `2026-09-23-agentic-control-vision` (`screenshot`, `ui_tree`,
-  `layer_thumbnail`), its action half as `2026-09-23-agentic-control-actions`
-  (`set_tool`, `selection`, `filter`, `adjustment`, `layer_op`,
-  `set_gpu_compute`), and its input half as `2026-09-23-agentic-control-input`
-  (`pointer`, `key`). Its live end-to-end script is archived as
-  `2026-09-23-agentic-control-e2e`. Remaining: P4 `pictura-mcp`, and the P5
-  client registration plus long-form docs. Authored before coding so the work can
-  resume cold.
+- **Status:** Shipped through #1061, #1063, #1069, #1073, #1075 and #1078. This
+  plan is kept as the design record and is no longer maintained. The current
+  reference is `docs/11-cross-cutting/agent-control.md`. What shipped differs here:
+  - The bridge is `pictura --mcp`, a library in the main binary, with no `rmcp` or
+    `tokio`, so there is no separate `pictura-mcp` binary to package.
+  - It also serves a person's live window, with permission tiers, allowed folders and
+    approval modes (`interop/agent-permissions`). The goal is no longer testing only.
+  - The control files are `control_server*.cpp`, and the spec is
+    `openspec/specs/interop/agentic-control/spec.md`.
+  - New GUI checks went into Qt Test, not the `mcp_control` self-test.
+  - Client registration is on the Agent Control page; section 12 is superseded.
 - **Track:** infrastructure/automation, **not** the M44 (layer filtering/search)
   milestone program.
 - **Proposed OpenSpec change:** `mcp-agentic-control`
 - **Proposed capability:** `agentic-control`
-- **Proposed long-form spec:** `docs/11-cross-cutting/agentic-testing.md` (XC id TBD)
+- **Long-form spec:** `docs/11-cross-cutting/agent-control.md` (`XC-022`)
 - **Docs guard:** files under `docs/` require a `TASK-ALLOWS-DOCS` marker in the
   landing commit (`scripts/guard.sh`).
 
