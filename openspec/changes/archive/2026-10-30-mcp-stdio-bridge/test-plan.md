@@ -5,6 +5,7 @@
 | `mcp_initialize` | `initialize` with a known, then unknown version | Echoed; newest | `pictura-mcp::initialize_negotiates_the_version` |
 | `mcp_notification` | `notifications/initialized` | No reply | `pictura-mcp::notifications_get_no_reply` |
 | `mcp_bad_input` | Bad JSON; unknown method | -32700; -32601 | `pictura-mcp::bad_input_is_reported` |
+| `mcp_oversized_request` | Line over 1 MiB; `ping` | -32600; answered | `pictura-mcp::an_oversized_request_is_refused_and_the_bridge_continues` |
 | `mcp_tools_list` | `tools/list` | Prefix, schema, exclusions | `pictura-mcp::tools_are_listed_safely` |
 | `mcp_call_forward` | `pictura_filter` on a fake backend | Forwarded; text result | `pictura-mcp::a_call_forwards_its_arguments` |
 | `mcp_call_error` | Backend answers `refused` | `isError`; code named | `pictura-mcp::a_control_error_is_a_tool_error` |

@@ -161,7 +161,7 @@ impl Spawned {
     pub fn endpoint(&self) -> Endpoint {
         Endpoint {
             socket: self.socket.clone(),
-            token: self.token.clone(),
+            token_path: self.token.clone(),
         }
     }
 }

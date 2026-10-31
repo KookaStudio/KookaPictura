@@ -451,6 +451,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-app/cpp/control_server.cpp`.
 - [x] **An MCP server:** `pictura --mcp` speaks MCP over stdio to a running window
       or a private headless instance. `crates/pictura-mcp/`.
+- [ ] **Agent Control in Preferences:** enable agents, set their permissions, and
+      register MCP clients ([#1053](https://github.com/KookaStudio/KookaPictura/issues/1053)).
 - [x] **Live agent sessions with permissions:** a control server in the running
       app, off by default, with permission tiers, allowed folders, and approval
       prompts. `crates/pictura-app/cpp/agent_control.cpp`.

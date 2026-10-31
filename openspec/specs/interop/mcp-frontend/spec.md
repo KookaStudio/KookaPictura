@@ -10,8 +10,8 @@ How an MCP client reaches a control server: the stdio bridge, its tools, and a p
 `pictura --mcp` SHALL speak MCP as newline-delimited JSON-RPC on stdin and stdout,
 SHALL NOT need a display, and SHALL write only protocol messages to stdout. It SHALL
 implement `initialize`, `ping`, `tools/list`, and `tools/call`, and SHALL answer an
-unknown method with error -32601 and an unparseable line with -32700. It SHALL NOT
-listen on any network port.
+unknown method with error -32601, an unparseable line with -32700, and a line over
+1 MiB with -32600. It SHALL NOT listen on any network port.
 
 #### Scenario: Initialize negotiates a version [mcp_initialize]
 
@@ -28,6 +28,11 @@ listen on any network port.
 
 - **WHEN** a client sends an unparseable line, then an unknown method
 - **THEN** the responses carry -32700 and -32601 and the bridge keeps running
+
+#### Scenario: An oversized request is refused [mcp_oversized_request]
+
+- **WHEN** a client sends a line over 1 MiB, then `ping`
+- **THEN** the first gets -32600 and the second is answered
 
 ### Requirement: Tools forward to the control server
 

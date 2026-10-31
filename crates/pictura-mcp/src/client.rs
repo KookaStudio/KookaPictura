@@ -26,20 +26,24 @@ pub struct ControlClient {
     next_id: i64,
 }
 
-enum Line {
+pub(crate) enum Line {
     Complete(Vec<u8>),
     TooLong,
     Closed,
 }
 
 /// One line, consuming a line over `max` to its newline so the next one is clean.
-fn read_line(reader: &mut impl BufRead, max: usize) -> std::io::Result<Line> {
+pub(crate) fn read_line(reader: &mut impl BufRead, max: usize) -> std::io::Result<Line> {
     let mut line = Vec::new();
     let mut too_long = false;
     loop {
         let available = reader.fill_buf()?;
         if available.is_empty() {
-            return Ok(Line::Closed);
+            return Ok(if line.is_empty() {
+                Line::Closed
+            } else {
+                Line::Complete(line)
+            });
         }
         let newline = available.iter().position(|byte| *byte == b'\n');
         let take = newline.unwrap_or(available.len());
@@ -73,15 +77,15 @@ fn check_ownership(endpoint: &Endpoint) -> Result<(), CallError> {
     if socket.uid() != user {
         return Err(foreign(&endpoint.socket));
     }
-    let token = std::fs::metadata(&endpoint.token)
+    let token = std::fs::metadata(&endpoint.token_path)
         .map_err(|_| CallError::new("not_running", NOT_RUNNING))?;
     if token.uid() != user {
-        return Err(foreign(&endpoint.token));
+        return Err(foreign(&endpoint.token_path));
     }
     if token.mode() & 0o077 != 0 {
         return Err(CallError::new(
             "not_running",
-            format!("{} is readable by others", endpoint.token),
+            format!("{} is readable by others", endpoint.token_path),
         ));
     }
     Ok(())
@@ -130,7 +134,7 @@ impl ControlClient {
         }
         check_ownership(&self.endpoint)?;
         let not_running = |_| CallError::new("not_running", NOT_RUNNING);
-        let token = std::fs::read_to_string(&self.endpoint.token).map_err(not_running)?;
+        let token = std::fs::read_to_string(&self.endpoint.token_path).map_err(not_running)?;
         let (reader, writer) = open_socket(&self.endpoint).map_err(not_running)?;
         self.connection = Some(Connection {
             reader: BufReader::new(reader),
@@ -164,7 +168,11 @@ impl ControlClient {
                     if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
                 {
                     // The reply may still come; its id gets it skipped then.
-                    return Err(CallError::new("timeout", "no reply in time"));
+                    return Err(CallError::new(
+                        "timeout",
+                        "no reply in time; the operation may still complete, so check \
+                         the state before retrying",
+                    ));
                 }
                 Err(_) => {
                     self.connection = None;
@@ -253,7 +261,7 @@ mod tests {
         let listener = UnixListener::bind(&socket).unwrap();
         let endpoint = Endpoint {
             socket: socket.to_str().unwrap().to_string(),
-            token: token.to_str().unwrap().to_string(),
+            token_path: token.to_str().unwrap().to_string(),
         };
         (
             Fixture {
@@ -267,7 +275,7 @@ mod tests {
     fn client_of(fixture: &Fixture) -> ControlClient {
         ControlClient::new(Endpoint {
             socket: fixture.endpoint.socket.clone(),
-            token: fixture.endpoint.token.clone(),
+            token_path: fixture.endpoint.token_path.clone(),
         })
     }
 
@@ -275,7 +283,7 @@ mod tests {
     fn nothing_listening_names_preferences() {
         let mut client = ControlClient::new(Endpoint {
             socket: "/nonexistent/live.sock".to_string(),
-            token: "/nonexistent/live.sock.token".to_string(),
+            token_path: "/nonexistent/live.sock.token".to_string(),
         });
         let error = client.call("status", json!({})).unwrap_err();
         assert!(error.message.contains("Preferences"));

@@ -17,6 +17,6 @@ pub mod ffi {
     #[namespace = "pictura"]
     extern "Rust" {
         /// Serve MCP on stdio until stdin closes, and return the exit code.
-        fn mcp_run(socket: &QString, token: &QString, args: &QStringList) -> i32;
+        fn mcp_run(socket: &QString, token_path: &QString, args: &QStringList) -> i32;
     }
 }
