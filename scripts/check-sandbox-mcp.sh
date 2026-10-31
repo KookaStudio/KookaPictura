@@ -54,6 +54,11 @@ def exchange():
     replies = [json.loads(line) for line in done.stdout.splitlines()]
     if len(replies) != len(requests) or any("result" not in reply for reply in replies):
         return None, done.stderr.strip() or done.stdout.strip()
+    # The bridge answers the first two by itself, so only this one reaches the
+    # window, and a window still starting says not_running.
+    text = replies[2]["result"]["content"][0]["text"]
+    if text.startswith("not_running"):
+        return None, text
     return replies, ""
 
 
