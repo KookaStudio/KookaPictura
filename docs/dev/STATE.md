@@ -48,6 +48,25 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Retouch stroke-start source builds** (#1018, OpenSpec change
+  `bound-retouch-stroke-start`). The retouch and source tools now build their
+  layer, composite, history, and pattern surfaces with the planes resolved once
+  and rows interleaved in parallel; Sample All Layers builds a layer-local
+  surface in one pass, the Pattern Stamp samples its tile per dab inside the
+  document bounds, and History/Art History/Erase-to-History reuse a source
+  surface keyed on the resolved history source id. Measured at 8000×6000:
+  Dodge 484→13.8 ms, Smudge + Sample All 829→29.8 ms, History Brush 534→15.6 ms,
+  Pattern Stamp 118→0.04 ms, Clone All Layers 767→532 ms (composite-bound).
+  Tests: `layer_rgba_matches_serial_builder`,
+  `surface_from_composite_matches_serial_builder`,
+  `layer_surface_matches_serial_builder`, `layer_local_matches_serial_builder`,
+  `sampled_surface_matches_two_pass_crop`, `pattern_source_matches_tiled_image`,
+  `zero_size_sources_are_empty`, `brush_source_surface_is_reused`,
+  `brush_source_surface_reuses_a_pinned_source`,
+  `brush_source_surface_reuses_a_source_dropped_by_depth`, and
+  `brush_source_surface_invalidates_on_history_change`. The tile-backed
+  dab-sized follow-up is #1070; `tools/in-place-stroke` still does not claim its
+  bound for these tools.
 - **Cheaper Qt fixtures and C++ compiles** (#1043, OpenSpec change
   `qt-fixture-and-compile-cost`).
   - **Qt Test layer.** Wall time is 72–74 s instead of 249 s.

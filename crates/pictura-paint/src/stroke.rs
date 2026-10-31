@@ -17,6 +17,7 @@ use pictura_core::{
 };
 use raster::{plane_slices, split_bands, write_band, BandPlanes, DabRaster};
 use rayon::prelude::*;
+use std::sync::Arc;
 
 /// Deterministic stroke seed; Dissolve randomness must not vary between runs.
 const STROKE_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -330,7 +331,7 @@ impl Stroke {
         doc: &Document,
         path: &str,
         cfg: StrokeConfig,
-        source: RgbaImage,
+        source: Arc<RgbaImage>,
         options: ArtHistoryOptions,
     ) -> Result<Stroke, PaintError> {
         if doc.depth != BitDepth::Eight {
@@ -350,9 +351,8 @@ impl Stroke {
         Ok(stroke)
     }
 
-    /// Start a Blur or Sharpen stroke. `sampled` is the document-space
-    /// composite Sample All Layers reads; `None` reads the layer. 8-bit
-    /// documents only.
+    /// Start a Blur or Sharpen stroke. `sampled` is the layer-local composite
+    /// Sample All Layers reads; `None` reads the layer. 8-bit documents only.
     pub fn begin_focus(
         doc: &Document,
         path: &str,
@@ -360,8 +360,7 @@ impl Stroke {
         options: FocusOptions,
         sampled: Option<RgbaImage>,
     ) -> Result<Stroke, PaintError> {
-        Stroke::begin_retouch(doc, path, cfg, |stroke, target| {
-            let sampled = sampled.map(|s| layer_local(&s, stroke.rect));
+        Stroke::begin_retouch(doc, path, cfg, |_, target| {
             DabEngine::Focus(FocusBrush::new(
                 options,
                 sampled,
@@ -381,13 +380,12 @@ impl Stroke {
     ) -> Result<Stroke, PaintError> {
         let mut stroke =
             Stroke::begin_kind(doc, path, cfg, StrokeKind::Mixer { options, reservoir })?;
-        let rect = stroke.rect;
         if let Some(PerDab {
             engine: DabEngine::Mixer(mixer),
             ..
         }) = stroke.per_dab.as_mut()
         {
-            mixer.sampled = sampled.map(|s| layer_local(&s, rect));
+            mixer.sampled = sampled;
         }
         Ok(stroke)
     }
@@ -401,8 +399,7 @@ impl Stroke {
         options: SmudgeOptions,
         sampled: Option<RgbaImage>,
     ) -> Result<Stroke, PaintError> {
-        Stroke::begin_retouch(doc, path, cfg, |stroke, target| {
-            let sampled = sampled.map(|s| layer_local(&s, stroke.rect));
+        Stroke::begin_retouch(doc, path, cfg, |_, target| {
             let paint = [cfg.color.r, cfg.color.g, cfg.color.b, cfg.color.a];
             let locked = layer_transparency_locked(target);
             DabEngine::Smudge(SmudgeBrush::new(options, sampled, locked, paint))
@@ -1057,21 +1054,6 @@ pub(crate) fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
     }
 }
 
-/// The layer's pixels as straight RGBA; a layer without alpha is opaque.
-pub(crate) fn layer_rgba(layer: &Layer) -> RgbaImage {
-    let (w, h) = (layer.rect.width().max(0), layer.rect.height().max(0));
-    RgbaImage {
-        width: w,
-        height: h,
-        data: (0..(w * h) as usize)
-            .map(|i| {
-                let (r, g, b, a) = read_pixel(layer, i);
-                [r, g, b, a]
-            })
-            .collect(),
-    }
-}
-
 /// Positions of the R, G, B and alpha planes in a layer's channel list, or
 /// `None` where the layer has no such plane.
 type PlaneIndex = [Option<usize>; 4];
@@ -1179,7 +1161,11 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
 
 mod blend;
 mod raster;
+mod surface;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use blend::blend_pixel;
+#[cfg(test)]
+pub(crate) use surface::layer_rgba_serial;
+pub(crate) use surface::{layer_planes, layer_rgba};

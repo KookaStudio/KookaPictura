@@ -1,4 +1,5 @@
 mod bands;
+mod surface;
 use super::*;
 use crate::healing::RgbaImage;
 use crate::spacing::SpacingMode;

@@ -19,6 +19,7 @@ use crate::replace::{dab_bounds, grow};
 use crate::stroke::union_rect;
 use crate::{tip_coverage, StrokeConfig};
 use pictura_core::PsdRect;
+use rayon::prelude::*;
 use std::f32::consts::{PI, TAU};
 
 /// The Style menu, in CS6's order.
@@ -301,14 +302,27 @@ pub(crate) fn layer_local(source: &RgbaImage, rect: PsdRect) -> RgbaImage {
         height: h,
         data: vec![[0; 4]; (w * h) as usize],
     };
-    for y in 0..h {
-        for x in 0..w {
-            let (sx, sy) = (x + rect.left, y + rect.top);
-            if sx >= 0 && sy >= 0 && sx < source.width && sy < source.height {
-                out.set(x, y, source.get(sx, sy));
-            }
-        }
+    let (uw, uh) = (w.max(0) as usize, h.max(0) as usize);
+    if uw == 0 || uh == 0 {
+        return out;
     }
+    let (sw, sh) = (source.width, source.height);
+    out.data
+        .par_chunks_mut(uw)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let sy = rect.top + y as i32;
+            if sy < 0 || sy >= sh {
+                return;
+            }
+            for (x, px) in row.iter_mut().enumerate() {
+                let sx = rect.left + x as i32;
+                if sx < 0 || sx >= sw {
+                    continue;
+                }
+                *px = source.data[sy as usize * sw as usize + sx as usize];
+            }
+        });
     out
 }
 
@@ -359,7 +373,7 @@ mod tests {
             diameter: 4,
             ..StrokeConfig::default()
         };
-        let mut stroke = Stroke::begin_art_history(doc, "0", cfg, source, options).ok()?;
+        let mut stroke = Stroke::begin_art_history(doc, "0", cfg, source.into(), options).ok()?;
         let mut out = doc.clone();
         for x in [24.0, 32.0, 40.0] {
             stroke.sample(
@@ -439,7 +453,8 @@ mod tests {
         let mut deep = doc(WHITE);
         deep.depth = BitDepth::Sixteen;
         let cfg = StrokeConfig::default();
-        let begun = Stroke::begin_art_history(&deep, "0", cfg, surface(RED), Default::default());
+        let begun =
+            Stroke::begin_art_history(&deep, "0", cfg, surface(RED).into(), Default::default());
         assert!(matches!(begun, Err(PaintError::UnsupportedDepth)));
     }
 
@@ -449,5 +464,115 @@ mod tests {
             assert!(ArtStyle::from_i32(i as i32).is_some());
         }
         assert!(ArtStyle::from_i32(STYLE_NAMES.len() as i32).is_none());
+    }
+
+    fn layer_local_serial(source: &RgbaImage, rect: PsdRect) -> RgbaImage {
+        let (w, h) = (rect.width().max(0), rect.height().max(0));
+        let mut out = RgbaImage {
+            width: w,
+            height: h,
+            data: vec![[0; 4]; (w * h) as usize],
+        };
+        for y in 0..h {
+            for x in 0..w {
+                let (sx, sy) = (x + rect.left, y + rect.top);
+                if sx >= 0 && sy >= 0 && sx < source.width && sy < source.height {
+                    out.set(x, y, source.get(sx, sy));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn layer_local_matches_serial_builder() {
+        let source = surface(RED);
+        for rect in [
+            PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 64,
+                right: 64,
+            },
+            PsdRect {
+                top: 5,
+                left: 7,
+                bottom: 20,
+                right: 30,
+            },
+            PsdRect {
+                top: -4,
+                left: -6,
+                bottom: 10,
+                right: 12,
+            },
+        ] {
+            assert_eq!(
+                layer_local(&source, rect),
+                layer_local_serial(&source, rect),
+                "{rect:?}"
+            );
+        }
+        let empty = RgbaImage {
+            width: 0,
+            height: 0,
+            data: Vec::new(),
+        };
+        let zero = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        };
+        assert!(layer_local(&empty, zero).data.is_empty());
+    }
+
+    #[test]
+    fn sampled_surface_matches_two_pass_crop() {
+        let mut buf = pictura_core::PixelBuffer::new(16, 12, 4);
+        buf.data = (0..16 * 12 * 4)
+            .map(|i| (i as u8).wrapping_mul(3))
+            .collect::<Vec<u8>>()
+            .into();
+        for rect in [
+            PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 12,
+                right: 16,
+            },
+            PsdRect {
+                top: 3,
+                left: 2,
+                bottom: 9,
+                right: 11,
+            },
+            PsdRect {
+                top: -2,
+                left: -3,
+                bottom: 5,
+                right: 6,
+            },
+            PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            PsdRect {
+                top: 3,
+                left: 2,
+                bottom: 9,
+                right: 2,
+            },
+        ] {
+            let one_pass = crate::stamp::surface_from_composite_rect(&buf, rect);
+            let two_pass = layer_local(&crate::stamp::surface_from_composite(&buf), rect);
+            assert_eq!(one_pass, two_pass, "{rect:?}");
+            if rect.width() == 0 || rect.height() == 0 {
+                assert!(one_pass.data.is_empty(), "{rect:?}");
+                assert!(two_pass.data.is_empty(), "{rect:?}");
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ use super::*;
 use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
 
 mod bands;
+mod cache;
 mod hint;
 
 fn doc(w: u32, h: u32, seed: u8) -> Document {

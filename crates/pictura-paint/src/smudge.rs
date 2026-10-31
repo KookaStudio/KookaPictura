@@ -285,7 +285,11 @@ mod tests {
 
     #[test]
     fn sample_all_layers_picks_up_from_the_composite() {
-        let composite = crate::stamp::layer_surface(&bar(), "0").unwrap();
+        let bar = bar();
+        let composite = crate::art_history::layer_local(
+            &crate::stamp::layer_surface(&bar, "0").unwrap(),
+            bar.layers[0].rect,
+        );
         let d = smudge(&doc(80, 40, WHITE), at(0.9), Some(composite), (12, 40));
         assert!(
             pixel(&d, 20, 20)[0] < 240,

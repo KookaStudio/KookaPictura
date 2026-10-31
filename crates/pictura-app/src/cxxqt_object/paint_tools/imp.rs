@@ -24,8 +24,8 @@ use pictura_paint::replace::{Limits, ReplaceMode, ReplaceOptions, Sampling};
 use pictura_paint::smudge::SmudgeOptions;
 use pictura_paint::spacing::SpacingMode;
 use pictura_paint::stamp::{
-    layer_surface, sample_scope, surface_from_composite, tiled, CloneSampling, SourceTransform,
-    StampSource,
+    layer_surface, sample_scope, surface_from_composite, surface_from_composite_rect,
+    CloneSampling, SourceTransform, StampSource,
 };
 use pictura_paint::tone::{SpongeMode, Tone, ToneOptions, ToneRange};
 use pictura_paint::{paint_stroke, Rgba, Stroke, StrokeConfig, StrokeKind, StrokeSample};
@@ -85,7 +85,9 @@ pub(super) fn begin_mixer_brush(
         ..tip_config(tip)
     };
     begin(view, "Mixer Brush Tool", cfg, |doc, path, view| {
-        let sampled = sample_all.then(|| composite_surface(doc, view));
+        let sampled = sample_all
+            .then(|| sampled_surface(doc, path, view))
+            .flatten();
         Stroke::begin_mixer(doc, path, cfg, options, reservoir, sampled).ok()
     })
 }
@@ -217,8 +219,8 @@ pub(super) fn begin_pattern_stamp(
     };
     let cfg = stamp_config(tip, opacity, flow, mode);
     begin(view, "Pattern Stamp", cfg, |doc, path, _| {
-        let image = tiled(&tile, doc.width, doc.height, (origin_x, origin_y))?;
-        Stroke::begin_source(doc, path, cfg, StampSource::new(image, (0, 0))).ok()
+        let source = StampSource::pattern(tile, (origin_x, origin_y), doc.width, doc.height)?;
+        Stroke::begin_source(doc, path, cfg, source).ok()
     })
 }
 
@@ -233,8 +235,7 @@ pub(super) fn begin_history_brush(
     begin(view, "History Brush", cfg, |doc, path, view| {
         // ponytail: the source layer is matched by panel path (layers carry no
         // stable id), so a reordered stack paints from whatever now sits there.
-        let past = view.session.history.brush_source_doc()?;
-        let source = StampSource::new(layer_surface(&past.doc, path)?, (0, 0));
+        let source = StampSource::new(view.session.history.brush_source_surface(path)?, (0, 0));
         Stroke::begin_source(doc, path, cfg, source).ok()
     })
 }
@@ -259,8 +260,8 @@ pub(super) fn begin_art_history_brush(
             // A new seed per history state: strokes differ, a stroke replays.
             seed: view.session.history.index() as u64 ^ 0xA27_4157,
         };
-        let past = view.session.history.brush_source_doc()?;
-        Stroke::begin_art_history(doc, path, cfg, layer_surface(&past.doc, path)?, options).ok()
+        let source = view.session.history.brush_source_surface(path)?;
+        Stroke::begin_art_history(doc, path, cfg, source, options).ok()
     })
 }
 
@@ -319,8 +320,10 @@ pub(super) fn begin_eraser(
         // ponytail: the source layer is matched by panel path, as for the
         // History Brush.
         let history = if to_history {
-            let past = view.session.history.brush_source_doc()?;
-            Some(StampSource::new(layer_surface(&past.doc, path)?, (0, 0)))
+            Some(StampSource::new(
+                view.session.history.brush_source_surface(path)?,
+                (0, 0),
+            ))
         } else {
             None
         };
@@ -408,7 +411,9 @@ pub(super) fn begin_focus(
     let cfg = tip_config(tip);
     let label = if sharpen { "Sharpen" } else { "Blur" };
     begin(view, label, cfg, |doc, path, view| {
-        let sampled = sample_all.then(|| composite_surface(doc, view));
+        let sampled = sample_all
+            .then(|| sampled_surface(doc, path, view))
+            .flatten();
         Stroke::begin_focus(doc, path, cfg, options, sampled).ok()
     })
 }
@@ -432,7 +437,9 @@ pub(super) fn begin_smudge(
         ..tip_config(tip)
     };
     begin(view, "Smudge", cfg, |doc, path, view| {
-        let sampled = sample_all.then(|| composite_surface(doc, view));
+        let sampled = sample_all
+            .then(|| sampled_surface(doc, path, view))
+            .flatten();
         Stroke::begin_smudge(doc, path, cfg, options, sampled).ok()
     })
 }
@@ -466,13 +473,26 @@ pub(super) fn begin_tone(
     })
 }
 
-/// The document's composite as a document-space surface: what Sample All
-/// Layers reads.
+/// The document's composite as a layer-local surface: what Sample All Layers
+/// reads.
 pub(super) fn composite_surface(
     doc: &Document,
     view: &PictureViewRust,
+    rect: PsdRect,
 ) -> pictura_paint::healing::RgbaImage {
-    surface_from_composite(&super::super::picture::picture(doc, view))
+    let picture = super::super::picture::picture(doc, view);
+    surface_from_composite_rect(&picture, rect)
+}
+
+/// The layer-local Sample All source for `path`; `None` when the layer is
+/// missing.
+fn sampled_surface(
+    doc: &Document,
+    path: &str,
+    view: &PictureViewRust,
+) -> Option<pictura_paint::healing::RgbaImage> {
+    let rect = pictura_render::resolve_path(doc, path)?.rect;
+    Some(composite_surface(doc, view, rect))
 }
 
 /// A copy of `doc` with the Background at `path` turned into an ordinary
@@ -829,7 +849,13 @@ mod tests {
         };
         let doc = view.session.doc.as_ref().expect("document");
         let before = composites_so_far();
-        let surface = composite_surface(doc, &view);
+        let surface = composite_surface(
+            doc,
+            &view,
+            pictura_render::resolve_path(doc, "0")
+                .expect("the layer")
+                .rect,
+        );
         assert_eq!(
             composites_so_far(),
             before,

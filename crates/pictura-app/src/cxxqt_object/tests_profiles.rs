@@ -9,6 +9,7 @@ mod damage;
 mod open;
 mod pan_zoom;
 mod preview;
+mod retouch;
 
 /// Viewport the canvas presents into (a typical desktop canvas).
 const VIEW: (u32, u32) = (1280, 800);
