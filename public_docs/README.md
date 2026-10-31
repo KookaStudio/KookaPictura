@@ -67,5 +67,9 @@ Photoshop background.
 - [Vanishing Point](filter-vanishing-point.md)
 - [Video, Other and Digimarc](filter-video-other-digimarc.md)
 
+## Working with AI
+
+- [Working with AI agents](agent-control.md)
+
 Can't find something? Press `Shift+Space`, type what you are looking for, and
 press Enter. The search finds commands, tools, panels and preference pages.
