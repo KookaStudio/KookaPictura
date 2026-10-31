@@ -13,6 +13,8 @@
 #include "frame.h"
 #include "session.h"
 
+#include "pictura_app/src/mcp_entry.cxxqt.h"
+
 namespace pictura {
 
 namespace {
@@ -71,6 +73,15 @@ QString AgentControl::liveEndpoint(QString* problem)
     }
     return directory + QStringLiteral("/live.sock");
 #endif
+}
+
+int AgentControl::runBridge(const QStringList& args)
+{
+    QString socket = qEnvironmentVariable("PICTURA_CONTROL_SOCKET");
+    if (socket.isEmpty()) {
+        socket = liveEndpoint(nullptr);
+    }
+    return mcp_run(socket, ControlServer::tokenPathFor(socket), args);
 }
 
 void AgentControl::apply(const AgentSettings& settings)

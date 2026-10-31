@@ -241,11 +241,16 @@ bool ControlServer::listen()
 
 QString ControlServer::tokenPath() const
 {
+    return tokenPathFor(socketPath_);
+}
+
+QString ControlServer::tokenPathFor(const QString& endpoint)
+{
 #ifdef _WIN32
     // A named pipe has no directory; the token lives in the user's temp dir.
-    return QDir::tempPath() + QStringLiteral("/") + socketPath_ + QStringLiteral(".token");
+    return QDir::tempPath() + QStringLiteral("/") + endpoint + QStringLiteral(".token");
 #else
-    return socketPath_ + QStringLiteral(".token");
+    return endpoint + QStringLiteral(".token");
 #endif
 }
 
@@ -442,6 +447,9 @@ void ControlServer::onDisconnected()
         QMetaObject::invokeMethod(this, &ControlServer::pump, Qt::QueuedConnection);
     }
     socket->deleteLater();
+    if (buffers_.isEmpty()) {
+        emit lastClientLeft();
+    }
 }
 
 void ControlServer::handleLine(const QPointer<QLocalSocket>& socket, const QByteArray& line)

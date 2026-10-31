@@ -146,4 +146,89 @@ if png[:8] != b"\x89PNG\r\n\x1a\n":
 print("verify-control: recipe OK")
 PY
 
+PICTURA_CONTROL_SOCKET="$sock" python3 - "$BIN" <<'PY'
+import json
+import os
+import subprocess
+import sys
+import tempfile
+
+binary = sys.argv[1]
+
+
+def fail(message):
+    print(f"verify-control: FAIL {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+class Bridge:
+    def __init__(self, *args, env=None):
+        self.process = subprocess.Popen(
+            [binary, "--mcp", *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            text=True, env=env)
+        self.next_id = 0
+
+    def request(self, method, **params):
+        self.next_id += 1
+        message = {"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params}
+        self.process.stdin.write(json.dumps(message) + "\n")
+        self.process.stdin.flush()
+        line = self.process.stdout.readline()
+        if not line:
+            fail(f"{method}: the bridge closed")
+        return json.loads(line)
+
+    def tool(self, name, **arguments):
+        return self.request("tools/call", name=name, arguments=arguments)["result"]
+
+    def close(self):
+        self.process.stdin.close()
+        if self.process.wait(timeout=20) != 0:
+            fail(f"the bridge exited {self.process.returncode}")
+
+
+# Attach to the instance the recipe above used.
+attached = Bridge()
+if "tools" not in attached.request("initialize", protocolVersion="2025-06-18")["result"]["capabilities"]:
+    fail("initialize advertises no tools")
+if len(attached.request("tools/list")["result"]["tools"]) < 20:
+    fail("too few tools")
+status = attached.tool("pictura_status")
+if status.get("isError") or "documents" not in status["content"][0]["text"]:
+    fail(f"attached status: {status}")
+shot = attached.tool("pictura_screenshot", scope="document")
+if shot["content"][0]["type"] != "image":
+    fail("a screenshot is not image content")
+attached.close()
+
+# A private instance: restricted, and gone when the bridge goes.
+with tempfile.TemporaryDirectory() as scratch:
+    env = dict(os.environ, TMPDIR=scratch)
+    env.pop("PICTURA_CONTROL_SOCKET")
+    root = os.path.join(scratch, "root")
+    os.mkdir(root)
+    spawned = Bridge("--spawn", "--tier", "save", "--root", root, env=env)
+    made = spawned.tool("pictura_document", op="new", width=8, height=8)
+    if made.get("isError"):
+        fail(f"spawned new: {made}")
+    target = os.path.join(root, "out.png")
+    if spawned.tool("pictura_export_png", path=target).get("isError") or not os.path.exists(target):
+        fail("spawned export")
+    outside = spawned.tool("pictura_export_png", path=os.path.join(scratch, "out.png"))
+    if not outside.get("isError") or "refused" not in outside["content"][0]["text"]:
+        fail(f"a write outside the root was not refused: {outside}")
+    spawned.close()
+    left = [name for name in os.listdir(scratch) if name.startswith("pictura-mcp-")]
+    if left:
+        fail(f"the bridge left {left}")
+
+    readonly = Bridge("--spawn", env=env)
+    denied = readonly.tool("pictura_document", op="new", width=8, height=8)
+    if not denied.get("isError"):
+        fail("the default tier allowed an edit")
+    readonly.close()
+
+print("verify-control: bridge OK")
+PY
+
 echo "verify-control: OK"

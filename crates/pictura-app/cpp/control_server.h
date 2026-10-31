@@ -77,6 +77,7 @@ public:
     // but cannot read the owner-only token file gets no file read/write
     // oracle (#844 M5). `dispatch()` is in-process and needs none.
     QString tokenPath() const;
+    static QString tokenPathFor(const QString& endpoint);
     QByteArray token() const { return token_; }
 
     // What socket requests may do; the default is unrestricted.
@@ -94,6 +95,10 @@ public:
     // wrapper. A dialog the call reaches is cancelled and answered `refused`.
     // Also drives the in-process self-test block.
     QJsonObject dispatch(const QString& method, const QJsonObject& params);
+
+signals:
+    // The last connected client left.
+    void lastClientLeft();
 
 public slots:
     // Close the server and remove the socket. Idempotent.

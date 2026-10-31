@@ -66,6 +66,21 @@
 
 int main(int argc, char* argv[])
 {
+    // Before QApplication: the bridge needs no display, and stdout is the
+    // protocol's, so nothing below may run first.
+    QStringList bridgeArgs;
+    bool bridge = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--mcp") == 0) {
+            bridge = true;
+        } else {
+            bridgeArgs.append(QString::fromLocal8Bit(argv[i]));
+        }
+    }
+    if (bridge) {
+        return pictura::AgentControl::runBridge(bridgeArgs);
+    }
+
     // xvfb-run sets DISPLAY but a live Wayland session's WAYLAND_DISPLAY leaks
     // through, so Qt prefers the Wayland plugin. There a popup opened without a
     // preceding input event cannot grab and the compositor dismisses it, which
@@ -116,6 +131,7 @@ int main(int argc, char* argv[])
     bool interopProbe = false;
     bool headless = false;
     bool control = false;
+    bool exitOnDisconnect = false;
     bool dumpTheme = false;
     QString psdPath;
     QString controlSocket;
@@ -136,6 +152,8 @@ int main(int argc, char* argv[])
             control = true;
         } else if (args.at(i) == QStringLiteral("--control-socket") && i + 1 < args.size()) {
             controlSocket = args.at(++i);
+        } else if (args.at(i) == QStringLiteral("--control-exit-on-disconnect")) {
+            exitOnDisconnect = true;
         } else if (args.at(i) == QStringLiteral("--control-tier") && i + 1 < args.size()) {
             controlTier = args.at(++i);
         } else if (args.at(i) == QStringLiteral("--control-root") && i + 1 < args.size()) {
@@ -341,6 +359,10 @@ int main(int argc, char* argv[])
         std::fflush(stderr);
         QObject::connect(&app, &QApplication::aboutToQuit, &controlServer,
                          &pictura::ControlServer::shutdown);
+        if (exitOnDisconnect) {
+            QObject::connect(&controlServer, &pictura::ControlServer::lastClientLeft, &app,
+                             &QApplication::quit, Qt::QueuedConnection);
+        }
         return app.exec();
     }
 
