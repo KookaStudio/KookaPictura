@@ -10,6 +10,7 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 
+#include "api/document_api.h"
 #include "control_approval_bar.h"
 #include "frame.h"
 #include "tools.h"
@@ -31,7 +32,13 @@ bool isSave(const QString& method, const QJsonObject& params)
     return isDocumentOp(method, params, "save") || isDocumentOp(method, params, "save_as");
 }
 
-QString humanBusyReason(PicturaMainWindow* frame)
+bool writesFile(const QString& method, const QJsonObject& params)
+{
+    return isSave(method, params) || method == QStringLiteral("export_png");
+}
+
+// `ownCrop`: the pending crop is the agent's, so it is not the person's to finish.
+QString humanBusyReason(PicturaMainWindow* frame, bool ownCrop)
 {
     if (QApplication::activeModalWidget() || QApplication::activePopupWidget()) {
         return QStringLiteral("a dialog or menu is open");
@@ -45,7 +52,7 @@ QString humanBusyReason(PicturaMainWindow* frame)
     if (QApplication::mouseButtons() != Qt::NoButton) {
         return QStringLiteral("a mouse button is held");
     }
-    if (frame->hasPendingCrop()) {
+    if (frame->hasPendingCrop() && !ownCrop) {
         return QStringLiteral("a crop is pending");
     }
     if (auto* tools = frame->findChild<ToolController*>(); tools && tools->transformPending()) {
@@ -82,6 +89,10 @@ ControlTier ControlServer::tierOf(const QString& method, const QJsonObject& para
             || op == QStringLiteral("close")) {
             return ControlTier::Edit;
         }
+        return ControlTier::Read;
+    }
+    if (method == QStringLiteral("history")
+        && params.value(QStringLiteral("op")).toString() == QStringLiteral("list")) {
         return ControlTier::Read;
     }
     if (method == QStringLiteral("pointer")) {
@@ -126,7 +137,7 @@ QJsonObject ControlServer::admit(const QString& method, const QJsonObject& param
         }
     }
     if (tier != ControlTier::Read) {
-        if (const QString reason = humanBusyReason(frame_); !reason.isEmpty()) {
+        if (const QString reason = humanBusyReason(frame_, agentCrop_); !reason.isEmpty()) {
             return error(QStringLiteral("human_busy"),
                          QStringLiteral("waiting for the person: %1").arg(reason));
         }
@@ -137,7 +148,7 @@ QJsonObject ControlServer::admit(const QString& method, const QJsonObject& param
 QString ControlServer::fileTarget(const QString& method, const QJsonObject& params) const
 {
     const bool open = isDocumentOp(method, params, "open");
-    if (!open && !isSave(method, params)) {
+    if (!open && !writesFile(method, params)) {
         return {};
     }
     QString path = params.value(QStringLiteral("path")).toString();
@@ -154,7 +165,7 @@ QString ControlServer::fileTarget(const QString& method, const QJsonObject& para
 PathVerdict ControlServer::verdictFor(const QString& method, const QJsonObject& params,
                                       const QString& target) const
 {
-    return judgePath(policy_, target, isSave(method, params), QFileInfo::exists(target),
+    return judgePath(policy_, target, writesFile(method, params), QFileInfo::exists(target),
                      known_.contains(target));
 }
 
@@ -167,6 +178,17 @@ void ControlServer::reply(const QPointer<QLocalSocket>& socket, int id, QJsonObj
 void ControlServer::serve(const QPointer<QLocalSocket>& socket, int id, const QString& method,
                           const QJsonObject& params)
 {
+    if (isMethod(method) && tierOf(method, params) != ControlTier::Read
+        && params.contains(QStringLiteral("doc"))) {
+        PictureView* view = frame_->activeView();
+        if (!view
+            || params.value(QStringLiteral("doc")).toString() != control_detail::documentId(view)) {
+            reply(socket, id,
+                  error(QStringLiteral("stale_document"),
+                        QStringLiteral("that document is not the active one")));
+            return;
+        }
+    }
     if (policy_.restricted) {
         if (const QJsonObject refusal = admit(method, params); !refusal.isEmpty()) {
             reply(socket, id, refusal);
@@ -208,9 +230,16 @@ void ControlServer::run(const QPointer<QLocalSocket>& socket, int id, const QStr
         parked_ = true;
         return;
     }
+    const bool cropBefore = frame_->hasPendingCrop();
     const QJsonObject response = dispatch(method, params);
-    if (isSave(method, params) && response.value(QStringLiteral("ok")).toBool()) {
-        known_.insert(canonicalTarget(frame_->activeFilePath()));
+    if (method == QStringLiteral("pointer") && !cropBefore && frame_->hasPendingCrop()) {
+        agentCrop_ = true;
+    }
+    if (!frame_->hasPendingCrop()) {
+        agentCrop_ = false;
+    }
+    if (writesFile(method, params) && response.value(QStringLiteral("ok")).toBool()) {
+        known_.insert(canonicalTarget(isSave(method, params) ? frame_->activeFilePath() : path));
     }
     reply(socket, id, response);
 }

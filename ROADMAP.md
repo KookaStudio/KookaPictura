@@ -445,8 +445,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 
 - [x] **A non-interactive `--headless` mode.**
       `crates/pictura-app/cpp/main.cpp`.
-- [x] **A local control server** on a Unix socket, with twenty JSON methods for
-      documents, layers, selections, filters, and pointer and key input.
+- [x] **A local control server** on a Unix socket, with JSON methods for documents,
+      layers, selections, filters with parameters, adjustments, commands, history,
+      PNG export, and pointer and key input.
       `crates/pictura-app/cpp/control_server.cpp`.
 - [x] **Live agent sessions with permissions:** a control server in the running
       app, off by default, with permission tiers, allowed folders, and approval
