@@ -541,42 +541,6 @@ bool ImageView::presentLevelRect(int level, QRect& docRect, QRect& sourceRect) c
     return true;
 }
 
-void ImageView::dropPresentCache()
-{
-    presentCache_.valid = false;
-    presentCache_.level = -1;
-    presentCache_.crop = QImage();
-}
-
-const QImage* ImageView::presentCrop(int level, const QRect& docRect, const QRect& sourceRect)
-{
-    if (!levelProvider_.crop) {
-        return nullptr;
-    }
-    const qint64 key = frameKey_;
-    const quint64 revision =
-        levelProvider_.canvasRevision ? levelProvider_.canvasRevision() : quint64(0);
-    if (presentCacheEnabledForTest_ && presentCache_.valid && presentCache_.key == key
-        && presentCache_.revision == revision && presentCache_.level == level
-        && presentCache_.docRect == docRect && !presentCache_.crop.isNull()) {
-        return &presentCache_.crop;
-    }
-    ++presentCache_.rebuilds;
-    QImage crop = levelProvider_.crop(level, sourceRect.x(), sourceRect.y(), sourceRect.width(),
-                                      sourceRect.height());
-    if (crop.isNull() || crop.width() <= 0 || crop.height() <= 0) {
-        presentCache_.valid = false;
-        return nullptr;
-    }
-    presentCache_.crop = crop;
-    presentCache_.key = key;
-    presentCache_.revision = revision;
-    presentCache_.level = level;
-    presentCache_.docRect = docRect;
-    presentCache_.valid = presentCacheEnabledForTest_;
-    return &presentCache_.crop;
-}
-
 void ImageView::paintEvent(QPaintEvent* event)
 {
     lastPaintRect_ = event ? event->rect() : rect();

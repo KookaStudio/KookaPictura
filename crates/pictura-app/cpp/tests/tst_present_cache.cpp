@@ -6,6 +6,8 @@
 #include <QtTest/QSignalSpy>
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDebug>
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
@@ -61,6 +63,8 @@ private slots:
     void level0PresentMatchesTheTransformDraw();
     void largeDocumentPresentsThroughALevel();
     void panPresentsWithoutResamplingTheDocument();
+    void panAndZoomReuseTheLevel0Crop();
+    void panThenZoomFrameTimes();
     void idlePresentLevelIsZoomSelected();
     void level0PatchMatchesFreshCrop();
     void damageOutsideCacheChangesNothing();
@@ -300,6 +304,92 @@ void PresentCacheTest::panPresentsWithoutResamplingTheDocument()
     QCOMPARE(canvas_->presentLevelForTest(), 1);
     QCOMPARE(canvas_->presentCacheRebuildCount(), builds);
     QVERIFY(!canvas_->holdsImageForTest());
+}
+
+void PresentCacheTest::panAndZoomReuseTheLevel0Crop()
+{
+    QVERIFY2(newDoc(4000, 3000), "document fixture");
+    setZoom(1.0);
+    QCOMPARE(canvas_->presentLevelForTest(), 0);
+    renderCanvas(*canvas_);
+    const int builds = canvas_->presentCacheRebuildCount();
+
+    // A pan at level 0 reuses the cached crop's overlap instead of re-cropping
+    // the whole viewport.
+    canvas_->panBy(QPointF(-200.0, -150.0));
+    const QImage panned = renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentLevelForTest(), 0);
+    QCOMPARE(canvas_->presentCacheRebuildCount(), builds);
+
+    // The reused pan present equals a fresh level-0 crop over the same rect.
+    canvas_->setPresentCacheEnabledForTest(false);
+    const QImage pannedFresh = renderCanvas(*canvas_);
+    canvas_->setPresentCacheEnabledForTest(true);
+    QVERIFY2(samePixels(panned, pannedFresh),
+             "the reused pan present differs from a fresh level-0 crop");
+
+    // A zoom step that stays in the level-0 band reuses the cache too.
+    renderCanvas(*canvas_);
+    const int builds2 = canvas_->presentCacheRebuildCount();
+    canvas_->setZoom(1.2, canvas_->rect().center());
+    QCOMPARE(canvas_->presentLevelForTest(), 0);
+    const QImage zoomed = renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentCacheRebuildCount(), builds2);
+
+    canvas_->setPresentCacheEnabledForTest(false);
+    const QImage zoomedFresh = renderCanvas(*canvas_);
+    canvas_->setPresentCacheEnabledForTest(true);
+    QVERIFY2(samePixels(zoomed, zoomedFresh),
+             "the reused zoom present differs from a fresh level-0 crop");
+}
+
+void PresentCacheTest::panThenZoomFrameTimes()
+{
+    // The document size is overridable so the same profile can run at 16000².
+    const int side = qEnvironmentVariableIntValue("PICTURA_PAN_ZOOM_SIZE");
+    const int n = side > 0 ? side : 4000;
+    QVERIFY2(newDoc(n, (n * 3) / 4), "document fixture");
+    // A realistic viewport: the frame cost scales with it.
+    window_->resize(2560, 1440);
+    QCoreApplication::processEvents();
+    const auto timeRender = [this]() {
+        QElapsedTimer clock;
+        clock.start();
+        QImage shot(canvas_->size(), QImage::Format_ARGB32);
+        canvas_->render(&shot);
+        return double(clock.nsecsElapsed()) / 1e6;
+    };
+    // Warm the paint path at level 0.
+    setZoom(1.0);
+    timeRender();
+
+    // Average the first render after a zoom step, from rest and after a pan.
+    const auto averageZoom = [&](bool afterPan) {
+        double sum = 0.0;
+        const int trials = 5;
+        for (int i = 0; i < trials; ++i) {
+            setZoom(1.0);
+            timeRender();
+            if (afterPan) {
+                canvas_->panBy(QPointF(200.0, 150.0));
+                timeRender();
+            }
+            canvas_->setZoom(1.08, canvas_->rect().center());
+            sum += timeRender();
+        }
+        return sum / trials;
+    };
+    const double zoomFromRest = averageZoom(false);
+    const double zoomAfterPan = averageZoom(true);
+    canvas_->setPresentCacheEnabledForTest(false);
+    const double zoomFromRestFullCrop = averageZoom(false);
+    const double zoomAfterPanFullCrop = averageZoom(true);
+    canvas_->setPresentCacheEnabledForTest(true);
+
+    qInfo("pictura profile: pan_zoom %dx%d canvas=%dx%d zoom_from_rest_ms=%.2f "
+          "zoom_after_pan_ms=%.2f | full-crop zoom_from_rest_ms=%.2f zoom_after_pan_ms=%.2f",
+          n, (n * 3) / 4, canvas_->width(), canvas_->height(), zoomFromRest, zoomAfterPan,
+          zoomFromRestFullCrop, zoomAfterPanFullCrop);
 }
 
 void PresentCacheTest::idlePresentLevelIsZoomSelected()

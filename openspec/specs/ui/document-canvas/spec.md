@@ -264,9 +264,13 @@ stored level below 0 it SHALL draw the level's pixels from the app-side borrowed
 level view without copying the visible rectangle. For level 0, which is planar
 and straight alpha, it SHALL draw a cached premultiplied crop and update that
 crop from the changed document rectangle rather than re-cropping the viewport.
-The canvas SHALL choose the coarsest level whose scale is still at least as fine
-as the screen:
-level 0 for zoom > 0.5; level 1 for 0.25 < zoom <= 0.5; level 2 for
+When the visible document rectangle changes at an unchanged level — a pan or a
+zoom step that does not cross a level boundary — the canvas SHALL reuse the
+overlap of the cached crop and crop only the newly exposed band(s) from the
+level provider, instead of re-cropping the whole viewport; the reused crop MUST
+be byte-identical to a fresh crop of that level over the same rectangle. The
+canvas SHALL choose the coarsest level whose scale is still at least as fine as
+the screen: level 0 for zoom > 0.5; level 1 for 0.25 < zoom <= 0.5; level 2 for
 0.125 < zoom <= 0.25; and so on. A pan or hover repaint MUST NOT resample the
 full-resolution document. There SHALL be no pixel-count bound that disables the
 level present path: a document of any size SHALL present through a level.
@@ -289,6 +293,22 @@ level present path: a document of any size SHALL present through a level.
   document rectangle
 - **THEN** the second paint reuses the cached premultiplied crop instead of
   re-cropping the document
+
+#### Scenario: A pan at level 0 reuses the cached crop [cvda_pan_reuses_crop]
+
+- **WHEN** the zoom selects level 0, the canvas paints, and then the view pans
+  without changing the zoom
+- **THEN** the next paint reuses the cached crop's overlap and crops only the
+  newly exposed band, and the presented pixels are byte-identical to a fresh
+  level-0 crop over the new rectangle
+
+#### Scenario: A zoom step at an unchanged level reuses the cached crop [cvda_zoom_reuses_crop]
+
+- **WHEN** the canvas paints at a zoom that selects level 0 and then zooms in
+  without crossing the level-0 boundary
+- **THEN** the next paint reuses the cached crop (the new rectangle is inside
+  the cached one) and the presented pixels are byte-identical to a fresh
+  level-0 crop over the new rectangle
 
 #### Scenario: A zoom change invalidates the cache
 
