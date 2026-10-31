@@ -9,6 +9,7 @@ mod build_config;
 pub mod cxxqt_object;
 mod decode_bridge;
 pub mod gpu;
+mod gpu_probe_bridge;
 mod history;
 pub(crate) mod layer_target;
 mod mcp_entry;

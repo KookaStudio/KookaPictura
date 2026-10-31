@@ -48,6 +48,7 @@
 #include "dialogs.h"
 #include "fonts.h"
 #include "frame.h"
+#include "gpu_probe.h"
 #include "icons.h"
 #include "image_view.h"
 #include "panels/layers_panel.h"
@@ -66,6 +67,15 @@
 
 int main(int argc, char* argv[])
 {
+    // Hidden child mode: create one backend device and run the validation
+    // composite. Handled before QApplication so a driver crash kills only this
+    // process.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--gpu-probe") == 0) {
+            return pictura::runGpuProbeChild(i + 1 < argc ? argv[i + 1] : nullptr);
+        }
+    }
+
     // Before QApplication: the bridge needs no display, and stdout is the
     // protocol's, so nothing below may run first.
     QStringList bridgeArgs;
@@ -255,6 +265,10 @@ int main(int argc, char* argv[])
         std::fflush(stderr);
         return 0;
     }
+
+    // Select and pin one backend before the frame's startup probe. Linux is a
+    // no-op; Windows probes candidates in a child process.
+    pictura::prepareGpuBackend();
 
     pictura::PicturaMainWindow frame;
     // Crash recovery runs only for an interactive launch: the self-test, a

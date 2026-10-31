@@ -1,6 +1,7 @@
 # Qt Test suites for the C++ shell. Explicit list, no globbing (repo convention).
 set(PICTURA_QT_TESTS
     tst_smoke
+    tst_gpu_backend
     tst_offthread_jobs
     tst_open_save
     tst_document_api

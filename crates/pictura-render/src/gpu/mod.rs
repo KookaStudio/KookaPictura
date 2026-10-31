@@ -63,9 +63,15 @@ mod lut;
 mod plan;
 mod raster;
 mod resident;
+mod select;
 mod shader;
 mod stroke;
 
+pub use select::{
+    backend_label, compiled_backends, env_candidates, gpu_backend_status, platform, probe_backend,
+    probe_backend_outcome, resolve_candidates, selected_backend, set_backend, set_safe_mode,
+    GpuBackend, GpuBackendStatus, Platform, ProbeOutcome,
+};
 pub use stroke::{GpuPaintMode, GpuStroke, GpuStrokeParams};
 
 pub(crate) use backend::{device_lost, grid_2d, shared_device};
@@ -81,7 +87,8 @@ use assemble::{
 /// Why the GPU compositor could not run. The caller falls back to CPU.
 #[derive(Debug, Clone)]
 pub enum GpuError {
-    /// No Vulkan adapter, or the device could not be created.
+    /// No GPU adapter on the selected backend, or the device could not be
+    /// created.
     Unavailable,
     /// The document needs buffers larger than the device limits.
     TooLarge,
@@ -113,7 +120,9 @@ pub enum GpuError {
 impl fmt::Display for GpuError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GpuError::Unavailable => write!(f, "no usable Vulkan adapter/device"),
+            GpuError::Unavailable => {
+                write!(f, "no usable GPU adapter/device on the selected backend")
+            }
             GpuError::TooLarge => write!(f, "document exceeds GPU buffer limits"),
             GpuError::Readback => write!(f, "GPU readback failed"),
             GpuError::UnsupportedMode(m) => write!(f, "blend mode {m:?} is CPU-only"),
@@ -146,7 +155,7 @@ impl std::error::Error for GpuError {}
 /// The compositing backend that produced a buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
-    /// The wgpu/Vulkan compute compositor.
+    /// The wgpu compute compositor on the selected backend.
     Gpu,
     /// The CPU oracle [`crate::composite_rgba`].
     Cpu,
@@ -156,8 +165,8 @@ pub enum Backend {
 ///
 /// Returns the same 4-channel planar straight-alpha 8-bit buffer as
 /// [`crate::composite_rgba`], within ±1 LSB for the supported modes. Returns
-/// [`GpuError`] when no Vulkan device is usable or the stack contains a
-/// CPU-only mode; it never panics.
+/// [`GpuError`] when no device on the selected backend is usable or the stack
+/// contains a CPU-only mode; it never panics.
 pub fn composite_gpu(doc: &Document) -> Result<PixelBuffer, GpuError> {
     composite_gpu_region(doc, 0, 0, doc.width, doc.height)
 }
@@ -264,13 +273,20 @@ pub fn composite_gpu_or_cpu(doc: &Document) -> PixelBuffer {
     composite_gpu(doc).unwrap_or_else(|_| crate::composite_rgba(doc))
 }
 
-/// Whether a usable Vulkan adapter/device exists and its compositor reproduces
-/// the CPU oracle.
+/// Whether a usable adapter/device exists on the selected backend and its
+/// compositor reproduces the CPU oracle.
 ///
 /// Cached behind `devices()`'s and [`gpu_composite_verified`]'s `OnceLock`s;
 /// cheap to call repeatedly and never panics.
 pub fn gpu_available() -> bool {
     devices().is_ok() && gpu_composite_verified()
+}
+
+/// Whether a device exists on the selected backend, without running the CPU
+/// oracle validation. Lets the probe distinguish "no adapter" from "adapter
+/// present but validation failed". Never panics.
+pub fn device_available() -> bool {
+    devices().is_ok()
 }
 
 /// A read-only summary of the adapter the compositor would use.
@@ -469,7 +485,7 @@ pub(crate) fn require_gpu() {
 pub(crate) fn require_device(available: bool) {
     assert!(
         available,
-        "no usable Vulkan device; this test is #[ignore]d and needs one \
+        "no usable GPU device on the selected backend; this test is #[ignore]d and needs one \
          (software-vulkan in CI)"
     );
 }

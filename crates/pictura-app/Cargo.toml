@@ -41,3 +41,9 @@ ash = "0.38"
 
 [build-dependencies]
 cxx-qt-build = "0.10"
+
+# Windows compiles the Direct3D 12 backend alongside Vulkan; Linux keeps the
+# Vulkan-only graph. The feature is target-scoped so Windows-only transitive
+# crates never enter the Linux build.
+[target.'cfg(windows)'.dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "dx12", "vulkan", "wgsl"] }

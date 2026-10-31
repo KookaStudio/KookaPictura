@@ -156,6 +156,7 @@ fn main() {
                 "src/cxxqt_object.rs",
                 "src/decode_bridge.rs",
                 "src/mcp_entry.rs",
+                "src/gpu_probe_bridge.rs",
                 "src/cxxqt_object/actions_engine.rs",
                 "src/cxxqt_object/engine_tables/adjustment_catalogue.rs",
                 "src/cxxqt_object/adjustment_edit.rs",

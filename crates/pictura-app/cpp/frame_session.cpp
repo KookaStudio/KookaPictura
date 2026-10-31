@@ -1,5 +1,7 @@
 #include <QtCore/QRect>
 #include "frame_includes.h"
+
+#include "gpu_probe.h"
 #include "panels/actions_panel.h"
 
 #include "pictura_debug_timing.h"
@@ -189,6 +191,11 @@ void PicturaMainWindow::refreshPanels()
 
 void PicturaMainWindow::applyGpuComputePreference(bool on)
 {
+    // Re-enabling is the user's explicit reset: clear a cached crash so the
+    // next launch retries the candidates.
+    if (on && !gpuCompute_) {
+        clearGpuBackendCache();
+    }
     gpuCompute_ = on;
     for (const DocEntry* entry : docs_) {
         if (entry->view) {

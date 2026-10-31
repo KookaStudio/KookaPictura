@@ -387,6 +387,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/fonts.cpp
     crates/pictura-app/cpp/recovery_store.cpp
     crates/pictura-app/cpp/session.cpp
+    crates/pictura-app/cpp/gpu_probe.cpp
     crates/pictura-app/cpp/workspace_store.cpp
     crates/pictura-app/cpp/preferences_agent_page.cpp
     crates/pictura-app/cpp/preferences_dialog.cpp

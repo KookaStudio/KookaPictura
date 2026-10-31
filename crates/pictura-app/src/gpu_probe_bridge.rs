@@ -1,0 +1,33 @@
+//! `pictura --gpu-probe` and the app's backend-selection edge.
+//!
+//! A free-function bridge, in its own file, because the probe runs before
+//! `QApplication` and because `cxxqt_object.rs` is at its size ceiling.
+
+mod imp;
+
+use imp::*;
+
+#[cxx_qt::bridge]
+pub mod ffi {
+    #[namespace = "pictura"]
+    extern "Rust" {
+        /// Parent side: spawn `child_command --gpu-probe <backend>`, wait up
+        /// to 10 s, and return 0 (ok), 1 (no adapter/clean failure), or 2
+        /// (validation failure, crash, or timeout).
+        fn gpu_probe(kind: i32, child_command: &str) -> i32;
+        /// Child side: pin the backend, create the device, and run the CPU
+        /// oracle validation. 0 on success, 1 when no adapter exists, 2 when a
+        /// device exists but fails validation.
+        fn gpu_probe_child(kind: i32) -> i32;
+        /// Pin the process to one backend. False when a different pin already
+        /// resolved or the code is unknown.
+        fn gpu_set_backend(kind: i32) -> bool;
+        /// Mark the GPU path blocked (chain exhausted or validation failed).
+        fn gpu_set_safe_mode(active: bool);
+        /// The ordered candidate list for this launch, after the environment
+        /// override and the compiled-backend intersection.
+        fn gpu_candidates() -> Vec<i32>;
+        /// The five-state status label for the status bar and About.
+        fn gpu_active_backend_label(gpu_compute: bool) -> String;
+    }
+}
