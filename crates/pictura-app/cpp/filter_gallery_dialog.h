@@ -106,7 +106,10 @@ private:
     void layoutPreview();
     QSize documentSize() const;
     void setZoom(double zoom);
-    void stepZoom(bool zoomIn);
+    void setZoomAt(double zoom, const QPointF& anchor);
+    void stepZoom(bool zoomIn, const QPointF& anchor);
+    QPointF previewCentre() const;
+    QPointF documentPointAt(const QPointF& viewportPoint) const;
     double fitZoom() const;
     void renderNextThumbnail();
 
