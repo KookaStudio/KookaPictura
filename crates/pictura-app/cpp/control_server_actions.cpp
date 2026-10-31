@@ -9,6 +9,7 @@
 
 #include "api/selection_api.h"
 #include "frame.h"
+#include "gpu_probe.h"
 #include "tool_options_json.h"
 #include "tools.h"
 
@@ -374,7 +375,11 @@ QJsonObject ControlServer::methodSetGpuCompute(const QJsonObject& params)
     if (!params.value(QStringLiteral("on")).isBool()) {
         return error(QStringLiteral("invalid_param"), QStringLiteral("on must be a boolean"));
     }
-    view->set_gpu_compute(params.value(QStringLiteral("on")).toBool());
+    const bool on = params.value(QStringLiteral("on")).toBool();
+    if (on && !view->gpu_compute()) {
+        clearGpuBackendCache();
+    }
+    view->set_gpu_compute(on);
     QJsonObject result;
     result.insert(QStringLiteral("gpu_compute"), view->gpu_compute());
     result.insert(QStringLiteral("backend"), view->active_backend());

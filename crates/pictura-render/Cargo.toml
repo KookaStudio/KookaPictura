@@ -44,3 +44,9 @@ pictura-testkit = { path = "../pictura-testkit" }
 # Inflate the PDF content stream the live-text tests read; already in the tree
 # through pictura-codec.
 flate2 = "1"
+
+# Windows compiles the Direct3D 12 backend alongside Vulkan; Linux keeps the
+# Vulkan-only graph. The feature is target-scoped so Windows-only transitive
+# crates never enter the Linux build.
+[target.'cfg(windows)'.dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "dx12", "vulkan", "wgsl"] }

@@ -46,7 +46,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setUiScalePercent(uiScalePercent_);
         preferencesDialog_->setPickerChoice(pickerChoice_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
-        preferencesDialog_->setGpuComputeEnabled(gpuAvailable_);
+        preferencesDialog_->setGpuComputeEnabled(gpuCandidatesAvailable_);
         preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
         preferencesDialog_->setTypeShowAsianOptions(typeShowAsianOptions_);
         preferencesDialog_->setTypeMiddleEastern(typeMiddleEastern_);

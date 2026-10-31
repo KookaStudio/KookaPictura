@@ -1,4 +1,4 @@
-//! M0.5 spike: offscreen wgpu render on Vulkan, read back to CPU.
+//! M0.5 spike: offscreen wgpu render on the selected backend, read back to CPU.
 //!
 //! The GPU is an accelerator, not an oracle: this module never panics on a
 //! missing adapter and never blocks the CPU fallback. Callers branch on
@@ -10,10 +10,13 @@
 
 use std::borrow::Cow;
 
-/// Outcome of an offscreen render. `Unavailable` means no Vulkan adapter /
-/// device (or the render failed); the caller keeps its CPU image.
+use pictura_render::GpuBackend;
+
+/// Outcome of an offscreen render. `Unavailable` means no GPU adapter / device
+/// on the selected backend (or the render failed); the caller keeps its CPU
+/// image.
 pub enum GpuRender {
-    /// No usable Vulkan device.
+    /// No usable GPU device on the selected backend.
     Unavailable,
     /// Render succeeded. `distinct` is the number of distinct RGB values seen
     /// in the readback, used to prove the output is not blank.
@@ -55,15 +58,17 @@ pub fn render_gradient(width: u32, height: u32) -> GpuRender {
     }
 }
 
-async fn create_device() -> Option<(wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
+async fn create_device(
+    backend: GpuBackend,
+) -> Option<(wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
     // wgpu::Instance::new panics where no implemented backend is compiled for
-    // the target (Apple builds no wgpu Vulkan). Return `None` so the caller
-    // keeps its CPU image, as this module's contract promises.
-    if !wgpu::Instance::enabled_backend_features().contains(wgpu::Backends::VULKAN) {
+    // the target. Return `None` so the caller keeps its CPU image, as this
+    // module's contract promises. `Cpu` is never a device backend.
+    if backend == GpuBackend::Cpu || !backend.is_compiled() {
         return None;
     }
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::VULKAN,
+        backends: backend.to_wgpu(),
         ..wgpu::InstanceDescriptor::new_without_display_handle()
     });
 
@@ -93,7 +98,8 @@ async fn create_device() -> Option<(wgpu::Instance, wgpu::Adapter, wgpu::Device,
 }
 
 async fn render_gradient_async(width: u32, height: u32) -> Option<GpuRender> {
-    let (_instance, adapter, device, queue) = create_device().await?;
+    let (_instance, adapter, device, queue) =
+        create_device(pictura_render::selected_backend()).await?;
 
     let info = adapter.get_info();
     eprintln!(
@@ -271,9 +277,12 @@ pub struct InteropState {
 /// compiled out there and the stub returns `None`.
 #[cfg(not(target_vendor = "apple"))]
 pub fn create_interop_state() -> Option<InteropState> {
+    if !GpuBackend::Vulkan.is_compiled() {
+        return None;
+    }
     pollster::block_on(async {
         let (width, height) = (512u32, 512u32);
-        let (instance, adapter, device, queue) = create_device().await?;
+        let (instance, adapter, device, queue) = create_device(GpuBackend::Vulkan).await?;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("pictura-interop-target"),
             size: wgpu::Extent3d {

@@ -363,7 +363,7 @@ fn software_vulkan_accepts_a_cpu_device() {
 }
 
 #[test]
-#[should_panic(expected = "no usable Vulkan device")]
+#[should_panic(expected = "no usable GPU device")]
 fn require_gpu_panics_without_a_device() {
     require_device(false);
 }

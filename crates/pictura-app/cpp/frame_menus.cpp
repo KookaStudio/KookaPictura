@@ -1,6 +1,7 @@
 #include "frame_includes.h"
 
 #include "fill_layer_editor.h"
+#include "gpu_probe.h"
 
 #include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
@@ -1133,8 +1134,10 @@ void PicturaMainWindow::registerHandlers()
                "and Qt.\n\n"
                "Licensed under the GNU GPL v3.0 or later. Built with Qt 6 (LGPLv3) and "
                "open-source Rust crates; see THIRD-PARTY-LICENSES.\n\n"
+               "%1\n\n"
                 "Adobe, Photoshop, and Camera Raw are trademarks of Adobe Inc.; "
-                "Kooka Pictura is not affiliated with or endorsed by Adobe."));
+                "Kooka Pictura is not affiliated with or endorsed by Adobe.")
+                .arg(aboutText(activeBackendLabel(gpuCompute_))));
     });
 
     // Help > Developer > Design System…: the in-app storybook over the real UI.

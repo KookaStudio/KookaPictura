@@ -235,15 +235,16 @@ fn gradient_luma_half_up_bits() -> Vec<u32> {
 }
 
 async fn request_device() -> Option<Devices> {
-    // wgpu::Instance::new panics when no implemented backend is compiled for
-    // the target; the workspace enables only the Vulkan backend, which Apple
-    // targets do not implement. Report "no GPU" instead of aborting the
-    // process, matching this module's never-panics contract.
-    if !wgpu::Instance::enabled_backend_features().contains(wgpu::Backends::VULKAN) {
+    // Pin exactly one backend: `Instance::new` initializes every backend named
+    // in the bitmask, and on Windows a multi-backend instance loads the
+    // crashing Vulkan ICD. An uncompiled backend (including `Cpu`) reports
+    // "no GPU" instead of aborting the process.
+    let backend = super::selected_backend();
+    if !backend.is_compiled() {
         return None;
     }
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::VULKAN,
+        backends: backend.to_wgpu(),
         ..wgpu::InstanceDescriptor::new_without_display_handle()
     });
     let adapter = instance
