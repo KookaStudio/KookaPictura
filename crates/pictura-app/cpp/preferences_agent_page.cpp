@@ -30,7 +30,8 @@ namespace {
 QString clientSnippet()
 {
     const QJsonObject server{{QStringLiteral("command"), AgentControl::launchCommand()},
-                             {QStringLiteral("args"), QJsonArray{QStringLiteral("--mcp")}}};
+                             {QStringLiteral("args"),
+                              QJsonArray::fromStringList(AgentControl::launchArguments())}};
     const QJsonObject root{
         {QStringLiteral("mcpServers"), QJsonObject{{QStringLiteral("pictura"), server}}}};
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Indented));
@@ -113,6 +114,17 @@ AgentControlPage::AgentControlPage(AgentControl* agent, QWidget* parent)
     if (!AgentControl::isSandboxed()) {
         layout->addWidget(new ClientRegistrationBox(mcpClients(QDir::homePath()),
                                                     AgentControl::launchCommand(), this));
+    } else {
+        QString note = tr("Add this configuration to your MCP client by hand. The client must "
+                          "run outside a sandbox of its own.");
+        if (qEnvironmentVariableIsSet("FLATPAK_ID")) {
+            note += QLatin1Char(' ')
+                + tr("Agents can reach open documents, and folders you granted with "
+                     "flatpak override.");
+        }
+        auto* sandboxNote = wrappedLabel(note, this);
+        sandboxNote->setObjectName(QStringLiteral("agentSandboxNote"));
+        layout->addWidget(sandboxNote);
     }
 
     auto* limits = wrappedLabel(
@@ -186,20 +198,11 @@ void AgentControlPage::showSettings()
         folders_->clear();
         folders_->addItems(settings.roots);
     }
-    if (AgentControl::isSandboxed()) {
-        for (QWidget* control : QList<QWidget*>{enable_, allowEdit_, allowSave_, approval_,
-                                                folders_, addFolder_, removeFolder_,
-                                                copySnippet_, snippet_}) {
-            control->setEnabled(false);
-        }
-    }
 }
 
 void AgentControlPage::showStatus()
 {
-    if (AgentControl::isSandboxed()) {
-        status_->setText(tr("Agent Control is not available in this sandboxed build."));
-    } else if (!agent_->problem().isEmpty()) {
+    if (!agent_->problem().isEmpty()) {
         status_->setText(agent_->problem());
     } else if (!agent_->isRunning()) {
         status_->setText(tr("Off."));

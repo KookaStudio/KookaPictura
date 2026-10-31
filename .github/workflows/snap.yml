@@ -101,6 +101,9 @@ jobs:
           echo "::error::the snap self-test did not pass under strict confinement"
           exit 1
 
+      - name: Check a client reaches the window
+        run: scripts/check-sandbox-mcp.sh snap
+
       - name: Keep the snap
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:

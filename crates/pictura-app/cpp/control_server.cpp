@@ -28,6 +28,7 @@
 #include <cmath>
 #ifndef _WIN32
 #include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -216,11 +217,7 @@ bool ControlServer::listen()
     }
 #endif
     // Before removeServer: a live holder's socket must survive this attempt.
-    // A stale time of 0 leaves a dead holder to the PID check alone.
-    lock_ = std::make_unique<QLockFile>(lockPath());
-    lock_->setStaleLockTime(0);
-    if (!lock_->tryLock(0)) {
-        lock_.reset();
+    if (!acquireLock()) {
         return false;
     }
     QLocalServer::removeServer(socketPath_);
@@ -229,7 +226,7 @@ bool ControlServer::listen()
     if (!server_->listen(socketPath_)) {
         delete server_;
         server_ = nullptr;
-        lock_.reset();
+        releaseLock();
         return false;
     }
     if (!writeTokenFile()) {
@@ -238,6 +235,47 @@ bool ControlServer::listen()
     }
     connect(server_, &QLocalServer::newConnection, this, &ControlServer::onNewConnection);
     return true;
+}
+
+bool ControlServer::acquireLock()
+{
+#ifdef _WIN32
+    // A stale time of 0 leaves a dead holder to the PID check alone.
+    lock_ = std::make_unique<QLockFile>(lockPath());
+    lock_->setStaleLockTime(0);
+    if (!lock_->tryLock(0)) {
+        lock_.reset();
+        return false;
+    }
+    return true;
+#else
+    // Not QLockFile: Flatpak instances have separate PID namespaces, so a recorded
+    // PID says nothing about the holder. The file stays, because unlinking a
+    // locked file would let a second holder lock a new one.
+    const int fd = ::open(lockPath().toLocal8Bit().constData(),
+                          O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (fd < 0) {
+        return false;
+    }
+    if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        ::close(fd);
+        return false;
+    }
+    lockFd_ = fd;
+    return true;
+#endif
+}
+
+void ControlServer::releaseLock()
+{
+#ifdef _WIN32
+    lock_.reset();
+#else
+    if (lockFd_ >= 0) {
+        ::close(lockFd_);
+        lockFd_ = -1;
+    }
+#endif
 }
 
 QString ControlServer::tokenPath() const
@@ -343,7 +381,7 @@ void ControlServer::shutdown()
         QLocalServer::removeServer(socketPath_);
 #endif
     }
-    lock_.reset();
+    releaseLock();
 }
 
 void ControlServer::onNewConnection()
