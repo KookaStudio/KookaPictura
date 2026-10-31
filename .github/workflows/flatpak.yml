@@ -63,7 +63,6 @@ jobs:
     timeout-minutes: 120
     if: >-
       github.event_name != 'pull_request' ||
-      github.head_ref == 'feat/1079-agent-control-flatpak-snap' ||
       (github.head_ref == 'release-please--branches--master' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     container:
