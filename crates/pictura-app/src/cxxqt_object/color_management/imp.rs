@@ -13,7 +13,7 @@ use std::sync::{OnceLock, RwLock};
 
 /// The picker's sRGB <-> working-CMYK transforms. A drag in the picker asks for
 /// the gamut test on every mouse move, so they are built once per working
-/// profile rather than per call.
+/// profile and conversion-option pair rather than per call.
 pub(super) struct PickerTransforms {
     to_cmyk: SpaceTransform,
     to_rgb: SpaceTransform,
@@ -40,10 +40,27 @@ pub(super) static PICKER_BUILDS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
 pub(super) fn picker_slot() -> &'static RwLock<Option<PickerTransforms>> {
-    PICKER.get_or_init(|| RwLock::new(picker_transforms(&Profile::coated_cmyk().to_icc())))
+    PICKER.get_or_init(|| {
+        RwLock::new(picker_transforms(
+            &Profile::coated_cmyk().to_icc(),
+            default_picker_options(),
+        ))
+    })
 }
 
-pub(super) fn picker_transforms(icc: &[u8]) -> Option<PickerTransforms> {
+/// The picker's default conversion options: relative colorimetric with
+/// black-point compensation, and dither off.
+pub(super) fn default_picker_options() -> ConversionOptions {
+    ConversionOptions {
+        dither: false,
+        ..ConversionOptions::default()
+    }
+}
+
+pub(super) fn picker_transforms(
+    icc: &[u8],
+    options: ConversionOptions,
+) -> Option<PickerTransforms> {
     #[cfg(test)]
     PICKER_BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let profile = Profile::from_icc(icc).unwrap_or_else(|_| Profile::coated_cmyk());
@@ -52,15 +69,21 @@ pub(super) fn picker_transforms(icc: &[u8]) -> Option<PickerTransforms> {
         intent,
         black_point_compensation: bpc,
         ..
-    } = picker_options();
+    } = options;
     Some(PickerTransforms {
         to_cmyk: SpaceTransform::new(&srgb, &profile, intent, bpc).ok()?,
         to_rgb: SpaceTransform::new(&profile, &srgb, intent, bpc).ok()?,
     })
 }
 
-pub(super) fn install_picker_profile(icc: &[u8]) {
-    let transforms = picker_transforms(icc);
+/// Rebuild the picker pair from an installed profile and its conversion options.
+/// Dither is never applied to the pair: it converts one colour, not a plane.
+pub(super) fn install_picker(icc: &[u8], options: ConversionOptions) {
+    let options = ConversionOptions {
+        dither: false,
+        ..options
+    };
+    let transforms = picker_transforms(icc, options);
     if let Ok(mut slot) = picker_slot().write() {
         *slot = transforms;
     }
@@ -87,13 +110,6 @@ pub(super) fn builtin_profile(index: i32) -> Option<Profile> {
         1 => Some(Profile::adobe_rgb()),
         2 => Some(Profile::pro_photo()),
         _ => None,
-    }
-}
-
-pub(super) fn picker_options() -> ConversionOptions {
-    ConversionOptions {
-        dither: false,
-        ..ConversionOptions::default()
     }
 }
 
@@ -132,21 +148,22 @@ pub fn set_color_settings(
         0 => Profile::coated_cmyk().to_icc(),
         _ => Profile::coated_cmyk().to_icc(),
     };
+    let options = ConversionOptions {
+        intent: intent_from_code(intent),
+        black_point_compensation: bpc,
+        dither,
+    };
     {
         let mut rust = view.as_mut().rust_mut();
         if let Some(policy) = Policy::from_code(cmyk_policy) {
             rust.cmyk_policy = policy;
         }
         rust.working_cmyk = profile.clone();
-        rust.conversion_options = ConversionOptions {
-            intent: intent_from_code(intent),
-            black_point_compensation: bpc,
-            dither,
-        };
+        rust.conversion_options = options;
         rust.ask_mismatch_open = ask_mismatch;
         rust.ask_missing_open = ask_missing;
     }
-    install_picker_profile(&profile);
+    install_picker(&profile, options);
 }
 
 pub fn cmyk_policy(view: &PictureView) -> i32 {
@@ -465,7 +482,9 @@ mod tests {
     static PICKER_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn take_turn() -> std::sync::MutexGuard<'static, ()> {
-        PICKER_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+        let guard = PICKER_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        install_picker(&Profile::coated_cmyk().to_icc(), default_picker_options());
+        guard
     }
 
     fn percents(inks: &[u8]) -> Vec<i32> {
@@ -522,7 +541,7 @@ mod tests {
         let first = builds();
         assert!(first >= 1, "the first call builds the pair");
 
-        let options = picker_options();
+        let options = default_picker_options();
         let coated = Profile::coated_cmyk();
         for r in (0..=255).step_by(51) {
             for b in (0..=255).step_by(51) {
@@ -558,7 +577,7 @@ mod tests {
         let direct = pictura_codec::rgb_to_cmyk_with_profile(
             &[0, 0, 0],
             &Profile::coated_cmyk(),
-            picker_options(),
+            default_picker_options(),
         )
         .expect("one-shot cmyk");
         assert_eq!(inks, percents(&direct));
@@ -592,11 +611,11 @@ mod tests {
     #[test]
     fn picker_services_follow_the_installed_profile() {
         let _turn = take_turn();
-        let options = picker_options();
+        let options = default_picker_options();
         let icc = second_cmyk_icc();
         let second = Profile::from_icc(&icc).expect("patched profile parses");
         let coated = Profile::coated_cmyk();
-        install_picker_profile(&icc);
+        install_picker(&icc, options);
         let mut differs = false;
         for r in (0..=255).step_by(51) {
             for b in (0..=255).step_by(51) {
@@ -626,8 +645,56 @@ mod tests {
                     != inks;
             }
         }
-        install_picker_profile(&coated.to_icc());
+        install_picker(&coated.to_icc(), default_picker_options());
         assert!(differs, "the second profile converts differently");
+    }
+
+    #[test]
+    fn picker_services_follow_the_installed_options() {
+        let _turn = take_turn();
+        let icc = Profile::coated_cmyk().to_icc();
+        let perceptual = ConversionOptions {
+            intent: Intent::Perceptual,
+            black_point_compensation: false,
+            dither: false,
+        };
+        install_picker(&icc, perceptual);
+        let options = perceptual;
+        let coated = Profile::coated_cmyk();
+        let mut differs = false;
+        for r in (0..=255).step_by(51) {
+            for b in (0..=255).step_by(51) {
+                let rgb = rgb_bytes(r, 40, b);
+                let inks = pictura_codec::rgb_to_cmyk_with_profile(&rgb, &coated, options)
+                    .expect("one-shot cmyk");
+                let back = pictura_codec::cmyk_to_rgb_with_profile(&inks, &coated, options)
+                    .expect("one-shot rgb");
+                let shown = percents(&inks);
+                let edited = pictura_codec::cmyk_to_rgb_with_profile(
+                    &cmyk_bytes(shown[0], shown[1], shown[2], shown[3]),
+                    &coated,
+                    options,
+                )
+                .expect("one-shot edit");
+                let in_gamut = rgb.iter().zip(&back).all(|(a, b)| a.abs_diff(*b) <= 1);
+                assert_eq!(picker_cmyk(r, 40, b), shown, "{rgb:?}");
+                assert_eq!(
+                    picker_rgb(shown[0], shown[1], shown[2], shown[3]),
+                    packed(&edited),
+                    "{rgb:?}"
+                );
+                assert_eq!(picker_in_gamut(r, 40, b), in_gamut, "{rgb:?}");
+                assert_eq!(picker_closest_rgb(r, 40, b), packed(&back), "{rgb:?}");
+                differs |= pictura_codec::rgb_to_cmyk_with_profile(
+                    &rgb,
+                    &coated,
+                    default_picker_options(),
+                )
+                .expect("one-shot default")
+                    != inks;
+            }
+        }
+        assert!(differs, "Perceptual without BPC changes a picker readout");
     }
 
     #[test]
@@ -635,7 +702,7 @@ mod tests {
         let _turn = take_turn();
         let before = sweep();
         let built = builds();
-        install_picker_profile(&Profile::coated_cmyk().to_icc());
+        install_picker(&Profile::coated_cmyk().to_icc(), default_picker_options());
         assert_eq!(builds(), built + 1, "an install rebuilds the pair once");
         assert_eq!(sweep(), before, "the rebuilt pair converts alike");
         assert_eq!(builds(), built + 1, "calls after the install reuse it");

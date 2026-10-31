@@ -4,6 +4,8 @@
 
 #include <QtWidgets/QCheckBox>
 
+#include <cstddef>
+
 #include "color_settings_dialog.h"
 #include "session.h"
 
@@ -24,6 +26,7 @@ private slots:
     void settingsReachOpen();
     void preferencesSurviveRestart();
     void notADocumentEdit();
+    void pickerFollowsConversionOptions();
 };
 
 void ColorSettingsTest::rgbPolicy()
@@ -129,6 +132,24 @@ void ColorSettingsTest::notADocumentEdit()
     pictura::set_color_settings(view, 2, 0, 0, false, false, true, true);
     QCOMPARE(view.history_count(), history);
     QCOMPARE(view.is_dirty(), dirty);
+}
+
+// #1054: the Color Settings intent and black-point compensation drive the
+// picker's working-CMYK evaluation, so changing them rebuilds the pair.
+void ColorSettingsTest::pickerFollowsConversionOptions()
+{
+    pictura::PictureView view;
+    pictura::set_color_settings(view, 0, 0, 1, true, false, false, false);
+    const auto relative = pictura::picker_cmyk(200, 50, 100);
+    pictura::set_color_settings(view, 0, 0, 0, false, false, false, false);
+    const auto perceptual = pictura::picker_cmyk(200, 50, 100);
+    bool same = true;
+    for (int i = 0; i < 4; ++i) {
+        same = same && relative[std::size_t(i)] == perceptual[std::size_t(i)];
+    }
+    QVERIFY2(!same, "the Color Settings options change the picker's CMYK readout");
+    // Restore the defaults for the rest of the process.
+    pictura::set_color_settings(view, 0, 0, 1, true, false, false, false);
 }
 
 QTEST_MAIN(ColorSettingsTest)
