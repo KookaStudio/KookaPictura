@@ -116,67 +116,68 @@ pub(crate) fn widen_planes(
 /// over each `4 * width`-byte row, then un-shuffles the four byte planes back
 /// into big-endian floats. Depth 1 never reaches ZIP (rejected earlier).
 pub(crate) fn undo_prediction(data: &mut [u8], width: usize, rows: usize, depth: u16) {
+    use rayon::prelude::*;
+
     if width == 0 {
         return;
     }
     match depth {
         16 => {
             let row = 2 * width;
-            for r in 0..rows {
-                let start = r * row;
-                if start + row > data.len() {
-                    break;
+            data.par_chunks_mut(row).take(rows).for_each(|chunk| {
+                // A short final row is skipped, as the serial loop breaks.
+                if chunk.len() < row {
+                    return;
                 }
                 let mut prev = 0u16;
                 for x in 0..width {
-                    let i = start + x * 2;
-                    let v = u16::from_be_bytes([data[i], data[i + 1]]).wrapping_add(prev);
-                    data[i..i + 2].copy_from_slice(&v.to_be_bytes());
+                    let i = x * 2;
+                    let v = u16::from_be_bytes([chunk[i], chunk[i + 1]]).wrapping_add(prev);
+                    chunk[i..i + 2].copy_from_slice(&v.to_be_bytes());
                     prev = v;
                 }
-            }
+            });
         }
         32 => {
             let row = 4 * width;
-            for r in 0..rows {
-                let row_start = r * row;
-                let row_end = (row_start + row).min(data.len());
-                for i in (row_start + 1)..row_end {
-                    data[i] = data[i].wrapping_add(data[i - 1]);
-                }
-            }
-            unshuffle_32(data, width, rows);
+            data.par_chunks_mut(row)
+                .take(rows)
+                .for_each_init(Vec::new, |scratch, chunk| {
+                    for i in 1..chunk.len() {
+                        chunk[i] = chunk[i].wrapping_add(chunk[i - 1]);
+                    }
+                    // The serial unshuffle breaks on a short row, so only a full
+                    // row is unshuffled.
+                    if chunk.len() == row {
+                        unshuffle_row_32(chunk, width, scratch);
+                    }
+                });
         }
         _ => {
-            for row_start in (0..data.len()).step_by(width) {
-                let row_end = (row_start + width).min(data.len());
-                for i in (row_start + 1)..row_end {
-                    data[i] = data[i].wrapping_add(data[i - 1]);
+            // Depth 8 covers every remaining byte, short final row included.
+            data.par_chunks_mut(width).for_each(|chunk| {
+                for i in 1..chunk.len() {
+                    chunk[i] = chunk[i].wrapping_add(chunk[i - 1]);
                 }
-            }
+            });
         }
     }
 }
 
-/// Undo the depth-32 four-byte-plane shuffle in place: psd-tools packs each
-/// row's four byte planes together (`12341234` -> `111222333444`) before the
-/// byte-wise delta, so this restores the big-endian float order.
-fn unshuffle_32(data: &mut [u8], width: usize, rows: usize) {
-    let row = 4 * width;
-    let src = data.to_vec();
-    for r in 0..rows {
-        let base = r * row;
-        if base + row > data.len() {
-            break;
-        }
-        let mut dst = base;
-        for offset in base..base + width {
-            let mut x = offset;
-            while x < base + row {
-                data[dst] = src[x];
-                dst += 1;
-                x += width;
-            }
+/// Undo the depth-32 four-byte-plane shuffle in place for one `4 * width`-byte
+/// row: psd-tools packs each row's four byte planes together (`12341234` ->
+/// `111222333444`) before the byte-wise delta, so this restores the big-endian
+/// float order.
+fn unshuffle_row_32(chunk: &mut [u8], width: usize, scratch: &mut Vec<u8>) {
+    scratch.clear();
+    scratch.extend_from_slice(chunk);
+    let mut dst = 0;
+    for offset in 0..width {
+        let mut x = offset;
+        while x < chunk.len() {
+            chunk[dst] = scratch[x];
+            dst += 1;
+            x += width;
         }
     }
 }
@@ -227,7 +228,7 @@ pub(crate) fn apply_prediction(data: &mut [u8], width: usize, rows: usize, depth
 }
 
 /// Apply the depth-32 four-byte-plane shuffle in place, the inverse of
-/// [`unshuffle_32`].
+/// [`unshuffle_row_32`].
 fn shuffle_32(data: &mut [u8], width: usize, rows: usize) {
     let row = 4 * width;
     let src = data.to_vec();

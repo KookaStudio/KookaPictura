@@ -535,6 +535,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **A wgpu/Vulkan compute path** for compositing, the heavy filters, and the
       live paint stroke, gated behind a one-time comparison against the CPU
       reference. `crates/pictura-render/src/gpu/`.
+- [x] **Parallel PSD decode** — layer channels, merged RLE rows, and
+      ZIP-prediction rows decode on rayon, byte-identical to the serial decode
+      with the same first error. `crates/pictura-codec/src/read/`. (#1019)
 - [ ] A typed `prefs.toml` store, the config and state split, migration,
       quarantine, and the reset gesture (#641)
 - [ ] `QTranslator` and `.qm`, RTL, and locale number formatting (#642)
