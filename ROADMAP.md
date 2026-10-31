@@ -455,8 +455,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       copy a client configuration. `crates/pictura-app/cpp/preferences_agent_page.cpp`.
 - [x] **One-click MCP client registration** from Preferences.
       `crates/pictura-app/cpp/client_registration.cpp`.
-- [ ] Agent Control in Flatpak and Snap builds
-      ([#1079](https://github.com/KookaStudio/KookaPictura/issues/1079)).
+- [x] **Agent Control in Flatpak and Snap builds**, with no extra sandbox
+      permission. `crates/pictura-app/cpp/agent_control.cpp`.
 - [ ] MCP protocol revision 2026-07-28
       ([#1080](https://github.com/KookaStudio/KookaPictura/issues/1080)).
 - [x] **Live agent sessions with permissions:** a control server in the running

@@ -39,6 +39,7 @@ private slots:
     void saveNeedsEdit();
     void allowAllWarns();
     void foldersPersist();
+    void clientSnippetIsValid_data();
     void clientSnippetIsValid();
     void limitsAreStated();
     void sandboxedBuildsExplainThemselves();
@@ -84,7 +85,9 @@ void PreferencesAgentTest::cleanup()
     page_.reset();
     delete agent_;
     agent_ = nullptr;
-    qunsetenv("FLATPAK_ID");
+    for (const char* variable : {"FLATPAK_ID", "SNAP", "SNAP_INSTANCE_NAME", "APPIMAGE"}) {
+        qunsetenv(variable);
+    }
 }
 
 void PreferencesAgentTest::enablingStartsTheServer()
@@ -164,16 +167,46 @@ void PreferencesAgentTest::foldersPersist()
     QCOMPARE(agent_->settings().roots, QStringList{QStringLiteral("/two")});
 }
 
+void PreferencesAgentTest::clientSnippetIsValid_data()
+{
+    QTest::addColumn<QByteArray>("variable");
+    QTest::addColumn<QByteArray>("value");
+    QTest::addColumn<QString>("command");
+    QTest::addColumn<QStringList>("args");
+
+    const QString mcp = QStringLiteral("--mcp");
+    const QString run = QStringLiteral("run");
+    QTest::newRow("plain") << QByteArray() << QByteArray()
+                           << QCoreApplication::applicationFilePath() << QStringList{mcp};
+    QTest::newRow("appimage") << QByteArray("APPIMAGE") << QByteArray("/home/me/Kooka.AppImage")
+                              << QStringLiteral("/home/me/Kooka.AppImage") << QStringList{mcp};
+    QTest::newRow("flatpak") << QByteArray("FLATPAK_ID") << QByteArray("io.example.App")
+                             << QStringLiteral("flatpak")
+                             << QStringList{run, QStringLiteral("io.example.App"), mcp};
+    QTest::newRow("snap") << QByteArray("SNAP") << QByteArray("/snap/kooka-pictura/current")
+                          << QStringLiteral("snap")
+                          << QStringList{run, QStringLiteral("kooka-pictura_two.pictura"), mcp};
+}
+
 void PreferencesAgentTest::clientSnippetIsValid()
 {
+    QFETCH(QByteArray, variable);
+    QFETCH(QByteArray, value);
+    QFETCH(QString, command);
+    QFETCH(QStringList, args);
+    if (!variable.isEmpty()) {
+        qputenv(variable.constData(), value);
+    }
+    qputenv("SNAP_INSTANCE_NAME", "kooka-pictura_two");
+    page_ = std::make_unique<AgentControlPage>(agent_);
+
     const QJsonDocument document =
         QJsonDocument::fromJson(child<QPlainTextEdit>("agentSnippet")->toPlainText().toUtf8());
     const QJsonObject server = document.object()
                                    .value(QStringLiteral("mcpServers")).toObject()
                                    .value(QStringLiteral("pictura")).toObject();
-    QCOMPARE(server.value(QStringLiteral("command")).toString(), AgentControl::launchCommand());
-    QCOMPARE(server.value(QStringLiteral("args")).toArray().first().toString(),
-             QStringLiteral("--mcp"));
+    QCOMPARE(server.value(QStringLiteral("command")).toString(), command);
+    QCOMPARE(server.value(QStringLiteral("args")).toArray(), QJsonArray::fromStringList(args));
 }
 
 void PreferencesAgentTest::limitsAreStated()
@@ -183,11 +216,22 @@ void PreferencesAgentTest::limitsAreStated()
 
 void PreferencesAgentTest::sandboxedBuildsExplainThemselves()
 {
+    QVERIFY(child<QWidget>("agentClients") != nullptr);
+    QVERIFY(child<QLabel>("agentSandboxNote") == nullptr);
+
+    qputenv("SNAP", "/snap/kooka-pictura/current");
+    page_ = std::make_unique<AgentControlPage>(agent_);
+    QVERIFY(child<QCheckBox>("agentEnable")->isEnabled());
+    QVERIFY(child<QComboBox>("agentApproval")->isEnabled());
+    QVERIFY(child<QWidget>("agentClients") == nullptr);
+    QVERIFY(!child<QLabel>("agentSandboxNote")->text().contains(QStringLiteral("flatpak")));
+    qunsetenv("SNAP");
+
     qputenv("FLATPAK_ID", "io.github.KookaStudio.KookaPictura");
     page_ = std::make_unique<AgentControlPage>(agent_);
-    QVERIFY(!child<QCheckBox>("agentEnable")->isEnabled());
-    QVERIFY(!child<QComboBox>("agentApproval")->isEnabled());
-    QVERIFY(child<QLabel>("agentStatus")->text().contains(QStringLiteral("sandboxed")));
+    QVERIFY(child<QCheckBox>("agentEnable")->isEnabled());
+    QVERIFY(child<QWidget>("agentClients") == nullptr);
+    QVERIFY(child<QLabel>("agentSandboxNote")->text().contains(QStringLiteral("flatpak override")));
 }
 
 void PreferencesAgentTest::stoppingWithdrawsAnApproval()
