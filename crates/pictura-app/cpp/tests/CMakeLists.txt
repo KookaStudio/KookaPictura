@@ -26,6 +26,7 @@ set(PICTURA_QT_TESTS
     tst_control_modal_guard
     tst_control_policy
     tst_control_serial
+    tst_preferences_agent
     tst_image_ops
     tst_image_rotate
     tst_crop_straighten

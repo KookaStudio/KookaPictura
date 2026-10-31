@@ -30,6 +30,7 @@ const QString PreferencesDialog::kPerformance = QStringLiteral("Performance");
 const QString PreferencesDialog::kUnits = QStringLiteral("Units & Rulers");
 const QString PreferencesDialog::kGuides = QStringLiteral("Guides, Grid, & Slices");
 const QString PreferencesDialog::kType = QStringLiteral("Type");
+const QString PreferencesDialog::kAgentControl = QStringLiteral("Agent Control");
 
 namespace {
 
@@ -253,6 +254,13 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     connect(uiScale_, &QComboBox::currentIndexChanged, this,
             [this]() { emit uiScalePercentChanged(uiScale_->currentData().toInt()); });
     pageList_->setCurrentRow(0);
+}
+
+void PreferencesDialog::addPage(const QString& name, QWidget* page)
+{
+    realPages_.append(name);
+    stack_->addWidget(page);
+    (new QListWidgetItem(name, pageList_))->setData(Qt::UserRole, name);
 }
 
 QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& label,

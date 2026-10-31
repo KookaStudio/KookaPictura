@@ -386,6 +386,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/recovery_store.cpp
     crates/pictura-app/cpp/session.cpp
     crates/pictura-app/cpp/workspace_store.cpp
+    crates/pictura-app/cpp/preferences_agent_page.cpp
     crates/pictura-app/cpp/preferences_dialog.cpp
     crates/pictura-app/cpp/new_guide_dialog.cpp
     crates/pictura-app/cpp/file_info_dialog.cpp
@@ -745,6 +746,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/fonts.h
     crates/pictura-app/cpp/session.h
     crates/pictura-app/cpp/workspace_store.h
+    crates/pictura-app/cpp/preferences_agent_page.h
     crates/pictura-app/cpp/preferences_dialog.h
     crates/pictura-app/cpp/pdf_save_dialog.h
     crates/pictura-app/cpp/pdf_presets_dialog.h

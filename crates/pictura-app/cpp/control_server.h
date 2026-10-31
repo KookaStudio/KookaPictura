@@ -71,6 +71,7 @@ public:
     // cannot be created, or while another live process holds the endpoint.
     bool listen();
     QString socketPath() const { return socketPath_; }
+    int clientCount() const { return buffers_.size(); }
 
     // Every socket request must carry this session token as its `token`
     // member, so another process of the same user that can reach the socket
@@ -99,6 +100,7 @@ public:
 signals:
     // The last connected client left.
     void lastClientLeft();
+    void clientsChanged();
 
 public slots:
     // Close the server and remove the socket. Idempotent.

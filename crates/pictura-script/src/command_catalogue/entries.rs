@@ -110,6 +110,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "edit.preferences.guidesGridSlices", path: &["Edit", "Preferences", "Guides, Grid, & Slices"], label: "Guides, Grid, & Slices", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.preferences.plug.ins", path: &["Edit", "Preferences", "Plug-ins"], label: "Plug-ins", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.preferences.type", path: &["Edit", "Preferences", "Type"], label: "Type", shortcut: "", implemented: true, checkable: false },
+    CommandSpec { id: "edit.preferences.agentControl", path: &["Edit", "Preferences", "Agent Control"], label: "Agent Control", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.preferences.3d", path: &["Edit", "Preferences", "3D"], label: "3D", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "image.mode.bitmap", path: &["Image", "Mode", "Bitmap"], label: "Bitmap", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.grayscale", path: &["Image", "Mode", "Grayscale"], label: "Grayscale", shortcut: "", implemented: true, checkable: true },

@@ -55,6 +55,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("EditPreferencesUnits", "edit.preferences.unitsRulers"),
     ("EditPreferencesGuides", "edit.preferences.guidesGridSlices"),
     ("EditPreferencesType", "edit.preferences.type"),
+    ("EditPreferencesAgentControl", "edit.preferences.agentControl"),
     ("EditAssignProfile", "edit.assignProfile"),
     ("EditConvertProfile", "edit.convertProfile"),
     ("EditColorSettings", "edit.colorSettings"),

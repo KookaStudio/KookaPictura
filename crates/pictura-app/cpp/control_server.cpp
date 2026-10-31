@@ -81,6 +81,7 @@ bool isModalCommand(const QString& id)
         QString::fromLatin1(command_ids::EditPreferencesUnits),
         QString::fromLatin1(command_ids::EditPreferencesGuides),
         QString::fromLatin1(command_ids::EditPreferencesType),
+        QString::fromLatin1(command_ids::EditPreferencesAgentControl),
         QString::fromLatin1(command_ids::ViewNewGuide),
         // Entering full screen can show the CS6 advisory (a modal message box).
         QString::fromLatin1(command_ids::ViewScreenModeFullWithMenuBar),
@@ -359,6 +360,7 @@ void ControlServer::onNewConnection()
         buffers_.insert(socket, QByteArray());
         connect(socket, &QLocalSocket::readyRead, this, &ControlServer::onReadyRead);
         connect(socket, &QLocalSocket::disconnected, this, &ControlServer::onDisconnected);
+        emit clientsChanged();
     }
 }
 
@@ -447,6 +449,7 @@ void ControlServer::onDisconnected()
         QMetaObject::invokeMethod(this, &ControlServer::pump, Qt::QueuedConnection);
     }
     socket->deleteLater();
+    emit clientsChanged();
     if (buffers_.isEmpty()) {
         emit lastClientLeft();
     }
