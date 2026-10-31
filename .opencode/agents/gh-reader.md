@@ -1,7 +1,7 @@
 ---
 description: Read-only GitHub investigator for issues, PRs, CI status
 mode: subagent
-model: opencode/deepseek-v4.1-flash-free
+model: deepinfra/deepseek-ai/DeepSeek-V4.1-Flash
 tools:
   write: false
   edit: false
