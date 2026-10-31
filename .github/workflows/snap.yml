@@ -42,6 +42,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: >-
       github.event_name != 'pull_request' ||
+      github.head_ref == 'feat/1079-agent-control-flatpak-snap' ||
       (github.head_ref == 'release-please--branches--master' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     # snapcraft builds inside an LXD container; allow for the cold toolchain and
