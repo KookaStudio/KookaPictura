@@ -1166,6 +1166,6 @@ mod surface;
 mod tests;
 
 pub(crate) use blend::blend_pixel;
-pub(crate) use surface::{layer_planes, layer_rgba};
 #[cfg(test)]
 pub(crate) use surface::layer_rgba_serial;
+pub(crate) use surface::{layer_planes, layer_rgba};

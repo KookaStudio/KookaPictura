@@ -9,6 +9,7 @@ use pictura_render::{Planes, ViewPyramid};
 mod damage;
 mod open;
 mod preview;
+mod retouch;
 
 /// Viewport the canvas presents into (a typical desktop canvas).
 const VIEW: (u32, u32) = (1280, 800);

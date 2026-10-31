@@ -101,6 +101,8 @@ pub enum BrushSource {
     Pinned,
 }
 
+type BrushCache = RefCell<Option<((u64, String), Arc<RgbaImage>)>>;
+
 /// Bounded undo/redo over labeled `(Document, Selection)` states plus up to
 /// [`MAX_SNAPSHOTS`] named restore points.
 ///
@@ -123,7 +125,7 @@ pub struct History {
     brush_source: BrushSource,
     pinned: Option<Snapshot>,
     pinned_id: Option<u64>,
-    brush_cache: RefCell<Option<((u64, String), Arc<RgbaImage>)>>,
+    brush_cache: BrushCache,
     current_target: LayerTarget,
 }
 

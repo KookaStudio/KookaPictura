@@ -1,4 +1,3 @@
-use super::*;
 use crate::stroke::{layer_rgba, layer_rgba_serial};
 use pictura_core::{Channel, Layer, PsdRect};
 
@@ -17,8 +16,7 @@ fn layer_with(rect: PsdRect, channels: &[(i16, u8)]) -> Layer {
                 channel.data.fracture(width);
                 channel
             })
-            .collect::<Vec<_>>()
-            .into(),
+            .collect::<Vec<_>>(),
         ..Default::default()
     }
 }

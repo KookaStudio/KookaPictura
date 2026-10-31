@@ -75,8 +75,6 @@ mod tests_impl;
 #[cfg(test)]
 mod tests_profiles;
 #[cfg(test)]
-mod tests_profiles_retouch;
-#[cfg(test)]
 mod tool_recording_tests;
 #[cxx_qt::bridge]
 pub mod qobject {

@@ -155,9 +155,7 @@ fn brush_source_surface_invalidates_on_history_change() {
     let expected = layer_surface(&history.brush_source_doc().unwrap().doc, "0").unwrap();
     assert_eq!(*snapshot, expected);
     history.purge_snapshots();
-    let after_snapshots = history
-        .brush_source_surface("0")
-        .expect("after snapshots");
+    let after_snapshots = history.brush_source_surface("0").expect("after snapshots");
     assert!(!Arc::ptr_eq(&snapshot, &after_snapshots));
     let expected = layer_surface(&history.brush_source_doc().unwrap().doc, "0").unwrap();
     assert_eq!(*after_snapshots, expected);

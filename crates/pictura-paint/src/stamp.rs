@@ -112,7 +112,7 @@ impl StampSource {
         height: u32,
     ) -> Option<StampSource> {
         let tile = tile.into();
-        (tile.width > 0 && tile.height > 0).then(|| StampSource {
+        (tile.width > 0 && tile.height > 0).then_some(StampSource {
             kind: SourceKind::Pattern {
                 tile,
                 origin,
@@ -368,30 +368,33 @@ pub fn layer_surface(doc: &Document, path: &str) -> Option<RgbaImage> {
         return Some(out);
     }
     let planes = layer_planes(layer);
-    out.data.par_chunks_mut(uw).enumerate().for_each(|(dy, row)| {
-        let ly = dy as i32 - rect.top;
-        if ly < 0 || ly >= lh as i32 {
-            return;
-        }
-        let ly = ly as usize;
-        let r = planes[0].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
-        let g = planes[1].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
-        let b = planes[2].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
-        let a = planes[3].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
-        for (dx, px) in row.iter_mut().enumerate() {
-            let lx = dx as i32 - rect.left;
-            if lx < 0 || lx >= lw as i32 {
-                continue;
+    out.data
+        .par_chunks_mut(uw)
+        .enumerate()
+        .for_each(|(dy, row)| {
+            let ly = dy as i32 - rect.top;
+            if ly < 0 || ly >= lh as i32 {
+                return;
             }
-            let lx = lx as usize;
-            *px = [
-                r.get(lx).copied().unwrap_or(0),
-                g.get(lx).copied().unwrap_or(0),
-                b.get(lx).copied().unwrap_or(0),
-                a.get(lx).copied().unwrap_or(255),
-            ];
-        }
-    });
+            let ly = ly as usize;
+            let r = planes[0].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+            let g = planes[1].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+            let b = planes[2].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+            let a = planes[3].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+            for (dx, px) in row.iter_mut().enumerate() {
+                let lx = dx as i32 - rect.left;
+                if lx < 0 || lx >= lw as i32 {
+                    continue;
+                }
+                let lx = lx as usize;
+                *px = [
+                    r.get(lx).copied().unwrap_or(0),
+                    g.get(lx).copied().unwrap_or(0),
+                    b.get(lx).copied().unwrap_or(0),
+                    a.get(lx).copied().unwrap_or(255),
+                ];
+            }
+        });
     Some(out)
 }
 

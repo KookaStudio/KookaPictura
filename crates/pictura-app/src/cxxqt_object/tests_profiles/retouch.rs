@@ -1,12 +1,10 @@
-use super::helpers::rgba_from_argb;
-use super::tests::pixel_layer;
-use pictura_core::{BitDepth, ColorMode, Document};
+use super::*;
 use pictura_paint::pattern;
 use pictura_paint::smudge::SmudgeOptions;
 use pictura_paint::spacing::SpacingMode;
 use pictura_paint::stamp::{
-    layer_surface, sample_scope, surface_from_composite, surface_from_composite_rect, CloneSampling,
-    StampSource,
+    layer_surface, sample_scope, surface_from_composite, surface_from_composite_rect,
+    CloneSampling, StampSource,
 };
 use pictura_paint::tone::ToneOptions;
 use pictura_paint::{Stroke, StrokeConfig};

@@ -307,19 +307,22 @@ pub(crate) fn layer_local(source: &RgbaImage, rect: PsdRect) -> RgbaImage {
         return out;
     }
     let (sw, sh) = (source.width, source.height);
-    out.data.par_chunks_mut(uw).enumerate().for_each(|(y, row)| {
-        let sy = rect.top + y as i32;
-        if sy < 0 || sy >= sh {
-            return;
-        }
-        for (x, px) in row.iter_mut().enumerate() {
-            let sx = rect.left + x as i32;
-            if sx < 0 || sx >= sw {
-                continue;
+    out.data
+        .par_chunks_mut(uw)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let sy = rect.top + y as i32;
+            if sy < 0 || sy >= sh {
+                return;
             }
-            *px = source.data[sy as usize * sw as usize + sx as usize];
-        }
-    });
+            for (x, px) in row.iter_mut().enumerate() {
+                let sx = rect.left + x as i32;
+                if sx < 0 || sx >= sw {
+                    continue;
+                }
+                *px = source.data[sy as usize * sw as usize + sx as usize];
+            }
+        });
     out
 }
 
