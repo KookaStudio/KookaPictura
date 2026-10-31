@@ -247,6 +247,7 @@ static NON_RECORDABLE: &[&str] = &[
     "edit.keyboardShortcuts",
     "edit.preferences.general", "edit.preferences.interface", "edit.preferences.performance",
     "edit.preferences.unitsRulers", "edit.preferences.guidesGridSlices", "edit.preferences.type",
+    "edit.preferences.agentControl",
     "type.panels.character", "type.panels.paragraph", "type.panels.paragraphStyles",
     "view.zoomIn", "view.zoomOut", "view.fitOnScreen", "view.actualPixels", "view.freePan",
     "view.snapCanvasToWorkspace", "view.screenMode.standard", "view.screenMode.fullWithMenuBar",

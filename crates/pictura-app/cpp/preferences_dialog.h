@@ -33,8 +33,12 @@ public:
     static const QString kUnits;
     static const QString kGuides;
     static const QString kType;
+    static const QString kAgentControl;
 
     explicit PreferencesDialog(QWidget* parent = nullptr);
+
+    // Add a page after the CS6 panes, for what only some windows have.
+    void addPage(const QString& name, QWidget* page);
 
     // Select `page` (a no-op when unknown) and show non-modally.
     void openOn(const QString& page);

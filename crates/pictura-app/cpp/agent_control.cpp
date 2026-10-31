@@ -1,5 +1,6 @@
 #include "agent_control.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QRegularExpression>
@@ -75,6 +76,12 @@ QString AgentControl::liveEndpoint(QString* problem)
 #endif
 }
 
+QString AgentControl::launchCommand()
+{
+    const QString image = qEnvironmentVariable("APPIMAGE");
+    return image.isEmpty() ? QCoreApplication::applicationFilePath() : image;
+}
+
 int AgentControl::runBridge(const QStringList& args)
 {
     QString socket = qEnvironmentVariable("PICTURA_CONTROL_SOCKET");
@@ -120,6 +127,12 @@ ControlPolicy AgentControl::policy(const QString& endpoint) const
 
 void AgentControl::sync()
 {
+    syncServer();
+    emit statusChanged();
+}
+
+void AgentControl::syncServer()
+{
     problem_.clear();
     if (!settings_.enabled) {
         server_.reset();
@@ -144,7 +157,10 @@ void AgentControl::sync()
         problem_ = tr("Another Kooka Pictura window is serving agents.");
         return;
     }
+    connect(server.get(), &ControlServer::clientsChanged, this, &AgentControl::statusChanged);
     server_ = std::move(server);
 }
 
 } // namespace pictura
+
+#include "moc_agent_control.cpp"

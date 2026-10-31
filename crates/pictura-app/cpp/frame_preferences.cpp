@@ -2,7 +2,9 @@
 // frame.cpp / frame_menus.cpp to keep them within their size budgets.
 
 #include "frame_includes.h"
+#include "agent_control.h"
 #include "api/type_api.h"
+#include "preferences_agent_page.h"
 
 namespace pictura {
 
@@ -22,6 +24,11 @@ void PicturaMainWindow::registerPreferenceHandlers()
                           [this]() { showPreferences(PreferencesDialog::kGuides); });
     registry_->setHandler(command_ids::EditPreferencesType,
                           [this]() { showPreferences(PreferencesDialog::kType); });
+    registry_->setHandler(command_ids::EditPreferencesAgentControl,
+                          [this]() { showPreferences(PreferencesDialog::kAgentControl); });
+    // Only an interactive window has one.
+    registry_->setEnabledProvider(command_ids::EditPreferencesAgentControl,
+                                  [this]() { return findChild<AgentControl*>() != nullptr; });
 }
 
 void PicturaMainWindow::showPreferences(const QString& page)
@@ -44,6 +51,10 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setTypeShowAsianOptions(typeShowAsianOptions_);
         preferencesDialog_->setTypeMiddleEastern(typeMiddleEastern_);
         preferencesDialog_->setTypeMissingGlyphProtection(typeMissingGlyphProtection_);
+        if (auto* agent = findChild<AgentControl*>()) {
+            preferencesDialog_->addPage(PreferencesDialog::kAgentControl,
+                                        new AgentControlPage(agent));
+        }
         connectRecoveryPreferences(preferencesDialog_);
         connectGuidePreferences(preferencesDialog_);
         connect(preferencesDialog_, &PreferencesDialog::useShiftKeyForToolSwitchChanged,

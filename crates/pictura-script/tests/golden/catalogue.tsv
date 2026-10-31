@@ -105,6 +105,7 @@ edit.preferences.unitsRulers	Edit/Preferences/Units & Rulers	Units & Rulers		1	0
 edit.preferences.guidesGridSlices	Edit/Preferences/Guides, Grid, & Slices	Guides, Grid, & Slices		1	0
 edit.preferences.plug.ins	Edit/Preferences/Plug-ins	Plug-ins		0	0
 edit.preferences.type	Edit/Preferences/Type	Type		1	0
+edit.preferences.agentControl	Edit/Preferences/Agent Control	Agent Control		1	0
 edit.preferences.3d	Edit/Preferences/3D	3D		0	0
 image.mode.bitmap	Image/Mode/Bitmap	Bitmap		1	1
 image.mode.grayscale	Image/Mode/Grayscale	Grayscale		1	1

@@ -31,6 +31,8 @@ struct AgentSettings {
 // Lives beside the frame rather than in it: saveSession() patches the stored
 // state, so these keys survive without the frame knowing them.
 class AgentControl : public QObject {
+    Q_OBJECT
+
 public:
     // `endpoint` overrides liveEndpoint() for tests.
     explicit AgentControl(PicturaMainWindow* frame, const QString& endpoint = QString());
@@ -40,6 +42,8 @@ public:
     // `problem` set, when no safe directory exists for it.
     static QString liveEndpoint(QString* problem);
     static bool isSandboxed();
+    // What an MCP client should run. An AppImage's own path is a temporary mount.
+    static QString launchCommand();
     // `pictura --mcp`: serve MCP on stdio, and return the exit code. Runs before
     // QApplication. `PICTURA_CONTROL_SOCKET` overrides the endpoint.
     static int runBridge(const QStringList& args);
@@ -53,8 +57,13 @@ public:
     QString problem() const { return problem_; }
     ControlServer* server() const { return server_.get(); }
 
+signals:
+    // Running, its problem, or its client count changed.
+    void statusChanged();
+
 private:
     void sync();
+    void syncServer();
     ControlPolicy policy(const QString& endpoint) const;
 
     PicturaMainWindow* frame_;

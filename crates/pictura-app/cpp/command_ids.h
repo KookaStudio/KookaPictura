@@ -55,6 +55,7 @@ inline constexpr char EditPreferencesPerformance[] = "edit.preferences.performan
 inline constexpr char EditPreferencesUnits[] = "edit.preferences.unitsRulers";
 inline constexpr char EditPreferencesGuides[] = "edit.preferences.guidesGridSlices";
 inline constexpr char EditPreferencesType[] = "edit.preferences.type";
+inline constexpr char EditPreferencesAgentControl[] = "edit.preferences.agentControl";
 inline constexpr char EditAssignProfile[] = "edit.assignProfile";
 inline constexpr char EditConvertProfile[] = "edit.convertProfile";
 inline constexpr char EditColorSettings[] = "edit.colorSettings";
