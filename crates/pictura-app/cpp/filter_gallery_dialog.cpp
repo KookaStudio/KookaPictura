@@ -331,8 +331,9 @@ QWidget* FilterGalleryDialog::buildPreview()
     auto* zoomIn = new QToolButton(pane);
     zoomIn->setObjectName(QStringLiteral("galleryZoomIn"));
     zoomIn->setText(QStringLiteral("+"));
-    connect(zoomOut, &QToolButton::clicked, this, [this] { stepZoom(false); });
-    connect(zoomIn, &QToolButton::clicked, this, [this] { stepZoom(true); });
+    connect(zoomOut, &QToolButton::clicked, this,
+            [this] { stepZoom(false, previewCentre()); });
+    connect(zoomIn, &QToolButton::clicked, this, [this] { stepZoom(true, previewCentre()); });
     addZoomShortcuts(this, zoomIn, zoomOut);
 
     // The zoom level: an editable box showing the live percentage, whose drop
@@ -650,21 +651,50 @@ double FilterGalleryDialog::fitZoom() const
     return qBound(zoomLadder().first(), fit, 1.0);
 }
 
+// The document point under a viewport position, through the canvas's current
+// placement; the canvas is centred when the picture fits the pane.
+QPointF FilterGalleryDialog::documentPointAt(const QPointF& viewportPoint) const
+{
+    if (!previewCanvas_ || zoom_ <= 0.0) {
+        return {};
+    }
+    return (viewportPoint - QPointF(previewCanvas_->pos())) / zoom_;
+}
+
+QPointF FilterGalleryDialog::previewCentre() const
+{
+    const QSize size = previewArea_->viewport()->size();
+    return QPointF(size.width() / 2.0, size.height() / 2.0);
+}
+
 void FilterGalleryDialog::setZoom(double zoom)
 {
+    setZoomAt(zoom, previewCentre());
+}
+
+// Resizing the canvas leaves the scrollbars at the old pixel values, so shift
+// them by however far the anchored point drifted across the resize.
+void FilterGalleryDialog::setZoomAt(double zoom, const QPointF& anchor)
+{
+    const QPointF docPoint = documentPointAt(anchor);
     zoom_ = zoom;
     layoutPreview();
+    const QPointF drift = QPointF(previewCanvas_->pos()) + docPoint * zoom_ - anchor;
+    previewArea_->horizontalScrollBar()->setValue(
+        previewArea_->horizontalScrollBar()->value() + qRound(drift.x()));
+    previewArea_->verticalScrollBar()->setValue(
+        previewArea_->verticalScrollBar()->value() + qRound(drift.y()));
     schedulePreview();
 }
 
 // One step up or down CS6's zoom ladder.
-void FilterGalleryDialog::stepZoom(bool zoomIn)
+void FilterGalleryDialog::stepZoom(bool zoomIn, const QPointF& anchor)
 {
     const QVector<double> ladder = zoomLadder();
     if (zoomIn) {
         for (double step : ladder) {
             if (step > zoom_ + 1e-6) {
-                setZoom(step);
+                setZoomAt(step, anchor);
                 return;
             }
         }
@@ -677,7 +707,7 @@ void FilterGalleryDialog::stepZoom(bool zoomIn)
         }
     }
     if (next > 0.0) {
-        setZoom(next);
+        setZoomAt(next, anchor);
     }
 }
 
@@ -724,9 +754,12 @@ bool FilterGalleryDialog::eventFilter(QObject* watched, QEvent* event)
             }
             break;
         case QEvent::Wheel: {
-            const int dy = static_cast<QWheelEvent*>(event)->angleDelta().y();
+            auto* wheel = static_cast<QWheelEvent*>(event);
+            const int dy = wheel->angleDelta().y();
             if (dy != 0) {
-                stepZoom(dy > 0);
+                // Zoom-in keeps the point under the pointer; zoom-out steps at
+                // the pane centre so the picture does not drift off the pointer.
+                stepZoom(dy > 0, dy > 0 ? wheel->position() : previewCentre());
                 return true;
             }
             break;

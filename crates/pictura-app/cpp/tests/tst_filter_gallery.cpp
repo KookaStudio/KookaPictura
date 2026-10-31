@@ -15,6 +15,7 @@
 #include <QtWidgets/QToolButton>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 #include "commands.h"
@@ -41,6 +42,40 @@ QStringList kinds(const QList<pictura::FilterGalleryDialog::Effect>& effects)
     return out;
 }
 
+// The zoom factor the drop-down currently shows.
+double zoomFactor(QComboBox* zoom)
+{
+    return zoom->currentText().chopped(1).toDouble() / 100.0;
+}
+
+// The document point under a viewport position, from the pane's canvas.
+QPointF documentPointUnder(QScrollArea* area, double zoom, const QPointF& at)
+{
+    return (at - QPointF(area->widget()->pos())) / zoom;
+}
+
+// A left drag on the preview pans it, as on the canvas.
+void panPreview(QScrollArea* area, const QPoint& delta)
+{
+    QWidget* viewport = area->viewport();
+    const QPoint start = viewport->rect().center();
+    QTest::mousePress(viewport, Qt::LeftButton, {}, start);
+    QTest::mouseMove(viewport, start - delta);
+    QTest::mouseRelease(viewport, Qt::LeftButton, {}, start - delta);
+}
+
+void sendWheel(QWidget* viewport, const QPointF& at, int delta)
+{
+    QWheelEvent wheel(at, viewport->mapToGlobal(at.toPoint()), QPoint(), QPoint(0, delta),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(viewport, &wheel);
+}
+
+bool withinAPixel(const QPointF& a, const QPointF& b)
+{
+    return std::abs(a.x() - b.x()) <= 1.0 && std::abs(a.y() - b.y()) <= 1.0;
+}
+
 } // namespace
 
 class FilterGalleryTest : public QObject {
@@ -62,6 +97,8 @@ private slots:
     void spaceTogglesTheEye();
     void keyboardZoomAndDragPan();
     void zoomDropdownAndWheel();
+    void wheelZoomAnchorsAtTheCursor();
+    void buttonsAndDropdownAnchorAtTheCentre();
     void sliderClickFocusesValueBox();
 
 private:
@@ -436,6 +473,114 @@ void FilterGalleryTest::zoomDropdownAndWheel()
     QVERIFY(index >= 0);
     QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, index));
     QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+
+    dialog.reject();
+}
+
+// The wheel keeps the document point under the pointer; zooming out keeps the
+// viewport centre (#840).
+void FilterGalleryTest::wheelZoomAnchorsAtTheCursor()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Zoom anchor"), 400, 400, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::FilterGalleryDialog dialog(window_->activeView());
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+    auto* zoom = dialog.findChild<QComboBox*>(QStringLiteral("galleryZoom"));
+    auto* area = dialog.findChild<QScrollArea*>(QStringLiteral("galleryPreview"));
+    QVERIFY(zoom != nullptr);
+    QVERIFY(area != nullptr);
+    const int preset = zoom->findText(QStringLiteral("200%"));
+    QVERIFY(preset >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, preset));
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+
+    QScrollBar* h = area->horizontalScrollBar();
+    QScrollBar* v = area->verticalScrollBar();
+    QVERIFY(h->maximum() > 0);
+    QVERIFY(v->maximum() > 0);
+    // Pan to a reachable spot, then wheel at a point away from the centre.
+    const QPoint panned(h->value(), v->value());
+    const QPoint drag(h->maximum() / 3, v->maximum() / 3);
+    panPreview(area, drag);
+    QCOMPARE(h->value(), qMin(h->maximum(), panned.x() + drag.x()));
+    QCOMPARE(v->value(), qMin(v->maximum(), panned.y() + drag.y()));
+
+    QWidget* viewport = area->viewport();
+    const QPointF anchor = QPointF(viewport->rect().center())
+                           + QPointF(viewport->width() / 8.0, -viewport->height() / 8.0);
+    const double beforeZoom = zoomFactor(zoom);
+    const QPointF before = documentPointUnder(area, beforeZoom, anchor);
+    sendWheel(viewport, anchor, 120);
+    const double afterZoom = zoomFactor(zoom);
+    QVERIFY2(afterZoom > beforeZoom,
+             qPrintable(QStringLiteral("%1 -> %2").arg(beforeZoom).arg(afterZoom)));
+    QVERIFY2(withinAPixel(before, documentPointUnder(area, afterZoom, anchor)),
+             "the wheel keeps the document point under the pointer");
+
+    // Zooming out anchors at the pane centre.
+    const QPointF centre = QPointF(viewport->rect().center());
+    const QPointF centreBefore = documentPointUnder(area, afterZoom, centre);
+    sendWheel(viewport, centre, -120);
+    const double outZoom = zoomFactor(zoom);
+    QVERIFY(outZoom < afterZoom);
+    QVERIFY2(withinAPixel(centreBefore, documentPointUnder(area, outZoom, centre)),
+             "zooming out keeps the document point at the viewport centre");
+
+    dialog.reject();
+}
+
+// The -/+ buttons and the drop-down have no pointer, so they anchor at the
+// viewport centre (#840).
+void FilterGalleryTest::buttonsAndDropdownAnchorAtTheCentre()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Zoom centre"), 400, 400, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::FilterGalleryDialog dialog(window_->activeView());
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+    auto* zoom = dialog.findChild<QComboBox*>(QStringLiteral("galleryZoom"));
+    auto* area = dialog.findChild<QScrollArea*>(QStringLiteral("galleryPreview"));
+    auto* zoomIn = dialog.findChild<QToolButton*>(QStringLiteral("galleryZoomIn"));
+    auto* zoomOut = dialog.findChild<QToolButton*>(QStringLiteral("galleryZoomOut"));
+    QVERIFY(zoom != nullptr);
+    QVERIFY(area != nullptr);
+    QVERIFY(zoomIn != nullptr);
+    QVERIFY(zoomOut != nullptr);
+    const int preset = zoom->findText(QStringLiteral("200%"));
+    QVERIFY(preset >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, preset));
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+
+    QScrollBar* h = area->horizontalScrollBar();
+    QScrollBar* v = area->verticalScrollBar();
+    QVERIFY(h->maximum() > 0);
+    QVERIFY(v->maximum() > 0);
+    panPreview(area, QPoint(h->maximum() / 3, v->maximum() / 3));
+
+    const QPointF centre = QPointF(area->viewport()->rect().center());
+    const QPointF before = documentPointUnder(area, zoomFactor(zoom), centre);
+
+    QTest::mouseClick(zoomIn, Qt::LeftButton);
+    QVERIFY(zoomFactor(zoom) > 2.0);
+    QVERIFY2(withinAPixel(before, documentPointUnder(area, zoomFactor(zoom), centre)),
+             "the + button keeps the centre");
+
+    QTest::mouseClick(zoomOut, Qt::LeftButton);
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+    QVERIFY2(withinAPixel(before, documentPointUnder(area, zoomFactor(zoom), centre)),
+             "the - button keeps the centre");
+
+    const int wide = zoom->findText(QStringLiteral("400%"));
+    QVERIFY(wide >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, wide));
+    QCOMPARE(zoom->currentText(), QStringLiteral("400%"));
+    QVERIFY2(withinAPixel(before, documentPointUnder(area, zoomFactor(zoom), centre)),
+             "the drop-down keeps the centre");
 
     dialog.reject();
 }
