@@ -1,5 +1,6 @@
 #include "preferences_agent_page.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
@@ -19,6 +20,7 @@
 #include <QtWidgets/QVBoxLayout>
 
 #include "agent_control.h"
+#include "client_registration_box.h"
 #include "control_server.h"
 
 namespace pictura {
@@ -72,6 +74,8 @@ AgentControlPage::AgentControlPage(AgentControl* agent, QWidget* parent)
     folders_->setObjectName(QStringLiteral("agentFolders"));
     snippet_->setObjectName(QStringLiteral("agentSnippet"));
     snippet_->setReadOnly(true);
+    snippet_->setFixedHeight(110);
+    folders_->setMaximumHeight(72);
 
     approval_->addItem(tr("Manual: Ask for Every Overwrite"), int(ApprovalMode::Manual));
     approval_->addItem(tr("Auto-Approve Files the Agent Made"), int(ApprovalMode::AutoApprove));
@@ -105,6 +109,11 @@ AgentControlPage::AgentControlPage(AgentControl* agent, QWidget* parent)
     clientLayout->addWidget(snippet_, 1);
     clientLayout->addWidget(copySnippet_, 0, Qt::AlignTop);
     layout->addWidget(client);
+
+    if (!AgentControl::isSandboxed()) {
+        layout->addWidget(new ClientRegistrationBox(mcpClients(QDir::homePath()),
+                                                    AgentControl::launchCommand(), this));
+    }
 
     auto* limits = wrappedLabel(
         tr("These permissions limit agents using this connection. They do not limit an "

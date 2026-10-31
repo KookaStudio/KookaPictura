@@ -371,6 +371,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/interop.cpp
     crates/pictura-app/cpp/commands.cpp
     crates/pictura-app/cpp/agent_control.cpp
+    crates/pictura-app/cpp/client_registration.cpp
+    crates/pictura-app/cpp/client_registration_box.cpp
     crates/pictura-app/cpp/control_approval_bar.cpp
     crates/pictura-app/cpp/control_policy.cpp
     crates/pictura-app/cpp/control_scope.cpp
@@ -737,6 +739,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/commands.h
     crates/pictura-app/cpp/command_ids.h
     crates/pictura-app/cpp/agent_control.h
+    crates/pictura-app/cpp/client_registration.h
+    crates/pictura-app/cpp/client_registration_box.h
     crates/pictura-app/cpp/control_approval_bar.h
     crates/pictura-app/cpp/control_policy.h
     crates/pictura-app/cpp/control_scope.h
