@@ -42,8 +42,10 @@ public:
     // `problem` set, when no safe directory exists for it.
     static QString liveEndpoint(QString* problem);
     static bool isSandboxed();
-    // What an MCP client should run. An AppImage's own path is a temporary mount.
+    // What an MCP client outside any sandbox should run. An AppImage's own path
+    // is a temporary mount, and a sandboxed path means nothing to the host.
     static QString launchCommand();
+    static QStringList launchArguments();
     // `pictura --mcp`: serve MCP on stdio, and return the exit code. Runs before
     // QApplication. `PICTURA_CONTROL_SOCKET` overrides the endpoint.
     static int runBridge(const QStringList& args);

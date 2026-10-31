@@ -63,8 +63,12 @@ QString AgentControl::liveEndpoint(QString* problem)
     return QStringLiteral("pictura-live-%1").arg(user);
 #else
     const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    // Each Flatpak instance has its own runtime directory, except for this
+    // subtree, and the window and the bridge are separate instances.
+    const QString flatpak = qEnvironmentVariable("FLATPAK_ID");
+    const QString shared = flatpak.isEmpty() ? runtime : runtime + QStringLiteral("/app/") + flatpak;
     const QString directory = !runtime.isEmpty()
-        ? runtime + QStringLiteral("/pictura")
+        ? shared + QStringLiteral("/pictura")
         : QDir::tempPath() + QStringLiteral("/pictura-%1").arg(::getuid());
     if (!isPrivateDirectory(directory.toLocal8Bit())) {
         if (problem) {
@@ -78,8 +82,28 @@ QString AgentControl::liveEndpoint(QString* problem)
 
 QString AgentControl::launchCommand()
 {
+    if (qEnvironmentVariableIsSet("FLATPAK_ID")) {
+        return QStringLiteral("flatpak");
+    }
+    if (qEnvironmentVariableIsSet("SNAP")) {
+        return QStringLiteral("snap");
+    }
     const QString image = qEnvironmentVariable("APPIMAGE");
     return image.isEmpty() ? QCoreApplication::applicationFilePath() : image;
+}
+
+QStringList AgentControl::launchArguments()
+{
+    if (qEnvironmentVariableIsSet("FLATPAK_ID")) {
+        return {QStringLiteral("run"), qEnvironmentVariable("FLATPAK_ID"), QStringLiteral("--mcp")};
+    }
+    if (qEnvironmentVariableIsSet("SNAP")) {
+        return {QStringLiteral("run"),
+                qEnvironmentVariable("SNAP_INSTANCE_NAME", QStringLiteral("kooka-pictura"))
+                    + QStringLiteral(".pictura"),
+                QStringLiteral("--mcp")};
+    }
+    return {QStringLiteral("--mcp")};
 }
 
 int AgentControl::runBridge(const QStringList& args)
@@ -135,11 +159,6 @@ void AgentControl::syncServer()
 {
     problem_.clear();
     if (!settings_.enabled) {
-        server_.reset();
-        return;
-    }
-    if (isSandboxed()) {
-        problem_ = tr("Agent control is not available in this sandboxed build.");
         server_.reset();
         return;
     }

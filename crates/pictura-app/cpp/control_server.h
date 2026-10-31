@@ -195,6 +195,8 @@ private:
     QString lockPath() const;
     bool writeTokenFile();
     bool authorized(const QJsonObject& request) const;
+    bool acquireLock();
+    void releaseLock();
     void writeLine(QLocalSocket* socket, const QJsonObject& response);
 
     PicturaMainWindow* frame_;
@@ -202,7 +204,11 @@ private:
     QString socketPath_;
     QByteArray token_;
     bool tokenWritten_ = false;
+#ifdef _WIN32
     std::unique_ptr<QLockFile> lock_;
+#else
+    int lockFd_ = -1;
+#endif
     QHash<QLocalSocket*, QByteArray> buffers_;
     QHash<QLocalSocket*, int> queuedCounts_;
     QList<QueuedLine> queue_;

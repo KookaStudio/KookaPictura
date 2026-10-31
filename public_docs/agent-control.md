@@ -138,6 +138,31 @@ jobs. Add `--spawn` to the client's arguments:
 Nobody is there to answer a prompt, so a private instance refuses instead of asking. It
 can't overwrite a file it didn't make, unless you use `--approval allow-all`.
 
+## Flatpak and Snap
+
+Agent Control works in both, with no extra permissions. **Copy** gives the command
+your client must run:
+
+| Install | Command |
+|---|---|
+| Flatpak | `flatpak run io.github.KookaStudio.KookaPictura --mcp` |
+| Snap | `snap run kooka-pictura.pictura --mcp` |
+
+The client has to run outside a sandbox of its own, because it starts this command.
+The app can't change another app's settings from inside its sandbox, so the
+Register buttons aren't offered. Add the configuration by hand.
+
+A Flatpak can't see your home folder, so an agent can work on documents you opened
+but can't open a file by its usual path. To give it a folder, run this once and
+restart the app:
+
+```bash
+flatpak override --user --filesystem=~/Pictures io.github.KookaStudio.KookaPictura
+```
+
+Only your account is affected. `flatpak override --user --reset
+io.github.KookaStudio.KookaPictura` removes every override you've set for the app.
+
 ## Staying safe
 
 An agent reads what is in your files, including layer names and text, and a file can be
@@ -162,7 +187,7 @@ an AI service, so check how yours handles your work.
 |---|---|
 | **Kooka Pictura is not running, or Agent Control is off** | Open the app, and tick **Enable Agent Control** |
 | **Another Kooka Pictura window is serving agents.** | Only one window can serve agents. Close the other one, then untick and tick Enable |
-| **Agent control is not available in this sandboxed build.** | Flatpak and Snap builds don't support it yet. Use another [install](installing.md) |
+| **Files can't be found** in a Flatpak build | The sandbox can't see your home folder. See [Flatpak and Snap](#flatpak-and-snap) |
 | The tool isn't listed in the client | Restart the client, and check that **Register** says **Registered.** |
 | **Its command-line tool was not found.** | Claude Code isn't on the path the app can see. Use **Copy** and `claude mcp add` |
 | **Its configuration is not plain JSON** | The file has comments or an error, so it was left alone. Add the entry by hand |

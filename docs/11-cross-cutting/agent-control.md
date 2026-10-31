@@ -83,6 +83,10 @@ is left alone.
 - A same-user race between a path check and its use, and hardlinks, are out of reach.
 - A native portal file dialog may never reach the modal guard.
 - On Windows nothing checks the pipe's peer, so another user could squat its name.
-- Unavailable in Flatpak and Snap builds (#1079).
+- Flatpak and Snap builds need no extra permission: the client runs `flatpak run
+  <id> --mcp` or `snap run <snap>.pictura --mcp`, so the bridge is a second
+  instance inside the sandbox and meets the window on a runtime path both can see.
+  One-click client registration is not offered there. A Flatpak sees host files
+  only through a `flatpak override` the person adds (#1079).
 - The bridge implements MCP up to 2025-11-25 (#1080).
 - A timed-out edit can still finish, so an agent should check state before retrying.

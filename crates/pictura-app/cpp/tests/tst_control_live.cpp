@@ -6,6 +6,8 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QScopeGuard>
+#include <QtCore/QSysInfo>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QDialog>
 
@@ -35,7 +37,10 @@ private slots:
     void startsAndStopsAtRuntime();
     void settingsPersist();
     void secondWindowDoesNotTakeOver();
-    void sandboxedBuildsDoNotStart();
+    void deadHolderDoesNotBlock();
+    void sandboxedBuildsStart();
+    void flatpakInstancesShareTheEndpoint();
+    void otherBuildsKeepTheirEndpoint();
     void dirtyCloseIsRefused();
     void personsPromptIsUnaffected();
     void editsWaitForAPerson();
@@ -82,6 +87,7 @@ void ControlLiveTest::cleanup()
 {
     agent_.reset();
     qunsetenv("FLATPAK_ID");
+    qunsetenv("SNAP");
 }
 
 AgentSettings ControlLiveTest::enabled() const
@@ -150,13 +156,58 @@ void ControlLiveTest::secondWindowDoesNotTakeOver()
     QVERIFY(succeeded(client.call(QStringLiteral("status"))));
 }
 
-void ControlLiveTest::sandboxedBuildsDoNotStart()
+void ControlLiveTest::deadHolderDoesNotBlock()
 {
-    qputenv("FLATPAK_ID", "io.github.KookaStudio.KookaPictura");
+    // Names a live PID, as a dead Flatpak window's lock can in the next window.
+    QFile lock(endpoint_ + QStringLiteral(".lock"));
+    QVERIFY(lock.open(QIODevice::WriteOnly));
+    lock.write(QByteArray::number(QCoreApplication::applicationPid())
+               + "\npictura\n" + QSysInfo::machineHostName().toUtf8() + "\n");
+    lock.close();
     agent_->apply(enabled());
-    QVERIFY(!agent_->isRunning());
-    QVERIFY(!agent_->problem().isEmpty());
-    QVERIFY(!QFile::exists(endpoint_));
+    QVERIFY(agent_->isRunning());
+    QVERIFY(agent_->problem().isEmpty());
+}
+
+void ControlLiveTest::sandboxedBuildsStart()
+{
+    for (const char* variable : {"FLATPAK_ID", "SNAP"}) {
+        qputenv(variable, "/sandbox");
+        agent_->apply(enabled());
+        QVERIFY(agent_->isRunning());
+        QVERIFY(agent_->problem().isEmpty());
+        agent_->apply(AgentSettings{});
+        qunsetenv(variable);
+    }
+}
+
+void ControlLiveTest::flatpakInstancesShareTheEndpoint()
+{
+    const QByteArray runtime = qgetenv("XDG_RUNTIME_DIR");
+    const auto restore = qScopeGuard([&runtime] { qputenv("XDG_RUNTIME_DIR", runtime); });
+    QTemporaryDir fake;
+    QVERIFY(fake.isValid());
+    const QString shared = QStringLiteral("app/io.github.KookaStudio.KookaPictura");
+    QVERIFY(QDir(fake.path()).mkpath(shared));
+    qputenv("XDG_RUNTIME_DIR", fake.path().toLocal8Bit());
+    qputenv("FLATPAK_ID", "io.github.KookaStudio.KookaPictura");
+    QString problem;
+    QCOMPARE(AgentControl::liveEndpoint(&problem),
+             fake.filePath(shared + QStringLiteral("/pictura/live.sock")));
+    QVERIFY(problem.isEmpty());
+}
+
+void ControlLiveTest::otherBuildsKeepTheirEndpoint()
+{
+    const QByteArray runtime = qgetenv("XDG_RUNTIME_DIR");
+    const auto restore = qScopeGuard([&runtime] { qputenv("XDG_RUNTIME_DIR", runtime); });
+    QTemporaryDir fake;
+    QVERIFY(fake.isValid());
+    qputenv("XDG_RUNTIME_DIR", fake.path().toLocal8Bit());
+    const QString expected = fake.filePath(QStringLiteral("pictura/live.sock"));
+    QCOMPARE(AgentControl::liveEndpoint(nullptr), expected);
+    qputenv("SNAP", "/snap/kooka-pictura/current");
+    QCOMPARE(AgentControl::liveEndpoint(nullptr), expected);
 }
 
 void ControlLiveTest::dirtyCloseIsRefused()

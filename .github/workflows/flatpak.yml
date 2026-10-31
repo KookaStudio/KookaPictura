@@ -93,6 +93,13 @@ jobs:
           flatpak install --user -y --noninteractive "KookaPictura-${VERSION#v}-x86_64.flatpak"
           dbus-run-session -- flatpak run io.github.KookaStudio.KookaPictura --headless --self-test
 
+      # The window and the bridge are separate instances, so this is the only
+      # check that they meet on the shared runtime path.
+      - name: Check a client reaches the window
+        run: |
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+          dbus-run-session -- scripts/check-sandbox-mcp.sh flatpak
+
       - name: Keep the bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
