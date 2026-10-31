@@ -31,6 +31,7 @@ private slots:
     void queueOverItsLimitIsRefused();
     void fifthConnectionIsClosed();
     void disconnectDuringARequestIsSafe();
+    void lastClientLeavingIsReported();
 
 private:
     QByteArray line(int id, const QString& method, const QJsonObject& params = {}) const;
@@ -197,6 +198,26 @@ void ControlSerialTest::disconnectDuringARequestIsSafe()
     const QList<QJsonObject> replies = readReplies(next, 1);
     QCOMPARE(replies.size(), 1);
     QVERIFY(replies.first().value(QStringLiteral("ok")).toBool());
+}
+
+void ControlSerialTest::lastClientLeavingIsReported()
+{
+    QSignalSpy left(server_.get(), &pictura::ControlServer::lastClientLeft);
+    QLocalSocket first;
+    QLocalSocket second;
+    QVERIFY(connectClient(first));
+    QVERIFY(connectClient(second));
+    for (QLocalSocket* client : {&first, &second}) {
+        client->write(line(1, QStringLiteral("status")));
+        client->flush();
+        QCOMPARE(readReplies(*client, 1).size(), 1);
+    }
+    first.abort();
+    // Time for the server to see this disconnect, to prove it stays silent.
+    QTest::qWait(100);
+    QCOMPARE(left.count(), 0);
+    second.abort();
+    QTRY_COMPARE(left.count(), 1);
 }
 
 QTEST_MAIN(ControlSerialTest)

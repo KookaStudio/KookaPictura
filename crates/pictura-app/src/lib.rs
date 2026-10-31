@@ -11,3 +11,4 @@ mod decode_bridge;
 pub mod gpu;
 mod history;
 pub(crate) mod layer_target;
+mod mcp_entry;

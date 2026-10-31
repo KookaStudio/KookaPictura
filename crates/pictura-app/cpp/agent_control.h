@@ -40,6 +40,9 @@ public:
     // `problem` set, when no safe directory exists for it.
     static QString liveEndpoint(QString* problem);
     static bool isSandboxed();
+    // `pictura --mcp`: serve MCP on stdio, and return the exit code. Runs before
+    // QApplication. `PICTURA_CONTROL_SOCKET` overrides the endpoint.
+    static int runBridge(const QStringList& args);
 
     const AgentSettings& settings() const { return settings_; }
     // Persist `settings`, then start, stop, or re-apply them to a running server.

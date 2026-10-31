@@ -1022,6 +1022,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pictura-mcp"
+version = "0.2.0"
+dependencies = [
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "pictura-ops"
 version = "0.2.0"
 dependencies = [
@@ -1096,6 +1104,7 @@ dependencies = [
  "pictura-color",
  "pictura-core",
  "pictura-filters",
+ "pictura-mcp",
  "pictura-ops",
  "pictura-paint",
  "pictura-render",
