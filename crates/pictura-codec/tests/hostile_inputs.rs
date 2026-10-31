@@ -9,11 +9,12 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::io::Write as _;
+use std::sync::{Mutex, OnceLock};
 
 use pictura_codec::pdf::{
     editing_psd, import::PdfImages, write_pdf, EditingPsd, PdfEnv, PdfOptions,
 };
-use pictura_codec::{read_psd, read_psd_within, write_psd, ImageBudget, Policy};
+use pictura_codec::{read_psd, read_psd_within, write_psd, ImageBudget, Policy, PsdError};
 use pictura_core::Document;
 
 /// Larger requests are refused outright (an allocation-failure abort).
@@ -21,9 +22,19 @@ const REFUSE: usize = 1 << 30;
 
 struct Tracking;
 
+// The largest single request seen on the measuring worker thread. A
+// thread-local on that worker, not a global: the decode runs on rayon workers,
+// and a global max would also record the allocations of tests running
+// concurrently on other threads.
 thread_local! {
     static PEAK: Cell<usize> = const { Cell::new(0) };
 }
+
+/// One dedicated worker runs every measured decode, so its thread-local cell
+/// sees every allocation the decode makes, nested rayon tasks included, and
+/// nothing from another test.
+static PEAK_POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+static PEAK_LOCK: Mutex<()> = Mutex::new(());
 
 fn note(size: usize) {
     let _ = PEAK.try_with(|peak| peak.set(peak.get().max(size)));
@@ -64,11 +75,24 @@ unsafe impl GlobalAlloc for Tracking {
 #[global_allocator]
 static ALLOCATOR: Tracking = Tracking;
 
-/// `f`'s result and the largest single allocation it requested.
-fn peak_of<T>(f: impl FnOnce() -> T) -> (T, usize) {
-    PEAK.with(|peak| peak.set(0));
-    let out = f();
-    (out, PEAK.with(Cell::get))
+/// `f`'s result and the largest single allocation it requested, measured on a
+/// dedicated one-thread rayon pool so the decode's worker allocations are seen
+/// and no concurrent test can inflate the number.
+fn peak_of<T: Send>(f: impl FnOnce() -> T + Send) -> (T, usize) {
+    let _guard = PEAK_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let pool = PEAK_POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("one-thread peak pool")
+    });
+    pool.install(|| {
+        PEAK.with(|peak| peak.set(0));
+        let out = f();
+        (out, PEAK.with(Cell::get))
+    })
 }
 
 const MIB: usize = 1 << 20;
@@ -370,6 +394,32 @@ fn layer_planes_count_against_the_document_total() {
     assert_eq!(doc.layers.len(), 2);
 }
 
+#[test]
+fn over_budget_channel_is_refused_before_decoding() {
+    // The -2 mask channel fits the budget but is malformed; the color channel
+    // that follows it is over the per-allocation cap. Phase A charges every
+    // decoded channel before any is decoded, so the budget refusal wins and the
+    // malformed channel is never decoded. The layer metadata charge (~300 bytes)
+    // must fit, so the cap is above it and below the 4x512 color plane.
+    let mut layer = LayerSpec {
+        rect: [0, 0, 512, 4],
+        mask: Some([0, 0, 1, 1]),
+        ..LayerSpec::default()
+    };
+    layer.channels = vec![
+        (-2, vec![0, 1, 0x81]), // RLE whose 2-byte count table is truncated
+        (0, raw_channel(0, 2048).1),
+    ];
+    let budget = ImageBudget {
+        max_dimension: 1000,
+        max_alloc_bytes: 1024,
+        max_document_bytes: 1 << 20,
+    };
+    let bytes = psd(&Header::rgb(4, 4), &[layer], None);
+    let error = read_psd_within(&bytes, Policy::Convert, budget).expect_err("over budget");
+    assert!(matches!(error, PsdError::Unsupported(_)), "{error:?}");
+}
+
 fn nested_groups(depth: usize) -> Vec<LayerSpec> {
     let mut layers: Vec<LayerSpec> = (0..depth)
         .map(|_| LayerSpec {
@@ -481,7 +531,13 @@ fn mutate(seed: &[u8], rng: &mut Rng) -> Vec<u8> {
 
 /// Run `parse` over `iterations` mutations of each seed, failing with the
 /// reproducing seed and iteration on a panic or an allocation over `limit`.
-fn fuzz(name: &str, seeds: &[Vec<u8>], iterations: usize, limit: usize, parse: impl Fn(&[u8])) {
+fn fuzz(
+    name: &str,
+    seeds: &[Vec<u8>],
+    iterations: usize,
+    limit: usize,
+    parse: impl Fn(&[u8]) + Sync,
+) {
     let mut rng = Rng(0x5eed_0844_cafe_f00d);
     for (s, seed) in seeds.iter().enumerate() {
         for i in 0..iterations {

@@ -5,6 +5,7 @@ use flate2::read::{DeflateDecoder, ZlibDecoder};
 use pictura_core::Samples;
 use std::io::Read;
 
+use crate::budget::DecodeBudget;
 use crate::common::*;
 use crate::depth::{depth_bits, planar_len, row_bytes, undo_prediction};
 use crate::error::PsdError;
@@ -48,6 +49,8 @@ pub(super) fn read_rle(
     height: usize,
     is_psb: bool,
 ) -> Result<Vec<u8>, PsdError> {
+    use rayon::prelude::*;
+
     let rows = channels
         .checked_mul(height)
         .ok_or_else(|| PsdError::Invalid("image dimensions overflow".into()))?;
@@ -59,15 +62,125 @@ pub(super) fn read_rle(
     }
 
     let mut out = vec![0u8; planar_len(channels, row_bytes, height)?];
-    let plane = row_bytes * height;
-    for (i, &count) in counts.iter().enumerate() {
-        let packed = r.take(count)?;
-        let channel = i / height;
-        let row = i % height;
-        let start = channel * plane + row * row_bytes;
-        decode_packbits(packed, &mut out[start..start + row_bytes])?;
+    // The image-data section is last, so the payload is the rest of the file.
+    // It is not consumed up front: a later row that runs off the end must not
+    // outrank an earlier row's decode error.
+    let payload = &r.data[r.pos..];
+    let mut offsets = Vec::with_capacity(rows);
+    let mut total = 0usize;
+    for &count in &counts {
+        offsets.push(total);
+        total = total.saturating_add(count);
     }
+    let results: Vec<Result<(), PsdError>> = out
+        .par_chunks_mut(row_bytes)
+        .zip(counts.par_iter().zip(offsets.par_iter()))
+        .map(|(dst, (&count, &offset))| {
+            let packed = payload
+                .get(offset..)
+                .and_then(|tail| tail.get(..count))
+                .ok_or(PsdError::Truncated)?;
+            decode_packbits(packed, dst)
+        })
+        .collect();
+    for result in results {
+        result?;
+    }
+    r.pos = r.pos.saturating_add(total);
     Ok(out)
+}
+
+/// One channel's decode work: located by the serial planning phase, decoded by
+/// the parallel phase, and reassembled in layer-record order.
+pub(super) enum ChannelTask {
+    /// A depth-8 unmodeled channel, preserved verbatim with its header.
+    Raw { offset: usize, len: usize },
+    /// A modeled channel decoded at the document depth.
+    Decode {
+        offset: usize,
+        len: usize,
+        width: usize,
+        height: usize,
+    },
+}
+
+impl ChannelTask {
+    pub(super) fn offset(&self) -> usize {
+        match self {
+            ChannelTask::Raw { offset, .. } | ChannelTask::Decode { offset, .. } => *offset,
+        }
+    }
+}
+
+/// One channel as the layer records describe it, before its task is planned.
+pub(super) struct PlannedChannel {
+    pub id: i16,
+    pub len: usize,
+    pub width: usize,
+    pub height: usize,
+}
+
+/// Phase A: locate every channel and charge the decode budget in record order.
+/// Returns the tasks and the total declared channel length.
+pub(super) fn plan_channel_tasks(
+    channels: &[PlannedChannel],
+    color_channels: usize,
+    depth: u16,
+    budget: &mut DecodeBudget,
+) -> Result<(Vec<ChannelTask>, usize), PsdError> {
+    let mut tasks = Vec::with_capacity(channels.len());
+    let mut offset = 0usize;
+    for channel in channels {
+        let is_color = channel.id >= 0 && (channel.id as usize) < color_channels;
+        let modeled = channel.id == -2 || channel.id == -1 || is_color;
+        let task = if modeled || depth != 8 {
+            super::charge_channel(budget, channel.len, channel.width, channel.height, depth)?;
+            ChannelTask::Decode {
+                offset,
+                len: channel.len,
+                width: channel.width,
+                height: channel.height,
+            }
+        } else {
+            ChannelTask::Raw {
+                offset,
+                len: channel.len,
+            }
+        };
+        tasks.push(task);
+        offset = offset.saturating_add(channel.len);
+    }
+    Ok((tasks, offset))
+}
+
+/// Phase B: decode every channel from its own slice, preserving task order.
+/// Each channel reads from `data[base + offset..]` on the whole file, never a
+/// cursor another task advances and never clipped to the layer-info end, so a
+/// truncated or over-long channel fails with the error the serial read gives.
+pub(super) fn decode_channel_tasks(
+    data: &[u8],
+    base: usize,
+    tasks: &[ChannelTask],
+    is_psb: bool,
+    depth: u16,
+) -> Vec<Result<ChannelRead, PsdError>> {
+    use rayon::prelude::*;
+
+    tasks
+        .par_iter()
+        .map(|task| {
+            let mut r = Reader::new(
+                data.get(base.saturating_add(task.offset())..)
+                    .unwrap_or(&[]),
+            );
+            match task {
+                ChannelTask::Raw { len, .. } => Ok((r.take(*len)?.to_vec(), COMPRESSION_RAW, None)),
+                ChannelTask::Decode {
+                    len, width, height, ..
+                } => read_channel_data(&mut r, *len, *width, *height, is_psb, depth),
+            }
+        })
+        .collect()
 }
 
 /// Decode one PackBits scanline into `dst` (exactly `dst.len()` bytes).

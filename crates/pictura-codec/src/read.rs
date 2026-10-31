@@ -15,7 +15,7 @@ pub(crate) use decode::decode_channel_data;
 #[cfg(test)]
 pub(crate) use decode::decode_rle_channel;
 pub(crate) use decode::inflate;
-use decode::{read_channel_data, read_rle};
+use decode::{plan_channel_tasks, read_rle};
 
 /// The deepest group nesting a file may declare. CS6 nests groups ten deep;
 /// the cap keeps the recursive compositor and `Drop` off the stack limit.
@@ -275,7 +275,17 @@ fn read_container(
         Compression::Raw => r
             .take(planar_len(header_channels, stride, height)?)?
             .to_vec(),
-        Compression::Rle => read_rle(&mut r, header_channels, stride, height, is_psb)?,
+        Compression::Rle => {
+            // The RLE decode builds a count vector, a prefix-sum offset vector,
+            // and one result per row; charge that metadata before allocating it.
+            let rows = header_channels
+                .checked_mul(height)
+                .ok_or_else(|| PsdError::Invalid("image dimensions overflow".into()))?;
+            let per_row =
+                2 * std::mem::size_of::<usize>() + std::mem::size_of::<Result<(), PsdError>>();
+            budget.charge("RLE row metadata", &[rows, per_row])?;
+            read_rle(&mut r, header_channels, stride, height, is_psb)?
+        }
         Compression::Zip | Compression::ZipPrediction => {
             let expected = planar_len(header_channels, stride, height)?;
             let remaining = r.remaining();
@@ -664,12 +674,18 @@ fn read_layer_info(
         raws.push(read_layer_record(r, is_psb)?);
     }
 
-    // First engine-encoded layer channel's compression; a document mixing kinds
-    // within a category normalizes to the first seen.
-    // ponytail: one kind per category, per-channel fidelity if ever needed.
-    let mut layer_compression = None;
-
-    for raw in raws.iter_mut() {
+    // Phase A (serial): locate every channel from the parsed records and charge
+    // the decode budget in record order. Channel data starts where the records
+    // end; every channel's slice is the rest of the file from its offset, so no
+    // task depends on another's cursor.
+    let base = r.pos;
+    let channel_count: usize = raws.iter().map(|raw| raw.channel_ids.len()).sum();
+    let per_channel = std::mem::size_of::<decode::PlannedChannel>()
+        + std::mem::size_of::<decode::ChannelTask>()
+        + std::mem::size_of::<Result<decode::ChannelRead, PsdError>>();
+    budget.charge("layer channel metadata", &[channel_count, per_channel])?;
+    let mut planned = Vec::with_capacity(channel_count);
+    for raw in &raws {
         let layer_w = raw.layer.rect.width().max(0) as usize;
         let layer_h = raw.layer.rect.height().max(0) as usize;
         let mask_dims = raw.layer.mask.as_ref().map(|m| {
@@ -678,55 +694,63 @@ fn read_layer_info(
                 m.rect.height().max(0) as usize,
             )
         });
+        for (&id, &len) in raw.channel_ids.iter().zip(raw.channel_lens.iter()) {
+            // The user layer mask channel (-2) is sized by the mask rect, which
+            // may differ from the layer rect.
+            let is_color = id >= 0 && (id as usize) < color_channels;
+            let modeled = id == -2 || id == -1 || is_color;
+            let (width, height) = if modeled && id == -2 {
+                mask_dims.unwrap_or((layer_w, layer_h))
+            } else {
+                (layer_w, layer_h)
+            };
+            planned.push(decode::PlannedChannel {
+                id,
+                len,
+                width,
+                height,
+            });
+        }
+    }
+    let (tasks, total) = plan_channel_tasks(&planned, color_channels, depth, budget)?;
 
+    // Phase B (parallel): decode every channel from its own slice.
+    let mut results = decode::decode_channel_tasks(r.data, base, &tasks, is_psb, depth).into_iter();
+
+    // Phase C (serial): reassemble in record order; the first error in that
+    // order is the one returned.
+    let mut layer_compression = None;
+    for raw in raws.iter_mut() {
         let mut channels = Vec::new();
         let mut raw_channels = Vec::new();
         let mut mask_data = None;
         let mut retained: Vec<(i16, Samples)> = Vec::new();
-        for (&id, &len) in raw.channel_ids.iter().zip(raw.channel_lens.iter()) {
-            // Channels outside the modeled set (a mode's extra color planes are
-            // decoded; spot/selection channels, notably -3, and any positive id
-            // beyond the color channels). At depth 8 the full on-disk stream
-            // (compression header included) is preserved verbatim; at depth
-            // 1/16/32 it is decoded at the document depth, narrowed to an 8-bit
-            // plane, and re-wrapped as a raw 8-bit stream for the engine.
+        for &id in raw.channel_ids.iter() {
+            let (data, code, native) = results
+                .next()
+                .ok_or_else(|| PsdError::Invalid("missing layer channel decode".into()))??;
             let is_color = id >= 0 && (id as usize) < color_channels;
-            if id != -2 && id != -1 && !is_color {
-                let (data, native) = if depth == 8 {
-                    (r.take(len)?.to_vec(), None)
-                } else {
-                    charge_channel(budget, len, layer_w, layer_h, depth)?;
-                    let (plane, _, native) =
-                        read_channel_data(r, len, layer_w, layer_h, is_psb, depth)?;
-                    let mut stream = Vec::with_capacity(2 + plane.len());
-                    stream.extend_from_slice(&COMPRESSION_RAW.to_be_bytes());
-                    stream.extend_from_slice(&plane);
-                    (stream, native)
-                };
-                if retain {
-                    if let Some(native) = native {
-                        retained.push((id, native));
-                    }
+            if retain {
+                if let Some(native) = native {
+                    retained.push((id, native));
                 }
+            }
+            // Channels outside the modeled set are preserved verbatim at depth
+            // 8 and re-wrapped as raw 8-bit streams at depth 1/16/32.
+            if id != -2 && id != -1 && !is_color {
+                let data = if depth == 8 {
+                    data
+                } else {
+                    let mut stream = Vec::with_capacity(2 + data.len());
+                    stream.extend_from_slice(&COMPRESSION_RAW.to_be_bytes());
+                    stream.extend_from_slice(&data);
+                    stream
+                };
                 raw_channels.push(RawChannel {
                     id,
                     data: data.into(),
                 });
                 continue;
-            }
-            // The user layer mask channel (-2) is sized by the mask rect, which
-            // may differ from the layer rect.
-            let (w, h) = if id == -2 {
-                mask_dims.unwrap_or((layer_w, layer_h))
-            } else {
-                (layer_w, layer_h)
-            };
-            charge_channel(budget, len, w, h, depth)?;
-            let (data, code, native) = read_channel_data(r, len, w, h, is_psb, depth)?;
-            if retain {
-                if let Some(native) = native {
-                    retained.push((id, native));
-                }
             }
             // Section dividers and folder records carry placeholder channels that
             // `build_tree` drops; only a normal record's channel is a survivor.
@@ -771,6 +795,9 @@ fn read_layer_info(
         }
     }
 
+    // The records and channel data must still fit the declared layer info; a
+    // channel declared past it is refused even though its bytes were in file.
+    r.pos = base.saturating_add(total);
     if r.pos > info_end {
         return Err(PsdError::Invalid("layer records exceed layer info".into()));
     }
