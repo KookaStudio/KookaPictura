@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Filter Gallery wheel zoom anchors at the pointer** (#840, OpenSpec change
+  `filter-gallery-wheel-zoom`). The gallery's preview is a `QScrollArea`, so a
+  wheel step resized the canvas and left the scrollbars at their old pixel
+  values: a panned detail jumped away on every step. `setZoomAt` now captures
+  the document point under the anchor, resizes, and shifts the scrollbars by the
+  measured drift, so zoom-in keeps the point under the pointer and zoom-out, the
+  `−`/`+` buttons, the shortcuts, the drop-down, and a typed percentage keep the
+  viewport centre (clamped at the scroll range). The four offset-based preview
+  canvases (Liquify, Vanishing Point, Adaptive Wide Angle, Lens Correction)
+  already anchored through `zoomAbout` and are unchanged. Tests:
+  `tst_filter_gallery::wheelZoomAnchorsAtTheCursor` and
+  `buttonsAndDropdownAnchorAtTheCentre` (both failed before the fix).
 - **Pan/zoom present-crop reuse** (#1066, OpenSpec change `pan-zoom-crop-reuse`).
   On a large document a pan, or a zoom step that stayed inside the current
   view-pyramid level's band, re-cropped the whole viewport from the planar
