@@ -4,6 +4,16 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Agent Control works in Flatpak and Snap builds** (#1079, OpenSpec change
+  `agent-control-in-sandboxes`), with no new sandbox permission. The client starts
+  the bridge inside the sandbox (`flatpak run <id> --mcp`, `snap run
+  <snap>.pictura --mcp`), and it meets the window on a runtime path both instances
+  see, `$XDG_RUNTIME_DIR/app/$FLATPAK_ID/pictura` under Flatpak. The POSIX
+  single-server lock is `flock`, because a recorded PID means nothing across
+  Flatpak PID namespaces; the lock file now stays on disk. One-click registration
+  stays hidden in sandboxes. A Flatpak sees host files only through a person's
+  `flatpak override`. `scripts/check-sandbox-mcp.sh` proves the round trip in the
+  Flatpak job and under strict Snap.
 - **Filter Gallery wheel zoom anchors at the pointer** (#840, OpenSpec change
   `filter-gallery-wheel-zoom`). The gallery's preview is a `QScrollArea`, so a
   wheel step resized the canvas and left the scrollbars at their old pixel
@@ -6347,4 +6357,4 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   are both present.
 - Agent Control shipped (#1053): `pictura --mcp` over a permissioned control server,
   with a Preferences page. See `docs/11-cross-cutting/agent-control.md`. Open:
-  Flatpak and Snap (#1079), MCP revision 2026-07-28 (#1080).
+  MCP revision 2026-07-28 (#1080).
