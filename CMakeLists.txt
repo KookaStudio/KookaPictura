@@ -519,6 +519,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/brush_tip_preview.cpp
     crates/pictura-app/cpp/brush_tip_preview.h
     crates/pictura-app/cpp/image_view.cpp
+    crates/pictura-app/cpp/image_view_present.cpp
     crates/pictura-app/cpp/image_view_transform_warp.cpp
     crates/pictura-app/cpp/image_view_overlays.cpp
     crates/pictura-app/cpp/image_view_annotations.cpp

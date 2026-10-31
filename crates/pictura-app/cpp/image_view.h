@@ -736,6 +736,8 @@ private:
         quint64 revision = 0;
         int level = -1;
         QRect docRect;
+        // The level-space rectangle `crop` covers (docRect / 2^level).
+        QRect levelRect;
         bool valid = false;
         int rebuilds = 0;
         QImage crop;
@@ -747,8 +749,15 @@ private:
     bool presentLevelRect(int level, QRect& docRect, QRect& sourceRect) const;
     // The premultiplied crop of `level` over `sourceRect`, cached by frame,
     // revision, level and document rect. Level 0 is repaired in place from a
-    // damage rect; a level with no zero-copy view uses the same cache.
+    // damage rect; a level with no zero-copy view uses the same cache. When only
+    // the visible rectangle changed at the cached level, the overlap is reused
+    // and only the newly exposed band is cropped.
     const QImage* presentCrop(int level, const QRect& docRect, const QRect& sourceRect);
+    // Rebuild the cached crop from its own overlap plus the newly exposed band
+    // for a changed visible rectangle at the same level. False (the caller
+    // re-crops whole) when the rectangles do not overlap or a band comes back
+    // short.
+    bool patchPresentCache(int level, const QRect& docRect, const QRect& sourceRect);
     void dropPresentCache();
 
     // Held only for a canvas without a level provider (tests, dialogs); a

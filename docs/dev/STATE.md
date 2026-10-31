@@ -4,6 +4,20 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Pan/zoom present-crop reuse** (#1066, OpenSpec change `pan-zoom-crop-reuse`).
+  On a large document a pan, or a zoom step that stayed inside the current
+  view-pyramid level's band, re-cropped the whole viewport from the planar
+  level-0 source every frame. The present cache now reuses the cached crop's
+  overlap when only the visible document rectangle changed at the same level and
+  crops only the newly exposed band(s) (`image_view_present.cpp`); a frame,
+  canvas-revision, or level change still rebuilds whole, and the reused crop is
+  byte-identical to a fresh crop. Measured at a 2148×1300 canvas on a 16000²
+  document: a zoom immediately after a pan 16.3 ms → 8.7 ms and a zoom from rest
+  15.6 ms → 8.4 ms; the Rust profile crops a 1280×800 level-0 view in 6.9 ms
+  against 1.4 ms for a 200 px pan band. Tests:
+  `tst_present_cache::panAndZoomReuseTheLevel0Crop`,
+  `tst_present_cache::panThenZoomFrameTimes`, and the extended
+  `pictura-app::scroll_zoom_pan_profile_{4000,16000}`.
 - **Interactive preview session** (#1015, OpenSpec change
   `render-session-backdrop`). A Properties-panel slider or curve drag, and a
   canvas-sized opacity/fill drag, present a display-only preview: the visible
