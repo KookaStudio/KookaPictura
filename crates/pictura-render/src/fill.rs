@@ -873,6 +873,14 @@ pub(crate) fn fill_source(
     use std::sync::Arc;
 
     let adjustment = decode_layer_fill(layer)?;
+    // An adjustment layer has an empty rect, so the kind is settled before the
+    // no-area case below can pass one off as an empty fill.
+    if !matches!(
+        adjustment,
+        Adjustment::SolidFill(_) | Adjustment::GradientFill(_) | Adjustment::PatternFill(_)
+    ) {
+        return None;
+    }
     let full_rect = layer.rect;
     let (full_w, full_h) = (full_rect.width(), full_rect.height());
     let rect = crate::layer_source::clip_to_document(full_rect, doc);

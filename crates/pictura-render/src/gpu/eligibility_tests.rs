@@ -214,6 +214,55 @@ fn hidden_clipping_base_suppresses_run() {
     assert!(plan(&doc).expect("accepted").is_empty());
 }
 
+fn adjustment_of_kind(kind: &str, rect: PsdRect) -> Layer {
+    Layer {
+        rect,
+        adjustment: crate::default_adjustment_block(kind, [0; 3], [255; 3]),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn adjustment_without_a_gpu_kind_declines_at_any_rect() {
+    for kind in [
+        "photo-filter",
+        "vibrance",
+        "color-balance",
+        "black-white",
+        "channel-mixer",
+        "selective-color",
+        "shadows-highlights",
+        "color-lookup",
+    ] {
+        for area in [Layer::default().rect, rect()] {
+            let doc = doc_layers(vec![pixels(), adjustment_of_kind(kind, area)]);
+            assert_eq!(
+                reason(check_supported(&doc)),
+                "UnsupportedAdjustment",
+                "{kind} at {area:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn empty_rect_keeps_gpu_adjustments_and_fills_on_the_gpu() {
+    for kind in ["brightness-contrast", "levels", "posterize", "threshold"] {
+        let doc = doc_layers(vec![
+            pixels(),
+            adjustment_of_kind(kind, Layer::default().rect),
+        ]);
+        assert_eq!(reason(check_supported(&doc)), "ok", "{kind}");
+    }
+    let fill = Layer {
+        adjustment: Some(crate::encode_solid_color_fill([1, 2, 3])),
+        ..Default::default()
+    };
+    let doc = doc_of(fill);
+    let plans = plan(&doc).expect("a fill with no area stays on the GPU");
+    assert!(matches!(&plans[0].body, plan::Body::Fill(_)));
+}
+
 #[test]
 fn plan_is_device_independent() {
     let doc = doc_of(pixels());
