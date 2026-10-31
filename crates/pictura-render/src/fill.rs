@@ -862,6 +862,15 @@ pub(crate) fn fill_coverage_matte(
     }
 }
 
+/// Whether `adjustment` is generative fill content rather than a tonal or
+/// colour adjustment of the backdrop.
+pub(crate) fn is_fill_kind(adjustment: &Adjustment) -> bool {
+    matches!(
+        adjustment,
+        Adjustment::SolidFill(_) | Adjustment::GradientFill(_) | Adjustment::PatternFill(_)
+    )
+}
+
 /// Rasterize a fill layer's content into the straight-alpha RGBA buffer the GPU
 /// uploads, or `None` when the layer is not a decoded fill.
 pub(crate) fn fill_source(
@@ -873,6 +882,11 @@ pub(crate) fn fill_source(
     use std::sync::Arc;
 
     let adjustment = decode_layer_fill(layer)?;
+    // An adjustment layer has an empty rect, so the kind is settled before the
+    // no-area case below can pass one off as an empty fill.
+    if !is_fill_kind(&adjustment) {
+        return None;
+    }
     let full_rect = layer.rect;
     let (full_w, full_h) = (full_rect.width(), full_rect.height());
     let rect = crate::layer_source::clip_to_document(full_rect, doc);

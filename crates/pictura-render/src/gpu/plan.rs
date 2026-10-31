@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use pictura_adjust::{Adjustment, AdjustmentLut};
+use pictura_adjust::AdjustmentLut;
 use pictura_core::{BlendMode, Document, Knockout, Layer, PsdRect};
 
 use super::{adjustment_params, GpuError};
@@ -254,14 +254,8 @@ fn plan_clip_member(layer: &Layer, doc: &Document) -> Result<(), GpuError> {
             plan_clip_children(&layer.children, doc)
         }
         ContentRoute::Fill(adjustment) => {
-            let fill = matches!(
-                crate::fill::decode_layer_fill(layer),
-                Some(
-                    Adjustment::SolidFill(_)
-                        | Adjustment::GradientFill(_)
-                        | Adjustment::PatternFill(_)
-                )
-            ) && layer.rect.width() > 0
+            let fill = crate::fill::is_fill_kind(&adjustment)
+                && layer.rect.width() > 0
                 && layer.rect.height() > 0;
             if adjustment_params(&adjustment).is_some()
                 || pictura_adjust::adjustment_lut(&adjustment).is_some()
