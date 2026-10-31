@@ -298,7 +298,9 @@ checks are Qt Test cases under `crates/pictura-app/cpp/tests/`, not new
 `runSelfTest()` checks.
 
 `--interop-probe` requires a real platform Vulkan instance and is not
-offscreen-compatible.
+offscreen-compatible. `--gpu-probe dx12|vulkan` is the hidden child mode the
+Windows launcher uses to test one backend without risking the parent; it is not
+for interactive use.
 
 ## Profiling
 
