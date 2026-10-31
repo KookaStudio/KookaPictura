@@ -403,7 +403,10 @@ impl ScratchDir {
                 NEXT.fetch_add(1, Ordering::Relaxed),
                 random_u64()
             ));
+            #[cfg(unix)]
             let mut builder = std::fs::DirBuilder::new();
+            #[cfg(not(unix))]
+            let builder = std::fs::DirBuilder::new();
             #[cfg(unix)]
             std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
             match builder.create(&dir) {
