@@ -19,6 +19,7 @@
 #include "api/type_api.h"
 #include "commands.h"
 #include "frame.h"
+#include "image_view.h"
 #include "panels/adjustments_panel.h"
 #include "panels/channels_panel.h"
 #include "panels/history_panel.h"
@@ -129,6 +130,9 @@ private slots:
     void anEditDoesNotRebindTheDock();
     void aCommittedEditRefreshesLayersOnce();
     void aStrokeCommitRefreshesPanels();
+    void anUndoLeavesThePanelsToTheDebounce();
+    void anUndoThatCancelsAStrokeRefreshesPanelsAtOnce();
+    void aHistoryRestoreDropsToolGestures();
     void aStrokeCommitDoesNotRetraceTheContour();
     void previewTicksCoalesceTheRegistry();
     void aCommitRefreshIsNotDelayedByPreviews();
@@ -626,6 +630,91 @@ void EditRefreshTest::aStrokeCommitRefreshesPanels()
     QTRY_VERIFY_WITH_TIMEOUT(histogramBins(histogram) != bins, 1000);
     QTRY_VERIFY_WITH_TIMEOUT(navigator->thumbnailSourceImageForTest() != navigatorBefore, 1000);
     QTRY_VERIFY_WITH_TIMEOUT(channels->channelThumbnailForTest(0).toImage() != channelBefore, 1000);
+
+    closeAll(*window_);
+}
+
+void EditRefreshTest::anUndoLeavesThePanelsToTheDebounce()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("UndoDebounce"), 64, 64, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
+    QTest::qWait(250);
+    pictura::PictureView* view = window_->activeView();
+    auto* histogram =
+        window_->findChild<pictura::HistogramPanel*>(QStringLiteral("histogramPanel"));
+    QVERIFY(view && histogram);
+    view->set_gpu_compute(false);
+    QVERIFY(view->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 20, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    QVERIFY(view->paint_dab(32.0, 32.0, 1.0));
+    QVERIFY(view->end_paint());
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
+    QTest::qWait(250);
+
+    const QVector<quint32> painted = histogramBins(histogram);
+    QSignalSpy restored(view, &pictura::PictureView::historyRestored);
+    QSignalSpy cancelled(view, &pictura::PictureView::sessionCancelled);
+    pictura::CommandRegistry* registry = window_->registry();
+    const int refreshes = registry->refreshCount();
+    QVERIFY(view->undo());
+
+    QCOMPARE(restored.count(), 1);
+    QCOMPARE(cancelled.count(), 0);
+    QCOMPARE(registry->refreshCount(), refreshes + 1);
+    QCOMPARE(histogramBins(histogram), painted);
+    QTRY_VERIFY_WITH_TIMEOUT(histogramBins(histogram) != painted, 1000);
+
+    closeAll(*window_);
+}
+
+void EditRefreshTest::anUndoThatCancelsAStrokeRefreshesPanelsAtOnce()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("UndoCancels"), 64, 64, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
+    QTest::qWait(250);
+    pictura::PictureView* view = window_->activeView();
+    auto* histogram =
+        window_->findChild<pictura::HistogramPanel*>(QStringLiteral("histogramPanel"));
+    QVERIFY(view && histogram);
+    view->set_gpu_compute(false);
+    const auto paint = [view] {
+        return view->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 20, 100, 100, 0, 100, 100, 25,
+                                 QStringLiteral("normal"), false, false)
+            && view->paint_dab(32.0, 32.0, 1.0);
+    };
+    QVERIFY(paint());
+    QVERIFY(view->end_paint());
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
+    QTest::qWait(250);
+
+    const QVector<quint32> painted = histogramBins(histogram);
+    QVERIFY(paint());
+    QSignalSpy restored(view, &pictura::PictureView::historyRestored);
+    QSignalSpy cancelled(view, &pictura::PictureView::sessionCancelled);
+    QVERIFY(view->undo());
+
+    QCOMPARE(cancelled.count(), 1);
+    QCOMPARE(restored.count(), 0);
+    QVERIFY(histogramBins(histogram) != painted);
+
+    closeAll(*window_);
+}
+
+void EditRefreshTest::aHistoryRestoreDropsToolGestures()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("UndoGesture"), 64, 64, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    auto* canvas = window_->findChild<pictura::ImageView*>();
+    QVERIFY(view && canvas);
+    window_->setActiveTool(pictura::ToolId::Lasso);
+    canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(canvas->hasSelectionPreviewForTest());
+
+    emit view->historyRestored();
+    QVERIFY(!canvas->hasSelectionPreviewForTest());
 
     closeAll(*window_);
 }

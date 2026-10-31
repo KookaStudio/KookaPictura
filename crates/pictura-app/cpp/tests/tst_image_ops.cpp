@@ -8,6 +8,7 @@
 #include "image_size_dialog.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
@@ -165,7 +166,7 @@ void ImageOpsTest::trimIsUndoable()
     const QStringList target = pictura::selected_layer_paths(*view);
     QCOMPARE(int(target.size()), 2);
     const int history = view->history_count();
-    const int snapshots = view->history_snapshot_count();
+    const int snapshots = pictura::history_snapshot_count(*view);
     const int depth = view->history_index();
     const QColor pixel = QColor::fromRgba(view->sample_argb(4, 3));
     const ::rust::Vec<int32_t> bounds = view->selection_bounds_extents();
@@ -175,8 +176,8 @@ void ImageOpsTest::trimIsUndoable()
     QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Trim"));
     QCOMPARE(view->history_label(0), QStringLiteral("New"));
     QCOMPARE(view->history_label(depth), QStringLiteral("Selection"));
-    QCOMPARE(view->history_snapshot_label(0), QStringLiteral("PreTrim"));
-    QCOMPARE(view->history_snapshot_count(), snapshots);
+    QCOMPARE(pictura::history_snapshot_label(*view, 0), QStringLiteral("PreTrim"));
+    QCOMPARE(pictura::history_snapshot_count(*view), snapshots);
     QCOMPARE(pictura::selected_layer_paths(*view), target);
     QVERIFY(view->can_undo());
     QVERIFY(!view->has_selection());
@@ -192,7 +193,7 @@ void ImageOpsTest::trimIsUndoable()
         QCOMPARE(restored[i], bounds[i]);
     }
     QCOMPARE(view->sample_argb(4, 3), pixel.rgba());
-    QCOMPARE(view->history_snapshot_count(), snapshots);
+    QCOMPARE(pictura::history_snapshot_count(*view), snapshots);
     frame.closeDocument(doc, false);
 }
 

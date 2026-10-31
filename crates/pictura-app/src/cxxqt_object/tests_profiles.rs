@@ -565,9 +565,23 @@ fn large_document_stroke_profile() {
     };
     let _ = rust.refresh_from_composite(rect);
     let refresh = t.elapsed().as_secs_f64() * 1000.0;
+    pictura_core::reset_materializations();
+    let t = Instant::now();
+    let thumbnails = rust
+        .session
+        .doc
+        .as_ref()
+        .expect("document")
+        .layers
+        .iter()
+        .filter_map(|layer| super::helpers_composite::layer_thumbnail_image(layer, 24))
+        .count();
+    let thumbnail_ms = t.elapsed().as_secs_f64() * 1000.0;
     println!(
         "large_document_undo history_undo={history_undo:.2}ms canvas_refresh={refresh:.2}ms \
-         region={}x{}",
+         thumbnails={thumbnail_ms:.2}ms ({thumbnails}) materializations={} region={}x{} \
+         target<16.00ms",
+        pictura_core::materializations(),
         rect.width(),
         rect.height()
     );

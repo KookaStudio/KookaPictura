@@ -37,3 +37,14 @@ pub(super) fn current_history_label(view: &PictureView) -> QString {
     let history = &view.rust().session.history;
     QString::from(history.label(history.index()))
 }
+
+pub(super) fn history_snapshot_count(view: &PictureView) -> i32 {
+    view.rust().session.history.snapshot_count() as i32
+}
+
+pub(super) fn history_snapshot_label(view: &PictureView, i: i32) -> QString {
+    if i < 0 {
+        return QString::default();
+    }
+    QString::from(view.rust().session.history.snapshot_label(i as usize))
+}

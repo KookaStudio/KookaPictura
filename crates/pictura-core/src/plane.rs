@@ -335,6 +335,21 @@ impl<T> Plane<T> {
         }
     }
 
+    /// The sample at logical index `i`, read from its band so that a diverged
+    /// plane is not materialized; `None` past the end.
+    pub fn sample(&self, i: usize) -> Option<T>
+    where
+        T: Copy,
+    {
+        match &self.bands {
+            None => self.base.get(i).copied(),
+            Some(bands) => {
+                let band_len = BAND_ROWS.checked_mul(bands.width).filter(|&n| n > 0)?;
+                self.band(i / band_len)?.get(i % band_len).copied()
+            }
+        }
+    }
+
     /// The base allocation as `(pointer, length)`, for retained-byte accounting.
     pub fn base_allocation(&self) -> (usize, usize) {
         (self.base.as_ptr() as usize, self.base.len())
@@ -663,6 +678,30 @@ mod tests {
 
     fn pattern(len: usize) -> Vec<u8> {
         (0..len).map(|i| (i.wrapping_mul(37) % 251) as u8).collect()
+    }
+
+    #[test]
+    fn sample_reads_a_diverged_plane_without_materializing() {
+        let width = 8;
+        let bytes = pattern(width * BAND_ROWS * 3 - width / 2);
+        let mut plane: Plane<u8> = bytes.clone().into();
+        assert_eq!(plane.sample(5), Some(bytes[5]));
+        plane.fracture(width);
+        let shared = plane.clone();
+        plane.write_band(1).expect("a band")[0] = bytes[0].wrapping_add(1);
+        assert!(plane.diverged());
+
+        let mut expected = bytes.clone();
+        expected[width * BAND_ROWS] = bytes[0].wrapping_add(1);
+        for (i, &byte) in expected.iter().enumerate() {
+            assert_eq!(plane.sample(i), Some(byte), "sample {i}");
+        }
+        assert_eq!(plane.sample(bytes.len()), None);
+        assert_eq!(
+            shared.sample(width * BAND_ROWS),
+            Some(bytes[width * BAND_ROWS])
+        );
+        assert!(plane.mirror.get().is_none(), "no contiguous view was built");
     }
 
     #[test]

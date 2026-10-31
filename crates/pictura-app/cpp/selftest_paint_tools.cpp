@@ -13,6 +13,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 
 #include <QtCore/QDir>
@@ -334,7 +335,7 @@ int pictura::runHistoryBrushChecks(pictura::PicturaMainWindow& frame)
     if (list && column) {
         column->showPanel(QStringLiteral("historyPanel"), true);
         QCoreApplication::processEvents();
-        const int rowIndex = f.view->history_snapshot_count() + base + 1;
+        const int rowIndex = pictura::history_snapshot_count(*f.view) + base + 1;
         if (QListWidgetItem* row = list->item(rowIndex)) {
             const QRect rect = list->visualItemRect(row);
             const QPointF at(rect.left() + 4, rect.center().y());

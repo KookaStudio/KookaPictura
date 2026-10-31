@@ -39,5 +39,11 @@ pub mod ffi {
 
         /// The label of the current history state, or empty without a document.
         fn current_history_label(view: &PictureView) -> QString;
+
+        /// Number of named restore points (capped at 10).
+        fn history_snapshot_count(view: &PictureView) -> i32;
+
+        /// Label of named restore point `i`, or empty when out of range.
+        fn history_snapshot_label(view: &PictureView, i: i32) -> QString;
     }
 }

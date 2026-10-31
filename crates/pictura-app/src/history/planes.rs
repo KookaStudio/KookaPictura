@@ -37,9 +37,11 @@ pub(super) enum PlaneKind {
     Composite,
     /// A layer's color or alpha channel: shown only through the composite.
     LayerChannel,
-    /// A document channel or a layer mask, which a channel or mask view shows
-    /// directly.
-    Other,
+    /// A layer mask at this document rectangle: a solo mask view shows it
+    /// directly, so its tiles are damage too.
+    Mask(PsdRect),
+    /// A document channel, which a channel view shows directly.
+    DocumentChannel,
 }
 
 /// Where a plane's tile grid sits in document coordinates.
@@ -60,19 +62,31 @@ pub(super) enum PlanePlacement {
 pub(super) fn plane_kinds(doc: &Document) -> Vec<PlaneKind> {
     fn visit(layer: &Layer, out: &mut Vec<PlaneKind>) {
         out.extend(layer.channels.iter().map(|_| PlaneKind::LayerChannel));
-        if layer.mask.as_ref().is_some_and(|m| m.data.is_some()) {
-            out.push(PlaneKind::Other);
+        if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
+            out.push(PlaneKind::Mask(mask.rect));
         }
         for child in &layer.children {
             visit(child, out);
         }
     }
     let mut out = vec![PlaneKind::Composite];
-    out.extend(doc.channels.iter().map(|_| PlaneKind::Other));
+    out.extend(doc.channels.iter().map(|_| PlaneKind::DocumentChannel));
     for l in &doc.layers {
         visit(l, &mut out);
     }
     out
+}
+
+/// The rectangle of every layer mask holding data, in traversal order. Mask
+/// tiles only map to the document while these stay put.
+pub(super) fn mask_rects(doc: &Document) -> Vec<PsdRect> {
+    plane_kinds(doc)
+        .into_iter()
+        .filter_map(|kind| match kind {
+            PlaneKind::Mask(rect) => Some(rect),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Bring `current` to `next` and return the changed tiles, each holding

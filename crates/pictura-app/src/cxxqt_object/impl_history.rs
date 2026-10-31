@@ -12,6 +12,12 @@ use cxx_qt_lib::QString;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
 
+/// A restore to present, and whether it ended a live session on the way.
+struct ShownRestore {
+    restored: Restored,
+    had_live_session: bool,
+}
+
 impl PictureViewRust {
     /// Fold `rect` of the document's own composite into level 0 and the
     /// pyramid without compositing it again — history has just restored those
@@ -46,14 +52,17 @@ impl PictureViewRust {
             &mut LayerTarget,
         ) -> Option<Restored>,
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
-    ) -> Option<Restored> {
+    ) -> Option<ShownRestore> {
+        let had_live_session = self.has_active_session();
         let cancelled = self.cancel_active_sessions();
-        let had_session = cancelled.changed_display();
         let restored = self.session.restore(&mut self.layer_target, step, legacy)?;
-        Some(if had_session {
-            Restored::Everywhere
-        } else {
-            restored
+        Some(ShownRestore {
+            restored: if cancelled.changed_display() {
+                Restored::Everywhere
+            } else {
+                restored
+            },
+            had_live_session,
         })
     }
 }
@@ -86,19 +95,30 @@ impl qobject::PictureView {
     /// recomposited when `recomposite`. Either way `changed` follows for the
     /// panels and overlays; a bounded restore leaves `frame_revision` alone, so
     /// the shell skips the full image.
+    ///
+    /// Only a restore that ended a live session reports `session_cancelled`,
+    /// whose handler refreshes the panels inline. Any other restore reports
+    /// `history_restored` and leaves them to the debounce `changed` started, so
+    /// undo stays off the input path the way a stroke commit does (#1067).
     fn show_restored(
         mut self: Pin<&mut Self>,
-        restored: Option<Restored>,
+        restored: Option<ShownRestore>,
         recomposite: bool,
     ) -> bool {
+        let Some(ShownRestore {
+            restored,
+            had_live_session,
+        }) = restored
+        else {
+            return false;
+        };
         match restored {
-            None => return false,
-            Some(Restored::Everywhere) if recomposite => self.as_mut().recomposite(),
-            Some(Restored::Everywhere) => {
+            Restored::Everywhere if recomposite => self.as_mut().recomposite(),
+            Restored::Everywhere => {
                 self.as_mut().rust_mut().reset_pyramid();
                 self.as_mut().changed();
             }
-            Some(Restored::Region(rect)) => {
+            Restored::Region(rect) => {
                 if let Some(damaged) = self.as_mut().rust_mut().refresh_from_composite(rect) {
                     self.as_mut().region_damaged(
                         damaged.left,
@@ -110,7 +130,11 @@ impl qobject::PictureView {
                 self.as_mut().changed();
             }
         }
-        self.as_mut().session_cancelled();
+        if had_live_session {
+            self.as_mut().session_cancelled();
+        } else {
+            self.as_mut().history_restored();
+        }
         true
     }
 
@@ -174,17 +198,6 @@ impl qobject::PictureView {
             .add_snapshot(&label.to_string(), snapshot, target);
         self.changed();
         true
-    }
-
-    pub fn history_snapshot_count(&self) -> i32 {
-        self.rust().session.history.snapshot_count() as i32
-    }
-
-    pub fn history_snapshot_label(&self, i: i32) -> QString {
-        if i < 0 {
-            return QString::default();
-        }
-        QString::from(self.rust().session.history.snapshot_label(i as usize))
     }
 
     pub fn history_restore_snapshot(mut self: Pin<&mut Self>, i: i32) -> bool {
