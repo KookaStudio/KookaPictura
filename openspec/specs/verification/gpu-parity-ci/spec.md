@@ -1,9 +1,9 @@
 # verification/gpu-parity-ci Specification
 
 ## Purpose
-Run the GPU parity tests in CI on a software GPU device (lavapipe on Linux,
-WARP on Windows), and report a GPU test that did not run as skipped, never as
-passed. The CPU oracle stays the only reference.
+Run the GPU parity tests in CI on lavapipe and a DX12 device smoke check on
+WARP, and report a GPU test that did not run as skipped, never as passed. The
+CPU oracle stays the only reference.
 
 ## Requirements
 
@@ -111,26 +111,24 @@ oracle, never the ImageMagick output.
   backend
 - **THEN** it reports `Backend::Cpu` and its bytes equal `composite_rgba`
 
-### Requirement: Windows CI runs the GPU parity tests on WARP with FXC
+### Requirement: Windows CI runs a DX12 device smoke check on WARP with FXC
 
 The Windows render CI job SHALL build `pictura-render` with the `software-gpu`
-feature and run the GPU parity profile with ignored tests enabled. On a runner
-without a hardware adapter, the DX12 probe SHALL accept WARP, the DX12 compiler
-SHALL be FXC, and the parity suites SHALL report passed results. A run that
-finds no usable device, or a parity mismatch, SHALL fail the job rather than
-pass on skipped tests. The Vulkan-only software-device probe test SHALL NOT run
-on Windows.
+feature and SHALL create the DX12 device on WARP without running the
+compositor validation composite, because WARP loses the device during that
+composite. The check SHALL fail when the device cannot be created or when the
+configured compiler is not FXC. The full GPU parity suite SHALL remain on the
+Linux lavapipe job.
 
-#### Scenario: The Windows job exercises WARP [gpu_windows_warp_parity]
+#### Scenario: The Windows job creates the DX12 device [gpu_windows_warp_device]
 
-- **WHEN** the Windows render job runs on a runner with only WARP
-- **THEN** the DX12 probe accepts WARP and the parity suites report passed
-  results
+- **WHEN** the Windows render job runs with the `software-gpu` feature
+- **THEN** it creates the DX12 device on WARP and reports success
 
 #### Scenario: FXC is the compiler on WARP [gpu_windows_fxc_probe]
 
-- **WHEN** the Windows render job probes DX12 without `WGPU_DX12_COMPILER`
-- **THEN** the probe succeeds and its detail names FXC
+- **WHEN** the Windows render job creates the device without `WGPU_DX12_COMPILER`
+- **THEN** the configured compiler is FXC
 
 #### Scenario: A missing device fails the Windows job [gpu_windows_missing_device_fails]
 

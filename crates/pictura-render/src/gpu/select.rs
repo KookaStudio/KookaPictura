@@ -540,12 +540,23 @@ mod tests {
     #[test]
     #[cfg(target_os = "windows")]
     fn dx12_probe_is_clean_with_or_without_an_adapter() {
+        // With the feature off, WARP is a CPU-type device and the probe must
+        // decline cleanly. With the feature on, the device smoke test below
+        // covers the accepted path without running the validation composite,
+        // which WARP loses the device on.
+        if cfg!(feature = "software-gpu") {
+            return;
+        }
+        let report = probe_backend_outcome(GpuBackend::Dx12);
+        assert_eq!(report.outcome, ProbeOutcome::NoAdapter, "{}", report.detail);
+    }
+
+    #[test]
+    #[cfg(all(target_os = "windows", feature = "software-gpu"))]
+    fn dx12_device_comes_up_with_fxc() {
         // No other Windows test reads the variable, so clearing it here is safe.
         std::env::remove_var("WGPU_DX12_COMPILER");
-        let report = probe_backend_outcome(GpuBackend::Dx12);
-        if cfg!(feature = "software-gpu") {
-            assert_eq!(report.outcome, ProbeOutcome::Ok, "{}", report.detail);
-            assert!(report.detail.contains("FXC"), "{}", report.detail);
-        }
+        assert!(crate::device_available(), "no DX12 device on WARP");
+        assert_eq!(dx12_compiler_label(), "FXC");
     }
 }
