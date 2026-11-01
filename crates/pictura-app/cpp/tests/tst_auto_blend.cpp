@@ -30,6 +30,7 @@ private slots:
     void refusedModes();
     void dialogDefaults();
     void fillFollowsDepth();
+    void dialogRestoresAChoice();
     void oneHistoryStateAndUndo();
     void cancelMidRun();
     void staleRunIsDropped();
@@ -148,6 +149,25 @@ void AutoBlendTest::dialogDefaults()
         const auto* preview = dialog.findChild<QLabel*>(QLatin1String(name));
         QVERIFY(preview && !preview->pixmap().isNull());
     }
+}
+
+void AutoBlendTest::dialogRestoresAChoice()
+{
+    pictura::AutoBlendDialog first;
+    first.findChild<QRadioButton*>(QStringLiteral("autoBlendStack"))->setChecked(true);
+    first.findChild<QCheckBox*>(QStringLiteral("autoBlendSeamless"))->setChecked(true);
+    first.findChild<QCheckBox*>(QStringLiteral("autoBlendFill"))->setChecked(true);
+
+    pictura::AutoBlendDialog next(true, nullptr, first.choice());
+    QVERIFY(next.stackImages());
+    QVERIFY(next.seamless());
+    QVERIFY(next.fillTransparent());
+    QVERIFY(!next.findChild<QRadioButton*>(QStringLiteral("autoBlendPanorama"))->isChecked());
+
+    // A choice survives a document where the option is unavailable.
+    pictura::AutoBlendDialog sixteen(false, nullptr, first.choice());
+    QVERIFY(!sixteen.fillTransparent());
+    QVERIFY(sixteen.choice().fillTransparent);
 }
 
 void AutoBlendTest::fillFollowsDepth()

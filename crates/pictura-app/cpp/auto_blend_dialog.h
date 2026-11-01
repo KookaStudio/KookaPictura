@@ -15,15 +15,24 @@ class PicturaMainWindow;
 bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless,
                   bool fillTransparent = false);
 
+// The dialog's options, kept between runs in a session.
+struct AutoBlendChoice {
+    bool stackImages = false;
+    bool seamless = false;
+    bool fillTransparent = false;
+};
+
 // Edit > Auto-Blend Layers: the blend method, illustrated, Seamless Tones And
 // Colors, and Content Aware Fill Transparent Areas (post-CS6, 8-bit only).
 class AutoBlendDialog : public QDialog {
 public:
-    explicit AutoBlendDialog(bool allowFill = true, QWidget* parent = nullptr);
+    explicit AutoBlendDialog(bool allowFill = true, QWidget* parent = nullptr,
+                             const AutoBlendChoice& choice = {});
 
     bool stackImages() const;
     bool seamless() const;
     bool fillTransparent() const;
+    AutoBlendChoice choice() const;
 
 private:
     QRadioButton* stack_ = nullptr;

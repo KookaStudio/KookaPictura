@@ -60,10 +60,11 @@ void PicturaMainWindow::wireAlignMenu()
 
     const QString autoBlend = commandIdForPath({QStringLiteral("Edit"), QStringLiteral("Auto-Blend Layers…")});
     registry_->setImplemented(autoBlend, true);
-    registry_->setHandler(autoBlend, [this]() {
+    registry_->setHandler(autoBlend, [this, last = AutoBlendChoice{}]() mutable {
         PictureView* view = activeView();
-        AutoBlendDialog dialog(view && document_api::documentDepthBits(*view) == 8, this);
+        AutoBlendDialog dialog(view && document_api::documentDepthBits(*view) == 8, this, last);
         if (runDialog(dialog, this) == QDialog::Accepted) {
+            last = dialog.choice();
             runAutoBlend(*this, dialog.stackImages(), dialog.seamless(), dialog.fillTransparent());
         }
     });

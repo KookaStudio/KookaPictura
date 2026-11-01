@@ -114,7 +114,7 @@ QLabel* previewLabel(const QPixmap& pixmap, const QString& name, QWidget* parent
 
 } // namespace
 
-AutoBlendDialog::AutoBlendDialog(bool allowFill, QWidget* parent)
+AutoBlendDialog::AutoBlendDialog(bool allowFill, QWidget* parent, const AutoBlendChoice& choice)
     : QDialog(parent)
 {
     setObjectName(QStringLiteral("autoBlendDialog"));
@@ -125,9 +125,10 @@ AutoBlendDialog::AutoBlendDialog(bool allowFill, QWidget* parent)
     auto* methodLayout = new QVBoxLayout(method);
     auto* panorama = new QRadioButton(tr("Panorama"), method);
     panorama->setObjectName(QStringLiteral("autoBlendPanorama"));
-    panorama->setChecked(true);
+    panorama->setChecked(!choice.stackImages);
     stack_ = new QRadioButton(tr("Stack Images"), method);
     stack_->setObjectName(QStringLiteral("autoBlendStack"));
+    stack_->setChecked(choice.stackImages);
     methodLayout->addWidget(panorama);
     methodLayout->addWidget(
         previewLabel(panoramaPreview(ink), QStringLiteral("autoBlendPanoramaPreview"), method));
@@ -137,8 +138,10 @@ AutoBlendDialog::AutoBlendDialog(bool allowFill, QWidget* parent)
 
     seamless_ = new QCheckBox(tr("Seamless Tones and Colors"), this);
     seamless_->setObjectName(QStringLiteral("autoBlendSeamless"));
+    seamless_->setChecked(choice.seamless);
     fill_ = new QCheckBox(tr("Content Aware Fill Transparent Areas"), this);
     fill_->setObjectName(QStringLiteral("autoBlendFill"));
+    fill_->setChecked(choice.fillTransparent);
     fill_->setEnabled(allowFill);
 
     auto* left = new QVBoxLayout;
@@ -169,6 +172,11 @@ bool AutoBlendDialog::seamless() const
 bool AutoBlendDialog::fillTransparent() const
 {
     return fill_->isEnabled() && fill_->isChecked();
+}
+
+AutoBlendChoice AutoBlendDialog::choice() const
+{
+    return {stack_->isChecked(), seamless_->isChecked(), fill_->isChecked()};
 }
 
 } // namespace pictura
