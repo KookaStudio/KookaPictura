@@ -6,6 +6,7 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QProgressDialog>
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QVBoxLayout>
 
@@ -58,6 +59,42 @@ bool runBusyJob(QWidget* parent, const QString& title, const QString& label,
         busy.hide();
         QApplication::restoreOverrideCursor();
     }
+    return finish();
+}
+
+bool runCancellableJob(QWidget* parent, const QString& title, const QString& label,
+                       const std::function<bool()>& start, const std::function<bool()>& running,
+                       const std::function<int()>& progress, const std::function<void()>& cancel,
+                       const std::function<bool()>& finish)
+{
+    if (!start()) {
+        return false;
+    }
+    QProgressDialog dialog(label, QObject::tr("Cancel"), 0, 1000, parent);
+    dialog.setObjectName(QStringLiteral("jobProgress"));
+    dialog.setWindowTitle(title);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setMinimumDuration(static_cast<int>(kBusyWindowDelayMs));
+    dialog.setAutoClose(false);
+    dialog.setAutoReset(false);
+    QObject::connect(&dialog, &QProgressDialog::canceled, &dialog, [&] { cancel(); });
+
+    QEventLoop loop;
+    QTimer poll;
+    poll.setInterval(16);
+    QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
+        if (running()) {
+            dialog.setValue(progress());
+        } else {
+            loop.quit();
+        }
+    });
+    poll.start();
+    if (running()) {
+        loop.exec();
+    }
+    poll.stop();
+    dialog.hide();
     return finish();
 }
 

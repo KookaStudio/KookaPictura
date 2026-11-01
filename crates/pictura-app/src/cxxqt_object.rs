@@ -4,6 +4,7 @@ mod actions_engine;
 mod adjustment_edit;
 mod align;
 mod annotations;
+mod auto_blend;
 mod channels;
 mod clipboard;
 mod clipping;

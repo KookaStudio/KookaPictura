@@ -161,6 +161,7 @@ fn main() {
                 "src/cxxqt_object/engine_tables/adjustment_catalogue.rs",
                 "src/cxxqt_object/adjustment_edit.rs",
                 "src/cxxqt_object/align.rs",
+                "src/cxxqt_object/auto_blend.rs",
                 "src/cxxqt_object/annotations.rs",
                 "src/cxxqt_object/engine_tables/blend_modes.rs",
                 "src/cxxqt_object/channels.rs",

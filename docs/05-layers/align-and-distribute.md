@@ -94,11 +94,16 @@ masks, and optionally matching tonal ranges. Two objectives:
   already aligned.
 
 **Seamless Tones And Colors** is an optional checkbox that adjusts color and
-tonality while blending. Constraints stated by the Help:
+tonality while blending. Kooka also offers **Content Aware Fill Transparent
+Areas**, a post-CS6 option outside CS6 parity, at 8 bits only. Constraints stated by the Help:
 
 - Only **RGB or Grayscale** images.
 - Does **not** work with Smart Objects, video layers, 3D layers, or background
   layers.
+
+Observed in Photoshop with Seamless on, Stack Images takes broad brightness from
+the base layer, and detail and colour from the sharpest layer, and shifts the
+base's colour without changing its brightness. Kooka approximates this; its constants are tuned by eye.
 
 Auto-Blend writes a layer mask per processed layer to hide content that should
 not contribute (over/under-exposed or out-of-focus areas).
@@ -276,7 +281,9 @@ is emitted.
   scale, perspective), so `Transform2D` must support a full 3×3 homography or a
   documented approximation.
 - **Auto-Blend** creates or replaces one raster **layer mask** per processed
-  layer, and may store a tonal correction. It does not change layer pixels.
+  layer and does not change those layers' pixels. It also adds one merged raster
+  layer, `<top layer> (merged)`, above them, holding a multiband blend with any
+  tonal correction baked in. A later run replaces that layer. Above 100 MP Kooka adds masks only and says so.
 - **Path align/distribute** mutates path component control points.
 - **Undo:** each user invocation is one history state (`ARCH-009`). Auto-Align
   and Auto-Blend are compound: undo restores every affected transform / removes
@@ -305,8 +312,8 @@ is emitted.
   content-based align.
 - **Auto-Blend mode guard** — CMYK/Lab and Bitmap/Indexed are rejected; Smart
   Objects, video, 3D, and Background layers are rejected.
-- **Background layer** — cannot be freely transformed; must be converted to a
-  regular layer before auto-align/blend.
+- **Background layer** — cannot be freely transformed; the user must convert it
+  to a regular layer before auto-align/blend. The command does not convert it.
 - **8/16/32-bit** — align/distribute are geometry-only and depth-independent;
   Auto-Blend's focus/exposure analysis should run at the document depth (32-bit
   float supported for RGB/Gray).
@@ -337,8 +344,9 @@ is emitted.
   aligned focus-bracketed RGB layers, each output layer gains a mask, and the
   composite's focus metric is better than any single input over the overlap
   region.
-- Given a CMYK or a document containing a Smart Object, `Auto-Blend Layers` is
-  rejected without changing the document.
+- Given a CMYK document, or a selection containing a Smart Object,
+  `Auto-Blend Layers` is rejected without changing the document. A Smart Object
+  outside the selection does not block it.
 - Given 32-bit RGB layers, Auto-Blend runs and the result is 32-bit.
 - Given any of these commands, exactly one history state is added and a single
   undo restores all affected transforms/masks.

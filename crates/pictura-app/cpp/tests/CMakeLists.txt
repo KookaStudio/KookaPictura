@@ -151,6 +151,7 @@ set(PICTURA_QT_TESTS
     tst_refine_edge
     tst_replace_color
     tst_match_color
+    tst_auto_blend
     tst_print
     tst_save_pdf
     tst_import_pdf

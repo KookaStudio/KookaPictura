@@ -77,6 +77,7 @@ edit.transform.path.distort	Edit/Transform Path/Distort	Distort		0	0
 edit.transform.path.perspective	Edit/Transform Path/Perspective	Perspective		0	0
 edit.transform.path.warp	Edit/Transform Path/Warp	Warp		0	0
 edit.transform.points.again	Edit/Transform Points/Again	Again		0	0
+edit.auto.blend.layers	Edit/Auto-Blend Layers…	Auto-Blend Layers…		1	0
 edit.define.brush.preset	Edit/Define Brush Preset…	Define Brush Preset…		0	0
 edit.define.pattern	Edit/Define Pattern…	Define Pattern…		0	0
 edit.define.custom.shape	Edit/Define Custom Shape…	Define Custom Shape…		0	0

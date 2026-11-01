@@ -82,6 +82,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "edit.transform.path.perspective", path: &["Edit", "Transform Path", "Perspective"], label: "Perspective", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.transform.path.warp", path: &["Edit", "Transform Path", "Warp"], label: "Warp", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.transform.points.again", path: &["Edit", "Transform Points", "Again"], label: "Again", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "edit.auto.blend.layers", path: &["Edit", "Auto-Blend Layers…"], label: "Auto-Blend Layers…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.define.brush.preset", path: &["Edit", "Define Brush Preset…"], label: "Define Brush Preset…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.define.pattern", path: &["Edit", "Define Pattern…"], label: "Define Pattern…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.define.custom.shape", path: &["Edit", "Define Custom Shape…"], label: "Define Custom Shape…", shortcut: "", implemented: false, checkable: false },
