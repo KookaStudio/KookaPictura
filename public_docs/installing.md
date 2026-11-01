@@ -16,6 +16,19 @@ Pick the format that suits your system:
 | snap | Systems with snap installed. |
 | flatpak | Systems with Flatpak installed. |
 
+### Snap
+
+The snap is a file from the releases page, not a Snap Store package, so it is
+unsigned. Install it with `--dangerous`, or snap stops with a "cannot find
+signatures" error:
+
+```bash
+sudo snap install --dangerous ./kooka-pictura_<version>_amd64.snap
+```
+
+A snap installed this way does not update by itself. To update, download the new
+release and run the same command.
+
 ## macOS
 
 Download the `.dmg`, open it and drag the app to Applications. The app is not

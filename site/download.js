@@ -41,7 +41,10 @@
     var linux = [];
     LINUX.forEach(function (f) {
       var a = find(assets, f[1]);
-      if (a) linux.push({ label: f[0], name: a.name, url: a.browser_download_url });
+      if (!a) return;
+      var item = { label: f[0], name: a.name, url: a.browser_download_url };
+      if (f[0] === "snap") item.command = "sudo snap install --dangerous ./" + a.name;
+      linux.push(item);
     });
     var dmg = find(assets, /\.dmg$/i);
     var exe = find(assets, /-setup\.exe$/i);
@@ -72,6 +75,7 @@
     var li = el("li");
     li.appendChild(a);
     li.appendChild(small);
+    if (item.command) li.appendChild(el("code", "dl-command", item.command));
     return li;
   }
 

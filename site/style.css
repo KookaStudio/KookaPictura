@@ -961,6 +961,7 @@ a:focus-visible,
 .dl-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.8rem; }
 .dl-link { font-weight: 600; color: var(--rust-deep); }
 .dl-file { font-size: 0.8rem; color: var(--ink-soft); }
+.dl-command { flex-basis: 100%; font-size: 0.8rem; overflow-wrap: anywhere; }
 .dl-tag { margin: 0; font-size: 0.8rem; color: var(--ink-soft); }
 .dl-tag:empty { display: none; }
 .dl-notes { font-size: 0.88rem; color: var(--ink-soft); border-left: 2px solid var(--rust); padding-left: 0.9rem; }

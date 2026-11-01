@@ -130,3 +130,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: gh release upload "$RELEASE_TAG" *.snap --clobber
+
+      # The snap is not from the store, so snapd refuses it without --dangerous.
+      # A re-run for the same tag must not add the note twice.
+      - name: Add the install command to the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          notes="$(gh release view "$RELEASE_TAG" --json body --jq .body)"
+          case "$notes" in
+            *--dangerous*) exit 0 ;;
+          esac
+          snap_file="$(ls *.snap)"
+          printf '%s\n\n### Installing the snap\n\nThe snap is unsigned, so install it with `--dangerous`:\n\n```bash\nsudo snap install --dangerous ./%s\n```\n' \
+            "$notes" "$snap_file" > release-notes.md
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md
