@@ -68,9 +68,10 @@ mod shader;
 mod stroke;
 
 pub use select::{
-    backend_label, compiled_backends, env_candidates, gpu_backend_status, platform, probe_backend,
-    probe_backend_outcome, resolve_candidates, selected_backend, set_backend, set_safe_mode,
-    GpuBackend, GpuBackendStatus, Platform, ProbeOutcome,
+    backend_label, compiled_backends, dx12_compiler, dx12_compiler_label, env_candidates,
+    gpu_backend_status, platform, probe_backend, probe_backend_outcome, resolve_candidates,
+    selected_backend, set_backend, set_safe_mode, GpuBackend, GpuBackendStatus, Platform,
+    ProbeOutcome, ProbeReport,
 };
 pub use stroke::{GpuPaintMode, GpuStroke, GpuStrokeParams};
 
@@ -332,20 +333,26 @@ fn gpu_composite_verified() -> bool {
         VALIDATION_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let doc = validation_document();
         let Ok(plans) = plan::plan_stack(&doc, None) else {
+            backend::record_error("validation plan failed");
             return false;
         };
         let cpu = crate::composite_rgba(&doc);
         let Ok(gpu) = composite_gpu_region_raw(&doc, &plans, 0, 0, doc.width, doc.height) else {
+            backend::record_error("validation composite failed");
             return false;
         };
-        gpu.width == cpu.width
+        let matches = gpu.width == cpu.width
             && gpu.height == cpu.height
             && gpu.data.len() == cpu.data.len()
             && gpu
                 .data
                 .iter()
                 .zip(cpu.data.iter())
-                .all(|(g, c)| g.abs_diff(*c) <= 1)
+                .all(|(g, c)| g.abs_diff(*c) <= 1);
+        if !matches {
+            backend::record_error("validation mismatch");
+        }
+        matches
     })
 }
 
@@ -486,7 +493,7 @@ pub(crate) fn require_device(available: bool) {
     assert!(
         available,
         "no usable GPU device on the selected backend; this test is #[ignore]d and needs one \
-         (software-vulkan in CI)"
+         (software-gpu in CI)"
     );
 }
 
@@ -666,7 +673,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "software-vulkan"))]
+    #[cfg(not(feature = "software-gpu"))]
     fn a_software_adapter_is_no_gpu() {
         assert!(!backend::accelerates(wgpu::DeviceType::Cpu));
         for real in [

@@ -252,7 +252,7 @@ fn compare_scene(scene_name: &str, modes: &[(BlendMode, &str, u8)]) {
 fn fixture_scenes_match_oracle_on_active_backend() {
     assert!(
         pictura_render::gpu_available(),
-        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+        "no usable GPU device; this test is #[ignore]d and needs one (software-gpu in CI)"
     );
     let mut on_gpu = 0;
     for (scene_name, modes) in [("solid", MODES), ("ramp", MODES), ("alpha", NORMAL_ONLY)] {
@@ -287,7 +287,7 @@ fn fixture_scenes_match_oracle_on_active_backend() {
 fn declined_fixture_scene_equals_oracle() {
     assert!(
         pictura_render::gpu_available(),
-        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+        "no usable GPU device; this test is #[ignore]d and needs one (software-gpu in CI)"
     );
     let base = read_fixture("ramp_base.rgba");
     let src = read_fixture("ramp_src.rgba");

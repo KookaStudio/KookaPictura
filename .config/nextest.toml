@@ -9,8 +9,9 @@ success-output = "never"
 path = "junit.xml"
 report-skipped = "ignored"
 
-# The GPU parity run (`gpu-parity` CI job, or locally on any Vulkan device):
-#   cargo nextest run -p pictura-render --features software-vulkan --profile gpu --run-ignored all
+# The GPU parity run (`gpu-parity` CI job on lavapipe, or locally on any Vulkan
+# or DX12 device):
+#   cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all
 # Selects the device-dependent tests and the device-free GPU checks; the
 # PICTURA_GPU_BENCH timing and profile evidence is excluded by name.
 [profile.gpu]

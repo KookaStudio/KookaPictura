@@ -280,7 +280,7 @@ pub(crate) fn is_gpu_gone(err: &GpuError) -> bool {
 pub(crate) fn require_gpu() {
     assert!(
         pictura_render::gpu_available(),
-        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+        "no usable GPU device; this test is #[ignore]d and needs one (software-gpu in CI)"
     );
 }
 

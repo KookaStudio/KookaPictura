@@ -121,16 +121,17 @@ pub use layer_effects::{
 };
 
 pub mod gpu;
-/// Whether this build was compiled with the test-only `software-vulkan`
-/// feature, which lets the GPU probe accept a software Vulkan device. No
-/// workspace manifest enables it; only the `gpu-parity` CI job passes it.
-pub const SOFTWARE_VULKAN: bool = cfg!(feature = "software-vulkan");
+/// Whether this build was compiled with the test-only `software-gpu` feature,
+/// which lets the GPU probe accept a software (CPU-type) device on any backend.
+/// No workspace manifest enables it; only the GPU parity CI jobs pass it.
+pub const SOFTWARE_GPU: bool = cfg!(feature = "software-gpu");
 pub use gpu::{
     backend_label, compiled_backends, composite_active, composite_gpu, composite_gpu_or_cpu,
-    composite_region_active, device_available, env_candidates, gpu_adapter_info, gpu_available,
-    gpu_backend_status, platform, probe_backend, probe_backend_outcome, resolve_candidates,
-    selected_backend, set_backend, set_safe_mode, Backend, GpuAdapterInfo, GpuBackend,
-    GpuBackendStatus, GpuError, Platform, ProbeOutcome,
+    composite_region_active, device_available, dx12_compiler, dx12_compiler_label, env_candidates,
+    gpu_adapter_info, gpu_available, gpu_backend_status, platform, probe_backend,
+    probe_backend_outcome, resolve_candidates, selected_backend, set_backend, set_safe_mode,
+    Backend, GpuAdapterInfo, GpuBackend, GpuBackendStatus, GpuError, Platform, ProbeOutcome,
+    ProbeReport,
 };
 
 mod filter;

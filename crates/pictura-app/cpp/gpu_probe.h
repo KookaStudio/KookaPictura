@@ -54,10 +54,17 @@ bool beginDeviceInit(const QString& backend);
 void endDeviceInit(bool ok);
 void endDeviceInit(bool ok, const QString& backend);
 
-// Run the chain for this launch. `probe` returns 0/1/2 for one backend.
-// Returns the chosen backend id, or an empty string for CPU.
+// The outcome of probing one backend: 0 = ok, 1 = failed, 2 = crashed
+// (validation failure, crash, or timeout), plus its diagnostic detail.
+struct GpuProbeResult {
+    int code = 1;
+    QString detail;
+};
+
+// Run the chain for this launch. `probe` returns the outcome and detail for one
+// backend. Returns the chosen backend id, or an empty string for CPU.
 QString selectGpuBackend(GpuBackendCache& cache,
-                         const std::function<int(const QString&)>& probe);
+                         const std::function<GpuProbeResult(const QString&)>& probe);
 
 // Windows: recover the marker, select and pin a backend, and set safe mode on
 // exhaustion. Linux: a no-op (the direct Vulkan path stays).

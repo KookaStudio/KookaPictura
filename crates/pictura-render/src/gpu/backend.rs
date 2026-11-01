@@ -234,6 +234,23 @@ fn gradient_luma_half_up_bits() -> Vec<u32> {
     words
 }
 
+/// The most recent device-creation failure, read by the probe child to explain
+/// a failed outcome. Process-local; the parent's own slot is separate.
+static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
+
+pub(super) fn record_error(message: impl Into<String>) {
+    *LAST_ERROR
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(message.into());
+}
+
+pub(super) fn take_last_error() -> Option<String> {
+    LAST_ERROR
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take()
+}
+
 async fn request_device() -> Option<Devices> {
     // Pin exactly one backend: `Instance::new` initializes every backend named
     // in the bitmask, and on Windows a multi-backend instance loads the
@@ -243,11 +260,11 @@ async fn request_device() -> Option<Devices> {
     if !backend.is_compiled() {
         return None;
     }
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: backend.to_wgpu(),
-        ..wgpu::InstanceDescriptor::new_without_display_handle()
-    });
-    let adapter = instance
+    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    descriptor.backends = backend.to_wgpu();
+    descriptor.backend_options.dx12.shader_compiler = super::dx12_compiler();
+    let instance = wgpu::Instance::new(descriptor);
+    let adapter = match instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: None,
@@ -255,10 +272,19 @@ async fn request_device() -> Option<Devices> {
             apply_limit_buckets: false,
         })
         .await
-        .ok()?;
-    if !accelerates(adapter.get_info().device_type)
-        || adapter.limits().max_storage_buffers_per_shader_stage < 4
     {
+        Ok(adapter) => adapter,
+        Err(error) => {
+            record_error(format!("request_adapter: {error}"));
+            return None;
+        }
+    };
+    if !accelerates(adapter.get_info().device_type) {
+        record_error("adapter is a software (CPU-type) device");
+        return None;
+    }
+    if adapter.limits().max_storage_buffers_per_shader_stage < 4 {
+        record_error("adapter has fewer than 4 storage buffers per shader stage");
         return None;
     }
     // Device timestamps are requested only for the opt-in metrics report, so
@@ -270,7 +296,7 @@ async fn request_device() -> Option<Devices> {
     } else {
         wgpu::Features::empty()
     };
-    let (device, queue) = adapter
+    let (device, queue) = match adapter
         .request_device(&wgpu::DeviceDescriptor {
             label: Some("pictura-render-gpu"),
             required_features,
@@ -280,7 +306,13 @@ async fn request_device() -> Option<Devices> {
             trace: wgpu::Trace::Off,
         })
         .await
-        .ok()?;
+    {
+        Ok(pair) => pair,
+        Err(error) => {
+            record_error(format!("request_device: {error}"));
+            return None;
+        }
+    };
     device.set_device_lost_callback(|reason, message| {
         LOST.store(true, std::sync::atomic::Ordering::Relaxed);
         eprintln!("pictura: GPU device lost ({reason:?}: {message}); using the CPU from now on");
@@ -300,12 +332,12 @@ async fn request_device() -> Option<Devices> {
 }
 
 /// Whether an adapter of this type can speed compositing up. A software
-/// Vulkan device (Mesa's lavapipe/llvmpipe, found on machines without a GPU)
-/// emulates the GPU on the CPU and measured slower than the CPU compositor
-/// itself, so it is treated as no GPU at all, except in a build with the
-/// test-only `software-vulkan` feature, which runs the GPU parity tests on it.
+/// device (Mesa's lavapipe/llvmpipe on Linux, WARP on Windows) emulates the GPU
+/// on the CPU and measured slower than the CPU compositor itself, so it is
+/// treated as no GPU at all, except in a build with the test-only
+/// `software-gpu` feature, which runs the GPU parity tests on it.
 pub(super) fn accelerates(device_type: wgpu::DeviceType) -> bool {
-    crate::SOFTWARE_VULKAN || device_type != wgpu::DeviceType::Cpu
+    crate::SOFTWARE_GPU || device_type != wgpu::DeviceType::Cpu
 }
 
 /// Set once the driver reports the shared device lost (a reset after a hung

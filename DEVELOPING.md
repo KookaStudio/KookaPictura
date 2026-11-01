@@ -241,14 +241,16 @@ GPU tests are `#[ignore]`d with a reason string and run with
 `#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]` and fails when it is run without one,
 so the report counts it as skipped, never as passed. The `gpu` nextest profile
 selects those tests and the device-free GPU checks. CI's `gpu-parity` job runs
-them on Mesa's lavapipe. The test-only `software-vulkan` feature lets the probe
-accept a software device, which release builds reject:
+them on Mesa's lavapipe; the Windows `windows-render` job runs a DX12 device
+smoke check on WARP.
+The test-only `software-gpu` feature lets the probe accept a software device on
+either backend, which release builds reject:
 
 ```bash
 # any Vulkan GPU:
 cargo nextest run -p pictura-render --profile gpu --run-ignored all
 # no GPU (install mesa-vulkan-drivers):
-cargo nextest run -p pictura-render --features software-vulkan --profile gpu --run-ignored all
+cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all
 ```
 
 See

@@ -67,10 +67,10 @@ async fn create_device(
     if backend == GpuBackend::Cpu || !backend.is_compiled() {
         return None;
     }
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: backend.to_wgpu(),
-        ..wgpu::InstanceDescriptor::new_without_display_handle()
-    });
+    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    descriptor.backends = backend.to_wgpu();
+    descriptor.backend_options.dx12.shader_compiler = pictura_render::dx12_compiler();
+    let instance = wgpu::Instance::new(descriptor);
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -367,11 +367,11 @@ mod tests {
         }
     }
 
-    /// The app never treats a software Vulkan device as a GPU: the test-only
-    /// `software-vulkan` feature stays off in every build of this crate.
+    /// The app never treats a software GPU as a GPU: the test-only
+    /// `software-gpu` feature stays off in every build of this crate.
     #[test]
-    fn app_never_enables_software_vulkan() {
+    fn app_never_enables_software_gpu() {
         // black_box: a bare constant would trip clippy's assertions_on_constants.
-        assert!(!std::hint::black_box(pictura_render::SOFTWARE_VULKAN));
+        assert!(!std::hint::black_box(pictura_render::SOFTWARE_GPU));
     }
 }
