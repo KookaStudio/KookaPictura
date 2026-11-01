@@ -406,8 +406,8 @@ fn validation_runs_at_most_once() {
 }
 
 #[test]
-#[cfg(feature = "software-vulkan")]
-fn software_vulkan_accepts_a_cpu_device() {
+#[cfg(feature = "software-gpu")]
+fn software_gpu_accepts_a_cpu_device() {
     assert!(backend::accelerates(wgpu::DeviceType::Cpu));
 }
 
@@ -419,7 +419,7 @@ fn require_gpu_panics_without_a_device() {
 
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
-fn gpu_is_available_under_software_vulkan() {
+fn gpu_is_available_under_a_software_device() {
     require_gpu();
     let doc = validation_document();
     let (buf, backend) = composite_active(&doc, true);

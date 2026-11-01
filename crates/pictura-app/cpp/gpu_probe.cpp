@@ -275,6 +275,7 @@ void recoverGpuInitMarker(GpuBackendCache& cache)
     GpuBackendEntry& entry = cache.backends[backend];
     entry.state = GpuBackendState::Crashed;
     entry.updatedAt = nowIso();
+    entry.detail = QStringLiteral("crashed during parent init");
     saveGpuBackendCache(cache);
     QFile::remove(path);
 }
@@ -322,12 +323,15 @@ void endDeviceInit(bool ok, const QString& backend)
     GpuBackendEntry& entry = cache.backends[backend];
     entry.state = ok ? GpuBackendState::Ok : GpuBackendState::Failed;
     entry.updatedAt = nowIso();
+    if (!ok) {
+        entry.detail = QStringLiteral("parent device init failed");
+    }
     saveGpuBackendCache(cache);
     QFile::remove(gpuMarkerPath());
 }
 
 QString selectGpuBackend(GpuBackendCache& cache,
-                         const std::function<int(const QString&)>& probe)
+                         const std::function<GpuProbeResult(const QString&)>& probe)
 {
     for (const int code : pictura::gpu_candidates()) {
         const QString backend = backendName(code);
@@ -341,10 +345,12 @@ QString selectGpuBackend(GpuBackendCache& cache,
         if (state == GpuBackendState::Crashed) {
             continue;
         }
-        const GpuBackendState outcome = gpuProbeOutcomeToState(probe(backend));
+        const GpuProbeResult result = probe(backend);
+        const GpuBackendState outcome = gpuProbeOutcomeToState(result.code);
         GpuBackendEntry& entry = cache.backends[backend];
         entry.state = outcome;
         entry.updatedAt = nowIso();
+        entry.detail = result.detail.left(512);
         saveGpuBackendCache(cache);
         if (outcome == GpuBackendState::Ok) {
             return backend;
@@ -367,10 +373,12 @@ void prepareGpuBackend()
     const QString chosen = selectGpuBackend(cache, [&](const QString& backend) {
         const int code = backendCode(backend);
         if (code < 0) {
-            return 1;
+            return GpuProbeResult{1, QStringLiteral("unknown backend")};
         }
-        return pictura::gpu_probe(
+        const auto reply = pictura::gpu_probe(
             code, rust::Str(executableUtf8.constData(), size_t(executableUtf8.size())));
+        return GpuProbeResult{
+            reply.code, QString::fromUtf8(reply.detail.data(), int(reply.detail.size()))};
     });
 
     if (!chosen.isEmpty() && pictura::gpu_set_backend(backendCode(chosen))) {

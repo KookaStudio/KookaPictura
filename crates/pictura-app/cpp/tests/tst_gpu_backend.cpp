@@ -71,6 +71,8 @@ private slots:
     void selectGpuBackendRecordsFailedAndTriesNext();
     void selectGpuBackendRecordsCrashAndTriesNext();
     void selectGpuBackendTreatsTimeoutAsCrashed();
+    void selectGpuBackendWritesTheProbeDetail();
+    void probeDetailIsBounded();
 
     void markerAttemptingWrittenBeforeProbe();
     void successClearsTheMarker();
@@ -194,7 +196,7 @@ void GpuBackendTest::okBackendSkipsTheProbe()
     bool probed = false;
     const QString chosen = selectGpuBackend(cache, [&](const QString&) {
         probed = true;
-        return 1;
+        return GpuProbeResult{1, {}};
     });
     QVERIFY(!probed);
     QCOMPARE(chosen, names.first());
@@ -211,7 +213,7 @@ void GpuBackendTest::failedIsRetriedNextLaunch()
         cache.backends.insert(name, {GpuBackendState::Failed, QStringLiteral("now"), {}});
     }
     const QString chosen = selectGpuBackend(cache, [&](const QString& backend) {
-        return backend == names.last() ? 0 : 1;
+        return GpuProbeResult{backend == names.last() ? 0 : 1, {}};
     });
     QCOMPARE(chosen, names.last());
     QCOMPARE(gpuBackendState(cache, names.last()), GpuBackendState::Ok);
@@ -226,7 +228,7 @@ void GpuBackendTest::crashedIsSkippedUntilReset()
     bool probed = false;
     const QString chosen = selectGpuBackend(cache, [&](const QString&) {
         probed = true;
-        return 0;
+        return GpuProbeResult{0, {}};
     });
     QVERIFY(chosen.isEmpty());
     QVERIFY(!probed);
@@ -241,7 +243,8 @@ void GpuBackendTest::corruptCacheDoesNotFailTheLaunch()
     file.close();
     GpuBackendCache cache = loadGpuBackendCache();
     QVERIFY(cache.backends.isEmpty());
-    QVERIFY(selectGpuBackend(cache, [](const QString&) { return 1; }).isEmpty());
+    QVERIFY(selectGpuBackend(cache, [](const QString&) { return GpuProbeResult{1, {}}; })
+                .isEmpty());
 }
 
 void GpuBackendTest::preferenceReenableClearsCache()
@@ -263,7 +266,8 @@ void GpuBackendTest::preferenceReenableClearsCache()
 void GpuBackendTest::selectGpuBackendRecordsOkAndSelectsIt()
 {
     GpuBackendCache cache;
-    const QString chosen = selectGpuBackend(cache, [](const QString&) { return 0; });
+    const QString chosen =
+        selectGpuBackend(cache, [](const QString&) { return GpuProbeResult{0, {}}; });
     QVERIFY(!chosen.isEmpty());
     QCOMPARE(gpuBackendState(cache, chosen), GpuBackendState::Ok);
 }
@@ -276,7 +280,7 @@ void GpuBackendTest::selectGpuBackendRecordsFailedAndTriesNext()
     }
     GpuBackendCache cache;
     const QString chosen = selectGpuBackend(cache, [&](const QString& backend) {
-        return backend == names.first() ? 1 : 0;
+        return GpuProbeResult{backend == names.first() ? 1 : 0, {}};
     });
     QCOMPARE(gpuBackendState(cache, names.first()), GpuBackendState::Failed);
     if (names.size() > 1) {
@@ -294,7 +298,7 @@ void GpuBackendTest::selectGpuBackendRecordsCrashAndTriesNext()
     }
     GpuBackendCache cache;
     const QString chosen = selectGpuBackend(cache, [&](const QString& backend) {
-        return backend == names.first() ? 2 : 0;
+        return GpuProbeResult{backend == names.first() ? 2 : 0, {}};
     });
     QCOMPARE(gpuBackendState(cache, names.first()), GpuBackendState::Crashed);
     if (names.size() > 1) {
@@ -311,8 +315,32 @@ void GpuBackendTest::selectGpuBackendTreatsTimeoutAsCrashed()
         QSKIP("no compiled candidates");
     }
     GpuBackendCache cache;
-    selectGpuBackend(cache, [](const QString&) { return 2; });
+    selectGpuBackend(cache, [](const QString&) { return GpuProbeResult{2, {}}; });
     QCOMPARE(gpuBackendState(cache, names.first()), GpuBackendState::Crashed);
+}
+
+void GpuBackendTest::selectGpuBackendWritesTheProbeDetail()
+{
+    GpuBackendCache cache;
+    const QString detail = QStringLiteral("compiler=FXC; adapter=Test; driver=1.2.3");
+    const QString chosen = selectGpuBackend(cache, [&](const QString&) {
+        return GpuProbeResult{0, detail};
+    });
+    QVERIFY(!chosen.isEmpty());
+    QCOMPARE(cache.backends.value(chosen).detail, detail);
+    QCOMPARE(loadGpuBackendCache().backends.value(chosen).detail, detail);
+}
+
+void GpuBackendTest::probeDetailIsBounded()
+{
+    GpuBackendCache cache;
+    const QString detail(2000, QLatin1Char('x'));
+    const QString chosen = selectGpuBackend(cache, [&](const QString&) {
+        return GpuProbeResult{0, detail};
+    });
+    QVERIFY(!chosen.isEmpty());
+    QCOMPARE(cache.backends.value(chosen).detail.size(), 512);
+    QCOMPARE(loadGpuBackendCache().backends.value(chosen).detail.size(), 512);
 }
 
 void GpuBackendTest::markerAttemptingWrittenBeforeProbe()
@@ -386,7 +414,8 @@ void GpuBackendTest::staleMarkerFallsToTheNextCandidate()
     GpuBackendCache cache;
     cache.backends.insert(names.first(),
                           {GpuBackendState::Crashed, QStringLiteral("now"), {}});
-    QCOMPARE(selectGpuBackend(cache, [](const QString&) { return 0; }), names.at(1));
+    QCOMPARE(selectGpuBackend(cache, [](const QString&) { return GpuProbeResult{0, {}}; }),
+             names.at(1));
 }
 
 void GpuBackendTest::unknownMarkerIsRemovedWithoutACacheChange()

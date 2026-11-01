@@ -245,7 +245,7 @@ fn assert_parity(got: &PixelBuffer, want: &PixelBuffer, label: &str) -> i32 {
 fn accelerated_filters_match_cpu_within_one_lsb() {
     assert!(
         filter_gpu_available(),
-        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+        "no usable GPU device; this test is #[ignore]d and needs one (software-gpu in CI)"
     );
     for (label, base) in [
         ("rgb", gradient_rgb()),

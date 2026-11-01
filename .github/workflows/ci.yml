@@ -128,8 +128,8 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       # The GPU parity feature's code, linted here so gpu-parity only runs tests.
-      - name: Clippy with software-vulkan
-        run: cargo clippy -p pictura-render --all-targets --features software-vulkan -- -D warnings
+      - name: Clippy with software-gpu
+        run: cargo clippy -p pictura-render --all-targets --features software-gpu -- -D warnings
 
       - name: Install cargo-deny
         if: ${{ hashFiles('deny.toml') != '' }}
@@ -207,7 +207,7 @@ jobs:
           path: target/nextest/default/junit.xml
 
   # GPU parity on Mesa's lavapipe: the software Vulkan device the
-  # `software-vulkan` feature lets the probe accept. The tests it runs are
+  # `software-gpu` feature lets the probe accept. The tests it runs are
   # #[ignore]d elsewhere, so a runner without the device fails here.
   gpu-parity:
     runs-on: ubuntu-24.04
@@ -233,7 +233,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: GPU parity
-        run: cargo nextest run -p pictura-render --features software-vulkan --profile gpu --run-ignored all
+        run: cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all
 
       - name: Upload GPU JUnit
         if: always()
@@ -278,6 +278,14 @@ jobs:
 
       - name: Test
         run: cargo test -p pictura-render --lib --test backend_pin --test backend_cpu
+
+      - uses: taiki-e/install-action@nextest
+
+      # WARP is the runner's only DX12 adapter; the software-gpu feature lets
+      # the probe accept it so the real compositor and filter shaders compile
+      # with FXC and match the CPU oracle.
+      - name: GPU parity on WARP
+        run: cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all
 
 
   qt-headless:

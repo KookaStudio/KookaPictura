@@ -162,6 +162,29 @@ pub fn env_candidates() -> (Vec<GpuBackend>, bool) {
     resolve_candidates(platform(), &compiled_backends(), value.as_deref())
 }
 
+/// The DX12 shader compiler policy.
+///
+/// FXC needs no extra DLL and covers the shader model 5.1 feature set this
+/// renderer uses, so it is the default. A machine with a modern DXC can opt in
+/// through `WGPU_DX12_COMPILER`.
+pub fn dx12_compiler() -> wgpu::Dx12Compiler {
+    resolve_dx12_compiler(wgpu::Dx12Compiler::from_env())
+}
+
+fn resolve_dx12_compiler(env: Option<wgpu::Dx12Compiler>) -> wgpu::Dx12Compiler {
+    env.unwrap_or(wgpu::Dx12Compiler::Fxc)
+}
+
+/// A short label for the configured DX12 compiler, used by probe diagnostics.
+pub fn dx12_compiler_label() -> &'static str {
+    match dx12_compiler() {
+        wgpu::Dx12Compiler::Fxc => "FXC",
+        wgpu::Dx12Compiler::DynamicDxc { .. } => "DXC",
+        wgpu::Dx12Compiler::StaticDxc => "STATICDXC",
+        wgpu::Dx12Compiler::Auto => "AUTO",
+    }
+}
+
 static SELECTED: OnceLock<GpuBackend> = OnceLock::new();
 static SAFE_MODE: AtomicBool = AtomicBool::new(false);
 
@@ -234,33 +257,91 @@ pub enum ProbeOutcome {
     Invalid,
 }
 
+/// A probe outcome plus the human-readable reason recorded beside it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProbeReport {
+    pub outcome: ProbeOutcome,
+    pub detail: String,
+}
+
 /// Probe one backend in this process and distinguish "no adapter" from
 /// "adapter present but validation failed". Intended for the `--gpu-probe`
 /// child, whose `OnceLock`s are fresh.
-pub fn probe_backend_outcome(backend: GpuBackend) -> ProbeOutcome {
+pub fn probe_backend_outcome(backend: GpuBackend) -> ProbeReport {
     if backend == GpuBackend::Cpu || !backend.is_compiled() {
-        return ProbeOutcome::NoAdapter;
+        return ProbeReport {
+            outcome: ProbeOutcome::NoAdapter,
+            detail: "backend not compiled".to_string(),
+        };
     }
     match set_backend(backend) {
         Ok(()) => {}
         Err(current) if current == backend => {}
-        Err(_) => return ProbeOutcome::NoAdapter,
+        Err(current) => {
+            return ProbeReport {
+                outcome: ProbeOutcome::NoAdapter,
+                detail: format!("backend pin already resolved to {}", current.name()),
+            };
+        }
     }
     if !super::device_available() {
-        return ProbeOutcome::NoAdapter;
+        return ProbeReport {
+            outcome: ProbeOutcome::NoAdapter,
+            detail: super::backend::take_last_error()
+                .map(|error| format_probe_detail(None, None, Some(&error)))
+                .unwrap_or_else(|| "no adapter".to_string()),
+        };
     }
+    let compiler = (backend == GpuBackend::Dx12).then(dx12_compiler_label);
+    let info = super::gpu_adapter_info();
     if super::gpu_composite_verified() {
-        ProbeOutcome::Ok
+        ProbeReport {
+            outcome: ProbeOutcome::Ok,
+            detail: format_probe_detail(compiler, info.as_ref(), None),
+        }
     } else {
-        ProbeOutcome::Invalid
+        let error =
+            super::backend::take_last_error().unwrap_or_else(|| "validation mismatch".to_string());
+        ProbeReport {
+            outcome: ProbeOutcome::Invalid,
+            detail: format_probe_detail(compiler, info.as_ref(), Some(&error)),
+        }
     }
+}
+
+fn format_probe_detail(
+    compiler: Option<&str>,
+    info: Option<&super::GpuAdapterInfo>,
+    error: Option<&str>,
+) -> String {
+    let mut detail = String::new();
+    if let Some(error) = error {
+        detail.push_str("error=");
+        detail.push_str(error);
+    } else if let Some(compiler) = compiler {
+        detail.push_str("compiler=");
+        detail.push_str(compiler);
+    }
+    if let Some(info) = info {
+        if !detail.is_empty() {
+            detail.push_str("; ");
+        }
+        detail.push_str("adapter=");
+        detail.push_str(&info.name);
+        detail.push_str("; driver=");
+        detail.push_str(&info.driver);
+    } else if detail.is_empty() {
+        detail.push_str("no adapter");
+    }
+    // The cache stores one line; a request error can carry a newline.
+    detail.replace(['\n', '\r'], " ")
 }
 
 /// Probe one backend in this process: pin it, create the device, and run the
 /// CPU-oracle validation. Returns false for an uncompiled backend, a missing
 /// adapter, or a validation failure. Intended for the `--gpu-probe` child.
 pub fn probe_backend(backend: GpuBackend) -> bool {
-    probe_backend_outcome(backend) == ProbeOutcome::Ok
+    probe_backend_outcome(backend).outcome == ProbeOutcome::Ok
 }
 
 #[cfg(test)]
@@ -359,7 +440,10 @@ mod tests {
             .into_iter()
             .find(|backend| !backend.is_compiled());
         if let Some(backend) = uncompiled {
-            assert_eq!(probe_backend_outcome(backend), ProbeOutcome::NoAdapter);
+            assert_eq!(
+                probe_backend_outcome(backend).outcome,
+                ProbeOutcome::NoAdapter
+            );
             assert!(!probe_backend(backend));
         }
     }
@@ -367,13 +451,87 @@ mod tests {
     #[test]
     fn cpu_probe_is_no_adapter() {
         assert_eq!(
-            probe_backend_outcome(GpuBackend::Cpu),
+            probe_backend_outcome(GpuBackend::Cpu).outcome,
             ProbeOutcome::NoAdapter
         );
         assert!(!probe_backend(GpuBackend::Cpu));
     }
 
     #[test]
+    fn dx12_compiler_defaults_to_fxc() {
+        assert!(matches!(
+            resolve_dx12_compiler(None),
+            wgpu::Dx12Compiler::Fxc
+        ));
+    }
+
+    #[test]
+    fn resolve_dx12_compiler_prefers_the_explicit_value() {
+        assert!(matches!(
+            resolve_dx12_compiler(Some(wgpu::Dx12Compiler::StaticDxc)),
+            wgpu::Dx12Compiler::StaticDxc
+        ));
+        assert!(matches!(
+            resolve_dx12_compiler(Some(wgpu::Dx12Compiler::Auto)),
+            wgpu::Dx12Compiler::Auto
+        ));
+        let dynamic = wgpu::Dx12Compiler::DynamicDxc {
+            dxc_path: "dxcompiler.dll".to_string(),
+        };
+        assert!(matches!(
+            resolve_dx12_compiler(Some(dynamic)),
+            wgpu::Dx12Compiler::DynamicDxc { .. }
+        ));
+    }
+
+    // The environment mutation is process-global, so this test runs only where
+    // no other test calls `dx12_compiler()`: the Windows-only probe test is the
+    // sole other reader, and it lives on the other platform.
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn dx12_compiler_reads_the_environment() {
+        std::env::set_var("WGPU_DX12_COMPILER", "staticdxc");
+        assert!(matches!(dx12_compiler(), wgpu::Dx12Compiler::StaticDxc));
+        std::env::remove_var("WGPU_DX12_COMPILER");
+    }
+
+    fn adapter_info() -> crate::GpuAdapterInfo {
+        crate::GpuAdapterInfo {
+            name: "Intel(R) HD Graphics 530".to_string(),
+            device_type: "IntegratedGpu".to_string(),
+            backend: "Dx12".to_string(),
+            driver: "30.0.101.1692".to_string(),
+            driver_info: String::new(),
+        }
+    }
+
+    #[test]
+    fn probe_detail_names_the_adapter_and_compiler() {
+        let info = adapter_info();
+        let detail = format_probe_detail(Some("FXC"), Some(&info), None);
+        assert!(detail.contains("compiler=FXC"), "{detail}");
+        assert!(detail.contains("Intel(R) HD Graphics 530"), "{detail}");
+        assert!(detail.contains("30.0.101.1692"), "{detail}");
+    }
+
+    #[test]
+    fn probe_detail_uses_the_request_error() {
+        let detail = format_probe_detail(None, None, Some("request_adapter: no suitable adapter"));
+        assert!(
+            detail.contains("request_adapter: no suitable adapter"),
+            "{detail}"
+        );
+    }
+
+    #[test]
+    fn probe_detail_is_one_line() {
+        let detail = format_probe_detail(None, None, Some("first line\nsecond line\r\nthird"));
+        assert!(!detail.contains('\n'), "{detail:?}");
+        assert!(!detail.contains('\r'), "{detail:?}");
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
     #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
     fn vulkan_probe_is_clean_on_a_software_device() {
         assert!(probe_backend(GpuBackend::Vulkan));
@@ -382,6 +540,12 @@ mod tests {
     #[test]
     #[cfg(target_os = "windows")]
     fn dx12_probe_is_clean_with_or_without_an_adapter() {
-        let _ = probe_backend(GpuBackend::Dx12);
+        // No other Windows test reads the variable, so clearing it here is safe.
+        std::env::remove_var("WGPU_DX12_COMPILER");
+        let report = probe_backend_outcome(GpuBackend::Dx12);
+        if cfg!(feature = "software-gpu") {
+            assert_eq!(report.outcome, ProbeOutcome::Ok, "{}", report.detail);
+            assert!(report.detail.contains("FXC"), "{}", report.detail);
+        }
     }
 }
