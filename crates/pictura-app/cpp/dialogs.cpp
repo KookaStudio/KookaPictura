@@ -794,21 +794,41 @@ QString getSaveFileName(QWidget* parent, const QString& caption, const QString& 
     return dialog.selectedFiles().value(0);
 }
 
-QString getOpenFileName(QWidget* parent, const QString& caption, const QString& dir,
-                        const QStringList& filters, QString* selectedFilter)
+namespace {
+
+QStringList runOpenFileDialog(QWidget* parent, const QString& caption, const QString& dir,
+                              const QStringList& filters, QString* selectedFilter,
+                              QFileDialog::FileMode mode)
 {
     QFileDialog dialog(parent, caption,
                        dir.isEmpty() ? defaultFileDialogDirectory() : dir);
     dialog.setAcceptMode(QFileDialog::AcceptOpen);
-    dialog.setFileMode(QFileDialog::ExistingFile);
+    dialog.setFileMode(mode);
     configureFileDialog(dialog, filters, selectedFilter);
     if (runFileDialog(dialog, parent) != QDialog::Accepted) {
-        return QString();
+        return {};
     }
     if (selectedFilter) {
         *selectedFilter = dialog.selectedNameFilter();
     }
-    return dialog.selectedFiles().value(0);
+    return dialog.selectedFiles();
+}
+
+} // namespace
+
+QString getOpenFileName(QWidget* parent, const QString& caption, const QString& dir,
+                        const QStringList& filters, QString* selectedFilter)
+{
+    return runOpenFileDialog(parent, caption, dir, filters, selectedFilter,
+                             QFileDialog::ExistingFile)
+        .value(0);
+}
+
+QStringList getOpenFileNames(QWidget* parent, const QString& caption, const QString& dir,
+                             const QStringList& filters, QString* selectedFilter)
+{
+    return runOpenFileDialog(parent, caption, dir, filters, selectedFilter,
+                             QFileDialog::ExistingFiles);
 }
 
 } // namespace pictura
