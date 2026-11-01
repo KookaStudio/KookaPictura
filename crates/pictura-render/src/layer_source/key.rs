@@ -37,11 +37,11 @@ pub(crate) fn content_key(layer: &Layer, doc: &Document) -> u64 {
     }
     if let Some(adjustment) = layer.adjustment.as_ref() {
         adjustment.key.hash(&mut hasher);
-        adjustment.data.hash(&mut hasher);
+        adjustment.data.ident().hash(&mut hasher);
     }
     for block in &layer.extra_blocks {
         block.key.hash(&mut hasher);
-        block.data.hash(&mut hasher);
+        block.data.ident().hash(&mut hasher);
     }
     if let Some(so) = layer.smart_object.as_ref() {
         so.payload_digest().hash(&mut hasher);
@@ -80,7 +80,7 @@ pub(super) fn chain_hash(so: &SmartObject) -> u64 {
     for filter in &so.smart_filters {
         filter.enabled.hash(&mut hasher);
         filter.filter_id.hash(&mut hasher);
-        filter.options.hash(&mut hasher);
+        filter.options.ident().hash(&mut hasher);
     }
     hasher.finish()
 }
@@ -100,10 +100,10 @@ pub(super) fn effect_digest(layer: &Layer) -> u64 {
     let mut hasher = DefaultHasher::new();
     if let Some(block) = layer.extra_block(b"lfx2") {
         2u8.hash(&mut hasher);
-        block.data.hash(&mut hasher);
+        block.data.ident().hash(&mut hasher);
     } else if let Some(block) = layer.extra_block(b"lrFX") {
         1u8.hash(&mut hasher);
-        block.data.hash(&mut hasher);
+        block.data.ident().hash(&mut hasher);
     }
     hasher.finish()
 }

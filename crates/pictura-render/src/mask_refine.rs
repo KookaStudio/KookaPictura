@@ -115,6 +115,7 @@ fn density(m: u8, d: u8) -> u8 {
 
 /// A mask's raster part resolved for a whole layer pass: the plain plane, a
 /// feathered plane built once, or a high-depth native `-2` plane.
+#[derive(Clone)]
 pub(crate) enum RasterGate<'a> {
     None,
     Plain {
@@ -168,6 +169,7 @@ impl RasterGate<'_> {
 }
 
 /// The mask's vector part resolved for a whole layer pass.
+#[derive(Clone)]
 pub(crate) enum VectorGate<'a> {
     None,
     Coverage {

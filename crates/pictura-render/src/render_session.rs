@@ -12,6 +12,7 @@ use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, PsdRect};
 
 use crate::composite::Canvas;
 use crate::composite_knockout::composite_layers_range;
+use crate::composite_plan::CompositePlan;
 use crate::composite_route::{content_route, ContentRoute};
 use crate::filter_proxy::FilterProxy;
 use crate::layer_source::key::content_key;
@@ -100,7 +101,8 @@ impl RenderSession {
             )?;
             scratch.clip = rect;
             scratch.effect_region = Some(rect);
-            composite_layers_range(&mut scratch, doc, k, doc.layers.len());
+            let plan = CompositePlan::build_suffix(doc, rect, Some(rect), k);
+            composite_layers_range(&mut scratch, doc, &plan, k, doc.layers.len());
             return Some(scratch.into_pixel_buffer());
         }
         if !reducible(doc) {
@@ -133,7 +135,8 @@ impl RenderSession {
         )?;
         scratch.clip = reduced_rect;
         scratch.effect_region = Some(reduced_rect);
-        composite_layers_range(&mut scratch, reduced, k, reduced.layers.len());
+        let plan = CompositePlan::build_suffix(reduced, reduced_rect, Some(reduced_rect), k);
+        composite_layers_range(&mut scratch, reduced, &plan, k, reduced.layers.len());
         Some(scratch.into_pixel_buffer())
     }
 
@@ -229,7 +232,8 @@ fn backdrop_for(
     );
     canvas.clip = rect;
     canvas.effect_region = Some(rect);
-    composite_layers_range(&mut canvas, doc, 0, k);
+    let plan = CompositePlan::build_prefix(doc, rect, Some(rect), k);
+    composite_layers_range(&mut canvas, doc, &plan, 0, k);
     *builds += 1;
     *slot = Some(Backdrop {
         key: digest,

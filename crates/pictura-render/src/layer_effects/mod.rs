@@ -96,7 +96,7 @@ use pictura_core::mask_ops::{self, Border};
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 use rayon::prelude::*;
 
-use crate::composite::{channel, mask_alpha, Canvas};
+use crate::composite::{mask_alpha, Canvas};
 use crate::composite_rows::serial;
 
 mod bevel;
@@ -104,6 +104,7 @@ mod glows;
 mod legacy;
 mod overlays;
 mod planes;
+pub(crate) use planes::content_matte;
 mod satin;
 mod shadows;
 mod strokes;
@@ -747,6 +748,7 @@ pub(crate) fn build_layer_passes(
     doc: &Document,
     effects: &LayerEffects,
     region: Option<PsdRect>,
+    fill: Option<&Adjustment>,
 ) -> crate::layer_source::LayerPasses {
     let build = BuildRegion {
         region,
@@ -759,7 +761,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| effect.enabled && effect.present)
     {
         out.below
-            .extend(shadows::build_drop_shadow(layer, doc, shadow, build));
+            .extend(shadows::build_drop_shadow(layer, doc, shadow, build, fill));
     }
     if let Some(glow) = effects
         .outer_glow
@@ -767,7 +769,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| effect.enabled && effect.present)
     {
         out.below
-            .extend(glows::build_outer_glow(layer, doc, glow, build));
+            .extend(glows::build_outer_glow(layer, doc, glow, build, fill));
     }
     let on = |enabled: bool, present: bool| enabled && present;
     if let Some(overlay) = effects
@@ -775,24 +777,27 @@ pub(crate) fn build_layer_passes(
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above
-            .extend(overlays::build_pattern_overlay(layer, doc, overlay, build));
+        out.above.extend(overlays::build_pattern_overlay(
+            layer, doc, overlay, build, fill,
+        ));
     }
     if let Some(overlay) = effects
         .gradient_overlay
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above
-            .extend(overlays::build_gradient_overlay(layer, doc, overlay, build));
+        out.above.extend(overlays::build_gradient_overlay(
+            layer, doc, overlay, build, fill,
+        ));
     }
     if let Some(overlay) = effects
         .color_overlay
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above
-            .extend(overlays::build_color_overlay(layer, doc, overlay, build));
+        out.above.extend(overlays::build_color_overlay(
+            layer, doc, overlay, build, fill,
+        ));
     }
     if let Some(satin) = effects
         .satin
@@ -800,7 +805,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(satin::build_satin(layer, doc, satin, build));
+            .extend(satin::build_satin(layer, doc, satin, build, None));
     }
     if let Some(glow) = effects
         .inner_glow
@@ -808,7 +813,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(glows::build_inner_glow(layer, doc, glow, build));
+            .extend(glows::build_inner_glow(layer, doc, glow, build, fill));
     }
     if let Some(shadow) = effects
         .inner_shadow
@@ -816,7 +821,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(shadows::build_inner_shadow(layer, doc, shadow, build));
+            .extend(shadows::build_inner_shadow(layer, doc, shadow, build, fill));
     }
     if let Some(stroke) = effects
         .stroke
@@ -824,7 +829,7 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(strokes::build_stroke(layer, doc, stroke, build));
+            .extend(strokes::build_stroke(layer, doc, stroke, build, fill));
     }
     if let Some(bevel) = effects
         .bevel
@@ -832,14 +837,14 @@ pub(crate) fn build_layer_passes(
         .filter(|effect| on(effect.enabled, effect.present))
     {
         out.above
-            .extend(bevel::build_bevel_emboss(layer, doc, bevel, build));
+            .extend(bevel::build_bevel_emboss(layer, doc, bevel, build, None));
     }
     out
 }
 
 /// Whether the layer has no drawable pass group, so the cache can skip it.
-pub(crate) fn no_passes(layer: &Layer, effects: &LayerEffects) -> bool {
-    if layer.is_group || is_destructive_adjustment(layer) {
+pub(crate) fn no_passes(layer: &Layer, effects: &LayerEffects, destructive: bool) -> bool {
+    if layer.is_group || destructive {
         return true;
     }
     let on = |enabled: bool, present: bool| enabled && present;
@@ -898,10 +903,7 @@ pub(crate) fn no_passes(layer: &Layer, effects: &LayerEffects) -> bool {
 /// Whether a pass build reads the document's pattern library, which this
 /// change does not key.
 pub(crate) fn reads_pattern(layer: &Layer, effects: &LayerEffects) -> bool {
-    if matches!(
-        crate::fill::decode_layer_fill(layer),
-        Some(Adjustment::PatternFill(_))
-    ) {
+    if crate::fill::is_pattern_fill(layer) {
         return true;
     }
     let on = |enabled: bool, present: bool| enabled && present;
@@ -931,7 +933,7 @@ pub(crate) fn composite_satin_for_test(
         region: None,
         mask_clip: canvas_rect(doc),
     };
-    let passes = satin::build_satin(layer, doc, satin, build);
+    let passes = satin::build_satin(layer, doc, satin, build, None);
     planes::apply(&mut canvas, &passes);
     canvas.into_pixel_buffer()
 }
@@ -949,7 +951,7 @@ pub(crate) fn composite_bevel_emboss_for_test(
         region: None,
         mask_clip: canvas_rect(doc),
     };
-    let passes = bevel::build_bevel_emboss(layer, doc, bevel, build);
+    let passes = bevel::build_bevel_emboss(layer, doc, bevel, build, None);
     planes::apply(&mut canvas, &passes);
     canvas.into_pixel_buffer()
 }
@@ -987,98 +989,6 @@ fn clamp_finite(value: f32, max: f32) -> f32 {
     } else {
         0.0
     }
-}
-
-/// The layer's content alpha over the canvas region `(x0, y0, x1, y1)`: a pixel
-/// layer's `-1` alpha, a fill's payload alpha, or `1.0` inside the rect of an
-/// embedded smart source.
-fn content_matte(layer: &Layer, doc: &Document, region: (i32, i32, i32, i32)) -> Vec<f32> {
-    let (x0, y0, x1, y1) = region;
-    let rw = (x1 - x0) as usize;
-    let rh = (y1 - y0) as usize;
-    let mut matte = vec![0.0f32; rw * rh];
-    if crate::fill::fill_coverage_matte(layer, doc, region, &mut matte) {
-        return matte;
-    }
-    // Pixel/smart content exists only inside the layer rect, intersected here.
-    let ix0 = layer.rect.left.max(x0);
-    let iy0 = layer.rect.top.max(y0);
-    let ix1 = layer.rect.right.min(x1);
-    let iy1 = layer.rect.bottom.min(y1);
-    if ix1 <= ix0 || iy1 <= iy0 {
-        return matte;
-    }
-    let at = |x: i32, y: i32| (y - y0) as usize * rw + (x - x0) as usize;
-    match channel(layer, -1) {
-        Some(alpha) => {
-            let lw = layer.rect.width();
-            if lw <= 0 {
-                return matte;
-            }
-            for y in iy0..iy1 {
-                for x in ix0..ix1 {
-                    let li = (y - layer.rect.top) as usize * lw as usize
-                        + (x - layer.rect.left) as usize;
-                    // A missing alpha sample is opaque, matching the content path.
-                    matte[at(x, y)] = alpha.get(li).copied().unwrap_or(255) as f32 / 255.0;
-                }
-            }
-        }
-        None => {
-            if !smart_source_matte(layer, region, &mut matte) {
-                // No `-1` channel and no readable source: the content path treats
-                // the layer as opaque, and so does the matte.
-                for y in iy0..iy1 {
-                    for x in ix0..ix1 {
-                        matte[at(x, y)] = 1.0;
-                    }
-                }
-            }
-        }
-    }
-    matte
-}
-
-/// Fill `matte` from an embedded smart object's rendered alpha over `region`.
-/// `false` when the layer has no renderable embedded source, so the caller
-/// keeps the opaque-rectangle fallback.
-fn smart_source_matte(layer: &Layer, region: (i32, i32, i32, i32), matte: &mut [f32]) -> bool {
-    // ponytail: the embedded source is decoded once per effect; cache the
-    // rendered alpha if a profile shows it.
-    let Some(so) = layer.smart_object.as_ref() else {
-        return false;
-    };
-    let (x0, y0, x1, y1) = region;
-    let rw = (x1 - x0) as usize;
-    let ix0 = layer.rect.left.max(x0);
-    let iy0 = layer.rect.top.max(y0);
-    let ix1 = layer.rect.right.min(x1);
-    let iy1 = layer.rect.bottom.min(y1);
-    if ix1 <= ix0 || iy1 <= iy0 {
-        return false;
-    }
-    let sub = PsdRect {
-        top: iy0,
-        left: ix0,
-        bottom: iy1,
-        right: ix1,
-    };
-    let Some(source) = crate::composite::render_smart_source(so, layer.rect, sub) else {
-        return false;
-    };
-    let sw = (ix1 - ix0) as usize;
-    let sh = (iy1 - iy0) as usize;
-    if source.channels != 4 || source.data.len() < sw * sh * 4 {
-        return false;
-    }
-    let alpha = &source.data[3 * sw * sh..];
-    for y in iy0..iy1 {
-        for x in ix0..ix1 {
-            let si = (y - iy0) as usize * sw + (x - ix0) as usize;
-            matte[(y - y0) as usize * rw + (x - x0) as usize] = alpha[si] as f32 / 255.0;
-        }
-    }
-    true
 }
 
 /// The layer rect clamped to the canvas as `(x0, y0, x1, y1)`; empty when the

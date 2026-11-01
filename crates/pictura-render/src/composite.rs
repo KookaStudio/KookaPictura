@@ -9,9 +9,10 @@ use pictura_core::{
 };
 
 pub(crate) use crate::blend::blend;
+use crate::composite_blend::BlendOverride;
 pub(crate) use crate::composite_knockout::{composite_layer, composite_layers, has_knockout};
 use crate::composite_native::composite_adjustment;
-use crate::composite_route::ContentRoute;
+use crate::composite_plan::{Body, CompositePlan, PlanNode};
 use crate::composite_rows::{composite_canvas, composite_pixels};
 use crate::smart_source::composite_smart_source;
 pub(crate) use crate::smart_source::render_smart_source;
@@ -32,8 +33,15 @@ pub use crate::composite_region::composite_rgba_region;
 /// [`composite_rgba`] on one canvas, the path every stack can take; the
 /// banded compositor is held to it.
 pub(crate) fn composite_whole(doc: &Document) -> PixelBuffer {
+    let clip = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height.min(i32::MAX as u32) as i32,
+        right: doc.width.min(i32::MAX as u32) as i32,
+    };
+    let plan = CompositePlan::build(doc, clip, None);
     let mut canvas = Canvas::new(doc.width as usize, doc.height as usize);
-    composite_layers(&mut canvas, doc);
+    composite_layers(&mut canvas, doc, &plan);
     canvas.into_pixel_buffer()
 }
 
@@ -206,49 +214,64 @@ pub(crate) fn to_u8(v: f32) -> u8 {
 
 pub(crate) fn composite_layer_inner(
     canvas: &mut Canvas,
-    layer: &Layer,
+    node: &PlanNode<'_>,
     doc: &Document,
     deep: Option<&Canvas>,
     shallow: Option<&Canvas>,
+    over: Option<&BlendOverride>,
 ) {
+    let layer = node.layer;
     if !layer.visible {
         return;
     }
-    let effects = crate::layer_source::decoded_effects(layer);
-    let passes = (!canvas.skip_effects
-        && !layer.is_group
-        && !crate::layer_effects::is_destructive_adjustment(layer))
-    .then(|| crate::layer_source::effect_passes(layer, doc, &effects, canvas.effect_region));
+    let Some(plan_blend) = node.blend.as_ref() else {
+        return;
+    };
+    let ctx = match over {
+        Some(over) => plan_blend.with_override(over),
+        None => plan_blend.clone(),
+    };
+    let passes = (!canvas.skip_effects)
+        .then_some(node.passes.as_deref())
+        .flatten();
     // Below-content effects (drop shadow, outer glow) render behind the content.
     let effect_scale = canvas.effect_scale;
-    canvas.effect_scale = effect_scale * layer.opacity as f32 / 255.0;
-    crate::layer_effects::composite_layer_effects(canvas, passes.as_deref());
+    canvas.effect_scale = effect_scale * ctx.opacity();
+    crate::layer_effects::composite_layer_effects(canvas, passes);
     canvas.effect_scale = effect_scale;
     // Each arm keeps the fall-through the old if/else chain had: a source
     // that cannot render (an empty region, an unreadable payload) leaves the
     // layer to the next path, ending at `composite_pixels`.
-    match crate::composite_route::content_route(layer) {
+    match &node.body {
+        Body::Hidden => return,
         // True pass-through: recurse children onto the running canvas so their
         // blend modes see outside the group (exact only at opacity 255, no
         // mask; else isolated). `deep` threads through so a `Deep` knockout
         // child still reaches the document background; when the subtree knocks
         // out, the backdrop current at group entry is snapshotted as the
         // children's `Shallow` stopping point.
-        ContentRoute::PassThroughGroup => {
-            let snapshot = has_knockout(layer).then(|| canvas.clone());
-            let child_shallow = snapshot.as_ref().or(shallow);
-            crate::composite_clipping::composite_siblings(
-                canvas,
-                &layer.children,
-                doc,
-                |canvas, _, child| composite_layer(canvas, child, doc, deep, child_shallow),
-            );
-            return;
-        }
-        // An isolated group is a boundary: `deep` resets (a `Deep` child falls
-        // back to the group's own backdrop) and that backdrop is also the
-        // `Shallow` stopping point; the incoming bases are ignored.
-        ContentRoute::IsolatedGroup => {
+        Body::Group { pass_through } => {
+            let pass_through = over
+                .and_then(|over| over.isolated_group)
+                .map(|isolated| !isolated)
+                .unwrap_or(*pass_through);
+            if pass_through {
+                let snapshot = has_knockout(layer).then(|| canvas.clone());
+                let child_shallow = snapshot.as_ref().or(shallow);
+                crate::composite_clipping::composite_siblings(
+                    canvas,
+                    &layer.children,
+                    doc,
+                    &node.children,
+                    |canvas, _, child, over| {
+                        composite_layer(canvas, child, doc, deep, child_shallow, over)
+                    },
+                );
+                return;
+            }
+            // An isolated group is a boundary: `deep` resets (a `Deep` child
+            // falls back to the group's own backdrop) and that backdrop is also
+            // the `Shallow` stopping point; the incoming bases are ignored.
             let mut inner = canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h);
             inner.skip_effects = canvas.skip_effects;
             let ko_base = has_knockout(layer)
@@ -257,31 +280,82 @@ pub(crate) fn composite_layer_inner(
                 &mut inner,
                 &layer.children,
                 doc,
-                |canvas, _, child| composite_layer(canvas, child, doc, None, ko_base.as_ref()),
+                &node.children,
+                |canvas, _, child, over| {
+                    composite_layer(canvas, child, doc, None, ko_base.as_ref(), over)
+                },
             );
-            composite_canvas(canvas, layer, doc, &inner);
+            composite_canvas(canvas, layer, doc, &inner, &ctx, over);
         }
-        ContentRoute::Fill(adjustment) => composite_adjustment(canvas, layer, doc, &adjustment),
+        Body::Fill(adjustment) => composite_adjustment(canvas, layer, doc, adjustment, &ctx, over),
         // A layer with no decoded fill but an adjustment block is a no-op.
-        ContentRoute::UndecodedAdjustment => {}
-        ContentRoute::SmartFiltered => {
-            if !crate::smart_filter::composite_smart_filtered_source(canvas, layer, doc)
-                && !composite_smart_source(canvas, layer, doc)
-                && !crate::text_render::composite_type_source(canvas, layer, doc)
-            {
-                composite_pixels(canvas, layer, doc);
+        Body::UndecodedAdjustment => {}
+        Body::SmartFiltered {
+            filtered,
+            filter_base,
+            source,
+            type_raster,
+            has_proxy,
+        } => {
+            let mut drew = false;
+            if let Some(filtered) = filtered {
+                drew = crate::smart_filter::composite_smart_filtered_source(
+                    canvas,
+                    layer,
+                    doc,
+                    filtered,
+                    filter_base.as_deref(),
+                    &ctx,
+                    over,
+                );
+            }
+            if !drew && !*has_proxy {
+                if let Some(source) = source {
+                    drew = composite_smart_source(canvas, layer, doc, source, &ctx, over);
+                }
+                if !drew {
+                    if let Some(raster) = type_raster {
+                        drew = crate::text_render::composite_type_source(
+                            canvas, layer, doc, raster, &ctx, over,
+                        );
+                    }
+                }
+            }
+            if !drew && *has_proxy {
+                composite_pixels(canvas, node, doc, &ctx, over);
             }
         }
-        ContentRoute::SmartSource => {
-            if !composite_smart_source(canvas, layer, doc)
-                && !crate::text_render::composite_type_source(canvas, layer, doc)
-            {
-                composite_pixels(canvas, layer, doc);
+        Body::SmartSource {
+            source,
+            type_raster,
+            has_proxy,
+        } => {
+            let mut drew = false;
+            if !has_proxy {
+                if let Some(source) = source {
+                    drew = composite_smart_source(canvas, layer, doc, source, &ctx, over);
+                }
+                if !drew {
+                    if let Some(raster) = type_raster {
+                        drew = crate::text_render::composite_type_source(
+                            canvas, layer, doc, raster, &ctx, over,
+                        );
+                    }
+                }
+            }
+            if !drew && *has_proxy {
+                composite_pixels(canvas, node, doc, &ctx, over);
             }
         }
-        ContentRoute::TypeSource => {
-            if !crate::text_render::composite_type_source(canvas, layer, doc) {
-                composite_pixels(canvas, layer, doc);
+        Body::TypeSource { raster, has_proxy } => {
+            let drew = !*has_proxy
+                && raster.as_ref().is_some_and(|raster| {
+                    crate::text_render::composite_type_source(
+                        canvas, layer, doc, raster, &ctx, over,
+                    )
+                });
+            if !drew {
+                composite_pixels(canvas, node, doc, &ctx, over);
             }
         }
         // A channel-less layer (for example a shape whose `vscg` did not
@@ -290,14 +364,12 @@ pub(crate) fn composite_layer_inner(
         // guarantee is relative to the bare channel-less layer. ponytail:
         // pre-existing channel-less behavior, left as is; gate it when a
         // fill-less shape layer needs to be truly transparent.
-        ContentRoute::UndecodedVectorFill | ContentRoute::Pixels => {
-            composite_pixels(canvas, layer, doc);
-        }
+        Body::Pixels => composite_pixels(canvas, node, doc, &ctx, over),
     }
     // The above-content effect (inner shadow) renders over the layer's content.
     let effect_scale = canvas.effect_scale;
-    canvas.effect_scale = effect_scale * layer.opacity as f32 / 255.0;
-    crate::layer_effects::composite_layer_effects_above(canvas, passes.as_deref());
+    canvas.effect_scale = effect_scale * ctx.opacity();
+    crate::layer_effects::composite_layer_effects_above(canvas, passes);
     canvas.effect_scale = effect_scale;
 }
 
@@ -317,6 +389,8 @@ pub(crate) fn composite_layer_inner(
 /// (pattern fill content), both fill descriptors, and `clrL` (Color Lookup,
 /// whose embedded `.CUBE` is parsed when the kind is a 3-D LUT).
 pub fn decode_adjustment(data: &AdjustmentData) -> Option<Adjustment> {
+    #[cfg(test)]
+    crate::composite_plan::counters::note_adjustment(data);
     match &data.key {
         b"nvrt" | b"invr" => Some(Adjustment::Invert),
         b"post" => be_u16(&data.data, 0)
@@ -897,6 +971,7 @@ pub(crate) fn blend_into_ctx(
     layer: &Layer,
     doc: &Document,
     clip: PsdRect,
+    over: Option<&BlendOverride>,
     x: usize,
     y: usize,
     cs: [f32; 3],
@@ -909,7 +984,7 @@ pub(crate) fn blend_into_ctx(
     let row = &mut px[start..start + w];
     let cov = cover.as_deref_mut().map(|c| &mut c[start..start + w]);
     crate::composite_blend::blend_into_row_ctx(
-        row, cov, ox, ctx, layer, doc, clip, x as i32, y as i32, cs, src_a,
+        row, cov, ox, ctx, layer, doc, clip, over, x as i32, y as i32, cs, src_a,
     );
 }
 

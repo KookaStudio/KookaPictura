@@ -4,7 +4,8 @@
 
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect, SmartObject};
 
-use crate::composite::{blend_into_ctx, channel_plane, Canvas};
+use crate::composite::{blend_into_ctx, Canvas};
+use crate::composite_blend::{BlendCtx, BlendOverride};
 
 /// Render an embedded smart object's source over `region` (document
 /// coordinates, within `rect`), scaling with the renderer's integer ratio.
@@ -24,7 +25,16 @@ pub(crate) fn render_smart_source(
     region: PsdRect,
 ) -> Option<PixelBuffer> {
     let src = crate::layer_source::embedded_source(so)?;
+    scale_smart_source(&src, rect, region)
+}
 
+/// Place the already-decoded embedded `src` into `region` (document
+/// coordinates, within `rect`), scaling with the renderer's integer ratio.
+pub(crate) fn scale_smart_source(
+    src: &PixelBuffer,
+    rect: PsdRect,
+    region: PsdRect,
+) -> Option<PixelBuffer> {
     let src_w = src.width as usize;
     let src_h = src.height as usize;
     let ch = src.channels as usize;
@@ -87,13 +97,14 @@ pub(crate) fn render_smart_source(
 /// `External`/`Alias`/`Unresolved`, an empty payload, or a decode failure
 /// returns `false`; the caller then tries the normal path, which draws nothing
 /// for a channel-less layer.
-pub(crate) fn composite_smart_source(canvas: &mut Canvas, layer: &Layer, doc: &Document) -> bool {
-    let Some(so) = layer.smart_object.as_ref() else {
-        return false;
-    };
-    if channel_plane(layer, 0).is_some() {
-        return false;
-    }
+pub(crate) fn composite_smart_source(
+    canvas: &mut Canvas,
+    layer: &Layer,
+    doc: &Document,
+    source: &PixelBuffer,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) -> bool {
     let region = PsdRect {
         top: layer.rect.top.max(canvas.y0()),
         left: layer.rect.left.max(canvas.x0()),
@@ -103,7 +114,7 @@ pub(crate) fn composite_smart_source(canvas: &mut Canvas, layer: &Layer, doc: &D
     if region.width() <= 0 || region.height() <= 0 {
         return false;
     }
-    let Some(src) = render_smart_source(so, layer.rect, region) else {
+    let Some(src) = scale_smart_source(source, layer.rect, region) else {
         return false;
     };
 
@@ -111,16 +122,16 @@ pub(crate) fn composite_smart_source(canvas: &mut Canvas, layer: &Layer, doc: &D
     let rh = region.height() as usize;
     let plane = rw * rh;
     let clip = canvas.clip();
-    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for by in 0..rh {
         for bx in 0..rw {
             let i = by * rw + bx;
             blend_into_ctx(
                 canvas,
-                &ctx,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 region.left as usize + bx,
                 region.top as usize + by,
                 [

@@ -260,11 +260,14 @@ fn auto_adjustment_on_depth16_uses_the_native_path() {
     let before: Vec<f32> = canvas.px.iter().map(|p| p.r).collect();
 
     let layer = adjustment_layer("auto", *b"auto", Vec::new(), 255, None);
+    let ctx = crate::composite_blend::BlendCtx::new(&layer, &d, canvas.clip());
     crate::composite_native::composite_adjustment(
         &mut canvas,
         &layer,
         &d,
         &Adjustment::Auto(AutoKind::Color),
+        &ctx,
+        None,
     );
 
     assert!(

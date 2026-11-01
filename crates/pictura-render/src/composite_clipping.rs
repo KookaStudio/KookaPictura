@@ -19,30 +19,34 @@ use pictura_core::{BlendMode, Document, Layer, PsdRect};
 use rayon::prelude::*;
 
 use crate::composite::{composite_layer_inner, Canvas, Px};
+use crate::composite_blend::BlendOverride;
+use crate::composite_plan::PlanNode;
 use crate::composite_rows::{composite_canvas, serial};
 
 /// Composite `layers` (bottom-first) onto `canvas` through `composite`, which
 /// receives each layer's index; a base and the clipped layers above it
 /// composite as one group.
-pub(crate) fn composite_siblings(
+pub(crate) fn composite_siblings<'a>(
     canvas: &mut Canvas,
-    layers: &[Layer],
-    doc: &Document,
-    composite: impl FnMut(&mut Canvas, usize, &Layer),
+    layers: &'a [Layer],
+    doc: &'a Document,
+    plan: &[PlanNode<'a>],
+    composite: impl FnMut(&mut Canvas, usize, &PlanNode<'a>, Option<&BlendOverride>),
 ) {
-    composite_siblings_range(canvas, layers, doc, 0, layers.len(), composite);
+    composite_siblings_range(canvas, layers, doc, plan, 0, layers.len(), composite);
 }
 
 /// [`composite_siblings`] over `layers[start..end]`. `start` must be a clipping
 /// boundary (a non-clipped base or a run start); a resume inside a clipped run
 /// is not expressible.
-pub(crate) fn composite_siblings_range(
+pub(crate) fn composite_siblings_range<'a>(
     canvas: &mut Canvas,
-    layers: &[Layer],
-    doc: &Document,
+    layers: &'a [Layer],
+    doc: &'a Document,
+    plan: &[PlanNode<'a>],
     start: usize,
     end: usize,
-    mut composite: impl FnMut(&mut Canvas, usize, &Layer),
+    mut composite: impl FnMut(&mut Canvas, usize, &PlanNode<'a>, Option<&BlendOverride>),
 ) {
     let end = end.min(layers.len());
     let mut i = start;
@@ -52,7 +56,7 @@ pub(crate) fn composite_siblings_range(
         if run == 0 || !base.visible {
             // A hidden base hides the clipped layers above it.
             if base.visible || run == 0 {
-                composite(canvas, i, base);
+                composite(canvas, i, &plan[i], None);
             }
             i += 1 + run;
             continue;
@@ -70,25 +74,31 @@ pub(crate) fn composite_siblings_range(
             canvas.clip(),
             canvas.effect_region,
             canvas.skip_effects,
-            base,
             i,
             &clipped,
             doc,
+            plan,
             &mut composite,
         );
-        let proxy = Layer {
-            opacity: base.opacity,
-            blend: base.blend,
-            fill: 255,
-            mask: None,
-            vector_mask: None,
-            blend_if: None,
-            is_group: true,
-            channels: Vec::new(),
-            children: pictura_core::LayerStack::default(),
-            ..base.clone()
+        let proxy_over = BlendOverride {
+            fill: Some(255),
+            no_mask: true,
+            no_blend_if: true,
+            ..Default::default()
         };
-        composite_canvas(canvas, &proxy, doc, &group);
+        let proxy_ctx = plan[i]
+            .blend
+            .as_ref()
+            .expect("a visible base resolves a blend context")
+            .with_override(&proxy_over);
+        composite_canvas(
+            canvas,
+            plan[i].layer,
+            doc,
+            &group,
+            &proxy_ctx,
+            Some(&proxy_over),
+        );
         i += 1 + run;
     }
 }
@@ -98,16 +108,16 @@ pub(crate) fn composite_siblings_range(
 /// mask-feather clip and `effect_region` its transient-pass setting. Both the CPU
 /// compositor and the GPU clip dispatch call this so the two cannot drift.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn build_sibling_group(
+pub(crate) fn build_sibling_group<'a>(
     bounds: PsdRect,
     clip: PsdRect,
     effect_region: Option<PsdRect>,
     skip_effects: bool,
-    base: &Layer,
     base_index: usize,
     clipped: &[(usize, &Layer)],
     doc: &Document,
-    mut composite: impl FnMut(&mut Canvas, usize, &Layer),
+    plan: &[PlanNode<'a>],
+    mut composite: impl FnMut(&mut Canvas, usize, &PlanNode<'a>, Option<&BlendOverride>),
 ) -> Canvas {
     let mut group = Canvas::new_region(
         bounds.left,
@@ -118,19 +128,25 @@ pub(crate) fn build_sibling_group(
     group.clip = clip;
     group.effect_region = effect_region;
     group.skip_effects = skip_effects;
-    let opaque = Layer {
-        opacity: 255,
-        blend: BlendMode::Normal,
-        ..base.clone()
+    let opaque_over = BlendOverride {
+        opacity: Some(255),
+        mode: Some(BlendMode::Normal),
+        isolated_group: Some(true),
+        ..Default::default()
     };
-    composite(&mut group, base_index, &opaque);
-    let cover = coverage(&group, base, doc);
+    composite(
+        &mut group,
+        base_index,
+        &plan[base_index],
+        Some(&opaque_over),
+    );
+    let cover = coverage(&group, &plan[base_index], doc);
     for &(index, layer) in clipped {
         if !layer.visible {
             continue;
         }
         let mut tmp = group.clone();
-        composite(&mut tmp, index, layer);
+        composite(&mut tmp, index, &plan[index], None);
         if serial() {
             for ((out, inside), &k) in group.px.iter_mut().zip(&tmp.px).zip(&cover) {
                 lerp(out, inside, k);
@@ -156,16 +172,17 @@ fn lerp(out: &mut Px, inside: &Px, k: f32) {
 
 /// The base's coverage over `canvas`'s region: its alpha composited alone onto
 /// transparency at full opacity and Fill, without effects.
-fn coverage(canvas: &Canvas, base: &Layer, doc: &Document) -> Vec<f32> {
+fn coverage(canvas: &Canvas, base: &PlanNode<'_>, doc: &Document) -> Vec<f32> {
     let mut alone = canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h);
     alone.skip_effects = true;
-    let full = Layer {
-        opacity: 255,
-        fill: 255,
-        blend: BlendMode::Normal,
-        ..base.clone()
+    let full_over = BlendOverride {
+        opacity: Some(255),
+        fill: Some(255),
+        mode: Some(BlendMode::Normal),
+        isolated_group: Some(true),
+        ..Default::default()
     };
-    composite_layer_inner(&mut alone, &full, doc, None, None);
+    composite_layer_inner(&mut alone, base, doc, None, None, Some(&full_over));
     if serial() {
         alone.px.iter().map(|p| p.a.clamp(0.0, 1.0)).collect()
     } else {

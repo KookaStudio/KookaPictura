@@ -141,4 +141,61 @@ fn cpu_composite_profile_4000() {
     let spec = TypeSpec::new("Profile", "Liberation Sans", (h as f64 / 20.0).max(24.0));
     add_type_layer(&mut type_doc, "", &spec);
     time(&type_doc, "full-canvas type layer");
+
+    time(&mixed_doc(w, h), "Curves + Color Lookup + type + style");
+}
+
+fn adjustment_layer(name: &str, adjustment: pictura_core::AdjustmentData) -> Layer {
+    Layer {
+        name: name.into(),
+        rect: full(0, 0),
+        adjustment: Some(adjustment),
+        ..Default::default()
+    }
+}
+
+/// A standard 33³ identity `.CUBE`, the size a real Color Lookup carries, so
+/// the profile measures the embedded parse rather than a trivial 2³ table.
+fn identity_cube(size: usize) -> String {
+    let mut cube = format!("LUT_3D_SIZE {size}\n");
+    let d = (size - 1) as f64;
+    for b in 0..size {
+        for g in 0..size {
+            for r in 0..size {
+                cube.push_str(&format!(
+                    "{:.6} {:.6} {:.6}\n",
+                    r as f64 / d,
+                    g as f64 / d,
+                    b as f64 / d
+                ));
+            }
+        }
+    }
+    cube
+}
+
+fn mixed_doc(w: u32, h: u32) -> Document {
+    let cube = identity_cube(33);
+    let mut styled = pixel_layer("styled", w, h, (200, 100, 50), 255, BlendMode::Multiply);
+    pictura_render::set_layer_style_value(&mut styled, "dropShadow.on", 1.0);
+    let mut curves = adjustment_layer(
+        "curves",
+        pictura_render::encode_curves(&[(0, 0), (128, 140), (255, 255)], None, None, None),
+    );
+    curves.rect = full(w, h);
+    let mut lookup = adjustment_layer(
+        "lookup",
+        pictura_render::encode_color_lookup(cube.as_bytes(), "identity"),
+    );
+    lookup.rect = full(w, h);
+    let mut d = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    d.layers = LayerStack::from_layers(vec![
+        pixel_layer("Background", w, h, (255, 255, 255), 255, BlendMode::Normal),
+        curves,
+        lookup,
+        styled,
+    ]);
+    let spec = TypeSpec::new("Profile", "Liberation Sans", (h as f64 / 20.0).max(24.0));
+    add_type_layer(&mut d, "", &spec);
+    d
 }

@@ -389,6 +389,8 @@ fn decode_embedded(so: &SmartObject) -> Option<PixelBuffer> {
 /// The smart-filter chain output for `layer` at `layer.rect ∩ document`, or
 /// `None` when the embedded source cannot render.
 pub(crate) fn filtered_source(layer: &Layer, doc: &Document) -> Option<CachedBuffer> {
+    #[cfg(test)]
+    crate::composite_plan::counters::note_source_lookup(layer);
     let so = layer.smart_object.as_ref()?;
     let rect = clip_to_document(layer.rect, doc);
     if rect.width() <= 0 || rect.height() <= 0 {
@@ -527,6 +529,8 @@ pub(crate) fn composited_source(
 /// The type-layer raster at `layer.rect`, or `None` when nothing paints.
 pub(crate) fn text_raster(layer: &Layer) -> Option<Arc<PixelBuffer>> {
     let type_tool = layer.type_tool.as_ref()?;
+    #[cfg(test)]
+    crate::composite_plan::counters::note_source_lookup(layer);
     let width = layer.rect.width();
     let height = layer.rect.height();
     if width <= 0 || height <= 0 {
@@ -573,12 +577,26 @@ pub(crate) fn effect_passes(
     effects: &LayerEffects,
     region: Option<PsdRect>,
 ) -> Arc<LayerPasses> {
-    if crate::layer_effects::no_passes(layer, effects) {
+    let destructive = crate::layer_effects::is_destructive_adjustment(layer);
+    effect_passes_with(layer, doc, effects, region, destructive, None)
+}
+
+/// [`effect_passes`] when the caller already knows whether the layer is a
+/// destructive adjustment, so it does not decode the adjustment again.
+pub(crate) fn effect_passes_with(
+    layer: &Layer,
+    doc: &Document,
+    effects: &LayerEffects,
+    region: Option<PsdRect>,
+    destructive: bool,
+    fill: Option<&pictura_adjust::Adjustment>,
+) -> Arc<LayerPasses> {
+    if crate::layer_effects::no_passes(layer, effects, destructive) {
         return Arc::new(LayerPasses::default());
     }
     let build = || {
         Artifact::Passes(Arc::new(crate::layer_effects::build_layer_passes(
-            layer, doc, effects, region,
+            layer, doc, effects, region, fill,
         )))
     };
     // A sub-region pass is built for this composite only: retaining it would

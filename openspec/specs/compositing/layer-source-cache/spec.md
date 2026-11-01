@@ -294,8 +294,8 @@ published artifact SHALL be the one every caller receives and the one the cache
 retains. A lookup outside the pool SHALL wait for an in-flight build of its key
 instead of building a duplicate, and a build that panics SHALL release its
 claim so a later lookup of the key builds it. A banded composite SHALL still
-build each layer's whole-layer effect passes once by compositing its first band
-before the remaining bands run in parallel.
+build each layer's whole-layer effect passes exactly once before the bands
+execute.
 
 #### Scenario: A same-key lookup run mid-build completes [lsc_steal]
 
