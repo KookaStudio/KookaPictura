@@ -8,7 +8,8 @@ use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, PsdRect, S
 use rayon::prelude::*;
 
 use crate::composite::{composite_layers, to_u8, Canvas};
-use crate::composite_blend::{blend_into_row_ctx, BlendCtx};
+use crate::composite_blend::{blend_into_row_ctx, BlendCtx, BlendOverride};
+use crate::composite_plan::CompositePlan;
 use crate::composite_rows::{for_each_row, serial};
 
 /// The layer's native sample for channel `id` at layer-pixel index `li`, in the
@@ -136,19 +137,21 @@ pub(crate) fn composite_adjustment(
     layer: &Layer,
     doc: &Document,
     adjustment: &Adjustment,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
 ) {
     // Fill content is generative: it adds color inside the layer's rect instead
     // of transforming the backdrop, so it takes the normal-content path.
     if let Adjustment::SolidFill(rgba) = adjustment {
-        crate::fill::composite_solid_fill(canvas, layer, doc, *rgba);
+        crate::fill::composite_solid_fill(canvas, layer, doc, *rgba, ctx, over);
         return;
     }
     if let Adjustment::GradientFill(params) = adjustment {
-        crate::fill::composite_gradient_fill(canvas, layer, doc, params);
+        crate::fill::composite_gradient_fill(canvas, layer, doc, params, ctx, over);
         return;
     }
     if let Adjustment::PatternFill(params) = adjustment {
-        crate::fill::composite_pattern_fill(canvas, layer, doc, params);
+        crate::fill::composite_pattern_fill(canvas, layer, doc, params, ctx, over);
         return;
     }
     let n = canvas.w * canvas.h;
@@ -157,18 +160,22 @@ pub(crate) fn composite_adjustment(
     }
     // CS6 exposes no Fill for adjustments: a stored value must not gate the
     // transformed backdrop. Generative fill content returned above keeps its
-    // Fill. The proxy lets both the native and 8-bit gates read fill 255.
-    let gated = Layer {
-        fill: 255,
-        ..layer.clone()
+    // Fill. The gated context lets both the native and 8-bit gates read fill 255.
+    let gated_over = BlendOverride {
+        fill: Some(255),
+        ..over.copied().unwrap_or_default()
     };
+    let gated = ctx.with_override(&BlendOverride {
+        fill: Some(255),
+        ..Default::default()
+    });
     // A document read at 16/32 applies the adjustment to the f32 accumulator
     // at native precision. An adjustment outside `apply_native`'s set falls
     // back to the 8-bit path below.
     if doc.source_depth.is_some() {
         match apply_native_rgb(canvas, adjustment) {
             Ok(adjusted) => {
-                gate_adjusted(canvas, &gated, doc, &adjusted);
+                gate_adjusted(canvas, layer, doc, &adjusted, &gated, Some(&gated_over));
                 return;
             }
             Err(AdjustError::Unsupported(_)) => {}
@@ -209,7 +216,6 @@ pub(crate) fn composite_adjustment(
     let y1 = canvas.y1();
     let clip = canvas.clip();
     let buf = &buf;
-    let ctx = BlendCtx::new(&gated, doc, clip);
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         let base = (y - oy) as usize * w;
         for x in x0..x1 {
@@ -230,10 +236,11 @@ pub(crate) fn composite_adjustment(
                 row,
                 cover.as_deref_mut(),
                 ox,
-                &ctx,
                 &gated,
+                layer,
                 doc,
                 clip,
+                Some(&gated_over),
                 x,
                 y,
                 cs,
@@ -274,7 +281,14 @@ fn apply_native_rgb(
 
 /// Gate the adjusted color through the layer's mask/opacity/blend, blending it
 /// over the original backdrop still held in `canvas.px`.
-fn gate_adjusted(canvas: &mut Canvas, layer: &Layer, doc: &Document, adjusted: &[[f32; 3]]) {
+fn gate_adjusted(
+    canvas: &mut Canvas,
+    layer: &Layer,
+    doc: &Document,
+    adjusted: &[[f32; 3]],
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) {
     let w = canvas.w;
     let ox = canvas.ox;
     let oy = canvas.oy;
@@ -283,7 +297,6 @@ fn gate_adjusted(canvas: &mut Canvas, layer: &Layer, doc: &Document, adjusted: &
     let y0 = canvas.y0();
     let y1 = canvas.y1();
     let clip = canvas.clip();
-    let ctx = BlendCtx::new(layer, doc, clip);
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         let base = (y - oy) as usize * w;
         for x in x0..x1 {
@@ -297,10 +310,11 @@ fn gate_adjusted(canvas: &mut Canvas, layer: &Layer, doc: &Document, adjusted: &
                 row,
                 cover.as_deref_mut(),
                 ox,
-                &ctx,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 x,
                 y,
                 adjusted[i],
@@ -318,8 +332,15 @@ pub fn composite_native(doc: &Document) -> Option<Samples> {
     if !matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {
         return None;
     }
+    let clip = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height.min(i32::MAX as u32) as i32,
+        right: doc.width.min(i32::MAX as u32) as i32,
+    };
+    let plan = CompositePlan::build(doc, clip, None);
     let mut canvas = Canvas::new(doc.width as usize, doc.height as usize);
-    composite_layers(&mut canvas, doc);
+    composite_layers(&mut canvas, doc, &plan);
     Some(emit_native(&canvas, depth))
 }
 

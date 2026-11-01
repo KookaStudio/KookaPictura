@@ -86,10 +86,10 @@ fn ctx_kernel_matches_legacy() {
             let mut new = [backdrop];
             let mut old = [backdrop];
             crate::composite_blend::blend_into_row_ctx(
-                &mut new, None, 0, &ctx, &layer, &d, clip, 0, 0, cs, a,
+                &mut new, None, 0, &ctx, &layer, &d, clip, None, 0, 0, cs, a,
             );
             crate::composite_blend::blend_into_row_legacy(
-                &mut old, None, 0, &layer, &d, clip, 0, 0, cs, a,
+                &mut old, None, 0, &layer, &d, clip, None, 0, 0, cs, a,
             );
             for (n, o) in [
                 (new[0].r, old[0].r),
@@ -167,6 +167,7 @@ fn zero_alpha_does_not_mark_cover() {
         &layer,
         &d,
         clip,
+        None,
         0,
         0,
         [1.0, 0.0, 0.0],

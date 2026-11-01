@@ -13,33 +13,37 @@
 use pictura_core::{Document, Knockout, Layer};
 
 use crate::composite::{composite_layer_inner, Canvas};
+use crate::composite_blend::BlendOverride;
+use crate::composite_plan::{CompositePlan, PlanNode};
 
-/// Composite `doc.layers` (bottom-first) onto `canvas`, applying each non-bottom
+/// Composite `plan.roots` (bottom-first) onto `canvas`, applying each non-bottom
 /// layer's knockout against its stopping-point base.
-pub(crate) fn composite_layers(canvas: &mut Canvas, doc: &Document) {
-    composite_layers_range(canvas, doc, 0, doc.layers.len());
+pub(crate) fn composite_layers(canvas: &mut Canvas, doc: &Document, plan: &CompositePlan<'_>) {
+    composite_layers_range(canvas, doc, plan, 0, plan.roots.len());
 }
 
-/// Composite `doc.layers[start..end]` onto `canvas`. `start` must be a clipping
+/// Composite `plan.roots[start..end]` onto `canvas`. `start` must be a clipping
 /// boundary; the caller owns the prefix already present on `canvas`.
 pub(crate) fn composite_layers_range(
     canvas: &mut Canvas,
     doc: &Document,
+    plan: &CompositePlan<'_>,
     start: usize,
     end: usize,
 ) {
-    let end = end.min(doc.layers.len());
+    let end = end.min(plan.roots.len());
     if start >= end {
         return;
     }
-    let background = knockout_base(canvas, doc, start, end);
+    let background = knockout_base(canvas, doc, plan, start, end);
     crate::composite_clipping::composite_siblings_range(
         canvas,
         &doc.layers,
         doc,
+        &plan.roots,
         start,
         end,
-        |canvas, i, layer| {
+        |canvas, i, node, over| {
             // At the document root both bases are the same document background, so
             // `Shallow` and `Deep` are byte-identical there.
             let (deep, shallow) = if i == 0 {
@@ -47,7 +51,7 @@ pub(crate) fn composite_layers_range(
             } else {
                 (background.as_ref(), background.as_ref())
             };
-            composite_layer(canvas, layer, doc, deep, shallow);
+            composite_layer(canvas, node, doc, deep, shallow, over);
         },
     );
 }
@@ -56,14 +60,20 @@ pub(crate) fn composite_layers_range(
 /// a layer in `start..end` knocks out. ponytail: no Background flag in the model,
 /// so the bottom layer is assumed to be the background; a non-background bottom
 /// resolves to its content rather than transparency.
-fn knockout_base(region: &Canvas, doc: &Document, start: usize, end: usize) -> Option<Canvas> {
+fn knockout_base(
+    region: &Canvas,
+    doc: &Document,
+    plan: &CompositePlan<'_>,
+    start: usize,
+    end: usize,
+) -> Option<Canvas> {
     let skip = start.max(1);
     let present = doc.layers.iter().take(end).skip(skip).any(has_knockout);
     present.then(|| {
         let mut base = region.derived(region.ox, region.oy, region.w, region.h);
         base.skip_effects = region.skip_effects;
-        if let Some(background) = doc.layers.first() {
-            composite_layer_inner(&mut base, background, doc, None, None);
+        if let Some(background) = plan.roots.first() {
+            composite_layer_inner(&mut base, background, doc, None, None, None);
         }
         base
     })
@@ -74,26 +84,27 @@ pub(crate) fn has_knockout(layer: &Layer) -> bool {
     layer.knockout != Knockout::None || layer.children.iter().any(has_knockout)
 }
 
-/// Composite `layer`; a knockout with an effective base routes through
+/// Composite `node`; a knockout with an effective base routes through
 /// [`composite_knockout`], everything else through the inner dispatch.
 ///
 /// The effective base is `deep.or(shallow)` for `Deep` (falling back when the
 /// document has no Background), `shallow` for `Shallow`, and `None` otherwise.
 pub(crate) fn composite_layer(
     canvas: &mut Canvas,
-    layer: &Layer,
+    node: &PlanNode<'_>,
     doc: &Document,
     deep: Option<&Canvas>,
     shallow: Option<&Canvas>,
+    over: Option<&BlendOverride>,
 ) {
-    let base = match layer.knockout {
+    let base = match node.layer.knockout {
         Knockout::None => None,
         Knockout::Deep => deep.or(shallow),
         Knockout::Shallow => shallow,
     };
     match base {
-        Some(base) => composite_knockout(canvas, layer, doc, base),
-        None => composite_layer_inner(canvas, layer, doc, deep, shallow),
+        Some(base) => composite_knockout(canvas, node, doc, base, over),
+        None => composite_layer_inner(canvas, node, doc, deep, shallow, over),
     }
 }
 
@@ -103,9 +114,15 @@ pub(crate) fn composite_layer(
 ///
 /// ponytail: shape-composited-against-the-stopping-point rule from
 /// `docs/05-layers/layers-overview.md:181`; clipping/Transparency-Shapes unresolved.
-fn composite_knockout(canvas: &mut Canvas, layer: &Layer, doc: &Document, base: &Canvas) {
+fn composite_knockout(
+    canvas: &mut Canvas,
+    node: &PlanNode<'_>,
+    doc: &Document,
+    base: &Canvas,
+    over: Option<&BlendOverride>,
+) {
     let mut tmp = Canvas::with_cover_from(base);
-    composite_layer_inner(&mut tmp, layer, doc, None, None);
+    composite_layer_inner(&mut tmp, node, doc, None, None, over);
     let cover = tmp.cover.take().unwrap_or_default();
     for (i, covered) in cover.iter().enumerate() {
         if *covered {

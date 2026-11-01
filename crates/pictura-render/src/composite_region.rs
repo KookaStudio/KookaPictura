@@ -5,6 +5,7 @@ use pictura_core::{Document, PixelBuffer, PsdRect};
 
 use crate::composite::Canvas;
 use crate::composite_knockout::composite_layers;
+use crate::composite_plan::CompositePlan;
 
 /// Rows per band of the banded compositor: a band's `f32` canvas stays a few
 /// tens of megabytes on a 16k-wide document.
@@ -32,7 +33,8 @@ pub fn composite_rgba_region(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32)
     if x0 != 0 || y0 != 0 || rw != doc.width || rh != doc.height {
         canvas.effect_region = Some(canvas.clip);
     }
-    composite_layers(&mut canvas, doc);
+    let plan = CompositePlan::build(doc, canvas.clip, canvas.effect_region);
+    composite_layers(&mut canvas, doc, &plan);
     canvas.into_pixel_buffer()
 }
 
@@ -45,6 +47,9 @@ pub(crate) fn banded(doc: &Document, rows: u32) -> bool {
 }
 
 fn pattern_driven(layer: &pictura_core::Layer) -> bool {
+    if !layer.visible {
+        return false;
+    }
     if !layer.is_group {
         let effects = crate::layer_source::decoded_effects(layer);
         if crate::layer_effects::reads_pattern(layer, &effects) {
@@ -69,12 +74,13 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
         bottom: (y0 + rh) as i32,
         right: (x0 + rw) as i32,
     };
+    let plan = CompositePlan::build(doc, clip, None);
     let band_into = |band: usize, r: &mut [u8], g: &mut [u8], b: &mut [u8], a: &mut [u8]| {
         let top = y0 as i32 + (band * BAND as usize) as i32;
         let mut canvas = Canvas::new_region(x0 as i32, top, w, r.len() / w);
         canvas.clip = clip;
         canvas.effect_region = None;
-        composite_layers(&mut canvas, doc);
+        composite_layers(&mut canvas, doc, &plan);
         for (i, p) in canvas.px.iter().enumerate() {
             r[i] = crate::composite::to_u8(p.r);
             g[i] = crate::composite::to_u8(p.g);

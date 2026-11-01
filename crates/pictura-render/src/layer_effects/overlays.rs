@@ -13,6 +13,7 @@
 //! canvas-sized; the exact inter-effect order among the overlays and
 //! Stroke is not modelled.
 
+use pictura_adjust::Adjustment;
 use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
@@ -192,7 +193,13 @@ type Region = (i32, i32, i32, i32);
 /// The content region, its masked coverage matte, and the clamped opacity.
 type Coverage = (Region, Vec<f32>, f32);
 
-fn coverage(layer: &Layer, doc: &Document, opacity: f32, build: BuildRegion) -> Option<Coverage> {
+fn coverage(
+    layer: &Layer,
+    doc: &Document,
+    opacity: f32,
+    build: BuildRegion,
+    fill: Option<&Adjustment>,
+) -> Option<Coverage> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
         doc.height.min(i32::MAX as u32) as i32,
@@ -211,7 +218,7 @@ fn coverage(layer: &Layer, doc: &Document, opacity: f32, build: BuildRegion) -> 
     }
     let (x0, y0, x1, _) = region;
     let rw = (x1 - x0) as usize;
-    let mut matte = content_matte(layer, doc, region);
+    let mut matte = content_matte(layer, doc, region, fill);
     apply_mask(&mut matte, rw, x0, y0, layer, build.mask_clip);
     if matte.iter().all(|&v| v <= 0.0) {
         return None;
@@ -232,8 +239,9 @@ pub(super) fn build_color_overlay(
     doc: &Document,
     overlay: &ColorOverlay,
     build: BuildRegion,
+    fill: Option<&Adjustment>,
 ) -> Vec<EffectPass> {
-    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build) else {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build, fill) else {
         return Vec::new();
     };
     let (x0, y0, x1, y1) = region;
@@ -266,8 +274,9 @@ pub(super) fn build_gradient_overlay(
     doc: &Document,
     overlay: &GradientOverlay,
     build: BuildRegion,
+    fill: Option<&Adjustment>,
 ) -> Vec<EffectPass> {
-    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build) else {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build, fill) else {
         return Vec::new();
     };
     let params = GradientFillParams {
@@ -332,8 +341,9 @@ pub(super) fn build_pattern_overlay(
     doc: &Document,
     overlay: &PatternOverlay,
     build: BuildRegion,
+    fill: Option<&Adjustment>,
 ) -> Vec<EffectPass> {
-    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build) else {
+    let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build, fill) else {
         return Vec::new();
     };
     let (lw, lh) = (layer.rect.width(), layer.rect.height());

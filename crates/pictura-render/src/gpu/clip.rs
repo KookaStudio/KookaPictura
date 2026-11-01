@@ -27,17 +27,26 @@ impl Gpu {
             .enumerate()
             .map(|(i, layer)| (i + 1, *layer))
             .collect();
+        let mut members: Vec<&Layer> = Vec::with_capacity(1 + clipped.len());
+        members.push(base);
+        members.extend(clipped.iter().map(|(_, layer)| *layer));
+        let plan = crate::composite_plan::CompositePlan::build_for_layers(
+            &members,
+            doc,
+            clip,
+            effect_region,
+        );
         let group = crate::composite_clipping::build_sibling_group(
             bounds,
             clip,
             effect_region,
             false,
-            base,
             0,
             &clipped,
             doc,
-            |canvas, _, layer| {
-                crate::composite::composite_layer_inner(canvas, layer, doc, None, None);
+            &plan,
+            |canvas, _, node, over| {
+                crate::composite::composite_layer_inner(canvas, node, doc, None, None, over);
             },
         );
         let w = bounds.width().max(0) as usize;

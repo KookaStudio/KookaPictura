@@ -214,8 +214,8 @@ fn samples(passes: &[crate::layer_effects::EffectPass], x: i32, y: i32) -> Vec<(
 fn assert_region_passes_equal(d: &Document, region: PsdRect) {
     let layer = &d.layers[1];
     let effects = crate::layer_source::decoded_effects(layer);
-    let full = crate::layer_effects::build_layer_passes(layer, d, &effects, None);
-    let part = crate::layer_effects::build_layer_passes(layer, d, &effects, Some(region));
+    let full = crate::layer_effects::build_layer_passes(layer, d, &effects, None, None);
+    let part = crate::layer_effects::build_layer_passes(layer, d, &effects, Some(region), None);
     for y in region.top..region.bottom {
         for x in region.left..region.right {
             assert_eq!(

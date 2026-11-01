@@ -10,16 +10,18 @@ byte-identical composites and saved files.
 ### Requirement: Per-layer state is resolved once per layer pass
 
 The CPU compositor SHALL resolve each layer's composite state once for its pass
-over a canvas, where a banded composite performs one pass per band. The resolved
-state MUST cover the layer's opacity and fill, the text-gamma curve, whether
-Blend If applies, the mask gate kind (none, 8-bit raster, native raster, vector,
-or feathered), the resolved feathered plane or vector coverage sampler, and the
-layer's authoritative native sample planes.
+over a composite call and SHALL reuse that resolved state for every band of a
+banded composite and for every region of the call. The resolved state MUST cover
+the layer's opacity and fill, the text-gamma curve, whether Blend If applies, the
+mask gate kind (none, 8-bit raster, native raster, vector, or feathered), the
+resolved feathered plane or vector coverage sampler, and the layer's
+authoritative native sample planes.
 
 Per-pixel evaluation MUST NOT call the document's authoritative-plane lookup,
 MUST NOT look up a feathered plane or vector coverage table in a cache, and MUST
 NOT re-derive the layer's opacity or fill, the text-gamma curve, or the Blend If
-default check.
+default check. A band MUST NOT re-resolve the mask gates or native planes for a
+layer whose state the composite already resolved.
 
 #### Scenario: A high-depth layer keeps its native samples [ck_native]
 
@@ -43,6 +45,13 @@ default check.
 - **WHEN** a layer has a non-default opacity, a fill below 255, an active Blend
   If range, and a type-tool curve
 - **THEN** the composite is byte-identical to the per-pixel evaluation
+
+#### Scenario: A banded composite reuses the resolved state [ck_banded_reuse]
+
+- **WHEN** a stack taller than two bands is composited in bands
+- **THEN** each layer's mask gates and native planes are resolved once for the
+  composite, every band samples them without a cache lookup, and the output is
+  byte-identical to the whole-canvas composite
 
 ### Requirement: Fully transparent source pixels are skipped before mask and blend work
 

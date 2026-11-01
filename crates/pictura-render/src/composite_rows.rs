@@ -13,7 +13,8 @@ use pictura_core::{BlendMode, ColorMode, Document, Layer, SampleRow};
 use rayon::prelude::*;
 
 use crate::composite::{blend, channel_plane, Canvas, Px};
-use crate::composite_blend::{blend_into_row_ctx, BlendCtx, SourcePlanes};
+use crate::composite_blend::{blend_into_row_ctx, BlendCtx, BlendOverride};
+use crate::composite_plan::PlanNode;
 
 /// Test-only switch that routes [`for_each_row`] and the chunked kernels
 /// through their serial branch, so a test can compare the parallel and
@@ -173,7 +174,14 @@ fn source_unit(native: Option<SampleRow<'_>>, bytes: Option<&[u8]>, lx: usize, d
 }
 
 /// Paint a pixel layer's own channels over the canvas, row-parallel.
-pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
+pub(crate) fn composite_pixels(
+    canvas: &mut Canvas,
+    node: &PlanNode<'_>,
+    doc: &Document,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) {
+    let layer = node.layer;
     // A smart-object layer with no raster proxy has no channel to draw from. The
     // embedded-source branch in `composite_layer_inner` handles it; if that
     // source is unusable, leave the backdrop unchanged instead of painting the
@@ -183,7 +191,7 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     }
     #[cfg(test)]
     if crate::composite_blend::legacy_source() {
-        composite_pixels_legacy(canvas, layer, doc);
+        composite_pixels_legacy(canvas, node, doc, ctx, over);
         return;
     }
     let lw = layer.rect.width();
@@ -211,8 +219,10 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
     let ox = canvas.ox;
     let rect = layer.rect;
     let clip = canvas.clip();
-    let ctx = BlendCtx::new(layer, doc, clip);
-    let source = SourcePlanes::resolve(layer, doc);
+    let source = node
+        .sources
+        .as_ref()
+        .expect("a visible layer resolves its native planes");
 
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         // A row lies inside one band, so reading rows keeps a banded plane
@@ -245,10 +255,11 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
                 row,
                 cover.as_deref_mut(),
                 ox,
-                &ctx,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 x,
                 y,
                 [r, g, b],
@@ -260,7 +271,14 @@ pub(crate) fn composite_pixels(canvas: &mut Canvas, layer: &Layer, doc: &Documen
 
 /// The pre-change pixel loop, kept as the source-sampling oracle.
 #[cfg(test)]
-fn composite_pixels_legacy(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
+fn composite_pixels_legacy(
+    canvas: &mut Canvas,
+    node: &PlanNode<'_>,
+    doc: &Document,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) {
+    let layer = node.layer;
     if layer.smart_object.is_some() && channel_plane(layer, 0).is_none() {
         return;
     }
@@ -311,13 +329,15 @@ fn composite_pixels_legacy(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
             let a = crate::composite_native::native_unit(layer, doc, -1, li).unwrap_or_else(|| {
                 ra.and_then(|r| r.get(lx)).copied().unwrap_or(255) as f32 / 255.0
             });
-            crate::composite_blend::blend_into_row(
+            crate::composite_blend::blend_into_row_ctx(
                 row,
                 cover.as_deref_mut(),
                 ox,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 x,
                 y,
                 [r, g, b],
@@ -329,14 +349,20 @@ fn composite_pixels_legacy(canvas: &mut Canvas, layer: &Layer, doc: &Document) {
 
 /// Blend an isolated group's rendered canvas onto the running canvas,
 /// row-parallel.
-pub(crate) fn composite_canvas(canvas: &mut Canvas, layer: &Layer, doc: &Document, inner: &Canvas) {
+pub(crate) fn composite_canvas(
+    canvas: &mut Canvas,
+    layer: &Layer,
+    doc: &Document,
+    inner: &Canvas,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) {
     let ox = canvas.ox;
     let x0 = canvas.x0();
     let x1 = canvas.x1();
     let y0 = canvas.y0();
     let y1 = canvas.y1();
     let clip = canvas.clip();
-    let ctx = BlendCtx::new(layer, doc, clip);
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         for x in x0..x1 {
             let p = inner.px[inner.idx(x as usize, y as usize)];
@@ -345,10 +371,11 @@ pub(crate) fn composite_canvas(canvas: &mut Canvas, layer: &Layer, doc: &Documen
                     row,
                     cover.as_deref_mut(),
                     ox,
-                    &ctx,
+                    ctx,
                     layer,
                     doc,
                     clip,
+                    over,
                     x,
                     y,
                     [p.r, p.g, p.b],

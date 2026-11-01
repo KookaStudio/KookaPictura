@@ -34,6 +34,7 @@ mod composite;
 mod composite_blend;
 mod composite_clipping;
 mod composite_knockout;
+mod composite_plan;
 mod composite_region;
 mod composite_route;
 mod composite_rows;

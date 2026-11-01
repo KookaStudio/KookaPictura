@@ -380,6 +380,7 @@ impl SmoothRows {
 
 /// A resolved vector-mask coverage table for one clip, sampled per pixel.
 /// Obtained from [`VectorMask::coverage_sampler`].
+#[derive(Clone, Copy)]
 pub struct VectorCoverage<'a> {
     rows: &'a SmoothRows,
 }

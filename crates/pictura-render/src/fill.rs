@@ -18,6 +18,7 @@ use pictura_codec::{DescValue, PatternPixels};
 use pictura_core::{AdjustmentData, Document, Layer, PixelBuffer};
 
 use crate::composite::{blend_into_ctx, desc_item, Canvas};
+use crate::composite_blend::{BlendCtx, BlendOverride};
 
 /// The decoded `GdFl` descriptor, or `None` when it is not a custom-stop
 /// gradient this crate understands. Never panics; every failure is a no-op.
@@ -48,6 +49,21 @@ pub fn decode_vector_fill(d: &[u8]) -> Option<Adjustment> {
         crate::composite::decode_solid_fill(body)
     } else {
         None
+    }
+}
+
+/// Whether the layer's fill content is a pattern fill, without decoding an
+/// adjustment block (the key alone decides it). A `vscg` vector fill still
+/// needs its descriptor parsed. A malformed `PtFl` block counts as pattern
+/// content, so the banded path stays conservative and never serves a stale
+/// pattern pass.
+pub(crate) fn is_pattern_fill(layer: &Layer) -> bool {
+    match layer.adjustment.as_ref() {
+        Some(data) => &data.key == b"PtFl",
+        None => layer
+            .extra_block(b"vscg")
+            .and_then(|block| decode_vector_fill(&block.data))
+            .is_some_and(|adjustment| matches!(adjustment, Adjustment::PatternFill(_))),
     }
 }
 
@@ -523,6 +539,8 @@ pub(crate) fn composite_solid_fill(
     layer: &Layer,
     doc: &Document,
     rgba: [u8; 4],
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
 ) {
     let x0 = layer.rect.left.max(canvas.x0());
     let y0 = layer.rect.top.max(canvas.y0());
@@ -538,11 +556,10 @@ pub(crate) fn composite_solid_fill(
     ];
     let src_a = rgba[3] as f32 / 255.0;
     let clip = canvas.clip();
-    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in y0..y1 {
         for x in x0..x1 {
             blend_into_ctx(
-                canvas, &ctx, layer, doc, clip, x as usize, y as usize, cs, src_a,
+                canvas, ctx, layer, doc, clip, over, x as usize, y as usize, cs, src_a,
             );
         }
     }
@@ -555,6 +572,8 @@ pub(crate) fn composite_gradient_fill(
     layer: &Layer,
     doc: &Document,
     params: &GradientFillParams,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
 ) {
     let w = layer.rect.width();
     let h = layer.rect.height();
@@ -571,17 +590,17 @@ pub(crate) fn composite_gradient_fill(
     let px = gradient_rgba(w, h, params);
     let row = w as usize;
     let clip = canvas.clip();
-    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in y0..y1 {
         for x in x0..x1 {
             let li = (y - layer.rect.top) as usize * row + (x - layer.rect.left) as usize;
             let c = px[li];
             blend_into_ctx(
                 canvas,
-                &ctx,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 x as usize,
                 y as usize,
                 [
@@ -693,6 +712,8 @@ pub(crate) fn composite_pattern_fill(
     layer: &Layer,
     doc: &Document,
     params: &PatternFillParams,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
 ) {
     let x0 = layer.rect.left.max(canvas.x0());
     let y0 = layer.rect.top.max(canvas.y0());
@@ -707,16 +728,16 @@ pub(crate) fn composite_pattern_fill(
     let pattern = patterns.iter().find(|p| p.pattern_id == params.pattern_id);
     let tile = tile_for(pattern, params);
     let clip = canvas.clip();
-    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in y0..y1 {
         for x in x0..x1 {
             let c = tile.sample(x, y, layer.rect.left, layer.rect.top);
             blend_into_ctx(
                 canvas,
-                &ctx,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 x as usize,
                 y as usize,
                 [
@@ -808,14 +829,12 @@ pub fn pattern_preview_rgba(
 /// ponytail: the pattern tile is sampled nearest-neighbour, matching the
 /// compositor's [`Tile`].
 pub(crate) fn fill_coverage_matte(
+    adjustment: &Adjustment,
     layer: &Layer,
     doc: &Document,
     region: (i32, i32, i32, i32),
     out: &mut [f32],
 ) -> bool {
-    let Some(adjustment) = decode_layer_fill(layer) else {
-        return false;
-    };
     let (rx0, ry0, rx1, ry1) = region;
     let rw = (rx1 - rx0) as usize;
     let ix0 = layer.rect.left.max(rx0);
@@ -849,7 +868,7 @@ pub(crate) fn fill_coverage_matte(
         Adjustment::PatternFill(params) => {
             let patterns = pictura_codec::decode_patterns(doc);
             let pattern = patterns.iter().find(|p| p.pattern_id == params.pattern_id);
-            let tile = tile_for(pattern, &params);
+            let tile = tile_for(pattern, params);
             for y in iy0..iy1 {
                 for x in ix0..ix1 {
                     let c = tile.sample(x, y, layer.rect.left, layer.rect.top);

@@ -15,6 +15,7 @@ use crate::mask_refine::{resolve_raster, resolve_vector, RasterGate, VectorGate}
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// The layer state the blend kernel needs, resolved once for a layer pass.
+#[derive(Clone)]
 pub(crate) struct BlendCtx<'a> {
     opacity: f32,
     fill: f32,
@@ -24,8 +25,23 @@ pub(crate) struct BlendCtx<'a> {
     mask: MaskGate<'a>,
 }
 
+/// Attributes a synthetic composite variant overrides without re-resolving the
+/// layer's content. `isolated_group` re-decides the group arm: `Some(true)`
+/// forces isolated, `Some(false)` forces pass-through.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct BlendOverride {
+    pub(crate) opacity: Option<u8>,
+    pub(crate) fill: Option<u8>,
+    pub(crate) mode: Option<BlendMode>,
+    pub(crate) no_mask: bool,
+    pub(crate) no_blend_if: bool,
+    pub(crate) isolated_group: Option<bool>,
+}
+
 impl<'a> BlendCtx<'a> {
     pub(crate) fn new(layer: &'a Layer, doc: &'a Document, clip: PsdRect) -> Self {
+        #[cfg(test)]
+        crate::composite_plan::counters::note_mask_gate(layer);
         let opacity = layer.opacity as f32 / 255.0;
         let fill = if layer.is_group {
             1.0
@@ -46,14 +62,46 @@ impl<'a> BlendCtx<'a> {
             mask: MaskGate::resolve(layer, doc, clip),
         }
     }
+
+    pub(crate) fn opacity(&self) -> f32 {
+        self.opacity
+    }
+
+    pub(crate) fn with_override(&self, over: &BlendOverride) -> Self {
+        let mut ctx = self.clone();
+        if let Some(opacity) = over.opacity {
+            ctx.opacity = opacity as f32 / 255.0;
+        }
+        if let Some(fill) = over.fill {
+            ctx.fill = fill as f32 / 255.0;
+        }
+        if let Some(mode) = over.mode {
+            ctx.mode = mode;
+        }
+        if over.no_mask {
+            ctx.mask = MaskGate::none();
+        }
+        if over.no_blend_if {
+            ctx.blend_if = None;
+        }
+        ctx
+    }
 }
 
+#[derive(Clone)]
 struct MaskGate<'a> {
     raster: RasterGate<'a>,
     vector: VectorGate<'a>,
 }
 
 impl<'a> MaskGate<'a> {
+    fn none() -> Self {
+        Self {
+            raster: RasterGate::None,
+            vector: VectorGate::None,
+        }
+    }
+
     fn resolve(layer: &'a Layer, doc: &'a Document, clip: PsdRect) -> Self {
         let raster = match resolve_native_mask(doc, layer) {
             Some(native) => RasterGate::Native {
@@ -97,6 +145,8 @@ pub(crate) struct SourcePlanes<'a> {
 
 impl<'a> SourcePlanes<'a> {
     pub(crate) fn resolve(layer: &'a Layer, doc: &'a Document) -> Self {
+        #[cfg(test)]
+        crate::composite_plan::counters::note_native_plane(layer);
         Self {
             native: [0i16, 1, 2, -1].map(|id| doc.authoritative_plane(layer, id)),
         }
@@ -121,6 +171,7 @@ pub(crate) fn blend_into_row_ctx(
     _layer: &Layer,
     _doc: &Document,
     _clip: PsdRect,
+    _over: Option<&BlendOverride>,
     x: i32,
     y: i32,
     cs: [f32; 3],
@@ -128,7 +179,7 @@ pub(crate) fn blend_into_row_ctx(
 ) {
     #[cfg(test)]
     if legacy_blend() {
-        return blend_into_row_legacy(row, cover, ox, _layer, _doc, _clip, x, y, cs, src_a);
+        return blend_into_row_legacy(row, cover, ox, _layer, _doc, _clip, _over, x, y, cs, src_a);
     }
     let mut content = (src_a * ctx.opacity) * ctx.fill;
     if content <= 0.0 {
@@ -164,19 +215,29 @@ pub(crate) fn blend_into_row_legacy(
     layer: &Layer,
     doc: &Document,
     clip: PsdRect,
+    over: Option<&BlendOverride>,
     x: i32,
     y: i32,
     cs: [f32; 3],
     src_a: f32,
 ) {
-    let opacity = layer.opacity as f32 / 255.0;
+    let opacity = over.and_then(|over| over.opacity).unwrap_or(layer.opacity) as f32 / 255.0;
     let fill = if layer.is_group {
         1.0
     } else {
-        layer.fill as f32 / 255.0
+        over.and_then(|over| over.fill).unwrap_or(layer.fill) as f32 / 255.0
     };
-    let mask = crate::composite_native::mask_alpha_unit(doc, layer, clip, x, y);
-    let gate = match layer.blend_if.as_ref() {
+    let mask = if over.is_some_and(|over| over.no_mask) {
+        1.0
+    } else {
+        crate::composite_native::mask_alpha_unit(doc, layer, clip, x, y)
+    };
+    let blend_if = if over.is_some_and(|over| over.no_blend_if) {
+        None
+    } else {
+        layer.blend_if.as_ref()
+    };
+    let gate = match blend_if {
         Some(view) if !view.is_default() => {
             let backdrop = row[(x - ox) as usize];
             blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
@@ -191,26 +252,8 @@ pub(crate) fn blend_into_row_legacy(
     {
         content = curve.apply(content);
     }
-    blend_parts_row(row, cover, ox, x, y, cs, content * mask * gate, layer.blend);
-}
-
-/// The per-pixel entry point for tests.
-#[cfg(test)]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn blend_into_row(
-    row: &mut [Px],
-    cover: Option<&mut [bool]>,
-    ox: i32,
-    layer: &Layer,
-    doc: &Document,
-    clip: PsdRect,
-    x: i32,
-    y: i32,
-    cs: [f32; 3],
-    src_a: f32,
-) {
-    let ctx = BlendCtx::new(layer, doc, clip);
-    blend_into_row_ctx(row, cover, ox, &ctx, layer, doc, clip, x, y, cs, src_a);
+    let mode = over.and_then(|over| over.mode).unwrap_or(layer.blend);
+    blend_parts_row(row, cover, ox, x, y, cs, content * mask * gate, mode);
 }
 
 #[cfg(test)]

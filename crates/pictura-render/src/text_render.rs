@@ -733,10 +733,10 @@ pub(crate) fn composite_type_source(
     canvas: &mut crate::composite::Canvas,
     layer: &Layer,
     doc: &Document,
+    raster: &pictura_core::PixelBuffer,
+    ctx: &crate::composite_blend::BlendCtx<'_>,
+    over: Option<&crate::composite_blend::BlendOverride>,
 ) -> bool {
-    if layer.type_tool.is_none() || crate::channel_plane(layer, 0).is_some() {
-        return false;
-    }
     let region = PsdRect {
         top: layer.rect.top.max(canvas.y0()),
         left: layer.rect.left.max(canvas.x0()),
@@ -746,15 +746,12 @@ pub(crate) fn composite_type_source(
     if region.width() <= 0 || region.height() <= 0 {
         return false;
     }
-    let Some(buf) = crate::layer_source::text_raster(layer) else {
-        return false;
-    };
+    let buf = raster;
     let lw = layer.rect.width() as usize;
     let plane = buf.pixel_count();
     let rw = region.width() as usize;
     let rh = region.height() as usize;
     let clip = canvas.clip();
-    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for by in 0..rh {
         for bx in 0..rw {
             let lx = (region.left - layer.rect.left) as usize + bx;
@@ -762,10 +759,11 @@ pub(crate) fn composite_type_source(
             let i = ly * lw + lx;
             crate::composite::blend_into_ctx(
                 canvas,
-                &ctx,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 region.left as usize + bx,
                 region.top as usize + by,
                 [

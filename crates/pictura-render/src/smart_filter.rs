@@ -16,7 +16,7 @@ use pictura_core::{
 use pictura_filters::catalogue::{self, NullResources};
 use pictura_filters::{Filter, LensCorrectionParams};
 
-use crate::composite::{blend_into_ctx, render_smart_source, Canvas};
+use crate::composite::{blend_into_ctx, Canvas};
 
 /// A decoded smart filter ready to render.
 #[derive(Debug, Clone)]
@@ -199,13 +199,14 @@ pub(crate) fn composite_smart_filtered_source(
     canvas: &mut Canvas,
     layer: &Layer,
     doc: &Document,
+    cached: &crate::layer_source::CachedBuffer,
+    filter_base: Option<&pictura_core::PixelBuffer>,
+    ctx: &crate::composite_blend::BlendCtx<'_>,
+    over: Option<&crate::composite_blend::BlendOverride>,
 ) -> bool {
     let Some(so) = layer.smart_object.as_ref() else {
         return false;
     };
-    if !crate::composite_route::smart_filters_apply(layer) {
-        return false;
-    }
     let region = PsdRect {
         top: layer.rect.top.max(canvas.y0()),
         left: layer.rect.left.max(canvas.x0()),
@@ -215,22 +216,12 @@ pub(crate) fn composite_smart_filtered_source(
     if region.width() <= 0 || region.height() <= 0 {
         return false;
     }
-    let Some(cached) = crate::layer_source::filtered_source(layer, doc) else {
-        return false;
-    };
-    let has_mask = so
-        .filter_mask
-        .as_ref()
-        .is_some_and(|_| so.filter_mask_enabled);
-    let base = has_mask
-        .then(|| render_smart_source(so, layer.rect, cached.rect))
-        .flatten();
+    let base = filter_base;
 
     let full = &cached.buffer;
     let fw = full.width as usize;
     let plane = fw * full.height as usize;
     let clip = canvas.clip();
-    let ctx = crate::composite_blend::BlendCtx::new(layer, doc, clip);
     for y in region.top..region.bottom {
         for x in region.left..region.right {
             let i = (y - cached.rect.top) as usize * fw + (x - cached.rect.left) as usize;
@@ -252,10 +243,11 @@ pub(crate) fn composite_smart_filtered_source(
             }
             blend_into_ctx(
                 canvas,
-                &ctx,
+                ctx,
                 layer,
                 doc,
                 clip,
+                over,
                 x as usize,
                 y as usize,
                 [

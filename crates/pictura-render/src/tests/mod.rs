@@ -11,6 +11,7 @@ mod blend;
 mod clipping;
 pub(crate) mod composite;
 mod composite_ctx;
+mod composite_plan;
 mod gradient_fill;
 pub(crate) mod layer_effects;
 mod native_depth;
