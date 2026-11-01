@@ -145,6 +145,10 @@ pub(crate) fn build_sibling_group<'a>(
         if !layer.visible {
             continue;
         }
+        if crate::layer_effects::is_destructive_adjustment(layer) {
+            composite_clipped_adjustment(&mut group, &cover, index, layer, &mut composite);
+            continue;
+        }
         let mut tmp = group.clone();
         composite(&mut tmp, index, &plan[index], None);
         if serial() {
@@ -161,6 +165,44 @@ pub(crate) fn build_sibling_group<'a>(
         }
     }
     group
+}
+
+/// A clipped adjustment recolors the group and adds no coverage. It runs over an
+/// opaque copy so its source alpha cannot raise the group's alpha or dilute its
+/// colour, and the result keeps the group's alpha. Coverage still gates it, so
+/// a base's effects outside its content stay unadjusted.
+fn composite_clipped_adjustment(
+    group: &mut Canvas,
+    cover: &[f32],
+    index: usize,
+    layer: &Layer,
+    composite: &mut impl FnMut(&mut Canvas, usize, &Layer),
+) {
+    let mut opaque = group.clone();
+    opaque.px.iter_mut().for_each(|p| p.a = 1.0);
+    composite(&mut opaque, index, layer);
+    let recolor = |((out, adjusted), &k): ((&mut Px, &Px), &f32)| {
+        if k > 0.0 {
+            out.r = adjusted.r;
+            out.g = adjusted.g;
+            out.b = adjusted.b;
+        }
+    };
+    if serial() {
+        group
+            .px
+            .iter_mut()
+            .zip(&opaque.px)
+            .zip(cover)
+            .for_each(recolor);
+    } else {
+        group
+            .px
+            .par_iter_mut()
+            .zip(opaque.px.par_iter())
+            .zip(cover.par_iter())
+            .for_each(recolor);
+    }
 }
 
 fn lerp(out: &mut Px, inside: &Px, k: f32) {
