@@ -446,6 +446,7 @@ fn unmodeled_layer_channel_preserves_source_depth() {
 fn layered_depth_fixtures_preserve_depth_and_channels() {
     for (name, bits, depth) in [
         ("rgb16_layered.psd", BitDepth::Sixteen, 16u16),
+        ("rgb16_tagged.psd", BitDepth::Sixteen, 16u16),
         ("rgb32_layered.psd", BitDepth::ThirtyTwo, 32u16),
     ] {
         let doc = load(name);

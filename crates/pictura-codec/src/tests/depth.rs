@@ -949,3 +949,113 @@ fn profile_conversion_leaves_partial_native_layer_unchanged() {
         "a layer with no working blue plane keeps its native store"
     );
 }
+
+/// `psd`'s layer-info subsection, and the bytes before and after the layer and
+/// mask section. The source's subsection is standard and its global mask empty.
+fn split_layer_info(psd: &[u8]) -> (&[u8], &[u8], &[u8]) {
+    let be32 = |at: usize| u32::from_be_bytes(psd[at..at + 4].try_into().unwrap()) as usize;
+    let mut at = 26;
+    at += 4 + be32(at);
+    at += 4 + be32(at);
+    let section = at;
+    let section_end = at + 4 + be32(at);
+    let info_at = at + 8;
+    let info = &psd[info_at..info_at + be32(at + 4)];
+    (&psd[..section], info, &psd[section_end..])
+}
+
+fn tagged_block(key: &[u8; 4], data: &[u8]) -> Vec<u8> {
+    let mut block = Vec::new();
+    crate::write::write_tag_document(&mut block, key, data, false);
+    block
+}
+
+/// `psd` with its layer-info subsection emptied and `trailing` as the blocks.
+fn with_trailing_blocks(psd: &[u8], trailing: &[u8]) -> Vec<u8> {
+    let (before, _, after) = split_layer_info(psd);
+    let mut out = before.to_vec();
+    out.extend_from_slice(&((8 + trailing.len()) as u32).to_be_bytes());
+    out.extend_from_slice(&0u32.to_be_bytes()); // empty layer-info subsection
+    out.extend_from_slice(&0u32.to_be_bytes()); // global layer mask
+    out.extend_from_slice(trailing);
+    out.extend_from_slice(after);
+    out
+}
+
+fn fixture(name: &str) -> Vec<u8> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name);
+    std::fs::read(path).unwrap()
+}
+
+#[test]
+fn tagged_layer_info_reads_like_the_subsection() {
+    for (name, key) in [
+        ("rgb16_layered.psd", b"Lr16"),
+        ("rgb32_layered.psd", b"Lr32"),
+        ("rgb16_grouped.psd", b"Lr16"),
+        ("rgb32_grouped.psd", b"Lr32"),
+    ] {
+        let psd = fixture(name);
+        let subsection = read_psd(&psd).unwrap();
+        assert!(!subsection.layers.is_empty(), "{name}: subsection layers");
+        let (_, info, _) = split_layer_info(&psd);
+        let tagged = read_psd(&with_trailing_blocks(&psd, &tagged_block(key, info))).unwrap();
+        assert_eq!(tagged, subsection, "{name}");
+    }
+}
+
+#[test]
+fn tagged_layer_info_leaves_its_sibling_blocks() {
+    let psd = fixture("rgb16_layered.psd");
+    let (_, info, _) = split_layer_info(&psd);
+    let first = tagged_block(b"Xyzw", &[1, 2, 3]);
+    let last = tagged_block(b"Pat2", &[]);
+    let trailing = [first.clone(), tagged_block(b"Lr16", info), last.clone()].concat();
+    let doc = read_psd(&with_trailing_blocks(&psd, &trailing)).unwrap();
+    assert_eq!(doc.layers.len(), 1);
+    assert_eq!(doc.layer_section_extra.to_vec(), [first, last].concat());
+}
+
+#[test]
+fn tagged_layer_info_key_must_match_the_depth() {
+    let psd = fixture("rgb16_layered.psd");
+    let (_, info, _) = split_layer_info(&psd);
+    let block = tagged_block(b"Lr32", info);
+    let doc = read_psd(&with_trailing_blocks(&psd, &block)).unwrap();
+    assert!(doc.layers.is_empty());
+    assert_eq!(doc.layer_section_extra.to_vec(), block);
+}
+
+#[test]
+fn truncated_tagged_layer_info_is_an_error() {
+    let psd = fixture("rgb16_layered.psd");
+    let (_, info, _) = split_layer_info(&psd);
+    let block = tagged_block(b"Lr16", &info[..info.len() - 8]);
+    assert!(read_psd(&with_trailing_blocks(&psd, &block)).is_err());
+}
+
+#[test]
+fn high_depth_layers_save_as_one_tagged_block() {
+    for (name, key) in [
+        ("rgb16_layered.psd", b"Lr16"),
+        ("rgb16_tagged.psd", b"Lr16"),
+        ("rgb32_layered.psd", b"Lr32"),
+    ] {
+        let doc = read_psd(&fixture(name)).unwrap();
+        let out = write_psd(&doc).unwrap();
+        let be32 = |at: usize| u32::from_be_bytes(out[at..at + 4].try_into().unwrap()) as usize;
+        let mut at = 26;
+        at += 4 + be32(at);
+        at += 4 + be32(at);
+        assert_eq!(be32(at + 4), 0, "{name}: empty layer-info subsection");
+        assert_eq!(be32(at + 8), 0, "{name}: empty global layer mask");
+        assert_eq!(&out[at + 12..at + 16], b"8BIM", "{name}");
+        assert_eq!(&out[at + 16..at + 20], key, "{name}: the block comes first");
+        let tag = [b"8BIM".as_slice(), key].concat();
+        let blocks = out.windows(8).filter(|w| *w == tag).count();
+        assert_eq!(blocks, 1, "{name}: one layer block");
+        assert_eq!(read_psd(&out).unwrap(), doc, "{name}: equal on re-read");
+    }
+}

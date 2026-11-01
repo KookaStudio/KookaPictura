@@ -276,13 +276,16 @@ fn for_each_block(bytes: &[u8], is_psb: bool, mut f: impl FnMut([u8; 4], &[u8]))
 
 /// Read the next global tagged block, returning `(key, start, end, data)`.
 /// Stops (returns `None`) on a malformed block, leaving the rest to the caller.
-fn next_block<'a>(r: &mut Reader<'a>, is_psb: bool) -> Option<([u8; 4], usize, usize, &'a [u8])> {
+pub(crate) fn next_block<'a>(
+    r: &mut Reader<'a>,
+    is_psb: bool,
+) -> Option<([u8; 4], usize, usize, &'a [u8])> {
     if r.remaining() < 12 {
         return None;
     }
     let start = r.pos;
     let sig = r.take(4).ok()?;
-    if sig != b"8BIM" {
+    if sig != b"8BIM" && sig != b"8B64" {
         r.pos = start;
         return None;
     }

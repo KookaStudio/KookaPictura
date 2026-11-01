@@ -510,8 +510,14 @@ fn write_container(
     } else {
         let (info, keys) = write_layer_info(doc, psb, lab_mode, cmyk_mode, indexed_mode, cache)?;
         used_layer_keys = keys;
+        let mut tagged = Vec::new();
+        if let Some(key) = tagged_layer_key(depth).filter(|_| !doc.layers.is_empty()) {
+            write_tag_document(&mut tagged, key, &info, psb);
+        }
+        let info: &[u8] = if tagged.is_empty() { &info } else { &[] };
         let len_width = if psb { 8 } else { 4 };
-        let section_len = len_width + info.len() + 4 + doc.global_layer_mask.len() + extra.len();
+        let section_len =
+            len_width + info.len() + 4 + doc.global_layer_mask.len() + tagged.len() + extra.len();
         if psb {
             out.extend_from_slice(&(section_len as u64).to_be_bytes());
             out.extend_from_slice(&(info.len() as u64).to_be_bytes());
@@ -519,9 +525,10 @@ fn write_container(
             out.extend_from_slice(&(section_len as u32).to_be_bytes());
             out.extend_from_slice(&(info.len() as u32).to_be_bytes());
         }
-        out.extend_from_slice(&info);
+        out.extend_from_slice(info);
         out.extend_from_slice(&(doc.global_layer_mask.len() as u32).to_be_bytes());
         out.extend_from_slice(&doc.global_layer_mask);
+        out.extend_from_slice(&tagged);
         out.extend_from_slice(&extra);
     }
 
