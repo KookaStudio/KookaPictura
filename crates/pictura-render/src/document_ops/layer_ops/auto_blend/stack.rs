@@ -9,12 +9,21 @@ use super::sources::{scan, Bits, Grid, UNLABELLED};
 use super::{Cancelled, Control};
 
 /// Focus below this is noise, leaving exposure to decide.
-const FOCUS_FLOOR: f64 = 1e-3;
+const FOCUS_FLOOR: f64 = 4e-3;
 /// Focus regions span at least this, and this share of the short side, so a
 /// stack blends by area and not by speckle.
 const FOCUS_SIGMA: f64 = 4.0;
-const FOCUS_SIGMA_SHARE: f64 = 1.0 / 48.0;
-const EXPOSURE_SIGMA: f32 = 0.2;
+const FOCUS_SIGMA_SHARE: f64 = 1.0 / 128.0;
+/// Luma this far from the ends counts as well exposed; beyond it the score
+/// falls to zero, so only blown or crushed areas lose, not bright flat sky.
+const EXPOSURE_MARGIN: f32 = 0.06;
+/// A higher layer must beat the best score by this factor. Flat or out-of-focus
+/// areas score alike, and they then stay with the lowest layer.
+const WIN_MARGIN: f64 = 1.3;
+/// A higher layer with real detail needs only this share of the best score, so
+/// fine texture below it such as spray does not erase its subject.
+const DETAIL_FOCUS: f64 = 0.01;
+const DETAIL_SHARE: f64 = 0.6;
 
 pub(super) fn label(
     doc: &Document,
@@ -37,11 +46,11 @@ pub(super) fn label(
                 continue;
             }
             covered.set(cell);
-            let offset = source.luma[cell] - 0.5;
-            let exposure = (-offset * offset / (2.0 * EXPOSURE_SIGMA * EXPOSURE_SIGMA)).exp();
-            let score = (focus[cell] + FOCUS_FLOOR) * f64::from(exposure);
-            // `>=` gives a tie to the topmost layer.
-            if score >= best[cell] {
+            let luma = source.luma[cell];
+            let exposure = (luma.min(1.0 - luma) / EXPOSURE_MARGIN).clamp(0.0, 1.0);
+            let score = (focus[cell] + FOCUS_FLOOR).sqrt() * f64::from(exposure.max(0.01));
+            let detailed = focus[cell] > DETAIL_FOCUS && score > best[cell] * DETAIL_SHARE;
+            if ids[cell] == UNLABELLED || score > best[cell] * WIN_MARGIN || detailed {
                 best[cell] = score;
                 ids[cell] = index as u16;
             }

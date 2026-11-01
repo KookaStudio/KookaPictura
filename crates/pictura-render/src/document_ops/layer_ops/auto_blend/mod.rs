@@ -186,7 +186,13 @@ pub fn plan_auto_blend(
     let grid = Grid::new(domain, sources::MAX_WORK_PIXELS);
 
     let channel_gains = if options.seamless {
-        gains::solve(doc, &layers, domain, &control)?
+        gains::solve(
+            doc,
+            &layers,
+            domain,
+            options.objective == BlendObjective::StackImages,
+            &control,
+        )?
     } else {
         vec![[1.0; 3]; layers.len()]
     };
@@ -204,6 +210,8 @@ pub fn plan_auto_blend(
         grid: &grid,
         labels: &labels,
         gains: &channel_gains,
+        base_from: (options.seamless && options.objective == BlendObjective::StackImages)
+            .then(|| blend::tone_level(domain)),
         conflict: conflict.as_deref(),
     };
     let mut merged = blend::blend(doc, &layers, &input, &control)?;

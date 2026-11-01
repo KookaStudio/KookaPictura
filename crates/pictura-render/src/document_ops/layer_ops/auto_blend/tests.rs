@@ -820,3 +820,79 @@ fn replace_layer_mask_round_trips() {
         "the reload keeps the new mask"
     );
 }
+
+/// A bright flat base, and above it a darker flat layer with a detailed square.
+fn subject_over_sky() -> Document {
+    let square = full(96, 96);
+    let subject = |x: i32, y: i32| {
+        if (32..64).contains(&x) && (32..64).contains(&y) {
+            checker(x, y)
+        } else {
+            60
+        }
+    };
+    doc(
+        96,
+        96,
+        vec![
+            painted("Sky", square, |_, _| 215),
+            painted("Subject", square, subject),
+        ],
+    )
+}
+
+#[test]
+fn stack_images_drops_a_flat_upper_background() {
+    let mut d = subject_over_sky();
+    blend(&mut d, &["0", "1"], STACK);
+    assert_eq!(
+        mask_at(&d.layers[1], 6, 6),
+        0,
+        "flat areas stay with the base"
+    );
+    assert_eq!(mask_at(&d.layers[1], 48, 48), 255, "the detail is kept");
+}
+
+#[test]
+fn stack_images_keeps_upper_detail_over_busy_texture() {
+    let square = full(96, 96);
+    let noise = |x: i32, y: i32| ((x * 7 + y * 13) * 37 % 97 + 80) as u8;
+    let mut d = doc(
+        96,
+        96,
+        vec![
+            painted("Spray", square, noise),
+            painted("Subject", square, |x, y| {
+                if (x / 8 + y / 8) % 2 == 0 {
+                    60
+                } else {
+                    190
+                }
+            }),
+        ],
+    );
+    blend(&mut d, &["0", "1"], STACK);
+    assert_eq!(mask_at(&d.layers[1], 48, 48), 255);
+}
+
+#[test]
+fn seamless_stack_takes_tone_from_the_base() {
+    const TONED: AutoBlendOptions = AutoBlendOptions {
+        seamless: true,
+        ..STACK
+    };
+    let mut d = subject_over_sky();
+    blend(&mut d, &["0", "1"], TONED);
+    let merged = d.layers[2].channels[0].data.as_slice();
+    let mean: u32 = (40..56)
+        .flat_map(|y| (40..56).map(move |x| u32::from(merged[y * 96 + x])))
+        .sum::<u32>()
+        / 256;
+    assert!(mean > 160, "broad tone follows the bright base: {mean}");
+    let spread = (40..56).map(|x| merged[48 * 96 + x]);
+    let (low, high) = (spread.clone().min(), spread.max());
+    assert!(
+        high.zip(low).is_some_and(|(h, l)| h - l > 30),
+        "detail survives"
+    );
+}

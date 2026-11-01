@@ -17,6 +17,7 @@ use super::sources::{color_ids, unit_row, Grid};
 use super::{Cancelled, Control};
 
 const MAX_LEVELS: usize = 8;
+const TONE_FEATURE_SHARE: usize = 16;
 
 /// What the blend needs beyond the layers.
 pub(super) struct BlendInput<'a> {
@@ -24,6 +25,8 @@ pub(super) struct BlendInput<'a> {
     pub grid: &'a Grid,
     pub labels: &'a [u16],
     pub gains: &'a [[f32; 3]],
+    /// Levels from this one up take tone from the lowest covering layer.
+    pub base_from: Option<usize>,
     /// Where weights stay on the hard label, `0..=1` once scaled.
     pub conflict: Option<&'a [f32]>,
 }
@@ -33,6 +36,12 @@ pub(super) struct Merged {
     rect: PsdRect,
     channels: Vec<Vec<f32>>,
     alpha: Vec<f32>,
+}
+
+/// The first level treated as tone: a feature about 1/24 of the short side.
+pub(super) fn tone_level(domain: PsdRect) -> usize {
+    let short = domain.width().min(domain.height()).max(1) as usize;
+    ((short / TONE_FEATURE_SHARE).max(1).ilog2() as usize).max(1)
 }
 
 fn level_count(w: usize, h: usize) -> usize {
@@ -115,6 +124,29 @@ fn weight_levels(weight: Vec<f32>, w: usize, h: usize, count: usize) -> Vec<Leve
     super::pyramid::pyramid(weight, w, h, count)
 }
 
+/// From level `from` up, weigh this layer by what it adds over the layers below
+/// it, not by its label: broad tone follows the base and detail the sharpest
+/// layer, so kept detail takes on the tone beneath it.
+fn base_tone(
+    levels: &mut [Level],
+    below: &[f32],
+    alpha: &[f32],
+    from: usize,
+    w: usize,
+    h: usize,
+    count: usize,
+) {
+    let exposed: Vec<f32> = below
+        .iter()
+        .zip(alpha)
+        .map(|(&b, &a)| a * (1.0 - b))
+        .collect();
+    let tone = super::pyramid::pyramid(exposed, w, h, count);
+    for (level, base) in levels.iter_mut().zip(tone).skip(from) {
+        *level = base;
+    }
+}
+
 /// Move a coarse weight to the hard weight where layers disagree, so low bands
 /// do not ghost across a seam. `hard` and `conflict` are full-resolution.
 fn tighten(levels: &mut [Level], hard: &[f32], conflict: &[f32], width: usize) {
@@ -181,6 +213,7 @@ pub(super) fn blend(
     let mut bands: Vec<Vec<Level>> = ids.iter().map(|_| empty()).collect();
     let mut totals = empty();
     let mut alpha_out = vec![0f32; w * h];
+    let mut covered_below = vec![0f32; w * h];
     let conflict: Option<Vec<f32>> = input.conflict.map(|plane| {
         (0..w * h)
             .map(|i| {
@@ -203,6 +236,12 @@ pub(super) fn blend(
             })
             .collect();
         let mut weights = weight_levels(weight.clone(), w, h, count);
+        if let Some(from) = input.base_from {
+            base_tone(&mut weights, &covered_below, &alpha, from, w, h, count);
+            for (below, &a) in covered_below.iter_mut().zip(&alpha) {
+                *below = *below + a - *below * a;
+            }
+        }
         if let Some(conflict) = &conflict {
             tighten(&mut weights, &weight, conflict, w);
         }

@@ -10,6 +10,8 @@ use super::{Cancelled, Control};
 
 const THUMBNAIL_PIXELS: u64 = 512 * 512;
 const GAIN_RANGE: (f32, f32) = (0.5, 2.0);
+/// Summed neighbour step below which a thumbnail cell counts as flat.
+const FLAT_STEP: f32 = 0.04;
 const NOISE_SIGMA: f64 = 0.04;
 const GAIN_SIGMA: f64 = 0.1;
 /// Samples outside this range clipped, so they say nothing about the gain.
@@ -19,6 +21,9 @@ struct Thumbnail {
     /// Mean colour per cell for each channel.
     channels: Vec<Vec<f32>>,
     opaque: Vec<bool>,
+    /// Cells without local detail. Tone is measured there, because detail is
+    /// the content a stack keeps, not a difference to correct.
+    flat: Vec<bool>,
 }
 
 fn thumbnail(
@@ -65,10 +70,23 @@ fn thumbnail(
             }
         }
     }
+    let flat = flat_cells(&totals, grid.w, grid.h);
     Ok(Thumbnail {
         channels: totals,
         opaque: seen.iter().map(|&n| n > 0).collect(),
+        flat,
     })
+}
+
+fn flat_cells(channels: &[Vec<f32>], w: usize, h: usize) -> Vec<bool> {
+    (0..w * h)
+        .map(|i| {
+            let (right, down) = ((i + 1).min(w * h - 1), (i + w).min(w * h - 1));
+            channels
+                .iter()
+                .all(|c| (c[i] - c[right]).abs() + (c[i] - c[down]).abs() < FLAT_STEP)
+        })
+        .collect()
 }
 
 /// Per-channel gains for each of `layers`; Grayscale fills only the first.
@@ -76,6 +94,7 @@ pub(super) fn solve(
     doc: &Document,
     layers: &[&Layer],
     domain: PsdRect,
+    keep_brightness: bool,
     control: &Control,
 ) -> Result<Vec<[f32; 3]>, Cancelled> {
     let grid = Grid::new(domain, THUMBNAIL_PIXELS);
@@ -91,7 +110,17 @@ pub(super) fn solve(
         }
     }
     control.step()?;
+    if keep_brightness && color_ids(doc).len() > 1 {
+        out.iter_mut().for_each(keep_luma);
+    }
     Ok(out)
+}
+
+/// Correct colour, not brightness: a stack's layers may be different scenes, so
+/// their brightness difference says little about exposure. A panorama keeps it.
+fn keep_luma(gain: &mut [f32; 3]) {
+    let luma = luma_gain(gain).max(f32::EPSILON);
+    gain.iter_mut().for_each(|g| *g /= luma);
 }
 
 /// Mean of two layers over their usable overlap, with its sample count.
@@ -100,7 +129,8 @@ fn overlap(a: &Thumbnail, b: &Thumbnail, channel: usize) -> (f64, f64, f64) {
     let usable = |v: f32| v > USABLE.0 && v < USABLE.1;
     for cell in 0..a.opaque.len() {
         let (x, y) = (a.channels[channel][cell], b.channels[channel][cell]);
-        if a.opaque[cell] && b.opaque[cell] && usable(x) && usable(y) {
+        let flat = a.flat[cell] && b.flat[cell];
+        if flat && a.opaque[cell] && b.opaque[cell] && usable(x) && usable(y) {
             mean_a += f64::from(x);
             mean_b += f64::from(y);
             n += 1.0;
