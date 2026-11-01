@@ -25,6 +25,8 @@ artistic effects.
 - **Source** is chosen the same way: click the left column of a state or snapshot
   in the History panel; a brush icon appears next to the source. The source is
   the color each stylized stroke samples.
+- The tool has no Airbrush option and keeps painting while the button is held
+  still.
 - The Help suggests experimenting by applying filters or filling an image with a
   solid color **before** painting, and enlarging the image (e.g. ×4) to soften
   detail.

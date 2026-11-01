@@ -142,6 +142,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-27 | `smudge-blur-sharpen.md` | HDR (16/32-bpc) operation | DIVERGENT | `stroke.rs:395` rejects non-8-bit | #551 |
 | TOOL-28 | `clone-stamp-and-pattern-stamp.md` | Cross-document colour-mode rule + Pattern Stamp Impressionist | MISSING | `paint_tools.rs:451`; `tool_stamps.cpp` | #552 |
 | TOOL-29 | `hand-and-zoom.md:76` | `Match All` + `Shift`+click/drag is approximated by the `Shift` forms of Scroll All (Hand drag, location) and Zoom All (Zoom click, zoom) rather than one combined match | DIVERGENT | `frame_document_arrange.cpp:173`; `tool_hand_zoom.cpp:59` | #500 |
+| TOOL-30 | `brush-and-pencil.md`; `airbrush-and-flow.md` | Brush Airbrush option and `Shift+Alt+P`; the stamp tools have the toggle, CPU strokes only, 20 dabs/s approximated | MISSING | `tool_brush.cpp`; `tool_stamps.cpp` | #1120 |
 
 ### 04-image-ops and adjustments
 
