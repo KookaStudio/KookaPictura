@@ -563,6 +563,7 @@ fn psd_seeds() -> Vec<Vec<u8>> {
         include_bytes!("fixtures/masked.psd").to_vec(),
         include_bytes!("fixtures/bitmap.psd").to_vec(),
         include_bytes!("fixtures/rgb16_layered.psd").to_vec(),
+        include_bytes!("fixtures/rgb16_tagged.psd").to_vec(),
         psd(&Header::rgb(4, 4), &nested_groups(3), None),
     ]
 }

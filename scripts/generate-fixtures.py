@@ -529,13 +529,15 @@ def rgb32() -> PSDImage:
     return psd
 
 
-def _depth_layered(depth: int) -> bytes:
+def _depth_layered(depth: int, tagged: bool = False) -> bytes:
     """A depth-16/32 RGB PSD that also exercises the layer and extra-channel
     paths: a composite extra channel and one pixel layer carrying color,
     transparency, a mask, and an unmodeled spot channel.
 
     Hand-authored because psd-tools cannot write 16/32-bit layer channels. The
-    independent decoder still opens it (see `main`).
+    independent decoder still opens it (see `main`). With `tagged`, the layers
+    sit in an `Lr16`/`Lr32` block as Photoshop stores them, not in the layer-info
+    subsection.
     """
     samples = DEPTH16_SAMPLES if depth == 16 else DEPTH32_SAMPLES
 
@@ -577,10 +579,18 @@ def _depth_layered(depth: int) -> bytes:
     out += struct.pack(">H", 3)  # RGB
     out += struct.pack(">I", 0)  # color mode data
     out += struct.pack(">I", 0)  # image resources
-    out += struct.pack(">I", 4 + len(info) + 4)  # layer/mask section length
-    out += struct.pack(">I", len(info))
-    out += info
-    out += struct.pack(">I", 0)  # global layer mask
+    if tagged:
+        key = b"Lr16" if depth == 16 else b"Lr32"
+        block = b"8BIM" + key + struct.pack(">I", len(info)) + info
+        out += struct.pack(">I", 4 + 4 + len(block))  # layer/mask section length
+        out += struct.pack(">I", 0)  # empty layer-info subsection
+        out += struct.pack(">I", 0)  # global layer mask
+        out += block
+    else:
+        out += struct.pack(">I", 4 + len(info) + 4)  # layer/mask section length
+        out += struct.pack(">I", len(info))
+        out += info
+        out += struct.pack(">I", 0)  # global layer mask
     out += struct.pack(">H", 0)  # raw composite
     for cp in color + [extra]:
         out += cp
@@ -595,6 +605,11 @@ def rgb16_layered() -> bytes:
 def rgb32_layered() -> bytes:
     """Depth-32 RGB with a composite extra channel and a multi-channel layer."""
     return _depth_layered(32)
+
+
+def rgb16_tagged() -> bytes:
+    """As `rgb16_layered`, with the layers in an `Lr16` block."""
+    return _depth_layered(16, tagged=True)
 
 
 def _grouped_psd(depth: int) -> bytes:
@@ -2106,6 +2121,7 @@ FIXTURES = {
     "rgb32.psd": rgb32,
     "rgb16_layered.psd": rgb16_layered,
     "rgb32_layered.psd": rgb32_layered,
+    "rgb16_tagged.psd": rgb16_tagged,
     "rgb16_grouped.psd": rgb16_grouped,
     "rgb32_grouped.psd": rgb32_grouped,
     "adjustment.psd": adjustment,

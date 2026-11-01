@@ -42,6 +42,16 @@ pub(crate) fn is_psb_big_key(key: &[u8; 4]) -> bool {
     PSB_BIG_KEYS.contains(key)
 }
 
+/// The document-level block Photoshop stores layer info in at `depth`, in place
+/// of the layer-info subsection; `None` at depths that use the subsection.
+pub(crate) fn tagged_layer_key(depth: u16) -> Option<&'static [u8; 4]> {
+    match depth {
+        16 => Some(b"Lr16"),
+        32 => Some(b"Lr32"),
+        _ => None,
+    }
+}
+
 /// Additional-layer-info keys that carry an adjustment.
 ///
 /// The brief's list plus the spellings the reference actually writes: Invert is

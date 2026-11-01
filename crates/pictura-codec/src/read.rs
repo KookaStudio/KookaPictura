@@ -10,6 +10,7 @@ use crate::mask_params;
 use crate::probe::ImageBudget;
 
 mod decode;
+mod tagged_layers;
 
 pub(crate) use decode::decode_channel_data;
 #[cfg(test)]
@@ -649,7 +650,20 @@ fn read_layer_section(
     }
     // Remaining bytes are trailing global additional-layer information.
     let extra_len = section_end - r.pos;
-    let layer_section_extra = r.take(extra_len)?.to_vec();
+    let mut layer_section_extra = r.take(extra_len)?.to_vec();
+    if info_len == 0 {
+        let tagged = tagged_layers::read_tagged_layer_info(
+            &mut layer_section_extra,
+            is_psb,
+            color_channels,
+            depth,
+            retain,
+            budget,
+        )?;
+        if let Some(read) = tagged {
+            (layers, layer_compression) = read;
+        }
+    }
     Ok((
         layers,
         global_layer_mask,

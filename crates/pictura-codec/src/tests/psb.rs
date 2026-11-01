@@ -168,6 +168,25 @@ fn psb_preserved_big_key_block_uses_u64_length() {
 }
 
 #[test]
+fn psb_reads_tagged_layer_info_signed_8b64() {
+    let psd = std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rgb16_layered.psd"),
+    )
+    .unwrap();
+    let doc = read_psd(&psd).unwrap();
+    let mut bytes = write_psb(&doc).unwrap();
+    let sig = bytes
+        .windows(8)
+        .position(|w| w == b"8BIMLr16")
+        .expect("an Lr16 block is present");
+    bytes[sig..sig + 4].copy_from_slice(b"8B64");
+
+    let back = read_psd(&bytes).unwrap();
+    assert_eq!(back.layers, doc.layers);
+    assert!(back.layer_section_extra.is_empty());
+}
+
+#[test]
 fn psb_document_resaves_as_psb() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     for (i, b) in doc.composite.data.iter_mut().enumerate() {
