@@ -724,7 +724,10 @@ dylibs.
 `.github/workflows/snap.yml` builds a strictly-confined snap for x86_64 from a
 release tag and attaches it to the release as
 `kooka-pictura_X.Y.Z_amd64.snap`. The snap is **unsigned** — install it with
-`snap install --dangerous ./kooka-pictura_X.Y.Z_amd64.snap`.
+`snap install --dangerous ./kooka-pictura_X.Y.Z_amd64.snap`. Without the flag
+snapd stops with "cannot find signatures". The upload job adds this command to
+the release notes, once per release; `README.md`, `public_docs/installing.md`,
+and the site's Download panel carry it too.
 
 The snap is built from source inside snapcraft (`snap/snapcraft.yaml`), not from
 the AppDir the Linux packages share: the `kde-neon-6` extension supplies Qt from

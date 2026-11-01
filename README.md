@@ -28,7 +28,9 @@ clone of every corner of Photoshop. For what is in and out of scope, see
 Prebuilt artifacts are published on the GitHub Releases page: AppImage,
 `.deb`/`.rpm`, snap, Flatpak, Windows portable archive and installer, and an
 Apple Silicon DMG. The macOS DMG is **unsigned and not notarized**; on first
-launch allow it in **System Settings → Privacy & Security → Open Anyway**.
+launch allow it in **System Settings → Privacy & Security → Open Anyway**. The
+snap is **unsigned** too; install it with
+`sudo snap install --dangerous ./kooka-pictura_<version>_amd64.snap`.
 
 You can also build it from source. Requirements: Rust 1.98, Qt 6, CMake, Ninja,
 `lld`, and the Little CMS 2 headers. C++ links use `mold` when it is installed

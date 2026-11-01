@@ -24,6 +24,16 @@ test("classifies the v0.2.0 assets", () => {
   assert.equal(p.windows.url, base + "KookaPictura-0.2.0-windows-x64-setup.exe");
 });
 
+test("gives the unsigned snap its install command and no other format one", () => {
+  const p = pickAssets(assets);
+  const withCommand = p.linux.filter((l) => l.command);
+  assert.deepEqual(withCommand.map((l) => l.label), ["snap"]);
+  assert.equal(
+    withCommand[0].command,
+    "sudo snap install --dangerous ./kooka-pictura_0.2.0_amd64.snap",
+  );
+});
+
 test("omits a format missing from the release", () => {
   const p = pickAssets(assets.filter((a) => !a.name.endsWith(".snap")));
   assert.ok(!p.linux.some((l) => l.label === "snap"));
