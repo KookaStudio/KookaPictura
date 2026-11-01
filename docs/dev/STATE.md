@@ -11,7 +11,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   with `WGPU_DX12_COMPILER`). A probe records a one-line detail (adapter,
   driver, compiler, or the request error) in `gpu-backend.json`. The test
   feature is now `software-gpu`, and `windows-render`
-  runs the GPU parity profile on WARP so the FXC path is proven in CI.
+  runs a DX12 device smoke check on WARP (the full parity profile stays on
+  lavapipe).
 - **Agent Control works in Flatpak and Snap builds** (#1079, OpenSpec change
   `agent-control-in-sandboxes`), with no new sandbox permission. The client starts
   the bridge inside the sandbox (`flatpak run <id> --mcp`, `snap run

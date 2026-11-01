@@ -271,8 +271,9 @@ modern DXC. A `gpu-init.marker` left by a crash during the parent's own init
 marks that backend `crashed` on the next launch. `WGPU_BACKEND` replaces the
 candidate order but still probes and still honors a `crashed` entry;
 `WGPU_BACKEND=none` forces the CPU. Linux keeps the direct Vulkan path, and the
-zero-copy interop probe stays Vulkan-only. Windows CI runs the GPU parity
-suites on WARP with the FXC path so a compiler regression fails the job.
+zero-copy interop probe stays Vulkan-only. Windows CI creates the DX12 device
+on WARP with the FXC path, so a device-creation regression fails the job; the
+full parity suites run on lavapipe.
 
 ## Rust module mapping
 

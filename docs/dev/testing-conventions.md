@@ -74,8 +74,9 @@ A test that needs a Vulkan device is ignored with
 a device. The nextest `gpu` profile (`.config/nextest.toml`) selects these tests
 and the device-free GPU checks, and excludes the `PICTURA_GPU_BENCH` timing
 evidence. CI's `gpu-parity` job runs that profile on Mesa's lavapipe with the
-test-only `software-gpu` feature; the Windows `windows-render` job runs it on
-WARP, which also proves the FXC-backed DX12 path.
+test-only `software-gpu` feature; the Windows `windows-render` job runs a DX12
+device smoke check on WARP, because WARP loses the device during the full
+validation composite.
 
 `#[ignore]` is **not** used to hide unimplemented behavior. The oracle suites
 that used to depend on stubs (`pictura-select`, `pictura-render`) un-ignore once
