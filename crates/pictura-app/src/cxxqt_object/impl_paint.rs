@@ -596,7 +596,7 @@ impl qobject::PictureView {
         if self.rust().session.live.preview().is_some() {
             return self.as_mut().preview_dab(x, y, pressure);
         }
-        let dirty = {
+        let painted = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let t = Instant::now();
@@ -612,9 +612,30 @@ impl qobject::PictureView {
                 _ => return false,
             };
             paint_timing::record("cpu_stroke_sample", t.elapsed());
-            if !painted {
-                return false;
+            painted
+        };
+        painted && self.present_stroke_dirty()
+    }
+
+    /// Dab again where the open CPU stroke last sampled, for a held button.
+    // ponytail: a recorded action replays the path only; held dabs are not
+    // captured, so Airbrush build-up is lost on replay.
+    pub fn paint_hold(mut self: Pin<&mut Self>) -> bool {
+        let painted = {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
+            match (rust.session.live.stroke_mut(), rust.session.doc.as_mut()) {
+                (Some(stroke), Some(doc)) => stroke.hold(doc),
+                _ => false,
             }
+        };
+        painted && self.present_stroke_dirty()
+    }
+
+    fn present_stroke_dirty(mut self: Pin<&mut Self>) -> bool {
+        let dirty = {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
             let dirty = rust.session.live.stroke_mut().and_then(Stroke::take_dirty);
             let pad = rust.session.live.paint_pad();
             let dirty = dirty.map(|rect| grow_rect(rect, pad));

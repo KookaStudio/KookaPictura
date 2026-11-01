@@ -441,12 +441,9 @@ impl Stroke {
     /// place. Returns `true` when any pixel's accumulated coverage changed.
     pub fn sample(&mut self, doc: &mut Document, s: StrokeSample) -> bool {
         let cfg = self.cfg;
-        let w = self.rect.width();
-        let h = self.rect.height();
-        if w <= 0 || h <= 0 {
+        if self.rect.width() <= 0 || self.rect.height() <= 0 {
             return false;
         }
-        let (w, h) = (w as usize, h as usize);
         let sx = s.x - self.rect.left as f32;
         let sy = s.y - self.rect.top as f32;
 
@@ -459,10 +456,24 @@ impl Stroke {
 
         let mut dabs = Vec::new();
         self.placer.feed(sx, sy, &mut dabs);
+        self.paint_dabs(doc, dabs)
+    }
+
+    /// Dab again at the last sample: the Airbrush's time-driven build-up for a
+    /// pointer that has not moved. Returns `true` as [`Stroke::sample`] does.
+    pub fn hold(&mut self, doc: &mut Document) -> bool {
+        let mut dabs = Vec::new();
+        self.placer.repeat_last(&mut dabs);
+        !dabs.is_empty() && self.paint_dabs(doc, dabs)
+    }
+
+    fn paint_dabs(&mut self, doc: &mut Document, dabs: Vec<(f32, f32)>) -> bool {
         if self.per_dab.is_some() {
             return self.apply_per_dab(doc, &dabs);
         }
 
+        let cfg = self.cfg;
+        let (w, h) = (self.rect.width() as usize, self.rect.height() as usize);
         let flow = cfg.flow as f32 / 100.0;
         let mut changed = false;
         // Dissolve draws one random roll per painted pixel in raster order, so
@@ -1160,6 +1171,8 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
 }
 
 mod blend;
+#[cfg(test)]
+mod hold_tests;
 mod raster;
 mod surface;
 #[cfg(test)]

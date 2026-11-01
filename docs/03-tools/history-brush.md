@@ -31,7 +31,8 @@ undo it, then selectively paint the effect back into parts of the image.
 - Options bar: set **opacity** and **blending mode**, and choose a **brush** with
   its options. (The CS6 Help's steps set the source in the History panel; a source
   picker also appears in the options bar of some Photoshop versions — see Open
-  questions.)
+  questions.) The bar also carries **Airbrush**; while it is on, paint builds while
+  the button is held still (`07-color-painting/airbrush-and-flow.md`).
 - Each completed stroke creates its own history state (per `ARCH-009`).
 - The Eraser's **Erase to History** option and `Edit > Fill > History` restore a
   selected area from the source state by the same mechanism.
@@ -41,7 +42,7 @@ undo it, then selectively paint the effect back into parts of the image.
 | Location | Type | Shortcut | Notes |
 |---|---|---|---|
 | Tools panel, History group | Tool | `Y` | History Brush and Art History Brush share `Y` |
-| Options bar | Bar | — | Opacity, blending mode, brush preset and brush options |
+| Options bar | Bar | — | Opacity, blending mode, Airbrush, brush preset and brush options |
 | History panel | Dock | `Window > History` | Left column selects the **source** state/snapshot; brush icon marks it |
 | History panel fly-out | Menu | — | History Options, snapshots, new document from state |
 | `Edit > Fill > History` | Dialog | `Shift+F5` | Region restore alternative |

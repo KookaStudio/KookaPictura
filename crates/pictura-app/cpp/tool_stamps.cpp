@@ -17,7 +17,9 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QPoint>
+#include <QtCore/QTimer>
 #include <QtGui/QColor>
+#include <QtGui/QGuiApplication>
 
 #include <memory>
 #include <optional>
@@ -26,14 +28,34 @@ namespace pictura {
 
 namespace {
 
-// The press / drag / release shared by the three stamps; `begin` starts the
-// tool's stroke and reports whether it did.
+// The time between dabs while the button is held still: 20 dabs per second.
+// CS6's rate is undocumented, so this approximates it; spacing is a distance
+// and cannot supply one.
+constexpr int kHoldDabMs = 50;
+
+// The press / drag / release shared by the stamps; `begin` starts the tool's
+// stroke and reports whether it did. A tool whose `holdPaints` is on keeps
+// dabbing from a timer until the stroke ends.
 class StampToolHandler : public ToolHandler {
 public:
     explicit StampToolHandler(std::shared_ptr<PaintOptions> paint)
         : paint_(std::move(paint))
     {
         addOptions(paint_.get());
+        holdTimer_.setInterval(kHoldDabMs);
+        QObject::connect(&holdTimer_, &QTimer::timeout, &holdTimer_, [this] {
+            if (stroke_) {
+                stroke_->hold();
+            }
+        });
+        // A release can be lost with the focus; the stroke then waits for the
+        // next release or tool switch, but stops painting now.
+        QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, &holdTimer_,
+                         [this](Qt::ApplicationState state) {
+                             if (state != Qt::ApplicationActive) {
+                                 holdTimer_.stop();
+                             }
+                         });
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
@@ -63,6 +85,9 @@ public:
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
         stroke_->dab(imagePos.x(), imagePos.y());
+        if (holdPaints()) {
+            holdTimer_.start();
+        }
         return true;
     }
 
@@ -80,16 +105,41 @@ public:
             return;
         }
         ctx.setDragging(false);
+        holdTimer_.stop();
         if (stroke_) {
             stroke_->finish();
             stroke_.reset();
         }
     }
 
+    // As with the Brush: a tool switch commits an open stroke, so the Stroke
+    // never outlives the view it calls back into.
+    void onDeactivate(ToolServices& ctx) override
+    {
+        holdTimer_.stop();
+        if (stroke_) {
+            stroke_->finish();
+            stroke_.reset();
+        }
+        ctx.setDragging(false);
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        holdTimer_.stop();
+        if (stroke_) {
+            stroke_->abandon();
+            stroke_.reset();
+        }
+        ctx.setDragging(false);
+    }
+
 protected:
     virtual bool begin(ToolServices& ctx, PictureView& v, const QPointF& imagePos) = 0;
     // A refusal the layer checks do not explain, e.g. a missing source.
     virtual void refuseSource(ToolServices&) {}
+    // Whether a stroke keeps dabbing while the pointer is still.
+    virtual bool holdPaints() const = 0;
 
     // Alt samples the foreground, as with the Brush.
     virtual void onAltPress(ToolServices& ctx, const QPointF& imagePos)
@@ -106,6 +156,7 @@ protected:
 
 private:
     std::optional<paint_api::Stroke> stroke_;
+    QTimer holdTimer_;
 };
 
 // Clone Stamp: Alt-click sets the active Clone Source slot's source point;
@@ -157,6 +208,8 @@ protected:
                                  slot.angle, o.cloneSample, o.ignoreAdjustments);
     }
 
+    bool holdPaints() const override { return stamp_->get().cloneAirbrush; }
+
     void refuseSource(ToolServices& ctx) override
     {
         ctx.refused(clone_->active().hasSource
@@ -191,6 +244,8 @@ protected:
                                    paint_->mode(), o.pattern, origin.x(), origin.y());
     }
 
+    bool holdPaints() const override { return stamp_->get().patternAirbrush; }
+
 private:
     std::shared_ptr<StampGroup> stamp_;
 };
@@ -199,7 +254,12 @@ private:
 // source state (the oldest state unless another is chosen), in place.
 class HistoryBrushToolHandler : public StampToolHandler {
 public:
-    using StampToolHandler::StampToolHandler;
+    HistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint, std::shared_ptr<StampGroup> stamp)
+        : StampToolHandler(std::move(paint))
+        , stamp_(std::move(stamp))
+    {
+        addOptions(stamp_.get());
+    }
 
 protected:
     bool begin(ToolServices& ctx, PictureView& v, const QPointF&) override
@@ -212,12 +272,16 @@ protected:
     {
         ctx.refused(QObject::tr("History Brush: the source state has no matching pixel layer."));
     }
+
+    bool holdPaints() const override { return stamp_->get().historyAirbrush; }
+
+private:
+    std::shared_ptr<StampGroup> stamp_;
 };
 
 // Art History Brush: stylized strokes coloured from the History Brush's source
-// state, shaped by the bar's Style, Area, and Tolerance.
-// ponytail: strokes land only as the pointer moves; CS6 keeps painting while
-// the button is held still.
+// state, shaped by the bar's Style, Area, and Tolerance. It has no Airbrush
+// option: it always keeps painting while the button is held.
 class ArtHistoryBrushToolHandler : public StampToolHandler {
 public:
     ArtHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint,
@@ -235,6 +299,8 @@ protected:
         return begin_art_history_brush(v, paintTip(*paint_), paint_->opacity(), o.style, o.area,
                                        o.tolerance);
     }
+
+    bool holdPaints() const override { return true; }
 
     void refuseSource(ToolServices& ctx) override
     {
@@ -262,9 +328,10 @@ std::unique_ptr<ToolHandler> makePatternStampToolHandler(std::shared_ptr<PaintOp
     return std::make_unique<PatternStampToolHandler>(std::move(paint), std::move(stamp));
 }
 
-std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint)
+std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                         std::shared_ptr<StampGroup> stamp)
 {
-    return std::make_unique<HistoryBrushToolHandler>(std::move(paint));
+    return std::make_unique<HistoryBrushToolHandler>(std::move(paint), std::move(stamp));
 }
 
 std::unique_ptr<ToolHandler> makeArtHistoryBrushToolHandler(

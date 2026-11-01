@@ -56,12 +56,16 @@ struct MixerOptions {
 // The Clone Stamp and Pattern Stamp options bars. Sample 0 Current Layer /
 // 1 Current And Below / 2 All Layers; Ignore Adjustment Layers applies to All
 // Layers only. `pattern` indexes the built-in patterns (stamp_pattern_name).
+// The History Brush keeps its Airbrush here too; each tool has its own.
 struct StampOptions {
     bool cloneAligned = true;
     int cloneSample = 0;
     bool ignoreAdjustments = false;
     int pattern = 0;
     bool patternAligned = true;
+    bool cloneAirbrush = false;
+    bool patternAirbrush = false;
+    bool historyAirbrush = false;
 };
 
 // The brush tip's dynamics (Scattering and Shape Dynamics), set by the brush

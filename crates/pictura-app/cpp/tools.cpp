@@ -124,7 +124,8 @@ std::unique_ptr<ToolHandler> makeCloneStampToolHandler(
     std::shared_ptr<CloneSourceOptions> clone);
 std::unique_ptr<ToolHandler> makePatternStampToolHandler(std::shared_ptr<PaintOptions> paint,
                                                          std::shared_ptr<StampGroup> stamp);
-std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint);
+std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                         std::shared_ptr<StampGroup> stamp);
 std::unique_ptr<ToolHandler> makeArtHistoryBrushToolHandler(
     std::shared_ptr<PaintOptions> paint, std::shared_ptr<ArtHistoryGroup> artHistory);
 std::unique_ptr<ToolHandler> makeEraserToolHandler(std::shared_ptr<PaintOptions> paint,
@@ -292,7 +293,7 @@ ToolController::ToolController(QObject* parent)
     registry_.registerTool(ToolId::CloneStamp,
                            makeCloneStampToolHandler(paint, stamp, clone));
     registry_.registerTool(ToolId::PatternStamp, makePatternStampToolHandler(paint, stamp));
-    registry_.registerTool(ToolId::HistoryBrush, makeHistoryBrushToolHandler(paint));
+    registry_.registerTool(ToolId::HistoryBrush, makeHistoryBrushToolHandler(paint, stamp));
     registry_.registerTool(ToolId::ArtHistoryBrush,
                            makeArtHistoryBrushToolHandler(paint, artHistory));
     registry_.registerTool(ToolId::Eraser, makeEraserToolHandler(paint, eraser));

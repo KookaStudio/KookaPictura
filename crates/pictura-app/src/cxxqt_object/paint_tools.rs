@@ -146,6 +146,10 @@ pub mod ffi {
             mode: &QString,
         ) -> bool;
 
+        /// Dab again at the active stroke's last sample, for a button held
+        /// still. False when no CPU stroke is open or no pixel changed.
+        fn paint_hold(view: Pin<&mut PictureView>) -> bool;
+
         /// Begin an Art History Brush stroke: stylized strokes coloured from
         /// the active layer as it was in the brush source state. `style` 0
         /// Tight Short … 9 Loose Curl Long, `area` in pixels, `tolerance`
