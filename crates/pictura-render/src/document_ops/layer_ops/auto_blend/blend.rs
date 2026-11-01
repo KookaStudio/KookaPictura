@@ -17,7 +17,7 @@ use super::sources::{color_ids, unit_row, Grid};
 use super::{Cancelled, Control};
 
 const MAX_LEVELS: usize = 8;
-const TONE_FEATURE_SHARE: usize = 16;
+const TONE_FEATURE_SHARE: usize = 32;
 
 /// What the blend needs beyond the layers.
 pub(super) struct BlendInput<'a> {
@@ -128,22 +128,58 @@ fn weight_levels(weight: Vec<f32>, w: usize, h: usize, count: usize) -> Vec<Leve
 /// it, not by its label: broad tone follows the base and detail the sharpest
 /// layer, so kept detail takes on the tone beneath it.
 fn base_tone(
-    levels: &mut [Level],
+    levels: &[Level],
     below: &[f32],
     alpha: &[f32],
     from: usize,
     w: usize,
     h: usize,
     count: usize,
-) {
+) -> Vec<Level> {
     let exposed: Vec<f32> = below
         .iter()
         .zip(alpha)
         .map(|(&b, &a)| a * (1.0 - b))
         .collect();
     let tone = super::pyramid::pyramid(exposed, w, h, count);
-    for (level, base) in levels.iter_mut().zip(tone).skip(from) {
-        *level = base;
+    levels
+        .iter()
+        .zip(tone)
+        .enumerate()
+        .map(|(k, (label, base))| {
+            if k < from {
+                Level {
+                    w: label.w,
+                    h: label.h,
+                    data: label.data.clone(),
+                }
+            } else {
+                base
+            }
+        })
+        .collect()
+}
+
+/// Replace RGB planes with luma and two colour differences, so brightness and
+/// colour can follow different layers. A single plane passes through.
+fn to_opponent(planes: &mut [Vec<f32>]) {
+    let [r, g, b] = planes else {
+        return;
+    };
+    for ((r, g), b) in r.iter_mut().zip(g.iter_mut()).zip(b.iter_mut()) {
+        let y = 0.299 * *r + 0.587 * *g + 0.114 * *b;
+        (*r, *g, *b) = (y, *r - y, *b - y);
+    }
+}
+
+fn from_opponent(planes: &mut [Vec<f32>]) {
+    let [y, cr, cb] = planes else {
+        return;
+    };
+    for ((y, cr), cb) in y.iter_mut().zip(cr.iter_mut()).zip(cb.iter_mut()) {
+        let (r, b) = (*y + *cr, *y + *cb);
+        let g = (*y - 0.299 * r - 0.114 * b) / 0.587;
+        (*y, *cr, *cb) = (r, g, b);
     }
 }
 
@@ -212,6 +248,7 @@ pub(super) fn blend(
     let empty = || super::pyramid::pyramid(vec![0f32; w * h], w, h, count);
     let mut bands: Vec<Vec<Level>> = ids.iter().map(|_| empty()).collect();
     let mut totals = empty();
+    let mut luma_totals = empty();
     let mut alpha_out = vec![0f32; w * h];
     let mut covered_below = vec![0f32; w * h];
     let conflict: Option<Vec<f32>> = input.conflict.map(|plane| {
@@ -236,8 +273,17 @@ pub(super) fn blend(
             })
             .collect();
         let mut weights = weight_levels(weight.clone(), w, h, count);
+        let mut tone = None;
         if let Some(from) = input.base_from {
-            base_tone(&mut weights, &covered_below, &alpha, from, w, h, count);
+            tone = Some(base_tone(
+                &weights,
+                &covered_below,
+                &alpha,
+                from,
+                w,
+                h,
+                count,
+            ));
             for (below, &a) in covered_below.iter_mut().zip(&alpha) {
                 *below = *below + a - *below * a;
             }
@@ -245,28 +291,43 @@ pub(super) fn blend(
         if let Some(conflict) = &conflict {
             tighten(&mut weights, &weight, conflict, w);
         }
-        for (slot, &id) in ids.iter().enumerate() {
+        control.check()?;
+        let mut planes: Vec<Vec<f32>> = ids
+            .iter()
+            .enumerate()
+            .map(|(slot, &id)| read_plane(doc, layer, id, domain, input.gains[index][slot], &alpha))
+            .collect();
+        to_opponent(&mut planes);
+        let luma_weights = tone.as_ref().unwrap_or(&weights);
+        for (slot, plane) in planes.into_iter().enumerate() {
             control.check()?;
-            let plane = read_plane(doc, layer, id, domain, input.gains[index][slot], &alpha);
-            add_bands(&mut bands[slot], plane, w, h, &weights);
-        }
-        for (total, level) in totals.iter_mut().zip(&weights) {
-            for (sum, value) in total.data.iter_mut().zip(&level.data) {
-                *sum += value;
+            let (level_weights, level_totals) = if slot == 0 {
+                (luma_weights, &mut luma_totals)
+            } else {
+                (&weights, &mut totals)
+            };
+            add_bands(&mut bands[slot], plane, w, h, level_weights);
+            if slot <= 1 {
+                for (total, level) in level_totals.iter_mut().zip(level_weights) {
+                    for (sum, value) in total.data.iter_mut().zip(&level.data) {
+                        *sum += value;
+                    }
+                }
             }
         }
         for (out, &a) in alpha_out.iter_mut().zip(&alpha) {
             *out = a + *out * (1.0 - a);
         }
     }
-    let channels = bands
+    let mut channels: Vec<Vec<f32>> = bands
         .into_iter()
-        .map(|levels| {
-            let mut plane = collapse(levels, &totals);
-            plane.iter_mut().for_each(|v| *v = v.clamp(0.0, 1.0));
-            plane
-        })
+        .enumerate()
+        .map(|(slot, levels)| collapse(levels, if slot == 0 { &luma_totals } else { &totals }))
         .collect();
+    from_opponent(&mut channels);
+    for plane in &mut channels {
+        plane.iter_mut().for_each(|v| *v = v.clamp(0.0, 1.0));
+    }
     Ok(Merged {
         rect: domain,
         channels,

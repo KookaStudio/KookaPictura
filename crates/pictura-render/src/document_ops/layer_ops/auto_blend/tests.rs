@@ -896,3 +896,53 @@ fn seamless_stack_takes_tone_from_the_base() {
         "detail survives"
     );
 }
+
+#[test]
+fn seamless_stack_keeps_the_subject_colour() {
+    let square = full(96, 96);
+    let inside = |x: i32, y: i32| (32..64).contains(&x) && (32..64).contains(&y);
+    let mut subject = painted("Subject", square, move |x, y| {
+        if inside(x, y) {
+            checker(x, y)
+        } else {
+            60
+        }
+    });
+    let red: Vec<u8> = (0..96 * 96)
+        .map(|i| {
+            let (x, y) = (i % 96, i / 96);
+            if inside(x, y) {
+                230
+            } else {
+                60
+            }
+        })
+        .collect();
+    subject.channels[0].data = red.into();
+    let sky = solid("Sky", square, (40, 120, 230), 255, BlendMode::Normal, 255);
+    let mut d = doc(96, 96, vec![sky, subject]);
+    blend(
+        &mut d,
+        &["0", "1"],
+        AutoBlendOptions {
+            seamless: true,
+            ..STACK
+        },
+    );
+    let at = |id: usize| i32::from(d.layers[2].channels[id].data.as_slice()[48 * 96 + 48]);
+    assert!(
+        at(0) > at(2) + 40,
+        "red over a blue base: {} vs {}",
+        at(0),
+        at(2)
+    );
+}
+
+#[test]
+fn stack_focus_stops_at_subject_edges() {
+    let mut d = subject_over_sky();
+    blend(&mut d, &["0", "1"], STACK);
+    // A soft transition remains; a focus leak read 234 here.
+    let beside = mask_at(&d.layers[1], 26, 48);
+    assert!(beside < 32, "no halo beside the subject: {beside}");
+}

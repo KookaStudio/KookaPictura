@@ -9,10 +9,14 @@ use super::sources::{scan, Bits, Grid, UNLABELLED};
 use super::{Cancelled, Control};
 
 /// Focus below this is noise, leaving exposure to decide.
-const FOCUS_FLOOR: f64 = 4e-3;
+const FOCUS_FLOOR: f64 = 0.02;
 /// Focus regions span at least this, and this share of the short side, so a
 /// stack blends by area and not by speckle.
 const FOCUS_SIGMA: f64 = 4.0;
+const GUIDE_EPSILON: f64 = 1e-3;
+/// Focus saturates here, or the blur tails of one strong edge would outscore a
+/// flat background well past that edge.
+const FOCUS_CAP: f64 = 0.05;
 const FOCUS_SIGMA_SHARE: f64 = 1.0 / 128.0;
 /// Luma this far from the ends counts as well exposed; beyond it the score
 /// falls to zero, so only blown or crushed areas lose, not bright flat sky.
@@ -22,7 +26,7 @@ const EXPOSURE_MARGIN: f32 = 0.06;
 const WIN_MARGIN: f64 = 1.3;
 /// A higher layer with real detail needs only this share of the best score, so
 /// fine texture below it such as spray does not erase its subject.
-const DETAIL_FOCUS: f64 = 0.01;
+const DETAIL_FOCUS: f64 = 0.02;
 const DETAIL_SHARE: f64 = 0.6;
 
 pub(super) fn label(
@@ -38,8 +42,12 @@ pub(super) fn label(
     let sigma = FOCUS_SIGMA.max(grid.w.min(grid.h) as f64 * FOCUS_SIGMA_SHARE);
     for (index, layer) in layers.iter().enumerate() {
         let source = scan(doc, layer, grid, true, control)?;
-        let mut focus: Vec<f64> = source.energy.iter().map(|&e| f64::from(e)).collect();
-        pictura_core::blur::approx_gaussian(&mut focus, grid.w, grid.h, sigma);
+        let mut focus: Vec<f64> = source
+            .energy
+            .iter()
+            .map(|&e| f64::from(e).min(FOCUS_CAP))
+            .collect();
+        guided_smooth(&mut focus, &source.luma, grid, sigma);
         let mut covered = Bits::new(cells);
         for cell in 0..cells {
             if source.alpha[cell] <= 0.0 {
@@ -59,6 +67,34 @@ pub(super) fn label(
         control.step()?;
     }
     Ok(despeckle(&ids, &covers, grid))
+}
+
+/// Smooth `plane` without crossing edges of `guide` (a guided filter), so a
+/// subject's focus does not spill onto the blurred background beside it.
+fn guided_smooth(plane: &mut [f64], guide: &[f32], grid: &Grid, sigma: f64) {
+    let blur = |values: Vec<f64>| {
+        let mut values = values;
+        pictura_core::blur::approx_gaussian(&mut values, grid.w, grid.h, sigma);
+        values
+    };
+    let guide: Vec<f64> = guide.iter().map(|&v| f64::from(v)).collect();
+    let mean_g = blur(guide.clone());
+    let mean_p = blur(plane.to_vec());
+    let squares = blur(guide.iter().map(|g| g * g).collect());
+    let cross = blur(guide.iter().zip(plane.iter()).map(|(g, p)| g * p).collect());
+    let slope: Vec<f64> = (0..plane.len())
+        .map(|i| {
+            let variance = squares[i] - mean_g[i] * mean_g[i];
+            (cross[i] - mean_g[i] * mean_p[i]) / (variance + GUIDE_EPSILON)
+        })
+        .collect();
+    let offset = (0..plane.len())
+        .map(|i| mean_p[i] - slope[i] * mean_g[i])
+        .collect();
+    let (slope, offset) = (blur(slope), blur(offset));
+    for (i, value) in plane.iter_mut().enumerate() {
+        *value = (slope[i] * guide[i] + offset[i]).max(0.0);
+    }
 }
 
 /// A cell almost no neighbour agrees with takes its neighbours' majority.
