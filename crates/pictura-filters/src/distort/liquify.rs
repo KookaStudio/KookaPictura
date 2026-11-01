@@ -106,6 +106,10 @@ pub struct LiquifyMesh {
     d: Vec<[f32; 2]>,
     /// Freeze per node, 0 free ..= 1 frozen.
     freeze: Vec<f32>,
+    /// The layer rectangle this mesh may change, in layer pixels; `None` is
+    /// the whole layer. CS6 confines Liquify to an active selection's
+    /// bounding rectangle.
+    clip: Option<PsdRect>,
 }
 
 /// Layer pixels per node: 2 up to about 4 MP, then coarser so a PSB-sized
@@ -136,6 +140,7 @@ impl LiquifyMesh {
             rows,
             d: vec![[0.0; 2]; cols * rows],
             freeze: vec![0.0; cols * rows],
+            clip: None,
         }
     }
 
@@ -145,6 +150,50 @@ impl LiquifyMesh {
 
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    /// The layer rectangle this mesh may change, or `None` for the whole
+    /// layer.
+    pub fn clip(&self) -> Option<PsdRect> {
+        self.clip
+    }
+
+    /// Restrict the mesh to `rect` (layer pixels, half-open): nodes outside
+    /// lose any offset, so nothing outside it moves. `None` clears the
+    /// restriction.
+    pub fn set_clip(&mut self, rect: Option<PsdRect>) {
+        self.clip = rect.and_then(|r| {
+            let out = PsdRect {
+                left: r.left.max(0),
+                top: r.top.max(0),
+                right: r.right.min(self.width as i32),
+                bottom: r.bottom.min(self.height as i32),
+            };
+            (out.left < out.right && out.top < out.bottom).then_some(out)
+        });
+        if self.clip.is_some() {
+            for j in 0..self.rows {
+                for i in 0..self.cols {
+                    let p = self.node_pos(i, j);
+                    if !self.contains(p[0], p[1]) {
+                        self.d[j * self.cols + i] = [0.0; 2];
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether layer point `(x, y)` is inside the processing rectangle.
+    fn contains(&self, x: f64, y: f64) -> bool {
+        match self.clip {
+            Some(c) => {
+                x >= f64::from(c.left)
+                    && x < f64::from(c.right)
+                    && y >= f64::from(c.top)
+                    && y < f64::from(c.bottom)
+            }
+            None => true,
+        }
     }
 
     pub fn is_identity(&self) -> bool {
@@ -160,8 +209,12 @@ impl LiquifyMesh {
         ((x - 0.5) / self.cell, (y - 0.5) / self.cell)
     }
 
-    /// Bilinear displacement at a layer point (zero beyond the mesh).
+    /// Bilinear displacement at a layer point (zero beyond the mesh or
+    /// outside its processing rectangle).
     pub fn displacement(&self, x: f64, y: f64) -> [f64; 2] {
+        if !self.contains(x, y) {
+            return [0.0; 2];
+        }
         let (gx, gy) = self.to_grid(x, y);
         bilinear(&self.d, self.cols, self.rows, gx, gy)
     }
@@ -220,13 +273,14 @@ impl LiquifyMesh {
         self.freeze.iter_mut().for_each(|f| *f = 1.0 - *f);
     }
 
-    /// This mesh stretched to a `width`×`height` layer, offsets scaled with
-    /// it — Load Mesh's "scaled to fit", corner-anchored. The freeze mask is
-    /// not carried.
+    /// This mesh stretched to a `width`×`height` layer, offsets and processing
+    /// rectangle scaled with it — Load Mesh's "scaled to fit", corner-anchored.
+    /// The freeze mask is not carried.
     pub fn scaled_to(&self, width: u32, height: u32) -> Self {
         let mut out = Self::new(width, height);
         if out.width == self.width && out.height == self.height {
             out.d.clone_from(&self.d);
+            out.clip = self.clip;
             return out;
         }
         let sx = f64::from(self.width) / f64::from(out.width);
@@ -238,6 +292,12 @@ impl LiquifyMesh {
                 out.d[j * out.cols + i] = [(v[0] / sx) as f32, (v[1] / sy) as f32];
             }
         }
+        out.set_clip(self.clip.map(|c| PsdRect {
+            left: (f64::from(c.left) / sx).floor() as i32,
+            top: (f64::from(c.top) / sy).floor() as i32,
+            right: (f64::from(c.right) / sx).ceil() as i32,
+            bottom: (f64::from(c.bottom) / sy).ceil() as i32,
+        }));
         out
     }
 
@@ -362,6 +422,9 @@ impl LiquifyMesh {
         for j in j0..=j1 {
             for i in i0..=i1 {
                 let p = self.node_pos(i, j);
+                if !self.contains(p[0], p[1]) {
+                    continue;
+                }
                 let (dx, dy) = (p[0] - c[0], p[1] - c[1]);
                 let t2 = (dx * dx + dy * dy) / (r * r);
                 if t2 >= 1.0 {
@@ -426,7 +489,7 @@ impl LiquifyMesh {
             self.freeze[idx] = f;
         }
         let pad = r.ceil() as i32 + 2;
-        clip(
+        let dirty = clip(
             PsdRect {
                 left: c[0].floor() as i32 - pad,
                 top: c[1].floor() as i32 - pad,
@@ -435,7 +498,12 @@ impl LiquifyMesh {
             },
             self.width,
             self.height,
-        )
+        );
+        match (dirty, self.clip) {
+            (Some(dirty), Some(rect)) => overlap(dirty, rect),
+            (dirty, None) => dirty,
+            (None, Some(_)) => None,
+        }
     }
 
     /// Show Mesh: the source grid `spacing` layer pixels apart as the
@@ -448,6 +516,15 @@ impl LiquifyMesh {
     pub fn grid_lines(&self, rect: [f64; 4], spacing: f64, step: f64) -> Vec<[f64; 2]> {
         let mut out = Vec::new();
         let (w, h) = (f64::from(self.width), f64::from(self.height));
+        let mut rect = rect;
+        if let Some(c) = self.clip {
+            rect = [
+                rect[0].max(f64::from(c.left)),
+                rect[1].max(f64::from(c.top)),
+                rect[2].min(f64::from(c.right)),
+                rect[3].min(f64::from(c.bottom)),
+            ];
+        }
         let (x0, y0) = (rect[0].max(0.0), rect[1].max(0.0));
         let (x1, y1) = (rect[2].min(w), rect[3].min(h));
         if !(spacing >= 1.0 && step > 0.0) || x0 >= x1 || y0 >= y1 {
@@ -711,6 +788,17 @@ fn clip(r: PsdRect, width: u32, height: u32) -> Option<PsdRect> {
         top: r.top.max(0),
         right: r.right.min(width as i32),
         bottom: r.bottom.min(height as i32),
+    };
+    (out.left < out.right && out.top < out.bottom).then_some(out)
+}
+
+/// The part of `a` inside `b`, or `None` when they miss.
+fn overlap(a: PsdRect, b: PsdRect) -> Option<PsdRect> {
+    let out = PsdRect {
+        left: a.left.max(b.left),
+        top: a.top.max(b.top),
+        right: a.right.min(b.right),
+        bottom: a.bottom.min(b.bottom),
     };
     (out.left < out.right && out.top < out.bottom).then_some(out)
 }

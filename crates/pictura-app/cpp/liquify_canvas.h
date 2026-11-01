@@ -122,6 +122,9 @@ private:
     double backdropOpacity_ = 0.5;
     int layerWidth_ = 0;
     int layerHeight_ = 0;
+    // The preview's top-left in the layer's own coordinates: the selection's
+    // bounding rectangle when one is active, else (0, 0).
+    QPointF origin_;
     double zoom_ = 1.0;
     QPointF offset_;
     bool placed_ = false;
