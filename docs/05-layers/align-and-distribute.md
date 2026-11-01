@@ -283,7 +283,7 @@ is emitted.
 - **Auto-Blend** creates or replaces one raster **layer mask** per processed
   layer and does not change those layers' pixels. It also adds one merged raster
   layer, `<top layer> (merged)`, above them, holding a multiband blend with any
-  tonal correction baked in. A later run replaces that layer.
+  tonal correction baked in. A later run replaces that layer. Above 100 MP Kooka adds masks only and says so.
 - **Path align/distribute** mutates path component control points.
 - **Undo:** each user invocation is one history state (`ARCH-009`). Auto-Align
   and Auto-Blend are compound: undo restores every affected transform / removes
