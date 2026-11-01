@@ -36,6 +36,7 @@ pub mod ffi {
             paths: &QStringList,
             stack_images: bool,
             seamless: bool,
+            fill_transparent: bool,
         ) -> bool;
 
         /// Whether the worker is still computing.

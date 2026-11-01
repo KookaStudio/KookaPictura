@@ -68,7 +68,7 @@ pub use layer_ops::{
     AlignEdge, Arrange, AutoBlendCancelled, AutoBlendOptions, AutoBlendPlan, BlendObjective,
     BlendedLayer, Clip, Interpolation, LayerMaskKind, LayerStyle, LayerTransform, MaskDocument,
     MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke,
-    StampScope, VectorMaskKind, AUTO_BLEND_PROGRESS_MAX, AUTO_BLEND_TONES, MASK_FLAG_LINKED,
+    StampScope, VectorMaskKind, AUTO_BLEND_PROGRESS_MAX, MASK_FLAG_LINKED,
     VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub(crate) use layer_ops::{insert_node, map_shape_layer};

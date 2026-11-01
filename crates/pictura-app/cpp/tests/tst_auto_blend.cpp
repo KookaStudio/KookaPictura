@@ -15,6 +15,7 @@
 
 #include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QRadioButton>
 
 #include "qt_test_support.h"
@@ -28,6 +29,7 @@ private slots:
     void menuEnablement();
     void refusedModes();
     void dialogDefaults();
+    void fillFollowsDepth();
     void oneHistoryStateAndUndo();
     void cancelMidRun();
     void staleRunIsDropped();
@@ -141,6 +143,22 @@ void AutoBlendTest::dialogDefaults()
     QVERIFY(!dialog.stackImages());
     QVERIFY(!dialog.findChild<QCheckBox*>(QStringLiteral("autoBlendSeamless"))->isChecked());
     QVERIFY(!dialog.seamless());
+    QVERIFY(!dialog.fillTransparent());
+    for (const char* name : {"autoBlendPanoramaPreview", "autoBlendStackPreview"}) {
+        const auto* preview = dialog.findChild<QLabel*>(QLatin1String(name));
+        QVERIFY(preview && !preview->pixmap().isNull());
+    }
+}
+
+void AutoBlendTest::fillFollowsDepth()
+{
+    pictura::AutoBlendDialog eight(true);
+    QVERIFY(eight.findChild<QCheckBox*>(QStringLiteral("autoBlendFill"))->isEnabled());
+    pictura::AutoBlendDialog sixteen(false);
+    auto* fill = sixteen.findChild<QCheckBox*>(QStringLiteral("autoBlendFill"));
+    QVERIFY(!fill->isEnabled());
+    fill->setChecked(true);
+    QVERIFY(!sixteen.fillTransparent());
 }
 
 void AutoBlendTest::oneHistoryStateAndUndo()
@@ -165,7 +183,7 @@ void AutoBlendTest::cancelMidRun()
     const int history = view_->history_count();
     const uint before = view_->composite_argb(12, 12);
     auto_blend_set_delay_for_test(*view_, 60000);
-    QVERIFY(auto_blend_start(*view_, paths_, false, true));
+    QVERIFY(auto_blend_start(*view_, paths_, false, true, false));
     QVERIFY(auto_blend_running(*view_));
     auto_blend_cancel(*view_);
     settle();
@@ -179,7 +197,7 @@ void AutoBlendTest::staleRunIsDropped()
 {
     QVERIFY(setupLayers());
     auto_blend_set_delay_for_test(*view_, 200);
-    QVERIFY(auto_blend_start(*view_, paths_, false, false));
+    QVERIFY(auto_blend_start(*view_, paths_, false, false, false));
     QVERIFY(!view_->add_layer_in(paths_.last()).isEmpty());
     const int history = view_->history_count();
     settle();
@@ -196,7 +214,7 @@ void AutoBlendTest::selectionAfterCommit()
     QCoreApplication::processEvents();
     QStringList selected = window_->selectedLayerPaths();
     selected.sort();
-    QCOMPARE(selected, QStringList({QStringLiteral("1"), QStringLiteral("3")}));
+    QCOMPARE(selected, paths_);
 }
 
 QTEST_MAIN(AutoBlendTest)

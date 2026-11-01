@@ -1,9 +1,9 @@
-//! Seamless Tones And Colors: Brown-Lowe gain compensation per channel, written
-//! as Curves so layer pixels never change. Approximated: Adobe's tonal model is
-//! unpublished. Both 8/16-bit encoded and 32-bit linear samples are measured in
-//! the unit domain Curves applies in.
+//! Seamless Tones And Colors: Brown-Lowe gain compensation per channel, baked
+//! into the merged layer so source pixels never change. Approximated: Adobe's
+//! tonal model is unpublished. Gains act on unit samples, encoded at 8/16-bit and
+//! linear at 32-bit.
 
-use pictura_core::{AdjustmentData, Document, Layer, PsdRect};
+use pictura_core::{Document, Layer, PsdRect};
 
 use super::sources::{color_ids, unit_row, Grid};
 use super::{Cancelled, Control};
@@ -14,7 +14,6 @@ const NOISE_SIGMA: f64 = 0.04;
 const GAIN_SIGMA: f64 = 0.1;
 /// Samples outside this range clipped, so they say nothing about the gain.
 const USABLE: (f32, f32) = (0.02, 0.98);
-const IDENTITY: [(u8, u8); 2] = [(0, 0), (255, 255)];
 
 struct Thumbnail {
     /// Mean colour per cell for each channel.
@@ -167,32 +166,4 @@ fn eliminate(mut m: Vec<Vec<f64>>) -> Vec<f32> {
 /// The luma scale of a colour gain.
 pub(super) fn luma_gain(gain: &[f32; 3]) -> f32 {
     0.299 * gain[0] + 0.587 * gain[1] + 0.114 * gain[2]
-}
-
-/// A two-point curve multiplying by `gain`, or `None` for identity.
-fn gain_curve(gain: f32) -> Option<[(u8, u8); 2]> {
-    let end = if gain < 1.0 {
-        (255, (255.0 * gain).round() as u8)
-    } else {
-        ((255.0 / gain).round() as u8, 255)
-    };
-    (end != (255, 255)).then_some([(0, 0), end])
-}
-
-/// The Curves payload for `gain`, `None` when every channel rounds to identity.
-pub(super) fn curve(gain: &[f32; 3], gray: bool) -> Option<AdjustmentData> {
-    if gray {
-        return gain_curve(gain[0]).map(|c| crate::encode_curves(&c, None, None, None));
-    }
-    let curves = gain.map(gain_curve);
-    if curves.iter().all(Option::is_none) {
-        return None;
-    }
-    let [r, g, b] = curves.map(|c| c.unwrap_or(IDENTITY));
-    Some(crate::encode_curves(
-        &IDENTITY,
-        Some(&r),
-        Some(&g),
-        Some(&b),
-    ))
 }

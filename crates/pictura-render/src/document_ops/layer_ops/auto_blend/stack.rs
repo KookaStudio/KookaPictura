@@ -10,7 +10,10 @@ use super::{Cancelled, Control};
 
 /// Focus below this is noise, leaving exposure to decide.
 const FOCUS_FLOOR: f64 = 1e-3;
+/// Focus regions span at least this, and this share of the short side, so a
+/// stack blends by area and not by speckle.
 const FOCUS_SIGMA: f64 = 4.0;
+const FOCUS_SIGMA_SHARE: f64 = 1.0 / 48.0;
 const EXPOSURE_SIGMA: f32 = 0.2;
 
 pub(super) fn label(
@@ -23,10 +26,11 @@ pub(super) fn label(
     let mut ids = vec![UNLABELLED; cells];
     let mut best = vec![f64::NEG_INFINITY; cells];
     let mut covers = Vec::with_capacity(layers.len());
+    let sigma = FOCUS_SIGMA.max(grid.w.min(grid.h) as f64 * FOCUS_SIGMA_SHARE);
     for (index, layer) in layers.iter().enumerate() {
         let source = scan(doc, layer, grid, true, control)?;
         let mut focus: Vec<f64> = source.energy.iter().map(|&e| f64::from(e)).collect();
-        pictura_core::blur::approx_gaussian(&mut focus, grid.w, grid.h, FOCUS_SIGMA);
+        pictura_core::blur::approx_gaussian(&mut focus, grid.w, grid.h, sigma);
         let mut covered = Bits::new(cells);
         for cell in 0..cells {
             if source.alpha[cell] <= 0.0 {

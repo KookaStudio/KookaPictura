@@ -10,6 +10,7 @@
 #include "pictura_app/src/cxxqt_object/auto_blend.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
 
+#include "api/document_api.h"
 #include "api/type_api.h"
 
 namespace pictura {
@@ -60,9 +61,10 @@ void PicturaMainWindow::wireAlignMenu()
     const QString autoBlend = commandIdForPath({QStringLiteral("Edit"), QStringLiteral("Auto-Blend Layers…")});
     registry_->setImplemented(autoBlend, true);
     registry_->setHandler(autoBlend, [this]() {
-        AutoBlendDialog dialog(this);
+        PictureView* view = activeView();
+        AutoBlendDialog dialog(view && document_api::documentDepthBits(*view) == 8, this);
         if (runDialog(dialog, this) == QDialog::Accepted) {
-            runAutoBlend(*this, dialog.stackImages(), dialog.seamless());
+            runAutoBlend(*this, dialog.stackImages(), dialog.seamless(), dialog.fillTransparent());
         }
     });
     registry_->setEnabledProvider(autoBlend, [this, selectedPaths]() {
@@ -71,7 +73,7 @@ void PicturaMainWindow::wireAlignMenu()
     });
 }
 
-bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless)
+bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless, bool fillTransparent)
 {
     PictureView* view = window.activeView();
     auto* panel = window.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
@@ -83,7 +85,7 @@ bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless)
     const bool committed = runCancellableJob(
         &window, PicturaMainWindow::tr("Auto-Blend Layers"),
         PicturaMainWindow::tr("Blending layers…"),
-        [&] { return auto_blend_start(*view, paths, stackImages, seamless); },
+        [&] { return auto_blend_start(*view, paths, stackImages, seamless, fillTransparent); },
         [&] { return auto_blend_running(*view); },
         [&] { return auto_blend_progress(*view); },
         [&] { auto_blend_cancel(*view); },

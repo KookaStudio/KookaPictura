@@ -61,6 +61,7 @@ pub(super) fn auto_blend_start(
     paths: &QStringList,
     stack_images: bool,
     seamless: bool,
+    fill_transparent: bool,
 ) -> bool {
     if view.rust().auto_blend.run.is_some() || !auto_blend_can(&view, paths) {
         return false;
@@ -76,6 +77,7 @@ pub(super) fn auto_blend_start(
             BlendObjective::Panorama
         },
         seamless,
+        fill_transparent,
     };
     let owned = list_of_strings(paths);
     let cancel = Arc::new(AtomicBool::new(false));

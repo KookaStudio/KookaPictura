@@ -16,10 +16,12 @@ use pictura_core::BlendMode;
 const STACK: AutoBlendOptions = AutoBlendOptions {
     objective: BlendObjective::StackImages,
     seamless: false,
+    fill_transparent: false,
 };
 const PANORAMA: AutoBlendOptions = AutoBlendOptions {
     objective: BlendObjective::Panorama,
     seamless: false,
+    fill_transparent: false,
 };
 
 fn plan(d: &Document, paths: &[&str], options: AutoBlendOptions) -> AutoBlendPlan {
@@ -501,6 +503,11 @@ fn keeps_depth(depth: BitDepth) {
         assert!(layer.mask.is_some());
         assert_eq!(layer.source_channels, before, "planes unchanged");
     }
+    let merged = d.layers[2]
+        .source_channels
+        .as_ref()
+        .expect("native samples");
+    assert_eq!(merged.depth, depth);
 }
 
 #[test]
@@ -565,6 +572,7 @@ fn mismatched(gray: bool) -> Document {
 const SEAMLESS: AutoBlendOptions = AutoBlendOptions {
     objective: BlendObjective::Panorama,
     seamless: true,
+    fill_transparent: false,
 };
 
 fn seam_step(d: &Document) -> u8 {
@@ -577,12 +585,12 @@ fn narrows_mismatch(gray: bool) {
     let before = seam_step(&d);
     let channels: Vec<Vec<_>> = d.layers.iter().map(|l| l.channels.clone()).collect();
     blend(&mut d, &["0", "1"], SEAMLESS);
-    assert_eq!(d.layers.len(), 4, "one correction per layer");
-    assert_eq!(d.layers[1].name, AUTO_BLEND_TONES);
-    assert!(d.layers[1].clipping && d.layers[3].clipping);
+    assert_eq!(d.layers.len(), 3, "the sources and the merged layer");
+    assert_eq!(d.layers[2].name, "B (merged)");
+    assert!(d.layers.iter().all(|l| l.adjustment.is_none()));
     assert!(seam_step(&d) < before / 2, "{} vs {before}", seam_step(&d));
     assert_eq!(d.layers[0].channels, channels[0], "pixels unchanged");
-    assert_eq!(d.layers[2].channels, channels[1], "pixels unchanged");
+    assert_eq!(d.layers[1].channels, channels[1], "pixels unchanged");
 }
 
 #[test]
@@ -596,7 +604,7 @@ fn seamless_handles_grayscale() {
 }
 
 #[test]
-fn seamless_identity_adds_nothing() {
+fn seamless_keeps_matching_tones() {
     let mut d = doc(
         20,
         20,
@@ -620,15 +628,50 @@ fn seamless_identity_adds_nothing() {
         ],
     );
     blend(&mut d, &["0", "1"], SEAMLESS);
-    assert_eq!(d.layers.len(), 2);
+    assert!(gray_of(&composite_rgba(&d), 10, 10).abs_diff(100) <= 1);
 }
 
 #[test]
-fn correction_sits_below_a_clipped_run() {
-    let mut clipped = adjustment("Mine");
-    clipped.clipping = true;
+fn stack_images_blends_softly() {
+    let square = full(128, 128);
+    let mut d = doc(
+        128,
+        128,
+        vec![
+            painted("Left", square, |x, y| {
+                if x < 64 {
+                    checker(x, y) / 2 + 40
+                } else {
+                    90
+                }
+            }),
+            painted("Right", square, |x, y| {
+                if x >= 64 {
+                    checker(x, y) / 2 + 100
+                } else {
+                    150
+                }
+            }),
+        ],
+    );
+    blend(&mut d, &["0", "1"], STACK);
+    let merged = d.layers[2].channels[0].data.as_slice();
+    let mean = |x: usize| {
+        (0..128)
+            .map(|y| i32::from(merged[y * 128 + x]))
+            .sum::<i32>()
+            / 128
+    };
+    let steps = (32..95).map(|x| (mean(x + 4) - mean(x)).abs());
+    assert!(steps.max().unwrap_or(0) < 25, "a hard step between regions");
+}
+
+#[test]
+fn merged_sits_above_a_clipped_run() {
     let a = painted("A", rect(0, 0, 20, 40), |_, _| 90);
     let b = painted("B", rect(0, 20, 20, 60), |_, _| 170);
+    let mut clipped = adjustment("Mine");
+    clipped.clipping = true;
     let group = Layer {
         name: "G".into(),
         opacity: 255,
@@ -636,46 +679,94 @@ fn correction_sits_below_a_clipped_run() {
         visible: true,
         is_group: true,
         blend: BlendMode::PassThrough,
-        children: pictura_core::LayerStack::from_layers(vec![a, clipped, b]),
+        children: pictura_core::LayerStack::from_layers(vec![a, b, clipped]),
         ..Default::default()
     };
     let top = solid("Top", full(60, 20), (0, 0, 0), 0, BlendMode::Normal, 255);
     let mut d = doc(60, 20, vec![group, top]);
-    let paths = blend(&mut d, &["0/0", "0/2"], SEAMLESS);
+    let paths = blend(&mut d, &["0/0", "0/1"], SEAMLESS);
     let names: Vec<&str> = d.layers[0]
         .children
         .iter()
         .map(|l| l.name.as_str())
         .collect();
-    assert_eq!(
-        names,
-        ["A", AUTO_BLEND_TONES, "Mine", "B", AUTO_BLEND_TONES]
-    );
-    assert_eq!(paths, ["0/0", "0/3"]);
+    assert_eq!(names, ["A", "B", "Mine", "B (merged)"]);
+    assert_eq!(paths, ["0/0", "0/1"]);
 }
 
 #[test]
-fn rerun_replaces_the_correction() {
+fn rerun_replaces_the_merged_layer() {
     let mut d = mismatched(false);
     let paths = blend(&mut d, &["0", "1"], SEAMLESS);
-    assert_eq!(paths, ["0", "2"]);
     let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
-    let paths = blend(&mut d, &refs, SEAMLESS);
-    assert_eq!(d.layers.len(), 4, "corrections do not stack");
-    let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
-    let paths = blend(&mut d, &refs, PANORAMA);
-    assert_eq!(d.layers.len(), 2, "the off run removes them");
-    assert_eq!(paths, ["0", "1"]);
+    blend(&mut d, &refs, PANORAMA);
+    assert_eq!(d.layers.len(), 3, "merged layers do not stack");
 }
 
 #[test]
-fn rerun_keeps_a_renamed_correction() {
+fn rerun_keeps_a_renamed_merged_layer() {
     let mut d = mismatched(false);
     blend(&mut d, &["0", "1"], SEAMLESS);
-    d.layers[1].name = "My tones".into();
-    blend(&mut d, &["0", "2"], PANORAMA);
+    d.layers[2].name = "Mine".into();
+    blend(&mut d, &["0", "1"], PANORAMA);
     let names: Vec<&str> = d.layers.iter().map(|l| l.name.as_str()).collect();
-    assert_eq!(names, ["A", "My tones", "B"]);
+    assert_eq!(names, ["A", "B", "B (merged)", "Mine"]);
+}
+
+const FILLED: AutoBlendOptions = AutoBlendOptions {
+    fill_transparent: true,
+    ..PANORAMA
+};
+
+fn gapped() -> Document {
+    doc(
+        40,
+        40,
+        vec![
+            solid(
+                "A",
+                rect(0, 0, 40, 15),
+                (200, 40, 40),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            solid(
+                "B",
+                rect(0, 25, 40, 40),
+                (200, 40, 40),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+        ],
+    )
+}
+
+#[test]
+fn content_aware_fill_covers_the_canvas() {
+    let mut d = gapped();
+    blend(&mut d, &["0", "1"], FILLED);
+    let merged = &d.layers[2];
+    assert_eq!(merged.rect, full(40, 40));
+    let alpha = merged.channels[3].data.as_slice();
+    assert!(alpha.iter().all(|&a| a == 255), "opaque across the canvas");
+    assert_eq!(merged.channels[0].data.as_slice()[20 * 40 + 20], 200);
+}
+
+#[test]
+fn content_aware_fill_is_ignored_at_high_depth() {
+    let mut d = doc(
+        40,
+        40,
+        vec![
+            native(BitDepth::Sixteen, "A", rect(0, 0, 40, 15), 0.4),
+            native(BitDepth::Sixteen, "B", rect(0, 25, 40, 40), 0.4),
+        ],
+    );
+    d.source_depth = Some(BitDepth::Sixteen);
+    blend(&mut d, &["0", "1"], FILLED);
+    assert_eq!(d.layers[2].channels[3].data.as_slice()[20 * 40 + 20], 0);
 }
 
 fn retained_mask_layer() -> Document {

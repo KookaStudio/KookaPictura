@@ -1,5 +1,6 @@
 //! Edit > Auto-Blend Layers: one generated raster mask per processed layer, for
-//! a panorama or an image stack, with an optional clipped tonal correction.
+//! a panorama or an image stack, plus a merged layer holding a multiband blend
+//! with any tonal correction baked in.
 //!
 //! Approximated, behavioural parity only: Adobe's focus metric, seam method and
 //! tonal model are unpublished. See `docs/05-layers/align-and-distribute.md`.
@@ -12,6 +13,7 @@
 //! ponytail: a layer's vector mask is ignored by the analysis.
 
 mod apply;
+mod blend;
 mod gains;
 mod pyramid;
 mod seams;
@@ -22,7 +24,7 @@ mod tests;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use pictura_core::{AdjustmentData, ColorMode, Document, Layer, LayerMask, PsdRect};
+use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerMask, PsdRect};
 use rayon::prelude::*;
 
 use super::paths::{parse_path, resolve_path, unique};
@@ -31,9 +33,6 @@ use crate::fill::decode_layer_fill;
 pub use apply::apply_auto_blend;
 
 use sources::Grid;
-
-/// The name of a correction layer, which a later run replaces.
-pub const AUTO_BLEND_TONES: &str = "Auto-Blend Tones";
 
 /// `progress` reaches this when a plan is complete.
 pub const AUTO_BLEND_PROGRESS_MAX: u32 = 1000;
@@ -49,6 +48,8 @@ pub enum BlendObjective {
 pub struct AutoBlendOptions {
     pub objective: BlendObjective,
     pub seamless: bool,
+    /// Content Aware Fill Transparent Areas: post-CS6, 8-bit only.
+    pub fill_transparent: bool,
 }
 
 /// The run was cancelled; nothing was produced.
@@ -60,13 +61,13 @@ pub struct Cancelled;
 pub struct BlendedLayer {
     pub path: String,
     pub mask: LayerMask,
-    pub correction: Option<AdjustmentData>,
 }
 
 /// The computed blend, bottom layer first, ready for [`apply_auto_blend`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AutoBlendPlan {
     pub layers: Vec<BlendedLayer>,
+    pub merged: Option<Layer>,
 }
 
 /// Cancellation and progress shared with the caller's thread.
@@ -177,7 +178,7 @@ pub fn plan_auto_blend(
         cancel,
         progress,
         done: AtomicU32::new(0),
-        total: 3 * layers.len() as u32 + 1,
+        total: 3 * layers.len() as u32 + 2,
     };
     let Some(domain) = union_of_content(doc, &targets) else {
         return Ok(AutoBlendPlan::default());
@@ -197,20 +198,41 @@ pub fn plan_auto_blend(
             (seams.ids, Some(seams.conflict))
         }
     };
-    let gray = doc.mode == ColorMode::Grayscale;
     let masks = masks(doc, &layers, &grid, &labels, conflict.as_deref(), &control)?;
+    let input = blend::BlendInput {
+        domain,
+        grid: &grid,
+        labels: &labels,
+        gains: &channel_gains,
+        conflict: conflict.as_deref(),
+    };
+    let mut merged = blend::blend(doc, &layers, &input, &control)?;
+    control.step()?;
+    let high_depth = matches!(
+        doc.source_depth,
+        Some(BitDepth::Sixteen | BitDepth::ThirtyTwo)
+    );
+    if options.fill_transparent && !high_depth {
+        merged.fill_transparent(doc.width, doc.height);
+    }
+    let name = merged_name(layers[layers.len() - 1]);
     let blended = targets
         .iter()
         .zip(masks)
-        .zip(&channel_gains)
-        .map(|((path, mask), gain)| BlendedLayer {
+        .map(|(path, mask)| BlendedLayer {
             path: path.to_string(),
             mask,
-            correction: gains::curve(gain, gray),
         })
         .collect();
     progress.store(AUTO_BLEND_PROGRESS_MAX, Ordering::Relaxed);
-    Ok(AutoBlendPlan { layers: blended })
+    Ok(AutoBlendPlan {
+        layers: blended,
+        merged: Some(merged.into_layer(doc, name)),
+    })
+}
+
+fn merged_name(top: &Layer) -> String {
+    format!("{} (merged)", top.name)
 }
 
 fn union_of_content(doc: &Document, paths: &[&str]) -> Option<PsdRect> {

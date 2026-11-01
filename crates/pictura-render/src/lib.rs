@@ -209,7 +209,7 @@ pub use document_ops::{
     BlendedLayer, Clip, Interpolation, LayerMaskKind, LayerStyle, LayerTransform, MaskDocument,
     MatteBackground, MattingError, MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode,
     ShapeAttributes, ShapeStroke, Slice, StampScope, VectorMaskKind, AUTO_BLEND_PROGRESS_MAX,
-    AUTO_BLEND_TONES, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
+    MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use document_ops::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};

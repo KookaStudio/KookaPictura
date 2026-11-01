@@ -47,7 +47,7 @@ impl Grid {
     }
 
     /// Bilinear sample of `work` at document pixel `(x, y)`, zero off the grid.
-    fn sample(&self, work: &[f32], x: i32, y: i32) -> f32 {
+    pub fn sample(&self, work: &[f32], x: i32, y: i32) -> f32 {
         let (dx, dy) = (x - self.left, y - self.top);
         let (span_x, span_y) = (self.w * self.f, self.h * self.f);
         if dx < 0 || dy < 0 || dx as usize >= span_x || dy as usize >= span_y {

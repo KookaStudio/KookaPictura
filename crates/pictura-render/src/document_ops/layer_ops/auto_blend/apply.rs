@@ -1,101 +1,49 @@
-//! Installing an [`AutoBlendPlan`]: masks first, then correction layers.
+//! Installing an [`AutoBlendPlan`]: masks, then the merged layer.
 
 use pictura_core::{Document, Layer};
 
 use super::super::layer_masks::replace_layer_mask;
-use super::super::paths::{parse_path, resolve_path};
-use super::{AutoBlendPlan, AUTO_BLEND_TONES};
+use super::super::paths::parse_path;
+use super::AutoBlendPlan;
 
-fn is_correction(layer: &Layer) -> bool {
-    layer.name == AUTO_BLEND_TONES
-        && layer.clipping
-        && layer.adjustment.as_ref().is_some_and(|a| a.key == *b"curv")
-}
-
-fn correction_layer(adjustment: pictura_core::AdjustmentData) -> Layer {
-    Layer {
-        name: AUTO_BLEND_TONES.into(),
-        opacity: 255,
-        fill: 255,
-        visible: true,
-        clipping: true,
-        adjustment: Some(adjustment),
-        ..Default::default()
+/// The container of `segments`' node, top-level when `parent` is empty.
+fn siblings<'a>(doc: &'a Document, parent: &[usize]) -> Option<&'a [Layer]> {
+    let mut layers: &[Layer] = &doc.layers;
+    for &index in parent {
+        layers = &layers.get(index)?.children;
     }
+    Some(layers)
 }
 
-/// One change to a container: `net` layers more directly above `index`.
-struct Shift {
-    parent: Vec<usize>,
-    index: usize,
-    net: isize,
-}
-
-/// Where `segments` lands after `shifts`, which name pre-edit positions.
-fn remap(segments: &[usize], shifts: &[Shift]) -> String {
-    let moved: Vec<String> = segments
-        .iter()
-        .enumerate()
-        .map(|(depth, &index)| {
-            let net: isize = shifts
-                .iter()
-                .filter(|s| s.index < index && s.parent == segments[..depth])
-                .map(|s| s.net)
-                .sum();
-            (index as isize + net).to_string()
-        })
-        .collect();
-    moved.join("/")
-}
-
-/// Install `plan`, replacing an earlier correction directly above each layer
-/// even when this run adds none. Returns each processed layer's path afterwards,
-/// bottom first. Works top-down so an edit never moves a path still to come.
+/// Install `plan`. The merged layer goes above the topmost source and any clipped
+/// run on it, replacing an earlier one of the same name found there. Nothing below
+/// it moves, so returns the processed paths unchanged, bottom first.
 pub fn apply_auto_blend(doc: &mut Document, plan: AutoBlendPlan) -> Vec<String> {
-    let mut ordered = Vec::with_capacity(plan.layers.len());
+    let mut paths = Vec::with_capacity(plan.layers.len());
     for layer in plan.layers {
-        let Some(segments) = parse_path(&layer.path) else {
-            continue;
-        };
         if replace_layer_mask(doc, &layer.path, layer.mask) {
-            ordered.push((segments, layer.correction));
+            paths.push(layer.path);
         }
     }
-    let originals: Vec<Vec<usize>> = ordered.iter().map(|(s, _)| s.clone()).collect();
-    let mut shifts = Vec::new();
-    for (segments, correction) in ordered.into_iter().rev() {
-        let Some((&index, parent)) = segments.split_last() else {
-            continue;
-        };
-        let mut above = segments.clone();
-        above[parent.len()] = index + 1;
-        let joined = above
-            .iter()
-            .map(usize::to_string)
-            .collect::<Vec<_>>()
-            .join("/");
-        let mut net = 0isize;
-        if resolve_path(doc, &joined).is_some_and(is_correction)
-            && doc.layers.remove(&above).is_some()
-        {
-            net -= 1;
-        }
-        if let Some(adjustment) = correction {
-            if doc
-                .layers
-                .insert(parent, index + 1, correction_layer(adjustment))
-                .is_ok()
-            {
-                net += 1;
-            }
-        }
-        if net != 0 {
-            shifts.push(Shift {
-                parent: parent.to_vec(),
-                index,
-                net,
-            });
-        }
+    let (Some(merged), Some(top)) = (plan.merged, paths.last().and_then(|p| parse_path(p))) else {
+        return paths;
+    };
+    let Some((&index, parent)) = top.split_last() else {
+        return paths;
+    };
+    let Some(layers) = siblings(doc, parent) else {
+        return paths;
+    };
+    let mut slot = index + 1;
+    while layers.get(slot).is_some_and(|layer| layer.clipping) {
+        slot += 1;
     }
-    originals.iter().map(|s| remap(s, &shifts)).collect()
+    if layers.get(slot).is_some_and(|l| l.name == merged.name) {
+        let mut stale = parent.to_vec();
+        stale.push(slot);
+        doc.layers.remove(&stale);
+    }
+    // A failed insert leaves the masks, which are a complete result.
+    let _ = doc.layers.insert(parent, slot, merged);
+    paths
 }

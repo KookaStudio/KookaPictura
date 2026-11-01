@@ -11,10 +11,10 @@ const LEVELS: usize = 5;
 /// the widest transition.
 const SMOOTH_FLOOR: f32 = 0.002;
 
-struct Level {
-    w: usize,
-    h: usize,
-    data: Vec<f32>,
+pub(super) struct Level {
+    pub w: usize,
+    pub h: usize,
+    pub data: Vec<f32>,
 }
 
 impl Level {
@@ -39,7 +39,7 @@ impl Level {
     /// Bilinear sample where `(x, y)` is a cell of the finest level and
     /// `scale` is that level's cells per cell of this one.
     #[inline]
-    fn sample(&self, x: usize, y: usize, scale: usize) -> f32 {
+    pub fn sample(&self, x: usize, y: usize, scale: usize) -> f32 {
         let f = scale as f32;
         let u = ((x as f32 + 0.5) / f - 0.5).clamp(0.0, (self.w - 1) as f32);
         let v = ((y as f32 + 0.5) / f - 0.5).clamp(0.0, (self.h - 1) as f32);
@@ -53,7 +53,7 @@ impl Level {
     }
 }
 
-fn pyramid(data: Vec<f32>, w: usize, h: usize, count: usize) -> Vec<Level> {
+pub(super) fn pyramid(data: Vec<f32>, w: usize, h: usize, count: usize) -> Vec<Level> {
     let mut levels = vec![Level { w, h, data }];
     while levels.len() < count {
         let next = levels[levels.len() - 1].reduce();

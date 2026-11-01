@@ -57,7 +57,6 @@ pub use align::{
 pub use auto_blend::{
     apply_auto_blend, can_auto_blend, plan_auto_blend, AutoBlendOptions, AutoBlendPlan,
     BlendObjective, BlendedLayer, Cancelled as AutoBlendCancelled, AUTO_BLEND_PROGRESS_MAX,
-    AUTO_BLEND_TONES,
 };
 pub use clipboard::{
     clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, Clip, PasteMode,
