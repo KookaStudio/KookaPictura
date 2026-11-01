@@ -13,6 +13,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   feature is now `software-gpu`, and `windows-render`
   runs a DX12 device smoke check on WARP (the full parity profile stays on
   lavapipe).
+- **Edit > Auto-Blend Layers** (#583, OpenSpec change `add-auto-blend-layers`).
+  `pictura-render::document_ops::layer_ops::auto_blend` plans one mask per layer
+  on a worker and applies it as one state: focus and exposure scoring for Stack
+  Images, a seeded watershed for Panorama, soft weights turned into stacked
+  alphas. Seamless adds clipped `Auto-Blend Tones` Curves layers, which needed a
+  compositor fix: a clipped adjustment over a soft base now keeps alpha and
+  applies fully. All approximated, behavioural parity only. Ceilings: Normal mode
+  at 100 % opacity, a 16 MP work grid, vector masks ignored, no video or 3D
+  refusal (#1110). `replace_layer_mask` handles the stale `-2` plane for this
+  command only (#1111). Auto-Align stays open (#582).
 - **Agent Control works in Flatpak and Snap builds** (#1079, OpenSpec change
   `agent-control-in-sandboxes`), with no new sandbox permission. The client starts
   the bridge inside the sandbox (`flatpak run <id> --mcp`, `snap run

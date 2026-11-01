@@ -305,8 +305,8 @@ is emitted.
   content-based align.
 - **Auto-Blend mode guard** — CMYK/Lab and Bitmap/Indexed are rejected; Smart
   Objects, video, 3D, and Background layers are rejected.
-- **Background layer** — cannot be freely transformed; must be converted to a
-  regular layer before auto-align/blend.
+- **Background layer** — cannot be freely transformed; the user must convert it
+  to a regular layer before auto-align/blend. The command does not convert it.
 - **8/16/32-bit** — align/distribute are geometry-only and depth-independent;
   Auto-Blend's focus/exposure analysis should run at the document depth (32-bit
   float supported for RGB/Gray).
@@ -337,8 +337,9 @@ is emitted.
   aligned focus-bracketed RGB layers, each output layer gains a mask, and the
   composite's focus metric is better than any single input over the overlap
   region.
-- Given a CMYK or a document containing a Smart Object, `Auto-Blend Layers` is
-  rejected without changing the document.
+- Given a CMYK document, or a selection containing a Smart Object,
+  `Auto-Blend Layers` is rejected without changing the document. A Smart Object
+  outside the selection does not block it.
 - Given 32-bit RGB layers, Auto-Blend runs and the result is 32-bit.
 - Given any of these commands, exactly one history state is added and a single
   undo restores all affected transforms/masks.
