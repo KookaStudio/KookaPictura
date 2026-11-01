@@ -4,6 +4,14 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **DX12 defaults to the FXC shader compiler** (#1104, OpenSpec change
+  `dx12-fxc-default`). wgpu 30's `Auto` loaded the stale `dxcompiler.dll`
+  windeployqt ships, so a Windows launch fell back to the CPU. Both device
+  creation sites now use `pictura_render::dx12_compiler()` (FXC, overridable
+  with `WGPU_DX12_COMPILER`). A probe records a one-line detail (adapter,
+  driver, compiler, or the request error) in `gpu-backend.json`. The test
+  feature is now `software-gpu`, and `windows-render`
+  runs the GPU parity profile on WARP so the FXC path is proven in CI.
 - **Agent Control works in Flatpak and Snap builds** (#1079, OpenSpec change
   `agent-control-in-sandboxes`), with no new sandbox permission. The client starts
   the bridge inside the sandbox (`flatpak run <id> --mcp`, `snap run
@@ -142,7 +150,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   the cxx-qt build script for all 77 bridges.
   Doctests are disabled workspace-wide and gone from the report; CI's `oracles`
   job is folded into `test` (ImageMagick cached, `ag-psd` pinned), and the
-  `software-vulkan` clippy runs in `lint`. A cached `-fuse-ld=` that hides an
+  `software-gpu` clippy runs in `lint`. A cached `-fuse-ld=` that hides an
   installed mold warns once per build tree. Tests:
   `pictura_app::build_config::{bridge_modules_end_at_column_zero,
   dev_app_profile_keeps_release_semantics,
@@ -247,7 +255,7 @@ Snapshot for resuming after a context break. Update after each milestone.
     tables; effect passes; and clipping groups. High-bit-depth documents,
     knockout, Blend If, and Dissolve still decline. Device-dependent GPU tests
     are `#[ignore]`d and run in the `gpu-parity` CI job on lavapipe
-    (`software-vulkan` feature, nextest `gpu` profile).
+    (`software-gpu` feature, nextest `gpu` profile).
 - **Rust single-source tables** (#269, #271, #272, #274, #403, branch
   `refactor/269-rust-single-source-bundle`, OpenSpec change
   `rust-single-source-bundle`). The shell's duplicated tables and colour math

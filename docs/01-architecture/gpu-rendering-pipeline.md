@@ -263,12 +263,16 @@ A launch pins exactly one backend: `wgpu::Instance::new` initializes every
 backend named in its bitmask, so a multi-backend instance would still load the
 Vulkan ICD that crashes on Intel Gen9 hardware. The launcher probes each
 candidate in a child process (`pictura --gpu-probe dx12|vulkan`), records the
-outcome in `kooka-pictura/gpu-backend.json` beside `state.json`, and pins the
-winner in the parent. A `gpu-init.marker` left by a crash during the parent's
-own init marks that backend `crashed` on the next launch. `WGPU_BACKEND`
-replaces the candidate order but still probes and still honors a `crashed`
-entry; `WGPU_BACKEND=none` forces the CPU. Linux keeps the direct Vulkan path,
-and the zero-copy interop probe stays Vulkan-only.
+outcome and a one-line detail in `kooka-pictura/gpu-backend.json` beside
+`state.json`, and pins the winner in the parent. DX12 uses the FXC shader
+compiler by default, so a stale `dxcompiler.dll` deployed by windeployqt is
+never loaded; `WGPU_DX12_COMPILER` overrides that choice for a machine with a
+modern DXC. A `gpu-init.marker` left by a crash during the parent's own init
+marks that backend `crashed` on the next launch. `WGPU_BACKEND` replaces the
+candidate order but still probes and still honors a `crashed` entry;
+`WGPU_BACKEND=none` forces the CPU. Linux keeps the direct Vulkan path, and the
+zero-copy interop probe stays Vulkan-only. Windows CI runs the GPU parity
+suites on WARP with the FXC path so a compiler regression fails the job.
 
 ## Rust module mapping
 
