@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **File > Open accepts a multi-file selection** (#1118, OpenSpec change
+  `multi-file-open`). The Open dialog now uses `QFileDialog::ExistingFiles`
+  (`getOpenFileNames()` in `cpp/dialogs.cpp`), and `showOpenDialog()` starts one
+  open per chosen path, so Shift-click/Ctrl-click opens one document per file
+  (tabs or floating windows per the tabs preference). A failed file does not
+  stop the rest. Open As, Place, Open Recent, and the command line stay
+  single-file. Tests: `tst_multi_file_open`.
 - **DX12 defaults to the FXC shader compiler** (#1104, OpenSpec change
   `dx12-fxc-default`). wgpu 30's `Auto` loaded the stale `dxcompiler.dll`
   windeployqt ships, so a Windows launch fell back to the CPU. Both device
