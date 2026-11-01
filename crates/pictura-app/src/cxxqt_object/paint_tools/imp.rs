@@ -224,6 +224,10 @@ pub(super) fn begin_pattern_stamp(
     })
 }
 
+pub(super) fn paint_hold(view: Pin<&mut PictureView>) -> bool {
+    view.paint_hold()
+}
+
 pub(super) fn begin_history_brush(
     view: Pin<&mut PictureView>,
     tip: &PaintTip,

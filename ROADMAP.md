@@ -150,6 +150,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Brush, pencil, colour replacement and mixer brush
 - [x] Clone stamp and pattern stamp
 - [x] History brush and art history brush
+- [x] Airbrush on the stamp tools and History Brush; Art History Brush paints
+      while the button is held (#799)
+- [ ] The Brush's Airbrush option and Shift+Alt+P (#1120)
 - [x] Eraser, background eraser and magic eraser
 - [x] Gradient and paint bucket
 - [x] Blur, sharpen and smudge

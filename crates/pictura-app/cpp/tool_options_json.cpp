@@ -185,6 +185,9 @@ template <typename F> void fields(StampOptions& o, F&& f)
     f("ignoreAdjustments", o.ignoreAdjustments);
     f("pattern", o.pattern);
     f("patternAligned", o.patternAligned);
+    f("cloneAirbrush", o.cloneAirbrush);
+    f("patternAirbrush", o.patternAirbrush);
+    f("historyAirbrush", o.historyAirbrush);
 }
 
 template <typename F> void fields(EraserOptions& o, F&& f)

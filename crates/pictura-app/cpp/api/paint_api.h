@@ -31,6 +31,7 @@ public:
 
     bool open() const { return open_; }
     bool dab(double x, double y, double pressure = 1.0);
+    bool hold();
     bool present();
     bool finish();
     void cancel();

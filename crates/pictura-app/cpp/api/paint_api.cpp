@@ -50,6 +50,14 @@ bool Stroke::dab(double x, double y, double pressure)
     return view_->paint_dab(x, y, pressure);
 }
 
+bool Stroke::hold()
+{
+    if (!open_ || !view_) {
+        return false;
+    }
+    return paint_hold(*view_);
+}
+
 bool Stroke::present()
 {
     if (!open_ || !view_) {
