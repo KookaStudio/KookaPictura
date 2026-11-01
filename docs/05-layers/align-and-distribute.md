@@ -94,7 +94,8 @@ masks, and optionally matching tonal ranges. Two objectives:
   already aligned.
 
 **Seamless Tones And Colors** is an optional checkbox that adjusts color and
-tonality while blending. Constraints stated by the Help:
+tonality while blending. Kooka also offers **Content Aware Fill Transparent
+Areas**, a post-CS6 option outside CS6 parity, at 8 bits only. Constraints stated by the Help:
 
 - Only **RGB or Grayscale** images.
 - Does **not** work with Smart Objects, video layers, 3D layers, or background
@@ -276,7 +277,9 @@ is emitted.
   scale, perspective), so `Transform2D` must support a full 3×3 homography or a
   documented approximation.
 - **Auto-Blend** creates or replaces one raster **layer mask** per processed
-  layer, and may store a tonal correction. It does not change layer pixels.
+  layer and does not change those layers' pixels. It also adds one merged raster
+  layer, `<top layer> (merged)`, above them, holding a multiband blend with any
+  tonal correction baked in. A later run replaces that layer.
 - **Path align/distribute** mutates path component control points.
 - **Undo:** each user invocation is one history state (`ARCH-009`). Auto-Align
   and Auto-Blend are compound: undo restores every affected transform / removes
