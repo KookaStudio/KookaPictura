@@ -144,10 +144,14 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "regionDamaged"]
         fn region_damaged(self: Pin<&mut Self>, x: i32, y: i32, w: i32, h: i32);
-        /// Emitted after a document replacement or history restore cancelled the live tool session; handlers drop their local gesture state.
+        /// Emitted after a document replacement, or a history restore that cancelled a live session; handlers drop their local gesture state.
         #[qsignal]
         #[cxx_name = "sessionCancelled"]
         fn session_cancelled(self: Pin<&mut Self>);
+        /// Emitted after a history restore that cancelled no live session. Handlers drop local gesture state; `changed` has already scheduled the panels.
+        #[qsignal]
+        #[cxx_name = "historyRestored"]
+        fn history_restored(self: Pin<&mut Self>);
         /// Emitted on the GUI thread when a started document open ends. `status` is `ok`, a PDF probe status, or `error:<message>`; `warnings` are the renderer's recoverable problems (PDF/EPS imports).
         #[qsignal]
         #[cxx_name = "openFinished"]
@@ -1133,12 +1137,6 @@ pub mod qobject {
         /// Capture the current state as a named restore point; false without a document.
         #[qinvokable]
         fn history_add_snapshot(self: Pin<&mut Self>, label: &QString) -> bool;
-        /// Number of named restore points (capped at 10).
-        #[qinvokable]
-        fn history_snapshot_count(&self) -> i32;
-        /// Label of named restore point `i`, or empty when out of range.
-        #[qinvokable]
-        fn history_snapshot_label(&self, i: i32) -> QString;
         /// Restore named restore point `i`, recomposite, and emit [`changed`]. Returns false when `i` is out of range.
         #[qinvokable]
         fn history_restore_snapshot(self: Pin<&mut Self>, i: i32) -> bool;

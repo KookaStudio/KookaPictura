@@ -281,8 +281,7 @@ fn mask_sample(mask: &LayerMask, x: i32, y: i32) -> u8 {
     if mx < 0 || my < 0 || mx >= mw || my >= mh {
         return mask.default_color;
     }
-    data.get(my as usize * mw as usize + mx as usize)
-        .copied()
+    data.sample(my as usize * mw as usize + mx as usize)
         .unwrap_or(mask.default_color)
 }
 

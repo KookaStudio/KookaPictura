@@ -14,6 +14,7 @@
 #include "selftest_paint_fixture.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/export.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/healing.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
@@ -326,7 +327,7 @@ void DocumentSessionTest::revertIsUndoable()
     QVERIFY(view->rotate_doc(1));
     QVERIFY(view->history_add_snapshot(QStringLiteral("Snap")));
     const int history = view->history_count();
-    const int snapshots = view->history_snapshot_count();
+    const int snapshots = pictura::history_snapshot_count(*view);
     QCOMPARE(view->document_width(), 32);
     QCOMPARE(view->document_height(), 64);
     QVERIFY(view->is_dirty());
@@ -339,7 +340,7 @@ void DocumentSessionTest::revertIsUndoable()
     QVERIFY(!view->is_painting());
     QCOMPARE(view->history_count(), history + 1);
     QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Revert"));
-    QCOMPARE(view->history_snapshot_count(), snapshots);
+    QCOMPARE(pictura::history_snapshot_count(*view), snapshots);
     QCOMPARE(view->document_width(), 64);
     QCOMPARE(view->document_height(), 32);
     QVERIFY(!view->is_dirty());

@@ -5,6 +5,7 @@ use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
 mod bands;
 mod cache;
 mod hint;
+mod mask_damage;
 
 fn doc(w: u32, h: u32, seed: u8) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);

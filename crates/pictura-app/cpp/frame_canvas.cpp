@@ -135,6 +135,11 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
             refreshPanels();
         }
     });
+    connect(view, &PictureView::historyRestored, this, [this]() {
+        if (tools_) {
+            tools_->onSessionCancelled();
+        }
+    });
     trackRecovery(view);
     // The cheapest sync only: restart the same 120 ms panel timer the `changed`
     // path uses, and never call image()/replaceImage(), so the region path

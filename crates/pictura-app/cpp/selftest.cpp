@@ -54,6 +54,7 @@
 #include "toolbox.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h"
 #include "interop.h"
 #include "selftest.h"
@@ -861,9 +862,9 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             const bool histJumpBack = propView && propView->history_jump(histAfter - 1);
             const bool snapAdded =
                 propView && propView->history_add_snapshot(QStringLiteral("Checkpoint"));
-            const int snapCount = propView ? propView->history_snapshot_count() : -1;
+            const int snapCount = propView ? pictura::history_snapshot_count(*propView) : -1;
             const bool snapLabelOk =
-                propView && propView->history_snapshot_label(0) == QStringLiteral("Checkpoint");
+                propView && pictura::history_snapshot_label(*propView, 0) == QStringLiteral("Checkpoint");
             const bool snapRestored = propView && propView->history_restore_snapshot(0);
             ST_BEGIN("history_states");
             ST_PASS("history states=%d open_label=%d grew=%d "

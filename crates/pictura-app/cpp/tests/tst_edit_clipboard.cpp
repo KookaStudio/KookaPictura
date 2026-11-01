@@ -153,11 +153,11 @@ void EditClipboardTest::purgeCommands()
     view->history_add_snapshot(QStringLiteral("Snap 1"));
     QVERIFY(view->history_count() > 1);
     QVERIFY(view->can_undo());
-    QCOMPARE(view->history_snapshot_count(), 1);
+    QCOMPARE(pictura::history_snapshot_count(*view), 1);
 
     // Purge Histories drops the restore point but keeps the undo stack.
     dispatch(pictura::command_ids::EditPurgeHistories);
-    QCOMPARE(view->history_snapshot_count(), 0);
+    QCOMPARE(pictura::history_snapshot_count(*view), 0);
     QVERIFY(view->history_count() > 1);
     QVERIFY(view->can_undo());
 
@@ -171,7 +171,7 @@ void EditClipboardTest::purgeCommands()
     pictura::clipboard_copy(*view, view->active_layer_path(), false);
     QVERIFY(pictura::clipboard_has_contents());
     dispatch(pictura::command_ids::EditPurgeAll);
-    QCOMPARE(view->history_snapshot_count(), 0);
+    QCOMPARE(pictura::history_snapshot_count(*view), 0);
     QCOMPARE(view->history_count(), 1);
     QVERIFY(!pictura::clipboard_has_contents());
 

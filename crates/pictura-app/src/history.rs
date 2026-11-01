@@ -10,8 +10,8 @@ mod planes;
 mod styles;
 
 use planes::{
-    adopt_metadata, apply_tiles, diff_into, fracture_planes, hollow, plane_kinds, planes_agree,
-    shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta, PlaneKind,
+    adopt_metadata, apply_tiles, diff_into, fracture_planes, hollow, mask_rects, plane_kinds,
+    planes_agree, shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta, PlaneKind,
 };
 pub(crate) use planes::{copy_plane, detached_copy};
 pub use styles::{
@@ -163,25 +163,39 @@ impl Damage {
         }
     }
 
+    fn union(&mut self, r: PsdRect) {
+        self.rect = Some(match self.rect {
+            None => r,
+            Some(u) => PsdRect {
+                top: u.top.min(r.top),
+                left: u.left.min(r.left),
+                bottom: u.bottom.max(r.bottom),
+                right: u.right.max(r.right),
+            },
+        });
+    }
+
     fn add(&mut self, deltas: &[PlaneDelta]) {
         for delta in deltas {
-            match self.kinds.get(delta.index) {
+            match self.kinds.get(delta.index).copied() {
                 Some(PlaneKind::Composite) => {
                     for tile in &delta.tiles {
                         let (top, bottom) = self.rows(tile);
-                        let r = PsdRect {
+                        self.union(PsdRect {
                             top,
                             bottom,
                             ..tile_rect(tile)
-                        };
-                        self.rect = Some(match self.rect {
-                            None => r,
-                            Some(u) => PsdRect {
-                                top: u.top.min(r.top),
-                                left: u.left.min(r.left),
-                                bottom: u.bottom.max(r.bottom),
-                                right: u.right.max(r.right),
-                            },
+                        });
+                    }
+                }
+                Some(PlaneKind::Mask(mask)) => {
+                    for tile in &delta.tiles {
+                        let r = tile_rect(tile);
+                        self.union(PsdRect {
+                            top: r.top + mask.top,
+                            left: r.left + mask.left,
+                            bottom: r.bottom + mask.top,
+                            right: r.right + mask.left,
                         });
                     }
                 }
@@ -521,7 +535,9 @@ impl History {
             .as_ref()
             .is_some_and(|cur| planes_agree(&cur.doc, doc));
         let before = self.current.as_ref().map(|cur| hollow(&cur.doc));
+        let masks_moved = self.masks_move_between(leaving, target);
         let mut damage = self.step_to(target, agreed.then_some(&mut *doc));
+        damage.everywhere |= masks_moved;
         let cur = self
             .current
             .as_mut()
@@ -585,6 +601,14 @@ impl History {
                 right: 0,
             }))
         }
+    }
+
+    /// Whether any state from `a` to `b` places a layer mask differently, which
+    /// leaves the walk's mask tiles without a single document position.
+    fn masks_move_between(&self, a: usize, b: usize) -> bool {
+        let (low, high) = (a.min(b), a.max(b));
+        let first = mask_rects(self.meta_of(low).0);
+        (low + 1..=high).any(|k| mask_rects(self.meta_of(k).0) != first)
     }
 
     /// The anchor of the segment holding state `i`.

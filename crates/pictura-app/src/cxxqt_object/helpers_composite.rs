@@ -382,10 +382,13 @@ pub(super) fn layer_thumbnail_image(layer: &Layer, size: u32) -> Option<QImage> 
             let sx = tx as usize * width as usize / tw as usize;
             let si = sy * width as usize + sx;
             let o = ((ty * tw + tx) * 4) as usize;
-            rgba[o] = c0[si];
-            rgba[o + 1] = c1[si];
-            rgba[o + 2] = c2[si];
-            rgba[o + 3] = alpha.map_or(255, |a| a[si]);
+            rgba[o] = c0.sample(si)?;
+            rgba[o + 1] = c1.sample(si)?;
+            rgba[o + 2] = c2.sample(si)?;
+            rgba[o + 3] = match alpha {
+                Some(a) => a.sample(si)?,
+                None => 255,
+            };
         }
     }
     Some(rgba_image(rgba, tw as i32, th as i32))
@@ -410,16 +413,17 @@ pub(super) fn layer_pixel(layer: &Layer, x: u32, y: u32) -> Option<[u8; 4]> {
         return None;
     }
     let (r, g, b) = if channel(1).is_none() && channel(2).is_none() {
-        (c0[at], c0[at], c0[at])
+        let v = c0.sample(at)?;
+        (v, v, v)
     } else {
         let (c1, c2) = (channel(1)?, channel(2)?);
         if c1.len() != plane || c2.len() != plane {
             return None;
         }
-        (c0[at], c1[at], c2[at])
+        (c0.sample(at)?, c1.sample(at)?, c2.sample(at)?)
     };
     let a = match channel(-1) {
-        Some(a) if a.len() == plane => a[at],
+        Some(a) if a.len() == plane => a.sample(at)?,
         Some(_) => return None,
         None => 255,
     };
@@ -676,7 +680,7 @@ pub(super) fn mask_thumbnail_image(mask: &LayerMask, size: u32) -> Option<QImage
         let sy = ty as usize * height as usize / th as usize;
         for tx in 0..tw {
             let sx = (tx as usize * width as usize / tw as usize).min(width as usize - 1);
-            let v = data[sy * width as usize + sx];
+            let v = data.sample(sy * width as usize + sx)?;
             let o = ((ty * tw + tx) * 4) as usize;
             rgba[o..o + 4].copy_from_slice(&[v, v, v, 255]);
         }
@@ -1094,5 +1098,88 @@ mod bundle_tests {
         assert_eq!(mask.rect.width(), 16);
         assert_eq!(mask.data.as_ref().map(|d| d.len()), Some(256));
         assert!(mask_thumbnail_image(&mask, 24).is_some());
+    }
+
+    fn rect(size: i32) -> PsdRect {
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: size,
+            right: size,
+        }
+    }
+
+    /// A 128×128 RGBA layer and mask whose bands have diverged, the state an
+    /// in-place undo leaves in the live document.
+    fn diverged_layer() -> Layer {
+        let size = 128usize;
+        let channel = |id: i16, seed: u8| {
+            let mut data: pictura_core::Plane<u8> = (0..size * size)
+                .map(|i| (i as u8).wrapping_mul(seed))
+                .collect::<Vec<u8>>()
+                .into();
+            data.fracture(size);
+            let shared = data.clone();
+            data.write_band(0).expect("a band")[0] = seed;
+            drop(shared);
+            pictura_core::Channel { id, data }
+        };
+        let mut mask = channel(0, 3).data;
+        mask.fracture(size);
+        Layer {
+            rect: rect(size as i32),
+            channels: vec![channel(0, 3), channel(1, 5), channel(2, 7), channel(-1, 11)],
+            mask: Some(LayerMask {
+                rect: rect(size as i32),
+                data: Some(mask),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn flattened(layer: &Layer) -> Layer {
+        let mut flat = layer.clone();
+        for channel in &mut flat.channels {
+            channel.data = channel.data.as_slice().to_vec().into();
+        }
+        if let Some(data) = flat.mask.as_mut().and_then(|m| m.data.as_mut()) {
+            *data = data.as_slice().to_vec().into();
+        }
+        flat
+    }
+
+    #[test]
+    fn thumbnails_of_a_diverged_layer_materialize_no_plane() {
+        let layer = diverged_layer();
+        let mask = layer.mask.as_ref().expect("mask");
+        pictura_core::reset_materializations();
+        assert!(layer_thumbnail_image(&layer, 24).is_some());
+        assert!(layer_thumbnail_positioned(&layer, 256, 256, 24).is_some());
+        assert!(mask_thumbnail_image(mask, 24).is_some());
+        assert_eq!(pictura_core::materializations(), 0);
+    }
+
+    #[test]
+    fn thumbnails_of_a_diverged_layer_match_its_flat_copy() {
+        let layer = diverged_layer();
+        let flat = flattened(&layer);
+        for (x, y) in [(0, 0), (1, 0), (127, 63), (64, 64), (127, 127)] {
+            assert_eq!(layer_pixel(&layer, x, y), layer_pixel(&flat, x, y));
+        }
+        let mut gray = layer.clone();
+        gray.channels.retain(|c| c.id == 0);
+        let gray_flat = flattened(&gray);
+        for (a, b) in [(&layer, &flat), (&gray, &gray_flat)] {
+            assert_eq!(layer_thumbnail_image(a, 32), layer_thumbnail_image(b, 32));
+            assert_eq!(
+                layer_thumbnail_positioned(a, 256, 256, 32),
+                layer_thumbnail_positioned(b, 256, 256, 32)
+            );
+        }
+        assert_eq!(
+            mask_thumbnail_image(layer.mask.as_ref().expect("mask"), 32),
+            mask_thumbnail_image(flat.mask.as_ref().expect("mask"), 32)
+        );
     }
 }

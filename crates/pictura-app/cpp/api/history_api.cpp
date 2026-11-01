@@ -58,12 +58,12 @@ bool addSnapshot(PictureView& view, const QString& label)
 
 int snapshotCount(const PictureView& view)
 {
-    return view.history_snapshot_count();
+    return history_snapshot_count(view);
 }
 
 QString snapshotLabel(const PictureView& view, int i)
 {
-    return view.history_snapshot_label(i);
+    return history_snapshot_label(view, i);
 }
 
 bool restoreSnapshot(PictureView& view, int i)
