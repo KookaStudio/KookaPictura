@@ -67,6 +67,7 @@ pub struct BlendedLayer {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AutoBlendPlan {
     pub layers: Vec<BlendedLayer>,
+    /// `None` above the blend's size limit; the masks stand alone then.
     pub merged: Option<Layer>,
 }
 
@@ -205,25 +206,29 @@ pub fn plan_auto_blend(
         }
     };
     let masks = masks(doc, &layers, &grid, &labels, conflict.as_deref(), &control)?;
-    let input = blend::BlendInput {
-        domain,
-        grid: &grid,
-        labels: &labels,
-        gains: &channel_gains,
-        base_from: (options.seamless && options.objective == BlendObjective::StackImages)
-            .then(|| blend::tone_level(domain)),
-        conflict: conflict.as_deref(),
+    let merged = if blend::fits(domain) {
+        let input = blend::BlendInput {
+            domain,
+            grid: &grid,
+            labels: &labels,
+            gains: &channel_gains,
+            base_from: (options.seamless && options.objective == BlendObjective::StackImages)
+                .then(|| blend::tone_level(domain)),
+            conflict: conflict.as_deref(),
+        };
+        let mut merged = blend::blend(doc, &layers, &input, &control)?;
+        control.step()?;
+        let high_depth = matches!(
+            doc.source_depth,
+            Some(BitDepth::Sixteen | BitDepth::ThirtyTwo)
+        );
+        if options.fill_transparent && !high_depth {
+            merged.fill_transparent(doc.width, doc.height);
+        }
+        Some(merged.into_layer(doc, merged_name(layers[layers.len() - 1])))
+    } else {
+        None
     };
-    let mut merged = blend::blend(doc, &layers, &input, &control)?;
-    control.step()?;
-    let high_depth = matches!(
-        doc.source_depth,
-        Some(BitDepth::Sixteen | BitDepth::ThirtyTwo)
-    );
-    if options.fill_transparent && !high_depth {
-        merged.fill_transparent(doc.width, doc.height);
-    }
-    let name = merged_name(layers[layers.len() - 1]);
     let blended = targets
         .iter()
         .zip(masks)
@@ -235,7 +240,7 @@ pub fn plan_auto_blend(
     progress.store(AUTO_BLEND_PROGRESS_MAX, Ordering::Relaxed);
     Ok(AutoBlendPlan {
         layers: blended,
-        merged: Some(merged.into_layer(doc, name)),
+        merged,
     })
 }
 

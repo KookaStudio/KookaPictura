@@ -18,6 +18,8 @@ type Outcome = Result<AutoBlendPlan, AutoBlendCancelled>;
 
 const STALE_MESSAGE: &str = "The document changed while Auto-Blend Layers was running.";
 const FAILED_MESSAGE: &str = "Auto-Blend Layers could not finish.";
+const NO_MERGED_MESSAGE: &str =
+    "These layers are too large for a merged layer, so Auto-Blend Layers added masks only.";
 
 struct Run {
     worker: Option<JoinHandle<Outcome>>,
@@ -151,6 +153,7 @@ pub(super) fn auto_blend_finish(mut view: Pin<&mut PictureView>) -> QStringList 
         Err(message) => view.as_mut().rust_mut().auto_blend.error = Some(message.to_string()),
         Ok(None) => {}
         Ok(Some(plan)) => {
+            let masks_only = !plan.layers.is_empty() && plan.merged.is_none();
             view.as_mut().edit("Auto-Blend Layers", |rust| {
                 let Some(doc) = rust.session.doc.as_mut() else {
                     return Edit::None;
@@ -164,6 +167,9 @@ pub(super) fn auto_blend_finish(mut view: Pin<&mut PictureView>) -> QStringList 
                 rust.mask_edit_target = None;
                 Edit::Structural { damage: None }
             });
+            if masks_only {
+                view.as_mut().rust_mut().auto_blend.error = Some(NO_MERGED_MESSAGE.to_string());
+            }
         }
     }
     let mut list = QList::<QString>::default();

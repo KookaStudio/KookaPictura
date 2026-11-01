@@ -32,6 +32,8 @@ public:
     bool stackImages() const;
     bool seamless() const;
     bool fillTransparent() const;
+    // The options to remember. Unlike fillTransparent(), this keeps a checked Fill
+    // box while it is disabled, so a 16-bit run does not forget it.
     AutoBlendChoice choice() const;
 
 private:

@@ -946,3 +946,35 @@ fn stack_focus_stops_at_subject_edges() {
     let beside = mask_at(&d.layers[1], 26, 48);
     assert!(beside < 32, "no halo beside the subject: {beside}");
 }
+
+#[test]
+fn merged_layer_is_skipped_above_the_blend_limit() {
+    let mut d = doc(
+        11_000,
+        10_000,
+        vec![
+            solid(
+                "A",
+                rect(0, 0, 20, 20),
+                (90, 90, 90),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            solid(
+                "B",
+                rect(9_980, 10_980, 10_000, 11_000),
+                (90, 90, 90),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+        ],
+    );
+    let planned = plan(&d, &["0", "1"], STACK);
+    assert!(planned.merged.is_none());
+    assert_eq!(planned.layers.len(), 2);
+    apply_auto_blend(&mut d, planned);
+    assert_eq!(d.layers.len(), 2);
+    assert!(d.layers[0].mask.is_some() && d.layers[1].mask.is_some());
+}

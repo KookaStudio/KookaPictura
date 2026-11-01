@@ -38,12 +38,13 @@ pub fn apply_auto_blend(doc: &mut Document, plan: AutoBlendPlan) -> Vec<String> 
     while layers.get(slot).is_some_and(|layer| layer.clipping) {
         slot += 1;
     }
-    if layers.get(slot).is_some_and(|l| l.name == merged.name) {
+    let replaces = layers.get(slot).is_some_and(|l| l.name == merged.name);
+    // Insert first: a failed insert keeps the earlier merged layer, and the masks
+    // are a complete result on their own.
+    if doc.layers.insert(parent, slot, merged).is_ok() && replaces {
         let mut stale = parent.to_vec();
-        stale.push(slot);
+        stale.push(slot + 1);
         doc.layers.remove(&stale);
     }
-    // A failed insert leaves the masks, which are a complete result.
-    let _ = doc.layers.insert(parent, slot, merged);
     paths
 }

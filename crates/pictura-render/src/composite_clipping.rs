@@ -146,7 +146,7 @@ pub(crate) fn build_sibling_group<'a>(
             continue;
         }
         if crate::layer_effects::is_destructive_adjustment(layer) {
-            composite_clipped_adjustment(&mut group, &cover, index, layer, &mut composite);
+            composite_clipped_adjustment(&mut group, &cover, index, &plan[index], &mut composite);
             continue;
         }
         let mut tmp = group.clone();
@@ -171,16 +171,16 @@ pub(crate) fn build_sibling_group<'a>(
 /// opaque copy so its source alpha cannot raise the group's alpha or dilute its
 /// colour, and the result keeps the group's alpha. Coverage still gates it, so
 /// a base's effects outside its content stay unadjusted.
-fn composite_clipped_adjustment(
+fn composite_clipped_adjustment<'a>(
     group: &mut Canvas,
     cover: &[f32],
     index: usize,
-    layer: &Layer,
-    composite: &mut impl FnMut(&mut Canvas, usize, &Layer),
+    node: &PlanNode<'a>,
+    composite: &mut impl FnMut(&mut Canvas, usize, &PlanNode<'a>, Option<&BlendOverride>),
 ) {
     let mut opaque = group.clone();
     opaque.px.iter_mut().for_each(|p| p.a = 1.0);
-    composite(&mut opaque, index, layer);
+    composite(&mut opaque, index, node, None);
     let recolor = |((out, adjusted), &k): ((&mut Px, &Px), &f32)| {
         if k > 0.0 {
             out.r = adjusted.r;

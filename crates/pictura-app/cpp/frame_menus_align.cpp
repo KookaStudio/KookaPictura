@@ -97,8 +97,9 @@ bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless, bo
     if (committed) {
         window.selectLayerPath(blended.last());
         panel->selectPaths(blended, blended.last());
-    } else if (const QString error = auto_blend_error(*view); !error.isEmpty()) {
-        window.statusBar()->showMessage(error, 8000);
+    }
+    if (const QString notice = auto_blend_error(*view); !notice.isEmpty()) {
+        window.statusBar()->showMessage(notice, 8000);
     }
     return committed;
 }

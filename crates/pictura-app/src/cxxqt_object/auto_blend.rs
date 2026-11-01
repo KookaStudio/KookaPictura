@@ -51,7 +51,7 @@ pub mod ffi {
         /// Land a finished run as one history state. Returns the processed layers' paths, empty when nothing was committed.
         fn auto_blend_finish(view: Pin<&mut PictureView>) -> QStringList;
 
-        /// Why the last run committed nothing, empty when it did or was cancelled.
+        /// What to tell the user about the last run: why it committed nothing, or that it added masks only. Empty otherwise.
         fn auto_blend_error(view: &PictureView) -> QString;
 
         /// Hold the worker for `ms` before it starts, so a test can act mid-run.

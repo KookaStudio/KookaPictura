@@ -4,7 +4,7 @@
 //! is unpublished.
 //!
 //! ponytail: memory follows the blended area at about 5 float planes per colour
-//! channel, and transparent pixels take the layer's mean colour instead of a
+//! channel up to `MAX_BLEND_PIXELS`, and transparent pixels take the layer's mean colour instead of a
 //! push-pull fill.
 
 use pictura_core::{
@@ -17,6 +17,9 @@ use super::sources::{color_ids, unit_row, Grid};
 use super::{Cancelled, Control};
 
 const MAX_LEVELS: usize = 8;
+/// The largest merged layer. The blend needs full-resolution pyramids, several
+/// GB beyond this, so a larger run keeps its masks and adds no merged layer.
+const MAX_BLEND_PIXELS: u64 = 100_000_000;
 const TONE_FEATURE_SHARE: usize = 32;
 
 /// What the blend needs beyond the layers.
@@ -36,6 +39,11 @@ pub(super) struct Merged {
     rect: PsdRect,
     channels: Vec<Vec<f32>>,
     alpha: Vec<f32>,
+}
+
+/// Whether a merged layer over `domain` stays within [`MAX_BLEND_PIXELS`].
+pub(super) fn fits(domain: PsdRect) -> bool {
+    domain.width().max(0) as u64 * domain.height().max(0) as u64 <= MAX_BLEND_PIXELS
 }
 
 /// The first level treated as tone: a feature about 1/24 of the short side.
