@@ -103,47 +103,6 @@ fn the_proxy_base_hides_the_active_layer_and_restores_it() {
 }
 
 #[test]
-fn the_proxy_layer_filters_and_positions_only_the_active_layer() {
-    use crate::cxxqt_object::tests::pixel_layer;
-    use pictura_core::{BitDepth, ColorMode, PsdRect};
-
-    let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-    let mut top = pixel_layer("top", 2, 2, (0, 0, 255));
-    top.rect = PsdRect {
-        top: 2,
-        left: 2,
-        bottom: 4,
-        right: 4,
-    };
-    doc.layers =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("bottom", 8, 8, (255, 0, 0)), top]);
-
-    let frame =
-        proxy_layer_frame_buffer(&doc.layers[1], 8, 8, 8, "gaussian-blur", &[1.0]).expect("frame");
-    let plane = 64;
-    let at = |x: usize, y: usize| y * 8 + x;
-    // Inside the layer's rect the uniform blue survives its blur...
-    assert_eq!(frame.data[at(2, 2)], 0);
-    assert_eq!(frame.data[plane + at(2, 2)], 0);
-    assert_eq!(frame.data[2 * plane + at(2, 2)], 255);
-    assert_eq!(frame.data[3 * plane + at(2, 2)], 255);
-    // ...and everywhere else the frame is transparent: the bottom layer
-    // and the unfiltered position are not drawn.
-    assert_eq!(frame.data[3 * plane + at(0, 0)], 0);
-    assert_eq!(frame.data[3 * plane + at(5, 5)], 0);
-}
-
-#[test]
-fn the_proxy_layer_bakes_opacity_and_mask_into_the_alpha() {
-    use crate::cxxqt_object::tests::pixel_layer;
-
-    let mut layer = pixel_layer("top", 2, 2, (0, 0, 255));
-    layer.opacity = 128;
-    let buffer = proxy_layer_buffer(&layer, 1.0).expect("layer buffer");
-    assert_eq!(buffer.data[3 * 4], 128, "opacity baked into the alpha");
-}
-
-#[test]
 fn a_nested_active_layer_resolves_for_the_proxy() {
     use crate::cxxqt_object::tests::pixel_layer;
     use pictura_core::{BitDepth, ColorMode};
@@ -158,10 +117,6 @@ fn a_nested_active_layer_resolves_for_the_proxy() {
     ]);
     doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
     doc.composite = pictura_render::composite_rgba(&doc);
-
-    // The group itself is not a proxy target; the nested leaf is.
-    assert!(active_proxy_layer(&doc, Some("0")).is_none());
-    assert!(active_proxy_layer(&doc, Some("0/1")).is_some());
 
     let base = hidden_layer_buffer(&mut doc, "0/1", false).expect("nested base");
     let plane = 16;

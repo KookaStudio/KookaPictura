@@ -83,6 +83,7 @@ private slots:
     void rejectRestoresPixels();
     void lastFilterSettingsReopensPrefilled();
     void paneKeepsTheOtherLayersUnsheared();
+    void paneShowsTheBlendMode();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -361,6 +362,35 @@ void ShearDialogTest::paneKeepsTheOtherLayersUnsheared()
     two.reject();
 
     QVERIFY2(single != stacked, "the pane filtered every layer, not just the active one");
+}
+
+void ShearDialogTest::paneShowsTheBlendMode()
+{
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    QImage gray(64, 64, QImage::Format_RGB32);
+    gray.fill(QColor(128, 128, 128));
+    const QString path = dir_.filePath(QStringLiteral("gray.png"));
+    QVERIFY(gray.save(path) && window->openDocumentAtPath(path));
+    pictura::PictureView* view = window->activeView();
+    QVERIFY(view != nullptr);
+    view->select_rect(0, 0, 64, 64, QStringLiteral("new"), 0.0);
+    const QString top = view->layer_via_copy(QStringLiteral("0"));
+    QVERIFY(!top.isEmpty());
+    view->set_active_layer(top);
+    view->deselect();
+    QVERIFY(view->set_layer_blend(top.toInt(), QStringLiteral("mul ")));
+
+    pictura::FilterPreviewDialog dialog(view, shearSpec());
+    QWidget* curve = curveBox(dialog);
+    auto* pane = dialog.findChild<QLabel*>(QStringLiteral("filterThumbnail"));
+    QVERIFY(curve != nullptr && pane != nullptr);
+    bendTheCurve(curve);
+    const QImage shown = pane->pixmap().toImage();
+    QVERIFY(!shown.isNull());
+    const int red = shown.pixelColor(shown.rect().center()).red();
+    dialog.reject();
+    QVERIFY2(red < 80, qPrintable(QStringLiteral("gray multiplied by itself, got %1").arg(red)));
 }
 
 QTEST_MAIN(ShearDialogTest)
