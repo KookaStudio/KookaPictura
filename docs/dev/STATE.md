@@ -20,6 +20,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   multiband pixel blend at document depth with Seamless gains baked in (OpenSpec
   change `auto-blend-merged-layer`, after review against Photoshop). The clipped
   adjustment compositor fix stays, as a correct fix on its own. Content Aware
+  Stack tone follows the base layer and detail the sharpest (`auto-blend-stack-tone`,
+  tuned by eye on one photograph pair).
   Fill Transparent Areas is post-CS6 and 8-bit only. All approximated, behavioural
   parity only. Ceilings: Normal mode at 100 % opacity, a 16 MP mask grid, vector
   masks ignored, no video or 3D refusal (#1110).

@@ -101,6 +101,10 @@ Areas**, a post-CS6 option outside CS6 parity, at 8 bits only. Constraints state
 - Does **not** work with Smart Objects, video layers, 3D layers, or background
   layers.
 
+Observed in Photoshop with Seamless on, Stack Images takes broad tone from the
+base layer and detail from the sharpest layer, and shifts colour without changing
+brightness. Kooka approximates this; its constants are tuned by eye.
+
 Auto-Blend writes a layer mask per processed layer to hide content that should
 not contribute (over/under-exposed or out-of-focus areas).
 
