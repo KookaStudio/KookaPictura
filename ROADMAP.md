@@ -114,7 +114,8 @@ Deeper technical status for PSD/PSB lives in
 - [ ] Layer-style Global Light, Create Layers, and Rasterize Layer Style (#580)
 - [ ] Bevel Contour and Texture, a gradient editor in the style dialog, and
       channel include (#581)
-- [ ] Auto-Align Layers (#582) and Auto-Blend Layers (#583)
+- [ ] Auto-Align Layers (#582)
+- [x] Auto-Blend Layers (#583)
 - [ ] Fill With (Mode)-Neutral Color for new layers (#584)
 - [ ] 32-bit and Lab blend-mode menu gating (#589)
 - [ ] `Ctrl+J` duplicate-group semantics (#590)
