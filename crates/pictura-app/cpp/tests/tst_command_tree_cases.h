@@ -109,7 +109,7 @@ inline void crListCommands(pictura::PicturaMainWindow& window)
 {
     window.registry()->refresh();
     const QList<pictura::CommandInfo> infos = window.registry()->describe();
-    QCOMPARE(infos.size(), 594);
+    QCOMPARE(infos.size(), 595);
     QHash<QString, pictura::CommandInfo> byId;
     for (const pictura::CommandInfo& info : infos) {
         byId.insert(info.id, info);
@@ -127,7 +127,7 @@ inline void crListCommands(pictura::PicturaMainWindow& window)
         QCOMPARE(info.path, row.path);
         QCOMPARE(info.label, row.label);
     }
-    QCOMPARE(index, 594);
+    QCOMPARE(index, 595);
     QCOMPARE(index, infos.size());
 
     const pictura::CommandInfo fileNew =

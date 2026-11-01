@@ -138,6 +138,8 @@ pub struct PictureViewRust {
     pub(super) canvas_proxy: Option<CanvasProxy>,
     /// Filter work running on worker threads (`filter_tools::jobs`).
     pub(super) filter_jobs: super::filter_tools::jobs::FilterJobs,
+    /// The Auto-Blend Layers worker (`auto_blend`).
+    pub(super) auto_blend: super::auto_blend::AutoBlendJob,
     /// The last committed filter's kind and slot values, for Last Filter and
     /// Last Filter Settings.
     pub(super) last_filter: Option<(String, Vec<f64>)>,
@@ -246,6 +248,7 @@ impl Default for PictureViewRust {
             ruler: None,
             canvas_proxy: None,
             filter_jobs: Default::default(),
+            auto_blend: Default::default(),
             last_filter: None,
             smart_filter_edit: None,
             filter_error: None,
