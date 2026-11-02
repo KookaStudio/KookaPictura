@@ -34,7 +34,18 @@ pub fn liquify(buf: &mut PixelBuffer, mesh: &LiquifyMesh) -> Result<(), FilterEr
         .chunks_exact(mesh.cols)
         .map(|row| row.iter().any(|v| v[0] != 0.0 || v[1] != 0.0))
         .collect();
-    let rows: Vec<(usize, Vec<u8>)> = (0..h)
+    // Outside the processing rectangle every sample is the source, so only
+    // the rows and columns inside it are resampled.
+    let (x0, x1, y0, y1) = match mesh.clip {
+        Some(c) => (
+            c.left.max(0) as usize,
+            c.right.min(w as i32).max(0) as usize,
+            c.top.max(0) as usize,
+            c.bottom.min(h as i32).max(0) as usize,
+        ),
+        None => (0, w, 0, h),
+    };
+    let rows: Vec<(usize, Vec<u8>)> = (y0..y1)
         .into_par_iter()
         .filter_map(|y| {
             let gy = y as f64 / mesh.cell;
@@ -45,7 +56,10 @@ pub fn liquify(buf: &mut PixelBuffer, mesh: &LiquifyMesh) -> Result<(), FilterEr
                 return None;
             }
             let mut out = vec![0u8; planes * w];
-            for x in 0..w {
+            for c in 0..planes {
+                out[c * w..(c + 1) * w].copy_from_slice(&src[c * n + y * w..c * n + (y + 1) * w]);
+            }
+            for x in x0..x1 {
                 let d = mesh.sample_cubic(x as f64 / mesh.cell, gy);
                 let u = snap(x as f64 + d[0]);
                 let v = snap(y as f64 + d[1]);

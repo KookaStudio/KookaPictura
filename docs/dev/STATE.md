@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Liquify confines an active selection to its bounding rectangle** (#882,
+  OpenSpec change `liquify-selection-bounds`). `LiquifyMesh` carries an optional
+  layer-local clip: nodes outside it take no offset, `liquify()` resamples only
+  its rows and columns, and `LiquifySource::render` clears outside it.
+  `liquify_begin` intersects the selection's bounds with the active layer, the
+  dialog previews only that rectangle (`liquify_geometry` reports its size,
+  `liquify_origin` its top-left, the backdrop is cropped to it), and the commit
+  no longer narrows processing to the selection's shape. A selection that
+  misses the layer, or covers nothing, refuses the dialog. Tests:
+  `tst_liquify_dialog`, the `*clip*` tests in `pictura-filters`, and
+  `pictura-app::session_clip_refuses_a_selection_off_the_layer`.
 - **File > Open accepts a multi-file selection** (#1118, OpenSpec change
   `multi-file-open`). The Open dialog now uses `QFileDialog::ExistingFiles`
   (`getOpenFileNames()` in `cpp/dialogs.cpp`), and `showOpenDialog()` starts one
