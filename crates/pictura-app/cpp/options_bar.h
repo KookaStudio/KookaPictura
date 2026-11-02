@@ -162,6 +162,9 @@ private:
     NumericField* addPercentField(QHBoxLayout* layout, QWidget* page, const QString& label,
                                   const QString& name, int value,
                                   std::function<void(int)> setter);
+    // The Airbrush option: paint keeps building while the button is held still.
+    QToolButton* addAirbrushToggle(QHBoxLayout* layout, QWidget* page, const QString& name,
+                                   bool on, std::function<void(bool)> setter);
     static NumericFieldConfig numericConfig(double lo, double hi, double step, int decimals,
                                             const QString& suffix, bool popup,
                                             const QString& name, bool allowFractional = false);

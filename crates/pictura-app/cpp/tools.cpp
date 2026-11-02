@@ -254,6 +254,9 @@ ToolController::ToolController(QObject* parent)
         emit eyedropperOptionsChanged();
     };
     mixer->changed = [this]() { emit mixerReservoirChanged(mixer_->get().reservoir); };
+    // `Shift+Alt+P` flips a stamp's Airbrush flag outside its options bar, which
+    // then re-reads the toggle.
+    stamp->changed = [this]() { emit stampOptionsChanged(); };
     // The Eraser's Block mode draws a square cursor instead of the brush-size
     // circle, so a Mode change re-applies the outline.
     eraser->changed = [this]() { refreshBrushOutline(); };
@@ -529,6 +532,11 @@ void ToolController::setBackground(const QColor& color)
     emit colorsChanged();
 }
 
+void ToolController::setPressure(double pressure)
+{
+    pressure_ = std::clamp(pressure, 0.0, 1.0);
+}
+
 void ToolController::setMaskActive(bool mask)
 {
     maskActive_ = mask;
@@ -539,6 +547,33 @@ void ToolController::adjustBrushSize(int delta) { paint_->setSize(paint_->size()
 void ToolController::adjustBrushHardness(int delta)
 {
     paint_->setHardness(paint_->hardness() + delta);
+}
+
+bool ToolController::toggleAirbrush()
+{
+    if (active_ == ToolId::Brush) {
+        paint_->setAirbrush(!paint_->airbrush());
+        return true;
+    }
+    StampGroup* group = optionsFor<StampGroup>(active_);
+    if (!group) {
+        return false;
+    }
+    StampOptions o = group->get();
+    bool* flag = nullptr;
+    if (active_ == ToolId::CloneStamp) {
+        flag = &o.cloneAirbrush;
+    } else if (active_ == ToolId::PatternStamp) {
+        flag = &o.patternAirbrush;
+    } else if (active_ == ToolId::HistoryBrush) {
+        flag = &o.historyAirbrush;
+    }
+    if (!flag) {
+        return false;
+    }
+    *flag = !*flag;
+    group->set(o);
+    return true;
 }
 
 bool ToolController::applyBrushShortcut(int key, quint32 nativeScanCode, bool shift)
@@ -627,6 +662,7 @@ void ToolController::bindCanvas(ImageView* canvas)
         return;
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
+    connect(canvas_, &ImageView::pointerPressure, this, &ToolController::setPressure);
     connect(canvas_, &ImageView::mouseMoved, this, &ToolController::handleMoved);
     connect(canvas_, &ImageView::modifierKeyChanged, this, &ToolController::handleModifiers);
     connect(canvas_, &ImageView::mouseReleased, this, &ToolController::handleReleased);

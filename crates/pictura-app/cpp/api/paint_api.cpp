@@ -91,11 +91,12 @@ void Stroke::abandon()
 
 std::optional<Stroke> beginBrush(PictureView& view, std::uint32_t foreground,
                                  std::uint32_t background, const PaintTip& tip, int opacity,
-                                 int flow, const QString& mode, bool aliased, bool autoErase)
+                                 int flow, const QString& mode, bool aliased, bool autoErase,
+                                 bool pressureSize, bool pressureOpacity)
 {
     Stroke stroke(view, [&] {
         return begin_brush(view, foreground, background, tip, opacity, flow, mode, aliased,
-                           autoErase);
+                           autoErase, pressureSize, pressureOpacity);
     });
     if (!stroke.open()) {
         return std::nullopt;

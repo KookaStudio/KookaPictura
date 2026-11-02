@@ -7,6 +7,7 @@
 
 class QCheckBox;
 class QLabel;
+class QListWidgetItem;
 
 namespace pictura {
 
@@ -17,7 +18,8 @@ class TipShapeView;
 // Window > Brush (F5): the Brush Tip Shape page. A row of standard round tips,
 // Size, Flip X / Flip Y, Angle, Roundness, Hardness, and Spacing, over the
 // controller's brush fields that every painting tool shares, with the engine's
-// stroke preview underneath. The brush dynamics are listed but not wired.
+// stroke preview underneath. The brush dynamics are listed but not wired; the
+// Build-up row is the Brush's Airbrush flag, shared with the options bar.
 // ponytail: round tips only (no sampled, bristle, or erodible tips), no Brush
 // Presets panel, and Spacing is always on (no velocity spacing).
 class BrushPanel : public QWidget {
@@ -34,6 +36,8 @@ public:
     QImage previewForTest() const;
 
 private:
+    void refreshAirbrush();
+
     ToolController* controller_ = nullptr;
     PaintOptions* paint_ = nullptr;
     NumericField* size_ = nullptr;
@@ -45,6 +49,7 @@ private:
     QCheckBox* flipY_ = nullptr;
     TipShapeView* shape_ = nullptr;
     QLabel* preview_ = nullptr;
+    QListWidgetItem* buildUp_ = nullptr;
 };
 
 } // namespace pictura

@@ -16,6 +16,7 @@
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPixmap>
+#include <QtGui/QTabletEvent>
 #include <QtGui/QWheelEvent>
 
 #include <algorithm>
@@ -965,6 +966,11 @@ void ImageView::mousePressEvent(QMouseEvent* event)
             setCursor(Qt::ClosedHandCursor);
         }
     } else {
+        // A real mouse has no pressure; a mouse event synthesized from a
+        // tablet keeps the pressure its tablet event just reported.
+        if (!tabletActive_ && event->source() != Qt::MouseEventSynthesizedByQt) {
+            emit pointerPressure(1.0);
+        }
         pressTrace_.clock.restart();
         pressTrace_.pressHwMs = event->timestamp();
         pressTrace_.handledNs = -1;
@@ -976,6 +982,28 @@ void ImageView::mousePressEvent(QMouseEvent* event)
         pressTrace_.handledNs = pressTrace_.clock.nsecsElapsed();
     }
     QWidget::mousePressEvent(event);
+}
+
+// Keep Qt's synthesized mouse events for the tool routing, but take the
+// tablet's pressure first so the next dab uses it.
+void ImageView::tabletEvent(QTabletEvent* event)
+{
+    switch (event->type()) {
+    case QEvent::TabletPress:
+        tabletActive_ = true;
+        emit pointerPressure(event->pressure());
+        break;
+    case QEvent::TabletMove:
+        emit pointerPressure(event->pressure());
+        break;
+    case QEvent::TabletRelease:
+        emit pointerPressure(event->pressure());
+        tabletActive_ = false;
+        break;
+    default:
+        break;
+    }
+    event->ignore();
 }
 
 void ImageView::mouseMoveEvent(QMouseEvent* event)

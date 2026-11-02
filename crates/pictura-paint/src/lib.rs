@@ -78,6 +78,12 @@ pub struct StrokeConfig {
     pub flip_x: bool,
     pub flip_y: bool,
     pub auto_erase: bool,
+    /// Scale each dab's diameter by the sample pressure (the options bar's
+    /// "Always use Pressure for Size"). Off leaves pressure out of the size.
+    pub pressure_size: bool,
+    /// Scale each dab's flow and opacity cap by the sample pressure (the
+    /// options bar's "Always use Pressure for Opacity").
+    pub pressure_opacity: bool,
 }
 
 impl StrokeConfig {
@@ -99,6 +105,22 @@ impl StrokeConfig {
             grain: self.grain.min(100),
             ..*self
         }
+    }
+
+    /// This config with one sample's pressure applied: the diameter and/or the
+    /// flow and opacity cap scale by `pressure` (clamped to 0..=1). The stroke
+    /// keeps its own config, so the next sample starts from the same values.
+    pub fn pressure_scaled(&self, pressure: f32) -> StrokeConfig {
+        let p = pressure.clamp(0.0, 1.0);
+        let mut cfg = *self;
+        if cfg.pressure_size {
+            cfg.diameter = ((cfg.diameter as f32 * p).round() as u32).max(1);
+        }
+        if cfg.pressure_opacity {
+            cfg.flow = (cfg.flow as f32 * p).round() as u8;
+            cfg.opacity = (cfg.opacity as f32 * p).round() as u8;
+        }
+        cfg
     }
 }
 
@@ -137,6 +159,8 @@ impl Default for StrokeConfig {
             flip_x: false,
             flip_y: false,
             auto_erase: false,
+            pressure_size: false,
+            pressure_opacity: false,
         }
     }
 }

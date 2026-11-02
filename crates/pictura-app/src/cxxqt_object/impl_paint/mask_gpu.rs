@@ -11,7 +11,6 @@ use super::super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::{Document, PsdRect};
-use pictura_paint::StrokeSample;
 
 /// The RGBA seed the GPU mask stroke uploads: each coverage byte replicated
 /// across RGB at opaque alpha, so byte 0 carries the coverage the shader blends.
@@ -38,7 +37,7 @@ impl qobject::PictureView {
     /// stroke would, patch each dab's changed coverage into the mask document,
     /// copy the region back into the real mask, and present it. The commit needs
     /// no replay: the mask document already holds the GPU-authored coverage.
-    pub(super) fn mask_gpu_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
+    pub(super) fn mask_gpu_dab(mut self: Pin<&mut Self>, x: f64, y: f64, _pressure: f64) -> bool {
         let (lx, ly) = {
             let rust = self.rust();
             let Some(ctx) = rust.session.live.mask_stroke() else {
@@ -46,20 +45,38 @@ impl qobject::PictureView {
             };
             (x - ctx.rect.left as f64, y - ctx.rect.top as f64)
         };
-        let sample = StrokeSample {
-            x: lx as f32,
-            y: ly as f32,
-            pressure: pressure as f32,
-        };
         let mut dabs = Vec::new();
+        {
+            let mut rust = self.as_mut().rust_mut();
+            let Some(placer) = rust.session.live.gpu_placer_mut() else {
+                return false;
+            };
+            placer.feed(lx as f32, ly as f32, &mut dabs);
+        }
+        self.as_mut().mask_gpu_dabs(dabs)
+    }
+
+    /// A held dab of a GPU mask stroke: place another dab at the placer's last
+    /// sample and apply it like [`Self::mask_gpu_dab`].
+    pub(super) fn mask_gpu_hold(mut self: Pin<&mut Self>) -> bool {
+        let mut dabs = Vec::new();
+        {
+            let mut rust = self.as_mut().rust_mut();
+            let Some(placer) = rust.session.live.gpu_placer_mut() else {
+                return false;
+            };
+            placer.repeat_last(&mut dabs);
+        }
+        self.as_mut().mask_gpu_dabs(dabs)
+    }
+
+    /// Dispatch `dabs` on the open GPU mask stroke, patch their coverage into
+    /// the mask document, copy the region back into the real mask, and present.
+    fn mask_gpu_dabs(mut self: Pin<&mut Self>, dabs: Vec<(f32, f32)>) -> bool {
         let mut changed = false;
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let Some(placer) = rust.session.live.gpu_placer_mut() else {
-                return false;
-            };
-            placer.feed(sample.x, sample.y, &mut dabs);
             for (cx, cy) in dabs {
                 let dab = {
                     let Some(gpu) = rust.session.live.gpu_stroke_mut() else {

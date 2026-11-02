@@ -231,6 +231,9 @@ pub struct Stroke {
     rng: u64,
     started: bool,
     painted: bool,
+    /// The last sample's pressure, so a held dab keeps the pressure it was
+    /// pressed with when the pressure overrides are on.
+    last_pressure: f32,
     per_dab: Option<PerDab>,
     source: Option<StampSource>,
     /// Raster every dab on one thread: the reference the banded raster is
@@ -309,6 +312,7 @@ impl Stroke {
             rng: STROKE_SEED,
             started: false,
             painted: false,
+            last_pressure: 1.0,
             per_dab,
             source: None,
             serial: false,
@@ -471,7 +475,12 @@ impl Stroke {
 
         let mut dabs = Vec::new();
         self.placer.feed(sx, sy, &mut dabs);
-        self.paint_dabs(doc, dabs)
+        self.last_pressure = s.pressure.clamp(0.0, 1.0);
+        // ponytail: the placer keeps the stroke's spacing; CS6 scales spacing
+        // with the live pressure-sized tip, so a very light stroke can space
+        // its dabs for the full diameter.
+        let sample_cfg = self.cfg.pressure_scaled(self.last_pressure);
+        self.paint_dabs(doc, dabs, sample_cfg)
     }
 
     /// Dab again at the last sample: the Airbrush's time-driven build-up for a
@@ -479,15 +488,15 @@ impl Stroke {
     pub fn hold(&mut self, doc: &mut Document) -> bool {
         let mut dabs = Vec::new();
         self.placer.repeat_last(&mut dabs);
-        !dabs.is_empty() && self.paint_dabs(doc, dabs)
+        let sample_cfg = self.cfg.pressure_scaled(self.last_pressure);
+        !dabs.is_empty() && self.paint_dabs(doc, dabs, sample_cfg)
     }
 
-    fn paint_dabs(&mut self, doc: &mut Document, dabs: Vec<(f32, f32)>) -> bool {
+    fn paint_dabs(&mut self, doc: &mut Document, dabs: Vec<(f32, f32)>, cfg: StrokeConfig) -> bool {
         if self.per_dab.is_some() {
             return self.apply_per_dab(doc, &dabs);
         }
 
-        let cfg = self.cfg;
         let (w, h) = (self.rect.width() as usize, self.rect.height() as usize);
         let flow = cfg.flow as f32 / 100.0;
         let mut changed = false;
@@ -501,7 +510,7 @@ impl Stroke {
         let mut placed: Vec<(f32, f32, Option<StrokeConfig>)> = Vec::new();
         for (dab_x, dab_y) in dabs {
             for _ in 0..cfg.count.max(1) {
-                placed.push(self.jittered(dab_x, dab_y));
+                placed.push(self.jittered(cfg, dab_x, dab_y));
             }
         }
 
@@ -550,12 +559,19 @@ impl Stroke {
             source: source.as_ref(),
             rect: *rect,
         };
+        // A pressure-scaled diameter needs its own profile; otherwise the
+        // stroke's hoisted one is exact.
+        let sample_tip = if cfg.pressure_size {
+            TipParams::new(&cfg)
+        } else {
+            *tip
+        };
 
         for (dab_x, dab_y, jittered) in placed {
             // The hoisted profile is exact when the dynamics left the tip
             // alone; a jittered dab rebuilds it from its own tip.
             let (params, radius) = match jittered {
-                None => (*tip, cfg.diameter as f32 * 0.5),
+                None => (sample_tip, cfg.diameter as f32 * 0.5),
                 Some(tip_cfg) => (TipParams::new(&tip_cfg), tip_cfg.diameter as f32 * 0.5),
             };
             let y0 = ((dab_y - radius).floor() as i32).max(0);
@@ -605,8 +621,7 @@ impl Stroke {
 
     /// One dab of a step, scattered and jittered per the dynamics; `None` when
     /// the dynamics left the tip alone, `Some(tip)` when they altered it.
-    fn jittered(&mut self, x: f32, y: f32) -> (f32, f32, Option<StrokeConfig>) {
-        let cfg = self.cfg;
+    fn jittered(&mut self, cfg: StrokeConfig, x: f32, y: f32) -> (f32, f32, Option<StrokeConfig>) {
         let (mut x, mut y) = (x, y);
         if cfg.scatter > 0 {
             let reach = cfg.diameter as f32 * cfg.scatter as f32 / 100.0;

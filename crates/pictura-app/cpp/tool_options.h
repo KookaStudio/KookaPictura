@@ -446,8 +446,9 @@ using ZoomGroup = ToolOption<ZoomOptions>;
 
 // The paint family's shared brush: tip shape, dynamics, and paint stroke. The
 // size has its own notification (the hover ring and the size readouts); every
-// other tip field shares `tipChanged`; Opacity, Flow, and Mode share
-// `paintSettingsChanged` so the options bar follows a preset.
+// other tip field shares `tipChanged`; Opacity, Flow, Mode, and Airbrush share
+// `paintSettingsChanged` so the options bar and the Brush panel follow a preset
+// or the `Shift+Alt+P` key.
 class PaintOptions : public ToolOptions {
 public:
     int size() const { return size_; }
@@ -536,6 +537,43 @@ public:
 
     bool autoErase() const { return autoErase_; }
     void setAutoErase(bool on) { autoErase_ = on; }
+
+    // Airbrush: while a stroke is open, keep dabbing at the last sample on a
+    // timer even when the pointer is still. The Brush panel's Build-up row is
+    // the same flag.
+    bool airbrush() const { return airbrush_; }
+    void setAirbrush(bool on)
+    {
+        if (on != airbrush_) {
+            airbrush_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
+
+    // Always use Pressure for Size / Opacity: the options-bar pressure toggles.
+    bool pressureSize() const { return pressureSize_; }
+    void setPressureSize(bool on)
+    {
+        if (on != pressureSize_) {
+            pressureSize_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
+
+    bool pressureOpacity() const { return pressureOpacity_; }
+    void setPressureOpacity(bool on)
+    {
+        if (on != pressureOpacity_) {
+            pressureOpacity_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
 
     // Preview-only: a preset whose tip is drawn as a pen nib. The stroke
     // engine never reads it.
@@ -645,6 +683,9 @@ public:
         flow_ = std::clamp(other.flow_, 0, 100);
         mode_ = other.mode_;
         autoErase_ = other.autoErase_;
+        airbrush_ = other.airbrush_;
+        pressureSize_ = other.pressureSize_;
+        pressureOpacity_ = other.pressureOpacity_;
         penTip_ = other.penTip_;
         aliased_ = other.aliased_;
         roundness_ = std::clamp(other.roundness_, 0, 100);
@@ -673,6 +714,9 @@ private:
     int flow_ = 100;
     QString mode_ = QStringLiteral("normal");
     bool autoErase_ = false;
+    bool airbrush_ = false;
+    bool pressureSize_ = false;
+    bool pressureOpacity_ = false;
     bool penTip_ = false;
     bool aliased_ = false;
     int roundness_ = 100;
