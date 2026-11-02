@@ -46,6 +46,7 @@ private slots:
     void checkingTheBoxShowsControls();
     void boxFollowsTheActiveLayer();
     void handleDragScalesAndCommits();
+    void handlePressPatchesTheBackdrop();
     void insideDragMovesAndRecordsMove();
     void clickInsideLeavesTheDocumentAlone();
     void selectionSuppressesTheBox();
@@ -191,6 +192,39 @@ void TransformControlsTest::handleDragScalesAndCommits()
     QVERIFY(tools->transformControlsIdleForTest());
     QVERIFY(!view->transform_session_active());
     QCOMPARE(boxRect(*canvas), QStringLiteral("4 2 30 28"));
+}
+
+// [tpr_canvas_patch]
+void TransformControlsTest::handlePressPatchesTheBackdrop()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+    view->set_layer_visible(0, false);
+    canvas->setSmartGuidesEnabled(false);
+    const QColor checker = canvas->grab().toImage().pixelColor(
+        canvas->imageToWidget(QPointF(35.0, 25.0)).toPoint());
+
+    // Shrink the layer toward its top-left corner, off its bottom-right quarter.
+    canvas->mousePressed(QPointF(30.0, 28.0), Qt::LeftButton, int(Qt::NoModifier));
+    QCOMPARE(view->move_preview_base().size(), QSize(20, 20));
+    const auto origin = pictura::move_preview_base_origin(*view);
+    QCOMPARE(int(origin.size()), 2);
+    QCOMPARE(QPoint(origin[0], origin[1]), QPoint(10, 8));
+    canvas->mouseMoved(QPointF(20.0, 18.0));
+
+    const QImage shot = canvas->grab().toImage();
+    const auto at = [&](double x, double y) {
+        return shot.pixelColor(canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(13.0, 11.0), QColor(Qt::black));
+    QVERIFY2(at(27.0, 25.0) != QColor(Qt::black), "the layer still shows at its old place");
+    QVERIFY2(at(27.0, 25.0).lightness() > 150, "the old place is not the checkerboard");
+    QCOMPARE(at(35.0, 25.0), checker);
+    canvas->mouseReleased(QPointF(20.0, 18.0));
 }
 
 void TransformControlsTest::insideDragMovesAndRecordsMove()

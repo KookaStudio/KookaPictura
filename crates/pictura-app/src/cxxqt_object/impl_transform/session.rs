@@ -17,197 +17,12 @@ use cxx_qt_lib::{QImage, QRect, QString};
 use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags};
 use pictura_render::Interpolation;
 
-/// Whether the layer's channels alone are not its whole appearance: a layer
-/// mask, vector mask, layer style, fill adjustment, or type needs the
-/// compositor to render the preview.
-fn needs_rendered_appearance(layer: &pictura_core::Layer) -> bool {
-    layer.mask.is_some()
-        || layer.vector_mask.is_some()
-        || layer.adjustment.is_some()
-        || layer.is_type()
-        || pictura_render::is_shape_layer(layer)
-        || pictura_render::decode_layer_fill(layer).is_some()
-        || pictura_render::has_layer_style(layer)
-}
+mod preview;
 
-/// Render the layer alone over transparency and crop to its visible rect, so
-/// the transform preview shows a mask, style, vector mask, fill, or type that
-/// its raw channels do not carry. The layer's opacity and blend are
-/// neutralized: the preview applies the layer opacity once itself.
-fn rendered_layer_image(
-    doc: &pictura_core::Document,
-    path: &str,
-    gpu_compute: bool,
-) -> Option<(QImage, i32, i32)> {
-    let needs_materialize = {
-        let layer = pictura_render::resolve_path(doc, path)?;
-        !layer.channels.iter().any(|c| c.id == 0) && layer.smart_object.is_some()
-    };
-    let mut materialized = None;
-    if needs_materialize {
-        let mut clone = doc.clone();
-        if !pictura_render::rasterize_smart_object(&mut clone, path) {
-            return None;
-        }
-        materialized = Some(clone);
-    }
-    let source_doc = materialized.as_ref().unwrap_or(doc);
-    let layer = pictura_render::resolve_path(source_doc, path)?;
-    let rect = layer.rect;
-    let (x0, y0) = (rect.left.max(0), rect.top.max(0));
-    let (x1, y1) = (
-        rect.right.min(source_doc.width as i32),
-        rect.bottom.min(source_doc.height as i32),
-    );
-    if x1 <= x0 || y1 <= y0 {
-        return None;
-    }
-    let mut source = layer.clone();
-    source.opacity = 255;
-    source.blend = BlendMode::Normal;
-    // A clone shares the pixel planes; replacing the layer list keeps the
-    // document's ICC profile, pattern library, and type stylesheet, which the
-    // compositor needs to reproduce the layer's appearance.
-    let mut scratch = source_doc.clone();
-    scratch.layers = LayerStack::from_layers(vec![source]);
-    let rendered = current_buffer(&scratch, gpu_compute);
-    let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
-    Some((image.copy(&QRect::new(x0, y0, x1 - x0, y1 - y0)), x0, y0))
-}
-
-/// The target path and the contiguous clipped layers directly above it in the
-/// same parent. Hiding only the base would drop a clipped fill from the
-/// preview, so the moving image carries the whole clipping group.
-fn clipping_group(doc: &pictura_core::Document, path: &str) -> Vec<String> {
-    let mut group = vec![path.to_string()];
-    let Some((parent, index)) = (match path.rsplit_once('/') {
-        Some((parent, last)) => last
-            .parse::<usize>()
-            .ok()
-            .map(|index| (Some(parent), index)),
-        None => path.parse::<usize>().ok().map(|index| (None, index)),
-    }) else {
-        return group;
-    };
-    let siblings: Option<&[pictura_core::Layer]> = match parent {
-        Some(parent) => {
-            pictura_render::resolve_path(doc, parent).map(|layer| layer.children.as_slice())
-        }
-        None => Some(doc.layers.as_slice()),
-    };
-    let Some(siblings) = siblings else {
-        return group;
-    };
-    let mut i = index + 1;
-    while siblings
-        .get(i)
-        .is_some_and(|layer: &pictura_core::Layer| layer.clipping)
-    {
-        group.push(match parent {
-            Some(parent) => format!("{parent}/{i}"),
-            None => i.to_string(),
-        });
-        i += 1;
-    }
-    group
-}
-
-/// Render a clipping group (the target plus the clipped layers above it) alone
-/// over transparency, cropped to the group's union rect. The target's opacity
-/// and blend are neutralized; the clipped layers keep theirs.
-///
-/// ponytail: the preview moves the clipped layers with the base; the commit
-/// transforms only the base, so the clipped pixels' final position can differ.
-fn rendered_clipping_group(
-    doc: &pictura_core::Document,
-    group: &[String],
-    gpu_compute: bool,
-) -> Option<(QImage, i32, i32)> {
-    let mut layers = Vec::with_capacity(group.len());
-    let mut bounds: Option<pictura_core::PsdRect> = None;
-    for (i, path) in group.iter().enumerate() {
-        let mut layer = pictura_render::resolve_path(doc, path)?.clone();
-        if i == 0 {
-            layer.opacity = 255;
-            layer.blend = BlendMode::Normal;
-        }
-        bounds = Some(bounds.map_or(layer.rect, |rect| union_rect(rect, layer.rect)));
-        layers.push(layer);
-    }
-    let bounds = bounds?;
-    let (x0, y0) = (bounds.left.max(0), bounds.top.max(0));
-    let (x1, y1) = (
-        bounds.right.min(doc.width as i32),
-        bounds.bottom.min(doc.height as i32),
-    );
-    if x1 <= x0 || y1 <= y0 {
-        return None;
-    }
-    let mut scratch = doc.clone();
-    scratch.layers = LayerStack::from_layers(layers);
-    let rendered = current_buffer(&scratch, gpu_compute);
-    let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
-    Some((image.copy(&QRect::new(x0, y0, x1 - x0, y1 - y0)), x0, y0))
-}
-
-/// Build the transform overlay images for `path`: the document composited with
-/// the target hidden, the target's own RGBA image (materializing a channel-less
-/// embedded object into a clone), its document-space origin, and opacity.
-pub(super) fn build_transform_preview(
-    doc: &pictura_core::Document,
-    path: &str,
-    gpu_compute: bool,
-) -> Option<(QImage, QImage, i32, i32, i32)> {
-    let opacity = pictura_render::resolve_path(doc, path)?.opacity as i32;
-    let (image, x, y) = transform_preview_layer(doc, path, gpu_compute)?;
-    let mut base_doc = doc.clone();
-    for target_path in &clipping_group(doc, path) {
-        if let Some(target) = pictura_render::resolve_path_mut(&mut base_doc, target_path) {
-            target.visible = false;
-        }
-    }
-    let rendered = current_buffer(&base_doc, gpu_compute);
-    Some((
-        buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
-        image,
-        x,
-        y,
-        opacity,
-    ))
-}
-
-/// The moving pixels of [`build_transform_preview`] and their document-space
-/// origin: the layer (or its clipping group, or its rendered appearance).
-pub(super) fn transform_preview_layer(
-    doc: &pictura_core::Document,
-    path: &str,
-    gpu_compute: bool,
-) -> Option<(QImage, i32, i32)> {
-    let layer = pictura_render::resolve_path(doc, path)?;
-    let group = clipping_group(doc, path);
-    let image = if group.len() > 1 {
-        rendered_clipping_group(doc, &group, gpu_compute)?
-    } else if needs_rendered_appearance(layer) {
-        rendered_layer_image(doc, path, gpu_compute)?
-    } else {
-        match layer_image(layer) {
-            Some(image) => (image, layer.rect.left, layer.rect.top),
-            None => {
-                let mut clone = doc.clone();
-                if !pictura_render::rasterize_smart_object(&mut clone, path) {
-                    return None;
-                }
-                let rendered = pictura_render::resolve_path(&clone, path)?;
-                (
-                    layer_image(rendered)?,
-                    rendered.rect.left,
-                    rendered.rect.top,
-                )
-            }
-        }
-    };
-    Some(image)
-}
+pub(in crate::cxxqt_object) use preview::transform_preview_layer;
+#[cfg(test)]
+use preview::TransformPreview;
+use preview::{build_transform_preview, rendered_layer_image};
 
 /// Whether `path` resolves to a transformable target: a raster pixel layer, a
 /// shape layer with an outline of some area, or a channel-less embedded smart
@@ -375,7 +190,11 @@ impl qobject::PictureView {
         let Some(session) = self.as_mut().rust_mut().prepare_transform(&path, mode) else {
             return false;
         };
-        if !self.as_mut().compute_transform_preview(&session.path) {
+        let bounded = session.lifted.is_none();
+        if !self
+            .as_mut()
+            .compute_transform_preview(&session.path, bounded)
+        {
             self.as_mut().rust_mut().restore_transform_begin(session);
             return false;
         }
@@ -388,7 +207,11 @@ impl qobject::PictureView {
 
     /// Compute and store the transform overlay base/layer for `path`; keyed with
     /// the `-1` sentinel so the Move cache rebuilds when it next runs.
-    pub(super) fn compute_transform_preview(mut self: Pin<&mut Self>, path: &str) -> bool {
+    pub(super) fn compute_transform_preview(
+        mut self: Pin<&mut Self>,
+        path: &str,
+        bounded: bool,
+    ) -> bool {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
@@ -396,15 +219,16 @@ impl qobject::PictureView {
             .session
             .doc
             .as_ref()
-            .and_then(|doc| build_transform_preview(doc, path, gpu_compute));
-        let Some((base, image, x, y, opacity)) = prepared else {
+            .and_then(|doc| build_transform_preview(doc, path, gpu_compute, bounded));
+        let Some(preview) = prepared else {
             return false;
         };
-        rust.move_base = Some(base);
-        rust.move_layer = Some(image);
-        rust.move_x = x;
-        rust.move_y = y;
-        rust.move_opacity = opacity;
+        rust.move_base = Some(preview.base);
+        rust.move_base_origin = preview.base_origin;
+        rust.move_layer = Some(preview.image);
+        rust.move_x = preview.x;
+        rust.move_y = preview.y;
+        rust.move_opacity = preview.opacity;
         rust.move_prepared_revision = rust.session.content_revision;
         rust.move_prepared_layer = String::new();
         rust.move_prepared_union = None;
@@ -855,6 +679,7 @@ impl qobject::PictureView {
     pub fn clear_transform_preview(self: Pin<&mut Self>) {
         let mut rust = self.rust_mut();
         rust.move_base = None;
+        rust.move_base_origin = None;
         rust.move_layer = None;
         rust.move_x = 0;
         rust.move_y = 0;
@@ -1120,8 +945,12 @@ mod tests {
             })
             .collect();
 
-        let (_, preview, x, y, _) =
-            build_transform_preview(&doc, &path, false).expect("shape preview");
+        let TransformPreview {
+            image: preview,
+            x,
+            y,
+            ..
+        } = build_transform_preview(&doc, &path, false, false).expect("shape preview");
         assert_eq!((x, y), (0, 0));
         let filled = (0..preview.height()).any(|py| {
             (0..preview.width()).any(|px| {
@@ -1152,3 +981,5 @@ mod tests {
 
 #[cfg(test)]
 mod cow_tests;
+#[cfg(test)]
+mod preview_tests;

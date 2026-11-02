@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <optional>
 
 class QPainter;
 
@@ -300,8 +301,10 @@ public:
     // Free Transform preview: same cached base/layer as the Move preview, but the
     // layer is drawn under a live similarity transform (scale/rotate/translate
     // about the layer centre) and the quad with its eight handles is overlaid.
+    // A `basePos` makes `base` a patch at that document position, drawn over the
+    // live canvas in place of a whole-document base.
     void beginTransformPreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                               double opacity);
+                               double opacity, std::optional<QPoint> basePos = std::nullopt);
     void setTransformPreview(double scaleX, double scaleY, double angleRadians, double dx,
                              double dy);
     // Projective layer preview: nine space-separated coefficients in
@@ -667,6 +670,7 @@ private:
     // Rewarp the projective preview when its inputs, the visible region, or the
     // view scale changed since the last warp.
     void refreshTransformWarp();
+    void paintTransformLayer(QPainter& painter);
     // The Free Transform box, handles, rotate knob, and reference point,
     // unclipped by the document rect (image_view_overlays.cpp).
     void paintTransformOverlay(QPainter& painter);
@@ -835,6 +839,7 @@ private:
 
     bool movePreviewActive_ = false;
     QImage moveBase_;
+    std::optional<QPoint> moveBasePos_;
     QImage moveLayer_;
     QPointF moveLayerPos_;
     QPointF moveDelta_;

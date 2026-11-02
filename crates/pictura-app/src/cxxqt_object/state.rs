@@ -58,6 +58,8 @@ pub struct PictureViewRust {
     /// The expanded group paths, per document.
     pub(super) expanded_groups: Vec<String>,
     pub(super) move_base: Option<QImage>,
+    /// Where a transform's backdrop patch sits; `None` for a whole-document base.
+    pub(super) move_base_origin: Option<(i32, i32)>,
     pub(super) move_layer: Option<QImage>,
     pub(super) move_x: i32,
     pub(super) move_y: i32,
@@ -205,6 +207,7 @@ impl Default for PictureViewRust {
             solo_snapshot: None,
             expanded_groups: Vec::new(),
             move_base: None,
+            move_base_origin: None,
             move_layer: None,
             move_x: 0,
             move_y: 0,
