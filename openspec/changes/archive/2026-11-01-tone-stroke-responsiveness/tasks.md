@@ -5,3 +5,4 @@
 - [x] Banded per-dab write-back
 - [x] Tests: serial oracle, band sharing, lazy loading, stale layer, write-back
 - [x] Profiles: `profile-tools.py` scenarios, `tone_stroke_profile`
+- [x] Skip the recomposite after a stroke that changed nothing

@@ -52,3 +52,16 @@ rectangle in parallel as on one thread. Cancelling SHALL restore the document.
   offset layer, once banded and once on one thread
 - **THEN** every sample reports the same changed flag and dirty rectangle, the
   documents are byte-identical, and cancelling restores the original
+
+### Requirement: A stroke that changed nothing rebuilds nothing
+
+A stroke that changes no pixel SHALL leave no history state and SHALL NOT rebuild
+the document composite or the view pyramid, so its release costs the same on any
+document size. A stroke that swapped the document or drew a preview SHALL still
+rebuild them.
+
+#### Scenario: Sponge over black releases at once [tsr_no_change]
+
+- **WHEN** Sponge at its default Vibrance strokes across black pixels
+- **THEN** no pixel changes, no history state is added, and the view reports no
+  change

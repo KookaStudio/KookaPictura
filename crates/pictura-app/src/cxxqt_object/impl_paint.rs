@@ -905,10 +905,17 @@ impl qobject::PictureView {
                     None => {
                         // A stroke that changed nothing leaves no history state,
                         // so a Background it layered goes back to a Background.
+                        // Otherwise the composite and the canvas still hold every
+                        // pixel: Sponge over grey lands here, and on a very large
+                        // document a recomposite is seconds. Only a preview left
+                        // a level to overwrite.
+                        let restored = stroke_base.is_some();
                         if let Some(base) = stroke_base {
                             self.as_mut().rust_mut().session.doc = Some(base);
                         }
-                        self.as_mut().recomposite();
+                        if restored || previewed {
+                            self.as_mut().recomposite();
+                        }
                         false
                     }
                     Some(rect) => {

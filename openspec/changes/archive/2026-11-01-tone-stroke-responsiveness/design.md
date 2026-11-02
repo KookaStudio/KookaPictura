@@ -43,6 +43,14 @@ nothing, and the reported bounding box is unchanged.
 
 Resident size after the last scenario falls from 5.8 GB to 5.3 GB.
 
+## A stroke that changed nothing
+
+Sponge with Vibrance cannot move black or near-grey pixels, so a stroke there
+finishes unpainted. `end_paint` then recomposited the whole document: 1.1–3.5 s on
+the world map with two layers, reported as a delay on release. The doc-swapping
+Background Eraser and a previewed stroke still need that rebuild; every other
+unpainted stroke has nothing to rebuild.
+
 ## Costs that remain
 
 - Small-stroke undo rose by about 50 %, to the Brush's level: toned planes now stay

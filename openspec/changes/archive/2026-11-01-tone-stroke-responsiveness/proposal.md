@@ -20,6 +20,9 @@ dab copies no layer plane.
   History, and the Background Eraser share this step; their dab loops stay as they
   are.
 
+- **Unpainted strokes.** A stroke that changes no pixel no longer recomposites the
+  document, which cost 1–3.5 s on release when Sponge crossed black or grey.
+
 ## Capabilities
 
 ### New Capabilities
