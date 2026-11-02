@@ -20,6 +20,7 @@ private slots:
     void snapshotContainsEditRecord();
     void resetClearsTotals();
     void addGroupCreatesGroup();
+    void typeOpAddsAndResetsAType();
 
 private:
     QJsonObject call(const QString& method, const QJsonObject& params = {});
@@ -103,6 +104,30 @@ void ControlMetricsTest::addGroupCreatesGroup()
              {{QStringLiteral("op"), QStringLiteral("add_group")}, {QStringLiteral("index"), 99}});
     QCOMPARE(bad.value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
              QStringLiteral("invalid_param"));
+}
+
+void ControlMetricsTest::typeOpAddsAndResetsAType()
+{
+    const QJsonObject added = call(QStringLiteral("type_op"), {{QStringLiteral("op"), QStringLiteral("add")}});
+    QVERIFY(added.value(QStringLiteral("ok")).toBool());
+    const QString path =
+        added.value(QStringLiteral("result")).toObject().value(QStringLiteral("path")).toString();
+    QVERIFY(!path.isEmpty());
+
+    const auto op = [&](const QString& name, const QString& field, const QJsonValue& value) {
+        return call(QStringLiteral("type_op"), {{QStringLiteral("op"), name},
+                                                {QStringLiteral("path"), path},
+                                                {field, value}})
+            .value(QStringLiteral("ok"))
+            .toBool();
+    };
+    QVERIFY(op(QStringLiteral("set"), QStringLiteral("size"), 96.0));
+    QVERIFY(op(QStringLiteral("preview"), QStringLiteral("color"), double(0xffc02030u)));
+    QVERIFY(op(QStringLiteral("warp_preview"), QStringLiteral("style"), QStringLiteral("arc")));
+    QVERIFY(call(QStringLiteral("type_op"), {{QStringLiteral("op"), QStringLiteral("warp_cancel")}})
+                .value(QStringLiteral("ok"))
+                .toBool());
+    QVERIFY(!op(QStringLiteral("nonsense"), QStringLiteral("size"), 96.0));
 }
 
 QTEST_MAIN(ControlMetricsTest)

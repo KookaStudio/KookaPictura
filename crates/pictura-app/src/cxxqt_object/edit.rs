@@ -269,7 +269,7 @@ impl PictureViewRust {
 
     /// Whether a structural damage bound is large enough that the regional
     /// path is not worth its per-rectangle overhead.
-    fn structural_is_full(&self, rects: &[PsdRect]) -> bool {
+    pub(super) fn structural_is_full(&self, rects: &[PsdRect]) -> bool {
         let Some(doc) = self.session.doc.as_ref() else {
             return true;
         };
