@@ -7,6 +7,7 @@
 #include "frame.h"
 #include "options_bar.h"
 #include "selftest_paint_fixture.h"
+#include "tool_options_json.h"
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -159,6 +160,9 @@ private slots:
     void airbrushOffStaysStill();
     void airbrushOnBuilds();
     void optionsBarAndPanelShareTheFlag();
+    void pressureButtonsToggleAndPersist();
+    void pressureSizeShrinksTheDab();
+    void pressureOpacityLightensTheDab();
     void shiftAltPTogglesTheBrush();
     void shiftAltPTogglesAStamp();
     void shiftAltPIgnoresToolsWithoutTheOption();
@@ -238,6 +242,106 @@ void BrushAirbrushTest::optionsBarAndPanelShareTheFlag()
     QVERIFY(bar);
     QVERIFY(!bar->pageForTest(pictura::ToolId::Pencil)
                  ->findChild<QToolButton*>(QStringLiteral("optionsBrushAirbrush")));
+}
+
+void BrushAirbrushTest::pressureButtonsToggleAndPersist()
+{
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    const BrushState brush(tools);
+    window_->setActiveTool(pictura::ToolId::Brush);
+    auto* paint = tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush);
+    auto* bar = window_->findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(paint && bar);
+    QWidget* page = bar->pageForTest(pictura::ToolId::Brush);
+    auto* size = page->findChild<QToolButton*>(QStringLiteral("optionsBrushPressureSize"));
+    auto* opacity = page->findChild<QToolButton*>(QStringLiteral("optionsBrushPressureOpacity"));
+    QVERIFY(size && opacity);
+    QVERIFY(!size->icon().isNull());
+    QVERIFY(!opacity->icon().isNull());
+    QVERIFY(!paint->pressureSize());
+    QVERIFY(!paint->pressureOpacity());
+
+    size->click();
+    opacity->click();
+    QVERIFY(paint->pressureSize());
+    QVERIFY(paint->pressureOpacity());
+    QVERIFY(size->isChecked());
+    QVERIFY(opacity->isChecked());
+
+    const QJsonObject saved = pictura::toolOptionsToJson(*tools);
+    paint->setPressureSize(false);
+    paint->setPressureOpacity(false);
+    pictura::applyToolOptionsJson(*tools, saved);
+    QVERIFY(paint->pressureSize());
+    QVERIFY(paint->pressureOpacity());
+}
+
+void BrushAirbrushTest::pressureSizeShrinksTheDab()
+{
+    quint32 full = 0;
+    {
+        Fixture f(*window_, whiteSeed(), QStringLiteral("pictura_brush_pressure_size_full"));
+        QVERIFY(f.ok());
+        const BrushState brush(f.tools);
+        armBrush(f, false);
+        auto* paint = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush);
+        paint->setPressureSize(true);
+        paint->setFlow(100);
+        f.tools->setPressure(1.0);
+        press(f);
+        release(f);
+        full = f.view->sample_argb(20, 16);
+    }
+    quint32 half = 0;
+    {
+        Fixture f(*window_, whiteSeed(), QStringLiteral("pictura_brush_pressure_size_half"));
+        QVERIFY(f.ok());
+        const BrushState brush(f.tools);
+        armBrush(f, false);
+        auto* paint = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush);
+        paint->setPressureSize(true);
+        paint->setFlow(100);
+        f.tools->setPressure(0.5);
+        press(f);
+        release(f);
+        half = f.view->sample_argb(20, 16);
+    }
+    QCOMPARE(full, 0xff000000u);
+    QCOMPARE(half, 0xffffffffu);
+}
+
+void BrushAirbrushTest::pressureOpacityLightensTheDab()
+{
+    quint32 full = 0;
+    {
+        Fixture f(*window_, whiteSeed(), QStringLiteral("pictura_brush_pressure_opacity_full"));
+        QVERIFY(f.ok());
+        const BrushState brush(f.tools);
+        armBrush(f, false);
+        auto* paint = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush);
+        paint->setPressureOpacity(true);
+        paint->setFlow(100);
+        f.tools->setPressure(1.0);
+        press(f);
+        release(f);
+        full = f.view->sample_argb(16, 16);
+    }
+    quint32 half = 0;
+    {
+        Fixture f(*window_, whiteSeed(), QStringLiteral("pictura_brush_pressure_opacity_half"));
+        QVERIFY(f.ok());
+        const BrushState brush(f.tools);
+        armBrush(f, false);
+        auto* paint = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush);
+        paint->setPressureOpacity(true);
+        paint->setFlow(100);
+        f.tools->setPressure(0.5);
+        press(f);
+        release(f);
+        half = f.view->sample_argb(16, 16);
+    }
+    QVERIFY2(qRed(full) < qRed(half), "lower pressure paints lighter");
 }
 
 void BrushAirbrushTest::shiftAltPTogglesTheBrush()

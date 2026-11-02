@@ -532,6 +532,11 @@ void ToolController::setBackground(const QColor& color)
     emit colorsChanged();
 }
 
+void ToolController::setPressure(double pressure)
+{
+    pressure_ = std::clamp(pressure, 0.0, 1.0);
+}
+
 void ToolController::setMaskActive(bool mask)
 {
     maskActive_ = mask;
@@ -657,6 +662,7 @@ void ToolController::bindCanvas(ImageView* canvas)
         return;
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
+    connect(canvas_, &ImageView::pointerPressure, this, &ToolController::setPressure);
     connect(canvas_, &ImageView::mouseMoved, this, &ToolController::handleMoved);
     connect(canvas_, &ImageView::modifierKeyChanged, this, &ToolController::handleModifiers);
     connect(canvas_, &ImageView::mouseReleased, this, &ToolController::handleReleased);

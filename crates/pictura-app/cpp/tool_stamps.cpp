@@ -79,7 +79,7 @@ public:
         }
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
-        stroke_->dab(imagePos.x(), imagePos.y());
+        stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
         if (holdPaints()) {
             holdTimer_.start();
         }
@@ -91,7 +91,7 @@ public:
         if (!ctx.dragging() || !stroke_) {
             return;
         }
-        stroke_->dab(imagePos.x(), imagePos.y());
+        stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
     }
 
     void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override

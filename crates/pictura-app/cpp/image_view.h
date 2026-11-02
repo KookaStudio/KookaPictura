@@ -635,6 +635,9 @@ signals:
     void mousePressed(const QPointF& imagePos, int button, int modifiers);
     void mouseMoved(const QPointF& imagePos);
     void mouseReleased(const QPointF& imagePos);
+    // A tablet event's pressure (0..1), before Qt's synthesized mouse event
+    // drives the stroke. A mouse press reports 1.0.
+    void pointerPressure(double pressure);
     // A modifier key (Alt/Shift/Ctrl/Meta) was pressed or released, so a tool
     // observes the edge even without pointer movement.
     void modifierKeyChanged(int modifiers);
@@ -651,6 +654,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void tabletEvent(QTabletEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
@@ -792,6 +796,9 @@ private:
     bool snapToWorkspace_ = false;
     bool panning_ = false;
     bool spacePan_ = false;
+    // A tablet press is down, so its synthesized mouse press keeps the
+    // tablet pressure instead of resetting to the mouse's 1.0.
+    bool tabletActive_ = false;
     // False after a load/fit so the first resize settles the canvas, then any
     // pan/zoom (and the initial fit itself) sets it true so a later tool-switch
     // resize keeps the view instead of snapping the zoom.

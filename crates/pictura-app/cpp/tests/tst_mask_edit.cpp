@@ -155,7 +155,7 @@ void MaskEditTest::maskThumbnailOnNonActiveRowKeepsTarget()
 
     const pictura::PaintTip tip{20, 100, 100, 0, 25, 0, 1, 0, 0, 0};
     QVERIFY(pictura::begin_brush(*view, 0xff000000u, 0xffffffffu, tip, 100, 100,
-                                 QStringLiteral("normal"), false, false));
+                                 QStringLiteral("normal"), false, false, false, false));
     QVERIFY(view->paint_dab(8.0, 8.0, 1.0));
     QVERIFY(view->end_paint());
 
@@ -325,7 +325,7 @@ void MaskEditTest::canvasToolsWriteCoverage()
     // pixels are left as they were.
     const int base = view->history_count();
     QVERIFY(pictura::begin_brush(*view, 0xff000000u, 0xffffffffu, tip, 100, 100,
-                                 QStringLiteral("normal"), false, false));
+                                 QStringLiteral("normal"), false, false, false, false));
     QVERIFY(view->paint_dab(16.0, 16.0, 1.0));
     QVERIFY(view->end_paint());
     QCOMPARE(view->history_label(base), QStringLiteral("Brush"));

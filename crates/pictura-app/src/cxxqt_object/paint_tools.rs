@@ -196,7 +196,8 @@ pub mod ffi {
         /// Begin a Brush (or, `aliased`, Pencil) stroke painting `foreground`
         /// (`0xAARRGGBB`) with `tip` and its dynamics. `mode` is a Brush mode
         /// (`"normal"`, …); `auto_erase` paints `background` over the
-        /// foreground (Pencil). False as for `begin_clone_stamp`.
+        /// foreground (Pencil); `pressure_size` / `pressure_opacity` scale each
+        /// dab by the sample pressure. False as for `begin_clone_stamp`.
         fn begin_brush(
             view: Pin<&mut PictureView>,
             foreground: u32,
@@ -207,6 +208,8 @@ pub mod ffi {
             mode: &QString,
             aliased: bool,
             auto_erase: bool,
+            pressure_size: bool,
+            pressure_opacity: bool,
         ) -> bool;
 
         /// Begin a Background Eraser stroke. `sampling` 0 Continuous / 1 Once

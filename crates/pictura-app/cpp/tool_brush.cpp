@@ -65,7 +65,8 @@ public:
                                             quint32(ctx.background().rgba()), paintTip(*paint_),
                                             paint_->opacity(), paint_->flow(), paint_->mode(),
                                             aliased_ || paint_->aliased(),
-                                            aliased_ && paint_->autoErase());
+                                            aliased_ && paint_->autoErase(),
+                                            paint_->pressureSize(), paint_->pressureOpacity());
         }
         if (!stroke_) {
             if (activePixelLocked(v)) {
@@ -81,7 +82,7 @@ public:
         ctx.setDragCommitted(false);
         {
             pictura::ScopedTimer t("cxx_paint_dab (call)");
-            stroke_->dab(imagePos.x(), imagePos.y());
+            stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
         }
         // The Pencil has no Airbrush option even though it shares PaintOptions.
         if (!aliased_ && paint_->airbrush()) {
@@ -96,7 +97,7 @@ public:
             return;
         }
         pictura::ScopedTimer t("cxx_paint_dab (call)");
-        stroke_->dab(imagePos.x(), imagePos.y());
+        stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
     }
 
     void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override

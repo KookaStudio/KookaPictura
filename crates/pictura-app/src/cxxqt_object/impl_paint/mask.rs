@@ -184,7 +184,9 @@ impl PictureViewRust {
             let (mw, mh) = (mask_stroke.document.width, mask_stroke.document.height);
             match (
                 preview_level(cfg.diameter as i32, mw, mh),
-                gpu_paint_mode(cfg.mode).filter(|_| cfg.grain == 0 && !cfg.wet_edges),
+                gpu_paint_mode(cfg.mode).filter(|_| {
+                    cfg.grain == 0 && !cfg.wet_edges && !cfg.pressure_size && !cfg.pressure_opacity
+                }),
                 self.gpu_compute,
             ) {
                 (Some(_), Some(mode), true) => {

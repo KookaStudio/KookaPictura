@@ -285,7 +285,7 @@ fn grow_extent(extent: &mut Option<PsdRect>, lx: i32, ly: i32) {
 /// same tip profile and flow accumulation the exact stroke uses, sampled at the
 /// level pixel's centre. Returns whether any pixel changed.
 fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool {
-    let cfg = preview.cfg;
+    let cfg = preview.cfg.pressure_scaled(sample.pressure);
     let scale = preview.scale as f32;
     let radius = cfg.diameter as f32 * 0.5;
     let flow = cfg.flow as f32 / 100.0;
@@ -505,11 +505,16 @@ impl PictureViewRust {
                     .doc
                     .as_ref()
                     .and_then(|doc| preview_level(cfg.diameter as i32, doc.width, doc.height));
-                // The GPU dab shader has no paper grain or wet-edge curve; such a
-                // tip stays on the CPU oracle so the stroke matches its
-                // committed pixels.
-                let gpu_mode = gpu_paint_mode(cfg.mode)
-                    .filter(|_| !cfg.auto_erase && cfg.grain == 0 && !cfg.wet_edges);
+                // The GPU dab shader has no paper grain, wet-edge curve, or
+                // per-sample pressure; such a stroke stays on the CPU oracle
+                // (or its preview) so the committed pixels match.
+                let gpu_mode = gpu_paint_mode(cfg.mode).filter(|_| {
+                    !cfg.auto_erase
+                        && cfg.grain == 0
+                        && !cfg.wet_edges
+                        && !cfg.pressure_size
+                        && !cfg.pressure_opacity
+                });
                 if level.is_some() && rust.gpu_compute {
                     let seeded = match (
                         gpu_mode,

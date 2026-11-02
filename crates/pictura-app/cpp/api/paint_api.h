@@ -48,7 +48,8 @@ private:
 /// `begin_brush` helper), owned by the returned stroke; `nullopt` on refusal.
 std::optional<Stroke> beginBrush(PictureView& view, std::uint32_t foreground,
                                  std::uint32_t background, const PaintTip& tip, int opacity,
-                                 int flow, const QString& mode, bool aliased, bool autoErase);
+                                 int flow, const QString& mode, bool aliased, bool autoErase,
+                                 bool pressureSize, bool pressureOpacity);
 
 /// Queue `flush_present` on the next event-loop turn; the migrated `frame.cpp`
 /// next-turn timer. A no-op when nothing is pending, so the chain ends.

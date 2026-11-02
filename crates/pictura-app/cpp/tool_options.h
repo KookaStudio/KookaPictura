@@ -552,6 +552,29 @@ public:
         }
     }
 
+    // Always use Pressure for Size / Opacity: the options-bar pressure toggles.
+    bool pressureSize() const { return pressureSize_; }
+    void setPressureSize(bool on)
+    {
+        if (on != pressureSize_) {
+            pressureSize_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
+
+    bool pressureOpacity() const { return pressureOpacity_; }
+    void setPressureOpacity(bool on)
+    {
+        if (on != pressureOpacity_) {
+            pressureOpacity_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
+
     // Preview-only: a preset whose tip is drawn as a pen nib. The stroke
     // engine never reads it.
     bool penTip() const { return penTip_; }
@@ -661,6 +684,8 @@ public:
         mode_ = other.mode_;
         autoErase_ = other.autoErase_;
         airbrush_ = other.airbrush_;
+        pressureSize_ = other.pressureSize_;
+        pressureOpacity_ = other.pressureOpacity_;
         penTip_ = other.penTip_;
         aliased_ = other.aliased_;
         roundness_ = std::clamp(other.roundness_, 0, 100);
@@ -690,6 +715,8 @@ private:
     QString mode_ = QStringLiteral("normal");
     bool autoErase_ = false;
     bool airbrush_ = false;
+    bool pressureSize_ = false;
+    bool pressureOpacity_ = false;
     bool penTip_ = false;
     bool aliased_ = false;
     int roundness_ = 100;
