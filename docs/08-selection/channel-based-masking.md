@@ -82,7 +82,7 @@ All other blend modes available to Apply Image/Calculations are the standard lay
 | Mask overlay opacity | percent | 50 % (Quick Mask default) | 0–100 % | Appearance only |
 | Apply Image Source | image/layer/channel | active document/layer | any open doc, any layer, `Merged` | Colour-mode rule for composite |
 | Apply Image Invert | bool | off | on / off | |
-| Apply Image Blending | enum | Normal | standard layer modes + Add/Subtract | |
+| Apply Image Blending | enum | Multiply | standard layer modes + Add/Subtract | |
 | Apply Image Opacity | percent | 100 % | 0–100 % | |
 | Apply Image Preserve Transparency | bool | off | on / off | |
 | Apply Image Mask | enum + refs | none | channel / Transparency / selection, + Invert | |
@@ -208,7 +208,7 @@ Not used in this pass:
 
 - **`Result = Selection` combine behaviour.** The Help says the blended result is placed in a selection but not whether it replaces, adds, subtracts, or intersects an existing selection. Resolve with a CS6 test.
 - **Calculations `Result` default.** The default target (New Document vs New Channel vs Selection) is not stated. Resolve from a CS6 UI capture.
-- **High-bit-depth Scale/Offset scaling.** The documented 0–255 arithmetic must be mapped to 16/32-bit; Adobe does not state the exact scaling. Resolve with a high-bit-depth reference.
+- **High-bit-depth Scale/Offset scaling.** The documented 0–255 arithmetic must be mapped to 16/32-bit; Adobe does not state the exact scaling. Apply Image uses `Offset / 255` in the unit domain at every depth and leaves 32-bit Add and Subtract unclamped; this is an inference, not verified parity. Confirm with a high-bit-depth reference.
 - **Apply Image colour-mode rule.** "Single channel but not composite" across differing modes is stated but the exact validation matrix is not. Resolve per colour-mode pair in `01-architecture/color-management.md`.
 - **Spot channel serialisation.** DCS 2.0 and PSD spot-channel encoding details must come from the Adobe file-format spec, not the Help PDF.
 - **Mask sense on PSD round-trip.** Whether the `Masked Areas` / `Selected Areas` flag is stored independently or derived must be confirmed against the file-format spec.
