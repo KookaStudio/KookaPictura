@@ -22,8 +22,9 @@ runs the app with PICTURA_METRICS=1, resets the metrics before each scenario,
 and prints the scenario's per-phase totals (including Qt-side phases such as
 the Layers panel refresh) from the control server's `metrics` snapshot.
 
-The new-layer and new-group scenarios create a layer or group through
-`layer_op` instead of driving a tool.
+The new-layer, new-group, duplicate, move-copy and delete-copy scenarios use
+`layer_op` instead of driving a tool. rss_mb is the app's resident size after
+the scenario.
 Numbers are for one machine and one build; compare runs on the same machine.
 No dependency beyond python3's standard library.
 """
@@ -55,10 +56,14 @@ SCENARIOS = {
     "gradient": ("gradient", {}, "line"),
     "paintbucket": ("paintbucket", {}, "click"),
 }
-# name -> layer_op op; each creates one node above the bottom layer.
+# name -> (layer_op op, its params, setup duplicates of the bottom layer).
 LAYER_SCENARIOS = {
-    "new-layer": "add",
-    "new-group": "add_group",
+    "new-layer": ("add", {"index": 0}, 0),
+    "new-group": ("add_group", {"index": 0}, 0),
+    "duplicate": ("duplicate", {"index": 0}, 0),
+    "duplicate-copy": ("duplicate", {"index": 1}, 1),
+    "move-copy": ("translate", {"index": 1, "dx": 40, "dy": 40}, 1),
+    "delete-copy": ("delete", {"index": 1}, 1),
 }
 DEFAULT_SCENARIOS = ",".join([*SCENARIOS, *LAYER_SCENARIOS])
 
@@ -153,12 +158,16 @@ def run_scenario(client, name, w, h, moves, before_undo):
     return row
 
 
-def run_layer_scenario(client, name, before_undo):
-    op = LAYER_SCENARIOS[name]
+def run_layer_scenario(client, name, before_undo, metrics):
+    op, params, setup = LAYER_SCENARIOS[name]
+    for _ in range(setup):
+        client.call("layer_op", op="duplicate", index=0)
     client.call("status")
+    if metrics:
+        client.call("metrics", reset=True)
     row = {"tool": "layer_op", "gesture": op}
     total = time.perf_counter()
-    _, row["op_ms"] = client.call("layer_op", op=op, index=0)
+    _, row["op_ms"] = client.call("layer_op", op=op, **params)
     _, row["settle_ms"] = client.call("status")
     row["total_ms"] = ms(time.perf_counter() - total)
     row["idle_ms"] = ms(wait_idle(client, total))
@@ -168,7 +177,18 @@ def run_layer_scenario(client, name, before_undo):
     _, undo = client.call("edit", op="undo")
     _, settle = client.call("status")
     row["undo_ms"] = ms(undo + settle)
+    for _ in range(setup):
+        client.call("edit", op="undo")
+    client.call("status")
     return row
+
+
+def rss_mb(pid):
+    with open(f"/proc/{pid}/status") as status:
+        for line in status:
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) // 1024
+    return 0
 
 
 def wait_idle(client, start, window=0.4, quiet_s=0.005):
@@ -192,10 +212,11 @@ def wait_idle(client, start, window=0.4, quiet_s=0.005):
         time.sleep(0.02)
 
 
-def run_any(client, name, w, h, moves, metrics):
+def run_any(client, name, w, h, moves, metrics, pid):
     # The snapshot is read before the scenario's undo, whose full restore
     # would otherwise add composite phases the scenario itself never ran.
     def before_undo(row):
+        row["rss_mb"] = rss_mb(pid)
         if metrics:
             snapshot = client.call("metrics")[0]
             row["phases"] = {label: phase["total_ms"] for label, phase in snapshot.get("phases", {}).items()}
@@ -203,7 +224,7 @@ def run_any(client, name, w, h, moves, metrics):
     if metrics:
         client.call("metrics", reset=True)
     if name in LAYER_SCENARIOS:
-        return run_layer_scenario(client, name, before_undo)
+        return run_layer_scenario(client, name, before_undo, metrics)
     return run_scenario(client, name, w, h, moves, before_undo)
 
 
@@ -218,7 +239,7 @@ def print_phases(results):
     print("(per-phase totals in milliseconds, from PICTURA_METRICS)")
 
 
-COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "settle_ms", "total_ms", "undo_ms"]
+COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "settle_ms", "total_ms", "undo_ms", "rss_mb"]
 
 
 def print_table(results):
@@ -327,7 +348,7 @@ def main():
         results = {}
         for name in names:
             try:
-                results[name] = run_any(client, name, w, h, args.moves, args.metrics)
+                results[name] = run_any(client, name, w, h, args.moves, args.metrics, app.pid)
             except (RuntimeError, OSError) as err:
                 results[name] = {"error": str(err)}
                 if app.poll() is not None:

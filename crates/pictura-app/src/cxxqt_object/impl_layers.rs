@@ -1,5 +1,6 @@
 use super::edit::{
-    insertion_edit, regions_influence, structural, structural_before, structural_paths, Edit,
+    duplicate_edit, insertion_edit, regions_influence, structural, structural_before,
+    structural_paths, Edit,
 };
 use super::helpers::*;
 use super::helpers_composite::*;
@@ -303,8 +304,9 @@ impl qobject::PictureView {
             }
             if created >= 0 {
                 let after = pictura_render::damage::influence(doc, &created.to_string());
+                let edit = duplicate_edit(doc, &[created.to_string()], structural(before, after));
                 rust.layer_target.select_only(&created.to_string());
-                structural(before, after)
+                edit
             } else {
                 Edit::None
             }
@@ -805,7 +807,11 @@ impl qobject::PictureView {
                 .doc
                 .as_ref()
                 .and_then(|doc| pictura_render::damage::influence_paths(doc, &created_refs));
-            structural_paths(before, after)
+            let changed = structural_paths(before, after);
+            match rust.session.doc.as_ref() {
+                Some(doc) => duplicate_edit(doc, &created, changed),
+                None => changed,
+            }
         });
         created.into_iter().map(QString::from).collect()
     }

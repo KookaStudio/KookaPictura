@@ -108,7 +108,7 @@ fn content_bounds(layer: &Layer) -> Option<PsdRect> {
     let Some(alpha) = layer.channels.iter().find(|c| c.id == -1) else {
         return Some(r);
     };
-    let local = super::coverage_bounds(&alpha.data, w as u32, h as u32)?;
+    let local = super::clipboard::plane_coverage_bounds(&alpha.data, w as u32, h as u32)?;
     Some(PsdRect {
         top: r.top + local.top,
         left: r.left + local.left,

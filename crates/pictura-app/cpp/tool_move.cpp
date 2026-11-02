@@ -70,13 +70,23 @@ public:
         addOptions(move_.get());
     }
 
-    void onActivate(ToolServices& ctx) override { warm(ctx); }
+    // `applyToolPolicy` also lands here on every undo and transform reset. The
+    // warm is a full-layer bake and a press rebuilds a stale cache anyway, so
+    // only a real switch to the tool pays for it.
+    void onActivate(ToolServices& ctx) override
+    {
+        if (!active_) {
+            warm(ctx);
+        }
+        active_ = true;
+    }
 
     void onDeactivate(ToolServices& ctx) override
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSmartGuides();
         }
+        active_ = false;
         warmView_ = nullptr;
         warmBase_ = QImage();
         warmLayer_ = QImage();
@@ -331,6 +341,7 @@ private:
     QList<QRectF> referenceRects_;
     qint64 boundsKey_ = 0;
     QRectF bounds_;
+    bool active_ = false;
     PictureView* warmView_ = nullptr;
     QImage warmBase_;
     QImage warmLayer_;

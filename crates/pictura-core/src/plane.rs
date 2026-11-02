@@ -26,6 +26,9 @@ impl<T> Clone for Band<T> {
 struct Bands<T> {
     width: usize,
     bands: Vec<Band<T>>,
+    /// Whether any band is `Owned`. A per-sample `Deref` asks this, so it must
+    /// not walk the bands.
+    diverged: bool,
 }
 
 impl<T> Clone for Bands<T> {
@@ -33,13 +36,14 @@ impl<T> Clone for Bands<T> {
         Self {
             width: self.width,
             bands: self.bands.clone(),
+            diverged: self.diverged,
         }
     }
 }
 
 impl<T> Bands<T> {
     fn diverged(&self) -> bool {
-        self.bands.iter().any(|b| matches!(b, Band::Owned(_)))
+        self.diverged
     }
 }
 
@@ -206,6 +210,7 @@ fn build_bands<T>(len: usize, width: usize) -> Bands<T> {
         return Bands {
             width,
             bands: Vec::new(),
+            diverged: false,
         };
     }
     let band_len = BAND_ROWS * width;
@@ -216,7 +221,11 @@ fn build_bands<T>(len: usize, width: usize) -> Bands<T> {
         bands.push(Band::Shared(start..end));
         start = end;
     }
-    Bands { width, bands }
+    Bands {
+        width,
+        bands,
+        diverged: false,
+    }
 }
 
 impl<T> Plane<T> {
@@ -473,6 +482,7 @@ impl<T: Clone> Plane<T> {
         self.mirror = OnceLock::new();
         let bands = self.bands.as_mut()?;
         let base = &mut self.base;
+        let diverged = &mut bands.diverged;
         let band = bands.bands.get_mut(i)?;
         match band {
             Band::Owned(data) => {
@@ -490,6 +500,7 @@ impl<T: Clone> Plane<T> {
                 } else {
                     let copy: Arc<[T]> = Arc::from(base[range.clone()].to_vec());
                     *band = Band::Owned(copy);
+                    *diverged = true;
                     match band {
                         Band::Owned(data) => Arc::get_mut(data),
                         Band::Shared(_) => unreachable!("the band was just replaced"),
@@ -823,6 +834,32 @@ mod tests {
         assert_eq!(b.as_slice(), bytes.as_slice(), "the clone keeps its bytes");
         assert_eq!(a.band(0).unwrap(), &bytes[..256]);
         assert_eq!(a.band(1).unwrap()[0], 0xEE);
+    }
+
+    #[test]
+    fn divergence_survives_clone_and_refracture() {
+        let bytes: Vec<u8> = (0..BAND_ROWS * 4 * 3).map(|i| i as u8).collect();
+        let mut plane = Plane::from(bytes.clone());
+        plane.fracture(4);
+        let shared = plane.clone();
+        plane.write_band(1).expect("band")[0] = 200;
+        let mut expected = bytes.clone();
+        expected[BAND_ROWS * 4] = 200;
+
+        let clone = plane.clone();
+        assert_eq!(
+            shared.as_slice(),
+            bytes.as_slice(),
+            "the holder is untouched"
+        );
+        assert_eq!(plane.as_slice(), expected.as_slice());
+        assert_eq!(clone.as_slice(), expected.as_slice());
+
+        let mut refractured = clone;
+        refractured.fracture(8);
+        assert_eq!(refractured.as_slice(), expected.as_slice());
+        assert_eq!(refractured.base_allocation().1, expected.len());
+        assert_eq!(refractured.owned_bands().count(), 0);
     }
 
     #[test]
