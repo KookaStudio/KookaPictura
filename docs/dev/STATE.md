@@ -4,6 +4,16 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Panel menu hooks survive a regroup** (#1057, OpenSpec change
+  `panel-menu-hooks-regroup`). The Actions, Character, and Paragraph per-widget
+  menu hooks used to live on the `PanelGroup` that `buildPanels` created, so the
+  fresh-session Essentials regroup and every workspace switch deleted them.
+  `PicturaMainWindow` now keeps the hooks in a registry keyed by panel object
+  name, and `PanelGroup::updateHeaderMenu` resolves the current panel's hook
+  from the owning frame when the menu opens (a group-level hook still wins).
+  The hooks therefore follow a panel across a regroup, a workspace apply, and a
+  move between groups. Tests: `tst_workspaces::{freshSessionKeepsPanelMenuHooks,
+  workspaceSwitchKeepsPanelMenuHooks, panelMoveKeepsPanelMenuHook}`.
 - **Filter ▸ Video ▸ De-Interlace** (#344, OpenSpec change `de-interlace`).
   `pictura_filters::video::de_interlace` reconstructs one interlaced field from
   the retained one: `InterlaceField::Odd`/`Even` picks the discarded field by
