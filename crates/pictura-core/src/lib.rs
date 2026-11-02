@@ -147,6 +147,20 @@ pub struct PixelBuffer<T = u8> {
     pub data: Plane<T>,
 }
 
+impl PixelBuffer<u8> {
+    /// As [`PixelBuffer::new`] without touching the memory, so a mostly empty
+    /// buffer costs only the pages written to it.
+    pub fn zeroed(width: u32, height: u32, channels: u8) -> Self {
+        let len = width as usize * height as usize * usize::from(channels);
+        Self {
+            width,
+            height,
+            channels,
+            data: Plane::build(len, |_| {}),
+        }
+    }
+}
+
 impl<T: Clone + Default> PixelBuffer<T> {
     pub fn new(width: u32, height: u32, channels: u8) -> Self {
         Self {

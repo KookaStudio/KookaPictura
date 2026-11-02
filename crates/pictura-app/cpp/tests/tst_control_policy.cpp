@@ -148,7 +148,7 @@ void ControlPolicyTest::editWithoutSaveRefusesSaving()
 void ControlPolicyTest::everyMethodHasATier()
 {
     const QStringList names = pictura::ControlServer::methodNames();
-    QCOMPARE(names.size(), 30);
+    QCOMPARE(names.size(), 31);
     QCOMPARE(server_->tierOf(QStringLiteral("key"), {}), ControlTier::Admin);
     QCOMPARE(server_->tierOf(QStringLiteral("set_unsaved_policy"), {}), ControlTier::Admin);
     QCOMPARE(server_->tierOf(QStringLiteral("status"), {}), ControlTier::Read);

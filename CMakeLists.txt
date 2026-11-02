@@ -382,6 +382,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/control_server_commands.cpp
     crates/pictura-app/cpp/control_server_documents.cpp
     crates/pictura-app/cpp/control_server_gate.cpp
+    crates/pictura-app/cpp/control_server_type.cpp
     crates/pictura-app/cpp/control_server_input.cpp
     crates/pictura-app/cpp/theme.cpp
     crates/pictura-app/cpp/fonts.cpp

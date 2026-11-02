@@ -165,6 +165,66 @@ pub(super) fn diff_into(
     Some(out)
 }
 
+/// The composite's change between the live document and a state from another
+/// segment, with the tile deltas a walk could not report. Bands the two still
+/// share are skipped, so an edit that kept them costs only what it touched.
+///
+/// `None` when the change has no bound to report: the geometry differs, a mask
+/// or document channel a view shows directly changed, or no composite byte did.
+/// A stack change that kept every pixel still has to redraw its panels whole.
+pub(super) fn composite_change(live: &mut Document, restored: &mut Document) -> Option<PlaneDelta> {
+    fracture_planes(live);
+    fracture_planes(restored);
+    let shown = |doc: &Document| {
+        planes(doc)
+            .into_iter()
+            .zip(plane_kinds(doc))
+            .filter(|(_, kind)| *kind != PlaneKind::LayerChannel)
+            .map(|(plane, _)| plane)
+            .collect::<Vec<_>>()
+    };
+    let (before, after) = (shown(live), shown(restored));
+    if before.len() != after.len()
+        || before
+            .iter()
+            .zip(&after)
+            .any(|(a, b)| a.1 != b.1 || a.2 != b.2 || a.0.len() != b.0.len())
+    {
+        return None;
+    }
+    let directly_shown_differ = before
+        .iter()
+        .zip(&after)
+        .skip(1)
+        .any(|(a, b)| !known_equal(&a.0, &b.0) && !a.0.bands().eq(b.0.bands()));
+    if directly_shown_differ {
+        return None;
+    }
+    let (from, to) = (&before.first()?, &after.first()?);
+    let (plane, width) = (&from.0, from.1);
+    let doc_height = live.height as usize;
+    let tiles: Vec<TileDelta> = (0..plane.band_count())
+        .into_par_iter()
+        .filter(|&band| !plane.shares_band(band, &to.0))
+        .flat_map_iter(|band| {
+            changed_band(
+                plane.band(band).unwrap_or(&[]),
+                to.0.band(band).unwrap_or(&[]),
+                width,
+                PlanePlacement::Composite,
+                doc_height,
+                None,
+                band * BAND_ROWS,
+            )
+        })
+        .collect();
+    (!tiles.is_empty()).then_some(PlaneDelta {
+        index: 0,
+        width,
+        tiles,
+    })
+}
+
 /// Fracture every tracked plane so a band-level scan and write can share bands.
 pub(super) fn fracture_planes(doc: &mut Document) {
     each_plane_mut(doc, &mut |plane, width, _, _| plane.fracture(width));
