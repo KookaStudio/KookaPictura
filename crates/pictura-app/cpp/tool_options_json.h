@@ -12,8 +12,12 @@ class ToolController;
 // Source slots (points in an open document) are not settings.
 QJsonObject toolOptionsToJson(const ToolController& tools);
 
-// Restore `json` into the groups without notifying; a missing group or field
-// keeps its default, and each value is clamped as its setter would.
+// Restore `json` into the groups without notifying (startup); a missing group
+// or field restores its default, and each value is clamped as its setter would.
 void applyToolOptionsJson(ToolController& tools, const QJsonObject& json);
+
+// Merge `json` into the current values, notifying as the setters would; a group
+// or field it leaves out keeps its current value.
+void patchToolOptionsJson(ToolController& tools, const QJsonObject& json);
 
 } // namespace pictura
