@@ -285,6 +285,16 @@ QToolButton:pressed { background: ${surface-control-active}; border-color: ${bor
 QToolButton:checked { background: ${surface-control-active}; border-color: ${border-control-hover}; color: ${content-control}; }
 QToolButton:disabled { color: ${content-disabled}; }
 QToolButton:focus { border-color: ${selection}; }
+/* CS6's pressure-override buttons are square controls even when off. */
+QToolButton#optionsBrushPressureOpacity, QToolButton#optionsBrushPressureSize {
+    background: ${surface-control}; border: 1px solid ${border-control}; border-radius: 3px;
+}
+QToolButton#optionsBrushPressureOpacity:hover, QToolButton#optionsBrushPressureSize:hover {
+    background: ${surface-control-hover}; border-color: ${border-control-hover};
+}
+QToolButton#optionsBrushPressureOpacity:checked, QToolButton#optionsBrushPressureSize:checked {
+    background: ${surface-control-active}; border-color: ${border-control-hover};
+}
 /* Tool slots sit flush on the toolbar at rest; only hover/press/active differ. */
 QToolButton#toolSlotButton { background: transparent; border: 1px solid transparent; border-radius: 3px; }
 QToolButton#toolSlotButton:hover { background: ${surface-control-hover}; border-color: ${border-control-hover}; }
