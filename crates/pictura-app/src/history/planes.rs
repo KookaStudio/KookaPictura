@@ -497,19 +497,27 @@ pub(super) fn planes_agree(private: &Document, live: &Document) -> bool {
     a.len() == b.len() && a.iter().zip(&b).all(|(x, y)| known_equal(&x.0, &y.0))
 }
 
-/// Re-stamp `private` and `live` with fresh stamps, whose tracked planes the
-/// caller has just made equal byte for byte. Shared bands are already the same
-/// allocation, so the pair is only stamped, never copied.
+/// Stamp `private` and `live`, whose tracked planes the caller has just made
+/// equal byte for byte, so each pair agrees. A pair that already agrees keeps
+/// its stamp, which is what keeps an unchanged layer resident on the GPU; a
+/// written plane, or a stamp a duplicated layer repeats, gets a fresh one.
+/// Shared bands are already the same allocation, so nothing is copied.
 pub(super) fn stamp_agreed(private: &mut Document, live: &mut Document) {
-    let mut stamps = Vec::new();
+    let mut held = Vec::new();
+    each_plane(live, &mut |p, _, _, _| held.push(p.stamp()));
+    let mut seen = std::collections::HashSet::new();
+    let mut index = 0;
     each_plane_mut(private, &mut |p, _, _, _| {
-        let stamp = fresh_stamp();
+        let own = p.stamp();
+        let agreed = own != 0 && held.get(index) == Some(&own) && seen.insert(own);
+        let stamp = if agreed { own } else { fresh_stamp() };
         p.set_stamp(stamp);
-        stamps.push(stamp);
+        held[index] = stamp;
+        index += 1;
     });
     let mut index = 0;
     each_plane_mut(live, &mut |p, _, _, _| {
-        p.set_stamp(stamps[index]);
+        p.set_stamp(held[index]);
         index += 1;
     });
 }
