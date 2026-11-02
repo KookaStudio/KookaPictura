@@ -476,6 +476,9 @@ impl Stroke {
         let mut dabs = Vec::new();
         self.placer.feed(sx, sy, &mut dabs);
         self.last_pressure = s.pressure.clamp(0.0, 1.0);
+        // ponytail: the placer keeps the stroke's spacing; CS6 scales spacing
+        // with the live pressure-sized tip, so a very light stroke can space
+        // its dabs for the full diameter.
         let sample_cfg = self.cfg.pressure_scaled(self.last_pressure);
         self.paint_dabs(doc, dabs, sample_cfg)
     }
