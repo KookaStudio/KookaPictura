@@ -10,6 +10,7 @@
 
 #include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 
+#include <QtCore/QSignalBlocker>
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QPixmap>
@@ -38,8 +39,9 @@ QIcon patternIcon(int index)
 }
 
 // The Airbrush option: paint keeps building while the button is held still.
-static void addAirbrushToggle(QHBoxLayout* layout, QWidget* page, const QString& name, bool on,
-                              std::function<void(bool)> setter)
+QToolButton* OptionsBar::addAirbrushToggle(QHBoxLayout* layout, QWidget* page,
+                                           const QString& name, bool on,
+                                           std::function<void(bool)> setter)
 {
     auto* button = new QToolButton(page);
     button->setObjectName(name);
@@ -49,7 +51,8 @@ static void addAirbrushToggle(QHBoxLayout* layout, QWidget* page, const QString&
     button->setChecked(on);
     button->setAutoRaise(true);
     layout->addWidget(button);
-    QObject::connect(button, &QToolButton::toggled, page, std::move(setter));
+    connect(button, &QToolButton::toggled, page, std::move(setter));
+    return button;
 }
 
 // A 0-100 % field wired to a controller setter; returns it.
@@ -117,15 +120,24 @@ QWidget* OptionsBar::buildStampPage(ToolId id)
         }
     };
     const bool clone = id == ToolId::CloneStamp;
-    addAirbrushToggle(layout, page,
-                      clone ? QStringLiteral("optionsCloneAirbrush")
-                            : QStringLiteral("optionsPatternAirbrush"),
-                      clone ? initial.cloneAirbrush : initial.patternAirbrush,
-                      [update, clone](bool on) {
-                          update([on, clone](StampOptions& o) {
-                              (clone ? o.cloneAirbrush : o.patternAirbrush) = on;
+    QToolButton* airbrush =
+        addAirbrushToggle(layout, page,
+                          clone ? QStringLiteral("optionsCloneAirbrush")
+                                : QStringLiteral("optionsPatternAirbrush"),
+                          clone ? initial.cloneAirbrush : initial.patternAirbrush,
+                          [update, clone](bool on) {
+                              update([on, clone](StampOptions& o) {
+                                  (clone ? o.cloneAirbrush : o.patternAirbrush) = on;
+                              });
                           });
-                      });
+    if (controller_) {
+        // `Shift+Alt+P` toggles the model; the bar follows it.
+        connect(controller_, &ToolController::stampOptionsChanged, airbrush, [this, clone, airbrush] {
+            const StampOptions o = stamp_->get();
+            const QSignalBlocker block(airbrush);
+            airbrush->setChecked(clone ? o.cloneAirbrush : o.patternAirbrush);
+        });
+    }
     if (clone) {
         // CS6 puts the Brush and Clone Source panel toggles right after the tip.
         auto addToggle = [&](const char* iconId, const QString& tip, const QString& name,
@@ -209,14 +221,21 @@ QWidget* OptionsBar::buildHistoryBrushPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
     addStampPaintFields(layout, page);
-    addAirbrushToggle(layout, page, QStringLiteral("optionsHistoryAirbrush"),
-                      controller_ && stamp_->get().historyAirbrush, [this](bool on) {
-                          if (controller_) {
-                              StampOptions o = stamp_->get();
-                              o.historyAirbrush = on;
-                              stamp_->set(o);
-                          }
-                      });
+    QToolButton* airbrush =
+        addAirbrushToggle(layout, page, QStringLiteral("optionsHistoryAirbrush"),
+                          controller_ && stamp_->get().historyAirbrush, [this](bool on) {
+                              if (controller_) {
+                                  StampOptions o = stamp_->get();
+                                  o.historyAirbrush = on;
+                                  stamp_->set(o);
+                              }
+                          });
+    if (controller_) {
+        connect(controller_, &ToolController::stampOptionsChanged, airbrush, [this, airbrush] {
+            const QSignalBlocker block(airbrush);
+            airbrush->setChecked(stamp_->get().historyAirbrush);
+        });
+    }
     layout->addStretch(1);
     return page;
 }

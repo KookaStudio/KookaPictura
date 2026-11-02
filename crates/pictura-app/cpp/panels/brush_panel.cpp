@@ -146,11 +146,26 @@ BrushPanel::BrushPanel(QWidget* parent)
     auto* tipShape = new QListWidgetItem(tr("Brush Tip Shape"), sets);
     sets->setCurrentItem(tipShape);
     for (const char* name : kDynamics) {
-        auto* item = new QListWidgetItem(QString::fromLatin1(name), sets);
-        item->setFlags(Qt::NoItemFlags);
-        item->setCheckState(Qt::Unchecked);
-        item->setToolTip(tr("%1: not implemented yet").arg(QString::fromLatin1(name)));
+        const QString label = QString::fromLatin1(name);
+        auto* item = new QListWidgetItem(label, sets);
+        if (label == QLatin1String("Build-up")) {
+            // The standalone Airbrush/Build-up toggle: the options-bar Airbrush
+            // button is the other view of this one flag.
+            buildUp_ = item;
+            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
+            item->setToolTip(tr("Build up paint while the mouse button is held "
+                                "(the options-bar Airbrush option)"));
+        } else {
+            item->setFlags(Qt::NoItemFlags);
+            item->setCheckState(Qt::Unchecked);
+            item->setToolTip(tr("%1: not implemented yet").arg(label));
+        }
     }
+    connect(sets, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
+        if (item == buildUp_ && paint_) {
+            paint_->setAirbrush(item->checkState() == Qt::Checked);
+        }
+    });
     body->addWidget(sets);
 
     auto* page = new QVBoxLayout();
@@ -275,8 +290,24 @@ void BrushPanel::setController(ToolController* controller)
     if (controller_) {
         connect(controller_, &ToolController::brushSizeChanged, this, [this] { refresh(); });
         connect(controller_, &ToolController::brushTipChanged, this, [this] { refresh(); });
+        connect(controller_, &ToolController::paintSettingsChanged, this,
+                [this] { refreshAirbrush(); });
     }
     refresh();
+}
+
+// The Build-up row follows the shared flag when the options bar or
+// `Shift+Alt+P` changes it. The list's signals are blocked, or setting the
+// check state would write the same value back through `itemChanged`.
+void BrushPanel::refreshAirbrush()
+{
+    if (!paint_ || !buildUp_) {
+        return;
+    }
+    if (QWidget* list = buildUp_->listWidget()) {
+        const QSignalBlocker block(list);
+        buildUp_->setCheckState(paint_->airbrush() ? Qt::Checked : Qt::Unchecked);
+    }
 }
 
 void BrushPanel::refresh()
@@ -284,6 +315,7 @@ void BrushPanel::refresh()
     if (!paint_) {
         return;
     }
+    refreshAirbrush();
     size_->setValue(paint_->size());
     hardness_->setValue(paint_->hardness());
     angle_->setValue(paint_->tipAngle());

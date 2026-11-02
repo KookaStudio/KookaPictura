@@ -5,7 +5,7 @@ mod mask;
 mod preview;
 
 pub(in crate::cxxqt_object) use mask::MaskStroke;
-pub(in crate::cxxqt_object) use preview::{MaskPreview, PreviewStroke};
+pub(in crate::cxxqt_object) use preview::{MaskPreview, PreviewSample, PreviewStroke};
 
 use crate::cxxqt_object::helpers::TileSet;
 use pictura_core::{Document, PsdRect};

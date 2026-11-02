@@ -656,6 +656,16 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 }
             });
 
+    // CS6's Airbrush key: flip the active tool's Airbrush option. The window
+    // owns it because it acts on the active tool, and workspaceKeys() lists it
+    // so the shortcut editor never assigns the same key to a command.
+    connect(new QShortcut(QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_P), this),
+            &QShortcut::activated, this, [this]() {
+                if (tools_) {
+                    tools_->toggleAirbrush();
+                }
+            });
+
     // CS6 foreground/background swap. `X` is unassigned in the tool letter
     // catalogue, so it does not collide with the tool-switch shortcuts.
     connect(new QShortcut(QKeySequence(Qt::Key_X), this), &QShortcut::activated, this,

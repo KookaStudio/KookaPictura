@@ -72,6 +72,7 @@ struct BrushState {
     int size;
     int opacity;
     int flow;
+    bool airbrush;
     pictura::StampOptions stamp;
 
     explicit BrushState(pictura::ToolController* t)
@@ -79,6 +80,7 @@ struct BrushState {
         , size(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->size())
         , opacity(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->opacity())
         , flow(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->flow())
+        , airbrush(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->airbrush())
         , stamp(t->optionsFor<pictura::StampGroup>(pictura::ToolId::CloneStamp)->get())
     {
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(6);
@@ -90,6 +92,7 @@ struct BrushState {
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(size);
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setOpacity(opacity);
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setFlow(flow);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setAirbrush(airbrush);
         tools->optionsFor<pictura::StampGroup>(pictura::ToolId::CloneStamp)->set(stamp);
     }
 };

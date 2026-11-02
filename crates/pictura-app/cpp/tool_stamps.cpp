@@ -28,11 +28,6 @@ namespace pictura {
 
 namespace {
 
-// The time between dabs while the button is held still: 20 dabs per second.
-// CS6's rate is undocumented, so this approximates it; spacing is a distance
-// and cannot supply one.
-constexpr int kHoldDabMs = 50;
-
 // The press / drag / release shared by the stamps; `begin` starts the tool's
 // stroke and reports whether it did. A tool whose `holdPaints` is on keeps
 // dabbing from a timer until the stroke ends.
@@ -42,7 +37,7 @@ public:
         : paint_(std::move(paint))
     {
         addOptions(paint_.get());
-        holdTimer_.setInterval(kHoldDabMs);
+        holdTimer_.setInterval(kAirbrushHoldDabMs);
         QObject::connect(&holdTimer_, &QTimer::timeout, &holdTimer_, [this] {
             if (stroke_) {
                 stroke_->hold();

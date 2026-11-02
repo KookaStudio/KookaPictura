@@ -3,7 +3,9 @@
 //! reduced-resolution preview replayed exactly at the commit.
 
 use super::super::document_session::SessionKind;
-use super::super::document_session::{MaskPreview, MaskStroke, PreviewStroke, StrokeSession};
+use super::super::document_session::{
+    MaskPreview, MaskStroke, PreviewSample, PreviewStroke, StrokeSession,
+};
 use super::super::helpers::*;
 use super::super::helpers_composite::display_rgba_bytes;
 use super::super::qobject;
@@ -305,6 +307,47 @@ impl qobject::PictureView {
         true
     }
 
+    /// A held dab of a mask stroke: hold the mask document's exact stroke, copy
+    /// the changed region back into the real mask, and present it.
+    pub(super) fn mask_hold(mut self: Pin<&mut Self>) -> bool {
+        if self.rust().session.live.gpu_stroke().is_some() {
+            return self.as_mut().mask_gpu_hold();
+        }
+        if self.rust().session.live.preview().is_some() {
+            return self.as_mut().preview_hold();
+        }
+        let (dirty, rect) = {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
+            let Some(ctx) = rust.session.live.mask_stroke_mut() else {
+                return false;
+            };
+            if !ctx.stroke.hold(&mut ctx.document) {
+                return false;
+            }
+            (ctx.stroke.take_dirty(), ctx.rect)
+        };
+        let Some(dirty) = dirty else {
+            return false;
+        };
+        {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
+            let (Some(doc), Some(ctx)) =
+                (rust.session.doc.as_mut(), rust.session.live.mask_stroke())
+            else {
+                return false;
+            };
+            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
+        }
+        let pad = self.rust().session.live.paint_pad();
+        let present = grow_rect(to_document(dirty, rect), pad);
+        if let Some(region) = self.as_mut().rust_mut().queue_present(present) {
+            self.as_mut().refresh_region(region);
+        }
+        true
+    }
+
     /// Commit a mask stroke. The dabs of an exact or GPU stroke already wrote
     /// the mask. A previewed stroke never fed the exact stroke, so its log is
     /// replayed on the mask document and written back once, and the preview's
@@ -332,13 +375,20 @@ impl qobject::PictureView {
                     .patch_level(preview.level as usize, &restore, extent);
                 rust.canvas_revision = rust.canvas_revision.wrapping_add(1);
             }
-            for sample in preview.samples {
-                let local = StrokeSample {
-                    x: sample.x - ctx.rect.left as f32,
-                    y: sample.y - ctx.rect.top as f32,
-                    ..sample
-                };
-                ctx.stroke.sample(&mut ctx.document, local);
+            for entry in preview.samples {
+                match entry {
+                    PreviewSample::Move(sample) => {
+                        let local = StrokeSample {
+                            x: sample.x - ctx.rect.left as f32,
+                            y: sample.y - ctx.rect.top as f32,
+                            ..sample
+                        };
+                        ctx.stroke.sample(&mut ctx.document, local);
+                    }
+                    PreviewSample::Hold => {
+                        ctx.stroke.hold(&mut ctx.document);
+                    }
+                }
                 if let Some(rect) = ctx.stroke.take_dirty() {
                     // The paint session left the slot before this replay, so
                     // mark the tiles it was taken with, not the slot's.

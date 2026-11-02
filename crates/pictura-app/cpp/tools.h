@@ -281,6 +281,10 @@ public:
     // (evdev 34/35), so it works on EU/Scandinavian layouts. Guarded to the
     // Brush/Pencil tools; returns false when the key is not a brush bracket.
     bool applyBrushShortcut(int key, quint32 nativeScanCode, bool shift);
+    // `Shift+Alt+P`: flip the active tool's Airbrush option. The Brush, Clone
+    // Stamp, Pattern Stamp, and History Brush have one; false for every other
+    // tool.
+    bool toggleAirbrush();
 
     void bindCanvas(ImageView* canvas);
     void unbindCanvas();
@@ -511,9 +515,12 @@ signals:
     void mixerReservoirChanged(const QColor& color);
     // Hardness or a Brush Tip Shape field changed (size has brushSizeChanged).
     void brushTipChanged();
-    // Opacity, Flow, or Mode changed (a preset applying its defaults); the
-    // options bar re-reads them.
+    // Opacity, Flow, Mode, or Airbrush changed (a preset applying its defaults,
+    // or `Shift+Alt+P`); the options bar and the Brush panel re-read them.
     void paintSettingsChanged();
+    // A stamp tool's options changed (the `Shift+Alt+P` Airbrush flip); the
+    // stamp options bars re-read their toggles.
+    void stampOptionsChanged();
     // An Eyedropper option changed (the bar or the canvas context menu); the
     // options bar re-reads its Sample Size / Sample readouts.
     void eyedropperOptionsChanged();

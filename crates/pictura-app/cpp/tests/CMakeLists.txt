@@ -79,6 +79,7 @@ set(PICTURA_QT_TESTS
     tst_eraser_tools
     tst_retouch_tools
     tst_stamp_hold
+    tst_brush_airbrush
     tst_pen_tools
     tst_path_selection_tools
     tst_shape_tools

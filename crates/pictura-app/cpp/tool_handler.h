@@ -13,6 +13,10 @@
 
 namespace pictura {
 
+// The Airbrush's held-dab rate: 20 dabs per second. CS6's rate is undocumented,
+// so this approximates it; spacing is a distance and cannot supply one.
+constexpr int kAirbrushHoldDabMs = 50;
+
 // One tool's pointer behavior. `onPress` returns whether it consumes the event,
 // as do the keyboard gestures `onFinishPath`/`onEscape`/`onDeletePoint`; the
 // other hooks are fire-and-forget. The default no-ops let a handler override only
