@@ -78,6 +78,44 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
     if active_mask_target(rust).is_some() || super::smart_apply::on_smart_object(rust) {
         return None;
     }
+    proxy_render(rust, std::slice::from_ref(filter), region, scale)
+}
+
+/// The document composited at `max_edge` on its long side with `kind`/`params`
+/// on the active layer, as straight sRGB. Pixel-sized slots are the caller's to
+/// scale. A kind the mapping knows with slots it refuses renders unfiltered, so
+/// the pane still shows the picture.
+pub(in crate::cxxqt_object) fn pane_buffer(
+    rust: &mut PictureViewRust,
+    kind: &str,
+    params: &[f64],
+    max_edge: u32,
+) -> Option<PixelBuffer> {
+    if max_edge == 0 || !crate::cxxqt_object::filter_map::is_filter_command(kind) {
+        return None;
+    }
+    let filter = crate::cxxqt_object::filter_map::filter_from_kind_params(kind, params);
+    let (width, height) = {
+        let doc = rust.session.doc.as_ref()?;
+        (doc.width, doc.height)
+    };
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: height as i32,
+        right: width as i32,
+    };
+    let scale = f64::from(max_edge) / f64::from(width.max(height).max(1));
+    proxy_render(rust, filter.as_slice(), canvas, scale)
+}
+
+/// `filters` on the active layer of the cached reduced copy, as straight sRGB.
+fn proxy_render(
+    rust: &mut PictureViewRust,
+    filters: &[pictura_filters::Filter],
+    region: PsdRect,
+    scale: f64,
+) -> Option<PixelBuffer> {
     let path = rust.layer_target.single().map(str::to_string)?;
     let key = (
         region,
@@ -96,9 +134,7 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
         rust.canvas_proxy = Some(CanvasProxy { key, proxy });
     }
     let proxy = &rust.canvas_proxy.as_ref()?.proxy;
-    let rendered = proxy
-        .render(&path, std::slice::from_ref(filter), rust.gpu_compute)
-        .ok()?;
+    let rendered = proxy.render(&path, filters, rust.gpu_compute).ok()?;
     let doc = rust.session.doc.as_ref()?;
     Some(pictura_codec::buffer_to_srgb(doc, &rendered).into_owned())
 }
@@ -294,6 +330,159 @@ mod tests {
         .expect("section preview");
         let shown = canvas_proxy_buffer(&mut rust, &blur, whole, 0.5).expect("proxy");
         assert_eq!(shown.data, expected.data);
+    }
+
+    /// A solid `top` layer over a solid `bottom` one, on an 8×8 canvas.
+    fn stacked(bottom: (u8, u8, u8), top: (u8, u8, u8)) -> PictureViewRust {
+        let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
+            pixel_layer("bottom", 8, 8, bottom),
+            pixel_layer("top", 8, 8, top),
+        ]);
+        PictureViewRust {
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+            layer_target: LayerTarget::only("1"),
+            gpu_compute: false,
+            ..Default::default()
+        }
+    }
+
+    /// The composite of `blur` committed on the active layer, leaving the
+    /// document alone.
+    fn committed(rust: &PictureViewRust, blur: &Filter) -> PixelBuffer {
+        let (mut doc, selection) = pre_preview_sources(rust).unwrap();
+        let path = rust.layer_target.single().unwrap().to_string();
+        let layer = pictura_render::resolve_path_mut(&mut doc, &path).unwrap();
+        pictura_render::apply_filter(layer, blur, selection.as_ref(), false).unwrap();
+        pictura_render::composite_rgba(&doc)
+    }
+
+    fn pane(rust: &mut PictureViewRust) -> PixelBuffer {
+        pane_buffer(rust, "gaussian-blur", &[1.0], 8).expect("pane")
+    }
+
+    #[test]
+    fn pane_matches_the_commit_under_multiply() {
+        let mut rust = stacked((200, 100, 50), (128, 128, 128));
+        rust.session.doc.as_mut().unwrap().layers[1].blend = pictura_core::BlendMode::Multiply;
+        let shown = pane(&mut rust);
+        assert_eq!(shown.data[0], 100, "red is multiplied, not replaced");
+        let want = committed(&rust, &Filter::GaussianBlur { radius: 1.0 });
+        assert_eq!(shown.data, want.data);
+    }
+
+    #[test]
+    fn pane_matches_the_commit_under_blend_if() {
+        let mut rust = stacked((10, 10, 10), (240, 240, 240));
+        let layer = &mut rust.session.doc.as_mut().unwrap().layers[1];
+        layer.blend_if = Some(pictura_core::BlendIf {
+            composite_source: (0, 25700),
+            composite_dest: (0, 65535),
+            channel_ranges: Vec::new(),
+        });
+        let shown = pane(&mut rust);
+        assert_eq!(shown.data[0], 10, "the bright layer is blended out");
+        let want = committed(&rust, &Filter::GaussianBlur { radius: 1.0 });
+        assert_eq!(shown.data, want.data);
+    }
+
+    #[test]
+    fn pane_places_a_vector_mask_at_reduced_scale() {
+        let mut rust = stacked((255, 0, 0), (0, 0, 255));
+        let doc = rust.session.doc.as_mut().unwrap();
+        let p = |x: i32, y: i32| [x * 256, y * 256];
+        doc.layers[1].vector_mask = Some(pictura_core::VectorMask {
+            subpaths: vec![pictura_core::VectorSubpath {
+                closed: true,
+                points: vec![p(0, 0), p(4, 0), p(4, 8), p(0, 8)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        let shown = pane_buffer(&mut rust, "gaussian-blur", &[1.0], 4).expect("pane");
+        assert_eq!((shown.width, shown.height), (4, 4));
+        assert_eq!(
+            shown.data[0], 0,
+            "the mask shows the blue layer on the left"
+        );
+        assert_eq!(shown.data[3], 255, "and hides it on the right");
+    }
+
+    #[test]
+    fn pane_is_gated_by_the_selection() {
+        let mut rust = striped();
+        let mut data = vec![0u8; 128 * 128];
+        data[..128 * 64].fill(255);
+        rust.session.selection = Some(pictura_select::Selection {
+            width: 128,
+            height: 128,
+            data: data.into(),
+        });
+        let before = red(&rust);
+        let shown = pane_buffer(&mut rust, "gaussian-blur", &[2.0], 128).expect("pane");
+        let outside = 120 * 128..128 * 128;
+        assert_eq!(shown.data[outside.clone()], before[outside]);
+        assert_ne!(shown.data[..128], before[..128], "inside it filters");
+        let want = committed(&rust, &Filter::GaussianBlur { radius: 2.0 });
+        assert_eq!(shown.data, want.data);
+    }
+
+    #[test]
+    fn pane_ignores_an_open_preview() {
+        let mut fresh = striped();
+        let expected = pane_buffer(&mut fresh, "gaussian-blur", &[2.0], 64).expect("pane");
+        let mut rust = striped();
+        apply_filter_active_region(
+            &mut rust,
+            "gaussian-blur",
+            &[6.0],
+            false,
+            Some(rect(40, 40, 80, 80)),
+        )
+        .expect("section preview");
+        let shown = pane_buffer(&mut rust, "gaussian-blur", &[2.0], 64).expect("pane");
+        assert_eq!(shown.data, expected.data);
+    }
+
+    #[test]
+    fn pane_filters_only_the_active_layer() {
+        let mut rust = striped();
+        let doc = rust.session.doc.as_mut().unwrap();
+        let mut top = pixel_layer("top", 128, 128, (0, 0, 0));
+        top.opacity = 0;
+        doc.layers = pictura_core::LayerStack::from_layers(vec![doc.layers[0].clone(), top]);
+        rust.layer_target = LayerTarget::only("1");
+        let before = red(&rust);
+        let shown = pane_buffer(&mut rust, "gaussian-blur", &[2.0], 128).expect("pane");
+        assert_eq!(shown.data[..before.len()], before[..]);
+    }
+
+    #[test]
+    fn pane_reaches_a_nested_layer() {
+        let mut rust = stacked((255, 0, 0), (0, 0, 255));
+        let doc = rust.session.doc.as_mut().unwrap();
+        let mut group = pixel_layer("group", 8, 8, (0, 0, 0));
+        group.is_group = true;
+        group.channels.clear();
+        group.children = std::mem::take(&mut doc.layers);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
+        rust.layer_target = LayerTarget::only("0/1");
+        let shown = pane(&mut rust);
+        assert_eq!(shown.data[0], 0, "the nested top layer shows");
+        // A group has no pixels to filter, so the pane shows the picture.
+        rust.layer_target = LayerTarget::only("0");
+        assert_eq!(pane(&mut rust).data[0], 0);
+    }
+
+    #[test]
+    fn pane_refuses_an_unknown_kind() {
+        let mut rust = striped();
+        assert!(pane_buffer(&mut rust, "no-such-filter", &[], 64).is_none());
+        let bad_slots = pane_buffer(&mut rust, "gaussian-blur", &[1.0, 2.0, 3.0], 128);
+        assert_eq!(
+            bad_slots.expect("unfiltered").data[..128],
+            red(&rust)[..128]
+        );
     }
 
     #[test]

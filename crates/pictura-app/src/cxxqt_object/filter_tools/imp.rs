@@ -517,21 +517,6 @@ pub(super) fn rgba_to_buffer(rgba: &[u8], width: u32, height: u32) -> Option<Pix
     Some(buffer)
 }
 
-/// The active path resolved to a proxyable raster layer (not a group or an
-/// adjustment), or `None` for an absent, malformed, or ineligible path.
-pub(super) fn active_proxy_layer<'a>(doc: &'a Document, active: Option<&str>) -> Option<&'a Layer> {
-    let layer = pictura_render::resolve_path(doc, active?)?;
-    (!layer.is_group && layer.adjustment.is_none()).then_some(layer)
-}
-
-/// Proxy frame dimensions: the document scaled to `max_edge` on the long side,
-/// aspect kept, at least one pixel per axis.
-pub(super) fn proxy_dims(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
-    let scale = f64::from(max_edge) / f64::from(width.max(height).max(1));
-    let scaled = |v: u32| ((f64::from(v) * scale).round() as u32).max(1);
-    (scaled(width), scaled(height))
-}
-
 /// The document's composite with the layer at `path` hidden, patched over the
 /// cached `doc.composite` so opening a dialog does not pay for a full
 /// recomposite. `None` when the path does not resolve.
@@ -564,183 +549,8 @@ pub(super) fn hidden_layer_buffer(
     Some(base)
 }
 
-/// The raster mask value at document pixel `(x, y)`: `255` when there is no
-/// enabled mask, the mask's default colour outside its rect.
-pub(super) fn proxy_mask(layer: &Layer, x: i32, y: i32) -> u8 {
-    let Some(mask) = layer.mask.as_ref() else {
-        return 255;
-    };
-    if mask.disabled {
-        return 255;
-    }
-    let Some(data) = mask.data.as_ref() else {
-        return 255;
-    };
-    let mx = x - mask.rect.left;
-    let my = y - mask.rect.top;
-    let (mw, mh) = (mask.rect.width(), mask.rect.height());
-    if mw <= 0 || mh <= 0 || mx < 0 || my < 0 || mx >= mw || my >= mh {
-        return mask.default_color;
-    }
-    data.get(my as usize * mw as usize + mx as usize)
-        .copied()
-        .unwrap_or(mask.default_color)
-}
-
-/// The active layer sampled at proxy scale, as a straight-alpha RGBA buffer:
-/// nearest-neighbour over the layer's own bounds, with its raster mask, opacity
-/// and fill baked into the alpha. `None` for an empty or malformed layer.
-///
-/// ponytail: vector masks, blend modes and Blend If are not applied; the pane
-/// is a preview, and the canvas preview next to it is exact.
-pub(super) fn proxy_layer_buffer(layer: &Layer, scale: f64) -> Option<PixelBuffer> {
-    let width = layer.rect.width();
-    let height = layer.rect.height();
-    if width <= 0 || height <= 0 {
-        return None;
-    }
-    let (width, height) = (width as u32, height as u32);
-    let pw = ((f64::from(width) * scale).round() as u32).max(1);
-    let ph = ((f64::from(height) * scale).round() as u32).max(1);
-    let plane = (width * height) as usize;
-    let channel = |id: i16| layer.channels.iter().find(|c| c.id == id).map(|c| &c.data);
-
-    let c0 = channel(0)?;
-    if c0.len() != plane {
-        return None;
-    }
-    let (c1, c2) = if channel(1).is_none() && channel(2).is_none() {
-        (c0, c0)
-    } else {
-        let (c1, c2) = (channel(1)?, channel(2)?);
-        if c1.len() != plane || c2.len() != plane {
-            return None;
-        }
-        (c1, c2)
-    };
-    let alpha = match channel(-1) {
-        Some(a) if a.len() == plane => Some(a),
-        Some(_) => return None,
-        None => None,
-    };
-    let opacity = u32::from(layer.opacity) * u32::from(layer.fill) / 255;
-
-    let mut out = PixelBuffer::new(pw, ph, 4);
-    let out_plane = (pw * ph) as usize;
-    for py in 0..ph {
-        let sy = (py as u64 * u64::from(height) / u64::from(ph)).min(u64::from(height) - 1);
-        for px in 0..pw {
-            let sx = (px as u64 * u64::from(width) / u64::from(pw)).min(u64::from(width) - 1);
-            let si = sy as usize * width as usize + sx as usize;
-            let a = alpha.map_or(255, |a| a[si]);
-            let mask = proxy_mask(
-                layer,
-                sx as i32 + layer.rect.left,
-                sy as i32 + layer.rect.top,
-            );
-            let o = py as usize * pw as usize + px as usize;
-            out.data[o] = c0[si];
-            out.data[out_plane + o] = c1[si];
-            out.data[2 * out_plane + o] = c2[si];
-            out.data[3 * out_plane + o] =
-                (((a as u32 * mask as u32 + 127) / 255) * opacity / 255).min(255) as u8;
-        }
-    }
-    Some(out)
-}
-
-/// The filtered active layer positioned in a `max_edge`-bounded document-frame
-/// proxy: the layer's own bounds are filtered — the same geometry the canvas
-/// preview and the commit use — then blitted at the layer's scaled rect,
-/// transparent elsewhere. The unfiltered layer is returned when the filter is
-/// refused.
-pub(super) fn proxy_layer_frame(
-    layer: &Layer,
-    doc_width: u32,
-    doc_height: u32,
-    max_edge: u32,
-    kind: &str,
-    params: &[f64],
-) -> QImage {
-    proxy_layer_frame_buffer(layer, doc_width, doc_height, max_edge, kind, params)
-        .map_or_else(QImage::default, |frame| buffer_to_image(&frame))
-}
-
-pub(super) fn proxy_layer_frame_buffer(
-    layer: &Layer,
-    doc_width: u32,
-    doc_height: u32,
-    max_edge: u32,
-    kind: &str,
-    params: &[f64],
-) -> Option<PixelBuffer> {
-    if !super::super::filter_map::is_filter_command(kind) {
-        return None;
-    }
-    let scale = f64::from(max_edge) / f64::from(doc_width.max(doc_height).max(1));
-    let mut buffer = proxy_layer_buffer(layer, scale)?;
-    if let Some(filter) = filter_from_kind_params(kind, params) {
-        let _ = pictura_filters::apply(&filter, &mut buffer);
-    }
-
-    let (frame_w, frame_h) = proxy_dims(doc_width, doc_height, max_edge);
-    let x = (f64::from(layer.rect.left) * scale).round() as i64;
-    let y = (f64::from(layer.rect.top) * scale).round() as i64;
-    let (lw, lh) = (buffer.width as usize, buffer.height as usize);
-    let lplane = lw * lh;
-    let mut frame = PixelBuffer::new(frame_w, frame_h, 4);
-    let fplane = (frame_w * frame_h) as usize;
-    for row in 0..lh {
-        let fy = y + row as i64;
-        if fy < 0 || fy >= i64::from(frame_h) {
-            continue;
-        }
-        for col in 0..lw {
-            let fx = x + col as i64;
-            if fx < 0 || fx >= i64::from(frame_w) {
-                continue;
-            }
-            let dst = fy as usize * frame_w as usize + fx as usize;
-            let src = row * lw + col;
-            for c in 0..4 {
-                frame.data[c * fplane + dst] = buffer.data[c * lplane + src];
-            }
-        }
-    }
-    Some(frame)
-}
-
-pub(super) fn filter_proxy_base(mut view: Pin<&mut PictureView>, max_edge: i32) -> QImage {
-    let Ok(max_edge) = u32::try_from(max_edge) else {
-        return QImage::default();
-    };
-    if max_edge == 0 {
-        return QImage::default();
-    }
-    let mut rust = view.as_mut().rust_mut();
-    let gpu_compute = rust.gpu_compute;
-    let active = rust.layer_target.single().map(str::to_string);
-    let Some(doc) = rust.session.doc.as_mut() else {
-        return QImage::default();
-    };
-    let Some(active_path) = active.as_deref() else {
-        return QImage::default();
-    };
-    if active_proxy_layer(doc, Some(active_path)).is_none() {
-        return QImage::default();
-    }
-    let Some(base) = hidden_layer_buffer(doc, active_path, gpu_compute) else {
-        return QImage::default();
-    };
-    let (width, height) = proxy_dims(doc.width, doc.height, max_edge);
-    match pictura_ops::resize(&base, width, height, pictura_ops::Resample::Bilinear) {
-        Ok(scaled) => buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &scaled)),
-        Err(_) => QImage::default(),
-    }
-}
-
-pub(super) fn filter_proxy_layer(
-    view: &PictureView,
+pub(super) fn filter_proxy_composite(
+    mut view: Pin<&mut PictureView>,
     kind: &QString,
     params: &QList<f64>,
     max_edge: i32,
@@ -748,37 +558,12 @@ pub(super) fn filter_proxy_layer(
     let Ok(max_edge) = u32::try_from(max_edge) else {
         return QImage::default();
     };
-    if max_edge == 0 {
-        return QImage::default();
-    }
-    let rust = view.rust();
-    let Some(doc) = rust.session.doc.as_ref() else {
-        return QImage::default();
-    };
-    let Some(active) = rust.layer_target.single() else {
-        return QImage::default();
-    };
-    let Some(resolved) = active_proxy_layer(doc, Some(active)) else {
-        return QImage::default();
-    };
-    // An open preview has already re-filtered the live layer; the proxy must
-    // start from its pre-preview snapshot so the two never compound.
-    let original = rust
-        .session
-        .live
-        .filter_preview()
-        .filter(|p| p.layer_path.as_str() == active)
-        .map(|p| p.baseline.original(resolved));
-    let layer = original.as_deref().unwrap_or(resolved);
     let params: Vec<f64> = params.into_iter().copied().collect();
-    proxy_layer_frame(
-        layer,
-        doc.width,
-        doc.height,
-        max_edge,
-        &kind.to_string(),
-        &params,
-    )
+    let mut rust = view.as_mut().rust_mut();
+    pane_buffer(&mut rust, &kind.to_string(), &params, max_edge)
+        .map_or_else(QImage::default, |buffer| {
+            premultiplied_display_image(&buffer)
+        })
 }
 
 pub(super) fn filter_canvas_proxy(

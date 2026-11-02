@@ -315,8 +315,9 @@ slider is being dragged, the preview SHALL render from a reduced copy of at
 most 360 px on its long edge, and releasing it SHALL render the full proxy.
 A click elsewhere on the picture SHALL add a pin copying the selected pin.
 Pins move, delete, hide (`H`), and preview as in Field Blur. In every
-gallery mode the preview SHALL filter only the active layer, drawn over the
-document with that layer hidden, so other layers are never blurred with it. OK SHALL commit
+gallery mode the preview SHALL filter only the active layer and composite it
+with the rest of the document as the commit will, so other layers are never
+blurred with it and the layer's blend mode, Blend If and masks show. OK SHALL commit
 one history state labelled `Filter: Tilt-Shift`.
 
 #### Scenario: The workspace opens on the default band

@@ -5,8 +5,8 @@
 //! preview costs what the pane shows rather than what the document holds. The
 //! proxy is never committed; OK filters the full-resolution layer.
 //!
-//! ponytail: only pixel planes and raster masks are reduced. Live type, vector
-//! masks, smart-object sources and layer-effect sizes still render at document
+//! ponytail: only pixel planes, raster masks and vector masks are reduced. Live
+//! type, smart-object sources and layer-effect sizes still render at document
 //! scale inside the proxy, so a preview over such layers is approximate beyond
 //! the filter itself; scale them too if a gallery preview over one matters.
 
@@ -186,6 +186,14 @@ impl Map {
         (f64::from(v - self.region.top) * self.scale).round() as i32
     }
 
+    /// A vector-mask vertex, in 1/256 pixels on both sides.
+    fn point(&self, [x, y]: [i32; 2]) -> [i32; 2] {
+        let map = |v: i32, origin: i32| {
+            ((f64::from(v) - f64::from(origin) * 256.0) * self.scale).round() as i32
+        };
+        [map(x, self.region.left), map(y, self.region.top)]
+    }
+
     /// The proxy rect of a document rect already inside the region, never
     /// thinner than one pixel.
     fn rect(&self, r: PsdRect) -> PsdRect {
@@ -278,6 +286,14 @@ fn reduce_layer(layer: &mut Layer, map: &Map) {
     };
     if let Some(mask) = &mut layer.mask {
         *mask = reduce_mask(mask, map);
+    }
+    if let Some(vector) = &mut layer.vector_mask {
+        for point in vector.subpaths.iter_mut().flat_map(|s| &mut s.points) {
+            *point = map.point(*point);
+        }
+        // Also retires the sampling cache and its identity, which describe the
+        // full-size path.
+        vector.set_feather(vector.feather() * map.scale);
     }
     layer.raw_channels.clear();
     layer.source_channels = None;
@@ -426,6 +442,58 @@ mod tests {
         crate::apply_filter(&mut want.layers[0], &filter, None, false).unwrap();
         assert_eq!(got, crate::composite_rgba(&want));
         // The proxy itself is untouched by a render.
+        assert_eq!(
+            proxy.render("0", &[], false).unwrap(),
+            crate::composite_rgba(&doc)
+        );
+    }
+
+    /// A vector mask showing only the left half of a canvas `w` wide.
+    fn left_half_mask(w: i32, h: i32) -> pictura_core::VectorMask {
+        let p = |x: i32, y: i32| [x * 256, y * 256];
+        pictura_core::VectorMask {
+            subpaths: vec![pictura_core::VectorSubpath {
+                closed: true,
+                points: vec![p(0, 0), p(w / 2, 0), p(w / 2, h), p(0, h)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn reduced_vector_mask_keeps_its_place() {
+        let mut doc = doc_with_layer(40, 40, rect(0, 0, 40, 40));
+        doc.layers[0].vector_mask = Some(left_half_mask(40, 40));
+        let whole = FilterProxy::new(&doc, None, rect(0, 0, 40, 40), 0.5).unwrap();
+        let mask = whole.doc.layers[0].vector_mask.as_ref().unwrap();
+        assert_eq!(mask.subpaths[0].points[1], [10 * 256, 0]);
+        assert_eq!(mask.subpaths[0].points[2], [10 * 256, 20 * 256]);
+        // A crop moves the path with the region.
+        let crop = FilterProxy::new(&doc, None, rect(10, 8, 40, 40), 1.0).unwrap();
+        let mask = crop.doc.layers[0].vector_mask.as_ref().unwrap();
+        assert_eq!(mask.subpaths[0].points[1], [10 * 256, -8 * 256]);
+    }
+
+    #[test]
+    fn reduced_vector_mask_scales_its_feather() {
+        let mut doc = doc_with_layer(40, 40, rect(0, 0, 40, 40));
+        let mut mask = left_half_mask(40, 40);
+        mask.set_feather(8.0);
+        let full_size = mask.ident();
+        doc.layers[0].vector_mask = Some(mask);
+        let proxy = FilterProxy::new(&doc, None, rect(0, 0, 40, 40), 0.25).unwrap();
+        let mask = proxy.doc.layers[0].vector_mask.as_ref().unwrap();
+        assert_eq!(mask.feather(), 2.0);
+        assert_ne!(mask.ident(), full_size, "the feather cache key must differ");
+    }
+
+    #[test]
+    fn full_scale_proxy_keeps_a_masked_multiply_layer() {
+        let mut doc = doc_with_layer(40, 30, rect(0, 0, 40, 30));
+        doc.layers[0].blend = pictura_core::BlendMode::Multiply;
+        doc.layers[0].vector_mask = Some(left_half_mask(40, 30));
+        let proxy = FilterProxy::new(&doc, None, rect(0, 0, 40, 30), 1.0).unwrap();
         assert_eq!(
             proxy.render("0", &[], false).unwrap(),
             crate::composite_rgba(&doc)

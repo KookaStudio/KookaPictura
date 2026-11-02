@@ -124,6 +124,7 @@ private slots:
     void irisHandlesReshapeTheOutline();
     void irisPreviewKeepsTheCoreSharp();
     void irisMenuCommitsOnce();
+    void canvasShowsTheBlendMode();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -514,6 +515,34 @@ void BlurGalleryDialogTest::irisMenuCommitsOnce()
     QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Filter: Iris Blur"));
     QCOMPARE(filter_last_kind(*view), QStringLiteral("iris-blur"));
     QCOMPARE(filter_last_params(*view), committed);
+}
+
+void BlurGalleryDialogTest::canvasShowsTheBlendMode()
+{
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    QImage gray(64, 64, QImage::Format_RGB32);
+    gray.fill(QColor(128, 128, 128));
+    const QString path = dir_.filePath(QStringLiteral("gray.png"));
+    QVERIFY(gray.save(path) && window->openDocumentAtPath(path));
+    pictura::PictureView* view = window->activeView();
+    QVERIFY(view != nullptr);
+    view->select_rect(0, 0, 64, 64, QStringLiteral("new"), 0.0);
+    const QString top = view->layer_via_copy(QStringLiteral("0"));
+    QVERIFY(!top.isEmpty());
+    view->set_active_layer(top);
+    view->deselect();
+    QVERIFY(view->set_layer_blend(top.toInt(), QStringLiteral("mul ")));
+
+    pictura::BlurGalleryDialog dialog(view, fieldBlurSpec());
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    const auto centreRed = [&dialog] {
+        const QImage image = dialog.canvas()->image();
+        return image.isNull() ? 255 : image.pixelColor(image.rect().center()).red();
+    };
+    QTRY_VERIFY2(centreRed() < 80, "the canvas ignored the Multiply blend mode");
+    dialog.reject();
 }
 
 QTEST_MAIN(BlurGalleryDialogTest)
