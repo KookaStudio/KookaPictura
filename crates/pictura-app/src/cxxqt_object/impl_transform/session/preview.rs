@@ -137,7 +137,7 @@ pub(super) fn rendered_clipping_group(
 
 /// The bounds of the transform targets at `paths`, when nothing they draw lands
 /// outside them: the bound the commit's region refresh relies on too.
-pub(super) fn backdrop_patch_rect(
+fn backdrop_patch_rect(
     doc: &pictura_core::Document,
     paths: &[String],
 ) -> Option<pictura_core::PsdRect> {
@@ -147,7 +147,9 @@ pub(super) fn backdrop_patch_rect(
         if layer_has_effects(layer) || layer.adjustment.is_some() || layer.is_group {
             return None;
         }
-        bounds = Some(bounds.map_or(layer.rect, |b| union_rect(b, layer.rect)));
+        // A painted layer's rect can be the whole canvas around a small mark.
+        let drawn = pictura_render::content_rect(doc, path).unwrap_or(layer.rect);
+        bounds = Some(bounds.map_or(drawn, |b| union_rect(b, drawn)));
     }
     bounds.filter(|&rect| clamp_region(rect, doc.width, doc.height).is_some())
 }
@@ -178,25 +180,54 @@ pub(super) fn build_transform_preview(
     let opacity = pictura_render::resolve_path(doc, path)?.opacity as i32;
     let (image, x, y) = transform_preview_layer(doc, path, gpu_compute)?;
     let group = clipping_group(doc, path);
-    let mut base_doc = doc.clone();
-    for target_path in &group {
-        if let Some(target) = pictura_render::resolve_path_mut(&mut base_doc, target_path) {
-            target.visible = false;
-        }
+    let patch = bounded.then(|| backdrop_patch(doc, &group, gpu_compute));
+    if let Some((base, origin)) = patch.flatten() {
+        return Some(TransformPreview {
+            base,
+            base_origin: Some(origin),
+            image,
+            x,
+            y,
+            opacity,
+        });
     }
-    let patch = bounded.then(|| backdrop_patch_rect(doc, &group)).flatten();
-    let rendered = match patch {
-        Some(rect) => pictura_render::composite_region_active(&base_doc, rect, gpu_compute).0,
-        None => current_buffer(&base_doc, gpu_compute),
-    };
+    let rendered = current_buffer(&hidden(doc, &group), gpu_compute);
     Some(TransformPreview {
         base: buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
-        base_origin: patch.map(|rect| (rect.left.max(0), rect.top.max(0))),
+        base_origin: None,
         image,
         x,
         y,
         opacity,
     })
+}
+
+/// `doc` with the layers at `paths` hidden.
+fn hidden(doc: &pictura_core::Document, paths: &[String]) -> pictura_core::Document {
+    let mut out = doc.clone();
+    for path in paths {
+        if let Some(target) = pictura_render::resolve_path_mut(&mut out, path) {
+            target.visible = false;
+        }
+    }
+    out
+}
+
+/// The backdrop under the layers at `paths` as a patch of their bounds and its
+/// document-space origin, for a preview drawn over the live canvas; `None` when
+/// the canvas cannot lie under it, so the whole backdrop has to be built.
+pub(super) fn backdrop_patch(
+    doc: &pictura_core::Document,
+    paths: &[String],
+    gpu_compute: bool,
+) -> Option<(QImage, (i32, i32))> {
+    let rect = backdrop_patch_rect(doc, paths)?;
+    let (rendered, _) =
+        pictura_render::composite_region_active(&hidden(doc, paths), rect, gpu_compute);
+    Some((
+        buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
+        (rect.left.max(0), rect.top.max(0)),
+    ))
 }
 
 /// The moving pixels of [`build_transform_preview`] and their document-space

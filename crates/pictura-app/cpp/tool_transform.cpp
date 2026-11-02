@@ -107,12 +107,10 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     transformControls_ = controls;
     transformGuideSnap_ = false;
     if (canvas_) {
-        const auto baseOrigin = move_preview_base_origin(*v);
         canvas_->beginTransformPreview(v->move_preview_base(), v->move_preview_layer(),
                                       QPointF(v->move_preview_x(), v->move_preview_y()),
                                       v->move_preview_opacity() / 255.0,
-                                      baseOrigin.empty() ? std::nullopt
-                                                         : std::optional(QPoint(baseOrigin[0], baseOrigin[1])));
+                                      transform_api::previewBaseOrigin(*v));
         updateTransformOverlay(v);
         // A transform session is modal: drop any transient Space pan so its
         // pan-disable is not swallowed by the override's pan guard.

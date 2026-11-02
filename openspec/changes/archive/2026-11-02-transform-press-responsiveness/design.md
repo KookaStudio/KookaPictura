@@ -17,6 +17,11 @@ backdrop, because the canvas still shows the document from before the lift.
 The canvas draws its normal level, then the patch. A patch can be transparent, so
 its area is first cleared to the checkerboard, or the target would show through.
 
+The Move drag uses the same patch. It used to replace the canvas with an unsmoothed
+full-size backdrop, so a click on a layer visibly changed the image at any zoom
+under 100 %. A selection drag and a layer that keeps the whole backdrop still draw
+that image, now smoothed; far below 50 % it stays coarser than the canvas.
+
 ## The stall after release
 
 A region edit forks a band of the composite. The next `sample_planar_argb` indexed

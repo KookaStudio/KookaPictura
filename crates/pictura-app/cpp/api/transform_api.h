@@ -1,9 +1,11 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include <QtCore/QList>
 
+#include <QtCore/QPoint>
 #include <QtCore/QString>
 #include <QtGui/QPolygon>
 
@@ -12,6 +14,10 @@ class PictureView;
 }
 
 namespace pictura::transform_api {
+
+/// Where the current preview's backdrop patch sits; unset for a whole-document
+/// base.
+std::optional<QPoint> previewBaseOrigin(const PictureView& view);
 
 /// A layer's document-space rectangle; invalid when `path` does not resolve.
 struct LayerRect {

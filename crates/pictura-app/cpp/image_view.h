@@ -293,7 +293,7 @@ public:
     // Move-tool live preview: draw a cached base plus the moved layer at a live
     // image-space offset, so the drag never composites the document.
     void beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                          double opacity);
+                          double opacity, std::optional<QPoint> basePos = std::nullopt);
     void setMovePreviewDelta(const QPointF& delta);
     void endMovePreview();
     bool movePreviewActive() const { return movePreviewActive_; }
@@ -301,8 +301,8 @@ public:
     // Free Transform preview: same cached base/layer as the Move preview, but the
     // layer is drawn under a live similarity transform (scale/rotate/translate
     // about the layer centre) and the quad with its eight handles is overlaid.
-    // A `basePos` makes `base` a patch at that document position, drawn over the
-    // live canvas in place of a whole-document base.
+    // In both previews, a `basePos` makes `base` a patch at that document position,
+    // drawn over the live canvas in place of a whole-document base.
     void beginTransformPreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
                                double opacity, std::optional<QPoint> basePos = std::nullopt);
     void setTransformPreview(double scaleX, double scaleY, double angleRadians, double dx,

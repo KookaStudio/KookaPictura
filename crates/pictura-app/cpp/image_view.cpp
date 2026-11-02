@@ -249,9 +249,10 @@ void ImageView::updateAntsTimer()
 }
 
 void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                                 double opacity)
+                                 double opacity, std::optional<QPoint> basePos)
 {
     moveBase_ = base;
+    moveBasePos_ = basePos;
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
@@ -589,14 +590,16 @@ void ImageView::paintEvent(QPaintEvent* event)
     painter.save();
     painter.setClipRect(docClip);
 
-    const bool basePatch = transformActive_ && moveBasePos_ && !moveBase_.isNull();
+    // Sampled like the canvas, so a preview does not change the image's quality.
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, smoothSamplingForZoom(zoom_));
+    const bool basePatch = movePreviewActive_ && moveBasePos_ && !moveBase_.isNull();
     if (transformActive_ && !basePatch && !moveBase_.isNull()) {
         // Free Transform: the base is fixed; the layer is drawn under the live
         // similarity transform about its original centre.
         painter.drawImage(QPointF(0.0, 0.0), moveBase_);
         paintTransformLayer(painter);
         presentCacheRebuiltLastPaint_ = false;
-    } else if (movePreviewActive_ && !moveBase_.isNull()) {
+    } else if (movePreviewActive_ && !basePatch && !moveBase_.isNull()) {
         // Draw the base and moving layer straight through the pan/zoom
         // transform. A move preview is transient and its sources change every
         // drag, so a scaled present cache would be rebuilt on the first frame
@@ -725,11 +728,14 @@ void ImageView::paintEvent(QPaintEvent* event)
         painter.setBrushOrigin(docDevice.topLeft());
         painter.fillRect(device, transparencyTile());
         painter.restore();
-        painter.save();
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, smoothSamplingForZoom(zoom_));
         painter.drawImage(patch, moveBase_);
-        painter.restore();
-        paintTransformLayer(painter);
+        if (transformActive_) {
+            paintTransformLayer(painter);
+        } else {
+            painter.setOpacity(moveOpacity_);
+            painter.drawImage(moveLayerPos_ + moveDelta_, moveLayer_);
+            painter.setOpacity(1.0);
+        }
     }
     paintFilterPreview(painter);
     paintMaskOverlay(painter);

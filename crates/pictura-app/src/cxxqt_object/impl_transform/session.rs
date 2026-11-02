@@ -22,7 +22,7 @@ mod preview;
 pub(in crate::cxxqt_object) use preview::transform_preview_layer;
 #[cfg(test)]
 use preview::TransformPreview;
-use preview::{build_transform_preview, rendered_layer_image};
+use preview::{backdrop_patch, build_transform_preview, rendered_layer_image};
 
 /// Whether `path` resolves to a transformable target: a raster pixel layer, a
 /// shape layer with an outline of some area, or a channel-less embedded smart
@@ -632,8 +632,12 @@ impl qobject::PictureView {
         } else {
             255
         };
-        let base = build_move_preview_base(doc, &paths, gpu_compute);
+        let (base, origin) = match backdrop_patch(doc, &paths, gpu_compute) {
+            Some((base, origin)) => (base, Some(origin)),
+            None => (build_move_preview_base(doc, &paths, gpu_compute), None),
+        };
         rust.move_base = Some(base);
+        rust.move_base_origin = origin;
         rust.move_layer = Some(layer_image);
         rust.move_x = x;
         rust.move_y = y;

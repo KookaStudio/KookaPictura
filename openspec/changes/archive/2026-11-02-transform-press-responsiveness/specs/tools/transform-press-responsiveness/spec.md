@@ -45,3 +45,17 @@ on any document size.
 
 - **WHEN** a pixel of a composite with a forked band is read
 - **THEN** the read returns the forked band's value and nothing materializes
+
+### Requirement: A preview leaves the canvas as it was
+
+A Move drag or transform of a layer with a backdrop patch SHALL keep drawing the
+live canvas, so the document outside the patch and the moving layer keeps its
+pixels and quality at every zoom. A whole-document backdrop SHALL be sampled as
+the canvas is.
+
+#### Scenario: A drag keeps the pixels outside the layer [tpr_canvas_kept]
+
+- **WHEN** a Move drag and a handle drag run on a small layer over a detailed
+  document at 58 % zoom
+- **THEN** the backdrop is a patch of the layer's bounds, and the canvas outside
+  the layer and the pointer is identical to the canvas before the press

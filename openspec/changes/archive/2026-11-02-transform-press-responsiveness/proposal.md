@@ -12,6 +12,8 @@ press composited the whole document twice to preview one small layer.
 - **Moving image.** A rendered layer composites only its own bounds.
 - **Backdrop patch.** A layer whose appearance stays inside its bounds gets a patch
   of those bounds, drawn over the live canvas, in place of a whole-document image.
+- **Move preview.** A Move drag uses the same patch, so a click no longer lowers
+  the image quality.
 - **Pixel reads.** Reading one composite pixel no longer materializes the composite.
 
 ## Capabilities
