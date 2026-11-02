@@ -125,6 +125,19 @@ pub(super) fn insertion_edit(doc: &pictura_core::Document, path: &str) -> Edit {
     }
 }
 
+/// The outcome for the copies at `created`: [`Edit::Inserted`] for one copy that
+/// cannot change the picture, else `changed`.
+pub(super) fn duplicate_edit(
+    doc: &pictura_core::Document,
+    created: &[String],
+    changed: Edit,
+) -> Edit {
+    match created {
+        [path] if pictura_render::duplicate_is_content_neutral(doc, path) => Edit::Inserted,
+        _ => changed,
+    }
+}
+
 fn merge_rects(rects: Vec<PsdRect>) -> Option<PsdRect> {
     let mut out: Option<PsdRect> = None;
     for rect in rects {
@@ -751,5 +764,45 @@ mod tests {
         let applied = view.apply_edit_move("Move", Edit::regions(vec![rect], false));
         assert_eq!(applied.blit, Some(rect));
         assert_eq!(view.session.history.count(), 1);
+    }
+
+    #[test]
+    fn a_neutral_duplicate_is_an_inserted_edit() {
+        use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LayerStack};
+
+        let opaque = |alpha: u8| Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 2,
+            },
+            visible: true,
+            channels: [0i16, 1, 2, -1]
+                .map(|id| Channel {
+                    id,
+                    data: vec![alpha; 4].into(),
+                })
+                .to_vec(),
+            ..Default::default()
+        };
+        let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = LayerStack::from_layers(vec![opaque(255), opaque(255)]);
+        let changed = || Edit::Structural { damage: None };
+        let one = ["1".to_string()];
+        assert!(matches!(
+            duplicate_edit(&doc, &one, changed()),
+            Edit::Inserted
+        ));
+        let two = ["1".to_string(), "0".to_string()];
+        assert!(matches!(
+            duplicate_edit(&doc, &two, changed()),
+            Edit::Structural { .. }
+        ));
+        doc.layers = LayerStack::from_layers(vec![opaque(255), opaque(90)]);
+        assert!(matches!(
+            duplicate_edit(&doc, &one, changed()),
+            Edit::Structural { .. }
+        ));
     }
 }

@@ -8,8 +8,10 @@
 //! clear_selection_pixels}` (<https://github.com/perfecto25/photorust>).
 
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, Document, Layer, LayerMask, PixelBuffer, PsdRect,
+    layer_pixel_locked, layer_transparency_locked, Document, Layer, LayerMask, PixelBuffer, Plane,
+    PsdRect,
 };
+use rayon::prelude::*;
 
 use super::create::{insert_node, next_layer_name, transparent_layer};
 use super::paths::{resolve_path, resolve_path_mut};
@@ -282,35 +284,51 @@ pub fn paste_clip(
 /// The bounding box of nonzero `coverage` over a `width * height` plane, or
 /// `None` when nothing is selected.
 pub fn coverage_bounds(coverage: &[u8], width: u32, height: u32) -> Option<PsdRect> {
-    let w = width as usize;
-    if w == 0 || coverage.len() < w * height as usize {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || coverage.len() < w * h {
         return None;
     }
-    let mut bounds: Option<PsdRect> = None;
-    for (y, row) in coverage.chunks_exact(w).take(height as usize).enumerate() {
-        let Some(first) = row.iter().position(|&v| v > 0) else {
-            continue;
-        };
-        let last = row.iter().rposition(|&v| v > 0).unwrap_or(first);
-        let (y, first, last) = (y as i32, first as i32, last as i32);
-        bounds = Some(match bounds {
-            None => PsdRect {
-                top: y,
-                left: first,
-                bottom: y + 1,
-                right: last + 1,
-            },
-            Some(b) => PsdRect {
-                top: b.top,
-                left: b.left.min(first),
-                bottom: y + 1,
-                right: b.right.max(last + 1),
-            },
-        });
-    }
-    bounds
+    row_bounds(h, |y| coverage.get(y * w..(y + 1) * w))
 }
 
+/// [`coverage_bounds`] of a plane, read by rows so a plane whose bands have
+/// diverged is not materialized.
+pub(super) fn plane_coverage_bounds(
+    coverage: &Plane<u8>,
+    width: u32,
+    height: u32,
+) -> Option<PsdRect> {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || coverage.len() < w * h {
+        return None;
+    }
+    row_bounds(h, |y| coverage.row(y, w))
+}
+
+fn row_bounds<'a>(
+    height: usize,
+    row: impl Fn(usize) -> Option<&'a [u8]> + Sync,
+) -> Option<PsdRect> {
+    (0..height)
+        .into_par_iter()
+        .filter_map(|y| {
+            let row = row(y)?;
+            let first = row.iter().position(|&v| v > 0)?;
+            let last = row.iter().rposition(|&v| v > 0).unwrap_or(first);
+            Some(PsdRect {
+                top: y as i32,
+                left: first as i32,
+                bottom: y as i32 + 1,
+                right: last as i32 + 1,
+            })
+        })
+        .reduce_with(|a, b| PsdRect {
+            top: a.top.min(b.top),
+            left: a.left.min(b.left),
+            bottom: a.bottom.max(b.bottom),
+            right: a.right.max(b.right),
+        })
+}
 /// Sample `region` through `pixel` into a clip, with the selection coverage (or
 /// full coverage) as its mask. `None` for an empty region or when every sampled
 /// pixel is transparent after masking.

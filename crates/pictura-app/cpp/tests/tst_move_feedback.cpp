@@ -49,6 +49,7 @@ private slots:
     void transformControlsOnByDefault();
     void dragShowsAntsAndReadout();
     void readoutFollowsTheRulerUnit();
+    void undoLeavesTheMoveWarmAlone();
 
 private:
     void showFrame();
@@ -131,6 +132,26 @@ void MoveFeedbackTest::readoutFollowsTheRulerUnit()
     f.canvas->setMeasureUnit(pictura::RulerUnit::Percent, false);
     QCOMPARE(f.canvas->offsetReadout(offset), QStringLiteral("ΔX: 18.0%\nΔY: 45.0%"));
     f.canvas->setMeasureUnit(pictura::RulerUnit::Inches, false);
+}
+
+void MoveFeedbackTest::undoLeavesTheMoveWarmAlone()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_undo"));
+    QVERIFY2(f.ok(), "move fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    frame.setActiveTool(pictura::ToolId::Move);
+    QVERIFY(f.view->begin_move_preview());
+    QVERIFY2(f.view->move_preview_cache_hit(), "switching to the tool warms");
+    f.view->end_move_preview();
+
+    QVERIFY(f.view->add_layer(1) >= 0);
+    QVERIFY(f.view->undo());
+    QCoreApplication::processEvents();
+    QVERIFY(f.view->begin_move_preview());
+    QVERIFY2(!f.view->move_preview_cache_hit(), "undo must not rebuild the warm");
+    f.view->end_move_preview();
 }
 
 QTEST_MAIN(MoveFeedbackTest)
