@@ -29,6 +29,9 @@ pub mod ffi {
         /// The active session's mode name ("free", "skew", "distort",
         /// "perspective"), or empty without a session.
         fn transform_session_mode(view: &PictureView) -> QString;
+        /// A preview backdrop patch's `[left, top]`; empty for a whole-document
+        /// base.
+        fn move_preview_base_origin(view: &PictureView) -> Vec<i32>;
         /// The session target's content rect as "left top right bottom", or
         /// empty without a session.
         fn transform_session_rect(view: &PictureView) -> QString;

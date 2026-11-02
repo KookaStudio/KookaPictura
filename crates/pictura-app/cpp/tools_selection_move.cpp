@@ -60,7 +60,8 @@ void ToolController::beginContentMove(PictureView* v, const QPointF& imagePos, b
         if (!previewBase.isNull() && !previewLayer.isNull()) {
             canvas_->beginMovePreview(previewBase, previewLayer,
                                       QPointF(v->move_preview_x(), v->move_preview_y()),
-                                      v->move_preview_opacity() / 255.0);
+                                      v->move_preview_opacity() / 255.0,
+                                      transform_api::previewBaseOrigin(*v));
             contentPreviewActive_ = true;
         }
     }

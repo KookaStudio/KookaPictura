@@ -249,9 +249,10 @@ void ImageView::updateAntsTimer()
 }
 
 void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                                 double opacity)
+                                 double opacity, std::optional<QPoint> basePos)
 {
     moveBase_ = base;
+    moveBasePos_ = basePos;
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
@@ -278,12 +279,14 @@ void ImageView::endMovePreview()
 }
 
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
-                                      const QPointF& layerPos, double opacity)
+                                      const QPointF& layerPos, double opacity,
+                                      std::optional<QPoint> basePos)
 {
     // A transform session is modal: the paint hover that owns the ring is
     // suspended, so the ring must go with the first transform frame.
     clearBrushOutline();
     moveBase_ = base;
+    moveBasePos_ = basePos;
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
@@ -587,36 +590,16 @@ void ImageView::paintEvent(QPaintEvent* event)
     painter.save();
     painter.setClipRect(docClip);
 
-    if (transformActive_ && !moveBase_.isNull()) {
+    // Sampled like the canvas, so a preview does not change the image's quality.
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, smoothSamplingForZoom(zoom_));
+    const bool basePatch = movePreviewActive_ && moveBasePos_ && !moveBase_.isNull();
+    if (transformActive_ && !basePatch && !moveBase_.isNull()) {
         // Free Transform: the base is fixed; the layer is drawn under the live
         // similarity transform about its original centre.
         painter.drawImage(QPointF(0.0, 0.0), moveBase_);
-        painter.setOpacity(moveOpacity_);
-        painter.save();
-        if (transformProjectiveActive_) {
-            // The projective map is in the layer image's own coordinates. The
-            // document-space form has a large translation and, for a strong
-            // perspective, a vanishing line close to the image; Qt's raster
-            // engine can drop the whole image in that form.
-            painter.translate(moveLayerPos_);
-            refreshTransformWarp();
-            if (!transformWarped_.image.isNull()) {
-                painter.drawImage(QRectF(transformWarped_.origin,
-                                         QSizeF(transformWarped_.image.size())
-                                             / transformWarped_.scale),
-                                  transformWarped_.image);
-            } else if (!transformWarped_.crossed) {
-                painter.setTransform(transformProjective_, true);
-                painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
-            }
-        } else {
-            painter.setTransform(transformPreviewMatrix(), true);
-            painter.drawImage(moveLayerPos_, moveLayer_);
-        }
-        painter.restore();
-        painter.setOpacity(1.0);
+        paintTransformLayer(painter);
         presentCacheRebuiltLastPaint_ = false;
-    } else if (movePreviewActive_ && !moveBase_.isNull()) {
+    } else if (movePreviewActive_ && !basePatch && !moveBase_.isNull()) {
         // Draw the base and moving layer straight through the pan/zoom
         // transform. A move preview is transient and its sources change every
         // drag, so a scaled present cache would be rebuilt on the first frame
@@ -733,6 +716,25 @@ void ImageView::paintEvent(QPaintEvent* event)
         } else {
             presentedImageSize_ = QSize();
             presentedImageKey_ = -1;
+        }
+    }
+    if (basePatch) {
+        // Only the target's own bounds differ from the live canvas. A clear
+        // patch must reveal the checkerboard, not the target still under it.
+        const QRectF patch(QPointF(*moveBasePos_), QSizeF(moveBase_.size()));
+        const QRectF device(offset_ + patch.topLeft() * zoom_, patch.size() * zoom_);
+        painter.save();
+        painter.resetTransform();
+        painter.setBrushOrigin(docDevice.topLeft());
+        painter.fillRect(device, transparencyTile());
+        painter.restore();
+        painter.drawImage(patch, moveBase_);
+        if (transformActive_) {
+            paintTransformLayer(painter);
+        } else {
+            painter.setOpacity(moveOpacity_);
+            painter.drawImage(moveLayerPos_ + moveDelta_, moveLayer_);
+            painter.setOpacity(1.0);
         }
     }
     paintFilterPreview(painter);

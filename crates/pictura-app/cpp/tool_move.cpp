@@ -197,7 +197,8 @@ public:
             }
             const QPointF origin(v->move_preview_x(), v->move_preview_y());
             canvas->beginMovePreview(warmBase_, warmLayer_, origin,
-                                     v->move_preview_opacity() / 255.0);
+                                     v->move_preview_opacity() / 255.0,
+                                     transform_api::previewBaseOrigin(*v));
             // The moving layer's content box as marching ants, as CS6 draws.
             // The scan is cached per layer image, so a warm press stays cheap.
             if (warmLayer_.cacheKey() != boundsKey_) {
@@ -238,7 +239,8 @@ public:
                 if (ImageView* canvas = ctx.canvas()) {
                     canvas->beginMovePreview(v->move_preview_base(), v->move_preview_layer(),
                                              QPointF(v->move_preview_x(), v->move_preview_y()),
-                                             v->move_preview_opacity() / 255.0);
+                                             v->move_preview_opacity() / 255.0,
+                                             transform_api::previewBaseOrigin(*v));
                 }
             }
         }

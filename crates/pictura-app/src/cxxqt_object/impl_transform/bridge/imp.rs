@@ -108,6 +108,12 @@ pub(super) fn layer_content_bounds_extents(view: &PictureView, path: &QString) -
         })
 }
 
+pub(super) fn move_preview_base_origin(view: &PictureView) -> Vec<i32> {
+    view.rust()
+        .move_base_origin
+        .map_or_else(Vec::new, |(x, y)| vec![x, y])
+}
+
 pub(super) fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32> {
     view.rust()
         .session
