@@ -4,6 +4,8 @@
 #include <QtCore/QString>
 #include <QtWidgets/QWidget>
 
+#include <functional>
+
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -14,10 +16,13 @@ class QToolButton;
 namespace pictura {
 
 class PictureView;
+class TextSession;
+struct ParagraphSetting;
 
 // The Paragraph panel (CS6 `Window > Paragraph`, `Type > Panels > Paragraph`): a
-// live attribute editor over the active type layer's `ParagraphAttrs`. With no
-// type layer active it shows the model defaults and disables editing.
+// live attribute editor over the open type session, or else the active type
+// layer's `ParagraphAttrs`. With neither it shows the model defaults and
+// disables editing.
 class ParagraphPanel : public QWidget {
     Q_OBJECT
 
@@ -25,6 +30,9 @@ public:
     explicit ParagraphPanel(QWidget* parent = nullptr);
 
     void setView(PictureView* view);
+    // The open type session, if any: while one is open the panel edits that
+    // session instead of the selected layer.
+    void setTextSession(std::function<TextSession*()> session);
     void setMiddleEastern(bool on);
     void updatePanelMenu(QMenu* menu);
     void performPanelMenuAction(const QString& actionId);
@@ -47,8 +55,12 @@ private:
     void openJustification();
     void resetParagraph();
     bool hasTypeLayer() const;
+    // The session being edited, null with none open.
+    TextSession* openSession() const;
+    void readFields(ParagraphSetting& p) const;
 
     PictureView* view_ = nullptr;
+    std::function<TextSession*()> session_;
     bool middleEastern_ = false;
     QFormLayout* form_ = nullptr;
     QWidget* direction_ = nullptr;

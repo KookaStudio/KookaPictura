@@ -2,6 +2,7 @@
 
 #include "dialogs.h"
 #include "justification_dialog.h"
+#include "tool_sessions.h"
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -141,6 +142,17 @@ bool ParagraphPanel::hasTypeLayer() const
     return !path.isEmpty() && pictura::type_api::readLayer(*view_, path).isType;
 }
 
+void ParagraphPanel::setTextSession(std::function<TextSession*()> session)
+{
+    session_ = std::move(session);
+}
+
+TextSession* ParagraphPanel::openSession() const
+{
+    TextSession* session = session_ ? session_() : nullptr;
+    return session && session->textActive() ? session : nullptr;
+}
+
 void ParagraphPanel::setView(PictureView* view)
 {
     view_ = view;
@@ -163,10 +175,15 @@ QSize ParagraphPanel::minimumSizeHint() const
 
 void ParagraphPanel::refresh()
 {
-    const bool type = hasTypeLayer();
-    const QString path = type ? layer_selection_anchor(*view_) : QString();
-    const ParagraphSetting p = type ? pictura::type_api::readLayer(*view_, path).spec.paragraph
-                                    : pictura::type_api::defaultParagraphSetting();
+    TextSession* session = openSession();
+    const bool type = session || hasTypeLayer();
+    const QString path = type && !session ? layer_selection_anchor(*view_) : QString();
+    ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    if (session) {
+        session->textParagraph(p);
+    } else if (type) {
+        p = pictura::type_api::readLayer(*view_, path).spec.paragraph;
+    }
 
     const QSignalBlocker blockJustify(justify_);
     const QSignalBlocker blockStart(startIndent_);
@@ -202,14 +219,8 @@ void ParagraphPanel::refresh()
     }
 }
 
-void ParagraphPanel::apply()
+void ParagraphPanel::readFields(ParagraphSetting& p) const
 {
-    if (!hasTypeLayer()) {
-        return;
-    }
-    const QString path = layer_selection_anchor(*view_);
-    const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
-    ParagraphSetting p = layer.spec.paragraph;
     p.justify = justify_->currentIndex();
     p.start_indent = startIndent_->value();
     p.end_indent = endIndent_->value();
@@ -222,6 +233,24 @@ void ParagraphPanel::apply()
     if (middleEastern_) {
         p.direction = rtl_->isChecked() ? 1 : 0;
     }
+}
+
+void ParagraphPanel::apply()
+{
+    if (TextSession* session = openSession()) {
+        ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+        session->textParagraph(p);
+        readFields(p);
+        session->setTextParagraph(p);
+        return;
+    }
+    if (!hasTypeLayer()) {
+        return;
+    }
+    const QString path = layer_selection_anchor(*view_);
+    const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
+    ParagraphSetting p = layer.spec.paragraph;
+    readFields(p);
 
     const QString family = familyForFontName(layer.spec.font);
     registerTypeFont(family, layer.spec.character.font_style);
@@ -230,7 +259,7 @@ void ParagraphPanel::apply()
 
 void ParagraphPanel::updatePanelMenu(QMenu* menu)
 {
-    const bool type = hasTypeLayer();
+    const bool type = openSession() || hasTypeLayer();
     const auto sync = [menu](const char* id, bool checked, bool enabled) {
         QAction* action = findMenuAction(menu, QString::fromLatin1(id));
         if (!action) {
@@ -286,6 +315,11 @@ void ParagraphPanel::performPanelMenuAction(const QString& actionId)
 
 void ParagraphPanel::resetParagraph()
 {
+    if (TextSession* session = openSession()) {
+        session->setTextParagraph(pictura::type_api::defaultParagraphSetting());
+        refresh();
+        return;
+    }
     if (!hasTypeLayer()) {
         return;
     }
@@ -300,6 +334,16 @@ void ParagraphPanel::resetParagraph()
 
 void ParagraphPanel::openJustification()
 {
+    if (TextSession* session = openSession()) {
+        ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+        session->textParagraph(p);
+        JustificationDialog dialog(p, this);
+        if (runDialog(dialog, this) == QDialog::Accepted) {
+            session->setTextParagraph(dialog.setting());
+            refresh();
+        }
+        return;
+    }
     if (!hasTypeLayer()) {
         return;
     }

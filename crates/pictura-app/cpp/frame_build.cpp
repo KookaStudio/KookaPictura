@@ -756,11 +756,24 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         registry_->dispatch(
             commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
     });
-    // While new type is being set the Character panel edits that session.
+    // While text is being set the Character and Paragraph panels edit that
+    // session. An options bar change reaches them too: they write back every
+    // field they show.
     characterPanel_->setTextSession(
+        [this]() { return tools_ ? tools_->textSession() : nullptr; });
+    paragraphPanel_->setTextSession(
         [this]() { return tools_ ? tools_->textSession() : nullptr; });
     connect(tools_, &ToolController::textEditingChanged, characterPanel_,
             &CharacterPanel::refresh);
+    connect(tools_, &ToolController::textEditingChanged, paragraphPanel_,
+            &ParagraphPanel::refresh);
+    connect(tools_, &ToolController::typeOptionsChanged, this, [this]() {
+        TextSession* session = tools_->textSession();
+        if (session && session->textActive()) {
+            characterPanel_->refresh();
+            paragraphPanel_->refresh();
+        }
+    });
     connect(optionsBar_, &OptionsBar::warpTextRequested, this, [this]() {
         registry_->dispatch(
             commandIdForPath({QStringLiteral("Type"), QStringLiteral("Warp Text…")}));
