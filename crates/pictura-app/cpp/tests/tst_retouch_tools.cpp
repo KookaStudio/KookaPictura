@@ -66,6 +66,7 @@ private slots:
     void dodgeTool();
     void burnTool();
     void spongeTool();
+    void strokeChangingNothingRebuildsNothing();
     void spotHealingClickRemovesADot();
     void brushTipBarIsCompact();
 
@@ -335,6 +336,26 @@ void RetouchToolsTest::spongeTool()
     QVERIFY2(f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge)->get().spongeMode == 1, "Saturate not set");
     QVERIFY2(spread(20, 32) > 120, "Saturate lifted nothing");
     mode->setCurrentIndex(options.spongeMode);
+}
+
+// [tsr_no_change]
+void RetouchToolsTest::strokeChangingNothingRebuildsNothing()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(Qt::black);
+    Fixture f(frame, seed, QStringLiteral("pictura_sponge_black_seed"));
+    QVERIFY2(f.ok(), "sponge fixture");
+    const BrushState brush(f.tools);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    frame.setActiveTool(pictura::ToolId::Sponge);
+
+    const int base = f.view->history_index();
+    QSignalSpy rebuilt(f.view, &pictura::PictureView::changed);
+    f.drag({QPointF(5, 20), QPointF(20, 20), QPointF(35, 20)});
+    QCOMPARE(rebuilt.count(), 0);
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(qRed(f.view->sample_argb(20, 20)), 0);
 }
 
 void RetouchToolsTest::brushTipBarIsCompact()

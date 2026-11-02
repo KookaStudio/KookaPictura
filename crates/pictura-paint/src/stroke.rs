@@ -5,7 +5,7 @@ use crate::eraser::{BackgroundEraseOptions, BackgroundEraser};
 use crate::focus::{FocusBrush, FocusOptions};
 use crate::healing::RgbaImage;
 use crate::mixer::{MixerBrush, MixerOptions};
-use crate::replace::{ColorReplacer, ReplaceOptions};
+use crate::replace::{dab_bounds, ColorReplacer, ReplaceOptions};
 use crate::smudge::{SmudgeBrush, SmudgeOptions};
 use crate::spacing::DabPlacer;
 use crate::stamp::StampSource;
@@ -15,9 +15,10 @@ use crate::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, PsdRect,
 };
-use raster::{plane_slices, split_bands, write_band, BandPlanes, DabRaster};
+use raster::{plane_slices, split_bands, write_back, write_band, BandPlanes, DabRaster};
 use rayon::prelude::*;
 use std::sync::Arc;
+use surface::LazyPixels;
 
 /// Deterministic stroke seed; Dissolve randomness must not vary between runs.
 const STROKE_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -66,6 +67,8 @@ enum DabEngine {
 struct PerDab {
     engine: DabEngine,
     pixels: RgbaImage,
+    /// Set when `pixels` fills on demand instead of starting as the whole layer.
+    lazy: Option<LazyPixels>,
 }
 
 pub struct StrokeOutcome {
@@ -286,6 +289,7 @@ impl Stroke {
             .map(|engine| PerDab {
                 engine,
                 pixels: layer_rgba(target),
+                lazy: None,
             });
         let ch = plane_index(target);
         Ok(Stroke {
@@ -347,6 +351,7 @@ impl Stroke {
         stroke.per_dab = Some(PerDab {
             engine: DabEngine::ArtHistory(brush),
             pixels: layer_rgba(target),
+            lazy: None,
         });
         Ok(stroke)
     }
@@ -413,9 +418,18 @@ impl Stroke {
         cfg: StrokeConfig,
         options: ToneOptions,
     ) -> Result<Stroke, PaintError> {
-        Stroke::begin_retouch(doc, path, cfg, |_, _| {
-            DabEngine::Tone(ToneBrush::new(options))
-        })
+        if doc.depth != BitDepth::Eight {
+            return Err(PaintError::UnsupportedDepth);
+        }
+        let mut stroke = Stroke::begin_kind(doc, path, cfg, StrokeKind::Paint)?;
+        let target = layer_at(doc, &stroke.layer_path).ok_or(PaintError::NoRasterLayer)?;
+        let (lazy, pixels) = LazyPixels::new(target);
+        stroke.per_dab = Some(PerDab {
+            engine: DabEngine::Tone(ToneBrush::new(options)),
+            pixels,
+            lazy: Some(lazy),
+        });
+        Ok(stroke)
     }
 
     /// A stroke whose dabs run the per-dab `engine` built for the target layer.
@@ -433,6 +447,7 @@ impl Stroke {
         stroke.per_dab = Some(PerDab {
             engine: engine(&stroke, target),
             pixels: layer_rgba(target),
+            lazy: None,
         });
         Ok(stroke)
     }
@@ -801,8 +816,19 @@ impl Stroke {
         let Some(per) = self.per_dab.as_mut() else {
             return false;
         };
-        let mut changed = None;
+        let mut changed = Vec::with_capacity(dabs.len());
         for &(x, y) in dabs {
+            if let Some(lazy) = per.lazy.as_mut() {
+                let Some(layer) = layer_at(doc, &self.layer_path) else {
+                    return false;
+                };
+                if !self.saved.fits(layer, self.ch) {
+                    return false;
+                }
+                if let Some(region) = dab_bounds(&per.pixels, &cfg, x, y) {
+                    lazy.load(layer, &mut per.pixels, region);
+                }
+            }
             let dirty = match &mut per.engine {
                 DabEngine::Replace(replacer) => {
                     replacer.dab(&mut per.pixels, &cfg, x, y, cfg.color)
@@ -816,41 +842,39 @@ impl Stroke {
                 DabEngine::Smudge(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
                 DabEngine::Tone(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
             };
-            if let Some(d) = dirty {
-                changed = Some(changed.map_or(d, |c: PsdRect| union_rect(c, d)));
-            }
+            changed.extend(dirty);
         }
-        let Some(rect) = changed else {
+        if changed.is_empty() {
             return false;
-        };
+        }
         let ch = self.ch;
         let Some(layer) = layer_at_mut(doc, &self.layer_path).filter(|l| self.saved.fits(l, ch))
         else {
             return false;
         };
-        self.saved.save(
-            layer,
-            ch,
-            rect.left,
-            rect.top,
-            rect.right - 1,
-            rect.bottom - 1,
-        );
-        let w = per.pixels.width;
+        // Each dab's own box: on a fast drag the union of a sample's dabs is
+        // mostly pixels no dab reached.
         let mut written: Option<PsdRect> = None;
-        for y in rect.top..rect.bottom {
-            for x in rect.left..rect.right {
-                let i = (y * w + x) as usize;
-                let [r, g, b, a] = per.pixels.data[i];
-                if write_pixel(layer, ch, i, PaintMode::Normal, (r, g, b, a)) {
-                    let pixel = PsdRect {
-                        top: y,
-                        left: x,
-                        bottom: y + 1,
-                        right: x + 1,
-                    };
-                    written = Some(written.map_or(pixel, |c| union_rect(c, pixel)));
-                }
+        for rect in changed {
+            self.saved.save(
+                layer,
+                ch,
+                rect.left,
+                rect.top,
+                rect.right - 1,
+                rect.bottom - 1,
+            );
+            let bbox = write_back(
+                layer,
+                ch,
+                &per.pixels,
+                rect,
+                &mut self.scratch,
+                &mut self.applied,
+                self.serial,
+            );
+            if let Some(bbox) = bbox {
+                written = Some(written.map_or(bbox, |w| union_rect(w, bbox)));
             }
         }
         let Some(rect) = written else {
@@ -1099,34 +1123,6 @@ fn read_planes(layer: &Layer, ch: PlaneIndex) -> [Option<&[u8]>; 4] {
             .map(|c| c.data.as_slice())
     };
     [at(ch[0]), at(ch[1]), at(ch[2]), at(ch[3])]
-}
-
-fn write_pixel(
-    layer: &mut Layer,
-    ch: PlaneIndex,
-    i: usize,
-    mode: PaintMode,
-    rgba: (u8, u8, u8, u8),
-) -> bool {
-    let (r, g, b, a) = rgba;
-    let mut changed = false;
-    if !matches!(mode, PaintMode::Clear) {
-        for (k, v) in [(ch[0], r), (ch[1], g), (ch[2], b)] {
-            if let Some(k) = k {
-                if layer.channels[k].data[i] != v {
-                    layer.channels[k].data[i] = v;
-                    changed = true;
-                }
-            }
-        }
-    }
-    if let Some(k) = ch[3] {
-        if layer.channels[k].data[i] != a {
-            layer.channels[k].data[i] = a;
-            changed = true;
-        }
-    }
-    changed
 }
 
 #[cfg(test)]
