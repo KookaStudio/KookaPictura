@@ -61,5 +61,9 @@ pub(crate) fn commit_params(kind: &str, params: &[f64]) -> Vec<f64> {
 mod tests;
 
 #[cfg(test)]
+#[path = "filter_map_video_tests.rs"]
+mod video_tests;
+
+#[cfg(test)]
 #[path = "filter_map_resource_tests.rs"]
 mod resource_tests;

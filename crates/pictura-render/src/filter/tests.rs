@@ -720,6 +720,11 @@ fn moving_kernels() -> Vec<Filter> {
         Filter::PictureFrame {
             options: FrameOptions::default(),
         },
+        // Reconstructs every plane, so the alpha plane moves with the colour.
+        Filter::DeInterlace {
+            field: pictura_filters::InterlaceField::Odd,
+            method: pictura_filters::DeinterlaceMethod::Interpolation,
+        },
     ]
 }
 

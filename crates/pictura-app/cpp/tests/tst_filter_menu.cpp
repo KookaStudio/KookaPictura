@@ -146,10 +146,12 @@ void FilterMenuTest::stubEntriesStayDisabled()
 {
     pictura::CommandRegistry* registry = window_->registry();
     QVERIFY(registry != nullptr);
-    // Reduce Noise gained a kernel (#343); a leaf with no kernel stays a stub.
+    // De-Interlace gained a kernel (#344); a leaf with no kernel stays a stub.
+    const QString stub = pictura::commandIdForPath(
+        {QStringLiteral("Filter"), QStringLiteral("Extract…")});
     bool sawStub = false;
     for (const pictura::CommandInfo& info : registry->describe()) {
-        if (info.id == filterId(QStringLiteral("Video"), QStringLiteral("De-Interlace"))) {
+        if (info.id == stub) {
             sawStub = true;
             QVERIFY2(!info.implemented, qPrintable(info.id));
             QVERIFY2(!info.enabled, qPrintable(info.id));
@@ -243,6 +245,7 @@ void FilterMenuTest::dialogCollectsParameterSlots()
         {QStringLiteral("Stylize"), QStringLiteral("Extrude"), 6},
         {QStringLiteral("Stylize"), QStringLiteral("Glowing Edges"), 3},
         {QStringLiteral("Sharpen"), QStringLiteral("Smart Sharpen"), 12},
+        {QStringLiteral("Video"), QStringLiteral("De-Interlace"), 2},
     };
     for (const Case& c : cases) {
         const pictura::FilterCommandSpec* spec =
