@@ -7,6 +7,7 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QPoint>
 #include <QtGui/QAction>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QWidget>
 
@@ -67,6 +68,44 @@ QJsonObject columnSpec(const QString& side, int order, int width, const QString&
     return column;
 }
 
+// The live per-widget menu for a panel, with its aboutToShow hooks run.
+QMenu* panelWidgetMenu(pictura::PicturaMainWindow& window, const QString& panelName)
+{
+    pictura::PanelColumn* column = window.columnForPanel(panelName);
+    if (!column) {
+        return nullptr;
+    }
+    pictura::PanelGroup* group = column->groupForPanel(panelName);
+    if (!group) {
+        return nullptr;
+    }
+    group->setCurrentPanel(panelName);
+    QToolButton* button = group->headerMenuButtonForTest();
+    QMenu* menu = button ? button->menu() : nullptr;
+    if (menu) {
+        emit menu->aboutToShow();
+    }
+    return menu;
+}
+
+QAction* panelMenuAction(QMenu* menu, const QString& id)
+{
+    if (!menu) {
+        return nullptr;
+    }
+    for (QAction* action : menu->actions()) {
+        if (action->data().toString() == id) {
+            return action;
+        }
+        if (QMenu* submenu = action->menu()) {
+            if (QAction* found = panelMenuAction(submenu, id)) {
+                return found;
+            }
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 class WorkspacesTest : public QObject {
@@ -79,6 +118,9 @@ private slots:
     void applyKeepsOmittedPanelReachable();
     void freshSessionUsesEssentialsDefault();
     void freshLayoutMatchesEssentialsApply();
+    void freshSessionKeepsPanelMenuHooks();
+    void workspaceSwitchKeepsPanelMenuHooks();
+    void panelMoveKeepsPanelMenuHook();
     void presetSwitchRegroups();
     void presetCommandsReflectActive();
     void switchingPresetRearrangesAndChecks();
@@ -307,6 +349,94 @@ void WorkspacesTest::freshLayoutMatchesEssentialsApply()
     QCoreApplication::processEvents();
 
     QCOMPARE(arrangementOf(window->workspaceLayoutForTest()), fresh);
+}
+
+void WorkspacesTest::freshSessionKeepsPanelMenuHooks()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    window->resize(1100, 700);
+    window->show();
+    QCoreApplication::processEvents();
+
+    QMenu* character = panelWidgetMenu(*window, QStringLiteral("characterPanel"));
+    QVERIFY(character != nullptr);
+    QAction* fractional =
+        panelMenuAction(character, QStringLiteral("character.fractionalWidths"));
+    QVERIFY(fractional != nullptr);
+    QVERIFY2(fractional->isChecked(), "the Character hook survives the fresh-session regroup");
+    QVERIFY2(!fractional->isEnabled(), "no type layer disables the Character rows");
+
+    QMenu* paragraph = panelWidgetMenu(*window, QStringLiteral("paragraphPanel"));
+    QVERIFY(paragraph != nullptr);
+    QAction* single =
+        panelMenuAction(paragraph, QStringLiteral("paragraph.singleLineComposer"));
+    QVERIFY(single != nullptr);
+    QVERIFY2(single->isChecked(), "the Paragraph hook survives the fresh-session regroup");
+
+    QMenu* actions = panelWidgetMenu(*window, QStringLiteral("actionsPanel"));
+    QVERIFY(actions != nullptr);
+    QAction* duplicate = panelMenuAction(actions, QStringLiteral("actions.duplicate"));
+    QVERIFY(duplicate != nullptr);
+    QVERIFY2(!duplicate->isEnabled(), "no selection disables Actions > Duplicate");
+}
+
+void WorkspacesTest::workspaceSwitchKeepsPanelMenuHooks()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    window->resize(1100, 700);
+    window->show();
+    QCoreApplication::processEvents();
+
+    window->applyWorkspaceLayoutForTest(pictura::workspacePresets(QStringLiteral("Typography")));
+    QCoreApplication::processEvents();
+
+    QMenu* character = panelWidgetMenu(*window, QStringLiteral("characterPanel"));
+    QVERIFY(character != nullptr);
+    QAction* fractional =
+        panelMenuAction(character, QStringLiteral("character.fractionalWidths"));
+    QVERIFY(fractional != nullptr);
+    QVERIFY2(fractional->isChecked(), "the Character hook survives a workspace switch");
+    QVERIFY2(!fractional->isEnabled(), "no type layer disables the Character rows");
+
+    QMenu* paragraph = panelWidgetMenu(*window, QStringLiteral("paragraphPanel"));
+    QVERIFY(paragraph != nullptr);
+    QAction* single =
+        panelMenuAction(paragraph, QStringLiteral("paragraph.singleLineComposer"));
+    QVERIFY(single != nullptr);
+    QVERIFY2(single->isChecked(), "the Paragraph hook survives a workspace switch");
+}
+
+void WorkspacesTest::panelMoveKeepsPanelMenuHook()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    window->resize(1100, 700);
+    window->show();
+    QCoreApplication::processEvents();
+
+    pictura::PanelColumn* column = window->columnForPanel(QStringLiteral("characterPanel"));
+    QVERIFY(column != nullptr);
+    QVERIFY(column->showPanel(QStringLiteral("characterPanel"), true));
+    QCoreApplication::processEvents();
+    QVERIFY2(window->dropIntoGroupForTest(QStringLiteral("characterPanel"),
+                                          QStringLiteral("layersPanel")),
+             "the Character panel moves into the Layers group");
+
+    QMenu* character = panelWidgetMenu(*window, QStringLiteral("characterPanel"));
+    QVERIFY(character != nullptr);
+    QAction* fractional =
+        panelMenuAction(character, QStringLiteral("character.fractionalWidths"));
+    QVERIFY(fractional != nullptr);
+    QVERIFY2(fractional->isChecked(), "the hook follows the panel to its new group");
+    QVERIFY2(!fractional->isEnabled(), "no type layer disables the Character rows");
 }
 
 void WorkspacesTest::presetSwitchRegroups()

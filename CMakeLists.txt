@@ -852,6 +852,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/justification_dialog.h
     crates/pictura-app/cpp/paragraph_style_dialog.h
     crates/pictura-app/cpp/panels/panel_group.h
+    crates/pictura-app/cpp/panels/panel_menu_hooks.h
     crates/pictura-app/cpp/panels/panel_column.h
     crates/pictura-app/cpp/tools.h
     crates/pictura-app/cpp/tool_options.h

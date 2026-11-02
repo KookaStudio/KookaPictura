@@ -9,6 +9,8 @@
 #include <QtGui/QIcon>
 #include <QtWidgets/QWidget>
 
+#include "panel_menu_hooks.h"
+
 #include <functional>
 
 class QBoxLayout;
@@ -18,6 +20,8 @@ class QTabWidget;
 class QToolButton;
 
 namespace pictura {
+
+class PicturaMainWindow;
 
 // One CS6 panel group: a top-tab QTabWidget whose tab text is the panel title.
 // There is deliberately no group-title label; the tabs are the group chrome.
@@ -81,7 +85,6 @@ public:
 
     // A panel may refine its own menu on aboutToShow (enablement, check state,
     // dynamic rows, and installed lists).
-    using PanelMenuHook = std::function<void(QMenu*)>;
     void setPanelMenuHook(const QString& panelName, PanelMenuHook hook);
 
     // M47 D10: a group hosted in a floating overlay shows a rightmost close
@@ -156,6 +159,9 @@ private:
     void rebuildIconRow();
     void applyMinimize();
     void updateHeaderMenu();
+    // The frame that owns this group, whether it is docked or hosted in a
+    // floating overlay (whose parent is the frame). Null for a standalone group.
+    PicturaMainWindow* owningFrame() const;
     void runPanelMenuAction(const QString& actionId);
     QToolButton* makeIconButton(const QIcon& icon, const QString& title,
                                 const QString& objectName);

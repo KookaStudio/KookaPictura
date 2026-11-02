@@ -14,6 +14,10 @@
 
 #include "theme.h"
 
+// `PicturaMainWindow` inherits the panel menu hook registry; `frame.h` reaches
+// it through this header.
+#include "panel_menu_hooks.h"
+
 #include <functional>
 
 class QBoxLayout;

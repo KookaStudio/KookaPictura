@@ -366,9 +366,9 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
     auto* actionsGroup = new PanelGroup(this);
     addPanel(actionsGroup, actionsPanel_, tr("Actions"),
              QString::fromLatin1(command_ids::WindowPanelsActions));
-    actionsGroup->setPanelMenuHook(QStringLiteral("actionsPanel"),
-                                   [this](QMenu* menu) { actionsPanel_->updatePanelMenu(menu); });
     attachGroup(actionsGroup);
+    setPanelMenuHook(QStringLiteral("actionsPanel"),
+                     [this](QMenu* menu) { actionsPanel_->updatePanelMenu(menu); });
     actionsPanel_->applySessionState(state);
 
     // Kept registered and Window-menu reachable, but out of the default groups.
@@ -392,12 +392,12 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
     auto* typeGroup = new PanelGroup(this);
     addPanel(typeGroup, characterPanel_, tr("Character"),
              QString::fromLatin1(command_ids::WindowPanelsCharacter));
-    typeGroup->setPanelMenuHook(QStringLiteral("characterPanel"),
-                                [this](QMenu* menu) { characterPanel_->updatePanelMenu(menu); });
+    setPanelMenuHook(QStringLiteral("characterPanel"),
+                     [this](QMenu* menu) { characterPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, paragraphPanel_, tr("Paragraph"),
              QString::fromLatin1(command_ids::WindowPanelsParagraph));
-    typeGroup->setPanelMenuHook(QStringLiteral("paragraphPanel"),
-                                [this](QMenu* menu) { paragraphPanel_->updatePanelMenu(menu); });
+    setPanelMenuHook(QStringLiteral("paragraphPanel"),
+                     [this](QMenu* menu) { paragraphPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, glyphsPanel_, tr("Glyphs"),
              QString::fromLatin1(command_ids::WindowPanelsGlyphs));
     addPanel(typeGroup, paragraphStylesPanel_, tr("Paragraph Styles"),
