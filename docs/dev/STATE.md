@@ -13,8 +13,13 @@ Snapshot for resuming after a context break. Update after each milestone.
   backend: the exact CPU stroke, the reduced-level preview (its replay log
   records held entries so the commit keeps the build-up), the GPU stroke, and a
   layer-mask stroke (exact and GPU). The 20 dabs/s rate is still approximated,
-  and held dabs are still absent from recorded actions. Tests:
-  `tst_brush_airbrush` (14 cases), extended `tst_tool_options_persistence`.
+  and held dabs are still absent from recorded actions. The two tablet-pressure
+  overrides (**Always use Pressure for Opacity** after Opacity and **Always use
+  Pressure for Size** after Airbrush) are in the bar with their own icons; the
+  canvas takes `QTabletEvent` pressure, the engine scales the dab diameter or
+  its flow/opacity cap, and a pressure stroke declines the GPU for the exact
+  CPU/preview path. Tests: `tst_brush_airbrush` (17 cases), extended
+  `tst_tool_options_persistence`, the Rust pressure units.
 - **Panel menu hooks survive a regroup** (#1057, OpenSpec change
   `panel-menu-hooks-regroup`). The Actions, Character, and Paragraph per-widget
   menu hooks used to live on the `PanelGroup` that `buildPanels` created, so the
