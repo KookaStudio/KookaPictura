@@ -65,10 +65,10 @@ QJsonObject ControlServer::methodToolOptions(const QJsonObject& params)
     if (!options.isUndefined() && !options.isObject()) {
         return error(QStringLiteral("invalid_param"), QStringLiteral("options must be an object"));
     }
-    // The session-store reader merges: a group or field the patch leaves out
-    // keeps its current value, and every value is clamped as its setter would.
+    // The runtime patch merges: a group or field it leaves out keeps its
+    // current value, and every value is clamped as its setter would.
     if (options.isObject()) {
-        applyToolOptionsJson(*tools, options.toObject());
+        patchToolOptionsJson(*tools, options.toObject());
     }
     QJsonObject result;
     result.insert(QStringLiteral("options"), toolOptionsToJson(*tools));

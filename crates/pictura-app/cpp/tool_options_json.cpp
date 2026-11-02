@@ -443,6 +443,52 @@ void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
 {
     eachGroup([&](const char* key, ToolId id, auto* tag) {
         using Group = std::remove_pointer_t<decltype(tag)>;
+        Group* group = tools.optionsFor<Group>(id);
+        if (!group) {
+            return;
+        }
+        const QJsonValue value = json.value(QLatin1String(key));
+        if (value.isObject()) {
+            group->update(clampOptions(read(value.toObject(), Group::defaults())));
+        } else {
+            group->reset();
+        }
+    });
+    if (CropOptions* c = tools.optionsFor<CropOptions>(ToolId::Crop)) {
+        const QJsonValue crop = json.value(QStringLiteral("crop"));
+        c->applySettings(crop.isObject() ? read(crop.toObject(), CropSettings{}) : CropSettings{});
+    }
+    if (PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush)) {
+        PaintOptions restored;
+        const QJsonValue brush = json.value(QStringLiteral("brush"));
+        if (brush.isObject()) {
+            applyPaint(restored, read(brush.toObject(), paintFields(PaintOptions{})));
+        }
+        paint->apply(restored);
+    }
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee)) {
+        SelectionOptions restored;
+        const QJsonValue selection = json.value(QStringLiteral("selection"));
+        if (selection.isObject()) {
+            applySelection(restored, read(selection.toObject(), selectionFields(SelectionOptions{})));
+        }
+        s->apply(restored);
+    }
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection)) {
+        SelectionOptions restored;
+        const QJsonValue quickSelection = json.value(QStringLiteral("quickSelection"));
+        if (quickSelection.isObject()) {
+            applySelection(restored,
+                           read(quickSelection.toObject(), selectionFields(SelectionOptions{})));
+        }
+        s->apply(restored);
+    }
+}
+
+void patchToolOptionsJson(ToolController& tools, const QJsonObject& json)
+{
+    eachGroup([&](const char* key, ToolId id, auto* tag) {
+        using Group = std::remove_pointer_t<decltype(tag)>;
         const QJsonValue value = json.value(QLatin1String(key));
         Group* group = tools.optionsFor<Group>(id);
         if (group && value.isObject()) {
