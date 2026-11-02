@@ -154,6 +154,7 @@ set(PICTURA_QT_TESTS
     tst_color_range
     tst_refine_edge
     tst_replace_color
+    tst_apply_image
     tst_match_color
     tst_auto_blend
     tst_print

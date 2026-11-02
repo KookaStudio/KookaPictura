@@ -165,7 +165,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "image.variables.data.sets", path: &["Image", "Variables", "Data Sets…"], label: "Data Sets…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "image.apply.data.set", path: &["Image", "Apply Data Set…"], label: "Apply Data Set…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "image.trap", path: &["Image", "Trap…"], label: "Trap…", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "image.apply.image", path: &["Image", "Apply Image…"], label: "Apply Image…", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "image.apply.image", path: &["Image", "Apply Image…"], label: "Apply Image…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "image.calculations", path: &["Image", "Calculations…"], label: "Calculations…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "layer.new.layer", path: &["Layer", "New", "Layer"], label: "Layer", shortcut: "Shift+Ctrl+N", implemented: true, checkable: false },
     CommandSpec { id: "layer.new.layerFromBackground", path: &["Layer", "New", "Layer from Background…"], label: "Layer from Background…", shortcut: "", implemented: true, checkable: false },

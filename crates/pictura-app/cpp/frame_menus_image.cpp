@@ -1,7 +1,10 @@
 #include "frame_includes.h"
 
 #include "api/selection_api.h"
+#include "apply_image_dialog.h"
 #include "canvas_size_dialog.h"
+#include "pictura_app/src/cxxqt_object/channels.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "image_size_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
@@ -98,6 +101,39 @@ void PicturaMainWindow::wireImageMenu()
         }
         return true;
     };
+
+    // Apply Image blends an open document of the same size into the active
+    // layer or mask; Indexed and Bitmap documents have no blendable channels.
+    const QString applyImage =
+        commandIdForPath({QStringLiteral("Image"), QStringLiteral("Apply Image…")});
+    registry_->setImplemented(applyImage, true);
+    registry_->setEnabledProvider(applyImage, [this]() {
+        PictureView* view = activeView();
+        if (!view || !filter_target_ready(*view) || filter_target_smart(*view)) {
+            return false;
+        }
+        const QString mode = QString(channels_mode(*view));
+        return mode != QLatin1String("indexed") && mode != QLatin1String("bitmap");
+    });
+    registry_->setHandler(applyImage, [this]() {
+        PictureView* view = activeView();
+        if (!view || !filter_target_ready(*view)) {
+            if (view) {
+                reportFilterRefusal(view);
+            }
+            return;
+        }
+        QList<ApplyImageDialog::Source> documents;
+        for (int i = 0; i < documentCount(); ++i) {
+            if (viewAt(i)) {
+                documents.append({documentName(i), viewAt(i)});
+            }
+        }
+        ApplyImageDialog dialog(view, imageView(), documents, this);
+        if (runDialog(dialog, this) == QDialog::Accepted) {
+            refresh();
+        }
+    });
 
     const QString imageSize =
         commandIdForPath({QStringLiteral("Image"), QStringLiteral("Image Size…")});

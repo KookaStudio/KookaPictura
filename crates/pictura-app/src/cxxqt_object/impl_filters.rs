@@ -10,8 +10,7 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::{layer_pixel_locked, Layer};
-use rayon::prelude::*;
+use pictura_core::layer_pixel_locked;
 
 impl qobject::PictureView {
     pub fn add_adjustment(mut self: Pin<&mut Self>, kind: &QString) -> bool {
@@ -258,6 +257,8 @@ pub(super) enum ActiveOp {
     /// A Filter Gallery stack, applied in order.
     Filters(Vec<pictura_filters::Filter>),
     Adjustment(pictura_render::Adjustment),
+    /// Image > Apply Image: its kernel needs document positions.
+    ApplyImage(pictura_render::ApplyImageParams),
 }
 
 /// Apply `op` to the active pixel layer within the selection, as a preview
@@ -299,6 +300,18 @@ pub(super) fn apply_op_active_region(
                 .map(|selection| selection_to_mask(selection, doc))
         }
     };
+    let native = match (op, rust.session.doc.as_ref()) {
+        (ActiveOp::ApplyImage(_), Some(doc)) => {
+            match pictura_render::apply_image_native(doc, &path) {
+                Ok(native) => native,
+                Err(error) => {
+                    rust.filter_error = Some(error.to_string());
+                    return None;
+                }
+            }
+        }
+        _ => false,
+    };
     let same_target = rust
         .session
         .live
@@ -327,7 +340,7 @@ pub(super) fn apply_op_active_region(
     let filters = match op {
         ActiveOp::Filter(filter) => std::slice::from_ref(filter),
         ActiveOp::Filters(filters) => filters.as_slice(),
-        ActiveOp::Adjustment(_) => &[],
+        ActiveOp::Adjustment(_) | ActiveOp::ApplyImage(_) => &[],
     };
     // Expand the visible rect by the support of every filter still to run, so
     // the viewport is exact after the whole stack; the renderer clamps it to
@@ -346,13 +359,26 @@ pub(super) fn apply_op_active_region(
             None => written,
         }
     });
-    let baseline = (!commit).then(|| PreviewBaseline::save(layer, section));
+    // A section baseline holds 8-bit channels only, so a store edit keeps the
+    // whole layer, which shares its planes until they are written.
+    let baseline = (!commit).then(|| PreviewBaseline::save(layer, section.filter(|_| !native)));
     let applied = match op {
         ActiveOp::Adjustment(adjustment) => pictura_render::apply_adjustment_region(
             layer,
             adjustment,
             mask.as_ref(),
             section.unwrap_or(lrect),
+        ),
+        ActiveOp::ApplyImage(params) => pictura_render::apply_image_region(
+            layer,
+            params,
+            mask.as_ref(),
+            section.unwrap_or(lrect),
+            pictura_render::ApplyImageTarget {
+                origin: (0, 0),
+                gray: false,
+                native,
+            },
         ),
         _ => {
             let mut applied = Ok(());
@@ -467,94 +493,6 @@ fn clamp_to(rect: pictura_core::PsdRect, bounds: pictura_core::PsdRect) -> pictu
     }
 }
 
-impl PreviewBaseline {
-    /// Keep what a preview over `section` (the whole layer for `None`) is
-    /// about to overwrite.
-    pub(in crate::cxxqt_object) fn save(
-        layer: &Layer,
-        section: Option<pictura_core::PsdRect>,
-    ) -> Self {
-        let Some(rect) = section else {
-            return Self::Layer(Box::new(layer.clone()));
-        };
-        let lrect = layer.rect;
-        let lw = lrect.width() as usize;
-        let full = lw * lrect.height() as usize;
-        let (ox, oy) = (
-            (rect.left - lrect.left) as usize,
-            (rect.top - lrect.top) as usize,
-        );
-        let (cw, ch) = (rect.width() as usize, rect.height() as usize);
-        let planes = layer
-            .channels
-            .iter()
-            .filter(|c| c.data.len() == full)
-            .map(|c| {
-                let mut saved = vec![0u8; cw * ch];
-                if cw > 0 {
-                    saved.par_chunks_mut(cw).enumerate().for_each(|(row, out)| {
-                        let from = (oy + row) * lw + ox;
-                        out.copy_from_slice(&c.data[from..from + cw]);
-                    });
-                }
-                (c.id, saved)
-            })
-            .collect();
-        Self::Section {
-            layer_rect: lrect,
-            rect,
-            planes,
-        }
-    }
-
-    /// Put the saved pixels back into `layer`; returns the rect restored.
-    pub(super) fn restore(&self, layer: &mut Layer) -> pictura_core::PsdRect {
-        let (layer_rect, rect, planes) = match self {
-            Self::Layer(original) => {
-                *layer = (**original).clone();
-                return layer.rect;
-            }
-            Self::Section {
-                layer_rect,
-                rect,
-                planes,
-            } => (*layer_rect, *rect, planes),
-        };
-        let (cw, ch) = (rect.width() as usize, rect.height() as usize);
-        if layer.rect != layer_rect || cw == 0 || ch == 0 {
-            return rect;
-        }
-        let lw = layer_rect.width() as usize;
-        let (ox, oy) = (
-            (rect.left - layer_rect.left) as usize,
-            (rect.top - layer_rect.top) as usize,
-        );
-        for (id, saved) in planes {
-            let Some(channel) = layer.channels.iter_mut().find(|c| c.id == *id) else {
-                continue;
-            };
-            let rows = oy * lw..(oy + ch) * lw;
-            channel.data.as_mut_slice()[rows]
-                .par_chunks_mut(lw)
-                .zip(saved.par_chunks(cw))
-                .for_each(|(out, src)| out[ox..ox + cw].copy_from_slice(src));
-        }
-        rect
-    }
-
-    /// The layer as it was before the preview, given the live one.
-    pub(super) fn original<'a>(&'a self, live: &'a Layer) -> std::borrow::Cow<'a, Layer> {
-        match self {
-            Self::Layer(original) => std::borrow::Cow::Borrowed(original.as_ref()),
-            Self::Section { .. } => {
-                let mut original = live.clone();
-                self.restore(&mut original);
-                std::borrow::Cow::Owned(original)
-            }
-        }
-    }
-}
-
 /// Apply `op` to the active layer's mask coverage instead of its pixels: the
 /// mask is exposed as a mask-sized grayscale document, filtered whole (the
 /// document selection confines it), and written back. A preview snapshots the
@@ -618,6 +556,7 @@ fn apply_mask_op(
     } else {
         None
     };
+    let mask_origin = mask.rect;
     let result = {
         let layer = mask.document.layers.first_mut()?;
         let rect = layer.rect;
@@ -631,6 +570,17 @@ fn apply_mask_op(
             ActiveOp::Adjustment(adjustment) => {
                 pictura_render::apply_adjustment_region(layer, adjustment, selection.as_ref(), rect)
             }
+            ActiveOp::ApplyImage(params) => pictura_render::apply_image_region(
+                layer,
+                params,
+                selection.as_ref(),
+                rect,
+                pictura_render::ApplyImageTarget {
+                    origin: (mask_origin.left, mask_origin.top),
+                    gray: true,
+                    native: false,
+                },
+            ),
         }
     };
     if let Err(error) = result {

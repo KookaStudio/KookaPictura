@@ -26,6 +26,7 @@ mod healing;
 mod helpers;
 mod helpers_composite;
 mod image_adjust;
+mod image_apply_image;
 mod image_hdr_toning;
 mod image_match_color;
 mod image_replace_color;

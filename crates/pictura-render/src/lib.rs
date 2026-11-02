@@ -135,6 +135,11 @@ pub use gpu::{
     ProbeReport,
 };
 
+mod apply_image;
+pub use apply_image::{
+    apply_image_native, apply_image_planes, apply_image_region, ApplyImageChannel, ApplyImageMode,
+    ApplyImageParams, ApplyImagePlanes, ApplyImageTarget,
+};
 mod filter;
 pub use filter::{apply_adjustment_region, apply_filter, apply_filter_region};
 
