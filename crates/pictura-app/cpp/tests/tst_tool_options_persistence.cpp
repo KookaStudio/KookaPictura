@@ -60,6 +60,9 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
         paint->setPenTip(true);
         paint->setAliased(true);
         paint->setWetEdges(true);
+        paint->setAirbrush(true);
+        paint->setPressureSize(true);
+        paint->setPressureOpacity(true);
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(5.5);
         tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->setTolerance(77);
         RetouchGroup* blur = tools->optionsFor<RetouchGroup>(ToolId::Blur);
@@ -87,6 +90,9 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->penTip());
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->aliased());
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->wetEdges());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->airbrush());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->pressureSize());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->pressureOpacity());
     QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::Marquee)->feather(), 5.5);
     QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->tolerance(), 77);
     QCOMPARE(tools->optionsFor<RetouchGroup>(ToolId::Blur)->get().strength, 80);
@@ -227,6 +233,9 @@ void ToolOptionsPersistenceTest::restoreDoesNotNotify()
                          {QStringLiteral("penTip"), true},
                          {QStringLiteral("aliased"), true},
                          {QStringLiteral("wetEdges"), true},
+                         {QStringLiteral("airbrush"), true},
+                         {QStringLiteral("pressureSize"), true},
+                         {QStringLiteral("pressureOpacity"), true},
                          {QStringLiteral("scatter"), 10},
                          {QStringLiteral("count"), 3},
                          {QStringLiteral("sizeJitter"), 10},
@@ -250,6 +259,9 @@ void ToolOptionsPersistenceTest::restoreDoesNotNotify()
     QCOMPARE(paint->opacity(), 50);
     QCOMPARE(paint->flow(), 60);
     QCOMPARE(paint->mode(), QStringLiteral("multiply"));
+    QVERIFY(paint->airbrush());
+    QVERIFY(paint->pressureSize());
+    QVERIFY(paint->pressureOpacity());
     QCOMPARE(int(marquee->combineMode()), 1);
     QCOMPARE(marquee->magneticWidth(), 40);
     QCOMPARE(int(quick->combineMode()), 2);

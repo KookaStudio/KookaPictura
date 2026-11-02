@@ -177,6 +177,7 @@ const QList<WorkspaceKey>& workspaceKeys()
         {QKeySequence(Qt::Key_BracketRight), QT_TR_NOOP("Increase Brush Size")},
         {QKeySequence(Qt::SHIFT | Qt::Key_BracketLeft), QT_TR_NOOP("Decrease Brush Hardness")},
         {QKeySequence(Qt::SHIFT | Qt::Key_BracketRight), QT_TR_NOOP("Increase Brush Hardness")},
+        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_P), QT_TR_NOOP("Toggle Airbrush")},
         {QKeySequence(Qt::Key_D), QT_TR_NOOP("Default Foreground/Background Colors")},
         {QKeySequence(Qt::Key_X), QT_TR_NOOP("Switch Foreground/Background Colors")},
         {QKeySequence(Qt::Key_F), QT_TR_NOOP("Cycle Screen Modes")},

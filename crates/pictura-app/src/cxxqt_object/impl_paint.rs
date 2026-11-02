@@ -1,4 +1,4 @@
-use super::document_session::{PreviewStroke, SessionKind, StrokeSession};
+use super::document_session::{PreviewSample, PreviewStroke, SessionKind, StrokeSession};
 use super::helpers::*;
 use super::helpers_composite::{patch_composite_region, planes_of};
 use super::qobject;
@@ -285,7 +285,7 @@ fn grow_extent(extent: &mut Option<PsdRect>, lx: i32, ly: i32) {
 /// same tip profile and flow accumulation the exact stroke uses, sampled at the
 /// level pixel's centre. Returns whether any pixel changed.
 fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool {
-    let cfg = preview.cfg;
+    let cfg = preview.cfg.pressure_scaled(sample.pressure);
     let scale = preview.scale as f32;
     let radius = cfg.diameter as f32 * 0.5;
     let flow = cfg.flow as f32 / 100.0;
@@ -505,11 +505,16 @@ impl PictureViewRust {
                     .doc
                     .as_ref()
                     .and_then(|doc| preview_level(cfg.diameter as i32, doc.width, doc.height));
-                // The GPU dab shader has no paper grain or wet-edge curve; such a
-                // tip stays on the CPU oracle so the stroke matches its
-                // committed pixels.
-                let gpu_mode = gpu_paint_mode(cfg.mode)
-                    .filter(|_| !cfg.auto_erase && cfg.grain == 0 && !cfg.wet_edges);
+                // The GPU dab shader has no paper grain, wet-edge curve, or
+                // per-sample pressure; such a stroke stays on the CPU oracle
+                // (or its preview) so the committed pixels match.
+                let gpu_mode = gpu_paint_mode(cfg.mode).filter(|_| {
+                    !cfg.auto_erase
+                        && cfg.grain == 0
+                        && !cfg.wet_edges
+                        && !cfg.pressure_size
+                        && !cfg.pressure_opacity
+                });
                 if level.is_some() && rust.gpu_compute {
                     let seeded = match (
                         gpu_mode,
@@ -617,10 +622,20 @@ impl qobject::PictureView {
         painted && self.present_stroke_dirty()
     }
 
-    /// Dab again where the open CPU stroke last sampled, for a held button.
+    /// Dab again where the open stroke last sampled, for a held button, on
+    /// whichever backend the stroke is using.
     // ponytail: a recorded action replays the path only; held dabs are not
     // captured, so Airbrush build-up is lost on replay.
     pub fn paint_hold(mut self: Pin<&mut Self>) -> bool {
+        if self.rust().session.live.mask_stroke().is_some() {
+            return self.as_mut().mask_hold();
+        }
+        if self.rust().session.live.gpu_stroke().is_some() {
+            return self.as_mut().gpu_hold();
+        }
+        if self.rust().session.live.preview().is_some() {
+            return self.as_mut().preview_hold();
+        }
         let painted = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
@@ -701,7 +716,38 @@ impl qobject::PictureView {
             let Some(preview) = rust.session.live.preview_mut() else {
                 return false;
             };
-            preview.samples.push(sample);
+            preview.samples.push(PreviewSample::Move(sample));
+            let t = Instant::now();
+            let rasterized = rasterize_preview(preview, sample);
+            paint_timing::record("preview_rasterize", t.elapsed());
+            if !rasterized {
+                return false;
+            }
+            let extent = preview.extent.expect("a rasterized pixel grew the extent");
+            rust.queue_present(extent)
+        };
+        match opens_frame {
+            Some(_) => self.as_mut().present_preview(),
+            None => true,
+        }
+    }
+
+    /// A held dab on a previewed stroke: record it for the commit replay and
+    /// rasterize another dab at the last pointer sample. Returns whether the
+    /// preview presented a change.
+    fn preview_hold(mut self: Pin<&mut Self>) -> bool {
+        let opens_frame = {
+            let mut rust = self.as_mut().rust_mut();
+            let Some(preview) = rust.session.live.preview_mut() else {
+                return false;
+            };
+            let Some(sample) = preview.samples.iter().rev().find_map(|entry| match entry {
+                PreviewSample::Move(sample) => Some(*sample),
+                PreviewSample::Hold => None,
+            }) else {
+                return false;
+            };
+            preview.samples.push(PreviewSample::Hold);
             let t = Instant::now();
             let rasterized = rasterize_preview(preview, sample);
             paint_timing::record("preview_rasterize", t.elapsed());
@@ -771,14 +817,37 @@ impl qobject::PictureView {
             pressure: pressure as f32,
         };
         let mut dabs = Vec::new();
-        let mut changed: Option<PsdRect> = None;
         {
             let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
             let Some(placer) = rust.session.live.gpu_placer_mut() else {
                 return false;
             };
             placer.feed(sample.x, sample.y, &mut dabs);
+        }
+        self.as_mut().gpu_dabs(dabs)
+    }
+
+    /// A held dab on a GPU stroke: place another dab at the placer's last
+    /// sample and apply it like [`Self::gpu_dab`].
+    fn gpu_hold(mut self: Pin<&mut Self>) -> bool {
+        let mut dabs = Vec::new();
+        {
+            let mut rust = self.as_mut().rust_mut();
+            let Some(placer) = rust.session.live.gpu_placer_mut() else {
+                return false;
+            };
+            placer.repeat_last(&mut dabs);
+        }
+        self.as_mut().gpu_dabs(dabs)
+    }
+
+    /// Dispatch `dabs` on the open GPU stroke, patch their pixels into the
+    /// working document, and present the frame-opening dab.
+    fn gpu_dabs(mut self: Pin<&mut Self>, dabs: Vec<(f32, f32)>) -> bool {
+        let mut changed: Option<PsdRect> = None;
+        {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
             for (cx, cy) in dabs {
                 let dab = {
                     let Some(gpu) = rust.session.live.gpu_stroke_mut() else {
@@ -889,8 +958,15 @@ impl qobject::PictureView {
                     let mut rust = self.as_mut().rust_mut();
                     let rust = &mut *rust;
                     if let Some(doc) = rust.session.doc.as_mut() {
-                        for sample in preview.samples {
-                            stroke.sample(doc, sample);
+                        for entry in preview.samples {
+                            match entry {
+                                PreviewSample::Move(sample) => {
+                                    stroke.sample(doc, sample);
+                                }
+                                PreviewSample::Hold => {
+                                    stroke.hold(doc);
+                                }
+                            }
                             if let Some(rect) = stroke.take_dirty() {
                                 stroke_tiles.mark(grow_rect(rect, paint_pad));
                             }

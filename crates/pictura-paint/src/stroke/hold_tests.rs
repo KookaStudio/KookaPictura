@@ -131,3 +131,108 @@ fn hold_paints_art_history() {
     assert!(stroke.hold(&mut doc), "the held dab scattered nothing");
     assert!(doc != first);
 }
+
+#[test]
+fn pressure_scaled_applies_the_overrides() {
+    let cfg = StrokeConfig {
+        diameter: 100,
+        flow: 80,
+        opacity: 60,
+        pressure_size: true,
+        pressure_opacity: true,
+        ..StrokeConfig::default()
+    };
+    let half = cfg.pressure_scaled(0.5);
+    assert_eq!(half.diameter, 50);
+    assert_eq!(half.flow, 40);
+    assert_eq!(half.opacity, 30);
+
+    let off = StrokeConfig {
+        pressure_size: false,
+        pressure_opacity: false,
+        ..cfg
+    };
+    let half = off.pressure_scaled(0.5);
+    assert_eq!(half.diameter, 100);
+    assert_eq!(half.flow, 80);
+    assert_eq!(half.opacity, 60);
+}
+
+fn pixel_red(doc: &Document, x: i32, y: i32) -> u8 {
+    layer_rgba(&doc.layers[0]).data[(y * SIDE + x) as usize][0]
+}
+
+#[test]
+fn pressure_size_scales_the_dab_footprint() {
+    let cfg = StrokeConfig {
+        pressure_size: true,
+        ..black_cfg(100, 100)
+    };
+    let mut full = white_doc();
+    let mut stroke = Stroke::begin_at(&full, "0", cfg).expect("begin");
+    stroke.sample(&mut full, press());
+
+    let mut half = white_doc();
+    let mut stroke = Stroke::begin_at(&half, "0", cfg).expect("begin");
+    stroke.sample(
+        &mut half,
+        StrokeSample {
+            pressure: 0.5,
+            ..press()
+        },
+    );
+
+    // The 20 px tip reaches x = 40; the half-pressure 10 px tip does not.
+    assert_eq!(pixel_red(&full, 40, 32), 0);
+    assert_eq!(pixel_red(&half, 40, 32), WHITE);
+    assert_eq!(pixel_red(&full, 32, 32), 0);
+    assert_eq!(pixel_red(&half, 32, 32), 0);
+}
+
+#[test]
+fn pressure_opacity_lightens_the_dab() {
+    let cfg = StrokeConfig {
+        pressure_opacity: true,
+        ..black_cfg(100, 100)
+    };
+    let mut full = white_doc();
+    let mut stroke = Stroke::begin_at(&full, "0", cfg).expect("begin");
+    stroke.sample(&mut full, press());
+
+    let mut half = white_doc();
+    let mut stroke = Stroke::begin_at(&half, "0", cfg).expect("begin");
+    stroke.sample(
+        &mut half,
+        StrokeSample {
+            pressure: 0.5,
+            ..press()
+        },
+    );
+
+    assert_eq!(centre_red(&full), 0);
+    assert!(centre_red(&half) > 100, "half pressure paints lighter");
+}
+
+#[test]
+fn hold_keeps_the_last_pressure() {
+    let cfg = StrokeConfig {
+        pressure_opacity: true,
+        ..black_cfg(100, 10)
+    };
+    let mut doc = white_doc();
+    let mut stroke = Stroke::begin_at(&doc, "0", cfg).expect("begin");
+    stroke.sample(
+        &mut doc,
+        StrokeSample {
+            pressure: 0.5,
+            ..press()
+        },
+    );
+    for _ in 0..50 {
+        stroke.hold(&mut doc);
+    }
+    assert!(
+        centre_red(&doc) > 40,
+        "a half-pressure hold stops at the 50% cap"
+    );
+}

@@ -4,6 +4,7 @@
 
 #include "options_bar.h"
 
+#include "icons.h"
 #include "paint_tip.h"
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
@@ -394,6 +395,149 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
                 [this, setReservoir] { setReservoir(controller_->foreground()); });
         connect(cleanBrush, &QAction::triggered, this,
                 [this, setReservoir] { setReservoir(QColor(Qt::transparent)); });
+    }
+
+    layout->addStretch(1);
+    return page;
+}
+
+// CS6's Brush and Pencil bar: the tip, Opacity, Flow, Mode, and the Brush's
+// Airbrush toggle; the Pencil adds Auto Erase. The tip, Opacity, Flow, Mode,
+// and Airbrush live in the shared PaintOptions, so a preset and `Shift+Alt+P`
+// are mirrored back into the bar.
+QWidget* OptionsBar::buildPaintPage(ToolId id)
+{
+    auto* page = new QWidget(stack_);
+    auto* layout = new QHBoxLayout(page);
+    layout->setContentsMargins(4, 2, 4, 2);
+    layout->addWidget(toolButton(id, page));
+
+    addBrushTipFields(layout, page, true);
+    auto addField = [&](const QString& label, const QString& name, const QString& suffix, int lo,
+                        int hi, int value, std::function<void(int)> setter) {
+        auto* field =
+            new NumericField(label, numericConfig(lo, hi, 1, 0, suffix, true, name), page);
+        field->setValue(value);
+        layout->addWidget(field);
+        if (controller_) {
+            connect(field, &NumericField::valueChanged, this,
+                    [setter](double v) { setter(qRound(v)); });
+        }
+        return field;
+    };
+    auto addPressure = [&](const QString& name, const QString& iconId, const QString& tip,
+                           bool on, std::function<void(bool)> setter) {
+        auto* button = new QToolButton(page);
+        button->setObjectName(name);
+        button->setIcon(pictura::icon(iconId));
+        button->setIconSize(QSize(20, 20));
+        button->setToolTip(tip);
+        button->setCheckable(true);
+        button->setChecked(on);
+        button->setAutoRaise(true);
+        layout->addWidget(button);
+        connect(button, &QToolButton::toggled, this, std::move(setter));
+        return button;
+    };
+
+    NumericField* opacityField =
+        addField(QStringLiteral("Opacity"), QStringLiteral("optionsBrushOpacity"),
+                 QStringLiteral("%"), 0, 100, controller_ ? paint_->opacity() : 100,
+                 [this](int v) { paint_->setOpacity(v); });
+    // CS6 puts Always use Pressure for Opacity right after the Opacity field.
+    QToolButton* pressureOpacity = addPressure(
+        QStringLiteral("optionsBrushPressureOpacity"), QStringLiteral("options.pressureOpacity"),
+        QStringLiteral("Always use Pressure for Opacity. When off, Brush Preset controls "
+                       "pressure"),
+        controller_ ? paint_->pressureOpacity() : false, [this](bool on) {
+            if (controller_) {
+                paint_->setPressureOpacity(on);
+            }
+        });
+    NumericField* flowField =
+        addField(QStringLiteral("Flow"), QStringLiteral("optionsBrushFlow"), QStringLiteral("%"), 0,
+                 100, controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
+
+    layout->addWidget(new QLabel(QStringLiteral("Mode"), page));
+    auto* combo = new QComboBox(page);
+    combo->setObjectName(QStringLiteral("optionsBrushMode"));
+    combo->addItem(QStringLiteral("Normal"), QStringLiteral("normal"));
+    combo->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
+    combo->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
+    combo->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
+    combo->addItem(QStringLiteral("Multiply"), QStringLiteral("multiply"));
+    if (controller_) {
+        const int modeIndex = combo->findData(paint_->mode());
+        if (modeIndex >= 0) {
+            combo->setCurrentIndex(modeIndex);
+        }
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo](int) {
+            paint_->setMode(combo->currentData().toString());
+        });
+    }
+    layout->addWidget(combo);
+
+    // The Brush's Airbrush option (the Brush panel's Build-up row is the same
+    // flag); the Pencil has no Airbrush option.
+    QToolButton* airbrush = nullptr;
+    QToolButton* pressureSize = nullptr;
+    if (id == ToolId::Brush) {
+        airbrush = addAirbrushToggle(layout, page, QStringLiteral("optionsBrushAirbrush"),
+                                     controller_ ? paint_->airbrush() : false, [this](bool on) {
+                                         if (controller_) {
+                                             paint_->setAirbrush(on);
+                                         }
+                                     });
+        // CS6 puts Always use Pressure for Size at the far right, after Airbrush.
+        pressureSize = addPressure(
+            QStringLiteral("optionsBrushPressureSize"), QStringLiteral("options.pressureSize"),
+            QStringLiteral("Always use Pressure for Size. When off, Brush Preset controls "
+                           "pressure"),
+            controller_ ? paint_->pressureSize() : false, [this](bool on) {
+                if (controller_) {
+                    paint_->setPressureSize(on);
+                }
+            });
+    }
+
+    if (controller_) {
+        // A preset writes Opacity, Flow, and Mode straight into the shared
+        // options, and `Shift+Alt+P` writes Airbrush; mirror them back into the
+        // bar so it never shows stale values (the issue #731 airbrush must read
+        // Flow 50).
+        auto syncSettings = [this, opacityField, flowField, combo, airbrush, pressureSize,
+                             pressureOpacity]() {
+            opacityField->setValue(paint_->opacity());
+            flowField->setValue(paint_->flow());
+            const int index = combo->findData(paint_->mode());
+            if (index >= 0) {
+                const QSignalBlocker blocker(combo);
+                combo->setCurrentIndex(index);
+            }
+            if (airbrush) {
+                const QSignalBlocker blocker(airbrush);
+                airbrush->setChecked(paint_->airbrush());
+            }
+            if (pressureSize) {
+                const QSignalBlocker blocker(pressureSize);
+                pressureSize->setChecked(paint_->pressureSize());
+            }
+            if (pressureOpacity) {
+                const QSignalBlocker blocker(pressureOpacity);
+                pressureOpacity->setChecked(paint_->pressureOpacity());
+            }
+        };
+        connect(controller_, &ToolController::paintSettingsChanged, this, syncSettings);
+    }
+
+    if (id == ToolId::Pencil) {
+        auto* check = new QCheckBox(QStringLiteral("Auto Erase"), page);
+        if (controller_) {
+            check->setChecked(paint_->autoErase());
+            connect(check, &QCheckBox::toggled, this,
+                    [this](bool on) { paint_->setAutoErase(on); });
+        }
+        layout->addWidget(check);
     }
 
     layout->addStretch(1);

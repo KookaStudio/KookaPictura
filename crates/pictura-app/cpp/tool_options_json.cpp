@@ -266,7 +266,8 @@ template <typename F> void fields(ToneOptions& o, F&& f)
 struct PaintFields {
     int size, hardness, opacity, flow, roundness, tipAngle, spacing, grain;
     QString mode;
-    bool autoErase, flipX, flipY, penTip, aliased, wetEdges;
+    bool autoErase, airbrush, pressureSize, pressureOpacity, flipX, flipY, penTip, aliased,
+        wetEdges;
     BrushDynamics dynamics;
 };
 
@@ -278,6 +279,9 @@ template <typename F> void fields(PaintFields& o, F&& f)
     f("flow", o.flow);
     f("mode", o.mode);
     f("autoErase", o.autoErase);
+    f("airbrush", o.airbrush);
+    f("pressureSize", o.pressureSize);
+    f("pressureOpacity", o.pressureOpacity);
     f("roundness", o.roundness);
     f("tipAngle", o.tipAngle);
     f("spacing", o.spacing);
@@ -296,10 +300,11 @@ template <typename F> void fields(PaintFields& o, F&& f)
 
 PaintFields paintFields(const PaintOptions& p)
 {
-    return {p.size(),     p.hardness(), p.opacity(), p.flow(),  p.roundness(),
-            p.tipAngle(), p.spacing(),  p.grain(),   p.mode(),    p.autoErase(),
-            p.flipX(),    p.flipY(),    p.penTip(),  p.aliased(), p.wetEdges(),
-            p.dynamics()};
+    return {p.size(),         p.hardness(), p.opacity(),     p.flow(),
+            p.roundness(),    p.tipAngle(), p.spacing(),     p.grain(),
+            p.mode(),         p.autoErase(), p.airbrush(),   p.pressureSize(),
+            p.pressureOpacity(), p.flipX(),  p.flipY(),       p.penTip(),
+            p.aliased(),      p.wetEdges(), p.dynamics()};
 }
 
 void applyPaint(PaintOptions& p, const PaintFields& v)
@@ -310,6 +315,9 @@ void applyPaint(PaintOptions& p, const PaintFields& v)
     p.setFlow(v.flow);
     p.setMode(v.mode);
     p.setAutoErase(v.autoErase);
+    p.setAirbrush(v.airbrush);
+    p.setPressureSize(v.pressureSize);
+    p.setPressureOpacity(v.pressureOpacity);
     p.setRoundness(v.roundness);
     p.setTipAngle(v.tipAngle);
     p.setSpacing(v.spacing);

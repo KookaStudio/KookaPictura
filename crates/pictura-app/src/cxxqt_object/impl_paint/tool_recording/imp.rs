@@ -105,6 +105,8 @@ impl ToolStrokeStep {
             flip_x: boolean("flip_x").unwrap_or(default.flip_x),
             flip_y: boolean("flip_y").unwrap_or(default.flip_y),
             auto_erase: boolean("auto_erase").unwrap_or(default.auto_erase),
+            pressure_size: boolean("pressure_size").unwrap_or(default.pressure_size),
+            pressure_opacity: boolean("pressure_opacity").unwrap_or(default.pressure_opacity),
         }
         .sanitized();
         Ok(Self {
@@ -151,6 +153,8 @@ impl ToolStrokeStep {
         settings.set("wet_edges", self.settings.wet_edges);
         settings.set("flip_x", self.settings.flip_x);
         settings.set("flip_y", self.settings.flip_y);
+        settings.set("pressure_size", self.settings.pressure_size);
+        settings.set("pressure_opacity", self.settings.pressure_opacity);
         match self.settings.spacing {
             SpacingMode::Fixed(percent) => {
                 settings.set("spacing_mode", "fixed");
