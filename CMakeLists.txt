@@ -489,6 +489,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/mask_display_options_dialog.cpp
     crates/pictura-app/cpp/replace_color_dialog.cpp
     crates/pictura-app/cpp/auto_blend_dialog.cpp
+    crates/pictura-app/cpp/apply_image_dialog.cpp
     crates/pictura-app/cpp/match_color_dialog.cpp
     crates/pictura-app/cpp/adjustment_dialog.cpp
     crates/pictura-app/cpp/black_white_dialog.cpp
@@ -787,6 +788,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/slider_dialog.h
     crates/pictura-app/cpp/replace_color_dialog.h
     crates/pictura-app/cpp/auto_blend_dialog.h
+    crates/pictura-app/cpp/apply_image_dialog.h
     crates/pictura-app/cpp/match_color_dialog.h
     crates/pictura-app/cpp/pictura_raw_dialog.h
     crates/pictura-app/cpp/acr/acr_settings.h

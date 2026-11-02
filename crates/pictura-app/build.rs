@@ -198,6 +198,7 @@ fn main() {
                 "src/cxxqt_object/impl_core/recovery.rs",
                 "src/cxxqt_object/impl_core/save_jobs.rs",
                 "src/cxxqt_object/image_replace_color.rs",
+                "src/cxxqt_object/image_apply_image.rs",
                 "src/cxxqt_object/image_match_color.rs",
                 "src/cxxqt_object/impl_paint/tool_recording.rs",
                 "src/cxxqt_object/layer_style.rs",

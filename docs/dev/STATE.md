@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Image > Apply Image** (#609, OpenSpec change `add-apply-image`). The dialog
+  reads its source and mask once into snapshots, so a preview on the active
+  document cannot compound. `pictura-render/src/apply_image.rs` holds the
+  kernel, which writes the 8-bit channels or the 16/32-bit store. Layer masks
+  are valid targets. The write stops at the layer rect (#1139), and high-depth
+  Offset scaling is an inference.
+
 - **Brush Airbrush build-up** (#1120, OpenSpec change
   `brush-airbrush-build-up`). The Brush options bar has an Airbrush toggle and
   the Brush panel's **Build-up** row is the same `PaintOptions` flag, so either
