@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use crate::{
-    AwaParams, BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap,
-    DiffuseMode, DisplaceFit, DisplaceMap, Durability, ExtrudeType, FrameOptions, GlassTexture,
-    GrainType, HalftoneType, HdrToningParams, IrisPin, IrisShape, LensCorrectionParams, LensType,
-    LightDirection, Lighting, LiquifyMesh, MezzotintType, NoiseDistribution, PathMotion, PolarKind,
-    Quality, RadialMethod, ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
-    SpherizeMode, SpinPin, SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin,
-    TonalFade, VpEdit, WatermarkKind, WaveType, WindMethod, ZigZagStyle,
+    AwaParams, BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge,
+    DeinterlaceMethod, DepthMap, DiffuseMode, DisplaceFit, DisplaceMap, Durability, ExtrudeType,
+    FrameOptions, GlassTexture, GrainType, HalftoneType, HdrToningParams, InterlaceField, IrisPin,
+    IrisShape, LensCorrectionParams, LensType, LightDirection, Lighting, LiquifyMesh,
+    MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
+    ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, SpinPin,
+    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, VpEdit,
+    WatermarkKind, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -174,6 +175,10 @@ pub enum Filter {
     FindEdges,
     Solarize,
     NtscColors,
+    DeInterlace {
+        field: InterlaceField,
+        method: DeinterlaceMethod,
+    },
     Diffuse {
         mode: DiffuseMode,
     },

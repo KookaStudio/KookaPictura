@@ -1,0 +1,23 @@
+# Test Plan — de-interlace
+
+One row per scenario in the change's spec deltas. Rows name a test this change
+creates unless marked `(existing)`.
+
+| Scenario | Steps | Expected result | Coverage |
+|---|---|---|---|
+| `deinterlace_odd` | Run `de_interlace` with `InterlaceField::Odd` on a buffer whose rows carry a known pattern, then compare every row with the input | Odd-indexed rows are reconstructed; every even-indexed row is bit-identical | `pictura-filters::de_interlace_reconstructs_the_odd_field` |
+| `deinterlace_even` | Run `de_interlace` with `InterlaceField::Even` on the same pattern, including the first row | Even-indexed rows are reconstructed, row 0 takes row 1's value, and every odd-indexed row is bit-identical | `pictura-filters::de_interlace_reconstructs_the_even_field_and_its_first_row` |
+| `deinterlace_interpolation` | Run `DeinterlaceMethod::Interpolation` on a column whose retained rows straddle an odd sum and on a top-edge row | An eliminated row is the rounded-up mean of the rows above and below; an edge row with one neighbour takes that neighbour | `pictura-filters::de_interlace_interpolation_averages_and_rounds_up` |
+| `deinterlace_duplication` | Run `DeinterlaceMethod::Duplication` with `Odd`, then with `Even` | Each eliminated row equals the retained row above; the `Even` run's first row equals the row below | `pictura-filters::de_interlace_duplication_copies_the_row_above` |
+| `deinterlace_alpha` | Run both methods on a 4-channel buffer with a non-uniform alpha plane | The alpha plane follows the same rule as the colour planes; retained rows keep their alpha | `pictura-filters::de_interlace_reconstructs_alpha` |
+| `deinterlace_invalid` | Run the filter on a 2-channel buffer, an empty buffer, and a buffer whose data length disagrees with its dimensions | Each call returns a `FilterError`, does not panic, and leaves the buffer unmodified | `pictura-filters::de_interlace_refuses_malformed_buffers` |
+| `deinterlace_short` | Run both field choices on a one-row buffer | Every plane is bit-identical to the input | `pictura-filters::de_interlace_leaves_a_single_row_unchanged` |
+| `deinterlace_command` | Open `Filter ▸ Video ▸ De-Interlace`, read the two radio groups, accept, then read the history | `Odd Fields` and `Interpolation` are selected; the rows change; one state labelled `Filter: De-Interlace` is recorded | `tst_de_interlace::dialogFollowsCs6`, `tst_de_interlace::oddFieldsInterpolateAndCommitOneState` |
+| `deinterlace_mapping` | Map `de-interlace` with `[1, 1]`, with `[]`, and with `[0]` | The two-value list yields `Even` + `Duplication`, the empty list yields the defaults, and the one-value list yields no filter | `pictura-app::de_interlace_is_a_two_slot_kind`, `pictura-app::de_interlace_is_in_the_descriptor` |
+| `deinterlace_disabled` | Clear the active layer, refresh the menu, read the De-Interlace action, then restore the layer | The action is disabled while no editable pixel layer is active | `tst_de_interlace::noFilterTargetDisablesTheEntry` |
+| An implemented entry is enabled and dispatches | Open the Filter menu on a document with an unlocked pixel layer and check every descriptor row | Implemented entries are enabled and resolve through the registry | `tst_filter_menu::implementedEntriesAreEnabled` (existing) |
+| Dialog entries carry an ellipsis | Open the Filter menu and compare each row's label with its descriptor's parameter list | Dialog entries end with `…`; parameterless entries do not | `tst_filter_menu::dialogEntriesEndWithEllipsis` (existing) |
+| An unimplemented entry stays disabled | Read the action for `Filter > Extract…`, which has no kernel | The action exists, is not implemented and is disabled | `tst_filter_menu::stubEntriesStayDisabled` (existing) |
+| No pixel layer disables the filters | Select a non-pixel layer and refresh the menu | Every filter command is disabled | `tst_filter_menu::nonPixelActiveLayerDisablesFilters` (existing) |
+| Existing parity guards | Run the exhaustive kind tests after adding the variant | The new variant has an instance, a digest decision and an oracle-mapping row | `pictura-filters::each_variant_is_applied_by_the_engine_its_property_names` (existing), `pictura-filters::every_variant_has_a_digest_decision` (existing), `pictura-filters::mapping_table_holds_one_row_per_variant` (existing) |
+| Visual check against a CS6 capture | Apply each field/method combination to an interlaced test image and compare with Photoshop CS6 | Same direction on the reconstructed field; no exact pixel match claimed | manual: Adobe's kernel is closed and no oracle exists, so the spec records the parity, edge and duplication conventions as an approximation |

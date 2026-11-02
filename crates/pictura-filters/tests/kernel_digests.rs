@@ -544,6 +544,7 @@ fn digest_decision(kind: FilterKind) -> bool {
         | FilterKind::FindEdges
         | FilterKind::Solarize
         | FilterKind::NtscColors
+        | FilterKind::DeInterlace
         | FilterKind::Diffuse
         | FilterKind::GlowingEdges
         | FilterKind::Mosaic

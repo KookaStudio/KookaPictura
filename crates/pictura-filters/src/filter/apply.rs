@@ -153,6 +153,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
         } => other::custom(buf, kernel, *scale, *offset),
         Filter::Solarize => stylize::solarize(buf),
         Filter::NtscColors => video::ntsc_colors(buf),
+        Filter::DeInterlace { field, method } => video::de_interlace(buf, *field, *method),
         Filter::OceanRipple {
             size,
             magnitude,

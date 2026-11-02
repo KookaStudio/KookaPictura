@@ -351,7 +351,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Vanishing Point planes saved in PSD, PSB, TIFF and JPEG (#918), in a
       project-owned image resource; reopening restores them
 - [x] NTSC Colors (#345)
-- [ ] De-Interlace (#344)
+- [x] De-Interlace (#344)
 - [x] Embed and Read Watermark (#350, #351): an in-tree approximate
       spread-spectrum carrier (not Digimarc-compatible), with the copyright
       title indicator on detection

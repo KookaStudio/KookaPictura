@@ -84,8 +84,9 @@ pub(super) fn filter_preview(
 }
 
 /// Filters that resolve pixel position or a global statistic against the whole
-/// layer, so a cropped section preview would not match the commit: Diffuse
-/// hashes the pixel's absolute coordinates, Lighting resolves its light span
+/// layer, so a cropped section preview would not match the commit: De-Interlace
+/// keys its field on the absolute row index, Diffuse hashes the pixel's
+/// absolute coordinates, Lighting resolves its light span
 /// against the crop, Lens Flare places and sizes itself as a fraction of the
 /// buffer, Shear shifts each row by
 /// a fraction of the buffer's half-width, Displace stretches or tiles its

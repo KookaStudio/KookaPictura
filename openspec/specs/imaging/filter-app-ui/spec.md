@@ -308,7 +308,7 @@ Every `Filter`-menu entry whose kind has a descriptor MUST be enabled and MUST d
 #### Scenario: An unimplemented entry stays disabled
 
 - **WHEN** the user opens the Filter menu
-- **THEN** entries with no engine kernel, such as `Filter > Video > De-Interlace`, are disabled
+- **THEN** entries with no engine kernel, such as `Filter > Extract…`, are disabled
 
 #### Scenario: No pixel layer disables the filters
 

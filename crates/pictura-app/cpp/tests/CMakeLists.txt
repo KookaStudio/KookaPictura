@@ -130,6 +130,7 @@ set(PICTURA_QT_TESTS
     tst_lighting_effects_dialog
     tst_shear_dialog
     tst_displace
+    tst_de_interlace
     tst_custom_filter
     tst_digimarc_watermark
     tst_shape_blur

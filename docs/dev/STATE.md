@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Filter ▸ Video ▸ De-Interlace** (#344, OpenSpec change `de-interlace`).
+  `pictura_filters::video::de_interlace` reconstructs one interlaced field from
+  the retained one: `InterlaceField::Odd`/`Even` picks the discarded field by
+  0-based row index, `DeinterlaceMethod::Interpolation` averages the retained
+  rows above and below (rounded half-up), and `Duplication` copies the row
+  above. The top edge uses the row below. Every plane is reconstructed,
+  including alpha. The catalogue row (`de-interlace`, two radio groups, the
+  shared dialog) previews the whole layer because row parity is absolute.
+  Approximated, behavioural parity only; the engine still runs on planar 8-bit
+  working planes. Tests: the `de_interlace_*` units in `pictura-filters`,
+  `pictura-app::{de_interlace_is_a_two_slot_kind,
+  de_interlace_is_in_the_descriptor}`, and `tst_de_interlace`.
 - **Liquify confines an active selection to its bounding rectangle** (#882,
   OpenSpec change `liquify-selection-bounds`). `LiquifyMesh` carries an optional
   layer-local clip: nodes outside it take no offset, `liquify()` resamples only
@@ -2045,7 +2057,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tst_filter_menu`; `commandIdForPath` centralizes the path-derived filter ids.
   Ceilings (`ponytail:`): entries with no engine kernel (Filter Gallery, Liquify,
   Vanishing Point, Lens Correction, Blur Gallery, Lens/Smart Blur, Reduce Noise,
-  Glass, Diffuse Glow, Diffuse, Glowing Edges, De-Interlace) stay disabled stubs
+  Glass, Diffuse Glow, Diffuse, Glowing Edges) stay disabled stubs
   (Custom has since been exposed, #336; Embed/Read Watermark now ship as an
   in-tree approximate carrier, #350/#351); the alpha pass reruns the kernel on the CPU.
 - PSD interop roadmap (`docs/dev/psd-support-roadmap.md`): P1 (ZIP/ZIP-prediction

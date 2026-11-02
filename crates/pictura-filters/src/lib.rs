@@ -63,6 +63,7 @@ pub use render::{
     uses_lines, FrameOptions, LensType, Light, LightType, Lighting, TextureChannel, MAX_LIGHTS,
 };
 pub use stylize::DiffuseMode;
+pub use video::{DeinterlaceMethod, InterlaceField};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FilterError {
