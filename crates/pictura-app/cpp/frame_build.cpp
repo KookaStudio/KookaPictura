@@ -139,6 +139,8 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
             &PicturaMainWindow::convertImageMode);
     connect(propertiesPanel_, &PropertiesPanel::depthRequested, this,
             &PicturaMainWindow::convertImageDepth);
+    setPanelMenuHook(QStringLiteral("propertiesPanel"),
+                     [this](QMenu* menu) { propertiesPanel_->updatePanelMenu(menu); });
 
     adjustmentsPanel_ = new AdjustmentsPanel(this);
     adjustmentsPanel_->setObjectName(QStringLiteral("adjustmentsPanel"));
@@ -366,9 +368,9 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
     auto* actionsGroup = new PanelGroup(this);
     addPanel(actionsGroup, actionsPanel_, tr("Actions"),
              QString::fromLatin1(command_ids::WindowPanelsActions));
-    actionsGroup->setPanelMenuHook(QStringLiteral("actionsPanel"),
-                                   [this](QMenu* menu) { actionsPanel_->updatePanelMenu(menu); });
     attachGroup(actionsGroup);
+    setPanelMenuHook(QStringLiteral("actionsPanel"),
+                     [this](QMenu* menu) { actionsPanel_->updatePanelMenu(menu); });
     actionsPanel_->applySessionState(state);
 
     // Kept registered and Window-menu reachable, but out of the default groups.
@@ -392,12 +394,12 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
     auto* typeGroup = new PanelGroup(this);
     addPanel(typeGroup, characterPanel_, tr("Character"),
              QString::fromLatin1(command_ids::WindowPanelsCharacter));
-    typeGroup->setPanelMenuHook(QStringLiteral("characterPanel"),
-                                [this](QMenu* menu) { characterPanel_->updatePanelMenu(menu); });
+    setPanelMenuHook(QStringLiteral("characterPanel"),
+                     [this](QMenu* menu) { characterPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, paragraphPanel_, tr("Paragraph"),
              QString::fromLatin1(command_ids::WindowPanelsParagraph));
-    typeGroup->setPanelMenuHook(QStringLiteral("paragraphPanel"),
-                                [this](QMenu* menu) { paragraphPanel_->updatePanelMenu(menu); });
+    setPanelMenuHook(QStringLiteral("paragraphPanel"),
+                     [this](QMenu* menu) { paragraphPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, glyphsPanel_, tr("Glyphs"),
              QString::fromLatin1(command_ids::WindowPanelsGlyphs));
     addPanel(typeGroup, paragraphStylesPanel_, tr("Paragraph Styles"),
@@ -656,6 +658,16 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 }
             });
 
+    // CS6's Airbrush key: flip the active tool's Airbrush option. The window
+    // owns it because it acts on the active tool, and workspaceKeys() lists it
+    // so the shortcut editor never assigns the same key to a command.
+    connect(new QShortcut(QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_P), this),
+            &QShortcut::activated, this, [this]() {
+                if (tools_) {
+                    tools_->toggleAirbrush();
+                }
+            });
+
     // CS6 foreground/background swap. `X` is unassigned in the tool letter
     // catalogue, so it does not collide with the tool-switch shortcuts.
     connect(new QShortcut(QKeySequence(Qt::Key_X), this), &QShortcut::activated, this,
@@ -746,11 +758,24 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         registry_->dispatch(
             commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
     });
-    // While new type is being set the Character panel edits that session.
+    // While text is being set the Character and Paragraph panels edit that
+    // session. An options bar change reaches them too: they write back every
+    // field they show.
     characterPanel_->setTextSession(
+        [this]() { return tools_ ? tools_->textSession() : nullptr; });
+    paragraphPanel_->setTextSession(
         [this]() { return tools_ ? tools_->textSession() : nullptr; });
     connect(tools_, &ToolController::textEditingChanged, characterPanel_,
             &CharacterPanel::refresh);
+    connect(tools_, &ToolController::textEditingChanged, paragraphPanel_,
+            &ParagraphPanel::refresh);
+    connect(tools_, &ToolController::typeOptionsChanged, this, [this]() {
+        TextSession* session = tools_->textSession();
+        if (session && session->textActive()) {
+            characterPanel_->refresh();
+            paragraphPanel_->refresh();
+        }
+    });
     connect(optionsBar_, &OptionsBar::warpTextRequested, this, [this]() {
         registry_->dispatch(
             commandIdForPath({QStringLiteral("Type"), QStringLiteral("Warp Text…")}));

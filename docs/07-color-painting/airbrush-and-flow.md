@@ -219,7 +219,7 @@ Fetched for this document:
   single-pixel target across controlled flow/spacing.
 - **Default Flow value.** The Help does not state it; marked *(unverified)*.
 - **Airbrush emission rate.** The time unit/rate of stationary dab emission is
-  undocumented.
+  undocumented. The stamp tools use 20 dabs per second as an approximation.
 - **Airbrush tip ranges and defaults.** Distortion/Granularity/Spatter ranges and
   defaults are not stated; marked *(unverified)*.
 - **Airbrush tip vs Airbrush option UI.** Whether selecting an airbrush tip

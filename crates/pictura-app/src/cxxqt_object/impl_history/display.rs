@@ -23,5 +23,11 @@ pub mod ffi {
         /// frame is rebuilt, never for a region the view blitted. A canvas that
         /// took `image()` at this revision is still current.
         fn frame_revision(view: &PictureView) -> u64;
+
+        /// The view-pyramid level the canvas must present, or 0 when the zoom
+        /// picks it: a reduced stroke preview's level, else the coarse level
+        /// standing in for a pyramid a worker is still building. A GPU stroke
+        /// presents the zoom-selected level.
+        fn preview_present_level(view: &PictureView) -> i32;
     }
 }

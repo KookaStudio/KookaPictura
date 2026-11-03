@@ -27,6 +27,10 @@ public:
                  const QStringList& disabledButtons = {}, QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override;
+
+private:
+    QVector<Row> rows_;
 };
 
 } // namespace pictura

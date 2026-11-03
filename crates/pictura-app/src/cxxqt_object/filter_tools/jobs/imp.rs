@@ -121,6 +121,16 @@ pub(super) fn apply_op(
             pictura_render::apply_adjustment_region(&mut layer, adjustment, mask, rect)
                 .map_err(|e| e.to_string())?;
         }
+        ActiveOp::ApplyImage(params) => {
+            let rect = layer.rect;
+            let target = pictura_render::ApplyImageTarget {
+                origin: (0, 0),
+                gray: false,
+                native: pictura_render::apply_image_native(doc, path).map_err(|e| e.to_string())?,
+            };
+            pictura_render::apply_image_region(&mut layer, params, mask, rect, target)
+                .map_err(|e| e.to_string())?;
+        }
     }
     Ok(layer)
 }

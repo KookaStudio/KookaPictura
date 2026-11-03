@@ -76,6 +76,12 @@ impl DabPlacer {
         };
         self.last = Some((x, y));
     }
+
+    /// Re-emit the last sample for a time-driven dab. The carried residual
+    /// stays put, so path spacing resumes as if the dab had not happened.
+    pub fn repeat_last(&self, out: &mut Vec<(f32, f32)>) {
+        out.extend(self.last);
+    }
 }
 
 #[cfg(test)]
@@ -89,6 +95,30 @@ mod tests {
             placer.feed(x, y, &mut out);
         }
         out.len()
+    }
+
+    #[test]
+    fn repeat_last_is_empty_before_any_dab() {
+        let mut out = Vec::new();
+        DabPlacer::new(SpacingMode::Fixed(25), 12.0).repeat_last(&mut out);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn repeat_last_keeps_path_spacing() {
+        let path = [(0.0, 0.0), (5.0, 0.0), (17.0, 0.0), (40.0, 0.0)];
+        let walk = |hold: bool| {
+            let mut placer = DabPlacer::new(SpacingMode::Fixed(25), 12.0);
+            let mut out = Vec::new();
+            for &(x, y) in &path {
+                placer.feed(x, y, &mut out);
+                if hold {
+                    placer.repeat_last(&mut Vec::new());
+                }
+            }
+            out
+        };
+        assert_eq!(walk(true), walk(false));
     }
 
     #[test]

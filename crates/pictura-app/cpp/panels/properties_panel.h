@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QByteArray>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
@@ -7,10 +8,13 @@
 
 #include "api/layers_api.h"
 
+#include <functional>
+#include <utility>
 
 class QComboBox;
 class QFormLayout;
 class QLabel;
+class QMenu;
 class QSpinBox;
 class QStackedWidget;
 class QTimer;
@@ -22,6 +26,7 @@ namespace pictura {
 class AdjustmentControls;
 class NumericField;
 class PictureView;
+class PresetCombo;
 
 // Window > Properties (PAN-006). For an adjustment layer it builds the
 // adjustment's controls from the engine's per-kind descriptor
@@ -36,8 +41,8 @@ class PictureView;
 // Mode / Bits per Channel menus, which route through Image ▸ Mode. With no
 // document it reads No Properties.
 // Ported from photorust's PropertiesPanel; Kooka's panel column hosts it.
-// ponytail: no adjustment Presets menu, mask page, Previous State toggle, or
-// Auto-Select menu items; the controls an engine descriptor omits are absent.
+// ponytail: no mask page, Previous State toggle, or Auto-Select menu items;
+// the controls an engine descriptor omits are absent.
 // The Canvas section has no X/Y, orientation toggle, or Fill menu, and the
 // resolution is read-only.
 class PropertiesPanel : public QWidget {
@@ -68,6 +73,22 @@ public:
     bool maskSectionVisibleForTest() const;
     // Whether the layer page's Vector Mask section is currently shown.
     bool vectorMaskSectionVisibleForTest() const;
+    // The Preset menu, for the Qt Test.
+    PresetCombo* presetComboForTest() const { return preset_; }
+    bool canSavePresetForTest() const;
+    // Run a Properties panel-menu entry (`savePreset`, `loadPreset`).
+    void performPanelMenuAction(const QString& id);
+    // Enable / disable the panel-menu entries as the active layer changes.
+    void updatePanelMenu(QMenu* menu);
+    // Replace the modal name / pick prompts in a test.
+    void setPresetNameProviderForTest(std::function<QString()> provider)
+    {
+        presetNameProvider_ = std::move(provider);
+    }
+    void setPresetPickProviderForTest(std::function<QString(const QStringList&)> provider)
+    {
+        presetPickProvider_ = std::move(provider);
+    }
 
 signals:
     // The Canvas section's Mode / Bits per Channel menus; the window runs the
@@ -81,6 +102,10 @@ private:
     void showNothing();
     void showLayer(const pictura::layers_api::LayerRow& row);
     void showAdjustment(const QStringList& page);
+    // Apply a preset block as one "Modify … Layer" state.
+    void applyPresetBlock(const QByteArray& block);
+    void savePreset();
+    void loadPreset();
     // Shrink the hidden pages so the stack sizes to the current one.
     void setPage(int index);
     void buildCanvas(QVBoxLayout* layout);
@@ -99,7 +124,10 @@ private:
     PictureView* view_ = nullptr;
     QString path_;
     QString title_;
+    QString kind_;
     bool dirty_ = false;
+    std::function<QString()> presetNameProvider_;
+    std::function<QString(const QStringList&)> presetPickProvider_;
 
     QLabel* header_ = nullptr;
     QStackedWidget* stack_ = nullptr;
@@ -113,6 +141,7 @@ private:
     bool pendingCurveValid_ = false;
 
     AdjustmentControls* controls_ = nullptr;
+    PresetCombo* preset_ = nullptr;
     QWidget* footer_ = nullptr;
     QToolButton* clip_ = nullptr;
     QToolButton* visible_ = nullptr;

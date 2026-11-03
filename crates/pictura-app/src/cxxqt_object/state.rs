@@ -1,3 +1,4 @@
+use super::impl_core::DeferredPyramid;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::{PixelBuffer, PsdRect};
@@ -58,6 +59,11 @@ pub struct PictureViewRust {
     /// The expanded group paths, per document.
     pub(super) expanded_groups: Vec<String>,
     pub(super) move_base: Option<QImage>,
+    /// Where a preview's backdrop patch sits; `None` for a whole-document base.
+    pub(super) move_base_origin: Option<(i32, i32)>,
+    /// The view a Move preview was built from; `None` for a full-resolution
+    /// preview. Its images are then at the view's level, not 1:1.
+    pub(super) move_view: Option<super::impl_transform::MoveView>,
     pub(super) move_layer: Option<QImage>,
     pub(super) move_x: i32,
     pub(super) move_y: i32,
@@ -131,6 +137,10 @@ pub struct PictureViewRust {
     /// other display consumer reads them.
     pub(super) mask_level0: Option<PixelBuffer>,
     pub(super) mask_pyramid: ViewPyramid,
+    /// The worker build `pyramid` stands in for, while it is coarse.
+    pub(super) deferred_pyramid: Option<DeferredPyramid>,
+    /// Numbers each deferred build, so a superseded result is recognised.
+    pub(super) pyramid_generation: u64,
     pub(super) link_sets: HashMap<String, u32>,
     /// The Ruler tool's measuring line: view state, never saved or undone.
     pub(super) ruler: Option<pictura_core::Ruler>,
@@ -138,6 +148,8 @@ pub struct PictureViewRust {
     pub(super) canvas_proxy: Option<CanvasProxy>,
     /// Filter work running on worker threads (`filter_tools::jobs`).
     pub(super) filter_jobs: super::filter_tools::jobs::FilterJobs,
+    /// The Auto-Blend Layers worker (`auto_blend`).
+    pub(super) auto_blend: super::auto_blend::AutoBlendJob,
     /// The last committed filter's kind and slot values, for Last Filter and
     /// Last Filter Settings.
     pub(super) last_filter: Option<(String, Vec<f64>)>,
@@ -203,6 +215,8 @@ impl Default for PictureViewRust {
             solo_snapshot: None,
             expanded_groups: Vec::new(),
             move_base: None,
+            move_view: None,
+            move_base_origin: None,
             move_layer: None,
             move_x: 0,
             move_y: 0,
@@ -242,10 +256,13 @@ impl Default for PictureViewRust {
             level0: None,
             mask_level0: None,
             mask_pyramid: ViewPyramid::default(),
+            deferred_pyramid: None,
+            pyramid_generation: 0,
             link_sets: HashMap::new(),
             ruler: None,
             canvas_proxy: None,
             filter_jobs: Default::default(),
+            auto_blend: Default::default(),
             last_filter: None,
             smart_filter_edit: None,
             filter_error: None,

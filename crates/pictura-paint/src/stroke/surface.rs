@@ -1,7 +1,7 @@
 //! Parallel builders for a stroke's layer source surface.
 
 use crate::healing::RgbaImage;
-use pictura_core::{Layer, Plane};
+use pictura_core::{Layer, Plane, PsdRect};
 use rayon::prelude::*;
 
 /// The R, G, B and alpha planes of `layer`, resolved once for a whole surface.
@@ -9,6 +9,79 @@ pub(crate) type LayerPlanes<'a> = [Option<&'a Plane<u8>>; 4];
 
 pub(crate) fn layer_planes(layer: &Layer) -> LayerPlanes<'_> {
     super::plane_index(layer).map(|k| k.and_then(|k| layer.channels.get(k)).map(|c| &c.data))
+}
+
+/// Columns `x0..x0 + out.len()` of row `y` of `planes` as straight RGBA.
+fn interleave(planes: LayerPlanes<'_>, y: usize, w: usize, x0: usize, out: &mut [[u8; 4]]) {
+    let at = |k: usize| planes[k].and_then(|p| p.row(y, w)).unwrap_or(&[]);
+    let (r, g, b, a) = (at(0), at(1), at(2), at(3));
+    for (i, px) in out.iter_mut().enumerate() {
+        let x = x0 + i;
+        *px = [
+            r.get(x).copied().unwrap_or(0),
+            g.get(x).copied().unwrap_or(0),
+            b.get(x).copied().unwrap_or(0),
+            a.get(x).copied().unwrap_or(255),
+        ];
+    }
+}
+
+/// Tile edge of a [`LazyPixels`] image.
+const LAZY_TILE: usize = 64;
+
+/// A per-dab image filled a tile at a time, for an engine that reads and writes
+/// only inside its dab. The image is layer-sized but zero-filled by the
+/// allocator, so a stroke's start and its memory follow the area it reaches.
+pub(super) struct LazyPixels {
+    loaded: Vec<bool>,
+    columns: usize,
+}
+
+impl LazyPixels {
+    /// The empty image for `layer` and the tiles that will fill it.
+    pub(super) fn new(layer: &Layer) -> (Self, RgbaImage) {
+        let w = layer.rect.width().max(0) as usize;
+        let h = layer.rect.height().max(0) as usize;
+        let columns = w.div_ceil(LAZY_TILE);
+        let lazy = LazyPixels {
+            loaded: vec![false; columns * h.div_ceil(LAZY_TILE)],
+            columns,
+        };
+        let image = RgbaImage {
+            width: w as i32,
+            height: h as i32,
+            data: vec![[0u8; 4]; w * h],
+        };
+        (lazy, image)
+    }
+
+    /// Fill every tile of `image` that `rect` meets and no dab has reached, from
+    /// `layer`, whose pixels there are still the ones the stroke began on.
+    pub(super) fn load(&mut self, layer: &Layer, image: &mut RgbaImage, rect: PsdRect) {
+        let w = image.width as usize;
+        let first_column = rect.left as usize / LAZY_TILE;
+        let end_column = (rect.right as usize).div_ceil(LAZY_TILE).min(self.columns);
+        let first_row = rect.top as usize / LAZY_TILE;
+        let end_row = (rect.bottom as usize).div_ceil(LAZY_TILE);
+        let (columns, planes, loaded) = (self.columns, layer_planes(layer), &self.loaded);
+        let end = (end_row * LAZY_TILE * w).min(image.data.len());
+        image.data[first_row * LAZY_TILE * w..end]
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(row, pixels)| {
+                let y = first_row * LAZY_TILE + row;
+                for column in first_column..end_column {
+                    if !loaded[y / LAZY_TILE * columns + column] {
+                        let x0 = column * LAZY_TILE;
+                        let x1 = (x0 + LAZY_TILE).min(w);
+                        interleave(planes, y, w, x0, &mut pixels[x0..x1]);
+                    }
+                }
+            });
+        for row in first_row..end_row {
+            self.loaded[row * columns + first_column..row * columns + end_column].fill(true);
+        }
+    }
 }
 
 /// The layer's pixels as straight RGBA; a layer without alpha is opaque.
@@ -27,18 +100,7 @@ pub(crate) fn layer_rgba(layer: &Layer) -> RgbaImage {
     }
     let planes = layer_planes(layer);
     data.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        let r = planes[0].and_then(|p| p.row(y, w)).unwrap_or(&[]);
-        let g = planes[1].and_then(|p| p.row(y, w)).unwrap_or(&[]);
-        let b = planes[2].and_then(|p| p.row(y, w)).unwrap_or(&[]);
-        let a = planes[3].and_then(|p| p.row(y, w)).unwrap_or(&[]);
-        for (x, px) in row.iter_mut().enumerate() {
-            *px = [
-                r.get(x).copied().unwrap_or(0),
-                g.get(x).copied().unwrap_or(0),
-                b.get(x).copied().unwrap_or(0),
-                a.get(x).copied().unwrap_or(255),
-            ];
-        }
+        interleave(planes, y, w, 0, row);
     });
     RgbaImage {
         width: w as i32,

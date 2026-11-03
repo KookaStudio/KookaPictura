@@ -10,6 +10,7 @@
 
 use super::qobject::PictureView;
 pub(super) use canvas_proxy::canvas_proxy_buffer;
+use canvas_proxy::pane_buffer;
 pub(super) use canvas_proxy::resolve_stack;
 pub(super) use canvas_proxy::scaled_stack_params;
 pub(super) use depth_gate::depth_refusal;
@@ -245,20 +246,15 @@ pub mod ffi {
             scale: f64,
         ) -> QImage;
 
-        /// A proxy of the document with the active layer hidden, scaled to
-        /// `max_edge` on the long side, for a whole-layer filter dialog's
-        /// bottom pane. The pane composites [`filter_proxy_layer`] over it, so
-        /// the other layers are never filtered with the active one.
-        fn filter_proxy_base(view: Pin<&mut PictureView>, max_edge: i32) -> QImage;
-
-        /// The active layer's pixels filtered with `kind`/`params`, at the
-        /// same proxy size as [`filter_proxy_base`] and positioned in its
-        /// document frame. The filter runs over the layer's own bounds, as the
-        /// canvas preview and the commit do, and the layer's mask, opacity and
-        /// fill are baked into the alpha. The unfiltered layer is returned when
-        /// the filter is refused, so the pane still shows the picture.
-        fn filter_proxy_layer(
-            view: &PictureView,
+        /// The document composited at `max_edge` on its long side with
+        /// `kind`/`params` on the active layer, as a premultiplied display
+        /// image, for a whole-picture filter pane: the layer's blend mode,
+        /// Blend If and masks apply and the selection gates the filter, as on
+        /// commit. The caller scales pixel-sized slots. Shares the reduced copy
+        /// [`filter_canvas_proxy`] keeps; null for an unknown kind or no active
+        /// layer, and slots the mapping refuses render the picture unfiltered.
+        fn filter_proxy_composite(
+            view: Pin<&mut PictureView>,
             kind: &QString,
             params: &QList_f64,
             max_edge: i32,

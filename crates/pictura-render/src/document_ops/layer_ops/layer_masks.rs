@@ -124,6 +124,20 @@ pub fn add_layer_mask_converting_background(
     true
 }
 
+/// Install `mask` on the layer at `path`, replacing any mask it has, and report
+/// whether the path resolved. A retained native `-2` plane is dropped so the
+/// compositor cannot prefer the old high-depth mask over this 8-bit one.
+pub fn replace_layer_mask(doc: &mut Document, path: &str, mask: LayerMask) -> bool {
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    layer.mask = Some(mask);
+    if let Some(source) = layer.source_channels.as_mut() {
+        source.planes.retain(|(id, _)| *id != -2);
+    }
+    true
+}
+
 /// Remove the layer mask at `path`, reporting whether one existed.
 pub fn delete_layer_mask(doc: &mut Document, path: &str) -> bool {
     resolve_path_mut(doc, path).is_some_and(|layer| layer.mask.take().is_some())

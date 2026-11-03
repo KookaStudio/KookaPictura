@@ -62,6 +62,15 @@ QString Quad::toString() const
     return parts.join(QLatin1Char(' '));
 }
 
+std::optional<QPoint> previewBaseOrigin(const PictureView& view)
+{
+    const auto origin = move_preview_base_origin(view);
+    if (origin.size() != 2) {
+        return std::nullopt;
+    }
+    return QPoint(origin[0], origin[1]);
+}
+
 LayerRect layerRect(const PictureView& view, const QString& path)
 {
     const ::rust::Vec<int32_t> extents = layer_rect_extents(view, path);

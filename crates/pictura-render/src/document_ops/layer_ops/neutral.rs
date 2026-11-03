@@ -1,7 +1,8 @@
 //! Whether a just-inserted node leaves the document composite unchanged, so the
 //! app can skip the recomposite for New Layer / New Group.
 
-use pictura_core::{Document, Knockout, Layer};
+use pictura_core::{BitDepth, BlendMode, ColorMode, Document, Knockout, Layer};
+use rayon::prelude::*;
 
 use super::paths::{container_of, parse_path};
 
@@ -34,6 +35,73 @@ pub fn insertion_is_content_neutral(doc: &Document, path: &str) -> bool {
         .and_then(|i| container.get(i))
         .is_some_and(|l| l.clipping);
     had_layers && is_inert(node) && !above_clipped && (!node.clipping || joins_run)
+}
+
+/// Tagged blocks that carry layer metadata and draw nothing.
+const METADATA_BLOCKS: [&[u8; 4]; 5] = [b"luni", b"lyid", b"lclr", b"lspf", b"shmd"];
+
+/// Whether the copy just inserted at `path`, directly above its source, leaves
+/// the stored composite valid: an opaque copy of an opaque layer shows what the
+/// source already showed, so the backdrop of everything above is unchanged.
+pub fn duplicate_is_content_neutral(doc: &Document, path: &str) -> bool {
+    // ponytail: 8-bit RGB only; other modes and depths recomposite, as before.
+    if doc.mode != ColorMode::Rgb || doc.depth != BitDepth::Eight {
+        return false;
+    }
+    let Some(segments) = parse_path(path) else {
+        return false;
+    };
+    let Some((&at, parent)) = segments.split_last() else {
+        return false;
+    };
+    let Some(container) = container_of(doc, parent) else {
+        return false;
+    };
+    let source = at.checked_sub(1).and_then(|i| container.get(i));
+    let above_clipped = container.get(at + 1).is_some_and(|l| l.clipping);
+    !above_clipped
+        && !doc
+            .layers
+            .iter()
+            .any(crate::composite_knockout::has_knockout)
+        && source.is_some_and(is_plain_opaque)
+        && container.get(at).is_some_and(is_plain_opaque)
+}
+
+/// A pixel layer that replaces its backdrop outright across its rect.
+fn is_plain_opaque(node: &Layer) -> bool {
+    let plain = !node.is_group
+        && !node.clipping
+        && node.visible
+        && node.blend == BlendMode::Normal
+        && node.blend_key.is_none()
+        && node.opacity == 255
+        && node.fill == 255
+        && node.mask.is_none()
+        && node.vector_mask.is_none()
+        && node.adjustment.is_none()
+        && node.smart_object.is_none()
+        && node.type_tool.is_none()
+        && node.raw_channels.is_empty()
+        && node.blend_if.is_none()
+        && node.knockout == Knockout::None
+        && node
+            .extra_blocks
+            .iter()
+            .all(|block| METADATA_BLOCKS.contains(&&block.key));
+    if !plain {
+        return false;
+    }
+    match node.channels.iter().find(|c| c.id == -1) {
+        Some(alpha) => {
+            let bands: Vec<&[u8]> = alpha.data.bands().collect();
+            bands.iter().all(|band| {
+                band.par_chunks(1 << 16)
+                    .all(|chunk| chunk.iter().all(|&a| a == 255))
+            })
+        }
+        None => node.background,
+    }
 }
 
 /// A node that draws nothing in any blend mode: an empty group, or a pixel
@@ -175,6 +243,128 @@ mod tests {
         let mut d = doc(vec![pixel("base", 90, 255)]);
         let path = add_layer_full(&mut d, "0", &spec(false));
         assert!(insertion_is_content_neutral(&d, &path));
+    }
+
+    fn background() -> Layer {
+        let mut layer = pixel("Background", 90, 255);
+        layer.channels.retain(|c| c.id != -1);
+        layer.background = true;
+        layer
+    }
+
+    #[test]
+    fn neutral_duplicates_preserve_composite() {
+        let top = pixel("top", 200, 120);
+        let stacks: Vec<(Vec<Layer>, &str)> = vec![
+            (vec![background()], "0"),
+            (vec![background(), top.clone()], "0"),
+            (vec![pixel("opaque", 70, 255), top.clone()], "0"),
+            (
+                vec![
+                    background(),
+                    group(BlendMode::PassThrough, vec![pixel("in", 50, 255)]),
+                ],
+                "1/0",
+            ),
+            (
+                vec![
+                    background(),
+                    group(BlendMode::Multiply, vec![pixel("in", 50, 255)]),
+                ],
+                "1/0",
+            ),
+        ];
+        for (stack, source) in stacks {
+            let mut d = doc(stack);
+            let expected = crate::composite_rgba(&d);
+            let created = crate::duplicate_paths(&mut d, &[source]);
+            assert!(duplicate_is_content_neutral(&d, &created[0]), "{source}");
+            assert_eq!(crate::composite_rgba(&d), expected, "{source}");
+            // The copy is itself duplicable, as a second Ctrl+J does.
+            let again = crate::duplicate_paths(&mut d, &[created[0].as_str()]);
+            assert!(duplicate_is_content_neutral(&d, &again[0]), "{source}");
+            assert_eq!(crate::composite_rgba(&d), expected, "{source} twice");
+        }
+    }
+
+    #[test]
+    fn excluded_duplicates_are_not_neutral() {
+        type Tweak = (&'static str, fn(&mut Layer));
+        let tweaks: Vec<Tweak> = vec![
+            ("translucent", |l| {
+                l.channels.iter_mut().find(|c| c.id == -1).unwrap().data =
+                    vec![200; (W * H) as usize].into();
+            }),
+            ("one soft pixel", |l| {
+                l.channels
+                    .iter_mut()
+                    .find(|c| c.id == -1)
+                    .unwrap()
+                    .data
+                    .as_mut_slice()[7] = 254;
+            }),
+            ("hidden", |l| l.visible = false),
+            ("multiply", |l| l.blend = BlendMode::Multiply),
+            ("opacity", |l| l.opacity = 128),
+            ("fill", |l| l.fill = 128),
+            ("clipped", |l| l.clipping = true),
+            ("knockout", |l| l.knockout = Knockout::Shallow),
+            ("effects", |l| {
+                l.extra_blocks.push(pictura_core::LayerBlock {
+                    key: *b"lfx2",
+                    ..Default::default()
+                })
+            }),
+            ("no alpha, not a Background", |l| {
+                l.channels.retain(|c| c.id != -1)
+            }),
+        ];
+        for (name, tweak) in tweaks {
+            let mut source = pixel("source", 90, 255);
+            tweak(&mut source);
+            let mut d = doc(vec![pixel("base", 10, 255), source]);
+            let created = crate::duplicate_paths(&mut d, &["1"]);
+            assert!(!duplicate_is_content_neutral(&d, &created[0]), "{name}");
+        }
+
+        let mut d = doc(vec![pixel("base", 90, 255), clipped("clip", 40)]);
+        let created = crate::duplicate_paths(&mut d, &["0"]);
+        assert!(
+            !duplicate_is_content_neutral(&d, &created[0]),
+            "clipped above"
+        );
+
+        let mut d = doc(vec![pixel("base", 90, 255)]);
+        d.depth = BitDepth::Sixteen;
+        let created = crate::duplicate_paths(&mut d, &["0"]);
+        assert!(!duplicate_is_content_neutral(&d, &created[0]), "depth");
+
+        let mut d = doc(vec![pixel("base", 90, 255)]);
+        d.mode = ColorMode::Cmyk;
+        let created = crate::duplicate_paths(&mut d, &["0"]);
+        assert!(!duplicate_is_content_neutral(&d, &created[0]), "mode");
+    }
+
+    #[test]
+    fn metadata_blocks_do_not_exclude_a_duplicate() {
+        let mut base = pixel("base", 90, 255);
+        base.extra_blocks.push(pictura_core::LayerBlock {
+            key: *b"luni",
+            ..Default::default()
+        });
+        let mut d = doc(vec![base]);
+        let created = crate::duplicate_paths(&mut d, &["0"]);
+        assert!(duplicate_is_content_neutral(&d, &created[0]));
+    }
+
+    #[test]
+    fn a_background_copy_gets_an_opaque_alpha_plane() {
+        let mut d = doc(vec![background()]);
+        let created = crate::duplicate_paths(&mut d, &["0"]);
+        let copy = crate::resolve_path(&d, &created[0]).unwrap();
+        let alpha = copy.channels.iter().find(|c| c.id == -1).unwrap();
+        assert_eq!(alpha.data.len(), (W * H) as usize);
+        assert!(alpha.data.iter().all(|&a| a == 255));
     }
 
     fn all_paths(layers: &[Layer], prefix: &str, out: &mut Vec<String>) {

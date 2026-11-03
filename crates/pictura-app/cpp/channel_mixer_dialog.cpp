@@ -1,5 +1,7 @@
 #include "channel_mixer_dialog.h"
 
+#include "adjustment_presets.h"
+
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QGridLayout>
@@ -29,6 +31,7 @@ ChannelMixerDialog::ChannelMixerDialog(PictureView* view, const QByteArray& bloc
     outer->setSpacing(16);
     auto* left = new QVBoxLayout;
     left->setSpacing(8);
+    addPresetRow(left);
 
     auto* outputRow = new QHBoxLayout;
     outputRow->addWidget(new QLabel(QStringLiteral("Output Channel:"), this));

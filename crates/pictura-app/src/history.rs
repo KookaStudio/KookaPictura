@@ -10,8 +10,9 @@ mod planes;
 mod styles;
 
 use planes::{
-    adopt_metadata, apply_tiles, diff_into, fracture_planes, hollow, mask_rects, plane_kinds,
-    planes_agree, shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta, PlaneKind,
+    adopt_metadata, apply_tiles, composite_change, diff_into, fracture_planes, hollow, mask_rects,
+    plane_kinds, planes_agree, shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta,
+    PlaneKind,
 };
 pub(crate) use planes::{copy_plane, detached_copy};
 pub use styles::{
@@ -31,6 +32,9 @@ pub enum Restored {
     /// The composite changed only inside this rectangle; an empty one means
     /// nowhere.
     Region(PsdRect),
+    /// As `Region` for the composite, but masks changed outside the rectangle,
+    /// so a view showing a mask directly has to rebuild it.
+    Composite(PsdRect),
     /// The change has no bound to report: redraw the whole document.
     Everywhere,
 }
@@ -138,6 +142,8 @@ struct Damage {
     height: usize,
     rect: Option<PsdRect>,
     everywhere: bool,
+    /// The walk left a segment, so its tiles no longer tell the whole change.
+    crossed: bool,
 }
 
 impl Damage {
@@ -147,6 +153,7 @@ impl Damage {
             height: doc.height as usize,
             rect: None,
             everywhere: false,
+            crossed: false,
         }
     }
 
@@ -199,7 +206,8 @@ impl Damage {
                         });
                     }
                 }
-                Some(PlaneKind::LayerChannel) => {}
+                // No canvas view draws these planes directly.
+                Some(PlaneKind::LayerChannel | PlaneKind::DocumentChannel) => {}
                 _ => self.everywhere = true,
             }
         }
@@ -537,16 +545,25 @@ impl History {
         let before = self.current.as_ref().map(|cur| hollow(&cur.doc));
         let masks_moved = self.masks_move_between(leaving, target);
         let mut damage = self.step_to(target, agreed.then_some(&mut *doc));
-        damage.everywhere |= masks_moved;
+        let mut masks_changed = masks_moved;
         let cur = self
             .current
             .as_mut()
             .expect("current state is always materialized");
-        if agreed && !damage.everywhere {
+        if agreed && !damage.everywhere && !damage.crossed && !masks_moved {
             adopt_metadata(doc, &cur.doc);
             stamp_agreed(&mut cur.doc, doc);
         } else {
-            damage.everywhere = true;
+            let change = (agreed && !damage.everywhere)
+                .then(|| composite_change(doc, &mut cur.doc))
+                .flatten();
+            match change {
+                Some(change) => {
+                    masks_changed |= change.masks_differ;
+                    damage.add(&[change.delta]);
+                }
+                None => damage.everywhere = true,
+            }
             let installed = shared_copy(&mut cur.doc, doc);
             *doc = installed;
         }
@@ -591,15 +608,16 @@ impl History {
         if before.is_none_or(|b| display_differs(&b, &cur.doc)) {
             damage.everywhere = true;
         }
-        if damage.everywhere {
-            Restored::Everywhere
-        } else {
-            Restored::Region(damage.rect.unwrap_or(PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
-            }))
+        let rect = damage.rect.unwrap_or(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        });
+        match (damage.everywhere, masks_changed) {
+            (true, _) => Restored::Everywhere,
+            (false, true) => Restored::Composite(rect),
+            (false, false) => Restored::Region(rect),
         }
     }
 
@@ -720,7 +738,7 @@ impl History {
                 self.current = Some(cur);
                 break;
             }
-            damage.everywhere = true;
+            damage.crossed = true;
             live = None;
             if target < anchor {
                 // Back across this segment's anchor: it keeps the state it is,
@@ -978,5 +996,7 @@ impl History {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_crossing;
 #[cfg(test)]
 mod tests_retention;

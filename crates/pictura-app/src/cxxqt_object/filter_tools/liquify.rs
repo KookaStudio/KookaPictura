@@ -31,9 +31,14 @@ pub mod ffi {
         /// unmasked pixel layer with colour data.
         fn liquify_begin(view: &PictureView) -> bool;
 
-        /// The session's layer size, `[width, height]`; empty with no
+        /// The session's preview size, `[width, height]` — the whole layer, or
+        /// the active selection's bounding rectangle inside it; empty with no
         /// session.
         fn liquify_geometry() -> Vec<i32>;
+
+        /// The preview's top-left in the layer's own coordinates, `[x, y]`;
+        /// empty with no session.
+        fn liquify_origin() -> Vec<i32>;
 
         /// A `w`×`h` premultiplied view of the distorted layer whose pixel
         /// `(i, j)` shows layer point `(x + (i + 0.5) / zoom, y + (j + 0.5) /

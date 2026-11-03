@@ -7,7 +7,7 @@ use pictura_core::{
     ColorLabel, Document, Layer, LayerMask, LockFlags, PsdRect,
 };
 
-use super::clipboard::{clear_layer, coverage_bounds};
+use super::clipboard::{clear_layer, coverage_bounds, plane_coverage_bounds};
 use super::merge::{merge_scope, MergeScope};
 use super::paths::{format_segments, parse_path, resolve_path, resolve_path_mut};
 use super::via::{layer_via_copy, layer_via_cut};
@@ -308,7 +308,7 @@ pub fn content_rect(doc: &Document, path: &str) -> Option<PsdRect> {
             .channels
             .iter()
             .find(|c| c.id == -1)
-            .is_some_and(|alpha| alpha.data.iter().all(|a| *a == 0));
+            .is_some_and(|alpha| alpha.data.bands().flatten().all(|a| *a == 0));
     (!empty).then_some(layer.rect)
 }
 
@@ -320,26 +320,16 @@ fn trim_bounds(layer: &Layer) -> Option<PsdRect> {
     }
     let alpha = layer.channels.iter().find(|c| c.id == -1)?;
     let rect = layer.rect;
-    let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
-    let (mut left, mut top, mut right, mut bottom) = (w, h, 0, 0);
-    for y in 0..h {
-        for x in 0..w {
-            if alpha.data.get(y * w + x).is_some_and(|a| *a > 0) {
-                left = left.min(x);
-                right = right.max(x + 1);
-                top = top.min(y);
-                bottom = bottom.max(y + 1);
-            }
-        }
-    }
-    if right == 0 || (left, top, right, bottom) == (0, 0, w, h) {
+    let (w, h) = (rect.width().max(0), rect.height().max(0));
+    let local = plane_coverage_bounds(&alpha.data, w as u32, h as u32)?;
+    if (local.left, local.top, local.right, local.bottom) == (0, 0, w, h) {
         return None;
     }
     Some(PsdRect {
-        top: rect.top + top as i32,
-        left: rect.left + left as i32,
-        bottom: rect.top + bottom as i32,
-        right: rect.left + right as i32,
+        top: rect.top + local.top,
+        left: rect.left + local.left,
+        bottom: rect.top + local.bottom,
+        right: rect.left + local.right,
     })
 }
 
@@ -648,6 +638,51 @@ mod tests {
             None,
             "an empty layer shows no box"
         );
+    }
+
+    #[test]
+    fn content_rect_matches_a_per_pixel_scan() {
+        let (w, h) = (9usize, 7usize);
+        let patterns: [&dyn Fn(usize, usize) -> u8; 4] = [
+            &|x, y| u8::from(x == 3 && y == 2),
+            &|x, y| u8::from((2..7).contains(&x) && (1..6).contains(&y)) * 9,
+            &|x, y| u8::from(x == 0 && y == 6 || x == 8 && y == 0),
+            &|x, y| u8::from((x + y) % 5 == 4 && x > 1 && y < 6),
+        ];
+        for pattern in patterns {
+            let mut data = vec![0u8; w * h];
+            let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+            for y in 0..h {
+                for x in 0..w {
+                    data[y * w + x] = pattern(x, y);
+                    if data[y * w + x] > 0 {
+                        (x0, y0) = (x0.min(x), y0.min(y));
+                        (x1, y1) = (x1.max(x + 1), y1.max(y + 1));
+                    }
+                }
+            }
+            let mut layer = pixel_layer("pattern", w as u32, h as u32, 40);
+            layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = data.into();
+            let found = content_rect(&doc_with(vec![layer]), "0").unwrap();
+            let expected = (y0 as i32, x0 as i32, y1 as i32, x1 as i32);
+            assert_eq!((found.top, found.left, found.bottom, found.right), expected);
+        }
+    }
+
+    #[test]
+    fn content_rect_does_not_materialize_a_diverged_plane() {
+        let (w, h) = (8u32, 200u32);
+        let mut layer = pixel_layer("banded", w, h, 40);
+        let alpha = layer.channels.iter_mut().find(|c| c.id == -1).unwrap();
+        alpha.data = vec![255; (w * h) as usize].into();
+        alpha.data.fracture(w as usize);
+        let held = alpha.data.clone();
+        alpha.data.write_band(0).expect("band")[0] = 0;
+        let doc = doc_with(vec![layer]);
+        let before = pictura_core::materializations();
+        assert!(content_rect(&doc, "0").is_some());
+        assert_eq!(pictura_core::materializations(), before);
+        drop(held);
     }
 
     #[test]

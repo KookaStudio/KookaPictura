@@ -642,7 +642,7 @@ pub(crate) fn paint_run(
     color: [f64; 4],
     vertical: bool,
 ) -> Option<PixelBuffer> {
-    let mut out = PixelBuffer::new(size[0] as u32, size[1] as u32, 4);
+    let mut out = PixelBuffer::zeroed(size[0] as u32, size[1] as u32, 4);
     let faces = crate::fonts::faces_in_order(bundled);
     let mut painted = false;
     for line in &layout.lines {

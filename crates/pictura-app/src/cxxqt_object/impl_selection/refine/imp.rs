@@ -141,7 +141,7 @@ pub(super) fn refine_edge_available(view: &PictureView) -> bool {
             .session
             .selection
             .as_ref()
-            .is_some_and(|s| s.data.iter().any(|&v| v > 0))
+            .is_some_and(|s| pictura_render::plane_has_coverage(&s.data, s.width, s.height))
 }
 
 /// Nearest-neighbour shrink of a planar buffer so its longer side is at most

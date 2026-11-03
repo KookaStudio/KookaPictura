@@ -16,6 +16,7 @@
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPixmap>
+#include <QtGui/QTabletEvent>
 #include <QtGui/QWheelEvent>
 
 #include <algorithm>
@@ -249,14 +250,23 @@ void ImageView::updateAntsTimer()
 }
 
 void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                                 double opacity)
+                                 double opacity, std::optional<QPoint> basePos, int scale)
 {
     moveBase_ = base;
+    moveBasePos_ = basePos;
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
+    moveScale_ = std::max(1, scale);
     movePreviewActive_ = true;
+    update();
+}
+
+void ImageView::setMovePreviewLayer(const QImage& layer, const QPointF& layerPos)
+{
+    moveLayer_ = layer;
+    moveLayerPos_ = layerPos;
     update();
 }
 
@@ -274,20 +284,24 @@ void ImageView::endMovePreview()
     moveLayer_ = QImage();
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
+    moveScale_ = 1;
     update();
 }
 
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
-                                      const QPointF& layerPos, double opacity)
+                                      const QPointF& layerPos, double opacity,
+                                      std::optional<QPoint> basePos)
 {
     // A transform session is modal: the paint hover that owns the ring is
     // suspended, so the ring must go with the first transform frame.
     clearBrushOutline();
     moveBase_ = base;
+    moveBasePos_ = basePos;
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
+    moveScale_ = 1;
     movePreviewActive_ = true;
     transformActive_ = true;
     transformScaleX_ = 1.0;
@@ -353,6 +367,7 @@ void ImageView::clearTransformPreview()
     moveLayer_ = QImage();
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
+    moveScale_ = 1;
     update();
 }
 
@@ -587,36 +602,16 @@ void ImageView::paintEvent(QPaintEvent* event)
     painter.save();
     painter.setClipRect(docClip);
 
-    if (transformActive_ && !moveBase_.isNull()) {
+    // Sampled like the canvas, so a preview does not change the image's quality.
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, smoothSamplingForZoom(zoom_));
+    const bool basePatch = movePreviewActive_ && moveBasePos_.has_value();
+    if (transformActive_ && !basePatch && !moveBase_.isNull()) {
         // Free Transform: the base is fixed; the layer is drawn under the live
         // similarity transform about its original centre.
         painter.drawImage(QPointF(0.0, 0.0), moveBase_);
-        painter.setOpacity(moveOpacity_);
-        painter.save();
-        if (transformProjectiveActive_) {
-            // The projective map is in the layer image's own coordinates. The
-            // document-space form has a large translation and, for a strong
-            // perspective, a vanishing line close to the image; Qt's raster
-            // engine can drop the whole image in that form.
-            painter.translate(moveLayerPos_);
-            refreshTransformWarp();
-            if (!transformWarped_.image.isNull()) {
-                painter.drawImage(QRectF(transformWarped_.origin,
-                                         QSizeF(transformWarped_.image.size())
-                                             / transformWarped_.scale),
-                                  transformWarped_.image);
-            } else if (!transformWarped_.crossed) {
-                painter.setTransform(transformProjective_, true);
-                painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
-            }
-        } else {
-            painter.setTransform(transformPreviewMatrix(), true);
-            painter.drawImage(moveLayerPos_, moveLayer_);
-        }
-        painter.restore();
-        painter.setOpacity(1.0);
+        paintTransformLayer(painter);
         presentCacheRebuiltLastPaint_ = false;
-    } else if (movePreviewActive_ && !moveBase_.isNull()) {
+    } else if (movePreviewActive_ && !basePatch && !moveBase_.isNull()) {
         // Draw the base and moving layer straight through the pan/zoom
         // transform. A move preview is transient and its sources change every
         // drag, so a scaled present cache would be rebuilt on the first frame
@@ -733,6 +728,29 @@ void ImageView::paintEvent(QPaintEvent* event)
         } else {
             presentedImageSize_ = QSize();
             presentedImageKey_ = -1;
+        }
+    }
+    if (basePatch) {
+        // Only the target's own bounds differ from the live canvas. A clear
+        // patch must reveal the checkerboard, not the target still under it.
+        if (!moveBase_.isNull()) {
+            const QRectF patch(QPointF(*moveBasePos_), QSizeF(moveBase_.size()) * moveScale_);
+            const QRectF device(offset_ + patch.topLeft() * zoom_, patch.size() * zoom_);
+            painter.save();
+            painter.resetTransform();
+            painter.setBrushOrigin(docDevice.topLeft());
+            painter.fillRect(device, transparencyTile());
+            painter.restore();
+            painter.drawImage(patch, moveBase_);
+        }
+        if (transformActive_) {
+            paintTransformLayer(painter);
+        } else {
+            painter.setOpacity(moveOpacity_);
+            painter.drawImage(
+                QRectF(moveLayerPos_ + moveDelta_, QSizeF(moveLayer_.size()) * moveScale_),
+                moveLayer_);
+            painter.setOpacity(1.0);
         }
     }
     paintFilterPreview(painter);
@@ -968,6 +986,11 @@ void ImageView::mousePressEvent(QMouseEvent* event)
             setCursor(Qt::ClosedHandCursor);
         }
     } else {
+        // A real mouse has no pressure; a mouse event synthesized from a
+        // tablet keeps the pressure its tablet event just reported.
+        if (!tabletActive_ && event->source() != Qt::MouseEventSynthesizedByQt) {
+            emit pointerPressure(1.0);
+        }
         pressTrace_.clock.restart();
         pressTrace_.pressHwMs = event->timestamp();
         pressTrace_.handledNs = -1;
@@ -979,6 +1002,28 @@ void ImageView::mousePressEvent(QMouseEvent* event)
         pressTrace_.handledNs = pressTrace_.clock.nsecsElapsed();
     }
     QWidget::mousePressEvent(event);
+}
+
+// Keep Qt's synthesized mouse events for the tool routing, but take the
+// tablet's pressure first so the next dab uses it.
+void ImageView::tabletEvent(QTabletEvent* event)
+{
+    switch (event->type()) {
+    case QEvent::TabletPress:
+        tabletActive_ = true;
+        emit pointerPressure(event->pressure());
+        break;
+    case QEvent::TabletMove:
+        emit pointerPressure(event->pressure());
+        break;
+    case QEvent::TabletRelease:
+        emit pointerPressure(event->pressure());
+        tabletActive_ = false;
+        break;
+    default:
+        break;
+    }
+    event->ignore();
 }
 
 void ImageView::mouseMoveEvent(QMouseEvent* event)

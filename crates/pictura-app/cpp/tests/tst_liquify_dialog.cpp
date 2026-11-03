@@ -71,6 +71,8 @@ private slots:
     void viewOptionsFollowCs6();
     void showMeshTracesTheDistortion();
     void showBackdropLaysOtherLayersOverOrUnder();
+    void aSelectionConfinesThePreviewAndCommitToItsBounds();
+    void aNonRectangularSelectionProcessesItsBoundingBox();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -533,6 +535,156 @@ void LiquifyDialogTest::showBackdropLaysOtherLayersOverOrUnder()
     opacity->setValue(100);
     QVERIFY(dialog.canvas()->grab().toImage() != distorted);
     dialog.reject();
+}
+
+void LiquifyDialogTest::aSelectionConfinesThePreviewAndCommitToItsBounds()
+{
+    pictura::PictureView* view = window_->activeView();
+    // The left half of the 160×120 document.
+    QVERIFY(view->select_rect(0, 0, 80, 120, QStringLiteral("new"), 0.0));
+    const QImage document = view->image();
+    const int history = view->history_count();
+
+    QList<int> dims;
+    QList<int> origin;
+    QImage previewBefore;
+    QImage previewAfter;
+    bool outsideClear = false;
+    bool distorted = true;
+    QTimer::singleShot(0, [&] {
+        LiquifyDialog* dialog = openLiquifyDialog();
+        if (!dialog) {
+            return;
+        }
+        for (const int32_t value : pictura::liquify_geometry()) {
+            dims.append(value);
+        }
+        for (const int32_t value : pictura::liquify_origin()) {
+            origin.append(value);
+        }
+        auto* canvas = dialog->canvas();
+        previewBefore = canvas->previewImage();
+        // Layer point (120, 60) is outside the selection but inside the layer.
+        const QPointF beyond = canvas->toWidget(QPointF(120, 60));
+        outsideClear = previewBefore.pixelColor(beyond.toPoint()).alpha() == 0;
+        // A drag wholly outside the rectangle moves nothing. The default
+        // brush is 100 px wide, so its 50 px reach stays clear of x = 80.
+        canvas->strokeForTest({QPointF(145, 60), QPointF(155, 60)});
+        previewAfter = canvas->previewImage();
+        distorted = pictura::liquify_distorted();
+        dialog->accept();
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kLiquifyPath)));
+    QCOMPARE(dims, (QList<int>{80, 120}));
+    QCOMPARE(origin, (QList<int>{0, 0}));
+    QVERIFY2(outsideClear, "the preview stops at the selection's bounds");
+    QCOMPARE(previewAfter, previewBefore);
+    QVERIFY(!distorted);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->image(), document);
+
+    // A drag inside the rectangle commits, and nothing outside it moves.
+    bool committed = false;
+    QTimer::singleShot(0, [&] {
+        LiquifyDialog* dialog = openLiquifyDialog();
+        if (!dialog) {
+            return;
+        }
+        dialog->canvas()->strokeForTest({QPointF(30, 60), QPointF(60, 60)});
+        committed = pictura::liquify_distorted();
+        dialog->accept();
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kLiquifyPath)));
+    QVERIFY(committed);
+    QCOMPARE(view->history_count(), history + 1);
+    const QImage after = view->image();
+    bool insideChanged = false;
+    for (int y = 0; y < after.height(); ++y) {
+        for (int x = 0; x < after.width(); ++x) {
+            if (after.pixelColor(x, y) == document.pixelColor(x, y)) {
+                continue;
+            }
+            if (x < 80) {
+                insideChanged = true;
+            } else {
+                QFAIL(qPrintable(QStringLiteral("pixel %1,%2 outside the selection changed")
+                                     .arg(x)
+                                     .arg(y)));
+            }
+        }
+    }
+    QVERIFY2(insideChanged, "the drag changes pixels inside the selection");
+    view->deselect();
+}
+
+void LiquifyDialogTest::aNonRectangularSelectionProcessesItsBoundingBox()
+{
+    pictura::PictureView* view = window_->activeView();
+    // An ellipse at (20, 20) 60×60: its bounding box is (20, 20)–(80, 80).
+    QVERIFY(view->select_ellipse(20, 20, 60, 60, QStringLiteral("new"), 0.0));
+    const QImage document = view->image();
+    const int history = view->history_count();
+
+    QList<int> dims;
+    QList<int> origin;
+    QTimer::singleShot(0, [&] {
+        LiquifyDialog* dialog = openLiquifyDialog();
+        if (!dialog) {
+            return;
+        }
+        for (const int32_t value : pictura::liquify_geometry()) {
+            dims.append(value);
+        }
+        for (const int32_t value : pictura::liquify_origin()) {
+            origin.append(value);
+        }
+        dialog->reject();
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kLiquifyPath)));
+    QCOMPARE(dims, (QList<int>{60, 60}));
+    QCOMPARE(origin, (QList<int>{20, 20}));
+    QCOMPARE(view->image(), document);
+
+    // A drag inside the box but outside the ellipse still commits: the box is
+    // the processing region, the shape only matters through Mask Options.
+    bool distorted = false;
+    QTimer::singleShot(0, [&] {
+        LiquifyDialog* dialog = openLiquifyDialog();
+        if (!dialog) {
+            return;
+        }
+        dialog->canvas()->strokeForTest({QPointF(25, 25), QPointF(45, 25)});
+        distorted = pictura::liquify_distorted();
+        dialog->accept();
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kLiquifyPath)));
+    QVERIFY(distorted);
+    QCOMPARE(view->history_count(), history + 1);
+    const QImage after = view->image();
+    bool outsideShapeChanged = false;
+    for (int y = 0; y < after.height(); ++y) {
+        for (int x = 0; x < after.width(); ++x) {
+            const bool inBox = x >= 20 && x < 80 && y >= 20 && y < 80;
+            const bool changed = after.pixelColor(x, y) != document.pixelColor(x, y);
+            if (!inBox) {
+                if (changed) {
+                    QFAIL(qPrintable(
+                        QStringLiteral("pixel %1,%2 outside the bounding box changed")
+                            .arg(x)
+                            .arg(y)));
+                }
+                continue;
+            }
+            const double dx = (x + 0.5 - 50.0) / 30.0;
+            const double dy = (y + 0.5 - 50.0) / 30.0;
+            if (changed && dx * dx + dy * dy > 1.0) {
+                outsideShapeChanged = true;
+            }
+        }
+    }
+    QVERIFY2(outsideShapeChanged,
+             "the bounding box is processed, not the selection's shape");
+    view->deselect();
 }
 
 QTEST_MAIN(LiquifyDialogTest)

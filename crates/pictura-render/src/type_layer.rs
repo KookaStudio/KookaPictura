@@ -305,7 +305,7 @@ pub fn render_type(spec: &TypeSpec) -> Option<(PsdRect, PixelBuffer)> {
     // None thresholds, matching the previous None/Sharp split.
     if spec.character.anti_alias == AntiAlias::None {
         let plane = buffer.pixel_count();
-        for alpha in &mut buffer.data[3 * plane..] {
+        for alpha in buffer.data[3 * plane..].iter_mut().filter(|a| **a != 0) {
             *alpha = if *alpha >= 128 { 255 } else { 0 };
         }
     }
@@ -476,16 +476,7 @@ fn type_content(
     let placement = type_placement(spec)?;
     let (rect, buffer) = render_type(spec)?;
     let tool = pictura_codec::author_type_tool(spec, placement.bounds, existing, font_name);
-    let plane = buffer.pixel_count();
-    let channels = [0, 1, 2, -1]
-        .into_iter()
-        .enumerate()
-        .map(|(i, id)| Channel {
-            id,
-            data: buffer.data[i * plane..(i + 1) * plane].to_vec().into(),
-        })
-        .collect();
-    Some((rect, channels, tool))
+    Some((rect, crate::type_channels::type_channels(&buffer), tool))
 }
 
 fn rgb8(doc: &Document) -> bool {

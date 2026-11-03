@@ -185,6 +185,9 @@ template <typename F> void fields(StampOptions& o, F&& f)
     f("ignoreAdjustments", o.ignoreAdjustments);
     f("pattern", o.pattern);
     f("patternAligned", o.patternAligned);
+    f("cloneAirbrush", o.cloneAirbrush);
+    f("patternAirbrush", o.patternAirbrush);
+    f("historyAirbrush", o.historyAirbrush);
 }
 
 template <typename F> void fields(EraserOptions& o, F&& f)
@@ -263,7 +266,8 @@ template <typename F> void fields(ToneOptions& o, F&& f)
 struct PaintFields {
     int size, hardness, opacity, flow, roundness, tipAngle, spacing, grain;
     QString mode;
-    bool autoErase, flipX, flipY, penTip, aliased, wetEdges;
+    bool autoErase, airbrush, pressureSize, pressureOpacity, flipX, flipY, penTip, aliased,
+        wetEdges;
     BrushDynamics dynamics;
 };
 
@@ -275,6 +279,9 @@ template <typename F> void fields(PaintFields& o, F&& f)
     f("flow", o.flow);
     f("mode", o.mode);
     f("autoErase", o.autoErase);
+    f("airbrush", o.airbrush);
+    f("pressureSize", o.pressureSize);
+    f("pressureOpacity", o.pressureOpacity);
     f("roundness", o.roundness);
     f("tipAngle", o.tipAngle);
     f("spacing", o.spacing);
@@ -293,10 +300,11 @@ template <typename F> void fields(PaintFields& o, F&& f)
 
 PaintFields paintFields(const PaintOptions& p)
 {
-    return {p.size(),     p.hardness(), p.opacity(), p.flow(),  p.roundness(),
-            p.tipAngle(), p.spacing(),  p.grain(),   p.mode(),    p.autoErase(),
-            p.flipX(),    p.flipY(),    p.penTip(),  p.aliased(), p.wetEdges(),
-            p.dynamics()};
+    return {p.size(),         p.hardness(), p.opacity(),     p.flow(),
+            p.roundness(),    p.tipAngle(), p.spacing(),     p.grain(),
+            p.mode(),         p.autoErase(), p.airbrush(),   p.pressureSize(),
+            p.pressureOpacity(), p.flipX(),  p.flipY(),       p.penTip(),
+            p.aliased(),      p.wetEdges(), p.dynamics()};
 }
 
 void applyPaint(PaintOptions& p, const PaintFields& v)
@@ -307,6 +315,9 @@ void applyPaint(PaintOptions& p, const PaintFields& v)
     p.setFlow(v.flow);
     p.setMode(v.mode);
     p.setAutoErase(v.autoErase);
+    p.setAirbrush(v.airbrush);
+    p.setPressureSize(v.pressureSize);
+    p.setPressureOpacity(v.pressureOpacity);
     p.setRoundness(v.roundness);
     p.setTipAngle(v.tipAngle);
     p.setSpacing(v.spacing);
@@ -437,6 +448,52 @@ QJsonObject toolOptionsToJson(const ToolController& tools)
 }
 
 void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
+{
+    eachGroup([&](const char* key, ToolId id, auto* tag) {
+        using Group = std::remove_pointer_t<decltype(tag)>;
+        Group* group = tools.optionsFor<Group>(id);
+        if (!group) {
+            return;
+        }
+        const QJsonValue value = json.value(QLatin1String(key));
+        if (value.isObject()) {
+            group->update(clampOptions(read(value.toObject(), Group::defaults())));
+        } else {
+            group->reset();
+        }
+    });
+    if (CropOptions* c = tools.optionsFor<CropOptions>(ToolId::Crop)) {
+        const QJsonValue crop = json.value(QStringLiteral("crop"));
+        c->applySettings(crop.isObject() ? read(crop.toObject(), CropSettings{}) : CropSettings{});
+    }
+    if (PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush)) {
+        PaintOptions restored;
+        const QJsonValue brush = json.value(QStringLiteral("brush"));
+        if (brush.isObject()) {
+            applyPaint(restored, read(brush.toObject(), paintFields(PaintOptions{})));
+        }
+        paint->apply(restored);
+    }
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee)) {
+        SelectionOptions restored;
+        const QJsonValue selection = json.value(QStringLiteral("selection"));
+        if (selection.isObject()) {
+            applySelection(restored, read(selection.toObject(), selectionFields(SelectionOptions{})));
+        }
+        s->apply(restored);
+    }
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection)) {
+        SelectionOptions restored;
+        const QJsonValue quickSelection = json.value(QStringLiteral("quickSelection"));
+        if (quickSelection.isObject()) {
+            applySelection(restored,
+                           read(quickSelection.toObject(), selectionFields(SelectionOptions{})));
+        }
+        s->apply(restored);
+    }
+}
+
+void patchToolOptionsJson(ToolController& tools, const QJsonObject& json)
 {
     eachGroup([&](const char* key, ToolId id, auto* tag) {
         using Group = std::remove_pointer_t<decltype(tag)>;

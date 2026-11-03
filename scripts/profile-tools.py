@@ -22,8 +22,9 @@ runs the app with PICTURA_METRICS=1, resets the metrics before each scenario,
 and prints the scenario's per-phase totals (including Qt-side phases such as
 the Layers panel refresh) from the control server's `metrics` snapshot.
 
-The new-layer and new-group scenarios create a layer or group through
-`layer_op` instead of driving a tool.
+The new-layer, new-group, duplicate, move-copy and delete-copy scenarios use
+`layer_op` instead of driving a tool. rss_mb is the app's resident size after
+the scenario.
 Numbers are for one machine and one build; compare runs on the same machine.
 No dependency beyond python3's standard library.
 """
@@ -48,6 +49,10 @@ SCENARIOS = {
     "brush-1940": ("brush", {"brush": {"size": 1940, "hardness": 0, "opacity": 100, "flow": 100}}, "stroke"),
     "pencil-1940": ("pencil", {"brush": {"size": 1940, "opacity": 100}}, "stroke"),
     "eraser-1940": ("eraser", {"brush": {"size": 1940, "hardness": 0, "opacity": 100, "flow": 100}}, "stroke"),
+    "dodge-40": ("dodge", {"brush": {"size": 40, "hardness": 100}}, "stroke"),
+    "dodge-500": ("dodge", {"brush": {"size": 500, "hardness": 0}}, "stroke"),
+    "dodge-1940": ("dodge", {"brush": {"size": 1940, "hardness": 0}}, "stroke"),
+    "sponge-1940": ("sponge", {"brush": {"size": 1940, "hardness": 0}}, "stroke"),
     "rectangle-shape": ("rectangle", {"shape": {"mode": 0, "geometry": 0}}, "box"),
     "ellipse-shape": ("ellipse", {"shape": {"mode": 0, "geometry": 0}}, "box"),
     "rectangle-pixels": ("rectangle", {"shape": {"mode": 2, "geometry": 0}}, "box"),
@@ -55,12 +60,31 @@ SCENARIOS = {
     "gradient": ("gradient", {}, "line"),
     "paintbucket": ("paintbucket", {}, "click"),
 }
-# name -> layer_op op; each creates one node above the bottom layer.
+# name -> (layer_op op, its params, setup duplicates of the bottom layer).
 LAYER_SCENARIOS = {
-    "new-layer": "add",
-    "new-group": "add_group",
+    "new-layer": ("add", {"index": 0}, 0),
+    "new-group": ("add_group", {"index": 0}, 0),
+    "duplicate": ("duplicate", {"index": 0}, 0),
+    "duplicate-copy": ("duplicate", {"index": 1}, 1),
+    "move-copy": ("translate", {"index": 1, "dx": 40, "dy": 40}, 1),
+    "delete-copy": ("delete", {"index": 1}, 1),
 }
-DEFAULT_SCENARIOS = ",".join([*SCENARIOS, *LAYER_SCENARIOS])
+# name -> (type_op op, its params, type_op add params), on a type layer added
+# first. Sizes are multiples of the document's short side / 56, so the layer has
+# the same share of the document at every size. Undo reports what undoing the
+# edit costs, which for a size change crosses a history segment.
+TYPE_SCENARIOS = {
+    "type-size": ("set", {"size": 1.2}, {}),
+    "type-font": ("set", {"font": "Liberation Serif"}, {}),
+    "type-align": ("set", {"justify": 2}, {}),
+    "type-color": ("set", {"color": 0xFFC02030}, {}),
+    "type-paragraph": ("set", {"space_before": 12.0}, {}),
+    "type-color-preview": ("preview", {"color": 0xFFC02030}, {}),
+    "type-warp-preview": ("warp_preview", {"style": "arc", "bend": 50.0}, {}),
+    "type-huge-box": ("set", {"size": 1.2}, {"box": True}),
+}
+ALL_SCENARIOS = [*SCENARIOS, *LAYER_SCENARIOS, *TYPE_SCENARIOS]
+DEFAULT_SCENARIOS = ",".join(ALL_SCENARIOS)
 
 
 class Client:
@@ -153,12 +177,16 @@ def run_scenario(client, name, w, h, moves, before_undo):
     return row
 
 
-def run_layer_scenario(client, name, before_undo):
-    op = LAYER_SCENARIOS[name]
+def run_layer_scenario(client, name, before_undo, metrics):
+    op, params, setup = LAYER_SCENARIOS[name]
+    for _ in range(setup):
+        client.call("layer_op", op="duplicate", index=0)
     client.call("status")
+    if metrics:
+        client.call("metrics", reset=True)
     row = {"tool": "layer_op", "gesture": op}
     total = time.perf_counter()
-    _, row["op_ms"] = client.call("layer_op", op=op, index=0)
+    _, row["op_ms"] = client.call("layer_op", op=op, **params)
     _, row["settle_ms"] = client.call("status")
     row["total_ms"] = ms(time.perf_counter() - total)
     row["idle_ms"] = ms(wait_idle(client, total))
@@ -168,7 +196,52 @@ def run_layer_scenario(client, name, before_undo):
     _, undo = client.call("edit", op="undo")
     _, settle = client.call("status")
     row["undo_ms"] = ms(undo + settle)
+    for _ in range(setup):
+        client.call("edit", op="undo")
+    client.call("status")
     return row
+
+
+def run_type_scenario(client, name, w, h, before_undo, metrics):
+    op, params, setup = TYPE_SCENARIOS[name]
+    base = max(24.0, min(w, h) / 56.0)
+    add = {"op": "add", "size": base, "x": w * 0.35, "y": h * 0.5}
+    if setup.get("box"):
+        add.update(x=w * 0.02, y=h * 0.02, box=[0.0, 0.0, w * 0.96, h * 0.96])
+    added, _ = client.call("type_op", **add)
+    client.call("status")
+    if metrics:
+        client.call("metrics", reset=True)
+    edit = {"path": added["path"], **params}
+    if "size" in edit:
+        edit["size"] = base * edit["size"]
+    row = {"tool": "type_op", "gesture": op}
+    total = time.perf_counter()
+    _, row["op_ms"] = client.call("type_op", op=op, **edit)
+    _, row["settle_ms"] = client.call("status")
+    row["total_ms"] = ms(time.perf_counter() - total)
+    row["idle_ms"] = ms(wait_idle(client, total))
+    row["op_ms"] = ms(row["op_ms"])
+    row["settle_ms"] = ms(row["settle_ms"])
+    before_undo(row)
+    if op == "set":
+        _, undo = client.call("edit", op="undo")
+        _, settle = client.call("status")
+        row["undo_ms"] = ms(undo + settle)
+    elif op == "warp_preview":
+        _, undo = client.call("type_op", op="warp_cancel")
+        row["undo_ms"] = ms(undo)
+    client.call("edit", op="undo")
+    client.call("status")
+    return row
+
+
+def rss_mb(pid):
+    with open(f"/proc/{pid}/status") as status:
+        for line in status:
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) // 1024
+    return 0
 
 
 def wait_idle(client, start, window=0.4, quiet_s=0.005):
@@ -192,10 +265,11 @@ def wait_idle(client, start, window=0.4, quiet_s=0.005):
         time.sleep(0.02)
 
 
-def run_any(client, name, w, h, moves, metrics):
+def run_any(client, name, w, h, moves, metrics, pid):
     # The snapshot is read before the scenario's undo, whose full restore
     # would otherwise add composite phases the scenario itself never ran.
     def before_undo(row):
+        row["rss_mb"] = rss_mb(pid)
         if metrics:
             snapshot = client.call("metrics")[0]
             row["phases"] = {label: phase["total_ms"] for label, phase in snapshot.get("phases", {}).items()}
@@ -203,7 +277,9 @@ def run_any(client, name, w, h, moves, metrics):
     if metrics:
         client.call("metrics", reset=True)
     if name in LAYER_SCENARIOS:
-        return run_layer_scenario(client, name, before_undo)
+        return run_layer_scenario(client, name, before_undo, metrics)
+    if name in TYPE_SCENARIOS:
+        return run_type_scenario(client, name, w, h, before_undo, metrics)
     return run_scenario(client, name, w, h, moves, before_undo)
 
 
@@ -218,7 +294,7 @@ def print_phases(results):
     print("(per-phase totals in milliseconds, from PICTURA_METRICS)")
 
 
-COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "settle_ms", "total_ms", "undo_ms"]
+COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "settle_ms", "total_ms", "undo_ms", "rss_mb"]
 
 
 def print_table(results):
@@ -261,7 +337,7 @@ def main():
     source.add_argument("--image", help="open this file as the document")
     source.add_argument("--size", default="4000x3000", help="new white RGB document WxH (default 4000x3000)")
     parser.add_argument("--scenarios", default=DEFAULT_SCENARIOS,
-                        help=f"comma list, or 'all' (of: {', '.join([*SCENARIOS, *LAYER_SCENARIOS])})")
+                        help=f"comma list, or 'all' (of: {', '.join(ALL_SCENARIOS)})")
     parser.add_argument("--moves", type=int, default=60, help="motion events per stroke (default 60)")
     parser.add_argument("--gpu", choices=["on", "off", "default"], default="default",
                         help="force GPU compute on/off for the document (default: the app's own)")
@@ -273,7 +349,7 @@ def main():
     parser.add_argument("--timeout", type=float, default=600.0, help="per-request timeout in seconds")
     args = parser.parse_args()
 
-    known = [*SCENARIOS, *LAYER_SCENARIOS]
+    known = ALL_SCENARIOS
     names = known if args.scenarios == "all" else [s.strip() for s in args.scenarios.split(",") if s.strip()]
     unknown = [n for n in names if n not in known]
     if unknown:
@@ -327,7 +403,7 @@ def main():
         results = {}
         for name in names:
             try:
-                results[name] = run_any(client, name, w, h, args.moves, args.metrics)
+                results[name] = run_any(client, name, w, h, args.moves, args.metrics, app.pid)
             except (RuntimeError, OSError) as err:
                 results[name] = {"error": str(err)}
                 if app.poll() is not None:

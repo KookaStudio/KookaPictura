@@ -1,7 +1,7 @@
 use super::*;
 
 use super::super::helpers::combine_mode_from;
-use crate::cxxqt_object::edit::{structural, structural_after, structural_paths, Edit};
+use crate::cxxqt_object::edit::{structural, structural_after, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -114,12 +114,7 @@ pub(super) fn type_convert(
         return false;
     };
     let path = path.to_string();
-    let before = view
-        .rust()
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| pictura_render::damage::influence(doc, &path));
+    let before = reach(&view, &path);
     let replaced = view
         .as_mut()
         .rust_mut()
@@ -128,12 +123,7 @@ pub(super) fn type_convert(
         .as_mut()
         .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path, &spec));
     if replaced {
-        let after = view
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::damage::influence(doc, &path));
+        let after = reach(&view, &path);
         view.as_mut().edit(
             if paragraph {
                 "Convert To Paragraph Text"
@@ -191,12 +181,7 @@ pub(super) fn type_commit_layer(
         created
     };
     if !created.is_empty() {
-        let after = view
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::damage::influence(doc, &created));
+        let after = reach(&view, &created);
         view.as_mut().edit(
             if spec.vertical {
                 "Vertical Type"
@@ -351,7 +336,9 @@ pub(super) fn set_visible(mut view: Pin<&mut PictureView>, path: &QString, visib
         .map(|layer| layer.visible = visible)
         .is_some();
     if changed {
-        view.as_mut().recomposite();
+        let reached = reach(&view, &path.to_string());
+        view.as_mut()
+            .preview(|_| structural_after(reached.map(|rect| vec![rect])));
     }
     changed
 }
@@ -373,6 +360,7 @@ pub(super) fn type_commit_edit(
     character: &CharacterSetting,
     paragraph: &ParagraphSetting,
 ) -> bool {
+    let before = reach(&view, &path.to_string());
     if !replace(
         view.as_mut(),
         path,
@@ -386,7 +374,8 @@ pub(super) fn type_commit_edit(
         return false;
     }
     set_shown(view.as_mut(), path);
-    commit_edit(view);
+    let after = reach(&view, &path.to_string());
+    commit_edit(view, joined(before, after));
     true
 }
 
@@ -399,6 +388,7 @@ pub(super) fn type_update_layer(
     character: &CharacterSetting,
     paragraph: &ParagraphSetting,
 ) -> bool {
+    let before = content_reach(&view, &path.to_string());
     let replaced = replace(
         view.as_mut(),
         path,
@@ -409,7 +399,8 @@ pub(super) fn type_update_layer(
         paragraph,
     );
     if replaced {
-        commit_edit(view);
+        let after = content_reach(&view, &path.to_string());
+        commit_edit(view, joined(before, after));
     }
     replaced
 }
@@ -423,6 +414,7 @@ pub(super) fn type_preview_layer(
     character: &CharacterSetting,
     paragraph: &ParagraphSetting,
 ) -> bool {
+    let before = content_reach(&view, &path.to_string());
     let replaced = replace(
         view.as_mut(),
         path,
@@ -433,8 +425,9 @@ pub(super) fn type_preview_layer(
         paragraph,
     );
     if replaced {
-        view.as_mut().recomposite();
-        view.as_mut().changed();
+        let after = content_reach(&view, &path.to_string());
+        let edit = content_edit(&view, joined(before, after));
+        view.as_mut().preview(|_| edit);
     }
     replaced
 }
@@ -446,12 +439,7 @@ pub(super) fn type_apply_style(
     paragraph: bool,
 ) -> bool {
     let path = path.to_string();
-    let before = view
-        .rust()
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| pictura_render::damage::influence(doc, &path));
+    let before = reach(&view, &path);
     let applied = view
         .as_mut()
         .rust_mut()
@@ -462,12 +450,7 @@ pub(super) fn type_apply_style(
             pictura_render::apply_type_style(doc, &path, &name.to_string(), paragraph)
         });
     if applied {
-        let after = view
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::damage::influence(doc, &path));
+        let after = reach(&view, &path);
         view.as_mut()
             .edit("Apply Type Style", |_| structural(before, after));
     }
@@ -491,11 +474,7 @@ pub(super) fn commit_style(
     label: &str,
     apply: impl FnOnce(&mut pictura_core::Document) -> bool,
 ) -> bool {
-    let before = view.rust().session.doc.as_ref().and_then(|doc| {
-        let paths = type_paths(doc);
-        let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
-        pictura_render::damage::influence_paths(doc, &refs)
-    });
+    let before = styled_reach(&view);
     let changed = view
         .as_mut()
         .rust_mut()
@@ -504,13 +483,39 @@ pub(super) fn commit_style(
         .as_mut()
         .is_some_and(apply);
     if changed {
-        let after = view.rust().session.doc.as_ref().and_then(|doc| {
-            let paths = type_paths(doc);
-            let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
-            pictura_render::damage::influence_paths(doc, &refs)
-        });
-        view.as_mut()
-            .edit(label, |_| structural_paths(before, after));
+        let edit = content_edit(&view, styled_change(&view, before));
+        release_positional_state(view.as_mut());
+        view.as_mut().edit(label, |_| edit);
+    }
+    changed
+}
+
+fn styled_change(
+    view: &PictureView,
+    before: Option<Vec<pictura_core::PsdRect>>,
+) -> Option<Vec<pictura_core::PsdRect>> {
+    let mut rects = before?;
+    rects.extend(styled_reach(view)?);
+    Some(rects)
+}
+
+/// A dialog's live style edit: every layer it re-sets refreshes, unrecorded.
+fn preview_style(
+    mut view: Pin<&mut PictureView>,
+    apply: impl FnOnce(&mut pictura_core::Document) -> bool,
+) -> bool {
+    let before = styled_reach(&view);
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(apply);
+    if changed {
+        let edit = content_edit(&view, styled_change(&view, before));
+        view.as_mut().clear_link_sets();
+        view.as_mut().preview(|_| edit);
     }
     changed
 }
@@ -549,26 +554,16 @@ pub(super) fn type_edit_character_style(
 }
 
 pub(super) fn type_preview_character_style(
-    mut view: Pin<&mut PictureView>,
+    view: Pin<&mut PictureView>,
     name: &QString,
     font: &QString,
     character: &CharacterSetting,
 ) -> bool {
     let name = name.to_string();
     let attrs = style_character_overrides(font, character);
-    let changed = view
-        .as_mut()
-        .rust_mut()
-        .session
-        .doc
-        .as_mut()
-        .is_some_and(|doc| crate::history::edit_character_style(doc, &name, attrs).is_ok());
-    if changed {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().changed();
-    }
-    changed
+    preview_style(view, |doc| {
+        crate::history::edit_character_style(doc, &name, attrs).is_ok()
+    })
 }
 
 pub(super) fn type_delete_character_style(view: Pin<&mut PictureView>, name: &QString) -> bool {
@@ -639,7 +634,7 @@ pub(super) fn type_delete_paragraph_style(view: Pin<&mut PictureView>, name: &QS
 /// display refreshes, and nothing is recorded; Cancel restores by previewing
 /// the style's pre-dialog values back.
 pub(super) fn type_preview_paragraph_style(
-    mut view: Pin<&mut PictureView>,
+    view: Pin<&mut PictureView>,
     name: &QString,
     font: &QString,
     character: &CharacterSetting,
@@ -648,21 +643,9 @@ pub(super) fn type_preview_paragraph_style(
     let name = name.to_string();
     let character = style_character_overrides(font, character);
     let paragraph = paragraph_overrides(&paragraph_attrs(paragraph));
-    let changed = view
-        .as_mut()
-        .rust_mut()
-        .session
-        .doc
-        .as_mut()
-        .is_some_and(|doc| {
-            crate::history::edit_paragraph_style(doc, &name, character, paragraph).is_ok()
-        });
-    if changed {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().changed();
-    }
-    changed
+    preview_style(view, |doc| {
+        crate::history::edit_paragraph_style(doc, &name, character, paragraph).is_ok()
+    })
 }
 
 pub(super) fn type_paragraph_styles(view: &PictureView) -> Vec<ParagraphStyleRow> {
@@ -710,9 +693,73 @@ pub(super) fn replace(
             .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec))
 }
 
-pub(super) fn commit_edit(mut view: Pin<&mut PictureView>) {
-    view.as_mut()
-        .edit("Edit Type Layer", |_| Edit::Structural { damage: None });
+/// Whether a live session, a pending preview or a soloed mask owns the display.
+/// A preview skips the commit path's check for these, so reach answers for both.
+fn display_is_owned(view: &PictureView) -> bool {
+    let rust = view.rust();
+    rust.has_active_session() || rust.pending_previews.any() || rust.mask_solo.is_some()
+}
+
+/// What hiding, showing or adding the layer at `path` can touch; `None` means
+/// the whole document.
+fn reach(view: &PictureView, path: &str) -> Option<pictura_core::PsdRect> {
+    if display_is_owned(view) {
+        return None;
+    }
+    pictura_render::damage::influence(view.rust().session.doc.as_ref()?, path)
+}
+
+/// What rewriting the pixels of the layer at `path` in place can touch.
+pub(super) fn content_reach(view: &PictureView, path: &str) -> Option<pictura_core::PsdRect> {
+    if display_is_owned(view) {
+        return None;
+    }
+    pictura_render::damage::ink_influence(view.rust().session.doc.as_ref()?, path)
+}
+
+/// As [`content_reach`] for every type layer, which a style edit can re-set.
+fn styled_reach(view: &PictureView) -> Option<Vec<pictura_core::PsdRect>> {
+    if display_is_owned(view) {
+        return None;
+    }
+    let doc = view.rust().session.doc.as_ref()?;
+    let paths = type_paths(doc);
+    let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+    pictura_render::damage::content_influence_paths(doc, &refs)
+}
+
+pub(super) fn joined(
+    before: Option<pictura_core::PsdRect>,
+    after: Option<pictura_core::PsdRect>,
+) -> Option<Vec<pictura_core::PsdRect>> {
+    pictura_render::damage::union(before, after).map(|rect| vec![rect])
+}
+
+/// The outcome of rewriting type pixels inside `rects`.
+///
+/// History scans without a hint: it compares only bands the edit unshared, and
+/// a dialog's previews or an ink trim can leave changes outside `rects`, such
+/// as the layer's place before the dialog opened.
+pub(super) fn content_edit(view: &PictureView, rects: Option<Vec<pictura_core::PsdRect>>) -> Edit {
+    match rects {
+        Some(rects) if rects.is_empty() => Edit::Meta,
+        Some(rects) if !view.rust().structural_is_full(&rects) => {
+            Edit::regions_hinted(rects, Vec::new(), true)
+        }
+        _ => Edit::Structural { damage: None },
+    }
+}
+
+/// Clear what a structural edit clears; a region edit keeps both by itself.
+pub(super) fn release_positional_state(mut view: Pin<&mut PictureView>) {
+    view.as_mut().clear_link_sets();
+    view.as_mut().rust_mut().solo_snapshot = None;
+}
+
+fn commit_edit(mut view: Pin<&mut PictureView>, rects: Option<Vec<pictura_core::PsdRect>>) {
+    let edit = content_edit(&view, rects);
+    release_positional_state(view.as_mut());
+    view.as_mut().edit("Edit Type Layer", |_| edit);
 }
 
 /// Show the layer at `path` again after `type_edit_begin` hid it; no composite.

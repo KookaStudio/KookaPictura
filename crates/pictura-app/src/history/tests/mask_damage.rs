@@ -98,7 +98,7 @@ fn undoing_a_mask_edit_reports_its_tiles_in_document_coordinates() {
 }
 
 #[test]
-fn a_moved_mask_restores_everywhere() {
+fn a_moved_mask_reports_the_composite() {
     let mut live = masked_doc();
     let mut stack = Stack::opened(&mut live);
     let before = live.clone();
@@ -111,12 +111,15 @@ fn a_moved_mask_restores_everywhere() {
     stack.capture(&mut live, "Mask");
     assert!(matches!(stack.undo(&mut live), Some(Restored::Region(_))));
 
-    assert_eq!(stack.undo(&mut live), Some(Restored::Everywhere));
+    assert!(matches!(
+        stack.undo(&mut live),
+        Some(Restored::Composite(_))
+    ));
     assert!(live == before, "undo restores the mask and its position");
 }
 
 #[test]
-fn a_walk_across_a_mask_move_restores_everywhere() {
+fn a_walk_across_a_mask_move_reports_the_composite() {
     let mut live = masked_doc();
     let mut stack = Stack::opened(&mut live);
     for delta in [8, -8] {
@@ -133,7 +136,7 @@ fn a_walk_across_a_mask_move_restores_everywhere() {
     let restored = stack
         .history
         .jump_live(0, &mut live, &mut stack.selection, &mut stack.target);
-    assert_eq!(restored, Some(Restored::Everywhere));
+    assert!(matches!(restored, Some(Restored::Composite(_))));
     let _ = stack
         .history
         .jump_live(2, &mut live, &mut stack.selection, &mut stack.target);
@@ -141,7 +144,7 @@ fn a_walk_across_a_mask_move_restores_everywhere() {
 }
 
 #[test]
-fn a_document_channel_edit_restores_everywhere() {
+fn a_document_channel_edit_reports_no_rectangle() {
     let mut live = masked_doc();
     live.channels.push(Channel {
         id: 0,
@@ -150,5 +153,71 @@ fn a_document_channel_edit_restores_everywhere() {
     let mut stack = Stack::opened(&mut live);
     live.channels[0].data.as_mut_slice()[3] = 9;
     stack.capture(&mut live, "Channel");
-    assert_eq!(stack.undo(&mut live), Some(Restored::Everywhere));
+    let edited = live.clone();
+    assert_eq!(
+        stack.undo(&mut live),
+        Some(Restored::Region(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        }))
+    );
+    assert!(live != edited, "undo restores the channel");
+}
+
+#[test]
+fn undoing_a_masked_delete_stays_bounded() {
+    let mut live = masked_doc();
+    let mut stack = Stack::opened(&mut live);
+    let before = live.clone();
+    assert!(live.layers.remove(&[0]).is_some());
+    live.composite = pictura_render::composite_rgba(&live);
+    stack.capture(&mut live, "Delete Layer");
+    assert!(matches!(
+        stack.undo(&mut live),
+        Some(Restored::Composite(_))
+    ));
+    assert!(live == before, "undo restores the masked layer");
+}
+
+#[test]
+fn a_jump_lands_on_an_exact_stored_composite() {
+    let mut live = masked_doc();
+    let mut stack = Stack::opened(&mut live);
+    paint_mask(&mut live, 70, 10);
+    stack.capture(&mut live, "Mask");
+    assert!(pictura_render::add_layer(&mut live, -1, "added") >= 0);
+    stack.capture(&mut live, "New Layer");
+    pictura_render::resize_document(&mut live, 256, 256, pictura_render::Resample::Nearest)
+        .expect("resize");
+    live.composite = pictura_render::composite_rgba(&live);
+    stack.capture(&mut live, "Image Size");
+    for state in [0, 3, 1, 3, 2, 0] {
+        stack
+            .history
+            .jump_live(state, &mut live, &mut stack.selection, &mut stack.target)
+            .expect("a state to jump to");
+        assert!(
+            live.composite == pictura_render::composite_rgba(&live),
+            "state {state} holds its exact composite"
+        );
+    }
+}
+
+#[test]
+fn an_undo_after_a_whole_jump_stays_bounded() {
+    let mut live = masked_doc();
+    let mut stack = Stack::opened(&mut live);
+    pictura_render::resize_document(&mut live, 256, 256, pictura_render::Resample::Nearest)
+        .expect("resize");
+    live.composite = pictura_render::composite_rgba(&live);
+    stack.capture(&mut live, "Image Size");
+    let restored = stack
+        .history
+        .jump_live(0, &mut live, &mut stack.selection, &mut stack.target);
+    assert_eq!(restored, Some(Restored::Everywhere));
+    paint_mask(&mut live, 70, 10);
+    stack.capture(&mut live, "Mask");
+    assert!(matches!(stack.undo(&mut live), Some(Restored::Region(_))));
 }

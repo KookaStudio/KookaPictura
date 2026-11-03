@@ -1,5 +1,6 @@
 use pictura_adjust::{GradientKind, GradientStop};
-use pictura_core::{BlendMode, Channel, ColorLabel, Document, Layer, LockFlags, PsdRect};
+use pictura_core::{BlendMode, Channel, ColorLabel, Document, Layer, LockFlags, Plane, PsdRect};
+use rayon::prelude::*;
 
 use super::paths::{container_of, format_segments, parse_path, resolve_path, resolve_path_mut};
 
@@ -524,7 +525,11 @@ pub(super) fn release_background(layer: &mut Layer) {
         let pixels = layer.rect.width().max(0) as usize * layer.rect.height().max(0) as usize;
         layer.channels.push(Channel {
             id: -1,
-            data: vec![255; pixels].into(),
+            data: Plane::build(pixels, |alpha| {
+                alpha
+                    .par_chunks_mut(1 << 20)
+                    .for_each(|chunk| chunk.fill(255));
+            }),
         });
     }
 }

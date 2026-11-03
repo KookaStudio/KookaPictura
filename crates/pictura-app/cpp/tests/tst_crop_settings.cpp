@@ -360,7 +360,7 @@ void CropSettingsTest::gridMenuDrivesTheOverlay()
     window_->setActiveTool(pictura::ToolId::Move);
 }
 
-// The control server patches options at runtime through applyToolOptionsJson;
+// The control server patches options at runtime through patchToolOptionsJson;
 // the open menu and the canvas follow the patch.
 void CropSettingsTest::runtimePatchRefreshesTheMenu()
 {
@@ -371,7 +371,7 @@ void CropSettingsTest::runtimePatchRefreshesTheMenu()
     auto* opacity = menu->findChild<pictura::NumericField*>(QStringLiteral("cropShieldOpacity"));
     QVERIFY(opacity);
     QSignalSpy changed(tools_, &pictura::ToolController::cropOptionsChanged);
-    pictura::applyToolOptionsJson(
+    pictura::patchToolOptionsJson(
         *tools_, QJsonObject{{QStringLiteral("crop"),
                               QJsonObject{{QStringLiteral("shieldOpacity"), 40}}}});
     QVERIFY(changed.count() >= 1);

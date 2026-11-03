@@ -25,6 +25,9 @@ struct ToolServices {
 
     virtual QColor foreground() const = 0;
     virtual QColor background() const = 0;
+    // The current pointer pressure (0..1): a tablet event's pressure, or 1.0
+    // for a mouse.
+    virtual double pressure() const = 0;
 
     // A modal tool session's history changed; the frame re-evaluates commands.
     virtual void notifyToolSessionChanged() = 0;

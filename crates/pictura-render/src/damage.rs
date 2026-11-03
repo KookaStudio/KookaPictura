@@ -14,6 +14,7 @@
 //! unexpected missing path and is unbounded.
 
 use pictura_core::{Document, Layer, PsdRect};
+use rayon::prelude::*;
 
 use crate::document_ops::{parent_path, resolve_path};
 
@@ -22,7 +23,6 @@ use crate::document_ops::{parent_path, resolve_path};
 /// `None` when the path does not resolve, when the reach cannot be proven, or
 /// when the document contains a knockout whose base the layer could affect.
 pub fn influence(doc: &Document, path: &str) -> Option<PsdRect> {
-    let layer = resolve_path(doc, path)?;
     // A knockout base is the bottom root layer (or the group-entry backdrop).
     // The layer-local reach cannot prove that a base reassignment stays inside
     // the edited path, so a document with a knockout keeps the full path.
@@ -33,6 +33,16 @@ pub fn influence(doc: &Document, path: &str) -> Option<PsdRect> {
     {
         return None;
     }
+    content_influence(doc, path)
+}
+
+/// As [`influence`] for an edit that only rewrites `path`'s pixels in place.
+///
+/// The stack keeps its order and visibility, so no knockout base is reassigned
+/// and every knockout still resolves pixel by pixel: a document with a knockout
+/// stays bounded, which a structural edit cannot claim.
+pub fn content_influence(doc: &Document, path: &str) -> Option<PsdRect> {
+    let layer = resolve_path(doc, path)?;
     let mut rect = influence_of(doc, layer)?;
     let index: usize = path.rsplit('/').next()?.parse().ok()?;
     let siblings: &[Layer] = match parent_path(path) {
@@ -46,6 +56,55 @@ pub fn influence(doc: &Document, path: &str) -> Option<PsdRect> {
         rect = union_rect(rect, influence_of(doc, above)?);
     }
     clip_to_canvas(doc, rect)
+}
+
+/// [`content_influence`], trimmed to the inked pixels of a type layer whose
+/// raster nearly fills the canvas.
+///
+/// A paragraph box can be document-sized around a few words. Its transparent
+/// pixels composite to nothing, so the trim holds only while the reach is the
+/// raster alone: effects or a clipped run keep the untrimmed rectangle.
+pub fn ink_influence(doc: &Document, path: &str) -> Option<PsdRect> {
+    let rect = content_influence(doc, path)?;
+    let canvas = area(canvas_rect(doc));
+    if area(rect).saturating_mul(4) < canvas.saturating_mul(3) {
+        return Some(rect);
+    }
+    let layer = resolve_path(doc, path)?;
+    let raster_alone = influence_of(doc, layer) == Some(layer.rect)
+        && clip_to_canvas(doc, layer.rect) == Some(rect);
+    if layer.type_tool.is_none() || !raster_alone {
+        return Some(rect);
+    }
+    let Some(ink) = ink_bounds(layer) else {
+        return Some(rect);
+    };
+    clip_to_canvas(doc, ink).or(Some(rect))
+}
+
+fn area(rect: PsdRect) -> u64 {
+    u64::from(rect.width().max(0) as u32) * u64::from(rect.height().max(0) as u32)
+}
+
+/// The document rectangle of `layer`'s nonzero alpha, `None` when none inks.
+fn ink_bounds(layer: &Layer) -> Option<PsdRect> {
+    let width = usize::try_from(layer.rect.width()).ok()?;
+    let height = usize::try_from(layer.rect.height()).ok()?;
+    let alpha = &layer.channels.iter().find(|c| c.id == -1)?.data;
+    let rows = (0..height).into_par_iter().filter_map(|y| {
+        let row = alpha.row(y, width)?;
+        let first = row.iter().position(|&a| a != 0)?;
+        let last = row.iter().rposition(|&a| a != 0)?;
+        Some((y, y, first, last))
+    });
+    let (top, bottom, left, right) =
+        rows.reduce_with(|a, b| (a.0.min(b.0), a.1.max(b.1), a.2.min(b.2), a.3.max(b.3)))?;
+    Some(PsdRect {
+        top: layer.rect.top + top as i32,
+        left: layer.rect.left + left as i32,
+        bottom: layer.rect.top + bottom as i32 + 1,
+        right: layer.rect.left + right as i32 + 1,
+    })
 }
 
 fn canvas_rect(doc: &Document) -> PsdRect {
@@ -65,6 +124,15 @@ pub fn influence_paths(doc: &Document, paths: &[&str]) -> Option<Vec<PsdRect>> {
     let mut rects = Vec::with_capacity(paths.len());
     for &path in paths {
         rects.push(influence(doc, path)?);
+    }
+    Some(merge_overlapping(rects))
+}
+
+/// As [`influence_paths`] over [`content_influence`].
+pub fn content_influence_paths(doc: &Document, paths: &[&str]) -> Option<Vec<PsdRect>> {
+    let mut rects = Vec::with_capacity(paths.len());
+    for &path in paths {
+        rects.push(content_influence(doc, path)?);
     }
     Some(merge_overlapping(rects))
 }
@@ -331,6 +399,61 @@ mod tests {
     fn unexpected_missing_path_is_unbounded() {
         let d = doc(vec![pixel_layer("a", rect(0, 0, 4, 4), 10, 255)]);
         assert_eq!(influence(&d, "9"), None);
+    }
+
+    #[test]
+    fn a_content_edit_under_a_knockout_stays_bounded_and_exact() {
+        let target = rect(6, 6, 6, 6);
+        let mut d = doc(vec![
+            pixel_layer("bottom", rect(0, 0, W as i32, H as i32), 10, 255),
+            pixel_layer("edited", target, 90, 255),
+            Layer {
+                knockout: Knockout::Deep,
+                ..pixel_layer("knockout", rect(4, 4, 8, 8), 20, 128)
+            },
+        ]);
+        assert_eq!(influence(&d, "1"), None);
+        assert_eq!(content_influence(&d, "1"), Some(target));
+
+        d.composite = crate::composite_rgba(&d);
+        d.layers[1].channels[0].data = vec![200; 36].into();
+        let full = crate::composite_rgba(&d);
+        let region = crate::composite::composite_rgba_region(&d, 6, 6, 6, 6);
+        for (channel, plane) in region.data.chunks(36).enumerate() {
+            for (i, value) in plane.iter().enumerate() {
+                let (x, y) = (6 + i % 6, 6 + i / 6);
+                let at = channel * (W * H) as usize + y * W as usize + x;
+                assert_eq!(*value, full.data[at], "channel {channel} at {x},{y}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_nearly_canvas_sized_type_box_trims_to_its_ink() {
+        let mut d = doc(vec![pixel_layer(
+            "bottom",
+            rect(0, 0, W as i32, H as i32),
+            10,
+            255,
+        )]);
+        let spec = pictura_core::TypeSpec {
+            origin: (0.0, 0.0),
+            box_bounds: Some([0.0, 0.0, W as f64, H as f64]),
+            ..pictura_core::TypeSpec::new("i", "Liberation Sans", 8.0)
+        };
+        let path = crate::add_type_layer(&mut d, "0", &spec);
+        assert!(!path.is_empty());
+        let whole = content_influence(&d, &path).expect("bounded");
+        assert_eq!(area(whole), u64::from(W * H), "the raster fills the box");
+        let ink = ink_influence(&d, &path).expect("bounded");
+        assert!(area(ink) * 4 < u64::from(W * H), "{ink:?} is the glyph");
+
+        crate::set_layer_style_value(&mut d.layers[1], "dropShadow.on", 1.0);
+        assert_eq!(
+            ink_influence(&d, &path),
+            content_influence(&d, &path),
+            "an effect's reach is not the raster's"
+        );
     }
 
     #[test]

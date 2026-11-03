@@ -3,7 +3,7 @@ use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
 use crate::cxxqt_object::edit::Edit;
-use crate::history::{History, Snapshot};
+use crate::history::History;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
@@ -13,6 +13,9 @@ use pictura_core::{
 };
 use std::time::Instant;
 
+pub(super) use deferred_pyramid::DeferredPyramid;
+
+mod deferred_pyramid;
 mod display;
 mod recovery;
 mod save;
@@ -927,6 +930,12 @@ impl super::PictureViewRust {
     /// (`recomposite`, `undo`, `redo`, `history_jump`, `history_restore_snapshot`,
     /// the move-preview commit, and a fresh open) routes through this.
     pub(super) fn reset_pyramid(&mut self) {
+        self.reset_display(false);
+    }
+
+    /// As [`Self::reset_pyramid`], leaving a large pyramid coarse when `defer`.
+    fn reset_display(&mut self, defer: bool) {
+        self.deferred_pyramid = None;
         self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         self.clear_display_preview();
         self.damage = pictura_render::CanvasDamage::default();
@@ -942,6 +951,7 @@ impl super::PictureViewRust {
         // reading the cached frame; otherwise the level-0 frame is the
         // document's own composite. Keeps a stray mid-stroke full rebuild correct.
         let gpu_compute = self.gpu_compute;
+        let t = Instant::now();
         let level0 = match self.session.live.stroke() {
             Some(_) => self
                 .session
@@ -951,12 +961,28 @@ impl super::PictureViewRust {
             None => self.session.doc.as_ref().map(level0_buffer),
         };
         self.level0 = level0;
+        paint_timing::record("reset_pyramid_level0", t.elapsed());
+        let t = Instant::now();
+        let coarse = defer.then(|| self.coarse_level()).flatten();
         self.pyramid = match self.level0.as_ref().and_then(planes_of) {
-            Some(planes) => pictura_render::ViewPyramid::rebuild(planes),
+            Some(planes) => match coarse {
+                Some(level) => pictura_render::ViewPyramid::coarse(planes, level),
+                None => pictura_render::ViewPyramid::rebuild(planes),
+            },
             None => pictura_render::ViewPyramid::default(),
         };
+        if let Some(level) = coarse {
+            self.pyramid_generation = self.pyramid_generation.wrapping_add(1);
+            self.deferred_pyramid = Some(DeferredPyramid {
+                generation: self.pyramid_generation,
+                level,
+            });
+        }
+        paint_timing::record("reset_pyramid_rebuild", t.elapsed());
         // A recomposite keeps a solo mask view current; a no-op otherwise.
+        let t = Instant::now();
         self.rebuild_mask_solo_source();
+        paint_timing::record("reset_pyramid_mask_solo", t.elapsed());
         self.canvas_revision = self.canvas_revision.wrapping_add(1);
         self.frame_revision = self.frame_revision.wrapping_add(1);
     }
@@ -964,6 +990,7 @@ impl super::PictureViewRust {
     /// Repair the pyramid for `rect` of the already-patched level-0 frame and
     /// bump the canvas revision, leaving the damage account for `image`.
     pub(super) fn update_pyramid(&mut self, rect: PsdRect) {
+        self.settle_pyramid();
         if let Some(planes) = self.level0.as_ref().and_then(planes_of) {
             self.pyramid.update(planes, rect);
         }
@@ -979,7 +1006,19 @@ impl super::PictureViewRust {
             (self.level0.as_ref(), dims),
             (Some(level0), Some((w, h))) if level0.width == w && level0.height == h
         );
-        if matches {
+        let whole = dims == Some((region.width, region.height)) && (x0, y0) == (0, 0);
+        if matches && whole {
+            // The whole frame replaces level 0 rather than being copied into
+            // it row by row (#1145). It never shares the composite's plane:
+            // whichever of the two is written first would copy it whole.
+            let mut frame = region;
+            if let Some(doc) = self.session.doc.as_ref() {
+                if frame.data.shares(&doc.composite.data) {
+                    frame.data = crate::history::copy_plane(&frame.data);
+                }
+            }
+            self.level0 = Some(frame);
+        } else if matches {
             if let Some(level0) = self.level0.as_mut() {
                 patch_buffer_region(level0, &region, x0, y0);
             }
@@ -1032,15 +1071,6 @@ impl qobject::PictureView {
         let target = rust.layer_target.clone();
         rust.session.record(&target, label);
         paint_timing::record("record_history_capture", t.elapsed());
-    }
-
-    pub(super) fn snapshot(&self) -> Option<Snapshot> {
-        let rust = self.rust();
-        let doc = rust.session.doc.clone()?;
-        Some(Snapshot {
-            doc,
-            selection: rust.session.selection.clone(),
-        })
     }
 
     /// Composite only `rect`, patch the authoritative `doc.composite` and the

@@ -1,6 +1,6 @@
-use super::document_session::{PreviewStroke, SessionKind, StrokeSession};
+use super::document_session::{PreviewSample, PreviewStroke, SessionKind, StrokeSession};
 use super::helpers::*;
-use super::helpers_composite::{patch_composite_region, planes_of};
+use super::helpers_composite::{patch_composite_region, planes_of, store_composite};
 use super::qobject;
 use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
@@ -78,6 +78,7 @@ impl PictureViewRust {
         let painting = self.session.live.mask_stroke().is_some();
         let source: &Document = self.session.doc.as_ref()?;
         let (x0, y0, w, h) = clamp_region(rect, source.width, source.height)?;
+        let whole = (x0, y0, w, h) == (0, 0, source.width, source.height);
         let gpu_compute = self.gpu_compute;
         let t = Instant::now();
         let buffer = pictura_render::composite_region_active(source, rect, gpu_compute).0;
@@ -91,7 +92,13 @@ impl PictureViewRust {
         if !painting {
             if let Some(doc) = self.session.doc.as_mut() {
                 let t = Instant::now();
-                patch_composite_region(doc, &buffer, x0, y0);
+                // A region that is the whole document replaces the composite:
+                // patching it row by row copies the document serially (#1145).
+                if whole {
+                    store_composite(doc, &buffer);
+                } else {
+                    patch_composite_region(doc, &buffer, x0, y0);
+                }
                 paint_timing::record("rr_patch_composite", t.elapsed());
             }
         }
@@ -285,7 +292,7 @@ fn grow_extent(extent: &mut Option<PsdRect>, lx: i32, ly: i32) {
 /// same tip profile and flow accumulation the exact stroke uses, sampled at the
 /// level pixel's centre. Returns whether any pixel changed.
 fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool {
-    let cfg = preview.cfg;
+    let cfg = preview.cfg.pressure_scaled(sample.pressure);
     let scale = preview.scale as f32;
     let radius = cfg.diameter as f32 * 0.5;
     let flow = cfg.flow as f32 / 100.0;
@@ -426,6 +433,7 @@ impl PictureViewRust {
     /// coverage when a mask is the edit target. False without a document, a
     /// layer target, or when another session owns the slot.
     pub(super) fn begin_paint(&mut self, cfg: StrokeConfig, label: &str) -> bool {
+        self.settle_pyramid();
         if self.session.doc.is_none() {
             return false;
         }
@@ -505,11 +513,16 @@ impl PictureViewRust {
                     .doc
                     .as_ref()
                     .and_then(|doc| preview_level(cfg.diameter as i32, doc.width, doc.height));
-                // The GPU dab shader has no paper grain or wet-edge curve; such a
-                // tip stays on the CPU oracle so the stroke matches its
-                // committed pixels.
-                let gpu_mode = gpu_paint_mode(cfg.mode)
-                    .filter(|_| !cfg.auto_erase && cfg.grain == 0 && !cfg.wet_edges);
+                // The GPU dab shader has no paper grain, wet-edge curve, or
+                // per-sample pressure; such a stroke stays on the CPU oracle
+                // (or its preview) so the committed pixels match.
+                let gpu_mode = gpu_paint_mode(cfg.mode).filter(|_| {
+                    !cfg.auto_erase
+                        && cfg.grain == 0
+                        && !cfg.wet_edges
+                        && !cfg.pressure_size
+                        && !cfg.pressure_opacity
+                });
                 if level.is_some() && rust.gpu_compute {
                     let seeded = match (
                         gpu_mode,
@@ -596,7 +609,7 @@ impl qobject::PictureView {
         if self.rust().session.live.preview().is_some() {
             return self.as_mut().preview_dab(x, y, pressure);
         }
-        let dirty = {
+        let painted = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let t = Instant::now();
@@ -612,9 +625,40 @@ impl qobject::PictureView {
                 _ => return false,
             };
             paint_timing::record("cpu_stroke_sample", t.elapsed());
-            if !painted {
-                return false;
+            painted
+        };
+        painted && self.present_stroke_dirty()
+    }
+
+    /// Dab again where the open stroke last sampled, for a held button, on
+    /// whichever backend the stroke is using.
+    // ponytail: a recorded action replays the path only; held dabs are not
+    // captured, so Airbrush build-up is lost on replay.
+    pub fn paint_hold(mut self: Pin<&mut Self>) -> bool {
+        if self.rust().session.live.mask_stroke().is_some() {
+            return self.as_mut().mask_hold();
+        }
+        if self.rust().session.live.gpu_stroke().is_some() {
+            return self.as_mut().gpu_hold();
+        }
+        if self.rust().session.live.preview().is_some() {
+            return self.as_mut().preview_hold();
+        }
+        let painted = {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
+            match (rust.session.live.stroke_mut(), rust.session.doc.as_mut()) {
+                (Some(stroke), Some(doc)) => stroke.hold(doc),
+                _ => false,
             }
+        };
+        painted && self.present_stroke_dirty()
+    }
+
+    fn present_stroke_dirty(mut self: Pin<&mut Self>) -> bool {
+        let dirty = {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
             let dirty = rust.session.live.stroke_mut().and_then(Stroke::take_dirty);
             let pad = rust.session.live.paint_pad();
             let dirty = dirty.map(|rect| grow_rect(rect, pad));
@@ -680,7 +724,38 @@ impl qobject::PictureView {
             let Some(preview) = rust.session.live.preview_mut() else {
                 return false;
             };
-            preview.samples.push(sample);
+            preview.samples.push(PreviewSample::Move(sample));
+            let t = Instant::now();
+            let rasterized = rasterize_preview(preview, sample);
+            paint_timing::record("preview_rasterize", t.elapsed());
+            if !rasterized {
+                return false;
+            }
+            let extent = preview.extent.expect("a rasterized pixel grew the extent");
+            rust.queue_present(extent)
+        };
+        match opens_frame {
+            Some(_) => self.as_mut().present_preview(),
+            None => true,
+        }
+    }
+
+    /// A held dab on a previewed stroke: record it for the commit replay and
+    /// rasterize another dab at the last pointer sample. Returns whether the
+    /// preview presented a change.
+    fn preview_hold(mut self: Pin<&mut Self>) -> bool {
+        let opens_frame = {
+            let mut rust = self.as_mut().rust_mut();
+            let Some(preview) = rust.session.live.preview_mut() else {
+                return false;
+            };
+            let Some(sample) = preview.samples.iter().rev().find_map(|entry| match entry {
+                PreviewSample::Move(sample) => Some(*sample),
+                PreviewSample::Hold => None,
+            }) else {
+                return false;
+            };
+            preview.samples.push(PreviewSample::Hold);
             let t = Instant::now();
             let rasterized = rasterize_preview(preview, sample);
             paint_timing::record("preview_rasterize", t.elapsed());
@@ -750,14 +825,37 @@ impl qobject::PictureView {
             pressure: pressure as f32,
         };
         let mut dabs = Vec::new();
-        let mut changed: Option<PsdRect> = None;
         {
             let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
             let Some(placer) = rust.session.live.gpu_placer_mut() else {
                 return false;
             };
             placer.feed(sample.x, sample.y, &mut dabs);
+        }
+        self.as_mut().gpu_dabs(dabs)
+    }
+
+    /// A held dab on a GPU stroke: place another dab at the placer's last
+    /// sample and apply it like [`Self::gpu_dab`].
+    fn gpu_hold(mut self: Pin<&mut Self>) -> bool {
+        let mut dabs = Vec::new();
+        {
+            let mut rust = self.as_mut().rust_mut();
+            let Some(placer) = rust.session.live.gpu_placer_mut() else {
+                return false;
+            };
+            placer.repeat_last(&mut dabs);
+        }
+        self.as_mut().gpu_dabs(dabs)
+    }
+
+    /// Dispatch `dabs` on the open GPU stroke, patch their pixels into the
+    /// working document, and present the frame-opening dab.
+    fn gpu_dabs(mut self: Pin<&mut Self>, dabs: Vec<(f32, f32)>) -> bool {
+        let mut changed: Option<PsdRect> = None;
+        {
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
             for (cx, cy) in dabs {
                 let dab = {
                     let Some(gpu) = rust.session.live.gpu_stroke_mut() else {
@@ -805,18 +903,6 @@ impl qobject::PictureView {
             }
             None => true,
         }
-    }
-
-    /// The view-pyramid level the active stroke is presenting: the preview
-    /// level while a reduced preview runs, `0` otherwise (the zoom picks the
-    /// level as usual). A GPU stroke presents the zoom-selected level, because
-    /// its region refresh repairs every stored level.
-    pub fn preview_present_level(&self) -> i32 {
-        let rust = self.rust();
-        rust.session
-            .live
-            .preview()
-            .map_or(0, |preview| preview.level as i32)
     }
 
     pub fn end_paint(mut self: Pin<&mut Self>) -> bool {
@@ -868,8 +954,15 @@ impl qobject::PictureView {
                     let mut rust = self.as_mut().rust_mut();
                     let rust = &mut *rust;
                     if let Some(doc) = rust.session.doc.as_mut() {
-                        for sample in preview.samples {
-                            stroke.sample(doc, sample);
+                        for entry in preview.samples {
+                            match entry {
+                                PreviewSample::Move(sample) => {
+                                    stroke.sample(doc, sample);
+                                }
+                                PreviewSample::Hold => {
+                                    stroke.hold(doc);
+                                }
+                            }
                             if let Some(rect) = stroke.take_dirty() {
                                 stroke_tiles.mark(grow_rect(rect, paint_pad));
                             }
@@ -884,10 +977,17 @@ impl qobject::PictureView {
                     None => {
                         // A stroke that changed nothing leaves no history state,
                         // so a Background it layered goes back to a Background.
+                        // Otherwise the composite and the canvas still hold every
+                        // pixel: Sponge over grey lands here, and on a very large
+                        // document a recomposite is seconds. Only a preview left
+                        // a level to overwrite.
+                        let restored = stroke_base.is_some();
                         if let Some(base) = stroke_base {
                             self.as_mut().rust_mut().session.doc = Some(base);
                         }
-                        self.as_mut().recomposite();
+                        if restored || previewed {
+                            self.as_mut().recomposite();
+                        }
                         false
                     }
                     Some(rect) => {

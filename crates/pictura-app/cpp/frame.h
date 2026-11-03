@@ -116,7 +116,7 @@ QJsonArray workspacePresets(const QString& name);
 // The CS6-shaped application frame: menu bar, tabbed document area, status bar,
 // and dock areas. Owns the UI and the open documents; each document's state
 // lives in its own cxx-qt PictureView.
-class PicturaMainWindow : public QMainWindow {
+class PicturaMainWindow : public QMainWindow, public PanelMenuHookStore {
     Q_OBJECT
 
 public:

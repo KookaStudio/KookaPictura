@@ -6,7 +6,7 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 159 gaps — 5 systemic in §B, 154 per-domain in §C.
+- **Rows:** 158 gaps — 5 systemic in §B, 153 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -142,6 +142,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-27 | `smudge-blur-sharpen.md` | HDR (16/32-bpc) operation | DIVERGENT | `stroke.rs:395` rejects non-8-bit | #551 |
 | TOOL-28 | `clone-stamp-and-pattern-stamp.md` | Cross-document colour-mode rule + Pattern Stamp Impressionist | MISSING | `paint_tools.rs:451`; `tool_stamps.cpp` | #552 |
 | TOOL-29 | `hand-and-zoom.md:76` | `Match All` + `Shift`+click/drag is approximated by the `Shift` forms of Scroll All (Hand drag, location) and Zoom All (Zoom click, zoom) rather than one combined match | DIVERGENT | `frame_document_arrange.cpp:173`; `tool_hand_zoom.cpp:59` | #500 |
+| TOOL-30 | `brush-and-pencil.md`; `airbrush-and-flow.md` | Brush Airbrush option and `Shift+Alt+P`; held dabs on the exact, preview, GPU and mask backends; 20 dabs/s approximated | SHIPPED | `tool_brush.cpp`; `tool_stamps.cpp`; `impl_paint.rs`. Ceiling: 20 dabs/s approximated; held dabs are not recorded in actions | #1120 |
 
 ### 04-image-ops and adjustments
 
@@ -169,7 +170,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ADJ-3 | `adjustments/hue-saturation.md` | Colorize, range-band editing, eyedroppers, on-image tool | MISSING | `hue_saturation_dialog.h:17-21` | #573 |
 | ADJ-4 | `adjustments/gradient-map.md` | Dither + CS6 print-toning presets | MISSING | `gradient_map_dialog.cpp:82-91`; `gradient.rs:295-310` | #574 |
 | ADJ-5 | `adjustments/match-color.md` | On-canvas eyedropper + live Info feedback | MISSING | `match_color_dialog.cpp` | #575 |
-| ADJ-6 | `adjustments-overview.md` | Adjustment presets (Levels/Curves/Photo Filter/Selective Color/Vibrance) | MISSING | `adjustment_params.rs:639` (Color Lookup only) | #576 |
 | ADJ-7 | `adjustments/selective-color.md` | Composite-channel-only gate + preset whitelist | MISSING | no channel gate | #577 |
 | ADJ-8 | `adjustments/brightness-contrast.md` | Brightness/Contrast Auto + shared adjustment Auto buttons | MISSING | `adjustment_dialog.cpp:445` | #578 |
 
@@ -181,7 +181,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | LAY-2 | `layer-styles.md` | Global Light dialog, Create Layers, Rasterize Layer Style | MISSING | `frame_menus_layer_style.cpp:3`; `crates/pictura-script/src/command_catalogue/entries.rs` | #580 |
 | LAY-3 | `layer-styles.md` | Bevel Contour/Texture UI, gradient editor, channel include in the authoring dialog | MISSING | `layer_style_dialog.h:9` | #581 |
 | LAY-4 | `align-and-distribute.md` | Auto-Align Layers | MISSING | none found | #582 |
-| LAY-5 | `align-and-distribute.md` | Auto-Blend Layers | MISSING | none found | #583 |
 | LAY-6 | `blend-modes.md` | `Fill With (Mode)-Neutral Color` for new layers | MISSING | none found | #584 |
 | LAY-8 | `layer-management-ui.md` | Panel Options thumbnail size (Entire Document/Bounds) | PARTIAL | `session.h:25` | #586 |
 | LAY-9 | `export-formats.md` | File ▸ Scripts ▸ Export Layers To Files | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #587 |
@@ -205,8 +204,8 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
 
-De-Interlace (`#344`) and NTSC Colors (`#345`) are already tracked. Embed/Read
-Watermark (`#350`/`#351`) shipped as an in-tree approximation
+De-Interlace (`#344`) and NTSC Colors (`#345`) shipped and are no longer gaps.
+Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
 (`06-filters/digimarc-watermark.md`), so it is no longer a gap.
 
 ### 07-color-painting
@@ -228,7 +227,7 @@ Watermark (`#350`/`#351`) shipped as an in-tree approximation
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| SEL-1 | `channel-based-masking.md` | Apply Image | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #609 |
+| SEL-1 | `channel-based-masking.md` | Apply Image shipped, but a smaller layer does not grow to the document | PARTIAL | `crates/pictura-render/src/apply_image.rs` | #1139 |
 | SEL-2 | `channel-based-masking.md` | Calculations | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #610 |
 | SEL-3 | `channel-based-masking.md` | Channel Options (Masked/Selected Areas) | MISSING | no polarity model | #611 |
 | SEL-4 | `refine-edge.md` | Interactive Refine Radius/Erase brushes | MISSING | `changes/refine-edge` out of scope | #612 |

@@ -12,7 +12,6 @@
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QMouseEvent>
-#include <QtGui/QPainter>
 #include <QtGui/QPen>
 #include <QtGui/QPixmap>
 #include <QtGui/QResizeEvent>
@@ -179,12 +178,6 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
         thumbnail_->setAlignment(Qt::AlignCenter);
         thumbnail_->setFrameShape(QFrame::StyledPanel);
         thumbnail_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-        // Cache the picture before any canvas preview: the document with the
-        // active layer hidden, so each pane update composites the filtered
-        // active layer over it rather than reading the whole canvas.
-        if (view_ && view_->has_document()) {
-            baseProxy_ = filter_proxy_base(*view_, kProxySize);
-        }
     }
     body->addLayout(leftColumn, 1);
 
@@ -554,18 +547,12 @@ void FilterPreviewDialog::updateThumbnail()
     }
     const QSize target = thumbnail_->size().expandedTo(thumbnail_->minimumSize());
     if (spec_.previewBelow) {
-        // CS6's Shear shows the whole picture under the inputs: the active
-        // layer filtered on the small proxy and composited over the document
-        // with it hidden, so a drag stays responsive and the other layers are
-        // not filtered with it.
+        // CS6's Shear shows the whole picture under the inputs: a small copy of
+        // the document with the active layer filtered, so a drag stays
+        // responsive and the other layers are not filtered with it.
         QImage shown;
-        if (view_ && !baseProxy_.isNull()) {
-            const QImage layer = filter_proxy_layer(*view_, spec_.kind, values(), kProxySize);
-            if (!layer.isNull()) {
-                shown = baseProxy_.copy();
-                QPainter painter(&shown);
-                painter.drawImage(0, 0, layer);
-            }
+        if (view_ && view_->has_document()) {
+            shown = filter_proxy_composite(*view_, spec_.kind, values(), kProxySize);
         }
         if (!shown.isNull()) {
             thumbnail_->setPixmap(QPixmap::fromImage(shown).scaled(

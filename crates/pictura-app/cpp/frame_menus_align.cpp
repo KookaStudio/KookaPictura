@@ -3,9 +3,14 @@
 
 #include "frame_includes.h"
 
+#include "auto_blend_dialog.h"
+#include "busy_job.h"
+#include "dialogs.h"
 #include "pictura_app/src/cxxqt_object/align.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/auto_blend.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
 
+#include "api/document_api.h"
 #include "api/type_api.h"
 
 namespace pictura {
@@ -52,6 +57,51 @@ void PicturaMainWindow::wireAlignMenu()
             return view && distribute_can(*view, selectedPaths());
         });
     }
+
+    const QString autoBlend = commandIdForPath({QStringLiteral("Edit"), QStringLiteral("Auto-Blend Layers…")});
+    registry_->setImplemented(autoBlend, true);
+    registry_->setHandler(autoBlend, [this, last = AutoBlendChoice{}]() mutable {
+        PictureView* view = activeView();
+        AutoBlendDialog dialog(view && document_api::documentDepthBits(*view) == 8, this, last);
+        if (runDialog(dialog, this) == QDialog::Accepted) {
+            last = dialog.choice();
+            runAutoBlend(*this, dialog.stackImages(), dialog.seamless(), dialog.fillTransparent());
+        }
+    });
+    registry_->setEnabledProvider(autoBlend, [this, selectedPaths]() {
+        PictureView* view = activeView();
+        return view && auto_blend_can(*view, selectedPaths());
+    });
+}
+
+bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless, bool fillTransparent)
+{
+    PictureView* view = window.activeView();
+    auto* panel = window.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
+    if (!view || !panel) {
+        return false;
+    }
+    const QStringList paths = window.selectedLayerPaths();
+    QStringList blended;
+    const bool committed = runCancellableJob(
+        &window, PicturaMainWindow::tr("Auto-Blend Layers"),
+        PicturaMainWindow::tr("Blending layers…"),
+        [&] { return auto_blend_start(*view, paths, stackImages, seamless, fillTransparent); },
+        [&] { return auto_blend_running(*view); },
+        [&] { return auto_blend_progress(*view); },
+        [&] { auto_blend_cancel(*view); },
+        [&] {
+            blended = auto_blend_finish(*view);
+            return !blended.isEmpty();
+        });
+    if (committed) {
+        window.selectLayerPath(blended.last());
+        panel->selectPaths(blended, blended.last());
+    }
+    if (const QString notice = auto_blend_error(*view); !notice.isEmpty()) {
+        window.statusBar()->showMessage(notice, 8000);
+    }
+    return committed;
 }
 
 void PicturaMainWindow::alignSelectedLayers(int edge, bool toSelection, int alignTo)

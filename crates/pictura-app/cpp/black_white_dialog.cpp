@@ -1,5 +1,6 @@
 #include "black_white_dialog.h"
 
+#include "adjustment_presets.h"
 #include "color_picker_dialog.h"
 #include "panels/color_swatch_widget.h"
 #include "panels/ramp_slider.h"
@@ -74,6 +75,11 @@ BlackWhiteDialog::BlackWhiteDialog(PictureView* view, const QByteArray& block,
     preset_->insertSeparator(1);
     for (const Preset& preset : kPresets) {
         preset_->addItem(QLatin1String(preset.name));
+    }
+    const QStringList saved = savedPresetNames(QStringLiteral("black-white"));
+    if (!saved.isEmpty()) {
+        preset_->insertSeparator(preset_->count());
+        preset_->addItems(saved);
     }
     preset_->insertSeparator(preset_->count());
     preset_->addItem(kCustom);
@@ -151,6 +157,7 @@ BlackWhiteDialog::BlackWhiteDialog(PictureView* view, const QByteArray& block,
     connect(tint, &QCheckBox::toggled, this, [this, enableTint](bool on) {
         enableTint(on);
         setParam(QStringLiteral("tint"), on ? 1.0 : 0.0);
+        markCustom();
     });
     connect(color_, &QPushButton::clicked, this, [this]() {
         const QColor picked = ColorPickerDialog::getColor(
@@ -174,6 +181,9 @@ void BlackWhiteDialog::applyPreset(int index)
         }
     }
     if (!chosen) {
+        if (savedPresetNames(QStringLiteral("black-white")).contains(name)) {
+            setBlock(savedPresetBlock(QStringLiteral("black-white"), name));
+        }
         return;
     }
     QList<QPair<QString, double>> edits;
@@ -190,9 +200,27 @@ void BlackWhiteDialog::applyPreset(int index)
     }
 }
 
+void BlackWhiteDialog::reloadFromBlock()
+{
+    loading_ = true;
+    for (const Channel& channel : kChannels) {
+        findChild<QSpinBox*>(QLatin1String(channel.key))
+            ->setValue(qRound(param(QLatin1String(channel.key), 0.0)));
+    }
+    findChild<QCheckBox*>(QStringLiteral("tint"))
+        ->setChecked(param(QStringLiteral("tint"), 0.0) != 0.0);
+    const QColor color = QColor::fromRgb(QRgb(uint(param(QStringLiteral("tintColor"), 0.0))));
+    paintTint(color);
+    showTint(color);
+    loading_ = false;
+}
+
 // The menu names the preset the six weights match, else Custom.
 void BlackWhiteDialog::markCustom()
 {
+    if (loading_) {
+        return;
+    }
     std::array<int, 6> current{};
     for (int i = 0; i < int(std::size(kChannels)); ++i) {
         current[i] = findChild<QSpinBox*>(QLatin1String(kChannels[i].key))->value();
@@ -228,6 +256,7 @@ void BlackWhiteDialog::setTint(const QColor& color)
 {
     paintTint(color);
     setParam(QStringLiteral("tintColor"), double(color.rgb() & 0xffffffu));
+    markCustom();
 }
 
 // The swatch, and the Saturation groove from gray to the swatch's full hue.

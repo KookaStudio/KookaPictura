@@ -63,9 +63,11 @@ private slots:
     void blurTool();
     void sharpenTool();
     void smudgeTool();
+    void smudgeSampleAllMatchesTheLiveLayer();
     void dodgeTool();
     void burnTool();
     void spongeTool();
+    void strokeChangingNothingRebuildsNothing();
     void spotHealingClickRemovesADot();
     void brushTipBarIsCompact();
 
@@ -232,6 +234,61 @@ void RetouchToolsTest::smudgeTool()
     QVERIFY2(fingerOk, "fingerOk");
 }
 
+void RetouchToolsTest::smudgeSampleAllMatchesTheLiveLayer()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    // Black left of x = 20, white right of it, as in `smudgeTool`.
+    QImage seed(80, 40, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    QPainter(&seed).fillRect(0, 0, 20, 40, Qt::black);
+    Fixture f(frame, seed, QStringLiteral("pictura_smudge_live"));
+    if (!f.ok()) {
+        QFAIL("smudge live fixture");
+    }
+    const BrushState brush(f.tools);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    const pictura::RetouchOptions options = f.tools->optionsFor<pictura::RetouchGroup>(pictura::ToolId::Smudge)->get();
+
+    frame.setActiveTool(pictura::ToolId::Smudge);
+    auto* strength = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsSmudgeStrength"));
+    auto* sampleAll = frame.findChild<QCheckBox*>(QStringLiteral("optionsSmudgeSampleAll"));
+    if (!strength || !sampleAll) {
+        QFAIL("smudge live bar");
+    }
+    strength->setValue(90);
+
+    QList<QPointF> path;
+    for (int x = 14; x <= 50; ++x) {
+        path << QPointF(x, 20);
+    }
+    const auto reach = [&]() {
+        int last = -1;
+        for (int x = 0; x < seed.width(); ++x) {
+            if (qRed(f.view->sample_argb(x, 20)) < 240) {
+                last = x;
+            }
+        }
+        return last;
+    };
+
+    // On a single opaque layer the composite is the layer, so Sample All Layers
+    // must smear exactly as far as the live layer does. A press-time snapshot
+    // stops the stroke short.
+    sampleAll->setChecked(false);
+    f.drag(path);
+    const int off = reach();
+    QVERIFY(f.view->undo());
+    sampleAll->setChecked(true);
+    f.drag(path);
+    const int on = reach();
+    sampleAll->setChecked(options.sampleAllLayers);
+    strength->setValue(options.strength);
+
+    QVERIFY2(off > 20, "the live stroke did not smear");
+    QVERIFY2(std::abs(on - off) <= 1,
+             qPrintable(QStringLiteral("sample all stopped short: off %1, on %2").arg(off).arg(on)));
+}
+
 void RetouchToolsTest::dodgeTool()
 {
     pictura::PicturaMainWindow& frame = *window_;
@@ -335,6 +392,26 @@ void RetouchToolsTest::spongeTool()
     QVERIFY2(f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge)->get().spongeMode == 1, "Saturate not set");
     QVERIFY2(spread(20, 32) > 120, "Saturate lifted nothing");
     mode->setCurrentIndex(options.spongeMode);
+}
+
+// [tsr_no_change]
+void RetouchToolsTest::strokeChangingNothingRebuildsNothing()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(Qt::black);
+    Fixture f(frame, seed, QStringLiteral("pictura_sponge_black_seed"));
+    QVERIFY2(f.ok(), "sponge fixture");
+    const BrushState brush(f.tools);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    frame.setActiveTool(pictura::ToolId::Sponge);
+
+    const int base = f.view->history_index();
+    QSignalSpy rebuilt(f.view, &pictura::PictureView::changed);
+    f.drag({QPointF(5, 20), QPointF(20, 20), QPointF(35, 20)});
+    QCOMPARE(rebuilt.count(), 0);
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(qRed(f.view->sample_argb(20, 20)), 0);
 }
 
 void RetouchToolsTest::brushTipBarIsCompact()

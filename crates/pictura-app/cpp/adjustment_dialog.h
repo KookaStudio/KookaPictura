@@ -24,6 +24,7 @@ class AdjustmentControls;
 class ColorSwatchWidget;
 class ImageView;
 class PictureView;
+class PresetCombo;
 class ToolController;
 
 // An Image > Adjustments dialog (Levels…, Curves…, Hue/Saturation…, and the
@@ -35,8 +36,8 @@ class ToolController;
 // and Curves subclass it with CS6's hand-laid-out pages (ported from
 // photorust's BrightnessContrastDialog / LevelsDialog / CurvesDialog) over the
 // same block, preview, and apply.
-// ponytail: the generic pages have no presets menu, Auto / eyedropper buttons,
-// histograms, or Load / Save; the preview covers the visible canvas section.
+// ponytail: the generic pages have no Auto / eyedropper buttons, histograms, or
+// Load / Save; the preview covers the visible canvas section.
 class AdjustmentDialog : public QDialog {
     Q_OBJECT
 
@@ -102,9 +103,16 @@ protected:
     // Curves `channel`'s points as `"x,y x,y …"`, and their replacement.
     QString curve(int channel) const;
     bool setCurve(int channel, const QString& points);
-    // Replace the whole block (a Gradient Map's rebuilt `grdm`) and preview;
-    // false, the block unchanged, when `next` is empty.
+    // Replace the whole block (a Gradient Map's rebuilt `grdm`, or a preset)
+    // and preview; false, the block unchanged, when `next` is empty.
     bool setBlock(const QByteArray& next);
+    // Reload the hand-laid controls after a whole block changed. The generic
+    // page reloads itself; a subclass overrides this when its controls are not
+    // bound to the page.
+    virtual void reloadFromBlock();
+    // The shared Preset menu for this block's kind, or null when the kind has
+    // none. The dialog's left column is `layout`.
+    PresetCombo* addPresetRow(QVBoxLayout* layout);
     // A 256-bin histogram of the canvas as the dialog opened: 0 luminosity,
     // 1 red, 2 green, 3 blue.
     const std::array<int, 256>& histogram(int channel) const;
@@ -150,6 +158,7 @@ private:
     QString title_;
     bool previewing_ = false;
     AdjustmentControls* controls_ = nullptr;
+    PresetCombo* preset_ = nullptr;
     QCheckBox* preview_ = nullptr;
     QTimer* previewTimer_ = nullptr;
     QTimer* previewPollTimer_ = nullptr;

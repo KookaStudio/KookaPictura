@@ -665,10 +665,10 @@ fn undoing_a_structural_edit_keeps_the_live_planes() {
     history.capture_live(&mut live, &selection, &target, "New Layer");
     let before = live.clone();
 
-    assert_eq!(
+    assert!(matches!(
         history.undo_live(&mut live, &mut selection, &mut target),
-        Some(Restored::Everywhere)
-    );
+        Some(Restored::Region(_))
+    ));
     assert!(live == open, "undo restores the pre-add document");
     assert!(
         live.composite.data.shares(&before.composite.data),
@@ -720,25 +720,25 @@ fn structural_capture_with_a_duplicated_layer_round_trips() {
     history.capture_live(&mut live, &selection, &target, "New Layer");
     let after = live.clone();
 
-    assert_eq!(
+    assert!(matches!(
         history.undo_live(&mut live, &mut selection, &mut target),
-        Some(Restored::Everywhere)
-    );
+        Some(Restored::Region(_))
+    ));
     assert!(live == duplicated, "undo restores the duplicated state");
-    assert_eq!(
+    assert!(matches!(
         history.undo_live(&mut live, &mut selection, &mut target),
-        Some(Restored::Everywhere)
-    );
+        Some(Restored::Region(_))
+    ));
     assert!(live == open, "undo restores the open state");
-    assert_eq!(
+    assert!(matches!(
         history.redo_live(&mut live, &mut selection, &mut target),
-        Some(Restored::Everywhere)
-    );
+        Some(Restored::Region(_))
+    ));
     assert!(live == duplicated, "redo restores the duplicated state");
-    assert_eq!(
+    assert!(matches!(
         history.redo_live(&mut live, &mut selection, &mut target),
-        Some(Restored::Everywhere)
-    );
+        Some(Restored::Region(_))
+    ));
     assert!(live == after, "redo restores the added state");
     let current = &history.current.as_ref().expect("current").doc;
     assert!(shares_a_band(&live, current));
@@ -1138,7 +1138,7 @@ fn live_restores_match_a_full_snapshot_history() {
                 if let Some(t) = target {
                     cursor = t;
                 }
-                if let Some(Restored::Region(r)) = restored {
+                if let Some(Restored::Region(r) | Restored::Composite(r)) = restored {
                     let hh = h as usize;
                     for (i, (a, b)) in before.iter().zip(live.composite.data.iter()).enumerate() {
                         let (x, y) = ((i % w as usize) as i32, ((i / w as usize) % hh) as i32);
@@ -1224,7 +1224,7 @@ fn live_restores_match_a_full_snapshot_history() {
 }
 
 #[test]
-fn undoing_a_reorder_of_equal_layers_reports_the_whole_document() {
+fn undoing_a_reorder_of_equal_layers_reports_no_rectangle() {
     let (w, h) = (40u32, 30u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![
@@ -1242,7 +1242,15 @@ fn undoing_a_reorder_of_equal_layers_reports_the_whole_document() {
     assert_eq!(history.anchor_count(), 2, "a reorder starts a new segment");
 
     let restored = history.undo_live(&mut live, &mut selection, &mut target);
-    assert_eq!(restored, Some(Restored::Everywhere));
+    assert_eq!(
+        restored,
+        Some(Restored::Region(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        }))
+    );
     assert!(live == open, "undo restores the original order");
 }
 

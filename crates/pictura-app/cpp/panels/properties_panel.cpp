@@ -2,6 +2,7 @@
 #include "api/type_api.h"
 
 #include "adjustment_controls.h"
+#include "adjustment_presets.h"
 #include "api/transform_api.h"
 #include "icons.h"
 #include "layers_panel_internal.h"
@@ -17,9 +18,13 @@
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 
 #include <QtCore/QTimer>
+#include <QtGui/QAction>
 #include <QtGui/QPainter>
 #include <QtGui/QShortcut>
 #include <QtGui/QStandardItemModel>
+#include <QtWidgets/QInputDialog>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
@@ -62,6 +67,17 @@ constexpr ModeEntry kModes[] = {
     {"indexed", "Indexed Color"}, {"rgb", "RGB Color"},     {"cmyk", "CMYK Color"},
     {"lab", "Lab Color"},       {"multichannel", "Multichannel"},
 };
+
+QByteArray bytes(const ::rust::Vec<std::uint8_t>& v)
+{
+    return QByteArray(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
+}
+
+::rust::Slice<const std::uint8_t> slice(const QByteArray& block)
+{
+    return {reinterpret_cast<const std::uint8_t*>(block.constData()),
+            std::size_t(block.size())};
+}
 
 QSpinBox* canvasSpin(QWidget* parent, const QString& name)
 {
@@ -158,7 +174,14 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     nothing->setEnabled(false);
     stack_->addWidget(nothing);
 
-    controls_ = new AdjustmentControls(stack_);
+    auto* adjustmentPage = new QWidget(stack_);
+    auto* adjustmentLayout = new QVBoxLayout(adjustmentPage);
+    adjustmentLayout->setContentsMargins(0, 0, 0, 0);
+    preset_ = new PresetCombo(adjustmentPage);
+    preset_->setObjectName(QStringLiteral("propertiesPreset"));
+    preset_->hide();
+    adjustmentLayout->addWidget(preset_);
+    controls_ = new AdjustmentControls(adjustmentPage);
     controls_->setObjectName(QStringLiteral("propertiesControls"));
     controls_->setCurveSource([this](int channel) {
         return view_ ? QString(adjustment_curve(*view_, path_, channel)) : QString();
@@ -179,7 +202,10 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
                 commitTimer_->start();
             });
     connect(controls_, &AdjustmentControls::gestureEnded, this, &PropertiesPanel::commit);
-    stack_->addWidget(controls_);
+    adjustmentLayout->addWidget(controls_);
+    connect(preset_, &PresetCombo::presetChosen, this,
+            [this](const QByteArray& block) { applyPresetBlock(block); });
+    stack_->addWidget(adjustmentPage);
 
     // CS6's footer: Clip to Layer, Reset, Toggle Visibility, Delete.
     footer_ = new QWidget(this);
@@ -647,9 +673,11 @@ void PropertiesPanel::refresh()
     }
     const QStringList page = adjustment_page(*view_, path_);
     if (page.isEmpty()) {
+        kind_.clear();
         showLayer(row);
         return;
     }
+    kind_ = row.adjustmentKind;
     clip_->setChecked(row.clipping);
     const QStringList clipPaths{path_};
     clip_->setEnabled(view_
@@ -662,6 +690,10 @@ void PropertiesPanel::refresh()
 
 void PropertiesPanel::showNothing()
 {
+    kind_.clear();
+    if (preset_) {
+        preset_->hide();
+    }
     footer_->hide();
     if (view_ && view_->has_document()) {
         header_->setText(QStringLiteral("Document"));
@@ -678,6 +710,10 @@ void PropertiesPanel::showNothing()
 
 void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
 {
+    kind_.clear();
+    if (preset_) {
+        preset_->hide();
+    }
     header_->setText(QStringLiteral("Layer Properties"));
     stack_->show();
     setPage(LayerPage);
@@ -749,9 +785,112 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     setPage(AdjustmentPage);
     canvas_->hide();
     footer_->show();
+    const bool supported = adjustmentPresetSupportsMenu(kind_);
+    preset_->setVisible(supported);
+    if (supported && view_) {
+        preset_->setBlock(kind_, bytes(adjustment_block(*view_, path_)));
+    } else {
+        preset_->setBlock(QString(), QByteArray());
+    }
     controls_->setPage(page, dirty_);
     title_ = controls_->title();
     header_->setText(title_);
+}
+
+void PropertiesPanel::applyPresetBlock(const QByteArray& block)
+{
+    if (!view_ || path_.isEmpty() || block.isEmpty()) {
+        return;
+    }
+    commit();
+    if (adjustment_set_block(*view_, path_, slice(block))) {
+        dirty_ = true;
+        commit();
+        refresh();
+    } else {
+        refresh();
+    }
+}
+
+void PropertiesPanel::savePreset()
+{
+    if (!view_ || path_.isEmpty() || !adjustmentPresetCanSave(kind_)) {
+        return;
+    }
+    commit();
+    const QByteArray block = bytes(adjustment_block(*view_, path_));
+    if (block.isEmpty()) {
+        return;
+    }
+    const QString name = presetNameProvider_
+                             ? presetNameProvider_()
+                             : QInputDialog::getText(this, QStringLiteral("Save Preset"),
+                                                     QStringLiteral("Preset name:"));
+    if (name.isEmpty()) {
+        return;
+    }
+    if (!saveAdjustmentPreset(kind_, name, block)) {
+        if (!presetNameProvider_) {
+            QMessageBox::warning(
+                this, QStringLiteral("Save Preset"),
+                QStringLiteral("That preset name is reserved or the preset could not be saved."));
+        }
+        return;
+    }
+    if (preset_) {
+        preset_->reload();
+        preset_->setBlock(kind_, block);
+    }
+}
+
+void PropertiesPanel::loadPreset()
+{
+    if (!view_ || path_.isEmpty() || !adjustmentPresetCanSave(kind_)) {
+        return;
+    }
+    const QStringList names = savedPresetNames(kind_);
+    if (names.isEmpty()) {
+        return;
+    }
+    const QString name =
+        presetPickProvider_ ? presetPickProvider_(names)
+                            : QInputDialog::getItem(this, QStringLiteral("Load Preset"),
+                                                    QStringLiteral("Preset:"), names, 0, false);
+    if (name.isEmpty()) {
+        return;
+    }
+    applyPresetBlock(savedPresetBlock(kind_, name));
+}
+
+void PropertiesPanel::performPanelMenuAction(const QString& id)
+{
+    if (id == QLatin1String("savePreset")) {
+        savePreset();
+    } else if (id == QLatin1String("loadPreset")) {
+        loadPreset();
+    }
+}
+
+void PropertiesPanel::updatePanelMenu(QMenu* menu)
+{
+    if (!menu) {
+        return;
+    }
+    const bool hasLayer = !path_.isEmpty();
+    for (QAction* action : menu->actions()) {
+        const QString id = action->data().toString();
+        if (id == QLatin1String("savePreset")) {
+            action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_));
+        } else if (id == QLatin1String("loadPreset")) {
+            action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_)
+                               && !savedPresetNames(kind_).isEmpty());
+        }
+    }
+}
+
+bool PropertiesPanel::canSavePresetForTest() const
+{
+    return !path_.isEmpty() && adjustmentPresetCanSave(kind_);
 }
 
 void PropertiesPanel::push(const QString& key, double value)
@@ -806,6 +945,9 @@ void PropertiesPanel::flushPendingPreview()
 void PropertiesPanel::edited()
 {
     dirty_ = true;
+    if (preset_ && !preset_->isHidden() && view_ && !path_.isEmpty()) {
+        preset_->setBlock(kind_, bytes(adjustment_block(*view_, path_)));
+    }
     commitTimer_->start();
 }
 

@@ -75,7 +75,10 @@ void LiquifyCanvas::reload()
         layerWidth_ = dims[0];
         layerHeight_ = dims[1];
     }
-    // CS6 opens Liquify at 100%, centred on the layer.
+    const ::rust::Vec<int32_t> origin = liquify_origin();
+    origin_ = origin.size() == 2 ? QPointF(origin[0], origin[1]) : QPointF(0, 0);
+    // CS6 opens Liquify at 100%, centred on the preview frame (the selection's
+    // bounding rectangle when one is active).
     zoom_ = 1.0;
     offset_ = QPointF((width() - layerWidth_) / 2.0, (height() - layerHeight_) / 2.0);
     placed_ = width() > 0 && height() > 0;
@@ -139,7 +142,10 @@ void LiquifyCanvas::setBackdrop(const QImage& image, BackdropMode mode, double o
 QPainterPath LiquifyCanvas::meshPathForTest()
 {
     rebuildMesh();
-    return QTransform::fromTranslate(offset_.x(), offset_.y()).scale(zoom_, zoom_).map(meshPath_);
+    return QTransform::fromTranslate(offset_.x(), offset_.y())
+        .scale(zoom_, zoom_)
+        .translate(-origin_.x(), -origin_.y())
+        .map(meshPath_);
 }
 
 void LiquifyCanvas::rebuildMesh()
@@ -244,12 +250,12 @@ void LiquifyCanvas::showZoomMenu(const QPoint& globalPos)
 
 QPointF LiquifyCanvas::toLayer(const QPointF& pos) const
 {
-    return (pos - offset_) / zoom_;
+    return (pos - offset_) / zoom_ + origin_;
 }
 
 QPointF LiquifyCanvas::toWidget(const QPointF& layer) const
 {
-    return offset_ + layer * zoom_;
+    return offset_ + (layer - origin_) * zoom_;
 }
 
 void LiquifyCanvas::strokeForTest(const QList<QPointF>& layerPoints, bool reverse, int ticks)
@@ -276,7 +282,7 @@ void LiquifyCanvas::paintEvent(QPaintEvent*)
     if (layerWidth_ <= 0) {
         return;
     }
-    const QRectF target(toWidget(QPointF(0, 0)), QSizeF(layerWidth_ * zoom_, layerHeight_ * zoom_));
+    const QRectF target(offset_, QSizeF(layerWidth_ * zoom_, layerHeight_ * zoom_));
     painter.save();
     painter.setBrushOrigin(target.topLeft());
     painter.fillRect(target, checkerBrush());
@@ -309,6 +315,7 @@ void LiquifyCanvas::paintEvent(QPaintEvent*)
         painter.save();
         painter.translate(offset_);
         painter.scale(zoom_, zoom_);
+        painter.translate(-origin_);
         QPen pen(meshColor_, 1.0);
         pen.setCosmetic(true);
         painter.setPen(pen);
@@ -473,7 +480,7 @@ void LiquifyCanvas::zoomAbout(double zoom, const QPointF& anchor)
     const double next = std::clamp(zoom, kMinZoom, kMaxZoom);
     const QPointF layer = toLayer(anchor);
     zoom_ = next;
-    offset_ = anchor - layer * zoom_;
+    offset_ = anchor - (layer - origin_) * zoom_;
     viewChanged();
 }
 

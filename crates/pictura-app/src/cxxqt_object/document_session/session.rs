@@ -479,6 +479,7 @@ impl PictureViewRust {
         self.solo_snapshot = None;
         self.expanded_groups.clear();
         self.move_base = None;
+        self.move_view = None;
         self.move_layer = None;
         self.move_x = 0;
         self.move_y = 0;
@@ -498,6 +499,7 @@ impl PictureViewRust {
         self.save_embed_profile = None;
         self.save_raster_options = None;
         self.filter_jobs.cancel_all();
+        self.auto_blend.cancel();
         self.adjust_jobs.cancel();
         self.save_job = None;
     }
@@ -513,6 +515,7 @@ impl PictureViewRust {
     /// whether the document changed and needs a rebuild.
     fn cancel_transform_session(&mut self, session: TransformSession) -> bool {
         self.move_base = None;
+        self.move_view = None;
         self.move_layer = None;
         self.move_x = 0;
         self.move_y = 0;

@@ -132,14 +132,16 @@ pub(super) fn begin_brush(
     mode: &QString,
     aliased: bool,
     auto_erase: bool,
+    pressure_size: bool,
+    pressure_opacity: bool,
 ) -> bool {
-    let cfg = StrokeConfig {
-        color: rgba_from_argb(foreground),
-        background: rgba_from_argb(background),
-        aliased,
-        auto_erase,
-        ..stamp_config(tip, opacity, flow, mode)
-    };
+    let mut cfg = stamp_config(tip, opacity, flow, mode);
+    cfg.color = rgba_from_argb(foreground);
+    cfg.background = rgba_from_argb(background);
+    cfg.aliased = aliased;
+    cfg.auto_erase = auto_erase;
+    cfg.pressure_size = pressure_size;
+    cfg.pressure_opacity = pressure_opacity;
     let label = if aliased { "Pencil" } else { "Brush" };
     if let Some(path) = active_mask_target(view.rust()) {
         let mask_cfg = mask_stroke_config(cfg);
@@ -222,6 +224,10 @@ pub(super) fn begin_pattern_stamp(
         let source = StampSource::pattern(tile, (origin_x, origin_y), doc.width, doc.height)?;
         Stroke::begin_source(doc, path, cfg, source).ok()
     })
+}
+
+pub(super) fn paint_hold(view: Pin<&mut PictureView>) -> bool {
+    view.paint_hold()
 }
 
 pub(super) fn begin_history_brush(

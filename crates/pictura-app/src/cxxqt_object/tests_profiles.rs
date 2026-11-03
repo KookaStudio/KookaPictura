@@ -9,7 +9,9 @@ mod damage;
 mod open;
 mod pan_zoom;
 mod preview;
+mod restore;
 mod retouch;
+mod type_edit;
 
 /// Viewport the canvas presents into (a typical desktop canvas).
 const VIEW: (u32, u32) = (1280, 800);
@@ -632,16 +634,16 @@ fn large_document_structural_edit_profile() {
         worst_add = worst_add.max(add + capture);
 
         let t = Instant::now();
-        assert_eq!(
+        assert!(matches!(
             history.undo_live(&mut doc, &mut selection, &mut target),
-            Some(Restored::Everywhere)
-        );
+            Some(Restored::Region(_))
+        ));
         let undo = t.elapsed().as_secs_f64() * 1000.0;
         worst_undo = worst_undo.max(undo);
-        assert_eq!(
+        assert!(matches!(
             history.redo_live(&mut doc, &mut selection, &mut target),
-            Some(Restored::Everywhere)
-        );
+            Some(Restored::Region(_))
+        ));
         println!(
             "structural_round round={i} add={add:.2}ms capture={capture:.2}ms undo={undo:.2}ms"
         );

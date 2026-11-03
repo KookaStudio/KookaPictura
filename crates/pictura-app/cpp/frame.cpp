@@ -773,12 +773,13 @@ void PicturaMainWindow::showFileInfo()
 
 void PicturaMainWindow::showOpenDialog()
 {
-    const QString path =
-        getOpenFileName(this, tr("Open"), documentDirectory(activeFilePath()), openFileFilters());
-    if (path.isEmpty()) {
-        return;
+    const QStringList paths = getOpenFileNames(this, tr("Open"),
+                                               documentDirectory(activeFilePath()),
+                                               openFileFilters());
+    // Start every chosen path; a failure on one must not skip the rest.
+    for (const QString& path : paths) {
+        startOpenDocumentAtPath(path);
     }
-    startOpenDocumentAtPath(path);
 }
 
 void PicturaMainWindow::setScreenMode(ScreenMode mode)

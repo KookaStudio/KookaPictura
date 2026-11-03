@@ -4,7 +4,7 @@
 
 ![The Video submenu](images/video-menu.png)
 
-- **De-Interlace…** is listed but is not available.
+- **De-Interlace…** removes the lines of one video field. Choose **Odd Fields** or **Even Fields** to say which field is thrown away, and **Interpolation** (a blend of the lines above and below) or **Duplication** (a copy of the line above) to say how the missing lines are rebuilt.
 - **NTSC Colors** limits the colours to those a television can show. It runs at once, without a dialog.
 
 ## Other

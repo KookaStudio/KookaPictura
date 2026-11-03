@@ -9,7 +9,7 @@
 // name, or checking it) is the one the canvas edits, and its arrow opens its
 // controls, closing the row that was open. The command's kind opens with
 // that effect on and selected. The preview re-renders the
-// active layer through `filter_proxy_layer` over the rest of the document;
+// document through `filter_proxy_composite`, with the active layer filtered;
 // the document is untouched until OK.
 
 #include <QtCore/QByteArray>
@@ -40,6 +40,7 @@ class BlurGalleryDialog : public QDialog {
 public:
     BlurGalleryDialog(PictureView* view, const FilterCommandSpec& spec,
                       QWidget* parent = nullptr);
+    ~BlurGalleryDialog() override;
 
     // The kind OK commits: the one effect switched on (`field-blur`,
     // `iris-blur`, `tilt-shift`, `path-blur`, `spin-blur`), `blur-gallery`
@@ -208,8 +209,6 @@ private:
     // edge; the preview draws the filtered layer over one of them, so the
     // other layers are never blurred with it (the commit filters only the
     // active layer). The draft is null when the full proxy is already small.
-    QImage base_;
-    QImage draftBase_;
     int proxyEdge_ = 0;
     int draftEdge_ = 0;
     bool renderPending_ = false;

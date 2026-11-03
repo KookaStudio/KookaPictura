@@ -4,6 +4,7 @@
 //! `Document::layers` (index 0 is the bottom of the stack).
 
 mod align;
+mod auto_blend;
 mod clipboard;
 mod clipping;
 mod create;
@@ -51,10 +52,16 @@ mod warp_raster;
 mod warp_tests;
 
 pub use align::{
-    align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds, AlignEdge,
+    align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds,
+    layer_has_content, AlignEdge,
+};
+pub use auto_blend::{
+    apply_auto_blend, can_auto_blend, plan_auto_blend, AutoBlendOptions, AutoBlendPlan,
+    BlendObjective, BlendedLayer, Cancelled as AutoBlendCancelled, AUTO_BLEND_PROGRESS_MAX,
 };
 pub use clipboard::{
-    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, Clip, PasteMode,
+    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, plane_has_coverage, Clip,
+    PasteMode,
 };
 pub use clipping::{
     can_create_clipping_mask, can_release_clipping_mask, create_clipping_mask,
@@ -71,8 +78,8 @@ pub use kernel::Interpolation;
 pub use layer_masks::{
     add_layer_mask, add_layer_mask_converting_background, apply_layer_mask, delete_layer_mask,
     has_layer_mask, invert_layer_mask, layer_mask_disabled, layer_mask_linked,
-    layer_mask_refinement, set_layer_mask_density, set_layer_mask_enabled, set_layer_mask_feather,
-    set_layer_mask_linked, LayerMaskKind, MASK_FLAG_LINKED,
+    layer_mask_refinement, replace_layer_mask, set_layer_mask_density, set_layer_mask_enabled,
+    set_layer_mask_feather, set_layer_mask_linked, LayerMaskKind, MASK_FLAG_LINKED,
 };
 pub use layer_style::{
     any_effects_visible, clear_layer_style, copy_layer_style, has_layer_style,
@@ -92,7 +99,7 @@ pub use move_content::{
     can_lift_selection, content_rect, lift_selection, merge_lifted, move_selection_content,
     trim_to_content, untrim_to,
 };
-pub use neutral::insertion_is_content_neutral;
+pub use neutral::{duplicate_is_content_neutral, insertion_is_content_neutral};
 pub use paths::{flatten_rows, is_background, parent_path, resolve_path, resolve_path_mut};
 pub use perspective_crop::{
     perspective_crop, perspective_crop_refusal, perspective_crop_size, perspective_crop_sized,

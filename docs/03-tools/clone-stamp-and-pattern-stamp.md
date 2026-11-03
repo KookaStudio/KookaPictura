@@ -66,8 +66,8 @@ samples `All Layers` / `Current And Below`.
 | Location | Type | Shortcut | Notes |
 |---|---|---|---|
 | Tools panel, Retouch group | Tool | `S` | Clone Stamp and Pattern Stamp share the `S` slot; the fly-out lists both |
-| Options bar (Clone Stamp) | Bar | — | Brush preset, Mode, Opacity, Flow, **Aligned**, **Sample** (Current Layer / Current And Below / All Layers), Ignore Adjustment Layers |
-| Options bar (Pattern Stamp) | Bar | — | Brush preset, Mode, Opacity, Flow, **Aligned**, Pattern picker, **Impressionist** |
+| Options bar (Clone Stamp) | Bar | — | Brush preset, Mode, Opacity, Flow, **Airbrush**, **Aligned**, **Sample** (Current Layer / Current And Below / All Layers), Ignore Adjustment Layers |
+| Options bar (Pattern Stamp) | Bar | — | Brush preset, Mode, Opacity, Flow, **Airbrush**, **Aligned**, Pattern picker, **Impressionist** |
 | `Window > Clone Source` | Dock panel | — | Five source buttons, W/H/Rotate/Flip, Offset x/y, overlay options |
 | Clone Source overlay | Canvas overlay | `Alt+Shift`/`Option+Shift` (hold) | Temporarily becomes Move Source Overlay |
 | Pattern pop-up panel | Picker | — | Pattern preset picker; library load from its panel menu |

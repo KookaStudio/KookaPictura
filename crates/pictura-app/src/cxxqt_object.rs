@@ -2,8 +2,10 @@
 #![allow(clippy::too_many_arguments)] // brush parameter lists mirror the C++ API
 mod actions_engine;
 mod adjustment_edit;
+mod adjustment_presets;
 mod align;
 mod annotations;
+mod auto_blend;
 mod channels;
 mod clipboard;
 mod clipping;
@@ -25,6 +27,7 @@ mod healing;
 mod helpers;
 mod helpers_composite;
 mod image_adjust;
+mod image_apply_image;
 mod image_hdr_toning;
 mod image_match_color;
 mod image_replace_color;
@@ -140,6 +143,9 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "regionBlitted"]
         fn region_blitted(self: Pin<&mut Self>, region: QImage, x: i32, y: i32);
+        /// Emitted when the exact pyramid replaced a coarse one: nothing changed, the receiver repaints.
+        #[qsignal]
+        fn pyramid_settled(self: Pin<&mut Self>);
         /// Emitted after a document region composite. The receiver patches its present crop over `(x, y, w, h)` and repaints; no region pixels cross the bridge.
         #[qsignal]
         #[cxx_name = "regionDamaged"]
@@ -210,7 +216,6 @@ pub mod qobject {
         /// Post-open notices (mode, depth, ICC), `"; "`-joined; empty when none.
         #[qinvokable]
         fn open_notice(&self) -> QString;
-
         /// Assign (retag) or convert (transform and retag) the active document to a built-in profile: 0 sRGB, 1 Adobe RGB, 2 Pro Photo RGB. False without a document or on a bad index.
         #[qinvokable]
         fn assign_profile(self: Pin<&mut Self>, profile_index: i32) -> bool;
@@ -1012,9 +1017,6 @@ pub mod qobject {
         /// Whether a paint stroke is currently active.
         #[qinvokable]
         fn is_painting(&self) -> bool;
-        /// The view-pyramid level the active stroke presents: the reduced preview level, or 0 when the zoom picks it. A GPU stroke presents the zoom-selected level.
-        #[qinvokable]
-        fn preview_present_level(&self) -> i32;
 
         /// Brush size/hardness step for a `[`/`]` key, or 0.
         #[qinvokable]

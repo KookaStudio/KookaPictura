@@ -1968,13 +1968,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // Full pixel-by-pixel equality over the small (64x64) canvas.
         const bool interactiveBegan = interactiveView->begin_move_preview();
         const QImage interactiveBase = interactiveView->move_preview_base();
+        const QPoint patchAt = pictura::transform_api::previewBaseOrigin(*interactiveView).value_or(QPoint());
         interactiveView->set_layer_visible(topLayer, false);
         const QImage regionHidden = interactiveView->image();
         // Force a full recomposite of the same document state.
         interactiveView->set_gpu_compute(interactiveView->gpu_compute());
         const QImage fullHidden = interactiveView->image();
         const bool baseSame = interactiveBegan && !interactiveBase.isNull()
-                                 && samePixels(interactiveBase, regionHidden);
+                                 && samePixels(interactiveBase, regionHidden.copy(QRect(patchAt, interactiveBase.size())));
         const bool visibilitySame = samePixels(regionHidden, fullHidden);
         interactiveView->set_layer_visible(topLayer, true);
         interactiveView->end_move_preview();

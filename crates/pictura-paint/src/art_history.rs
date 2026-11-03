@@ -274,7 +274,7 @@ impl ArtHistoryBrush {
 }
 
 /// `paint`'s colour over `dest` at coverage `a` (straight alpha).
-fn over(dest: [u8; 4], paint: [u8; 4], a: f32) -> [u8; 4] {
+pub(crate) fn over(dest: [u8; 4], paint: [u8; 4], a: f32) -> [u8; 4] {
     let da = dest[3] as f32 / 255.0;
     let out_a = a + da * (1.0 - a);
     if out_a <= 0.0 {

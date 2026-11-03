@@ -50,6 +50,14 @@ bool Stroke::dab(double x, double y, double pressure)
     return view_->paint_dab(x, y, pressure);
 }
 
+bool Stroke::hold()
+{
+    if (!open_ || !view_) {
+        return false;
+    }
+    return paint_hold(*view_);
+}
+
 bool Stroke::present()
 {
     if (!open_ || !view_) {
@@ -83,11 +91,12 @@ void Stroke::abandon()
 
 std::optional<Stroke> beginBrush(PictureView& view, std::uint32_t foreground,
                                  std::uint32_t background, const PaintTip& tip, int opacity,
-                                 int flow, const QString& mode, bool aliased, bool autoErase)
+                                 int flow, const QString& mode, bool aliased, bool autoErase,
+                                 bool pressureSize, bool pressureOpacity)
 {
     Stroke stroke(view, [&] {
         return begin_brush(view, foreground, background, tip, opacity, flow, mode, aliased,
-                           autoErase);
+                           autoErase, pressureSize, pressureOpacity);
     });
     if (!stroke.open()) {
         return std::nullopt;

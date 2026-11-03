@@ -175,6 +175,7 @@ private:
     QJsonObject applyFilterWithParams(const QString& kind, const QJsonValue& values);
     QJsonObject methodAdjustment(const QJsonObject& params);
     QJsonObject methodLayerOp(const QJsonObject& params);
+    QJsonObject methodTypeOp(const QJsonObject& params);
     QJsonObject methodSetGpuCompute(const QJsonObject& params);
     QJsonObject methodMetrics(const QJsonObject& params);
     QJsonObject methodPointer(const QJsonObject& params);

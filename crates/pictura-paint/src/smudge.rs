@@ -15,6 +15,7 @@
 //! Ported from photorust's `core/src/smudge.rs`
 //! (<https://github.com/perfecto25/photorust>). Behavioural parity only.
 
+use crate::art_history::over;
 use crate::focus::{lerp, restrict, RetouchMode};
 use crate::healing::RgbaImage;
 use crate::replace::{dab_bounds, grow};
@@ -51,9 +52,12 @@ struct Carried {
 /// One Smudge stroke's state.
 pub(crate) struct SmudgeBrush {
     options: SmudgeOptions,
-    /// Sample All Layers: the composite, layer-local, the finger picks up from.
-    // ponytail: a snapshot taken at the press, so with Sample All Layers the
-    // smear reaches one dab past what the composite showed then.
+    /// Sample All Layers: the composite at the press, layer-local. Each pickup
+    /// lays the live working layer over it, so the finger reads the current
+    /// canvas while the other layers stay static.
+    // ponytail: the live layer is source-over'd on the press-time composite, so
+    // a partial-alpha or mid-stack target double-counts its press-time
+    // contribution. A true live composite needs the render layer in the stroke.
     sampled: Option<RgbaImage>,
     /// A transparency lock: colour may move, coverage may not.
     preserve_alpha: bool,
@@ -131,7 +135,10 @@ impl SmudgeBrush {
             right: (region.right + reach).min(img.width),
         };
         let loaded = self.carried.is_none() && self.options.finger_painting;
-        let from = self.sampled.as_ref().unwrap_or(img);
+        let sampled = self
+            .sampled
+            .as_ref()
+            .filter(|s| s.width == img.width && s.height == img.height);
         let (w, h) = (rect.width(), rect.height());
         let data = (0..h)
             .flat_map(|y| (0..w).map(move |x| (x, y)))
@@ -139,7 +146,16 @@ impl SmudgeBrush {
                 if loaded {
                     self.paint
                 } else {
-                    from.get(x + rect.left, y + rect.top)
+                    let (px, py) = (x + rect.left, y + rect.top);
+                    let live = img.get(px, py);
+                    match sampled {
+                        // The composite as it was at the press, with the layer
+                        // this stroke is changing laid over it. Without the
+                        // live part the finger would never pick up its own
+                        // smear and the stroke would replay press-time pixels.
+                        Some(sampled) => over(sampled.get(px, py), live, live[3] as f32 / 255.0),
+                        None => live,
+                    }
                 }
             })
             .collect();
@@ -283,6 +299,18 @@ mod tests {
         );
     }
 
+    fn image(width: i32, height: i32, px: impl Fn(i32, i32) -> [u8; 4]) -> RgbaImage {
+        let data = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .map(|(x, y)| px(x, y))
+            .collect();
+        RgbaImage {
+            width,
+            height,
+            data,
+        }
+    }
+
     #[test]
     fn sample_all_layers_picks_up_from_the_composite() {
         let bar = bar();
@@ -290,15 +318,41 @@ mod tests {
             &crate::stamp::layer_surface(&bar, "0").unwrap(),
             bar.layers[0].rect,
         );
-        let d = smudge(&doc(80, 40, WHITE), at(0.9), Some(composite), (12, 40));
+        // The target starts empty, so the finger has to read the composite.
+        let d = smudge(
+            &doc(80, 40, [0, 0, 0, 0]),
+            at(0.9),
+            Some(composite),
+            (12, 40),
+        );
         assert!(
             pixel(&d, 20, 20)[0] < 240,
             "nothing was picked up from the composite"
         );
         assert_eq!(
             pixel(&d, 2, 20),
-            WHITE,
+            [0, 0, 0, 0],
             "the layer was painted outside the stroke"
+        );
+    }
+
+    #[test]
+    fn sample_all_layers_picks_up_the_live_layer() {
+        // An empty target over a red-left/blue-right composite. Once the stroke
+        // lays red onto the target, the pickup must read that live layer rather
+        // than the press-time composite, so the red is dragged to the far end.
+        let sampled = image(80, 40, |x, _| {
+            if x < 20 {
+                [220, 20, 20, 255]
+            } else {
+                [20, 20, 220, 255]
+            }
+        });
+        let out = smudge(&doc(80, 40, [0, 0, 0, 0]), at(1.0), Some(sampled), (12, 70));
+        let far = pixel(&out, 65, 20);
+        assert!(
+            far[0] > far[2],
+            "the press-time blue was carried instead of the laid red: {far:?}"
         );
     }
 }

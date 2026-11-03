@@ -4,6 +4,7 @@ set(PICTURA_QT_TESTS
     tst_gpu_backend
     tst_offthread_jobs
     tst_open_save
+    tst_multi_file_open
     tst_document_api
     tst_document_session
     tst_selection_api
@@ -77,6 +78,8 @@ set(PICTURA_QT_TESTS
     tst_fill_tools
     tst_eraser_tools
     tst_retouch_tools
+    tst_stamp_hold
+    tst_brush_airbrush
     tst_pen_tools
     tst_path_selection_tools
     tst_shape_tools
@@ -88,12 +91,14 @@ set(PICTURA_QT_TESTS
     tst_type_tools
     tst_type_panels
     tst_type_color_preview
+    tst_type_edit_damage
     tst_paragraph_type
     tst_type_on_path
     tst_move_feedback
     tst_smart_guides
     tst_tool_options_persistence
     tst_character_paragraph_panels
+    tst_type_session_panels
     tst_paragraph_styles_panel
     tst_character_styles_panel
     tst_type_preferences
@@ -115,6 +120,7 @@ set(PICTURA_QT_TESTS
     tst_save_format_options
     tst_properties_panel
     tst_properties_preview
+    tst_adjustment_presets
     tst_adjustments_panel
     tst_actions_panel
     tst_channels_panel
@@ -128,6 +134,7 @@ set(PICTURA_QT_TESTS
     tst_lighting_effects_dialog
     tst_shear_dialog
     tst_displace
+    tst_de_interlace
     tst_custom_filter
     tst_digimarc_watermark
     tst_shape_blur
@@ -150,7 +157,9 @@ set(PICTURA_QT_TESTS
     tst_color_range
     tst_refine_edge
     tst_replace_color
+    tst_apply_image
     tst_match_color
+    tst_auto_blend
     tst_print
     tst_save_pdf
     tst_import_pdf

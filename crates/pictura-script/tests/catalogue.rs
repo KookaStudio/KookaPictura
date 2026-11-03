@@ -103,21 +103,19 @@ fn every_wired_filter_has_a_definition() {
             "wired filter '{id}' has no command definition"
         );
     }
-    for unwired in ["filter.extract", "filter.video.de.interlace"] {
-        assert!(
-            pictura_script::command::definition(unwired).is_none(),
-            "unwired filter '{unwired}' must stay unimplemented"
-        );
-    }
+    assert!(
+        pictura_script::command::definition("filter.extract").is_none(),
+        "unwired filter 'filter.extract' must stay unimplemented"
+    );
 }
 
 #[test]
 fn default_catalogue_shape_is_stable() {
     let catalogue = command_catalogue();
-    assert_eq!(catalogue.len(), 594);
+    assert_eq!(catalogue.len(), 595);
     assert_eq!(
         catalogue.iter().filter(|spec| spec.implemented).count(),
-        362
+        365
     );
     assert_eq!(const_names().len(), 237);
 }

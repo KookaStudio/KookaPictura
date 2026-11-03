@@ -3,9 +3,11 @@
 #include "actions_panel.h"
 #include "adjustment_catalogue.h"
 #include "character_panel.h"
+#include "frame.h"
 #include "history_panel.h"
 #include "layers_panel.h"
 #include "paragraph_panel.h"
+#include "properties_panel.h"
 
 #include <QtCore/QHash>
 #include <QtGui/QAction>
@@ -307,7 +309,8 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
          }()},
         {QStringLiteral("propertiesPanel"),
          {
-             dis(QStringLiteral("Save Preset…")),
+             imp(QStringLiteral("Save Preset…"), QStringLiteral("savePreset")),
+             imp(QStringLiteral("Load Preset…"), QStringLiteral("loadPreset")),
              dis(QStringLiteral("Save Black & White Preset")),
              dis(QStringLiteral("Auto Options…"), true),
              dis(QStringLiteral("Curves Display Options…")),
@@ -398,6 +401,21 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
 }
 } // namespace
 
+PicturaMainWindow* PanelGroup::owningFrame() const
+{
+    QWidget* top = window();
+    if (auto* frame = qobject_cast<PicturaMainWindow*>(top)) {
+        return frame;
+    }
+    // A group hosted in a floating overlay: the overlay's parent is the frame.
+    if (top) {
+        if (auto* frame = qobject_cast<PicturaMainWindow*>(top->parentWidget())) {
+            return frame;
+        }
+    }
+    return nullptr;
+}
+
 void PanelGroup::updateHeaderMenu()
 {
     if (!headerButton_) {
@@ -451,8 +469,14 @@ void PanelGroup::updateHeaderMenu()
                 }
             }
         }
-        if (panelMenuHooks_.contains(panel)) {
-            panelMenuHooks_.value(panel)(headerMenu_);
+        PanelMenuHook hook = panelMenuHooks_.value(panel);
+        if (!hook) {
+            if (PicturaMainWindow* frame = owningFrame()) {
+                hook = frame->panelMenuHook(panel);
+            }
+        }
+        if (hook) {
+            hook(headerMenu_);
         } else if (auto* actions = qobject_cast<ActionsPanel*>(tabs_->currentWidget())) {
             actions->updatePanelMenu(headerMenu_);
         }
@@ -494,6 +518,10 @@ void PanelGroup::runPanelMenuAction(const QString& actionId)
     }
     if (auto* paragraph = qobject_cast<ParagraphPanel*>(panel)) {
         paragraph->performPanelMenuAction(actionId);
+        return;
+    }
+    if (auto* properties = qobject_cast<PropertiesPanel*>(panel)) {
+        properties->performPanelMenuAction(actionId);
         return;
     }
     // The Adjustments panel is a launcher with no view handle; its adjustment

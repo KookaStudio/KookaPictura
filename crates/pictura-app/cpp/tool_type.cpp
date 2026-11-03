@@ -544,9 +544,9 @@ public:
         }
     }
 
-    bool newTextCharacter(CharacterSetting& character, QString& family) const override
+    bool textCharacter(CharacterSetting& character, QString& family) const override
     {
-        if (!active_ || !editPath_.isEmpty() || mask_) {
+        if (!active_) {
             return false;
         }
         character = currentSetting().character;
@@ -556,9 +556,9 @@ public:
 
     // The options bar's fields (family, size, colour, anti-aliasing) stay in
     // the shared TypeOptions; the rest rides on the session.
-    bool setNewTextCharacter(const CharacterSetting& character, const QString& family) override
+    bool setTextCharacter(const CharacterSetting& character, const QString& family) override
     {
-        if (!active_ || !editPath_.isEmpty() || mask_) {
+        if (!active_) {
             return false;
         }
         character_ = character;
@@ -567,6 +567,28 @@ public:
         o.size = character.size;
         o.color = QColor::fromRgba(character.color);
         o.antialias = character.anti_alias;
+        type_->set(o);
+        refreshOverlay();
+        return true;
+    }
+
+    bool textParagraph(ParagraphSetting& paragraph) const override
+    {
+        if (!active_) {
+            return false;
+        }
+        paragraph = currentSetting().paragraph;
+        return true;
+    }
+
+    bool setTextParagraph(const ParagraphSetting& paragraph) override
+    {
+        if (!active_) {
+            return false;
+        }
+        paragraph_ = paragraph;
+        TypeOptions o = type_->get();
+        o.justification = paragraph.justify;
         type_->set(o);
         refreshOverlay();
         return true;
@@ -617,6 +639,7 @@ private:
         frame_ = TypeFrame();
         frame_.origin = pos;
         character_.reset();
+        paragraph_.reset();
         // New type starts with its placeholder selected, so typing replaces
         // it (Photoshop CC, not CS6); the mask tools make selections, not
         // layers, and start empty.
@@ -964,6 +987,7 @@ private:
         editPath_.clear();
         editSession_.reset();
         character_.reset();
+        paragraph_.reset();
         edit_.reset(QString(), 0);
         stops_.clear();
         selecting_ = false;
@@ -990,16 +1014,22 @@ private:
     {
         const TypeOptions o = type_->get();
         TypeEdit edit;
-        edit.character = character_ ? *character_ : pictura::type_api::defaultCharacterSetting();
+        edit.character = pictura::type_api::defaultCharacterSetting();
         edit.paragraph = pictura::type_api::defaultParagraphSetting();
-        // A reopened layer keeps its full attribute set; the bar overrides only
-        // the fields it exposes.
+        // A reopened layer keeps its full attribute set; the panels' edits sit
+        // over it, and the bar overrides only the fields it exposes.
         if (!editPath_.isEmpty() && view_) {
             const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, editPath_);
             if (layer.isType) {
                 edit.character = layer.spec.character;
                 edit.paragraph = layer.spec.paragraph;
             }
+        }
+        if (character_) {
+            edit.character = *character_;
+        }
+        if (paragraph_) {
+            edit.paragraph = *paragraph_;
         }
         edit.character.size = o.size;
         edit.character.color = o.color.rgba();
@@ -1144,8 +1174,9 @@ private:
     // a bar change applies only what changed.
     QString layerPath_;
     TypeOptions known_;
-    // The Character panel's attributes for new type; unset until it edits them.
+    // The panels' attributes for this session; unset until they edit them.
     std::optional<CharacterSetting> character_;
+    std::optional<ParagraphSetting> paragraph_;
     bool syncing_ = false;
     std::unique_ptr<TypeKeyFilter> filter_;
     std::shared_ptr<TypeGroup> type_;

@@ -108,6 +108,27 @@ pub(super) fn layer_content_bounds_extents(view: &PictureView, path: &QString) -
         })
 }
 
+pub(super) fn move_preview_base_origin(view: &PictureView) -> Vec<i32> {
+    view.rust()
+        .move_base_origin
+        .map_or_else(Vec::new, |(x, y)| vec![x, y])
+}
+
+pub(super) fn move_preview_scale(view: &PictureView) -> i32 {
+    view.rust().move_view.map_or(1, |view| view.scale())
+}
+
+pub(super) fn move_preview_content_extents(view: &PictureView) -> Vec<i32> {
+    view.rust().move_view.map_or_else(Vec::new, |view| {
+        let rect = view.content;
+        vec![rect.left, rect.top, rect.right, rect.bottom]
+    })
+}
+
+pub(super) fn move_preview_follow(view: Pin<&mut PictureView>, dx: i32, dy: i32) -> bool {
+    view.follow_move_preview(dx, dy)
+}
+
 pub(super) fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32> {
     view.rust()
         .session

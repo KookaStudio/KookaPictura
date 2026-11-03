@@ -132,6 +132,10 @@ QString getSaveFileName(QWidget* parent, const QString& caption, const QString& 
                         const QStringList& filters, QString* selectedFilter);
 QString getOpenFileName(QWidget* parent, const QString& caption, const QString& dir,
                         const QStringList& filters, QString* selectedFilter = nullptr);
+// Multi-select variant of getOpenFileName for File > Open: returns every chosen
+// path (empty = cancel) and sets `selectedFilter` to the chosen filter.
+QStringList getOpenFileNames(QWidget* parent, const QString& caption, const QString& dir,
+                             const QStringList& filters, QString* selectedFilter = nullptr);
 
 // Start folder for a dialog opened without an explicit directory. Qt persists
 // its own "last visited" folder but reconstructs it as a path from a file://

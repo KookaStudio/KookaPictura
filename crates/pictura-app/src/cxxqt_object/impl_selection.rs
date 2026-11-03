@@ -289,6 +289,8 @@ impl qobject::PictureView {
         };
         let mut rust = self.as_mut().rust_mut();
         rust.move_base = Some(base);
+        rust.move_base_origin = None;
+        rust.move_view = None;
         rust.move_layer = Some(layer);
         rust.move_x = 0;
         rust.move_y = 0;

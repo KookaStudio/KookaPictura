@@ -14,7 +14,7 @@ class CurveWidget;
 // selected point, a usage hint, Preview, and Cancel / OK along the bottom.
 // Each channel (RGB, Red, Green, Blue) edits its own curve. Ported from
 // photorust's CurvesDialog, laid out after the newer single-column Curves page.
-// ponytail: no presets menu, eyedroppers, Auto, or Show options; the histogram
+// ponytail: no eyedroppers, Auto, or Show options; the histogram
 // is of the canvas composite, not the active layer alone.
 class CurvesDialog : public AdjustmentDialog {
     Q_OBJECT
@@ -24,6 +24,7 @@ public:
                  QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override { loadChannel(); }
 
 private:
     void loadChannel();

@@ -141,7 +141,6 @@ private:
     // the active layer hidden, so each pane update filters only the active
     // layer at proxy scale and composites it over this base. The pane follows a
     // drag while the whole-layer preview waits for release.
-    QImage baseProxy_;
 };
 
 } // namespace pictura

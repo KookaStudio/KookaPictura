@@ -20,6 +20,7 @@ public:
                    QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override;
 
 private:
     void applyPreset(int index);
