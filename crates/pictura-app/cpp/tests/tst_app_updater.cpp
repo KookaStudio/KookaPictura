@@ -640,6 +640,7 @@ void AppUpdaterTest::disabledCheckMakesNoRequest()
     checker.setSettings(
         settingsFor(server, PackageMethod::AppImage, QStringLiteral("0.3.0"), false));
     QVERIFY(!checker.checkAutomatically());
+    // A mistaken request would reach the local server within this window.
     QTest::qWait(100);
     QCOMPARE(server.requestCount(), 0);
 }
@@ -655,6 +656,7 @@ void AppUpdaterTest::headlessSkipsCheck()
                                     true, false));
     QVERIFY(!checker.checkAutomatically());
     QVERIFY(!checker.checkManually());
+    // A mistaken request would reach the local server within this window.
     QTest::qWait(100);
     QCOMPARE(server.requestCount(), 0);
 }

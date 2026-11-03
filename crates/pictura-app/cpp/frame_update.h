@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QtCore/QString>
+
 class QWidget;
 
 namespace pictura {

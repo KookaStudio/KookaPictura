@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QString>
 #include <QtWidgets/QWidget>
 
 class QCheckBox;
