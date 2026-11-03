@@ -21,6 +21,7 @@ mod rasterize;
 mod region;
 mod smart_object;
 mod smart_object_actions;
+mod smart_object_alpha;
 mod text_gamma;
 mod vector_fill;
 mod vector_mask;

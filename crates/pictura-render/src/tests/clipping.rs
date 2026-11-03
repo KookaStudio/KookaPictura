@@ -1,7 +1,10 @@
 //! Clipping groups in the CPU compositor (`composite_clipping`).
 
+use super::smart_object::{embedded, payload_of, smart_layer};
+use super::smart_object_alpha::payload_with_alpha;
 use super::*;
 use crate::composite::composite_rgba_region;
+use pictura_core::{Channel, SmartObject};
 
 const WHITE: [u8; 3] = [255, 255, 255];
 const GREEN: [u8; 3] = [0, 255, 0];
@@ -220,4 +223,79 @@ fn clipped_adjustment_region_matches_full() {
             assert_eq!(px(&parallel, x, y), px(&full_out, x + 1, y + 1));
         }
     }
+}
+
+/// A white background, a smart-object base over the full canvas, and a
+/// full-canvas green layer clipped to it.
+fn smart_base_doc(so: SmartObject, channels: Vec<Channel>) -> Document {
+    let base = smart_layer("Base", full(4, 4), so, channels);
+    let mut green = solid(
+        "Green",
+        full(4, 4),
+        (0, 255, 0),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    green.clipping = true;
+    doc(
+        4,
+        4,
+        vec![
+            solid(
+                "Background",
+                full(4, 4),
+                (255, 255, 255),
+                255,
+                BlendMode::Normal,
+                255,
+            ),
+            base,
+            green,
+        ],
+    )
+}
+
+/// A 4x4 red proxy whose left half is opaque and right half transparent.
+fn proxy_with_alpha() -> Vec<Channel> {
+    let alpha: Vec<u8> = (0..16).map(|i| if i % 4 < 2 { 255 } else { 0 }).collect();
+    vec![
+        Channel {
+            id: 0,
+            data: vec![255; 16].into(),
+        },
+        Channel {
+            id: 1,
+            data: vec![0; 16].into(),
+        },
+        Channel {
+            id: 2,
+            data: vec![0; 16].into(),
+        },
+        Channel {
+            id: -1,
+            data: alpha.into(),
+        },
+    ]
+}
+
+#[test]
+fn a_clipped_layer_respects_a_smart_object_bases_alpha() {
+    // The 2x2 source scales to 4x4: columns 0-1 opaque, columns 2-3 transparent.
+    let so = embedded(payload_with_alpha([[255, 0, 0]; 4], [255, 0, 255, 0]));
+    let out = composite_rgba(&smart_base_doc(so, Vec::new()));
+    assert_eq!(rgb(&out, 0, 0), GREEN, "inside the opaque half");
+    assert_eq!(rgb(&out, 1, 3), GREEN);
+    assert_eq!(rgb(&out, 2, 0), WHITE, "over the transparent half");
+    assert_eq!(rgb(&out, 3, 3), WHITE);
+}
+
+#[test]
+fn a_clipped_layer_respects_a_proxy_bases_alpha() {
+    let so = embedded(payload_of([255, 0, 0]));
+    let out = composite_rgba(&smart_base_doc(so, proxy_with_alpha()));
+    assert_eq!(rgb(&out, 0, 0), GREEN, "inside the proxy's opaque half");
+    assert_eq!(rgb(&out, 1, 3), GREEN);
+    assert_eq!(rgb(&out, 2, 0), WHITE, "over the proxy's transparent half");
+    assert_eq!(rgb(&out, 3, 3), WHITE);
 }
