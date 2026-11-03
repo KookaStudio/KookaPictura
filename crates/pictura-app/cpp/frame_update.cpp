@@ -250,6 +250,10 @@ void setAutomaticUpdateChecks(PicturaMainWindow& frame, bool on)
 
 void checkForUpdatesManually(PicturaMainWindow& frame)
 {
+    if (qEnvironmentVariableIsSet("PICTURA_DISABLE_UPDATE_CHECK")) {
+        frame.statusBar()->showMessage(QObject::tr("Update checks are disabled."), 5000);
+        return;
+    }
     auto* checker = ensureUpdateChecker(frame, loadSession().checkForUpdatesOnLaunch);
     if (!checker->settings().networkAllowed) {
         frame.statusBar()->showMessage(

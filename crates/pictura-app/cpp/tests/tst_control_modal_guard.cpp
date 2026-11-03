@@ -56,6 +56,7 @@ private:
 
 void ControlModalGuardTest::initTestCase()
 {
+    qputenv("PICTURA_DISABLE_UPDATE_CHECK", "1");
     QVERIFY(stateHome_.isValid());
     pictura::setUnsavedPromptInteractive(false);
     pictura::setNonInteractiveUnsavedChoice(pictura::UnsavedChoice::Discard);
