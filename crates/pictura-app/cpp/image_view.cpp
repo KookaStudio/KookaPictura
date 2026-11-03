@@ -764,35 +764,7 @@ void ImageView::paintEvent(QPaintEvent* event)
     }
     painter.restore();
 
-    if (brushOutlineActive_ && brushOutlineDiameter_ > 0.0 && !panning_ && !spacePan_) {
-        // Draw in the screen frame and snap to the device grid. The image-space
-        // transform leaves the centre and radius fractional, so the 1-px stroke
-        // lands between pixels at every zoom but 100 %. The restore is required
-        // because the overlays below still draw in image space.
-        painter.save();
-        painter.setTransform(viewRotation());
-        painter.setClipping(false);
-        const double diameter = brushOutlineDeviceDiameter();
-        const QPointF raw = brushOutlineImagePos_ * zoom_ + offset_;
-        const QPointF centre(std::round(raw.x()), std::round(raw.y()));
-        const double radius = diameter / 2.0;
-        // The cosmetic pen is one device pixel; the halo is the same so the
-        // white ring stays one device pixel outside the black one at any DPR.
-        const double halo = 1.0 / devicePixelRatioF();
-        const auto outline = [&painter, centre, square = brushOutlineSquare_](double r) {
-            if (square) {
-                painter.drawRect(QRectF(centre.x() - r, centre.y() - r, 2.0 * r, 2.0 * r));
-            } else {
-                painter.drawEllipse(centre, r, r);
-            }
-        };
-        painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(Qt::white, 0));
-        outline(radius + halo);
-        painter.setPen(QPen(Qt::black, 0));
-        outline(radius);
-        painter.restore();
-    }
+    paintBrushOutline(painter);
 
     painter.save();
     // One device pixel of slack lets a cosmetic stroke centred on the document

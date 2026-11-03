@@ -674,6 +674,7 @@ private:
     // The screen-pixel diameter the ring is drawn at: the scaled diameter
     // rounded to whole pixels, clamped so a sub-pixel brush keeps a cursor.
     double brushOutlineDeviceDiameter() const;
+    void paintBrushOutline(QPainter& painter);
     void paintCropGroupOverlays(QPainter& painter);
     // The Free Transform reference point marker (image_view_overlays.cpp).
     void paintTransformPivot(QPainter& painter);
