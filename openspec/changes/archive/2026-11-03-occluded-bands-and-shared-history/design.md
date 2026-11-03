@@ -6,7 +6,9 @@
 knockout, when the bottom shown root is *opaque over the band* (a plain pixel
 layer: no effects, clipping, smart object, group or other source; full opacity
 and fill, no type curve, Blend If or mask, no native store; covering the band
-with every alpha sample 255) and the roots above it are plain, the band starts at
+with every alpha sample 255; a layer with no alpha channel counts as opaque, and a
+missing or short alpha row does not, although the compositor reads a missing
+sample as 255 too) and the roots above it are plain, the band starts at
 the topmost such root in Normal mode.
 
 Why it is exact: the bottom over the transparent canvas yields alpha

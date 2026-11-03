@@ -246,6 +246,7 @@ fn opaque_over(node: &PlanNode<'_>, region: PsdRect) -> bool {
     {
         return false;
     }
+    // A layer with no alpha channel is opaque: a Background.
     let Some(alpha) = crate::composite::channel_plane(layer, -1) else {
         return true;
     };
@@ -254,14 +255,14 @@ fn opaque_over(node: &PlanNode<'_>, region: PsdRect) -> bool {
         (region.left - rect.left) as usize,
         (region.right - rect.left) as usize,
     );
+    // A missing or short alpha row is not opaque. The compositor reads a
+    // missing sample as 255 too, but being strict costs only the skip, never
+    // a byte.
     (region.top..region.bottom).all(|y| {
-        // A short or missing row reads as opaque, as the compositor reads it.
-        match alpha.row((y - rect.top) as usize, lw) {
-            Some(row) => row
-                .get(from..to.min(row.len()))
-                .is_none_or(|span| span.iter().all(|&v| v == 255)),
-            None => true,
-        }
+        alpha
+            .row((y - rect.top) as usize, lw)
+            .and_then(|row| row.get(from..to))
+            .is_some_and(|span| span.iter().all(|&v| v == 255))
     })
 }
 
@@ -398,6 +399,26 @@ mod tests {
         doc
     }
 
+    /// The opaque layer's alpha cut off after 100 of its 192 rows.
+    fn truncated() -> Document {
+        let mut doc = covered(true);
+        let alpha = doc.layers[2]
+            .channels
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .expect("an alpha channel");
+        alpha.data.truncate(100 * W as usize);
+        doc
+    }
+
+    #[test]
+    fn a_short_alpha_plane_is_not_opaque() {
+        let doc = truncated();
+        let plan = CompositePlan::build(&doc, canvas(), None);
+        assert_eq!(first_shown_root(&plan, &doc, band_rect(1)), (2, true));
+        assert_eq!(first_shown_root(&plan, &doc, band_rect(2)), (0, false));
+    }
+
     #[test]
     fn an_opaque_top_layer_alone_is_copied() {
         let doc = covered(true);
@@ -411,7 +432,13 @@ mod tests {
 
     #[test]
     fn a_skipped_band_composites_as_the_whole_stack_does() {
-        for doc in [stack(true), stack(false), covered(true), covered(false)] {
+        for doc in [
+            stack(true),
+            stack(false),
+            covered(true),
+            covered(false),
+            truncated(),
+        ] {
             let opaque_bottom = doc.layers[0].channels.len() == 3;
             assert!(banded(&doc, H));
             let whole = composite_rgba_region(&doc, 0, 0, W, H);
