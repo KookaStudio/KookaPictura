@@ -67,22 +67,6 @@ impl<'a> BlendCtx<'a> {
         self.opacity
     }
 
-    pub(crate) fn mode(&self) -> BlendMode {
-        self.mode
-    }
-
-    /// Whether the content's own alpha reaches the blend unscaled: full
-    /// opacity and fill, no type curve, no Blend If and no mask, so a sample of
-    /// alpha 255 blends at exactly 1.
-    pub(crate) fn passes_alpha(&self) -> bool {
-        self.opacity == 1.0
-            && self.fill == 1.0
-            && self.curve.is_none()
-            && self.blend_if.is_none()
-            && matches!(self.mask.raster, RasterGate::None)
-            && matches!(self.mask.vector, VectorGate::None)
-    }
-
     pub(crate) fn with_override(&self, over: &BlendOverride) -> Self {
         let mut ctx = self.clone();
         if let Some(opacity) = over.opacity {
@@ -166,11 +150,6 @@ impl<'a> SourcePlanes<'a> {
         Self {
             native: [0i16, 1, 2, -1].map(|id| doc.authoritative_plane(layer, id)),
         }
-    }
-
-    /// Whether any channel reads a native store instead of its 8-bit plane.
-    pub(crate) fn any_native(&self) -> bool {
-        self.native.iter().any(Option::is_some)
     }
 
     pub(crate) fn row(&self, y: usize, width: usize) -> [Option<SampleRow<'_>>; 4] {
