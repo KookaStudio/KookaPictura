@@ -220,6 +220,7 @@ pub(crate) fn fill_planes<T: Sample + PartialEq + Send + Sync>(
     rows.into_par_iter()
         .filter_map(|(y, mut row)| {
             let mut dirty = None;
+            let mut last = None;
             for x in x0..x1 {
                 let selected = selection.map_or(255, |s| s[(y * canvas.0 + x) as usize]);
                 if selected == 0 {
@@ -263,7 +264,23 @@ pub(crate) fn fill_planes<T: Sample + PartialEq + Send + Sync>(
                 if alpha == Alpha::Keep && dst_alpha.to_unit() == 0.0 {
                     continue;
                 }
-                let Some(out) = blend(mode, dst, &color, strength, pixel_noise(x, y)) else {
+                // A uniform run feeds the blend the same inputs pixel after
+                // pixel, so the last answer is reused; only Dissolve reads the
+                // per-pixel noise (#1149).
+                let out = if mode == PaintMode::Dissolve {
+                    blend(mode, dst, &color, strength, pixel_noise(x, y))
+                } else {
+                    let key = (dst, color, strength.to_bits());
+                    match last {
+                        Some((seen, out)) if seen == key => out,
+                        _ => {
+                            let out = blend(mode, dst, &color, strength, 0.0);
+                            last = Some((key, out));
+                            out
+                        }
+                    }
+                };
+                let Some(out) = out else {
                     continue;
                 };
                 let out_alpha = match alpha {
@@ -762,5 +779,35 @@ pub(crate) mod tests {
             (0.55..=0.72).contains(&neighbour),
             "grain neighbour correlation {neighbour:.3}"
         );
+    }
+
+    #[test]
+    fn a_run_of_equal_pixels_blends_like_each_pixel_alone() {
+        // Runs of equal backdrops and strengths, broken by changes of each
+        // input, so the reused blend is checked against a fresh one.
+        let (w, h) = (24, 3);
+        let mut d = doc(w, h, [0; 4]);
+        for (i, v) in d.layers[0].channels[3].data.iter_mut().enumerate() {
+            *v = [0, 0, 0, 90, 90, 255][i % 6];
+        }
+        for (i, v) in d.layers[0].channels[0].data.iter_mut().enumerate() {
+            *v = if i % 12 < 6 { 10 } else { 200 };
+        }
+        let before = layer_rgba(&d.layers[0]);
+        let strength = |x: i32| [1.0, 1.0, 0.5, 0.5, 0.5, 0.25][(x % 6) as usize];
+        for mode in [PaintMode::Normal, PaintMode::Multiply, PaintMode::Behind] {
+            let mut filled = d.clone();
+            fill_layer(&mut filled, "0", mode, None, Alpha::Blend, |x, _| {
+                Some((RED, strength(x)))
+            });
+            for y in 0..h {
+                for x in 0..w {
+                    let [r, g, b, a] = before.get(x, y);
+                    let want = blend_pixel(mode, (r, g, b, a), &RED, strength(x), 0.0)
+                        .map_or([r, g, b, a], |(r, g, b, a)| [r, g, b, a]);
+                    assert_eq!(pixel(&filled, x, y), want, "{mode:?} at ({x}, {y})");
+                }
+            }
+        }
     }
 }

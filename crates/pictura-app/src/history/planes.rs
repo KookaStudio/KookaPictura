@@ -144,13 +144,20 @@ pub(super) fn diff_into(
                 })
                 .collect();
             if scanned.iter().any(|(_, tiles)| !tiles.is_empty()) {
-                for (band, tiles) in &scanned {
-                    if tiles.is_empty() {
-                        continue;
-                    }
-                    let src = after.band(*band).unwrap_or(&[]);
-                    if let Some(dst) = plane.write_band(*band) {
-                        write_tiles_in_band(dst, src, width, tiles);
+                if hint.is_none() {
+                    // Every differing tile was taken, so the plane becomes
+                    // `after` byte for byte: share it instead of forking the
+                    // bands to copy the tiles in (#1149).
+                    *plane = after.clone();
+                } else {
+                    for (band, tiles) in &scanned {
+                        if tiles.is_empty() {
+                            continue;
+                        }
+                        let src = after.band(*band).unwrap_or(&[]);
+                        if let Some(dst) = plane.write_band(*band) {
+                            write_tiles_in_band(dst, src, width, tiles);
+                        }
                     }
                 }
                 out.push(PlaneDelta {
@@ -425,24 +432,88 @@ pub(super) fn apply_tiles(doc: &mut Document, deltas: &[PlaneDelta]) {
 /// Exchange each tile's stored bytes with `doc`'s, writing the stored bytes
 /// into `live` too when given: a walk that moves a materialized state across
 /// the deltas, after which they hold the side it left.
+///
+/// `live` agrees with `doc` when given, so after the swap each plane a delta
+/// touched is `doc`'s byte for byte: `live` shares it instead of having the
+/// tiles written a second time (#1149).
 pub(super) fn swap_tiles(
     doc: &mut Document,
     live: Option<&mut Document>,
     deltas: &mut [PlaneDelta],
 ) {
-    if let Some(live) = live {
-        apply_tiles(live, deltas);
-    }
     for delta in deltas.iter_mut() {
         let mut index = 0;
         each_plane_mut(doc, &mut |plane, _, _, _| {
             if index == delta.index {
-                for tile in delta.tiles.iter_mut() {
-                    swap_tile(plane, delta.width, tile);
-                }
+                swap_plane_tiles(plane, delta.width, &mut delta.tiles);
             }
             index += 1;
         });
+    }
+    let Some(live) = live else {
+        return;
+    };
+    let mut touched: Vec<Option<Plane<u8>>> = Vec::new();
+    let mut index = 0;
+    each_plane(doc, &mut |plane, _, _, _| {
+        touched.push(
+            deltas
+                .iter()
+                .any(|delta| delta.index == index)
+                .then(|| plane.clone()),
+        );
+        index += 1;
+    });
+    let mut index = 0;
+    each_plane_mut(live, &mut |plane, _, _, _| {
+        if let Some(Some(shared)) = touched.get(index) {
+            *plane = shared.clone();
+        }
+        index += 1;
+    });
+}
+
+/// Swap one plane's tiles with it. Tiles one band high and band-aligned, as
+/// [`diff_into`] makes them, swap a band per core; any other tile swaps row by
+/// row.
+fn swap_plane_tiles(plane: &mut Plane<u8>, width: usize, tiles: &mut [TileDelta]) {
+    let banded = width > 0
+        && plane.width() == Some(width)
+        && tiles
+            .iter()
+            .all(|tile| tile.y % BAND_ROWS == 0 && tile.h <= BAND_ROWS);
+    if banded {
+        let bands: Vec<usize> = tiles
+            .chunk_by(|a, b| a.y == b.y)
+            .map(|group| group[0].y / BAND_ROWS)
+            .collect();
+        if let Some(slices) = plane.write_bands(&bands) {
+            let groups: Vec<&mut [TileDelta]> = tiles.chunk_by_mut(|a, b| a.y == b.y).collect();
+            slices
+                .into_par_iter()
+                .zip(groups)
+                .for_each(|(band, group)| {
+                    for tile in group {
+                        swap_in_band(band, width, tile);
+                    }
+                });
+            return;
+        }
+    }
+    for tile in tiles {
+        swap_tile(plane, width, tile);
+    }
+}
+
+/// Swap a tile with its rows in `band`, the slice of the band it lies in.
+fn swap_in_band(band: &mut [u8], width: usize, tile: &mut TileDelta) {
+    for row in 0..tile.h {
+        let at = row * width + tile.x;
+        let src = row * tile.w;
+        if at + tile.w > band.len() || src + tile.w > tile.bytes.len() {
+            return;
+        }
+        band[at..at + tile.w].swap_with_slice(&mut tile.bytes[src..src + tile.w]);
     }
 }
 

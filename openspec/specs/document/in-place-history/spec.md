@@ -14,7 +14,10 @@ copy tracked-plane pixels for the history and SHALL assign fresh stamps to both
 the live document and the history cursor state. Capturing a state SHALL compare the
 live document with the current state band by band, SHALL skip bands whose
 allocations are shared, and SHALL scan the 64×64 tiles of the remaining bands
-across all cores, copying only the changed tiles into the current state. A
+across all cores. A capture with a hint SHALL copy only the changed tiles into
+the current state; a capture with no hint SHALL instead make each changed plane
+of the current state share the live document's plane, which it then equals byte
+for byte. A
 capture SHALL skip only bands that are still shared: a contiguous read of a
 plane followed by another write adopts the materialized view as the plane's base,
 so its bands no longer match the current state's and the capture scans that plane
@@ -45,11 +48,20 @@ current state keeps its copy of those bands and every other band stays shared.
 - **THEN** only the written bands are copied, and the current state's bytes for
   those bands are unchanged
 
+#### Scenario: A whole-layer change is shared [iph_capture_shares_plane]
+
+- **WHEN** every byte of a layer is changed and captured with no hint, and the
+  same change is captured with a canvas-sized hint
+- **THEN** the unhinted capture's current state shares the layer's planes with
+  the live document, and the hinted one holds equal bytes in its own bands
+
 ### Requirement: In-place undo with restored damage
 
-Undo, redo and jump SHALL bring the live document to the target state by
-applying the stored tiles to it in place when the target is in the same
-geometry segment, and SHALL report the document rectangle whose composite
+Undo, redo and jump SHALL bring the live document to the target state in place
+when the target is in the same geometry segment: the stored tiles are swapped
+into the current state, band-aligned tiles one band per core, and each plane
+they touch is then shared with the live document instead of being written into
+it a second time. They SHALL report the document rectangle whose composite
 changed, or the whole document when the change cannot be bounded (a change of
 document size, mode, depth or profile). The canvas SHALL refresh only the
 reported rectangle.
@@ -71,6 +83,13 @@ reported rectangle.
 - **WHEN** an undo crosses a layer-structure change at the same document size
 - **THEN** the live document equals the target state exactly and the reported
   rectangle covers the changed composite tiles, empty when none changed
+
+#### Scenario: A whole-layer undo shares the restored planes [iph_undo_shares_plane]
+
+- **WHEN** a whole-layer change over several bands and a short last band is
+  captured, undone, redone and undone again
+- **THEN** each restore is byte-identical to its state and, after the undo, the
+  live layer's bands are the current state's
 
 ### Requirement: One materialized copy per history
 
