@@ -1,7 +1,8 @@
 //! Edit clipboard tests: Copy / Copy Merged / Clear / Paste (Into, Outside).
 
 use super::clipboard::{
-    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, Clip, PasteMode,
+    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, plane_coverage_bounds,
+    plane_has_coverage, Clip, PasteMode, COVERAGE_SCANS,
 };
 use super::create::empty_group;
 use super::tests::{doc_with, pixel_layer};
@@ -273,4 +274,64 @@ fn masked_rgba_folds_the_selection_into_alpha() {
         mask: vec![128, 0],
     };
     assert_eq!(clip.masked_rgba(), vec![9, 9, 9, 128, 9, 9, 9, 0]);
+}
+
+fn coverage_scans() -> usize {
+    COVERAGE_SCANS.with(std::cell::Cell::get)
+}
+
+#[test]
+fn plane_coverage_test_matches_its_bounds() {
+    let (w, h) = (40u32, 130u32);
+    let n = (w * h) as usize;
+    let mut one = vec![0u8; n];
+    one[n - 3] = 1;
+    let mut banded = pictura_core::Plane::from(vec![0u8; n]);
+    banded.fracture(w as usize);
+    banded.row_mut(129, w as usize).expect("row")[7] = 9;
+    let cases = [
+        pictura_core::Plane::from(vec![0u8; n]),
+        pictura_core::Plane::from(one),
+        pictura_core::Plane::from(vec![255u8; n]),
+        pictura_core::Plane::from(vec![255u8; n - 1]),
+        banded,
+    ];
+    for (i, plane) in cases.iter().enumerate() {
+        assert_eq!(
+            plane_has_coverage(plane, w, h),
+            plane_coverage_bounds(plane, w, h).is_some(),
+            "case {i}"
+        );
+    }
+    assert!(!plane_has_coverage(&cases[2], 0, h));
+}
+
+#[test]
+fn an_unchanged_plane_is_scanned_once() {
+    let (w, h) = (32u32, 32u32);
+    let mut plane = pictura_core::Plane::from(vec![0u8; (w * h) as usize]);
+    let before = coverage_scans();
+    assert!(!plane_has_coverage(&plane, w, h));
+    assert!(!plane_has_coverage(&plane, w, h));
+    assert!(!plane_has_coverage(&plane.clone(), w, h));
+    assert_eq!(
+        coverage_scans() - before,
+        1,
+        "a remembered plane is not read again"
+    );
+
+    plane.as_mut_slice()[5] = 1;
+    assert!(plane_has_coverage(&plane, w, h), "a write is seen");
+    assert_eq!(coverage_scans() - before, 2);
+}
+
+#[test]
+fn a_diverged_plane_is_checked_without_materializing() {
+    let (w, h) = (16u32, 200u32);
+    let mut plane = pictura_core::Plane::from(vec![0u8; (w * h) as usize]);
+    plane.fracture(w as usize);
+    plane.row_mut(150, w as usize).expect("row")[3] = 4;
+    let before = pictura_core::materializations();
+    assert!(plane_has_coverage(&plane, w, h));
+    assert_eq!(pictura_core::materializations(), before);
 }

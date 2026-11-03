@@ -979,7 +979,19 @@ impl super::PictureViewRust {
             (self.level0.as_ref(), dims),
             (Some(level0), Some((w, h))) if level0.width == w && level0.height == h
         );
-        if matches {
+        let whole = dims == Some((region.width, region.height)) && (x0, y0) == (0, 0);
+        if matches && whole {
+            // The whole frame replaces level 0 rather than being copied into
+            // it row by row (#1145). It never shares the composite's plane:
+            // whichever of the two is written first would copy it whole.
+            let mut frame = region;
+            if let Some(doc) = self.session.doc.as_ref() {
+                if frame.data.shares(&doc.composite.data) {
+                    frame.data = crate::history::copy_plane(&frame.data);
+                }
+            }
+            self.level0 = Some(frame);
+        } else if matches {
             if let Some(level0) = self.level0.as_mut() {
                 patch_buffer_region(level0, &region, x0, y0);
             }

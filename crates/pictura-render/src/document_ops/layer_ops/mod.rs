@@ -52,14 +52,16 @@ mod warp_raster;
 mod warp_tests;
 
 pub use align::{
-    align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds, AlignEdge,
+    align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds,
+    layer_has_content, AlignEdge,
 };
 pub use auto_blend::{
     apply_auto_blend, can_auto_blend, plan_auto_blend, AutoBlendOptions, AutoBlendPlan,
     BlendObjective, BlendedLayer, Cancelled as AutoBlendCancelled, AUTO_BLEND_PROGRESS_MAX,
 };
 pub use clipboard::{
-    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, Clip, PasteMode,
+    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, plane_has_coverage, Clip,
+    PasteMode,
 };
 pub use clipping::{
     can_create_clipping_mask, can_release_clipping_mask, create_clipping_mask,

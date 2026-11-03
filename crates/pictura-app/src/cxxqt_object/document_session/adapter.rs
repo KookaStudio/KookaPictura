@@ -44,12 +44,17 @@ impl qobject::PictureView {
         }
     }
 
-    /// Cancel whatever live gesture is active and present the result.
+    /// Cancel whatever live gesture is active and present the result. Only a
+    /// cancelled session reports `session_cancelled`, whose handler refreshes
+    /// every panel at once; a tool switch with nothing live stays cheap (#1145).
     pub fn cancel_active_session(mut self: Pin<&mut Self>) -> bool {
+        let had_session = self.rust().has_active_session();
         let change = self.as_mut().rust_mut().cancel_active_sessions();
         let changed = change.changed_display();
         self.as_mut().apply_session_change(change);
-        self.as_mut().session_cancelled();
+        if had_session {
+            self.as_mut().session_cancelled();
+        }
         changed
     }
 }
