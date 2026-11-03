@@ -26,7 +26,8 @@ void NotificationStatusBar::paintEvent(QPaintEvent* event)
     painter.setBrush(QColor(0xff, 0xf3, 0xb0));
     painter.drawRoundedRect(rect.adjusted(0, 2, 0, -2), 4, 4);
     painter.setPen(QColor(0x1a, 0x1a, 0x1a));
-    painter.drawText(rect, Qt::AlignLeading | Qt::AlignVCenter | Qt::TextSingleLine, message);
+    painter.drawText(rect.adjusted(6, 0, -6, 0),
+                     Qt::AlignLeading | Qt::AlignVCenter | Qt::TextSingleLine, message);
 }
 
 QRect NotificationStatusBar::messageRect() const
