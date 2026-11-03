@@ -16,7 +16,7 @@ namespace pictura {
 UpdatePreferencesPage::UpdatePreferencesPage(UpdateChecker* checker, QWidget* parent)
     : QWidget(parent)
     , checker_(checker)
-    , automaticChecks_(new QCheckBox(tr("Automatically check for updates on launch"), this))
+    , automaticChecks_(new QCheckBox(tr("Check for updates automatically"), this))
     , version_(new QLabel(this))
     , package_(new QLabel(this))
     , checkNow_(new QPushButton(tr("Check Now"), this))

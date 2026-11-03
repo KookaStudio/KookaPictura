@@ -43,7 +43,7 @@ field.
 ### Requirement: Preferences > Updates controls automatic checks
 
 `Edit > Preferences` SHALL include an **Updates** page. The page MUST show an
-**Automatically check for updates on launch** checkbox, the running version,
+**Check for updates automatically** checkbox, the running version,
 the detected package method, a **Check Now** button, and the last check result.
 The checkbox MUST be on by default and MUST persist across restarts.
 
