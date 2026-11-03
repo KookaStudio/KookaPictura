@@ -79,8 +79,7 @@ bool UpdateChecker::checkAutomatically()
     if (automaticCheckStarted_ || checking_) {
         return false;
     }
-    if (!settings_.automaticChecksEnabled || !settings_.networkAllowed
-        || settings_.packageMethod == PackageMethod::Development) {
+    if (!settings_.automaticChecksEnabled || !settings_.networkAllowed) {
         return false;
     }
     automaticCheckStarted_ = true;

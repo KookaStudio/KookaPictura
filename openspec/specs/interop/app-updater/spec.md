@@ -12,10 +12,9 @@ installs or points at the correct update path for each packaging format.
 When automatic checks are enabled, the application SHALL request the newest
 stable release from the repository's GitHub Releases `releases/latest`
 endpoint once per launch. The request MUST be asynchronous and MUST NOT delay
-the main window from appearing. Automatic checks SHALL run for packaged builds;
-a development build MUST NOT auto-check but SHALL allow a manual check. The
-application MUST skip the request in headless, self-test, theme-dump,
-MCP-bridge, GPU-probe, and test runs.
+the main window from appearing. Automatic checks SHALL run for every build,
+including a development build. The application MUST skip the request in
+headless, self-test, theme-dump, MCP-bridge, GPU-probe, and test runs.
 
 #### Scenario: A normal launch checks once [au_launch_check]
 
@@ -35,12 +34,11 @@ MCP-bridge, GPU-probe, and test runs.
   the test harness
 - **THEN** it sends no release request
 
-#### Scenario: A development build starts [au_dev_no_auto_check]
+#### Scenario: A development build starts [au_dev_auto_check]
 
-- **WHEN** the detected package method is development and the person has not
-  asked for a check
-- **THEN** no automatic request is sent, while
-  `Help > Check for Updates…` still performs one
+- **WHEN** the detected package method is development and automatic checks are
+  enabled
+- **THEN** the launch request is sent and the dialog offers the release page
 
 ### Requirement: Release versions are compared with SemVer ordering
 

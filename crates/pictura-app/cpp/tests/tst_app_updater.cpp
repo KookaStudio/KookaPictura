@@ -270,7 +270,7 @@ private slots:
     void checkOnLaunchSendsOneRequest();
     void disabledCheckMakesNoRequest();
     void headlessSkipsCheck();
-    void developmentBuildDoesNotAutoCheck();
+    void developmentBuildAutoChecks();
     void requestCarriesNoIdentifier();
     void rateLimitIsSilent();
     void networkFailureIsSilent();
@@ -659,7 +659,7 @@ void AppUpdaterTest::headlessSkipsCheck()
     QCOMPARE(server.requestCount(), 0);
 }
 
-void AppUpdaterTest::developmentBuildDoesNotAutoCheck()
+void AppUpdaterTest::developmentBuildAutoChecks()
 {
     TestReleaseServer server;
     QVERIFY(server.start());
@@ -668,12 +668,8 @@ void AppUpdaterTest::developmentBuildDoesNotAutoCheck()
     pictura::UpdateChecker checker;
     checker.setSettings(
         settingsFor(server, PackageMethod::Development, QStringLiteral("0.3.0")));
-    QVERIFY(!checker.checkAutomatically());
-    QTest::qWait(100);
-    QCOMPARE(server.requestCount(), 0);
-
     QSignalSpy available(&checker, &pictura::UpdateChecker::updateAvailable);
-    QVERIFY(checker.checkManually());
+    QVERIFY(checker.checkAutomatically());
     QVERIFY(waitForIdle(checker));
     QCOMPARE(available.count(), 1);
     QCOMPARE(server.requestCount(), 1);
