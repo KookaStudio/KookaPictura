@@ -4,7 +4,9 @@
 #include "frame_includes.h"
 #include "agent_control.h"
 #include "api/type_api.h"
+#include "frame_update.h"
 #include "preferences_agent_page.h"
+#include "update_preferences_page.h"
 
 namespace pictura {
 
@@ -55,6 +57,8 @@ void PicturaMainWindow::showPreferences(const QString& page)
             preferencesDialog_->addPage(PreferencesDialog::kAgentControl,
                                         new AgentControlPage(agent));
         }
+        preferencesDialog_->addPage(PreferencesDialog::kUpdates,
+                                    makeUpdatePreferencesPage(*this, preferencesDialog_));
         connectRecoveryPreferences(preferencesDialog_);
         connectGuidePreferences(preferencesDialog_);
         connect(preferencesDialog_, &PreferencesDialog::useShiftKeyForToolSwitchChanged,

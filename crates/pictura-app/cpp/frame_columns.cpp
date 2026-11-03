@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "frame_update.h"
 
 #include <QtGui/QResizeEvent>
 #include <QtGui/QShowEvent>
@@ -138,6 +139,7 @@ void PicturaMainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     layoutWorkspaceFrame();
+    repositionUpdateBanner(*this);
     for (PanelColumn* column : allPanelColumns()) {
         if (column) {
             column->reclampFloats();
@@ -150,6 +152,7 @@ void PicturaMainWindow::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
     layoutWorkspaceFrame();
+    scheduleUpdateCheck(*this);
     if (!pendingFloatRestores_.isEmpty()) {
         // Let the compositor apply the restored/maximized frame geometry first;
         // an in-window overlay then converts its stored global rect against it.

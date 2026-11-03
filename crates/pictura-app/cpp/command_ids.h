@@ -236,6 +236,7 @@ inline constexpr char TypePanelsParagraph[] = "type.panels.paragraph";
 inline constexpr char TypePanelsParagraphStyles[] = "type.panels.paragraphStyles";
 inline constexpr char TypePanelsCharacterStyles[] = "type.panels.characterStyles";
 inline constexpr char HelpSearch[] = "help.search";
+inline constexpr char HelpCheckForUpdates[] = "help.checkForUpdates";
 inline constexpr char HelpSystemInfo[] = "help.system.info";
 inline constexpr char HelpSubmitIssue[] = "help.submit.issue";
 inline constexpr char HelpAbout[] = "help.about";

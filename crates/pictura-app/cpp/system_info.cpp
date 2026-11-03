@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "update_package.h"
+
 #ifdef Q_OS_LINUX
 #include <unistd.h>
 #endif
@@ -323,6 +325,7 @@ SystemInfo collectSystemInfo(const QStringList& gpuFields)
     if (info.buildType.isEmpty()) {
         info.buildType = QStringLiteral("unknown");
     }
+    info.packageMethod = packageMethodName(detectPackageMethod());
     info.qtVersion = QString::fromLatin1(qVersion());
     info.osType = osType();
     info.osVersion = QSysInfo::prettyProductName();
@@ -454,6 +457,7 @@ QString formatSystemInfo(const SystemInfo& info)
     report += QStringLiteral("Application\n-----------\n");
     report += row(QStringLiteral("Version"), info.appVersion) + QLatin1Char('\n');
     report += row(QStringLiteral("Build"), info.buildType) + QLatin1Char('\n');
+    report += row(QStringLiteral("Package"), info.packageMethod) + QLatin1Char('\n');
     report += row(QStringLiteral("Qt"), info.qtVersion) + QLatin1Char('\n');
 
     report += QStringLiteral("\nSystem\n------\n");

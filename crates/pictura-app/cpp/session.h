@@ -50,6 +50,9 @@ struct SessionState {
     // General: Zoom Resizes Windows (View zoom fits a floating window). A store
     // written before it loads off.
     bool zoomResizesWindows = false;
+    // Edit > Preferences > Updates: check for a newer release on launch. On by
+    // default; the banner's opt-out and the Preferences page turn it off.
+    bool checkForUpdatesOnLaunch = true;
     // Edit > Preferences > Type: new type starts with selected placeholder text.
     bool typePlaceholderText = true;
     // Edit > Preferences > Type: the CS6 type options and glyph protection.
@@ -129,7 +132,7 @@ struct SessionState {
     // tool name -> letter (empty: none).
     QMap<QString, QStringList> shortcuts;
     QMap<QString, QString> toolShortcuts;
-    int schemaVersion = 11;
+    int schemaVersion = 12;
     QStringList recent;
     QByteArray windowGeometry;       // QMainWindow::saveGeometry(), empty = default
     bool windowMaximized = false;    // restored as Qt::WindowMaximized on launch
