@@ -86,6 +86,7 @@ private slots:
     void initTestCase();
     void blockErasesASquareThatScalesWithTheZoom();
     void theBlockCursorIsASquareOfTheBlockSize();
+    void blockCursorSnapsToTheScreenGrid();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -169,6 +170,57 @@ void EraserToolsTest::theBlockCursorIsASquareOfTheBlockSize()
 
     QVERIFY2(atOne >= 16 && atOne <= 18, qPrintable(QStringLiteral("at 100 %: %1").arg(atOne)));
     QVERIFY2(atFour >= 16 && atFour <= 18, qPrintable(QStringLiteral("at 400 %: %1").arg(atFour)));
+}
+
+void EraserToolsTest::blockCursorSnapsToTheScreenGrid()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(60, 60, QImage::Format_RGB32);
+    seed.fill(QColor(128, 128, 128));
+    Fixture f(frame, seed, QStringLiteral("pictura_eraser_block_snap"));
+    QVERIFY2(f.ok(), "eraser fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QCoreApplication::processEvents();
+
+    frame.setActiveTool(pictura::ToolId::Eraser);
+    const QPointF pointer(30.0, 30.0);
+    const double zoom = 1.25;
+    f.canvas->setZoom(zoom, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    // A Block of 16 screen pixels is 16 / zoom document pixels.
+    f.canvas->setBlockOutline(16.0 / zoom, pointer);
+    QCoreApplication::processEvents();
+
+    const QImage shot = f.canvas->grab().toImage();
+    const QPointF raw = pointer * f.canvas->zoom() + f.canvas->offset();
+    const int cx = qRound(raw.x());
+    const int cy = qRound(raw.y());
+
+    // The square is 16 screen pixels wide: its left stroke is eight pixels from
+    // the snapped centre, and the white halo is one device pixel outside it.
+    int black = -1;
+    for (int x = cx - 12; x <= cx - 4; ++x) {
+        if (qGray(shot.pixel(x, cy)) < 64) {
+            black = x;
+            break;
+        }
+    }
+    QVERIFY2(black >= 0, "the block's left edge is drawn");
+    QVERIFY2(std::abs((cx - black) - 8) <= 1, "the edge sits at half the block");
+    QVERIFY2(qGray(shot.pixel(cx - 9, cy)) > 192, "one-device-pixel white halo");
+    QVERIFY2(qGray(shot.pixel(cx - 10, cy)) < 192, "document past the halo");
+
+    const QPointF corner =
+        f.canvas->imageToWidget(pointer + QPointF(8.0 / zoom, 8.0 / zoom));
+    bool cornerDark = false;
+    for (int y = qRound(corner.y()) - 1; y <= qRound(corner.y()) + 1; ++y) {
+        for (int x = qRound(corner.x()) - 1; x <= qRound(corner.x()) + 1; ++x) {
+            if (qGray(shot.pixel(x, y)) < 64) {
+                cornerDark = true;
+            }
+        }
+    }
+    QVERIFY2(cornerDark, "the outline is a square");
 }
 
 QTEST_MAIN(EraserToolsTest)

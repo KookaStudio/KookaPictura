@@ -747,16 +747,20 @@ void ImageView::paintEvent(QPaintEvent* event)
     painter.restore();
 
     if (brushOutlineActive_ && brushOutlineDiameter_ > 0.0 && !panning_ && !spacePan_) {
-        // Cosmetic pens keep each ring 1 device px independent of zoom; the
-        // radius is in image pixels, so the on-screen circle scales with zoom.
-        // A white ring one image px outside the black one keeps the outline
-        // legible on both light and dark documents. Drawn with the full-widget
-        // clip, not the document clip, so the ring stays visible past the edge.
-        // The Eraser's Block mode draws a square of the same size instead, with
-        // a one-screen-pixel halo, so it stays tight at any zoom.
-        const double radius = brushOutlineDiameter_ / 2.0;
-        const double halo = brushOutlineSquare_ ? 1.0 / zoom_ : 1.0;
-        const QPointF centre = brushOutlineImagePos_;
+        // Draw in the screen frame and snap to the device grid. The image-space
+        // transform leaves the centre and radius fractional, so the 1-px stroke
+        // lands between pixels at every zoom but 100 %. The restore is required
+        // because the overlays below still draw in image space.
+        painter.save();
+        painter.setTransform(viewRotation());
+        painter.setClipping(false);
+        const double diameter = brushOutlineDeviceDiameter();
+        const QPointF raw = brushOutlineImagePos_ * zoom_ + offset_;
+        const QPointF centre(std::round(raw.x()), std::round(raw.y()));
+        const double radius = diameter / 2.0;
+        // The cosmetic pen is one device pixel; the halo is the same so the
+        // white ring stays one device pixel outside the black one at any DPR.
+        const double halo = 1.0 / devicePixelRatioF();
         const auto outline = [&painter, centre, square = brushOutlineSquare_](double r) {
             if (square) {
                 painter.drawRect(QRectF(centre.x() - r, centre.y() - r, 2.0 * r, 2.0 * r));
@@ -769,6 +773,7 @@ void ImageView::paintEvent(QPaintEvent* event)
         outline(radius + halo);
         painter.setPen(QPen(Qt::black, 0));
         outline(radius);
+        painter.restore();
     }
 
     painter.save();
@@ -1121,6 +1126,11 @@ void ImageView::setBrushOutline(double diameter, const QPointF& imagePos)
 void ImageView::setBlockOutline(double side, const QPointF& imagePos)
 {
     setBrushOutlineShape(side, imagePos, true);
+}
+
+double ImageView::brushOutlineDeviceDiameter() const
+{
+    return std::max(1.0, std::round(brushOutlineDiameter_ * zoom_));
 }
 
 void ImageView::setBrushOutlineShape(double diameter, const QPointF& imagePos, bool square)
