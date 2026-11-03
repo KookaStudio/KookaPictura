@@ -34,9 +34,9 @@ pub use layer_ops::{
     can_materialize_smart_source, can_merge_scope, can_merge_target, can_move_path,
     can_move_path_to, can_new_smart_object_via_copy, can_rasterize_smart_object,
     can_release_clipping_mask, can_replace_smart_object_contents, can_reset_smart_object_transform,
-    clear_layer, clear_layer_style, content_rect, convert_for_smart_filters,
-    convert_smart_object_to_layers, convert_to_smart_object, copy_layer, copy_layer_style,
-    copy_merged, copy_path_to_document, copy_shape_attributes, coverage_bounds,
+    clear_layer, clear_layer_style, clipping_release_paths, content_rect,
+    convert_for_smart_filters, convert_smart_object_to_layers, convert_to_smart_object, copy_layer,
+    copy_layer_style, copy_merged, copy_path_to_document, copy_shape_attributes, coverage_bounds,
     create_clipping_mask, delete_hidden_layers, delete_layer_mask, delete_paths,
     delete_paths_report, delete_vector_mask, distribute_layers, duplicate_layer, duplicate_paths,
     flatten, flatten_rows, group_layer, group_paths, has_forced_locks, has_layer_mask,
@@ -71,9 +71,10 @@ pub use layer_ops::{
     VectorMaskKind, AUTO_BLEND_PROGRESS_MAX, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED,
     VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
-pub use layer_ops::{duplicate_is_content_neutral, insertion_is_content_neutral};
+pub use layer_ops::{
+    duplicate_is_content_neutral, insertion_is_content_neutral, move_is_content_neutral,
+};
 pub(crate) use layer_ops::{insert_node, map_shape_layer};
-pub use layer_ops::{insertion_is_content_neutral, move_is_content_neutral};
 pub use lens_correction::{apply_lens_correction, lens_correction_slots, smart_source_buffer};
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};
 pub use mode::{

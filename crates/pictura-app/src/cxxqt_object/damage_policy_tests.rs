@@ -375,6 +375,21 @@ fn structural_edit_with_pending_preview_rebuilds() {
 }
 
 #[test]
+fn inserted_edit_with_pending_preview_rebuilds() {
+    set_for_this_thread(true);
+    let mut view = view(vec![pixel_layer("base", 8, 8, (0, 0, 0))]);
+    view.pending_previews.opacity_changed = true;
+    let before = full_composites();
+    let applied = view.apply_edit("New Layer", Edit::Inserted);
+    assert_eq!(
+        applied.edit,
+        Edit::Structural { damage: None },
+        "a pending preview must upgrade a content-neutral edit to a full rebuild"
+    );
+    assert_eq!(full_composites(), before + 1);
+}
+
+#[test]
 fn structural_region_edit_with_solo_mask_rebuilds() {
     set_for_this_thread(true);
     let mut view = view(vec![pixel_layer("base", 8, 8, (0, 0, 0))]);

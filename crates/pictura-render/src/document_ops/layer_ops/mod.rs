@@ -64,8 +64,8 @@ pub use clipboard::{
     PasteMode,
 };
 pub use clipping::{
-    can_create_clipping_mask, can_release_clipping_mask, create_clipping_mask,
-    release_clipping_mask,
+    can_create_clipping_mask, can_release_clipping_mask, clipping_release_paths,
+    create_clipping_mask, release_clipping_mask,
 };
 pub(crate) use create::insert_node;
 pub use create::{

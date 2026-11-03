@@ -426,6 +426,58 @@ mod tests {
     }
 
     #[test]
+    fn releasing_a_clipping_mask_damages_the_freed_run() {
+        let mut d = doc(vec![
+            pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
+            pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
+            Layer {
+                clipping: true,
+                ..pixel_layer("member", rect(6, 7, 4, 3), 30, 255)
+            },
+            Layer {
+                clipping: true,
+                ..pixel_layer("freed", rect(0, 0, W as i32, H as i32), 40, 255)
+            },
+        ]);
+        let canvas = rect(0, 0, W as i32, H as i32);
+        // The clicked middle member frees itself and the full-canvas member
+        // above it; the damage refs must include both.
+        let freed = crate::clipping_release_paths(&d, &["2"]);
+        assert!(
+            freed.contains(&"3".to_string()),
+            "the run above the clicked member is freed: {freed:?}"
+        );
+        let refs: Vec<&str> = freed.iter().map(String::as_str).collect();
+
+        let clicked_before =
+            influence_paths(&d, &["2"]).and_then(|r| r.into_iter().reduce(union_rect));
+        let before = influence_paths(&d, &refs).and_then(|r| r.into_iter().reduce(union_rect));
+        assert_eq!(crate::release_clipping_mask(&mut d, &["2"]), 2);
+        assert!(!d.layers[2].clipping && !d.layers[3].clipping);
+        let clicked_after =
+            influence_paths(&d, &["2"]).and_then(|r| r.into_iter().reduce(union_rect));
+        let after = influence_paths(&d, &refs).and_then(|r| r.into_iter().reduce(union_rect));
+
+        let clicked_damage = union(clicked_before, clicked_after).expect("bounded");
+        assert_ne!(
+            clicked_damage, canvas,
+            "clicking only the member under-bounds the freed full-canvas layer"
+        );
+        let damage = union(before, after).expect("bounded");
+        assert_eq!(damage, canvas, "the freed full-canvas layer is covered");
+
+        let full = crate::composite_rgba(&d);
+        let region = crate::composite_rgba_region(
+            &d,
+            damage.left as u32,
+            damage.top as u32,
+            damage.width() as u32,
+            damage.height() as u32,
+        );
+        assert_eq!(region, sub_buffer(&full, damage));
+    }
+
+    #[test]
     fn unbased_clipped_run_keeps_the_conservative_union() {
         let d = doc(vec![
             Layer {

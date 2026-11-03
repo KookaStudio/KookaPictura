@@ -140,12 +140,23 @@ pub(crate) fn layer_is_inert(node: &Layer) -> bool {
 /// it: the run above clips to its alpha, and a hidden base hides that run. A
 /// clipped member is never a base, so an inert or hidden member can move within
 /// or out of a run without changing any other layer's base.
+///
+/// A knockout stack is never neutral: moving the bottom layer or a group-entry
+/// backdrop reassigns the knockout base even when the moved node draws nothing.
 pub fn move_is_content_neutral(
     doc_before: &Document,
     path_before: &str,
     doc_after: &Document,
     path_after: &str,
 ) -> bool {
+    let knockout = |doc: &Document| {
+        doc.layers
+            .iter()
+            .any(crate::composite_knockout::has_knockout)
+    };
+    if knockout(doc_before) || knockout(doc_after) {
+        return false;
+    }
     let Some(before) = node_at(doc_before, path_before) else {
         return false;
     };
@@ -511,6 +522,24 @@ mod tests {
         ]);
         let (after, moved) = move_to(&before, "0", "2", 0);
         assert!(!move_is_content_neutral(&before, "0", &after, &moved));
+    }
+
+    #[test]
+    fn inert_bottom_move_under_a_knockout_is_not_neutral() {
+        let before = doc(vec![
+            pixel("empty", 0, 0),
+            pixel("content", 90, 255),
+            Layer {
+                knockout: Knockout::Deep,
+                ..pixel("knockout", 40, 255)
+            },
+        ]);
+        let (after, moved) = move_to(&before, "0", "2", 0);
+        assert_eq!(moved, "2");
+        assert!(
+            !move_is_content_neutral(&before, "0", &after, &moved),
+            "moving the bottom layer reassigns the knockout base"
+        );
     }
 
     #[test]

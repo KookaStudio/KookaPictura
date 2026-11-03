@@ -85,11 +85,19 @@ pub fn can_release_clipping_mask(doc: &Document, path: &str) -> bool {
     !release_set(doc, path).is_empty()
 }
 
-/// Release Clipping Mask for each of `paths`. Returns how many layers changed.
-pub fn release_clipping_mask(doc: &mut Document, paths: &[&str]) -> usize {
+/// The paths Release Clipping Mask would free for `paths`: every clicked
+/// clipped layer with the clipped run above it, and every layer clipped to a
+/// clicked base. Empty when there is nothing to release.
+pub fn clipping_release_paths(doc: &Document, paths: &[&str]) -> Vec<String> {
     let mut freed: Vec<String> = paths.iter().flat_map(|p| release_set(doc, p)).collect();
     freed.sort();
     freed.dedup();
+    freed
+}
+
+/// Release Clipping Mask for each of `paths`. Returns how many layers changed.
+pub fn release_clipping_mask(doc: &mut Document, paths: &[&str]) -> usize {
+    let freed = clipping_release_paths(doc, paths);
     let mut changed = 0;
     for path in &freed {
         let Some(segments) = parse_path(path) else {
