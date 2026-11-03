@@ -4,6 +4,16 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Smudge picks up the live canvas with Sample All Layers** (#800, OpenSpec
+  change `smudge-live-snapshot`). `SmudgeBrush` builds each carried patch from
+  the press-time composite with the live working layer source-over'd on it, so
+  a dab picks up the smear the stroke has already laid instead of replaying the
+  press-time image. Exact for an opaque topmost target and for smudging onto an
+  empty topmost layer; a partial-alpha or mid-stack target remains an
+  approximation (`ponytail:`). Tests:
+  `pictura-paint::sample_all_layers_picks_up_the_live_layer` and
+  `tst_retouch_tools::smudgeSampleAllMatchesTheLiveLayer`.
+
 - **Image > Apply Image** (#609, OpenSpec change `add-apply-image`). The dialog
   reads its source and mask once into snapshots, so a preview on the active
   document cannot compound. `pictura-render/src/apply_image.rs` holds the
@@ -2738,7 +2748,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   98 now probes Pen, `keys_shown` (116) the out-of-scope 3D K group, and
   `shift_plain` (117) presses P as the unimplemented key. Ceilings
   (`ponytail:`): no Airbrush or pressure controls; a Sample All Layers smudge
-  reads the composite as it was at the press.
+  read the composite as it was at the press (fixed by #800).
 - **Pen, Freeform Pen, Add Anchor Point, Delete Anchor Point, and Convert
   Point** (changes `pen-tool`, `freeform-pen-tool`, `add-anchor-point-tool`,
   `delete-anchor-point-tool`, `convert-point-tool`, issues #32–#36, ported from
