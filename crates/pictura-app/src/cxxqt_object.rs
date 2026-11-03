@@ -26,6 +26,7 @@ mod hdr_conversion;
 mod healing;
 mod helpers;
 mod helpers_composite;
+mod helpers_masks;
 mod image_adjust;
 mod image_apply_image;
 mod image_hdr_toning;
@@ -1005,7 +1006,6 @@ pub mod qobject {
         /// Present the region accumulated since the last in-stroke present, or do nothing when none is pending.
         #[qinvokable]
         fn flush_present(self: Pin<&mut Self>) -> bool;
-
         /// Commit the active stroke as one history state, superseding any pending present, and mark dirty; false if nothing painted.
         #[qinvokable]
         fn end_paint(self: Pin<&mut Self>) -> bool;

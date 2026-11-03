@@ -7,6 +7,7 @@
 #include "api/layers_api.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -163,6 +164,7 @@ private slots:
     void adjustmentThumbnailKindIcon();
     void fillThumbnailPreviews();
     void fillThumbnailIsSquare();
+    void subCanvasLayerPlacement();
 };
 
 void LayersSnapshotTest::fixtureExpectations()
@@ -328,6 +330,45 @@ void LayersSnapshotTest::fillThumbnailIsSquare()
         QVERIFY2(!row.thumbnail.isNull(), "the fill preview is present");
         QCOMPARE(row.thumbnail.width(), row.thumbnail.height());
     }
+}
+
+// A sub-canvas raster layer and its mask keep the document aspect in Entire
+// Document placement and fall back to the layer/mask bounds otherwise (#1102).
+void LayersSnapshotTest::subCanvasLayerPlacement()
+{
+    auto view = std::make_unique<pictura::PictureView>();
+    QVERIFY(pictura::create_document(*view, 20, 10, QStringLiteral("rgb"), 8, 0xffffffu, false,
+                                     72.0, false));
+    QVERIFY(view->select_rect(6, 2, 4, 4, QStringLiteral("new"), 0.0));
+    const QString base = view->active_layer_path();
+    QVERIFY(pictura::clipboard_copy(*view, base, false));
+    const QString pasted =
+        pictura::clipboard_paste(*view, base, pictura::PasteKind::Plain, 0.0, 0.0);
+    QVERIFY(!pasted.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, pasted, QStringLiteral("reveal-all")));
+
+    const auto findRow = [&pasted](const Snapshot& snap) {
+        for (const LayerRow& row : snap.rows) {
+            if (row.path == pasted) {
+                return row;
+            }
+        }
+        return LayerRow{};
+    };
+
+    const Snapshot positioned = pictura::layers_api::snapshot(*view, 24, true);
+    const LayerRow row = findRow(positioned);
+    QCOMPARE(row.thumbnail.size(), QSize(24, 12));
+    QCOMPARE(row.thumbnail.pixelColor(0, 0).alpha(), 0);
+    QCOMPARE(row.thumbnail.pixelColor(7, 2).alpha(), 255);
+    QCOMPARE(row.maskThumbnail.size(), QSize(24, 12));
+    QCOMPARE(row.maskThumbnail.pixelColor(0, 0).alpha(), 0);
+    QCOMPARE(row.maskThumbnail.pixelColor(7, 2).alpha(), 255);
+
+    const Snapshot bounded = pictura::layers_api::snapshot(*view, 24, false);
+    const LayerRow bounds = findRow(bounded);
+    QCOMPARE(bounds.thumbnail.size(), QSize(24, 24));
+    QCOMPARE(bounds.maskThumbnail.size(), QSize(24, 24));
 }
 
 QTEST_MAIN(LayersSnapshotTest)

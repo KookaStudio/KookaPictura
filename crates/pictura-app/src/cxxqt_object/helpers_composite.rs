@@ -1,8 +1,6 @@
 use cxx_qt_lib::{QImage, QImageFormat};
 use pictura_codec::buffer_to_srgb;
-use pictura_core::{
-    BlendMode, ColorMode, Document, Layer, LayerMask, PixelBuffer, PsdRect, VectorMask,
-};
+use pictura_core::{BlendMode, ColorMode, Document, Layer, LayerMask, PixelBuffer, PsdRect};
 use pictura_paint::stamp::{layer_surface, sample_scope, surface_from_composite, CloneSampling};
 #[cfg(test)]
 use pictura_paint::Stroke;
@@ -586,8 +584,10 @@ pub(super) fn layer_thumbnail_positioned(
             {
                 continue;
             }
-            let sx = ((px - dest_left) as u32 * src_w / dest_w as u32).min(src_w - 1);
-            let sy = ((py - dest_top) as u32 * src_h / dest_h as u32).min(src_h - 1);
+            let sx = (((px - dest_left) as u64 * src_w as u64) / dest_w as u64)
+                .min(src_w as u64 - 1) as u32;
+            let sy = (((py - dest_top) as u64 * src_h as u64) / dest_h as u64).min(src_h as u64 - 1)
+                as u32;
             let Some([r, g, b, a]) = layer_pixel(layer, sx, sy) else {
                 continue;
             };
@@ -648,98 +648,6 @@ pub(super) fn fill_thumbnail_image(
     Some(rgba_image(rgba, tw as i32, th as i32))
 }
 
-/// Downsample a layer mask's grayscale data into a `size`-bounded square (long
-/// edge `size`, aspect kept), replicating the value across RGB. Null without
-/// mask data.
-pub(super) fn mask_thumbnail_image(mask: &LayerMask, size: u32) -> Option<QImage> {
-    let data = mask.data.as_ref()?;
-    let width = mask.rect.width();
-    let height = mask.rect.height();
-    if width <= 0 || height <= 0 {
-        return None;
-    }
-    let (width, height) = (width as u32, height as u32);
-    let plane = (width * height) as usize;
-    if data.len() != plane {
-        return None;
-    }
-    let (tw, th) = if width >= height {
-        (
-            size,
-            ((height as u64 * size as u64) / width as u64).max(1) as u32,
-        )
-    } else {
-        (
-            ((width as u64 * size as u64) / height as u64).max(1) as u32,
-            size,
-        )
-    };
-
-    let mut rgba = vec![0u8; (tw * th * 4) as usize];
-    for ty in 0..th {
-        let sy = ty as usize * height as usize / th as usize;
-        for tx in 0..tw {
-            let sx = (tx as usize * width as usize / tw as usize).min(width as usize - 1);
-            let v = data.sample(sy * width as usize + sx)?;
-            let o = ((ty * tw + tx) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&[v, v, v, 255]);
-        }
-    }
-    Some(rgba_image(rgba, tw as i32, th as i32))
-}
-/// Downsample a vector mask's coverage into a `size`-bounded square (long edge
-/// `size`, aspect kept), replicating the value across RGB with the same
-/// white-shows / black-hides convention as [`mask_thumbnail_image`]. An absent,
-/// disabled, or all-open mask is fully white (permissive), matching the
-/// compositor. `ponytail:` CS6 strokes the path outline; this fills coverage.
-pub(super) fn vector_mask_thumbnail_image(
-    mask: &VectorMask,
-    doc_width: u32,
-    doc_height: u32,
-    size: u32,
-) -> Option<QImage> {
-    if doc_width == 0 || doc_height == 0 || size == 0 {
-        return None;
-    }
-    let (tw, th) = if doc_width >= doc_height {
-        (
-            size,
-            ((doc_height as u64 * size as u64) / doc_width as u64).max(1) as u32,
-        )
-    } else {
-        (
-            ((doc_width as u64 * size as u64) / doc_height as u64).max(1) as u32,
-            size,
-        )
-    };
-    let clip = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: doc_height as i32,
-        right: doc_width as i32,
-    };
-    let mut rgba = vec![0u8; (tw * th * 4) as usize];
-    for ty in 0..th {
-        let dy = (ty as u64 * doc_height as u64 / th as u64) as i32;
-        for tx in 0..tw {
-            let dx = (tx as u64 * doc_width as u64 / tw as u64) as i32;
-            let value = if !mask.has_fill() {
-                255
-            } else {
-                let inside = mask.inside(dx, dy, clip);
-                let show = if mask.invert { !inside } else { inside };
-                if show {
-                    255
-                } else {
-                    0
-                }
-            };
-            let o = ((ty * tw + tx) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&[value, value, value, 255]);
-        }
-    }
-    Some(rgba_image(rgba, tw as i32, th as i32))
-}
 /// The `0xAARRGGBB` value of a planar buffer pixel, or 0 out of bounds.
 ///
 /// Mirrors [`buffer_to_image`]'s plane rules: 1 plane is opaque grey, 2 is grey
@@ -1077,6 +985,7 @@ mod tests {
 
 #[cfg(test)]
 mod bundle_tests {
+    use super::super::helpers_masks::mask_thumbnail_image;
     use super::*;
 
     #[test]
