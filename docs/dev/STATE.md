@@ -4,6 +4,22 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Paint Bucket fill and undo on large documents** (#1149, OpenSpec change
+  `paint-bucket-fill-responsiveness`). The flood tests each pixel once in
+  parallel and returns an empty or uniform layer whole; the anti-alias box runs
+  in parallel from column sums; a fill reuses the last blend across a run of
+  equal pixels (not Dissolve). The banded CPU compositor starts a band at the
+  topmost plain opaque Normal layer when the stack below is provably opaque
+  (`composite_region::first_shown_root`; exact because the backdrop alpha stays
+  exactly 1 in `f32`), and copies that layer's bytes when nothing is shown above
+  it. The history shares the live plane on an unhinted capture instead of
+  copying tiles in, shares the restored plane with the live document on an
+  in-place undo, and swaps band-aligned tiles one band per core.
+  `bucket_fill_profile` at 1/16 of 16507×16196 (`PICTURA_PROFILE_DIVISOR=4`) on
+  the laptop: click 751 ms to 191 ms (flood 85→15, anti-alias 146→6, composite
+  285→7, capture 77→15), undo 109 ms to 70 ms. The fill's per-pixel loop
+  (about 105 ms there) is now the largest stage.
+
 - **Move tool press on large documents** (#1148, OpenSpec change
   `move-press-responsiveness`). Switching to the Move tool no longer bakes a
   preview; the press builds it. One plain pixel layer with content over 4 MP
