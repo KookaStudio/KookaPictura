@@ -4,6 +4,24 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Structural undo off the GUI thread** (#1098, OpenSpec change
+  `structural-undo-responsiveness`). Undo and redo only go whole-document when
+  the document's size, mode, depth or profile changes. An unchanged composite
+  reports an empty `Region`, document channels add no damage, and mask changes
+  report `Restored::Composite`, which also rebuilds a soloed mask. A whole-document
+  history jump now presents the stored composite instead of compositing again. On
+  a document over 16 MP, a whole-document restore installs level 0 and a coarse
+  level (`ViewPyramid::coarse`) on the GUI thread, presents the coarse level
+  through `preview_present_level`, and builds the exact pyramid on a worker
+  (`impl_core/deferred_pyramid.rs`). The worker's result lands by generation and
+  emits `pyramid_settled`. A stroke, mask stroke, display preview or pyramid
+  update first calls `settle_pyramid`, which builds the pyramid synchronously. At
+  16507×16196 (`structural_restore_profile`): undoing New Layer drops from
+  526 ms to 0.4 ms and a document channel undo from 460 ms to 0.1 ms. Undoing a
+  resize keeps 104 ms on the GUI thread, down from 315 ms; level 0's copy is
+  most of that. An identical reorder still byte-compares the composite, at 42 ms.
+  The soloed mask rebuild stays synchronous. All three are tracked in #1152.
+
 - **Adjustment presets** (#576, OpenSpec change `adjustment-presets`). The
   Properties panel shows a Preset menu for Levels, Curves, Photo Filter,
   Selective Color, and Vibrance; `Save Preset…` / `Load Preset…` are gated to
