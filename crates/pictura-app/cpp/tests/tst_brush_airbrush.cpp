@@ -11,6 +11,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 
@@ -539,7 +540,7 @@ void BrushAirbrushTest::previewHoldReachesTheCommit()
     QVERIFY(!view->gpu_compute());
 
     QVERIFY(beginLargeStroke(*view));
-    QCOMPARE(view->preview_present_level(), 3);
+    QCOMPARE(pictura::preview_present_level(*view), 3);
     QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
     for (int i = 0; i < 6; ++i) {
         QVERIFY(pictura::paint_hold(*view));
@@ -551,7 +552,7 @@ void BrushAirbrushTest::previewHoldReachesTheCommit()
     // The same stroke without the held dabs: the commit must differ, or the
     // preview's build-up was dropped by the replay.
     QVERIFY(beginLargeStroke(*view));
-    QCOMPARE(view->preview_present_level(), 3);
+    QCOMPARE(pictura::preview_present_level(*view), 3);
     QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
     QVERIFY(view->end_paint());
     const quint32 plain = view->sample_argb(1024, 1024);
@@ -572,7 +573,7 @@ void BrushAirbrushTest::maskPreviewHoldReachesTheCommit()
     const quint32 fill = view->sample_argb(1024, 1024);
 
     QVERIFY(beginLargeStroke(*view));
-    QCOMPARE(view->preview_present_level(), 3);
+    QCOMPARE(pictura::preview_present_level(*view), 3);
     QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
     for (int i = 0; i < 6; ++i) {
         QVERIFY(pictura::paint_hold(*view));
@@ -583,7 +584,7 @@ void BrushAirbrushTest::maskPreviewHoldReachesTheCommit()
     QVERIFY(view->undo());
 
     QVERIFY(beginLargeStroke(*view));
-    QCOMPARE(view->preview_present_level(), 3);
+    QCOMPARE(pictura::preview_present_level(*view), 3);
     QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
     QVERIFY(view->end_paint());
     const quint32 plain = view->sample_argb(1024, 1024);
@@ -607,7 +608,7 @@ void BrushAirbrushTest::gpuHoldBuilds()
     }
 
     QVERIFY(beginLargeStroke(*view));
-    if (view->preview_present_level() != 0) {
+    if (pictura::preview_present_level(*view) != 0) {
         view->cancel_paint();
         QSKIP("the GPU stroke was not taken");
     }
@@ -620,7 +621,7 @@ void BrushAirbrushTest::gpuHoldBuilds()
     QVERIFY(view->undo());
 
     QVERIFY(beginLargeStroke(*view));
-    if (view->preview_present_level() != 0) {
+    if (pictura::preview_present_level(*view) != 0) {
         view->cancel_paint();
         QSKIP("the GPU control stroke was not taken");
     }
@@ -633,7 +634,7 @@ void BrushAirbrushTest::gpuHoldBuilds()
     QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
     QVERIFY(pictura::mask_edit_target_set(*view, QStringLiteral("0")));
     QVERIFY(beginLargeStroke(*view));
-    if (view->preview_present_level() != 0) {
+    if (pictura::preview_present_level(*view) != 0) {
         view->cancel_paint();
         QSKIP("the GPU mask stroke was not taken");
     }

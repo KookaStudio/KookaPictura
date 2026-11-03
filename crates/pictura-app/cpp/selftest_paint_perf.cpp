@@ -6,6 +6,7 @@
 #include "image_view.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QElapsedTimer>
@@ -349,14 +350,14 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
             }
             view->flush_present();
         }
-        const int previewLevel = view->preview_present_level();
+        const int previewLevel = pictura::preview_present_level(*view);
         const int previewBlits = blits;
         const bool painting = view->is_painting();
 
         QObject::disconnect(conn);
         const bool ended = view->end_paint();
         view->set_gpu_compute(true);
-        const int levelAfter = view->preview_present_level();
+        const int levelAfter = pictura::preview_present_level(*view);
         QApplication::processEvents();
 
         QImage cropA(canvas->size(), QImage::Format_ARGB32);

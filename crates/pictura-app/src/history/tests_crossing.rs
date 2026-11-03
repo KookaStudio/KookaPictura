@@ -67,7 +67,7 @@ fn crossing_a_segment_reports_the_changed_tile() {
 }
 
 #[test]
-fn crossing_a_segment_with_a_changed_channel_reports_everything() {
+fn crossing_a_segment_with_a_changed_channel_stays_bounded() {
     let mut live = document();
     live.channels = vec![Channel {
         id: 3,
@@ -81,6 +81,29 @@ fn crossing_a_segment_with_a_changed_channel_reports_everything() {
     live.composite.data[0] = 200;
     live.channels[0].data[0] = 255;
     history.capture_live(&mut live, &selection, &target, "Resize");
+
+    let Some(Restored::Region(rect)) = history.undo_live(&mut live, &mut selection, &mut target)
+    else {
+        panic!("the restore is bounded");
+    };
+    assert!(rect.right <= 64 && rect.bottom <= 64, "one tile: {rect:?}");
+}
+
+#[test]
+fn undoing_a_resize_reports_the_whole_document() {
+    let mut live = document();
+    let (mut selection, mut target) = (None, LayerTarget::default());
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    pictura_render::resize_document(
+        &mut live,
+        SIDE / 2,
+        SIDE / 2,
+        pictura_render::Resample::Nearest,
+    )
+    .expect("resize");
+    live.composite = pictura_render::composite_rgba(&live);
+    history.capture_live(&mut live, &selection, &target, "Image Size");
 
     assert_eq!(
         history.undo_live(&mut live, &mut selection, &mut target),

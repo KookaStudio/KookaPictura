@@ -22,6 +22,9 @@ pub const SMALLEST_SIDE: u32 = 256;
 /// stable grid. `level0` itself is never touched here: the caller owns it.
 pub const TILE: i32 = 64;
 
+/// The most pixels [`ViewPyramid::coarse`] samples into its first filled level.
+const COARSE_PIXELS: u64 = 4_000_000;
+
 /// A borrowed planar straight-alpha level-0 view, one slice per channel.
 #[derive(Clone, Copy)]
 pub struct Planes<'a> {
@@ -131,6 +134,47 @@ impl ViewPyramid {
             match pyramid.levels.last() {
                 None => shrink_from_planes(&level0, &mut next, whole),
                 Some(above) => shrink_into(above, &mut next, whole),
+            }
+            pyramid.levels.push(next);
+            lw = nw;
+            lh = nh;
+        }
+        pyramid
+    }
+
+    /// The first level of a `width`×`height` composite at or under
+    /// [`COARSE_PIXELS`], for [`Self::coarse`].
+    pub fn coarse_level(width: u32, height: u32) -> usize {
+        let (mut w, mut h, mut level) = (width, height, 0);
+        while u64::from(w) * u64::from(h) > COARSE_PIXELS {
+            (w, h, level) = (half(w), half(h), level + 1);
+        }
+        level
+    }
+
+    /// A stand-in cheap enough for the GUI thread: every level of a rebuild is
+    /// allocated, but only `first` and those below it hold pixels. `first` is
+    /// point-sampled from level 0, so it aliases until the exact pyramid
+    /// replaces it. The caller must not read a level above `first`.
+    pub fn coarse(level0: Planes<'_>, first: usize) -> Self {
+        let mut pyramid = Self {
+            width: level0.width,
+            height: level0.height,
+            levels: Vec::new(),
+        };
+        let (mut lw, mut lh) = (level0.width, level0.height);
+        loop {
+            let (nw, nh) = (half(lw), half(lh));
+            if nw.max(nh) < SMALLEST_SIDE || nw <= 1 || nh <= 1 {
+                break;
+            }
+            let mut next = PyramidLevel::new(nw, nh);
+            let level = pyramid.levels.len() + 1;
+            if level == first {
+                sample_from_planes(&level0, &mut next, level);
+            } else if level > first {
+                let above = pyramid.levels.last().expect("the level above is stored");
+                shrink_into(above, &mut next, rect_of(nw, nh));
             }
             pyramid.levels.push(next);
             lw = nw;
@@ -375,6 +419,18 @@ fn stored_pixel(level: &PyramidLevel, x: usize, y: usize) -> [u8; 4] {
     [data[o], data[o + 1], data[o + 2], data[o + 3]]
 }
 
+/// Fill `dst`, stored `level`, with the level-0 pixel at each texel's corner.
+fn sample_from_planes(level0: &Planes<'_>, dst: &mut PyramidLevel, level: usize) {
+    let whole = rect_of(dst.width, dst.height);
+    each_row(dst, whole, |y, row| {
+        let sy = ((y as usize) << level).min(level0.height as usize - 1);
+        for (x, texel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            let sx = (x << level).min(level0.width as usize - 1);
+            texel.copy_from_slice(&premultiplied_plane_pixel(level0, sx, sy));
+        }
+    });
+}
+
 /// Fill `rect` of `dst` (level 1) from the straight-alpha level 0, each pixel the
 /// premultiplied average of its 2×2 block. A short block at an odd edge averages
 /// over what is there, so the last row and column are not dimmed.
@@ -552,6 +608,30 @@ mod tests {
             .map(|l| pyramid.level_size(l))
             .collect();
         assert_eq!(sizes, vec![(511, 300), (256, 150)]);
+    }
+
+    #[test]
+    fn coarse_pyramid_matches_the_exact_levels() {
+        let p = Built::new(1600, 1200, 5);
+        let exact = ViewPyramid::rebuild(p.planes());
+        let coarse = ViewPyramid::coarse(p.planes(), 2);
+        assert_eq!(coarse.level_count(), exact.level_count());
+        for level in 0..exact.level_count() {
+            assert_eq!(coarse.level_size(level), exact.level_size(level));
+        }
+        for (x, y) in [(0, 0), (31, 17), (399, 299)] {
+            assert_eq!(
+                stored_pixel(&coarse.levels[1], x, y),
+                premultiplied_plane_pixel(&p.planes(), x * 4, y * 4)
+            );
+        }
+        assert!(coarse.levels[0].data().iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn the_coarse_level_fits_its_budget() {
+        assert_eq!(ViewPyramid::coarse_level(2000, 2000), 0);
+        assert_eq!(ViewPyramid::coarse_level(16507, 16196), 4);
     }
 
     #[test]

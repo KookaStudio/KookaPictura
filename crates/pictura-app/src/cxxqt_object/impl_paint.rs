@@ -426,6 +426,7 @@ impl PictureViewRust {
     /// coverage when a mask is the edit target. False without a document, a
     /// layer target, or when another session owns the slot.
     pub(super) fn begin_paint(&mut self, cfg: StrokeConfig, label: &str) -> bool {
+        self.settle_pyramid();
         if self.session.doc.is_none() {
             return false;
         }
@@ -895,18 +896,6 @@ impl qobject::PictureView {
             }
             None => true,
         }
-    }
-
-    /// The view-pyramid level the active stroke is presenting: the preview
-    /// level while a reduced preview runs, `0` otherwise (the zoom picks the
-    /// level as usual). A GPU stroke presents the zoom-selected level, because
-    /// its region refresh repairs every stored level.
-    pub fn preview_present_level(&self) -> i32 {
-        let rust = self.rust();
-        rust.session
-            .live
-            .preview()
-            .map_or(0, |preview| preview.level as i32)
     }
 
     pub fn end_paint(mut self: Pin<&mut Self>) -> bool {

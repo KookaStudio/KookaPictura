@@ -1,3 +1,4 @@
+use super::impl_core::DeferredPyramid;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::{PixelBuffer, PsdRect};
@@ -133,6 +134,10 @@ pub struct PictureViewRust {
     /// other display consumer reads them.
     pub(super) mask_level0: Option<PixelBuffer>,
     pub(super) mask_pyramid: ViewPyramid,
+    /// The worker build `pyramid` stands in for, while it is coarse.
+    pub(super) deferred_pyramid: Option<DeferredPyramid>,
+    /// Numbers each deferred build, so a superseded result is recognised.
+    pub(super) pyramid_generation: u64,
     pub(super) link_sets: HashMap<String, u32>,
     /// The Ruler tool's measuring line: view state, never saved or undone.
     pub(super) ruler: Option<pictura_core::Ruler>,
@@ -247,6 +252,8 @@ impl Default for PictureViewRust {
             level0: None,
             mask_level0: None,
             mask_pyramid: ViewPyramid::default(),
+            deferred_pyramid: None,
+            pyramid_generation: 0,
             link_sets: HashMap::new(),
             ruler: None,
             canvas_proxy: None,

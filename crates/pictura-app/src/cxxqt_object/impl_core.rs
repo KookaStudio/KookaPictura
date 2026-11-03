@@ -13,6 +13,9 @@ use pictura_core::{
 };
 use std::time::Instant;
 
+pub(super) use deferred_pyramid::DeferredPyramid;
+
+mod deferred_pyramid;
 mod display;
 mod recovery;
 mod save;
@@ -927,6 +930,12 @@ impl super::PictureViewRust {
     /// (`recomposite`, `undo`, `redo`, `history_jump`, `history_restore_snapshot`,
     /// the move-preview commit, and a fresh open) routes through this.
     pub(super) fn reset_pyramid(&mut self) {
+        self.reset_display(false);
+    }
+
+    /// As [`Self::reset_pyramid`], leaving a large pyramid coarse when `defer`.
+    fn reset_display(&mut self, defer: bool) {
+        self.deferred_pyramid = None;
         self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         self.clear_display_preview();
         self.damage = pictura_render::CanvasDamage::default();
@@ -942,6 +951,7 @@ impl super::PictureViewRust {
         // reading the cached frame; otherwise the level-0 frame is the
         // document's own composite. Keeps a stray mid-stroke full rebuild correct.
         let gpu_compute = self.gpu_compute;
+        let t = Instant::now();
         let level0 = match self.session.live.stroke() {
             Some(_) => self
                 .session
@@ -951,12 +961,28 @@ impl super::PictureViewRust {
             None => self.session.doc.as_ref().map(level0_buffer),
         };
         self.level0 = level0;
+        paint_timing::record("reset_pyramid_level0", t.elapsed());
+        let t = Instant::now();
+        let coarse = defer.then(|| self.coarse_level()).flatten();
         self.pyramid = match self.level0.as_ref().and_then(planes_of) {
-            Some(planes) => pictura_render::ViewPyramid::rebuild(planes),
+            Some(planes) => match coarse {
+                Some(level) => pictura_render::ViewPyramid::coarse(planes, level),
+                None => pictura_render::ViewPyramid::rebuild(planes),
+            },
             None => pictura_render::ViewPyramid::default(),
         };
+        if let Some(level) = coarse {
+            self.pyramid_generation = self.pyramid_generation.wrapping_add(1);
+            self.deferred_pyramid = Some(DeferredPyramid {
+                generation: self.pyramid_generation,
+                level,
+            });
+        }
+        paint_timing::record("reset_pyramid_rebuild", t.elapsed());
         // A recomposite keeps a solo mask view current; a no-op otherwise.
+        let t = Instant::now();
         self.rebuild_mask_solo_source();
+        paint_timing::record("reset_pyramid_mask_solo", t.elapsed());
         self.canvas_revision = self.canvas_revision.wrapping_add(1);
         self.frame_revision = self.frame_revision.wrapping_add(1);
     }
@@ -964,6 +990,7 @@ impl super::PictureViewRust {
     /// Repair the pyramid for `rect` of the already-patched level-0 frame and
     /// bump the canvas revision, leaving the damage account for `image`.
     pub(super) fn update_pyramid(&mut self, rect: PsdRect) {
+        self.settle_pyramid();
         if let Some(planes) = self.level0.as_ref().and_then(planes_of) {
             self.pyramid.update(planes, rect);
         }
