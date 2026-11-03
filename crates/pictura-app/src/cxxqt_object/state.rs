@@ -61,6 +61,9 @@ pub struct PictureViewRust {
     pub(super) move_base: Option<QImage>,
     /// Where a preview's backdrop patch sits; `None` for a whole-document base.
     pub(super) move_base_origin: Option<(i32, i32)>,
+    /// The view a Move preview was built from; `None` for a full-resolution
+    /// preview. Its images are then at the view's level, not 1:1.
+    pub(super) move_view: Option<super::impl_transform::MoveView>,
     pub(super) move_layer: Option<QImage>,
     pub(super) move_x: i32,
     pub(super) move_y: i32,
@@ -212,6 +215,7 @@ impl Default for PictureViewRust {
             solo_snapshot: None,
             expanded_groups: Vec::new(),
             move_base: None,
+            move_view: None,
             move_base_origin: None,
             move_layer: None,
             move_x: 0,

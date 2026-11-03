@@ -60,13 +60,13 @@ other duplicate SHALL recomposite.
 
 ### Requirement: Undo does not rebuild the Move preview
 
-Restoring a history state SHALL NOT rebuild the Move tool's preview cache. Only
-switching to the Move tool SHALL warm it, and a press SHALL rebuild a stale one.
+Restoring a history state SHALL NOT build the Move tool's preview. Switching to
+the Move tool SHALL NOT build it either; a press SHALL build it.
 
 #### Scenario: Undo leaves the warm alone [ldr_undo_no_warm]
 
 - **WHEN** the Move tool is active on a movable layer and an edit is undone
-- **THEN** the preview cache is not rebuilt, and the next press rebuilds it
+- **THEN** no preview is built, and the next press builds it
 
 ### Requirement: Releasing a Background gives it an opaque alpha plane
 

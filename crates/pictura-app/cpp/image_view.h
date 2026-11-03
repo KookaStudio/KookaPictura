@@ -291,9 +291,15 @@ public:
     const QList<QPolygonF>& selectionPreviewContours() const { return previewContours_; }
 
     // Move-tool live preview: draw a cached base plus the moved layer at a live
-    // image-space offset, so the drag never composites the document.
+    // image-space offset, so the drag never composites the document. `scale`
+    // is document pixels per image pixel: a preview built from the view is at
+    // the presented level. A patch preview with a null base draws only the
+    // layer over the live canvas.
     void beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                          double opacity, std::optional<QPoint> basePos = std::nullopt);
+                          double opacity, std::optional<QPoint> basePos = std::nullopt,
+                          int scale = 1);
+    // Replace the moving image mid-drag (a view preview that followed the drag).
+    void setMovePreviewLayer(const QImage& layer, const QPointF& layerPos);
     void setMovePreviewDelta(const QPointF& delta);
     void endMovePreview();
     bool movePreviewActive() const { return movePreviewActive_; }
@@ -851,6 +857,7 @@ private:
     QPointF moveLayerPos_;
     QPointF moveDelta_;
     double moveOpacity_ = 1.0;
+    int moveScale_ = 1;
 
     bool transformActive_ = false;
     double transformScaleX_ = 1.0;
