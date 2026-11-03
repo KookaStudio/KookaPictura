@@ -586,8 +586,8 @@ pub(super) fn layer_thumbnail_positioned(
             }
             let sx = (((px - dest_left) as u64 * src_w as u64) / dest_w as u64)
                 .min(src_w as u64 - 1) as u32;
-            let sy = (((py - dest_top) as u64 * src_h as u64) / dest_h as u64)
-                .min(src_h as u64 - 1) as u32;
+            let sy = (((py - dest_top) as u64 * src_h as u64) / dest_h as u64).min(src_h as u64 - 1)
+                as u32;
             let Some([r, g, b, a]) = layer_pixel(layer, sx, sy) else {
                 continue;
             };
