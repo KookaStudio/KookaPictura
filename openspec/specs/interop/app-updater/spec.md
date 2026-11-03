@@ -76,15 +76,23 @@ when the release version is strictly newer than the running version.
 
 The application SHALL classify the running build as one of AppImage, Flatpak,
 Snap, deb, rpm, Windows setup, Windows portable, macOS app, or development.
-Detection MUST use the sandbox environment markers, the executable location,
-the Windows install marker, the macOS bundle location, and the distribution
-package database in that order. The detected method MUST be available to the
-banner, Preferences, About, and System Info.
+Detection MUST use the sandbox environment markers, the package's own
+`package-method` marker, the executable location, the Windows install marker,
+the macOS bundle location, and the distribution package database in that order.
+The detected method MUST be available to the dialog, Preferences, About, and
+System Info.
 
 #### Scenario: A sandbox or AppImage marker is present [au_detect_env]
 
 - **WHEN** `FLATPAK_ID`, `SNAP`, or `APPIMAGE` is set
 - **THEN** the detector returns Flatpak, Snap, or AppImage respectively
+
+#### Scenario: The package's marker identifies it [au_detect_package_marker]
+
+- **WHEN** the package's `package-method` file says `deb`, `rpm`, `appimage`,
+  `flatpak`, `snap`, `windows-setup`, `windows-portable`, or `macos-dmg`
+- **THEN** the detector returns the matching method, even when the executable
+  was moved from its usual install path
 
 #### Scenario: A Linux package install is detected [au_detect_path]
 
@@ -198,16 +206,24 @@ without the person's choice.
 
 The application SHALL install only through the path the detected method
 supports. AppImage MUST replace the running image atomically, keep a `.old`
-backup, and relaunch the new image. Windows setup MUST launch the downloaded
-installer and quit so the installer can relaunch the application. macOS MUST
-open the verified DMG and offer to quit. Flatpak, Snap, deb, and rpm MUST NOT
-self-update. An install failure MUST leave the old application runnable.
+backup, and relaunch the new image. deb and rpm MUST install the verified
+package through the system package manager with elevation, then relaunch the
+application. Windows setup MUST launch the downloaded installer and quit so the
+installer can relaunch the application. macOS MUST open the verified DMG and
+offer to quit. Flatpak and Snap MUST NOT self-update. An install failure MUST
+leave the old application runnable.
 
 #### Scenario: An AppImage is replaced and relaunched [au_install_appimage]
 
 - **WHEN** a verified AppImage update is installed in a writable directory
 - **THEN** the old image is kept as `.old`, the new image replaces it, and the
   new image is launched
+
+#### Scenario: A deb or rpm is installed [au_install_deb_rpm]
+
+- **WHEN** a verified deb or rpm update is installed
+- **THEN** the system package manager installs it with elevation and the
+  application relaunches
 
 #### Scenario: A Windows setup is launched [au_install_windows]
 
@@ -224,11 +240,11 @@ self-update. An install failure MUST leave the old application runnable.
 - **WHEN** the replacement or relaunch fails
 - **THEN** the old application remains runnable and the person sees the error
 
-### Requirement: Package-manager-owned builds never self-update
+### Requirement: Flatpak and Snap builds never self-update
 
-For Flatpak, Snap, deb, and rpm builds, the application MUST NOT download or
-replace the installed files. It SHALL show the package-manager command that
-updates the installation and SHALL offer the release page.
+For Flatpak and Snap builds, the application MUST NOT download or replace the
+installed files. It SHALL show the store command that updates the installation
+and SHALL offer the release page.
 
 #### Scenario: A Flatpak build checks [au_flatpak_hint]
 
@@ -241,11 +257,6 @@ updates the installation and SHALL offer the release page.
 - **WHEN** the detected method is Snap and an update is available
 - **THEN** the UI shows `snap refresh kooka-pictura` and does not download the
   snap
-
-#### Scenario: A deb or rpm build checks [au_deb_rpm_hint]
-
-- **WHEN** the detected method is deb or rpm and an update is available
-- **THEN** the UI shows the matching install command and the release page
 
 ### Requirement: Automatic checks are private and bounded
 

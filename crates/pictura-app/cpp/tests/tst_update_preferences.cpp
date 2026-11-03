@@ -122,7 +122,7 @@ private slots:
     void failureOffersRetry();
     void flatpakShowsUpdateCommand();
     void snapShowsUpdateCommand();
-    void debRpmShowsPackageManagerCommand();
+    void debRpmShowsUpdateNow();
     void preferencesDefaultOn();
     void togglePersists();
     void checkNowChecks();
@@ -262,22 +262,22 @@ void UpdatePreferencesTest::snapShowsUpdateCommand()
     QVERIFY(banner.releasePageButton()->isVisible());
 }
 
-void UpdatePreferencesTest::debRpmShowsPackageManagerCommand()
+void UpdatePreferencesTest::debRpmShowsUpdateNow()
 {
-    QCOMPARE(pictura::packageUpdateCommand(pictura::PackageMethod::Deb, QStringLiteral("0.4.0")),
-             QStringLiteral("sudo apt install ./KookaPictura_0.4.0_amd64.deb"));
-    QCOMPARE(pictura::packageUpdateCommand(pictura::PackageMethod::Rpm, QStringLiteral("0.4.0")),
-             QStringLiteral("sudo dnf install ./KookaPictura-0.4.0-1.x86_64.rpm"));
+    QCOMPARE(pictura::packageManagerInstallCommand(pictura::PackageMethod::Deb,
+                                                   QStringLiteral("/tmp/a.deb")),
+             QStringLiteral("pkexec apt-get install -y '/tmp/a.deb'"));
+    QCOMPARE(pictura::packageManagerInstallCommand(pictura::PackageMethod::Rpm,
+                                                   QStringLiteral("/tmp/a.rpm")),
+             QStringLiteral("pkexec dnf install -y '/tmp/a.rpm'"));
 
     QWidget host;
     host.resize(900, 300);
     host.show();
     UpdateBanner banner(&host);
-    banner.showUpdate(
-        QStringLiteral("0.3.0"), QStringLiteral("0.4.0"), false,
-        pictura::packageUpdateCommand(pictura::PackageMethod::Deb, QStringLiteral("0.4.0")));
-    QVERIFY(banner.commandText().contains(QStringLiteral("apt install")));
-    QVERIFY(banner.releasePageButton()->isVisible());
+    banner.showUpdate(QStringLiteral("0.3.0"), QStringLiteral("0.4.0"), true, QString());
+    QCOMPARE(banner.updateButton()->text(), QStringLiteral("Update now"));
+    QVERIFY(banner.commandText().isEmpty());
 }
 
 void UpdatePreferencesTest::preferencesDefaultOn()

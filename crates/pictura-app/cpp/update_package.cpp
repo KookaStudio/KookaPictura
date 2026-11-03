@@ -2,6 +2,7 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
+#include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QProcess>
 #include <QtCore/QProcessEnvironment>
@@ -35,6 +36,56 @@ bool isX86_64(const QString& architecture)
         || lower == QStringLiteral("x64");
 }
 
+PackageMethod packageMethodFromMarker(const QString& marker)
+{
+    const QString value = marker.trimmed().toLower();
+    if (value == QStringLiteral("appimage")) {
+        return PackageMethod::AppImage;
+    }
+    if (value == QStringLiteral("flatpak")) {
+        return PackageMethod::Flatpak;
+    }
+    if (value == QStringLiteral("snap")) {
+        return PackageMethod::Snap;
+    }
+    if (value == QStringLiteral("deb")) {
+        return PackageMethod::Deb;
+    }
+    if (value == QStringLiteral("rpm")) {
+        return PackageMethod::Rpm;
+    }
+    if (value == QStringLiteral("windows-setup")) {
+        return PackageMethod::WindowsSetup;
+    }
+    if (value == QStringLiteral("windows-portable")) {
+        return PackageMethod::WindowsPortable;
+    }
+    if (value == QStringLiteral("macos-dmg")) {
+        return PackageMethod::MacDmg;
+    }
+    return PackageMethod::Development;
+}
+
+QString packageMarkerPath(const QString& executablePath)
+{
+    const QDir directory(QFileInfo(executablePath).absolutePath());
+#ifdef Q_OS_WIN
+    return QDir::cleanPath(directory.filePath(QStringLiteral("../package-method")));
+#elif defined(Q_OS_MACOS)
+    return QDir::cleanPath(directory.filePath(QStringLiteral("../Resources/package-method")));
+#else
+    return QDir::cleanPath(
+        directory.filePath(QStringLiteral("../share/kooka-pictura/package-method")));
+#endif
+}
+
+QString shellQuote(const QString& value)
+{
+    QString escaped = value;
+    escaped.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
+    return QLatin1Char('\'') + escaped + QLatin1Char('\'');
+}
+
 } // namespace
 
 PackageMethod detectPackageMethod(const PackageDetectionInput& input)
@@ -47,6 +98,11 @@ PackageMethod detectPackageMethod(const PackageDetectionInput& input)
     }
     if (!input.environment.value(QStringLiteral("APPIMAGE")).isEmpty()) {
         return PackageMethod::AppImage;
+    }
+
+    const PackageMethod marker = packageMethodFromMarker(input.packageMarker);
+    if (marker != PackageMethod::Development) {
+        return marker;
     }
 
     const QString os = input.os.toLower();
@@ -86,6 +142,11 @@ PackageMethod detectPackageMethod()
     const QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     for (const QString& key : environment.keys()) {
         input.environment.insert(key, environment.value(key));
+    }
+
+    QFile marker(packageMarkerPath(input.executablePath));
+    if (marker.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        input.packageMarker = QString::fromUtf8(marker.readLine()).trimmed();
     }
 
 #ifdef Q_OS_WIN
@@ -148,7 +209,8 @@ QString packageMethodName(PackageMethod method)
 bool packageMethodSelfUpdates(PackageMethod method)
 {
     return method == PackageMethod::AppImage || method == PackageMethod::WindowsSetup
-        || method == PackageMethod::MacDmg;
+        || method == PackageMethod::MacDmg || method == PackageMethod::Deb
+        || method == PackageMethod::Rpm;
 }
 
 bool packageMethodUsesPackageManager(PackageMethod method)
@@ -211,6 +273,19 @@ QString packageUpdateCommand(PackageMethod method, const QString& version)
             return {};
         }
         return QStringLiteral("sudo dnf install ./KookaPictura-%1-1.x86_64.rpm").arg(cleanVersion);
+    default:
+        return {};
+    }
+}
+
+QString packageManagerInstallCommand(PackageMethod method, const QString& packagePath)
+{
+    const QString quoted = shellQuote(packagePath);
+    switch (method) {
+    case PackageMethod::Deb:
+        return QStringLiteral("pkexec apt-get install -y %1").arg(quoted);
+    case PackageMethod::Rpm:
+        return QStringLiteral("pkexec dnf install -y %1").arg(quoted);
     default:
         return {};
     }

@@ -70,9 +70,10 @@ void showUpdateBanner(PicturaMainWindow& frame)
     const ReleaseInfo& release = *checker->release();
     const PackageMethod method = checker->settings().packageMethod;
     const bool canInstall = checker->asset().has_value() && packageMethodSelfUpdates(method);
+    const QString command =
+        canInstall ? QString() : packageUpdateCommand(method, release.version);
     banner->setAutomaticChecks(checker->settings().automaticChecksEnabled);
-    banner->showUpdate(QStringLiteral(PICTURA_VERSION), release.version, canInstall,
-                       packageUpdateCommand(method, release.version));
+    banner->showUpdate(QStringLiteral(PICTURA_VERSION), release.version, canInstall, command);
 }
 
 QString appImagePath()

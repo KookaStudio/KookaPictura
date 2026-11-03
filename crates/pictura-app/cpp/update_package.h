@@ -26,6 +26,7 @@ struct PackageDetectionInput {
     QString os;  // "linux", "windows", or "macos"
     QString executablePath;
     QMap<QString, QString> environment;
+    QString packageMarker;  // contents of the package's marker file, if any
     bool windowsInstallMarker = false;
     bool debPackageInstalled = false;
     bool rpmPackageInstalled = false;
@@ -52,5 +53,8 @@ QString packageAssetSuffix(PackageMethod method, const QString& architecture);
 // The command a package-manager-owned build should show, or empty when the
 // method has no package-manager command.
 QString packageUpdateCommand(PackageMethod method, const QString& version);
+
+// The elevated command that installs a downloaded deb or rpm package.
+QString packageManagerInstallCommand(PackageMethod method, const QString& packagePath);
 
 } // namespace pictura

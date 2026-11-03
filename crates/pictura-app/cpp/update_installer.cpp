@@ -1,8 +1,11 @@
 #include "update_installer.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QProcess>
+#include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryFile>
 #include <QtCore/QUrl>
 #include <QtCore/QtGlobal>
@@ -33,6 +36,13 @@ bool downloadUrlAllowed(const QUrl& url)
     const QString host = url.host();
     return host == QStringLiteral("127.0.0.1") || host == QStringLiteral("localhost")
         || host == QStringLiteral("::1") || host == QStringLiteral("[::1]");
+}
+
+QString shellQuote(const QString& value)
+{
+    QString escaped = value;
+    escaped.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
+    return QLatin1Char('\'') + escaped + QLatin1Char('\'');
 }
 
 } // namespace
@@ -213,6 +223,68 @@ UpdateInstallOutcome UpdateInstaller::install(PackageMethod method, const QStrin
             QFile::remove(appImagePath);
             QFile::rename(oldPath, appImagePath);
             outcome.error = QStringLiteral("The new version could not be started.");
+            return outcome;
+        }
+        outcome.ok = true;
+        outcome.quit = true;
+        return outcome;
+    }
+
+    if (method == PackageMethod::Deb || method == PackageMethod::Rpm) {
+        if (QStandardPaths::findExecutable(QStringLiteral("pkexec")).isEmpty()) {
+            outcome.error = QStringLiteral(
+                "The package manager helper (pkexec) is not available. Install the package "
+                "from the release page.");
+            return outcome;
+        }
+        QString installCommand = packageManagerInstallCommand(method, downloadedPath);
+        if (method == PackageMethod::Rpm
+            && QStandardPaths::findExecutable(QStringLiteral("dnf")).isEmpty()) {
+            if (QStandardPaths::findExecutable(QStringLiteral("rpm")).isEmpty()) {
+                outcome.error = QStringLiteral(
+                    "Neither dnf nor rpm is available. Install the package from the release "
+                    "page.");
+                return outcome;
+            }
+            installCommand =
+                QStringLiteral("pkexec rpm -U %1").arg(shellQuote(downloadedPath));
+        }
+        if (installCommand.isEmpty()) {
+            outcome.error = QStringLiteral("The package manager command is not available.");
+            return outcome;
+        }
+
+        QString appPath = QStandardPaths::findExecutable(QStringLiteral("pictura"));
+        if (appPath.isEmpty()) {
+            appPath = QCoreApplication::applicationFilePath();
+        }
+        QString tempDir =
+            QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        if (tempDir.isEmpty()) {
+            tempDir = QDir::tempPath();
+        }
+        QTemporaryFile script(
+            QDir(tempDir).filePath(QStringLiteral("pictura-update-XXXXXX.sh")));
+        script.setAutoRemove(false);
+        if (!script.open()) {
+            outcome.error = QStringLiteral("The update helper could not be written.");
+            return outcome;
+        }
+        const QString scriptPath = script.fileName();
+        const QString content =
+            QStringLiteral("#!/bin/sh\n"
+                           "if %1; then\n"
+                           "  nohup %2 >/dev/null 2>&1 &\n"
+                           "fi\n"
+                           "rm -f %3 %4\n")
+                .arg(installCommand, shellQuote(appPath), shellQuote(scriptPath),
+                     shellQuote(downloadedPath));
+        script.write(content.toUtf8());
+        script.close();
+        QFile::setPermissions(scriptPath,
+                              QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        if (!QProcess::startDetached(QStringLiteral("/bin/sh"), {scriptPath})) {
+            outcome.error = QStringLiteral("The package manager could not be started.");
             return outcome;
         }
         outcome.ok = true;

@@ -256,6 +256,7 @@ private slots:
     void detectsLinuxPackages();
     void detectsWindowsInstallKinds();
     void detectsDevelopmentBuild();
+    void detectsPackageMarkers();
     void parsesReleaseFixture();
     void rejectsMalformedReleaseJson();
     void selectsAppImageAsset();
@@ -263,6 +264,7 @@ private slots:
     void selectsMacDmgAsset();
     void missingAssetFallsBackToReleasePage();
     void packageCommands();
+    void debRpmUsesPackageManager();
     void sessionCheckDefault();
     void environmentSettings();
     void checkOnLaunchSendsOneRequest();
@@ -424,6 +426,36 @@ void AppUpdaterTest::detectsDevelopmentBuild()
     QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::MacDmg);
 }
 
+void AppUpdaterTest::detectsPackageMarkers()
+{
+    PackageDetectionInput input = linuxInput();
+    input.packageMarker = QStringLiteral("deb");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::Deb);
+    input.packageMarker = QStringLiteral("rpm");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::Rpm);
+    input.packageMarker = QStringLiteral("appimage");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::AppImage);
+    input.packageMarker = QStringLiteral("flatpak");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::Flatpak);
+    input.packageMarker = QStringLiteral("snap");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::Snap);
+
+    input.os = QStringLiteral("windows");
+    input.packageMarker = QStringLiteral("windows-setup");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::WindowsSetup);
+    input.packageMarker = QStringLiteral("windows-portable");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::WindowsPortable);
+
+    input.os = QStringLiteral("macos");
+    input.packageMarker = QStringLiteral("macos-dmg");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::MacDmg);
+
+    input.os = QStringLiteral("linux");
+    input.packageMarker = QStringLiteral("unknown");
+    input.executablePath = QStringLiteral("/home/person/build/pictura");
+    QVERIFY(pictura::detectPackageMethod(input) == PackageMethod::Development);
+}
+
 void AppUpdaterTest::parsesReleaseFixture()
 {
     const auto release = pictura::parseReleaseJson(releaseFixture());
@@ -532,6 +564,18 @@ void AppUpdaterTest::packageCommands()
 
     QCOMPARE(pictura::packageMethodName(PackageMethod::Development),
              QStringLiteral("Development build"));
+}
+
+void AppUpdaterTest::debRpmUsesPackageManager()
+{
+    QVERIFY(pictura::packageMethodSelfUpdates(PackageMethod::Deb));
+    QVERIFY(pictura::packageMethodSelfUpdates(PackageMethod::Rpm));
+    QCOMPARE(pictura::packageManagerInstallCommand(PackageMethod::Deb,
+                                                   QStringLiteral("/tmp/a.deb")),
+             QStringLiteral("pkexec apt-get install -y '/tmp/a.deb'"));
+    QCOMPARE(pictura::packageManagerInstallCommand(PackageMethod::Rpm,
+                                                   QStringLiteral("/tmp/a.rpm")),
+             QStringLiteral("pkexec dnf install -y '/tmp/a.rpm'"));
 }
 
 void AppUpdaterTest::sessionCheckDefault()
