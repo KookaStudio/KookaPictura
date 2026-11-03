@@ -4,6 +4,8 @@
 
 #include <QtTest/QtTest>
 
+#include <cmath>
+
 #include "frame.h"
 #include "image_view.h"
 #include "tools.h"
@@ -15,6 +17,33 @@
 #include "qt_test_support.h"
 
 #include <QtWidgets/QCheckBox>
+
+namespace {
+
+// The drawn ring's stroke is one device pixel; the snapped centre can put the
+// exact edge pixel either side of the rounded coordinate, so scan a small
+// neighbourhood for the ink.
+QPoint darkPixelNear(const QImage& shot, const QPointF& expected)
+{
+    const int cx = qRound(expected.x());
+    const int cy = qRound(expected.y());
+    for (int radius = 0; radius <= 2; ++radius) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                if (radius > 0 && std::abs(dx) != radius && std::abs(dy) != radius) {
+                    continue;
+                }
+                const QPoint p(cx + dx, cy + dy);
+                if (QRect(QPoint(0, 0), shot.size()).contains(p) && qGray(shot.pixel(p)) < 64) {
+                    return p;
+                }
+            }
+        }
+    }
+    return QPoint(-1, -1);
+}
+
+} // namespace
 
 class TransformOverlayTest : public QObject {
     Q_OBJECT
@@ -121,11 +150,13 @@ void TransformOverlayTest::freeTransformClearsTheBrushRing()
     QVERIFY(canvas->hasBrushOutline());
 
     // A patch on the ring, clear of the box border and the reference point.
-    const QPointF centre = canvas->imageToWidget(QPointF(80.0, 80.0));
+    const QPointF raw = QPointF(80.0, 80.0) * canvas->zoom() + canvas->offset();
+    const QPointF centre(std::round(raw.x()), std::round(raw.y()));
     const double radius = canvas->brushOutlineScreenDiameterForTest() / 2.0;
-    const QPoint ring = QPointF(centre.x() + radius, centre.y()).toPoint();
-    const QRect ringPatch(ring - QPoint(4, 4), QSize(9, 9));
     const QImage withRing = canvas->grab().toImage();
+    const QPoint ring = darkPixelNear(withRing, QPointF(centre.x() + radius, centre.y()));
+    QVERIFY2(ring.x() >= 0, "the brush ring is drawn");
+    const QRect ringPatch(ring - QPoint(4, 4), QSize(9, 9));
 
     QVERIFY(frame.beginFreeTransform(layer));
     QCoreApplication::processEvents();

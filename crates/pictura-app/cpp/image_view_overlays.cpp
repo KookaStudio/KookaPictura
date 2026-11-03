@@ -487,6 +487,40 @@ void ImageView::clearSamplingRing()
 
 // Drawn in widget space so lines, handles, and badges keep their screen size at
 // any zoom.
+void ImageView::paintBrushOutline(QPainter& painter)
+{
+    if (!brushOutlineActive_ || brushOutlineDiameter_ <= 0.0 || panning_ || spacePan_) {
+        return;
+    }
+    // Draw in the screen frame and snap to the screen grid. The image-space
+    // transform leaves the centre and radius fractional, so the 1-px stroke
+    // lands between pixels at every zoom but 100 %. The restore is required
+    // because the overlays that follow still draw in image space.
+    painter.save();
+    painter.setTransform(viewRotation());
+    painter.setClipping(false);
+    const double diameter = brushOutlineDeviceDiameter();
+    const QPointF raw = brushOutlineImagePos_ * zoom_ + offset_;
+    const QPointF centre(std::round(raw.x()), std::round(raw.y()));
+    const double radius = diameter / 2.0;
+    // The cosmetic pen is one device pixel; the halo is the same so the
+    // white ring stays one device pixel outside the black one at any DPR.
+    const double halo = 1.0 / devicePixelRatioF();
+    const auto outline = [&painter, centre, square = brushOutlineSquare_](double r) {
+        if (square) {
+            painter.drawRect(QRectF(centre.x() - r, centre.y() - r, 2.0 * r, 2.0 * r));
+        } else {
+            painter.drawEllipse(centre, r, r);
+        }
+    };
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(Qt::white, 0));
+    outline(radius + halo);
+    painter.setPen(QPen(Qt::black, 0));
+    outline(radius);
+    painter.restore();
+}
+
 void ImageView::paintCropGroupOverlays(QPainter& painter)
 {
     if (perspectiveQuad_.isEmpty() && sliceOverlay_.isEmpty() && sliceDrag_.isNull()
