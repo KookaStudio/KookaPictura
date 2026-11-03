@@ -4,6 +4,23 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Move tool press on large documents** (#1148, OpenSpec change
+  `move-press-responsiveness`). Switching to the Move tool no longer bakes a
+  preview; the press builds it. One plain pixel layer with content over 4 MP
+  previews from the view (`impl_transform/session/view_preview.rs`): the backdrop
+  only under the layer's on-screen part and the moving image within a quarter
+  view of the screen, both at the presented pyramid level (level 0 composites the
+  backdrop exactly; deeper levels composite a `FilterProxy`). A drag that shows
+  layer pixels outside the moving image rebuilds it (`move_preview_follow`).
+  Above level 0 a document with effects, type, smart objects, or fill layers
+  keeps the full-resolution preview (`FilterProxy::reduces_faithfully`), as do
+  link sets, shapes, and styled layers. `box_reduce` now adds rows into column
+  sums, about twice as fast with the same output. `move_gesture_profile`, at half
+  size per side: press 1.2–1.4 s to 57 ms at fit and 115 ms at 100 %. The
+  view at the press is not followed through a pan or zoom mid-drag. The commit
+  still recomposites the moved area on the GUI thread (about 4.6 s at full size
+  for a canvas-sized layer), tracked in #1157.
+
 - **Structural undo off the GUI thread** (#1098, OpenSpec change
   `structural-undo-responsiveness`). Undo and redo only go whole-document when
   the document's size, mode, depth or profile changes. An unchanged composite
@@ -35,7 +52,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   At 16507×16196 with an empty layer: registry refresh 150 ms (2.3 s with a
   selection) to about 1 ms, tool switch 0.4–0.6 s to 1–185 ms, Marquee release
   2.5 s to 0.25 s, Paint Bucket fill 19.5 s to 8.4 s. Still slow, each tracked:
-  Move tool activation (about 8 s, #1148), the Paint Bucket fill and undo
+  Move tool activation (about 8 s, #1148, since fixed), the Paint Bucket fill and undo
   (#1149), the Marquee switch and release (#1150), the debounced panel refresh
   (#1151), and whole-document undo (#1098, #1152).
 
