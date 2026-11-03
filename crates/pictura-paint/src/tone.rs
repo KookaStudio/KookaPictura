@@ -24,9 +24,12 @@
 //! Adobe's Exposure curve is closed.
 
 use crate::healing::RgbaImage;
-use crate::replace::{dab_bounds, grow};
-use crate::{tip_coverage, StrokeConfig};
+use crate::replace::dab_bounds;
+use crate::stroke::union_rect;
+use crate::tip::TipParams;
+use crate::StrokeConfig;
 use pictura_core::PsdRect;
+use rayon::prelude::*;
 
 /// The band of the tonal scale the tool works hardest in: CS6's Range.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -125,6 +128,9 @@ const RANGE_SIGMA: f32 = 0.38;
 /// the tool is unusable; half gives one pass at 50 % about CS6's lift.
 const EXPOSURE_SCALE: f32 = 0.5;
 
+/// The fewest rows of a dab handed to one thread, so a small dab stays cheap.
+const MIN_PARALLEL_ROWS: usize = 32;
+
 /// One toning stroke's state: the coverage already applied at each pixel, so a
 /// pixel under four overlapping dabs is toned once, not four times.
 pub(crate) struct ToneBrush {
@@ -155,38 +161,77 @@ impl ToneBrush {
             return None;
         }
         let region = dab_bounds(img, cfg, cx, cy)?;
-        self.applied.resize(img.data.len(), 0.0);
-        let mut dirty = None;
-        for y in region.top..region.bottom {
-            for x in region.left..region.right {
-                let cover = tip_coverage(cfg, x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
-                let i = (y * img.width + x) as usize;
-                let dst = img.get(x, y);
-                // Only the increment over what this stroke already applied.
-                if cover <= self.applied[i] || dst[3] == 0 {
-                    continue;
-                }
-                let weight = (cover - self.applied[i]) * amount;
-                let rgb = [dst[0], dst[1], dst[2]].map(|v| v as f32 / 255.0);
-                let lifted = match self.options.tone {
-                    Tone::Dodge | Tone::Burn => tone(rgb, weight, &self.options),
-                    Tone::Sponge => sponge(rgb, weight, &self.options),
-                };
-                let c = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-                let out = [c(lifted[0]), c(lifted[1]), c(lifted[2]), dst[3]];
-                // Too small a step to move an 8-bit channel: keep the increment
-                // on offer for the next dab rather than rounding it away, or a
-                // soft tip's slow falloff leaves a dotted fringe.
-                if out == dst {
-                    continue;
-                }
-                self.applied[i] = cover;
-                img.set(x, y, out);
-                dirty = Some(grow(dirty, x, y));
-            }
+        // Zeroed by the allocator: only the pages the stroke reaches take memory.
+        if self.applied.is_empty() {
+            self.applied = vec![0.0; img.data.len()];
         }
-        dirty
+        let tip = TipParams::new(cfg);
+        let options = self.options;
+        let w = img.width as usize;
+        let (start, end) = (region.top as usize * w, region.bottom as usize * w);
+        img.data[start..end]
+            .par_chunks_mut(w)
+            .zip(self.applied[start..end].par_chunks_mut(w))
+            .enumerate()
+            .with_min_len(MIN_PARALLEL_ROWS)
+            .filter_map(|(row, (pixels, applied))| {
+                let y = region.top + row as i32;
+                let dy = y as f32 + 0.5 - cy;
+                let (xlo, xhi) = tip.x_span(dy)?;
+                let x0 = ((cx + xlo).floor() as i32).max(region.left);
+                let x1 = ((cx + xhi).ceil() as i32).min(region.right - 1);
+                let mut first = None;
+                let mut last = 0;
+                for x in x0..=x1 {
+                    let cover = tip.coverage(x as f32 + 0.5 - cx, dy);
+                    let at = x as usize;
+                    let toned = toned(pixels[at], cover, &mut applied[at], amount, &options);
+                    if let Some(out) = toned {
+                        pixels[at] = out;
+                        first.get_or_insert(x);
+                        last = x;
+                    }
+                }
+                first.map(|first| PsdRect {
+                    top: y,
+                    left: first,
+                    bottom: y + 1,
+                    right: last + 1,
+                })
+            })
+            .reduce_with(union_rect)
     }
+}
+
+/// `dst` under a dab's `cover`, or `None` when it stays as it is. `applied` is
+/// the coverage this stroke has already given the pixel.
+fn toned(
+    dst: [u8; 4],
+    cover: f32,
+    applied: &mut f32,
+    amount: f32,
+    options: &ToneOptions,
+) -> Option<[u8; 4]> {
+    // Only the increment over what this stroke already applied.
+    if cover <= *applied || dst[3] == 0 {
+        return None;
+    }
+    let weight = (cover - *applied) * amount;
+    let rgb = [dst[0], dst[1], dst[2]].map(|v| v as f32 / 255.0);
+    let lifted = match options.tone {
+        Tone::Dodge | Tone::Burn => tone(rgb, weight, options),
+        Tone::Sponge => sponge(rgb, weight, options),
+    };
+    let c = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let out = [c(lifted[0]), c(lifted[1]), c(lifted[2]), dst[3]];
+    // Too small a step to move an 8-bit channel: keep the increment on offer
+    // for the next dab rather than rounding it away, or a soft tip's slow
+    // falloff leaves a dotted fringe.
+    if out == dst {
+        return None;
+    }
+    *applied = cover;
+    Some(out)
 }
 
 /// Dodge and Burn.
@@ -273,8 +318,146 @@ fn shift_luminance(rgb: [f32; 3], target: f32) -> [f32; 3] {
 mod tests {
     use super::*;
     use crate::fill::tests::{doc, pixel};
-    use crate::{Stroke, StrokeSample};
+    use crate::replace::grow;
+    use crate::{tip_coverage, Stroke, StrokeSample};
     use pictura_core::Document;
+
+    /// The reference [`ToneBrush::dab`] is held to: one thread, the whole
+    /// square, the tip re-derived per pixel.
+    fn dab_serial(
+        brush: &mut ToneBrush,
+        img: &mut RgbaImage,
+        cfg: &StrokeConfig,
+        cx: f32,
+        cy: f32,
+    ) -> Option<PsdRect> {
+        let amount = brush.options.amount.clamp(0.0, 1.0);
+        let region = dab_bounds(img, cfg, cx, cy)?;
+        brush.applied.resize(img.data.len(), 0.0);
+        let mut dirty = None;
+        for y in region.top..region.bottom {
+            for x in region.left..region.right {
+                let cover = tip_coverage(cfg, x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+                let i = (y * img.width + x) as usize;
+                let dst = img.data[i];
+                if let Some(out) = toned(dst, cover, &mut brush.applied[i], amount, &brush.options)
+                {
+                    img.data[i] = out;
+                    dirty = Some(grow(dirty, x, y));
+                }
+            }
+        }
+        dirty
+    }
+
+    fn texture() -> RgbaImage {
+        let (width, height) = (300, 280);
+        let data = (0..(width * height) as usize)
+            .map(|i| {
+                let alpha = if i % 97 == 0 { 0 } else { 255 - (i % 7) as u8 };
+                [(i % 251) as u8, (i % 241) as u8, (i % 239) as u8, alpha]
+            })
+            .collect();
+        RgbaImage {
+            width,
+            height,
+            data,
+        }
+    }
+
+    // [tsr_exact]
+    #[test]
+    fn the_parallel_dab_equals_the_serial_raster() {
+        let base = StrokeConfig {
+            diameter: 180,
+            hardness: 0,
+            ..StrokeConfig::default()
+        };
+        let tips = [
+            base,
+            StrokeConfig {
+                hardness: 100,
+                ..base
+            },
+            StrokeConfig {
+                roundness: 40,
+                angle_deg: 33,
+                hardness: 60,
+                ..base
+            },
+            StrokeConfig {
+                angle_deg: 33,
+                aliased: true,
+                hardness: 100,
+                ..base
+            },
+            StrokeConfig {
+                aliased: true,
+                hardness: 100,
+                ..base
+            },
+            StrokeConfig {
+                square: true,
+                ..base
+            },
+            StrokeConfig {
+                diameter: 7,
+                ..base
+            },
+        ];
+        let mut options = Vec::new();
+        for tone in [Tone::Dodge, Tone::Burn] {
+            for range in [
+                ToneRange::Shadows,
+                ToneRange::Midtones,
+                ToneRange::Highlights,
+            ] {
+                for protect_tones in [false, true] {
+                    options.push(ToneOptions {
+                        tone,
+                        range,
+                        protect_tones,
+                        ..ToneOptions::default()
+                    });
+                }
+            }
+        }
+        for sponge in [SpongeMode::Desaturate, SpongeMode::Saturate] {
+            for vibrance in [false, true] {
+                options.push(ToneOptions {
+                    tone: Tone::Sponge,
+                    sponge,
+                    vibrance,
+                    ..ToneOptions::default()
+                });
+            }
+        }
+        // Inside, across two edges, and off the image altogether.
+        let dabs = [
+            (150.0, 140.0),
+            (172.5, 151.25),
+            (3.0, 2.0),
+            (299.5, 279.5),
+            (-500.0, 40.0),
+        ];
+        for (t, cfg) in tips.iter().enumerate() {
+            for option in &options {
+                let (mut parallel, mut serial) = (texture(), texture());
+                let mut a = ToneBrush::new(*option);
+                let mut b = ToneBrush::new(*option);
+                for &(x, y) in &dabs {
+                    let got = a.dab(&mut parallel, cfg, x, y);
+                    let want = dab_serial(&mut b, &mut serial, cfg, x, y);
+                    assert_eq!(got, want, "tip {t}, {option:?}: dirty differs");
+                }
+                assert!(
+                    parallel.data == serial.data,
+                    "tip {t}, {option:?}: pixels differ"
+                );
+                assert!(parallel.data != texture().data, "tip {t}: nothing toned");
+            }
+        }
+    }
 
     /// One stroke of a hard 20 px tone through `xs` along row 20 of `d`.
     fn stroke(d: &Document, options: ToneOptions, xs: &[f32]) -> Document {

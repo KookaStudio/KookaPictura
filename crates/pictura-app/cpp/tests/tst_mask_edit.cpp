@@ -19,6 +19,7 @@
 #include "toolbox.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -155,7 +156,7 @@ void MaskEditTest::maskThumbnailOnNonActiveRowKeepsTarget()
 
     const pictura::PaintTip tip{20, 100, 100, 0, 25, 0, 1, 0, 0, 0};
     QVERIFY(pictura::begin_brush(*view, 0xff000000u, 0xffffffffu, tip, 100, 100,
-                                 QStringLiteral("normal"), false, false));
+                                 QStringLiteral("normal"), false, false, false, false));
     QVERIFY(view->paint_dab(8.0, 8.0, 1.0));
     QVERIFY(view->end_paint());
 
@@ -325,7 +326,7 @@ void MaskEditTest::canvasToolsWriteCoverage()
     // pixels are left as they were.
     const int base = view->history_count();
     QVERIFY(pictura::begin_brush(*view, 0xff000000u, 0xffffffffu, tip, 100, 100,
-                                 QStringLiteral("normal"), false, false));
+                                 QStringLiteral("normal"), false, false, false, false));
     QVERIFY(view->paint_dab(16.0, 16.0, 1.0));
     QVERIFY(view->end_paint());
     QCOMPARE(view->history_label(base), QStringLiteral("Brush"));
@@ -899,7 +900,7 @@ void MaskEditTest::largeMaskDabPreviews()
     // 600 px on 2048² is over the 262 144 px budget, and level 3 exists
     // (2048 → 1024 → 512 → 256).
     QVERIFY(beginLargeMaskStroke(*view));
-    QCOMPARE(view->preview_present_level(), 3);
+    QCOMPARE(pictura::preview_present_level(*view), 3);
     QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
     QVERIFY(view->paint_dab(1100.0, 1024.0, 1.0));
     view->flush_present();
@@ -908,7 +909,7 @@ void MaskEditTest::largeMaskDabPreviews()
 
     // The replay hides the layer under the brush and leaves the rest alone.
     QVERIFY(view->end_paint());
-    QCOMPARE(view->preview_present_level(), 0);
+    QCOMPARE(pictura::preview_present_level(*view), 0);
     QCOMPARE(view->history_count(), base + 1);
     QCOMPARE(view->history_label(base), QStringLiteral("Brush"));
     QCOMPARE(view->sample_argb(1024, 1024), 0xffffffffu);
@@ -946,7 +947,7 @@ void MaskEditTest::previewOnlyPixelsRestoreAtCommit()
     // every 150 px, so it never dabs the second sample, 76 px on, while the
     // preview does. (1376, 1024) is inside only that second preview dab.
     QVERIFY(beginLargeMaskStroke(*view));
-    const int level = view->preview_present_level();
+    const int level = pictura::preview_present_level(*view);
     QVERIFY(level > 0);
     const QRgb before = levelPixel(*view, level, 1376, 1024);
     QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));

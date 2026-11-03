@@ -1,7 +1,8 @@
 use super::*;
 
-use super::super::{ffi::TypeSetting, layer_spec};
-use crate::cxxqt_object::edit::structural;
+use super::super::{
+    content_edit, content_reach, ffi::TypeSetting, joined, layer_spec, release_positional_state,
+};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -80,10 +81,11 @@ pub(super) fn set_warp(mut view: Pin<&mut PictureView>, path: &QString, warp: Te
     true
 }
 
-pub(super) fn present(mut view: Pin<&mut PictureView>) {
+/// Show a warp preview that touched `rects`; nothing is recorded.
+fn present(mut view: Pin<&mut PictureView>, rects: Option<Vec<pictura_core::PsdRect>>) {
+    let edit = content_edit(&view, rects);
     view.as_mut().clear_link_sets();
-    view.as_mut().recomposite();
-    view.as_mut().changed();
+    view.as_mut().preview(|_| edit);
 }
 
 pub(super) fn type_warp_preview(
@@ -95,28 +97,33 @@ pub(super) fn type_warp_preview(
     v: f64,
     vertical: bool,
 ) -> bool {
+    let path_string = path.to_string();
+    let before = content_reach(&view, &path_string);
     let changed = set_warp(view.as_mut(), path, warp_of(style, bend, h, v, vertical));
     if changed {
-        present(view);
+        let after = content_reach(&view, &path_string);
+        present(view, joined(before, after));
     }
     changed
 }
 
 pub(super) fn type_warp_cancel(mut view: Pin<&mut PictureView>) -> bool {
-    let restored = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some((path, layer)) = rust.warp_text_original.take() else {
-            return false;
-        };
-        rust.session
-            .doc
-            .as_mut()
-            .and_then(|doc| pictura_render::resolve_path_mut(doc, &path))
-            .map(|slot| *slot = layer)
-            .is_some()
+    let Some((path, layer)) = view.as_mut().rust_mut().warp_text_original.take() else {
+        return false;
     };
+    let before = content_reach(&view, &path);
+    let restored = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .and_then(|doc| pictura_render::resolve_path_mut(doc, &path))
+        .map(|slot| *slot = layer)
+        .is_some();
     if restored {
-        present(view);
+        let after = content_reach(&view, &path);
+        present(view, joined(before, after));
     }
     restored
 }
@@ -131,23 +138,14 @@ pub(super) fn type_warp_commit(
     vertical: bool,
 ) -> bool {
     let path_string = path.to_string();
-    let before = view
-        .rust()
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| pictura_render::damage::influence(doc, &path_string));
+    let before = content_reach(&view, &path_string);
     let committed = set_warp(view.as_mut(), path, warp_of(style, bend, h, v, vertical));
     view.as_mut().rust_mut().warp_text_original = None;
     if committed {
-        let after = view
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::damage::influence(doc, &path_string));
-        view.as_mut()
-            .edit("Warp Text", |_| structural(before, after));
+        let after = content_reach(&view, &path_string);
+        let edit = content_edit(&view, joined(before, after));
+        release_positional_state(view.as_mut());
+        view.as_mut().edit("Warp Text", |_| edit);
     }
     committed
 }

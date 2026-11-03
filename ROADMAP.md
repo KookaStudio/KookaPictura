@@ -114,7 +114,8 @@ Deeper technical status for PSD/PSB lives in
 - [ ] Layer-style Global Light, Create Layers, and Rasterize Layer Style (#580)
 - [ ] Bevel Contour and Texture, a gradient editor in the style dialog, and
       channel include (#581)
-- [ ] Auto-Align Layers (#582) and Auto-Blend Layers (#583)
+- [ ] Auto-Align Layers (#582)
+- [x] Auto-Blend Layers (#583)
 - [ ] Fill With (Mode)-Neutral Color for new layers (#584)
 - [ ] 32-bit and Lab blend-mode menu gating (#589)
 - [ ] `Ctrl+J` duplicate-group semantics (#590)
@@ -150,6 +151,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Brush, pencil, colour replacement and mixer brush
 - [x] Clone stamp and pattern stamp
 - [x] History brush and art history brush
+- [x] Airbrush on the stamp tools and History Brush; Art History Brush paints
+      while the button is held (#799)
+- [x] The Brush's Airbrush option and Shift+Alt+P (#1120)
 - [x] Eraser, background eraser and magic eraser
 - [x] Gradient and paint bucket
 - [x] Blur, sharpen and smudge
@@ -219,7 +223,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **Save and load selections to channels**, and selection-masked edits.
       `crates/pictura-app/src/cxxqt_object/impl_selection.rs`.
 - [ ] Select ▸ Transform Selection (#526)
-- [ ] Apply Image (#609) and Calculations (#610)
+- [x] Apply Image (#609)
+- [ ] Calculations (#610)
 - [ ] Channel Options — Masked and Selected Areas polarity (#611)
 - [ ] The interactive Refine Radius and Erase brushes (#612)
 - [ ] Color Range Skin Tones, Localized Clusters, Out Of Gamut, previews, and
@@ -280,7 +285,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       on-image tool (#573)
 - [ ] Gradient Map dither, and the CS6 print-toning presets (#574)
 - [ ] The Match Color on-canvas eyedropper and live Info feedback (#575)
-- [ ] Adjustment presets for Levels, Curves, Photo Filter, Selective Color and
+- [x] Adjustment presets for Levels, Curves, Photo Filter, Selective Color and
       Vibrance (#576)
 - [ ] The Selective Color composite-channel-only gate, and the preset
       whitelist (#577)
@@ -347,7 +352,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Vanishing Point planes saved in PSD, PSB, TIFF and JPEG (#918), in a
       project-owned image resource; reopening restores them
 - [x] NTSC Colors (#345)
-- [ ] De-Interlace (#344)
+- [x] De-Interlace (#344)
 - [x] Embed and Read Watermark (#350, #351): an in-tree approximate
       spread-spectrum carrier (not Digimarc-compatible), with the copyright
       title indicator on detection

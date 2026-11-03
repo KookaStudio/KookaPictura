@@ -271,6 +271,9 @@ public:
     void setForeground(const QColor& color);
     QColor background() const override;
     void setBackground(const QColor& color);
+    double pressure() const override { return pressure_; }
+    // A tablet event's pressure, or 1.0 from a mouse press.
+    void setPressure(double pressure);
     // Whether the current FG/BG pair belongs to a mask target. The canvas
     // backdrop and other document chrome keep the image pair while a mask is
     // edited, even though paint and fill use the mask pair.
@@ -281,6 +284,10 @@ public:
     // (evdev 34/35), so it works on EU/Scandinavian layouts. Guarded to the
     // Brush/Pencil tools; returns false when the key is not a brush bracket.
     bool applyBrushShortcut(int key, quint32 nativeScanCode, bool shift);
+    // `Shift+Alt+P`: flip the active tool's Airbrush option. The Brush, Clone
+    // Stamp, Pattern Stamp, and History Brush have one; false for every other
+    // tool.
+    bool toggleAirbrush();
 
     void bindCanvas(ImageView* canvas);
     void unbindCanvas();
@@ -511,9 +518,12 @@ signals:
     void mixerReservoirChanged(const QColor& color);
     // Hardness or a Brush Tip Shape field changed (size has brushSizeChanged).
     void brushTipChanged();
-    // Opacity, Flow, or Mode changed (a preset applying its defaults); the
-    // options bar re-reads them.
+    // Opacity, Flow, Mode, or Airbrush changed (a preset applying its defaults,
+    // or `Shift+Alt+P`); the options bar and the Brush panel re-read them.
     void paintSettingsChanged();
+    // A stamp tool's options changed (the `Shift+Alt+P` Airbrush flip); the
+    // stamp options bars re-read their toggles.
+    void stampOptionsChanged();
     // An Eyedropper option changed (the bar or the canvas context menu); the
     // options bar re-reads its Sample Size / Sample readouts.
     void eyedropperOptionsChanged();
@@ -630,6 +640,7 @@ private:
     bool canvasSampling_ = false;
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
+    double pressure_ = 1.0;
     bool maskActive_ = false;
 
     bool dragging_ = false;

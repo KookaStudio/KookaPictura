@@ -48,8 +48,11 @@ memory without saving to disk; optional **Duplicate Merged Layers Only**. See
 
 ### Open
 
-- `File > Open` (`Ctrl/Cmd+O`): select a file and click Open. Some formats (camera
-  raw, PDF) then show a format-specific options dialog. If a color-profile warning
+- `File > Open` (`Ctrl/Cmd+O`): select one or more files (Shift-click a range,
+  Ctrl/Cmd-click individual files) and click Open. Each selected file opens as
+  its own document, following the **Open Documents As Tabs** preference; a file
+  that fails to open does not stop the others. Some formats (camera raw, PDF)
+  then show a format-specific options dialog. If a color-profile warning
   appears, choose whether to use the embedded profile as the working space,
   convert the document color to the working space, or discard the embedded
   profile (`ARCH-007`).
@@ -156,7 +159,7 @@ own `File > Open` remains the canonical path.
 |---|---|---|---|
 | `File > New` | Dialog | `Ctrl/Cmd+N` *(inferred)* | Presets, size, mode, depth, background, Advanced, Save Preset, Device Central |
 | `Image > Duplicate` | Dialog | — | In-memory copy |
-| `File > Open` | Dialog | `Ctrl/Cmd+O` | Format options for raw/PDF; profile warning |
+| `File > Open` | Dialog | `Ctrl/Cmd+O` | Multi-file selection; format options for raw/PDF; profile warning |
 | `File > Open Recent` | Submenu | — | Count from File Handling |
 | `File > Open As` (Windows) / `File > Open`+Format (macOS) | Dialog | — | Force type on extension mismatch |
 | `File > Open As Smart Object` | Dialog | — | Single smart-object document |

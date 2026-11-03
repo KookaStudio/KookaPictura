@@ -5,7 +5,7 @@ use crate::eraser::{BackgroundEraseOptions, BackgroundEraser};
 use crate::focus::{FocusBrush, FocusOptions};
 use crate::healing::RgbaImage;
 use crate::mixer::{MixerBrush, MixerOptions};
-use crate::replace::{ColorReplacer, ReplaceOptions};
+use crate::replace::{dab_bounds, ColorReplacer, ReplaceOptions};
 use crate::smudge::{SmudgeBrush, SmudgeOptions};
 use crate::spacing::DabPlacer;
 use crate::stamp::StampSource;
@@ -15,9 +15,10 @@ use crate::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, PsdRect,
 };
-use raster::{plane_slices, split_bands, write_band, BandPlanes, DabRaster};
+use raster::{plane_slices, split_bands, write_back, write_band, BandPlanes, DabRaster};
 use rayon::prelude::*;
 use std::sync::Arc;
+use surface::LazyPixels;
 
 /// Deterministic stroke seed; Dissolve randomness must not vary between runs.
 const STROKE_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -66,6 +67,8 @@ enum DabEngine {
 struct PerDab {
     engine: DabEngine,
     pixels: RgbaImage,
+    /// Set when `pixels` fills on demand instead of starting as the whole layer.
+    lazy: Option<LazyPixels>,
 }
 
 pub struct StrokeOutcome {
@@ -228,6 +231,9 @@ pub struct Stroke {
     rng: u64,
     started: bool,
     painted: bool,
+    /// The last sample's pressure, so a held dab keeps the pressure it was
+    /// pressed with when the pressure overrides are on.
+    last_pressure: f32,
     per_dab: Option<PerDab>,
     source: Option<StampSource>,
     /// Raster every dab on one thread: the reference the banded raster is
@@ -286,6 +292,7 @@ impl Stroke {
             .map(|engine| PerDab {
                 engine,
                 pixels: layer_rgba(target),
+                lazy: None,
             });
         let ch = plane_index(target);
         Ok(Stroke {
@@ -305,6 +312,7 @@ impl Stroke {
             rng: STROKE_SEED,
             started: false,
             painted: false,
+            last_pressure: 1.0,
             per_dab,
             source: None,
             serial: false,
@@ -347,6 +355,7 @@ impl Stroke {
         stroke.per_dab = Some(PerDab {
             engine: DabEngine::ArtHistory(brush),
             pixels: layer_rgba(target),
+            lazy: None,
         });
         Ok(stroke)
     }
@@ -413,9 +422,18 @@ impl Stroke {
         cfg: StrokeConfig,
         options: ToneOptions,
     ) -> Result<Stroke, PaintError> {
-        Stroke::begin_retouch(doc, path, cfg, |_, _| {
-            DabEngine::Tone(ToneBrush::new(options))
-        })
+        if doc.depth != BitDepth::Eight {
+            return Err(PaintError::UnsupportedDepth);
+        }
+        let mut stroke = Stroke::begin_kind(doc, path, cfg, StrokeKind::Paint)?;
+        let target = layer_at(doc, &stroke.layer_path).ok_or(PaintError::NoRasterLayer)?;
+        let (lazy, pixels) = LazyPixels::new(target);
+        stroke.per_dab = Some(PerDab {
+            engine: DabEngine::Tone(ToneBrush::new(options)),
+            pixels,
+            lazy: Some(lazy),
+        });
+        Ok(stroke)
     }
 
     /// A stroke whose dabs run the per-dab `engine` built for the target layer.
@@ -433,6 +451,7 @@ impl Stroke {
         stroke.per_dab = Some(PerDab {
             engine: engine(&stroke, target),
             pixels: layer_rgba(target),
+            lazy: None,
         });
         Ok(stroke)
     }
@@ -441,12 +460,9 @@ impl Stroke {
     /// place. Returns `true` when any pixel's accumulated coverage changed.
     pub fn sample(&mut self, doc: &mut Document, s: StrokeSample) -> bool {
         let cfg = self.cfg;
-        let w = self.rect.width();
-        let h = self.rect.height();
-        if w <= 0 || h <= 0 {
+        if self.rect.width() <= 0 || self.rect.height() <= 0 {
             return false;
         }
-        let (w, h) = (w as usize, h as usize);
         let sx = s.x - self.rect.left as f32;
         let sy = s.y - self.rect.top as f32;
 
@@ -459,10 +475,29 @@ impl Stroke {
 
         let mut dabs = Vec::new();
         self.placer.feed(sx, sy, &mut dabs);
+        self.last_pressure = s.pressure.clamp(0.0, 1.0);
+        // ponytail: the placer keeps the stroke's spacing; CS6 scales spacing
+        // with the live pressure-sized tip, so a very light stroke can space
+        // its dabs for the full diameter.
+        let sample_cfg = self.cfg.pressure_scaled(self.last_pressure);
+        self.paint_dabs(doc, dabs, sample_cfg)
+    }
+
+    /// Dab again at the last sample: the Airbrush's time-driven build-up for a
+    /// pointer that has not moved. Returns `true` as [`Stroke::sample`] does.
+    pub fn hold(&mut self, doc: &mut Document) -> bool {
+        let mut dabs = Vec::new();
+        self.placer.repeat_last(&mut dabs);
+        let sample_cfg = self.cfg.pressure_scaled(self.last_pressure);
+        !dabs.is_empty() && self.paint_dabs(doc, dabs, sample_cfg)
+    }
+
+    fn paint_dabs(&mut self, doc: &mut Document, dabs: Vec<(f32, f32)>, cfg: StrokeConfig) -> bool {
         if self.per_dab.is_some() {
             return self.apply_per_dab(doc, &dabs);
         }
 
+        let (w, h) = (self.rect.width() as usize, self.rect.height() as usize);
         let flow = cfg.flow as f32 / 100.0;
         let mut changed = false;
         // Dissolve draws one random roll per painted pixel in raster order, so
@@ -475,7 +510,7 @@ impl Stroke {
         let mut placed: Vec<(f32, f32, Option<StrokeConfig>)> = Vec::new();
         for (dab_x, dab_y) in dabs {
             for _ in 0..cfg.count.max(1) {
-                placed.push(self.jittered(dab_x, dab_y));
+                placed.push(self.jittered(cfg, dab_x, dab_y));
             }
         }
 
@@ -524,12 +559,19 @@ impl Stroke {
             source: source.as_ref(),
             rect: *rect,
         };
+        // A pressure-scaled diameter needs its own profile; otherwise the
+        // stroke's hoisted one is exact.
+        let sample_tip = if cfg.pressure_size {
+            TipParams::new(&cfg)
+        } else {
+            *tip
+        };
 
         for (dab_x, dab_y, jittered) in placed {
             // The hoisted profile is exact when the dynamics left the tip
             // alone; a jittered dab rebuilds it from its own tip.
             let (params, radius) = match jittered {
-                None => (*tip, cfg.diameter as f32 * 0.5),
+                None => (sample_tip, cfg.diameter as f32 * 0.5),
                 Some(tip_cfg) => (TipParams::new(&tip_cfg), tip_cfg.diameter as f32 * 0.5),
             };
             let y0 = ((dab_y - radius).floor() as i32).max(0);
@@ -579,8 +621,7 @@ impl Stroke {
 
     /// One dab of a step, scattered and jittered per the dynamics; `None` when
     /// the dynamics left the tip alone, `Some(tip)` when they altered it.
-    fn jittered(&mut self, x: f32, y: f32) -> (f32, f32, Option<StrokeConfig>) {
-        let cfg = self.cfg;
+    fn jittered(&mut self, cfg: StrokeConfig, x: f32, y: f32) -> (f32, f32, Option<StrokeConfig>) {
         let (mut x, mut y) = (x, y);
         if cfg.scatter > 0 {
             let reach = cfg.diameter as f32 * cfg.scatter as f32 / 100.0;
@@ -790,8 +831,19 @@ impl Stroke {
         let Some(per) = self.per_dab.as_mut() else {
             return false;
         };
-        let mut changed = None;
+        let mut changed = Vec::with_capacity(dabs.len());
         for &(x, y) in dabs {
+            if let Some(lazy) = per.lazy.as_mut() {
+                let Some(layer) = layer_at(doc, &self.layer_path) else {
+                    return false;
+                };
+                if !self.saved.fits(layer, self.ch) {
+                    return false;
+                }
+                if let Some(region) = dab_bounds(&per.pixels, &cfg, x, y) {
+                    lazy.load(layer, &mut per.pixels, region);
+                }
+            }
             let dirty = match &mut per.engine {
                 DabEngine::Replace(replacer) => {
                     replacer.dab(&mut per.pixels, &cfg, x, y, cfg.color)
@@ -805,41 +857,39 @@ impl Stroke {
                 DabEngine::Smudge(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
                 DabEngine::Tone(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
             };
-            if let Some(d) = dirty {
-                changed = Some(changed.map_or(d, |c: PsdRect| union_rect(c, d)));
-            }
+            changed.extend(dirty);
         }
-        let Some(rect) = changed else {
+        if changed.is_empty() {
             return false;
-        };
+        }
         let ch = self.ch;
         let Some(layer) = layer_at_mut(doc, &self.layer_path).filter(|l| self.saved.fits(l, ch))
         else {
             return false;
         };
-        self.saved.save(
-            layer,
-            ch,
-            rect.left,
-            rect.top,
-            rect.right - 1,
-            rect.bottom - 1,
-        );
-        let w = per.pixels.width;
+        // Each dab's own box: on a fast drag the union of a sample's dabs is
+        // mostly pixels no dab reached.
         let mut written: Option<PsdRect> = None;
-        for y in rect.top..rect.bottom {
-            for x in rect.left..rect.right {
-                let i = (y * w + x) as usize;
-                let [r, g, b, a] = per.pixels.data[i];
-                if write_pixel(layer, ch, i, PaintMode::Normal, (r, g, b, a)) {
-                    let pixel = PsdRect {
-                        top: y,
-                        left: x,
-                        bottom: y + 1,
-                        right: x + 1,
-                    };
-                    written = Some(written.map_or(pixel, |c| union_rect(c, pixel)));
-                }
+        for rect in changed {
+            self.saved.save(
+                layer,
+                ch,
+                rect.left,
+                rect.top,
+                rect.right - 1,
+                rect.bottom - 1,
+            );
+            let bbox = write_back(
+                layer,
+                ch,
+                &per.pixels,
+                rect,
+                &mut self.scratch,
+                &mut self.applied,
+                self.serial,
+            );
+            if let Some(bbox) = bbox {
+                written = Some(written.map_or(bbox, |w| union_rect(w, bbox)));
             }
         }
         let Some(rect) = written else {
@@ -1090,34 +1140,6 @@ fn read_planes(layer: &Layer, ch: PlaneIndex) -> [Option<&[u8]>; 4] {
     [at(ch[0]), at(ch[1]), at(ch[2]), at(ch[3])]
 }
 
-fn write_pixel(
-    layer: &mut Layer,
-    ch: PlaneIndex,
-    i: usize,
-    mode: PaintMode,
-    rgba: (u8, u8, u8, u8),
-) -> bool {
-    let (r, g, b, a) = rgba;
-    let mut changed = false;
-    if !matches!(mode, PaintMode::Clear) {
-        for (k, v) in [(ch[0], r), (ch[1], g), (ch[2], b)] {
-            if let Some(k) = k {
-                if layer.channels[k].data[i] != v {
-                    layer.channels[k].data[i] = v;
-                    changed = true;
-                }
-            }
-        }
-    }
-    if let Some(k) = ch[3] {
-        if layer.channels[k].data[i] != a {
-            layer.channels[k].data[i] = a;
-            changed = true;
-        }
-    }
-    changed
-}
-
 #[cfg(test)]
 fn channel_data(layer: &Layer, id: i16) -> Option<&[u8]> {
     layer
@@ -1160,6 +1182,8 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
 }
 
 mod blend;
+#[cfg(test)]
+mod hold_tests;
 mod raster;
 mod surface;
 #[cfg(test)]

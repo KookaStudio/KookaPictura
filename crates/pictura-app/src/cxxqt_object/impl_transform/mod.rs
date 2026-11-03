@@ -8,6 +8,8 @@ mod session;
 mod skew;
 mod warp;
 
+pub(in crate::cxxqt_object) use session::MoveView;
+
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::state::PictureViewRust;

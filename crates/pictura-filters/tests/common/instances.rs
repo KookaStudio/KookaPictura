@@ -179,6 +179,10 @@ pub fn all() -> Vec<Filter> {
         Filter::FindEdges,
         Filter::Solarize,
         Filter::NtscColors,
+        Filter::DeInterlace {
+            field: InterlaceField::Odd,
+            method: DeinterlaceMethod::Interpolation,
+        },
         Filter::Diffuse {
             mode: DiffuseMode::Normal,
         },

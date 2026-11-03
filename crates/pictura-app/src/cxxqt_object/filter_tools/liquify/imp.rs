@@ -8,6 +8,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat, QString};
 use pictura_core::{PixelBuffer, PsdRect};
 use pictura_filters::{LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool};
+use pictura_select::Selection;
 
 use super::super::super::helpers::{active_mask_target, active_pixel_layer};
 use super::super::super::helpers_composite::{layer_buffer, rgba_image};
@@ -66,6 +67,9 @@ pub(super) struct Session {
     brush: LiquifyBrush,
     last: Option<[f64; 3]>,
     mask: Option<[u8; 3]>,
+    /// The selection's bounding rectangle in layer coordinates, or `None`
+    /// without a selection: the dialog's preview frame and the mesh's clip.
+    clip: Option<PsdRect>,
 }
 
 pub(super) static SESSION: Mutex<Option<Session>> = Mutex::new(None);
@@ -77,6 +81,30 @@ pub(super) fn with_session<R>(default: R, f: impl FnOnce(&mut Session) -> R) -> 
 
 pub(super) fn rect_vec(r: Option<PsdRect>) -> Vec<i32> {
     r.map_or_else(Vec::new, |r| vec![r.left, r.top, r.width(), r.height()])
+}
+
+/// The session's processing rectangle in layer coordinates. `Ok(None)` is the
+/// whole layer (no selection); `Ok(Some(rect))` is the selection's bounding
+/// rectangle inside the layer; `Err(())` when a selection misses the layer or
+/// covers nothing.
+fn session_clip(selection: Option<&Selection>, layer: PsdRect) -> Result<Option<PsdRect>, ()> {
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let bounds = selection.bounds().ok_or(())?;
+    let left = bounds.left.max(layer.left);
+    let top = bounds.top.max(layer.top);
+    let right = bounds.right.min(layer.right);
+    let bottom = bounds.bottom.min(layer.bottom);
+    if left >= right || top >= bottom {
+        return Err(());
+    }
+    Ok(Some(PsdRect {
+        left: left - layer.left,
+        top: top - layer.top,
+        right: right - layer.left,
+        bottom: bottom - layer.top,
+    }))
 }
 
 pub(super) const TOOLS: [LiquifyTool; 10] = [
@@ -107,6 +135,10 @@ pub(super) fn liquify_begin(view: &PictureView) -> bool {
     if w <= 0 || h <= 0 {
         return false;
     }
+    let clip = match session_clip(rust.session.selection.as_ref(), layer.rect) {
+        Ok(clip) => clip,
+        Err(()) => return false,
+    };
     let plane = w as usize * h as usize;
     // Planes are shared, not copied: the modal dialog never edits the layer.
     let channel = |id: i16| {
@@ -125,20 +157,31 @@ pub(super) fn liquify_begin(view: &PictureView) -> bool {
         channel(1).unwrap_or_else(|| c0.clone()),
         channel(2).unwrap_or(c0),
     ];
+    let mut mesh = LiquifyMesh::new(w as u32, h as u32);
+    mesh.set_clip(clip);
     let session = Session {
-        mesh: LiquifyMesh::new(w as u32, h as u32),
+        mesh,
         source: LiquifySource::new(w as u32, h as u32, color, channel(-1)),
         brush: LiquifyBrush::new(LiquifyTool::ForwardWarp, 100.0),
         last: None,
         mask: None,
+        clip,
     };
     *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     true
 }
 
 pub(super) fn liquify_geometry() -> Vec<i32> {
-    with_session(Vec::new(), |s| {
-        vec![s.mesh.width() as i32, s.mesh.height() as i32]
+    with_session(Vec::new(), |s| match s.clip {
+        Some(c) => vec![c.width(), c.height()],
+        None => vec![s.mesh.width() as i32, s.mesh.height() as i32],
+    })
+}
+
+pub(super) fn liquify_origin() -> Vec<i32> {
+    with_session(Vec::new(), |s| match s.clip {
+        Some(c) => vec![c.left, c.top],
+        None => vec![0, 0],
     })
 }
 
@@ -184,6 +227,17 @@ pub(super) fn liquify_backdrop(mut view: Pin<&mut PictureView>, path: &QString) 
     };
     let Some(frame) = active_pixel_layer(doc, Some(&active)).map(|l| l.rect) else {
         return QImage::default();
+    };
+    // The dialog shows the session's frame: the whole layer, or the active
+    // selection's bounding rectangle inside it.
+    let frame = match with_session(None, |s| s.clip) {
+        Some(c) => PsdRect {
+            left: frame.left + c.left,
+            top: frame.top + c.top,
+            right: frame.left + c.right,
+            bottom: frame.top + c.bottom,
+        },
+        None => frame,
     };
     let path = path.to_string();
     let picture = if path.is_empty() {
@@ -326,6 +380,9 @@ pub(super) fn liquify_load_mesh(id: i32) -> bool {
     with_session(false, |s| {
         let mut mesh = kept.scaled_to(s.mesh.width(), s.mesh.height());
         mesh.copy_freeze_from(&s.mesh);
+        // The session's selection decides where the mesh may act, not the one
+        // the kept mesh was committed under.
+        mesh.set_clip(s.clip);
         s.mesh = mesh;
         true
     })
@@ -376,5 +433,39 @@ mod tests {
             register(LiquifyMesh::new(2, 2));
         }
         assert!(liquify_mesh(id).is_none(), "the oldest mesh is dropped");
+    }
+
+    fn layer(left: i32, top: i32, w: i32, h: i32) -> PsdRect {
+        PsdRect {
+            left,
+            top,
+            right: left + w,
+            bottom: top + h,
+        }
+    }
+
+    #[test]
+    fn session_clip_refuses_a_selection_off_the_layer() {
+        let layer_rect = layer(20, 10, 40, 30);
+        // No selection: the whole layer.
+        assert_eq!(session_clip(None, layer_rect), Ok(None));
+        // A selection wider than an offset layer is its intersection, in layer
+        // coordinates.
+        let covering = Selection::rect(100, 100, 0, 0, 100, 100);
+        assert_eq!(
+            session_clip(Some(&covering), layer_rect),
+            Ok(Some(layer(0, 0, 40, 30)))
+        );
+        // A selection inside an offset layer moves with the layer origin.
+        let inner = Selection::rect(100, 100, 30, 20, 10, 5);
+        assert_eq!(
+            session_clip(Some(&inner), layer_rect),
+            Ok(Some(layer(10, 10, 10, 5)))
+        );
+        // A selection that misses the layer, or covers nothing, refuses.
+        let off = Selection::rect(100, 100, 70, 60, 10, 10);
+        assert_eq!(session_clip(Some(&off), layer_rect), Err(()));
+        let empty = Selection::none(100, 100);
+        assert_eq!(session_clip(Some(&empty), layer_rect), Err(()));
     }
 }

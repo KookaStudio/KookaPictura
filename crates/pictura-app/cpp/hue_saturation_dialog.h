@@ -27,6 +27,7 @@ public:
                         QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override;
 
 protected:
     QString paramKey(const QString& key) const override;

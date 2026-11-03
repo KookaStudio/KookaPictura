@@ -9,6 +9,8 @@
 
 #include "image_view.h"
 
+#include <QtGui/QPainter>
+
 #include <QtGui/QImage>
 #include <QtGui/QPolygonF>
 
@@ -300,6 +302,34 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
     out.origin = QPointF(pixels.left(), pixels.top()) / scale;
     out.scale = scale;
     return out;
+}
+
+void ImageView::paintTransformLayer(QPainter& painter)
+{
+    painter.setOpacity(moveOpacity_);
+    painter.save();
+    if (transformProjectiveActive_) {
+        // The projective map is in the layer image's own coordinates. The
+        // document-space form has a large translation and, for a strong
+        // perspective, a vanishing line close to the image; Qt's raster
+        // engine can drop the whole image in that form.
+        painter.translate(moveLayerPos_);
+        refreshTransformWarp();
+        if (!transformWarped_.image.isNull()) {
+            painter.drawImage(QRectF(transformWarped_.origin,
+                                     QSizeF(transformWarped_.image.size())
+                                         / transformWarped_.scale),
+                              transformWarped_.image);
+        } else if (!transformWarped_.crossed) {
+            painter.setTransform(transformProjective_, true);
+            painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
+        }
+    } else {
+        painter.setTransform(transformPreviewMatrix(), true);
+        painter.drawImage(moveLayerPos_, moveLayer_);
+    }
+    painter.restore();
+    painter.setOpacity(1.0);
 }
 
 void ImageView::refreshTransformWarp()

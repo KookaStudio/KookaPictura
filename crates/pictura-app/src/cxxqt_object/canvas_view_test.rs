@@ -340,6 +340,51 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
 }
 
 #[test]
+fn a_mid_stroke_named_snapshot_stores_an_exact_composite() {
+    use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
+
+    let rgba = vec![40u8; 128 * 128 * 4];
+    let mut doc = Document::from_rgba("paint", 128, 128, &rgba);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let stale = doc.composite.clone();
+    let mut stroke = Stroke::begin_at(&doc, "0", StrokeConfig::default()).expect("begin stroke");
+    assert!(stroke.sample(
+        &mut doc,
+        StrokeSample {
+            x: 64.0,
+            y: 64.0,
+            pressure: 1.0,
+        }
+    ));
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    rust.session
+        .live
+        .set_stroke_session(crate::cxxqt_object::document_session::StrokeSession {
+            stroke: Some(stroke),
+            ..Default::default()
+        });
+
+    let snapshot = rust.named_snapshot().expect("a snapshot");
+    assert!(snapshot.doc.composite == pictura_render::composite_rgba(&snapshot.doc));
+    assert!(
+        snapshot.doc.composite != stale,
+        "the dab is in the stored composite"
+    );
+    let live = rust.session.doc.as_ref().expect("document");
+    assert!(
+        live.composite == stale,
+        "the live document keeps its pre-stroke base"
+    );
+    assert!(!snapshot.doc.layers[0].channels[0]
+        .data
+        .shares(&live.layers[0].channels[0].data));
+}
+
+#[test]
 fn paint_commit_region_patch_equals_a_full_recomposite() {
     use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 
@@ -927,4 +972,46 @@ fn selection_contour_cache_clears_without_a_selection() {
     assert!(rust.selection_contour_extents().is_empty());
     assert!(rust.selection_contour_cache.borrow().is_none());
     assert_eq!(rust.selection_contour_computes.get(), 1);
+}
+
+#[test]
+fn a_whole_document_region_refresh_installs_its_frames() {
+    let (w, h) = (300u32, 200u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
+        "px",
+        w,
+        h,
+        (10, 20, 30),
+    )]);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let mut view = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.reset_pyramid();
+    let frame = view.frame_revision;
+
+    let doc = view.session.doc.as_mut().expect("document");
+    doc.layers[0].channels[0].data.as_mut_slice().fill(200);
+    let whole = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    };
+    assert_eq!(view.refresh_regions(&[whole]), Some(whole));
+
+    let doc = view.session.doc.as_ref().expect("document");
+    assert!(doc.composite == pictura_render::composite_rgba(doc));
+    let level0 = view.level0.as_ref().expect("level 0");
+    assert!(*level0 == level0_buffer(doc));
+    assert!(
+        !level0.data.shares(&doc.composite.data),
+        "level 0 keeps its own plane"
+    );
+    assert_eq!(view.frame_revision, frame, "the frame is reused");
+    let rebuilt = ViewPyramid::rebuild(planes_of(level0).expect("planes"));
+    assert_pyramids_equal(&view.pyramid, &rebuilt, level0);
 }

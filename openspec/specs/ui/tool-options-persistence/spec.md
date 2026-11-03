@@ -12,9 +12,10 @@ restored at the next launch: the Move, Type, Shape, Pen, brush (size, hardness,
 opacity, flow, mode, tip, dynamics), selection, eraser, stamp, healing, patch,
 retouch and toning (each tool its own), gradient, bucket, eyedropper, mixer,
 color replacement, art history, and red eye options. They SHALL be saved on
-close, on quit, and on a tool switch. A missing or unknown entry SHALL keep the
-default, and a restored value SHALL be clamped as the options bar clamps it.
-Clone Source points and values that mirror the open document SHALL NOT be saved.
+close, on quit, and on a tool switch. A missing group or field SHALL restore the
+group's default, and a restored value SHALL be clamped as the options bar clamps
+it. Restoring SHALL NOT notify any change listener. Clone Source points and
+values that mirror the open document SHALL NOT be saved.
 
 #### Scenario: Options survive a restart [top_round_trip]
 
@@ -25,3 +26,13 @@ Clone Source points and values that mirror the open document SHALL NOT be saved.
 
 - **WHEN** `tst_tool_options_persistence::badEntriesKeepDefaults` restores a store with an out-of-range type size, a non-object group, and an unknown key
 - **THEN** the type size is clamped, the other groups keep their defaults, and nothing fails
+
+#### Scenario: Restore does not notify [top_silent_restore]
+
+- **WHEN** `tst_tool_options_persistence::restoreDoesNotNotify` attaches listeners to the brush, selection, and crop groups and applies a stored object
+- **THEN** every value is restored and no listener fires
+
+#### Scenario: A missing field restores its default [top_missing_default]
+
+- **WHEN** `tst_tool_options_persistence::missingFieldsRestoreDefaults` applies a stored group that omits fields the group held before
+- **THEN** each omitted field reads its default, not the previous value

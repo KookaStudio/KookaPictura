@@ -7,7 +7,7 @@ use pictura_paint::stamp::{
     CloneSampling, StampSource,
 };
 use pictura_paint::tone::ToneOptions;
-use pictura_paint::{Stroke, StrokeConfig};
+use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 use std::time::Instant;
 
 const W: u32 = 8000;
@@ -78,4 +78,56 @@ fn retouch_stroke_start_profile() {
         let source = StampSource::pattern(tile, (0, 0), W, H).expect("pattern");
         Stroke::begin_source(&doc, "0", cfg, source).expect("pattern")
     });
+}
+
+/// One stroke's begin, first dab, and mean later dab, on a document the history
+/// shares, as a live one's is.
+fn measure_stroke(label: &str, doc: &Document, begin: impl Fn(&Document) -> Stroke) {
+    let mut live = doc.clone();
+    let t = Instant::now();
+    let mut stroke = begin(&live);
+    let begun = t.elapsed();
+    let at = |i: usize| StrokeSample {
+        x: 2000.0 + i as f32 * 150.0,
+        y: 8000.0,
+        pressure: 1.0,
+    };
+    let t = Instant::now();
+    stroke.sample(&mut live, at(0));
+    let first = t.elapsed();
+    let t = Instant::now();
+    for i in 1..=20 {
+        stroke.sample(&mut live, at(i));
+    }
+    let later = t.elapsed() / 20;
+    println!(
+        "tone_stroke tool={label} begin={:.2}ms first_dab={:.2}ms later={:.2}ms",
+        begun.as_secs_f64() * 1000.0,
+        first.as_secs_f64() * 1000.0,
+        later.as_secs_f64() * 1000.0
+    );
+}
+
+/// Print-only: toning against Brush at two sizes on the world map's dimensions,
+/// through the engine, without the GUI. No budget.
+#[test]
+#[ignore = "16507x16196 tone stroke profile; run explicitly with --ignored --nocapture"]
+fn tone_stroke_profile() {
+    let (w, h) = (16507, 16196);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (120, 90, 60))]);
+    for diameter in [500, 1940] {
+        let cfg = StrokeConfig {
+            diameter,
+            hardness: 0,
+            ..cfg()
+        };
+        measure_stroke(&format!("brush-{diameter}"), &doc, |d| {
+            Stroke::begin_at(d, "0", cfg).expect("brush")
+        });
+        measure_stroke(&format!("dodge-{diameter}"), &doc, |d| {
+            Stroke::begin_tone(d, "0", cfg, ToneOptions::default()).expect("dodge")
+        });
+    }
 }

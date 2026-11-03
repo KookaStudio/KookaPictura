@@ -77,6 +77,7 @@ edit.transform.path.distort	Edit/Transform Path/Distort	Distort		0	0
 edit.transform.path.perspective	Edit/Transform Path/Perspective	Perspective		0	0
 edit.transform.path.warp	Edit/Transform Path/Warp	Warp		0	0
 edit.transform.points.again	Edit/Transform Points/Again	Again		0	0
+edit.auto.blend.layers	Edit/Auto-Blend Layers…	Auto-Blend Layers…		1	0
 edit.define.brush.preset	Edit/Define Brush Preset…	Define Brush Preset…		0	0
 edit.define.pattern	Edit/Define Pattern…	Define Pattern…		0	0
 edit.define.custom.shape	Edit/Define Custom Shape…	Define Custom Shape…		0	0
@@ -159,7 +160,7 @@ image.variables.define	Image/Variables/Define…	Define…		0	0
 image.variables.data.sets	Image/Variables/Data Sets…	Data Sets…		0	0
 image.apply.data.set	Image/Apply Data Set…	Apply Data Set…		0	0
 image.trap	Image/Trap…	Trap…		0	0
-image.apply.image	Image/Apply Image…	Apply Image…		0	0
+image.apply.image	Image/Apply Image…	Apply Image…		1	0
 image.calculations	Image/Calculations…	Calculations…		0	0
 layer.new.layer	Layer/New/Layer	Layer	Shift+Ctrl+N	1	0
 layer.new.layerFromBackground	Layer/New/Layer from Background…	Layer from Background…		1	0
@@ -469,7 +470,7 @@ filter.texture.mosaic.tiles	Filter/Texture/Mosaic Tiles	Mosaic Tiles		1	0
 filter.texture.patchwork	Filter/Texture/Patchwork	Patchwork		1	0
 filter.texture.stained.glass	Filter/Texture/Stained Glass	Stained Glass		1	0
 filter.texture.texturizer	Filter/Texture/Texturizer	Texturizer		1	0
-filter.video.de.interlace	Filter/Video/De-Interlace	De-Interlace		0	0
+filter.video.de.interlace	Filter/Video/De-Interlace	De-Interlace		1	0
 filter.video.ntsc.colors	Filter/Video/NTSC Colors	NTSC Colors		1	0
 filter.other.custom	Filter/Other/Custom	Custom		1	0
 filter.other.high.pass	Filter/Other/High Pass	High Pass		1	0

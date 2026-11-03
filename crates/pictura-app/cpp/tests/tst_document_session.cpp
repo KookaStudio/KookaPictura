@@ -50,6 +50,8 @@ private slots:
     void theTransformDragHandleComesFromTheSession();
     void undoAndRedoCancelTheTransformSession();
     void replaceEntryPointsCancelTheSession();
+    void cancellingNothingReportsNoCancel();
+    void cancellingAStrokeReportsTheCancel();
     void replacementSignalsMatchTheEntryPoint();
     void historyNavigationMarksDirty();
     void failedRevertKeepsDocument();
@@ -171,6 +173,29 @@ void DocumentSessionTest::replaceEntryPointsCancelTheSession()
     pictura::PictureView view;
     QSignalSpy cancelled(&view, &pictura::PictureView::sessionCancelled);
     QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QCOMPARE(cancelled.count(), 1);
+}
+
+void DocumentSessionTest::cancellingNothingReportsNoCancel()
+{
+    // A tool switch cancels whatever is live; with nothing live it must not
+    // report a cancel, whose handler refreshes every panel at once (#1145).
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QSignalSpy cancelled(&view, &pictura::PictureView::sessionCancelled);
+    QVERIFY(!view.cancel_active_session());
+    QCOMPARE(cancelled.count(), 0);
+}
+
+void DocumentSessionTest::cancellingAStrokeReportsTheCancel()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QVERIFY(view.begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 16, 100, 100, 0, 100, 100, 25,
+                             QStringLiteral("normal"), false, false));
+    QVERIFY(view.paint_dab(16.0, 16.0, 1.0));
+    QSignalSpy cancelled(&view, &pictura::PictureView::sessionCancelled);
+    QVERIFY(view.cancel_active_session());
     QCOMPARE(cancelled.count(), 1);
 }
 

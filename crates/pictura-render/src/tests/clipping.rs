@@ -153,3 +153,71 @@ fn clipping_parallel_matches_serial() {
         "clipping region differs between serial and parallel"
     );
 }
+
+/// An Invert clipped to a red base on a transparent canvas, with the base's
+/// alpha and mask set by `base`.
+fn inverted_base(alpha: u8, mask: Option<LayerMask>) -> Document {
+    let mut base = solid(
+        "Base",
+        rect(2, 2, 6, 6),
+        (255, 0, 0),
+        alpha,
+        BlendMode::Normal,
+        255,
+    );
+    base.mask = mask;
+    let invert = Layer {
+        name: "Invert".into(),
+        rect: rect(0, 0, 0, 0),
+        opacity: 255,
+        fill: 255,
+        visible: true,
+        clipping: true,
+        adjustment: Some(crate::encode_invert()),
+        ..Default::default()
+    };
+    doc(8, 8, vec![base, invert])
+}
+
+fn half_mask() -> LayerMask {
+    LayerMask {
+        rect: rect(2, 2, 6, 6),
+        data: Some(vec![128u8; 16].into()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn clipped_adjustment_keeps_a_soft_base_alpha() {
+    let d = inverted_base(128, None);
+    let out = px(&composite_rgba(&d), 3, 3);
+    assert_eq!(&out[..3], &[0, 255, 255], "fully inverted");
+    assert!(out[3].abs_diff(128) <= 1, "alpha unchanged: {}", out[3]);
+    assert_eq!(px(&composite_rgba(&d), 1, 1)[3], 0, "outside the base");
+}
+
+#[test]
+fn clipped_adjustment_follows_a_half_mask() {
+    let d = inverted_base(255, Some(half_mask()));
+    let out = px(&composite_rgba(&d), 3, 3);
+    assert_eq!(&out[..3], &[0, 255, 255], "fully inverted");
+    assert!(out[3].abs_diff(128) <= 1, "alpha unchanged: {}", out[3]);
+}
+
+#[test]
+fn clipped_adjustment_region_matches_full() {
+    let _guard = crate::composite_rows::serial_test_lock();
+    let d = inverted_base(128, Some(half_mask()));
+    let full_out = composite_rgba(&d);
+    let forced = &crate::composite_rows::FORCE_SERIAL;
+    forced.store(true, std::sync::atomic::Ordering::Relaxed);
+    let serial = composite_rgba_region(&d, 1, 1, 6, 6);
+    forced.store(false, std::sync::atomic::Ordering::Relaxed);
+    let parallel = composite_rgba_region(&d, 1, 1, 6, 6);
+    for y in 0..6 {
+        for x in 0..6 {
+            assert_eq!(px(&serial, x, y), px(&full_out, x + 1, y + 1));
+            assert_eq!(px(&parallel, x, y), px(&full_out, x + 1, y + 1));
+        }
+    }
+}

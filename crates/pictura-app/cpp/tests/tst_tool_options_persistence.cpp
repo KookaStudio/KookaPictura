@@ -25,6 +25,9 @@ private slots:
     void quickSelectionToleranceFromOptionsBarPersists();
     void quickSelectionToleranceTypedWithoutEnterPersists();
     void badEntriesKeepDefaults();
+    void restoreDoesNotNotify();
+    void missingFieldsRestoreDefaults();
+    void patchMergesAndNotifies();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -57,6 +60,9 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
         paint->setPenTip(true);
         paint->setAliased(true);
         paint->setWetEdges(true);
+        paint->setAirbrush(true);
+        paint->setPressureSize(true);
+        paint->setPressureOpacity(true);
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(5.5);
         tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->setTolerance(77);
         RetouchGroup* blur = tools->optionsFor<RetouchGroup>(ToolId::Blur);
@@ -84,6 +90,9 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->penTip());
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->aliased());
     QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->wetEdges());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->airbrush());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->pressureSize());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->pressureOpacity());
     QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::Marquee)->feather(), 5.5);
     QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::QuickSelection)->tolerance(), 77);
     QCOMPARE(tools->optionsFor<RetouchGroup>(ToolId::Blur)->get().strength, 80);
@@ -172,8 +181,7 @@ void ToolOptionsPersistenceTest::badEntriesKeepDefaults()
     auto window = test::makeMainWindow();
     auto* tools = window->findChild<ToolController*>();
     QVERIFY(tools);
-    const int brushSize = tools->optionsFor<PaintOptions>(ToolId::Brush)->size();
-    const int eraserMode = tools->optionsFor<EraserGroup>(ToolId::Eraser)->get().mode;
+    const int brushDefault = PaintOptions{}.size();
     QJsonObject json;
     json.insert(QStringLiteral("type"), QJsonObject{{QStringLiteral("size"), 99999.0}});
     json.insert(QStringLiteral("brush"), 5);
@@ -181,8 +189,140 @@ void ToolOptionsPersistenceTest::badEntriesKeepDefaults()
     json.insert(QStringLiteral("unknownTool"), QJsonObject{{QStringLiteral("a"), 1}});
     applyToolOptionsJson(*tools, json);
     QCOMPARE(tools->optionsFor<TypeGroup>(ToolId::HorizontalType)->get().size, 1296.0);
-    QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->size(), brushSize);
-    QCOMPARE(tools->optionsFor<EraserGroup>(ToolId::Eraser)->get().mode, eraserMode);
+    QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->size(), brushDefault);
+    QCOMPARE(tools->optionsFor<EraserGroup>(ToolId::Eraser)->get().mode, EraserOptions{}.mode);
+}
+
+void ToolOptionsPersistenceTest::restoreDoesNotNotify()
+{
+    using namespace pictura;
+    ToolController tools;
+    PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush);
+    SelectionOptions* marquee = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
+    SelectionOptions* quick = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection);
+    CropOptions* crop = tools.optionsFor<CropOptions>(ToolId::Crop);
+    QVERIFY(paint && marquee && quick && crop);
+
+    int brushSignals = 0;
+    paint->sizeChanged = [&brushSignals](int) { ++brushSignals; };
+    paint->tipChanged = [&brushSignals]() { ++brushSignals; };
+    paint->paintSettingsChanged = [&brushSignals]() { ++brushSignals; };
+    int selectionSignals = 0;
+    marquee->combineModeChanged = [&selectionSignals](SelectionMode) { ++selectionSignals; };
+    marquee->magneticWidthChanged = [&selectionSignals](int) { ++selectionSignals; };
+    quick->combineModeChanged = [&selectionSignals](SelectionMode) { ++selectionSignals; };
+    quick->magneticWidthChanged = [&selectionSignals](int) { ++selectionSignals; };
+    int cropSignals = 0;
+    crop->optionsChanged = [&cropSignals]() { ++cropSignals; };
+
+    applyToolOptionsJson(
+        tools,
+        QJsonObject{
+            {QStringLiteral("brush"),
+             QJsonObject{{QStringLiteral("size"), 99},
+                         {QStringLiteral("hardness"), 10},
+                         {QStringLiteral("opacity"), 50},
+                         {QStringLiteral("flow"), 60},
+                         {QStringLiteral("mode"), QStringLiteral("multiply")},
+                         {QStringLiteral("roundness"), 40},
+                         {QStringLiteral("tipAngle"), 30},
+                         {QStringLiteral("spacing"), 10},
+                         {QStringLiteral("grain"), 20},
+                         {QStringLiteral("flipX"), true},
+                         {QStringLiteral("flipY"), true},
+                         {QStringLiteral("penTip"), true},
+                         {QStringLiteral("aliased"), true},
+                         {QStringLiteral("wetEdges"), true},
+                         {QStringLiteral("airbrush"), true},
+                         {QStringLiteral("pressureSize"), true},
+                         {QStringLiteral("pressureOpacity"), true},
+                         {QStringLiteral("scatter"), 10},
+                         {QStringLiteral("count"), 3},
+                         {QStringLiteral("sizeJitter"), 10},
+                         {QStringLiteral("angleJitter"), 20},
+                         {QStringLiteral("roundnessJitter"), 30}}},
+            {QStringLiteral("selection"),
+             QJsonObject{{QStringLiteral("combineMode"), 1},
+                         {QStringLiteral("magneticWidth"), 40}}},
+            {QStringLiteral("quickSelection"),
+             QJsonObject{{QStringLiteral("combineMode"), 2},
+                         {QStringLiteral("magneticWidth"), 50}}},
+            {QStringLiteral("crop"),
+             QJsonObject{{QStringLiteral("shieldOpacity"), 40},
+                         {QStringLiteral("overlayShow"), 1}}}});
+
+    QCOMPARE(brushSignals, 0);
+    QCOMPARE(selectionSignals, 0);
+    QCOMPARE(cropSignals, 0);
+    QCOMPARE(paint->size(), 99);
+    QCOMPARE(paint->hardness(), 10);
+    QCOMPARE(paint->opacity(), 50);
+    QCOMPARE(paint->flow(), 60);
+    QCOMPARE(paint->mode(), QStringLiteral("multiply"));
+    QVERIFY(paint->airbrush());
+    QVERIFY(paint->pressureSize());
+    QVERIFY(paint->pressureOpacity());
+    QCOMPARE(int(marquee->combineMode()), 1);
+    QCOMPARE(marquee->magneticWidth(), 40);
+    QCOMPARE(int(quick->combineMode()), 2);
+    QCOMPARE(quick->magneticWidth(), 50);
+    QCOMPARE(crop->settings().shieldOpacity, 40);
+    QCOMPARE(crop->settings().overlayShow, int(CropSettings::AlwaysShow));
+}
+
+void ToolOptionsPersistenceTest::missingFieldsRestoreDefaults()
+{
+    using namespace pictura;
+    ToolController tools;
+    PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush);
+    SelectionOptions* marquee = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
+    MoveGroup* move = tools.optionsFor<MoveGroup>(ToolId::Move);
+    QVERIFY(paint && marquee && move);
+
+    paint->setSize(77);
+    paint->setHardness(10);
+    paint->setOpacity(40);
+    marquee->setTolerance(200);
+    marquee->setMagneticWidth(40);
+    MoveOptions options = move->get();
+    options.autoSelectOn = true;
+    move->set(options);
+
+    applyToolOptionsJson(
+        tools,
+        QJsonObject{
+            {QStringLiteral("brush"), QJsonObject{{QStringLiteral("size"), 33}}},
+            {QStringLiteral("selection"), QJsonObject{{QStringLiteral("tolerance"), 100}}},
+            {QStringLiteral("move"), QJsonObject{{QStringLiteral("alignTo"), 1}}}});
+
+    QCOMPARE(paint->size(), 33);
+    QCOMPARE(paint->hardness(), PaintOptions{}.hardness());
+    QCOMPARE(paint->opacity(), PaintOptions{}.opacity());
+    QCOMPARE(marquee->tolerance(), 100);
+    QCOMPARE(marquee->magneticWidth(), SelectionOptions{}.magneticWidth());
+    QVERIFY(!move->get().autoSelectOn);
+    QCOMPARE(move->get().alignTo, 1);
+}
+
+void ToolOptionsPersistenceTest::patchMergesAndNotifies()
+{
+    using namespace pictura;
+    ToolController tools;
+    PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush);
+    QVERIFY(paint);
+    paint->setSize(77);
+    paint->setOpacity(40);
+
+    int notified = 0;
+    paint->sizeChanged = [&notified](int) { ++notified; };
+    paint->paintSettingsChanged = [&notified]() { ++notified; };
+
+    patchToolOptionsJson(tools,
+                         QJsonObject{{QStringLiteral("brush"),
+                                      QJsonObject{{QStringLiteral("size"), 123}}}});
+    QCOMPARE(paint->size(), 123);
+    QCOMPARE(paint->opacity(), 40);
+    QCOMPARE(notified, 1);
 }
 
 QTEST_MAIN(ToolOptionsPersistenceTest)

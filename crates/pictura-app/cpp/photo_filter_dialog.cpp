@@ -1,5 +1,6 @@
 #include "photo_filter_dialog.h"
 
+#include "adjustment_presets.h"
 #include "color_picker_dialog.h"
 #include "panels/color_swatch_widget.h"
 
@@ -49,9 +50,11 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
     outer->setSpacing(16);
     auto* left = new QVBoxLayout;
     left->setSpacing(8);
+    addPresetRow(left);
 
-    auto* use = new QGroupBox(QStringLiteral("Use"), this);
-    use->setObjectName(QStringLiteral("photoFilterUse"));
+    use_ = new QGroupBox(QStringLiteral("Use"), this);
+    use_->setObjectName(QStringLiteral("photoFilterUse"));
+    auto* use = use_;
     auto* grid = new QGridLayout(use);
     useFilter_ = new QRadioButton(QStringLiteral("Filter:"), use);
     useFilter_->setObjectName(QStringLiteral("useFilter"));
@@ -83,6 +86,7 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
     densityRow->addWidget(new QLabel(QStringLiteral("Density:"), this));
     const ParamSpec densityRange = spec(QStringLiteral("density"));
     auto* density = new QSpinBox(this);
+    density_ = density;
     density->setObjectName(QStringLiteral("density"));
     density->setRange(qRound(densityRange.min), qRound(densityRange.max));
     density->setSuffix(QStringLiteral(" %"));
@@ -92,12 +96,14 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
     densityRow->addStretch(1);
     left->addLayout(densityRow);
     auto* slider = new QSlider(Qt::Horizontal, this);
+    densitySlider_ = slider;
     slider->setObjectName(QStringLiteral("densitySlider"));
     slider->setRange(density->minimum(), density->maximum());
     slider->setValue(density->value());
     left->addWidget(slider);
 
     auto* luminosity = new QCheckBox(QStringLiteral("Preserve Luminosity"), this);
+    luminosity_ = luminosity;
     luminosity->setObjectName(QStringLiteral("preserveLuminosity"));
     luminosity->setChecked(param(QStringLiteral("preserveLuminosity"), 1.0) != 0.0);
     left->addWidget(luminosity);
@@ -141,6 +147,32 @@ void PhotoFilterDialog::applySource()
                          ? QRgb(filter_->currentData().toUInt())
                          : color_->property("color").value<QColor>().rgb() & 0xffffffu;
     setParam(QStringLiteral("color"), double(rgb));
+}
+
+void PhotoFilterDialog::reloadFromBlock()
+{
+    const double rgb = param(QStringLiteral("color"), -1.0);
+    use_->setEnabled(rgb >= 0.0);
+    const QColor current = QColor::fromRgb(QRgb(uint(std::max(rgb, 0.0))));
+    paintSwatch(color_, current);
+    const int named = filter_->findData(uint(current.rgb() & 0xffffffu));
+    {
+        const QSignalBlocker block(filter_);
+        filter_->setCurrentIndex(std::max(named, 0));
+    }
+    {
+        const QSignalBlocker blockFilter(useFilter_);
+        const QSignalBlocker blockColor(useColor_);
+        (named >= 0 || rgb < 0.0 ? useFilter_ : useColor_)->setChecked(true);
+    }
+    {
+        const QSignalBlocker blockSpin(density_);
+        const QSignalBlocker blockSlider(densitySlider_);
+        density_->setValue(qRound(param(QStringLiteral("density"), 25.0)));
+        densitySlider_->setValue(density_->value());
+    }
+    const QSignalBlocker blockLuminosity(luminosity_);
+    luminosity_->setChecked(param(QStringLiteral("preserveLuminosity"), 1.0) != 0.0);
 }
 
 QWidget* PhotoFilterDialog::controlForTest(const QString& key) const

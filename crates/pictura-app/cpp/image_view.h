@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <optional>
 
 class QPainter;
 
@@ -290,9 +291,15 @@ public:
     const QList<QPolygonF>& selectionPreviewContours() const { return previewContours_; }
 
     // Move-tool live preview: draw a cached base plus the moved layer at a live
-    // image-space offset, so the drag never composites the document.
+    // image-space offset, so the drag never composites the document. `scale`
+    // is document pixels per image pixel: a preview built from the view is at
+    // the presented level. A patch preview with a null base draws only the
+    // layer over the live canvas.
     void beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                          double opacity);
+                          double opacity, std::optional<QPoint> basePos = std::nullopt,
+                          int scale = 1);
+    // Replace the moving image mid-drag (a view preview that followed the drag).
+    void setMovePreviewLayer(const QImage& layer, const QPointF& layerPos);
     void setMovePreviewDelta(const QPointF& delta);
     void endMovePreview();
     bool movePreviewActive() const { return movePreviewActive_; }
@@ -300,8 +307,10 @@ public:
     // Free Transform preview: same cached base/layer as the Move preview, but the
     // layer is drawn under a live similarity transform (scale/rotate/translate
     // about the layer centre) and the quad with its eight handles is overlaid.
+    // In both previews, a `basePos` makes `base` a patch at that document position,
+    // drawn over the live canvas in place of a whole-document base.
     void beginTransformPreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                               double opacity);
+                               double opacity, std::optional<QPoint> basePos = std::nullopt);
     void setTransformPreview(double scaleX, double scaleY, double angleRadians, double dx,
                              double dy);
     // Projective layer preview: nine space-separated coefficients in
@@ -632,6 +641,9 @@ signals:
     void mousePressed(const QPointF& imagePos, int button, int modifiers);
     void mouseMoved(const QPointF& imagePos);
     void mouseReleased(const QPointF& imagePos);
+    // A tablet event's pressure (0..1), before Qt's synthesized mouse event
+    // drives the stroke. A mouse press reports 1.0.
+    void pointerPressure(double pressure);
     // A modifier key (Alt/Shift/Ctrl/Meta) was pressed or released, so a tool
     // observes the edge even without pointer movement.
     void modifierKeyChanged(int modifiers);
@@ -648,6 +660,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void tabletEvent(QTabletEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
@@ -667,6 +680,7 @@ private:
     // Rewarp the projective preview when its inputs, the visible region, or the
     // view scale changed since the last warp.
     void refreshTransformWarp();
+    void paintTransformLayer(QPainter& painter);
     // The Free Transform box, handles, rotate knob, and reference point,
     // unclipped by the document rect (image_view_overlays.cpp).
     void paintTransformOverlay(QPainter& painter);
@@ -788,6 +802,9 @@ private:
     bool snapToWorkspace_ = false;
     bool panning_ = false;
     bool spacePan_ = false;
+    // A tablet press is down, so its synthesized mouse press keeps the
+    // tablet pressure instead of resetting to the mouse's 1.0.
+    bool tabletActive_ = false;
     // False after a load/fit so the first resize settles the canvas, then any
     // pan/zoom (and the initial fit itself) sets it true so a later tool-switch
     // resize keeps the view instead of snapping the zoom.
@@ -835,10 +852,12 @@ private:
 
     bool movePreviewActive_ = false;
     QImage moveBase_;
+    std::optional<QPoint> moveBasePos_;
     QImage moveLayer_;
     QPointF moveLayerPos_;
     QPointF moveDelta_;
     double moveOpacity_ = 1.0;
+    int moveScale_ = 1;
 
     bool transformActive_ = false;
     double transformScaleX_ = 1.0;

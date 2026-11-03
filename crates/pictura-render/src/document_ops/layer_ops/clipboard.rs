@@ -8,8 +8,12 @@
 //! clear_selection_pixels}` (<https://github.com/perfecto25/photorust>).
 
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, Document, Layer, LayerMask, PixelBuffer, PsdRect,
+    layer_pixel_locked, layer_transparency_locked, Document, Layer, LayerMask, PixelBuffer, Plane,
+    PsdRect,
 };
+use rayon::prelude::*;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 use super::create::{insert_node, next_layer_name, transparent_layer};
 use super::paths::{resolve_path, resolve_path_mut};
@@ -282,35 +286,102 @@ pub fn paste_clip(
 /// The bounding box of nonzero `coverage` over a `width * height` plane, or
 /// `None` when nothing is selected.
 pub fn coverage_bounds(coverage: &[u8], width: u32, height: u32) -> Option<PsdRect> {
-    let w = width as usize;
-    if w == 0 || coverage.len() < w * height as usize {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || coverage.len() < w * h {
         return None;
     }
-    let mut bounds: Option<PsdRect> = None;
-    for (y, row) in coverage.chunks_exact(w).take(height as usize).enumerate() {
-        let Some(first) = row.iter().position(|&v| v > 0) else {
-            continue;
-        };
-        let last = row.iter().rposition(|&v| v > 0).unwrap_or(first);
-        let (y, first, last) = (y as i32, first as i32, last as i32);
-        bounds = Some(match bounds {
-            None => PsdRect {
-                top: y,
-                left: first,
-                bottom: y + 1,
-                right: last + 1,
-            },
-            Some(b) => PsdRect {
-                top: b.top,
-                left: b.left.min(first),
-                bottom: y + 1,
-                right: b.right.max(last + 1),
-            },
-        });
-    }
-    bounds
+    row_bounds(h, |y| coverage.get(y * w..(y + 1) * w))
 }
 
+/// [`coverage_bounds`] of a plane, read by rows so a plane whose bands have
+/// diverged is not materialized.
+pub(super) fn plane_coverage_bounds(
+    coverage: &Plane<u8>,
+    width: u32,
+    height: u32,
+) -> Option<PsdRect> {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || coverage.len() < w * h {
+        return None;
+    }
+    row_bounds(h, |y| coverage.row(y, w))
+}
+
+/// How many planes [`plane_has_coverage`] remembers before it starts over.
+const COVERAGE_MEMO_ENTRIES: usize = 256;
+
+/// A plane's `(ident, width, height)`. An ident names one set of bytes, so an
+/// answer stored under it never goes stale.
+type CoverageKey = (u64, u32, u32);
+
+/// [`plane_has_coverage`] answers by [`CoverageKey`].
+static COVERAGE_MEMO: LazyLock<Mutex<HashMap<CoverageKey, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(test)]
+thread_local! {
+    /// Scans [`plane_has_coverage`] started on this thread, for the tests that
+    /// prove a remembered plane is not read again.
+    pub(super) static COVERAGE_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Whether `coverage` holds a nonzero sample: exactly when
+/// [`plane_coverage_bounds`] is `Some`. Rows are read in place and the scan
+/// stops at the first hit. The answer is remembered by the plane's ident, so
+/// the menu checks one refresh runs read an unchanged plane once (#1145).
+pub fn plane_has_coverage(coverage: &Plane<u8>, width: u32, height: u32) -> bool {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || coverage.len() < w * h {
+        return false;
+    }
+    let key = (coverage.ident(), width, height);
+    let memo = || {
+        COVERAGE_MEMO
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    };
+    if let Some(&known) = memo().get(&key) {
+        return known;
+    }
+    #[cfg(test)]
+    COVERAGE_SCANS.with(|scans| scans.set(scans.get() + 1));
+    let covered = (0..h).into_par_iter().any(|y| {
+        coverage
+            .row(y, w)
+            .is_some_and(|row| row.iter().any(|&v| v > 0))
+    });
+    let mut memo = memo();
+    if memo.len() >= COVERAGE_MEMO_ENTRIES {
+        memo.clear();
+    }
+    memo.insert(key, covered);
+    covered
+}
+
+fn row_bounds<'a>(
+    height: usize,
+    row: impl Fn(usize) -> Option<&'a [u8]> + Sync,
+) -> Option<PsdRect> {
+    (0..height)
+        .into_par_iter()
+        .filter_map(|y| {
+            let row = row(y)?;
+            let first = row.iter().position(|&v| v > 0)?;
+            let last = row.iter().rposition(|&v| v > 0).unwrap_or(first);
+            Some(PsdRect {
+                top: y as i32,
+                left: first as i32,
+                bottom: y as i32 + 1,
+                right: last as i32 + 1,
+            })
+        })
+        .reduce_with(|a, b| PsdRect {
+            top: a.top.min(b.top),
+            left: a.left.min(b.left),
+            bottom: a.bottom.max(b.bottom),
+            right: a.right.max(b.right),
+        })
+}
 /// Sample `region` through `pixel` into a clip, with the selection coverage (or
 /// full coverage) as its mask. `None` for an empty region or when every sampled
 /// pixel is transparent after masking.

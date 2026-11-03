@@ -8,6 +8,7 @@
 namespace pictura {
 
 struct CharacterSetting;
+struct ParagraphSetting;
 
 // Session-command ports a tool handler may implement alongside ToolHandler.
 // `ToolController` resolves one typed (`cropCommitSession`, `cropBoxSession`,
@@ -58,11 +59,13 @@ public:
     virtual bool cancelText() = 0;
     virtual bool textActive() const = 0;
     virtual bool insertText(const QString& text) = 0;
-    // New (not reopened) type's character attributes and font family, which
-    // the Character panel edits while no layer exists yet; false outside such
-    // a session. Setting them previews at once.
-    virtual bool newTextCharacter(CharacterSetting& character, QString& family) const = 0;
-    virtual bool setNewTextCharacter(const CharacterSetting& character, const QString& family) = 0;
+    // The open session's attributes, which the Character and Paragraph panels
+    // edit in place of any layer; false with no session open. Setting them
+    // previews at once, records no state, and lands on commit.
+    virtual bool textCharacter(CharacterSetting& character, QString& family) const = 0;
+    virtual bool setTextCharacter(const CharacterSetting& character, const QString& family) = 0;
+    virtual bool textParagraph(ParagraphSetting& paragraph) const = 0;
+    virtual bool setTextParagraph(const ParagraphSetting& paragraph) = 0;
     // Shows `color` on the text being typed or the selected type layer without
     // a history state (the Text Color picker's live preview); calling it with
     // the original colour drops the preview. The committed colour still goes

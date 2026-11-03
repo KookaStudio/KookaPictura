@@ -2,9 +2,11 @@
 //! parallel, each writing only its own rows of the coverage buffers and planes.
 
 use super::{union_rect, PlaneIndex, Stencil};
+use crate::healing::RgbaImage;
 use crate::tip::TipParams;
 use crate::PaintMode;
 use pictura_core::{Layer, PsdRect, BAND_ROWS};
+use rayon::prelude::*;
 
 /// The target layer's R, G, B and alpha planes, or a cut of the same rows of
 /// each, in that order.
@@ -204,7 +206,68 @@ pub(super) fn split_bands<'a>(
     bands
 }
 
-/// `write_pixel` for a band's planes.
+/// Copy the layer-local `rect` of a per-dab engine's `pixels` into the layer's
+/// planes, forking only the bands it reaches. Returns the box of the pixels that
+/// changed.
+pub(super) fn write_back(
+    layer: &mut Layer,
+    ch: PlaneIndex,
+    pixels: &RgbaImage,
+    rect: PsdRect,
+    scratch: &mut [u8],
+    applied: &mut [u8],
+    serial: bool,
+) -> Option<PsdRect> {
+    let (w, h) = (pixels.width as usize, pixels.height as usize);
+    let (y0, y1) = (rect.top as usize, rect.bottom as usize);
+    let planes = plane_slices(layer, ch, w, h, y0, y1);
+    let bands = split_bands(y0, y1 - y0, w, scratch, applied, planes);
+    if serial {
+        bands
+            .into_iter()
+            .filter_map(|band| write_back_band(band, pixels, rect))
+            .reduce(union_rect)
+    } else {
+        bands
+            .into_par_iter()
+            .filter_map(|band| write_back_band(band, pixels, rect))
+            .reduce_with(union_rect)
+    }
+}
+
+fn write_back_band(mut band: Band<'_>, pixels: &RgbaImage, rect: PsdRect) -> Option<PsdRect> {
+    let w = pixels.width as usize;
+    let rows = band.scratch.len() / w;
+    let top = band.y.max(rect.top as usize);
+    let bottom = (band.y + rows).min(rect.bottom as usize);
+    let columns = rect.left as usize..rect.right as usize;
+    let mut bbox: Option<PsdRect> = None;
+    for ly in top..bottom {
+        let source = &pixels.data[ly * w..(ly + 1) * w];
+        let row = (ly - band.y) * w;
+        let mut first = None;
+        let mut last = 0;
+        for lx in columns.clone() {
+            let [r, g, b, a] = source[lx];
+            if write_band(&mut band.planes, row + lx, PaintMode::Normal, (r, g, b, a)) {
+                first.get_or_insert(lx);
+                last = lx;
+            }
+        }
+        if let Some(first) = first {
+            let row_box = PsdRect {
+                top: ly as i32,
+                left: first as i32,
+                bottom: ly as i32 + 1,
+                right: last as i32 + 1,
+            };
+            bbox = Some(bbox.map_or(row_box, |b| union_rect(b, row_box)));
+        }
+    }
+    bbox
+}
+
+/// Write one pixel at offset `at` of a band's planes; `true` when a byte changed.
 pub(super) fn write_band(
     planes: &mut BandPlanes<'_>,
     at: usize,

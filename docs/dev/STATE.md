@@ -4,6 +4,143 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Move tool press on large documents** (#1148, OpenSpec change
+  `move-press-responsiveness`). Switching to the Move tool no longer bakes a
+  preview; the press builds it. One plain pixel layer with content over 4 MP
+  previews from the view (`impl_transform/session/view_preview.rs`): the backdrop
+  only under the layer's on-screen part and the moving image within a quarter
+  view of the screen, both at the presented pyramid level (level 0 composites the
+  backdrop exactly; deeper levels composite a `FilterProxy`). A drag that shows
+  layer pixels outside the moving image rebuilds it (`move_preview_follow`).
+  Above level 0 a document with effects, type, smart objects, or fill layers
+  keeps the full-resolution preview (`FilterProxy::reduces_faithfully`), as do
+  link sets, shapes, and styled layers. `box_reduce` now adds rows into column
+  sums, about twice as fast with the same output. `move_gesture_profile`, at half
+  size per side: press 1.2–1.4 s to 57 ms at fit and 115 ms at 100 %. The
+  view at the press is not followed through a pan or zoom mid-drag. The commit
+  still recomposites the moved area on the GUI thread (about 4.6 s at full size
+  for a canvas-sized layer), tracked in #1157.
+
+- **Structural undo off the GUI thread** (#1098, OpenSpec change
+  `structural-undo-responsiveness`). Undo and redo only go whole-document when
+  the document's size, mode, depth or profile changes. An unchanged composite
+  reports an empty `Region`, document channels add no damage, and mask changes
+  report `Restored::Composite`, which also rebuilds a soloed mask. A whole-document
+  history jump now presents the stored composite instead of compositing again. On
+  a document over 16 MP, a whole-document restore installs level 0 and a coarse
+  level (`ViewPyramid::coarse`) on the GUI thread, presents the coarse level
+  through `preview_present_level`, and builds the exact pyramid on a worker
+  (`impl_core/deferred_pyramid.rs`). The worker's result lands by generation and
+  emits `pyramid_settled`. A stroke, mask stroke, display preview or pyramid
+  update first calls `settle_pyramid`, which builds the pyramid synchronously. At
+  16507×16196 (`structural_restore_profile`): undoing New Layer drops from
+  526 ms to 0.4 ms and a document channel undo from 460 ms to 0.1 ms. Undoing a
+  resize keeps 104 ms on the GUI thread, down from 315 ms; level 0's copy is
+  most of that. An identical reorder still byte-compares the composite, at 42 ms.
+  The soloed mask rebuild stays synchronous. All three are tracked in #1152.
+
+- **Command refresh on large documents** (#1145, OpenSpec change
+  `command-refresh-responsiveness`). Menu enabled checks no longer measure
+  content: `plane_has_coverage` stops at the first covered row and memoizes by
+  `Plane::ident` (every write resets it, so entries never go stale). Align,
+  Distribute, Auto-Blend, Transform, Align to Selection and Refine Edge use it;
+  Transform no longer copies the selection mask per check. `cancel_active_session`
+  reports `sessionCancelled` only when a session was live, so a tool switch no
+  longer refreshes every panel inline. A whole-document region refresh installs
+  the composite and level 0 instead of copying them row by row.
+  `PICTURA_PAINT_TIMING` now names each registry command costing 1 ms or more.
+  At 16507×16196 with an empty layer: registry refresh 150 ms (2.3 s with a
+  selection) to about 1 ms, tool switch 0.4–0.6 s to 1–185 ms, Marquee release
+  2.5 s to 0.25 s, Paint Bucket fill 19.5 s to 8.4 s. Still slow, each tracked:
+  Move tool activation (about 8 s, #1148, since fixed), the Paint Bucket fill and undo
+  (#1149), the Marquee switch and release (#1150), the debounced panel refresh
+  (#1151), and whole-document undo (#1098, #1152).
+
+- **Adjustment presets** (#576, OpenSpec change `adjustment-presets`). The
+  Properties panel shows a Preset menu for Levels, Curves, Photo Filter,
+  Selective Color, and Vibrance; `Save Preset…` / `Load Preset…` are gated to
+  the CS6 whitelist (Levels, Curves, Exposure, Hue/Saturation, Black & White,
+  Channel Mixer, Selective Color) and the same saved list appears in the
+  adjustment dialogs. Built-ins reuse the established dialog tables plus the
+  community Curves list and Photo Filter filter colours; Channel Mixer,
+  Selective Color, and Vibrance invent none. User presets live in
+  `$XDG_DATA_HOME/kooka-pictura/Presets/Adjustments/<kind>.presets` (atomic
+  write) through `pictura-render/src/adjustment_presets.rs`. Tests:
+  `pictura-render` preset units and `tst_adjustment_presets` (13 cases).
+
+- **Smudge picks up the live canvas with Sample All Layers** (#800, OpenSpec
+  change `smudge-live-snapshot`). `SmudgeBrush` builds each carried patch from
+  the press-time composite with the live working layer source-over'd on it, so
+  a dab picks up the smear the stroke has already laid instead of replaying the
+  press-time image. Exact for an opaque topmost target and for smudging onto an
+  empty topmost layer; a partial-alpha or mid-stack target remains an
+  approximation (`ponytail:`). Tests:
+  `pictura-paint::sample_all_layers_picks_up_the_live_layer` and
+  `tst_retouch_tools::smudgeSampleAllMatchesTheLiveLayer`.
+
+- **Image > Apply Image** (#609, OpenSpec change `add-apply-image`). The dialog
+  reads its source and mask once into snapshots, so a preview on the active
+  document cannot compound. `pictura-render/src/apply_image.rs` holds the
+  kernel, which writes the 8-bit channels or the 16/32-bit store. Layer masks
+  are valid targets. The write stops at the layer rect (#1139), and high-depth
+  Offset scaling is an inference.
+
+- **Brush Airbrush build-up** (#1120, OpenSpec change
+  `brush-airbrush-build-up`). The Brush options bar has an Airbrush toggle and
+  the Brush panel's **Build-up** row is the same `PaintOptions` flag, so either
+  view follows the other. `Shift+Alt+P` flips the active tool's Airbrush option
+  (Brush, Clone Stamp, Pattern Stamp, History Brush) and the stamp bars follow
+  through `stampOptionsChanged`. A held Brush stroke now keeps painting on every
+  backend: the exact CPU stroke, the reduced-level preview (its replay log
+  records held entries so the commit keeps the build-up), the GPU stroke, and a
+  layer-mask stroke (exact and GPU). The 20 dabs/s rate is still approximated,
+  and held dabs are still absent from recorded actions. The two tablet-pressure
+  overrides (**Always use Pressure for Opacity** after Opacity and **Always use
+  Pressure for Size** after Airbrush) are in the bar with their own icons; the
+  canvas takes `QTabletEvent` pressure, the engine scales the dab diameter or
+  its flow/opacity cap, and a pressure stroke declines the GPU for the exact
+  CPU/preview path. Tests: `tst_brush_airbrush` (17 cases), extended
+  `tst_tool_options_persistence`, the Rust pressure units.
+- **Panel menu hooks survive a regroup** (#1057, OpenSpec change
+  `panel-menu-hooks-regroup`). The Actions, Character, and Paragraph per-widget
+  menu hooks used to live on the `PanelGroup` that `buildPanels` created, so the
+  fresh-session Essentials regroup and every workspace switch deleted them.
+  `PicturaMainWindow` now keeps the hooks in a registry keyed by panel object
+  name, and `PanelGroup::updateHeaderMenu` resolves the current panel's hook
+  from the owning frame when the menu opens (a group-level hook still wins).
+  The hooks therefore follow a panel across a regroup, a workspace apply, and a
+  move between groups. Tests: `tst_workspaces::{freshSessionKeepsPanelMenuHooks,
+  workspaceSwitchKeepsPanelMenuHooks, panelMoveKeepsPanelMenuHook}`.
+- **Filter ▸ Video ▸ De-Interlace** (#344, OpenSpec change `de-interlace`).
+  `pictura_filters::video::de_interlace` reconstructs one interlaced field from
+  the retained one: `InterlaceField::Odd`/`Even` picks the discarded field by
+  0-based row index, `DeinterlaceMethod::Interpolation` averages the retained
+  rows above and below (rounded half-up), and `Duplication` copies the row
+  above. The top edge uses the row below. Every plane is reconstructed,
+  including alpha. The catalogue row (`de-interlace`, two radio groups, the
+  shared dialog) previews the whole layer because row parity is absolute.
+  Approximated, behavioural parity only; the engine still runs on planar 8-bit
+  working planes. Tests: the `de_interlace_*` units in `pictura-filters`,
+  `pictura-app::{de_interlace_is_a_two_slot_kind,
+  de_interlace_is_in_the_descriptor}`, and `tst_de_interlace`.
+- **Liquify confines an active selection to its bounding rectangle** (#882,
+  OpenSpec change `liquify-selection-bounds`). `LiquifyMesh` carries an optional
+  layer-local clip: nodes outside it take no offset, `liquify()` resamples only
+  its rows and columns, and `LiquifySource::render` clears outside it.
+  `liquify_begin` intersects the selection's bounds with the active layer, the
+  dialog previews only that rectangle (`liquify_geometry` reports its size,
+  `liquify_origin` its top-left, the backdrop is cropped to it), and the commit
+  no longer narrows processing to the selection's shape. A selection that
+  misses the layer, or covers nothing, refuses the dialog. Tests:
+  `tst_liquify_dialog`, the `*clip*` tests in `pictura-filters`, and
+  `pictura-app::session_clip_refuses_a_selection_off_the_layer`.
+- **File > Open accepts a multi-file selection** (#1118, OpenSpec change
+  `multi-file-open`). The Open dialog now uses `QFileDialog::ExistingFiles`
+  (`getOpenFileNames()` in `cpp/dialogs.cpp`), and `showOpenDialog()` starts one
+  open per chosen path, so Shift-click/Ctrl-click opens one document per file
+  (tabs or floating windows per the tabs preference). A failed file does not
+  stop the rest. Open As, Place, Open Recent, and the command line stay
+  single-file. Tests: `tst_multi_file_open`.
 - **DX12 defaults to the FXC shader compiler** (#1104, OpenSpec change
   `dx12-fxc-default`). wgpu 30's `Auto` loaded the stale `dxcompiler.dll`
   windeployqt ships, so a Windows launch fell back to the CPU. Both device
@@ -13,6 +150,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   feature is now `software-gpu`, and `windows-render`
   runs a DX12 device smoke check on WARP (the full parity profile stays on
   lavapipe).
+- **Edit > Auto-Blend Layers** (#583, OpenSpec change `add-auto-blend-layers`).
+  `pictura-render::document_ops::layer_ops::auto_blend` plans one mask per layer
+  on a worker and applies it as one state: focus and exposure scoring for Stack
+  Images, a seeded watershed for Panorama. Every run adds `<top> (merged)`, a
+  multiband pixel blend at document depth with Seamless gains baked in (OpenSpec
+  change `auto-blend-merged-layer`, after review against Photoshop). The clipped
+  adjustment compositor fix stays, as a correct fix on its own. Stack brightness
+  follows the base layer; detail and colour follow the sharpest
+  (`auto-blend-stack-tone`, `auto-blend-stack-colour`, tuned by eye on one
+  photograph pair). Content Aware Fill Transparent Areas is post-CS6 and 8-bit
+  only. All approximated, behavioural parity only. Ceilings: Normal mode at 100 %
+  opacity, a 16 MP mask grid, no merged layer above 100 MP, vector masks ignored,
+  no video or 3D refusal (#1110).
+  `replace_layer_mask` handles the stale `-2` plane for this
+  command only (#1111). Auto-Align stays open (#582).
 - **Agent Control works in Flatpak and Snap builds** (#1079, OpenSpec change
   `agent-control-in-sandboxes`), with no new sandbox permission. The client starts
   the bridge inside the sandbox (`flatpak run <id> --mcp`, `snap run
@@ -2012,7 +2164,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tst_filter_menu`; `commandIdForPath` centralizes the path-derived filter ids.
   Ceilings (`ponytail:`): entries with no engine kernel (Filter Gallery, Liquify,
   Vanishing Point, Lens Correction, Blur Gallery, Lens/Smart Blur, Reduce Noise,
-  Glass, Diffuse Glow, Diffuse, Glowing Edges, De-Interlace) stay disabled stubs
+  Glass, Diffuse Glow, Diffuse, Glowing Edges) stay disabled stubs
   (Custom has since been exposed, #336; Embed/Read Watermark now ship as an
   in-tree approximate carrier, #350/#351); the alpha pass reruns the kernel on the CPU.
 - PSD interop roadmap (`docs/dev/psd-support-roadmap.md`): P1 (ZIP/ZIP-prediction
@@ -2660,7 +2812,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   98 now probes Pen, `keys_shown` (116) the out-of-scope 3D K group, and
   `shift_plain` (117) presses P as the unimplemented key. Ceilings
   (`ponytail:`): no Airbrush or pressure controls; a Sample All Layers smudge
-  reads the composite as it was at the press.
+  read the composite as it was at the press (fixed by #800).
 - **Pen, Freeform Pen, Add Anchor Point, Delete Anchor Point, and Convert
   Point** (changes `pen-tool`, `freeform-pen-tool`, `add-anchor-point-tool`,
   `delete-anchor-point-tool`, `convert-point-tool`, issues #32–#36, ported from

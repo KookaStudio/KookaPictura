@@ -1013,6 +1013,7 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
         | Filter::Custom { .. }
         | Filter::Solarize
         | Filter::NtscColors
+        | Filter::DeInterlace { .. }
         | Filter::Liquify { .. }
         | Filter::AdaptiveWideAngle { .. }
         | Filter::LensCorrection { .. }

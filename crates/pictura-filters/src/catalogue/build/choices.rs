@@ -2,11 +2,11 @@
 //! the order its dialog lists them (a choice slot's index picks from these).
 
 use crate::{
-    BlurNoiseKind, BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, GlassTexture,
-    GrainType, HalftoneType, IrisShape, LensType, LightDirection, LightType, MezzotintType,
-    NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
-    SmartBlurMode, SpherizeMode, StrokeDirection, TextureChannel, TileFill, WaveType, WindMethod,
-    ZigZagStyle,
+    BlurNoiseKind, BrushType, ContourEdge, DeinterlaceMethod, DiffuseMode, DisplaceFit,
+    ExtrudeType, GlassTexture, GrainType, HalftoneType, InterlaceField, IrisShape, LensType,
+    LightDirection, LightType, MezzotintType, NoiseDistribution, PolarKind, Quality, RadialMethod,
+    RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, StrokeDirection,
+    TextureChannel, TileFill, WaveType, WindMethod, ZigZagStyle,
 };
 
 pub(crate) const BLUR_NOISE_KINDS: [BlurNoiseKind; 3] = [
@@ -39,6 +39,12 @@ pub(crate) const RIPPLE_SIZES: [RippleSize; 3] =
 pub(crate) const WAVE_TYPES: [WaveType; 3] = [WaveType::Sine, WaveType::Triangle, WaveType::Square];
 pub(crate) const POLAR_KINDS: [PolarKind; 2] =
     [PolarKind::RectangularToPolar, PolarKind::PolarToRectangular];
+pub(crate) const INTERLACE_FIELDS: [InterlaceField; 2] =
+    [InterlaceField::Odd, InterlaceField::Even];
+pub(crate) const DEINTERLACE_METHODS: [DeinterlaceMethod; 2] = [
+    DeinterlaceMethod::Interpolation,
+    DeinterlaceMethod::Duplication,
+];
 pub(crate) const SHEAR_FILLS: [ShearFill; 2] = [ShearFill::WrapAround, ShearFill::RepeatEdgePixels];
 pub(crate) const DISPLACE_FITS: [DisplaceFit; 2] = [DisplaceFit::StretchToFit, DisplaceFit::Tile];
 pub(crate) const GLASS_TEXTURES: [GlassTexture; 4] = [

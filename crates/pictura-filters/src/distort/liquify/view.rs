@@ -211,7 +211,7 @@ impl LiquifySource {
             for i in 0..w {
                 let x = origin[0] + (i as f64 + 0.5) / zoom;
                 let px = &mut line[i * 4..i * 4 + 4];
-                if !(0.0..lw).contains(&x) || !(0.0..lh).contains(&y) {
+                if !(0.0..lw).contains(&x) || !(0.0..lh).contains(&y) || !mesh.contains(x, y) {
                     px.fill(0);
                     continue;
                 }

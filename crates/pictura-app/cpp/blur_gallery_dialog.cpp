@@ -8,7 +8,6 @@
 #include <QtCore/QTimer>
 #include <QtGui/QLinearGradient>
 #include <QtGui/QMouseEvent>
-#include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QShortcut>
 #include <QtWidgets/QAbstractSpinBox>
@@ -104,13 +103,6 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
             const int longEdge = qMax(view_->document_width(), view_->document_height());
             proxyEdge_ = qMin(kProxyEdge, longEdge);
             draftEdge_ = proxyEdge_ > kDraftEdge ? kDraftEdge : 0;
-            const auto base = [this](int edge) {
-                return edge > 0 ? filter_proxy_base(*view_, edge).convertToFormat(
-                                      QImage::Format_ARGB32_Premultiplied)
-                                : QImage();
-            };
-            base_ = base(proxyEdge_);
-            draftBase_ = base(draftEdge_);
             canvas_->setDocumentSize(QSize(view_->document_width(), view_->document_height()));
         }
     }
@@ -938,6 +930,13 @@ void BlurGalleryDialog::scheduleRender()
     });
 }
 
+BlurGalleryDialog::~BlurGalleryDialog()
+{
+    if (view_) {
+        filter_canvas_proxy_release(*view_);
+    }
+}
+
 bool BlurGalleryDialog::interacting() const
 {
     const auto held = [](const QSlider* slider) { return slider && slider->isSliderDown(); };
@@ -962,10 +961,8 @@ void BlurGalleryDialog::render()
         canvas_->setImage(proxy_);
         return;
     }
-    const bool draft = !draftBase_.isNull() && interacting();
-    const QImage& base = draft ? draftBase_ : base_;
-    const int edge = draft ? draftEdge_ : proxyEdge_;
-    if (base.isNull()) {
+    const int edge = draftEdge_ > 0 && interacting() ? draftEdge_ : proxyEdge_;
+    if (edge <= 0) {
         canvas_->setImage(proxy_);
         return;
     }
@@ -977,13 +974,10 @@ void BlurGalleryDialog::render()
         canvas_->setImage(proxy_);
         return;
     }
-    const QImage layer = filter_proxy_layer(*view_, commit, slotList(scale), edge);
-    QImage composed = base.copy();
-    if (!layer.isNull()) {
-        QPainter painter(&composed);
-        painter.drawImage(0, 0, layer);
-    }
-    canvas_->setImage(composed);
+    const QImage composed = filter_proxy_composite(*view_, commit, slotList(scale), edge);
+    canvas_->setImage(composed.isNull()
+                          ? proxy_
+                          : composed.convertToFormat(QImage::Format_ARGB32_Premultiplied));
 }
 
 bool BlurGalleryDialog::get(PictureView* view, const FilterCommandSpec& spec,

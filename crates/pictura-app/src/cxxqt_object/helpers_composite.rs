@@ -658,28 +658,21 @@ pub(super) fn sample_planar_argb(buffer: &PixelBuffer, x: i32, y: i32) -> u32 {
     }
     let plane = buffer.width as usize * buffer.height as usize;
     let i = y as usize * buffer.width as usize + x as usize;
+    // One sample read from its band: indexing the plane would materialize a whole
+    // diverged composite for a single pixel, seconds on a very large document.
+    let at = |i: usize| buffer.data.sample(i).unwrap_or(0);
     let (r, g, b, a) = match buffer.channels {
         0 => return 0,
         1 => {
-            let v = buffer.data[i];
+            let v = at(i);
             (v, v, v, 255)
         }
         2 => {
-            let v = buffer.data[i];
-            (v, v, v, buffer.data[plane + i])
+            let v = at(i);
+            (v, v, v, at(plane + i))
         }
-        channels if channels >= 4 => (
-            buffer.data[i],
-            buffer.data[plane + i],
-            buffer.data[2 * plane + i],
-            buffer.data[3 * plane + i],
-        ),
-        _ => (
-            buffer.data[i],
-            buffer.data[plane + i],
-            buffer.data[2 * plane + i],
-            255,
-        ),
+        channels if channels >= 4 => (at(i), at(plane + i), at(2 * plane + i), at(3 * plane + i)),
+        _ => (at(i), at(plane + i), at(2 * plane + i), 255),
     };
     ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }

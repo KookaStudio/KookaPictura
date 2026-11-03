@@ -285,3 +285,97 @@ fn history_capture_profile() {
         elapsed / 20
     );
 }
+
+fn stamped_doc() -> Document {
+    let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
+    let channels = [0i16, 1, 2, -1]
+        .map(|id| pictura_core::Channel {
+            id,
+            data: vec![9; 4].into(),
+        })
+        .to_vec();
+    doc.layers = LayerStack::from_layers(vec![Layer {
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        },
+        channels,
+        ..Default::default()
+    }]);
+    doc
+}
+
+fn layer_stamps(doc: &Document, layer: usize) -> Vec<u64> {
+    doc.layers[layer]
+        .channels
+        .iter()
+        .map(|c| c.data.stamp())
+        .collect()
+}
+
+#[test]
+fn a_capture_keeps_the_stamps_of_unchanged_planes() {
+    let mut history = History::default();
+    let mut doc = stamped_doc();
+    let target = LayerTarget::default();
+    history.capture_live(&mut doc, &None, &target, "Open");
+    let before = layer_stamps(&doc, 0);
+    assert!(before.iter().all(|&stamp| stamp != 0));
+
+    doc.layers.get_mut(0).unwrap().channels[1]
+        .data
+        .as_mut_slice()[0] = 1;
+    history.capture_live(&mut doc, &None, &target, "Edit");
+    let after = layer_stamps(&doc, 0);
+    assert_eq!(after[0], before[0]);
+    assert_eq!(after[2], before[2]);
+    assert_eq!(after[3], before[3]);
+    assert!(after[1] != 0 && after[1] != before[1], "the written plane");
+}
+
+#[test]
+fn undo_keeps_the_stamps_of_unchanged_planes() {
+    let mut history = History::default();
+    let mut doc = stamped_doc();
+    let target = LayerTarget::default();
+    history.capture_live(&mut doc, &None, &target, "Open");
+    doc.layers.get_mut(0).unwrap().channels[1]
+        .data
+        .as_mut_slice()[0] = 1;
+    history.capture_live(&mut doc, &None, &target, "Edit");
+    let edited = layer_stamps(&doc, 0);
+
+    let (mut selection, mut target) = (None, target);
+    assert!(history
+        .undo_live(&mut doc, &mut selection, &mut target)
+        .is_some());
+    let undone = layer_stamps(&doc, 0);
+    assert_eq!(undone[0], edited[0]);
+    assert_eq!(undone[2], edited[2]);
+    assert_eq!(undone[3], edited[3]);
+    assert_eq!(doc.layers[0].channels[1].data[0], 9);
+}
+
+#[test]
+fn a_duplicated_layer_gets_unique_stable_stamps() {
+    let mut history = History::default();
+    let mut doc = stamped_doc();
+    let target = LayerTarget::default();
+    history.capture_live(&mut doc, &None, &target, "Open");
+    let copy = doc.layers[0].clone();
+    doc.layers.push(copy).unwrap();
+    history.capture_live(&mut doc, &None, &target, "Duplicate");
+
+    let stamps = [layer_stamps(&doc, 0), layer_stamps(&doc, 1)].concat();
+    let unique: std::collections::HashSet<u64> = stamps.iter().copied().collect();
+    assert_eq!(unique.len(), stamps.len());
+    assert!(!unique.contains(&0));
+
+    history.capture_live(&mut doc, &None, &target, "Again");
+    assert_eq!(
+        [layer_stamps(&doc, 0), layer_stamps(&doc, 1)].concat(),
+        stamps
+    );
+}

@@ -211,6 +211,11 @@ const MAPPING: &[Mapping] = &[
         "no ImageMagick NTSC gamut-clamp operator; the YIQ approximation is pinned by the \
          pictura-color and video kernel tests",
     ),
+    none(
+        "DeInterlace",
+        "no ImageMagick de-interlace operator; the row-parity, edge and duplication conventions \
+         are pinned by the video kernel tests",
+    ),
     Mapping {
         filter: "Mosaic",
         im: Some("-filter box -resize {W/n}x{H/n}! -filter point -resize WxH!  (n = cell_size)"),

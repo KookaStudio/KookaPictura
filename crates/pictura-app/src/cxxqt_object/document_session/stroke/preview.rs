@@ -2,6 +2,15 @@
 
 use pictura_paint::{StrokeConfig, StrokeSample};
 
+/// One entry in a previewed stroke's replay log: a pointer sample, or a held dab
+/// at the last sample (Airbrush build-up). The commit replays a hold with
+/// [`pictura_paint::Stroke::hold`] so the build-up reaches the committed pixels.
+#[derive(Clone, Copy, Debug)]
+pub(in crate::cxxqt_object) enum PreviewSample {
+    Move(StrokeSample),
+    Hold,
+}
+
 /// A large-brush stroke shown at a view-pyramid level instead of rasterized at
 /// full resolution.
 ///
@@ -10,7 +19,8 @@ use pictura_paint::{StrokeConfig, StrokeSample};
 /// whole extent on every present without compounding. `samples` is the exact
 /// input the commit replays through a real [`pictura_paint::Stroke`] on the
 /// full-resolution document, which is what keeps the committed pixels
-/// byte-identical to a stroke that never previewed.
+/// byte-identical to a stroke that never previewed. A held dab is a log entry
+/// too, so an Airbrush stroke's build-up reaches that replay.
 pub(in crate::cxxqt_object) struct PreviewStroke {
     pub(in crate::cxxqt_object) level: u32,
     pub(in crate::cxxqt_object) scale: u32,
@@ -19,7 +29,7 @@ pub(in crate::cxxqt_object) struct PreviewStroke {
     pub(in crate::cxxqt_object) snapshot: Vec<u8>,
     pub(in crate::cxxqt_object) coverage: Vec<u8>,
     pub(in crate::cxxqt_object) extent: Option<pictura_core::PsdRect>,
-    pub(in crate::cxxqt_object) samples: Vec<StrokeSample>,
+    pub(in crate::cxxqt_object) samples: Vec<PreviewSample>,
     /// The stroke's configuration, so the preview rasterizes the same tip,
     /// flow and opacity the exact stroke will.
     pub(in crate::cxxqt_object) cfg: StrokeConfig,

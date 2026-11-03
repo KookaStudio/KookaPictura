@@ -40,7 +40,7 @@ pub(super) enum PlaneKind {
     /// A layer mask at this document rectangle: a solo mask view shows it
     /// directly, so its tiles are damage too.
     Mask(PsdRect),
-    /// A document channel, which a channel view shows directly.
+    /// A document channel, shown only as its panel thumbnail.
     DocumentChannel,
 }
 
@@ -163,6 +163,78 @@ pub(super) fn diff_into(
         index += 1;
     });
     Some(out)
+}
+
+/// What a state from another segment changes on screen.
+pub(super) struct CompositeChange {
+    /// The composite's tile deltas, empty when no byte differs.
+    pub(super) delta: PlaneDelta,
+    /// A mask differs, in pixels, position or count.
+    pub(super) masks_differ: bool,
+}
+
+/// The composite's change between the live document and a state from another
+/// segment, with the tile deltas a walk could not report. Bands the two still
+/// share are skipped, so an edit that kept them costs only what it touched.
+///
+/// `None` when the composite's own geometry differs. Document channels do not
+/// count: no canvas view draws one.
+pub(super) fn composite_change(
+    live: &mut Document,
+    restored: &mut Document,
+) -> Option<CompositeChange> {
+    fracture_planes(live);
+    fracture_planes(restored);
+    let shown = |doc: &Document, wanted: fn(PlaneKind) -> bool| {
+        planes(doc)
+            .into_iter()
+            .zip(plane_kinds(doc))
+            .filter(|(_, kind)| wanted(*kind))
+            .map(|(plane, _)| plane)
+            .collect::<Vec<_>>()
+    };
+    let is_mask = |kind: PlaneKind| matches!(kind, PlaneKind::Mask(_));
+    let (before, after) = (shown(live, is_mask), shown(restored, is_mask));
+    let masks_differ = before.len() != after.len()
+        || before.iter().zip(&after).any(|(a, b)| {
+            a.1 != b.1
+                || a.2 != b.2
+                || a.0.len() != b.0.len()
+                || (!known_equal(&a.0, &b.0) && !a.0.bands().eq(b.0.bands()))
+        });
+    let is_composite = |kind: PlaneKind| matches!(kind, PlaneKind::Composite);
+    let (from, to) = (
+        shown(live, is_composite).into_iter().next()?,
+        shown(restored, is_composite).into_iter().next()?,
+    );
+    if from.1 != to.1 || from.2 != to.2 || from.0.len() != to.0.len() {
+        return None;
+    }
+    let (plane, width) = (&from.0, from.1);
+    let doc_height = live.height as usize;
+    let tiles: Vec<TileDelta> = (0..plane.band_count())
+        .into_par_iter()
+        .filter(|&band| !plane.shares_band(band, &to.0))
+        .flat_map_iter(|band| {
+            changed_band(
+                plane.band(band).unwrap_or(&[]),
+                to.0.band(band).unwrap_or(&[]),
+                width,
+                PlanePlacement::Composite,
+                doc_height,
+                None,
+                band * BAND_ROWS,
+            )
+        })
+        .collect();
+    Some(CompositeChange {
+        delta: PlaneDelta {
+            index: 0,
+            width,
+            tiles,
+        },
+        masks_differ,
+    })
 }
 
 /// Fracture every tracked plane so a band-level scan and write can share bands.
@@ -497,19 +569,27 @@ pub(super) fn planes_agree(private: &Document, live: &Document) -> bool {
     a.len() == b.len() && a.iter().zip(&b).all(|(x, y)| known_equal(&x.0, &y.0))
 }
 
-/// Re-stamp `private` and `live` with fresh stamps, whose tracked planes the
-/// caller has just made equal byte for byte. Shared bands are already the same
-/// allocation, so the pair is only stamped, never copied.
+/// Stamp `private` and `live`, whose tracked planes the caller has just made
+/// equal byte for byte, so each pair agrees. A pair that already agrees keeps
+/// its stamp, which is what keeps an unchanged layer resident on the GPU; a
+/// written plane, or a stamp a duplicated layer repeats, gets a fresh one.
+/// Shared bands are already the same allocation, so nothing is copied.
 pub(super) fn stamp_agreed(private: &mut Document, live: &mut Document) {
-    let mut stamps = Vec::new();
+    let mut held = Vec::new();
+    each_plane(live, &mut |p, _, _, _| held.push(p.stamp()));
+    let mut seen = std::collections::HashSet::new();
+    let mut index = 0;
     each_plane_mut(private, &mut |p, _, _, _| {
-        let stamp = fresh_stamp();
+        let own = p.stamp();
+        let agreed = own != 0 && held.get(index) == Some(&own) && seen.insert(own);
+        let stamp = if agreed { own } else { fresh_stamp() };
         p.set_stamp(stamp);
-        stamps.push(stamp);
+        held[index] = stamp;
+        index += 1;
     });
     let mut index = 0;
     each_plane_mut(live, &mut |p, _, _, _| {
-        p.set_stamp(stamps[index]);
+        p.set_stamp(held[index]);
         index += 1;
     });
 }

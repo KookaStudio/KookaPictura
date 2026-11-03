@@ -8,7 +8,9 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
 #include <QtCore/QObject>
+#include <QtCore/QTimer>
 #include <QtGui/QColor>
+#include <QtGui/QGuiApplication>
 
 #include <memory>
 #include <optional>
@@ -26,6 +28,20 @@ public:
         , paint_(std::move(paint))
     {
         addOptions(paint_.get());
+        holdTimer_.setInterval(kAirbrushHoldDabMs);
+        QObject::connect(&holdTimer_, &QTimer::timeout, &holdTimer_, [this] {
+            if (stroke_) {
+                stroke_->hold();
+            }
+        });
+        // A release can be lost with the focus; the stroke then waits for the
+        // next release or tool switch, but stops painting now.
+        QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, &holdTimer_,
+                         [this](Qt::ApplicationState state) {
+                             if (state != Qt::ApplicationActive) {
+                                 holdTimer_.stop();
+                             }
+                         });
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
@@ -49,7 +65,8 @@ public:
                                             quint32(ctx.background().rgba()), paintTip(*paint_),
                                             paint_->opacity(), paint_->flow(), paint_->mode(),
                                             aliased_ || paint_->aliased(),
-                                            aliased_ && paint_->autoErase());
+                                            aliased_ && paint_->autoErase(),
+                                            paint_->pressureSize(), paint_->pressureOpacity());
         }
         if (!stroke_) {
             if (activePixelLocked(v)) {
@@ -65,7 +82,11 @@ public:
         ctx.setDragCommitted(false);
         {
             pictura::ScopedTimer t("cxx_paint_dab (call)");
-            stroke_->dab(imagePos.x(), imagePos.y());
+            stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
+        }
+        // The Pencil has no Airbrush option even though it shares PaintOptions.
+        if (!aliased_ && paint_->airbrush()) {
+            holdTimer_.start();
         }
         return true;
     }
@@ -76,7 +97,7 @@ public:
             return;
         }
         pictura::ScopedTimer t("cxx_paint_dab (call)");
-        stroke_->dab(imagePos.x(), imagePos.y());
+        stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
     }
 
     void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
@@ -85,6 +106,7 @@ public:
             return;
         }
         ctx.setDragging(false);
+        holdTimer_.stop();
         if (stroke_) {
             pictura::ScopedTimer t("cxx_end_paint (call)");
             stroke_->finish();
@@ -107,6 +129,7 @@ public:
     // down later (its destructor calls back into the view).
     void onDeactivate(ToolServices& ctx) override
     {
+        holdTimer_.stop();
         if (stroke_) {
             stroke_->finish();
             stroke_.reset();
@@ -116,6 +139,7 @@ public:
 
     void onSessionCancelled(ToolServices& ctx) override
     {
+        holdTimer_.stop();
         if (stroke_) {
             stroke_->abandon();
             stroke_.reset();
@@ -127,6 +151,7 @@ private:
     bool aliased_;
     std::optional<paint_api::Stroke> stroke_;
     std::shared_ptr<PaintOptions> paint_;
+    QTimer holdTimer_;
 };
 
 }

@@ -56,12 +56,16 @@ struct MixerOptions {
 // The Clone Stamp and Pattern Stamp options bars. Sample 0 Current Layer /
 // 1 Current And Below / 2 All Layers; Ignore Adjustment Layers applies to All
 // Layers only. `pattern` indexes the built-in patterns (stamp_pattern_name).
+// The History Brush keeps its Airbrush here too; each tool has its own.
 struct StampOptions {
     bool cloneAligned = true;
     int cloneSample = 0;
     bool ignoreAdjustments = false;
     int pattern = 0;
     bool patternAligned = true;
+    bool cloneAirbrush = false;
+    bool patternAirbrush = false;
+    bool historyAirbrush = false;
 };
 
 // The brush tip's dynamics (Scattering and Shape Dynamics), set by the brush
@@ -388,8 +392,9 @@ inline MoveOptions clampOptions(MoveOptions options)
     return options;
 }
 
-// One family option value: `set` clamps, stores, and notifies. `update` is for
-// computed state that must not notify (the crop pivot).
+// One family option value: `set` clamps, stores, and notifies. `update` stores
+// without notifying (the restore and the control-server patch), and `defaults`
+// / `reset` supply the value a missing group restores to.
 template <typename T>
 class ToolOption : public ToolOptions {
 public:
@@ -404,6 +409,10 @@ public:
     }
 
     void update(const T& value) { value_ = value; }
+
+    // The value a missing group or field restores to (startup).
+    static T defaults() { return clampOptions(T{}); }
+    void reset() { value_ = defaults(); }
 
     std::function<void()> changed;
 
@@ -437,8 +446,9 @@ using ZoomGroup = ToolOption<ZoomOptions>;
 
 // The paint family's shared brush: tip shape, dynamics, and paint stroke. The
 // size has its own notification (the hover ring and the size readouts); every
-// other tip field shares `tipChanged`; Opacity, Flow, and Mode share
-// `paintSettingsChanged` so the options bar follows a preset.
+// other tip field shares `tipChanged`; Opacity, Flow, Mode, and Airbrush share
+// `paintSettingsChanged` so the options bar and the Brush panel follow a preset
+// or the `Shift+Alt+P` key.
 class PaintOptions : public ToolOptions {
 public:
     int size() const { return size_; }
@@ -527,6 +537,43 @@ public:
 
     bool autoErase() const { return autoErase_; }
     void setAutoErase(bool on) { autoErase_ = on; }
+
+    // Airbrush: while a stroke is open, keep dabbing at the last sample on a
+    // timer even when the pointer is still. The Brush panel's Build-up row is
+    // the same flag.
+    bool airbrush() const { return airbrush_; }
+    void setAirbrush(bool on)
+    {
+        if (on != airbrush_) {
+            airbrush_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
+
+    // Always use Pressure for Size / Opacity: the options-bar pressure toggles.
+    bool pressureSize() const { return pressureSize_; }
+    void setPressureSize(bool on)
+    {
+        if (on != pressureSize_) {
+            pressureSize_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
+
+    bool pressureOpacity() const { return pressureOpacity_; }
+    void setPressureOpacity(bool on)
+    {
+        if (on != pressureOpacity_) {
+            pressureOpacity_ = on;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
 
     // Preview-only: a preset whose tip is drawn as a pen nib. The stroke
     // engine never reads it.
@@ -624,6 +671,36 @@ public:
         }
     }
 
+    // Restore persisted values without notifying (startup). The callbacks stay
+    // this object's; only the data members are replaced.
+    void apply(const PaintOptions& other)
+    {
+        size_ = std::clamp(other.size_, 1, 5000);
+        hardness_ = std::clamp(other.hardness_, 0, 100);
+        grain_ = std::clamp(other.grain_, 0, 100);
+        wetEdges_ = other.wetEdges_;
+        opacity_ = std::clamp(other.opacity_, 0, 100);
+        flow_ = std::clamp(other.flow_, 0, 100);
+        mode_ = other.mode_;
+        autoErase_ = other.autoErase_;
+        airbrush_ = other.airbrush_;
+        pressureSize_ = other.pressureSize_;
+        pressureOpacity_ = other.pressureOpacity_;
+        penTip_ = other.penTip_;
+        aliased_ = other.aliased_;
+        roundness_ = std::clamp(other.roundness_, 0, 100);
+        tipAngle_ = std::clamp(other.tipAngle_, -180, 180);
+        spacing_ = std::clamp(other.spacing_, 1, 1000);
+        flipX_ = other.flipX_;
+        flipY_ = other.flipY_;
+        dynamics_ = {
+            std::clamp(other.dynamics_.scatter, 0, 1000),
+            std::clamp(other.dynamics_.count, 1, 16),
+            std::clamp(other.dynamics_.sizeJitter, 0, 100),
+            std::clamp(other.dynamics_.angleJitter, 0, 180),
+            std::clamp(other.dynamics_.roundnessJitter, 0, 100)};
+    }
+
     std::function<void(int)> sizeChanged;
     std::function<void()> tipChanged;
     std::function<void()> paintSettingsChanged;
@@ -637,6 +714,9 @@ private:
     int flow_ = 100;
     QString mode_ = QStringLiteral("normal");
     bool autoErase_ = false;
+    bool airbrush_ = false;
+    bool pressureSize_ = false;
+    bool pressureOpacity_ = false;
     bool penTip_ = false;
     bool aliased_ = false;
     int roundness_ = 100;
@@ -717,6 +797,24 @@ public:
     void setMagneticFrequency(int frequency)
     {
         magneticFrequency_ = std::clamp(frequency, 0, 100);
+    }
+
+    // Restore persisted values without notifying (startup). The callbacks stay
+    // this object's; only the data members are replaced.
+    void apply(const SelectionOptions& other)
+    {
+        combineMode_ = other.combineMode_;
+        marqueeStyle_ = other.marqueeStyle_;
+        feather_ = other.feather_ > 0.0 ? std::min(other.feather_, 250.0) : 0.0;
+        fixedRatioW_ = other.fixedRatioW_ > 0.0 ? other.fixedRatioW_ : 1.0;
+        fixedRatioH_ = other.fixedRatioH_ > 0.0 ? other.fixedRatioH_ : 1.0;
+        fixedSizeW_ = std::max(other.fixedSizeW_, 1);
+        fixedSizeH_ = std::max(other.fixedSizeH_, 1);
+        tolerance_ = std::clamp(other.tolerance_, 0, 255);
+        contiguous_ = other.contiguous_;
+        magneticWidth_ = std::clamp(other.magneticWidth_, 1, 256);
+        magneticContrast_ = std::clamp(other.magneticContrast_, 1, 100);
+        magneticFrequency_ = std::clamp(other.magneticFrequency_, 0, 100);
     }
 
     // A mode button or the Quick Selection New-to-Add switch changed the mode;
@@ -822,14 +920,14 @@ public:
     const CropSettings& settings() const { return settings_; }
     void setSettings(CropSettings settings)
     {
-        settings.shieldOpacity = std::clamp(settings.shieldOpacity, 0, 100);
-        settings.overlayShow = std::clamp(settings.overlayShow, 0, 2);
-        settings.overlayOrientation = std::clamp(settings.overlayOrientation, 0, 3);
-        settings_ = settings;
+        settings_ = clamped(settings);
         if (optionsChanged) {
             optionsChanged();
         }
     }
+
+    // Restore persisted settings without notifying (startup).
+    void applySettings(CropSettings settings) { settings_ = clamped(settings); }
 
     // The guide overlays, in grid-menu order; the index is gridOverlay().
     static const QStringList& overlayNames()
@@ -902,6 +1000,14 @@ public:
     std::function<void()> straightenChanged;
 
 private:
+    static CropSettings clamped(CropSettings settings)
+    {
+        settings.shieldOpacity = std::clamp(settings.shieldOpacity, 0, 100);
+        settings.overlayShow = std::clamp(settings.overlayShow, 0, 2);
+        settings.overlayOrientation = std::clamp(settings.overlayOrientation, 0, 3);
+        return settings;
+    }
+
     double ratio_ = 0.0;
     bool deletePixels_ = true;
     double angle_ = 0.0;

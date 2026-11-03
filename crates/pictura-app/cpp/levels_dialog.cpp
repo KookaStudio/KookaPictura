@@ -1,5 +1,7 @@
 #include "levels_dialog.h"
 
+#include "adjustment_presets.h"
+
 #include <QtGui/QLinearGradient>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
@@ -23,27 +25,6 @@ namespace {
 constexpr int kStripWidth = 256 + 2 * LevelsStrip::kInset;
 constexpr int kThumbHeight = 10;
 
-struct Preset {
-    const char* name;
-    int inBlack;
-    int inWhite;
-    double gamma;
-    int outBlack;
-    int outWhite;
-};
-
-// photorust's preset table; "Custom" marks a hand edit.
-constexpr Preset kPresets[] = {
-    {"Default", 0, 255, 1.00, 0, 255},
-    {"Darker", 0, 255, 0.75, 0, 255},
-    {"Increase Contrast 1", 5, 250, 1.00, 0, 255},
-    {"Increase Contrast 2", 10, 245, 1.00, 0, 255},
-    {"Increase Contrast 3", 15, 240, 1.00, 0, 255},
-    {"Lighten Shadows", 0, 255, 1.50, 0, 255},
-    {"Lighter", 0, 255, 1.50, 0, 255},
-    {"Midtones Brighter", 0, 255, 1.25, 0, 255},
-    {"Midtones Darker", 0, 255, 0.75, 0, 255},
-};
 const QString kCustom = QStringLiteral("Custom");
 
 const QStringList kChannelPrefixes = {QString(), QStringLiteral("red."),
@@ -199,10 +180,17 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     presetRow->addWidget(new QLabel(QStringLiteral("Preset:"), this));
     preset_ = new QComboBox(this);
     preset_->setObjectName(QStringLiteral("levelsPreset"));
-    for (const Preset& preset : kPresets) {
-        preset_->addItem(QLatin1String(preset.name));
+    preset_->addItem(QStringLiteral("Default"));
+    preset_->insertSeparator(preset_->count());
+    for (const BuiltinPreset& preset : builtinPresets(QStringLiteral("levels"))) {
+        preset_->addItem(preset.name);
     }
-    preset_->insertSeparator(1);
+    const QStringList saved = savedPresetNames(QStringLiteral("levels"));
+    if (!saved.isEmpty()) {
+        preset_->insertSeparator(preset_->count());
+        preset_->addItems(saved);
+    }
+    preset_->insertSeparator(preset_->count());
     preset_->addItem(kCustom);
     presetRow->addWidget(preset_, 1);
     left->addLayout(presetRow);
@@ -365,31 +353,26 @@ void LevelsDialog::edit(const QString& name, double value)
 void LevelsDialog::applyPreset(int index)
 {
     const QString name = preset_->itemText(index);
-    for (const Preset& preset : kPresets) {
-        if (name != QLatin1String(preset.name)) {
-            continue;
+    QByteArray next;
+    if (name == QLatin1String("Default")) {
+        next = defaultPresetBlock(QStringLiteral("levels"));
+    } else {
+        for (const BuiltinPreset& preset : builtinPresets(QStringLiteral("levels"))) {
+            if (preset.name == name) {
+                next = preset.build(block());
+                break;
+            }
         }
-        // Every channel back to identity first, so each preset value lands
-        // against a full 0..255 input range.
-        QList<QPair<QString, double>> edits;
-        for (const QString& key : kChannelPrefixes) {
-            edits << qMakePair(key + QStringLiteral("inputBlack"), 0.0)
-                  << qMakePair(key + QStringLiteral("inputWhite"), 255.0)
-                  << qMakePair(key + QStringLiteral("gamma"), 1.0)
-                  << qMakePair(key + QStringLiteral("outputBlack"), 0.0)
-                  << qMakePair(key + QStringLiteral("outputWhite"), 255.0);
+        if (next.isEmpty() && savedPresetNames(QStringLiteral("levels")).contains(name)) {
+            next = savedPresetBlock(QStringLiteral("levels"), name);
         }
-        edits << qMakePair(QStringLiteral("inputBlack"), double(preset.inBlack))
-              << qMakePair(QStringLiteral("inputWhite"), double(preset.inWhite))
-              << qMakePair(QStringLiteral("gamma"), preset.gamma)
-              << qMakePair(QStringLiteral("outputBlack"), double(preset.outBlack))
-              << qMakePair(QStringLiteral("outputWhite"), double(preset.outWhite));
-        setParams(edits);
-        const QSignalBlocker block(channel_);
-        channel_->setCurrentIndex(0);
-        loadChannel();
+    }
+    if (next.isEmpty() || !setBlock(next)) {
         return;
     }
+    const QSignalBlocker block(preset_);
+    channel_->setCurrentIndex(0);
+    loadChannel();
 }
 
 void LevelsDialog::autoLevels()

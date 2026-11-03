@@ -610,6 +610,7 @@ const QList<ControlServer::MethodRow>& ControlServer::methodTable()
         {"filter", &ControlServer::methodFilter, ControlTier::Edit},
         {"adjustment", &ControlServer::methodAdjustment, ControlTier::Edit},
         {"layer_op", &ControlServer::methodLayerOp, ControlTier::Edit},
+        {"type_op", &ControlServer::methodTypeOp, ControlTier::Edit},
         {"set_gpu_compute", &ControlServer::methodSetGpuCompute, ControlTier::Admin},
         {"metrics", &ControlServer::methodMetrics, ControlTier::Read},
         {"pointer", &ControlServer::methodPointer, ControlTier::Admin},

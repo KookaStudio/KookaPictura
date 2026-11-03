@@ -42,8 +42,8 @@ public:
     explicit CharacterPanel(QWidget* parent = nullptr);
 
     void setView(PictureView* view);
-    // The open type session, if any: while new type is being set the panel
-    // edits that session instead of the selected layer.
+    // The open type session, if any: while one is open the panel edits that
+    // session instead of the selected layer.
     void setTextSession(std::function<TextSession*()> session);
     void setShowAsianOptions(bool on);
     void updatePanelMenu(QMenu* menu);
@@ -106,6 +106,9 @@ private:
     PictureView* view_ = nullptr;
     bool showAsianOptions_ = false;
     std::function<TextSession*()> session_;
+    // A session edit in progress: its options echo must not rewrite the
+    // controls that produced it.
+    bool applying_ = false;
     // The attributes the controls show; edits land here, then `apply` writes
     // them to the layer.
     CharacterSetting shown_{};

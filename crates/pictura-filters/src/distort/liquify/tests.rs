@@ -1,5 +1,5 @@
 use super::*;
-use pictura_core::PixelBuffer;
+use pictura_core::{PixelBuffer, PsdRect};
 
 fn brush(tool: LiquifyTool, size: f64) -> LiquifyBrush {
     LiquifyBrush::new(tool, size)
@@ -307,6 +307,88 @@ fn a_mesh_scaled_to_a_larger_layer_scales_its_offsets() {
 }
 
 #[test]
+fn a_mesh_scaled_to_a_larger_layer_scales_its_clip() {
+    let mut mesh = LiquifyMesh::new(50, 40);
+    mesh.set_clip(Some(PsdRect {
+        left: 10,
+        top: 8,
+        right: 30,
+        bottom: 24,
+    }));
+    let big = mesh.scaled_to(100, 80);
+    assert_eq!(
+        big.clip(),
+        Some(PsdRect {
+            left: 20,
+            top: 16,
+            right: 60,
+            bottom: 48,
+        })
+    );
+    assert_eq!(big.displacement(5.0, 5.0), [0.0, 0.0]);
+    assert_eq!(mesh.scaled_to(50, 40).clip(), mesh.clip());
+}
+
+#[test]
+fn a_dab_outside_the_clip_moves_nothing() {
+    let mut mesh = LiquifyMesh::new(40, 30);
+    mesh.set_clip(Some(PsdRect {
+        left: 0,
+        top: 0,
+        right: 20,
+        bottom: 30,
+    }));
+    let b = brush(LiquifyTool::ForwardWarp, 10.0);
+    assert!(mesh
+        .stroke_to(&b, [30.0, 15.0, 1.0], [38.0, 15.0, 1.0])
+        .is_none());
+    assert!(mesh.is_identity());
+    assert_eq!(mesh.displacement(30.0, 15.0), [0.0, 0.0]);
+}
+
+#[test]
+fn a_clip_leaves_the_picture_outside_it_untouched() {
+    let clip = PsdRect {
+        left: 10,
+        top: 8,
+        right: 30,
+        bottom: 22,
+    };
+    let mut mesh = LiquifyMesh::new(40, 30);
+    mesh.set_clip(Some(clip));
+    let b = brush(LiquifyTool::ForwardWarp, 14.0);
+    let dirty = mesh
+        .stroke_to(&b, [16.0, 15.0, 1.0], [26.0, 15.0, 1.0])
+        .expect("the drag is inside the clip");
+    assert!(
+        dirty.left >= clip.left
+            && dirty.top >= clip.top
+            && dirty.right <= clip.right
+            && dirty.bottom <= clip.bottom,
+        "{dirty:?}"
+    );
+    let mut buf = gradient(40, 30);
+    let before = buf.clone();
+    liquify(&mut buf, &mesh).unwrap();
+    let n = 40 * 30;
+    let mut changed = false;
+    for y in 0..30 {
+        for x in 0..40 {
+            let inside = x >= clip.left && x < clip.right && y >= clip.top && y < clip.bottom;
+            for c in 0..3 {
+                let i = c * n + y as usize * 40 + x as usize;
+                if inside {
+                    changed |= buf.data[i] != before.data[i];
+                } else {
+                    assert_eq!(buf.data[i], before.data[i], "({x},{y}) c{c}");
+                }
+            }
+        }
+    }
+    assert!(changed, "the drag changes pixels inside the clip");
+}
+
+#[test]
 fn a_stroke_to_a_far_off_point_returns() {
     let mut mesh = LiquifyMesh::new(24, 16);
     let b = brush(LiquifyTool::ForwardWarp, 30.0);
@@ -359,6 +441,35 @@ fn the_view_at_100_percent_shows_the_layer_exactly() {
             assert_eq!(out[i * 4 + c], buf.data[c * n + i], "pixel {i} channel {c}");
         }
         assert_eq!(out[i * 4 + 3], 255);
+    }
+}
+
+#[test]
+fn a_clipped_view_is_clear_outside_its_bounds() {
+    let (mut src, buf) = source(40, 30, 255);
+    let clip = PsdRect {
+        left: 10,
+        top: 5,
+        right: 30,
+        bottom: 25,
+    };
+    let mut mesh = LiquifyMesh::new(40, 30);
+    mesh.set_clip(Some(clip));
+    let out = render(&mut src, &mesh, [0.0, 0.0], 1.0, (40, 30));
+    let n = 40 * 30;
+    for y in 0..30 {
+        for x in 0..40 {
+            let i = y as usize * 40 + x as usize;
+            let inside = x >= clip.left && x < clip.right && y >= clip.top && y < clip.bottom;
+            if inside {
+                for c in 0..3 {
+                    assert_eq!(out[i * 4 + c], buf.data[c * n + i], "({x},{y}) c{c}");
+                }
+                assert_eq!(out[i * 4 + 3], 255, "({x},{y})");
+            } else {
+                assert_eq!(&out[i * 4..i * 4 + 4], &[0, 0, 0, 0], "({x},{y})");
+            }
+        }
     }
 }
 

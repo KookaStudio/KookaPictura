@@ -45,6 +45,13 @@ pub fn apply_filter_region(
     gpu_enabled: bool,
     region: PsdRect,
 ) -> Result<(), FilterError> {
+    // A clipped Liquify mesh confines itself to the active selection's
+    // bounding rectangle, which CS6 processes whole; the coverage mask would
+    // narrow that to the selection's shape.
+    let mask = match filter {
+        Filter::Liquify { mesh } if mesh.clip().is_some() => None,
+        _ => mask,
+    };
     apply_op_region(layer, Op::Filter(filter, gpu_enabled), mask, region)
 }
 

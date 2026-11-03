@@ -1,6 +1,7 @@
 //! The filter dialog's live preview.
 
 use pictura_core::{Layer, PsdRect};
+use rayon::prelude::*;
 
 /// The pre-filter pixels backing a live filter preview.
 pub(in crate::cxxqt_object) struct FilterPreview {
@@ -23,6 +24,97 @@ pub(in crate::cxxqt_object) enum PreviewBaseline {
         rect: PsdRect,
         planes: Vec<(i16, Vec<u8>)>,
     },
+}
+
+impl PreviewBaseline {
+    /// Keep what a preview over `section` (the whole layer for `None`) is
+    /// about to overwrite.
+    pub(in crate::cxxqt_object) fn save(
+        layer: &Layer,
+        section: Option<pictura_core::PsdRect>,
+    ) -> Self {
+        let Some(rect) = section else {
+            return Self::Layer(Box::new(layer.clone()));
+        };
+        let lrect = layer.rect;
+        let lw = lrect.width() as usize;
+        let full = lw * lrect.height() as usize;
+        let (ox, oy) = (
+            (rect.left - lrect.left) as usize,
+            (rect.top - lrect.top) as usize,
+        );
+        let (cw, ch) = (rect.width() as usize, rect.height() as usize);
+        let planes = layer
+            .channels
+            .iter()
+            .filter(|c| c.data.len() == full)
+            .map(|c| {
+                let mut saved = vec![0u8; cw * ch];
+                if cw > 0 {
+                    saved.par_chunks_mut(cw).enumerate().for_each(|(row, out)| {
+                        let from = (oy + row) * lw + ox;
+                        out.copy_from_slice(&c.data[from..from + cw]);
+                    });
+                }
+                (c.id, saved)
+            })
+            .collect();
+        Self::Section {
+            layer_rect: lrect,
+            rect,
+            planes,
+        }
+    }
+
+    /// Put the saved pixels back into `layer`; returns the rect restored.
+    pub(in crate::cxxqt_object) fn restore(&self, layer: &mut Layer) -> pictura_core::PsdRect {
+        let (layer_rect, rect, planes) = match self {
+            Self::Layer(original) => {
+                *layer = (**original).clone();
+                return layer.rect;
+            }
+            Self::Section {
+                layer_rect,
+                rect,
+                planes,
+            } => (*layer_rect, *rect, planes),
+        };
+        let (cw, ch) = (rect.width() as usize, rect.height() as usize);
+        if layer.rect != layer_rect || cw == 0 || ch == 0 {
+            return rect;
+        }
+        let lw = layer_rect.width() as usize;
+        let (ox, oy) = (
+            (rect.left - layer_rect.left) as usize,
+            (rect.top - layer_rect.top) as usize,
+        );
+        for (id, saved) in planes {
+            let Some(channel) = layer.channels.iter_mut().find(|c| c.id == *id) else {
+                continue;
+            };
+            let rows = oy * lw..(oy + ch) * lw;
+            channel.data.as_mut_slice()[rows]
+                .par_chunks_mut(lw)
+                .zip(saved.par_chunks(cw))
+                .for_each(|(out, src)| out[ox..ox + cw].copy_from_slice(src));
+        }
+        rect
+    }
+
+    /// The layer as it was before the preview, given the live one.
+    pub(in crate::cxxqt_object) fn original<'a>(
+        &'a self,
+        live: &'a Layer,
+    ) -> std::borrow::Cow<'a, Layer> {
+        match self {
+            Self::Layer(original) => std::borrow::Cow::Borrowed(original.as_ref()),
+            Self::Section { .. } => {
+                let mut original = live.clone();
+                self.restore(&mut original);
+                std::borrow::Cow::Owned(original)
+            }
+        }
+    }
 }
 
 /// A filter dialog's live preview: either on a layer's pixels or on a layer
