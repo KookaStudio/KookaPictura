@@ -1,7 +1,9 @@
 # ui/command-refresh-responsiveness Specification
 
 ## Purpose
-TBD - created by archiving change command-refresh-responsiveness. Update Purpose after archive.
+What the shell may do around an edit or a tool switch, so the menu and
+options-bar enabled checks, session-cancel reports and region refreshes it runs
+stay cheap on a large document.
 
 ## Requirements
 
