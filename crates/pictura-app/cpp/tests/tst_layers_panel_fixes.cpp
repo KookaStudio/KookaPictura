@@ -42,6 +42,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
@@ -185,6 +186,7 @@ private slots:
     void adjustmentThumbnailIsSquareWithoutOutline();
     void fillThumbnailIsSquareWithOutline();
     void maskThumbnailMatchesSquareCard();
+    void maskThumbnailKeepsDocumentAspect();
     void labelGlyphTintFollowsFill();
     void groupIconIsLarger();
     void blendComboArrowAndKeys();
@@ -1350,6 +1352,48 @@ void LayersPanelFixesTest::maskThumbnailMatchesSquareCard()
         QCOMPARE(mask.width(), mask.height());
         QCOMPARE(mask.size(), image.size());
     }
+}
+
+// A layer-sized mask on a non-square document keeps the document aspect in
+// Entire Document mode, sits at its document position, and shows the checker in
+// the uncovered margin (#1102).
+void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspect()
+{
+    const bool created = window_->newDocument(QStringLiteral("MaskThumbAspect"), 400, 100,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view_ && panel_, "mask thumbnail fixture");
+    QVERIFY(view_->select_rect(50, 25, 50, 50, QStringLiteral("new"), 0.0));
+    const QString base = view_->active_layer_path();
+    QVERIFY(pictura::clipboard_copy(*view_, base, false));
+    const QString pasted =
+        pictura::clipboard_paste(*view_, base, pictura::PasteKind::Plain, 0.0, 0.0);
+    QVERIFY(!pasted.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view_, pasted, QStringLiteral("reveal-all")));
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(0);
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QTreeView* tree = panel_->findChild<QTreeView*>();
+    QVERIFY2(tree && delegate, "layers tree and delegate");
+    const QModelIndex index = indexForPath(tree->model(), pasted);
+    QVERIFY2(index.isValid(), "pasted row");
+    const QRect rowRect(0, 0, tree->visualRect(index).width(), tree->visualRect(index).height());
+    const QImage mask = index.data(pictura::MaskThumbnailRole).value<QImage>();
+    QCOMPARE(index.data(pictura::ThumbnailRole).value<QImage>().size(), QSize(24, 6));
+    QCOMPARE(mask.size(), QSize(24, 6));
+    QCOMPARE(mask.pixelColor(0, 0).alpha(), 0);
+    QCOMPARE(mask.pixelColor(3, 2).alpha(), 255);
+    const QRect imageCard = delegate->thumbRect(rowRect, index);
+    const QRect maskCard = delegate->maskThumbRect(rowRect, index);
+    QCOMPARE(imageCard.size(), QSize(24, 6));
+    QCOMPARE(maskCard.size(), QSize(24, 6));
+    const QImage painted = panel_->rowImageForTest(pasted);
+    QCOMPARE(qGray(painted.pixelColor(imageCard.left() + 1, imageCard.top() + 1).rgb()), 255);
+    QCOMPARE(qGray(painted.pixelColor(maskCard.left() + 1, maskCard.top() + 1).rgb()), 255);
+    window_->closeDocument(window_->activeDocumentIndex(), false);
 }
 
 QTEST_MAIN(LayersPanelFixesTest)

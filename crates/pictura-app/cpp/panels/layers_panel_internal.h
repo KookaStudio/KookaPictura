@@ -756,6 +756,12 @@ public:
                                     linkPix);
             }
             maskRect = maskThumbRect(rect, index);
+            // Only a raster row's mask card is the document-aspect slot; a
+            // group, type, adjustment, or fill card keeps its previous bands.
+            if (!squareThumbCard(index)
+                && index.data(KindRole).toString() != QLatin1String("group")) {
+                painter->drawTiledPixmap(maskRect, checkerTile());
+            }
             drawImageFit(painter, maskRect, mask);
             if (index.data(MaskTargetRole).toBool()) {
                 // The active mask thumbnail wears the CS6 focus border: a dark

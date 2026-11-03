@@ -24,6 +24,7 @@ mod hdr_conversion;
 mod healing;
 mod helpers;
 mod helpers_composite;
+mod helpers_masks;
 mod image_adjust;
 mod image_hdr_toning;
 mod image_match_color;
