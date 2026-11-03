@@ -9,7 +9,8 @@
 use pictura_core::TypeSpec;
 
 use crate::fonts::face_for;
-use crate::type_layer::{align_factor, flat_rect, leading_px, map, text_box_any};
+use crate::type_box::{flat_rect, text_box_any};
+use crate::type_layer::{align_factor, leading_px, map};
 use crate::type_paragraph::{line_advance_with, vertical_cell, visual_lines};
 use crate::type_style::shape_styled;
 
@@ -32,9 +33,9 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
     let rect = flat_rect(left, top, width, height);
     let (rl, rt) = (rect.left as f32, rect.top as f32);
     // Lines align across the box for paragraph type, else across the rect.
-    let (aw, ah) = match spec.box_bounds {
-        Some(b) => ((b[2] - b[0]) as f32, (b[3] - b[1]) as f32),
-        None => (rect.width() as f32, rect.height() as f32),
+    let aw = match spec.box_bounds {
+        Some(b) => (b[2] - b[0]) as f32,
+        None => rect.width() as f32,
     };
     let c = &spec.character;
     let size = c.size as f32;
@@ -59,18 +60,26 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
         c,
         &spec.paragraph,
     );
+    // A point-type rect grows left/top for a hanging first line; the caret
+    // paints from the expanded rect's edge, so shift it by the overhang.
+    let offset = if spec.box_bounds.is_none() {
+        -wrapped.inline_low.min(0.0)
+    } else {
+        0.0
+    };
     let lines = wrapped
         .lines
         .iter()
+        .zip(&wrapped.boxes)
         .enumerate()
-        .map(|(i, line)| {
+        .map(|(i, (line, line_box))| {
             let chars: Vec<char> = line.text.chars().collect();
             let stops = if spec.vertical {
-                let centre = aw - leading * (i as f32 + 0.5);
-                let run = (ah - chars.len() as f32 * cell) * factor;
+                let centre = aw - line_box.block;
+                let run = line_box.start + (line_box.extent - chars.len() as f32 * cell) * factor;
                 (0..=chars.len())
                     .map(|k| {
-                        let y = run + k as f32 * cell;
+                        let y = run + k as f32 * cell + offset;
                         at((centre - leading / 2.0, y), (centre + leading / 2.0, y))
                     })
                     .collect()
@@ -96,7 +105,7 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                         &trimmed,
                         crate::type_justify::shaped_spaces(bundled, &shaped),
                         ink_advance,
-                        aw,
+                        line_box.extent,
                     )
                     .unwrap_or(0.0)
                 } else {
@@ -108,11 +117,11 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                 // alignment.
                 let flush = crate::type_justify::spreads(justify) && line.soft && extra <= 0.0;
                 let shift = if extra > 0.0 || flush {
-                    0.0
+                    line_box.start
                 } else {
-                    (aw - ink_advance) * factor
+                    line_box.start + (line_box.extent - ink_advance) * factor
                 };
-                let baseline = ascent + i as f32 * leading;
+                let baseline = ascent + line_box.block;
                 let total_spaces = crate::type_justify::spaces(&prefix(ink));
                 let line_width = ink_advance + total_spaces as f32 * extra;
                 (0..=chars.len())
@@ -123,7 +132,7 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                             shift + line_width - extent
                         } else {
                             shift + extent
-                        };
+                        } + offset;
                         at((x, baseline - ascent), (x, baseline + descent))
                     })
                     .collect()

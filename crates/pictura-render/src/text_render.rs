@@ -465,74 +465,66 @@ pub(crate) fn render_text_buffer(
 ///
 /// Paragraph type (`box_bounds`) wraps to its box and aligns across its
 /// width; lines past the box are not laid out (see `type_paragraph`). A
-/// justified paragraph spreads its word spaces to the box's width, except for
+/// justified paragraph spreads its word spaces to its line's column, except for
 /// the paragraph's last line, which its justification aligns (see
-/// `type_justify`).
+/// `type_justify`). Paragraph indents inset each line's column and space
+/// before/after offsets baselines or column gaps (see `type_paragraph`).
 ///
-/// ponytail: paragraph indents, space before/after, hanging punctuation,
-/// hyphenation, and the composer are authored to the engine data but not laid
-/// out; render them when a paragraph-layout engine exists.
+/// ponytail: hanging punctuation, hyphenation, and the composer are authored to
+/// the engine data but not laid out; render them when a paragraph-layout engine
+/// exists.
 pub(crate) fn layout_type(
     bundled: &BundledText,
     type_tool: &TypeTool,
     width: i32,
-    height: i32,
+    _height: i32,
 ) -> Option<TextLayout> {
     let style = type_tool.style.as_ref()?;
     let c = &style.character;
     let font_size = c.size as f32;
     let leading = crate::type_layer::leading_px(font_size, c.leading, style.paragraph.auto_leading);
     let justify = style.paragraph.justify;
-    let lines = crate::type_paragraph::visual_lines(
+    let wrapped = crate::type_paragraph::visual_lines(
         bundled,
         &type_tool.text,
         type_tool.vertical,
         type_tool.box_bounds,
         c,
         &style.paragraph,
-    )
-    .rendered_paragraphs();
-    let (width, height) = match type_tool.box_bounds {
-        Some(b) => ((b[2] - b[0]) as f32, (b[3] - b[1]) as f32),
-        None => (width as f32, height as f32),
+    );
+    let lines = wrapped.rendered_paragraphs();
+    let boxes = &wrapped.boxes[..wrapped.visible];
+    let width = match type_tool.box_bounds {
+        Some(b) => (b[2] - b[0]) as f32,
+        None => width as f32,
     };
-    let layout = if type_tool.vertical {
-        crate::type_layer::vertical_layout(
-            bundled,
-            &lines
-                .iter()
-                .map(|(text, _)| text.clone())
-                .collect::<Vec<_>>(),
-            c,
-            justify.index(),
-            width,
-            height,
-            leading,
-        )
+    let mut layout = if type_tool.vertical {
+        let texts: Vec<String> = lines.iter().map(|(text, _)| text.clone()).collect();
+        crate::type_layer::vertical_layout(bundled, &texts, boxes, c, justify.index(), width)
     } else {
         let faces = crate::fonts::faces_in_order(bundled);
         let mut shaped: Vec<Vec<ShapedGlyph>> = lines
             .iter()
             .map(|(line, _)| shape_line_directed(&faces, line, c, style.paragraph.direction))
             .collect();
-        // A justified line's word spaces take the leftover width, so the
-        // line's advance reaches the column and the layout shifts it by zero.
-        let column = if type_tool.box_bounds.is_some() {
-            width
-        } else {
-            0.0
+        // A justified line's word spaces take its column's leftover width, so
+        // the line's advance reaches the column and its placement shift is
+        // zero. Point type has no column to fill.
+        let columns: Vec<f32> = match type_tool.box_bounds {
+            Some(_) => boxes.iter().map(|line| line.extent).collect(),
+            None => vec![0.0; boxes.len()],
         };
         let spread = crate::type_justify::spread_lines(
             bundled,
             &lines,
             &mut shaped,
             justify,
-            column,
+            &columns,
             tracking_step(c, font_size),
             &style.paragraph,
             font_size,
         );
-        let align = TextAlign::from_justification(justify.index());
+        let factor = TextAlign::from_justification(justify.index()).factor();
         let mut layout = layout_lines(
             &shaped,
             &LayoutParams {
@@ -540,13 +532,29 @@ pub(crate) fn layout_type(
                 units_per_em: font_size,
                 tracking: tracking_step(c, font_size) * 1000.0 / font_size,
                 leading,
-                align,
-                wrap_width: Some(width),
+                align: TextAlign::from_justification(justify.index()),
+                wrap_width: None,
             },
         );
-        // A line that could not be spread stays flush left: the layout
-        // shifted it by the paragraph's last line's alignment.
-        crate::type_justify::flush_left(&mut layout, &lines, &spread, justify, width);
+        for (i, ((_, last), line)) in lines.iter().zip(&mut layout.lines).enumerate() {
+            let line_box = boxes[i];
+            let delta = line_box.block - line.baseline;
+            for glyph in &mut line.glyphs {
+                glyph.y += delta;
+            }
+            line.baseline = line_box.block;
+            // A spread line fills its column; a justified line that could not
+            // spread stays flush left; every other line takes the alignment.
+            let shift =
+                if spread[i] || (crate::type_justify::spreads(justify) && !*last && !spread[i]) {
+                    line_box.start
+                } else {
+                    line_box.start + (line_box.extent - line.advance) * factor
+                };
+            for glyph in &mut line.glyphs {
+                glyph.x += shift;
+            }
+        }
         // Baseline shift and super/subscript move the run off its baseline
         // (positive is up).
         let rise = RunStyle::of(bundled, c).rise;
@@ -557,6 +565,22 @@ pub(crate) fn layout_type(
         }
         layout
     };
+    // A point-type rect grows left/top for a hanging first line; the glyphs
+    // paint from the expanded rect's edge, so shift them by the overhang.
+    if type_tool.box_bounds.is_none() {
+        let offset = -wrapped.inline_low.min(0.0);
+        if offset != 0.0 {
+            for line in &mut layout.lines {
+                for glyph in &mut line.glyphs {
+                    if type_tool.vertical {
+                        glyph.y += offset;
+                    } else {
+                        glyph.x += offset;
+                    }
+                }
+            }
+        }
+    }
     if layout.lines.iter().all(|line| line.glyphs.is_empty()) {
         return None;
     }

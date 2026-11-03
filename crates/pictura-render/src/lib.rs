@@ -243,6 +243,7 @@ mod pdf_text;
 pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;
 pub use type_caret::{type_baselines, type_caret_stops};
+mod type_box;
 mod type_justify;
 mod type_paragraph;
 pub use type_paragraph::{type_overflows, type_to_paragraph, type_to_point};
@@ -250,9 +251,10 @@ mod type_channels;
 mod type_layer;
 mod type_path;
 mod type_warp;
+pub use type_box::TypePlacement;
 pub use type_layer::{
     add_type_layer, apply_type_style, re_render_type_layers, render_type, replace_type_layer,
-    type_layer_at, type_layer_spec, type_layers_editable, type_mask, type_placement, TypePlacement,
+    type_layer_at, type_layer_spec, type_layers_editable, type_mask, type_placement,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 pub use type_warp::{type_warp_refusal, WarpRefusal};

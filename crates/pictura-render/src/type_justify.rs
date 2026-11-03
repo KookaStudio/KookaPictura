@@ -7,7 +7,7 @@
 //! Maximum. Desired values apply to every line; Minimum and Maximum bound only
 //! the lines justification spreads.
 
-use pictura_core::{Justify, ParagraphAttrs, ShapedGlyph, TextAlign, TextLayout};
+use pictura_core::{Justify, ParagraphAttrs, ShapedGlyph};
 
 use crate::text_render::BundledText;
 
@@ -75,17 +75,18 @@ fn widen_spaces(glyphs: &mut [ShapedGlyph], space: u16, extra: f32) {
 }
 
 /// Spread the lines the justification spreads: each one's word spaces take the
-/// leftover width, so the line's advance reaches the column and the layout
-/// shifts it by zero. `lines` carries each line's text and whether it ends
-/// its paragraph; `tracking` is the per-glyph tracking step. Returns the
-/// lines that were spread.
+/// leftover width of its own column, so the line's advance reaches the column
+/// and the layout shifts it by zero. `lines` carries each line's text and
+/// whether it ends its paragraph; `columns` is each line's indented width;
+/// `tracking` is the per-glyph tracking step. Returns the lines that were
+/// spread.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spread_lines(
     bundled: &BundledText,
     lines: &[(String, bool)],
     shaped: &mut [Vec<ShapedGlyph>],
     justify: Justify,
-    column: f32,
+    columns: &[f32],
     tracking: f32,
     paragraph: &ParagraphAttrs,
     font_size: f32,
@@ -126,6 +127,7 @@ pub(crate) fn spread_lines(
         if *last && !spreads_last(justify) {
             continue;
         }
+        let column = columns.get(i).copied().unwrap_or(0.0);
         let space_count = shaped_spaces(bundled, glyphs);
         if space_count == 0 || space_count != spaces(line) {
             continue;
@@ -181,33 +183,6 @@ pub(crate) fn spread_lines(
         spread[i] = (column - final_advance).abs() <= 0.01;
     }
     spread
-}
-
-/// Shift the lines a justification could not spread back to flush left: the
-/// layout shifted them by the paragraph's last line's alignment, and a line
-/// with no word space to spread stays where it was set.
-pub(crate) fn flush_left(
-    layout: &mut TextLayout,
-    lines: &[(String, bool)],
-    spread: &[bool],
-    justify: Justify,
-    column: f32,
-) {
-    if !spreads(justify) {
-        return;
-    }
-    let align = TextAlign::from_justification(justify.index());
-    for (line, ((_, last), was_spread)) in
-        layout.lines.iter_mut().zip(lines.iter().zip(spread.iter()))
-    {
-        if *last || *was_spread {
-            continue;
-        }
-        let shift = -(column - line.advance) * align.factor();
-        for glyph in &mut line.glyphs {
-            glyph.x += shift;
-        }
-    }
 }
 
 #[cfg(test)]
@@ -340,20 +315,25 @@ mod tests {
     fn a_point_type_layer_has_no_column() {
         let all = layout("aa\rb", None, Justify::JustifyAll);
         assert_eq!(all.lines.len(), 2);
+        let natural = all
+            .lines
+            .iter()
+            .map(|line| line.advance)
+            .fold(0.0, f32::max);
         for line in &all.lines {
-            assert!(line.advance < COLUMN, "the line is not spread");
+            assert!(line.advance <= natural + 0.01, "the line is not spread");
             assert!(first_x(line).abs() < 0.01, "the line keeps the alignment");
         }
         let right = layout("aa\rb", None, Justify::JustifyLastRight);
         for line in &right.lines {
-            assert!(line.advance < COLUMN, "the line is not spread");
+            assert!(line.advance <= natural + 0.01, "the line is not spread");
             assert!(
-                first_x(line) > COLUMN - line.advance - 0.01,
+                first_x(line) > natural - line.advance - 0.01,
                 "the line keeps the variant's alignment"
             );
         }
         // The two lines have different widths, so they sit at different
-        // offsets inside the column.
+        // offsets inside the natural column.
         assert!(first_x(&right.lines[1]) > first_x(&right.lines[0]));
     }
 
