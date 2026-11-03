@@ -18,11 +18,13 @@ use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags};
 use pictura_render::Interpolation;
 
 mod preview;
+mod view_preview;
 
 pub(in crate::cxxqt_object) use preview::transform_preview_layer;
 #[cfg(test)]
 use preview::TransformPreview;
 use preview::{backdrop_patch, build_transform_preview, rendered_layer_image};
+pub(in crate::cxxqt_object) use view_preview::MoveView;
 
 /// Whether `path` resolves to a transformable target: a raster pixel layer, a
 /// shape layer with an outline of some area, or a channel-less embedded smart
@@ -237,6 +239,7 @@ impl qobject::PictureView {
         };
         rust.move_base = Some(preview.base);
         rust.move_base_origin = preview.base_origin;
+        rust.move_view = None;
         rust.move_layer = Some(preview.image);
         rust.move_x = preview.x;
         rust.move_y = preview.y;
@@ -605,7 +608,9 @@ impl qobject::PictureView {
         let shape = paths.iter().any(|path| {
             pictura_render::resolve_path(doc, path).is_some_and(pictura_render::is_shape_layer)
         });
+        // A view preview covers only what the canvas showed at its press.
         !shape
+            && rust.move_view.is_none()
             && rust.move_base.is_some()
             && rust.move_prepared_revision == rust.session.content_revision
             && rust.move_prepared_layer == move_group_key(paths)
@@ -617,6 +622,30 @@ impl qobject::PictureView {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
+        let viewed = rust.session.doc.as_ref().and_then(|doc| {
+            let preview = view_preview::view_preview(
+                doc,
+                &paths,
+                rust.presented_level,
+                rust.presented_rect,
+                gpu_compute,
+            )?;
+            let opacity = pictura_render::resolve_path(doc, &paths[0])?.opacity as i32;
+            Some((preview, opacity))
+        });
+        if let Some((preview, opacity)) = viewed {
+            rust.move_base = Some(preview.base);
+            rust.move_base_origin = Some(preview.base_origin);
+            rust.move_layer = Some(preview.layer);
+            rust.move_x = preview.view.region.left;
+            rust.move_y = preview.view.region.top;
+            rust.move_opacity = opacity;
+            rust.move_view = Some(preview.view);
+            rust.move_prepared_revision = rust.session.content_revision;
+            rust.move_prepared_layer = move_group_key(&paths);
+            rust.move_prepared_union = None;
+            return true;
+        }
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
@@ -650,6 +679,7 @@ impl qobject::PictureView {
         };
         rust.move_base = Some(base);
         rust.move_base_origin = origin;
+        rust.move_view = None;
         rust.move_layer = Some(layer_image);
         rust.move_x = x;
         rust.move_y = y;
@@ -684,6 +714,32 @@ impl qobject::PictureView {
         self.rust().move_opacity
     }
 
+    /// Rebuild a view preview's moving image when a drag of `(dx, dy)` has
+    /// carried the on-screen part of the layer past the region it covers.
+    /// True when the image (and its origin) changed.
+    pub(in crate::cxxqt_object) fn follow_move_preview(
+        mut self: Pin<&mut Self>,
+        dx: i32,
+        dy: i32,
+    ) -> bool {
+        let mut guard = self.as_mut().rust_mut();
+        let rust = &mut *guard;
+        let (Some(view), Some(doc)) = (rust.move_view, rust.session.doc.as_ref()) else {
+            return false;
+        };
+        let Some(path) = rust.move_prepared_layer.lines().next() else {
+            return false;
+        };
+        let Some((image, view)) = view_preview::follow(doc, path, view, dx, dy) else {
+            return false;
+        };
+        rust.move_layer = Some(image);
+        rust.move_x = view.region.left;
+        rust.move_y = view.region.top;
+        rust.move_view = Some(view);
+        true
+    }
+
     pub fn end_move_preview(self: Pin<&mut Self>) {
         // Keep the cache: the next press reuses it when the revision, topmost
         // layer, and clamped rect are unchanged.
@@ -696,6 +752,7 @@ impl qobject::PictureView {
         let mut rust = self.rust_mut();
         rust.move_base = None;
         rust.move_base_origin = None;
+        rust.move_view = None;
         rust.move_layer = None;
         rust.move_x = 0;
         rust.move_y = 0;
@@ -1024,5 +1081,7 @@ mod tests {
 
 #[cfg(test)]
 mod cow_tests;
+#[cfg(test)]
+mod move_profile;
 #[cfg(test)]
 mod preview_tests;

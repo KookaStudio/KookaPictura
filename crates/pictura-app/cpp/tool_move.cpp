@@ -60,8 +60,8 @@ QRectF contentBounds(const QImage& layer)
 }
 
 // Move: whole-layer translate and, when a selection exists, the content move.
-// It owns the warm-preview cache so the first press after activation skips the
-// expensive region build.
+// Switching to the tool builds nothing: a press builds the drag preview, from
+// the view when the layer is too large to bake whole (#1148).
 class MoveToolHandler : public ToolHandler {
 public:
     explicit MoveToolHandler(std::shared_ptr<MoveGroup> move)
@@ -70,27 +70,11 @@ public:
         addOptions(move_.get());
     }
 
-    // `applyToolPolicy` also lands here on every undo and transform reset. The
-    // warm is a full-layer bake and a press rebuilds a stale cache anyway, so
-    // only a real switch to the tool pays for it.
-    void onActivate(ToolServices& ctx) override
-    {
-        if (!active_) {
-            warm(ctx);
-        }
-        active_ = true;
-    }
-
     void onDeactivate(ToolServices& ctx) override
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSmartGuides();
         }
-        active_ = false;
-        warmView_ = nullptr;
-        warmBase_ = QImage();
-        warmLayer_ = QImage();
-        warmValid_ = false;
         pendingDuplicate_ = false;
         duplicated_ = false;
         pressed_ = false;
@@ -188,24 +172,7 @@ public:
             ? smartGuideReferences(*v, pictura::move_group_paths(*v))
             : QList<QRectF>();
         if (canvas) {
-            const bool reuse = warmValid_ && warmView_ == v && v->move_preview_cache_hit();
-            if (!reuse) {
-                warmBase_ = v->move_preview_base();
-                warmLayer_ = v->move_preview_layer();
-                warmView_ = v;
-                warmValid_ = !warmBase_.isNull();
-            }
-            const QPointF origin(v->move_preview_x(), v->move_preview_y());
-            canvas->beginMovePreview(warmBase_, warmLayer_, origin,
-                                     v->move_preview_opacity() / 255.0,
-                                     transform_api::previewBaseOrigin(*v));
-            // The moving layer's content box as marching ants, as CS6 draws.
-            // The scan is cached per layer image, so a warm press stays cheap.
-            if (warmLayer_.cacheKey() != boundsKey_) {
-                boundsKey_ = warmLayer_.cacheKey();
-                bounds_ = contentBounds(warmLayer_);
-            }
-            canvas->setMoveOutline(bounds_.translated(origin));
+            showPreview(*canvas, *v);
         }
         return true;
     }
@@ -234,28 +201,27 @@ public:
             pendingDuplicate_ = false;
             PictureView* v = ctx.view();
             if (v && v->begin_move_duplicate()) {
-                warmValid_ = false;
                 duplicated_ = true;
                 if (ImageView* canvas = ctx.canvas()) {
-                    canvas->beginMovePreview(v->move_preview_base(), v->move_preview_layer(),
-                                             QPointF(v->move_preview_x(), v->move_preview_y()),
-                                             v->move_preview_opacity() / 255.0,
-                                             transform_api::previewBaseOrigin(*v));
+                    showPreview(*canvas, *v);
                 }
             }
         }
         PictureView* v = ctx.view();
         ImageView* canvas = ctx.canvas();
         if (v && canvas) {
-            const QPointF origin(v->move_preview_x(), v->move_preview_y());
             const SmartGuideResult guides =
                 canvas->smartGuidesEnabled()
-                    ? smartGuideSnap(bounds_.translated(origin + rawDelta_), referenceRects_,
+                    ? smartGuideSnap(bounds_.translated(rawDelta_), referenceRects_,
                                      QSizeF(v->document_width(), v->document_height()),
                                      canvas->zoom())
                     : SmartGuideResult{};
             totalDelta_ = rawDelta_ + guides.snap;
             canvas->setSmartGuides(guides.lines, guides.gaps);
+            if (move_preview_follow(*v, qRound(totalDelta_.x()), qRound(totalDelta_.y()))) {
+                canvas->setMovePreviewLayer(v->move_preview_layer(),
+                                            QPointF(v->move_preview_x(), v->move_preview_y()));
+            }
             canvas->setMovePreviewDelta(totalDelta_);
             // ΔX / ΔY in the rulers' unit, by the pointer.
             canvas->setDragSizeHint(
@@ -319,21 +285,28 @@ private:
         drag->exec(Qt::CopyAction);
     }
 
-    void warm(ToolServices& ctx)
+    // Hand the prepared preview to the canvas, with the moving layer's content
+    // box as marching ants, as CS6 draws.
+    void showPreview(ImageView& canvas, PictureView& v)
     {
-        PictureView* v = ctx.view();
-        if (!v) {
-            warmValid_ = false;
-            return;
+        const QImage layer = v.move_preview_layer();
+        const QPointF origin(v.move_preview_x(), v.move_preview_y());
+        canvas.beginMovePreview(v.move_preview_base(), layer, origin,
+                                v.move_preview_opacity() / 255.0,
+                                transform_api::previewBaseOrigin(v), move_preview_scale(v));
+        // A view preview covers part of the layer, so Rust reports its box. A
+        // full image is scanned once per image.
+        const ::rust::Vec<int32_t> content = move_preview_content_extents(v);
+        if (content.size() == 4) {
+            bounds_ = QRectF(QPointF(content[0], content[1]), QPointF(content[2], content[3]));
+        } else {
+            if (layer.cacheKey() != boundsKey_) {
+                boundsKey_ = layer.cacheKey();
+                localBounds_ = contentBounds(layer);
+            }
+            bounds_ = localBounds_.translated(origin);
         }
-        if (!v->prepare_move_preview()) {
-            warmValid_ = false;
-            return;
-        }
-        warmBase_ = v->move_preview_base();
-        warmLayer_ = v->move_preview_layer();
-        warmView_ = v;
-        warmValid_ = !warmBase_.isNull();
+        canvas.setMoveOutline(bounds_);
     }
 
     QPointF last_;
@@ -342,12 +315,9 @@ private:
     QPointF totalDelta_;
     QList<QRectF> referenceRects_;
     qint64 boundsKey_ = 0;
+    QRectF localBounds_;
+    // The moving content's box in document space at the press.
     QRectF bounds_;
-    bool active_ = false;
-    PictureView* warmView_ = nullptr;
-    QImage warmBase_;
-    QImage warmLayer_;
-    bool warmValid_ = false;
     // Alt is armed at press; the clone is inserted on the first non-zero move.
     bool pendingDuplicate_ = false;
     bool duplicated_ = false;

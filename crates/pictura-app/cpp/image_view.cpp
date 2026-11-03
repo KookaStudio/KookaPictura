@@ -250,7 +250,7 @@ void ImageView::updateAntsTimer()
 }
 
 void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                                 double opacity, std::optional<QPoint> basePos)
+                                 double opacity, std::optional<QPoint> basePos, int scale)
 {
     moveBase_ = base;
     moveBasePos_ = basePos;
@@ -258,7 +258,15 @@ void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const 
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
+    moveScale_ = std::max(1, scale);
     movePreviewActive_ = true;
+    update();
+}
+
+void ImageView::setMovePreviewLayer(const QImage& layer, const QPointF& layerPos)
+{
+    moveLayer_ = layer;
+    moveLayerPos_ = layerPos;
     update();
 }
 
@@ -276,6 +284,7 @@ void ImageView::endMovePreview()
     moveLayer_ = QImage();
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
+    moveScale_ = 1;
     update();
 }
 
@@ -292,6 +301,7 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
+    moveScale_ = 1;
     movePreviewActive_ = true;
     transformActive_ = true;
     transformScaleX_ = 1.0;
@@ -357,6 +367,7 @@ void ImageView::clearTransformPreview()
     moveLayer_ = QImage();
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
+    moveScale_ = 1;
     update();
 }
 
@@ -593,7 +604,7 @@ void ImageView::paintEvent(QPaintEvent* event)
 
     // Sampled like the canvas, so a preview does not change the image's quality.
     painter.setRenderHint(QPainter::SmoothPixmapTransform, smoothSamplingForZoom(zoom_));
-    const bool basePatch = movePreviewActive_ && moveBasePos_ && !moveBase_.isNull();
+    const bool basePatch = movePreviewActive_ && moveBasePos_.has_value();
     if (transformActive_ && !basePatch && !moveBase_.isNull()) {
         // Free Transform: the base is fixed; the layer is drawn under the live
         // similarity transform about its original centre.
@@ -722,19 +733,23 @@ void ImageView::paintEvent(QPaintEvent* event)
     if (basePatch) {
         // Only the target's own bounds differ from the live canvas. A clear
         // patch must reveal the checkerboard, not the target still under it.
-        const QRectF patch(QPointF(*moveBasePos_), QSizeF(moveBase_.size()));
-        const QRectF device(offset_ + patch.topLeft() * zoom_, patch.size() * zoom_);
-        painter.save();
-        painter.resetTransform();
-        painter.setBrushOrigin(docDevice.topLeft());
-        painter.fillRect(device, transparencyTile());
-        painter.restore();
-        painter.drawImage(patch, moveBase_);
+        if (!moveBase_.isNull()) {
+            const QRectF patch(QPointF(*moveBasePos_), QSizeF(moveBase_.size()) * moveScale_);
+            const QRectF device(offset_ + patch.topLeft() * zoom_, patch.size() * zoom_);
+            painter.save();
+            painter.resetTransform();
+            painter.setBrushOrigin(docDevice.topLeft());
+            painter.fillRect(device, transparencyTile());
+            painter.restore();
+            painter.drawImage(patch, moveBase_);
+        }
         if (transformActive_) {
             paintTransformLayer(painter);
         } else {
             painter.setOpacity(moveOpacity_);
-            painter.drawImage(moveLayerPos_ + moveDelta_, moveLayer_);
+            painter.drawImage(
+                QRectF(moveLayerPos_ + moveDelta_, QSizeF(moveLayer_.size()) * moveScale_),
+                moveLayer_);
             painter.setOpacity(1.0);
         }
     }

@@ -32,6 +32,15 @@ pub mod ffi {
         /// A preview backdrop patch's `[left, top]`; empty for a whole-document
         /// base.
         fn move_preview_base_origin(view: &PictureView) -> Vec<i32>;
+        /// Document pixels per pixel of the Move preview's images: 1 for a
+        /// full-resolution preview, `2^level` for one built from the view.
+        fn move_preview_scale(view: &PictureView) -> i32;
+        /// A view preview's layer content bounds as `[left, top, right,
+        /// bottom]`; empty for a full-resolution preview.
+        fn move_preview_content_extents(view: &PictureView) -> Vec<i32>;
+        /// Rebuild a view preview's moving image once a drag of `(dx, dy)`
+        /// shows layer pixels it does not cover; true when it changed.
+        fn move_preview_follow(view: Pin<&mut PictureView>, dx: i32, dy: i32) -> bool;
         /// The session target's content rect as "left top right bottom", or
         /// empty without a session.
         fn transform_session_rect(view: &PictureView) -> QString;
