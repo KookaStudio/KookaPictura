@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Occluded bands and shared history planes** (#1149, OpenSpec change
+  `occluded-bands-and-shared-history`). The banded CPU compositor starts a band
+  at the topmost plain opaque Normal layer when the stack below is provably
+  opaque (`composite_region::first_shown_root`; exact because the backdrop
+  alpha stays exactly 1 in `f32`), and copies that layer's bytes when nothing
+  is shown above it. The history shares the live plane on an unhinted capture
+  instead of copying tiles in, shares the restored plane with the live document
+  on an in-place undo, and swaps band-aligned tiles one band per core. On a
+  Paint Bucket fill at 1/16 of 16507×16196: region composite 271 ms to 7 ms,
+  capture 84 ms to 15 ms, the undo's history step 81 ms to 28 ms.
+
 - **Move tool press on large documents** (#1148, OpenSpec change
   `move-press-responsiveness`). Switching to the Move tool no longer bakes a
   preview; the press builds it. One plain pixel layer with content over 4 MP
