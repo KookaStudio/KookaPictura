@@ -1,5 +1,7 @@
 #include "adjustment_dialog.h"
 
+#include "adjustment_presets.h"
+
 #include <QtCore/QDebug>
 
 #include "api/document_api.h"
@@ -83,6 +85,7 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     controls_->setPage(image_adjustment_page(slice(block_)));
     title_ = controls_->title();
     setWindowTitle(title_);
+    addPresetRow(left);
     left->addWidget(controls_);
     left->addStretch(1);
     left->addWidget(previewCheck(), 0, Qt::AlignRight);
@@ -227,7 +230,31 @@ bool AdjustmentDialog::setBlock(const QByteArray& next)
         return false;
     }
     edited(next);
+    reloadFromBlock();
     return true;
+}
+
+void AdjustmentDialog::reloadFromBlock()
+{
+    if (controls_) {
+        controls_->setPage(image_adjustment_page(slice(block_)));
+    }
+}
+
+PresetCombo* AdjustmentDialog::addPresetRow(QVBoxLayout* layout)
+{
+    const QString kind = adjustmentPresetKind(block_);
+    if (!adjustmentPresetSupportsMenu(kind)) {
+        return nullptr;
+    }
+    auto* combo = new PresetCombo(this);
+    combo->setObjectName(QStringLiteral("adjustmentPreset"));
+    combo->setBlock(kind, block_);
+    layout->addWidget(combo);
+    connect(combo, &PresetCombo::presetChosen, this,
+            [this](const QByteArray& next) { setBlock(next); });
+    preset_ = combo;
+    return combo;
 }
 
 QCheckBox* AdjustmentDialog::previewCheck()
@@ -388,6 +415,9 @@ void AdjustmentDialog::edited(const QByteArray& next)
         return;
     }
     block_ = next;
+    if (preset_) {
+        preset_->setBlock(adjustmentPresetKind(block_), block_);
+    }
     if (previewTimer_ && (!preview_ || preview_->isChecked())) {
         previewTimer_->start();
     }
@@ -499,6 +529,9 @@ void AdjustmentDialog::reject()
 
 QWidget* AdjustmentDialog::controlForTest(const QString& key) const
 {
+    if (key == QLatin1String("preset") && preset_) {
+        return preset_;
+    }
     return controls_ ? controls_->controlForTest(key) : nullptr;
 }
 

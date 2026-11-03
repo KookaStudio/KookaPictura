@@ -120,6 +120,7 @@ set(PICTURA_QT_TESTS
     tst_save_format_options
     tst_properties_panel
     tst_properties_preview
+    tst_adjustment_presets
     tst_adjustments_panel
     tst_actions_panel
     tst_channels_panel

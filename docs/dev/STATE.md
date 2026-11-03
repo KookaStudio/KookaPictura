@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Adjustment presets** (#576, OpenSpec change `adjustment-presets`). The
+  Properties panel shows a Preset menu for Levels, Curves, Photo Filter,
+  Selective Color, and Vibrance; `Save Preset…` / `Load Preset…` are gated to
+  the CS6 whitelist (Levels, Curves, Exposure, Hue/Saturation, Black & White,
+  Channel Mixer, Selective Color) and the same saved list appears in the
+  adjustment dialogs. Built-ins reuse the established dialog tables plus the
+  community Curves list and Photo Filter filter colours; Channel Mixer,
+  Selective Color, and Vibrance invent none. User presets live in
+  `$XDG_DATA_HOME/kooka-pictura/Presets/Adjustments/<kind>.presets` (atomic
+  write) through `pictura-render/src/adjustment_presets.rs`. Tests:
+  `pictura-render` preset units and `tst_adjustment_presets` (13 cases).
+
 - **Smudge picks up the live canvas with Sample All Layers** (#800, OpenSpec
   change `smudge-live-snapshot`). `SmudgeBrush` builds each carried patch from
   the press-time composite with the live working layer source-over'd on it, so

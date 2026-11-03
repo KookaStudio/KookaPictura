@@ -1,5 +1,6 @@
 #include "exposure_dialog.h"
 
+#include "adjustment_presets.h"
 #include "icons.h"
 
 #include <QtWidgets/QCheckBox>
@@ -83,6 +84,12 @@ ExposureDialog::ExposureDialog(PictureView* view, const QByteArray& block, const
         preset_->addItem(QLatin1String(preset.name));
     }
     preset_->insertSeparator(1);
+    const QStringList saved = savedPresetNames(QStringLiteral("exposure"));
+    if (!saved.isEmpty()) {
+        preset_->insertSeparator(preset_->count());
+        preset_->addItems(saved);
+    }
+    preset_->insertSeparator(preset_->count());
     preset_->addItem(kCustom);
     presetRow->addWidget(preset_, 1);
     left->addLayout(presetRow);
@@ -166,6 +173,21 @@ void ExposureDialog::applyPreset(int index)
             return;
         }
     }
+    if (savedPresetNames(QStringLiteral("exposure")).contains(name)) {
+        setBlock(savedPresetBlock(QStringLiteral("exposure"), name));
+    }
+}
+
+void ExposureDialog::reloadFromBlock()
+{
+    applying_ = true;
+    findChild<QDoubleSpinBox*>(QStringLiteral("exposure"))
+        ->setValue(param(QStringLiteral("exposure"), 0.0));
+    findChild<QDoubleSpinBox*>(QStringLiteral("offset"))
+        ->setValue(param(QStringLiteral("offset"), 0.0));
+    findChild<QDoubleSpinBox*>(QStringLiteral("gamma"))
+        ->setValue(param(QStringLiteral("gamma"), 1.0));
+    applying_ = false;
 }
 
 void ExposureDialog::markCustom()

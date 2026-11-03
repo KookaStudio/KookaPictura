@@ -29,6 +29,12 @@ pub mod ffi {
         /// The Properties page for the adjustment layer at `path`, one tab-separated row each: `title`, `note`, `groups` (`|`-joined), `curves`, then a `slider` (key, label, group, value, default, min, max, decimals), `check` / `color` (key, label, group, value, default), or `choice` (… options `|`-joined) per control; group -1 shows in every group. Empty for anything else.
         fn adjustment_page(view: &PictureView, path: &QString) -> QStringList;
 
+        /// The adjustment layer at `path`'s block (the 4-byte key then the payload), or empty for anything else.
+        fn adjustment_block(view: &PictureView, path: &QString) -> Vec<u8>;
+
+        /// Replace the adjustment layer at `path` with `block` and recomposite, without a history state. False when the block does not decode to the same kind.
+        fn adjustment_set_block(view: Pin<&mut PictureView>, path: &QString, block: &[u8]) -> bool;
+
         /// Set parameter `key` of the adjustment at `path` and recomposite, without a history state. False when refused.
         fn adjustment_set(
             view: Pin<&mut PictureView>,

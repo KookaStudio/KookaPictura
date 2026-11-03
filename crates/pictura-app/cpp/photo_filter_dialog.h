@@ -2,8 +2,12 @@
 
 #include "adjustment_dialog.h"
 
+class QCheckBox;
 class QComboBox;
+class QGroupBox;
 class QRadioButton;
+class QSlider;
+class QSpinBox;
 class ColorSwatchWidget;
 
 namespace pictura {
@@ -26,15 +30,20 @@ public:
                       QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override;
 
 private:
     // Write the colour the selected source (filter or swatch) names.
     void applySource();
 
+    QGroupBox* use_ = nullptr;
     QRadioButton* useFilter_ = nullptr;
     QRadioButton* useColor_ = nullptr;
     QComboBox* filter_ = nullptr;
     ColorSwatchWidget* color_ = nullptr;
+    QSpinBox* density_ = nullptr;
+    QSlider* densitySlider_ = nullptr;
+    QCheckBox* luminosity_ = nullptr;
 };
 
 } // namespace pictura

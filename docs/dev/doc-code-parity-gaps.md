@@ -6,7 +6,7 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 159 gaps — 5 systemic in §B, 154 per-domain in §C.
+- **Rows:** 158 gaps — 5 systemic in §B, 153 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -170,7 +170,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ADJ-3 | `adjustments/hue-saturation.md` | Colorize, range-band editing, eyedroppers, on-image tool | MISSING | `hue_saturation_dialog.h:17-21` | #573 |
 | ADJ-4 | `adjustments/gradient-map.md` | Dither + CS6 print-toning presets | MISSING | `gradient_map_dialog.cpp:82-91`; `gradient.rs:295-310` | #574 |
 | ADJ-5 | `adjustments/match-color.md` | On-canvas eyedropper + live Info feedback | MISSING | `match_color_dialog.cpp` | #575 |
-| ADJ-6 | `adjustments-overview.md` | Adjustment presets (Levels/Curves/Photo Filter/Selective Color/Vibrance) | MISSING | `adjustment_params.rs:639` (Color Lookup only) | #576 |
 | ADJ-7 | `adjustments/selective-color.md` | Composite-channel-only gate + preset whitelist | MISSING | no channel gate | #577 |
 | ADJ-8 | `adjustments/brightness-contrast.md` | Brightness/Contrast Auto + shared adjustment Auto buttons | MISSING | `adjustment_dialog.cpp:445` | #578 |
 

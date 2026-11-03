@@ -492,6 +492,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/apply_image_dialog.cpp
     crates/pictura-app/cpp/match_color_dialog.cpp
     crates/pictura-app/cpp/adjustment_dialog.cpp
+    crates/pictura-app/cpp/adjustment_presets.cpp
     crates/pictura-app/cpp/black_white_dialog.cpp
     crates/pictura-app/cpp/channel_mixer_dialog.cpp
     crates/pictura-app/cpp/color_balance_dialog.cpp

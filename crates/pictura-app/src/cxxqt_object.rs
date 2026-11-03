@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)] // brush parameter lists mirror the C++ API
 mod actions_engine;
 mod adjustment_edit;
+mod adjustment_presets;
 mod align;
 mod annotations;
 mod auto_blend;
@@ -212,7 +213,6 @@ pub mod qobject {
         /// Post-open notices (mode, depth, ICC), `"; "`-joined; empty when none.
         #[qinvokable]
         fn open_notice(&self) -> QString;
-
         /// Assign (retag) or convert (transform and retag) the active document to a built-in profile: 0 sRGB, 1 Adobe RGB, 2 Pro Photo RGB. False without a document or on a bad index.
         #[qinvokable]
         fn assign_profile(self: Pin<&mut Self>, profile_index: i32) -> bool;

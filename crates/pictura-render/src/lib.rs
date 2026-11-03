@@ -83,9 +83,16 @@ pub use adjustment_catalogue::{
 mod adjustment_defaults;
 pub use adjustment_defaults::default_adjustment_block;
 mod adjustment_params;
+mod adjustment_presets;
 pub use adjustment_params::{
     adjustment_editor, curve_points, reset_adjustment, set_adjustment_param, set_curve_points,
     AdjustmentEditor, AdjustmentParam, ParamKind,
+};
+pub use adjustment_presets::{
+    blocks_match as preset_blocks_match, delete as delete_preset,
+    is_saveable as preset_is_saveable, kind_of as preset_kind_of, save as save_preset,
+    saved_block as saved_preset_block, saved_names as saved_preset_names,
+    supports_menu as preset_supports_menu, MENU_KINDS, SAVEABLE_KINDS,
 };
 
 mod selective_color;

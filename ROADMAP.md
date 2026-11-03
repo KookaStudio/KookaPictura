@@ -285,7 +285,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       on-image tool (#573)
 - [ ] Gradient Map dither, and the CS6 print-toning presets (#574)
 - [ ] The Match Color on-canvas eyedropper and live Info feedback (#575)
-- [ ] Adjustment presets for Levels, Curves, Photo Filter, Selective Color and
+- [x] Adjustment presets for Levels, Curves, Photo Filter, Selective Color and
       Vibrance (#576)
 - [ ] The Selective Color composite-channel-only gate, and the preset
       whitelist (#577)
