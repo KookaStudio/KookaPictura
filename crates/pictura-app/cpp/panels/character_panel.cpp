@@ -11,6 +11,7 @@
 #include "api/type_api.h"
 #include "tool_sessions.h"
 
+#include <QtCore/QScopedValueRollback>
 #include <QtCore/QEvent>
 #include <QtCore/QLocale>
 #include <QtCore/QSignalBlocker>
@@ -700,7 +701,8 @@ void CharacterPanel::updatePanelMenu(QMenu* menu)
     }
     sync("character.fractionalWidths", shown_.fractional_widths, editable);
     sync("character.systemLayout", !shown_.fractional_widths, editable);
-    sync("character.reset", false, type);
+    TextSession* session = session_ ? session_() : nullptr;
+    sync("character.reset", false, type || (session && session->textActive()));
     if (QAction* openType = findSubmenuAction(menu, QStringLiteral("OpenType"))) {
         bool any = false;
         for (QToolButton* button : openType_) {
@@ -746,6 +748,18 @@ void CharacterPanel::performPanelMenuAction(const QString& actionId)
 
 void CharacterPanel::resetCharacter()
 {
+    CharacterSetting live = pictura::type_api::defaultCharacterSetting();
+    QString liveFamily;
+    if (TextSession* session = session_ ? session_() : nullptr;
+        session && session->textCharacter(live, liveFamily)) {
+        const CharacterSetting kept = live;
+        copyPanelFields(pictura::type_api::defaultCharacterSetting(), live);
+        live.size = kept.size;
+        live.font_style = kept.font_style;
+        session->setTextCharacter(live, liveFamily);
+        refresh();
+        return;
+    }
     if (!hasTypeLayer()) {
         return;
     }
@@ -786,21 +800,24 @@ void CharacterPanel::setTextSession(std::function<TextSession*()> session)
 
 void CharacterPanel::refresh()
 {
+    if (applying_) {
+        return;
+    }
     CharacterSetting live = pictura::type_api::defaultCharacterSetting();
     QString liveFamily;
     TextSession* session = session_ ? session_() : nullptr;
-    const bool newText = session && session->newTextCharacter(live, liveFamily);
-    const bool type = newText || hasTypeLayer();
-    const QString path = type && !newText ? layer_selection_anchor(*view_) : QString();
+    const bool inSession = session && session->textCharacter(live, liveFamily);
+    const bool type = inSession || hasTypeLayer();
+    const QString path = type && !inSession ? layer_selection_anchor(*view_) : QString();
     const pictura::type_api::LayerType layer = path.isEmpty()
                                                    ? pictura::type_api::LayerType{}
                                                    : pictura::type_api::readLayer(*view_, path);
-    shown_ = newText ? live
-             : type  ? layer.spec.character
-                     : pictura::type_api::defaultCharacterSetting();
-    const QString family = newText ? liveFamily
-                           : type  ? familyForFontName(layer.spec.font)
-                                   : QString();
+    shown_ = inSession ? live
+             : type    ? layer.spec.character
+                       : pictura::type_api::defaultCharacterSetting();
+    const QString family = inSession ? liveFamily
+                           : type    ? familyForFontName(layer.spec.font)
+                                     : QString();
     std::uint32_t features = 0;
     if (type) {
         // The query must see the host face, not the bundled fallback.
@@ -862,12 +879,13 @@ void CharacterPanel::apply(bool preview)
     CharacterSetting live = pictura::type_api::defaultCharacterSetting();
     QString liveFamily;
     if (TextSession* session = session_ ? session_() : nullptr;
-        session && session->newTextCharacter(live, liveFamily)) {
+        session && session->textCharacter(live, liveFamily)) {
         copyPanelFields(shown_, live);
         live.color = color_.rgba();
         const QString family = family_->currentFont().family();
         registerTypeFont(family, shown_.font_style);
-        session->setNewTextCharacter(live, family);
+        const QScopedValueRollback guard(applying_, true);
+        session->setTextCharacter(live, family);
         return;
     }
     if (!hasTypeLayer()) {

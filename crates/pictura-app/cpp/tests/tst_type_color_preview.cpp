@@ -108,6 +108,7 @@ private slots:
     void sessionPreviewsAndRestores();
     void characterPanelPreviewsAndCommits();
     void characterPanelCancelRestores();
+    void characterPanelColorEditsReopenedSession();
 
 private:
     void showFrame();
@@ -315,6 +316,42 @@ void TypeColorPreviewTest::characterPanelCancelRestores()
     QVERIFY2(shown, "the layer showed the colour while the picker was open");
     QCOMPARE(layerColor(f, path), QColor(200, 0, 0));
     QCOMPARE(f.view->history_index(), base);
+}
+
+void TypeColorPreviewTest::characterPanelColorEditsReopenedSession()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_type_color_panel_session"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = redLayerSelected(f);
+    QVERIFY(!path.isEmpty());
+    auto* panel = window_->findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    const int base = f.view->history_index();
+    f.drag({QPointF(30, 45)});
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
+    panel->refresh();
+    auto* swatch = panel->findChild<QToolButton*>(QStringLiteral("characterColor"));
+    QVERIFY2(swatch && swatch->isEnabled(), "panel colour swatch");
+    const auto barColor = [&]() {
+        return f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().color;
+    };
+
+    // Cancel drops the preview and leaves the session's colour.
+    bool shown = false;
+    QVERIFY(drivePicker([&]() { swatch->click(); }, QStringLiteral("0000ff"),
+                        [&]() { shown = barColor() == QColor(0, 0, 255); }, false));
+    QVERIFY2(shown, "the session showed the colour while the picker was open");
+    QCOMPARE(barColor(), QColor(200, 0, 0));
+
+    QVERIFY(drivePicker([&]() { swatch->click(); }, QStringLiteral("00ff00"), []() {}, true));
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(layerColor(f, path), QColor(200, 0, 0));
+
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    QCOMPARE(layerColor(f, path), QColor(0, 255, 0));
 }
 
 QTEST_MAIN(TypeColorPreviewTest)

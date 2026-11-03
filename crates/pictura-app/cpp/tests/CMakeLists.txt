@@ -98,6 +98,7 @@ set(PICTURA_QT_TESTS
     tst_smart_guides
     tst_tool_options_persistence
     tst_character_paragraph_panels
+    tst_type_session_panels
     tst_paragraph_styles_panel
     tst_character_styles_panel
     tst_type_preferences
