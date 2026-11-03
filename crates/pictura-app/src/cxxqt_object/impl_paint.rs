@@ -1,6 +1,6 @@
 use super::document_session::{PreviewSample, PreviewStroke, SessionKind, StrokeSession};
 use super::helpers::*;
-use super::helpers_composite::{patch_composite_region, planes_of};
+use super::helpers_composite::{patch_composite_region, planes_of, store_composite};
 use super::qobject;
 use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
@@ -78,6 +78,7 @@ impl PictureViewRust {
         let painting = self.session.live.mask_stroke().is_some();
         let source: &Document = self.session.doc.as_ref()?;
         let (x0, y0, w, h) = clamp_region(rect, source.width, source.height)?;
+        let whole = (x0, y0, w, h) == (0, 0, source.width, source.height);
         let gpu_compute = self.gpu_compute;
         let t = Instant::now();
         let buffer = pictura_render::composite_region_active(source, rect, gpu_compute).0;
@@ -91,7 +92,13 @@ impl PictureViewRust {
         if !painting {
             if let Some(doc) = self.session.doc.as_mut() {
                 let t = Instant::now();
-                patch_composite_region(doc, &buffer, x0, y0);
+                // A region that is the whole document replaces the composite:
+                // patching it row by row copies the document serially (#1145).
+                if whole {
+                    store_composite(doc, &buffer);
+                } else {
+                    patch_composite_region(doc, &buffer, x0, y0);
+                }
                 paint_timing::record("rr_patch_composite", t.elapsed());
             }
         }

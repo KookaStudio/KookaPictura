@@ -40,7 +40,20 @@ pub(super) fn align_can(
     };
     let owned = list_of_strings(paths);
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    pictura_render::can_align(doc, &refs, target(view, to_selection, align_to))
+    pictura_render::can_align(doc, &refs, has_target(view, to_selection, align_to))
+}
+
+/// Whether [`target`] has a box, without measuring the selection.
+fn has_target(view: &PictureView, to_selection: bool, align_to: i32) -> bool {
+    if align_to == 1 {
+        return view.rust().session.doc.is_some();
+    }
+    view.rust()
+        .session
+        .selection
+        .as_ref()
+        .filter(|_| to_selection)
+        .is_some_and(|s| pictura_render::plane_has_coverage(&s.data, s.width, s.height))
 }
 
 pub(super) fn distribute_can(view: &PictureView, paths: &QStringList) -> bool {

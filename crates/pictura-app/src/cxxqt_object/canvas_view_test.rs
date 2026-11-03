@@ -973,3 +973,45 @@ fn selection_contour_cache_clears_without_a_selection() {
     assert!(rust.selection_contour_cache.borrow().is_none());
     assert_eq!(rust.selection_contour_computes.get(), 1);
 }
+
+#[test]
+fn a_whole_document_region_refresh_installs_its_frames() {
+    let (w, h) = (300u32, 200u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
+        "px",
+        w,
+        h,
+        (10, 20, 30),
+    )]);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let mut view = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.reset_pyramid();
+    let frame = view.frame_revision;
+
+    let doc = view.session.doc.as_mut().expect("document");
+    doc.layers[0].channels[0].data.as_mut_slice().fill(200);
+    let whole = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    };
+    assert_eq!(view.refresh_regions(&[whole]), Some(whole));
+
+    let doc = view.session.doc.as_ref().expect("document");
+    assert!(doc.composite == pictura_render::composite_rgba(doc));
+    let level0 = view.level0.as_ref().expect("level 0");
+    assert!(*level0 == level0_buffer(doc));
+    assert!(
+        !level0.data.shares(&doc.composite.data),
+        "level 0 keeps its own plane"
+    );
+    assert_eq!(view.frame_revision, frame, "the frame is reused");
+    let rebuilt = ViewPyramid::rebuild(planes_of(level0).expect("planes"));
+    assert_pyramids_equal(&view.pyramid, &rebuilt, level0);
+}

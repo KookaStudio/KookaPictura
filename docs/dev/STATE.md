@@ -22,6 +22,23 @@ Snapshot for resuming after a context break. Update after each milestone.
   most of that. An identical reorder still byte-compares the composite, at 42 ms.
   The soloed mask rebuild stays synchronous. All three are tracked in #1152.
 
+- **Command refresh on large documents** (#1145, OpenSpec change
+  `command-refresh-responsiveness`). Menu enabled checks no longer measure
+  content: `plane_has_coverage` stops at the first covered row and memoizes by
+  `Plane::ident` (every write resets it, so entries never go stale). Align,
+  Distribute, Auto-Blend, Transform, Align to Selection and Refine Edge use it;
+  Transform no longer copies the selection mask per check. `cancel_active_session`
+  reports `sessionCancelled` only when a session was live, so a tool switch no
+  longer refreshes every panel inline. A whole-document region refresh installs
+  the composite and level 0 instead of copying them row by row.
+  `PICTURA_PAINT_TIMING` now names each registry command costing 1 ms or more.
+  At 16507×16196 with an empty layer: registry refresh 150 ms (2.3 s with a
+  selection) to about 1 ms, tool switch 0.4–0.6 s to 1–185 ms, Marquee release
+  2.5 s to 0.25 s, Paint Bucket fill 19.5 s to 8.4 s. Still slow, each tracked:
+  Move tool activation (about 8 s, #1148), the Paint Bucket fill and undo
+  (#1149), the Marquee switch and release (#1150), the debounced panel refresh
+  (#1151), and whole-document undo (#1098, #1152).
+
 - **Adjustment presets** (#576, OpenSpec change `adjustment-presets`). The
   Properties panel shows a Preset menu for Levels, Curves, Photo Filter,
   Selective Color, and Vibrance; `Save Preset…` / `Load Preset…` are gated to

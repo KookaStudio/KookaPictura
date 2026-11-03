@@ -129,7 +129,7 @@ fn eligible(doc: &Document, path: &str) -> bool {
             && layer.type_tool.is_none()
             && layer.smart_object.is_none()
     }) && visible_in_tree(doc, path)
-        && super::layer_content_bounds(doc, path).is_some()
+        && super::layer_has_content(doc, path)
 }
 
 fn refused(layer: &Layer) -> bool {
