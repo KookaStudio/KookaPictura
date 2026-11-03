@@ -291,7 +291,7 @@ void UpdatePreferencesTest::preferencesDefaultOn()
     auto* package = page->findChild<QLabel*>(QStringLiteral("preferencesUpdatePackage"));
     QVERIFY(version != nullptr);
     QVERIFY(package != nullptr);
-    QVERIFY(version->text().contains(QStringLiteral("0.3.0")));
+    QVERIFY(version->text().contains(QStringLiteral(PICTURA_VERSION)));
     QVERIFY(package->text().contains(QStringLiteral("Package:")));
 }
 
@@ -401,7 +401,7 @@ void UpdatePreferencesTest::menuEntryChecks()
 void UpdatePreferencesTest::aboutShowsVersionAndMethod()
 {
     const QString text = pictura::aboutVersionText();
-    QVERIFY(text.contains(QStringLiteral("Kooka Pictura 0.3.0")));
+    QVERIFY(text.contains(QStringLiteral("Kooka Pictura %1").arg(QStringLiteral(PICTURA_VERSION))));
     QVERIFY(text.contains(QStringLiteral("Package: ")));
 }
 

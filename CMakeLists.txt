@@ -582,6 +582,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/update_checker.h
     crates/pictura-app/cpp/update_installer.cpp
     crates/pictura-app/cpp/update_installer.h
+    crates/pictura-app/cpp/notification_status_bar.cpp
+    crates/pictura-app/cpp/notification_status_bar.h
     crates/pictura-app/cpp/update_banner.cpp
     crates/pictura-app/cpp/update_banner.h
     crates/pictura-app/cpp/update_preferences_page.cpp
