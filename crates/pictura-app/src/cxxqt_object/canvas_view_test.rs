@@ -340,6 +340,51 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
 }
 
 #[test]
+fn a_mid_stroke_named_snapshot_stores_an_exact_composite() {
+    use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
+
+    let rgba = vec![40u8; 128 * 128 * 4];
+    let mut doc = Document::from_rgba("paint", 128, 128, &rgba);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let stale = doc.composite.clone();
+    let mut stroke = Stroke::begin_at(&doc, "0", StrokeConfig::default()).expect("begin stroke");
+    assert!(stroke.sample(
+        &mut doc,
+        StrokeSample {
+            x: 64.0,
+            y: 64.0,
+            pressure: 1.0,
+        }
+    ));
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    rust.session
+        .live
+        .set_stroke_session(crate::cxxqt_object::document_session::StrokeSession {
+            stroke: Some(stroke),
+            ..Default::default()
+        });
+
+    let snapshot = rust.named_snapshot().expect("a snapshot");
+    assert!(snapshot.doc.composite == pictura_render::composite_rgba(&snapshot.doc));
+    assert!(
+        snapshot.doc.composite != stale,
+        "the dab is in the stored composite"
+    );
+    let live = rust.session.doc.as_ref().expect("document");
+    assert!(
+        live.composite == stale,
+        "the live document keeps its pre-stroke base"
+    );
+    assert!(!snapshot.doc.layers[0].channels[0]
+        .data
+        .shares(&live.layers[0].channels[0].data));
+}
+
+#[test]
 fn paint_commit_region_patch_equals_a_full_recomposite() {
     use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 

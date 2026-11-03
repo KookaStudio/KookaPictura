@@ -15,6 +15,7 @@
 | `hrr_no_pixel_reorder` | Reorder equal layers, undo | Empty region | `pictura-app::undoing_a_reorder_of_equal_layers_reports_no_rectangle` |
 | `hrr_no_pixel_frame` | Add a neutral layer, undo | Frame revision unchanged | `tst_large_document::aNeutralLayerUndoKeepsTheFrame` |
 | `hrr_jump_oracle` | Jump across structural, geometry and mask edits | Composite equals a full composite | `pictura-app::a_jump_lands_on_an_exact_stored_composite` |
+| `hrr_snapshot_mid_stroke` | Start a stroke, lay a dab, create a named snapshot | Stored composite equals a full composite; live composite unchanged | `pictura-app::a_mid_stroke_named_snapshot_stores_an_exact_composite` |
 | `hrr_jump_then_undo` | Jump, stroke, undo | Region | `pictura-app::an_undo_after_a_whole_jump_stays_bounded` |
 | `hrr_coarse_levels` | Build coarse and exact pyramids | Sizes match, first level holds corner pixels | `pictura-render::coarse_pyramid_matches_the_exact_levels` |
 | `hrr_deferred_lands` | Resize a large document, undo, wait | Coarse first, `pyramidSettled`, then exact | `tst_large_document::aLargeGeometryUndoLandsTheExactPyramid`, `pictura-app::a_landed_pyramid_equals_a_rebuild` |

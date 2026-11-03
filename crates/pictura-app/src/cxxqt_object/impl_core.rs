@@ -3,7 +3,7 @@ use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
 use crate::cxxqt_object::edit::Edit;
-use crate::history::{History, Snapshot};
+use crate::history::History;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
@@ -1059,15 +1059,6 @@ impl qobject::PictureView {
         let target = rust.layer_target.clone();
         rust.session.record(&target, label);
         paint_timing::record("record_history_capture", t.elapsed());
-    }
-
-    pub(super) fn snapshot(&self) -> Option<Snapshot> {
-        let rust = self.rust();
-        let doc = rust.session.doc.clone()?;
-        Some(Snapshot {
-            doc,
-            selection: rust.session.selection.clone(),
-        })
     }
 
     /// Composite only `rect`, patch the authoritative `doc.composite` and the

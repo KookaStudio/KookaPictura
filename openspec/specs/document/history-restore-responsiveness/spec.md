@@ -135,6 +135,12 @@ the target state. A later bounded edit's undo SHALL stay bounded.
 - **WHEN** a jump crosses structural, geometry and mask edits
 - **THEN** the stored composite equals a full composite of the target
 
+#### Scenario: A named snapshot taken mid-stroke stores an exact composite [hrr_snapshot_mid_stroke]
+
+- **WHEN** a named snapshot is created while a stroke is live
+- **THEN** its stored composite equals a full composite of its layers, and the
+  live document keeps its pre-stroke composite
+
 #### Scenario: An undo after a jump stays bounded [hrr_jump_then_undo]
 
 - **WHEN** a stroke is committed and undone after a whole-document jump

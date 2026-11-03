@@ -2,7 +2,7 @@ mod display;
 mod purge;
 
 use super::helpers::{clamp_region, paint_timing};
-use super::helpers_composite::{crop_planar, into_rgba_frame};
+use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame, store_composite};
 use super::{qobject, PictureViewRust};
 use crate::history::{detached_copy, History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
@@ -39,6 +39,23 @@ impl PictureViewRust {
         };
         self.apply_refreshed_region(x0, y0, clipped, srgb);
         Some(clipped)
+    }
+
+    /// The live document for a named snapshot: planes of its own, so the next
+    /// dab does not copy a whole plane, and an exact composite. Mid-stroke the
+    /// document's composite is still the pre-stroke base, so it is composited
+    /// from the painted layers; anything that presents the snapshot can then
+    /// trust it the way a jump trusts a state's composite.
+    pub(super) fn named_snapshot(&self) -> Option<Snapshot> {
+        let mut doc = detached_copy(self.session.doc.as_ref()?);
+        if self.session.live.stroke().is_some() {
+            let rendered = current_buffer(&doc, self.gpu_compute);
+            store_composite(&mut doc, &rendered);
+        }
+        Some(Snapshot {
+            doc,
+            selection: self.session.selection.clone(),
+        })
     }
 
     /// Restore through the history in place into the live document, or by
@@ -189,14 +206,8 @@ impl qobject::PictureView {
     }
 
     pub fn history_add_snapshot(mut self: Pin<&mut Self>, label: &QString) -> bool {
-        // The named state gets planes of its own: one shared with the live
-        // document would make the next dab copy a whole plane.
-        let Some(snapshot) = self.snapshot() else {
+        let Some(snapshot) = self.rust().named_snapshot() else {
             return false;
-        };
-        let snapshot = Snapshot {
-            doc: detached_copy(&snapshot.doc),
-            ..snapshot
         };
         let target = self.rust().layer_target.clone();
         self.as_mut()
