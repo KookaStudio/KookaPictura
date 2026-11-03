@@ -117,6 +117,36 @@ fn content_bounds(layer: &Layer) -> Option<PsdRect> {
     })
 }
 
+/// Whether [`content_bounds`] would box something, without building the box.
+fn has_content(layer: &Layer) -> bool {
+    if layer.is_group || layer.adjustment.is_some() {
+        return false;
+    }
+    let (w, h) = (layer.rect.width().max(0), layer.rect.height().max(0));
+    if w == 0 || h == 0 {
+        return false;
+    }
+    layer
+        .channels
+        .iter()
+        .find(|c| c.id == -1)
+        .is_none_or(|alpha| super::clipboard::plane_has_coverage(&alpha.data, w as u32, h as u32))
+}
+
+/// Whether the layer at `path` has content Align would move; the cheap form of
+/// [`layer_content_bounds`]`(..).is_some()`.
+pub fn layer_has_content(doc: &Document, path: &str) -> bool {
+    resolve_path(doc, path).is_some_and(has_content)
+}
+
+/// How many of `paths` (deduplicated) have content.
+fn content_count(doc: &Document, paths: &[&str]) -> usize {
+    unique(paths)
+        .into_iter()
+        .filter(|p| layer_has_content(doc, p))
+        .count()
+}
+
 /// The document-space ink box round the layer at `path`, as Align computes it;
 /// `None` when the path is missing, a group, an adjustment, or empty.
 pub fn layer_content_bounds(doc: &Document, path: &str) -> Option<PsdRect> {
@@ -152,11 +182,12 @@ fn shift(doc: &mut Document, path: &str, (dx, dy): (i32, i32)) -> bool {
 }
 
 /// Whether Align applies: two layers with content line up on each other; with
-/// a `selection` box, one is enough (CS6's Align Layers To Selection, which
-/// is also how one layer aligns to the canvas after Select All).
-pub fn can_align(doc: &Document, paths: &[&str], selection: Option<PsdRect>) -> bool {
-    let n = contents(doc, paths).len();
-    n >= 2 || (n == 1 && selection.is_some())
+/// a target box (`has_target`), one is enough (CS6's Align Layers To
+/// Selection, which is also how one layer aligns to the canvas after Select
+/// All).
+pub fn can_align(doc: &Document, paths: &[&str], has_target: bool) -> bool {
+    let n = content_count(doc, paths);
+    n >= 2 || (n == 1 && has_target)
 }
 
 /// Line the content of `paths` up along `edge`: against `selection` when
@@ -169,7 +200,7 @@ pub fn align_layers(
     edge: AlignEdge,
     selection: Option<PsdRect>,
 ) -> usize {
-    if !can_align(doc, paths, selection) {
+    if !can_align(doc, paths, selection.is_some()) {
         return 0;
     }
     let rects = contents(doc, paths);
@@ -191,7 +222,7 @@ pub fn align_layers(
 /// Whether Distribute applies: three layers with content (with two there is
 /// nothing between them to space).
 pub fn can_distribute(doc: &Document, paths: &[&str]) -> bool {
-    contents(doc, paths).len() >= 3
+    content_count(doc, paths) >= 3
 }
 
 /// Space the content of `paths` so `edge` of each falls at even steps between
@@ -222,6 +253,48 @@ mod tests {
     use super::super::tests::{doc_with, pixel_layer};
     use super::*;
     use pictura_core::{Channel, LockFlags};
+
+    #[test]
+    fn the_content_test_agrees_with_content_bounds() {
+        let mut empty = pixel_layer("empty", 4, 4, 0);
+        let mut corner = pixel_layer("corner", 4, 4, 0);
+        for layer in [&mut empty, &mut corner] {
+            let alpha = layer
+                .channels
+                .iter_mut()
+                .find(|c| c.id == -1)
+                .expect("alpha");
+            alpha.data.as_mut_slice().fill(0);
+        }
+        let alpha = corner
+            .channels
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .expect("alpha");
+        alpha.data.as_mut_slice()[15] = 1;
+        let mut no_alpha = pixel_layer("no alpha", 4, 4, 9);
+        no_alpha.channels.retain(|c| c.id != -1);
+        let mut flat = pixel_layer("flat", 4, 4, 9);
+        flat.rect.right = flat.rect.left;
+        let d = doc_with(vec![
+            pixel_layer("opaque", 4, 4, 9),
+            empty,
+            corner,
+            no_alpha,
+            flat,
+        ]);
+        for path in ["0", "1", "2", "3", "4", "9"] {
+            assert_eq!(
+                layer_has_content(&d, path),
+                layer_content_bounds(&d, path).is_some(),
+                "layer {path}"
+            );
+        }
+        assert!(can_distribute(&d, &["0", "2", "3", "1", "4"]));
+        assert!(!can_distribute(&d, &["0", "1", "2", "4"]));
+        assert!(can_align(&d, &["1", "2"], true));
+        assert!(!can_align(&d, &["1", "2"], false));
+    }
 
     fn at(rect: &mut PsdRect, x: i32, y: i32) {
         let (w, h) = (rect.width(), rect.height());
@@ -287,7 +360,7 @@ mod tests {
             bottom: 200,
             right: 200,
         };
-        assert!(!can_align(&d, &["0"], None));
+        assert!(!can_align(&d, &["0"], false));
         assert_eq!(
             align_layers(&mut d, &["0"], AlignEdge::Bottom, Some(selection)),
             1
@@ -329,7 +402,7 @@ mod tests {
     fn align_skips_groups_and_dedupes_paths() {
         let mut d = squares(&[(10, 40, 20)]);
         let _ = d.layers.push(super::super::create::empty_group("Group"));
-        assert!(!can_align(&d, &["0", "0", "1"], None));
+        assert!(!can_align(&d, &["0", "0", "1"], false));
     }
 
     #[test]

@@ -1,5 +1,7 @@
 #include "commands.h"
 
+#include "pictura_debug_timing.h"
+
 #include "pictura_app/src/cxxqt_object/command_catalogue.cxxqt.h"
 
 #include <QtCore/QDebug>
@@ -427,6 +429,7 @@ void CommandRegistry::refresh()
             continue;
         }
         const CommandSpec& spec = entry.spec;
+        const auto start = std::chrono::steady_clock::now();
 
         bool enabled = spec.implemented && hasHandler(spec.id);
         if (enabledProviders_.contains(spec.id)) {
@@ -445,6 +448,17 @@ void CommandRegistry::refresh()
         const QString text =
             labelProviders_.contains(spec.id) ? labelProviders_[spec.id]() : spec.label;
         entry.action->setText(text);
+        // Name each command whose providers cost a noticeable share of a
+        // refresh, so a provider that scans the document shows up by id.
+        if (paintTimingLevel() > 0) {
+            const double ms = std::chrono::duration<double, std::milli>(
+                                  std::chrono::steady_clock::now() - start)
+                                  .count();
+            if (ms >= 1.0) {
+                std::fprintf(stderr, "[paint-timing]   registry %-40s %8.2f ms\n",
+                             qPrintable(spec.id), ms);
+            }
+        }
     }
 }
 

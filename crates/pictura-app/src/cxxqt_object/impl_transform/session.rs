@@ -74,7 +74,19 @@ fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
     rust.session.doc.as_ref().is_some_and(|doc| {
         pictura_render::resolve_path(doc, path)
             .is_some_and(|layer| layer.visible && pictura_render::can_lift_selection(layer))
-    }) && lift_coverage(rust).is_some()
+    }) && selection_covers(rust)
+}
+
+/// Whether [`lift_coverage`] would find a selection, without copying it.
+fn selection_covers(rust: &PictureViewRust) -> bool {
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return false;
+    };
+    rust.session
+        .selection
+        .as_ref()
+        .filter(|s| s.width == doc.width && s.height == doc.height)
+        .is_some_and(|s| pictura_render::plane_has_coverage(&s.data, doc.width, doc.height))
 }
 
 /// The repeatable part of a committed session: the similarity parameters and
@@ -864,6 +876,33 @@ mod tests {
     use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
     use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
     use pictura_render::Interpolation;
+
+    #[test]
+    fn the_selection_test_agrees_with_the_lift_coverage() {
+        let mut rust = PictureViewRust::default();
+        rust.session.doc = Some(Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight));
+        let mut corner = vec![0u8; 64];
+        corner[63] = 1;
+        let cases = [
+            None,
+            Some((8, 8, vec![0u8; 64])),
+            Some((8, 8, corner)),
+            Some((8, 8, vec![255u8; 64])),
+            Some((4, 4, vec![255u8; 16])),
+        ];
+        for (i, case) in cases.into_iter().enumerate() {
+            rust.session.selection = case.map(|(width, height, data)| pictura_select::Selection {
+                width,
+                height,
+                data: data.into(),
+            });
+            assert_eq!(
+                selection_covers(&rust),
+                lift_coverage(&rust).is_some(),
+                "case {i}"
+            );
+        }
+    }
 
     fn transform_session(rect: PsdRect) -> TransformSession {
         TransformSession {

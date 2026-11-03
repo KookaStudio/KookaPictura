@@ -12,6 +12,8 @@ use pictura_core::{
     PsdRect,
 };
 use rayon::prelude::*;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 use super::create::{insert_node, next_layer_name, transparent_layer};
 use super::paths::{resolve_path, resolve_path_mut};
@@ -303,6 +305,57 @@ pub(super) fn plane_coverage_bounds(
         return None;
     }
     row_bounds(h, |y| coverage.row(y, w))
+}
+
+/// How many planes [`plane_has_coverage`] remembers before it starts over.
+const COVERAGE_MEMO_ENTRIES: usize = 256;
+
+/// A plane's `(ident, width, height)`. An ident names one set of bytes, so an
+/// answer stored under it never goes stale.
+type CoverageKey = (u64, u32, u32);
+
+/// [`plane_has_coverage`] answers by [`CoverageKey`].
+static COVERAGE_MEMO: LazyLock<Mutex<HashMap<CoverageKey, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(test)]
+thread_local! {
+    /// Scans [`plane_has_coverage`] started on this thread, for the tests that
+    /// prove a remembered plane is not read again.
+    pub(super) static COVERAGE_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Whether `coverage` holds a nonzero sample: exactly when
+/// [`plane_coverage_bounds`] is `Some`. Rows are read in place and the scan
+/// stops at the first hit. The answer is remembered by the plane's ident, so
+/// the menu checks one refresh runs read an unchanged plane once (#1145).
+pub fn plane_has_coverage(coverage: &Plane<u8>, width: u32, height: u32) -> bool {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || coverage.len() < w * h {
+        return false;
+    }
+    let key = (coverage.ident(), width, height);
+    let memo = || {
+        COVERAGE_MEMO
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    };
+    if let Some(&known) = memo().get(&key) {
+        return known;
+    }
+    #[cfg(test)]
+    COVERAGE_SCANS.with(|scans| scans.set(scans.get() + 1));
+    let covered = (0..h).into_par_iter().any(|y| {
+        coverage
+            .row(y, w)
+            .is_some_and(|row| row.iter().any(|&v| v > 0))
+    });
+    let mut memo = memo();
+    if memo.len() >= COVERAGE_MEMO_ENTRIES {
+        memo.clear();
+    }
+    memo.insert(key, covered);
+    covered
 }
 
 fn row_bounds<'a>(
