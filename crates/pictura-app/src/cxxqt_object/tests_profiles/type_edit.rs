@@ -61,7 +61,7 @@ fn edit_once(label: &str, before: &TypeSpec, after: &TypeSpec, bounded: bool) {
         .undo_live(doc, &mut session.selection, &mut LayerTarget::default())
         .expect("a state to undo");
     match restored {
-        Restored::Region(rect) => {
+        Restored::Region(rect) | Restored::Composite(rect) => {
             view.refresh_from_composite(rect);
         }
         Restored::Everywhere => view.reset_pyramid(),

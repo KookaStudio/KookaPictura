@@ -41,7 +41,7 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
         },
         [levelView]() { return levelView ? levelView->canvas_revision() : quint64(0); },
         [levelView]() { return levelView && levelView->is_painting(); },
-        [levelView]() { return levelView ? levelView->preview_present_level() : 0; },
+        [levelView]() { return levelView ? pictura::preview_present_level(*levelView) : 0; },
         [levelView](int level) {
             // A zero-copy view of a stored level; the canvas drops it after the
             // paint so the next update can write the level in place.
@@ -184,6 +184,12 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
                 }
                 afterPresent(index);
             });
+    connect(view, &PictureView::pyramid_settled, this, [this, view] {
+        const int index = indexOfView(view);
+        if (index >= 0) {
+            forEachCanvas(*docs_.at(index), [](ImageView* canvas) { canvas->update(); });
+        }
+    });
     // A canvas that holds its own image still takes the pixel path (the
     // non-document fallback).
     connect(view, &PictureView::regionBlitted, this,

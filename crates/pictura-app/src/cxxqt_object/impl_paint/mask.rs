@@ -153,6 +153,7 @@ impl PictureViewRust {
         if !self.slot_allows(SessionKind::MaskPaint) {
             return false;
         }
+        self.settle_pyramid();
         let built = {
             let rust = &*self;
             if rust.session.live.stroke().is_some() || rust.session.live.mask_stroke().is_some() {

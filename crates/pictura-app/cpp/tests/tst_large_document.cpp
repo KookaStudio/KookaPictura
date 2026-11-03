@@ -50,6 +50,8 @@ class LargeDocumentTest : public QObject {
 private slots:
     void initTestCase();
     void boundedUndoKeepsTheFrame();
+    void aNeutralLayerUndoKeepsTheFrame();
+    void aLargeGeometryUndoLandsTheExactPyramid();
     void undoDuringAStrokeCancelsIt();
     void moveDoesNotWarmTheBackground();
     void layerPropertiesRepaintOnlyTheLayer();
@@ -88,6 +90,37 @@ void LargeDocumentTest::boundedUndoKeepsTheFrame()
     QCOMPARE(f.view->sample_argb(40, 20), kRed);
     QCOMPARE(canvasPixel(*f.canvas, 40, 20), QRgb(kRed));
     QCOMPARE(quint64(pictura::frame_revision(*f.view)), frame);
+}
+
+void LargeDocumentTest::aNeutralLayerUndoKeepsTheFrame()
+{
+    QImage seed(120, 60, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_neutral_undo"));
+    QVERIFY2(f.ok(), "neutral undo fixture");
+
+    QVERIFY(f.view->add_layer(0) >= 0);
+    const quint64 frame = pictura::frame_revision(*f.view);
+    QVERIFY(window_->registry()->dispatch(QStringLiteral("edit.undo")));
+    QCOMPARE(quint64(pictura::frame_revision(*f.view)), frame);
+}
+
+void LargeDocumentTest::aLargeGeometryUndoLandsTheExactPyramid()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_pyramid"));
+    QVERIFY2(f.ok(), "deferred pyramid fixture");
+
+    QVERIFY(f.view->resize_image(QStringLiteral("nearest"), 2100, 2100));
+    QCOMPARE(pictura::preview_present_level(*f.view), 0);
+    QSignalSpy settled(f.view, &pictura::PictureView::pyramid_settled);
+    QVERIFY(window_->registry()->dispatch(QStringLiteral("edit.undo")));
+    QCOMPARE(f.view->document_width(), 4200);
+    QVERIFY(pictura::preview_present_level(*f.view) > 0);
+
+    QVERIFY(settled.wait(30000));
+    QCOMPARE(pictura::preview_present_level(*f.view), 0);
 }
 
 void LargeDocumentTest::undoDuringAStrokeCancelsIt()

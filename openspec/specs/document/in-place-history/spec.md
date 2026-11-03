@@ -50,8 +50,9 @@ current state keeps its copy of those bands and every other band stays shared.
 Undo, redo and jump SHALL bring the live document to the target state by
 applying the stored tiles to it in place when the target is in the same
 geometry segment, and SHALL report the document rectangle whose composite
-changed, or the whole document when the change cannot be bounded (a geometry or
-document-level change). The canvas SHALL refresh only the reported rectangle.
+changed, or the whole document when the change cannot be bounded (a change of
+document size, mode, depth or profile). The canvas SHALL refresh only the
+reported rectangle.
 
 #### Scenario: Undoing a stroke reports its tiles [iph_undo_damage]
 
@@ -61,9 +62,15 @@ document-level change). The canvas SHALL refresh only the reported rectangle.
 
 #### Scenario: Crossing a geometry change reports the whole document [iph_geometry_damage]
 
-- **WHEN** an undo crosses a resize, crop, or layer-structure change
+- **WHEN** an undo crosses a resize or crop
 - **THEN** the live document equals the target state exactly and the reported
   rectangle is the whole document
+
+#### Scenario: Crossing a layer-structure change reports what changed [iph_structure_damage]
+
+- **WHEN** an undo crosses a layer-structure change at the same document size
+- **THEN** the live document equals the target state exactly and the reported
+  rectangle covers the changed composite tiles, empty when none changed
 
 ### Requirement: One materialized copy per history
 
