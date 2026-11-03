@@ -152,6 +152,8 @@ SessionState loadSession()
     state.enableFloatingDocumentDocking =
         obj.value(QStringLiteral("enableFloatingDocumentDocking")).toBool(true);
     state.zoomResizesWindows = obj.value(QStringLiteral("zoomResizesWindows")).toBool(false);
+    state.checkForUpdatesOnLaunch =
+        obj.value(QStringLiteral("checkForUpdatesOnLaunch")).toBool(true);
     state.typePlaceholderText = obj.value(QStringLiteral("typePlaceholderText")).toBool(true);
     state.typeShowAsianOptions =
         obj.value(QStringLiteral("typeShowAsianOptions")).toBool(false);
@@ -318,6 +320,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("enableFloatingDocumentDocking"),
                state.enableFloatingDocumentDocking);
     obj.insert(QStringLiteral("zoomResizesWindows"), state.zoomResizesWindows);
+    obj.insert(QStringLiteral("checkForUpdatesOnLaunch"), state.checkForUpdatesOnLaunch);
     obj.insert(QStringLiteral("typePlaceholderText"), state.typePlaceholderText);
     obj.insert(QStringLiteral("typeShowAsianOptions"), state.typeShowAsianOptions);
     obj.insert(QStringLiteral("typeMiddleEastern"), state.typeMiddleEastern);

@@ -56,6 +56,8 @@ mapfile -t elves < <(find "$root$prefix" -type f -exec sh -c \
 build_deb() {
     local pkg=$work/deb
     cp -a "$root" "$pkg"
+    install -d "$pkg$prefix/share/kooka-pictura"
+    printf 'deb\n' > "$pkg$prefix/share/kooka-pictura/package-method"
     mkdir -p "$pkg/DEBIAN" "$work/shlibs/debian"
     # dpkg-shlibdeps wants a source package around it; the stub only names one.
     printf 'Source: %s\n\nPackage: %s\nArchitecture: amd64\n' "$name" "$name" \
@@ -117,6 +119,8 @@ $prefix
 %license /usr/share/doc/$name/copyright
 %license /usr/share/doc/$name/THIRD-PARTY-LICENSES
 EOF
+    install -d "$root$prefix/share/kooka-pictura"
+    printf 'rpm\n' > "$root$prefix/share/kooka-pictura/package-method"
     rpmbuild -bb --define "_topdir $work/rpm" "$work/rpm/$name.spec"
     cp "$work"/rpm/RPMS/x86_64/*.rpm "$outdir/KookaPictura-${version}-1.x86_64.rpm"
 }

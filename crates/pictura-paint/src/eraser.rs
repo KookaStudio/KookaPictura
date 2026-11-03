@@ -37,6 +37,7 @@ use crate::stamp::StampSource;
 use crate::stroke::{layer_at, layer_at_mut, parse_layer_path};
 use crate::{tip_coverage, PaintError, PaintMode, Rgba, Stroke, StrokeConfig};
 use pictura_core::{layer_transparency_locked, Channel, Document, Layer, PsdRect};
+use rayon::prelude::*;
 
 /// The Block eraser's side, in *screen* pixels. CS6's Block is a fixed
 /// screen-space square, so its document side is this divided by the zoom.
@@ -363,31 +364,43 @@ pub fn magic_erase(
 
 /// Soften a binary document-sized `mask` (`w` wide) with a 3×3 box, so an
 /// anti-aliased Magic Eraser leaves a smooth edge instead of a stepped one.
+///
+/// Rows run in parallel from column sums; a row whose 3×3 neighbourhood is
+/// all 0 or all 255 has nothing to soften and is copied (#1149).
 pub fn antialias_mask(mask: &[u8], w: usize) -> Vec<u8> {
-    let h = mask.len() / w.max(1);
-    let at = |x: usize, y: usize| mask[y * w + x] as u32;
     let mut out = mask.to_vec();
-    for y in 0..h {
-        for x in 0..w {
-            let (x0, x1, y0, y1) = (
-                x.saturating_sub(1),
-                (x + 1).min(w - 1),
-                y.saturating_sub(1),
-                (y + 1).min(h - 1),
-            );
-            let (mut sum, mut count) = (0, 0);
-            for yy in y0..=y1 {
-                for xx in x0..=x1 {
-                    sum += at(xx, yy);
-                    count += 1;
-                }
-            }
-            // Only the edge softens; a selected pixel never drops below half.
-            if mask[y * w + x] > 0 {
-                out[y * w + x] = (sum / count).max(128) as u8;
-            }
-        }
+    if w == 0 {
+        return out;
     }
+    let h = mask.len() / w;
+    if h == 0 {
+        return out;
+    }
+    out[..w * h]
+        .par_chunks_mut(w)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let (y0, y1) = (y.saturating_sub(1), (y + 1).min(h - 1));
+            let near = &mask[y0 * w..(y1 + 1) * w];
+            if near.iter().all(|&v| v == 255) || !near.iter().any(|&v| v != 0) {
+                return;
+            }
+            let columns: Vec<u32> = (0..w)
+                .map(|x| (y0..=y1).map(|yy| u32::from(mask[yy * w + x])).sum())
+                .collect();
+            let rows = (y1 - y0 + 1) as u32;
+            let own = &mask[y * w..(y + 1) * w];
+            for (x, px) in row.iter_mut().enumerate() {
+                if own[x] == 0 {
+                    continue;
+                }
+                let (x0, x1) = (x.saturating_sub(1), (x + 1).min(w - 1));
+                let sum: u32 = columns[x0..=x1].iter().sum();
+                let count = rows * (x1 - x0 + 1) as u32;
+                // Only the edge softens; a selected pixel never drops below half.
+                *px = (sum / count).max(128) as u8;
+            }
+        });
     out
 }
 
@@ -789,5 +802,62 @@ mod tests {
         assert_eq!(soft[4 * 9 + 4], 255);
         assert!(soft[2 * 9 + 2] < 255 && soft[2 * 9 + 2] >= 128);
         assert_eq!(soft[0], 0);
+    }
+
+    /// The per-pixel 3×3 box the parallel one replaced.
+    fn antialias_reference(mask: &[u8], w: usize) -> Vec<u8> {
+        let h = mask.len() / w;
+        let mut out = mask.to_vec();
+        for y in 0..h {
+            for x in 0..w {
+                let (mut sum, mut count) = (0u32, 0u32);
+                for yy in y.saturating_sub(1)..=(y + 1).min(h - 1) {
+                    for xx in x.saturating_sub(1)..=(x + 1).min(w - 1) {
+                        sum += u32::from(mask[yy * w + xx]);
+                        count += 1;
+                    }
+                }
+                if mask[y * w + x] > 0 {
+                    out[y * w + x] = (sum / count).max(128) as u8;
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_parallel_antialias_matches_the_per_pixel_box() {
+        let mut seed = 0x2545_f491_u32;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed
+        };
+        for (w, h) in [(1, 1), (1, 7), (7, 1), (2, 2), (37, 23)] {
+            // Solid runs, gaps, and partial coverage, plus a ragged tail.
+            let mut mask: Vec<u8> = (0..w * h)
+                .map(|_| match next() % 5 {
+                    0 => 0,
+                    1 => (next() % 256) as u8,
+                    _ => 255,
+                })
+                .collect();
+            for v in &mut mask[..w.min(w * h)] {
+                *v = 255;
+            }
+            // A tail shorter than a row is not part of the mask.
+            let tail: &[u8] = if w > 1 { &[77] } else { &[] };
+            mask.extend_from_slice(tail);
+            assert_eq!(
+                antialias_mask(&mask, w),
+                antialias_reference(&mask[..w * h], w)
+                    .into_iter()
+                    .chain(tail.iter().copied())
+                    .collect::<Vec<_>>(),
+                "{w}x{h}"
+            );
+        }
+        assert_eq!(antialias_mask(&[5, 6], 0), vec![5, 6]);
     }
 }

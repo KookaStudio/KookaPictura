@@ -4,6 +4,7 @@
 #include "color_picker_dialog.h"
 #include "fill_layer_editor.h"
 #include "command_ids.h"
+#include "notification_status_bar.h"
 
 #include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
 #include "fonts.h"
@@ -887,6 +888,9 @@ void PicturaMainWindow::buildDocumentTabs()
 
 void PicturaMainWindow::buildStatusBar()
 {
+    if (!qobject_cast<NotificationStatusBar*>(statusBar())) {
+        setStatusBar(new NotificationStatusBar(this));
+    }
     QStatusBar* bar = statusBar();
     bar->setSizeGripEnabled(false);
     bar->setContentsMargins(6, 0, 0, 0);

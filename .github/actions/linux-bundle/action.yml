@@ -43,6 +43,8 @@ runs:
           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         cmake --build build --parallel
         DESTDIR="$PWD/AppDir" cmake --install build
+        install -d AppDir/usr/share/kooka-pictura
+        printf 'appimage\n' > AppDir/usr/share/kooka-pictura/package-method
 
     # libvulkan and the GPU drivers stay on the host: wgpu dlopens them.
     - name: Deploy Qt and dependencies

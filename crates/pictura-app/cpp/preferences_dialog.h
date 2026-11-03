@@ -34,6 +34,7 @@ public:
     static const QString kGuides;
     static const QString kType;
     static const QString kAgentControl;
+    static const QString kUpdates;
 
     explicit PreferencesDialog(QWidget* parent = nullptr);
 

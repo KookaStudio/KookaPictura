@@ -3,6 +3,7 @@
 
 #include "gpu_probe.h"
 #include "panels/actions_panel.h"
+#include "update_checker.h"
 
 #include "pictura_debug_timing.h"
 #include "type_fonts.h"
@@ -317,7 +318,10 @@ void PicturaMainWindow::saveSession()
     // v9: the ordered per-column layout, in central-splitter order; shared with
     // the workspace store's arrangement shape (see serializeWorkspaceLayout).
     state.panelColumns = serializeWorkspaceLayout();
-    state.schemaVersion = 11;
+    state.schemaVersion = 12;
+    if (auto* checker = findChild<UpdateChecker*>(QStringLiteral("updateChecker"))) {
+        state.checkForUpdatesOnLaunch = checker->settings().automaticChecksEnabled;
+    }
     state.recent = recent_;
     // A refused write means another instance wrote the store after this one
     // launched; leave its workspace snapshot alone too.

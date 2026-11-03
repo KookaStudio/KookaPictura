@@ -80,3 +80,5 @@ parts:
         > /etc/ld.so.conf.d/kde-qt6-core24-sdk.conf
       ldconfig
       craftctl default
+      install -d "$CRAFT_PART_INSTALL/usr/share/kooka-pictura"
+      printf 'snap\n' > "$CRAFT_PART_INSTALL/usr/share/kooka-pictura/package-method"

@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "frame_update.h"
 
 #include <QtGui/QResizeEvent>
 #include <QtGui/QShowEvent>
@@ -150,6 +151,7 @@ void PicturaMainWindow::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
     layoutWorkspaceFrame();
+    scheduleUpdateCheck(*this);
     if (!pendingFloatRestores_.isEmpty()) {
         // Let the compositor apply the restored/maximized frame geometry first;
         // an in-window overlay then converts its stored global rect against it.

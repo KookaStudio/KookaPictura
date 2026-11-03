@@ -36,6 +36,29 @@ void sendMouse(pictura::ImageView* canvas, QEvent::Type type, const QPointF& loc
                       Qt::NoModifier);
     QApplication::sendEvent(canvas, &event);
 }
+
+// The drawn ring's stroke is one device pixel; the snapped centre can put the
+// exact edge pixel either side of the rounded coordinate, so scan a small
+// neighbourhood for the ink.
+QPoint darkPixelNear(const QImage& shot, const QPointF& expected)
+{
+    const int cx = qRound(expected.x());
+    const int cy = qRound(expected.y());
+    for (int radius = 0; radius <= 2; ++radius) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                if (radius > 0 && std::abs(dx) != radius && std::abs(dy) != radius) {
+                    continue;
+                }
+                const QPoint p(cx + dx, cy + dy);
+                if (QRect(QPoint(0, 0), shot.size()).contains(p) && qGray(shot.pixel(p)) < 64) {
+                    return p;
+                }
+            }
+        }
+    }
+    return QPoint(-1, -1);
+}
 }
 
 class CanvasPanTest : public QObject {
@@ -91,10 +114,12 @@ void CanvasPanTest::panHidesTheBrushRing()
     QCoreApplication::processEvents();
     QVERIFY(f.canvas->hasBrushOutline());
 
-    const QPointF center = f.canvas->imageToWidget(QPointF(80, 80));
+    const QPointF raw = QPointF(80, 80) * f.canvas->zoom() + f.canvas->offset();
+    const QPointF center(std::round(raw.x()), std::round(raw.y()));
     const double radius = f.canvas->brushOutlineScreenDiameterForTest() / 2.0;
-    const QPoint ring = QPointF(center.x() + radius, center.y()).toPoint();
     const QImage withRing = f.canvas->grab().toImage();
+    const QPoint ring = darkPixelNear(withRing, QPointF(center.x() + radius, center.y()));
+    QVERIFY2(ring.x() >= 0, "the brush ring is drawn");
 
     f.canvas->setSpacePan(true);
     const QImage panned = f.canvas->grab().toImage();

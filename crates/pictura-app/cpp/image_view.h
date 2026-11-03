@@ -177,11 +177,9 @@ public:
     QPointF brushOutlineImagePos() const { return brushOutlineImagePos_; }
     double brushOutlineDiameterForTest() const { return brushOutlineDiameter_; }
     bool brushOutlineIsSquareForTest() const { return brushOutlineSquare_; }
-    // Device-pixel ring diameter for the current zoom (what a render shows).
-    double brushOutlineScreenDiameterForTest() const
-    {
-        return brushOutlineDiameter_ * zoom_;
-    }
+    // Screen-pixel ring diameter for the current zoom (device pixels at a
+    // device pixel ratio of 1; what a render shows).
+    double brushOutlineScreenDiameterForTest() const { return brushOutlineDeviceDiameter(); }
 
     // Eyedropper sampling ring drawn in image space like the brush outline; the
     // diameter is the Sample Size in image pixels.
@@ -673,6 +671,10 @@ private:
     // The one brush outline: a circle for the brush tools, a square for the
     // Eraser's Block mode.
     void setBrushOutlineShape(double diameter, const QPointF& imagePos, bool square);
+    // The screen-pixel diameter the ring is drawn at: the scaled diameter
+    // rounded to whole pixels, clamped so a sub-pixel brush keeps a cursor.
+    double brushOutlineDeviceDiameter() const;
+    void paintBrushOutline(QPainter& painter);
     void paintCropGroupOverlays(QPainter& painter);
     // The Free Transform reference point marker (image_view_overlays.cpp).
     void paintTransformPivot(QPainter& painter);

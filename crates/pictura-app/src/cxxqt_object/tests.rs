@@ -238,7 +238,7 @@ fn row_thumbnails_respect_contents_and_masks() {
         data: Some(vec![0, 128, 255, 64].into()),
         ..Default::default()
     };
-    let mask_image = mask_thumbnail_image(&mask, 4).expect("mask thumbnail");
+    let mask_image = super::helpers_masks::mask_thumbnail_image(&mask, 4).expect("mask thumbnail");
     assert_eq!((mask_image.width(), mask_image.height()), (4, 4));
     assert_eq!(mask_image.pixel_color(0, 0).red(), 0);
     assert_eq!(mask_image.pixel_color(3, 3).red(), 64);

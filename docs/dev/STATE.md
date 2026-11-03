@@ -13,7 +13,18 @@ Snapshot for resuming after a context break. Update after each milestone.
   instead of copying tiles in, shares the restored plane with the live document
   on an in-place undo, and swaps band-aligned tiles one band per core. On a
   Paint Bucket fill at 1/16 of 16507×16196: region composite 271 ms to 7 ms,
-  capture 84 ms to 15 ms, the undo's history step 81 ms to 28 ms.
+  capture 84 ms to 15 ms, the undo's history step 81 ms to 28 ms. With the
+  Paint Bucket engine work below, the click is 751 ms to 191 ms and the undo
+  109 ms to 70 ms.
+
+- **Paint Bucket fill on large documents** (#1149, OpenSpec change
+  `paint-bucket-fill-responsiveness`). The flood tests each pixel once in
+  parallel and returns an empty or uniform layer whole; the anti-alias box runs
+  in parallel from column sums; a fill reuses the last blend across a run of
+  equal pixels (not Dissolve). `bucket_fill_profile` at 1/16 of 16507×16196
+  (`PICTURA_PROFILE_DIVISOR=4`) on the laptop: click 751 ms to 456 ms (flood
+  85→12, anti-alias 146→6, fill 121→88). The region composite (258 ms) and the
+  history capture and undo (82 ms, 108 ms) are the change above.
 
 - **Move tool press on large documents** (#1148, OpenSpec change
   `move-press-responsiveness`). Switching to the Move tool no longer bakes a

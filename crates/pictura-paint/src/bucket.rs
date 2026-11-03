@@ -17,6 +17,7 @@ use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
 use pictura_core::mask_ops::{self, Border};
 use pictura_core::{Document, PsdRect};
+use rayon::prelude::*;
 
 /// What the Paint Bucket fills with: the options bar's Fill menu.
 #[derive(Clone, Copy, Debug)]
@@ -48,20 +49,20 @@ pub fn flood(
             .zip(&target)
             .all(|(a, b)| a.abs_diff(*b) <= tolerance)
     };
-    if !contiguous {
-        return Some(
-            surface
-                .data
-                .iter()
-                .map(|p| matches(p) as u8 * 255)
-                .collect(),
-        );
+    // Every pixel is tested once, in parallel; the contiguous flood then only
+    // walks the answers. When every pixel matches (an empty or uniform layer)
+    // they are all connected, so the flood is the whole surface (#1149).
+    let matched: Vec<u8> = surface
+        .data
+        .par_iter()
+        .map(|p| matches(p) as u8 * 255)
+        .collect();
+    if !contiguous || !matched.contains(&0) {
+        return Some(matched);
     }
     let mut seeds = vec![0u8; (w * h) as usize];
     seeds[(seed.1 * w + seed.0) as usize] = 1;
-    mask_ops::flood(w as usize, h as usize, &seeds, |_, to| {
-        matches(&surface.data[to])
-    })
+    mask_ops::flood(w as usize, h as usize, &seeds, |_, to| matched[to] != 0)
 }
 
 /// Fill the pixel layer at `path` with `paint` through a document-sized
@@ -351,6 +352,31 @@ mod tests {
         let surface = layer_surface(&rooms(), "0").unwrap();
         assert!(flood(&surface, (40, 10), 32, true).is_none());
         assert!(flood(&surface, (-1, 10), 32, false).is_none());
+    }
+
+    #[test]
+    fn an_empty_layer_floods_whole_and_an_enclosed_seed_does_not() {
+        let empty = layer_surface(&doc(30, 20, [0; 4]), "0").unwrap();
+        for contiguous in [true, false] {
+            let all = flood(&empty, (3, 4), 0, contiguous).unwrap();
+            assert_eq!(all, vec![255u8; 30 * 20]);
+        }
+        // An opaque ring: the pixels outside it match the seed inside but
+        // are not connected to it.
+        let mut d = doc(30, 20, [0; 4]);
+        for y in 5..15 {
+            for x in 5..15 {
+                if x == 5 || x == 14 || y == 5 || y == 14 {
+                    d.layers[0].channels[3].data[y * 30 + x] = 255;
+                }
+            }
+        }
+        let ring = layer_surface(&d, "0").unwrap();
+        let inside = flood(&ring, (10, 10), 0, true).unwrap();
+        assert_eq!(inside.iter().filter(|&&v| v == 255).count(), 8 * 8);
+        assert_eq!(inside[0], 0);
+        let global = flood(&ring, (10, 10), 0, false).unwrap();
+        assert_eq!(global.iter().filter(|&&v| v == 255).count(), 30 * 20 - 36);
     }
 
     #[test]

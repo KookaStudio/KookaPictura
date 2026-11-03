@@ -1,6 +1,7 @@
 #include "frame_includes.h"
 
 #include "fill_layer_editor.h"
+#include "frame_update.h"
 #include "gpu_probe.h"
 
 #include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
@@ -1095,6 +1096,7 @@ void PicturaMainWindow::registerHandlers()
                                 [this]() { return tr("UI Size: %1%").arg(uiScalePercent_); });
 
     registerPreferenceHandlers();
+    registerUpdateHandlers(*this);
     registerShortcutHandlers();
     registerGuideHandlers();
     registerSearchHandlers();
@@ -1137,7 +1139,8 @@ void PicturaMainWindow::registerHandlers()
                "%1\n\n"
                 "Adobe, Photoshop, and Camera Raw are trademarks of Adobe Inc.; "
                 "Kooka Pictura is not affiliated with or endorsed by Adobe.")
-                .arg(aboutText(activeBackendLabel(gpuCompute_))));
+                .arg(aboutText(activeBackendLabel(gpuCompute_)))
+                + QLatin1Char('\n') + QLatin1Char('\n') + aboutVersionText());
     });
 
     // Help > Developer > Design System…: the in-app storybook over the real UI.

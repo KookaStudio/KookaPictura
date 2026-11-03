@@ -4,6 +4,7 @@ use super::edit::{
 };
 use super::helpers::*;
 use super::helpers_composite::*;
+use super::helpers_masks::*;
 use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -466,7 +467,15 @@ impl qobject::PictureView {
                             layer
                                 .mask
                                 .as_ref()
-                                .and_then(|mask| mask_thumbnail_image(mask, thumb))
+                                .and_then(|mask| {
+                                    if entire_document {
+                                        mask_thumbnail_positioned(
+                                            mask, doc.width, doc.height, thumb,
+                                        )
+                                    } else {
+                                        mask_thumbnail_image(mask, thumb)
+                                    }
+                                })
                                 .unwrap_or_default()
                         };
                         // CS6 draws a shape layer as one thumbnail: its outline

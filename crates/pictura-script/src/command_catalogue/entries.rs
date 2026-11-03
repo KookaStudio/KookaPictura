@@ -589,6 +589,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "window.uiDecrease", path: &["Window", "Decrease UI Size"], label: "Decrease UI Size", shortcut: "Ctrl+Alt+-", implemented: true, checkable: false },
     CommandSpec { id: "window.uiReset", path: &["Window", "Reset UI Size"], label: "Reset UI Size", shortcut: "Ctrl+Alt+0", implemented: true, checkable: false },
     CommandSpec { id: "help.search", path: &["Help", "Search…"], label: "Search…", shortcut: "Shift+Space", implemented: true, checkable: false },
+    CommandSpec { id: "help.checkForUpdates", path: &["Help", "Check for Updates…"], label: "Check for Updates…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "help.kooka.pictura.help", path: &["Help", "Kooka Pictura Help"], label: "Kooka Pictura Help", shortcut: "F1", implemented: false, checkable: false },
     CommandSpec { id: "help.online.support", path: &["Help", "Online Support"], label: "Online Support", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "help.full.product.family.help", path: &["Help", "Full Product Family Help"], label: "Full Product Family Help", shortcut: "", implemented: false, checkable: false },

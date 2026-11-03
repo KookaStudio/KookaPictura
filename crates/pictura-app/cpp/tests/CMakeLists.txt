@@ -199,9 +199,13 @@ set(PICTURA_QT_TESTS
     tst_acr_dialog
     tst_canvas_context_menus
     tst_brush_tip_preview
+    tst_brush_outline
     tst_untrusted_input
     tst_theme_apply
     tst_test_support
+    tst_app_updater
+    tst_update_preferences
+    tst_notification_status_bar
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
@@ -287,6 +291,11 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
         )
     endif()
 endforeach()
+
+# The brush-outline suite maps logical canvas coordinates to QImage device
+# indices; pin the device pixel ratio so the two agree.
+set_tests_properties(tst_brush_outline PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1")
 
 # The suites include the generated cxx-qt header, so they follow the bridge
 # stamp like the shell does.

@@ -31,6 +31,7 @@ const QString PreferencesDialog::kUnits = QStringLiteral("Units & Rulers");
 const QString PreferencesDialog::kGuides = QStringLiteral("Guides, Grid, & Slices");
 const QString PreferencesDialog::kType = QStringLiteral("Type");
 const QString PreferencesDialog::kAgentControl = QStringLiteral("Agent Control");
+const QString PreferencesDialog::kUpdates = QStringLiteral("Updates");
 
 namespace {
 
