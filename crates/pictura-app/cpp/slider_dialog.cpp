@@ -1,5 +1,7 @@
 #include "slider_dialog.h"
 
+#include "adjustment_presets.h"
+
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
@@ -19,6 +21,8 @@ SliderDialog::SliderDialog(PictureView* view, const QByteArray& block, const QRe
     outer->setSpacing(16);
 
     auto* left = new QVBoxLayout;
+    addPresetRow(left);
+    rows_ = rows;
     auto* grid = new QGridLayout;
     grid->setColumnStretch(1, 1);
     grid->setVerticalSpacing(6);
@@ -40,6 +44,21 @@ SliderDialog::SliderDialog(PictureView* view, const QByteArray& block, const QRe
     outer->addLayout(buttons);
 
     setMinimumWidth(420);
+}
+
+void SliderDialog::reloadFromBlock()
+{
+    for (const Row& row : rows_) {
+        auto* spin = findChild<QSpinBox*>(row.key);
+        auto* slider = findChild<QSlider*>(row.key + QStringLiteral("Slider"));
+        if (!spin || !slider) {
+            continue;
+        }
+        const QSignalBlocker blockSpin(spin);
+        const QSignalBlocker blockSlider(slider);
+        spin->setValue(qRound(param(row.key)));
+        slider->setValue(spin->value());
+    }
 }
 
 QWidget* SliderDialog::controlForTest(const QString& key) const

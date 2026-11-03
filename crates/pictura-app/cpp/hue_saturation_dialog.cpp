@@ -1,5 +1,6 @@
 #include "hue_saturation_dialog.h"
 
+#include "adjustment_presets.h"
 #include "panels/spectrum_bar.h"
 
 #include <QtWidgets/QCheckBox>
@@ -61,6 +62,11 @@ HueSaturationDialog::HueSaturationDialog(PictureView* view, const QByteArray& bl
         preset_->addItem(QLatin1String(preset.name));
     }
     preset_->insertSeparator(1);
+    const QStringList saved = savedPresetNames(QStringLiteral("hue-saturation"));
+    if (!saved.isEmpty()) {
+        preset_->insertSeparator(preset_->count());
+        preset_->addItems(saved);
+    }
     preset_->insertSeparator(preset_->count());
     preset_->addItem(kCustom);
     presetRow->addWidget(preset_, 1);
@@ -159,7 +165,12 @@ void HueSaturationDialog::applyPreset(int index)
         loadRange();
         return;
     }
+    if (savedPresetNames(QStringLiteral("hue-saturation")).contains(name)) {
+        setBlock(savedPresetBlock(QStringLiteral("hue-saturation"), name));
+    }
 }
+
+void HueSaturationDialog::reloadFromBlock() { loadRange(); }
 
 void HueSaturationDialog::markCustom()
 {

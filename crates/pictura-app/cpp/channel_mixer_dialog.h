@@ -12,8 +12,8 @@ namespace pictura {
 // ramping into their own colour, the sources' Total, Constant, and OK /
 // Cancel / Preview down the right. Each output channel edits its own row.
 // Ported from photorust's ChannelMixerDialog.
-// ponytail: no Preset menu or Monochrome check (the engine keeps a block's
-// monochrome flag as it is; a monochrome block offers its one Gray output).
+// ponytail: no Monochrome check (the engine keeps a block's monochrome flag as
+// it is; a monochrome block offers its one Gray output).
 class ChannelMixerDialog : public AdjustmentDialog {
     Q_OBJECT
 
@@ -22,6 +22,7 @@ public:
                        QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override { loadOutput(); }
 
 protected:
     QString paramKey(const QString& key) const override;

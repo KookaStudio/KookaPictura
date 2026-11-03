@@ -7,6 +7,7 @@
 #include "history_panel.h"
 #include "layers_panel.h"
 #include "paragraph_panel.h"
+#include "properties_panel.h"
 
 #include <QtCore/QHash>
 #include <QtGui/QAction>
@@ -308,7 +309,8 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
          }()},
         {QStringLiteral("propertiesPanel"),
          {
-             dis(QStringLiteral("Save Preset…")),
+             imp(QStringLiteral("Save Preset…"), QStringLiteral("savePreset")),
+             imp(QStringLiteral("Load Preset…"), QStringLiteral("loadPreset")),
              dis(QStringLiteral("Save Black & White Preset")),
              dis(QStringLiteral("Auto Options…"), true),
              dis(QStringLiteral("Curves Display Options…")),
@@ -516,6 +518,10 @@ void PanelGroup::runPanelMenuAction(const QString& actionId)
     }
     if (auto* paragraph = qobject_cast<ParagraphPanel*>(panel)) {
         paragraph->performPanelMenuAction(actionId);
+        return;
+    }
+    if (auto* properties = qobject_cast<PropertiesPanel*>(panel)) {
+        properties->performPanelMenuAction(actionId);
         return;
     }
     // The Adjustments panel is a launcher with no view handle; its adjustment

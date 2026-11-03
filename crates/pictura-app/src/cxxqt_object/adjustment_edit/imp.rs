@@ -13,6 +13,42 @@ pub(super) fn adjustment_data(view: &PictureView, path: &str) -> Option<Adjustme
     pictura_render::resolve_path(doc, path)?.adjustment.clone()
 }
 
+fn block_bytes(data: &AdjustmentData) -> Vec<u8> {
+    data.key
+        .iter()
+        .copied()
+        .chain(data.data.iter().copied())
+        .collect()
+}
+
+fn block_data(block: &[u8]) -> Option<AdjustmentData> {
+    Some(AdjustmentData {
+        key: block.get(..4)?.try_into().ok()?,
+        data: block.get(4..)?.to_vec().into(),
+    })
+}
+
+pub(super) fn adjustment_block(view: &PictureView, path: &QString) -> Vec<u8> {
+    adjustment_data(view, &path.to_string())
+        .as_ref()
+        .map(block_bytes)
+        .unwrap_or_default()
+}
+
+pub(super) fn adjustment_set_block(
+    view: Pin<&mut PictureView>,
+    path: &QString,
+    block: &[u8],
+) -> bool {
+    let Some(next) = block_data(block) else {
+        return false;
+    };
+    edit_adjustment(view, path, |current| {
+        (pictura_render::preset_kind_of(current) == pictura_render::preset_kind_of(&next))
+            .then_some(next)
+    })
+}
+
 pub(super) fn adjustment_page(view: &PictureView, path: &QString) -> QStringList {
     adjustment_data(view, &path.to_string())
         .as_ref()

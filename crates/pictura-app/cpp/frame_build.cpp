@@ -139,6 +139,8 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
             &PicturaMainWindow::convertImageMode);
     connect(propertiesPanel_, &PropertiesPanel::depthRequested, this,
             &PicturaMainWindow::convertImageDepth);
+    setPanelMenuHook(QStringLiteral("propertiesPanel"),
+                     [this](QMenu* menu) { propertiesPanel_->updatePanelMenu(menu); });
 
     adjustmentsPanel_ = new AdjustmentsPanel(this);
     adjustmentsPanel_->setObjectName(QStringLiteral("adjustmentsPanel"));

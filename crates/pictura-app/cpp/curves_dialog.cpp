@@ -1,5 +1,6 @@
 #include "curves_dialog.h"
 
+#include "adjustment_presets.h"
 #include "panels/curve_widget.h"
 
 #include <QtWidgets/QCheckBox>
@@ -33,6 +34,8 @@ CurvesDialog::CurvesDialog(PictureView* view, const QByteArray& block, const QRe
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(14, 12, 14, 12);
     layout->setSpacing(8);
+
+    addPresetRow(layout);
 
     auto* channelRow = new QHBoxLayout;
     channelRow->addWidget(new QLabel(QStringLiteral("Channel:"), this));

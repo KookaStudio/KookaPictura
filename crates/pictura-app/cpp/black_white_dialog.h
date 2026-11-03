@@ -11,7 +11,7 @@ namespace pictura {
 // sliders), Tint with its colour swatch and the Hue / Saturation rows that
 // edit it (enabled with Tint), Preview, and Cancel / OK. Ported from
 // photorust's BlackWhiteDialog.
-// ponytail: no Auto, preset Load / Save, or on-canvas scrubby targeting.
+// ponytail: no Auto, preset Save, or on-canvas scrubby targeting.
 class BlackWhiteDialog : public AdjustmentDialog {
     Q_OBJECT
 
@@ -20,6 +20,7 @@ public:
                      QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override;
 
 private:
     void applyPreset(int index);
@@ -35,6 +36,7 @@ private:
     QSpinBox* hue_ = nullptr;
     QSpinBox* saturation_ = nullptr;
     bool showingTint_ = false;
+    bool loading_ = false;
 };
 
 } // namespace pictura

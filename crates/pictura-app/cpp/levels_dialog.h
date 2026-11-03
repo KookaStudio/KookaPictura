@@ -86,6 +86,7 @@ public:
                  QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
+    void reloadFromBlock() override { loadChannel(); }
 
 private:
     // The current channel's key prefix: "", "red.", "green.", "blue.".
