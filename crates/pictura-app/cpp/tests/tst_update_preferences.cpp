@@ -114,6 +114,7 @@ class UpdatePreferencesTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void launchCheckShowsDialog();
     void bannerShowsVersionTransition();
     void bannerDoesNotStealFocus();
     void laterHidesBanner();
@@ -131,6 +132,23 @@ private slots:
     void menuEntryChecks();
     void aboutShowsVersionAndMethod();
 };
+
+void UpdatePreferencesTest::launchCheckShowsDialog()
+{
+    TestReleaseServer server;
+    QVERIFY(server.start());
+    ScopedEnvironment endpoint("PICTURA_UPDATE_URL", server.url().toString().toUtf8());
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+
+    pictura::PicturaMainWindow window(nullptr, true);
+    window.show();
+    pictura::UpdateBanner* banner = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT((banner = window.findChild<pictura::UpdateBanner*>()), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(banner->isVisible(), 3000);
+    QVERIFY(banner->titleText().contains(QStringLiteral("0.4.0")));
+    QCOMPARE(banner->updateButton()->text(), QStringLiteral("Update now"));
+}
 
 void UpdatePreferencesTest::bannerShowsVersionTransition()
 {
