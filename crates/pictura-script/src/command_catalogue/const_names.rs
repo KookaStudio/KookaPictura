@@ -236,6 +236,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("TypePanelsParagraphStyles", "type.panels.paragraphStyles"),
     ("TypePanelsCharacterStyles", "type.panels.characterStyles"),
     ("HelpSearch", "help.search"),
+    ("HelpCheckForUpdates", "help.checkForUpdates"),
     ("HelpSystemInfo", "help.system.info"),
     ("HelpSubmitIssue", "help.submit.issue"),
     ("HelpAbout", "help.about"),

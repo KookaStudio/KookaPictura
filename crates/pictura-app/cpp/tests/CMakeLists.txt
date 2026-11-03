@@ -203,6 +203,9 @@ set(PICTURA_QT_TESTS
     tst_untrusted_input
     tst_theme_apply
     tst_test_support
+    tst_app_updater
+    tst_update_preferences
+    tst_notification_status_bar
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)

@@ -584,6 +584,7 @@ window.uiEnlarge	Window/Enlarge UI Size	Enlarge UI Size	Ctrl+Alt++	1	0
 window.uiDecrease	Window/Decrease UI Size	Decrease UI Size	Ctrl+Alt+-	1	0
 window.uiReset	Window/Reset UI Size	Reset UI Size	Ctrl+Alt+0	1	0
 help.search	Help/Search…	Search…	Shift+Space	1	0
+help.checkForUpdates	Help/Check for Updates…	Check for Updates…		1	0
 help.kooka.pictura.help	Help/Kooka Pictura Help	Kooka Pictura Help	F1	0	0
 help.online.support	Help/Online Support	Online Support		0	0
 help.full.product.family.help	Help/Full Product Family Help	Full Product Family Help		0	0

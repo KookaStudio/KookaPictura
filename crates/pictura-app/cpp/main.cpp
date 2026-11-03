@@ -177,6 +177,12 @@ int main(int argc, char* argv[])
         }
     }
 
+    // A headless, self-test, or theme-dump run must not touch the network; the
+    // frame's update checker reads this before it starts.
+    if (selfTest || headless || dumpTheme) {
+        qputenv("PICTURA_DISABLE_UPDATE_CHECK", "1");
+    }
+
     // The theme dump is a machine-readable read of the token contract; it needs
     // no window, session store, or document.
     if (dumpTheme) {
@@ -270,7 +276,7 @@ int main(int argc, char* argv[])
     // no-op; Windows probes candidates in a child process.
     pictura::prepareGpuBackend();
 
-    pictura::PicturaMainWindow frame;
+    pictura::PicturaMainWindow frame(nullptr, !selfTest && !headless);
     // Crash recovery runs only for an interactive launch: the self-test, a
     // headless run, and control mode must neither write snapshots nor raise the
     // recovery prompt.

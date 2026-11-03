@@ -118,15 +118,13 @@ QJsonArray workspacePresets(const QString& name);
 // lives in its own cxx-qt PictureView.
 class PicturaMainWindow : public QMainWindow, public PanelMenuHookStore {
     Q_OBJECT
-
 public:
     enum class ScreenMode { Standard, FullWithMenuBar, Full };
-
-    explicit PicturaMainWindow(QWidget* parent = nullptr);
+    explicit PicturaMainWindow(QWidget* parent = nullptr, bool enableUpdateCheck = true);
     ~PicturaMainWindow() override;
-
     // Test hooks.
     CommandRegistry* registry() const { return registry_; }
+    bool updateChecksEnabled() const { return updateChecksEnabled_; }
     ImageView* imageView() const;       // active canvas, or nullptr with no document
     PictureView* activeView() const;    // active document, or nullptr
     // Creates two documents and drags the last tab before its neighbour through
@@ -139,7 +137,8 @@ public:
     PanelColumn* panelColumn() const { return panelColumn_; }
     PreferencesDialog* preferencesDialog() const { return preferencesDialog_; }
     void showPreferences(const QString& page);
-
+    void saveSessionNow() { saveSession(); }
+    bool saveAllDocumentsForRestart();
     // M43 multi-column host. Columns live in the central splitter around the
     // document tabs; a column's side is its splitter order relative to the
     // tabs, never its geometry. M44 W5: `anchor` inserts the new column
@@ -1108,6 +1107,7 @@ private:
     bool openDocumentsAsTabs_ = true;
     bool floatingDocumentDocking_ = true;
     bool zoomResizesWindows_ = false;
+    bool updateChecksEnabled_ = true;
     // Set while a Hand pan is fanned out to the other windows, so the fan-out
     // never echoes.
     bool scrollingAllWindows_ = false;

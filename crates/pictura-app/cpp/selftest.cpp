@@ -3445,7 +3445,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                                    QStringLiteral("File Handling"),
                                    QStringLiteral("Performance"), QStringLiteral("Units & Rulers"),
                                    QStringLiteral("Guides, Grid, & Slices"),
-                                   QStringLiteral("Type")});
+                                   QStringLiteral("Type"), QStringLiteral("Updates")});
         prefsOpen = openedGeneral && openedInterface;
         if (prefs) {
             auto* prefsToolbox = frame.findChild<pictura::Toolbox*>(QStringLiteral("toolsPanel"));

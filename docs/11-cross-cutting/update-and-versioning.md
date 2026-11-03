@@ -79,8 +79,8 @@
 | Plugin ABI minor | u32 | `0` | host-enforced | Host hides fields newer than its own. |
 | Settings schema version | u32 | `1` | monotonic | Drives migration chain. |
 | Update channel | enum | `stable` | stable, beta, nightly | Flatpak branch or AppImage update-info. |
-| Check-for-updates | enum | `manual` | off, manual, on-launch | Default off/manual for privacy. |
-| Update method | enum | `package` | flatpak, appimage, distro | Detected at runtime; distro builds never self-update. |
+| Check-for-updates | enum | `on-launch` | off, manual, on-launch | On by default with an opt-out; no identifier is sent. |
+| Update method | enum | `package` | flatpak, snap, appimage, deb, rpm, windows, macos | Detected at runtime from the package marker, environment, path, or package database. |
 | Keep previous version | bool | on (AppImage) | on/off | AppImage `.zs-old` backup semantics. |
 
 ## Algorithms & pipeline
@@ -150,13 +150,16 @@ mutating `_v1`. The plugin manager surfaces the mismatch reason.
 
 ### Update delivery on Linux
 
-Three supported channels with different ownership:
+Each package type owns a different update path:
 
 | Format | Update owner | Mechanism | Version visibility |
 |---|---|---|---|
 | **Flatpak** | Flatpak/OSTree + Flathub | `flatpak update`; OSTree deduplicated/delta pulls; branch = channel; signed remote; rollback supported | OSTree commit + app version in metainfo |
-| **AppImage** | The application/its self-updater | Embedded update-info; `AppImageUpdate`/`libappimageupdate`; zsync delta; signature check; new file beside old | Embedded update-info; `.zs-old` backup |
-| **Distro `.deb`/`.rpm`** | The distribution package manager | apt/dnf/pacman; AppStream release notes | Package version only |
+| **Snap** | snapd + the store | `snap refresh`; channel = track/risk | Snap revision |
+| **AppImage** | The application | Full verified asset download; SHA-256; atomic replace beside the old file; `.old` backup; relaunch | Embedded version + release asset |
+| **Debian `.deb` / RPM `.rpm`** | The application + the package manager | Download the verified release package, install it with `pkexec` through apt/dnf (or rpm), then relaunch | Package manager database + the package marker |
+| **Windows setup** | The application + the NSIS installer | Download the verified setup, launch it, quit; the installer relaunches the app | Installer registry + the package marker |
+| **macOS DMG** | The application + the DMG | Download the verified DMG, open it, and offer to quit so the app can be replaced | App bundle marker + release asset |
 
 - **Flatpak.** Builds are published to an OSTree repository; `flatpak update`
   pulls changes. Branch names encode the channel (`stable`, `beta`, `nightly`).
@@ -168,16 +171,24 @@ Three supported channels with different ownership:
   explicit consent**, respect system/user/ENV "do not check/do not update" flags,
   do not nag on first launch, use a GUI-consistent update experience, and keep
   the app usable during the update.
-- **Distro packages.** The package manager owns versioning; the app must **not**
-  self-update (doing so fights the package database). Update checks are the
-  package manager's job; the app only displays its version and points users to
-  the distro for updates.
-- **Privacy.** Update checks are off/manual by default and, when enabled, send
-  no unique identifier. This matches the AppImage rule that forced version
-  checks are a form of tracking.
-- **Runtime detection.** The app detects how it was installed (Flatpak sandbox
-  marker, `$APPIMAGE`, package-manager metadata) and selects the matching path;
-  it never offers an update method it cannot complete.
+- **Debian/RPM packages.** The app downloads the release `.deb`/`.rpm`, verifies
+  its SHA-256 digest, and asks the system package manager to install it with
+  elevation (`pkexec apt-get install -y` or `pkexec dnf install -y`). The
+  package manager remains the database owner; the app never rewrites package
+  files directly. If `pkexec` or the package manager is unavailable, the app
+  offers the release page instead.
+- **Flatpak/Snap packages.** The store owns the files; the app never downloads
+  or replaces them. It shows `flatpak update …` or `snap refresh …` and the
+  release page.
+- **Privacy.** Update checks are on at launch by default, with a
+  **Check for updates automatically** opt-out in the dialog and Preferences.
+  The request sends no unique identifier; GitHub sees the client IP.
+- **Runtime detection.** Every package carries a `package-method` marker next to
+  its executable (`appimage`, `flatpak`, `snap`, `deb`, `rpm`,
+  `windows-setup`, `windows-portable`, `macos-dmg`). The app reads that marker
+  first, then the sandbox environment, the executable path, the Windows install
+  marker, the macOS bundle, and the package database. If none applies, it treats
+  the build as development and offers only the release page.
 
 ## Rust module mapping
 
@@ -260,11 +271,11 @@ that must match the CS6 docked-dialog feel; the update checker is a headless
   `opDocumentVersion`; read-only + warning path applies.
 - **AppImage in a read-only directory** — update cannot write a sibling file;
   surface a clear error, do not corrupt the running image.
-- **Distro build offering self-update** — blocked at runtime detection.
+- **Flatpak/Snap build offering self-update** — blocked; the store command is shown. deb/rpm update through the package manager.
 - **Update while documents are open** — prompt to save/restart; never kill a
   document or an in-flight save.
-- **Offline / metered** — checks are manual by default and respect the
-  do-not-check flags.
+- **Offline / metered** — an automatic check is silent; a manual check reports
+  the failure and respects the do-not-check flags.
 - **Qt/Rust toolchain skew in Flatpak** — the runtime pins Qt; version mismatch
   with a distro build must be reported, not crash.
 - **Clock/timezone** — build timestamps are informational only; never used for
@@ -294,11 +305,12 @@ that must match the CS6 docked-dialog feel; the update checker is a headless
 8. Given the Flatpak build, `flatpak update` moves between commits/branches and
    a rollback restores the previous commit; the app reports the OSTree commit it
    is running.
-9. Given an AppImage with embedded update-info and an update available, the app
-   downloads only on explicit consent, keeps the old file as `.zs-old`, and
-   remains usable during the update.
-10. Given a distro-installed build, no in-app self-update is offered and the
-    update hint points at the package manager.
+9. Given an AppImage and an update available, the app downloads the verified
+   asset only on explicit consent, keeps the old file as `.old`, and remains
+   usable during the update.
+10. Given a deb or rpm build, the app downloads the verified package, installs
+    it through the system package manager with elevation, and relaunches; a
+    Flatpak or Snap build shows the store command instead.
 11. Given a check-for-updates setting of `off`, no network request is made at
     launch.
 12. Given an update is available while a document is open, the app prompts to

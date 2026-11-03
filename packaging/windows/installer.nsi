@@ -95,6 +95,9 @@ Section "Kooka Pictura" SecMain
   ; The staged tree is already self-contained: pictura.exe, the Qt DLLs, the
   ; platforms plugins, and the MSVC runtime that windeployqt copied.
   File /r "${STAGE_DIR}\*"
+  FileOpen $0 "$INSTDIR\package-method" w
+  FileWrite $0 "windows-setup$\r$\n"
+  FileClose $0
   FileOpen $0 "$INSTDIR\.kooka-pictura-install" w
   FileWrite $0 "${VERSION}$\r$\n"
   FileClose $0

@@ -8,6 +8,7 @@
 #include "file_drop_router.h"
 #include "fonts.h"
 #include "frame_canvas.h"
+#include "frame_update.h"
 #include "gpu_probe.h"
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
@@ -51,9 +52,10 @@ bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded)
 
 bool saveActiveInProgress() { return saveActiveOrigin; }
 
-PicturaMainWindow::PicturaMainWindow(QWidget* parent)
+PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     : QMainWindow(parent)
 {
+    updateChecksEnabled_ = enableUpdateCheck;
     tabs_ = new QTabWidget(this);
     tabs_->setObjectName(QStringLiteral("documentTabs"));
     tabs_->tabBar()->setObjectName(QStringLiteral("documentTabBar"));
@@ -162,6 +164,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     }
     gpuCandidatesAvailable_ = gpuAvailable_ || gpuChainHasResetPath();
     registerHandlers();
+    if (updateChecksEnabled_ && !qEnvironmentVariableIsSet("PICTURA_DISABLE_UPDATE_CHECK")) {
+        ensureUpdateChecker(*this, state.checkForUpdatesOnLaunch);
+    }
     const auto saveToRecordedPath = [this](const CommandParams& params) {
         return saveActiveAs(params.values.value(QStringLiteral("in")).toString());
     };
@@ -999,27 +1004,34 @@ void PicturaMainWindow::updateWindowTitle()
     setWindowTitle(QStringLiteral("%1 — Kooka Pictura").arg(name));
 }
 
-void PicturaMainWindow::closeEvent(QCloseEvent* event)
+bool PicturaMainWindow::saveAllDocumentsForRestart()
 {
-    cancelAllOpens();
     for (int i = 0; i < docs_.size(); ++i) {
         if (!isDocumentDirty(i)) {
             continue;
         }
         switch (askUnsaved(this, documentName(i))) {
         case UnsavedChoice::Cancel:
-            event->ignore();
-            return;
+            return false;
         case UnsavedChoice::Save:
             setActiveDocumentIndex(i);
             if (!saveActive()) {
-                event->ignore();
-                return;
+                return false;
             }
             break;
         case UnsavedChoice::Discard:
             break;
         }
+    }
+    return true;
+}
+
+void PicturaMainWindow::closeEvent(QCloseEvent* event)
+{
+    cancelAllOpens();
+    if (!saveAllDocumentsForRestart()) {
+        event->ignore();
+        return;
     }
     for (NumericField* field : findChildren<NumericField*>()) field->commitPendingEdit();
     saveSession();

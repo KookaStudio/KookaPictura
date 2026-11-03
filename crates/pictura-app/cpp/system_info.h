@@ -20,6 +20,7 @@ struct MonitorInfo {
 struct SystemInfo {
     QString appVersion;
     QString buildType;
+    QString packageMethod;
     QString qtVersion;
     QString osType;
     QString osVersion;

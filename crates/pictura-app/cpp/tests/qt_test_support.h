@@ -58,7 +58,7 @@ private:
 
 inline std::unique_ptr<PicturaMainWindow> makeMainWindow(QWidget* parent = nullptr)
 {
-    return std::make_unique<PicturaMainWindow>(parent);
+    return std::make_unique<PicturaMainWindow>(parent, false);
 }
 
 // The test functions of a suite, in the order QTest finds them.

@@ -26,6 +26,7 @@ class SystemInfoTest : public QObject {
 private slots:
     void initTestCase();
     void reportHasAllSections();
+    void packageMethodIsReported();
     void reportHasGpuFields();
     void reportUsesUnavailable();
     void dialogCopiesReport();
@@ -155,6 +156,14 @@ void SystemInfoTest::reportHasAllSections()
          }) {
         QVERIFY2(report.contains(text), qPrintable(text));
     }
+}
+
+void SystemInfoTest::packageMethodIsReported()
+{
+    pictura::SystemInfo info = fixture();
+    info.packageMethod = QStringLiteral("AppImage");
+    const QString report = pictura::formatSystemInfo(info);
+    QVERIFY(report.contains(QStringLiteral("Package: AppImage")));
 }
 
 void SystemInfoTest::reportHasGpuFields()
