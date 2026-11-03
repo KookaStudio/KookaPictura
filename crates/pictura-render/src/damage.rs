@@ -7,6 +7,14 @@
 //! [`pictura_core::LayerStack`] releases or re-bases it when a base is removed
 //! or moved.
 //!
+//! A clipped member is different: it only shows through its base's rendered
+//! alpha, so the base's own reach bounds the whole run. Reporting that reach
+//! keeps a reorder inside the run bounded instead of unioning a full-canvas
+//! member. This is safe on both sides of a move because `move_layer_to` unions
+//! the before and after reaches: a member that leaves the run is reported
+//! unclipped on its side, and a non-clipped base keeps the conservative union
+//! with its run (moving the base releases the run).
+//!
 //! `None` means the reach cannot be proven, so the caller must fall back to the
 //! full recomposite. A path that the edit creates is omitted from the before
 //! set and included in the after set; a path the edit removes is included only
@@ -43,12 +51,22 @@ pub fn influence(doc: &Document, path: &str) -> Option<PsdRect> {
 /// stays bounded, which a structural edit cannot claim.
 pub fn content_influence(doc: &Document, path: &str) -> Option<PsdRect> {
     let layer = resolve_path(doc, path)?;
-    let mut rect = influence_of(doc, layer)?;
     let index: usize = path.rsplit('/').next()?.parse().ok()?;
     let siblings: &[Layer] = match parent_path(path) {
         Some(parent) => &resolve_path(doc, parent)?.children,
         None => &doc.layers,
     };
+    // A clipped member is confined to its base's rendered alpha, so the base's
+    // reach bounds the whole run. An unbased run (no non-clipped sibling, or a
+    // Background base) keeps the conservative union below.
+    if layer.clipping {
+        if let Some(base) = base_below(siblings, index) {
+            if !siblings[base].background {
+                return clip_to_canvas(doc, influence_of(doc, &siblings[base])?);
+            }
+        }
+    }
+    let mut rect = influence_of(doc, layer)?;
     for above in siblings.iter().skip(index + 1) {
         if !above.clipping {
             break;
@@ -105,6 +123,12 @@ fn ink_bounds(layer: &Layer) -> Option<PsdRect> {
         bottom: layer.rect.top + bottom as i32 + 1,
         right: layer.rect.left + right as i32 + 1,
     })
+}
+
+/// The nearest non-clipped sibling below `index`: the base of the run a clipped
+/// layer at `index` belongs to.
+fn base_below(siblings: &[Layer], index: usize) -> Option<usize> {
+    (0..index).rev().find(|&i| !siblings[i].clipping)
 }
 
 fn canvas_rect(doc: &Document) -> PsdRect {
@@ -326,6 +350,133 @@ mod tests {
         ]);
         let base = influence(&d, "0").expect("bounded");
         assert!(base.left <= 5 && base.top <= 5 && base.right >= 25 && base.bottom >= H as i32);
+        // The clipped member is confined to the base, so its own larger reach
+        // does not widen the damage.
+        assert_eq!(influence(&d, "1"), Some(rect(0, 0, 10, 10)));
+    }
+
+    #[test]
+    fn clipped_member_reorder_is_bounded_by_the_base() {
+        let mut d = doc(vec![
+            pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
+            pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
+            Layer {
+                clipping: true,
+                ..pixel_layer("clip", rect(0, 0, W as i32, H as i32), 30, 255)
+            },
+            Layer {
+                clipping: true,
+                ..pixel_layer("clip2", rect(0, 0, W as i32, H as i32), 40, 255)
+            },
+        ]);
+        let base_rect = rect(4, 5, 6, 7);
+        let before = influence(&d, "2").expect("bounded before");
+        assert_eq!(before, base_rect);
+        assert!(crate::move_path(&mut d, "2", 1));
+        assert!(d.layers[3].clipping, "the reorder stays in the run");
+        let after = influence(&d, "3").expect("bounded after");
+        let damage = union(Some(before), Some(after)).expect("bounded");
+        assert_eq!(damage, base_rect);
+    }
+
+    #[test]
+    fn moving_the_base_out_keeps_the_released_run_covered() {
+        let mut d = doc(vec![
+            pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
+            pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
+            Layer {
+                clipping: true,
+                ..pixel_layer("clip", rect(0, 0, W as i32, H as i32), 30, 255)
+            },
+        ]);
+        let canvas = rect(0, 0, W as i32, H as i32);
+        let before = influence(&d, "1").expect("bounded before");
+        assert_eq!(before, canvas, "the base move keeps its released run");
+        assert!(crate::move_path(&mut d, "1", 1));
+        assert!(!d.layers[1].clipping, "the run is released");
+        let after = influence(&d, "2").expect("bounded after");
+        let damage = union(Some(before), Some(after)).expect("bounded");
+        assert_eq!(damage, canvas, "the released run is never under-bounded");
+    }
+
+    #[test]
+    fn moving_a_clipped_layer_out_covers_old_base_and_own_reach() {
+        let mut d = doc(vec![
+            pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
+            pixel_layer("base", rect(2, 3, 4, 5), 20, 255),
+            Layer {
+                clipping: true,
+                ..pixel_layer("clip", rect(10, 20, 5, 4), 30, 255)
+            },
+            pixel_layer("top", rect(0, 0, W as i32, H as i32), 40, 255),
+        ]);
+        let base_rect = rect(2, 3, 4, 5);
+        let own_rect = rect(10, 20, 5, 4);
+        let before = influence(&d, "2").expect("bounded before");
+        assert_eq!(before, base_rect);
+        assert!(crate::move_path(&mut d, "2", 1));
+        assert!(!d.layers[3].clipping, "leaving the run releases it");
+        let after = influence(&d, "3").expect("bounded after");
+        assert_eq!(after, own_rect);
+        let damage = union(Some(before), Some(after)).expect("bounded");
+        assert_eq!(
+            damage,
+            union(Some(base_rect), Some(own_rect)).expect("union")
+        );
+    }
+
+    #[test]
+    fn unbased_clipped_run_keeps_the_conservative_union() {
+        let d = doc(vec![
+            Layer {
+                clipping: true,
+                ..pixel_layer("clip", rect(0, 0, 10, 10), 10, 255)
+            },
+            Layer {
+                clipping: true,
+                ..pixel_layer("clip2", rect(20, 10, 5, 5), 20, 255)
+            },
+        ]);
+        assert_eq!(influence(&d, "0"), Some(rect(0, 0, 15, 24)));
+    }
+
+    #[test]
+    fn bounded_clipping_damage_matches_the_full_composite() {
+        let d = doc(vec![
+            pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
+            pixel_layer("base", rect(4, 5, 10, 8), 20, 255),
+            Layer {
+                clipping: true,
+                ..pixel_layer("clip", rect(0, 0, W as i32, H as i32), 200, 255)
+            },
+        ]);
+        let damage = influence(&d, "2").expect("bounded");
+        let full = crate::composite_rgba(&d);
+        let region = crate::composite_rgba_region(
+            &d,
+            damage.left as u32,
+            damage.top as u32,
+            damage.width() as u32,
+            damage.height() as u32,
+        );
+        assert_eq!(region, sub_buffer(&full, damage));
+    }
+
+    fn sub_buffer(full: &pictura_core::PixelBuffer, rect: PsdRect) -> pictura_core::PixelBuffer {
+        let (rw, rh) = (rect.width() as u32, rect.height() as u32);
+        let plane = (full.width * full.height) as usize;
+        let mut out = pictura_core::PixelBuffer::new(rw, rh, 4);
+        for channel in 0..4 {
+            for row in 0..rh as usize {
+                let src = channel * plane
+                    + (rect.top as usize + row) * full.width as usize
+                    + rect.left as usize;
+                let dst = channel * (rw * rh) as usize + row * rw as usize;
+                out.data[dst..dst + rw as usize]
+                    .copy_from_slice(&full.data[src..src + rw as usize]);
+            }
+        }
+        out
     }
 
     #[test]

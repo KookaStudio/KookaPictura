@@ -37,10 +37,11 @@ pub(super) enum Edit {
     /// The edit invalidates positional links. `damage` bounds the regional
     /// refresh; `None` means full.
     Structural { damage: Option<Vec<PsdRect>> },
-    /// A content-neutral layer or group insertion (see
-    /// `pictura_render::insertion_is_content_neutral`): clear the positional
-    /// links like [`Edit::Structural`], but the stored composite and the
-    /// display already match the new tree, so nothing is composited.
+    /// A content-neutral layer or group insertion or move (see
+    /// `pictura_render::insertion_is_content_neutral` and
+    /// `pictura_render::move_is_content_neutral`): clear the positional links
+    /// like [`Edit::Structural`], but the stored composite and the display
+    /// already match the new tree, so nothing is composited.
     Inserted,
 }
 

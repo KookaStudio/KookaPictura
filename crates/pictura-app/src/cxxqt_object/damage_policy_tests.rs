@@ -1,11 +1,11 @@
 //! The described-damage policy: bounded edits use a region, unbounded ones a
 //! full recomposite.
 
-use crate::cxxqt_object::document_session::StrokeSession;
+use crate::cxxqt_object::document_session::{DocumentSession, StrokeSession};
 use crate::cxxqt_object::edit::{
     effect_of, insertion_edit, regions_influence, structural_paths, Edit, Effect,
 };
-use crate::cxxqt_object::impl_layers::changed_property_region;
+use crate::cxxqt_object::impl_layers::{changed_property_region, move_edit};
 use crate::cxxqt_object::metrics::{set_for_this_thread, with};
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::cxxqt_object::PictureViewRust;
@@ -453,6 +453,42 @@ fn neutral_insertion_still_yields_inserted() {
         Edit::Inserted,
         "a content-neutral insertion must not recomposite"
     );
+}
+
+#[test]
+fn neutral_move_still_yields_inserted() {
+    set_for_this_thread(true);
+    let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![
+        pixel_layer("base", 8, 8, (0, 0, 0)),
+        Layer {
+            clipping: true,
+            ..pixel_layer("clip", 8, 8, (10, 20, 30))
+        },
+    ]);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let inserted = pictura_render::add_layer_in(&mut doc, "", "");
+    assert!(!inserted.is_empty());
+    let before_doc = doc.clone();
+    let moved = pictura_render::move_path_to_result(&mut doc, &inserted, "1", 1)
+        .expect("move into the run");
+    assert!(doc.layers[1].clipping, "the empty layer joins the run");
+    let edit = move_edit(Some(&before_doc), Some(&doc), &inserted, Some(&moved), None);
+    assert_eq!(
+        edit,
+        Edit::Inserted,
+        "a content-neutral move must not recomposite"
+    );
+    assert_eq!(doc.composite, pictura_render::composite_rgba(&doc));
+
+    let mut view = PictureViewRust {
+        session: DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    let before = full_composites();
+    view.apply_edit("Move Layer", edit);
+    assert_eq!(full_composites(), before, "the neutral move composited");
 }
 
 #[test]

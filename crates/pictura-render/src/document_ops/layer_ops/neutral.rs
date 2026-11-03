@@ -1,5 +1,6 @@
-//! Whether a just-inserted node leaves the document composite unchanged, so the
-//! app can skip the recomposite for New Layer / New Group.
+//! Whether a just-inserted or just-moved node leaves the document composite
+//! unchanged, so the app can skip the recomposite for New Layer / New Group and
+//! for moves of an inert or hidden layer.
 
 use pictura_core::{BitDepth, BlendMode, ColorMode, Document, Knockout, Layer};
 use rayon::prelude::*;
@@ -34,7 +35,7 @@ pub fn insertion_is_content_neutral(doc: &Document, path: &str) -> bool {
         .checked_sub(1)
         .and_then(|i| container.get(i))
         .is_some_and(|l| l.clipping);
-    had_layers && is_inert(node) && !above_clipped && (!node.clipping || joins_run)
+    had_layers && layer_is_inert(node) && !above_clipped && (!node.clipping || joins_run)
 }
 
 /// Tagged blocks that carry layer metadata and draw nothing.
@@ -106,7 +107,7 @@ fn is_plain_opaque(node: &Layer) -> bool {
 
 /// A node that draws nothing in any blend mode: an empty group, or a pixel
 /// layer whose alpha is all zero, with nothing that renders around it.
-fn is_inert(node: &Layer) -> bool {
+pub(crate) fn layer_is_inert(node: &Layer) -> bool {
     let bare = node.mask.is_none()
         && node.vector_mask.is_none()
         && node.adjustment.is_none()
@@ -126,6 +127,59 @@ fn is_inert(node: &Layer) -> bool {
         .iter()
         .find(|c| c.id == -1)
         .is_some_and(|alpha| alpha.data.iter().all(|&a| a == 0))
+}
+
+/// Whether moving the node at `path_before` to `path_after` leaves the document
+/// composite unchanged. `path_before` and `path_after` must name the same node
+/// on either side of the move.
+///
+/// A hidden node draws nothing, and an inert node (an empty group or a pixel
+/// layer with all-zero alpha and nothing that renders around it) draws nothing
+/// either, so the move is neutral unless the node is a clipping base on either
+/// side. A base is a non-clipped layer with a clipped sibling directly above
+/// it: the run above clips to its alpha, and a hidden base hides that run. A
+/// clipped member is never a base, so an inert or hidden member can move within
+/// or out of a run without changing any other layer's base.
+pub fn move_is_content_neutral(
+    doc_before: &Document,
+    path_before: &str,
+    doc_after: &Document,
+    path_after: &str,
+) -> bool {
+    let Some(before) = node_at(doc_before, path_before) else {
+        return false;
+    };
+    let Some(after) = node_at(doc_after, path_after) else {
+        return false;
+    };
+    let draws_nothing = |node: &Layer| layer_is_inert(node) || !node.visible;
+    draws_nothing(before.node)
+        && draws_nothing(after.node)
+        && !is_clipping_base(before.container, before.at)
+        && !is_clipping_base(after.container, after.at)
+}
+
+struct NodeAt<'a> {
+    node: &'a Layer,
+    container: &'a [Layer],
+    at: usize,
+}
+
+fn node_at<'a>(doc: &'a Document, path: &str) -> Option<NodeAt<'a>> {
+    let segments = parse_path(path)?;
+    let (&at, parent) = segments.split_last()?;
+    let container = container_of(doc, parent)?;
+    let node = container.get(at)?;
+    Some(NodeAt {
+        node,
+        container,
+        at,
+    })
+}
+
+fn is_clipping_base(container: &[Layer], at: usize) -> bool {
+    container.get(at).is_some_and(|node| !node.clipping)
+        && container.get(at + 1).is_some_and(|above| above.clipping)
 }
 
 #[cfg(test)]
@@ -252,6 +306,18 @@ mod tests {
         layer
     }
 
+    fn move_to(before: &Document, path: &str, target: &str, mode: i32) -> (Document, String) {
+        let mut after = before.clone();
+        let moved = crate::move_path_to_result(&mut after, path, target, mode).expect("move");
+        (after, moved)
+    }
+
+    fn hidden(name: &str, value: u8) -> Layer {
+        let mut layer = pixel(name, value, 255);
+        layer.visible = false;
+        layer
+    }
+
     #[test]
     fn neutral_duplicates_preserve_composite() {
         let top = pixel("top", 200, 120);
@@ -365,6 +431,179 @@ mod tests {
         let alpha = copy.channels.iter().find(|c| c.id == -1).unwrap();
         assert_eq!(alpha.data.len(), (W * H) as usize);
         assert!(alpha.data.iter().all(|&a| a == 255));
+    }
+
+    #[test]
+    fn inert_move_into_a_run_is_neutral() {
+        let before = doc(vec![
+            pixel("base", 90, 255),
+            clipped("clip", 40),
+            pixel("new", 0, 0),
+        ]);
+        let (after, moved) = move_to(&before, "2", "1", 1);
+        assert_eq!(moved, "1");
+        assert!(after.layers[1].clipping, "the inert layer joins the run");
+        assert!(move_is_content_neutral(&before, "2", &after, &moved));
+    }
+
+    #[test]
+    fn inert_move_out_of_a_run_is_neutral() {
+        let before = doc(vec![
+            pixel("base", 90, 255),
+            Layer {
+                clipping: true,
+                ..pixel("new", 0, 0)
+            },
+            pixel("top", 50, 255),
+        ]);
+        let (after, moved) = move_to(&before, "1", "2", 0);
+        assert_eq!(moved, "2");
+        assert!(!after.layers[2].clipping, "the inert layer leaves the run");
+        assert!(move_is_content_neutral(&before, "1", &after, &moved));
+    }
+
+    #[test]
+    fn inert_base_before_is_not_neutral() {
+        let before = doc(vec![
+            pixel("base", 0, 0),
+            clipped("clip", 40),
+            pixel("top", 50, 255),
+        ]);
+        let (after, moved) = move_to(&before, "0", "2", 0);
+        assert!(!move_is_content_neutral(&before, "0", &after, &moved));
+    }
+
+    #[test]
+    fn inert_base_after_is_not_neutral() {
+        let before = doc(vec![
+            pixel("base", 90, 255),
+            clipped("clip", 40),
+            pixel("new", 0, 0),
+        ]);
+        let mut after = doc(vec![
+            pixel("base", 90, 255),
+            pixel("new", 0, 0),
+            clipped("clip", 40),
+        ]);
+        after.layers[1].clipping = false;
+        assert!(!move_is_content_neutral(&before, "2", &after, "1"));
+    }
+
+    #[test]
+    fn hidden_content_move_is_neutral() {
+        let before = doc(vec![
+            pixel("base", 90, 255),
+            clipped("clip", 40),
+            hidden("hidden", 50),
+        ]);
+        let (after, moved) = move_to(&before, "2", "1", 1);
+        assert_eq!(moved, "1");
+        assert!(after.layers[1].clipping);
+        assert!(move_is_content_neutral(&before, "2", &after, &moved));
+    }
+
+    #[test]
+    fn hidden_base_is_not_neutral() {
+        let before = doc(vec![
+            hidden("hidden", 50),
+            clipped("clip", 40),
+            pixel("top", 50, 255),
+        ]);
+        let (after, moved) = move_to(&before, "0", "2", 0);
+        assert!(!move_is_content_neutral(&before, "0", &after, &moved));
+    }
+
+    #[test]
+    fn content_move_is_not_neutral() {
+        let before = doc(vec![
+            pixel("base", 90, 255),
+            clipped("clip", 40),
+            pixel("new", 50, 255),
+        ]);
+        let (after, moved) = move_to(&before, "2", "1", 1);
+        assert!(!move_is_content_neutral(&before, "2", &after, &moved));
+    }
+
+    #[test]
+    fn empty_group_move_is_neutral_unless_it_is_a_base() {
+        let before = doc(vec![
+            pixel("base", 90, 255),
+            clipped("clip", 40),
+            group(BlendMode::Normal, Vec::new()),
+        ]);
+        let (after, moved) = move_to(&before, "2", "1", 1);
+        assert!(move_is_content_neutral(&before, "2", &after, &moved));
+
+        let before = doc(vec![
+            group(BlendMode::Normal, Vec::new()),
+            clipped("clip", 40),
+        ]);
+        let (after, moved) = move_to(&before, "0", "1", 1);
+        assert!(!move_is_content_neutral(&before, "0", &after, &moved));
+    }
+
+    /// Every move the predicate calls neutral must leave the composite
+    /// byte-identical. This catches a predicate that treats a visible or
+    /// base-changing move as neutral.
+    #[test]
+    fn neutral_moves_preserve_composite() {
+        let stacks = vec![
+            vec![
+                pixel("base", 90, 255),
+                clipped("clip", 40),
+                pixel("new", 0, 0),
+            ],
+            vec![
+                pixel("bg", 10, 255),
+                group(
+                    BlendMode::PassThrough,
+                    vec![pixel("in", 120, 128), clipped("inclip", 60)],
+                ),
+                pixel("top", 220, 90),
+            ],
+            vec![
+                pixel("base", 90, 255),
+                clipped("c1", 40),
+                hidden("hidden", 200),
+            ],
+            vec![
+                pixel("base", 90, 255),
+                Layer {
+                    clipping: true,
+                    ..pixel("new", 0, 0)
+                },
+                pixel("top", 50, 255),
+            ],
+            vec![group(BlendMode::Normal, Vec::new()), clipped("clip", 40)],
+        ];
+        let mut checked = 0;
+        for stack in stacks {
+            let before = doc(stack);
+            let expected = crate::composite_rgba(&before);
+            let mut paths = Vec::new();
+            all_paths(&before.layers, "", &mut paths);
+            for path in &paths {
+                for target in &paths {
+                    for mode in 0..3 {
+                        let mut after = before.clone();
+                        let Some(moved) =
+                            crate::move_path_to_result(&mut after, path, target, mode)
+                        else {
+                            continue;
+                        };
+                        if move_is_content_neutral(&before, path, &after, &moved) {
+                            assert_eq!(
+                                crate::composite_rgba(&after),
+                                expected,
+                                "neutral move {path} -> {target} mode {mode} changed the composite"
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 5, "the stacks exercise the neutral move path");
     }
 
     fn all_paths(layers: &[Layer], prefix: &str, out: &mut Vec<String>) {

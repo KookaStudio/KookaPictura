@@ -73,6 +73,7 @@ pub use layer_ops::{
 };
 pub use layer_ops::{duplicate_is_content_neutral, insertion_is_content_neutral};
 pub(crate) use layer_ops::{insert_node, map_shape_layer};
+pub use layer_ops::{insertion_is_content_neutral, move_is_content_neutral};
 pub use lens_correction::{apply_lens_correction, lens_correction_slots, smart_source_buffer};
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};
 pub use mode::{
