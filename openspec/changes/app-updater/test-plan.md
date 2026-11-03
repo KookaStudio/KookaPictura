@@ -48,13 +48,14 @@ missing test references for this in-progress change.
 | `au_manual_when_off` | Disable automatic checks, then invoke the manual check | The request is sent and the result is reported | `tst_app_updater::manualCheckWorksWhenAutoOff` |
 | `au_manual_up_to_date` | Manual check against the running version | The up-to-date result is reported | `tst_app_updater::manualCheckUpToDate` |
 | `au_manual_error` | Manual check against a refused connection | The failure is reported without blocking the document | `tst_app_updater::manualCheckError` |
-| `up_banner_version_path` | Show a banner for `0.3.0` with `0.4.0` available | The text contains `0.3.0 → 0.4.0` and the actions for the detected method | `tst_update_preferences::bannerShowsVersionTransition` |
-| `up_banner_no_focus` | Focus a document field, then show the banner | The field keeps focus and the banner is non-activating | `tst_update_preferences::bannerDoesNotStealFocus` |
-| `up_banner_later` | Choose Later | The banner hides for the launch | `tst_update_preferences::laterHidesBanner` |
+| `up_banner_version_path` | Show the update dialog for `0.3.0` with `0.4.0` available | The text contains `0.3.0 → 0.4.0`, **Update now**, **Release Notes**, and **Later** | `tst_update_preferences::bannerShowsVersionTransition` |
+| `up_banner_auto_on` | Show the update dialog | The **Check for updates automatically** box is checked | `tst_update_preferences::bannerShowsVersionTransition` |
+| `up_banner_no_focus` | Focus a document field, then show the dialog | The field keeps focus and the dialog is non-activating | `tst_update_preferences::bannerDoesNotStealFocus` |
+| `up_banner_later` | Choose Later | The dialog hides for the launch | `tst_update_preferences::laterHidesBanner` |
 | `up_prefs_default_on` | Open Preferences > Updates in a fresh session | The automatic-check checkbox is on | `tst_update_preferences::preferencesDefaultOn` |
 | `up_prefs_toggle_persists` | Turn the checkbox off, save the session, reload it | The checkbox stays off and the launch check is skipped | `tst_update_preferences::togglePersists` |
 | `up_prefs_check_now` | Press Check Now | A check runs and the result text updates | `tst_update_preferences::checkNowChecks` |
-| `up_dont_check_disables` | Check the banner's opt-out box | The session stores automatic checks off and Preferences follows | `tst_update_preferences::dontCheckDisablesAutoChecks` |
+| `up_dont_check_disables` | Uncheck **Check for updates automatically** | The session stores automatic checks off and Preferences follows | `tst_update_preferences::dontCheckDisablesAutoChecks` |
 | `up_reenable` | Turn automatic checks on in Preferences, then restart | The next launch checks | `tst_update_preferences::reenableFromPreferences` |
 | `up_progress` | Start a download and report progress | The banner shows a progress indicator and sizes | `tst_update_preferences::progressIsShown` |
 | `up_cancel` | Choose Cancel during a download | The transfer stops, the temp file is removed, and the banner resets | `tst_update_preferences::cancelStopsDownload` |

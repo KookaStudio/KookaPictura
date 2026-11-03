@@ -139,7 +139,6 @@ void PicturaMainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     layoutWorkspaceFrame();
-    repositionUpdateBanner(*this);
     for (PanelColumn* column : allPanelColumns()) {
         if (column) {
             column->reclampFloats();

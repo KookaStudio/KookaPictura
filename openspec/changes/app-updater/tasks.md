@@ -8,7 +8,7 @@
 - [x] 1.3 Add the planned `tst_app_updater` cases (initially failing or
       skipped) for version ordering, package detection, asset selection,
       release parsing, integrity, install, and the no-network paths.
-- [x] 1.4 Add the planned `tst_update_preferences` cases for the banner,
+- [x] 1.4 Add the planned `tst_update_preferences` cases for the update dialog,
       Preferences page, opt-out, progress/error states, menu entry, About, and
       System Info.
 - [x] 1.5 Add `tst_system_info::packageMethodIsReported`.
@@ -78,17 +78,18 @@
       `flatpakShowsUpdateCommand`, `snapShowsUpdateCommand`, and
       `debRpmShowsPackageManagerCommand`.
 
-## 6. Banner and Preferences UI
+## 6. Update dialog and Preferences UI
 
-- [x] 6.1 Add `update_banner.{h,cpp}`: non-modal overlay with the version
-      transition, **Release Notes**, **Later**, **Update Now**, the opt-out
-      checkbox, progress, cancel, retry, and release-page states.
+- [x] 6.1 Add `update_banner.{h,cpp}`: non-modal popup dialog with the version
+      transition, **Update now**, **Release Notes**, **Later**, the
+      **Check for updates automatically** checkbox, progress, cancel, retry, and
+      release-page states.
 - [x] 6.2 Add `update_preferences_page.{h,cpp}`: automatic-check checkbox,
       running version, package method, **Check Now**, and last result.
 - [x] 6.3 Add `PreferencesDialog::kUpdates` through `addPage`, wire it from
       `frame_preferences.cpp`, and persist the checkbox.
-- [x] 6.4 Reposition the banner in `PicturaMainWindow::resizeEvent` and defer it
-      while a modal dialog is active.
+- [x] 6.4 Keep the dialog non-activating and defer it while a modal dialog is
+      active; it sizes and centres itself.
 - [x] 6.5 Add the `help.checkForUpdates` command to
       `crates/pictura-script/src/command_catalogue/entries.rs` and
       `const_names.rs`; regenerate `command_ids.h` with
@@ -102,7 +103,7 @@
 ## 7. Wiring and save gate
 
 - [x] 7.1 Add `frame_update.cpp`: schedule the launch check from `showEvent`
-      after the window is visible, create the banner and Preferences page,
+      after the window is visible, create the dialog and Preferences page,
       connect the menu action, and own the checker/installer lifetimes.
 - [x] 7.2 Extract the unsaved-document loop from `closeEvent` into
       `bool saveAllDocumentsForRestart()` and call it from both `closeEvent`

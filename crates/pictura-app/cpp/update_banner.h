@@ -1,19 +1,18 @@
 #pragma once
 
 #include <QtCore/QString>
-#include <QtWidgets/QFrame>
+#include <QtWidgets/QDialog>
 
 class QCheckBox;
-class QEvent;
 class QLabel;
 class QProgressBar;
 class QPushButton;
 
 namespace pictura {
 
-// The non-modal update notice. It is an overlay, not a dialog: it never takes
-// focus from the document and it can be dismissed without blocking the window.
-class UpdateBanner : public QFrame {
+// The update notice is a compact, non-modal popup dialog. It never takes focus
+// from the document, but it is a real window rather than a side overlay.
+class UpdateBanner : public QDialog {
     Q_OBJECT
 
 public:
@@ -24,7 +23,6 @@ public:
     void showProgress(qint64 received, qint64 total);
     void showError(const QString& message);
     void setAutomaticChecks(bool on);
-    void reposition();
 
     QString titleText() const;
     QString commandText() const;
@@ -43,15 +41,12 @@ signals:
     void releasePageRequested();
     void laterRequested();
     void cancelRequested();
-    void commandRequested();
     void automaticChecksChanged(bool on);
-
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void setBusy(bool busy);
     void resetToAvailable();
+    void centerOnParent();
 
     QLabel* title_ = nullptr;
     QLabel* command_ = nullptr;

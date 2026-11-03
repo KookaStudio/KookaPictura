@@ -142,10 +142,15 @@ void UpdatePreferencesTest::bannerShowsVersionTransition()
 
     QVERIFY(banner.isVisible());
     QVERIFY(banner.titleText().contains(QStringLiteral("0.3.0 → 0.4.0")));
-    QCOMPARE(banner.updateButton()->text(), QStringLiteral("Update Now"));
+    QCOMPARE(banner.updateButton()->text(), QStringLiteral("Update now"));
+    QCOMPARE(banner.automaticChecksBox()->text(),
+             QStringLiteral("Check for updates automatically"));
+    QVERIFY(banner.automaticChecksBox()->isChecked());
     QVERIFY(banner.laterButton()->isVisible());
     QVERIFY(banner.notesButton()->isVisible());
     QVERIFY(!banner.releasePageButton()->isVisible());
+    QVERIFY(banner.width() <= 640);
+    QVERIFY(banner.height() < 400);
 }
 
 void UpdatePreferencesTest::bannerDoesNotStealFocus()
@@ -238,7 +243,7 @@ void UpdatePreferencesTest::flatpakShowsUpdateCommand()
         pictura::packageUpdateCommand(pictura::PackageMethod::Flatpak, QStringLiteral("0.4.0")));
 
     QVERIFY(banner.commandText().contains(QStringLiteral("flatpak update")));
-    QCOMPARE(banner.updateButton()->text(), QStringLiteral("Show Update Command"));
+    QCOMPARE(banner.updateButton()->text(), QStringLiteral("Update now"));
     QVERIFY(banner.releasePageButton()->isVisible());
 }
 
@@ -253,7 +258,7 @@ void UpdatePreferencesTest::snapShowsUpdateCommand()
         pictura::packageUpdateCommand(pictura::PackageMethod::Snap, QStringLiteral("0.4.0")));
 
     QVERIFY(banner.commandText().contains(QStringLiteral("snap refresh")));
-    QCOMPARE(banner.updateButton()->text(), QStringLiteral("Show Update Command"));
+    QCOMPARE(banner.updateButton()->text(), QStringLiteral("Update now"));
     QVERIFY(banner.releasePageButton()->isVisible());
 }
 

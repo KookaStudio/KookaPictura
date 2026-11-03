@@ -23,8 +23,8 @@ surface is tracked by #649.
   window from appearing.
 - Compare the running `PICTURA_VERSION` with the latest release tag using
   SemVer ordering, and show the upgrade path (`0.3.0 → 0.4.0`).
-- Add a non-modal update banner with **Update Now**, **Release Notes**, **Later**,
-  and a **Don't check for updates automatically** checkbox.
+- Add a non-modal update dialog with **Update now**, **Release Notes**, **Later**,
+  and a **Check for updates automatically** checkbox.
 - Add `Help > Check for Updates…` for an explicit check even when automatic
   checks are off.
 - Add `Edit > Preferences > Updates` with the automatic-check toggle, the
@@ -61,7 +61,7 @@ surface is tracked by #649.
   detection, asset selection, integrity verification, save-before-update,
   per-format installation/restart, and the no-self-update rule for
   package-manager-owned builds.
-- `ui/update-preferences`: the startup banner, the Preferences > Updates pane,
+- `ui/update-preferences`: the update dialog, the Preferences > Updates pane,
   the automatic-check opt-out, progress and error states, the manual-check menu
   entry, and version/package visibility in About and System Info.
 
@@ -93,7 +93,7 @@ surface is tracked by #649.
   is already linked into `pictura_shell`; the updater uses it directly.
 - **Privacy:** automatic checks are on by default by owner decision for #1146.
   The request sends no identifier beyond the standard `User-Agent:
-  KookaPictura/<version>`; GitHub sees the client IP. The banner checkbox and
+  KookaPictura/<version>`; GitHub sees the client IP. The dialog checkbox and
   Preferences turn automatic checks off, and manual checks still work.
 - **Security:** downloads are HTTPS-only, capped in size, verified against the
   release asset's SHA-256 digest, and written through a temporary file in the

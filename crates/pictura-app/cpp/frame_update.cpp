@@ -10,7 +10,6 @@
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
 #include <QtGui/QDesktopServices>
-#include <QtGui/QGuiApplication>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
@@ -32,7 +31,6 @@ namespace {
 
 void beginUpdate(PicturaMainWindow& frame);
 void cancelUpdate(PicturaMainWindow& frame);
-void copyUpdateCommand(PicturaMainWindow& frame);
 void openUpdateReleasePage(PicturaMainWindow& frame);
 void showUpdateReleaseNotes(PicturaMainWindow& frame);
 void setAutomaticUpdateChecks(PicturaMainWindow& frame, bool on);
@@ -43,11 +41,8 @@ UpdateBanner* ensureUpdateBanner(PicturaMainWindow& frame)
     if (auto* existing = frame.findChild<UpdateBanner*>(QStringLiteral("updateBanner"))) {
         return existing;
     }
-    auto* banner = new UpdateBanner(frame.centralWidget());
+    auto* banner = new UpdateBanner(&frame);
     banner->setObjectName(QStringLiteral("updateBanner"));
-    if (QWidget* host = frame.centralWidget()) {
-        host->installEventFilter(banner);
-    }
     QObject::connect(banner, &UpdateBanner::updateRequested, &frame,
                      [&frame] { beginUpdate(frame); });
     QObject::connect(banner, &UpdateBanner::releaseNotesRequested, &frame,
@@ -56,8 +51,6 @@ UpdateBanner* ensureUpdateBanner(PicturaMainWindow& frame)
                      [&frame] { openUpdateReleasePage(frame); });
     QObject::connect(banner, &UpdateBanner::automaticChecksChanged, &frame,
                      [&frame](bool on) { setAutomaticUpdateChecks(frame, on); });
-    QObject::connect(banner, &UpdateBanner::commandRequested, &frame,
-                     [&frame] { copyUpdateCommand(frame); });
     QObject::connect(banner, &UpdateBanner::cancelRequested, &frame,
                      [&frame] { cancelUpdate(frame); });
     return banner;
@@ -208,16 +201,6 @@ void cancelUpdate(PicturaMainWindow& frame)
     }
 }
 
-void copyUpdateCommand(PicturaMainWindow& frame)
-{
-    auto* banner = frame.findChild<UpdateBanner*>(QStringLiteral("updateBanner"));
-    if (!banner || banner->commandText().isEmpty()) {
-        return;
-    }
-    QGuiApplication::clipboard()->setText(banner->commandText());
-    frame.statusBar()->showMessage(QObject::tr("Update command copied."), 3000);
-}
-
 void openUpdateReleasePage(PicturaMainWindow& frame)
 {
     auto* checker = frame.findChild<UpdateChecker*>(QStringLiteral("updateChecker"));
@@ -310,13 +293,6 @@ void scheduleUpdateCheck(PicturaMainWindow& frame)
         return;
     }
     ensureUpdateChecker(frame, loadSession().checkForUpdatesOnLaunch)->checkAutomatically();
-}
-
-void repositionUpdateBanner(PicturaMainWindow& frame)
-{
-    if (auto* banner = frame.findChild<UpdateBanner*>(QStringLiteral("updateBanner"))) {
-        banner->reposition();
-    }
 }
 
 void registerUpdateHandlers(PicturaMainWindow& frame)

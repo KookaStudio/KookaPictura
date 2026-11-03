@@ -24,8 +24,8 @@ connected:
 - `SessionState` already persists UI preferences in
   `$XDG_STATE_HOME/kooka-pictura/state.json`; the automatic-check flag belongs
   there.
-- `ControlApprovalBar` is an existing non-modal, non-activating overlay
-  pattern that the update banner can follow.
+- `ControlApprovalBar` is the existing non-activating pattern; the update
+  dialog reuses that focus behaviour but is a real popup window.
 - `PicturaMainWindow::closeEvent` already has the exact unsaved-document loop
   the update flow must run before replacing the application.
 - `agent_control.cpp` already detects Flatpak, Snap, and AppImage from the
@@ -45,12 +45,12 @@ record the actual mapping.
 **Goals:**
 
 - A launch check that is quick, non-blocking, and silent on failure.
-- A banner that names the transition and asks before doing anything.
+- A popup dialog that names the transition and asks before doing anything.
 - A real update path for the formats the application owns: AppImage automatic,
   Windows setup assisted, macOS DMG assisted.
 - A safe hint, never a self-update, for Flatpak, Snap, deb, and rpm.
 - A single preference that turns automatic checks off, reachable from both the
-  banner and Preferences.
+  dialog and Preferences.
 - No network traffic in tests or headless runs.
 - No new dependency.
 
@@ -73,7 +73,7 @@ record the actual mapping.
 `GET https://api.github.com/repos/KookaStudio/KookaPictura/releases/latest`
 returns the newest non-prerelease, non-draft release, its tag, body, HTML URL,
 and assets with `name`, `browser_download_url`, `size`, and `digest`. That is
-exactly the data the banner, release notes, asset selection, and integrity check
+exactly the data the dialog, release notes, asset selection, and integrity check
 need. The endpoint is public, needs no token, and matches the repository's
 existing release automation.
 
@@ -111,9 +111,9 @@ The split is:
 | `update_release.{h,cpp}` | Parse the GitHub release JSON, validate fields, select an asset by method and architecture. | Qt Test with a release JSON fixture |
 | `update_checker.{h,cpp}` | `QNetworkAccessManager` request, timeout, result signals, one-per-launch guard, manual check. | Qt Test against a local `QTcpServer` |
 | `update_installer.{h,cpp}` | Download to a temp file, size cap, SHA-256, atomic install, restart callback. | Qt Test with a local server and a temp directory |
-| `update_banner.{h,cpp}` | Non-modal overlay: version path, buttons, opt-out checkbox, progress, error. | Qt Test widget assertions |
+| `update_banner.{h,cpp}` | Non-modal popup dialog: version path, Update now, Release Notes, Later, automatic-check checkbox, progress, error. | Qt Test widget assertions |
 | `update_preferences_page.{h,cpp}` | Preferences > Updates page. | Qt Test widget assertions |
-| `frame_update.cpp` | Wiring: schedule the check, show the banner, save-work gate, menu handler, Preferences page. | Qt Test through `PicturaMainWindow` |
+| `frame_update.cpp` | Wiring: schedule the check, show the dialog, save-work gate, menu handler, Preferences page. | Qt Test through `PicturaMainWindow` |
 
 Keeping this in the shell matches the existing ownership boundary and avoids a
 cross-language bridge for a handful of string and enum operations. The units
@@ -182,7 +182,7 @@ The GitHub asset `digest` field is `sha256:<hex>` when present. The installer:
    rename is atomic on the same filesystem. The SHA-256 is updated as chunks
    arrive rather than over the whole file on the GUI thread.
 5. Compares the incremental SHA-256 to the asset digest.
-6. Refuses auto-install when the digest is missing. The banner then offers
+6. Refuses auto-install when the digest is missing. The dialog then offers
    **Release Page** instead of **Update Now**.
 
 This is deliberately stricter than "download and run". A release asset without
@@ -221,29 +221,32 @@ of corrupting the running image. `$APPIMAGE` is resolved through
 launcher symlink does not send the update to the wrong directory. The `.old`
 file is kept as the rollback copy; the next successful update replaces it.
 
-### Decision: the banner is an overlay, not a modal dialog
+### Decision: the update notice is a compact popup dialog
 
-The banner follows `ControlApprovalBar`: a `QFrame` parented to the window,
-positioned at the top centre, `Qt::WA_ShowWithoutActivating`, and no focus
-stealing. It shows:
+`UpdateBanner` is a `QDialog` parented to the frame, `Qt::NonModal`,
+`Qt::WA_ShowWithoutActivating`, with a fixed 560 px width and a self-sizing
+height. It centres over the frame. It shows:
 
 ```
-Kooka Pictura 0.4.0 is available. You have 0.3.0.
-[Release Notes] [Later] [Update Now]   [ ] Don't check for updates automatically
+Kooka Pictura 0.4.0 is available. You have 0.3.0. (0.3.0 → 0.4.0)
+[package-manager command, when the package manager owns the install]
+[x] Check for updates automatically
+[Release Notes] [Release Page] [Later] [Update now]
 ```
 
 The transition text is `current → available`, which is the upgrade path the
-issue asks for. **Later** hides the banner for this launch. **Don't check for
-updates automatically** writes `checkForUpdatesOnLaunch = false` to the session
-and updates the Preferences checkbox if the dialog exists. **Release Notes**
-opens a `QTextBrowser` with the release body as Markdown. For Flatpak, Snap,
-deb, rpm, Windows portable, and development methods, **Update Now** is replaced
-by **Show Update Command** (or **Release Page** where there is no command), so
-the banner never promises an install it cannot perform.
+issue asks for. **Later** hides the dialog for this launch. **Check for updates
+automatically** is checked by default; unchecking it writes
+`checkForUpdatesOnLaunch = false` to the session and updates the Preferences
+checkbox if the dialog exists. **Release Notes** opens a `QTextBrowser` with the
+release body as Markdown. **Update now** is always present: a self-updatable
+method downloads and installs, while a package-manager or development method
+shows the command and opens the release page, so the dialog never promises an
+install it cannot perform.
 
-If a modal dialog is active when the result arrives, the banner waits for the
-modal to close rather than appearing behind it. The banner is repositioned in
-`PicturaMainWindow::resizeEvent`.
+If a modal dialog is active when the result arrives, the dialog waits for the
+modal to close rather than appearing behind it. The dialog sizes and centres
+itself; there is no overlay repositioning.
 
 ### Decision: automatic checks are on by default, with an explicit opt-out
 
@@ -266,7 +269,7 @@ request is opt-out, the manual request is always explicit.
 
 `PicturaMainWindow` gains a constructor parameter
 `bool enableUpdateCheck = true`. The flag disables the automatic launch
-request only; the checker object, the banner, the Preferences page, and the
+request only; the checker object, the dialog, the Preferences page, and the
 manual menu action still exist. The test helper `makeMainWindow()` passes
 `false`, so the 300+ existing Qt Test suites never touch the network.
 Production `main.cpp` sets `PICTURA_DISABLE_UPDATE_CHECK=1` for `--headless`,
@@ -313,7 +316,7 @@ submitted issue actionable.
   installed; the application has already quit, so the person relaunches it.
 - **macOS is assisted, not automatic.** Copying a signed `.app` over the
   running bundle is not safe from inside the app. The DMG is opened and the
-  person drags it; the banner offers **Quit Now**.
+  person drags it; the dialog offers **Quit Now**.
 - **AppImage in a read-only directory.** The sibling rename fails. The updater
   reports the path and opens the release page instead of writing elsewhere and
   leaving the person with an unlaunchable image.
