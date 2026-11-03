@@ -5,6 +5,7 @@ use super::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode, Document, PsdRect};
 
+mod bucket;
 mod damage;
 mod open;
 mod pan_zoom;
