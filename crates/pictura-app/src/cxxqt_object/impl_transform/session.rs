@@ -741,8 +741,9 @@ impl qobject::PictureView {
     }
 
     pub fn end_move_preview(self: Pin<&mut Self>) {
-        // Keep the cache: the next press reuses it when the revision, topmost
-        // layer, and clamped rect are unchanged.
+        // Keep the cache: the next press reuses a full-resolution preview when
+        // the revision, topmost layer, and clamped rect are unchanged. A view
+        // preview is rebuilt on every press (`move_cache_valid`).
     }
 
     /// Drop the transform overlay's prepared base/layer. The C++ canvas clears

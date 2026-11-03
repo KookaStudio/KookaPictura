@@ -106,8 +106,7 @@ impl FilterProxy {
     /// their document-scale sizes inside the proxy (see the module note).
     pub fn reduces_faithfully(doc: &Document) -> bool {
         fn faithful(layer: &Layer) -> bool {
-            let effects =
-                layer.extra_block(b"lfx2").is_some() || layer.extra_block(b"lrFX").is_some();
+            let effects = crate::document_ops::has_layer_style(layer);
             let route = match content_route(layer) {
                 ContentRoute::PassThroughGroup
                 | ContentRoute::IsolatedGroup
