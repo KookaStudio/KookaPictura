@@ -44,8 +44,10 @@ and the 17000×17000 baseline (headless, GPU compute on, idle machine) measured:
 - **Move on a shape layer renders and refreshes the shape's reach**: the moving
   image covers the shape's paint bounds, the backdrop patch covers its
   influence, and the commit's damage is its influence before and after.
-- **A Path or Direct Selection drag on a shape layer refreshes the shape's
-  influence before and after each step**, not the document.
+- **A Path or Direct Selection drag on a shape layer shows the moving outline
+  and composites on its release**, over the shape's influence before and after
+  the drag, not the document on every step (owner decision; Photocraft's timings
+  show the same split).
 - **A Fill Pixels shape rasterizes and fills its own box**, writing only the
   plane bands the box crosses.
 - `profile-tools.py` gains a scenario for every toolbox tool.

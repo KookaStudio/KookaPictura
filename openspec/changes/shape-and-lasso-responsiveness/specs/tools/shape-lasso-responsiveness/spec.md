@@ -80,8 +80,9 @@ mask's box. The composite MUST equal the one over the layer's whole rect.
 
 A Move of a shape layer SHALL render the moving image over the shape's paint
 bounds, and its commit SHALL refresh only the shape's influence before and
-after the move. A Path or Direct Selection drag on a shape layer SHALL refresh
-only the shape's influence before and after each step.
+after the move. A Path or Direct Selection drag on a shape layer SHALL show the
+moving outline without compositing, and its release SHALL composite only the
+shape's influence before and after the drag.
 
 #### Scenario: A shape Move previews and commits its box [slr_shape_move]
 
@@ -91,12 +92,13 @@ only the shape's influence before and after each step.
   refreshed region is within the shape's before and after reach, and the
   shape is drawn at its new place and gone from its old one
 
-#### Scenario: A path drag refreshes the shape's reach [slr_shape_path_drag]
+#### Scenario: A path drag composites on its release [slr_shape_path_drag]
 
-- **WHEN** the active shape layer's outline is dragged with the Path Selection
-  tool and the drag is committed
-- **THEN** each step's refreshed region is within the shape's before and after
-  reach, and the shape is drawn at its new place and gone from its old one
+- **WHEN** the active shape layer's outline is dragged in two steps with the
+  Path Selection tool and the drag is committed
+- **THEN** no region is refreshed during the steps and the fill stays put;
+  the release refreshes one region within the shape's before and after reach,
+  and the shape is drawn at its new place and gone from its old one
 
 ### Requirement: A Fill Pixels shape fills its own box
 

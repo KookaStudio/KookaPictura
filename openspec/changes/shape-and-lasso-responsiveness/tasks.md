@@ -21,7 +21,7 @@
 - [x] 4.1 Bound a fill or shape layer's composite, effects source and GPU fill to its mask's box
 - [x] 4.2 Render the shape Move preview over its paint bounds and patch its influence
 - [x] 4.3 Commit a shape Move over its influence before and after
-- [x] 4.4 Refresh a path drag on a shape layer over its influence before and after
+- [x] 4.4 Composite a path drag on a shape layer on its release, over its influence before and after
 - [x] 4.5 Rasterize and fill a Fill Pixels shape in its own box, in the bands it crosses
 
 ## 5. Evidence

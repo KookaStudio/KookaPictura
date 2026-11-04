@@ -23,7 +23,7 @@ add up. Times are milliseconds; "up" is the release, or the closing click.
 | Lasso Add | 12821 | 482 | 1.6 | 4.1 |
 | Lasso Subtract | 12760 | 462 | 4.1 | 2.9 |
 | Polygonal Lasso | 7829 | 454 | 2.3 | 1.6 |
-| Magnetic Lasso (press / close) | press 7800, close never ended (killed after 15 min) | 1822 / 399 | – | 40 |
+| Magnetic Lasso (press / close) | press 7800, close never ended (killed after 15 min) | 232 / 399 | – | 42 |
 | Rectangle shape | 7512 | 1121 | 2.5 | 2.3 |
 | Ellipse shape | 6557 | 935 | 2.8 | 1.4 |
 | Rounded rectangle shape | 6678 | 1135 | 3.2 | 1.9 |
@@ -34,7 +34,31 @@ add up. Times are milliseconds; "up" is the release, or the closing click.
 | Ellipse, Fill Pixels | 2051 | 673 | 1.8 | 1.8 |
 | Move a shape (press / up) | 15346 / 12603 | 1873 / 1180 | 6.3 | 4.8 |
 | Move a stroked shape (press / up) | 22349 / 15527 | 3738 / 2877 | 8.2 | 4.6 |
-| Path Selection drag on a shape | 58 | 42 | 12831 | 919 |
+| Path Selection drag on a shape | 58 | 1321 | 12831 | 5.6 |
+
+The path drag composites on its release (owner decision): the release pays the
+one region composite the steps used to pay each.
+
+### The Photocraft bar
+
+Photocraft (`storytold/photocraft` 6a2aaebe, release build) was driven with the
+same gestures through its control port (`ui.pointer`, then `ui.inspect` to catch
+the frame) on a 17000×17000 new document under Xvfb. There it renders on
+llvmpipe (its CPU path), so every event carries a frame floor of 47–90 ms;
+Pictura ran headless with GPU compute. Read the rows as an order of magnitude.
+
+| Scenario | Photocraft | Pictura after |
+|---|---|---|
+| Rectangle / Ellipse shape (up) | 1081 / 1073 | 1121 / 935 |
+| Lasso (up) | 220 | 128 |
+| Polygonal Lasso (close) | 390 | 454 |
+| Magnetic Lasso (press / move p50 / close) | 220 / 112 / 402 | 232 / 39 / 399 |
+| Move a shape (press / move p50 / up) | 140 / 432 / 590 | 1615 / 3.5 / 1303 |
+| Path Selection drag (move p50 / up) | 92 / 1285 | 3.9 / 1321 |
+
+The shape Move press is the one row still well behind: it renders the shape and
+its backdrop at full resolution over the shape's box, where the large-layer view
+preview (#1148) would build them at the shown level. It is a follow-up.
 
 The polygon covers nearly the canvas (the tool draws from its centre), so its
 region is the document. The shape undo costs 330–1700 ms on both builds: the
@@ -122,9 +146,13 @@ a drop shadow is compared byte for byte.
 `rendered_layer_image` renders a shape over its paint bounds. The backdrop
 patch accepts a shape layer and covers its `content_influence` (outline box,
 effects, clipped run). `translate_move_group` dirties a shape's influence
-before and after instead of its `rect`. `edit_target` refreshes the union of
-the target's influence before and after the edit with `refresh_regions` and
-`changed`; an unprovable reach still recomposites.
+before and after instead of its `rect`. `edit_target` computes the union of
+the target's influence before and after an edit. A live drag step (subpath,
+anchor or handle) adds it to `path_drag_damage` and composites nothing, while
+the overlay draws the moving outline. Every path commit and the gesture's end
+(`path_gesture_end`, on every release) refresh the pending region with
+`refresh_regions` and `changed`, or recomposite when the reach is unprovable.
+Any other edit flushes it at once.
 
 ## Fill Pixels
 
