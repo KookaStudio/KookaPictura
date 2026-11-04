@@ -7,9 +7,7 @@
 mod imp;
 
 use super::super::qobject::PictureView;
-use super::new_document::{
-    create_document, document_budget_allows, document_resize_budget_allows,
-};
+use super::new_document::{create_document, document_budget_allows, document_resize_budget_allows};
 use imp::*;
 
 #[cxx_qt::bridge]
