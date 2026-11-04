@@ -58,6 +58,29 @@ fn doc_with(layer: Layer) -> Document {
 }
 
 #[test]
+fn a_face_that_paints_nothing_retries_with_the_bundled_face() {
+    // A local face keeps this test out of the process-wide registry, whose
+    // generation invalidates other tests' text caches.
+    let noto: &'static [u8] = Box::leak(
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/NotoSans-Regular.ttf"
+        ))
+        .to_vec()
+        .into_boxed_slice(),
+    );
+    let first = BundledText::from_bytes(noto).expect("Noto Sans parses");
+    let fallback = super::bundled().expect("bundled font");
+    let mut calls = Vec::new();
+    let out = paint_with_fallback(&first, Some(fallback), |face| {
+        calls.push(std::ptr::eq(face, &first));
+        std::ptr::eq(face, fallback).then(|| PixelBuffer::zeroed(1, 1, 4))
+    });
+    assert!(out.is_some(), "the bundled face paints");
+    assert_eq!(calls, vec![true, false], "the first face then the bundled");
+}
+
+#[test]
 fn rasterizer_returns_coverage_of_width_times_height() {
     let bundled = bundled();
     let index = bundled.glyph_for('A');
