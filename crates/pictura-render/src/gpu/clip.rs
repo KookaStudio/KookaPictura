@@ -127,32 +127,18 @@ fn layer_bounds(layer: &Layer) -> Option<PsdRect> {
                 bounds = union(bounds, layer_bounds(child));
             }
         }
-        return bounds.map(|rect| grow(rect, crate::layer_effects::paint_reach(layer)));
+        return bounds.map(|rect| rect.grow(crate::layer_effects::paint_reach(layer)));
     }
     if layer.adjustment.is_some() && crate::fill::decode_layer_fill(layer).is_none() {
         return None;
     }
-    Some(grow(layer.rect, crate::layer_effects::paint_reach(layer)))
+    Some(layer.rect.grow(crate::layer_effects::paint_reach(layer)))
 }
 
 fn union(a: Option<PsdRect>, b: Option<PsdRect>) -> Option<PsdRect> {
     match (a, b) {
-        (Some(a), Some(b)) => Some(PsdRect {
-            top: a.top.min(b.top),
-            left: a.left.min(b.left),
-            bottom: a.bottom.max(b.bottom),
-            right: a.right.max(b.right),
-        }),
+        (Some(a), Some(b)) => Some(a.union(b)),
         (Some(a), None) => Some(a),
         (None, b) => b,
-    }
-}
-
-fn grow(rect: PsdRect, pad: i32) -> PsdRect {
-    PsdRect {
-        top: rect.top.saturating_sub(pad),
-        left: rect.left.saturating_sub(pad),
-        bottom: rect.bottom.saturating_add(pad),
-        right: rect.right.saturating_add(pad),
     }
 }

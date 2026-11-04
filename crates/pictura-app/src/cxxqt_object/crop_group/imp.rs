@@ -174,15 +174,7 @@ pub(super) fn perspective_crop_refusal_reason(view: &PictureView) -> QString {
 pub(super) fn composite_bounds(view: &PictureView) -> QString {
     fn union(layers: &[pictura_core::Layer], acc: &mut Option<PsdRect>) {
         for layer in layers {
-            match acc.as_mut() {
-                Some(r) => {
-                    r.left = r.left.min(layer.rect.left);
-                    r.top = r.top.min(layer.rect.top);
-                    r.right = r.right.max(layer.rect.right);
-                    r.bottom = r.bottom.max(layer.rect.bottom);
-                }
-                None => *acc = Some(layer.rect),
-            }
+            *acc = Some(acc.map_or(layer.rect, |r| r.union(layer.rect)));
             union(&layer.children, acc);
         }
     }

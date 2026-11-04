@@ -414,29 +414,6 @@ pub(super) fn mask_paint_pad_for(doc: &pictura_core::Document, path: &str) -> i3
             .unwrap_or(0)
 }
 
-/// Grow a document-space rect by `pad` on every side.
-pub(super) fn grow_rect(rect: PsdRect, pad: i32) -> PsdRect {
-    if pad <= 0 {
-        return rect;
-    }
-    PsdRect {
-        top: rect.top.saturating_sub(pad),
-        left: rect.left.saturating_sub(pad),
-        bottom: rect.bottom.saturating_add(pad),
-        right: rect.right.saturating_add(pad),
-    }
-}
-
-/// The bounding box of two document-space rects.
-pub(super) fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.min(b.top),
-        left: a.left.min(b.left),
-        bottom: a.bottom.max(b.bottom),
-        right: a.right.max(b.right),
-    }
-}
-
 /// A stroke's dirty area as a document-space bitmap of [`pictura_render::TILE`]
 /// cells. The commit decomposes it into disjoint rectangles so a diagonal stroke
 /// composites its tiles, not its whole bounding box.
@@ -486,7 +463,7 @@ impl TileSet {
                 let rect = tile_rect(x, x + 1, y, y + 1, tile);
                 bounds = Some(match bounds {
                     None => rect,
-                    Some(current) => union_rect(current, rect),
+                    Some(current) => current.union(rect),
                 });
             }
         }
@@ -585,7 +562,7 @@ pub(super) fn set_visible_paths_union(
         if let Some(layer) = pictura_render::resolve_path(doc, path) {
             if layer.visible != visible {
                 match pictura_render::damage::influence(doc, path) {
-                    Some(rect) => union = Some(union.map_or(rect, |u| union_rect(u, rect))),
+                    Some(rect) => union = Some(union.map_or(rect, |u| u.union(rect))),
                     None => unbounded = true,
                 }
             }
@@ -599,14 +576,13 @@ pub(super) fn set_visible_paths_union(
 /// Returns `(x0, y0, w, h)` in document pixels, or `None` when the intersection
 /// is empty (zero or negative area).
 pub(super) fn clamp_region(rect: PsdRect, width: u32, height: u32) -> Option<(i32, i32, u32, u32)> {
-    let x0 = rect.left.max(0);
-    let y0 = rect.top.max(0);
-    let x1 = rect.right.min(width as i32);
-    let y1 = rect.bottom.min(height as i32);
-    if x1 <= x0 || y1 <= y0 {
-        return None;
-    }
-    Some((x0, y0, (x1 - x0) as u32, (y1 - y0) as u32))
+    let rect = rect.clip_to(width, height)?;
+    Some((
+        rect.left,
+        rect.top,
+        rect.width() as u32,
+        rect.height() as u32,
+    ))
 }
 /// The region to patch for the move-preview base, or `None` to fall back to a
 /// full composite.

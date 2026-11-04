@@ -154,7 +154,7 @@ pub(super) fn best_source(
     }
     let context = thin(context);
     let interior = thin(interior);
-    let footprint = super::inflate(hole, CONTEXT as i32 + 1);
+    let footprint = hole.grow(CONTEXT as i32 + 1);
     let canvas = img.rect();
     let fits = |(dx, dy): (i32, i32)| {
         let f = shift(footprint, dx, dy);

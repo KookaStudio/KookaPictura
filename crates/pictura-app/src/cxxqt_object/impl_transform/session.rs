@@ -399,7 +399,7 @@ impl qobject::PictureView {
                 .and_then(|doc| pictura_render::resolve_path(doc, &path))
                 .map(|layer| (layer.rect, layer_has_effects(layer)));
             match after {
-                Some((after, false)) => self.as_mut().refresh_region(union_rect(orig_rect, after)),
+                Some((after, false)) => self.as_mut().refresh_region(orig_rect.union(after)),
                 _ => self.as_mut().recomposite(),
             }
             self.as_mut().record(&history_label);

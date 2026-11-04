@@ -16,7 +16,6 @@
 
 use crate::healing::RgbaImage;
 use crate::replace::{dab_bounds, grow};
-use crate::stroke::union_rect;
 use crate::{tip_coverage, StrokeConfig};
 use pictura_core::PsdRect;
 use rayon::prelude::*;
@@ -194,7 +193,7 @@ impl ArtHistoryBrush {
                     y += step * heading.sin();
                 }
                 if let Some(d) = self.stamp(img, cfg, x, y, paint) {
-                    dirty = Some(dirty.map_or(d, |r: PsdRect| union_rect(r, d)));
+                    dirty = Some(dirty.map_or(d, |r: PsdRect| r.union(d)));
                 }
             }
         }

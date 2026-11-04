@@ -164,12 +164,7 @@ fn union(a: Option<PsdRect>, b: Option<PsdRect>) -> Option<PsdRect> {
     match (a, b) {
         (None, None) => None,
         (Some(r), None) | (None, Some(r)) => Some(r),
-        (Some(a), Some(b)) => Some(PsdRect {
-            top: a.top.min(b.top),
-            left: a.left.min(b.left),
-            bottom: a.bottom.max(b.bottom),
-            right: a.right.max(b.right),
-        }),
+        (Some(a), Some(b)) => Some(a.union(b)),
     }
 }
 

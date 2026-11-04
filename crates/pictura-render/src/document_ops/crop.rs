@@ -88,31 +88,20 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
             || layer.smart_object.is_some()
             || layer.vector_mask.is_some()
             || layer.source_channels.is_some();
-        if layer.is_group || layer.channels.is_empty() || live || rect.width() <= 0 {
+        if layer.is_group || layer.channels.is_empty() || live || rect.is_empty() {
             return;
         }
-        let keep = intersect(rect, canvas);
-        if keep == rect {
+        let keep = rect.intersect(canvas);
+        if keep == Some(rect) {
             return;
         }
-        let empty = keep.width() <= 0 || keep.height() <= 0;
-        let keep = if empty {
-            PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
-            }
-        } else {
-            keep
-        };
+        let keep = keep.unwrap_or_default();
         for channel in &mut layer.channels {
             channel.data = trim_plane(&channel.data, rect, keep).into();
         }
         if let Some(mask) = &mut layer.mask {
             if let Some(data) = &mask.data {
-                let mask_keep = intersect(mask.rect, canvas);
-                if mask_keep.width() > 0 && mask_keep.height() > 0 {
+                if let Some(mask_keep) = mask.rect.intersect(canvas) {
                     mask.data = Some(trim_plane(data, mask.rect, mask_keep).into());
                     mask.rect = mask_keep;
                 }
@@ -123,15 +112,6 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
         trimmed += 1;
     });
     trimmed
-}
-
-fn intersect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
-    }
 }
 
 /// The `keep` window of a plane laid out over `rect` (`keep` inside `rect`).

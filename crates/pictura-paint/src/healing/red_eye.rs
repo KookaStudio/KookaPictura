@@ -10,7 +10,7 @@
 //! (<https://github.com/perfecto25/photorust>).
 
 use super::layer::{heal_layer, HealError};
-use super::{intersect, RgbaImage};
+use super::RgbaImage;
 use pictura_core::{Document, PsdRect};
 
 /// CS6's Pupil Size and Darken Amount defaults (both 0–100).
@@ -34,10 +34,9 @@ pub fn red_eye_layer(
         bottom: doc.height as i32,
         right: doc.width as i32,
     };
-    let rect = intersect(rect, canvas);
-    if rect.width() <= 0 || rect.height() <= 0 {
+    let Some(rect) = rect.intersect(canvas) else {
         return Ok(None);
-    }
+    };
     let coverage = vec![1.0; (rect.width() * rect.height()) as usize];
     heal_layer(doc, path, rect, &coverage, |img, local, _| {
         red_eye_region(img, local, pupil, darken)
@@ -50,10 +49,7 @@ fn red_eye_region(
     pupil: u32,
     darken: u32,
 ) -> Option<PsdRect> {
-    let work = intersect(region, img.rect());
-    if work.width() <= 0 || work.height() <= 0 {
-        return None;
-    }
+    let work = region.intersect(img.rect())?;
     // Pupil Size widens the net: at 0 only strongly red pixels qualify, at 100
     // anything where red merely leads.
     let ratio = 1.8 - (pupil.min(100) as f32 / 100.0) * 0.75;

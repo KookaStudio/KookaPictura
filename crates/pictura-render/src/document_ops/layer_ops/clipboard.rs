@@ -86,9 +86,9 @@ pub fn copy_layer(doc: &Document, path: &str, selection: Option<&[u8]>) -> Optio
     if !has_pixels(layer) {
         return None;
     }
-    let region = intersect(layer.rect, canvas(doc));
+    let region = layer.rect.intersect(canvas(doc))?;
     let region = match selection {
-        Some(coverage) => intersect(region, coverage_bounds(coverage, doc.width, doc.height)?),
+        Some(coverage) => region.intersect(coverage_bounds(coverage, doc.width, doc.height)?)?,
         None => region,
     };
     let src_w = layer.rect.width() as usize;
@@ -128,10 +128,9 @@ pub fn copy_merged(
         return None;
     }
     let region = match selection {
-        Some(coverage) => intersect(
-            canvas(doc),
-            coverage_bounds(coverage, doc.width, doc.height)?,
-        ),
+        Some(coverage) => {
+            canvas(doc).intersect(coverage_bounds(coverage, doc.width, doc.height)?)?
+        }
         None => canvas(doc),
     };
     let plane = doc.width as usize * doc.height as usize;
@@ -444,15 +443,6 @@ fn canvas(doc: &Document) -> PsdRect {
         left: 0,
         bottom: doc.height as i32,
         right: doc.width as i32,
-    }
-}
-
-fn intersect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
     }
 }
 

@@ -908,7 +908,7 @@ pub(crate) fn fill_source(
     }
     let full_rect = layer.rect;
     let (full_w, full_h) = (full_rect.width(), full_rect.height());
-    let rect = crate::layer_source::clip_to_document(full_rect, doc);
+    let rect = full_rect.clip_to(doc.width, doc.height).unwrap_or_default();
     let (w, h) = (rect.width(), rect.height());
     // A fill with no on-canvas area is the CPU's no-op; keep it on the GPU as an
     // empty source rather than declining the whole document.

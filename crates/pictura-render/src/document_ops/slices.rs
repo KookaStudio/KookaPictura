@@ -64,10 +64,9 @@ pub fn resolve_slices(doc: &Document) -> Vec<Slice> {
     let mut slices = Vec::new();
     let mut kept = Vec::new();
     for (index, rect) in doc.slices.iter().enumerate() {
-        let clipped = intersect(*rect, canvas);
-        if clipped.width() <= 0 || clipped.height() <= 0 {
+        let Some(clipped) = rect.intersect(canvas) else {
             continue;
-        }
+        };
         kept.push(clipped);
         slices.push(Slice {
             rect: clipped,
@@ -136,15 +135,6 @@ fn auto_slices(user: &[PsdRect], canvas: PsdRect) -> Vec<PsdRect> {
     out
 }
 
-fn intersect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,8 +161,7 @@ mod tests {
     }
 
     fn overlaps(a: PsdRect, b: PsdRect) -> bool {
-        let i = intersect(a, b);
-        i.width() > 0 && i.height() > 0
+        a.intersect(b).is_some()
     }
 
     #[test]

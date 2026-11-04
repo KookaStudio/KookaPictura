@@ -25,7 +25,7 @@
 
 use crate::healing::RgbaImage;
 use crate::replace::dab_bounds;
-use crate::stroke::union_rect;
+
 use crate::tip::TipParams;
 use crate::StrokeConfig;
 use pictura_core::PsdRect;
@@ -199,7 +199,7 @@ impl ToneBrush {
                     right: last + 1,
                 })
             })
-            .reduce_with(union_rect)
+            .reduce_with(PsdRect::union)
     }
 }
 

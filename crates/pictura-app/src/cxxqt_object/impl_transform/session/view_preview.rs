@@ -85,14 +85,14 @@ pub(super) fn view_preview(
     let level = u32::try_from(level)
         .ok()
         .filter(|&level| level <= MAX_LEVEL)?;
-    let visible = intersect(visible, canvas(doc))?;
+    let visible = visible.intersect(canvas(doc))?;
     if level > 0 && !FilterProxy::reduces_faithfully(doc) {
         return None;
     }
     let scale = 1i32 << level;
-    let (base, base_origin) = match intersect(content, visible) {
+    let (base, base_origin) = match content.intersect(visible) {
         Some(patch) => {
-            let patch = intersect(align(patch, scale), canvas(doc))?;
+            let patch = align(patch, scale).intersect(canvas(doc))?;
             let base = backdrop(doc, path, level, patch, gpu_compute)?;
             (base, (patch.left, patch.top))
         }
@@ -129,7 +129,7 @@ pub(super) fn follow(
 ) -> Option<(QImage, MoveView)> {
     let layer = pictura_render::resolve_path(doc, path)?;
     let shown = offset(view.visible, -dx, -dy);
-    let needed = intersect(shown, layer.rect)?;
+    let needed = shown.intersect(layer.rect)?;
     if contains(view.region, needed) {
         return None;
     }
@@ -210,7 +210,7 @@ fn moving_region(layer_rect: PsdRect, visible: PsdRect, scale: i32) -> Option<Ps
     } else {
         layer_rect
     };
-    intersect(align(intersect(grown, layer_rect)?, scale), inner)
+    align(grown.intersect(layer_rect)?, scale).intersect(inner)
 }
 
 fn align(rect: PsdRect, scale: i32) -> PsdRect {
@@ -257,16 +257,6 @@ fn contains(outer: PsdRect, inner: PsdRect) -> bool {
         && inner.top >= outer.top
         && inner.right <= outer.right
         && inner.bottom <= outer.bottom
-}
-
-fn intersect(a: PsdRect, b: PsdRect) -> Option<PsdRect> {
-    let rect = PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
-    };
-    (rect.width() > 0 && rect.height() > 0).then_some(rect)
 }
 
 #[cfg(test)]

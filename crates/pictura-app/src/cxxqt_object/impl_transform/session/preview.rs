@@ -116,7 +116,7 @@ pub(super) fn rendered_clipping_group(
             layer.opacity = 255;
             layer.blend = BlendMode::Normal;
         }
-        bounds = Some(bounds.map_or(layer.rect, |rect| union_rect(rect, layer.rect)));
+        bounds = Some(bounds.map_or(layer.rect, |rect| rect.union(layer.rect)));
         layers.push(layer);
     }
     let bounds = bounds?;
@@ -141,7 +141,7 @@ fn backdrop_patch_rect(
     doc: &pictura_core::Document,
     paths: &[String],
 ) -> Option<pictura_core::PsdRect> {
-    let mut bounds = None;
+    let mut bounds: Option<pictura_core::PsdRect> = None;
     for path in paths {
         let layer = pictura_render::resolve_path(doc, path)?;
         if layer_has_effects(layer) || layer.adjustment.is_some() || layer.is_group {
@@ -149,7 +149,7 @@ fn backdrop_patch_rect(
         }
         // A painted layer's rect can be the whole canvas around a small mark.
         let drawn = pictura_render::content_rect(doc, path).unwrap_or(layer.rect);
-        bounds = Some(bounds.map_or(drawn, |b| union_rect(b, drawn)));
+        bounds = Some(bounds.map_or(drawn, |b| b.union(drawn)));
     }
     bounds.filter(|&rect| clamp_region(rect, doc.width, doc.height).is_some())
 }

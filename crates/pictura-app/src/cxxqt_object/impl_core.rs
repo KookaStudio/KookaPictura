@@ -1054,7 +1054,7 @@ impl super::PictureViewRust {
                 continue;
             };
             self.apply_refreshed_region(x0, y0, clipped, srgb);
-            union = Some(union.map_or(clipped, |u| union_rect(u, clipped)));
+            union = Some(union.map_or(clipped, |u| u.union(clipped)));
         }
         union
     }

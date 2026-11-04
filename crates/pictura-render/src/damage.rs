@@ -62,7 +62,7 @@ pub fn content_influence(doc: &Document, path: &str) -> Option<PsdRect> {
     if layer.clipping {
         if let Some(base) = base_below(siblings, index) {
             if !siblings[base].background {
-                return clip_to_canvas(doc, influence_of(doc, &siblings[base])?);
+                return influence_of(doc, &siblings[base])?.clip_to(doc.width, doc.height);
             }
         }
     }
@@ -71,9 +71,9 @@ pub fn content_influence(doc: &Document, path: &str) -> Option<PsdRect> {
         if !above.clipping {
             break;
         }
-        rect = union_rect(rect, influence_of(doc, above)?);
+        rect = rect.union(influence_of(doc, above)?);
     }
-    clip_to_canvas(doc, rect)
+    rect.clip_to(doc.width, doc.height)
 }
 
 /// [`content_influence`], trimmed to the inked pixels of a type layer whose
@@ -90,14 +90,14 @@ pub fn ink_influence(doc: &Document, path: &str) -> Option<PsdRect> {
     }
     let layer = resolve_path(doc, path)?;
     let raster_alone = influence_of(doc, layer) == Some(layer.rect)
-        && clip_to_canvas(doc, layer.rect) == Some(rect);
+        && layer.rect.clip_to(doc.width, doc.height) == Some(rect);
     if layer.type_tool.is_none() || !raster_alone {
         return Some(rect);
     }
     let Some(ink) = ink_bounds(layer) else {
         return Some(rect);
     };
-    clip_to_canvas(doc, ink).or(Some(rect))
+    ink.clip_to(doc.width, doc.height).or(Some(rect))
 }
 
 fn area(rect: PsdRect) -> u64 {
@@ -165,22 +165,22 @@ pub fn content_influence_paths(doc: &Document, paths: &[&str]) -> Option<Vec<Psd
 /// makes the whole edit unbounded. Omit a side that does not exist instead of
 /// passing `None` for it.
 pub fn union(a: Option<PsdRect>, b: Option<PsdRect>) -> Option<PsdRect> {
-    Some(union_rect(a?, b?))
+    Some(a?.union(b?))
 }
 
 fn influence_of(doc: &Document, layer: &Layer) -> Option<PsdRect> {
     if layer.is_group {
-        let mut rect = None;
+        let mut rect: Option<PsdRect> = None;
         for child in &layer.children {
             let child = influence_of(doc, child)?;
             rect = Some(match rect {
                 None => child,
-                Some(current) => union_rect(current, child),
+                Some(current) => current.union(child),
             });
         }
         if let Some(mask) = &layer.mask {
             if mask.data.is_some() {
-                rect = Some(union_rect(rect?, mask.rect));
+                rect = Some(rect?.union(mask.rect));
             }
         }
         return rect;
@@ -197,39 +197,13 @@ fn influence_of(doc: &Document, layer: &Layer) -> Option<PsdRect> {
     Some(rect)
 }
 
-fn clip_to_canvas(doc: &Document, rect: PsdRect) -> Option<PsdRect> {
-    let right = rect.right.min(doc.width.min(i32::MAX as u32) as i32);
-    let bottom = rect.bottom.min(doc.height.min(i32::MAX as u32) as i32);
-    let left = rect.left.max(0);
-    let top = rect.top.max(0);
-    (right > left && bottom > top).then_some(PsdRect {
-        top,
-        left,
-        bottom,
-        right,
-    })
-}
-
-fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.min(b.top),
-        left: a.left.min(b.left),
-        bottom: a.bottom.max(b.bottom),
-        right: a.right.max(b.right),
-    }
-}
-
-fn intersects(a: PsdRect, b: PsdRect) -> bool {
-    a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
-}
-
 fn merge_overlapping(rects: Vec<PsdRect>) -> Vec<PsdRect> {
     let mut out: Vec<PsdRect> = Vec::new();
     for mut rect in rects {
         let mut at = 0;
         while at < out.len() {
-            if intersects(out[at], rect) {
-                rect = union_rect(out.remove(at), rect);
+            if out[at].intersect(rect).is_some() {
+                rect = out.remove(at).union(rect);
             } else {
                 at += 1;
             }
@@ -311,7 +285,7 @@ mod tests {
 
     fn total(doc: &Document, paths: &[&str]) -> Option<PsdRect> {
         influence_paths(doc, paths)
-            .map(|rects| rects.into_iter().reduce(union_rect).expect("paths"))
+            .map(|rects| rects.into_iter().reduce(PsdRect::union).expect("paths"))
     }
 
     #[test]
@@ -450,13 +424,13 @@ mod tests {
         let refs: Vec<&str> = freed.iter().map(String::as_str).collect();
 
         let clicked_before =
-            influence_paths(&d, &["2"]).and_then(|r| r.into_iter().reduce(union_rect));
-        let before = influence_paths(&d, &refs).and_then(|r| r.into_iter().reduce(union_rect));
+            influence_paths(&d, &["2"]).and_then(|r| r.into_iter().reduce(PsdRect::union));
+        let before = influence_paths(&d, &refs).and_then(|r| r.into_iter().reduce(PsdRect::union));
         assert_eq!(crate::release_clipping_mask(&mut d, &["2"]), 2);
         assert!(!d.layers[2].clipping && !d.layers[3].clipping);
         let clicked_after =
-            influence_paths(&d, &["2"]).and_then(|r| r.into_iter().reduce(union_rect));
-        let after = influence_paths(&d, &refs).and_then(|r| r.into_iter().reduce(union_rect));
+            influence_paths(&d, &["2"]).and_then(|r| r.into_iter().reduce(PsdRect::union));
+        let after = influence_paths(&d, &refs).and_then(|r| r.into_iter().reduce(PsdRect::union));
 
         let clicked_damage = union(clicked_before, clicked_after).expect("bounded");
         assert_ne!(

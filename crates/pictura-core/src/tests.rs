@@ -459,6 +459,202 @@ fn psd_rect_extent_saturates_instead_of_overflowing() {
 }
 
 #[test]
+fn psd_rect_is_empty_covers_zero_inverted_and_huge() {
+    let zero_width = PsdRect {
+        top: 0,
+        left: 4,
+        bottom: 4,
+        right: 4,
+    };
+    let zero_height = PsdRect {
+        top: 4,
+        left: 0,
+        bottom: 4,
+        right: 4,
+    };
+    let inverted = PsdRect {
+        top: 4,
+        left: 4,
+        bottom: 0,
+        right: 0,
+    };
+    assert!(zero_width.is_empty());
+    assert!(zero_height.is_empty());
+    assert!(inverted.is_empty());
+
+    let huge = PsdRect {
+        top: i32::MIN,
+        left: i32::MIN,
+        bottom: i32::MAX,
+        right: i32::MAX,
+    };
+    assert!(!huge.is_empty(), "a saturating span is still a real rect");
+}
+
+#[test]
+fn psd_rect_intersect_returns_none_when_disjoint_or_touching() {
+    let a = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 10,
+        right: 10,
+    };
+    let overlap = PsdRect {
+        top: 5,
+        left: 5,
+        bottom: 15,
+        right: 15,
+    };
+    assert_eq!(
+        a.intersect(overlap),
+        Some(PsdRect {
+            top: 5,
+            left: 5,
+            bottom: 10,
+            right: 10,
+        })
+    );
+
+    let touching = PsdRect {
+        top: 0,
+        left: 10,
+        bottom: 10,
+        right: 20,
+    };
+    let disjoint = PsdRect {
+        top: 20,
+        left: 20,
+        bottom: 30,
+        right: 30,
+    };
+    let inverted = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 0,
+        right: 0,
+    };
+    assert_eq!(a.intersect(touching), None);
+    assert_eq!(a.intersect(disjoint), None);
+    assert_eq!(a.intersect(inverted), None);
+}
+
+#[test]
+fn psd_rect_clip_to_clamps_and_reports_a_miss() {
+    let rect = PsdRect {
+        top: -3,
+        left: -2,
+        bottom: 9,
+        right: 8,
+    };
+    assert_eq!(
+        rect.clip_to(10, 10),
+        Some(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 9,
+            right: 8,
+        })
+    );
+
+    let off_canvas = PsdRect {
+        top: 20,
+        left: 20,
+        bottom: 30,
+        right: 30,
+    };
+    assert_eq!(off_canvas.clip_to(10, 10), None);
+    assert_eq!(PsdRect::default().clip_to(10, 10), None);
+}
+
+#[test]
+fn psd_rect_union_is_the_bounding_box_without_an_empty_identity() {
+    let a = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 10,
+        right: 10,
+    };
+    let b = PsdRect {
+        top: 5,
+        left: 5,
+        bottom: 15,
+        right: 15,
+    };
+    let expected = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 15,
+        right: 15,
+    };
+    assert_eq!(a.union(b), expected);
+
+    let disjoint = PsdRect {
+        top: 20,
+        left: 20,
+        bottom: 30,
+        right: 30,
+    };
+    assert_eq!(
+        a.union(disjoint),
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 30,
+            right: 30,
+        }
+    );
+
+    let empty = PsdRect::default();
+    assert_eq!(
+        empty.union(a),
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 10,
+            right: 10,
+        },
+        "an empty rect is not the identity"
+    );
+}
+
+#[test]
+fn psd_rect_grow_saturates_at_the_i32_limits() {
+    let full = PsdRect {
+        top: i32::MIN,
+        left: i32::MIN,
+        bottom: i32::MAX,
+        right: i32::MAX,
+    };
+    assert_eq!(full.grow(5), full);
+
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 10,
+        right: 10,
+    };
+    assert_eq!(
+        rect.grow(5),
+        PsdRect {
+            top: -5,
+            left: -5,
+            bottom: 15,
+            right: 15,
+        }
+    );
+    assert_eq!(
+        rect.grow(-2),
+        PsdRect {
+            top: 2,
+            left: 2,
+            bottom: 8,
+            right: 8,
+        },
+        "a negative pad shrinks inward"
+    );
+}
+
+#[test]
 fn content_digest_is_stable_and_sensitive_to_bytes() {
     assert_eq!(content_digest(b"layer"), content_digest(b"layer"));
     assert_ne!(content_digest(b"layer"), content_digest(b"layers"));

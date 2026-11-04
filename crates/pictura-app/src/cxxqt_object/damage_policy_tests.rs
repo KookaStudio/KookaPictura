@@ -676,7 +676,7 @@ fn write_layer_dab(doc: &mut Document, path: &str, dab: PsdRect) {
 
 fn commit_region_equals_full(mut view: PictureViewRust, dab: PsdRect, pad: i32) {
     write_layer_dab(view.session.doc.as_mut().expect("doc"), "1", dab);
-    let grown = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    let grown = dab.grow(pad);
     view.apply_edit("Paint", Edit::regions(vec![grown], false));
     let doc = view.session.doc.as_ref().expect("doc");
     let full = pictura_render::composite_rgba(doc);
@@ -796,7 +796,7 @@ fn feathered_mask_dab_commit_equals_full_recomposite() {
             }
         }
     }
-    let grown = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    let grown = dab.grow(pad);
     view.apply_edit("Paint", Edit::regions(vec![grown], false));
     let doc = view.session.doc.as_ref().expect("doc");
     let full = pictura_render::composite_rgba(doc);
@@ -833,7 +833,7 @@ fn cancel_styled_stroke_restores_the_halo() {
         },
     ));
     let dirty = stroke.dirty().expect("dirty");
-    let grown = crate::cxxqt_object::helpers::grow_rect(dirty, pad);
+    let grown = dirty.grow(pad);
     let _ = view.refresh_region_buffer(grown);
     let session = StrokeSession {
         stroke: Some(stroke),
@@ -848,15 +848,13 @@ fn cancel_styled_stroke_restores_the_halo() {
 
 #[test]
 fn dab_near_the_canvas_edge_clips_the_grown_rect() {
-    let grown = crate::cxxqt_object::helpers::grow_rect(
-        PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 4,
-            right: 4,
-        },
-        20,
-    );
+    let grown = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 4,
+        right: 4,
+    }
+    .grow(20);
     assert!(grown.top < 0 && grown.left < 0);
     let (x0, y0, w, h) = crate::cxxqt_object::helpers::clamp_region(grown, 8, 8).expect("clamped");
     assert_eq!((x0, y0, w, h), (0, 0, 8, 8));
@@ -881,7 +879,7 @@ fn paint_present_covers_the_dab_union_plus_reach() {
         bottom: 25,
         right: 25,
     };
-    let present = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    let present = dab.grow(pad);
     assert!(present.left <= dab.left - 6 && present.top <= dab.top - 6);
     assert!(present.right >= dab.right + 6 && present.bottom >= dab.bottom + 6);
     let session = StrokeSession {
@@ -919,7 +917,7 @@ fn mask_present_covers_the_feather_reach() {
         bottom: 25,
         right: 25,
     };
-    let present = crate::cxxqt_object::helpers::grow_rect(dab, pad);
+    let present = dab.grow(pad);
     assert!(present.left <= dab.left - feather);
     assert!(present.top <= dab.top - feather);
 }

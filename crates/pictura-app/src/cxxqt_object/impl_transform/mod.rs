@@ -32,7 +32,11 @@ pub(super) fn build_move_preview_base(
             members.push((path.clone(), layer.visible, layer.rect));
         }
     }
-    let Some(union) = members.iter().map(|(_, _, rect)| *rect).reduce(union_rect) else {
+    let Some(union) = members
+        .iter()
+        .map(|(_, _, rect)| *rect)
+        .reduce(PsdRect::union)
+    else {
         return QImage::default();
     };
     let composite_ok = doc.composite.width == doc.width
@@ -96,8 +100,8 @@ pub(super) fn translate_move_group(
             continue;
         }
         let after = pictura_render::resolve_path(doc, path).map_or(before, |layer| layer.rect);
-        let rect = union_rect(before, after);
-        dirty = Some(dirty.map_or(rect, |acc| union_rect(acc, rect)));
+        let rect = before.union(after);
+        dirty = Some(dirty.map_or(rect, |acc| acc.union(rect)));
     }
     dirty
 }
@@ -109,7 +113,7 @@ pub(super) fn move_group_union(doc: &Document, paths: &[String]) -> Option<(i32,
     let mut bounds: Option<PsdRect> = None;
     for path in paths {
         let layer = pictura_render::resolve_path(doc, path)?;
-        bounds = Some(bounds.map_or(layer.rect, |rect| union_rect(rect, layer.rect)));
+        bounds = Some(bounds.map_or(layer.rect, |rect| rect.union(layer.rect)));
     }
     bounds.map(|rect| (rect.left, rect.top, rect.right, rect.bottom))
 }
@@ -185,7 +189,7 @@ pub(super) fn move_origin_opacity(doc: &Document, paths: &[String]) -> Option<(i
     let mut bounds: Option<PsdRect> = None;
     for path in paths {
         let layer = pictura_render::resolve_path(doc, path)?;
-        bounds = Some(bounds.map_or(layer.rect, |rect| union_rect(rect, layer.rect)));
+        bounds = Some(bounds.map_or(layer.rect, |rect| rect.union(layer.rect)));
     }
     bounds.map(|rect| (rect.left.max(0), rect.top.max(0), 255))
 }
