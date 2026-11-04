@@ -88,10 +88,9 @@ fn apply_op_region(
     if layer_pixel_locked(layer) {
         return Err(FilterError::Locked);
     }
-    let clip = intersect_rect(region, lrect);
-    if clip.width() <= 0 || clip.height() <= 0 {
+    let Some(clip) = region.intersect(lrect) else {
         return Ok(());
-    }
+    };
     let lw = lrect.width() as usize;
     let full_n = lw * lrect.height() as usize;
     let cw = clip.width() as usize;
@@ -301,15 +300,6 @@ fn write_back(out: &mut [u8], filtered: &[u8], blend: Option<Blend>, at: Placeme
                 dst[lx] = (o + (f - o) * cov as f64 / 255.0).round().clamp(0.0, 255.0) as u8;
             }
         });
-}
-
-fn intersect_rect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
-    }
 }
 
 fn channel_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {

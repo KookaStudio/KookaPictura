@@ -9,7 +9,6 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::path::{NamedPath, VectorPath};
 use pictura_core::shape::path_coverage;
-use pictura_core::PsdRect;
 use pictura_paint::bucket::{self, BucketPaint};
 use pictura_paint::spacing::SpacingMode;
 use pictura_paint::{paint_stroke, Alpha, PaintMode, StrokeConfig, StrokeSample};
@@ -303,18 +302,6 @@ pub(super) fn stroke_samples(target: &VectorPath) -> Vec<Vec<StrokeSample>> {
         .collect()
 }
 
-pub(super) fn union(a: Option<PsdRect>, b: PsdRect) -> PsdRect {
-    match a {
-        None => b,
-        Some(a) => PsdRect {
-            top: a.top.min(b.top),
-            left: a.left.min(b.left),
-            bottom: a.bottom.max(b.bottom),
-            right: a.right.max(b.right),
-        },
-    }
-}
-
 // ponytail: Stroke Path paints with a round brush from the given settings,
 // not CS6's choice of any painting tool, and (like Kooka's brush strokes)
 // ignores the selection.
@@ -367,7 +354,7 @@ pub(super) fn paths_stroke(
                     Cow::Borrowed(samples.as_slice())
                 };
                 match paint_stroke(doc, layer, &cfg, &local) {
-                    Some(rect) => Some(union(dirty, rect)),
+                    Some(rect) => Some(dirty.map_or(rect, |d| d.union(rect))),
                     None => dirty,
                 }
             })

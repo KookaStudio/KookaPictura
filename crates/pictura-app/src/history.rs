@@ -171,15 +171,7 @@ impl Damage {
     }
 
     fn union(&mut self, r: PsdRect) {
-        self.rect = Some(match self.rect {
-            None => r,
-            Some(u) => PsdRect {
-                top: u.top.min(r.top),
-                left: u.left.min(r.left),
-                bottom: u.bottom.max(r.bottom),
-                right: u.right.max(r.right),
-            },
-        });
+        self.rect = Some(self.rect.map_or(r, |u| u.union(r)));
     }
 
     fn add(&mut self, deltas: &[PlaneDelta]) {

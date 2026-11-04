@@ -589,7 +589,7 @@ impl BlendMode {
 
 /// A signed rectangle in PSD coordinates. Bounds may fall outside the canvas,
 /// so all edges are `i32` and `right`/`bottom` may be smaller than `left`/`top`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PsdRect {
     pub top: i32,
     pub left: i32,
@@ -606,6 +606,56 @@ impl PsdRect {
 
     pub fn height(&self) -> i32 {
         self.bottom.saturating_sub(self.top)
+    }
+
+    /// Whether either extent is non-positive. An inverted rect is empty.
+    pub fn is_empty(self) -> bool {
+        self.width() <= 0 || self.height() <= 0
+    }
+
+    /// The overlap of two rects, or `None` when they do not overlap.
+    pub fn intersect(self, other: Self) -> Option<Self> {
+        let rect = Self {
+            top: self.top.max(other.top),
+            left: self.left.max(other.left),
+            bottom: self.bottom.min(other.bottom),
+            right: self.right.min(other.right),
+        };
+        (!rect.is_empty()).then_some(rect)
+    }
+
+    /// The smallest rect containing both. An empty rect is not an identity.
+    pub fn union(self, other: Self) -> Self {
+        Self {
+            top: self.top.min(other.top),
+            left: self.left.min(other.left),
+            bottom: self.bottom.max(other.bottom),
+            right: self.right.max(other.right),
+        }
+    }
+
+    /// `self` clipped to a `width`×`height` canvas, or `None` when it misses.
+    pub fn clip_to(self, width: u32, height: u32) -> Option<Self> {
+        let right = self.right.min(width.min(i32::MAX as u32) as i32);
+        let bottom = self.bottom.min(height.min(i32::MAX as u32) as i32);
+        let left = self.left.max(0);
+        let top = self.top.max(0);
+        (right > left && bottom > top).then_some(Self {
+            top,
+            left,
+            bottom,
+            right,
+        })
+    }
+
+    /// Grow every edge by `pad`, saturating at the `i32` limits.
+    pub fn grow(self, pad: i32) -> Self {
+        Self {
+            top: self.top.saturating_sub(pad),
+            left: self.left.saturating_sub(pad),
+            bottom: self.bottom.saturating_add(pad),
+            right: self.right.saturating_add(pad),
+        }
     }
 }
 

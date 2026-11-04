@@ -286,7 +286,7 @@ fn stroke_split_profile_4000() {
 #[test]
 #[ignore = "4000x4000 commit refresh profile; run explicitly with --ignored --nocapture"]
 fn commit_refresh_profile_4000() {
-    use super::helpers::{paint_timing, union_rect};
+    use super::helpers::paint_timing;
     use super::helpers_composite::premultiplied_display_image;
     use super::PictureViewRust;
     use std::time::{Duration, Instant};
@@ -336,7 +336,7 @@ fn commit_refresh_profile_4000() {
                         srgb_image = t.elapsed();
                     }
                     rust.apply_refreshed_region(x0, y0, clipped, buf);
-                    covered = Some(covered.map_or(clipped, |u| union_rect(u, clipped)));
+                    covered = Some(covered.map_or(clipped, |u| u.union(clipped)));
                 }
                 let loop_time = t0.elapsed();
                 let covered = covered.expect("a dense stroke covers pixels");

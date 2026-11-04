@@ -53,7 +53,7 @@ pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &[u8]) ->
 /// coverage; `None` when no covered pixel is visible.
 fn lifted_copy(source: &Layer, coverage: &[u8], doc_w: u32, doc_h: u32) -> Option<Layer> {
     let bounds = coverage_bounds(coverage, doc_w, doc_h)?;
-    let rect = intersect(bounds, source.rect)?;
+    let rect = bounds.intersect(source.rect)?;
     let (w, h) = (rect.width() as usize, rect.height() as usize);
     let src = source.rect;
     let src_w = src.width() as usize;
@@ -116,16 +116,6 @@ fn lifted_copy(source: &Layer, coverage: &[u8], doc_w: u32, doc_h: u32) -> Optio
     })
 }
 
-fn intersect(a: PsdRect, b: PsdRect) -> Option<PsdRect> {
-    let rect = PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
-    };
-    (rect.width() > 0 && rect.height() > 0).then_some(rect)
-}
-
 /// Whether [`lift_selection`] can take pixels from `layer`: a pixel layer or
 /// Background without a pixel lock or a transparency lock on its alpha, and
 /// not position-locked unless it is the Background (which always is).
@@ -178,10 +168,10 @@ pub fn merge_lifted(doc: &mut Document, lifted_path: &str) -> bool {
 fn composite_over(base: &mut Layer, top: &Layer) {
     let has_alpha = base.channels.iter().any(|c| c.id == -1);
     if has_alpha {
-        grow_to(base, union(base.rect, top.rect));
+        grow_to(base, base.rect.union(top.rect));
     }
     let (rect, top_rect) = (base.rect, top.rect);
-    let Some(area) = intersect(rect, top_rect) else {
+    let Some(area) = rect.intersect(top_rect) else {
         return;
     };
     let (base_w, top_w) = (rect.width() as usize, top_rect.width() as usize);
@@ -222,15 +212,6 @@ fn composite_over(base: &mut Layer, top: &Layer) {
     }
 }
 
-fn union(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.min(b.top),
-        left: a.left.min(b.left),
-        bottom: a.bottom.max(b.bottom),
-        right: a.right.max(b.right),
-    }
-}
-
 /// Extend `layer`'s channels to `rect` (a superset of its rect); the new area
 /// is transparent.
 fn grow_to(layer: &mut Layer, rect: PsdRect) {
@@ -265,7 +246,7 @@ pub fn untrim_to(doc: &mut Document, path: &str, rect: PsdRect) -> bool {
     };
     if layer.is_group
         || layer.rect == rect
-        || union(layer.rect, rect) != rect
+        || layer.rect.union(rect) != rect
         || !layer.channels.iter().any(|c| c.id == -1)
     {
         return false;

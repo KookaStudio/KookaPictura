@@ -18,7 +18,10 @@ impl Gpu {
         cached: &CachedBuffer,
         doc: &Document,
     ) -> (wgpu::Buffer, SrcLayout) {
-        let rect = clip_to_document(cached.rect, doc);
+        let rect = cached
+            .rect
+            .clip_to(doc.width, doc.height)
+            .unwrap_or_default();
         let w = rect.width().max(0) as u32;
         let h = rect.height().max(0) as u32;
         let n = w as usize * h as usize;
@@ -59,15 +62,6 @@ impl Gpu {
             })
         });
         (buffer, layout)
-    }
-}
-
-fn clip_to_document(rect: PsdRect, doc: &Document) -> PsdRect {
-    PsdRect {
-        top: rect.top.max(0),
-        left: rect.left.max(0),
-        bottom: rect.bottom.min(doc.height.min(i32::MAX as u32) as i32),
-        right: rect.right.min(doc.width.min(i32::MAX as u32) as i32),
     }
 }
 

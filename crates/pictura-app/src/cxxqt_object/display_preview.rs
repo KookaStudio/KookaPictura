@@ -119,7 +119,10 @@ impl PictureViewRust {
         // The canvas reports a rect rounded out to the level grid, which can
         // overshoot the document by up to 2^level - 1 pixels. Clamp it so the
         // reduced frame and the level rect have the same size.
-        let rect = clamp_rect(self.presented_rect, doc.width, doc.height);
+        let rect = self
+            .presented_rect
+            .clip_to(doc.width, doc.height)
+            .unwrap_or_default();
         if rect.width() <= 0 || rect.height() <= 0 {
             return None;
         }
@@ -191,15 +194,6 @@ impl PictureViewRust {
         self.session.document_generation.hash(&mut hasher);
         self.non_preview_revision.hash(&mut hasher);
         hasher.finish()
-    }
-}
-
-fn clamp_rect(rect: PsdRect, width: u32, height: u32) -> PsdRect {
-    PsdRect {
-        top: rect.top.max(0),
-        left: rect.left.max(0),
-        bottom: rect.bottom.min(height.min(i32::MAX as u32) as i32),
-        right: rect.right.min(width.min(i32::MAX as u32) as i32),
     }
 }
 

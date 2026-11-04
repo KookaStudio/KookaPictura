@@ -422,10 +422,7 @@ pub(crate) fn filtered_source(layer: &Layer, doc: &Document) -> Option<CachedBuf
     #[cfg(test)]
     crate::composite_plan::counters::note_source_lookup(layer);
     let so = layer.smart_object.as_ref()?;
-    let rect = clip_to_document(layer.rect, doc);
-    if rect.width() <= 0 || rect.height() <= 0 {
-        return None;
-    }
+    let rect = layer.rect.clip_to(doc.width, doc.height)?;
     let mut hasher = DefaultHasher::new();
     so.payload_digest().hash(&mut hasher);
     rect_key(layer.rect).hash(&mut hasher);
@@ -481,10 +478,7 @@ pub(crate) fn composited_source(
         }
         RasterRoute::SmartSource => {
             let so = layer.smart_object.as_ref()?;
-            let rect = clip_to_document(layer.rect, doc);
-            if rect.width() <= 0 || rect.height() <= 0 {
-                return None;
-            }
+            let rect = layer.rect.clip_to(doc.width, doc.height)?;
             let mut hasher = DefaultHasher::new();
             key::embedded_key(so).hash(&mut hasher);
             rect_key(layer.rect).hash(&mut hasher);
@@ -645,15 +639,6 @@ pub(crate) fn effect_passes_with(
         Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
             Arc::new(LayerPasses::default())
         }
-    }
-}
-
-pub(crate) fn clip_to_document(rect: PsdRect, doc: &Document) -> PsdRect {
-    PsdRect {
-        top: rect.top.max(0),
-        left: rect.left.max(0),
-        bottom: rect.bottom.min(doc.height.min(i32::MAX as u32) as i32),
-        right: rect.right.min(doc.width.min(i32::MAX as u32) as i32),
     }
 }
 

@@ -161,15 +161,6 @@ fn contents(doc: &Document, paths: &[&str]) -> Vec<(String, PsdRect)> {
         .collect()
 }
 
-fn union(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.min(b.top),
-        left: a.left.min(b.left),
-        bottom: a.bottom.max(b.bottom),
-        right: a.right.max(b.right),
-    }
-}
-
 /// Move `path` by `(dx, dy)` unless it is position-locked or the Background.
 fn shift(doc: &mut Document, path: &str, (dx, dy): (i32, i32)) -> bool {
     match resolve_path_mut(doc, path) {
@@ -207,7 +198,7 @@ pub fn align_layers(
     let target = selection.unwrap_or_else(|| {
         rects[1..]
             .iter()
-            .fold(rects[0].1, |all, (_, r)| union(all, *r))
+            .fold(rects[0].1, |all, (_, r)| all.union(*r))
     });
     let mut moved = 0;
     for (path, rect) in &rects {

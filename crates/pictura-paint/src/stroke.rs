@@ -599,7 +599,7 @@ impl Stroke {
                 let mut acc: Option<PsdRect> = None;
                 for band in bands {
                     if let Some(rect) = dab.band(band, Some(&mut *rng)) {
-                        acc = Some(acc.map_or(rect, |b| union_rect(b, rect)));
+                        acc = Some(acc.map_or(rect, |b| b.union(rect)));
                     }
                 }
                 acc
@@ -607,7 +607,7 @@ impl Stroke {
                 bands
                     .into_par_iter()
                     .filter_map(|band| dab.band(band, None))
-                    .reduce_with(union_rect)
+                    .reduce_with(PsdRect::union)
             };
             if let Some(bbox) = bbox {
                 Self::grow_dirty(dirty, dab_dirty, bbox.left, bbox.top);
@@ -793,7 +793,7 @@ impl Stroke {
                     bottom: ly + 1,
                     right,
                 };
-                changed = Some(changed.map_or(row_box, |c| union_rect(c, row_box)));
+                changed = Some(changed.map_or(row_box, |c| c.union(row_box)));
             }
         }
         let Some(rect) = changed else {
@@ -889,7 +889,7 @@ impl Stroke {
                 self.serial,
             );
             if let Some(bbox) = bbox {
-                written = Some(written.map_or(bbox, |w| union_rect(w, bbox)));
+                written = Some(written.map_or(bbox, |w| w.union(bbox)));
             }
         }
         let Some(rect) = written else {
@@ -1093,15 +1093,6 @@ pub fn paint_stroke(
         stroke.sample(doc, s);
     }
     stroke.finish()
-}
-
-pub(crate) fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.min(b.top),
-        left: a.left.min(b.left),
-        bottom: a.bottom.max(b.bottom),
-        right: a.right.max(b.right),
-    }
 }
 
 /// Positions of the R, G, B and alpha planes in a layer's channel list, or

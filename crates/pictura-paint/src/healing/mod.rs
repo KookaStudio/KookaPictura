@@ -181,10 +181,7 @@ impl Work {
         if coverage.len() != rw * region.height().max(0) as usize {
             return None;
         }
-        let rect = intersect(inflate(region, margin + BORDER), canvas);
-        if rect.width() <= 0 || rect.height() <= 0 {
-            return None;
-        }
+        let rect = region.grow(margin + BORDER).intersect(canvas)?;
         let (w, h) = (rect.width() as usize, rect.height() as usize);
         let mut cov = vec![0.0f32; w * h];
         let mut hole = vec![false; w * h];
@@ -297,7 +294,7 @@ fn heal_region_adapted(
         }
     };
     work.write_back(img, &rgba, &filled);
-    Some(intersect(inflate(region, margin), img.rect()))
+    region.grow(margin).intersect(img.rect())
 }
 
 /// Transplant the texture at `source` (an offset added to each destination
@@ -324,7 +321,7 @@ pub fn clone_region(
         keep_destination_colour(&mut out, &dest, &work.hole);
     }
     work.write_back(img, &dest, &out);
-    Some(intersect(region, img.rect()))
+    region.intersect(img.rect())
 }
 
 /// Successive over-relaxation on the Poisson equation: each unknown moves past
@@ -495,23 +492,5 @@ fn keep_destination_colour(solved: &mut [[f32; 4]], dest: &[[f32; 4]], hole: &[b
             solved[i][c] = (dest[i][c] * scale).clamp(0.0, 255.0);
         }
         solved[i][3] = dest[i][3];
-    }
-}
-
-fn inflate(r: PsdRect, by: i32) -> PsdRect {
-    PsdRect {
-        top: r.top - by,
-        left: r.left - by,
-        bottom: r.bottom + by,
-        right: r.right + by,
-    }
-}
-
-fn intersect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
     }
 }

@@ -449,7 +449,7 @@ pub(crate) fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
             .children
             .iter()
             .filter_map(|child| paint_bounds(child, doc))
-            .reduce(union_rect);
+            .reduce(PsdRect::union);
     }
     if is_destructive_adjustment(layer) {
         return adjustment_bounds(layer, doc);
@@ -478,15 +478,6 @@ fn canvas_rect(doc: &Document) -> PsdRect {
         left: 0,
         bottom: doc.height.min(i32::MAX as u32) as i32,
         right: doc.width.min(i32::MAX as u32) as i32,
-    }
-}
-
-fn grow_rect(rect: PsdRect, pad: i32) -> PsdRect {
-    PsdRect {
-        top: rect.top.saturating_sub(pad),
-        left: rect.left.saturating_sub(pad),
-        bottom: rect.bottom.saturating_add(pad),
-        right: rect.right.saturating_add(pad),
     }
 }
 
@@ -530,7 +521,7 @@ fn adjustment_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
             && mask.density == 255
             && mask.rect.width() > 0
             && mask.rect.height() > 0)
-            .then(|| grow_rect(mask.rect, feather_pad(mask.feather())))
+            .then(|| mask.rect.grow(feather_pad(mask.feather())))
     });
     match raster {
         Some(rect) => Some(rect),
@@ -545,8 +536,7 @@ fn adjustment_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
 /// adjustment mask.
 fn masked_fill_bounds(layer: &Layer) -> Option<PsdRect> {
     let pad = effects_pad(layer);
-    let grow =
-        |rect: PsdRect, feather: f64| grow_rect(rect, pad.saturating_add(feather_pad(feather)));
+    let grow = |rect: PsdRect, feather: f64| rect.grow(pad.saturating_add(feather_pad(feather)));
     let raster = layer.mask.as_ref().and_then(|mask| {
         (!mask.disabled
             && mask.data.is_some()
@@ -566,15 +556,6 @@ fn masked_fill_bounds(layer: &Layer) -> Option<PsdRect> {
         (Some(rect), _) => Some(rect),
         (None, Some(rect)) => Some(rect),
         (None, None) => None,
-    }
-}
-
-fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        left: a.left.min(b.left),
-        top: a.top.min(b.top),
-        right: a.right.max(b.right),
-        bottom: a.bottom.max(b.bottom),
     }
 }
 
@@ -737,7 +718,7 @@ pub fn paint_reach(layer: &Layer) -> i32 {
 fn build_mask_clip(region: Option<PsdRect>, effects: &LayerEffects, doc: &Document) -> PsdRect {
     match region {
         None => canvas_rect(doc),
-        Some(r) => grow_rect(r, effect_change_reach(effects)),
+        Some(r) => r.grow(effect_change_reach(effects)),
     }
 }
 

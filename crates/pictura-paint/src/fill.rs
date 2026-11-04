@@ -3,7 +3,7 @@
 //! Brush mode through the selection.
 
 use crate::replace::grow;
-use crate::stroke::{blend_pixel, layer_at, layer_at_mut, parse_layer_path, union_rect};
+use crate::stroke::{blend_pixel, layer_at, layer_at_mut, parse_layer_path};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect, Sample,
@@ -318,7 +318,7 @@ pub(crate) fn fill_planes<T: Sample + PartialEq + Send + Sync>(
             }
             dirty
         })
-        .reduce_with(union_rect)
+        .reduce_with(PsdRect::union)
 }
 
 /// `plane` cut into rows of `w`, or endless `None`s for an absent plane.

@@ -1,7 +1,7 @@
 //! The banded dab raster: a large dab's rows cut into bands that run in
 //! parallel, each writing only its own rows of the coverage buffers and planes.
 
-use super::{union_rect, PlaneIndex, Stencil};
+use super::{PlaneIndex, Stencil};
 use crate::healing::RgbaImage;
 use crate::tip::TipParams;
 use crate::PaintMode;
@@ -108,7 +108,7 @@ impl DabRaster<'_> {
                     bottom: ly as i32 + 1,
                     right: last + 1,
                 };
-                bbox = Some(bbox.map_or(row_box, |b| union_rect(b, row_box)));
+                bbox = Some(bbox.map_or(row_box, |b| b.union(row_box)));
             }
         }
         bbox
@@ -226,12 +226,12 @@ pub(super) fn write_back(
         bands
             .into_iter()
             .filter_map(|band| write_back_band(band, pixels, rect))
-            .reduce(union_rect)
+            .reduce(PsdRect::union)
     } else {
         bands
             .into_par_iter()
             .filter_map(|band| write_back_band(band, pixels, rect))
-            .reduce_with(union_rect)
+            .reduce_with(PsdRect::union)
     }
 }
 
@@ -261,7 +261,7 @@ fn write_back_band(mut band: Band<'_>, pixels: &RgbaImage, rect: PsdRect) -> Opt
                 bottom: ly as i32 + 1,
                 right: last as i32 + 1,
             };
-            bbox = Some(bbox.map_or(row_box, |b| union_rect(b, row_box)));
+            bbox = Some(bbox.map_or(row_box, |b| b.union(row_box)));
         }
     }
     bbox

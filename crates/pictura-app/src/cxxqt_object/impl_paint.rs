@@ -26,7 +26,7 @@ impl PictureViewRust {
         if self.session.live.present_flush_due() {
             let pending = self.session.live.take_pending_present();
             self.session.live.set_pending_present(Some(match pending {
-                Some(pending) => union_rect(pending, rect),
+                Some(pending) => pending.union(rect),
                 None => rect,
             }));
             None
@@ -131,19 +131,17 @@ impl PictureViewRust {
                 pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, None);
             }
             return dirty.map(|rect| {
-                grow_rect(
-                    PsdRect {
-                        top: rect.top + ctx.rect.top,
-                        left: rect.left + ctx.rect.left,
-                        bottom: rect.bottom + ctx.rect.top,
-                        right: rect.right + ctx.rect.left,
-                    },
-                    pad,
-                )
+                PsdRect {
+                    top: rect.top + ctx.rect.top,
+                    left: rect.left + ctx.rect.left,
+                    bottom: rect.bottom + ctx.rect.top,
+                    right: rect.right + ctx.rect.left,
+                }
+                .grow(pad)
             });
         }
         let stroke = session.stroke?;
-        let dirty = stroke.dirty().map(|rect| grow_rect(rect, pad));
+        let dirty = stroke.dirty().map(|rect| rect.grow(pad));
         match (session.stroke_base, self.session.doc.as_mut()) {
             (Some(base), _) => self.session.doc = Some(base),
             (None, Some(doc)) => {
@@ -661,7 +659,7 @@ impl qobject::PictureView {
             let rust = &mut *rust;
             let dirty = rust.session.live.stroke_mut().and_then(Stroke::take_dirty);
             let pad = rust.session.live.paint_pad();
-            let dirty = dirty.map(|rect| grow_rect(rect, pad));
+            let dirty = dirty.map(|rect| rect.grow(pad));
             if let Some(rect) = dirty {
                 rust.session.live.mark_stroke_tile(rect);
             }
@@ -880,9 +878,9 @@ impl qobject::PictureView {
                 if !patched {
                     continue;
                 }
-                let grown = grow_rect(rect, rust.session.live.paint_pad());
+                let grown = rect.grow(rust.session.live.paint_pad());
                 rust.session.live.mark_stroke_tile(grown);
-                changed = Some(changed.map_or(grown, |u| union_rect(u, grown)));
+                changed = Some(changed.map_or(grown, |u| u.union(grown)));
             }
         }
         let Some(rect) = changed else {
@@ -964,7 +962,7 @@ impl qobject::PictureView {
                                 }
                             }
                             if let Some(rect) = stroke.take_dirty() {
-                                stroke_tiles.mark(grow_rect(rect, paint_pad));
+                                stroke_tiles.mark(rect.grow(paint_pad));
                             }
                         }
                     }
@@ -991,7 +989,7 @@ impl qobject::PictureView {
                         false
                     }
                     Some(rect) => {
-                        let rect = grow_rect(rect, paint_pad);
+                        let rect = rect.grow(paint_pad);
                         // A previewed stroke never presented full resolution:
                         // refresh its dirty tiles. Decomposing them into
                         // disjoint rectangles keeps a diagonal stroke from

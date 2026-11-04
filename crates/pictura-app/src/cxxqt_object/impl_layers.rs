@@ -67,7 +67,7 @@ pub(super) fn changed_property_region(
                 return None;
             }
             let rect = pictura_render::damage::influence(doc, path)?;
-            Some(Some(union.map_or(rect, |u| union_rect(u, rect))))
+            Some(Some(union.map_or(rect, |u| u.union(rect))))
         })
 }
 

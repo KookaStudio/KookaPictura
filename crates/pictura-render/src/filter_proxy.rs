@@ -47,15 +47,7 @@ impl FilterProxy {
         region: PsdRect,
         scale: f64,
     ) -> Option<Self> {
-        let region = intersect(
-            region,
-            PsdRect {
-                top: 0,
-                left: 0,
-                bottom: doc.height as i32,
-                right: doc.width as i32,
-            },
-        )?;
+        let region = region.clip_to(doc.width, doc.height)?;
         let scale = if scale.is_finite() && scale > 0.0 {
             scale.min(1.0)
         } else {
@@ -237,7 +229,7 @@ impl Map {
         if data.len() < sw * sh {
             return None;
         }
-        let sub = intersect(rect, self.region)?;
+        let sub = rect.intersect(self.region)?;
         let out = self.rect(sub);
         let window = Window {
             x: (sub.left - rect.left) as usize,
@@ -304,7 +296,7 @@ fn reduce_layer(layer: &mut Layer, map: &Map) {
         // A channel-less fill layer draws from its rect; an adjustment layer
         // ignores it, so only fills need the mapped rect.
         None if crate::document_ops::is_fill_content_layer(layer) => {
-            intersect(rect, map.region).map_or(EMPTY, |r| map.rect(r))
+            rect.intersect(map.region).map_or(EMPTY, |r| map.rect(r))
         }
         None => EMPTY,
     };
@@ -336,19 +328,14 @@ fn reduce_mask(mask: &LayerMask, map: &Map) -> LayerMask {
                 out.data = None;
             }
         },
-        None => out.rect = intersect(mask.rect, map.region).map_or(EMPTY, |r| map.rect(r)),
+        None => {
+            out.rect = mask
+                .rect
+                .intersect(map.region)
+                .map_or(EMPTY, |r| map.rect(r))
+        }
     }
     out
-}
-
-fn intersect(a: PsdRect, b: PsdRect) -> Option<PsdRect> {
-    let r = PsdRect {
-        top: a.top.max(b.top),
-        left: a.left.max(b.left),
-        bottom: a.bottom.min(b.bottom),
-        right: a.right.min(b.right),
-    };
-    (r.right > r.left && r.bottom > r.top).then_some(r)
 }
 
 #[derive(Clone, Copy)]

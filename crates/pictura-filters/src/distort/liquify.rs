@@ -489,18 +489,15 @@ impl LiquifyMesh {
             self.freeze[idx] = f;
         }
         let pad = r.ceil() as i32 + 2;
-        let dirty = clip(
-            PsdRect {
-                left: c[0].floor() as i32 - pad,
-                top: c[1].floor() as i32 - pad,
-                right: c[0].ceil() as i32 + pad,
-                bottom: c[1].ceil() as i32 + pad,
-            },
-            self.width,
-            self.height,
-        );
+        let dirty = PsdRect {
+            left: c[0].floor() as i32 - pad,
+            top: c[1].floor() as i32 - pad,
+            right: c[0].ceil() as i32 + pad,
+            bottom: c[1].ceil() as i32 + pad,
+        }
+        .clip_to(self.width, self.height);
         match (dirty, self.clip) {
-            (Some(dirty), Some(rect)) => overlap(dirty, rect),
+            (Some(dirty), Some(rect)) => dirty.intersect(rect),
             (dirty, None) => dirty,
             (None, Some(_)) => None,
         }
@@ -782,35 +779,9 @@ pub(super) fn catmull_rom(t: f64) -> [f64; 4] {
     ]
 }
 
-fn clip(r: PsdRect, width: u32, height: u32) -> Option<PsdRect> {
-    let out = PsdRect {
-        left: r.left.max(0),
-        top: r.top.max(0),
-        right: r.right.min(width as i32),
-        bottom: r.bottom.min(height as i32),
-    };
-    (out.left < out.right && out.top < out.bottom).then_some(out)
-}
-
-/// The part of `a` inside `b`, or `None` when they miss.
-fn overlap(a: PsdRect, b: PsdRect) -> Option<PsdRect> {
-    let out = PsdRect {
-        left: a.left.max(b.left),
-        top: a.top.max(b.top),
-        right: a.right.min(b.right),
-        bottom: a.bottom.min(b.bottom),
-    };
-    (out.left < out.right && out.top < out.bottom).then_some(out)
-}
-
 fn union(a: Option<PsdRect>, b: Option<PsdRect>) -> Option<PsdRect> {
     match (a, b) {
-        (Some(a), Some(b)) => Some(PsdRect {
-            left: a.left.min(b.left),
-            top: a.top.min(b.top),
-            right: a.right.max(b.right),
-            bottom: a.bottom.max(b.bottom),
-        }),
+        (Some(a), Some(b)) => Some(a.union(b)),
         (a, None) => a,
         (None, b) => b,
     }

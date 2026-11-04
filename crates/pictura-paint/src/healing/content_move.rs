@@ -13,7 +13,7 @@
 
 use super::layer::{heal_layer, HealError};
 use super::patch::selection_coverage;
-use super::{heal_region_adapted, intersect, Adaptation, HealMode, RgbaImage};
+use super::{heal_region_adapted, Adaptation, HealMode, RgbaImage};
 use pictura_core::{Document, PsdRect};
 
 /// The Content-Aware Move options bar, plus the drag.
@@ -61,10 +61,7 @@ fn move_region(
         bottom: region.bottom + dy,
         right: region.right + dx,
     };
-    let visible = intersect(destination, img.rect());
-    if visible.width() <= 0 || visible.height() <= 0 {
-        return None;
-    }
+    let visible = destination.intersect(img.rect())?;
     let source = img.clone();
     // Close the hole first, while its surroundings are untouched, so the moved
     // pixels are not sampled as if they belonged where the subject was.

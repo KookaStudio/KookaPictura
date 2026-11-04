@@ -823,7 +823,7 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     let before = doc.layers.last().unwrap().rect;
     assert!(pictura_render::translate_layer_rect(&mut doc, 2, 1));
     let after = doc.layers.last().unwrap().rect;
-    let dirty = union_rect(before, after);
+    let dirty = before.union(after);
     let (x0, y0, w, h) = clamp_region(dirty, doc.width, doc.height).expect("in-bounds");
     assert_eq!((w, h), (dirty.width() as u32, dirty.height() as u32));
     let (buffer, _) = pictura_render::composite_region_active(&doc, dirty, false);
@@ -884,7 +884,7 @@ fn region_refresh_keeps_composite_and_rebuilt_image_equal_to_full() {
         let before = doc.layers.last().unwrap().rect;
         assert!(pictura_render::translate_layer_rect(&mut doc, dx, dy));
         let after = doc.layers.last().unwrap().rect;
-        let dirty = union_rect(before, after);
+        let dirty = before.union(after);
         let (x0, y0, w, h) = clamp_region(dirty, doc.width, doc.height).expect("in-bounds");
         let (buffer, _) = pictura_render::composite_region_active(&doc, dirty, false);
         assert_eq!((buffer.width, buffer.height), (w, h));

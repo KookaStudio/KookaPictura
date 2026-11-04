@@ -61,8 +61,13 @@ Keys are exactly 4 bytes, space-padded where the name is short (`mul `,
 ### `PsdRect`
 ```rust
 pub struct PsdRect { pub top: i32, pub left: i32, pub bottom: i32, pub right: i32 }
-PsdRect::width()  -> i32   // right - left
-PsdRect::height() -> i32   // bottom - top
+PsdRect::width()  -> i32                    // right - left, saturating
+PsdRect::height() -> i32                    // bottom - top, saturating
+PsdRect::is_empty() -> bool                 // width <= 0 || height <= 0
+PsdRect::intersect(other) -> Option<PsdRect> // overlap; None when disjoint
+PsdRect::union(other) -> PsdRect            // bounding box; empty is not identity
+PsdRect::clip_to(width, height) -> Option<PsdRect> // canvas clamp; None on a miss
+PsdRect::grow(pad) -> PsdRect               // saturating; a negative pad shrinks
 ```
 PSD `Rectangle` in the layer record (top/left/bottom/right). Edges are signed;
 a layer clipped at the canvas edge still reports its real (possibly negative)

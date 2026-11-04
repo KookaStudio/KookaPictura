@@ -443,15 +443,13 @@ fn bake_inputs(
     scratch.layers = pictura_core::LayerStack::from_layers(inputs.to_vec());
     let buffer = crate::composite_rgba(&scratch);
 
-    let union = inputs.iter().filter_map(content_rect).reduce(union_rect);
+    let union = inputs
+        .iter()
+        .filter_map(content_rect)
+        .reduce(PsdRect::union);
     let rect = union
-        .and_then(|r| clamp_rect(r, doc.width, doc.height))
-        .unwrap_or(PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
-        });
+        .and_then(|r| r.clip_to(doc.width, doc.height))
+        .unwrap_or_default();
     let channels = bake(&buffer, rect);
     let node = pixel_result(name, rect, blend, opacity, clipping, channels);
 
@@ -514,7 +512,7 @@ fn content_rect(layer: &Layer) -> Option<PsdRect> {
             .children
             .iter()
             .filter_map(content_rect)
-            .reduce(union_rect);
+            .reduce(PsdRect::union);
     }
     if layer.adjustment.is_some() {
         return None;
@@ -524,25 +522,6 @@ fn content_rect(layer: &Layer) -> Option<PsdRect> {
     } else {
         None
     }
-}
-
-fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
-    PsdRect {
-        top: a.top.min(b.top),
-        left: a.left.min(b.left),
-        bottom: a.bottom.max(b.bottom),
-        right: a.right.max(b.right),
-    }
-}
-
-fn clamp_rect(rect: PsdRect, width: u32, height: u32) -> Option<PsdRect> {
-    let clamped = PsdRect {
-        top: rect.top.max(0),
-        left: rect.left.max(0),
-        bottom: rect.bottom.min(height as i32),
-        right: rect.right.min(width as i32),
-    };
-    (clamped.right > clamped.left && clamped.bottom > clamped.top).then_some(clamped)
 }
 
 /// Crop the full-document planar RGBA `buffer` to `rect` as `0/1/2/-1` channels.

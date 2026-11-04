@@ -666,7 +666,7 @@ fn layer_move_region_refresh_equals_a_full_recomposite() {
         &mut doc, index, 10, 6
     ));
     let after = doc.layers[index].rect;
-    let dirty = super::helpers::union_rect(before, after);
+    let dirty = before.union(after);
     let buffer = pictura_render::composite_region_active(&doc, dirty, false).0;
     patch_composite_region(&mut doc, &buffer, dirty.left, dirty.top);
 

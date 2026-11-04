@@ -348,13 +348,13 @@ pub(super) fn apply_op_active_region(
     let mut apron: i32 = filters.iter().map(|filter| filter.preview_apron()).sum();
     let section = preview_region
         .filter(|_| !commit)
-        .map(|visible| clamp_to(expand(visible, apron), lrect));
+        .map(|visible| clamp_to(visible.grow(apron), lrect));
     // The composite changes where this call writes and where the last preview
     // was put back; a layer effect can spill anywhere.
     let region_out = (!layer_has_effects(layer)).then(|| {
         let written = section.unwrap_or(lrect);
         match restored {
-            Some(r) if written.width() > 0 && written.height() > 0 => union_rect(r, written),
+            Some(r) if written.width() > 0 && written.height() > 0 => r.union(written),
             Some(r) => r,
             None => written,
         }
@@ -389,7 +389,7 @@ pub(super) fn apply_op_active_region(
                         filter,
                         mask.as_ref(),
                         gpu_compute,
-                        expand(visible, apron),
+                        visible.grow(apron),
                     ),
                     _ => pictura_render::apply_filter(layer, filter, mask.as_ref(), gpu_compute),
                 };
@@ -469,16 +469,6 @@ pub(super) fn pixel_filter_target(rust: &mut PictureViewRust) -> Option<String> 
         return None;
     }
     Some(path)
-}
-
-/// `rect` grown by `by` on every side.
-fn expand(rect: pictura_core::PsdRect, by: i32) -> pictura_core::PsdRect {
-    pictura_core::PsdRect {
-        top: rect.top - by,
-        left: rect.left - by,
-        bottom: rect.bottom + by,
-        right: rect.right + by,
-    }
 }
 
 /// `rect` clamped to `bounds`; an empty result keeps a zero size.

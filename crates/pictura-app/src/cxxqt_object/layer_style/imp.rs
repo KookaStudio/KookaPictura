@@ -97,35 +97,38 @@ pub(super) fn refresh_paint_bounds(
         let Some(bounds) = before.or(after) else {
             return;
         };
-        let Some(rect) = clip_to_canvas(view.as_ref().get_ref(), bounds) else {
+        let Some((width, height)) = view
+            .as_ref()
+            .get_ref()
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map(|doc| (doc.width, doc.height))
+        else {
+            return;
+        };
+        let Some(rect) = bounds.clip_to(width, height) else {
             return;
         };
         view.as_mut().refresh_region(rect);
         return;
     };
-    let union = pictura_core::PsdRect {
-        left: a.left.min(b.left),
-        top: a.top.min(b.top),
-        right: a.right.max(b.right),
-        bottom: a.bottom.max(b.bottom),
+    let union = a.union(b);
+    let Some((width, height)) = view
+        .as_ref()
+        .get_ref()
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .map(|doc| (doc.width, doc.height))
+    else {
+        return;
     };
-    if let Some(rect) = clip_to_canvas(view.as_ref().get_ref(), union) {
+    if let Some(rect) = union.clip_to(width, height) {
         view.as_mut().refresh_region(rect);
     }
-}
-
-pub(super) fn clip_to_canvas(
-    view: &PictureView,
-    rect: pictura_core::PsdRect,
-) -> Option<pictura_core::PsdRect> {
-    let doc = view.rust().session.doc.as_ref()?;
-    let clipped = pictura_core::PsdRect {
-        left: rect.left.max(0),
-        top: rect.top.max(0),
-        right: rect.right.min(doc.width.min(i32::MAX as u32) as i32),
-        bottom: rect.bottom.min(doc.height.min(i32::MAX as u32) as i32),
-    };
-    (clipped.width() > 0 && clipped.height() > 0).then_some(clipped)
 }
 
 pub(super) fn layer_style_set_blend_if(

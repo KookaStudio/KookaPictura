@@ -70,7 +70,7 @@ fn a_blemish_on_a_flat_field_disappears() {
         HealMode::ProximityMatch,
     );
     // The fully covered 8×8 square has the minimum 3 px margin.
-    assert_eq!(done, Some(inflate(region, 3)));
+    assert_eq!(done, Some(region.grow(3)));
     // Every healed pixel returns to the flat field; the blemish is gone.
     for y in 12..20 {
         for x in 12..20 {
@@ -289,6 +289,21 @@ fn a_zero_offset_clone_is_a_no_op() {
 }
 
 #[test]
+fn an_off_image_region_reports_no_work() {
+    let mut img = flat(8, 8, BASE);
+    let before = img.clone();
+    let region = PsdRect {
+        top: 0,
+        left: 10,
+        bottom: 2,
+        right: 12,
+    };
+    let done = clone_region(&mut img, region, &all_ones(region), (1, 0), Transfer::Full);
+    assert_eq!(done, None);
+    assert_eq!(img, before);
+}
+
+#[test]
 fn cloning_carries_the_source_texture_over() {
     // Left half dark, right half light. Clone a light patch (offset +8 in x)
     // into a hole on the dark side: the solve keeps the destination's low
@@ -427,7 +442,7 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
         |img, local, cov| heal_region(img, local, cov, HealMode::ProximityMatch),
     )
     .unwrap();
-    assert_eq!(done, Some(inflate(region, 3)));
+    assert_eq!(done, Some(region.grow(3)));
     assert_eq!(channel(&doc, 0, 0, 16, 16), BASE[0]);
     assert_eq!(channel(&doc, 0, 1, 16, 16), BASE[1]);
     assert_eq!(channel(&doc, 0, 2, 16, 16), BASE[2]);
