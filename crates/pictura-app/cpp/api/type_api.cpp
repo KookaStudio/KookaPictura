@@ -9,6 +9,10 @@
 
 namespace pictura::type_api {
 
+// Every function here that reaches type layout calls registerTypeFallbacks()
+// first, so Missing Glyph Protection has its faces whatever the entry point
+// (#1151). Functions that only read stored type data do not.
+
 namespace {
 
 QVector<double> doubles(const ::rust::Vec<double>& values)
@@ -264,6 +268,7 @@ QVector<ParagraphStyle> paragraphStyles(const PictureView& view)
 
 bool rasterize(PictureView& view, const QString& path)
 {
+    registerTypeFallbacks();
     return view.rasterize_type(path);
 }
 

@@ -156,7 +156,8 @@ void PicturaMainWindow::refreshPanels()
     PictureView* view = activeView();
     pictura::MetricsTimer<PictureView> metrics(view, "panels_refresh");
     // The per-script fallback scan opens every installed family; a document
-    // without type never needs it (#1151).
+    // without type never needs it (#1151). It runs before the early returns
+    // below on purpose: it is once-only, and a held refresh lands soon after.
     if (view && type_api::hasTypeLayers(*view)) {
         registerTypeFallbacks();
     }

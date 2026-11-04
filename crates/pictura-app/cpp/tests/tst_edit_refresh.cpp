@@ -870,6 +870,13 @@ void EditRefreshTest::typeLayoutRegistersTheFallbacks()
     pictura::forgetTypeFallbacksForTest();
     QVERIFY(!pictura::type_api::previewRect(helloSpec(view)).isEmpty());
     QVERIFY(pictura::typeFallbacksRegistered());
+
+    QVERIFY(!pictura::type_api::commitLayer(view, helloSpec(view)).isEmpty());
+    const QString path = typeLayerPath(view);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    pictura::forgetTypeFallbacksForTest();
+    QVERIFY(pictura::type_api::rasterize(view, path));
+    QVERIFY(pictura::typeFallbacksRegistered());
 }
 
 int main(int argc, char* argv[])

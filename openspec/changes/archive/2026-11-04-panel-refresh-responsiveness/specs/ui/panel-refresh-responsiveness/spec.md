@@ -20,7 +20,8 @@ by the refresh of a document that holds type or by a type operation.
 
 #### Scenario: Laying out type registers the fallbacks [pr_layout_registers]
 
-- **WHEN** text is laid out for a preview in a document without type
+- **WHEN** text is laid out for a preview in a document without type, or a
+  type layer is rasterized
 - **THEN** the fallback faces are registered before the layout
 
 #### Scenario: Type is found at any depth [pr_has_type_depth]
