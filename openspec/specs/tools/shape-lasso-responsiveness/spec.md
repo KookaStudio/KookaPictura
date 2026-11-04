@@ -1,7 +1,10 @@
 # tools/shape-lasso-responsiveness Specification
 
 ## Purpose
-TBD - created by archiving change shape-and-lasso-responsiveness. Update Purpose after archive.
+Keep the lassos and the shape tools responsive on large documents: a lasso
+commit, the Magnetic Lasso, and a shape layer's creation, Move, path drag and
+Fill Pixels work only within the shape's own box or reach, never the whole
+document, and give the same result as the whole-document computation.
 
 ## Requirements
 
