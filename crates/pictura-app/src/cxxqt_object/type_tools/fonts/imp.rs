@@ -24,6 +24,14 @@ pub(super) fn type_layers_editable(view: &PictureView) -> bool {
         .is_some_and(pictura_render::type_layers_editable)
 }
 
+pub(super) fn type_document_has_type(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(pictura_render::has_type_layers)
+}
+
 pub(super) fn type_replace_fonts(view: Pin<&mut PictureView>, missing: &QString) -> i32 {
     let missing = missing.to_string();
     let names: Vec<&str> = missing.lines().filter(|name| !name.is_empty()).collect();

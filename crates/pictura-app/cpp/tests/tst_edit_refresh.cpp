@@ -36,6 +36,7 @@
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 #include "qt_test_support.h"
+#include "type_fonts.h"
 
 namespace {
 
@@ -48,6 +49,15 @@ QString typeLayerPath(const pictura::PictureView& view)
         }
     }
     return QString();
+}
+
+pictura::type_api::TypeSpec helloSpec(const pictura::PictureView& view)
+{
+    pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
+    character.size = 30.0;
+    return {QStringLiteral("Hello"), QStringLiteral("Liberation Sans"),
+            pictura::type_api::readLayer(view, QString()).spec.setting, character,
+            pictura::type_api::defaultParagraphSetting()};
 }
 
 QString patternFixture()
@@ -137,6 +147,9 @@ private slots:
     void previewTicksCoalesceTheRegistry();
     void aCommitRefreshIsNotDelayedByPreviews();
     void anInactiveCloseDoesNotRebindTheDock();
+    void aRefreshWithoutTypeSkipsTheFontScan();
+    void aRefreshOfATypeDocumentRegistersTheFallbacks();
+    void typeLayoutRegistersTheFallbacks();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -817,8 +830,51 @@ void EditRefreshTest::anInactiveCloseDoesNotRebindTheDock()
     closeAll(*window_);
 }
 
+void EditRefreshTest::aRefreshWithoutTypeSkipsTheFontScan()
+{
+    pictura::forgetTypeFallbacksForTest();
+    const int retarget = window_->dockRetargetCountForTest();
+    QVERIFY(window_->newDocument(QStringLiteral("No Type"), 64, 64, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    QTRY_VERIFY_WITH_TIMEOUT(window_->dockRetargetCountForTest() > retarget, 1000);
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    auto* layers = window_->layersPanelForTest();
+    QVERIFY(layers != nullptr);
+    const int base = layers->refreshCountForTest();
+    QVERIFY(!view->add_layer_in(QString()).isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(layers->refreshCountForTest() > base, 1000);
+    // negative window: the debounced refresh after the edit has run
+    QTest::qWait(250);
+    QVERIFY(!pictura::typeFallbacksRegistered());
+}
+
+void EditRefreshTest::aRefreshOfATypeDocumentRegistersTheFallbacks()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Typed"), 200, 200, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    QVERIFY(!pictura::type_api::commitLayer(*view, helloSpec(*view)).isEmpty());
+    QVERIFY(pictura::type_api::hasTypeLayers(*view));
+    pictura::forgetTypeFallbacksForTest();
+    QVERIFY(!view->add_layer_in(QString()).isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(pictura::typeFallbacksRegistered(), 1000);
+}
+
+void EditRefreshTest::typeLayoutRegistersTheFallbacks()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(200, 200, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QVERIFY(!pictura::type_api::hasTypeLayers(view));
+    pictura::forgetTypeFallbacksForTest();
+    QVERIFY(!pictura::type_api::previewRect(helloSpec(view)).isEmpty());
+    QVERIFY(pictura::typeFallbacksRegistered());
+}
+
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<EditRefreshTest>(argc, argv);
 }
+
 #include "tst_edit_refresh.moc"
