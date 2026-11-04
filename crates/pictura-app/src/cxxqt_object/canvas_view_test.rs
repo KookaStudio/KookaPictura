@@ -1,9 +1,7 @@
 use super::helpers_composite::*;
 use super::PictureViewRust;
 use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect};
-use pictura_render::{
-    composite, rgba_frame, CanvasDamage, CompositeRequest, DocumentComposite, ViewPyramid,
-};
+use pictura_render::{rgba_frame, CanvasDamage, DocumentComposite, ViewPyramid};
 
 /// A 4-plane RGBA buffer with variation in every channel, so a level mismatch
 /// cannot hide behind uniform pixels.
