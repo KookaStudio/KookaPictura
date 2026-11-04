@@ -8,7 +8,7 @@
 #include "tool_hint_bar.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QPointF>
 #include <QtCore/Qt>

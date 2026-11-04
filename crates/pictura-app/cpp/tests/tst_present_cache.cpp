@@ -17,7 +17,7 @@
 #include "frame.h"
 #include "image_view.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include "qt_test_support.h"
 

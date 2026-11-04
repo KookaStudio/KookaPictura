@@ -2,8 +2,7 @@
 
 #include "image_view.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QObject>
 

@@ -6,15 +6,9 @@
 
 #include "api/layers_api.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QImage>

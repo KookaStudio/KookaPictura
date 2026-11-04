@@ -15,10 +15,9 @@
 #include "commands.h"
 #include "filter_commands.h"
 #include "frame.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/vanishing_point.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/filters_bridge.h"
+
 #include "vp_canvas.h"
 #include "vp_dialog.h"
 

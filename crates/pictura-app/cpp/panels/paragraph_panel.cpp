@@ -5,8 +5,8 @@
 #include "tool_sessions.h"
 #include "type_fonts.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "api/layers_bridge.h"
+
 #include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>

@@ -10,8 +10,8 @@
 #include "canvas_ruler.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/transform_bridge.h"
 
 #include <memory>
 

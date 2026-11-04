@@ -7,9 +7,7 @@
 #include "frame.h"
 #include "new_document_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtGui/QClipboard>
 #include <QtGui/QImage>

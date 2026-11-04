@@ -16,8 +16,7 @@
 
 #include <cmath>
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/crop_group.cxxqt.h"
+#include "api/transform_bridge.h"
 
 class CropStraightenTest : public QObject {
     Q_OBJECT

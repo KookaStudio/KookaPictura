@@ -14,9 +14,8 @@
 
 #include "api/document_api.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/pdf_export/import.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QEventLoop>

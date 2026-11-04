@@ -10,7 +10,7 @@
 #include "image_view.h"
 #include "match_color_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QBuffer>
 #include <QtCore/QByteArray>

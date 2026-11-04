@@ -10,9 +10,8 @@
 
 #include "api/transform_api.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "qt_test_support.h"
 

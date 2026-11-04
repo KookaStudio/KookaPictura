@@ -9,8 +9,7 @@
 #include "panels/panel_column.h"
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QCoreApplication>

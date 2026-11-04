@@ -23,9 +23,8 @@
 #include "session.h"
 #include "vp_dialog.h"
 
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/filters_bridge.h"
 
 namespace pictura {
 

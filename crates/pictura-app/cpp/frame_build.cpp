@@ -6,14 +6,13 @@
 #include "command_ids.h"
 #include "notification_status_bar.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/engine_bridge.h"
+
 #include "fonts.h"
 #include "panels/actions_engine_bridge.h"
 #include "panels/actions_panel.h"
-#include "pictura_app/src/cxxqt_object/actions_engine.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
 #include "text_input.h"

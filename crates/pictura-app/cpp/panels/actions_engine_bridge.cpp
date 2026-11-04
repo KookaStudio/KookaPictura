@@ -2,7 +2,7 @@
 
 #include "actions_tool_recording_bridge.h"
 
-#include "pictura_app/src/cxxqt_object/actions_engine.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include "session.h"
 

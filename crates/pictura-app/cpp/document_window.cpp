@@ -2,8 +2,7 @@
 
 #include "image_view.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QHash>

@@ -7,7 +7,7 @@
 #include "frame_includes.h"
 
 #include "api/document_api.h"
-#include "pictura_app/src/cxxqt_object/impl_core/recovery.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QLocale>

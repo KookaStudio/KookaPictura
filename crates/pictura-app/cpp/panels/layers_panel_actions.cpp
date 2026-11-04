@@ -5,11 +5,7 @@
 #include "layer_new_dialog.h"
 #include "layer_style_dialog.h"
 
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_arrange.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QString>

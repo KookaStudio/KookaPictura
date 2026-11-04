@@ -16,9 +16,7 @@
 #include "frame.h"
 #include "liquify_canvas.h"
 #include "liquify_dialog.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include "qt_test_support.h"
 

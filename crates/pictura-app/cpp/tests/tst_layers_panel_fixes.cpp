@@ -40,13 +40,8 @@
 #include "panels/percent_field.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "qt_test_support.h"
 

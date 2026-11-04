@@ -11,7 +11,8 @@
 #include "paragraph_style_dialog.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "api/type_api.h"
 
 #include <algorithm>

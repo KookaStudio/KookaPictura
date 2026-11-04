@@ -16,10 +16,9 @@
 #include "toolbox.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "qt_test_support.h"
 

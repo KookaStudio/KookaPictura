@@ -10,9 +10,8 @@
 #include "session.h"
 #include "type_fonts.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QUrl>

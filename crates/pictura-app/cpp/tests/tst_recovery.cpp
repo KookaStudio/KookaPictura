@@ -17,10 +17,8 @@
 #include "recovery_store.h"
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_core/recovery.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
 
 #include "qt_test_support.h"
 

@@ -3,8 +3,7 @@
 #include "frame.h"
 #include "image_view.h"
 #include "panels/channels_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QToolButton>

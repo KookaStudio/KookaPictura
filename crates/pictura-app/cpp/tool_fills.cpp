@@ -9,8 +9,7 @@
 #include "image_view.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QLineF>
 #include <QtCore/QObject>

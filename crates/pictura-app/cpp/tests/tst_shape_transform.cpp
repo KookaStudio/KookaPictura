@@ -10,9 +10,9 @@
 #include "commands.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/transform_bridge.h"
 
 #include <memory>
 

@@ -9,8 +9,8 @@
 #include "color_settings_dialog.h"
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/engine_bridge.h"
+
 #include "qt_test_support.h"
 
 class ColorSettingsTest : public QObject {

@@ -3,7 +3,7 @@
 #include "color_picker_dialog.h"
 #include "options_bar.h"
 
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtGui/QPixmap>
 #include <QtGui/QStandardItemModel>

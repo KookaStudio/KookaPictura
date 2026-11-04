@@ -13,11 +13,7 @@
 #include "panels/adjustment_controls.h"
 #include "panels/color_swatch_widget.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include "curves_dialog.h"
 #include "exposure_dialog.h"

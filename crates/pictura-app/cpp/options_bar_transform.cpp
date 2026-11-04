@@ -11,9 +11,7 @@
 #include "panels/numeric_field.h"
 #include "warp_styles.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h"
+#include "api/transform_bridge.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QIcon>

@@ -477,3 +477,308 @@ fn qt_test_waits_are_justified() {
         unjustified.join("\n")
     );
 }
+
+/// Every `.cpp`/`.h` under `dir`, skipping the `api` adapter directory.
+fn cpp_sources(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            if path.file_name().is_some_and(|name| name == "api") {
+                continue;
+            }
+            cpp_sources(&path, out);
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext == "cpp" || ext == "h")
+        {
+            out.push(path);
+        }
+    }
+}
+
+/// The C++ files outside `cpp/api/` that include a generated cxx-qt header.
+fn generated_include_violations_in(root: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    cpp_sources(&root.join("cpp"), &mut files);
+    let mut violations = Vec::new();
+    for path in files {
+        let src = read(&path);
+        for (index, line) in src.lines().enumerate() {
+            let line = line.trim_start();
+            if line.starts_with("#include") && line.contains(".cxxqt.h") {
+                violations.push(format!("{}:{}", path.display(), index + 1));
+            }
+        }
+    }
+    violations
+}
+
+/// The bridge module text of a source file, when it has one.
+fn bridge_module(src: &str) -> Option<&str> {
+    let attr = src.find(BRIDGE_ATTRIBUTE)?;
+    let end = brace_counted_end(src, attr)?;
+    Some(&src[attr..=end])
+}
+
+/// The number of functions a bridge module exposes in `extern "Rust"` or
+/// `extern "RustQt"` blocks.
+fn rust_function_count(module: &str) -> usize {
+    let mut count = 0;
+    let mut rest = module;
+    while let Some(at) = rest.find("extern \"Rust") {
+        let block = &rest[at..];
+        let Some(open) = block.find('{') else {
+            break;
+        };
+        let Some(close) = brace_counted_end(block, open) else {
+            break;
+        };
+        count += block[open..=close]
+            .lines()
+            .filter(|line| line.trim_start().starts_with("fn "))
+            .count();
+        rest = &block[close + 1..];
+    }
+    count
+}
+
+/// The generated header path for a bridge source under `src/`.
+fn generated_header(relative: &Path) -> String {
+    format!(
+        "pictura_app/src/{}",
+        relative.with_extension("cxxqt.h").display()
+    )
+}
+
+fn bridge_files() -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    rust_sources(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    files
+        .into_iter()
+        .filter(|path| read(path).contains(BRIDGE_MARKER))
+        .collect()
+}
+
+fn membrane_headers() -> Vec<PathBuf> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/api");
+    let mut membranes: Vec<PathBuf> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with("_bridge.h"))
+        })
+        .collect();
+    membranes.sort();
+    membranes
+}
+
+#[test]
+fn bridge_headers_confined_to_api() {
+    let violations = generated_include_violations_in(Path::new(env!("CARGO_MANIFEST_DIR")));
+    assert!(
+        violations.is_empty(),
+        "generated headers included outside cpp/api:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn generated_include_scan_rejects_violation() {
+    let root = std::env::temp_dir().join(format!("pictura-bridge-scan-{}", std::process::id()));
+    let cpp = root.join("cpp");
+    fs::create_dir_all(&cpp).unwrap();
+    fs::write(
+        cpp.join("bad.cpp"),
+        "#include \"pictura_app/src/cxxqt_object.cxxqt.h\"\n",
+    )
+    .unwrap();
+    let violations = generated_include_violations_in(&root);
+    fs::remove_dir_all(&root).unwrap();
+    assert!(
+        violations
+            .iter()
+            .any(|violation| violation.contains("bad.cpp")),
+        "the scanner missed a direct generated include: {violations:?}"
+    );
+}
+
+#[test]
+fn bridge_membranes_are_include_only() {
+    let membranes = membrane_headers();
+    assert!(!membranes.is_empty(), "no cpp/api/*_bridge.h membranes");
+    let mut offenders = Vec::new();
+    for path in membranes {
+        let src = read(&path);
+        for (index, line) in src.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty()
+                || line.starts_with("//")
+                || line.starts_with("/*")
+                || line.starts_with('*')
+                || line.starts_with("#pragma once")
+                || line.starts_with("#ifndef")
+                || line.starts_with("#define")
+                || line.starts_with("#endif")
+                || line.starts_with("#include")
+            {
+                continue;
+            }
+            offenders.push(format!("{}:{}: {line}", path.display(), index + 1));
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "membranes hold more than includes and comments:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn no_universal_bridge_membrane() {
+    let membranes = membrane_headers();
+    assert!(!membranes.is_empty(), "no cpp/api/*_bridge.h membranes");
+    let all: std::collections::HashSet<String> = bridge_files()
+        .iter()
+        .map(|path| {
+            let relative = path
+                .strip_prefix(Path::new(env!("CARGO_MANIFEST_DIR")).join("src"))
+                .unwrap();
+            generated_header(relative)
+        })
+        .collect();
+    let mut owners: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    let mut owner_files = membranes.clone();
+    owner_files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/api/type_api.h"));
+    owner_files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/api/type_api.cpp"));
+    for path in &owner_files {
+        let src = read(path);
+        let type_adapter = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "type_api.h" || name == "type_api.cpp");
+        let included: Vec<String> = src
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                let name = line.strip_prefix("#include \"")?.strip_suffix('"')?;
+                if type_adapter && !name.contains("type_tools") {
+                    return None;
+                }
+                all.contains(name).then(|| name.to_string())
+            })
+            .collect();
+        if membranes.contains(path) {
+            assert!(
+                included.len() < all.len(),
+                "{} includes every generated header",
+                path.display()
+            );
+        }
+        for header in included {
+            owners
+                .entry(header)
+                .or_default()
+                .push(path.display().to_string());
+        }
+    }
+    let unowned: Vec<String> = all
+        .iter()
+        .filter(|header| !owners.contains_key(*header))
+        .filter(|header| !header.ends_with("impl_paint/tool_recording.cxxqt.h"))
+        .cloned()
+        .collect();
+    assert!(
+        unowned.is_empty(),
+        "generated headers with no membrane or adapter owner:\n{}",
+        unowned.join("\n")
+    );
+    let duplicated: Vec<String> = owners
+        .iter()
+        .filter(|(_, owners)| owners.len() > 1)
+        .map(|(header, owners)| format!("{header} -> {owners:?}"))
+        .collect();
+    assert!(
+        duplicated.is_empty(),
+        "generated headers included by more than one membrane:\n{}",
+        duplicated.join("\n")
+    );
+}
+
+#[test]
+fn no_small_bridge_files() {
+    let mut small = Vec::new();
+    for path in bridge_files() {
+        let src = read(&path);
+        let Some(module) = bridge_module(&src) else {
+            continue;
+        };
+        let exposed = rust_function_count(module);
+        if (1..=2).contains(&exposed) {
+            small.push(format!("{} exposes {exposed}", path.display()));
+        }
+    }
+    assert!(
+        small.is_empty(),
+        "bridge files with one or two Rust functions:\n{}",
+        small.join("\n")
+    );
+}
+
+#[test]
+fn bridge_count_within_budget() {
+    let files = bridge_files();
+    let count = files.len();
+    assert!(count <= 69, "bridge file count grew to {count} (budget 69)");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let listed: std::collections::HashSet<String> = listed_bridge_files().into_iter().collect();
+    let actual: std::collections::HashSet<String> = files
+        .iter()
+        .map(|path| {
+            path.strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(
+        listed, actual,
+        "build.rs `.files([...])` does not match the bridge files on disk"
+    );
+    let main = read(&root.join("src/cxxqt_object.rs"));
+    assert!(
+        main.lines().count() <= 1204,
+        "cxxqt_object.rs grew past 1204 lines"
+    );
+}
+
+#[test]
+fn adapter_and_membrane_headers_are_registered() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cmake = read(&root.join("../../CMakeLists.txt"));
+    let dir = root.join("cpp/api");
+    let mut missing = Vec::new();
+    for entry in fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path
+            .extension()
+            .is_some_and(|ext| ext == "h" || ext == "cpp")
+        {
+            let name = path.file_name().unwrap().to_string_lossy();
+            let listed = format!("crates/pictura-app/cpp/api/{name}");
+            if !cmake.contains(&listed) {
+                missing.push(listed);
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "cpp/api headers missing from CMakeLists.txt:\n{}",
+        missing.join("\n")
+    );
+}

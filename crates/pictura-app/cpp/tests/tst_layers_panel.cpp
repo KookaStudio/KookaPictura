@@ -33,11 +33,7 @@
 #include "panels/layers_panel_internal.h"
 #include "theme.h"
 #include "commands.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include "qt_test_support.h"
 

@@ -13,7 +13,7 @@
 #include "adjustment_catalogue.h"
 #include "commands.h"
 #include "frame.h"
-#include "pictura_app/src/cxxqt_object/command_catalogue.cxxqt.h"
+#include "api/engine_bridge.h"
 
 namespace pictura::test {
 

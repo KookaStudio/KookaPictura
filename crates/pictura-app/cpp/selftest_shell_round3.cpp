@@ -7,7 +7,7 @@
 #include "session.h"
 #include "toolbox.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/Qt>
 #include <QtCore/QCoreApplication>

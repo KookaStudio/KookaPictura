@@ -14,11 +14,7 @@
 #include "api/layers_api.h"
 #include "frame.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/mask_refine.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include "qt_test_support.h"
 

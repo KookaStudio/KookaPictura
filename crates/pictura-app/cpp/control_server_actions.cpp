@@ -13,9 +13,8 @@
 #include "tool_options_json.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 
 namespace pictura {
 

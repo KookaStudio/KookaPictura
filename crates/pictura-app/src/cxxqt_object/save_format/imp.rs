@@ -66,7 +66,7 @@ pub fn raster_preview_bytes(
     let buffer = picture(doc, rust);
     let rgba = buffer_to_rgba_bytes(&buffer);
     let format = format.to_string();
-    ffi::encode_image_bytes(
+    super::super::export::ffi::encode_image_bytes(
         &rgba,
         buffer.width as i32,
         buffer.height as i32,

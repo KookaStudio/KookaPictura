@@ -8,14 +8,8 @@
 #include "layers_panel_internal.h"
 #include "numeric_field.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/mask_refine.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QTimer>
 #include <QtGui/QAction>

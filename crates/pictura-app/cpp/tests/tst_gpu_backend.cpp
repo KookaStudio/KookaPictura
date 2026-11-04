@@ -14,7 +14,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QLabel>
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include "frame.h"
 #include "gpu_probe.h"

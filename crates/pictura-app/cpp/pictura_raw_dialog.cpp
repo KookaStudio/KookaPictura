@@ -8,7 +8,7 @@
 #include "dialogs.h"
 #include "icons.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QList>
 #include <QtCore/QTimer>

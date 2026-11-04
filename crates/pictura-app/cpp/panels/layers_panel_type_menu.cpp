@@ -6,7 +6,7 @@
 #include "api/type_api.h"
 #include "warp_text_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QPointer>
 

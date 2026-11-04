@@ -22,7 +22,8 @@
 #include "image_view.h"
 #include "panels/panel_column.h"
 #include "panels/properties_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "session.h"
 #include "tools.h"
 

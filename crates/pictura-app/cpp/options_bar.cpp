@@ -4,8 +4,7 @@
 #include "color_picker_dialog.h"
 #include "panels/numeric_field.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QPointer>
 #include <QtCore/QSignalBlocker>

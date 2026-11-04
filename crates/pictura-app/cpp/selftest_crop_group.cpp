@@ -6,8 +6,7 @@
 #include "image_view.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/crop_group.cxxqt.h"
+#include "api/transform_bridge.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>

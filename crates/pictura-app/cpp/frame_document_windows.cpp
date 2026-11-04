@@ -5,7 +5,7 @@
 
 #include "frame_includes.h"
 
-#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QTabWidget>

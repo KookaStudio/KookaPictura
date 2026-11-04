@@ -1,7 +1,6 @@
 #include "color_models.h"
 
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/engine_tables/color_models.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <cstdint>
 #include <vector>

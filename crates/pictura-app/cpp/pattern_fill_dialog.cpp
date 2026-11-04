@@ -3,7 +3,7 @@
 #include "dialogs.h"
 #include "panels/numeric_field.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QStringList>
 #include <QtGui/QIcon>

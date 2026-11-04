@@ -4,7 +4,7 @@
 #include "image_view.h"
 #include "panels/layers_panel_internal.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QEvent>
 #include <QtCore/QFileInfo>

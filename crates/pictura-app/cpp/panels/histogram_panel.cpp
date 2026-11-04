@@ -3,7 +3,7 @@
 #include "theme.h"
 
 #include "api/document_api.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QRectF>
 #include <QtCore/QStringList>

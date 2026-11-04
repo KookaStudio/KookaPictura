@@ -1,6 +1,6 @@
 use cxx_qt_lib::{QList, QString, QStringList};
 
-pub(super) fn mcp_run(socket: &QString, token_path: &QString, args: &QStringList) -> i32 {
+pub(crate) fn mcp_run(socket: &QString, token_path: &QString, args: &QStringList) -> i32 {
     let args: Vec<String> = QList::<QString>::from(args)
         .iter()
         .map(|arg| arg.to_string())

@@ -4,7 +4,7 @@
 #include "control_server.h"
 #include "frame.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QEventLoop>

@@ -1,8 +1,8 @@
-use super::ffi::{ToolHintRow, ToolSpecRow};
+use super::super::ffi::{ToolHintRow, ToolSpecRow};
 use cxx_qt_lib::QString;
 use pictura_script::tool_catalogue::{tool_catalogue, ToolCursor};
 
-pub(super) fn cursor_name(cursor: ToolCursor) -> &'static str {
+pub(crate) fn cursor_name(cursor: ToolCursor) -> &'static str {
     match cursor {
         ToolCursor::Arrow => "arrow",
         ToolCursor::Cross => "cross",
@@ -12,7 +12,7 @@ pub(super) fn cursor_name(cursor: ToolCursor) -> &'static str {
     }
 }
 
-pub(super) fn tool_catalogue_rows() -> Vec<ToolSpecRow> {
+pub(crate) fn tool_catalogue_rows() -> Vec<ToolSpecRow> {
     tool_catalogue()
         .iter()
         .map(|spec| ToolSpecRow {

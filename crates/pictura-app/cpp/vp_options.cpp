@@ -14,7 +14,7 @@
 #include <tuple>
 #include <utility>
 
-#include "pictura_app/src/cxxqt_object/filter_tools/vanishing_point_retouch.cxxqt.h"
+#include "api/filters_bridge.h"
 
 namespace pictura {
 

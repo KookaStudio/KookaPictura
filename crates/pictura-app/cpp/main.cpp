@@ -60,7 +60,7 @@
 #include "toolbox.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include "interop.h"
 #include "selftest.h"

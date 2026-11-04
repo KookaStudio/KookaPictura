@@ -8,7 +8,7 @@
 #include "panels/panel_column.h"
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>

@@ -5,7 +5,7 @@
 #include "image_view.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 int pictura::runClickDeselectChecks(pictura::PicturaMainWindow& frame)
 {

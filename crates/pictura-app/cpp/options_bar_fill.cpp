@@ -5,8 +5,7 @@
 
 #include "panels/numeric_field.h"
 
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtGui/QActionGroup>
 #include <QtGui/QIcon>

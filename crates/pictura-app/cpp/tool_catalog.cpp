@@ -1,6 +1,6 @@
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object/engine_tables/tool_catalogue.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QHash>

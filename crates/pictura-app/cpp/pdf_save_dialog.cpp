@@ -2,7 +2,7 @@
 
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>

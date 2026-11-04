@@ -21,8 +21,8 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "api/filters_bridge.h"
+
 #include "panels/color_swatch_widget.h"
 
 namespace pictura {

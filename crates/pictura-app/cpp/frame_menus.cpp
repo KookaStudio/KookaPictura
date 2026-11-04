@@ -4,8 +4,8 @@
 #include "frame_update.h"
 #include "gpu_probe.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "api/layers_bridge.h"
+
 #include "api/type_api.h"
 
 #include "design_system_dialog.h"
@@ -13,9 +13,6 @@
 #include "api/layers_api.h"
 
 #include "api/document_api.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_arrange.cxxqt.h"
 
 namespace pictura {
 

@@ -14,8 +14,7 @@
 #include "commands.h"
 #include "pictura_raw_dialog.h"
 #include "panels/layers_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include "qt_test_support.h"
 

@@ -8,8 +8,7 @@
 #include "panels/panel_column.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>

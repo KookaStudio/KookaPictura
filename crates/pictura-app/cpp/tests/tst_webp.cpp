@@ -5,8 +5,7 @@
 
 #include "api/document_api.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QTemporaryDir>

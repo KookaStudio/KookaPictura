@@ -3,7 +3,7 @@
 #include "icons.h"
 #include "layers_panel_internal.h"
 
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QSize>
 #include <QtCore/QVariant>

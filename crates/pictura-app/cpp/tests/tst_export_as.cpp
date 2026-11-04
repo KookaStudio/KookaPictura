@@ -13,8 +13,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/svg_export.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include "qt_test_support.h"
 

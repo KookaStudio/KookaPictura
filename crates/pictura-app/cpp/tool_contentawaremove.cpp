@@ -5,8 +5,7 @@
 
 #include "tool_region_drag.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/healing.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <memory>
 

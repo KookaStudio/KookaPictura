@@ -4,7 +4,7 @@
 #include "frame_includes.h"
 #include "api/document_api.h"
 
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
+#include "api/engine_bridge.h"
 
 namespace pictura {
 

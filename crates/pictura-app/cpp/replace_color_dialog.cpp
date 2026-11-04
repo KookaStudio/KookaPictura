@@ -7,9 +7,7 @@
 #include "panels/jump_slider.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_replace_color.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>

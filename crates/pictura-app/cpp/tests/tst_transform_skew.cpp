@@ -12,14 +12,9 @@
 #include "selftest_paint_fixture.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 

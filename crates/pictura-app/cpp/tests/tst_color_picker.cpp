@@ -22,7 +22,8 @@
 #include "panels/swatches_panel.h"
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
+#include "api/engine_bridge.h"
+
 #include "qt_test_support.h"
 
 #include <cmath>

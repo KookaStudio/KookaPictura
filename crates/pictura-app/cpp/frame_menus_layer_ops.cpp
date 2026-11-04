@@ -6,11 +6,7 @@
 
 #include "api/layers_api.h"
 
-#include "pictura_app/src/cxxqt_object/layer_arrange.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
 
 namespace pictura {
 

@@ -1,5 +1,7 @@
 #include "frame_includes.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "api/document_api.h"
 #include "api/selection_api.h"
@@ -14,10 +16,6 @@
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
 #include "text_input.h"
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QSize>

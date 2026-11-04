@@ -5,7 +5,8 @@
 #include "icons.h"
 #include "image_view.h"
 #include "panels/numeric_field.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "session.h"
 #include "theme.h"
 #include "tool_hint_bar.h"

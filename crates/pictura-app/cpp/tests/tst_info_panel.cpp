@@ -17,9 +17,8 @@
 #include "color_picker_dialog.h"
 #include "frame.h"
 #include "panels/info_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 
 #include "qt_test_support.h"
 

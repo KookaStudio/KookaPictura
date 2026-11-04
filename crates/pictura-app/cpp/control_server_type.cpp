@@ -12,7 +12,7 @@
 #include "frame.h"
 #include "type_fonts.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 namespace pictura {
 

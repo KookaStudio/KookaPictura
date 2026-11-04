@@ -2,7 +2,7 @@
 #include "color_picker_dialog.h"
 #include "panels/color_swatch_widget.h"
 #include "panels/jump_slider.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QVariant>

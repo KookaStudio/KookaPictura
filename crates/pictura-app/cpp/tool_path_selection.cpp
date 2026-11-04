@@ -20,8 +20,7 @@
 #include "shape_dialogs.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QLineF>
 #include <QtGui/QGuiApplication>

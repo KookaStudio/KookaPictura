@@ -14,7 +14,7 @@
 #include "frame.h"
 #include "session.h"
 
-#include "pictura_app/src/mcp_entry.cxxqt.h"
+#include "api/engine_bridge.h"
 
 namespace pictura {
 

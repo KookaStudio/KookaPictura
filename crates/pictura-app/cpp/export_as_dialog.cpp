@@ -3,10 +3,7 @@
 #include "api/document_api.h"
 #include "dialogs.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/svg_export.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/web_export.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QBuffer>
 #include <QtCore/QFileInfo>

@@ -7,7 +7,8 @@
 #include "icons.h"
 #include "theme.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "api/layers_api.h"
 
 #include <QtCore/QAbstractItemModel>

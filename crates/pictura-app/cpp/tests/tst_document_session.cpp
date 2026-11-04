@@ -13,15 +13,10 @@
 #include "commands.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/healing.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "qt_test_support.h"
 
