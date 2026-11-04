@@ -27,7 +27,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 Update the `docs/GLOSSARY.md` entries for the removed and demoted functions in a separate commit carrying `TASK-ALLOWS-DOCS`. Verify `scripts/guard.sh` accepts the commit.
+- [x] 5.1 Update the `docs/GLOSSARY.md` entries for the removed and demoted functions in a separate commit carrying `TASK-ALLOWS-DOCS`. Verify `scripts/guard.sh` accepts the commit.
 - [x] 5.2 Confirm the delta specs match the final API names. Verify `openspec validate composite-request --strict` and `openspec validate --all --strict` pass.
 
 ## 6. Integration Checks
@@ -36,4 +36,4 @@
 - [x] 6.2 Run the GPU profile where a device exists: `cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all`. Verify the parity and moved error tests pass or report skipped.
 - [x] 6.3 Search the tree for `composite_active`, `composite_region_active`, `composite_gpu_or_cpu`, and external `composite_gpu` / `composite_native` / `composite_rgba_region` references. Verify only in-crate definitions, in-crate tests, and archived OpenSpec text remain, and clean stale doc comments such as `src/gpu/mod.rs:12,26,237` and `tests/gpu_parity/main.rs:13`.
 - [ ] 6.4 Run `bash scripts/verify-fast.sh`; run `bash scripts/verify-full.sh` (or refresh the CMake build first) when the build tree is stale.
-- [ ] 6.5 Archive the change: `openspec archive composite-request`, then run `scripts/check-openspec-archived.sh`.
+- [x] 6.5 Archive the change: `openspec archive composite-request`, then run `scripts/check-openspec-archived.sh`.
