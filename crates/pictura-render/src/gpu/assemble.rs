@@ -276,10 +276,19 @@ pub(super) fn mask_has_data(layer: &Layer) -> bool {
 }
 
 /// The coverage influence rectangle: the whole region for a group or an
-/// adjustment layer, the clamped layer rect for a pixel layer.
+/// adjustment layer, the clamped layer rect for a pixel layer, and the mask's
+/// box for a fill or shape layer its mask confines (zero coverage outside).
 pub(super) fn mask_influence_rect(region: Region, layer: &Layer) -> (i32, i32, i32, i32) {
     let region_right = (region.x0 + region.w) as i32;
     let region_bottom = (region.y0 + region.h) as i32;
+    if let Some(content) = crate::layer_effects::fill_content_box(layer) {
+        return (
+            content.left.max(region.x0 as i32),
+            content.top.max(region.y0 as i32),
+            content.right.min(region_right),
+            content.bottom.min(region_bottom),
+        );
+    }
     if layer.is_group || layer.adjustment.is_some() {
         (
             region.x0 as i32,

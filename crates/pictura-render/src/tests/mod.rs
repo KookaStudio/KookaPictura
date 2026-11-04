@@ -19,6 +19,7 @@ mod pattern_fill;
 mod raster_import;
 mod rasterize;
 mod region;
+mod shape_box;
 mod smart_object;
 mod smart_object_actions;
 mod smart_object_alpha;
