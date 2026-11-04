@@ -95,7 +95,7 @@ fn resident_uploads_profile() {
     }
 
     let t = Instant::now();
-    let _ = pictura_render::composite_active(&doc, true);
+    let _ = pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, true));
     let seed = t.elapsed();
     let seeded = metrics::counters();
 
@@ -105,7 +105,11 @@ fn resident_uploads_profile() {
         // The stroke writes the active layer: its stamp clears, so it cannot be
         // reused. The other layers keep their stamps.
         doc.layers[0].channels[0].data.as_mut_slice()[0] ^= 1;
-        let _ = pictura_render::composite_region_active(&doc, moving_rect(frame), true);
+        let _ = pictura_render::composite(pictura_render::CompositeRequest::region(
+            &doc,
+            moving_rect(frame),
+            true,
+        ));
     }
     let presents = t.elapsed();
     let after = metrics::counters();
@@ -114,7 +118,7 @@ fn resident_uploads_profile() {
     stamp_layer(&mut doc.layers[0]);
 
     let t = Instant::now();
-    let _ = pictura_render::composite_active(&doc, true);
+    let _ = pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, true));
     let full = t.elapsed();
     let end = metrics::counters();
 

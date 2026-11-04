@@ -28,7 +28,7 @@ pub fn composite_rgba(doc: &Document) -> PixelBuffer {
     composite_whole(doc)
 }
 
-pub use crate::composite_region::composite_rgba_region;
+pub(crate) use crate::composite_region::composite_rgba_region;
 
 /// [`composite_rgba`] on one canvas, the path every stack can take; the
 /// banded compositor is held to it.

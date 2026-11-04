@@ -69,7 +69,10 @@ fn pass_through_group_vector_mask_fixture() {
     assert_eq!(rgb(&out, 0, 6), [255, 0, 0], "below the mask");
     assert_eq!(rgb(&out, 7, 7), [255, 0, 0], "corner outside the mask");
 
-    let gpu = composite_gpu_or_cpu(&d);
+    let gpu = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(&d, true),
+    )
+    .0;
     for (i, (a, b)) in gpu.data.iter().zip(out.data.iter()).enumerate() {
         assert!(
             (*a as i16 - *b as i16).abs() <= 1,

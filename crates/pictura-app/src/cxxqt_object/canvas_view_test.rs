@@ -329,7 +329,10 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
     // A mid-stroke region refresh keeps the pyramid equal to a full rebuild, so
     // the present path can crop it instead of resampling the full image.
     let working = rust.session.doc.as_ref().unwrap();
-    let region = pictura_render::composite_region_active(working, rect, false).0;
+    let region = pictura_render::composite(pictura_render::CompositeRequest::region(
+        working, rect, false,
+    ))
+    .0;
     let level0 = level0_from_buffer(working, &region);
     rust.refresh_level0_region(level0, rect.left, rect.top);
     rust.update_pyramid(rect);
@@ -410,7 +413,10 @@ fn paint_commit_region_patch_equals_a_full_recomposite() {
 
     // Replay `end_paint`'s region commit against the committed bytes.
     let mut committed = doc.clone();
-    let buffer = pictura_render::composite_region_active(&committed, rect, false).0;
+    let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &committed, rect, false,
+    ))
+    .0;
     let x0 = rect.left.max(0);
     let y0 = rect.top.max(0);
     patch_composite_region(&mut committed, &buffer, x0, y0);
@@ -542,7 +548,10 @@ fn a_multi_rect_stroke_commit_equals_a_full_recomposite() {
     // Replay `end_paint`'s per-rect commit against the committed bytes.
     let mut committed = doc.clone();
     for region in &regions {
-        let buffer = pictura_render::composite_region_active(&committed, *region, false).0;
+        let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
+            &committed, *region, false,
+        ))
+        .0;
         patch_composite_region(
             &mut committed,
             &buffer,
@@ -569,7 +578,8 @@ fn layer_opacity_region_refresh_equals_a_full_recomposite() {
     // way `mutate_layer` does.
     doc.layers.last_mut().unwrap().opacity = 128;
     let rect = doc.layers.last().unwrap().rect;
-    let buffer = pictura_render::composite_region_active(&doc, rect, false).0;
+    let buffer =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false)).0;
     patch_composite_region(&mut doc, &buffer, rect.left, rect.top);
 
     let full = current_buffer(&doc, false);
@@ -611,7 +621,8 @@ fn content_move_region_fixture() -> (Document, PixelBuffer, PsdRect) {
         &mut doc, &path, &mask, dx, dy, false
     ));
     let dirty = super::impl_selection::move_dirty_rect(&selection, dx, dy).expect("dirty rect");
-    let buffer = pictura_render::composite_region_active(&doc, dirty, false).0;
+    let buffer =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, false)).0;
     patch_composite_region(&mut doc, &buffer, dirty.left, dirty.top);
     (doc, before, dirty)
 }
@@ -667,7 +678,8 @@ fn layer_move_region_refresh_equals_a_full_recomposite() {
     ));
     let after = doc.layers[index].rect;
     let dirty = before.union(after);
-    let buffer = pictura_render::composite_region_active(&doc, dirty, false).0;
+    let buffer =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, false)).0;
     patch_composite_region(&mut doc, &buffer, dirty.left, dirty.top);
 
     let full = current_buffer(&doc, false);

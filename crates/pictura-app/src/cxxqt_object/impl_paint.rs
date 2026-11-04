@@ -81,7 +81,12 @@ impl PictureViewRust {
         let whole = (x0, y0, w, h) == (0, 0, source.width, source.height);
         let gpu_compute = self.gpu_compute;
         let t = Instant::now();
-        let buffer = pictura_render::composite_region_active(source, rect, gpu_compute).0;
+        let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
+            source,
+            rect,
+            gpu_compute,
+        ))
+        .0;
         paint_timing::record("rr_composite_region", t.elapsed());
         let t = Instant::now();
         let srgb = pictura_codec::buffer_to_srgb(source, &buffer).into_owned();
@@ -149,8 +154,10 @@ impl PictureViewRust {
                 // The stroke's presents patched the composite; put the
                 // restored pixels back into it before anything reads it.
                 if let Some(rect) = dirty {
-                    let buffer =
-                        pictura_render::composite_region_active(doc, rect, self.gpu_compute).0;
+                    let buffer = pictura_render::composite(
+                        pictura_render::CompositeRequest::region(doc, rect, self.gpu_compute),
+                    )
+                    .0;
                     if let Some((x0, y0, _, _)) = clamp_region(rect, doc.width, doc.height) {
                         patch_composite_region(doc, &buffer, x0, y0);
                     }

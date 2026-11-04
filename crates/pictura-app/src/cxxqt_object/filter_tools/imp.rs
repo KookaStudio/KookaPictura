@@ -537,7 +537,11 @@ pub(super) fn hidden_layer_buffer(
         && rect.height() > 0;
     pictura_render::resolve_path_mut(doc, path)?.visible = false;
     let base = if cached_ok {
-        let (region, _) = pictura_render::composite_region_active(doc, rect, gpu_compute);
+        let (region, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+            doc,
+            rect,
+            gpu_compute,
+        ));
         let mut base = doc.composite.clone();
         patch_buffer_region(&mut base, &region, rect.left, rect.top);
         base

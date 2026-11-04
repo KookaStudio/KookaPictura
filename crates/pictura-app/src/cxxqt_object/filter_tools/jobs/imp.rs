@@ -402,7 +402,10 @@ pub(super) fn commit(
     } else {
         match clamp_region(rect, doc.width, doc.height) {
             Some((x0, y0, w, h)) => {
-                let buffer = pictura_render::composite_region_active(&doc, rect, gpu).0;
+                let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
+                    &doc, rect, gpu,
+                ))
+                .0;
                 let srgb = pictura_codec::buffer_to_srgb(&doc, &buffer).into_owned();
                 patch_composite_region(&mut doc, &buffer, x0, y0);
                 let clipped = PsdRect {

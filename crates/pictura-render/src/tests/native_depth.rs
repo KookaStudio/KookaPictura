@@ -1,6 +1,6 @@
 use super::*;
 use crate::composite::{Canvas, Px};
-use crate::composite_native::mask_alpha_unit;
+use crate::composite_native::{composite_native, mask_alpha_unit};
 use pictura_adjust::{Adjustment, AutoKind, ExposureGamma, HdrToneMap, LocalAdaptationParams};
 use pictura_core::{LayerMask, PixelBuffer, Samples, SourceChannels, SourcePlanes};
 

@@ -561,13 +561,10 @@ fn shrinking_feather_equals_full_recomposite() {
     let after = pictura_render::damage::influence(&doc, "0");
     let damage = pictura_render::damage::union(before, after).expect("bounded");
     let full = pictura_render::composite_rgba(&doc);
-    let region = pictura_render::composite_rgba_region(
-        &doc,
-        damage.left as u32,
-        damage.top as u32,
-        damage.width() as u32,
-        damage.height() as u32,
-    );
+    let region = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &doc, damage, false,
+    ))
+    .0;
     let fw = full.width as usize;
     let fp = fw * full.height as usize;
     let rw = region.width as usize;

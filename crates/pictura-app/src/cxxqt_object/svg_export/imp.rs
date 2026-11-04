@@ -17,7 +17,11 @@ pub fn svg_from_view(view: &PictureView) -> QString {
 /// active backend.
 pub(super) fn svg_for_document(doc: &Document, gpu_compute: bool) -> String {
     pictura_render::encode_document_svg(doc, |scratch: &Document| {
-        let buffer = pictura_render::composite_active(scratch, gpu_compute).0;
+        let buffer = pictura_render::composite(pictura_render::CompositeRequest::whole(
+            scratch,
+            gpu_compute,
+        ))
+        .0;
         buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(scratch, &buffer))
     })
 }

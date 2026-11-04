@@ -234,7 +234,7 @@ pub(super) fn current_buffer(doc: &Document, gpu_compute: bool) -> PixelBuffer {
     if doc.layers.is_empty() {
         doc.composite.clone()
     } else {
-        pictura_render::composite_active(doc, gpu_compute).0
+        pictura_render::composite(pictura_render::CompositeRequest::whole(doc, gpu_compute)).0
     }
 }
 /// Convert the document to a packed RGBA `QImage`.

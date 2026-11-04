@@ -3,6 +3,7 @@
 //! wide, and these tests read the default.
 
 use super::*;
+use crate::gpu::composite_gpu;
 use crate::text_gamma::{text_gamma_alpha, DEFAULT_TEXT_GAMMA};
 use pictura_core::TypeTool;
 

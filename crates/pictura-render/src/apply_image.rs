@@ -18,8 +18,9 @@ use pictura_filters::FilterError;
 use rayon::prelude::*;
 
 use crate::blend::blend;
+use crate::composite_native::composite_native;
 use crate::filter::coverage;
-use crate::{channel, composite_native, composite_rgba, resolve_path};
+use crate::{channel, composite_rgba, resolve_path};
 
 /// The blend slot. Add and Subtract exist only here, never as layer modes.
 #[derive(Clone, Copy, Debug, PartialEq)]

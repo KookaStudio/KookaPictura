@@ -189,8 +189,8 @@ pub fn translate_layer_rect(doc: &mut Document, dx: i32, dy: i32) -> bool {
 /// composite through the active backend.
 ///
 /// Same rect/mask shift as [`translate_layer`]; only the composite refresh
-/// differs — `composite_active` uses the GPU when `gpu_enabled` and an adapter
-/// is usable, falling back to the CPU oracle otherwise.
+/// differs — [`crate::composite`] uses the GPU when `gpu_enabled` and an
+/// adapter is usable, falling back to the CPU oracle otherwise.
 pub fn translate_layer_active(doc: &mut Document, dx: i32, dy: i32, gpu_enabled: bool) -> bool {
     let Some(layer) = topmost_pixel_layer(&mut doc.layers) else {
         return false;
@@ -199,7 +199,9 @@ pub fn translate_layer_active(doc: &mut Document, dx: i32, dy: i32, gpu_enabled:
         return false;
     }
     offset_layer(layer, dx, dy);
-    let (composite, _) = crate::gpu::composite_active(doc, gpu_enabled);
+    let (composite, _) = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(doc, gpu_enabled),
+    );
     doc.composite = composite;
     true
 }
@@ -556,7 +558,9 @@ mod tests {
         doc.composite = crate::composite_rgba(&doc);
 
         let full = Instant::now();
-        let _ = crate::composite_active(&doc, true);
+        let _ = crate::composite_request::composite(
+            crate::composite_request::CompositeRequest::whole(&doc, true),
+        );
         let full_ms = full.elapsed().as_secs_f64() * 1000.0;
 
         let rect = PsdRect {
@@ -566,7 +570,9 @@ mod tests {
             right: 1064,
         };
         let region = Instant::now();
-        let (buffer, backend) = crate::gpu::composite_region_active(&doc, rect, true);
+        let (buffer, backend) = crate::composite_request::composite(
+            crate::composite_request::CompositeRequest::region(&doc, rect, true),
+        );
         let region_ms = region.elapsed().as_secs_f64() * 1000.0;
 
         assert_eq!((buffer.width, buffer.height), (64, 64));
