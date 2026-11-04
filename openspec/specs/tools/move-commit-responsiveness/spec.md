@@ -75,6 +75,23 @@ preview that started after it.
   without a whole-document composite, and the first landing does not clear the
   second drag's preview
 
+### Requirement: A large transform commit leaves the GUI thread
+
+A Free Transform commit on a plain layer of a document over 16 MP SHALL
+resample the transform across rows in parallel, and SHALL leave the region
+composite and the exact pyramid to a worker when its dirty union reaches 16 MP.
+The transform image SHALL remain presented until `moveCommitted`; the transform
+handles SHALL be gone immediately. A commit that does not defer SHALL report
+`moveCommitted` before returning.
+
+#### Scenario: A large transform release returns to Move [mcr_transform_deferred]
+
+- **WHEN** a canvas-sized layer's Free Transform is committed on a document over
+  16 MP
+- **THEN** the release returns after the parallel engine transform without a
+  whole-document composite, the transform image stays until `moveCommitted`,
+  and the transform handles are gone
+
 ### Requirement: A pointer readout does not settle a pending composite
 
 The Info panel's hover readout SHALL read the maintained composite without

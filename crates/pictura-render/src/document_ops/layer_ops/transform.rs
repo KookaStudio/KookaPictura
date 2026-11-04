@@ -9,6 +9,7 @@
 
 use pictura_core::homography::HOMOGRAPHY_EPSILON;
 use pictura_core::{Channel, Document, Homography, LayerMask, LockFlags, PsdRect, SourceChannels};
+use rayon::prelude::*;
 
 use super::crossed_quad;
 use super::kernel::{self, Interpolation};
@@ -260,7 +261,7 @@ fn bounding_box<M: PlaneMap>(map: &M, rect: PsdRect) -> Option<(i32, i32, i32, i
 }
 
 /// Resample one `w×h` plane into the destination rect; out-of-source → 0.
-pub(super) fn resample_plane<M: PlaneMap>(
+pub(super) fn resample_plane<M: PlaneMap + Sync>(
     src: &[u8],
     w: usize,
     h: usize,
@@ -276,8 +277,8 @@ pub(super) fn resample_plane<M: PlaneMap>(
     let mut out = vec![0u8; dw * dh];
     let wf = w as f64;
     let hf = h as f64;
-    for oy in 0..dh {
-        for ox in 0..dw {
+    out.par_chunks_mut(dw).enumerate().for_each(|(oy, row)| {
+        for (ox, pixel) in row.iter_mut().enumerate() {
             let qx = dl as f64 + ox as f64 + 0.5;
             let qy = dt as f64 + oy as f64 + 0.5;
             let Some((sx, sy)) = map.inverse(qx, qy) else {
@@ -288,9 +289,9 @@ pub(super) fn resample_plane<M: PlaneMap>(
             if lx < 0.0 || ly < 0.0 || lx >= wf || ly >= hf {
                 continue;
             }
-            out[oy * dw + ox] = kernel::sample(src, w, h, lx, ly, resolved);
+            *pixel = kernel::sample(src, w, h, lx, ly, resolved);
         }
-    }
+    });
     out
 }
 
@@ -333,7 +334,7 @@ fn materialized_channels(doc: &Document, layer: &Layer) -> Option<Vec<Channel>> 
 /// has its `rect` transformed (and keeps `data` `None`) so the rect follows the
 /// layer; a similarity map re-centres on the mask's own rect, a projective map
 /// is global.
-fn transform_mask<M: PlaneMap>(
+fn transform_mask<M: PlaneMap + Sync>(
     mask: &LayerMask,
     layer_map: &M,
     interpolation: Interpolation,
@@ -523,7 +524,7 @@ fn apply_layer_map<M, F>(
     interpolation: Interpolation,
 ) -> bool
 where
-    M: PlaneMap,
+    M: PlaneMap + Sync,
     F: Fn(PsdRect) -> Option<M>,
 {
     let Some(prepared) = prepare_layer(doc, path) else {

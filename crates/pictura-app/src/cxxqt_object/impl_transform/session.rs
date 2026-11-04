@@ -383,13 +383,19 @@ impl qobject::PictureView {
             self.as_mut().rust_mut().session.set_selection(None);
             self.as_mut().rust_mut().last_transform = repeat;
             self.as_mut()
-                .edit(&history_label, |_| Edit::Structural { damage: None });
+                .commit_transform_edit(&history_label, |_| Edit::Structural { damage: None });
+            if !self.rust().move_composite_pending() {
+                self.as_mut().move_committed();
+            }
             self.as_mut().clear_transform_preview();
             return true;
         }
         if changed {
             self.as_mut().rust_mut().last_transform = repeat;
             self.as_mut().clear_link_sets();
+            // Finish the session before the edit: the layer extent is final,
+            // and the commit may leave a large composite to a worker.
+            self.as_mut().drop_transform_session();
             // The transform only moves the layer, so the union of its source rect
             // and its transformed rect bounds the composite change.
             let after = self
@@ -400,10 +406,22 @@ impl qobject::PictureView {
                 .and_then(|doc| pictura_render::resolve_path(doc, &path))
                 .map(|layer| (layer.rect, layer_has_effects(layer)));
             match after {
-                Some((after, false)) => self.as_mut().refresh_region(orig_rect.union(after)),
-                _ => self.as_mut().recomposite(),
+                Some((after, false)) => {
+                    let dirty = orig_rect.union(after);
+                    self.as_mut().commit_transform_edit(&history_label, |_| {
+                        Edit::regions(vec![dirty], false)
+                    });
+                }
+                _ => {
+                    // An effect or an unbounded reach needs the whole document;
+                    // a large one still leaves its composite to a worker.
+                    self.as_mut()
+                        .commit_transform_edit(&history_label, |_| Edit::Full);
+                }
             }
-            self.as_mut().record(&history_label);
+            if !self.rust().move_composite_pending() {
+                self.as_mut().move_committed();
+            }
         }
         self.as_mut().clear_transform_preview();
         changed

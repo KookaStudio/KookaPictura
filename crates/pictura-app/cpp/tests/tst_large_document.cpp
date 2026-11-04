@@ -15,6 +15,7 @@
 #include "pictura_app/src/cxxqt_object/impl_core/deferred_composite.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -68,6 +69,7 @@ private slots:
     void aSecondPressReusesTheFullPreview();
     void aSecondPressKeepsTheViewPreview();
     void aHoverReadoutDoesNotSettleTheMove();
+    void aTransformCommitLandsOffThread();
 
 private:
     void showFrame();
@@ -378,6 +380,40 @@ void LargeDocumentTest::aHoverReadoutDoesNotSettleTheMove()
     QVERIFY(committed.wait(30000));
     panel->refresh();
     QVERIFY(!pictura::move_composite_pending(*f.view));
+}
+
+// [mcr_transform_deferred]
+void LargeDocumentTest::aTransformCommitLandsOffThread()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_transform"));
+    QVERIFY2(f.ok(), "deferred transform fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.tools->beginFreeTransform(QStringLiteral("1")));
+    const QPolygonF quad = pictura::transform_api::quad(*f.view).corners;
+    QCOMPARE(quad.size(), 4);
+    const QPointF corner = quad.at(2);
+    QVERIFY(f.view->transform_press(corner.x(), corner.y(), 1.0, false, false) >= 0);
+    QVERIFY(f.view->transform_move(corner.x() - 200.0, corner.y() - 200.0, 1.0, false, false));
+    f.view->transform_release();
+
+    pictura::move_composite_set_delay(*f.view, 500);
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    QElapsedTimer timer;
+    timer.start();
+    f.tools->commitFreeTransform();
+    const qint64 elapsed = timer.elapsed();
+    QVERIFY2(pictura::move_composite_pending(*f.view), "a large transform commit defers");
+    QVERIFY2(elapsed < 1000, "the transform engine and commit stay off the whole composite");
+    QVERIFY2(f.canvas->movePreviewActive(), "the transform image waits for the landing");
+    QVERIFY2(!f.canvas->transformPreviewActive(), "the transform handles are gone");
+
+    QVERIFY(committed.wait(30000));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY(!f.canvas->movePreviewActive());
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));
 }
 
 QTEST_MAIN(LargeDocumentTest)

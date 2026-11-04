@@ -316,9 +316,9 @@ void ToolController::commitFreeTransform()
         return;
     }
     transformControls_ = false;
-    v->commit_transform();
+    const bool committed = v->commit_transform();
     transformGuideSnap_ = false;
-    resetTransformUi();
+    resetTransformUi(committed);
 }
 
 void ToolController::cancelFreeTransform()
@@ -333,13 +333,17 @@ void ToolController::cancelFreeTransform()
     resetTransformUi();
 }
 
-void ToolController::resetTransformUi()
+void ToolController::resetTransformUi(bool keepPreview)
 {
     transformControls_ = false;
     transformGuideSnap_ = false;
     clearControlsBox();
     if (canvas_) {
-        canvas_->clearTransformPreview();
+        if (keepPreview) {
+            canvas_->endTransformOverlay();
+        } else {
+            canvas_->clearTransformPreview();
+        }
         canvas_->clearSmartGuides();
     }
     applyToolPolicy();

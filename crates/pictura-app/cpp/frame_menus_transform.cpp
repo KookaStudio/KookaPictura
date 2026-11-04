@@ -161,6 +161,13 @@ void PicturaMainWindow::wireTransformMenu()
             }
             transform_set_history_label(*view, label);
             const bool applied = view->commit_transform();
+            if (ImageView* canvas = imageView()) {
+                if (applied) {
+                    canvas->endTransformOverlay();
+                } else {
+                    canvas->clearTransformPreview();
+                }
+            }
             if (applied) {
                 refresh();
             }

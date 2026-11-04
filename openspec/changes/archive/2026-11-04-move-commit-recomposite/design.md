@@ -78,6 +78,16 @@ therefore always sees the patched composite, and a pending move is one history
 state by the time the next edit begins. `can_undo` counts a pending move as an
 undoable state; `can_redo` is false while it is pending.
 
+## Transform commits
+
+`commit_transform` uses the same deferred edit for a plain layer: it applies the
+engine transform to the layer, then hands the region composite (or the full
+composite for an effect) to the worker. The engine's resample now runs its
+output rows in parallel, so the synchronous half is the layer's own content, not
+the canvas. The C++ canvas drops the transform handles immediately but keeps the
+transformed image until `moveCommitted`; a commit that does not defer emits it
+before returning.
+
 ## Limits
 
 - The worker composites the whole dirty union, even when the moved layer is
