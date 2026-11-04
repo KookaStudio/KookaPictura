@@ -30,7 +30,7 @@ pub(crate) fn document_bytes(available: Option<u64>, per_allocation: u64) -> u64
 
 /// The memory the host can give a new allocation now without swapping, in
 /// bytes, or `None` when it cannot be read.
-pub(crate) fn available_memory() -> Option<u64> {
+pub fn available_memory() -> Option<u64> {
     host::available_memory()
 }
 

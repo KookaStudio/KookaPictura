@@ -149,7 +149,7 @@ bool resizeFitsBudget(PictureView& view, const QJsonObject& values)
     } else if (height <= 0 && width > 0) {
         height = qRound(double(view.document_height()) * width / view.document_width());
     }
-    return document_budget_allows(width, height, document_api::documentDepthBits(view));
+    return document_resize_budget_allows(width, height, document_api::documentDepthBits(view));
 }
 
 } // namespace

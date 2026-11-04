@@ -2,6 +2,8 @@
 
 #include <QtWidgets/QDialog>
 
+#include <functional>
+
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -16,6 +18,17 @@ class PictureView;
 QString imageSizeSummary(double bytes);
 // The bytes one pixel of `view`'s document takes (colour channels × depth).
 double bytesPerPixel(PictureView* view);
+// Whether a `width` × `height` resample of `view`'s document fits the
+// ImageBudget caps bounded by the memory available now (#1156).
+bool imageSizeFitsBudget(PictureView& view, int width, int height);
+// The warning the Image Size handler shows when it does not.
+QString imageSizeBudgetMessage(int width, int height);
+// Test seam: answer the Image Size dialog and its budget warning.
+void setImageSizeDialogDriverForTest(std::function<bool(QDialog&)> driver);
+// Run `dialog` under the test driver, or modally; true when accepted.
+bool answerImageSizeDialog(QDialog& dialog, QWidget* parent);
+// Show the budget warning through the test driver, or modally.
+void showImageSizeBudgetWarning(QWidget* parent, int width, int height);
 
 // Image > Image Size. Width, Height, and Resolution are three views of a pixel
 // count and a pixels-per-inch figure. With Resample on, Width and Height set

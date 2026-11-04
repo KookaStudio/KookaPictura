@@ -4,6 +4,7 @@
 #include <QtTest/QtTest>
 
 #include "canvas_size_dialog.h"
+#include "commands.h"
 #include "frame.h"
 #include "image_size_dialog.h"
 
@@ -24,6 +25,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QToolButton>
 
 class ImageOpsTest : public QObject {
@@ -31,6 +33,7 @@ class ImageOpsTest : public QObject {
 
 private slots:
     void initTestCase();
+    void cleanup();
     void duplicateDocument();
     void trimDocument();
     void trimIsUndoable();
@@ -38,6 +41,9 @@ private slots:
     void imageSizeResamplesAndSetsResolution();
     void imageSizePhysicalUnitsUseInches();
     void imageSizeEstimatesTheStoredMode();
+    void imageSizeRefusesAnOverBudgetTarget();
+    void resizeImageRefusesAnOverBudgetTarget();
+    void imageSizeShowsTheBudgetWarning();
     void canvasSizeGrowsAroundTheAnchor();
 
 private:
@@ -50,6 +56,11 @@ void ImageOpsTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+}
+
+void ImageOpsTest::cleanup()
+{
+    pictura::setImageSizeDialogDriverForTest({});
 }
 
 void ImageOpsTest::duplicateDocument()
@@ -392,6 +403,108 @@ void ImageOpsTest::canvasSizeGrowsAroundTheAnchor()
     QCOMPARE(QColor::fromRgba(view->composite_argb(2, 5)), QColor(Qt::black));
     QCOMPARE(QColor::fromRgba(view->composite_argb(15, 5)), QColor(Qt::white));
     QCOMPARE(QColor::fromRgba(view->composite_argb(27, 5)), QColor(Qt::black));
+    frame.closeDocument(doc, false);
+}
+
+// Image Size refuses a target that does not fit the document budget, and a
+// resolution-only change is still allowed (#1156).
+void ImageOpsTest::imageSizeRefusesAnOverBudgetTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Budget"), 40, 20, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const int history = view->history_count();
+
+    QVERIFY(!pictura::imageSizeFitsBudget(*view, 30000, 30000));
+    const QString message = pictura::imageSizeBudgetMessage(30000, 30000);
+    QVERIFY(message.contains(QStringLiteral("30000")));
+    QVERIFY(message.contains(QStringLiteral("memory"), Qt::CaseInsensitive));
+
+    QVERIFY(!pictura::image_size_apply(*view, QStringLiteral("bicubic"), 30000, 30000, 72.0,
+                                       false));
+    QCOMPARE(view->document_width(), 40);
+    QCOMPARE(view->document_height(), 20);
+    QCOMPARE(view->history_count(), history);
+
+    QVERIFY(pictura::image_size_apply(*view, QString(), 40, 20, 300.0, false));
+    QCOMPARE(view->document_width(), 40);
+    QCOMPARE(view->document_height(), 20);
+    QCOMPARE(pictura::document_ppi(*view), 300.0);
+    frame.closeDocument(doc, false);
+}
+
+// The resize bridge applies the same gate and still allows a size inside it.
+void ImageOpsTest::resizeImageRefusesAnOverBudgetTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Bridge"), 40, 20, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const int history = view->history_count();
+
+    QVERIFY(!view->resize_image(QStringLiteral("bicubic"), 30000, 30000));
+    QCOMPARE(view->document_width(), 40);
+    QCOMPARE(view->document_height(), 20);
+    QCOMPARE(view->history_count(), history);
+
+    QVERIFY(view->resize_image(QStringLiteral("nearest"), 20, 10));
+    QCOMPARE(view->document_width(), 20);
+    QCOMPARE(view->document_height(), 10);
+    frame.closeDocument(doc, false);
+}
+
+// Accepting an over-budget Image Size shows the warning and leaves the
+// document alone.
+void ImageOpsTest::imageSizeShowsTheBudgetWarning()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Warning"), 40, 20, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const int history = view->history_count();
+
+    int warnings = 0;
+    QString text;
+    pictura::setImageSizeDialogDriverForTest([&](QDialog& dialog) {
+        if (auto* box = qobject_cast<QMessageBox*>(&dialog)) {
+            ++warnings;
+            text = box->text();
+            return true;
+        }
+        auto* size = qobject_cast<pictura::ImageSizeDialog*>(&dialog);
+        if (!size) {
+            return false;
+        }
+        auto* chain = qobject_cast<QToolButton*>(
+            size->controlForTest(QStringLiteral("imageSizeConstrain")));
+        auto* width = qobject_cast<QDoubleSpinBox*>(
+            size->controlForTest(QStringLiteral("imageSizeWidth")));
+        auto* height = qobject_cast<QDoubleSpinBox*>(
+            size->controlForTest(QStringLiteral("imageSizeHeight")));
+        if (!chain || !width || !height) {
+            return false;
+        }
+        chain->setChecked(false);
+        width->setValue(30000);
+        height->setValue(30000);
+        return true;
+    });
+    QVERIFY(frame.registry()->dispatch(QStringLiteral("image.image.size")));
+    pictura::setImageSizeDialogDriverForTest({});
+
+    QCOMPARE(warnings, 1);
+    QVERIFY(text.contains(QStringLiteral("30000")));
+    QVERIFY(text.contains(QStringLiteral("memory"), Qt::CaseInsensitive));
+    QCOMPARE(view->document_width(), 40);
+    QCOMPARE(view->document_height(), 20);
+    QCOMPARE(view->history_count(), history);
     frame.closeDocument(doc, false);
 }
 

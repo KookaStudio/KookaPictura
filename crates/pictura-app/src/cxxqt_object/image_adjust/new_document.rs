@@ -50,5 +50,9 @@ pub mod ffi {
         /// `ImageBudget`, so a caller can refuse before allocating: an
         /// allocation failure aborts the process.
         fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool;
+
+        /// Whether an immediate resize to `width` × `height` at `bits` per
+        /// channel fits the memory available now (the resize gate, #1156).
+        fn document_resize_budget_allows(width: i32, height: i32, bits: i32) -> bool;
     }
 }

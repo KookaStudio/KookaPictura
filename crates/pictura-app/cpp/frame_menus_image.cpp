@@ -145,17 +145,28 @@ void PicturaMainWindow::wireImageMenu()
             return;
         }
         ImageSizeDialog dialog(view, this);
-        if (runDialog(dialog, this) == QDialog::Accepted
-            && applyImageSize(view, dialog.resampleKind(), dialog.resultWidth(),
-                              dialog.resultHeight(), dialog.resultPpi(), dialog.resultPerCm())) {
-            CommandParams command;
-            command.values.insert(QStringLiteral("width"), dialog.resultWidth());
-            command.values.insert(QStringLiteral("height"), dialog.resultHeight());
-            command.values.insert(QStringLiteral("resolution"), dialog.resultPpi());
-            command.values.insert(QStringLiteral("perCm"), dialog.resultPerCm());
-            command.values.insert(QStringLiteral("resample"), dialog.resampleKind());
-            registry_->recordCommand(imageSize, command);
+        if (!answerImageSizeDialog(dialog, this)) {
+            return;
         }
+        const bool resamples = !dialog.resampleKind().isEmpty()
+            && (dialog.resultWidth() != view->document_width()
+                || dialog.resultHeight() != view->document_height());
+        if (resamples
+            && !imageSizeFitsBudget(*view, dialog.resultWidth(), dialog.resultHeight())) {
+            showImageSizeBudgetWarning(this, dialog.resultWidth(), dialog.resultHeight());
+            return;
+        }
+        if (!applyImageSize(view, dialog.resampleKind(), dialog.resultWidth(),
+                            dialog.resultHeight(), dialog.resultPpi(), dialog.resultPerCm())) {
+            return;
+        }
+        CommandParams command;
+        command.values.insert(QStringLiteral("width"), dialog.resultWidth());
+        command.values.insert(QStringLiteral("height"), dialog.resultHeight());
+        command.values.insert(QStringLiteral("resolution"), dialog.resultPpi());
+        command.values.insert(QStringLiteral("perCm"), dialog.resultPerCm());
+        command.values.insert(QStringLiteral("resample"), dialog.resampleKind());
+        registry_->recordCommand(imageSize, command);
     });
     registry_->setExecutor(imageSize, [this, applyImageSize](const CommandParams& params) {
         PictureView* view = activeView();
@@ -181,8 +192,13 @@ void PicturaMainWindow::wireImageMenu()
                 ppi *= 2.54;
             }
         }
-        return applyImageSize(view, params.values.value(QStringLiteral("resample")).toString(),
-                              width, height, ppi, perCm);
+        const QString kind = params.values.value(QStringLiteral("resample")).toString();
+        const bool resamples = !kind.isEmpty()
+            && (width != view->document_width() || height != view->document_height());
+        if (resamples && !imageSizeFitsBudget(*view, width, height)) {
+            return false;
+        }
+        return applyImageSize(view, kind, width, height, ppi, perCm);
     });
 
     const QString canvasSize =

@@ -84,6 +84,7 @@ mod smart_writer_tests;
 mod tests;
 
 pub use advanced_blending::encode_blend_if;
+pub use budget::available_memory;
 pub use color_mode::{
     bitmap_rows_to_rgb, cmyk_to_rgb, cmyk_to_rgb_with_profile, indexed_to_rgb, lab_to_rgb,
     rgb_to_cmyk_with_profile, rgb_to_lab, xyz_d50_to_srgb_u8,
