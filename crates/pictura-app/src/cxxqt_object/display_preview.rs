@@ -5,13 +5,14 @@
 //! the gesture composites the exact frame and records one history state.
 
 use super::edit::Edit;
-use super::helpers_composite::{display_rgba_bytes, patch_buffer_region};
+use super::helpers_composite::display_rgba_bytes;
 use super::presentation::{Presentation, Rebuild};
 use super::qobject::PictureView;
 use super::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::{Document, Layer, PsdRect};
+use pictura_render::patch_buffer_region;
 
 /// The property a display preview is changing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

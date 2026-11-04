@@ -2,7 +2,7 @@ mod display;
 mod purge;
 
 use super::helpers::{clamp_region, paint_timing};
-use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame, store_composite};
+use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame};
 use super::presentation::{Dirty, Presentation, Rebuild};
 use super::{qobject, PictureViewRust};
 use crate::history::{detached_copy, History, Restored, Snapshot};
@@ -11,6 +11,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::{Document, PsdRect};
+use pictura_render::DocumentComposite;
 use pictura_select::Selection;
 use std::time::Instant;
 
@@ -53,7 +54,7 @@ impl PictureViewRust {
         let mut doc = detached_copy(self.session.doc.as_ref()?);
         if self.session.live.stroke().is_some() {
             let rendered = current_buffer(&doc, self.gpu_compute);
-            store_composite(&mut doc, &rendered);
+            DocumentComposite::new(&mut doc).store(&rendered);
         }
         Some(Snapshot {
             doc,

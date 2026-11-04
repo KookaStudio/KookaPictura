@@ -11,7 +11,28 @@ use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
     PsdRect,
 };
+use pictura_render::{patch_buffer_region, CompositeScope, DocumentComposite};
 use std::time::Instant;
+
+#[cfg(test)]
+std::thread_local! {
+    pub(super) static REFRESH_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn note_refresh() {
+    REFRESH_CALLS.with(|calls| calls.set(calls.get() + 1));
+}
+
+#[cfg(test)]
+pub(super) fn refresh_calls() -> u64 {
+    REFRESH_CALLS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(super) fn reset_refresh_calls() {
+    REFRESH_CALLS.with(|calls| calls.set(0));
+}
 
 pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 
@@ -232,7 +253,7 @@ impl qobject::PictureView {
         };
         let gpu_compute = self.rust().gpu_compute;
         let rendered = current_buffer(&doc, gpu_compute);
-        store_composite(&mut doc, &rendered);
+        DocumentComposite::new(&mut doc).store(&rendered);
         {
             let mut view = self.as_mut().rust_mut();
             view.replace_document(Some(doc), History::default(), Default::default(), None);
@@ -917,17 +938,20 @@ impl super::PictureViewRust {
     /// composite was stored.
     pub(super) fn composite_into_doc(&mut self) -> bool {
         let t = Instant::now();
-        let rendered = self
-            .session
-            .doc
-            .as_ref()
-            .map(|doc| current_buffer(doc, self.gpu_compute));
-        paint_timing::record("recomposite_full_composite", t.elapsed());
-        let Some(rendered) = rendered else {
-            return false;
+        let gpu_compute = self.gpu_compute;
+        let refreshed = {
+            let Some(doc) = self.session.doc.as_mut() else {
+                return false;
+            };
+            DocumentComposite::new(doc).render(CompositeScope::Full, gpu_compute)
         };
-        if let Some(doc) = self.session.doc.as_mut() {
-            store_composite(doc, &rendered);
+        #[cfg(test)]
+        note_refresh();
+        paint_timing::record("recomposite_full_composite", t.elapsed());
+        for frame in refreshed {
+            if let Some(doc) = self.session.doc.as_mut() {
+                DocumentComposite::new(doc).store(&frame.buffer);
+            }
         }
         true
     }
@@ -1057,10 +1081,7 @@ impl super::PictureViewRust {
     /// runs once.
     pub(super) fn refresh_regions(&mut self, rects: &[PsdRect]) -> Option<PsdRect> {
         let mut union: Option<PsdRect> = None;
-        for &rect in rects {
-            let Some((x0, y0, clipped, srgb)) = self.refresh_region_buffer(rect) else {
-                continue;
-            };
+        for (x0, y0, clipped, srgb) in self.refresh_regions_buffer(rects) {
             self.apply_refreshed_region(x0, y0, clipped, srgb);
             union = Some(union.map_or(clipped, |u| u.union(clipped)));
         }

@@ -9,7 +9,7 @@ use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerBlock, LayerMask,
     LockFlags, PixelBuffer, PsdRect,
 };
-use pictura_render::{composite, CompositeRequest};
+use pictura_render::{composite, patch_buffer_region, CompositeRequest, DocumentComposite};
 use pictura_select::Selection;
 
 pub(super) fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Layer {
@@ -279,7 +279,7 @@ fn move_preview_base_equals_full_composite_with_layer_hidden() {
 
     // The authoritative composite holds the layer visible, as M34 keeps it.
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
 
     // (a) Full composite with the topmost layer hidden.
     doc.layers[index].visible = false;
@@ -431,44 +431,6 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
 }
 
 #[test]
-fn visibility_region_path_matches_full_recomposite() {
-    let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![
-        pixel_layer("base", 16, 16, (30, 60, 90)),
-        pixel_layer("top", 6, 6, (200, 100, 50)),
-    ]);
-    let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
-
-    // The region path: apply the toggle, union the changed regions, composite
-    // and patch only that union.
-    let mut region_doc = doc.clone();
-    let (changed, region) = set_visible_paths_union(&mut region_doc, &["1"], false);
-    assert_eq!(changed, 1);
-    let rect = region.expect("raster layer is bounded");
-    let (x0, y0, w, h) =
-        clamp_region(rect, region_doc.width, region_doc.height).expect("non-empty region");
-    let (buffer, _) = composite(CompositeRequest::region(&region_doc, rect, false));
-    assert_eq!((buffer.width, buffer.height), (w, h));
-    patch_composite_region(&mut region_doc, &buffer, x0, y0);
-
-    // A full recomposite of the same state, stored the way `recomposite` does.
-    let mut full_doc = doc.clone();
-    assert_eq!(
-        pictura_render::set_visible_paths(&mut full_doc, &["1"], false),
-        1
-    );
-    let rendered = current_buffer(&full_doc, false);
-    store_composite(&mut full_doc, &rendered);
-
-    assert_eq!(
-        buffer_to_image(&region_doc.composite),
-        buffer_to_image(&full_doc.composite),
-        "region path must match a full recomposite byte-for-byte"
-    );
-}
-
-#[test]
 fn visibility_union_falls_back_for_unbounded_layer() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut group = pixel_layer("group", 4, 4, (9, 9, 9));
@@ -551,7 +513,7 @@ fn move_preview_base_preserves_layer_visibility() {
         pixel_layer("top", 8, 8, (200, 100, 50)),
     ]);
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
     doc.layers[1].visible = false;
 
     // The region path.
@@ -738,61 +700,6 @@ fn test_image_is_not_null() {
 }
 
 #[test]
-fn store_composite_stores_rgba_for_rgb_and_keeps_grayscale_plane() {
-    let mut rgb = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-    rgb.layers =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 8, 8, (30, 60, 90))]);
-    let rendered = current_buffer(&rgb, false);
-    assert_eq!(rendered.channels, 4);
-    store_composite(&mut rgb, &rendered);
-    assert_eq!(rgb.composite.channels, 4);
-    assert_eq!(rgb.composite.data, rendered.data);
-
-    let mut gray = Document::new(8, 8, ColorMode::Grayscale, BitDepth::Eight);
-    gray.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "gray".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 8,
-            right: 8,
-        },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![120; 64].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255; 64].into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }]);
-    let rendered = current_buffer(&gray, false);
-    assert_eq!(rendered.channels, 4);
-    store_composite(&mut gray, &rendered);
-    assert_eq!(gray.composite.channels, 1, "grayscale stays one plane");
-    assert_eq!(
-        gray.composite.data,
-        rendered.data[..64],
-        "stored grey plane"
-    );
-}
-
-#[test]
 fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![
@@ -800,7 +707,7 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
         pixel_layer("top", 6, 6, (200, 100, 50)),
     ]);
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
     let open = Snapshot {
         doc: doc.clone(),
         selection: None,
@@ -811,7 +718,7 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     // A full-composite mutation, captured after the store.
     assert!(pictura_render::translate_layer(&mut doc, 3, 2));
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
     history.capture(
         Snapshot {
             doc: doc.clone(),
@@ -829,7 +736,7 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     assert_eq!((w, h), (dirty.width() as u32, dirty.height() as u32));
     let (buffer, _) = composite(CompositeRequest::region(&doc, dirty, false));
     assert_eq!((buffer.width, buffer.height), (w, h));
-    patch_composite_region(&mut doc, &buffer, x0, y0);
+    DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
     history.capture(
         Snapshot {
             doc: doc.clone(),
@@ -876,7 +783,7 @@ fn region_refresh_keeps_composite_and_rebuilt_image_equal_to_full() {
         pixel_layer("top", 8, 8, (200, 100, 50)),
     ]);
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
 
     // Replay `refresh_region`'s non-painting body for a sequence of moves:
     // patch the composite, then rebuild the display image from it as
@@ -889,7 +796,7 @@ fn region_refresh_keeps_composite_and_rebuilt_image_equal_to_full() {
         let (x0, y0, w, h) = clamp_region(dirty, doc.width, doc.height).expect("in-bounds");
         let (buffer, _) = composite(CompositeRequest::region(&doc, dirty, false));
         assert_eq!((buffer.width, buffer.height), (w, h));
-        patch_composite_region(&mut doc, &buffer, x0, y0);
+        DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
         let image = buffer_to_image(&doc.composite);
         let full = document_to_image(&doc, false);
         assert_eq!(
@@ -1009,7 +916,7 @@ fn save_after_edit_serializes_the_current_composite() {
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 8, 8, (40, 40, 40))]);
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
     let plane = 64usize;
     let before = doc.composite.data[..3 * plane].to_vec();
 
@@ -1022,7 +929,7 @@ fn save_after_edit_serializes_the_current_composite() {
         }
     }
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
     assert_eq!(doc.composite.channels, 4);
     let edited = doc.composite.data[..3 * plane].to_vec();
     assert_ne!(edited, before, "the edit must change the composite");

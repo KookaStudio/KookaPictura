@@ -39,6 +39,10 @@ mod composite_region;
 mod composite_request;
 mod composite_route;
 mod composite_rows;
+mod document_composite;
+pub use document_composite::{
+    patch_buffer_region, rgba_frame, CompositeScope, DocumentComposite, Refreshed,
+};
 pub mod damage;
 mod layer_source;
 pub use layer_effects::layer_paint_bounds;

@@ -1,17 +1,18 @@
 use super::document_session::{PreviewSample, PreviewStroke, SessionKind, StrokeSession};
 use super::helpers::*;
-use super::helpers_composite::{patch_composite_region, planes_of, store_composite};
+use super::helpers_composite::planes_of;
 use super::qobject;
 use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::{Document, PixelBuffer, PsdRect};
+use pictura_core::{PixelBuffer, PsdRect};
 use pictura_paint::spacing::DabPlacer;
 use pictura_paint::{spacing::SpacingMode, PaintMode, Stroke, StrokeConfig, StrokeSample};
 use pictura_render::gpu::{GpuPaintMode, GpuStroke, GpuStrokeParams};
 use pictura_render::ViewPyramid;
+use pictura_render::{CompositeScope, DocumentComposite};
 use std::time::Instant;
 
 mod mask;
@@ -76,44 +77,36 @@ impl PictureViewRust {
         rect: PsdRect,
     ) -> Option<(i32, i32, PsdRect, PixelBuffer)> {
         let painting = self.session.live.mask_stroke().is_some();
-        let source: &Document = self.session.doc.as_ref()?;
-        let (x0, y0, w, h) = clamp_region(rect, source.width, source.height)?;
-        let whole = (x0, y0, w, h) == (0, 0, source.width, source.height);
         let gpu_compute = self.gpu_compute;
         let t = Instant::now();
-        let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
-            source,
-            rect,
-            gpu_compute,
-        ))
-        .0;
+        let refreshed = {
+            let doc = self.session.doc.as_mut()?;
+            let mut cache = DocumentComposite::new(doc);
+            let out = if painting {
+                cache.render(CompositeScope::Regions(vec![rect]), gpu_compute)
+            } else {
+                cache.refresh(CompositeScope::Regions(vec![rect]), gpu_compute)
+            };
+            out.into_iter().next()?
+        };
         paint_timing::record("rr_composite_region", t.elapsed());
-        let t = Instant::now();
-        let srgb = pictura_codec::buffer_to_srgb(source, &buffer).into_owned();
-        paint_timing::record("rr_buffer_to_srgb", t.elapsed());
+        #[cfg(test)]
+        {
+            if !painting {
+                super::impl_core::note_refresh();
+            }
+        }
+        let source = self.session.doc.as_ref()?;
+        let srgb = pictura_codec::buffer_to_srgb(source, &refreshed.buffer).into_owned();
         if srgb.width == 0 || srgb.height == 0 {
             return None;
         }
-        if !painting {
-            if let Some(doc) = self.session.doc.as_mut() {
-                let t = Instant::now();
-                // A region that is the whole document replaces the composite:
-                // patching it row by row copies the document serially (#1145).
-                if whole {
-                    store_composite(doc, &buffer);
-                } else {
-                    patch_composite_region(doc, &buffer, x0, y0);
-                }
-                paint_timing::record("rr_patch_composite", t.elapsed());
-            }
-        }
-        let clipped = PsdRect {
-            top: y0,
-            left: x0,
-            bottom: y0 + h as i32,
-            right: x0 + w as i32,
-        };
-        Some((x0, y0, clipped, srgb))
+        Some((
+            refreshed.rect.left,
+            refreshed.rect.top,
+            refreshed.rect,
+            srgb,
+        ))
     }
 
     /// Abandon the live stroke, putting back the pixels it changed (or the
@@ -147,6 +140,7 @@ impl PictureViewRust {
         }
         let stroke = session.stroke?;
         let dirty = stroke.dirty().map(|rect| rect.grow(pad));
+        let gpu_compute = self.gpu_compute;
         match (session.stroke_base, self.session.doc.as_mut()) {
             (Some(base), _) => self.session.doc = Some(base),
             (None, Some(doc)) => {
@@ -154,18 +148,61 @@ impl PictureViewRust {
                 // The stroke's presents patched the composite; put the
                 // restored pixels back into it before anything reads it.
                 if let Some(rect) = dirty {
-                    let buffer = pictura_render::composite(
-                        pictura_render::CompositeRequest::region(doc, rect, self.gpu_compute),
-                    )
-                    .0;
-                    if let Some((x0, y0, _, _)) = clamp_region(rect, doc.width, doc.height) {
-                        patch_composite_region(doc, &buffer, x0, y0);
-                    }
+                    DocumentComposite::new(doc)
+                        .refresh(CompositeScope::Regions(vec![rect]), gpu_compute);
+                    #[cfg(test)]
+                    super::impl_core::note_refresh();
                 }
             }
             (None, None) => {}
         }
         dirty
+    }
+
+    /// Composite several regions in one cache refresh and return their clamped
+    /// origins, rects, and sRGB buffers. The cache is refreshed once for the
+    /// whole list; a live mask stroke renders without writing it.
+    pub(super) fn refresh_regions_buffer(
+        &mut self,
+        rects: &[PsdRect],
+    ) -> Vec<(i32, i32, PsdRect, PixelBuffer)> {
+        let painting = self.session.live.mask_stroke().is_some();
+        let gpu_compute = self.gpu_compute;
+        let t = Instant::now();
+        let refreshed = {
+            let Some(doc) = self.session.doc.as_mut() else {
+                return Vec::new();
+            };
+            let mut cache = DocumentComposite::new(doc);
+            let scope = CompositeScope::Regions(rects.to_vec());
+            if painting {
+                cache.render(scope, gpu_compute)
+            } else {
+                cache.refresh(scope, gpu_compute)
+            }
+        };
+        paint_timing::record("rr_composite_region", t.elapsed());
+        #[cfg(test)]
+        {
+            if !painting && !refreshed.is_empty() {
+                super::impl_core::note_refresh();
+            }
+        }
+        let Some(doc) = self.session.doc.as_ref() else {
+            return Vec::new();
+        };
+        refreshed
+            .into_iter()
+            .filter_map(|refreshed| {
+                let srgb = pictura_codec::buffer_to_srgb(doc, &refreshed.buffer).into_owned();
+                (srgb.width != 0 && srgb.height != 0).then_some((
+                    refreshed.rect.left,
+                    refreshed.rect.top,
+                    refreshed.rect,
+                    srgb,
+                ))
+            })
+            .collect()
     }
 
     /// Fold a refreshed region into level 0, the damage account and the pyramid.

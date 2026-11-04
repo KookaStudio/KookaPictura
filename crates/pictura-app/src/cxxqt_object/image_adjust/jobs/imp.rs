@@ -3,9 +3,7 @@ use super::*;
 use super::super::super::document_session::{FilterPreview, PreviewBaseline, SessionKind};
 use super::super::super::filter_tools::jobs::commit_op_start;
 use super::super::super::helpers::{active_mask_target, clamp_region, layer_has_effects};
-use super::super::super::helpers_composite::{
-    current_buffer, patch_composite_region, selection_to_mask, store_composite,
-};
+use super::super::super::helpers_composite::{current_buffer, selection_to_mask};
 use super::super::super::impl_filters::{cancel_filter_preview, pixel_filter_target, ActiveOp};
 use super::super::super::presentation::{Dirty, Presentation, Rebuild};
 use super::super::super::state::PictureViewRust;
@@ -15,6 +13,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::{layer_pixel_locked, Document, Layer, PsdRect};
 use pictura_render::Adjustment;
+use pictura_render::DocumentComposite;
 use pictura_select::Selection;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -107,7 +106,7 @@ pub(super) fn adjust_preview(
     let layer = layer.clone();
     let refresh = if layer_has_effects(&layer) {
         let rendered = current_buffer(&doc, gpu);
-        store_composite(&mut doc, &rendered);
+        DocumentComposite::new(&mut doc).store(&rendered);
         WorkerAdjustRefresh::Everywhere {
             composite: rendered,
         }
@@ -119,7 +118,7 @@ pub(super) fn adjust_preview(
                 ))
                 .0;
                 let srgb = pictura_codec::buffer_to_srgb(&doc, &buffer).into_owned();
-                patch_composite_region(&mut doc, &buffer, x0, y0);
+                DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
                 WorkerAdjustRefresh::Region {
                     x0,
                     y0,
@@ -260,7 +259,7 @@ pub(in crate::cxxqt_object) fn preview_poll(rust: &mut PictureViewRust) -> Optio
             composite,
         } => {
             if let Some(doc) = rust.session.doc.as_mut() {
-                patch_composite_region(doc, &composite, x0, y0);
+                DocumentComposite::new(doc).patch(&composite, x0, y0);
             }
             rust.apply_refreshed_region(x0, y0, rect, srgb);
             Presentation {
@@ -274,7 +273,7 @@ pub(in crate::cxxqt_object) fn preview_poll(rust: &mut PictureViewRust) -> Optio
         }
         WorkerAdjustRefresh::Everywhere { composite } => {
             if let Some(doc) = rust.session.doc.as_mut() {
-                store_composite(doc, &composite);
+                DocumentComposite::new(doc).store(&composite);
             }
             Presentation {
                 rebuild: Rebuild::Sync,

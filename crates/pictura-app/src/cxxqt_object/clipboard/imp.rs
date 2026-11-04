@@ -1,11 +1,11 @@
 use super::*;
 
-use super::super::helpers_composite::rgba_frame;
 use super::super::picture::picture;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_render::rgba_frame;
 use pictura_render::{Clip, PasteMode};
 use std::sync::Mutex;
 
