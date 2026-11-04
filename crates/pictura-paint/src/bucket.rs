@@ -12,7 +12,7 @@
 //! (<https://github.com/perfecto25/photorust>), extended with the pattern
 //! fill. Behavioural parity only.
 
-use crate::fill::{fill_layer, Alpha};
+use crate::fill::{fill_layer, fill_layer_within, Alpha};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
 use pictura_core::mask_ops::{self, Border};
@@ -91,6 +91,47 @@ pub fn fill(
     }
     fill_layer(doc, path, mode, selection, alpha, |x, y| {
         let cover = mask[(y * width + x) as usize];
+        if cover == 0 {
+            return None;
+        }
+        let color = match paint {
+            BucketPaint::Foreground(color) => color,
+            BucketPaint::Pattern(tile) => {
+                let [r, g, b, a] = tile.get(x.rem_euclid(tile.width), y.rem_euclid(tile.height));
+                Rgba { r, g, b, a }
+            }
+        };
+        Some((color, cover as f32 / 255.0 * opacity))
+    })
+}
+
+/// [`fill`] through a coverage `mask` that covers only `bounds` (document
+/// pixels, row-major over `bounds.width()`): the layer is visited and written
+/// only where the box reaches, so a shape filled on a large document costs
+/// its own box.
+#[allow(clippy::too_many_arguments)]
+pub fn fill_within(
+    doc: &mut Document,
+    path: &str,
+    bounds: PsdRect,
+    mask: &[u8],
+    paint: BucketPaint<'_>,
+    mode: PaintMode,
+    opacity: f32,
+    selection: Option<&[u8]>,
+    alpha: Alpha,
+) -> Option<PsdRect> {
+    let opacity = opacity.clamp(0.0, 1.0);
+    let empty_tile = matches!(paint, BucketPaint::Pattern(t) if t.width <= 0 || t.height <= 0);
+    let bw = bounds.width().max(0);
+    if opacity <= 0.0 || empty_tile || mask.len() < (bw * bounds.height().max(0)) as usize {
+        return None;
+    }
+    fill_layer_within(doc, path, mode, selection, alpha, Some(bounds), |x, y| {
+        if x < bounds.left || y < bounds.top || x >= bounds.right || y >= bounds.bottom {
+            return None;
+        }
+        let cover = mask[((y - bounds.top) * bw + x - bounds.left) as usize];
         if cover == 0 {
             return None;
         }
@@ -539,5 +580,82 @@ mod tests {
         assert_eq!(pixel(&d, 2, 0), [220, 0, 0, 255]);
         assert_eq!(pixel(&d, 5, 0), [220, 0, 0, 255]);
         assert_eq!(pixel(&d, 1, 0), WHITE);
+    }
+
+    #[test]
+    fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_bands() {
+        use crate::fill::tests::doc_at;
+        let (w, h) = (90i32, 300i32);
+        // A soft box crossing two bands, on a layer offset from the canvas
+        // and on a Background, both shared with a history snapshot.
+        let bounds = PsdRect {
+            top: 70,
+            left: 12,
+            bottom: 140,
+            right: 61,
+        };
+        let bw = bounds.width();
+        let boxed: Vec<u8> = (0..bw * bounds.height())
+            .map(|i| ((i * 37) % 256) as u8)
+            .collect();
+        let mut whole = vec![0u8; (w * h) as usize];
+        for y in bounds.top..bounds.bottom {
+            for x in bounds.left..bounds.right {
+                whole[(y * w + x) as usize] =
+                    boxed[((y - bounds.top) * bw + x - bounds.left) as usize];
+            }
+        }
+        let red = BucketPaint::Foreground(RED);
+        for (origin, background) in [((0, 0), false), ((-5, 10), false), ((0, 0), true)] {
+            let base = doc_at((w, h), origin, WHITE, background);
+            let mut expected = base.clone();
+            let dirty = fill(
+                &mut expected,
+                "0",
+                &whole,
+                red,
+                PaintMode::Normal,
+                0.8,
+                None,
+                Alpha::Blend,
+            );
+            let mut history = base.clone();
+            for c in &mut history.layers[0].channels {
+                c.data.fracture(w as usize);
+            }
+            let mut got = history.clone();
+            let boxed_dirty = fill_within(
+                &mut got,
+                "0",
+                bounds,
+                &boxed,
+                red,
+                PaintMode::Normal,
+                0.8,
+                None,
+                Alpha::Blend,
+            );
+            assert_eq!(boxed_dirty, dirty, "origin {origin:?}");
+            for (a, b) in got.layers[0]
+                .channels
+                .iter()
+                .zip(&expected.layers[0].channels)
+            {
+                assert_eq!(
+                    a.data.as_slice(),
+                    b.data.as_slice(),
+                    "channel {} at {origin:?}",
+                    a.id
+                );
+            }
+            for (a, b) in got.layers[0]
+                .channels
+                .iter()
+                .zip(&history.layers[0].channels)
+            {
+                assert!(a.data.shares_band(4, &b.data), "band 4 stayed shared");
+                assert!(!a.data.shares_band(1, &b.data), "band 1 was written");
+            }
+        }
     }
 }

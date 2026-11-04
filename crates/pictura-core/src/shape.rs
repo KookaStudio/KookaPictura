@@ -17,6 +17,8 @@ mod line;
 pub use custom::{custom_shape_kernel, custom_shape_preview, CUSTOM_SHAPE_NAMES};
 
 use crate::path::{PathPoint, Subpath, VectorPath};
+use crate::PsdRect;
+use rayon::prelude::*;
 
 /// The cubic handle length, as a fraction of the radius, that best fits a
 /// quarter circle.
@@ -459,73 +461,117 @@ pub fn path_coverage(path: &VectorPath, width: u32, height: u32) -> Vec<u8> {
     rasterize(&contours, width, height, |w| w != 0)
 }
 
+/// [`coverage`] cut to the box of its nonzero pixels' rows and columns: the
+/// box in document pixels and its row-major coverage, `None` when the subpath
+/// covers no row of the canvas. A large document's shape is rasterized
+/// without a document-sized mask.
+pub fn coverage_box(subpath: &Subpath, width: u32, height: u32) -> Option<(PsdRect, Vec<u8>)> {
+    let (rect, mask) = rasterize_box(&[subpath.flatten(COVERAGE_TOLERANCE)], width, height, |w| {
+        w % 2 != 0
+    })?;
+    (!rect.is_empty()).then_some((rect, mask))
+}
+
 /// Scanline-fill the implicitly closed `contours`, a pixel sample being inside
-/// where `inside(winding)` holds.
+/// where `inside(winding)` holds, into a document-sized mask.
 fn rasterize(
     contours: &[Vec<(f64, f64)>],
     width: u32,
     height: u32,
-    inside: impl Fn(i32) -> bool,
+    inside: impl Fn(i32) -> bool + Sync,
 ) -> Vec<u8> {
     let (w, h) = (width as usize, height as usize);
     let mut mask = vec![0u8; w * h];
+    if let Some((rect, cut)) = rasterize_box(contours, width, height, inside) {
+        let bw = rect.width().max(0) as usize;
+        if bw > 0 {
+            for (y, row) in (rect.top as usize..).zip(cut.chunks_exact(bw)) {
+                let at = y * w + rect.left as usize;
+                mask[at..at + bw].copy_from_slice(row);
+            }
+        }
+    }
+    mask
+}
+
+/// [`rasterize`] into the box of the contours' rows and columns (clipped to
+/// the canvas): every span lies between two crossings, so nothing outside it
+/// is covered. `None` when no contour can cover anything.
+fn rasterize_box(
+    contours: &[Vec<(f64, f64)>],
+    width: u32,
+    height: u32,
+    inside: impl Fn(i32) -> bool + Sync,
+) -> Option<(PsdRect, Vec<u8>)> {
+    let (w, h) = (width as usize, height as usize);
     let contours: Vec<_> = contours.iter().filter(|c| c.len() >= 3).collect();
     if contours.is_empty() || w == 0 || h == 0 {
-        return mask;
+        return None;
     }
     let (top, bottom) = contours
         .iter()
         .flat_map(|c| c.iter())
         .fold((f64::MAX, f64::MIN), |(t, b), p| (t.min(p.1), b.max(p.1)));
-    let first_row = top.floor().max(0.0) as usize;
+    let first_row = (top.floor().max(0.0) as usize).min(h);
     let last_row = (bottom.ceil().max(0.0) as usize).min(h);
-    // Every span lies between two crossings, so within the contours' columns:
-    // only those are cleared and written back, not the whole document row.
     let (left, right) = contours
         .iter()
         .flat_map(|c| c.iter())
         .fold((f64::MAX, f64::MIN), |(l, r), p| (l.min(p.0), r.max(p.0)));
     let first_col = (left.floor().max(0.0) as usize).min(w);
     let end_col = ((right.floor().max(0.0) as usize) + 1).min(w);
-    let mut row = vec![0f32; w + 1];
-    let mut crossings: Vec<(f64, i32)> = Vec::new();
-    for y in first_row..last_row {
-        row[first_col..=end_col].iter_mut().for_each(|c| *c = 0.0);
-        for s in 0..SUBROWS {
-            let sy = y as f64 + (s as f64 + 0.5) / SUBROWS as f64;
-            crossings.clear();
-            for contour in &contours {
-                let mut j = contour.len() - 1;
-                for (i, &(xi, yi)) in contour.iter().enumerate() {
-                    let (xj, yj) = contour[j];
-                    if (yi > sy) != (yj > sy) {
-                        let x = xi + (sy - yi) / (yj - yi) * (xj - xi);
-                        crossings.push((x, if yi > yj { 1 } else { -1 }));
-                    }
-                    j = i;
-                }
-            }
-            crossings.sort_by(|a, b| a.0.total_cmp(&b.0));
-            let mut winding = 0;
-            let mut span_start = None;
-            for &(x, dir) in &crossings {
-                winding += dir;
-                match (span_start, inside(winding)) {
-                    (None, true) => span_start = Some(x),
-                    (Some(x0), false) => {
-                        add_span(&mut row, f64::max(x0, 0.0), x.min(w as f64));
-                        span_start = None;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        for (x, c) in row[first_col..end_col].iter().enumerate() {
-            mask[y * w + first_col + x] =
-                (c / SUBROWS as f32 * 255.0).round().clamp(0.0, 255.0) as u8;
-        }
+    let rect = PsdRect {
+        top: first_row as i32,
+        left: first_col as i32,
+        bottom: last_row.max(first_row) as i32,
+        right: end_col.max(first_col) as i32,
+    };
+    let bw = end_col.saturating_sub(first_col);
+    let mut mask = vec![0u8; bw * last_row.saturating_sub(first_row)];
+    if mask.is_empty() {
+        return Some((rect, mask));
     }
-    mask
+    // Rows are independent: each runs on any core with its own buffers.
+    let fresh = || (vec![0f32; w + 1], Vec::<(f64, i32)>::new());
+    mask.par_chunks_mut(bw)
+        .enumerate()
+        .for_each_init(fresh, |(row, crossings), (k, out)| {
+            let y = first_row + k;
+            row[first_col..=end_col].iter_mut().for_each(|c| *c = 0.0);
+            for s in 0..SUBROWS {
+                let sy = y as f64 + (s as f64 + 0.5) / SUBROWS as f64;
+                crossings.clear();
+                for contour in &contours {
+                    let mut j = contour.len() - 1;
+                    for (i, &(xi, yi)) in contour.iter().enumerate() {
+                        let (xj, yj) = contour[j];
+                        if (yi > sy) != (yj > sy) {
+                            let x = xi + (sy - yi) / (yj - yi) * (xj - xi);
+                            crossings.push((x, if yi > yj { 1 } else { -1 }));
+                        }
+                        j = i;
+                    }
+                }
+                crossings.sort_by(|a, b| a.0.total_cmp(&b.0));
+                let mut winding = 0;
+                let mut span_start = None;
+                for &(x, dir) in crossings.iter() {
+                    winding += dir;
+                    match (span_start, inside(winding)) {
+                        (None, true) => span_start = Some(x),
+                        (Some(x0), false) => {
+                            add_span(row, f64::max(x0, 0.0), x.min(w as f64));
+                            span_start = None;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            for (o, c) in out.iter_mut().zip(&row[first_col..end_col]) {
+                *o = (c / SUBROWS as f32 * 255.0).round().clamp(0.0, 255.0) as u8;
+            }
+        });
+    Some((rect, mask))
 }
 
 /// Accumulate horizontal coverage of `[x0, x1)` into `row` (one cell per pixel).
@@ -806,6 +852,40 @@ mod tests {
         )
         .unwrap();
         assert_eq!(coverage(&off, 8, 8).len(), 64, "clipped to the canvas");
+    }
+
+    #[test]
+    fn the_coverage_box_holds_every_covered_pixel() {
+        let shapes = [
+            (ShapeKind::Ellipse, (4.0, 3.0), (25.0, 20.0)),
+            (ShapeKind::Ellipse, (-6.0, -2.0), (14.0, 30.0)),
+            (ShapeKind::Rectangle, (2.0, 2.0), (6.5, 6.0)),
+            (ShapeKind::Rectangle, (20.0, 10.0), (40.0, 40.0)),
+        ];
+        let (w, h) = (30usize, 24usize);
+        for (kind, from, to) in shapes {
+            let s = outline(opts(kind), from, to, false, false).unwrap();
+            let whole = coverage(&s, w as u32, h as u32);
+            let (rect, cut) = coverage_box(&s, w as u32, h as u32).expect("on the canvas");
+            let mut expanded = vec![0u8; w * h];
+            let bw = rect.width() as usize;
+            for (y, row) in (rect.top as usize..).zip(cut.chunks_exact(bw)) {
+                expanded[y * w + rect.left as usize..][..bw].copy_from_slice(row);
+            }
+            assert_eq!(expanded, whole, "{kind:?} from {from:?}");
+        }
+        let gone = outline(
+            opts(ShapeKind::Rectangle),
+            (40.0, 30.0),
+            (50.0, 40.0),
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(
+            coverage_box(&gone, w as u32, h as u32).is_none(),
+            "off the canvas"
+        );
     }
 
     #[test]
