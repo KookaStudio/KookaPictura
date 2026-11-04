@@ -7,9 +7,8 @@ use pictura_core::{
     VectorMask, VectorSubpath,
 };
 use pictura_render::{
-    composite_active, composite_gpu, composite_gpu_or_cpu, composite_region_active, composite_rgba,
-    decode_layer_fill, encode_invert, encode_pattern_fill, metrics, set_layer_style_value, Backend,
-    GpuError,
+    composite, composite_rgba, decode_layer_fill, encode_invert, encode_pattern_fill, metrics,
+    set_layer_style_value, Backend, CompositeRequest,
 };
 
 use crate::common::{
@@ -160,10 +159,8 @@ fn adjustment_layers_match_cpu() {
             adjustment_layer(name, data.clone()),
         ]);
         let cpu = composite_rgba(&doc);
-        let gpu = match composite_gpu(&doc) {
-            Ok(buf) => buf,
-            Err(e) => panic!("{name}: {e}"),
-        };
+        let (gpu, backend) = composite(CompositeRequest::whole(&doc, true));
+        assert_eq!(backend, Backend::Gpu, "{name}: GPU backend");
         assert_eq!((gpu.width, gpu.height, gpu.channels), (SIZE, SIZE, 4));
         let mut case_delta = 0i32;
         for (i, (&a, &b)) in cpu.data.iter().zip(&gpu.data).enumerate() {
@@ -176,39 +173,6 @@ fn adjustment_layers_match_cpu() {
         checked += 1;
     }
     eprintln!("adjustment parity: {checked} kinds ok, max delta {max_delta} LSB");
-}
-
-#[test]
-fn unsupported_adjustment_falls_back_or_errors() {
-    // A key the renderer does not decode, and one that decodes but the GPU has
-    // no kind for (Selective Color): both must error and fall back without
-    // panicking. Levels is now accepted through the lookup-table route.
-    let cases = [
-        AdjustmentData {
-            key: *b"clrL",
-            data: vec![1, 2, 3].into(),
-        },
-        AdjustmentData {
-            key: *b"selc",
-            data: vec![1, 2, 3].into(),
-        },
-    ];
-    for data in cases {
-        let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![
-            base_layer(),
-            adjustment_layer("unsupported", data),
-        ]);
-        assert!(
-            matches!(composite_gpu(&doc), Err(GpuError::UnsupportedAdjustment)),
-            "expected UnsupportedAdjustment"
-        );
-        assert_eq!(
-            composite_gpu_or_cpu(&doc).data,
-            composite_rgba(&doc).data,
-            "fallback must equal the CPU oracle"
-        );
-    }
 }
 
 // --- New routes ------------------------------------------------------------
@@ -519,7 +483,10 @@ fn disabled_effects_stay_eligible() {
     let doc = doc_with(vec![base_layer(), styled]);
     let mut max_delta = 0i32;
     check_scene_parity(&doc, &mut max_delta);
-    assert!(composite_gpu(&doc).is_ok());
+    assert_eq!(
+        composite(CompositeRequest::whole(&doc, true)).1,
+        Backend::Gpu
+    );
 }
 
 #[test]
@@ -650,9 +617,11 @@ fn clipping_smart_source_matches_cpu() {
 fn cached_raster_source_is_reused() {
     require_gpu();
     let doc = doc_with(vec![proxy_less_type()]);
-    let _ = composite_gpu(&doc).expect("first composite");
+    let (_, backend) = composite(CompositeRequest::whole(&doc, true));
+    assert_eq!(backend, Backend::Gpu);
     let before = metrics::counters().resident_hits;
-    let _ = composite_gpu(&doc).expect("second composite");
+    let (_, backend) = composite(CompositeRequest::whole(&doc, true));
+    assert_eq!(backend, Backend::Gpu);
     assert!(
         metrics::counters().resident_hits > before,
         "the cached type raster is re-uploaded"
@@ -664,10 +633,12 @@ fn cached_raster_source_is_reused() {
 fn cached_raster_source_invalidates() {
     require_gpu();
     let mut doc = doc_with(vec![base_layer(), proxy_less_type()]);
-    let first = composite_gpu(&doc).expect("first composite");
+    let (first, backend) = composite(CompositeRequest::whole(&doc, true));
+    assert_eq!(backend, Backend::Gpu);
     doc.layers[1].type_tool.as_mut().expect("type").text = "Changed".into();
     let before = metrics::counters().resident_misses;
-    let second = composite_gpu(&doc).expect("second composite");
+    let (second, backend) = composite(CompositeRequest::whole(&doc, true));
+    assert_eq!(backend, Backend::Gpu);
     assert_ne!(first.data.as_ref(), second.data.as_ref());
     assert!(
         metrics::counters().resident_misses > before,
@@ -682,7 +653,8 @@ fn pattern_fill_is_not_served_stale() {
     let mut doc = fixture(include_bytes!(
         "../../../pictura-codec/tests/fixtures/pattern_fill.psd"
     ));
-    let first = composite_gpu(&doc).expect("first composite");
+    let (first, backend) = composite(CompositeRequest::whole(&doc, true));
+    assert_eq!(backend, Backend::Gpu);
     let layer = doc
         .layers
         .iter_mut()
@@ -700,7 +672,8 @@ fn pattern_fill_is_not_served_stale() {
         pictura_codec::add_document_pattern(&mut doc, "pictura-changed", &record),
         "the changed pattern is added"
     );
-    let second = composite_gpu(&doc).expect("second composite");
+    let (second, backend) = composite(CompositeRequest::whole(&doc, true));
+    assert_eq!(backend, Backend::Gpu);
     assert_ne!(
         first.data.as_ref(),
         second.data.as_ref(),
@@ -709,7 +682,7 @@ fn pattern_fill_is_not_served_stale() {
 }
 
 fn assert_region_matches_full(doc: &Document, label: &str) {
-    let (full, backend) = composite_active(doc, true);
+    let (full, backend) = composite(CompositeRequest::whole(doc, true));
     assert_eq!(backend, Backend::Gpu, "{label}: full backend");
     let w = doc.width;
     let h = doc.height;
@@ -724,7 +697,7 @@ fn assert_region_matches_full(doc: &Document, label: &str) {
         right,
         bottom,
     };
-    let (region, backend) = composite_region_active(doc, rect, true);
+    let (region, backend) = composite(CompositeRequest::region(doc, rect, true));
     assert_eq!(backend, Backend::Gpu, "{label}: region backend");
     let rw = rect.width() as usize;
     let rh = rect.height() as usize;

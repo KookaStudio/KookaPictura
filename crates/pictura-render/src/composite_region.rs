@@ -16,7 +16,13 @@ pub(crate) const BAND: u32 = 64;
 /// Byte-identical to the same slice of [`crate::composite_rgba`] for every
 /// stack: per-layer sources are sampled, and effect passes are replayed into
 /// the region canvas.
-pub fn composite_rgba_region(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32) -> PixelBuffer {
+pub(crate) fn composite_rgba_region(
+    doc: &Document,
+    x0: u32,
+    y0: u32,
+    rw: u32,
+    rh: u32,
+) -> PixelBuffer {
     if rw == 0 || rh == 0 {
         return PixelBuffer::new(0, 0, 4);
     }

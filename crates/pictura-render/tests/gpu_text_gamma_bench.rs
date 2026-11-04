@@ -8,7 +8,8 @@ use std::time::Instant;
 
 use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, PsdRect, TypeTool};
 use pictura_render::{
-    composite_active, gpu_available, set_text_gamma, text_gamma, Backend, DEFAULT_TEXT_GAMMA,
+    composite, gpu_available, set_text_gamma, text_gamma, Backend, CompositeRequest,
+    DEFAULT_TEXT_GAMMA,
 };
 
 fn channel(id: i16, data: Vec<u8>) -> Channel {
@@ -108,7 +109,7 @@ fn bench(doc: &Document, gpu: bool, runs: usize) -> Vec<f64> {
     let mut times = Vec::with_capacity(runs);
     for _ in 0..runs {
         let start = Instant::now();
-        let (_, backend) = composite_active(doc, gpu);
+        let (_, backend) = composite(CompositeRequest::whole(doc, gpu));
         let ms = start.elapsed().as_secs_f64() * 1000.0;
         assert_eq!(
             backend,
@@ -131,8 +132,8 @@ fn text_gamma_gpu_vs_cpu() {
     for n in [1024, 4000] {
         let doc = scene(n);
         set_text_gamma(Some(DEFAULT_TEXT_GAMMA));
-        let _ = composite_active(&doc, true);
-        let _ = composite_active(&doc, false);
+        let _ = composite(CompositeRequest::whole(&doc, true));
+        let _ = composite(CompositeRequest::whole(&doc, false));
 
         let cpu_on = median(bench(&doc, false, 5));
         let gpu_on = median(bench(&doc, true, 5));

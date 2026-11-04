@@ -105,7 +105,10 @@ fn adjustment_ignores_fill() {
         let scene = doc(1, 1, vec![base(), adj]);
         let out = composite_rgba(&scene);
         assert_eq!(rgb(&out, 0, 0), [155, 155, 155], "fill {fill} is ignored");
-        let gpu = composite_gpu_or_cpu(&scene);
+        let gpu = crate::composite_request::composite(
+            crate::composite_request::CompositeRequest::whole(&scene, true),
+        )
+        .0;
         for (i, (a, b)) in out.data.iter().zip(gpu.data.iter()).enumerate() {
             assert!(
                 (*a as i16 - *b as i16).abs() <= 1,

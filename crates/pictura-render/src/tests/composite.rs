@@ -1,4 +1,5 @@
 use super::*;
+use crate::gpu::composite_gpu;
 use pictura_core::{BlendIf, CharacterAttrs, Knockout, ParagraphAttrs, TextStyle, TypeTool};
 
 // --- compositing pipeline ----------------------------------------------
@@ -479,7 +480,10 @@ fn pass_through_group_vector_mask() {
     for x in 2..4 {
         assert_eq!(rgb(&pass, x, 0), [0, 0, 255], "masked-out column {x}");
     }
-    let gpu = composite_gpu_or_cpu(&scene(BlendMode::PassThrough));
+    let gpu = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(&scene(BlendMode::PassThrough), true),
+    )
+    .0;
     for (i, (a, b)) in gpu.data.iter().zip(pass.data.iter()).enumerate() {
         assert!(
             (*a as i16 - *b as i16).abs() <= 1,
@@ -802,7 +806,9 @@ fn proxy_less_type_layer_composites_live_coverage() {
     } else {
         Backend::Cpu
     };
-    let (active, backend) = composite_active(&d, true);
+    let (active, backend) = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(&d, true),
+    );
     assert_eq!(backend, expected);
     if backend == Backend::Gpu {
         for (i, (a, b)) in out.data.iter().zip(active.data.iter()).enumerate() {

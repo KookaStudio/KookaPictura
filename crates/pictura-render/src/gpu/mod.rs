@@ -1,29 +1,29 @@
 //! GPU (wgpu/Vulkan) compositor for the separable and non-separable blend
 //! modes and the supported adjustment layers.
 //!
-//! `composite_gpu` mirrors the CPU oracle [`crate::composite_rgba`] pass for
+//! `composite_gpu_region` mirrors the CPU oracle [`crate::composite_rgba`] pass for
 //! pass: the same per-layer loop, mask/opacity handling, pass-through/isolated
 //! group semantics, and the W3C + reference blend formulas, executed by a
 //! wgpu compute shader. It is proven, not assumed — the parity test in
-//! `tests/gpu_parity.rs` diffs it against the CPU compositor within ±1 LSB.
+//! `tests/gpu_parity/` diffs it against the CPU compositor within ±1 LSB.
 //!
 //! # Region compositing
 //!
-//! [`composite_region_active`] runs the same kernel over a clamped document
-//! rectangle: the canvas, the mask, and group inner canvases are region-sized,
-//! and each invocation maps a region-local index to document coordinates for
-//! layer-rect and mask sampling. A layer source is region-sized only when it is
-//! built on a miss; a hit binds the whole-document upload kept by a previous
-//! full composite and uses its document-space layout. Only the region is
-//! dispatched and read back, so the output is byte-identical to the same slice
-//! of the full composite. `composite_gpu` is just the region kernel over the
-//! whole document.
+//! [`crate::composite`] runs the same kernel over a clamped document
+//! rectangle when the request asks for the GPU: the canvas, the mask, and group
+//! inner canvases are region-sized, and each invocation maps a region-local
+//! index to document coordinates for layer-rect and mask sampling. A layer
+//! source is region-sized only when it is built on a miss; a hit binds the
+//! whole-document upload kept by a previous full composite and uses its
+//! document-space layout. Only the region is dispatched and read back, so the
+//! output is byte-identical to the same slice of the full composite.
+//! The whole-document GPU oracle is the region kernel over the whole document.
 //!
 //! # CPU-only modes
 //!
-//! Dissolve is the only CPU-only blend mode. [`composite_gpu`] returns
+//! Dissolve is the only CPU-only blend mode. The GPU compositor returns
 //! [`GpuError::UnsupportedMode`] for a visible layer using it;
-//! [`composite_gpu_or_cpu`] then falls back to the CPU compositor. DarkerColor
+//! [`crate::composite`] then falls back to the CPU compositor. DarkerColor
 //! and LighterColor *are* handled (they are per-pixel whole-RGB comparisons, not
 //! triplet math), and the four non-separable modes (Hue, Saturation, Color,
 //! Luminosity) run the PDF/CSS triplet math on the GPU.
@@ -168,17 +168,18 @@ pub enum Backend {
 /// [`crate::composite_rgba`], within ±1 LSB for the supported modes. Returns
 /// [`GpuError`] when no device on the selected backend is usable or the stack
 /// contains a CPU-only mode; it never panics.
-pub fn composite_gpu(doc: &Document) -> Result<PixelBuffer, GpuError> {
+#[cfg(test)]
+pub(crate) fn composite_gpu(doc: &Document) -> Result<PixelBuffer, GpuError> {
     composite_gpu_region(doc, 0, 0, doc.width, doc.height)
 }
 
 /// Composite a document-space region `[x0, x0+rw) × [y0, y0+rh)` on the GPU.
 ///
-/// The same kernel as [`composite_gpu`], with every buffer (canvas, per-layer
+/// The same kernel as the whole-document GPU oracle, with every buffer (canvas, per-layer
 /// source, mask, group inner canvases) sized to the region and each invocation
 /// mapping a region-local index to document coordinates. `x0 + rw <= doc.width`
 /// and `y0 + rh <= doc.height` are the caller's responsibility.
-fn composite_gpu_region(
+pub(crate) fn composite_gpu_region(
     doc: &Document,
     x0: u32,
     y0: u32,
@@ -229,49 +230,6 @@ fn composite_gpu_region_raw(
     }
     let pixels = gpu.read_canvas(&canvas)?;
     Ok(pixels)
-}
-
-/// Composite only `rect` (clamped to the document) through the active backend.
-///
-/// Returns a `rect`-sized buffer, byte-identical to the corresponding
-/// sub-rectangle of `composite_active(doc, gpu_enabled).0`. An empty clamped
-/// intersection returns a zero-dimension buffer and never panics.
-pub fn composite_region_active(
-    doc: &Document,
-    rect: PsdRect,
-    gpu_enabled: bool,
-) -> (PixelBuffer, Backend) {
-    let x0 = rect.left.max(0);
-    let y0 = rect.top.max(0);
-    let x1 = rect.right.min(doc.width as i32);
-    let y1 = rect.bottom.min(doc.height as i32);
-    if x1 <= x0 || y1 <= y0 {
-        // Nothing ran, so report the fallback backend rather than a device.
-        return (PixelBuffer::new(0, 0, 4), Backend::Cpu);
-    }
-    let w = (x1 - x0) as u32;
-    let h = (y1 - y0) as u32;
-    let (x0, y0) = (x0 as u32, y0 as u32);
-    if gpu_enabled && gpu_available() {
-        if let Ok(buf) = composite_gpu_region(doc, x0, y0, w, h) {
-            return (buf, Backend::Gpu);
-        }
-    }
-    (composite_cpu_region(doc, x0, y0, w, h), Backend::Cpu)
-}
-
-/// The CPU region fallback.
-///
-/// Composites only the requested region. Cached sources are sampled and effect
-/// passes are replayed into the region, so the result is byte-identical to the
-/// same slice of the full CPU composite for every stack.
-fn composite_cpu_region(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32) -> PixelBuffer {
-    crate::composite::composite_rgba_region(doc, x0, y0, rw, rh)
-}
-
-/// Try [`composite_gpu`]; on any [`GpuError`] fall back to the CPU oracle.
-pub fn composite_gpu_or_cpu(doc: &Document) -> PixelBuffer {
-    composite_gpu(doc).unwrap_or_else(|_| crate::composite_rgba(doc))
 }
 
 /// Whether a usable adapter/device exists on the selected backend and its
@@ -420,21 +378,6 @@ fn validation_document() -> Document {
     doc
 }
 
-/// Composite `doc` on the GPU when `gpu_enabled && gpu_available()`, otherwise
-/// on the CPU, reporting which backend ran.
-///
-/// Never panics: any [`GpuError`] (unavailable device, oversize document,
-/// unsupported mode/adjustment, readback failure) falls back to the CPU
-/// composite for that call.
-pub fn composite_active(doc: &Document, gpu_enabled: bool) -> (PixelBuffer, Backend) {
-    if gpu_enabled && gpu_available() {
-        if let Ok(buf) = composite_gpu(doc) {
-            return (buf, Backend::Gpu);
-        }
-    }
-    (crate::composite_rgba(doc), Backend::Cpu)
-}
-
 /// No adjustment: the ordinary blend/source-over dispatch.
 const NO_ADJ: (u32, i32, i32, i32) = (0, 0, 0, 0);
 
@@ -499,6 +442,12 @@ pub(crate) fn require_device(available: bool) {
 
 #[cfg(test)]
 mod eligibility_tests;
+
+#[cfg(test)]
+mod oracle_tests;
+
+#[cfg(test)]
+mod request_tests;
 
 /// Blend mode ids shared with the WGSL `switch`. `PassThrough` is Normal here
 /// because the CPU isolated-group path treats it as Normal, and true
@@ -888,7 +837,9 @@ mod tests {
         // The cached smart source is accepted; the CPU oracle renders the
         // embedded source rather than the channel-less layer's opaque black.
         assert!(check_supported(&doc).is_ok());
-        let (out, backend) = composite_active(&doc, false);
+        let (out, backend) = crate::composite_request::composite(
+            crate::composite_request::CompositeRequest::whole(&doc, false),
+        );
         assert_eq!(backend, Backend::Cpu);
         for i in 0..n {
             assert_eq!(

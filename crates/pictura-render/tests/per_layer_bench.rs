@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use pictura_core::{
     AdjustmentData, BitDepth, BlendMode, Channel, ColorMode, Document, Layer, LayerStack, PsdRect,
 };
-use pictura_render::{composite_active, composite_region_active, composite_rgba, Backend};
+use pictura_render::{composite, composite_rgba, Backend, CompositeRequest};
 
 const N: u32 = 4000;
 const RUNS: usize = 3;
@@ -148,11 +148,11 @@ fn max_delta(a: &[u8], b: &[u8]) -> i32 {
 fn per_layer_gpu_bench() {
     let doc = scene();
     let cpu = composite_rgba(&doc);
-    let _ = composite_active(&doc, true);
+    let _ = composite(CompositeRequest::whole(&doc, true));
 
     let (active_ms, backend) = best(|| {
         let start = Instant::now();
-        let (_buf, backend) = composite_active(&doc, true);
+        let (_buf, backend) = composite(CompositeRequest::whole(&doc, true));
         (start.elapsed(), backend)
     });
     let (cpu_ms, _) = best(|| {
@@ -160,23 +160,23 @@ fn per_layer_gpu_bench() {
         let _ = composite_rgba(&doc);
         (start.elapsed(), Backend::Cpu)
     });
-    let (active, _) = composite_active(&doc, true);
+    let (active, _) = composite(CompositeRequest::whole(&doc, true));
     let full_delta = max_delta(&active.data, &cpu.data);
 
     let region = rect(512, 512, 1200, 1500);
-    let _ = composite_region_active(&doc, region, true);
+    let _ = composite(CompositeRequest::region(&doc, region, true));
     let (region_ms, rbackend) = best(|| {
         let start = Instant::now();
-        let (_buf, backend) = composite_region_active(&doc, region, true);
+        let (_buf, backend) = composite(CompositeRequest::region(&doc, region, true));
         (start.elapsed(), backend)
     });
     let (region_cpu_ms, _) = best(|| {
         let start = Instant::now();
-        let _ = composite_region_active(&doc, region, false);
+        let _ = composite(CompositeRequest::region(&doc, region, false));
         (start.elapsed(), Backend::Cpu)
     });
-    let (region_buf, _) = composite_region_active(&doc, region, true);
-    let (region_cpu, _) = composite_region_active(&doc, region, false);
+    let (region_buf, _) = composite(CompositeRequest::region(&doc, region, true));
+    let (region_cpu, _) = composite(CompositeRequest::region(&doc, region, false));
     let region_delta = max_delta(&region_buf.data, &region_cpu.data);
 
     let speedup = |active: f64, cpu: f64| {

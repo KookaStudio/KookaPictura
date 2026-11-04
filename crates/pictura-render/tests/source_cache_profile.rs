@@ -8,6 +8,15 @@ use pictura_core::{
     SmartObject, SmartObjectKind, TextStyle, TypeTool,
 };
 
+fn region_rect((left, top, width, height): (u32, u32, u32, u32)) -> PsdRect {
+    PsdRect {
+        top: top as i32,
+        left: left as i32,
+        bottom: (top + height) as i32,
+        right: (left + width) as i32,
+    }
+}
+
 fn source_doc() -> Document {
     let mut d = Document::new(200, 200, ColorMode::Rgb, BitDepth::Eight);
     let n = 200 * 200;
@@ -127,18 +136,31 @@ fn warm_region_is_ten_times_faster() {
         let start = Instant::now();
         for _ in 0..N {
             pictura_render::purge_source_cache();
-            let _ =
-                pictura_render::composite_rgba_region(&d, REGION.0, REGION.1, REGION.2, REGION.3);
+            let _ = pictura_render::composite(pictura_render::CompositeRequest::region(
+                &d,
+                region_rect(REGION),
+                false,
+            ))
+            .0;
         }
         start.elapsed()
     };
     // Warm the cache, then time repeated warm composites.
-    let _ = pictura_render::composite_rgba_region(&d, REGION.0, REGION.1, REGION.2, REGION.3);
+    let _ = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &d,
+        region_rect(REGION),
+        false,
+    ))
+    .0;
     let warm = {
         let start = Instant::now();
         for _ in 0..N {
-            let _ =
-                pictura_render::composite_rgba_region(&d, REGION.0, REGION.1, REGION.2, REGION.3);
+            let _ = pictura_render::composite(pictura_render::CompositeRequest::region(
+                &d,
+                region_rect(REGION),
+                false,
+            ))
+            .0;
         }
         start.elapsed()
     };
@@ -235,7 +257,12 @@ fn canvas_sized_styled_present_is_faster_than_a_full_composite() {
     // A dab invalidates the pass exactly as a stroke present does.
     d.layers[0].channels[3].data.as_mut_slice()[100 * SIZE as usize + 100] = 0;
     let start = Instant::now();
-    let region = pictura_render::composite_rgba_region(&d, 100, 100, 128, 128);
+    let region = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &d,
+        region_rect((100, 100, 128, 128)),
+        false,
+    ))
+    .0;
     let region_time = start.elapsed();
     let start = Instant::now();
     let full = pictura_render::composite_rgba(&d);

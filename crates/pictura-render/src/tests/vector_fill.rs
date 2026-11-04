@@ -1,4 +1,5 @@
 use super::*;
+use crate::gpu::composite_gpu;
 use pictura_adjust::{GradientKind, GradientStop};
 use pictura_core::{AdjustmentData, LayerBlock};
 

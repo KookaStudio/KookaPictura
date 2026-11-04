@@ -365,7 +365,10 @@ fn cpu_oracle_unchanged_for_every_route() {
             "{name}: the CPU oracle bytes changed"
         );
         assert_eq!(
-            crate::composite_active(&doc, false).0,
+            crate::composite_request::composite(crate::composite_request::CompositeRequest::whole(
+                &doc, false
+            ))
+            .0,
             out,
             "{name}: the CPU backend is the oracle"
         );
@@ -386,7 +389,9 @@ fn sixteen_bit_document_declines() {
 fn thirty_two_bit_active_backend_is_cpu() {
     let mut doc = doc_of(pixels());
     doc.source_depth = Some(BitDepth::ThirtyTwo);
-    let (buf, backend) = composite_active(&doc, true);
+    let (buf, backend) = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(&doc, true),
+    );
     assert_eq!(backend, Backend::Cpu);
     assert_eq!(buf, crate::composite_rgba(&doc));
 }
@@ -422,7 +427,9 @@ fn require_gpu_panics_without_a_device() {
 fn gpu_is_available_under_a_software_device() {
     require_gpu();
     let doc = validation_document();
-    let (buf, backend) = composite_active(&doc, true);
+    let (buf, backend) = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(&doc, true),
+    );
     assert_eq!(backend, Backend::Gpu);
     let cpu = crate::composite_rgba(&doc);
     assert!(buf

@@ -327,7 +327,7 @@ fn gate_adjusted(
 /// The document's composite at its recorded source depth: `Samples::U16` at 16
 /// and `Samples::F32` at 32, in planar RGBA order with straight alpha clamped to
 /// `[0, 1]`. `None` for a document with no recorded 16/32-bit source depth.
-pub fn composite_native(doc: &Document) -> Option<Samples> {
+pub(crate) fn composite_native(doc: &Document) -> Option<Samples> {
     let depth = doc.source_depth?;
     if !matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {
         return None;

@@ -2,14 +2,18 @@
 
 ## Purpose
 Re-emits the native composite on a dirty high-depth save and leaves out-of-scope saves unchanged.
+
 ## Requirements
+
 ### Requirement: A dirty high-depth save re-emits its native composite
 
 The application SHALL, when saving a dirty document whose bit depth was recorded
 on read as 16 or 32 in RGB or Grayscale working mode and which has layers,
-replace the working composite and the retained composite color planes from
-`pictura_render::composite_native` before encoding, so the written composite
-color planes are the native samples rather than the widened 8-bit bytes.
+replace the working composite and the retained composite color planes through
+`pictura_render::refresh_native_composite` before encoding, so the written
+composite color planes are the native samples rather than the widened 8-bit
+bytes. The raw source-depth composite (`composite_native`) is internal to
+`pictura-render`.
 
 #### Scenario: An edited depth-16 layered document saves at 16-bit with native samples
 
@@ -46,4 +50,3 @@ behavior.
 - **WHEN** a 16-bit CMYK (`source_mode` CMYK) document is edited and saved
 - **THEN** the retained source planes are not overwritten with working RGB
 - **THEN** the existing depth behavior is preserved
-

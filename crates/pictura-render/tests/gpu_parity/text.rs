@@ -2,7 +2,7 @@
 
 use pictura_core::{BitDepth, BlendMode, ColorMode, Document, LayerMask, PsdRect, TypeTool};
 use pictura_render::{
-    composite_active, metrics, set_text_gamma, text_gamma, Backend, DEFAULT_TEXT_GAMMA,
+    composite, metrics, set_text_gamma, text_gamma, Backend, CompositeRequest, DEFAULT_TEXT_GAMMA,
 };
 
 use crate::common::{base_layer, check_scene_parity, gamma_guard, group, layer, require_gpu, SIZE};
@@ -89,7 +89,7 @@ fn group_type_scene(pass_through: bool) -> Document {
 fn assert_parity(doc: &Document, max_delta: &mut i32) {
     check_scene_parity(doc, max_delta);
     assert_eq!(
-        composite_active(doc, true).1,
+        composite(CompositeRequest::whole(doc, true)).1,
         Backend::Gpu,
         "a proxied type layer must stay on the GPU"
     );

@@ -286,13 +286,9 @@ fn mask_feather_preview_profile() {
     let after = pictura_render::damage::influence(&doc, &path);
     let damage = pictura_render::damage::union(before, after).expect("bounded");
     let t = std::time::Instant::now();
-    let _ = pictura_render::composite_rgba_region(
-        &doc,
-        damage.left.max(0) as u32,
-        damage.top.max(0) as u32,
-        damage.width().max(0) as u32,
-        damage.height().max(0) as u32,
-    );
+    let _ = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &doc, damage, false,
+    ));
     ms("mask_feather preview", t.elapsed());
     println!("mask_feather damage={damage:?}");
 }

@@ -7,8 +7,8 @@ use pictura_core::{
     PsdRect, TypeTool,
 };
 use pictura_render::{
-    composite_active, composite_gpu, composite_region_active, composite_rgba, encode_invert,
-    gpu_available, metrics, set_text_gamma, text_gamma, Backend, DEFAULT_TEXT_GAMMA,
+    composite, composite_rgba, encode_invert, gpu_available, metrics, set_text_gamma, text_gamma,
+    Backend, CompositeRequest, DEFAULT_TEXT_GAMMA,
 };
 
 use crate::common::{
@@ -148,12 +148,12 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
     scenes
 }
 
-/// Assert `composite_region_active(doc, r, true)` equals the `r` slice of the
+/// Assert `composite(CompositeRequest::region(doc, r, true))` equals the `r` slice of the
 /// already-composited `full` buffer, byte for byte, and that the stamped
 /// sources came from the resident store rather than a re-upload.
 fn assert_region_slice(doc: &Document, full: &PixelBuffer, r: PsdRect, ctx: &str) {
     let hits = metrics::counters().resident_hits;
-    let (region, backend) = composite_region_active(doc, r, true);
+    let (region, backend) = composite(CompositeRequest::region(doc, r, true));
     assert_eq!(backend, Backend::Gpu, "{ctx}: region must run on the GPU");
     assert!(
         metrics::counters().resident_hits > hits,
@@ -229,7 +229,7 @@ fn region_matches_full_slice() {
     let scenes = region_scenes();
     let count = scenes.len();
     for (name, doc) in scenes {
-        let (full, backend) = composite_active(&doc, true);
+        let (full, backend) = composite(CompositeRequest::whole(&doc, true));
         assert_eq!(backend, Backend::Gpu, "{name}: full must run on the GPU");
         for &r in &rects {
             assert_region_slice(&doc, &full, r, name);
@@ -248,8 +248,8 @@ fn full_region_equals_full_composite() {
     let _resident = resident_lock();
     require_gpu();
     for (name, doc) in region_scenes() {
-        let (full, fb) = composite_active(&doc, true);
-        let (region, rb) = composite_region_active(&doc, whole_rect(), true);
+        let (full, fb) = composite(CompositeRequest::whole(&doc, true));
+        let (region, rb) = composite(CompositeRequest::region(&doc, whole_rect(), true));
         assert_eq!(fb, Backend::Gpu, "{name}: full backend");
         assert_eq!(rb, fb, "{name}: region backend");
         assert_eq!((region.width, region.height), (full.width, full.height));
@@ -271,6 +271,7 @@ fn cpu_region_matches_full_slice() {
     // byte-identical to the same slice of the full CPU composite, including
     // partial coverage and every multi-layer scene kind.
     let rects = [
+        whole_rect(),
         region_rect(0, 0, 4, 4),
         region_rect(1, 2, 7, 6),
         region_rect(3, 5, SIZE as i32, SIZE as i32),
@@ -278,10 +279,10 @@ fn cpu_region_matches_full_slice() {
         region_rect(6, 6, 999, 999),
     ];
     for (name, doc) in region_scenes() {
-        let (full, fb) = composite_active(&doc, false);
+        let (full, fb) = composite(CompositeRequest::whole(&doc, false));
         assert_eq!(fb, Backend::Cpu, "{name}: full CPU backend");
         for &r in &rects {
-            let (region, rb) = composite_region_active(&doc, r, false);
+            let (region, rb) = composite(CompositeRequest::region(&doc, r, false));
             assert_eq!(rb, Backend::Cpu, "{name}: region CPU backend");
             let x0 = r.left.max(0) as usize;
             let y0 = r.top.max(0) as usize;
@@ -320,14 +321,14 @@ fn cpu_region_matches_full_slice() {
 #[test]
 fn empty_and_out_of_bounds_region_are_safe() {
     let doc = scene(BlendMode::Multiply);
-    let (full, _) = composite_active(&doc, false);
+    let (full, _) = composite(CompositeRequest::whole(&doc, false));
     for (name, r) in [
         ("zero_area", region_rect(0, 0, 0, 0)),
         ("inverted", region_rect(5, 5, 2, 3)),
         ("fully_outside", region_rect(-10, -10, -5, -5)),
         ("past_bottom_right", region_rect(20, 20, 30, 30)),
     ] {
-        let (buf, backend) = composite_region_active(&doc, r, false);
+        let (buf, backend) = composite(CompositeRequest::region(&doc, r, false));
         assert_eq!(backend, Backend::Cpu, "{name}");
         assert_eq!(
             (buf.width, buf.height),
@@ -338,7 +339,11 @@ fn empty_and_out_of_bounds_region_are_safe() {
     }
 
     // Partial overlap clamps to the intersection and matches the full slice.
-    let (buf, _) = composite_region_active(&doc, region_rect(-5, -5, 3, 3), false);
+    let (buf, _) = composite(CompositeRequest::region(
+        &doc,
+        region_rect(-5, -5, 3, 3),
+        false,
+    ));
     assert_eq!((buf.width, buf.height), (3, 3));
     let fplane = full.pixel_count();
     let rplane = buf.pixel_count();
@@ -354,7 +359,11 @@ fn empty_and_out_of_bounds_region_are_safe() {
     }
 
     // Extending past the far edge clamps to what fits.
-    let (buf, _) = composite_region_active(&doc, region_rect(6, 6, 20, 20), false);
+    let (buf, _) = composite(CompositeRequest::region(
+        &doc,
+        region_rect(6, 6, 20, 20),
+        false,
+    ));
     assert_eq!((buf.width, buf.height), (2, 2));
     eprintln!("empty/oob region: clamped and zero-dimension without panic");
 }
@@ -378,16 +387,16 @@ fn region_vs_full_timing_4000() {
         large_layer(N, N, 0, BlendMode::Normal),
         large_layer(N, N, 1, BlendMode::Multiply),
     ]);
-    let _ = composite_active(&doc, true); // warm-up: keep device/pipeline setup out of the numbers
+    let _ = composite(CompositeRequest::whole(&doc, true)); // warm-up: keep device/pipeline setup out of the numbers
 
     let t = Instant::now();
-    let (full, backend) = composite_active(&doc, true);
+    let (full, backend) = composite(CompositeRequest::whole(&doc, true));
     let full_ms = t.elapsed().as_millis();
     assert_eq!(backend, Backend::Gpu);
 
     let dirty = region_rect(1200, 1500, 1712, 2012); // 512×512
     let t = Instant::now();
-    let (region, rbackend) = composite_region_active(&doc, dirty, true);
+    let (region, rbackend) = composite(CompositeRequest::region(&doc, dirty, true));
     let region_ms = t.elapsed().as_millis();
     assert_eq!(rbackend, Backend::Gpu);
     assert_eq!((region.width, region.height), (512, 512));
@@ -458,7 +467,7 @@ fn resident_uploads_stay_bounded_across_region_presents() {
 
     let n = u64::from(w * h);
     let seed_before = metrics::counters();
-    let (_, backend) = composite_active(&doc, true);
+    let (_, backend) = composite(CompositeRequest::whole(&doc, true));
     assert_eq!(backend, Backend::Gpu, "seed composite");
     let seeded = metrics::counters();
     assert_eq!(
@@ -482,7 +491,7 @@ fn resident_uploads_stay_bounded_across_region_presents() {
             right: x as i32 + 8,
             bottom: y as i32 + 8,
         };
-        let (_, backend) = composite_region_active(&doc, rect, true);
+        let (_, backend) = composite(CompositeRequest::region(&doc, rect, true));
         assert_eq!(backend, Backend::Gpu, "region composite {frame}");
     }
     let after = metrics::counters();
@@ -506,7 +515,7 @@ fn resident_uploads_stay_bounded_across_region_presents() {
     );
 
     let before_full = metrics::counters();
-    let (seeded_full, backend) = composite_active(&doc, true);
+    let (seeded_full, backend) = composite(CompositeRequest::whole(&doc, true));
     assert_eq!(backend, Backend::Gpu, "final composite");
     let after_full = metrics::counters();
     assert_eq!(
@@ -527,7 +536,7 @@ fn resident_uploads_stay_bounded_across_region_presents() {
         right: 24,
         bottom: 24,
     };
-    let (_, backend) = composite_region_active(&fresh, region, true);
+    let (_, backend) = composite(CompositeRequest::region(&fresh, region, true));
     assert_eq!(backend, Backend::Gpu, "fresh region composite");
     let after_fresh = metrics::counters();
     assert_eq!(
@@ -540,7 +549,12 @@ fn resident_uploads_stay_bounded_across_region_presents() {
     );
 
     let cpu = composite_rgba(&fresh);
-    let gpu = composite_gpu(&fresh).expect("gpu composite after a sub-region miss");
+    let (gpu, backend) = composite(CompositeRequest::whole(&fresh, true));
+    assert_eq!(
+        backend,
+        Backend::Gpu,
+        "gpu composite after a sub-region miss"
+    );
     assert_within_one_lsb(
         &cpu,
         &gpu,

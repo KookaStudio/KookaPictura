@@ -17,7 +17,8 @@ fn preview_ticks(kind: PreviewKind, level: u32, rect: PsdRect) -> (f64, f64, f64
         layers.push(helpers::adjustment_layer("curves", None).expect("curves"));
     }
     doc.layers = pictura_core::LayerStack::from_layers(layers);
-    doc.composite = pictura_render::composite_active(&doc, false).0;
+    doc.composite =
+        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
     let target = if kind == PreviewKind::Adjustment {
         "8".to_string()
     } else {

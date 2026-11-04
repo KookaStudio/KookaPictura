@@ -6,7 +6,7 @@ use pictura_core::{
     AdjustmentData, BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer,
     LockFlags, PsdRect,
 };
-use pictura_render::{composite_gpu, composite_rgba, GpuError};
+use pictura_render::{composite, composite_rgba, Backend, CompositeRequest};
 
 pub(crate) const SIZE: u32 = 8;
 
@@ -40,8 +40,6 @@ pub(crate) const GPU_MODES: &[BlendMode] = &[
     BlendMode::Color,
     BlendMode::Luminosity,
 ];
-
-pub(crate) const CPU_ONLY: &[BlendMode] = &[BlendMode::Dissolve];
 
 static GAMMA_LOCK: Mutex<()> = Mutex::new(());
 
@@ -267,13 +265,6 @@ pub(crate) fn large_layer(w: u32, h: u32, seed: u32, blend: BlendMode) -> Layer 
     }
 }
 
-pub(crate) fn is_gpu_gone(err: &GpuError) -> bool {
-    matches!(
-        err,
-        GpuError::Unavailable | GpuError::TooLarge | GpuError::Readback
-    )
-}
-
 /// Fail a device-dependent test that has no usable GPU. Such tests are
 /// `#[ignore]`d, so reaching this without a device is a misconfigured run, not
 /// a pass.
@@ -287,7 +278,12 @@ pub(crate) fn require_gpu() {
 /// Assert one scene's GPU result matches the CPU oracle within ±1 LSB.
 pub(crate) fn check_scene_parity(doc: &Document, max_delta: &mut i32) {
     let cpu = composite_rgba(doc);
-    let gpu = composite_gpu(doc).unwrap_or_else(|e| panic!("{e}"));
+    let (gpu, backend) = composite(CompositeRequest::whole(doc, true));
+    assert_eq!(
+        backend,
+        Backend::Gpu,
+        "the parity scene must run on the GPU"
+    );
     assert_eq!(
         (gpu.width, gpu.height, gpu.channels),
         (doc.width, doc.height, 4)

@@ -6,7 +6,9 @@ use super::*;
 /// or falls back to the exact CPU oracle.
 pub(crate) fn assert_gpu_accepts_and_matches_cpu(doc: &Document) {
     let cpu = composite_rgba(doc);
-    let (out, backend) = composite_active(doc, true);
+    let (out, backend) = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(doc, true),
+    );
     let expected = if gpu_available() {
         Backend::Gpu
     } else {
