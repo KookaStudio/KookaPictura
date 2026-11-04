@@ -7,6 +7,54 @@ use pictura_select::CombineMode;
 
 pub(super) mod safe_io;
 
+/// Whether a `width` × `height` document at `bits` per channel fits the default
+/// [`pictura_codec::ImageBudget`].
+pub(in crate::cxxqt_object) fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool {
+    document_fits(width, height, bits, &pictura_codec::ImageBudget::default())
+}
+
+/// Whether a resize to `width` × `height` at `bits` fits the memory available
+/// now. The default document budget never drops below one maximum allocation,
+/// so it cannot see a low-memory host; a resize allocates the target
+/// immediately and also respects three quarters of the memory available now.
+pub(in crate::cxxqt_object) fn resize_budget_allows(width: i32, height: i32, bits: i32) -> bool {
+    document_fits(
+        width,
+        height,
+        bits,
+        &bounded_budget(
+            pictura_codec::ImageBudget::default(),
+            pictura_codec::available_memory(),
+        ),
+    )
+}
+
+/// `budget` with its document limit bounded by three quarters of `available`,
+/// or unchanged when the host's memory cannot be read.
+fn bounded_budget(
+    mut budget: pictura_codec::ImageBudget,
+    available: Option<u64>,
+) -> pictura_codec::ImageBudget {
+    if let Some(bytes) = available {
+        budget.max_document_bytes = budget.max_document_bytes.min(bytes / 4 * 3);
+    }
+    budget
+}
+
+/// Sized like `ImageBudget`'s decoded allocation: four 8-bit planes, scaled by
+/// depth.
+fn document_fits(width: i32, height: i32, bits: i32, budget: &pictura_codec::ImageBudget) -> bool {
+    if width < 1 || height < 1 || bits < 1 {
+        return false;
+    }
+    let (width, height) = (width as u64, height as u64);
+    if width > u64::from(budget.max_dimension) || height > u64::from(budget.max_dimension) {
+        return false;
+    }
+    let bytes = width * height * 4 * (bits as u64).div_ceil(8);
+    bytes <= budget.max_alloc_bytes && bytes <= budget.max_document_bytes
+}
+
 /// Build an adjustment layer for `kind`, or `None` for an unknown kind.
 ///
 /// Most defaults are chosen so a freshly added layer visibly changes the
@@ -1014,5 +1062,52 @@ mod tests {
             vec![dab],
             "a lone tile composite would cover 64x64 for an 8x8 dab"
         );
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    fn budget(document: u64) -> pictura_codec::ImageBudget {
+        pictura_codec::ImageBudget {
+            max_dimension: 30_000,
+            max_alloc_bytes: 2 * 1024 * 1024 * 1024,
+            max_document_bytes: document,
+        }
+    }
+
+    #[test]
+    fn budget_judges_sides_then_bytes() {
+        let budget = budget(2 * 1024 * 1024 * 1024);
+        assert!(document_fits(17_000, 17_000, 8, &budget));
+        assert!(!document_fits(17_000, 17_000, 16, &budget));
+        assert!(!document_fits(30_000, 30_000, 8, &budget));
+        assert!(!document_fits(30_001, 1, 8, &budget));
+        assert!(!document_fits(0, 10, 8, &budget));
+        assert!(document_fits(30_000, 1, 1, &budget));
+    }
+
+    #[test]
+    fn budget_honours_the_document_limit() {
+        let budget = budget(1024);
+        assert!(document_fits(10, 10, 8, &budget));
+        assert!(!document_fits(100, 100, 8, &budget));
+    }
+
+    #[test]
+    fn a_resize_document_limit_drops_the_allocation_floor() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        const MIB: u64 = 1024 * 1024;
+        let budget = budget(2 * GIB);
+        let low = bounded_budget(budget, Some(456 * MIB));
+        assert!(
+            !document_fits(17_000, 17_000, 8, &low),
+            "the reported 17000x17000 target is refused on 456 MB"
+        );
+        let high = bounded_budget(budget, Some(8 * GIB));
+        assert!(document_fits(17_000, 17_000, 8, &high));
+        let unknown = bounded_budget(budget, None);
+        assert_eq!(unknown.max_document_bytes, 2 * GIB);
     }
 }

@@ -282,6 +282,13 @@ impl qobject::PictureView {
         if width < 1 || height < 1 {
             return false;
         }
+        if !crate::cxxqt_object::helpers::resize_budget_allows(
+            width,
+            height,
+            self.as_ref().document_depth_bits(),
+        ) {
+            return false;
+        }
         let resized = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.session.doc.as_mut() else {

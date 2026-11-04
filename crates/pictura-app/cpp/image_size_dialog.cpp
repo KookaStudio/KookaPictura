@@ -1,8 +1,11 @@
 #include "image_size_dialog.h"
 
+#include "api/document_api.h"
+#include "dialogs.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QPainter>
@@ -13,6 +16,7 @@
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
@@ -24,6 +28,10 @@
 namespace pictura {
 
 namespace {
+
+// A test driver answers the Image Size dialog and its budget warning instead of
+// running them modally.
+std::function<bool(QDialog&)> imageSizeDialogDriver;
 
 // Width/Height units, in CS6's order. Pixels and Percent stand apart from the
 // physical units, which all convert through the resolution.
@@ -189,6 +197,42 @@ double bytesPerPixel(PictureView* view)
         channels = 1;
     }
     return channels * qMax(1, int(image_depth_bits(*view))) / 8.0;
+}
+
+bool imageSizeFitsBudget(PictureView& view, int width, int height)
+{
+    return document_resize_budget_allows(width, height, document_api::documentDepthBits(view));
+}
+
+QString imageSizeBudgetMessage(int width, int height)
+{
+    return ImageSizeDialog::tr(
+               "Not enough memory to resize to %1 × %2 pixels. Close other documents "
+               "or free memory and try again.")
+        .arg(width)
+        .arg(height);
+}
+
+void setImageSizeDialogDriverForTest(std::function<bool(QDialog&)> driver)
+{
+    imageSizeDialogDriver = std::move(driver);
+}
+
+bool answerImageSizeDialog(QDialog& dialog, QWidget* parent)
+{
+    return imageSizeDialogDriver ? imageSizeDialogDriver(dialog)
+                                 : runDialog(dialog, parent) == QDialog::Accepted;
+}
+
+void showImageSizeBudgetWarning(QWidget* parent, int width, int height)
+{
+    QMessageBox warning(QMessageBox::Warning, ImageSizeDialog::tr("Image Size"),
+                        imageSizeBudgetMessage(width, height), QMessageBox::Ok, parent);
+    if (imageSizeDialogDriver) {
+        imageSizeDialogDriver(warning);
+    } else {
+        warning.exec();
+    }
 }
 
 ImageSizeDialog::ImageSizeDialog(PictureView* view, QWidget* parent)

@@ -48,6 +48,7 @@ pub(super) fn image_size_apply(
     if width < 1 || height < 1 || !ppi.is_finite() || ppi <= 0.0 {
         return false;
     }
+    let bits = view.document_depth_bits();
     let wanted = Resolution { ppi, per_cm };
     let (resized, changed) = {
         let mut rust = view.as_mut().rust_mut();
@@ -56,6 +57,9 @@ pub(super) fn image_size_apply(
         };
         let resize = resample.filter(|_| (width as u32, height as u32) != (doc.width, doc.height));
         if let Some(resample) = resize {
+            if !crate::cxxqt_object::helpers::resize_budget_allows(width, height, bits) {
+                return false;
+            }
             if pictura_render::resize_document(doc, width as u32, height as u32, resample).is_err()
             {
                 return false;
