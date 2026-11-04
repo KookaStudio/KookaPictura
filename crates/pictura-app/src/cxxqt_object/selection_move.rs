@@ -64,11 +64,11 @@ impl PictureViewRust {
     }
 
     /// The selection's bounding box as it looks now: the origin's bounds
-    /// translated by the drag offset and clipped to the canvas, or a row scan
-    /// when no drag is active.
+    /// translated by the drag offset and clipped to the canvas, or the cached
+    /// mask bounds when no drag is active.
     pub(super) fn selection_bounds(&self) -> Option<PsdRect> {
         let sel = self.session.selection.as_ref()?;
-        let bounds = sel.bounds()?;
+        let bounds = self.selection_mask_bounds()?;
         let Some(&(dx, dy)) = self.session.live.selection_move_delta() else {
             return Some(bounds);
         };
@@ -80,6 +80,39 @@ impl PictureViewRust {
             right: (bounds.right + dx).clamp(0, w),
         };
         (moved.right > moved.left && moved.bottom > moved.top).then_some(moved)
+    }
+
+    /// The selection mask's own bounds (no drag offset), scanned once per mask:
+    /// a pointer move reads the Info panel's W/H from here.
+    pub(super) fn selection_mask_bounds(&self) -> Option<PsdRect> {
+        let sel = self.session.selection.as_ref()?;
+        let key = (sel.data.ident(), sel.width);
+        if let Some((cached, bounds)) = self.selection_bounds_cache.get() {
+            if cached == key {
+                return bounds;
+            }
+        }
+        let bounds = sel.bounds();
+        self.selection_bounds_computes
+            .set(self.selection_bounds_computes.get() + 1);
+        self.selection_bounds_cache.set(Some((key, bounds)));
+        bounds
+    }
+
+    /// The number of selected pixels, counted once per mask.
+    pub(super) fn selection_pixel_count(&self) -> i32 {
+        let Some(sel) = self.session.selection.as_ref() else {
+            return 0;
+        };
+        let key = sel.data.ident();
+        if let Some((cached, count)) = self.selection_count_cache.get() {
+            if cached == key {
+                return count;
+            }
+        }
+        let count = sel.data.iter().filter(|&&v| v > 0).count() as i32;
+        self.selection_count_cache.set(Some((key, count)));
+        count
     }
 
     /// Selection coverage at a document pixel, read through the drag offset.
@@ -205,6 +238,67 @@ mod tests {
                 .bounds()
                 .expect("translated bounds")
         );
+    }
+
+    #[test]
+    fn selection_bounds_and_count_follow_the_revision() {
+        let mut rust = view(rect_selection(32, 32, 4, 4, 12, 12));
+        let first = PsdRect {
+            top: 4,
+            left: 4,
+            bottom: 12,
+            right: 12,
+        };
+        for _ in 0..3 {
+            assert_eq!(rust.selection_bounds(), Some(first));
+            assert_eq!(rust.selection_pixel_count(), 64);
+        }
+        assert_eq!(rust.selection_bounds_computes.get(), 1, "read once");
+
+        rust.session
+            .set_selection(Some(rect_selection(32, 32, 1, 2, 5, 9)));
+        let replaced = PsdRect {
+            top: 2,
+            left: 1,
+            bottom: 9,
+            right: 5,
+        };
+        assert_eq!(rust.selection_bounds(), Some(replaced));
+        assert_eq!(rust.selection_pixel_count(), 28);
+        assert_eq!(rust.selection_bounds_computes.get(), 2);
+
+        rust.session.selection.as_mut().expect("selection").data[0] = 255;
+        rust.session.touch_selection();
+        assert_eq!(
+            rust.selection_bounds(),
+            Some(PsdRect {
+                top: 0,
+                left: 0,
+                ..replaced
+            }),
+            "an in-place write rescans"
+        );
+        assert_eq!(rust.selection_pixel_count(), 29);
+        assert_eq!(rust.selection_bounds_computes.get(), 3);
+
+        assert!(rust.begin_selection_move());
+        assert!(rust.preview_selection_move(3, 2));
+        assert_eq!(
+            rust.selection_bounds(),
+            Some(PsdRect {
+                top: 2,
+                left: 3,
+                bottom: 11,
+                right: 8,
+            }),
+            "the preview offsets the cached bounds"
+        );
+        assert_eq!(rust.selection_bounds_computes.get(), 3);
+        assert!(rust.cancel_selection_move());
+
+        rust.session.set_selection(None);
+        assert_eq!(rust.selection_bounds(), None);
+        assert_eq!(rust.selection_pixel_count(), 0);
     }
 
     #[test]

@@ -14,7 +14,8 @@ namespace pictura {
 // overrides the tint (an invalid color follows the palette).
 QIcon icon(const QString& id);
 QIcon icon(const QString& id, const QColor& color);
-// Renders the cursor SVG at the given hotspot in the 24x24 cursor space.
+// The cursor SVG rendered at the given hotspot in the 24x24 cursor space, built
+// once per id, hotspot, angle and device pixel ratio and then reused.
 QCursor cursor(const QString& id, int hotX, int hotY);
 // As above, turned `degrees` clockwise about the hotspot.
 QCursor cursor(const QString& id, int hotX, int hotY, double degrees);

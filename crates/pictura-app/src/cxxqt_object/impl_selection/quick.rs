@@ -18,11 +18,8 @@ pub(super) fn combine_selection(
     mode: CombineMode,
     keep_reselect: bool,
 ) {
+    let replaced = matches!(mode, CombineMode::New) && rust.selection_mask_bounds().is_some();
     let previous = rust.session.take_selection();
-    let replaced = matches!(mode, CombineMode::New)
-        && previous
-            .as_ref()
-            .is_some_and(|s| s.data.iter().any(|&v| v > 0));
     if replaced {
         rust.session.deselected_selection = previous;
         rust.session.set_selection(Some(shape));

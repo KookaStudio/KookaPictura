@@ -538,11 +538,7 @@ impl qobject::PictureView {
     }
 
     pub fn selection_count(&self) -> i32 {
-        self.rust()
-            .session
-            .selection
-            .as_ref()
-            .map_or(0, |s| s.data.iter().filter(|&&v| v > 0).count() as i32)
+        self.rust().selection_pixel_count()
     }
 
     /// Coverage byte at `(x, y)` (0 outside, 255 fully inside, intermediate on
@@ -713,6 +709,11 @@ impl qobject::PictureView {
     pub fn selection_contour_compute_count(&self) -> u64 {
         self.rust().selection_contour_computes.get()
     }
+
+    /// How many times the selection bounds have been scanned, for the cache test.
+    pub fn selection_bounds_compute_count(&self) -> u64 {
+        self.rust().selection_bounds_computes.get()
+    }
 }
 
 impl super::state::PictureViewRust {
@@ -732,7 +733,11 @@ impl super::state::PictureViewRust {
                 }
             }
         }
-        let loops = pictura_select::contour(sel, 128);
+        // The bounds hold every covered pixel, so the outline lies inside them.
+        let loops = self
+            .selection_mask_bounds()
+            .map(|bounds| pictura_select::contour_within(sel, 128, bounds))
+            .unwrap_or_default();
         let mut out = Vec::new();
         for poly in &loops {
             out.push(poly.len() as i32);

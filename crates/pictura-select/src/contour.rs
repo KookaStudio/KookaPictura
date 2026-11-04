@@ -11,18 +11,42 @@
 //! stored.
 
 use crate::Selection;
+use pictura_core::PsdRect;
 
 /// Closed polylines (integer pixel-corner lattice, `[0, width] x [0, height]`)
 /// tracing the boundary of the pixels whose coverage is `>= threshold`.
 ///
 /// The first vertex is not repeated at the end; draw each loop closed.
 pub fn contour(selection: &Selection, threshold: u8) -> Vec<Vec<[i32; 2]>> {
+    let whole = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: selection.height as i32,
+        right: selection.width as i32,
+    };
+    contour_within(selection, threshold, whole)
+}
+
+/// [`contour`] read only inside `window` (clipped to the canvas), in document
+/// coordinates. Every pixel at or above `threshold` must lie in the window, as
+/// it does in [`Selection::bounds`]; then no edge lies outside it.
+pub fn contour_within(selection: &Selection, threshold: u8, window: PsdRect) -> Vec<Vec<[i32; 2]>> {
     let (w, h) = (selection.width as usize, selection.height as usize);
     if w == 0 || h == 0 || selection.data.len() != w * h {
         return Vec::new();
     }
+    let clip = |lo: i32, hi: i32, max: usize| {
+        let lo = lo.clamp(0, max as i32);
+        (lo as usize, hi.clamp(lo, max as i32) as usize)
+    };
+    let (x0, x1) = clip(window.left, window.right, w);
+    let (y0, y1) = clip(window.top, window.bottom, h);
+    if x0 == x1 || y0 == y1 {
+        return Vec::new();
+    }
     let vw = w as i64 + 1;
     let key = |x: usize, y: usize| y as i64 * vw + x as i64;
+    let row_at = |y: usize| &selection.data[y * w + x0..y * w + x1];
     let mut edges: Vec<[i64; 2]> = Vec::new();
     let mut above: Vec<(usize, usize)> = Vec::new();
     let mut below: Vec<(usize, usize)> = Vec::new();
@@ -31,29 +55,29 @@ pub fn contour(selection: &Selection, threshold: u8) -> Vec<Vec<[i32; 2]>> {
     // Row boundary `y` separates row `y - 1` (above) from row `y` (below).
     // Edges run with the inside on their right in pixel coordinates: left sides
     // down, bottoms right, right sides up, tops left.
-    for y in 0..=h {
-        let row = (y < h).then(|| &selection.data[y * w..(y + 1) * w]);
+    for y in y0..=y1 {
+        let row = (y < y1).then(|| row_at(y));
         let same = match row {
-            Some(r) => y > 0 && r == &selection.data[(y - 1) * w..y * w],
+            Some(r) => y > y0 && r == row_at(y - 1),
             None => above.is_empty(),
         };
         if !same {
             below.clear();
             if let Some(r) = row {
-                inside_runs(r, threshold, &mut below);
+                inside_runs(r, threshold, x0, &mut below);
             }
-            for (x0, x1) in difference(&below, &above) {
-                edges.push([key(x1, y), key(x0, y)]);
+            for (a, b) in difference(&below, &above) {
+                edges.push([key(b, y), key(a, y)]);
             }
-            for (x0, x1) in difference(&above, &below) {
-                edges.push([key(x0, y), key(x1, y)]);
+            for (a, b) in difference(&above, &below) {
+                edges.push([key(a, y), key(b, y)]);
             }
             std::mem::swap(&mut above, &mut below);
         }
-        if y < h {
-            for &(x0, x1) in &above {
-                edges.push([key(x0, y), key(x0, y + 1)]);
-                edges.push([key(x1, y + 1), key(x1, y)]);
+        if y < y1 {
+            for &(a, b) in &above {
+                edges.push([key(a, y), key(a, y + 1)]);
+                edges.push([key(b, y + 1), key(b, y)]);
             }
             if above.as_slice() == [(0, w)] {
                 full_rows += 1;
@@ -68,8 +92,9 @@ pub fn contour(selection: &Selection, threshold: u8) -> Vec<Vec<[i32; 2]>> {
     chain(&edges, vw)
 }
 
-/// Append the half-open `[x0, x1)` runs of `row` at or above `threshold`.
-fn inside_runs(row: &[u8], threshold: u8, out: &mut Vec<(usize, usize)>) {
+/// Append the half-open `[x0, x1)` runs of `row` at or above `threshold`,
+/// shifted right by `offset`.
+fn inside_runs(row: &[u8], threshold: u8, offset: usize, out: &mut Vec<(usize, usize)>) {
     let mut x = 0;
     while let Some(start) = row[x..].iter().position(|&v| v >= threshold) {
         let x0 = x + start;
@@ -77,7 +102,7 @@ fn inside_runs(row: &[u8], threshold: u8, out: &mut Vec<(usize, usize)>) {
             .iter()
             .position(|&v| v < threshold)
             .map_or(row.len(), |n| x0 + n);
-        out.push((x0, x1));
+        out.push((offset + x0, offset + x1));
         x = x1;
     }
 }
@@ -303,5 +328,59 @@ mod tests {
             }
             assert_eq!(drawn_unit_edges(&contour(&sel, 128)), expected);
         }
+    }
+
+    #[test]
+    fn tracing_within_the_bounds_matches_the_whole_mask() {
+        let mut seed = 0x9e37_79b9_u32;
+        let mut next = |n: u32| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 8) % n
+        };
+        let (w, h) = (23u32, 17u32);
+        let mut masks = Vec::new();
+        for _ in 0..60 {
+            // A random patch somewhere on the canvas, with coverage both under
+            // and over the threshold so the bounds are wider than the outline.
+            let (px, py) = (next(w), next(h));
+            let (pw, ph) = (1 + next(w - px), 1 + next(h - py));
+            let mut sel = Selection::none(w, h);
+            for y in py..py + ph {
+                for x in px..px + pw {
+                    sel.data[(y * w + x) as usize] = [0, 60, 200, 255][next(4) as usize];
+                }
+            }
+            masks.push(sel);
+        }
+        masks.push(filled(w, h, 0, 0, w as i64, 3));
+        masks.push(filled(w, h, w as i64 - 2, 0, w as i64, h as i64));
+        masks.push(filled(w, h, 0, h as i64 - 1, w as i64, h as i64));
+        masks.push(Selection::all(w, h));
+        for sel in &masks {
+            let whole = contour(sel, 128);
+            match sel.bounds() {
+                Some(bounds) => assert_eq!(
+                    drawn_unit_edges(&contour_within(sel, 128, bounds)),
+                    drawn_unit_edges(&whole)
+                ),
+                None => assert!(whole.is_empty()),
+            }
+        }
+        assert_eq!(
+            contour_within(
+                &Selection::all(w, h),
+                128,
+                Selection::all(w, h).bounds().unwrap()
+            ),
+            contour(&Selection::all(w, h), 128),
+            "Select All stays the document rectangle"
+        );
+        let empty = PsdRect {
+            top: 4,
+            left: 4,
+            bottom: 4,
+            right: 9,
+        };
+        assert!(contour_within(&Selection::all(w, h), 128, empty).is_empty());
     }
 }

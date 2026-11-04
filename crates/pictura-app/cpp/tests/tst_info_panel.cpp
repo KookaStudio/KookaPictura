@@ -43,6 +43,7 @@ private slots:
     void offCanvasBlanksColorReadouts();
     void docLineIsPresent();
     void cursorMoveDoesNotRestatTheDocument();
+    void cursorMovesReuseTheSelectionBounds();
     void toolRowDescribesActiveTool();
     void toolHintsOnePerLineCapitalisedReducedFont();
     void menuOpensBesideItsButton();
@@ -315,6 +316,26 @@ void InfoPanelTest::cursorMoveDoesNotRestatTheDocument()
     QVERIFY(QFile::remove(path));
     panel_->setCursorPosition(QPointF(4, 4));
     QCOMPARE(panel_->docTextForTest(), before);
+}
+
+void InfoPanelTest::cursorMovesReuseTheSelectionBounds()
+{
+    openDocument(QStringLiteral("BoundsCache"));
+    QVERIFY(view_->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0));
+    panel_->refresh();
+    QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("4 × 4"));
+
+    const quint64 computes = view_->selection_bounds_compute_count();
+    for (int i = 0; i < 5; ++i) {
+        panel_->setCursorPosition(QPointF(1 + 2 * i, 3));
+    }
+    QCOMPARE(view_->selection_bounds_compute_count(), computes);
+    QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("4 × 4"));
+
+    QVERIFY(view_->select_rect(1, 5, 6, 3, QStringLiteral("new"), 0.0));
+    panel_->refresh();
+    QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("6 × 3"));
+    QCOMPARE(view_->selection_bounds_compute_count(), computes + 1);
 }
 
 void InfoPanelTest::toolRowDescribesActiveTool()

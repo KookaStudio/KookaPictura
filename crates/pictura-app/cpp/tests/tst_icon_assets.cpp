@@ -2,6 +2,7 @@
 
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
+#include <QtGui/QCursor>
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QPixmap>
@@ -40,6 +41,7 @@ private slots:
     void actionsGlyphsResolve();
     void characterStylesGlyphResolves();
     void unknownIdIsNull();
+    void cursorIsBuiltOnce();
     void explicitColour();
     void defaultTintIsWhite();
     void disabledTintStaysDimmed();
@@ -157,6 +159,18 @@ void IconAssetsTest::characterStylesGlyphResolves()
 void IconAssetsTest::unknownIdIsNull()
 {
     QVERIFY(pictura::icon(QStringLiteral("no.such.icon")).isNull());
+}
+
+void IconAssetsTest::cursorIsBuiltOnce()
+{
+    const QString id = QStringLiteral("cursor.moveSelection");
+    const QCursor first = pictura::cursor(id, 2, 2);
+    QVERIFY(!first.pixmap().isNull());
+    QCOMPARE(pictura::cursor(id, 2, 2).pixmap().cacheKey(), first.pixmap().cacheKey());
+
+    const QCursor other = pictura::cursor(id, 12, 12);
+    QVERIFY(other.pixmap().cacheKey() != first.pixmap().cacheKey());
+    QVERIFY(other.hotSpot() != first.hotSpot());
 }
 
 void IconAssetsTest::explicitColour()
