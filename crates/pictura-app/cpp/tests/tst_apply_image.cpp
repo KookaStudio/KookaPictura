@@ -9,9 +9,8 @@
 #include "frame.h"
 #include "image_view.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QAction>

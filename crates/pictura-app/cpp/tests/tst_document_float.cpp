@@ -43,9 +43,8 @@
 #include "tool_options.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/filters_bridge.h"
 
 #include "qt_test_support.h"
 

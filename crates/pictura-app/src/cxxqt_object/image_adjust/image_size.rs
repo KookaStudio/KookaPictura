@@ -7,6 +7,7 @@
 mod imp;
 
 use super::super::qobject::PictureView;
+use super::new_document::{create_document, document_budget_allows, document_resize_budget_allows};
 use imp::*;
 
 #[cxx_qt::bridge]
@@ -54,5 +55,34 @@ pub mod ffi {
             height: i32,
             fill: u32,
         ) -> bool;
+
+        /// A new `width` × `height` document in `mode` (`"bitmap"`,
+        /// `"grayscale"`, `"rgb"`, `"cmyk"`, `"lab"`) at `bits` per channel
+        /// (1 for Bitmap; else 8, 16, or 32), its layer filled with `fill`
+        /// (`0xRRGGBB`) or left clear when `transparent`, at `ppi` pixels per
+        /// inch (shown per cm when `per_cm`). One "New" state; false when
+        /// refused (an unknown mode, a depth the mode cannot take, or a
+        /// dimension below 1).
+        #[allow(clippy::too_many_arguments)]
+        fn create_document(
+            view: Pin<&mut PictureView>,
+            width: i32,
+            height: i32,
+            mode: &QString,
+            bits: i32,
+            fill: u32,
+            transparent: bool,
+            ppi: f64,
+            per_cm: bool,
+        ) -> bool;
+
+        /// Whether a `width` × `height` document at `bits` per channel fits
+        /// `ImageBudget`, so a caller can refuse before allocating: an
+        /// allocation failure aborts the process.
+        fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool;
+
+        /// Whether an immediate resize to `width` × `height` at `bits` per
+        /// channel fits the memory available now (the resize gate, #1156).
+        fn document_resize_budget_allows(width: i32, height: i32, bits: i32) -> bool;
     }
 }

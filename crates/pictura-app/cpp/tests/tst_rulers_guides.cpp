@@ -12,7 +12,7 @@
 #include "selftest_paint_fixture.h"
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object/guides.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QMouseEvent>

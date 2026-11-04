@@ -4,7 +4,7 @@
 #include "../tools.h"
 #include "jump_slider.h"
 
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QEvent>
 #include <QtCore/QString>

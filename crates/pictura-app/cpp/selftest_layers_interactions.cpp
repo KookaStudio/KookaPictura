@@ -5,7 +5,7 @@
 #include "frame.h"
 #include "panels/layers_panel.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QString>
 #include <QtCore/QStringList>

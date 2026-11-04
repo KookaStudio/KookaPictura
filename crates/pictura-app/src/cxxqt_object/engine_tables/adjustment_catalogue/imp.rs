@@ -1,8 +1,8 @@
-use super::ffi::AdjustmentRow;
+use super::super::ffi::AdjustmentRow;
 use cxx_qt_lib::QString;
 use pictura_render::{AdjustmentEntry, ImageCommand, LayerEntry, ADJUSTMENT_CATALOGUE};
 
-pub(super) fn image_name(image: ImageCommand) -> &'static str {
+pub(crate) fn image_name(image: ImageCommand) -> &'static str {
     match image {
         ImageCommand::AdjustmentsDialog => "dialog",
         ImageCommand::AdjustmentsDirect => "direct",
@@ -11,7 +11,7 @@ pub(super) fn image_name(image: ImageCommand) -> &'static str {
     }
 }
 
-pub(super) fn row(entry: &AdjustmentEntry) -> AdjustmentRow {
+pub(crate) fn row(entry: &AdjustmentEntry) -> AdjustmentRow {
     AdjustmentRow {
         kind: QString::from(entry.kind),
         title: QString::from(entry.title),
@@ -24,7 +24,7 @@ pub(super) fn row(entry: &AdjustmentEntry) -> AdjustmentRow {
     }
 }
 
-pub(super) fn adjustment_catalogue() -> Vec<AdjustmentRow> {
+pub(crate) fn adjustment_catalogue() -> Vec<AdjustmentRow> {
     ADJUSTMENT_CATALOGUE.iter().map(row).collect()
 }
 

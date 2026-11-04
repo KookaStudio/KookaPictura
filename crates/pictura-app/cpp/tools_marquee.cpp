@@ -7,10 +7,8 @@
 #include "image_view.h"
 #include "selection_geometry.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QPointF>
 #include <QtCore/QRect>

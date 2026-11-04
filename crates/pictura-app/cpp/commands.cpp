@@ -2,7 +2,7 @@
 
 #include "pictura_debug_timing.h"
 
-#include "pictura_app/src/cxxqt_object/command_catalogue.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QEvent>

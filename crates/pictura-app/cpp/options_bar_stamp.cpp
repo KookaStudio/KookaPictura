@@ -8,7 +8,7 @@
 #include "icons.h"
 #include "panels/numeric_field.h"
 
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QIcon>

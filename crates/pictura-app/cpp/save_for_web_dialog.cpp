@@ -2,8 +2,7 @@
 
 #include "dialogs.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/web_export.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QBuffer>
 #include <QtCore/QFileInfo>

@@ -19,10 +19,7 @@
 #include "dialogs.h"
 #include "hdr_toning_dialog.h"
 #include "tools.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/gradient_map.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>

@@ -4,10 +4,9 @@
 #include "color_models.h"
 #include "icons.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QEvent>
 #include <QtCore/QPair>

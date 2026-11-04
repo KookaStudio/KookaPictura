@@ -13,8 +13,7 @@
 #include "filter_preview_dialog.h"
 #include "frame.h"
 #include "image_view.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include "qt_test_support.h"
 

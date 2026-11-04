@@ -2,8 +2,8 @@
 
 #include "dialogs.h"
 
-#include "pictura_app/src/cxxqt_object/image_adjust/gradient_map.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
+#include "api/filters_bridge.h"
 
 #include <QtGui/QPainter>
 #include <QtWidgets/QCheckBox>

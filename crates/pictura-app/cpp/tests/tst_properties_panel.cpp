@@ -4,11 +4,9 @@
 #include "frame.h"
 #include "panels/layers_panel.h"
 #include "panels/properties_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/layers_bridge.h"
+
 #include "panels/numeric_field.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/mask_refine.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>

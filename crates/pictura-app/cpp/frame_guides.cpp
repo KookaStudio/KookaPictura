@@ -7,8 +7,7 @@
 
 #include "new_guide_dialog.h"
 
-#include "pictura_app/src/cxxqt_object/guides.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
+#include "api/document_bridge.h"
 
 namespace pictura {
 

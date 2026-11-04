@@ -63,7 +63,7 @@ mod save_format;
 mod selection_move;
 mod shapes;
 mod state;
-mod svg_export;
+pub(crate) mod svg_export;
 mod type_tools;
 mod web_export;
 pub use state::PictureViewRust;

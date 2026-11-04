@@ -9,9 +9,7 @@
 
 #include "image_view.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_match_color.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QCheckBox>

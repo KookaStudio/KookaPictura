@@ -15,7 +15,7 @@ pub fn svg_from_view(view: &PictureView) -> QString {
 
 /// Serialize `doc` to SVG; each raster fallback is composited through the
 /// active backend.
-pub(super) fn svg_for_document(doc: &Document, gpu_compute: bool) -> String {
+pub(crate) fn svg_for_document(doc: &Document, gpu_compute: bool) -> String {
     pictura_render::encode_document_svg(doc, |scratch: &Document| {
         let buffer = pictura_render::composite(pictura_render::CompositeRequest::whole(
             scratch,

@@ -16,6 +16,7 @@
 pub(super) mod fills;
 mod imp;
 
+use super::eyedropper_sample::sample_argb_scoped;
 use super::qobject::PictureView;
 use imp::*;
 
@@ -341,5 +342,11 @@ pub mod ffi {
         // ponytail: cxx-qt 0.10 has no free qinvokable; the C++ Actions player
         // calls this bridge function directly, as it does the other tool begins.
         fn replay_tool_stroke(view: Pin<&mut PictureView>, payload: &QString) -> bool;
+
+        /// The average `0xAARRGGBB` of a `size`×`size` box centred on `(x, y)`
+        /// read from `scope` (0 Current Layer, 1 Current & Below, 2 All Layers,
+        /// 3 All Layers No Adjustments, 4 Current & Below No Adjustments); 0
+        /// without a document or when nothing is sampled.
+        fn sample_argb_scoped(view: &PictureView, x: i32, y: i32, size: i32, scope: i32) -> u32;
     }
 }

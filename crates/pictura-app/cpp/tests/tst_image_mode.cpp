@@ -7,9 +7,8 @@
 #include "frame.h"
 #include "indexed_color_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 
 #include "qt_test_support.h"
 

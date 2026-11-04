@@ -1,6 +1,6 @@
 #include "adjustment_catalogue.h"
 
-#include "pictura_app/src/cxxqt_object/engine_tables/adjustment_catalogue.cxxqt.h"
+#include "api/engine_bridge.h"
 
 namespace pictura {
 

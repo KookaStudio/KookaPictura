@@ -26,9 +26,8 @@
 #include "panels/panel_group.h"
 #include "panels/properties_panel.h"
 #include "theme.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
+
 #include "preferences_dialog.h"
 #include "session.h"
 #include "theme.h"

@@ -1,21 +1,21 @@
 use super::super::super::channels::mode_name;
 use super::super::super::impl_selection::{channel_value, color_rows, q_gray};
-use super::ffi::LabValue;
+use super::super::ffi::LabValue;
 use cxx_qt_lib::QString;
 use pictura_color::model;
 use pictura_core::ColorMode;
 
-pub(super) fn srgb_to_lab(r: u8, g: u8, b: u8) -> LabValue {
+pub(crate) fn srgb_to_lab(r: u8, g: u8, b: u8) -> LabValue {
     let [l, a, b] = model::srgb_to_lab([r, g, b]);
     LabValue { l, a, b }
 }
 
-pub(super) fn lab_to_srgb(l: f64, a: f64, b: f64) -> u32 {
+pub(crate) fn lab_to_srgb(l: f64, a: f64, b: f64) -> u32 {
     let [r, g, b] = model::lab_to_srgb([l, a, b]);
     (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
 }
 
-pub(super) const MODES: [ColorMode; 8] = [
+pub(crate) const MODES: [ColorMode; 8] = [
     ColorMode::Bitmap,
     ColorMode::Grayscale,
     ColorMode::Indexed,
@@ -26,7 +26,7 @@ pub(super) const MODES: [ColorMode; 8] = [
     ColorMode::Lab,
 ];
 
-pub(super) fn channel_plane(pixels: &[u32], mode: &QString, row: i32) -> Vec<u8> {
+pub(crate) fn channel_plane(pixels: &[u32], mode: &QString, row: i32) -> Vec<u8> {
     let name = mode.to_string();
     let mode = MODES
         .into_iter()

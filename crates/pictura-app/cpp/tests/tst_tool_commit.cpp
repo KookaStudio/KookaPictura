@@ -10,10 +10,9 @@
 #include "control_server.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>

@@ -115,3 +115,38 @@ body, which the §1 rule rejects. Issue #403 weighed two fixes and chose to
   `type_bridge_headers_stay_in_adapter` enforces this.
 
 Change artifacts: `openspec/changes/rust-single-source-bundle/`.
+
+## 7. Round 4: domain membranes (#1160)
+
+The tree drifted back to 82 bridge modules and 356 C++ files including a
+generated header. A literal single bridge module is blocked by cxx-qt 0.10's
+one-module-per-file rule and the 1,200-line cap; one umbrella header would make
+every translation unit parse every generated header. The seam now uses eight
+hand-written membranes under `cpp/api/`:
+
+| Membrane | Domain |
+|---|---|
+| `view_bridge.h` | the `PictureView` QObject |
+| `document_bridge.h` | open/save/recovery, history, guides, new/size/mode |
+| `layers_bridge.h` | layer stack, masks, styles, paths, shapes, channels |
+| `paint_bridge.h` | paint tools, healing, magnetic, annotations |
+| `filters_bridge.h` | filter tools, adjustments, HDR, apply/match/replace |
+| `selection_bridge.h` | selection, refine, colour range |
+| `transform_bridge.h` | transform, warp, crop, align |
+| `engine_bridge.h` | actions, clipboard, colour management, export, decode, MCP |
+
+Every C++ file that reaches the bridge includes a membrane, never a `*.cxxqt.h`
+directly.
+`api/type_api.h` remains the type domain's generated-header surface. The bridges
+that exposed one or two Rust functions were folded into neighbours, leaving 69
+bridge files. The bridge stamp is still global: any bridge edit recompiles every
+membrane consumer; the membranes bound the per-translation-unit include surface,
+not the rebuild fan-out. Tests:
+`pictura_app::build_config::{bridge_headers_confined_to_api,
+bridge_membranes_are_include_only, no_universal_bridge_membrane,
+no_small_bridge_files, bridge_count_within_budget,
+adapter_and_membrane_headers_are_registered,
+generated_include_scan_rejects_violation}`.
+
+Change artifacts: `openspec/changes/archive/2026-11-04-bridge-membranes/`.
+

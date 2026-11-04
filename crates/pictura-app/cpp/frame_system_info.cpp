@@ -1,6 +1,7 @@
 #include "frame.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "system_info.h"
 #include "system_info_dialog.h"
 

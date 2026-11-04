@@ -16,7 +16,8 @@
 #include "session.h"
 #include "type_fonts.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "api/type_api.h"
 
 #include <QtWidgets/QCheckBox>

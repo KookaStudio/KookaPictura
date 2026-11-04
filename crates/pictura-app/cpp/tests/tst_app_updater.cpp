@@ -28,7 +28,7 @@
 #include "update_release.h"
 #include "update_version.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 using pictura::PackageDetectionInput;
 using pictura::PackageMethod;

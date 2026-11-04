@@ -9,9 +9,8 @@
 #include "frame.h"
 #include "panels/layers_panel.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/auto_blend.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/filters_bridge.h"
 
 #include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>

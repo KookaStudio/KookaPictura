@@ -9,9 +9,8 @@
 #include "image_view.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 

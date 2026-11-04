@@ -3,7 +3,7 @@
 #include "adjustment_catalogue.h"
 #include "icons.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QSize>
 #include <QtCore/QStringList>

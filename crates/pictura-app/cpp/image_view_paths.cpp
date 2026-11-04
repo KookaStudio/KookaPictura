@@ -6,7 +6,7 @@
 
 #include "path_overlay.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtGui/QPainter>
 

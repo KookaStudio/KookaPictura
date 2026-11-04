@@ -5,7 +5,7 @@
 #include "png_options_dialog.h"
 #include "tiff_options_dialog.h"
 
-#include "pictura_app/src/cxxqt_object/save_format.cxxqt.h"
+#include "api/engine_bridge.h"
 
 namespace pictura {
 

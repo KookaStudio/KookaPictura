@@ -2,7 +2,7 @@
 
 #include "tool_options.h"
 
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
+#include "api/paint_bridge.h"
 
 namespace pictura {
 

@@ -5,7 +5,7 @@
 #include "layers_panel_internal.h"
 #include "percent_field.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QMetaObject>

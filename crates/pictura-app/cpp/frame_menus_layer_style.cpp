@@ -8,7 +8,7 @@
 
 #include <QtWidgets/QInputDialog>
 
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
+#include "api/layers_bridge.h"
 
 namespace pictura {
 

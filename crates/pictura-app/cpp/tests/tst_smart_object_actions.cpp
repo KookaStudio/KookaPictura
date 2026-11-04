@@ -6,8 +6,7 @@
 #include "commands.h"
 #include "frame.h"
 #include "panels/layers_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include "qt_test_support.h"
 

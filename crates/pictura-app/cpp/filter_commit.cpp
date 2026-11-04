@@ -4,8 +4,7 @@
 
 #include "busy_job.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
+#include "api/filters_bridge.h"
 
 namespace pictura {
 

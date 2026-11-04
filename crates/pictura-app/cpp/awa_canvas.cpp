@@ -13,7 +13,7 @@
 #include <cmath>
 #include <vector>
 
-#include "pictura_app/src/cxxqt_object/filter_tools/adaptive_wide_angle.cxxqt.h"
+#include "api/filters_bridge.h"
 
 namespace pictura {
 

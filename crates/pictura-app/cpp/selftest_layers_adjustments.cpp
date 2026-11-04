@@ -8,7 +8,7 @@
 #include "panels/panel_column.h"
 #include "profile_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QString>

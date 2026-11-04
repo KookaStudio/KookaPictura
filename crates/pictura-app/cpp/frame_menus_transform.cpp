@@ -5,7 +5,7 @@
 
 #include "frame_includes.h"
 
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+#include "api/transform_bridge.h"
 
 namespace pictura {
 

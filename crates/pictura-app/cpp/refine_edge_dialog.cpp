@@ -2,8 +2,7 @@
 
 #include "panels/jump_slider.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
+#include "api/selection_bridge.h"
 
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QCheckBox>

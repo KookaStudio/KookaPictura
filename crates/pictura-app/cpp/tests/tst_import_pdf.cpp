@@ -15,8 +15,7 @@
 #include "pdf_save_dialog.h"
 #include "rasterize_eps_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QProcess>

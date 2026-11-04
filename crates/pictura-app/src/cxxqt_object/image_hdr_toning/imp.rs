@@ -9,7 +9,7 @@ use pictura_core::PsdRect;
 use pictura_filters::{Filter, HdrToningParams};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn params(
+pub(crate) fn params(
     radius: f64,
     strength: f64,
     gamma: f64,
@@ -35,7 +35,7 @@ pub(super) fn params(
 
 /// Run HDR Toning (a preview over `preview` when given) and refresh the canvas;
 /// records `label` on a commit.
-pub(super) fn run(
+pub(crate) fn run(
     mut view: Pin<&mut PictureView>,
     params: HdrToningParams,
     preview: Option<PsdRect>,
@@ -65,7 +65,7 @@ pub(super) fn run(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn hdr_toning_preview(
+pub(crate) fn hdr_toning_preview(
     view: Pin<&mut PictureView>,
     radius: f64,
     strength: f64,
@@ -94,7 +94,7 @@ pub(super) fn hdr_toning_preview(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn hdr_toning_apply(
+pub(crate) fn hdr_toning_apply(
     view: Pin<&mut PictureView>,
     radius: f64,
     strength: f64,

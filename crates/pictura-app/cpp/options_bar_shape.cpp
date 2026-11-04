@@ -20,7 +20,7 @@
 #include "icons.h"
 #include "panels/numeric_field.h"
 
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QPainter>

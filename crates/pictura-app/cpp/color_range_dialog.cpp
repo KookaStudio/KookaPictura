@@ -4,8 +4,7 @@
 #include "panels/jump_slider.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/color_range.cxxqt.h"
+#include "api/selection_bridge.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>

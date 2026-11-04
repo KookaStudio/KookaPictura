@@ -5,8 +5,7 @@
 #include "frame.h"
 #include "image_view.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QElapsedTimer>

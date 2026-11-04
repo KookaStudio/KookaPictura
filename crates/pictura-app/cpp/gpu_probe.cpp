@@ -12,7 +12,8 @@
 
 #include <cstddef>
 
-#include "pictura_app/src/gpu_probe_bridge.cxxqt.h"
+#include "api/engine_bridge.h"
+
 #include "session.h"
 
 #ifdef Q_OS_WIN
@@ -376,7 +377,7 @@ void prepareGpuBackend()
             return GpuProbeResult{1, QStringLiteral("unknown backend")};
         }
         const auto reply = pictura::gpu_probe(
-            code, rust::Str(executableUtf8.constData(), size_t(executableUtf8.size())));
+            code, ::rust::Str(executableUtf8.constData(), size_t(executableUtf8.size())));
         return GpuProbeResult{
             reply.code, QString::fromUtf8(reply.detail.data(), int(reply.detail.size()))};
     });
@@ -430,7 +431,7 @@ QStringList gpuCandidateNames()
 
 QString activeBackendLabel(bool gpuCompute)
 {
-    const rust::String label = pictura::gpu_active_backend_label(gpuCompute);
+    const ::rust::String label = pictura::gpu_active_backend_label(gpuCompute);
     return QString::fromUtf8(label.data(), int(label.size()));
 }
 

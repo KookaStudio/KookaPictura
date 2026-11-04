@@ -13,8 +13,7 @@
 #include "tool_options_json.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include "qt_test_support.h"
 

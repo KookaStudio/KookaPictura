@@ -11,7 +11,7 @@
 #include "panels/layers_panel.h"
 #include "panels/panel_group.h"
 #include "panels/properties_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtGui/QAction>
 #include <QtWidgets/QMenu>

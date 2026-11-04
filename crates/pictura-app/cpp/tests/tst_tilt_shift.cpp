@@ -17,9 +17,8 @@
 #include "commands.h"
 #include "filter_commands.h"
 #include "frame.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
+#include "api/filters_bridge.h"
 
 #include "qt_test_support.h"
 

@@ -2,8 +2,7 @@
 
 #include "raster_size_fields.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/pdf_export/import.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QSignalBlocker>

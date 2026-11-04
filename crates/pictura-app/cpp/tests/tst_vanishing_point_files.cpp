@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "frame.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/vanishing_point.cxxqt.h"
+#include "api/filters_bridge.h"
+
 #include "vp_dialog.h"
 
 #include "qt_test_support.h"

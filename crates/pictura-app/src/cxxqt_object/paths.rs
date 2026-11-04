@@ -21,12 +21,16 @@
 
 mod imp;
 
+use super::layer_path::{layer_kind_path, layer_lock_path};
 use super::qobject::PictureView;
 pub(super) use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qstring.h");
+        type QString = cxx_qt_lib::QString;
+
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
         type PictureView = super::PictureView;
@@ -172,5 +176,11 @@ pub mod ffi {
             tolerance: f64,
             close: bool,
         ) -> bool;
+
+        /// Kind of the layer at `path` (`"0/1"` walks into node 0), or empty.
+        fn layer_kind_path(view: &PictureView, path: &QString) -> QString;
+
+        /// Lock flags of the layer at `path` as a bitmask, or 0 when unresolved.
+        fn layer_lock_path(view: &PictureView, path: &QString) -> i32;
     }
 }

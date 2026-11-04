@@ -1,6 +1,6 @@
 #include "filter_commands.h"
 
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include <QtCore/QStringList>
 

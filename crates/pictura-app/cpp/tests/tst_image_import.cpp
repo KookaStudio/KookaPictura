@@ -12,9 +12,8 @@
 #include "color_settings_dialog.h"
 #include "frame.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "qt_test_support.h"
 

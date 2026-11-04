@@ -1,6 +1,7 @@
 #include "color_picker_dialog.h"
 #include "color_picker_math.h"
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
+#include "api/engine_bridge.h"
+
 #include "dialogs.h"
 #include "icons.h"
 #include "panels/color_swatch_widget.h"

@@ -19,7 +19,7 @@
 #include "lens_correction_canvas.h"
 #include "lens_correction_dialog.h"
 #include "lens_correction_panels.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include "qt_test_support.h"
 

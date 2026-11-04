@@ -10,8 +10,7 @@
 #include "dialogs.h"
 #include "frame.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
+#include "api/document_bridge.h"
 
 namespace pictura {
 

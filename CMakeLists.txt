@@ -326,17 +326,16 @@ if(NOT _pictura_stamp_text STREQUAL _pictura_bridge_hash)
     file(WRITE "${PICTURA_BRIDGE_STAMP}" "${_pictura_bridge_hash}")
 endif()
 
-# Make every translation unit that includes a generated cxx-qt header depend on
-# the stamp, so a bridge change rebuilds it in the same build.
+# Make every C++ translation unit depend on the stamp, so a bridge change
+# rebuilds its consumers in the same build. The stamp is global, and after the
+# membrane migration a translation unit can reach a generated header through a
+# header (frame_includes.h, paint_tip.h, ...), so a per-source string scan
+# would miss some consumers. Rebuilding too much is the accepted fallback.
 function(pictura_depend_on_bridge_stamp)
     foreach(_source IN LISTS ARGN)
         if(_source MATCHES "\\.(c|cc|cpp|cxx)$")
-            file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${_source}" _content)
-            string(FIND "${_content}" "pictura_app/src/" _generated_at)
-            if(NOT _generated_at EQUAL -1)
-                set_property(SOURCE "${_source}" APPEND PROPERTY
-                    OBJECT_DEPENDS "${PICTURA_BRIDGE_STAMP}")
-            endif()
+            set_property(SOURCE "${_source}" APPEND PROPERTY
+                OBJECT_DEPENDS "${PICTURA_BRIDGE_STAMP}")
         endif()
     endforeach()
 endfunction()
@@ -364,6 +363,14 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/api/layers_api.h
     crates/pictura-app/cpp/api/type_api.cpp
     crates/pictura-app/cpp/api/type_api.h
+    crates/pictura-app/cpp/api/view_bridge.h
+    crates/pictura-app/cpp/api/document_bridge.h
+    crates/pictura-app/cpp/api/layers_bridge.h
+    crates/pictura-app/cpp/api/paint_bridge.h
+    crates/pictura-app/cpp/api/filters_bridge.h
+    crates/pictura-app/cpp/api/selection_bridge.h
+    crates/pictura-app/cpp/api/transform_bridge.h
+    crates/pictura-app/cpp/api/engine_bridge.h
     crates/pictura-app/cpp/decode_image.cpp
     crates/pictura-app/cpp/decode_image.h
     crates/pictura-app/cpp/encode_image.cpp

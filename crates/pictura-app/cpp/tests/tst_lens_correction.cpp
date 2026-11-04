@@ -28,10 +28,9 @@
 #include "lens_correction_panels.h"
 #include "panels/angle_dial.h"
 #include "panels/color_swatch_widget.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/filters_bridge.h"
 
 #include "qt_test_support.h"
 

@@ -16,12 +16,10 @@
 #include "filter_commands.h"
 #include "frame.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/filters_bridge.h"
+#include "api/engine_bridge.h"
 
 namespace pictura {
 

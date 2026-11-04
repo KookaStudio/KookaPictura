@@ -7,7 +7,7 @@
 
 #include "qt_test_support.h"
 
-#include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
+#include "api/layers_bridge.h"
 
 namespace {
 using paint_fixture::Fixture;

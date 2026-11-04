@@ -20,7 +20,11 @@
 #include "icons.h"
 #include "image_view.h"
 #include "new_document_dialog.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/transform_bridge.h"
+#include "api/engine_bridge.h"
+
 #include "options_bar.h"
 #include "pictura_raw_dialog.h"
 #include "panels/brush_panel.h"
@@ -59,12 +63,6 @@
 #include "tool_options_json.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/color_management.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QCoreApplication>

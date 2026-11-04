@@ -9,20 +9,20 @@ use pictura_codec::{set_document_resolution, Resolution};
 use pictura_core::{BitDepth, ColorMode, Document};
 use pictura_render::BitmapMethod;
 
-pub(super) const DEFAULT_PPI: f64 = 72.0;
+pub(crate) const DEFAULT_PPI: f64 = 72.0;
 
-pub(super) fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool {
+pub(crate) fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool {
     crate::cxxqt_object::helpers::document_budget_allows(width, height, bits)
 }
 
-pub(super) fn document_resize_budget_allows(width: i32, height: i32, bits: i32) -> bool {
+pub(crate) fn document_resize_budget_allows(width: i32, height: i32, bits: i32) -> bool {
     crate::cxxqt_object::helpers::resize_budget_allows(width, height, bits)
 }
 
 /// The finishing steps for `mode` at `bits` on an 8-bit base, or `None` when
 /// the pair is refused. Bitmap is 1-bit only, and the 1-bit depth is
 /// Bitmap's alone.
-pub(super) fn plan(
+pub(crate) fn plan(
     mode: &str,
     bits: i32,
 ) -> Option<(&'static str, Option<ColorMode>, Option<BitDepth>)> {
@@ -45,7 +45,7 @@ pub(super) fn plan(
 }
 
 /// Fill the base layer's colour planes with `rgb` (its luminance on Gray).
-pub(super) fn fill_layer(doc: &mut Document, rgb: [u8; 3]) {
+pub(crate) fn fill_layer(doc: &mut Document, rgb: [u8; 3]) {
     let gray = doc.mode == ColorMode::Grayscale;
     let luma = pictura_core::rec601_luma(rgb[0], rgb[1], rgb[2]);
     for layer in &mut doc.layers {
@@ -61,7 +61,7 @@ pub(super) fn fill_layer(doc: &mut Document, rgb: [u8; 3]) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn create_document(
+pub(crate) fn create_document(
     mut view: Pin<&mut PictureView>,
     width: i32,
     height: i32,

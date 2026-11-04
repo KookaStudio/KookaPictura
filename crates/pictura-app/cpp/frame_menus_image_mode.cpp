@@ -4,8 +4,8 @@
 
 #include "bitmap_mode_dialog.h"
 #include "indexed_color_dialog.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/hdr_conversion.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/filters_bridge.h"
 
 namespace pictura {
 

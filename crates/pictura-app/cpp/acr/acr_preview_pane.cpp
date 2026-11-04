@@ -1,6 +1,7 @@
 #include "acr_preview_pane.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "theme.h"
 
 #include <QtCore/QRect>

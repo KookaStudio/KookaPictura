@@ -1,8 +1,7 @@
 #include "frame_includes.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 
-#include "pictura_app/src/cxxqt_object/color_range.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
 
 #include "refine_edge_dialog.h"
 

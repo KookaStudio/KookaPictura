@@ -3,13 +3,12 @@
 #include "api/selection_api.h"
 #include "apply_image_dialog.h"
 #include "canvas_size_dialog.h"
-#include "pictura_app/src/cxxqt_object/channels.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/filters_bridge.h"
+
 #include "image_size_dialog.h"
 
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 
 #include <QtWidgets/QInputDialog>
 

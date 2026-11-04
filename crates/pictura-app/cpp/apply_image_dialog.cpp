@@ -6,10 +6,8 @@
 #include "blend_modes.h"
 #include "image_view.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/channels.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_apply_image.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/filters_bridge.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>

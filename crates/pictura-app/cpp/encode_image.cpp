@@ -1,6 +1,6 @@
 #include "encode_image.h"
 
-#include "pictura_app/src/decode_bridge.cxxqt.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QBuffer>
 #include <QtCore/QByteArray>

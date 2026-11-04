@@ -5,8 +5,7 @@
 #include "selection_geometry.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/magnetic.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QPolygonF>

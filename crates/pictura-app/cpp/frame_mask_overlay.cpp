@@ -4,7 +4,7 @@
 
 #include "frame_includes.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
+#include "api/layers_bridge.h"
 
 namespace pictura {
 

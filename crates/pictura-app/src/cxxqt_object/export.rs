@@ -8,6 +8,7 @@
 mod imp;
 
 use super::qobject::PictureView;
+use super::save_format::{raster_preview_bytes, set_save_raster_options};
 pub use imp::*;
 
 #[cxx_qt::bridge]
@@ -41,6 +42,21 @@ pub mod ffi {
             out_width: &mut i32,
             out_height: &mut i32,
         ) -> Vec<u8>;
+
+        /// Encode packed RGBA8888 to memory with the named Qt image writer and
+        /// return the bytes; empty on any refusal.
+        fn encode_image_bytes(
+            rgba: &[u8],
+            width: i32,
+            height: i32,
+            format: &str,
+            quality: i32,
+            scale: i32,
+            compression: i32,
+            optimized: bool,
+            progressive: bool,
+            matte: i32,
+        ) -> Vec<u8>;
     }
 
     unsafe extern "C++" {
@@ -68,5 +84,27 @@ pub mod ffi {
 
         /// Encode packed RGBA8888 as a lossless WebP container; empty on refusal.
         fn webp_encode(rgba: &[u8], width: i32, height: i32) -> Vec<u8>;
+
+        /// Store the format options the next raster save of this document uses.
+        fn set_save_raster_options(
+            view: Pin<&mut PictureView>,
+            quality: i32,
+            compression: i32,
+            optimized: bool,
+            progressive: bool,
+            matte: i32,
+        );
+
+        /// The composite encoded at the given settings, for the JPEG dialog's
+        /// size estimate and preview; empty when there is no document.
+        fn raster_preview_bytes(
+            view: &PictureView,
+            format: &QString,
+            quality: i32,
+            compression: i32,
+            optimized: bool,
+            progressive: bool,
+            matte: i32,
+        ) -> Vec<u8>;
     }
 }

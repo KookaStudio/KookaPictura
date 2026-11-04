@@ -6,7 +6,8 @@
 
 #include "api/document_api.h"
 #include "api/type_api.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "api/document_bridge.h"
+
 #include "color_settings_dialog.h"
 #include "commands.h"
 #include "panels/layers_panel.h"

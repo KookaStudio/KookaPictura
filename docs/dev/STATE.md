@@ -330,6 +330,18 @@ Snapshot for resuming after a context break. Update after each milestone.
   `pictura_app::build_config::{bridge_modules_end_at_column_zero,
   dev_app_profile_keeps_release_semantics,
   every_workspace_library_disables_doctests}`.
+- **Domain bridge membranes** (#1160, OpenSpec change `bridge-membranes`).
+  Eight `cpp/api/*_bridge.h` membranes own the generated cxx-qt headers; no C++
+  file outside `cpp/api/` includes one, and `api/type_api.h` remains the type
+  exception. The bridges that exposed one or two Rust functions were folded into
+  neighbours, leaving 69 bridge files. The bridge stamp is still global, so any
+  bridge edit recompiles every shell and test translation unit; the membranes bound the
+  per-translation-unit include surface. Tests:
+  `pictura_app::build_config::{bridge_headers_confined_to_api,
+  bridge_membranes_are_include_only, no_universal_bridge_membrane,
+  no_small_bridge_files, bridge_count_within_budget,
+  adapter_and_membrane_headers_are_registered,
+  generated_include_scan_rejects_violation}`.
 - **Channels mask thumbnail is O(thumbnail), not O(document)** (#1038, OpenSpec
   change `brush-popup-solo-mask`). Opening the brush popup on a solo-mask layer
   and hovering back onto the canvas stalled ~170 ms because the debounced

@@ -20,7 +20,7 @@
 #include "frame.h"
 #include "panels/curve_widget.h"
 #include "pictura_raw_dialog.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include "qt_test_support.h"
 

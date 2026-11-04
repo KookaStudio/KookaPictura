@@ -6,7 +6,7 @@
 
 #include "defringe_dialog.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/matting.cxxqt.h"
+#include "api/layers_bridge.h"
 
 namespace pictura {
 

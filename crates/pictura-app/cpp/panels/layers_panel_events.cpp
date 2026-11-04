@@ -13,15 +13,7 @@
 #include "percent_field.h"
 #include "session.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QAbstractItemModel>
 #include <QtCore/QEvent>

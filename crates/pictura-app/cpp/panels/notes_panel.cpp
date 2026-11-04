@@ -1,7 +1,6 @@
 #include "notes_panel.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QEvent>
 #include <QtWidgets/QHBoxLayout>

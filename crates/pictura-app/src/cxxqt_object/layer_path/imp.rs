@@ -4,7 +4,7 @@ use super::super::helpers::layer_kind_str;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 
-pub(super) fn layer_kind_path(view: &PictureView, path: &QString) -> QString {
+pub(crate) fn layer_kind_path(view: &PictureView, path: &QString) -> QString {
     let Some(doc) = view.rust().session.doc.as_ref() else {
         return QString::default();
     };
@@ -15,7 +15,7 @@ pub(super) fn layer_kind_path(view: &PictureView, path: &QString) -> QString {
     }
 }
 
-pub(super) fn layer_lock_path(view: &PictureView, path: &QString) -> i32 {
+pub(crate) fn layer_lock_path(view: &PictureView, path: &QString) -> i32 {
     let Some(doc) = view.rust().session.doc.as_ref() else {
         return 0;
     };

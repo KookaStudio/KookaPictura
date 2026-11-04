@@ -7,7 +7,7 @@
 #include "api/document_api.h"
 #include "api/selection_api.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 using namespace pictura;
 

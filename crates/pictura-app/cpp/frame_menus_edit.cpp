@@ -1,12 +1,11 @@
 #include "frame_includes.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "api/history_api.h"
 #include "text_input.h"
 
-#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include <QtCore/QMimeData>
 #include <QtGui/QClipboard>

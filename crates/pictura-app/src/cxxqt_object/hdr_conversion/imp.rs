@@ -6,7 +6,7 @@ use cxx_qt::CxxQtType;
 use pictura_render::{ExposureGamma, HdrToneMap, LocalAdaptationParams};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn convert_depth_method(
+pub(crate) fn convert_depth_method(
     mut view: Pin<&mut PictureView>,
     bits: i32,
     method: i32,

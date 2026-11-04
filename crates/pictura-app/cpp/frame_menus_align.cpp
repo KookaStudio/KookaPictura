@@ -6,9 +6,9 @@
 #include "auto_blend_dialog.h"
 #include "busy_job.h"
 #include "dialogs.h"
-#include "pictura_app/src/cxxqt_object/align.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/auto_blend.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
+#include "api/filters_bridge.h"
+#include "api/selection_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "api/document_api.h"
 #include "api/type_api.h"

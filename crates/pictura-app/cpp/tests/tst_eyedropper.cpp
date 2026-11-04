@@ -11,7 +11,7 @@
 #include "panels/color_panel.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>

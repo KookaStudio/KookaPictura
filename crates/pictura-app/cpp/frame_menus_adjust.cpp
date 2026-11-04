@@ -13,9 +13,8 @@
 #include "match_color_dialog.h"
 #include "replace_color_dialog.h"
 
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/filters_bridge.h"
 
 namespace pictura {
 

@@ -4,8 +4,7 @@
 
 #include "frame_includes.h"
 
-#include "pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
+#include "api/layers_bridge.h"
 
 namespace pictura {
 

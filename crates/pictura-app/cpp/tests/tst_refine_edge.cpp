@@ -13,9 +13,8 @@
 #include "frame.h"
 #include "refine_edge_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>

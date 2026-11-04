@@ -1,9 +1,8 @@
 #include "paths_panel.h"
 
 #include "icons.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
+#include "api/layers_bridge.h"
+
 #include "tools.h"
 
 #include <QtGui/QFont>

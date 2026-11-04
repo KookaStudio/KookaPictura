@@ -1,8 +1,8 @@
-use super::ffi::BlendModeRow;
+use super::super::ffi::BlendModeRow;
 use cxx_qt_lib::QString;
 use pictura_core::BlendMode;
 
-pub(super) fn blend_mode_rows() -> Vec<BlendModeRow> {
+pub(crate) fn blend_mode_rows() -> Vec<BlendModeRow> {
     BlendMode::LAYER_MODES
         .iter()
         .map(|mode| BlendModeRow {

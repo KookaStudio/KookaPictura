@@ -1,7 +1,7 @@
 #include "adjustment_presets.h"
 
-#include "pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
+#include "api/layers_bridge.h"
+#include "api/filters_bridge.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QSignalBlocker>

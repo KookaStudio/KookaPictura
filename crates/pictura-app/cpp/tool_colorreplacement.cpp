@@ -11,8 +11,7 @@
 #include "pictura_debug_timing.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QObject>
 #include <QtGui/QColor>

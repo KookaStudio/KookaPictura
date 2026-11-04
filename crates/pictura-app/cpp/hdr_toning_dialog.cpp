@@ -3,9 +3,7 @@
 #include "dialogs.h"
 #include "hdr_toning_controls.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_hdr_toning.cxxqt.h"
+#include "api/filters_bridge.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QTimer>

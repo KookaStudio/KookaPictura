@@ -7,8 +7,7 @@
 #include "frame.h"
 #include "layer_style_dialog.h"
 #include "panels/layers_panel.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStringList>

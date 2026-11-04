@@ -8,13 +8,10 @@
 #include "frame.h"
 #include "image_size_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/filters_bridge.h"
 
 #include "qt_test_support.h"
 

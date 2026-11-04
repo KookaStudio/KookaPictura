@@ -7,8 +7,7 @@
 #include "image_view.h"
 #include "panels/layers_panel.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+#include "api/transform_bridge.h"
 
 #include <cmath>
 

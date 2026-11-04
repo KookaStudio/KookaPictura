@@ -14,8 +14,7 @@
 #include "selftest_paint_fixture.h"
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/eyedropper_sample.cxxqt.h"
+#include "api/paint_bridge.h"
 
 #include "qt_test_support.h"
 

@@ -12,7 +12,8 @@
 #include "control_server.h"
 #include "control_test_client.h"
 #include "frame.h"
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/view_bridge.h"
+
 #include "qt_test_support.h"
 
 using pictura::test::ControlClient;

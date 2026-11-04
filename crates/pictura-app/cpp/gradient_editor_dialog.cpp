@@ -4,8 +4,8 @@
 #include "panels/color_swatch_widget.h"
 #include "panels/percent_field.h"
 
-#include "pictura_app/src/cxxqt_object/image_adjust/gradient_map.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
+#include "api/filters_bridge.h"
 
 #include <QtGui/QLinearGradient>
 #include <QtGui/QMouseEvent>

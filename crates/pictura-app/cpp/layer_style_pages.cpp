@@ -4,8 +4,7 @@
 
 #include "layer_style_dialog.h"
 
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
+#include "api/layers_bridge.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
