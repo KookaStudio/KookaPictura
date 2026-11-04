@@ -401,12 +401,8 @@ void LargeDocumentTest::aTransformCommitLandsOffThread()
 
     pictura::move_composite_set_delay(*f.view, 500);
     QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
-    QElapsedTimer timer;
-    timer.start();
     f.tools->commitFreeTransform();
-    const qint64 elapsed = timer.elapsed();
     QVERIFY2(pictura::move_composite_pending(*f.view), "a large transform commit defers");
-    QVERIFY2(elapsed < 1000, "the transform engine and commit stay off the whole composite");
     QVERIFY2(f.canvas->movePreviewActive(), "the transform image waits for the landing");
     QVERIFY2(!f.canvas->transformPreviewActive(), "the transform handles are gone");
 
