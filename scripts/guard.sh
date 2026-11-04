@@ -4,6 +4,7 @@
 #
 # Fails when tracked code drifts into a declared non-goal:
 #   1. crates/ source referencing Adobe .8bf plugin binaries (wrong ABI, non-goal).
+#   1b. composite cache helpers (store/patch/rgba_frame) redefined in pictura-app.
 #   2. an artboard* file appearing under crates/ (artboards are post-CS6 CC 2015).
 #   3. a milestone name (m<NN>/M<NN>) in a crates/ identifier or string literal
 #      (milestones belong in comments, docs, and specs only).
@@ -39,6 +40,15 @@ hits=$(git grep -n -i -e '8bf' -- 'crates/*' || true)
 if [ -n "$hits" ]; then
     echo "FAIL: .8bf reference under crates/ (Adobe plugin ABI is a non-goal):"
     echo "$hits"
+    fail=1
+fi
+
+# --- 1b. composite cache helpers live only in pictura-render -----------------
+echo "check: composite cache helpers are not redefined in pictura-app"
+cache_defs=$(git grep -n -E '^[[:space:]]*(pub(\([^)]*\))?[[:space:]]+)?fn[[:space:]]+(store_composite|patch_composite_region|patch_buffer_region|rgba_frame)[[:space:]]*\(' -- 'crates/pictura-app/*' || true)
+if [ -n "$cache_defs" ]; then
+    echo "FAIL: app-side composite cache helper definition (must live in pictura-render):"
+    echo "$cache_defs"
     fail=1
 fi
 

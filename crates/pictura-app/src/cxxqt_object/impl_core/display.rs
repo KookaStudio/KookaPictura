@@ -4,12 +4,13 @@
 //! the solo mask. The solo mask is served by [`canvas_present_image`], which
 //! only the canvas provider and the present/region paths read.
 
-use super::super::helpers_composite::{level_display_image, patch_buffer_region, planes_of};
+use super::super::helpers_composite::{level_display_image, planes_of};
 use crate::cxxqt_object::qobject;
 use crate::cxxqt_object::state::PictureViewRust;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{c_void, QImage, QImageFormat};
 use pictura_core::{LayerMask, PixelBuffer, PsdRect};
+use pictura_render::patch_buffer_region;
 use pictura_render::{LevelView, ViewPyramid};
 
 impl qobject::PictureView {

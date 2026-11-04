@@ -2,9 +2,7 @@ use super::*;
 
 use super::super::super::filter_map::filter_from_kind_params;
 use super::super::super::helpers::{active_mask_target, clamp_region, layer_has_effects};
-use super::super::super::helpers_composite::{
-    current_buffer, patch_composite_region, premultiplied_display_image, store_composite,
-};
+use super::super::super::helpers_composite::{current_buffer, premultiplied_display_image};
 use super::super::super::impl_filters::{
     apply_op_active_region, cancel_filter_preview, pixel_filter_target, ActiveOp,
 };
@@ -19,6 +17,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QList, QString, QStringList};
 use pictura_core::{Document, Layer, LayerMask, PixelBuffer, PsdRect};
 use pictura_filters::Filter;
+use pictura_render::DocumentComposite;
 use pictura_select::Selection;
 use std::thread::JoinHandle;
 
@@ -398,7 +397,7 @@ pub(super) fn commit(
     // changes only its layer's rect unless a layer effect spills past it.
     let refresh = if effects {
         let rendered = current_buffer(&doc, gpu);
-        store_composite(&mut doc, &rendered);
+        DocumentComposite::new(&mut doc).store(&rendered);
         WorkerRefresh::Everywhere
     } else {
         match clamp_region(rect, doc.width, doc.height) {
@@ -408,7 +407,7 @@ pub(super) fn commit(
                 ))
                 .0;
                 let srgb = pictura_codec::buffer_to_srgb(&doc, &buffer).into_owned();
-                patch_composite_region(&mut doc, &buffer, x0, y0);
+                DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
                 let clipped = PsdRect {
                     top: y0,
                     left: x0,

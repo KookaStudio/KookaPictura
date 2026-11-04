@@ -3,7 +3,7 @@ use super::helpers_composite::*;
 use super::tests::pixel_layer;
 use crate::history::{History, Snapshot};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
-use pictura_render::{composite, CompositeRequest};
+use pictura_render::{composite, patch_buffer_region, CompositeRequest, DocumentComposite};
 use pictura_select::Selection;
 
 /// Print-only evidence that a region refresh no longer pays a per-pixel FFI
@@ -30,7 +30,7 @@ fn region_refresh_profile_4000() {
         let (buffer, _) = composite(CompositeRequest::region(&doc, rect, true));
         let composite = t.elapsed();
         let t = std::time::Instant::now();
-        patch_composite_region(&mut doc, &buffer, 1024, 1024);
+        DocumentComposite::new(&mut doc).patch(&buffer, 1024, 1024);
         let patch = t.elapsed();
         let t = std::time::Instant::now();
         let _ = buffer_to_image(&buffer);
@@ -156,7 +156,7 @@ fn visibility_region_profile_4000() {
         small,
     ]);
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
 
     // Region path: hide the small layer and composite only its rect.
     let (_, region) = set_visible_paths_union(&mut doc, &["1"], false);
@@ -164,7 +164,7 @@ fn visibility_region_profile_4000() {
     let (x0, y0, ..) = clamp_region(rect, doc.width, doc.height).expect("in bounds");
     let t = std::time::Instant::now();
     let (buffer, backend) = composite(CompositeRequest::region(&doc, rect, false));
-    patch_composite_region(&mut doc, &buffer, x0, y0);
+    DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
     let _ = buffer_to_image(&buffer);
     ms("region toggle", t.elapsed());
 
@@ -172,7 +172,7 @@ fn visibility_region_profile_4000() {
     let mut full = doc.clone();
     let t = std::time::Instant::now();
     let rendered = current_buffer(&full, false);
-    store_composite(&mut full, &rendered);
+    DocumentComposite::new(&mut full).store(&rendered);
     let _ = buffer_to_image(&full.composite);
     ms("full recomposite", t.elapsed());
 
@@ -941,7 +941,7 @@ fn move_profile(n: u32) {
         pixel_layer("top", 512, 512, (200, 100, 50)),
     ]);
     let rendered = current_buffer(&partial, true);
-    store_composite(&mut partial, &rendered);
+    DocumentComposite::new(&mut partial).store(&rendered);
     let mut partial_preview = partial.clone();
     let t = std::time::Instant::now();
     let pindex = topmost_pixel_layer_index(&partial_preview).expect("pixel layer");
@@ -1057,7 +1057,7 @@ fn undo_profile_4000() {
 
     // Persist the composite the way the bridge's `recomposite` does.
     let rendered = current_buffer(&doc, true);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
 
     // New undo display path: the snapshot already holds the composite.
     let t = std::time::Instant::now();

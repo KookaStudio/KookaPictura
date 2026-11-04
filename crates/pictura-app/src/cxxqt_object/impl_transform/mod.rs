@@ -16,6 +16,7 @@ use super::state::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::{QImage, QRect};
 use pictura_core::{layer_move_locked, Document, LayerStack, PsdRect};
+use pictura_render::patch_buffer_region;
 
 /// Build the move-preview base for the layers at `paths`: the authoritative
 /// composite with each layer's rect recomposited as if hidden, then each layer's

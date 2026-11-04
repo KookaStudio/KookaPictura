@@ -424,9 +424,10 @@ impl qobject::PictureView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cxxqt_object::impl_core::{refresh_calls, reset_refresh_calls};
     use crate::cxxqt_object::presentation::present_core;
     use crate::cxxqt_object::tests::pixel_layer;
-    use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
+    use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PsdRect};
 
     fn doc_with_layer() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
@@ -454,6 +455,36 @@ mod tests {
         assert_eq!(view.session.content_revision, 1);
         let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+    }
+
+    #[test]
+    fn one_commit_refreshes_once_through_the_cache() {
+        let mut view = view(doc_with_layer());
+        let rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        };
+        reset_refresh_calls();
+        let presentation = view.apply_edit("bounded", Edit::regions(vec![rect], true));
+        assert_eq!(refresh_calls(), 1);
+        assert_eq!(presentation.regions, vec![rect]);
+
+        reset_refresh_calls();
+        let presentation = view.apply_edit("full", Edit::Full);
+        assert_eq!(refresh_calls(), 1);
+        assert!(presentation.regions.is_empty());
+    }
+
+    #[test]
+    fn an_empty_region_edit_rebuilds_fully() {
+        let mut view = view(doc_with_layer());
+        reset_refresh_calls();
+        let presentation = view.apply_edit("empty", Edit::regions(Vec::new(), true));
+        assert_eq!(refresh_calls(), 1);
+        assert!(presentation.regions.is_empty());
+        assert_eq!(presentation.rebuild, Rebuild::Sync);
     }
 
     #[test]
