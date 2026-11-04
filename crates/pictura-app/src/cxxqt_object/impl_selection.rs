@@ -14,7 +14,10 @@ mod bridge;
 mod quick;
 mod refine;
 
-use quick::combine_selection;
+#[cfg(test)]
+pub(in crate::cxxqt_object) use quick::combine_for_profile;
+pub(in crate::cxxqt_object) use quick::ShapeBox;
+use quick::{combine_selection, combine_selection_boxed};
 
 impl qobject::PictureView {
     pub fn select_all(mut self: Pin<&mut Self>) {
@@ -556,6 +559,24 @@ impl qobject::PictureView {
         self.apply_selection_labeled(shape, mode, "Selection")
     }
 
+    /// [`apply_selection`](Self::apply_selection) for a shape whose box is
+    /// known (see [`ShapeBox`]).
+    fn apply_selection_boxed(
+        mut self: Pin<&mut Self>,
+        (shape, boxed): (Selection, Option<ShapeBox>),
+        mode: CombineMode,
+    ) -> bool {
+        {
+            let mut rust = self.as_mut().rust_mut();
+            if rust.session.doc.is_none() {
+                return false;
+            }
+            combine_selection_boxed(&mut rust, shape, boxed, mode, false);
+        }
+        self.as_mut().edit("Selection", |_| Edit::Meta);
+        true
+    }
+
     /// [`apply_selection`](Self::apply_selection) under a history `label`.
     pub(super) fn apply_selection_labeled(
         mut self: Pin<&mut Self>,
@@ -588,10 +609,26 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            feathered(Selection::rect(doc.width, doc.height, x, y, w, h), feather)
+            let rect = Selection::rect(doc.width, doc.height, x, y, w, h);
+            let bounds = (w > 0 && h > 0)
+                .then(|| {
+                    PsdRect {
+                        top: y,
+                        left: x,
+                        bottom: y.saturating_add(h),
+                        right: x.saturating_add(w),
+                    }
+                    .clip_to(doc.width, doc.height)
+                })
+                .flatten();
+            // The marquee's box bounds its feather and combine; its bounds
+            // are still read once per selection (`mq_bounds_once`).
+            let (shape, boxed) = feathered_within(rect, bounds, feather);
+            let boxed = boxed.map(|b| ShapeBox { tight: false, ..b });
+            (shape, boxed)
         };
         let mode = combine_mode_from(&mode.to_string());
-        self.as_mut().apply_selection(shape, mode)
+        self.as_mut().apply_selection_boxed(shape, mode)
     }
 
     pub fn select_ellipse(
@@ -637,10 +674,11 @@ impl qobject::PictureView {
             if points.len() < 3 {
                 return false;
             }
-            feathered(Selection::polygon(doc.width, doc.height, points), feather)
+            let (polygon, bounds) = Selection::polygon_bounded(doc.width, doc.height, points);
+            feathered_within(polygon, bounds, feather)
         };
         let mode = combine_mode_from(self.rust().session.live.lasso_mode().unwrap_or_default());
-        if !self.as_mut().apply_selection(shape, mode) {
+        if !self.as_mut().apply_selection_boxed(shape, mode) {
             return false;
         }
         let mut rust = self.as_mut().rust_mut();

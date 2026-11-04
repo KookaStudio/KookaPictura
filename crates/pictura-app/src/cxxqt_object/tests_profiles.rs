@@ -13,6 +13,7 @@ mod pan_zoom;
 mod preview;
 mod restore;
 mod retouch;
+mod shape_lasso;
 mod type_edit;
 
 /// Viewport the canvas presents into (a typical desktop canvas).

@@ -99,6 +99,15 @@ impl PictureViewRust {
         bounds
     }
 
+    /// Record `bounds` as the current mask's bounds, from a builder that knows
+    /// them, so [`Self::selection_mask_bounds`] need not scan the mask.
+    pub(super) fn seed_selection_mask_bounds(&self, bounds: Option<PsdRect>) {
+        if let Some(sel) = self.session.selection.as_ref() {
+            self.selection_bounds_cache
+                .set(Some(((sel.data.ident(), sel.width), bounds)));
+        }
+    }
+
     /// The number of selected pixels, counted once per mask.
     pub(super) fn selection_pixel_count(&self) -> i32 {
         let Some(sel) = self.session.selection.as_ref() else {
@@ -110,7 +119,18 @@ impl PictureViewRust {
                 return count;
             }
         }
-        let count = sel.data.iter().filter(|&&v| v > 0).count() as i32;
+        // Every selected pixel lies in the bounds, which a lasso commit
+        // already knows: count only them.
+        let w = sel.width as usize;
+        let count = self.selection_mask_bounds().map_or(0, |b| {
+            let data = sel.data.as_slice();
+            (b.top as usize..b.bottom as usize)
+                .map(|y| {
+                    let row = &data[y * w + b.left as usize..y * w + b.right as usize];
+                    row.iter().filter(|&&v| v > 0).count()
+                })
+                .sum::<usize>()
+        }) as i32;
         self.selection_count_cache.set(Some((key, count)));
         count
     }

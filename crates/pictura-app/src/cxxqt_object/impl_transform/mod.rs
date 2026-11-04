@@ -82,7 +82,7 @@ fn restore_member_visibility(doc: &mut Document, members: &[(String, bool, PsdRe
 
 /// Translate every layer in `paths` by `(dx, dy)` through
 /// `translate_layer_path` and return the union of each moved layer's
-/// before/after rect. A member that cannot be translated (a group, an
+/// before/after reach. A member that cannot be translated (a group, an
 /// adjustment, a position-locked layer, or an unresolved path) is skipped;
 /// `None` when nothing moved.
 pub(super) fn translate_move_group(
@@ -93,17 +93,30 @@ pub(super) fn translate_move_group(
 ) -> Option<PsdRect> {
     let mut dirty: Option<PsdRect> = None;
     for path in paths {
-        let Some(before) = pictura_render::resolve_path(doc, path).map(|layer| layer.rect) else {
+        let Some(before) = move_reach(doc, path) else {
             continue;
         };
         if !pictura_render::translate_layer_path(doc, path, dx, dy) {
             continue;
         }
-        let after = pictura_render::resolve_path(doc, path).map_or(before, |layer| layer.rect);
+        let after = move_reach(doc, path).unwrap_or(before);
         let rect = before.union(after);
         dirty = Some(dirty.map_or(rect, |acc| acc.union(rect)));
     }
     dirty
+}
+
+/// What a move of the layer at `path` can change: a shape layer's reach (its
+/// outline box with its effects and clipped run; its `rect` is the whole
+/// canvas), and any other layer's rect. `None` when the path does not resolve.
+fn move_reach(doc: &Document, path: &str) -> Option<PsdRect> {
+    let layer = pictura_render::resolve_path(doc, path)?;
+    if pictura_render::is_shape_layer(layer) {
+        if let Some(reach) = pictura_render::damage::content_influence(doc, path) {
+            return Some(reach);
+        }
+    }
+    Some(layer.rect)
 }
 
 /// The move group's union rect, or `None` when a path does not resolve. The

@@ -108,18 +108,30 @@ pub(super) fn edit_target<T>(
     let mut after = before.clone();
     let out = edit(&mut after);
     if after != before {
-        {
+        // The outline moves in place, so only the layer's reach before and
+        // after the edit is recomposited; a drag no longer composites the
+        // whole document on every pointer move (#1185).
+        let damage = {
             let mut rust = view.as_mut().rust_mut();
             let doc = rust.session.doc.as_mut()?;
             let (width, height) = (doc.width, doc.height);
+            let reach_before = pictura_render::damage::content_influence(doc, &target);
             let layer = pictura_render::resolve_path_mut(doc, &target)?;
             pictura_render::set_layer_shape_paths(layer, &after.subpaths, width, height);
             let live = pictura_render::layer_live_shape(layer)
                 .zip(moved_by)
                 .map(|(live, (dx, dy))| live.translated(dx, dy));
             pictura_render::set_layer_live_shape(layer, live.as_ref());
+            let reach_after = pictura_render::damage::content_influence(doc, &target);
+            pictura_render::damage::union(reach_before, reach_after)
+        };
+        match damage {
+            Some(rect) => {
+                view.as_mut().refresh_regions(&[rect]);
+                view.as_mut().changed();
+            }
+            None => view.as_mut().recomposite(),
         }
-        view.as_mut().recomposite();
     }
     Some(out)
 }

@@ -292,6 +292,40 @@ pub(super) fn feathered(
         shape
     }
 }
+/// [`feathered`] for a shape that covers exactly `bounds` (`None`: nothing),
+/// with the box the result is zero outside: the feather blurs only the shape's
+/// reach, and an unfeathered shape keeps its bounds tight.
+pub(super) fn feathered_within(
+    shape: pictura_select::Selection,
+    bounds: Option<pictura_core::PsdRect>,
+    radius: f64,
+) -> (
+    pictura_select::Selection,
+    Option<super::impl_selection::ShapeBox>,
+) {
+    let empty = pictura_core::PsdRect::default();
+    let Some(bounds) = bounds else {
+        let boxed = super::impl_selection::ShapeBox {
+            zero_outside: empty,
+            tight: true,
+        };
+        return (shape, Some(boxed));
+    };
+    if radius > 0.0 {
+        let (soft, window) = shape.feather_within(radius, bounds);
+        let boxed = super::impl_selection::ShapeBox {
+            zero_outside: window.unwrap_or(empty),
+            tight: false,
+        };
+        (soft, Some(boxed))
+    } else {
+        let boxed = super::impl_selection::ShapeBox {
+            zero_outside: bounds,
+            tight: true,
+        };
+        (shape, Some(boxed))
+    }
+}
 /// Unpack a `0xAARRGGBB` colour.
 pub(super) fn rgba_from_argb(argb: u32) -> Rgba {
     Rgba {
