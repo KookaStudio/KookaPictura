@@ -329,11 +329,11 @@ impl PictureViewRust {
 }
 
 pub(super) fn path_gesture_abort(mut view: Pin<&mut PictureView>) -> bool {
-    let change = view.as_mut().rust_mut().cancel_path_gesture();
-    if !change.changed_display() {
+    let presentation = view.as_mut().rust_mut().cancel_path_gesture();
+    if !presentation.has_display_change() {
         return false;
     }
-    view.as_mut().apply_session_change(change);
+    view.as_mut().present(presentation);
     true
 }
 

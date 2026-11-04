@@ -6,6 +6,7 @@
 
 use super::edit::Edit;
 use super::helpers_composite::{display_rgba_bytes, patch_buffer_region};
+use super::presentation::{Presentation, Rebuild};
 use super::qobject::PictureView;
 use super::state::PictureViewRust;
 use core::pin::Pin;
@@ -210,28 +211,36 @@ fn clamp_rect(rect: PsdRect, width: u32, height: u32) -> PsdRect {
 /// `None` when there is no display-preview state; `Some(false)` when the value
 /// is unchanged and nothing was recorded; `Some(true)` when a state was
 /// recorded.
-pub(super) fn commit_display_preview(mut view: Pin<&mut PictureView>, label: &str) -> Option<bool> {
-    let (edit, unchanged, presented) = {
-        let mut rust = view.as_mut().rust_mut();
-        let preview = rust.display_preview.take()?;
-        let doc = rust.session.doc.as_ref();
-        let unchanged = preview.unchanged(doc);
-        let edit = preview.exact_edit(doc);
-        (edit, unchanged, preview.presented)
-    };
+pub(super) fn commit_display_preview_core(
+    rust: &mut PictureViewRust,
+    label: &str,
+) -> Option<(bool, Presentation)> {
+    let preview = rust.display_preview.take()?;
+    let doc = rust.session.doc.as_ref();
+    let unchanged = preview.unchanged(doc);
+    let edit = preview.exact_edit(doc);
+    let presented = preview.presented;
     if unchanged {
-        view.as_mut().rust_mut().reset_pyramid();
-        view.as_mut().changed();
-        return Some(false);
+        return Some((
+            false,
+            Presentation {
+                rebuild: Rebuild::Sync,
+                notify: true,
+                ..Presentation::none()
+            },
+        ));
     }
-    if presented {
-        view.as_mut().edit(label, |_| edit);
-    } else {
-        // The fallback already composited the exact frame; capture it without
-        // compositing again.
-        view.as_mut().edit(label, |_| Edit::Record);
-    }
-    Some(true)
+    let presentation = rust.apply_edit(label, if presented { edit } else { Edit::Record });
+    Some((true, presentation))
+}
+
+pub(super) fn commit_display_preview(mut view: Pin<&mut PictureView>, label: &str) -> Option<bool> {
+    let (recorded, presentation) = {
+        let mut rust = view.as_mut().rust_mut();
+        commit_display_preview_core(&mut rust, label)?
+    };
+    view.as_mut().present(presentation);
+    Some(recorded)
 }
 
 #[cfg(test)]

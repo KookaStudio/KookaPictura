@@ -3,6 +3,7 @@ mod purge;
 
 use super::helpers::{clamp_region, paint_timing};
 use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame, store_composite};
+use super::presentation::{Dirty, Presentation, Rebuild};
 use super::{qobject, PictureViewRust};
 use crate::history::{detached_copy, History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
@@ -13,10 +14,12 @@ use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
 use std::time::Instant;
 
-/// A restore to present, and whether it ended a live session on the way.
+/// A restore to present, whether it ended a live session on the way, and the
+/// dirty value the saved identity implies.
 struct ShownRestore {
     restored: Restored,
     had_live_session: bool,
+    dirty: bool,
 }
 
 impl PictureViewRust {
@@ -72,18 +75,47 @@ impl PictureViewRust {
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
     ) -> Option<ShownRestore> {
         let had_live_session = self.has_active_session();
-        let cancelled = self.cancel_active_sessions();
+        let cancelled = self.cancel_active_sessions_report_only();
         let t = Instant::now();
         let restored = self.session.restore(&mut self.layer_target, step, legacy)?;
         paint_timing::record("history_restore", t.elapsed());
         Some(ShownRestore {
-            restored: if cancelled.changed_display() {
+            restored: if cancelled.has_display_change() {
                 Restored::Everywhere
             } else {
                 restored
             },
             had_live_session,
+            dirty: self.session.derived_dirty(),
         })
+    }
+
+    /// Convert a history report into the one presentation shape. The region
+    /// paths apply the restored composite and the mask-solo refresh; the
+    /// deferred rebuild is the presenter's.
+    pub(super) fn restore_presentation(&mut self, restored: Restored, dirty: bool) -> Presentation {
+        let (regions, rebuild) = match restored {
+            Restored::Everywhere => (Vec::new(), Rebuild::Deferred),
+            Restored::Region(rect) => (
+                self.refresh_from_composite(rect).into_iter().collect(),
+                Rebuild::None,
+            ),
+            Restored::Composite(rect) => {
+                self.refresh_mask_solo();
+                (
+                    self.refresh_from_composite(rect).into_iter().collect(),
+                    Rebuild::None,
+                )
+            }
+        };
+        Presentation {
+            regions,
+            rebuild,
+            notify: true,
+            dirty: Dirty::Set(dirty),
+            revision: true,
+            declaration: None,
+        }
     }
 }
 
@@ -120,28 +152,21 @@ impl qobject::PictureView {
     /// whose handler refreshes the panels inline. Any other restore reports
     /// `history_restored` and leaves them to the debounce `changed` started, so
     /// undo stays off the input path the way a stroke commit does (#1067).
-    fn show_restored(mut self: Pin<&mut Self>, restored: Option<ShownRestore>) -> bool {
+    fn show_restored(mut self: Pin<&mut Self>, shown: Option<ShownRestore>) -> bool {
         let Some(ShownRestore {
             restored,
             had_live_session,
-        }) = restored
+            dirty,
+        }) = shown
         else {
             return false;
         };
         let t = Instant::now();
-        match restored {
-            Restored::Everywhere => {
-                if let Some(job) = self.as_mut().rust_mut().reset_pyramid_deferred() {
-                    self.as_mut().build_pyramid(job);
-                }
-                self.as_mut().changed();
-            }
-            Restored::Region(rect) => self.as_mut().show_region(rect),
-            Restored::Composite(rect) => {
-                self.as_mut().rust_mut().refresh_mask_solo();
-                self.as_mut().show_region(rect);
-            }
-        }
+        let presentation = self
+            .as_mut()
+            .rust_mut()
+            .restore_presentation(restored, dirty);
+        self.as_mut().present(presentation);
         paint_timing::record("history_show_restored", t.elapsed());
         if had_live_session {
             self.as_mut().session_cancelled();
@@ -149,18 +174,6 @@ impl qobject::PictureView {
             self.as_mut().history_restored();
         }
         true
-    }
-
-    fn show_region(mut self: Pin<&mut Self>, rect: PsdRect) {
-        if let Some(damaged) = self.as_mut().rust_mut().refresh_from_composite(rect) {
-            self.as_mut().region_damaged(
-                damaged.left,
-                damaged.top,
-                damaged.width(),
-                damaged.height(),
-            );
-        }
-        self.changed();
     }
 
     pub fn can_undo(&self) -> bool {
@@ -234,7 +247,7 @@ impl qobject::PictureView {
             .to_string();
         let target = self.rust().session.history.snapshot_target(i as usize);
         let mut rust = self.as_mut().rust_mut();
-        rust.cancel_active_sessions();
+        rust.cancel_active_sessions_report_only();
         rust.session.doc = Some(detached_copy(&snapshot.doc));
         rust.session.set_selection(snapshot.selection);
         if let Some(mut target) = target {

@@ -8,6 +8,7 @@ use super::super::super::helpers_composite::{
 use super::super::super::impl_filters::{
     apply_op_active_region, cancel_filter_preview, pixel_filter_target, ActiveOp,
 };
+use super::super::super::presentation::{Dirty, Presentation, Rebuild};
 use super::super::super::state::PictureViewRust;
 use super::super::canvas_proxy::{pre_preview_sources, section_buffer};
 use super::super::resolve_stack;
@@ -80,10 +81,10 @@ pub(super) struct CommitJob {
 pub(super) struct Committed {
     doc: Document,
     history: History,
-    outcome: Result<Refresh, String>,
+    outcome: Result<WorkerRefresh, String>,
 }
 
-pub(super) enum Refresh {
+pub(super) enum WorkerRefresh {
     Region {
         x0: i32,
         y0: i32,
@@ -398,7 +399,7 @@ pub(super) fn commit(
     let refresh = if effects {
         let rendered = current_buffer(&doc, gpu);
         store_composite(&mut doc, &rendered);
-        Refresh::Everywhere
+        WorkerRefresh::Everywhere
     } else {
         match clamp_region(rect, doc.width, doc.height) {
             Some((x0, y0, w, h)) => {
@@ -411,14 +412,14 @@ pub(super) fn commit(
                     bottom: y0 + h as i32,
                     right: x0 + w as i32,
                 };
-                Refresh::Region {
+                WorkerRefresh::Region {
                     x0,
                     y0,
                     clipped,
                     srgb,
                 }
             }
-            None => Refresh::Nothing,
+            None => WorkerRefresh::Nothing,
         }
     };
     history.capture_live(&mut doc, selection, &target, label);
@@ -572,25 +573,15 @@ pub(super) fn filter_commit_running(view: &PictureView) -> bool {
     view.rust().filter_jobs.commit_running()
 }
 
-/// What the canvas needs after [`commit_finish`] landed a commit.
-pub(in crate::cxxqt_object) enum Landed {
-    /// Level 0 and the pyramid were patched over this document rectangle.
-    Region { rect: PsdRect },
-    /// The pyramid was rebuilt.
-    Everywhere,
-    /// A commit landed with no changed rectangle.
-    Nothing,
-    /// There was no commit to finish.
-    NoCommit,
-}
-
 /// Wait for the started commit and swap its document and history in, patching
-/// level 0 and the pyramid: the part of a commit the UI thread still does.
-/// `Ok(Landed::NoCommit)` when no commit was running; `Err` (with
-/// `filter_error` set) when the worker refused.
-pub(in crate::cxxqt_object) fn commit_finish(rust: &mut PictureViewRust) -> Result<Landed, ()> {
+/// level 0 for a bounded refresh. The presenter owns the rebuild, dirty,
+/// revision, and notification. `Ok(None)` when no commit was running; `Err`
+/// (with `filter_error` set) when the worker refused.
+pub(in crate::cxxqt_object) fn commit_finish(
+    rust: &mut PictureViewRust,
+) -> Result<Option<Presentation>, ()> {
     let Some(job) = rust.filter_jobs.commit.take() else {
-        return Ok(Landed::NoCommit);
+        return Ok(None);
     };
     let Ok(committed) = job.handle.join() else {
         rust.filter_error = Some("the filter stopped unexpectedly; history was reset".to_string());
@@ -605,27 +596,58 @@ pub(in crate::cxxqt_object) fn commit_finish(rust: &mut PictureViewRust) -> Resu
         }
     };
     rust.session.doc = Some(committed.doc);
-    rust.session.dirty = true;
-    rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     if job.last_filter.is_some() {
         rust.last_filter = job.last_filter;
     }
-    Ok(match refresh {
-        Refresh::Region {
+    Ok(Some(match refresh {
+        WorkerRefresh::Region {
             x0,
             y0,
             clipped,
             srgb,
         } => {
             rust.apply_refreshed_region(x0, y0, clipped, srgb);
-            Landed::Region { rect: clipped }
+            Presentation {
+                regions: vec![clipped],
+                rebuild: Rebuild::None,
+                notify: false,
+                dirty: Dirty::Set(true),
+                revision: true,
+                declaration: None,
+            }
         }
-        Refresh::Everywhere => {
-            rust.reset_pyramid();
-            Landed::Everywhere
-        }
-        Refresh::Nothing => Landed::Nothing,
-    })
+        WorkerRefresh::Everywhere => Presentation {
+            rebuild: Rebuild::Sync,
+            notify: true,
+            dirty: Dirty::Set(true),
+            revision: true,
+            ..Presentation::none()
+        },
+        WorkerRefresh::Nothing => Presentation {
+            notify: true,
+            dirty: Dirty::Set(true),
+            revision: true,
+            ..Presentation::none()
+        },
+    }))
+}
+
+#[cfg(test)]
+pub(in crate::cxxqt_object) fn test_commit_finish(
+    rust: &mut PictureViewRust,
+) -> Option<Presentation> {
+    let doc = rust.session.doc.clone()?;
+    let history = std::mem::take(&mut rust.session.history);
+    let handle = std::thread::spawn(move || Committed {
+        doc,
+        history,
+        outcome: Ok(WorkerRefresh::Nothing),
+    });
+    rust.filter_jobs.commit = Some(CommitJob {
+        handle,
+        last_filter: None,
+    });
+    commit_finish(rust).ok().flatten()
 }
 
 pub(super) fn filter_commit_finish(mut view: Pin<&mut PictureView>) -> bool {
@@ -638,15 +660,8 @@ pub(super) fn filter_commit_finish(mut view: Pin<&mut PictureView>) -> bool {
             view.as_mut().recomposite();
             return false;
         }
-        Ok(Landed::Region { rect }) => {
-            // A document canvas patches its present crop from the damaged
-            // rectangle; no region or marker pixels cross the bridge.
-            view.as_mut()
-                .region_damaged(rect.left, rect.top, rect.width(), rect.height());
-        }
-        Ok(Landed::Everywhere) => view.as_mut().changed(),
-        Ok(Landed::Nothing) => view.as_mut().changed(),
-        Ok(Landed::NoCommit) => {}
+        Ok(Some(presentation)) => view.as_mut().present(presentation),
+        Ok(None) => {}
     }
     true
 }

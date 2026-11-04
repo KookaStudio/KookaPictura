@@ -1,5 +1,6 @@
 use super::*;
 use crate::cxxqt_object::impl_filters::apply_filter_active;
+use crate::cxxqt_object::presentation::Presentation;
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode};
@@ -59,8 +60,8 @@ fn whole() -> PsdRect {
 }
 
 /// Land a started commit, as the bridge does once the worker is done.
-fn finish(rust: &mut PictureViewRust) -> Option<Landed> {
-    commit_finish(rust).ok()
+fn finish(rust: &mut PictureViewRust) -> Option<Presentation> {
+    commit_finish(rust).ok().flatten()
 }
 
 #[test]
@@ -78,7 +79,7 @@ fn a_background_commit_matches_the_synchronous_one_and_records_its_label() {
     ));
     assert_eq!(red(&rust), before, "the live document waits for finish");
     let refresh = finish(&mut rust).expect("committed");
-    assert!(matches!(refresh, Landed::Region { .. }));
+    assert!(!refresh.regions.is_empty());
     assert_eq!(red(&rust), red(&sync));
     assert_eq!(rust.session.history.count(), 2);
     assert_eq!(rust.session.history.label(1), "Filter: Gaussian Blur");

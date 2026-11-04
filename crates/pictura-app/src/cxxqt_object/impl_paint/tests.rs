@@ -1,5 +1,5 @@
 use super::{gpu_paint_mode, preview_blend, preview_level, rasterize_preview};
-use crate::cxxqt_object::edit::{effect_of, Edit, Effect};
+use crate::cxxqt_object::edit::{presentation_of, Edit};
 use crate::cxxqt_object::helpers::TileSet;
 use pictura_core::PsdRect;
 use pictura_paint::{tip_coverage, PaintMode, Rgba, StrokeConfig, StrokeSample};
@@ -224,7 +224,9 @@ fn paint_commit_hints_all_stroke_tiles() {
     let hint = tiles.regions(bounds);
     assert!(!hint.is_empty());
     let edit = Edit::regions_hinted(vec![], hint.clone(), false);
-    assert_eq!(effect_of(&edit), Effect::Blit { notify: false });
+    let presentation = presentation_of(&edit, None, true);
+    assert!(presentation.regions.is_empty());
+    assert!(!presentation.notify);
     assert_eq!(edit.history_hint(), Some(hint.as_slice()));
 }
 
@@ -241,6 +243,8 @@ fn paint_commit_with_no_pending_region_hints_the_whole_stroke() {
     let bounds = tiles.bounds().expect("the stroke covers tiles");
     let hint = tiles.regions(bounds);
     let edit = Edit::regions_hinted(Vec::new(), hint.clone(), false);
-    assert_eq!(effect_of(&edit), Effect::Blit { notify: false });
+    let presentation = presentation_of(&edit, None, true);
+    assert!(presentation.regions.is_empty());
+    assert!(!presentation.notify);
     assert_eq!(edit.history_hint(), Some(hint.as_slice()));
 }

@@ -1,10 +1,11 @@
 //! The edit transaction: one owner for committed document edits.
 //!
 //! A mutation declares what it changed; this module performs the compositing,
-//! link invalidation, history capture, revision and dirty bookkeeping, and
-//! reports what the QObject must present.
+//! link invalidation, and history capture, and reports what the presenter must
+//! show through one [`Presentation`].
 
 use super::metrics;
+use super::presentation::{Dirty, Presentation, Rebuild};
 use super::qobject;
 use super::PictureViewRust;
 use core::pin::Pin;
@@ -77,40 +78,47 @@ impl Edit {
     }
 }
 
-/// What the QObject must present after a commit.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Effect {
-    Nothing,
-    Notify,
-    Blit { notify: bool },
-    Rebuild,
-}
-
-/// How a declared edit is presented. Pure, so the policy is unit-tested.
-pub(super) fn effect_of(edit: &Edit) -> Effect {
-    match edit {
-        Edit::None => Effect::Nothing,
-        Edit::Meta | Edit::SelectionPreview | Edit::Inserted => Effect::Notify,
-        Edit::Record => Effect::Nothing,
+/// The presentation a normalized edit produces after its pixels were applied.
+pub(super) fn presentation_of(
+    edit: &Edit,
+    blit: Option<PsdRect>,
+    bump_revision: bool,
+) -> Presentation {
+    let (rebuild, notify) = match edit {
+        Edit::None => return Presentation::none(),
+        Edit::Meta | Edit::SelectionPreview | Edit::Inserted => (Rebuild::None, true),
+        Edit::Record => (Rebuild::None, false),
         Edit::Regions {
             rects,
             hint,
             notify,
         } => {
             if rects.is_empty() && hint.is_none() {
-                Effect::Rebuild
+                (Rebuild::Sync, true)
             } else {
-                Effect::Blit { notify: *notify }
+                (Rebuild::None, *notify)
             }
         }
+        Edit::Full => (Rebuild::Sync, true),
         Edit::Structural { damage } => {
             if damage.as_ref().is_some_and(|rects| !rects.is_empty()) {
-                Effect::Blit { notify: true }
+                (Rebuild::None, true)
             } else {
-                Effect::Rebuild
+                (Rebuild::Sync, true)
             }
         }
-        Edit::Full => Effect::Rebuild,
+    };
+    Presentation {
+        regions: blit.into_iter().collect(),
+        rebuild,
+        notify,
+        dirty: if matches!(edit, Edit::SelectionPreview) {
+            Dirty::Unchanged
+        } else {
+            Dirty::Set(true)
+        },
+        revision: bump_revision,
+        declaration: Some(edit.clone()),
     }
 }
 
@@ -198,27 +206,25 @@ pub(super) fn regions_influence(
     }
 }
 
-/// A committed edit and the damaged rectangle (if any) the QObject must emit.
-pub(super) struct Applied {
-    pub(super) edit: Edit,
-    pub(super) blit: Option<PsdRect>,
-}
-
 impl PictureViewRust {
-    /// Execute the pixel half, then capture one state and bump the bookkeeping.
-    pub(super) fn apply_edit(&mut self, label: &str, edit: Edit) -> Applied {
+    /// Execute the pixel half, then capture one state, and report what the
+    /// presenter must show.
+    pub(super) fn apply_edit(&mut self, label: &str, edit: Edit) -> Presentation {
         self.apply_edit_with(label, edit, true)
     }
 
     /// As [`Self::apply_edit`] for a move of the topmost pixel layer, which
     /// leaves the cached move-preview base valid: no content-revision bump.
-    pub(super) fn apply_edit_move(&mut self, label: &str, edit: Edit) -> Applied {
+    pub(super) fn apply_edit_move(&mut self, label: &str, edit: Edit) -> Presentation {
         self.apply_edit_with(label, edit, false)
     }
 
-    fn apply_edit_with(&mut self, label: &str, edit: Edit, bump_revision: bool) -> Applied {
+    fn apply_edit_with(&mut self, label: &str, edit: Edit, bump_revision: bool) -> Presentation {
         if matches!(edit, Edit::None) {
-            return Applied { edit, blit: None };
+            return Presentation {
+                declaration: Some(edit),
+                ..Presentation::none()
+            };
         }
         self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         let pending = self.pending_previews.any();
@@ -255,19 +261,18 @@ impl PictureViewRust {
         }
         let target = self.layer_target.clone();
         let t = Instant::now();
-        if matches!(edit, Edit::SelectionPreview) {
-            self.session.content_revision = self.session.content_revision.wrapping_add(1);
-        } else {
+        if !matches!(edit, Edit::SelectionPreview) {
             if bump_revision {
-                self.session.record_hinted(&target, label, hint.as_deref());
+                self.session
+                    .capture_live_without_bookkeeping(&target, label, hint.as_deref());
             } else {
                 self.session
-                    .record_move_with(&target, label, hint.as_deref());
+                    .capture_move_without_bookkeeping(&target, label, hint.as_deref());
             }
             metrics::record_phase("history_capture", t.elapsed());
         }
         metrics::end_edit();
-        Applied { edit, blit }
+        presentation_of(&edit, blit, bump_revision)
     }
 
     /// Whether a structural damage bound is large enough that the regional
@@ -296,7 +301,7 @@ impl PictureViewRust {
                 if rects.is_empty() {
                     if hint.is_none() {
                         metrics::mark_composited();
-                        self.composite_full();
+                        self.composite_into_doc();
                     }
                     return None;
                 }
@@ -308,7 +313,7 @@ impl PictureViewRust {
             } if !rects.is_empty() => {
                 metrics::mark_composited();
                 if self.structural_is_full(rects) {
-                    self.composite_full();
+                    self.composite_into_doc();
                     None
                 } else {
                     self.refresh_regions(rects)
@@ -316,7 +321,7 @@ impl PictureViewRust {
             }
             Edit::Full | Edit::Structural { .. } => {
                 metrics::mark_composited();
-                self.composite_full();
+                self.composite_into_doc();
                 None
             }
             Edit::Inserted => {
@@ -334,14 +339,16 @@ impl PictureViewRust {
     }
 
     /// Present a live edit without capturing history.
-    pub(super) fn preview_edit(&mut self, edit: &Edit) -> Option<PsdRect> {
+    pub(super) fn preview_edit(&mut self, edit: &Edit) -> Presentation {
         if matches!(edit, Edit::None) {
-            return None;
+            return Presentation::none();
         }
         self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         let blit = self.refresh_for(edit);
-        self.session.content_revision = self.session.content_revision.wrapping_add(1);
-        blit
+        let mut presentation = presentation_of(edit, blit, true);
+        presentation.dirty = Dirty::Unchanged;
+        presentation.declaration = None;
+        presentation
     }
 }
 
@@ -364,24 +371,10 @@ impl qobject::PictureView {
         if matches!(edit, Edit::None) {
             metrics::cancel_edit();
         }
-        let Applied { edit, blit } = self.as_mut().rust_mut().apply_edit(label, edit);
-        if let Some(damaged) = blit {
-            if damaged.width() > 0 && damaged.height() > 0 {
-                self.as_mut().region_damaged(
-                    damaged.left,
-                    damaged.top,
-                    damaged.width(),
-                    damaged.height(),
-                );
-            }
-        }
-        if matches!(
-            effect_of(&edit),
-            Effect::Notify | Effect::Rebuild | Effect::Blit { notify: true }
-        ) {
-            self.changed();
-        }
-        edit
+        let presentation = self.as_mut().rust_mut().apply_edit(label, edit.clone());
+        let outcome = presentation.declaration.clone().unwrap_or(edit);
+        self.as_mut().present(presentation);
+        outcome
     }
 
     /// As [`Self::edit`] for a move of the topmost pixel layer.
@@ -401,24 +394,13 @@ impl qobject::PictureView {
         if matches!(edit, Edit::None) {
             metrics::cancel_edit();
         }
-        let Applied { edit, blit } = self.as_mut().rust_mut().apply_edit_move(label, edit);
-        if let Some(damaged) = blit {
-            if damaged.width() > 0 && damaged.height() > 0 {
-                self.as_mut().region_damaged(
-                    damaged.left,
-                    damaged.top,
-                    damaged.width(),
-                    damaged.height(),
-                );
-            }
-        }
-        if matches!(
-            effect_of(&edit),
-            Effect::Notify | Effect::Rebuild | Effect::Blit { notify: true }
-        ) {
-            self.changed();
-        }
-        edit
+        let presentation = self
+            .as_mut()
+            .rust_mut()
+            .apply_edit_move(label, edit.clone());
+        let outcome = presentation.declaration.clone().unwrap_or(edit);
+        self.as_mut().present(presentation);
+        outcome
     }
 
     /// Present a live edit without capturing history and return its outcome.
@@ -433,23 +415,8 @@ impl qobject::PictureView {
             }
             f(&mut rust)
         };
-        let blit = self.as_mut().rust_mut().preview_edit(&edit);
-        if let Some(damaged) = blit {
-            if damaged.width() > 0 && damaged.height() > 0 {
-                self.as_mut().region_damaged(
-                    damaged.left,
-                    damaged.top,
-                    damaged.width(),
-                    damaged.height(),
-                );
-            }
-        }
-        if matches!(
-            effect_of(&edit),
-            Effect::Notify | Effect::Rebuild | Effect::Blit { notify: true }
-        ) {
-            self.changed();
-        }
+        let presentation = self.as_mut().rust_mut().preview_edit(&edit);
+        self.as_mut().present(presentation);
         edit
     }
 }
@@ -457,6 +424,7 @@ impl qobject::PictureView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cxxqt_object::presentation::present_core;
     use crate::cxxqt_object::tests::pixel_layer;
     use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
 
@@ -477,9 +445,10 @@ mod tests {
     #[test]
     fn one_commit_refreshes_captures_and_versions() {
         let mut view = view(doc_with_layer());
-        let applied = view.apply_edit("Edit", Edit::Full);
-        assert_eq!(applied.edit, Edit::Full);
-        assert!(applied.blit.is_none());
+        let presentation = view.apply_edit("Edit", Edit::Full);
+        assert_eq!(presentation.rebuild, Rebuild::Sync);
+        assert_eq!(presentation.declaration, Some(Edit::Full));
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
         assert!(view.session.dirty);
         assert_eq!(view.session.content_revision, 1);
@@ -491,8 +460,8 @@ mod tests {
     fn the_declared_outcome_is_returned() {
         let mut view = view(doc_with_layer());
         for edit in [Edit::None, Edit::Meta, Edit::Record, Edit::Full] {
-            let applied = view.apply_edit("Edit", edit.clone());
-            assert_eq!(applied.edit, edit);
+            let presentation = view.apply_edit("Edit", edit.clone());
+            assert_eq!(presentation.declaration, Some(edit));
         }
     }
 
@@ -506,10 +475,10 @@ mod tests {
             .expect("document")
             .composite
             .clone();
-        let outcome = Edit::None;
-        let applied = view.apply_edit("Refused", outcome);
-        assert_eq!(applied.edit, Edit::None);
-        assert_eq!(effect_of(&applied.edit), Effect::Nothing);
+        let presentation = view.apply_edit("Refused", Edit::None);
+        assert!(presentation.is_empty());
+        assert_eq!(presentation.declaration, Some(Edit::None));
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 0);
         assert!(!view.session.dirty);
         assert_eq!(view.session.content_revision, 0);
@@ -529,8 +498,9 @@ mod tests {
             .expect("document")
             .composite
             .clone();
-        let applied = view.apply_edit("Edit", Edit::None);
-        assert_eq!(applied.edit, Edit::None);
+        let presentation = view.apply_edit("Edit", Edit::None);
+        assert!(presentation.is_empty());
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 0);
         assert!(!view.session.dirty);
         assert_eq!(view.session.content_revision, 0);
@@ -548,10 +518,10 @@ mod tests {
             bottom: 2,
             right: 2,
         };
-        assert_eq!(
-            effect_of(&Edit::regions(vec![rect], false)),
-            Effect::Blit { notify: false }
-        );
+        let presentation = presentation_of(&Edit::regions(vec![rect], false), Some(rect), true);
+        assert_eq!(presentation.regions, vec![rect]);
+        assert_eq!(presentation.rebuild, Rebuild::None);
+        assert!(!presentation.notify);
     }
 
     #[test]
@@ -568,10 +538,8 @@ mod tests {
             bottom: 4,
             right: 4,
         };
-        assert_eq!(
-            effect_of(&Edit::regions(vec![a, b], false)),
-            Effect::Blit { notify: false }
-        );
+        let presentation = presentation_of(&Edit::regions(vec![a, b], false), Some(a), true);
+        assert_eq!(presentation.regions, vec![a]);
     }
 
     #[test]
@@ -584,9 +552,11 @@ mod tests {
             .expect("document")
             .composite
             .clone();
-        let applied = view.apply_edit("Edit", Edit::Meta);
-        assert_eq!(effect_of(&applied.edit), Effect::Notify);
+        let presentation = view.apply_edit("Edit", Edit::Meta);
+        assert!(presentation.notify);
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
+        assert!(view.session.dirty);
         assert_eq!(
             view.session.doc.as_ref().expect("document").composite,
             before
@@ -596,8 +566,11 @@ mod tests {
     #[test]
     fn a_selection_preview_notifies_without_capturing_history() {
         let mut view = view(doc_with_layer());
-        let applied = view.apply_edit("Selection", Edit::SelectionPreview);
-        assert_eq!(effect_of(&applied.edit), Effect::Notify);
+        let presentation = view.apply_edit("Selection", Edit::SelectionPreview);
+        assert!(presentation.notify);
+        assert_eq!(presentation.dirty, Dirty::Unchanged);
+        assert!(presentation.revision);
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 0);
         assert!(!view.session.dirty);
         assert_eq!(view.session.content_revision, 1);
@@ -606,18 +579,22 @@ mod tests {
     #[test]
     fn an_already_presented_edit_records_without_notifying() {
         let mut view = view(doc_with_layer());
-        let applied = view.apply_edit("Edit", Edit::Record);
-        assert_eq!(effect_of(&applied.edit), Effect::Nothing);
+        let presentation = view.apply_edit("Edit", Edit::Record);
+        assert!(!presentation.notify);
+        assert_eq!(presentation.dirty, Dirty::Set(true));
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
+        assert!(view.session.dirty);
     }
 
     #[test]
     fn an_unbounded_structural_outcome_rebuilds() {
         let mut view = view(doc_with_layer());
         view.link_sets.insert("0".into(), 1);
-        let applied = view.apply_edit("Edit", Edit::Structural { damage: None });
-        assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
+        let presentation = view.apply_edit("Edit", Edit::Structural { damage: None });
+        assert_eq!(presentation.rebuild, Rebuild::Sync);
         assert!(view.link_sets.is_empty());
+        present_core(&mut view, &presentation);
         let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
     }
@@ -632,15 +609,17 @@ mod tests {
             bottom: 2,
             right: 2,
         };
-        let applied = view.apply_edit(
+        let presentation = view.apply_edit(
             "Edit",
             Edit::Structural {
                 damage: Some(vec![rect]),
             },
         );
-        assert_eq!(effect_of(&applied.edit), Effect::Blit { notify: true });
-        assert_eq!(applied.blit, Some(rect));
+        assert_eq!(presentation.rebuild, Rebuild::None);
+        assert!(presentation.notify);
+        assert_eq!(presentation.regions, vec![rect]);
         assert!(view.link_sets.is_empty());
+        present_core(&mut view, &presentation);
         let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
     }
@@ -657,10 +636,12 @@ mod tests {
             .composite
             .clone();
         let frame = view.frame_revision;
-        let applied = view.apply_edit("New Layer", Edit::Inserted);
-        assert_eq!(effect_of(&applied.edit), Effect::Notify);
-        assert!(applied.blit.is_none());
+        let presentation = view.apply_edit("New Layer", Edit::Inserted);
+        assert!(presentation.notify);
+        assert_eq!(presentation.rebuild, Rebuild::None);
+        assert!(presentation.regions.is_empty());
         assert!(view.link_sets.is_empty());
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
         assert_eq!(view.frame_revision, frame, "no display rebuild");
         assert_eq!(
@@ -673,16 +654,16 @@ mod tests {
     #[test]
     fn a_full_outcome_rebuilds_once() {
         let mut view = view(doc_with_layer());
-        let applied = view.apply_edit("Edit", Edit::Full);
-        assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
-        assert!(applied.blit.is_none());
+        let presentation = view.apply_edit("Edit", Edit::Full);
+        assert_eq!(presentation.rebuild, Rebuild::Sync);
+        assert!(presentation.regions.is_empty());
     }
 
     #[test]
     fn a_commit_captures_the_refreshed_composite() {
         let mut view = view(doc_with_layer());
-        let applied = view.apply_edit("Edit", Edit::Full);
-        assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
+        let presentation = view.apply_edit("Edit", Edit::Full);
+        assert_eq!(presentation.rebuild, Rebuild::Sync);
         let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
         let restored = view.session.history.jump(0).expect("captured state");
@@ -708,18 +689,24 @@ mod tests {
     #[test]
     fn a_preview_records_nothing_and_its_commit_records_one() {
         let mut view = view(doc_with_layer());
-        view.preview_edit(&Edit::Full);
+        let preview = view.preview_edit(&Edit::Full);
+        assert!(preview.revision);
+        assert_eq!(preview.dirty, Dirty::Unchanged);
+        present_core(&mut view, &preview);
         assert_eq!(view.session.history.count(), 0);
         assert_eq!(view.session.content_revision, 1);
-        view.apply_edit("Edit", Edit::Meta);
+        let presentation = view.apply_edit("Edit", Edit::Meta);
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
     }
 
     #[test]
     fn a_move_commit_keeps_the_content_revision() {
         let mut view = view(doc_with_layer());
-        let applied = view.apply_edit_move("Move", Edit::Full);
-        assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
+        let presentation = view.apply_edit_move("Move", Edit::Full);
+        assert_eq!(presentation.rebuild, Rebuild::Sync);
+        assert!(!presentation.revision);
+        present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
         assert_eq!(view.session.content_revision, 0);
     }
@@ -764,8 +751,8 @@ mod tests {
             bottom: 2,
             right: 2,
         };
-        let applied = view.apply_edit_move("Move", Edit::regions(vec![rect], false));
-        assert_eq!(applied.blit, Some(rect));
+        let presentation = view.apply_edit_move("Move", Edit::regions(vec![rect], false));
+        assert_eq!(presentation.regions, vec![rect]);
         assert_eq!(view.session.history.count(), 1);
     }
 

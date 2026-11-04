@@ -7,6 +7,7 @@ use super::super::super::helpers_composite::{
     current_buffer, patch_composite_region, selection_to_mask, store_composite,
 };
 use super::super::super::impl_filters::{cancel_filter_preview, pixel_filter_target, ActiveOp};
+use super::super::super::presentation::{Dirty, Presentation, Rebuild};
 use super::super::super::state::PictureViewRust;
 use super::super::decode;
 use core::pin::Pin;
@@ -58,10 +59,10 @@ impl AdjustPreview {
 
 pub(super) struct AdjustResult {
     layer: Layer,
-    refresh: AdjustRefresh,
+    refresh: WorkerAdjustRefresh,
 }
 
-pub(in crate::cxxqt_object) enum AdjustRefresh {
+pub(in crate::cxxqt_object) enum WorkerAdjustRefresh {
     Region {
         x0: i32,
         y0: i32,
@@ -107,7 +108,7 @@ pub(super) fn adjust_preview(
     let refresh = if layer_has_effects(&layer) {
         let rendered = current_buffer(&doc, gpu);
         store_composite(&mut doc, &rendered);
-        AdjustRefresh::Everywhere {
+        WorkerAdjustRefresh::Everywhere {
             composite: rendered,
         }
     } else {
@@ -116,7 +117,7 @@ pub(super) fn adjust_preview(
                 let buffer = pictura_render::composite_region_active(&doc, rect, gpu).0;
                 let srgb = pictura_codec::buffer_to_srgb(&doc, &buffer).into_owned();
                 patch_composite_region(&mut doc, &buffer, x0, y0);
-                AdjustRefresh::Region {
+                WorkerAdjustRefresh::Region {
                     x0,
                     y0,
                     rect: PsdRect {
@@ -129,7 +130,7 @@ pub(super) fn adjust_preview(
                     composite: buffer,
                 }
             }
-            None => AdjustRefresh::Nothing,
+            None => WorkerAdjustRefresh::Nothing,
         }
     };
     Some(AdjustResult { layer, refresh })
@@ -219,7 +220,7 @@ pub(in crate::cxxqt_object) fn preview_start(
 }
 
 /// Install the latest landed preview; `None` when nothing is ready.
-pub(in crate::cxxqt_object) fn preview_poll(rust: &mut PictureViewRust) -> Option<AdjustRefresh> {
+pub(in crate::cxxqt_object) fn preview_poll(rust: &mut PictureViewRust) -> Option<Presentation> {
     advance(rust);
     let preview = rust.adjust_jobs.preview.as_mut()?;
     if preview.delivered {
@@ -239,14 +240,75 @@ pub(in crate::cxxqt_object) fn preview_poll(rust: &mut PictureViewRust) -> Optio
             PreviewBaseline::save(layer, None)
         }
     };
-    let doc = rust.session.doc.as_mut()?;
-    *pictura_render::resolve_path_mut(doc, &path)? = result.layer;
+    {
+        let doc = rust.session.doc.as_mut()?;
+        *pictura_render::resolve_path_mut(doc, &path)? = result.layer;
+    }
     rust.session.live.set_filter_preview(FilterPreview {
         layer_path: path,
         baseline,
     });
-    rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
-    Some(result.refresh)
+    Some(match result.refresh {
+        WorkerAdjustRefresh::Region {
+            x0,
+            y0,
+            rect,
+            srgb,
+            composite,
+        } => {
+            if let Some(doc) = rust.session.doc.as_mut() {
+                patch_composite_region(doc, &composite, x0, y0);
+            }
+            rust.apply_refreshed_region(x0, y0, rect, srgb);
+            Presentation {
+                regions: vec![rect],
+                rebuild: Rebuild::None,
+                notify: false,
+                dirty: Dirty::Unchanged,
+                revision: true,
+                declaration: None,
+            }
+        }
+        WorkerAdjustRefresh::Everywhere { composite } => {
+            if let Some(doc) = rust.session.doc.as_mut() {
+                store_composite(doc, &composite);
+            }
+            Presentation {
+                rebuild: Rebuild::Sync,
+                notify: true,
+                dirty: Dirty::Unchanged,
+                revision: true,
+                ..Presentation::none()
+            }
+        }
+        WorkerAdjustRefresh::Nothing => Presentation {
+            revision: true,
+            ..Presentation::none()
+        },
+    })
+}
+
+#[cfg(test)]
+pub(in crate::cxxqt_object) fn test_preview_poll(
+    rust: &mut PictureViewRust,
+) -> Option<Presentation> {
+    let layer = pictura_render::resolve_path(rust.session.doc.as_ref()?, "0")?.clone();
+    let request = AdjustRequest {
+        path: "0".to_string(),
+        adjustment: Adjustment::Invert,
+    };
+    let result = AdjustResult {
+        layer,
+        refresh: WorkerAdjustRefresh::Nothing,
+    };
+    rust.adjust_jobs.preview = Some(AdjustPreview {
+        latest: request.clone(),
+        running: None,
+        done: Some((request, result)),
+        failed: None,
+        delivered: false,
+    });
+    preview_poll(rust)
 }
 
 pub(in crate::cxxqt_object) fn preview_busy(rust: &mut PictureViewRust) -> bool {
@@ -275,49 +337,14 @@ pub(super) fn image_adjust_preview_start(mut view: Pin<&mut PictureView>, block:
 }
 
 pub(super) fn image_adjust_preview_poll(mut view: Pin<&mut PictureView>) -> bool {
-    let refresh = {
+    let presentation = {
         let mut rust = view.as_mut().rust_mut();
         preview_poll(&mut rust)
     };
-    let Some(refresh) = refresh else {
+    let Some(presentation) = presentation else {
         return false;
     };
-    match refresh {
-        AdjustRefresh::Region {
-            x0,
-            y0,
-            rect,
-            srgb,
-            composite,
-        } => {
-            {
-                let mut rust = view.as_mut().rust_mut();
-                if let Some(doc) = rust.session.doc.as_mut() {
-                    patch_composite_region(doc, &composite, x0, y0);
-                }
-                rust.apply_refreshed_region(x0, y0, rect, srgb);
-            }
-            view.as_mut()
-                .region_damaged(rect.left, rect.top, rect.width(), rect.height());
-        }
-        AdjustRefresh::Everywhere { composite } => {
-            {
-                let mut rust = view.as_mut().rust_mut();
-                // reset_pyramid drops the live preview; keep its baseline so
-                // Cancel can still restore the layer after the rebuild.
-                let preview = rust.session.live.take_filter_preview();
-                if let Some(doc) = rust.session.doc.as_mut() {
-                    store_composite(doc, &composite);
-                }
-                rust.reset_pyramid();
-                if let Some(preview) = preview {
-                    rust.session.live.set_filter_preview(preview);
-                }
-            }
-            view.as_mut().changed();
-        }
-        AdjustRefresh::Nothing => {}
-    }
+    view.as_mut().present(presentation);
     true
 }
 

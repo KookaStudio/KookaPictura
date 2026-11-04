@@ -13,7 +13,7 @@ use pictura_core::{
 };
 use std::time::Instant;
 
-pub(super) use deferred_pyramid::DeferredPyramid;
+pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 
 mod deferred_pyramid;
 mod display;
@@ -111,7 +111,7 @@ impl qobject::PictureView {
         let super::open_jobs::OpenedDocument { doc, target, .. } = opened;
         {
             let mut rust = self.as_mut().rust_mut();
-            rust.cancel_active_sessions();
+            rust.cancel_active_sessions_report_only();
             rust.clear_document_scoped_state();
             rust.path = Some(path);
             rust.session.pdf_password = pdf_password;
@@ -903,6 +903,19 @@ impl super::PictureViewRust {
     /// the cached display. Emits nothing; the caller owns the signal.
     pub(super) fn composite_full(&mut self) {
         let t0 = Instant::now();
+        if self.composite_into_doc() {
+            let t = Instant::now();
+            self.reset_pyramid();
+            paint_timing::record("recomposite_reset_pyramid", t.elapsed());
+            paint_timing::record("recomposite_total", t0.elapsed());
+        }
+    }
+
+    /// Rebuild the document composite from the current layer stack without
+    /// touching the display. A presentation asks the presenter to reset the
+    /// display, so producers leave the composite exact here. Returns whether a
+    /// composite was stored.
+    pub(super) fn composite_into_doc(&mut self) -> bool {
         let t = Instant::now();
         let rendered = self
             .session
@@ -911,17 +924,12 @@ impl super::PictureViewRust {
             .map(|doc| current_buffer(doc, self.gpu_compute));
         paint_timing::record("recomposite_full_composite", t.elapsed());
         let Some(rendered) = rendered else {
-            return;
+            return false;
         };
-        {
-            let t = Instant::now();
-            if let Some(doc) = self.session.doc.as_mut() {
-                store_composite(doc, &rendered);
-            }
-            self.reset_pyramid();
-            paint_timing::record("recomposite_reset_pyramid", t.elapsed());
+        if let Some(doc) = self.session.doc.as_mut() {
+            store_composite(doc, &rendered);
         }
-        paint_timing::record("recomposite_total", t0.elapsed());
+        true
     }
 
     /// Rebuild the cached sRGB level-0 frame and the matching premultiplied

@@ -2,6 +2,7 @@ use super::*;
 
 use super::super::display_preview::{commit_display_preview, PreviewKind};
 use super::super::edit::Edit;
+use super::super::presentation::{Dirty, Presentation, Rebuild};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -115,11 +116,14 @@ pub(super) fn edit_adjustment(
         layer.adjustment = Some(next);
     }
     if let Some(rect) = view.as_mut().rust_mut().present_display_preview() {
-        view.as_mut()
-            .region_damaged(rect.left, rect.top, rect.width(), rect.height());
-        let mut rust = view.as_mut().rust_mut();
-        rust.session.dirty = true;
-        rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
+        view.as_mut().present(Presentation {
+            regions: vec![rect],
+            rebuild: Rebuild::None,
+            notify: false,
+            dirty: Dirty::Set(true),
+            revision: true,
+            declaration: None,
+        });
         return true;
     }
     // The exact path runs instead: keep the pre-gesture preview state so the

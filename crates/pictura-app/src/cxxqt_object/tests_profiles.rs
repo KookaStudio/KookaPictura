@@ -759,6 +759,7 @@ fn large_document_filter_profile() {
         ),
     ] {
         use super::filter_tools::jobs::{commit_finish, commit_start};
+        use crate::cxxqt_object::presentation::present_core;
         let t = Instant::now();
         assert!(commit_start(
             &mut rust,
@@ -772,7 +773,10 @@ fn large_document_filter_profile() {
         }
         let worker = t.elapsed();
         let t = Instant::now();
-        assert!(commit_finish(&mut rust).is_ok());
+        let presentation = commit_finish(&mut rust).expect("the commit succeeds");
+        if let Some(presentation) = presentation {
+            present_core(&mut rust, &presentation);
+        }
         println!(
             "{kind} background commit: start (UI)={:.0}ms worker={:.0}ms land (UI)={:.0}ms",
             started.as_secs_f64() * 1000.0,
@@ -870,6 +874,7 @@ fn large_document_filter_profile() {
 fn radial_blur_commit_profile() {
     use super::filter_tools::jobs::{commit_finish, commit_start};
     use super::PictureViewRust;
+    use crate::cxxqt_object::presentation::present_core;
     use pictura_filters::{Filter, Quality, RadialMethod};
     use std::time::Instant;
 
@@ -918,7 +923,10 @@ fn radial_blur_commit_profile() {
         }
         let worker = t.elapsed();
         let t = Instant::now();
-        assert!(commit_finish(&mut rust).is_ok());
+        let presentation = commit_finish(&mut rust).expect("the commit succeeds");
+        if let Some(presentation) = presentation {
+            present_core(&mut rust, &presentation);
+        }
         println!(
             "radial {method:?} 100 Best: worker={:.0}ms land (UI)={:.0}ms history tiles={:.0} MB",
             worker.as_secs_f64() * 1000.0,
