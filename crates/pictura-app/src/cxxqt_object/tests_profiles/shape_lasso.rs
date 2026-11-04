@@ -99,13 +99,9 @@ fn shape_lasso_profile() {
         let reach =
             pictura_render::damage::content_influence(&shaped, &path).expect("a bounded shape");
         let t = Instant::now();
-        let _ = pictura_render::composite_rgba_region(
-            &shaped,
-            reach.left as u32,
-            reach.top as u32,
-            reach.width() as u32,
-            reach.height() as u32,
-        );
+        let _ = pictura_render::composite(pictura_render::CompositeRequest::region(
+            &shaped, reach, false,
+        ));
         ms(
             &format!("{kind:?} layer region composite (CPU)"),
             t.elapsed(),
