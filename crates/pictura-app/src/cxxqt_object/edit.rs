@@ -254,24 +254,35 @@ impl PictureViewRust {
             edit.history_hint().map(|rects| rects.to_vec())
         };
         metrics::begin_edit(label);
-        let blit = self.refresh_for(&edit);
+        let deferred = !bump_revision
+            && self.should_defer_move(&edit)
+            && self.defer_move_composite(label, &edit);
+        let blit = if deferred {
+            None
+        } else {
+            self.refresh_for(&edit)
+        };
         if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
             self.link_sets.clear();
             self.solo_snapshot = None;
         }
-        let target = self.layer_target.clone();
-        let t = Instant::now();
-        if !matches!(edit, Edit::SelectionPreview) {
-            if bump_revision {
-                self.session
-                    .capture_live_without_bookkeeping(&target, label, hint.as_deref());
-            } else {
-                self.session
-                    .capture_move_without_bookkeeping(&target, label, hint.as_deref());
+        // A deferred move captures its history when its composite lands, so a
+        // diff never sees the stale composite.
+        if !deferred {
+            let target = self.layer_target.clone();
+            let t = Instant::now();
+            if !matches!(edit, Edit::SelectionPreview) {
+                if bump_revision {
+                    self.session
+                        .capture_live_without_bookkeeping(&target, label, hint.as_deref());
+                } else {
+                    self.session
+                        .capture_move_without_bookkeeping(&target, label, hint.as_deref());
+                }
+                metrics::record_phase("history_capture", t.elapsed());
             }
-            metrics::record_phase("history_capture", t.elapsed());
+            metrics::end_edit();
         }
-        metrics::end_edit();
         presentation_of(&edit, blit, bump_revision)
     }
 
@@ -359,6 +370,7 @@ impl qobject::PictureView {
         label: &str,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {
@@ -383,6 +395,7 @@ impl qobject::PictureView {
         label: &str,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {
@@ -398,6 +411,9 @@ impl qobject::PictureView {
             .as_mut()
             .rust_mut()
             .apply_edit_move(label, edit.clone());
+        if let Some(job) = self.as_mut().rust_mut().pending_move_job.take() {
+            self.as_mut().build_move_composite(job);
+        }
         let outcome = presentation.declaration.clone().unwrap_or(edit);
         self.as_mut().present(presentation);
         outcome
@@ -408,6 +424,7 @@ impl qobject::PictureView {
         mut self: Pin<&mut Self>,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {

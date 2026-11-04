@@ -564,6 +564,7 @@ pub(super) fn filter_proxy_composite(
         return QImage::default();
     };
     let params: Vec<f64> = params.into_iter().copied().collect();
+    view.as_mut().settle_pending_composite();
     let mut rust = view.as_mut().rust_mut();
     pane_buffer(&mut rust, &kind.to_string(), &params, max_edge)
         .map_or_else(QImage::default, |buffer| {
@@ -582,6 +583,7 @@ pub(super) fn filter_canvas_proxy(
     scale: f64,
 ) -> QImage {
     let params: Vec<f64> = params.into_iter().copied().collect();
+    view.as_mut().settle_pending_composite();
     let Some(filter) = filter_from_kind_params(&kind.to_string(), &params) else {
         return QImage::default();
     };

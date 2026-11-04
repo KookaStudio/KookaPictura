@@ -447,6 +447,7 @@ impl qobject::PictureView {
     ) -> bool {
         paint_timing::start("stroke (begin -> commit)");
         let _begin = paint_timing::Scope::new("begin_total");
+        self.as_mut().settle_pending_composite();
         let cfg = StrokeConfig {
             color: rgba_from_argb(foreground),
             background: rgba_from_argb(background),

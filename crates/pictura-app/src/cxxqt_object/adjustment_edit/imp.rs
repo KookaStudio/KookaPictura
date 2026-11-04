@@ -98,6 +98,7 @@ pub(super) fn edit_adjustment(
     path: &QString,
     edit: impl FnOnce(&AdjustmentData) -> Option<AdjustmentData>,
 ) -> bool {
+    view.as_mut().settle_pending_composite();
     let path = path.to_string();
     {
         let mut rust = view.as_mut().rust_mut();

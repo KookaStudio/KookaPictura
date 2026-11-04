@@ -5,6 +5,7 @@ use super::*;
 
 impl qobject::PictureView {
     pub fn save(mut self: Pin<&mut Self>, path: &QString) -> bool {
+        self.as_mut().settle_pending_composite();
         let path_string = path.to_string();
         let suffix = format_for_path(&path_string);
         if matches!(suffix.as_str(), "pdf" | "pdp") {

@@ -9,6 +9,8 @@
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
+#include "pictura_app/src/cxxqt_object/impl_core/deferred_composite.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -56,6 +58,9 @@ private slots:
     void moveDoesNotWarmTheBackground();
     void layerPropertiesRepaintOnlyTheLayer();
     void aDocumentCanvasHoldsNoImage();
+    void aLargeMoveCommitLandsOffThread();
+    void aSmallMoveCommitIsSynchronous();
+    void aReadSettlesThePendingMove();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -201,6 +206,69 @@ void LargeDocumentTest::aDocumentCanvasHoldsNoImage()
     QCOMPARE(shown.size(), QSize(90, 50));
     QCOMPARE(shown.pixel(40, 20), QRgb(kRed));
     QCOMPARE(shown.pixel(40, 45), QRgb(kWhite));
+}
+
+// [mcr_deferred] [mcr_preview]
+void LargeDocumentTest::aLargeMoveCommitLandsOffThread()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_move"));
+    QVERIFY2(f.ok(), "deferred move fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    pictura::move_composite_set_delay(*f.view, 400);
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    // Stand in for the drag preview: the release keeps it until the composite
+    // lands.
+    f.canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY2(pictura::move_composite_pending(*f.view), "a large commit defers");
+    QVERIFY2(f.canvas->movePreviewActive(), "the preview survives the release");
+    QCOMPARE(committed.count(), 0);
+
+    QVERIFY(committed.wait(30000));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY2(!f.canvas->movePreviewActive(), "the signal drops the preview");
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [mcr_small_sync]
+void LargeDocumentTest::aSmallMoveCommitIsSynchronous()
+{
+    QImage seed(120, 60, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_sync_move"));
+    QVERIFY2(f.ok(), "sync move fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    QVERIFY(f.view->commit_move(2, 2));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QCOMPARE(committed.count(), 1);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [mcr_settle_read]
+void LargeDocumentTest::aReadSettlesThePendingMove()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_read_settles_move"));
+    QVERIFY2(f.ok(), "read settle fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(paintLine(*f.view, 100.0));
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    // The red line moved from row 100 to row 104; the stale composite still has
+    // white there, so the sample must settle the worker's composite first.
+    QCOMPARE(f.view->sample_argb(40, 104), kRed);
+    QVERIFY(!pictura::move_composite_pending(*f.view));
 }
 
 QTEST_MAIN(LargeDocumentTest)

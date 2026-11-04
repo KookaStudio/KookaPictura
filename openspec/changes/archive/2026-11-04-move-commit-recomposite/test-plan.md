@@ -1,0 +1,14 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `mcr_deferred` | On a small document, translate a canvas-sized layer, defer a move composite, run the job's region composite, and land it. | The landed `doc.composite` equals `composite_rgba(doc)`, level 0 matches it, and history gained one `Move Layer` state. | `pictura-app::a_landed_move_composite_matches_a_full_composite`; `tst_large_document::aLargeMoveCommitLandsOffThread` |
+| `mcr_small_sync` | Ask `should_defer_move` for a 16 MP document with a 16 MP union, a 15 MP union, and a 15 MP document. | Only the 16 MP/16 MP case defers. | `pictura-app::only_a_large_area_defers`; `tst_large_document::aSmallMoveCommitIsSynchronous` |
+| `mcr_busy_sync` | Ask `should_defer_move` with a live session, a pending preview, and a soloed mask on a large document. | None defers. | `pictura-app::a_busy_display_does_not_defer` |
+| `mcr_preview` | On a 4200² fixture, hold the worker result with the test delay, commit a canvas-sized layer move, and wait for `moveCommitted`. | `moveCommitted` is not emitted before the delay, the canvas keeps the preview, and the preview is gone after the signal. | `tst_large_document::aLargeMoveCommitLandsOffThread` |
+| `mcr_settle_edit` | Defer a move, then settle it and apply a second edit. | The settle captures one move state, the second edit starts from the moved composite, and history has both states. | `pictura-app::a_settled_composite_matches_a_full_composite`; `pictura-app::a_settle_before_an_edit_keeps_one_state` |
+| `mcr_settle_undo` | Defer a move on a one-state history and check `can_undo`/`can_redo`, then settle. | Undo is offered while pending, redo is not, and after settling the move state exists. | `pictura-app::can_undo_counts_a_pending_move` |
+| `mcr_settle_read` | Defer a move and read the picture accessor and a plain sample. | The accessor does not return the stale composite, and the sample returns the moved pixel after settling. | `pictura-app::a_pending_composite_is_not_current`; `tst_large_document::aReadSettlesThePendingMove` |
+| `mcr_stale` | Defer a move, settle it, then land the original job. | The late result is dropped and the settled document is unchanged. | `pictura-app::a_superseded_move_composite_is_dropped` |
+| `mcr_replace` | Defer a move and replace the document. | Nothing is pending and a late result cannot patch the replacement. | `pictura-app::a_replaced_document_drops_the_move_composite` |
+| `mcr_large_manual` | On a real display, drag and release a canvas-sized layer on a 16507×16196 document at fit zoom and at 100 %. | The release returns to the event loop, the preview remains until the composite lands, and the moved pixels appear. | manual: requires a real display and the 16507×16196 document; `move_gesture_profile` records the commit and settle times. |

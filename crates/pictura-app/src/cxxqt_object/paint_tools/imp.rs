@@ -654,6 +654,7 @@ pub(super) fn set_history_brush_source(
 }
 
 pub(super) fn replay_tool_stroke(mut view: Pin<&mut PictureView>, payload: &QString) -> bool {
+    view.as_mut().settle_pending_composite();
     let mut rust = view.as_mut().rust_mut();
     let rust = &mut *rust;
     tool_recording::replay_tool_stroke_json(rust, &payload.to_string()).is_ok()

@@ -18,7 +18,8 @@
 //! - the document retains a native-depth composite: saving rewrites
 //!   `doc.composite` from the native samples, which is not the 8-bit composite
 //!   the consumers read;
-//! - the composite's dimensions differ from the document's.
+//! - the composite's dimensions differ from the document's;
+//! - a large Move commit's composite is still on its worker (#1157).
 //!
 //! Anything else is a bug in an edit path: it changed pixels without
 //! refreshing the composite.
@@ -55,6 +56,7 @@ fn is_current(doc: &Document, view: &PictureViewRust) -> bool {
     !view.is_painting()
         && !view.has_lifted_transform()
         && !view.display_preview_presented()
+        && view.deferred_composite.is_none()
         && doc.source_depth.is_none()
         && pictura_render::DocumentComposite::is_shape_valid(doc)
 }

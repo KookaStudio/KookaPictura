@@ -99,6 +99,12 @@ fn move_gesture_profile() {
     ms("translate", t);
 
     let t = Instant::now();
-    view.apply_edit_move("Move Layer", Edit::regions(vec![dirty], false));
+    let applied = view.apply_edit_move("Move Layer", Edit::regions(vec![dirty], false));
     ms("commit edit", t);
+    println!("commit deferred: {}", view.move_composite_pending());
+    drop(applied);
+
+    let t = Instant::now();
+    view.settle_move_composite();
+    ms("commit settle (worker-equivalent)", t);
 }

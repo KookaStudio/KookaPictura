@@ -186,6 +186,7 @@ impl qobject::PictureView {
         paths: &QStringList,
         value: i32,
     ) -> i32 {
+        self.as_mut().settle_pending_composite();
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let (changed, presentation, saved) = {
@@ -215,6 +216,7 @@ impl qobject::PictureView {
     }
 
     pub fn preview_layers_fill(mut self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32 {
+        self.as_mut().settle_pending_composite();
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let (changed, presentation, saved) = {

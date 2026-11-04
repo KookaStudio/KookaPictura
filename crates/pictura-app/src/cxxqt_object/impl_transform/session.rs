@@ -168,6 +168,7 @@ impl qobject::PictureView {
         path: &QString,
         mode: TransformMode,
     ) -> bool {
+        self.as_mut().settle_pending_composite();
         if !self
             .rust()
             .slot_allows(super::super::document_session::SessionKind::Transform)
@@ -480,6 +481,7 @@ impl qobject::PictureView {
     /// Reuses the cached base when the content revision and move-group key
     /// match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
+        self.as_mut().settle_pending_composite();
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
@@ -509,6 +511,7 @@ impl qobject::PictureView {
     /// move-preview layer, no document change. Otherwise the active pixel layer
     /// is cloned, made active, and previewed.
     pub fn begin_move_duplicate(mut self: Pin<&mut Self>) -> bool {
+        self.as_mut().settle_pending_composite();
         if self.rust().session.selection.is_some() {
             return self.as_mut().begin_selection_duplicate_preview();
         }
@@ -531,6 +534,7 @@ impl qobject::PictureView {
     /// Move tool may not move (a Background) is never previewed, so it is not
     /// warmed either: the warm composites the whole document.
     pub fn prepare_move_preview(mut self: Pin<&mut Self>) -> bool {
+        self.as_mut().settle_pending_composite();
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
@@ -783,6 +787,11 @@ impl qobject::PictureView {
         };
         self.as_mut()
             .commit_move_edit("Move Layer", |_| Edit::regions(vec![dirty], false));
+        // A deferred commit reports when its composite lands; a synchronous one
+        // reports now so the canvas drops the drag preview either way.
+        if !self.rust().move_composite_pending() {
+            self.as_mut().move_committed();
+        }
         true
     }
 

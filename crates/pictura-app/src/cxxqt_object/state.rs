@@ -1,4 +1,4 @@
-use super::impl_core::DeferredPyramid;
+use super::impl_core::{DeferredComposite, DeferredPyramid};
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::{PixelBuffer, PsdRect};
@@ -157,6 +157,16 @@ pub struct PictureViewRust {
     pub(super) pending_pyramid_job: Option<super::impl_core::PyramidJob>,
     /// Numbers each deferred build, so a superseded result is recognised.
     pub(super) pyramid_generation: u64,
+    /// The Move commit's composite waiting for its worker (#1157).
+    pub(super) deferred_composite: Option<DeferredComposite>,
+    /// The job the QObject spawns after the transaction returns.
+    pub(super) pending_move_job: Option<super::impl_core::CompositeJob>,
+    /// Numbers each deferred Move composite, so a superseded result is
+    /// recognised.
+    pub(super) composite_generation: u64,
+    /// Test seam: hold a started Move composite's result for this many
+    /// milliseconds.
+    pub(super) move_composite_delay_for_test: u64,
     pub(super) link_sets: HashMap<String, u32>,
     /// The Ruler tool's measuring line: view state, never saved or undone.
     pub(super) ruler: Option<pictura_core::Ruler>,
@@ -279,6 +289,10 @@ impl Default for PictureViewRust {
             deferred_pyramid: None,
             pending_pyramid_job: None,
             pyramid_generation: 0,
+            deferred_composite: None,
+            pending_move_job: None,
+            composite_generation: 0,
+            move_composite_delay_for_test: 0,
             link_sets: HashMap::new(),
             ruler: None,
             canvas_proxy: None,

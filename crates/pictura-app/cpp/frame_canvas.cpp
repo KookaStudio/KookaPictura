@@ -190,6 +190,14 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
             forEachCanvas(*docs_.at(index), [](ImageView* canvas) { canvas->update(); });
         }
     });
+    // A large Move commit keeps its drag preview while a worker composites; the
+    // signal says the composite is current, so the preview can go.
+    connect(view, &PictureView::moveCommitted, this, [this, view] {
+        const int index = indexOfView(view);
+        if (index >= 0) {
+            forEachCanvas(*docs_.at(index), [](ImageView* canvas) { canvas->endMovePreview(); });
+        }
+    });
     // A canvas that holds its own image still takes the pixel path (the
     // non-document fallback).
     connect(view, &PictureView::regionBlitted, this,
