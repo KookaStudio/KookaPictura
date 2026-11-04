@@ -380,10 +380,40 @@ fn decode_embedded(so: &SmartObject) -> Option<PixelBuffer> {
         && comp.channels >= 1
         && comp.data.len() == comp.width as usize * comp.height as usize * comp.channels as usize;
     if embedded.merged_composite_present && usable {
-        Some(comp.clone())
+        // ponytail: depth-1 Bitmap extras stay packed, not 8-bit alpha.
+        let merged = embedded.source_mode != Some(pictura_core::ColorMode::Bitmap);
+        Some(if merged {
+            with_merged_alpha(comp, &embedded.channels)
+        } else {
+            comp.clone()
+        })
     } else {
         Some(crate::composite_rgba(&embedded))
     }
+}
+
+/// The stored merged composite with its first extra merged plane appended as
+/// alpha. `read_psd` splits the merged image data into color planes and
+/// document-level extra planes, so a flattened transparent source carries its
+/// transparency in `channels`, not in `composite`.
+///
+/// ponytail: the first extra merged plane is treated as transparency, matching
+/// `materialize_merged_composite`. A saved-selection or spot plane is
+/// indistinguishable here; upgrade by reading alpha-channel metadata or a
+/// background-layer discriminator if a real file shows it.
+fn with_merged_alpha(comp: &PixelBuffer, channels: &[pictura_core::Channel]) -> PixelBuffer {
+    let plane = comp.width as usize * comp.height as usize;
+    if plane == 0 || !matches!(comp.channels, 1 | 3) {
+        return comp.clone();
+    }
+    let Some(alpha) = channels.first().filter(|c| c.data.len() >= plane) else {
+        return comp.clone();
+    };
+    let colors = comp.channels as usize;
+    let mut out = PixelBuffer::new(comp.width, comp.height, comp.channels + 1);
+    out.data[..colors * plane].copy_from_slice(&comp.data[..colors * plane]);
+    out.data[colors * plane..].copy_from_slice(&alpha.data[..plane]);
+    out
 }
 
 /// The smart-filter chain output for `layer` at `layer.rect ∩ document`, or

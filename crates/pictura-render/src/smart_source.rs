@@ -42,6 +42,9 @@ pub(crate) fn scale_smart_source(
         return None;
     }
     let plane = src_w * src_h;
+    if src.data.len() < plane * ch {
+        return None;
+    }
 
     let lw = rect.width();
     let lh = rect.height();
@@ -78,6 +81,8 @@ pub(crate) fn scale_smart_source(
             };
             let a = if ch >= 4 {
                 src.data[3 * plane + si]
+            } else if ch == 2 {
+                src.data[plane + si]
             } else {
                 255
             };

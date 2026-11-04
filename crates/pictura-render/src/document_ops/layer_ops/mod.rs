@@ -64,8 +64,8 @@ pub use clipboard::{
     PasteMode,
 };
 pub use clipping::{
-    can_create_clipping_mask, can_release_clipping_mask, create_clipping_mask,
-    release_clipping_mask,
+    can_create_clipping_mask, can_release_clipping_mask, clipping_release_paths,
+    create_clipping_mask, release_clipping_mask,
 };
 pub(crate) use create::insert_node;
 pub use create::{
@@ -99,7 +99,9 @@ pub use move_content::{
     can_lift_selection, content_rect, lift_selection, merge_lifted, move_selection_content,
     trim_to_content, untrim_to,
 };
-pub use neutral::{duplicate_is_content_neutral, insertion_is_content_neutral};
+pub use neutral::{
+    duplicate_is_content_neutral, insertion_is_content_neutral, move_is_content_neutral,
+};
 pub use paths::{flatten_rows, is_background, parent_path, resolve_path, resolve_path_mut};
 pub use perspective_crop::{
     perspective_crop, perspective_crop_refusal, perspective_crop_size, perspective_crop_sized,

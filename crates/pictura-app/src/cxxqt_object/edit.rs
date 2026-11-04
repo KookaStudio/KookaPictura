@@ -37,10 +37,11 @@ pub(super) enum Edit {
     /// The edit invalidates positional links. `damage` bounds the regional
     /// refresh; `None` means full.
     Structural { damage: Option<Vec<PsdRect>> },
-    /// A content-neutral layer or group insertion (see
-    /// `pictura_render::insertion_is_content_neutral`): clear the positional
-    /// links like [`Edit::Structural`], but the stored composite and the
-    /// display already match the new tree, so nothing is composited.
+    /// A content-neutral layer or group insertion or move (see
+    /// `pictura_render::insertion_is_content_neutral` and
+    /// `pictura_render::move_is_content_neutral`): clear the positional links
+    /// like [`Edit::Structural`], but the stored composite and the display
+    /// already match the new tree, so nothing is composited.
     Inserted,
 }
 
@@ -223,9 +224,11 @@ impl PictureViewRust {
         let pending = self.pending_previews.any();
         let force_full = self.has_active_session() || pending || self.mask_solo.is_some();
         let edit = match edit {
-            // A live gesture leaves the stored composite stale and needs the
-            // full rebuild to end it.
-            Edit::Inserted if self.has_active_session() => Edit::Structural { damage: None },
+            // A live gesture or a pending preview leaves the stored composite
+            // stale and needs the full rebuild to end it.
+            Edit::Inserted if self.has_active_session() || pending => {
+                Edit::Structural { damage: None }
+            }
             // A pending preview or a soloed mask owns display state the
             // regional path does not repair.
             Edit::Structural { .. } if force_full => Edit::Structural { damage: None },

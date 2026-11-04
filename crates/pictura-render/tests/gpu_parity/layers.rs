@@ -267,6 +267,25 @@ fn embedded_object() -> SmartObject {
     so
 }
 
+/// An embedded source with a transparent right half, so a clipping base that
+/// renders it must confine its clipped layers to the opaque left half.
+fn embedded_object_with_transparent_margin() -> SmartObject {
+    let mut source = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
+    source.layers = LayerStack::from_layers(vec![layer("source", BlendMode::Normal, |x, _| {
+        if x < SIZE / 2 {
+            (200, 40, 20, 255)
+        } else {
+            (0, 0, 0, 0)
+        }
+    })]);
+    source.composite = composite_rgba(&source);
+    let payload = pictura_codec::write_psd(&source).expect("payload writes");
+    let mut so = SmartObject::default();
+    so.kind = SmartObjectKind::Embedded;
+    so.set_payload(payload);
+    so
+}
+
 fn lens_slots() -> [f64; 16] {
     [
         1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 25.0, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 0.0, 0.0, 100.0,
@@ -608,6 +627,20 @@ fn clipping_base_fill_and_effects_match_cpu() {
     let mut clipped = sub_layer("clipped", whole_rect(), (0, 255, 0, 255), BlendMode::Normal);
     clipped.clipping = true;
     let doc = doc_with(vec![base, clipped]);
+    let mut max_delta = 0i32;
+    check_scene_parity(&doc, &mut max_delta);
+}
+
+#[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+fn clipping_smart_source_matches_cpu() {
+    require_gpu();
+    let mut base = layer("smart base", BlendMode::Normal, |_, _| (0, 0, 0, 0));
+    base.channels = Vec::new();
+    base.smart_object = Some(embedded_object_with_transparent_margin());
+    let mut clipped = sub_layer("clipped", whole_rect(), (0, 255, 0, 255), BlendMode::Normal);
+    clipped.clipping = true;
+    let doc = doc_with(vec![base_layer(), base, clipped]);
     let mut max_delta = 0i32;
     check_scene_parity(&doc, &mut max_delta);
 }

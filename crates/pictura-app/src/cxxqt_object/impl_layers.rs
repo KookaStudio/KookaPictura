@@ -28,6 +28,32 @@ fn property_compositing(doc: &Document, path: &str) -> Option<(BlendMode, u8, u8
     pictura_render::resolve_path(doc, path).map(|layer| (layer.blend, layer.opacity, layer.fill))
 }
 
+/// The edit for a completed layer move: [`Edit::Inserted`] when the moved node
+/// draws nothing (inert or hidden) and is not a clipping base on either side,
+/// else the bounded structural edit.
+pub(super) fn move_edit(
+    before_doc: Option<&Document>,
+    after_doc: Option<&Document>,
+    path_before: &str,
+    path_after: Option<&str>,
+    before: Option<pictura_core::PsdRect>,
+) -> Edit {
+    let Some(path_after) = path_after else {
+        return structural(before, None);
+    };
+    let neutral = match (before_doc, after_doc) {
+        (Some(before_doc), Some(after_doc)) => {
+            pictura_render::move_is_content_neutral(before_doc, path_before, after_doc, path_after)
+        }
+        _ => false,
+    };
+    if neutral {
+        return Edit::Inserted;
+    }
+    let after = after_doc.and_then(|doc| pictura_render::damage::influence(doc, path_after));
+    structural(before, after)
+}
+
 pub(super) fn changed_property_region(
     doc: &Document,
     refs: &[&str],
@@ -602,9 +628,8 @@ impl qobject::PictureView {
     pub fn move_layer_path(mut self: Pin<&mut Self>, path: &QString, delta: i32) -> bool {
         let path = path.to_string();
         let edit = self.as_mut().edit("Move Layer", |rust| {
-            let before = rust
-                .session
-                .doc
+            let before_doc = rust.session.doc.clone();
+            let before = before_doc
                 .as_ref()
                 .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let moved = {
@@ -617,29 +642,35 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             let parent = pictura_render::parent_path(&path).unwrap_or("").to_string();
-            let after = if let (Some(index), Some(doc)) = (
-                path.rsplit('/')
-                    .next()
-                    .and_then(|segment| segment.parse::<usize>().ok()),
-                rust.session.doc.as_ref(),
-            ) {
-                if let Some(len) = container_len(doc, &parent) {
-                    if len > 0 {
-                        let index = (index as i32 + delta).clamp(0, len as i32 - 1) as usize;
-                        let landed = join_path(&parent, index);
-                        let after = pictura_render::damage::influence(doc, &landed);
-                        rust.select_only_layer(&landed);
-                        after
-                    } else {
-                        None
-                    }
-                } else {
-                    None
+            let landed = rust.session.doc.as_ref().and_then(|doc| {
+                let index = path.rsplit('/').next()?.parse::<usize>().ok()?;
+                let container = container_slice(doc, &parent)?;
+                let len = container.len();
+                if len == 0 {
+                    return None;
                 }
-            } else {
-                None
-            };
-            structural(before, after)
+                // Mirror `move_path`'s clamp exactly so the landed path names
+                // the moved node, not a different layer.
+                let floor = container
+                    .iter()
+                    .rposition(|layer| layer.background)
+                    .map_or(0, |at| at + 1);
+                if index < floor || floor > len - 1 {
+                    return None;
+                }
+                let target = (index as i32 + delta).clamp(floor as i32, len as i32 - 1) as usize;
+                Some(join_path(&parent, target))
+            });
+            if let Some(landed) = landed.as_deref() {
+                rust.select_only_layer(landed);
+            }
+            move_edit(
+                before_doc.as_ref(),
+                rust.session.doc.as_ref(),
+                &path,
+                landed.as_deref(),
+                before,
+            )
         });
         !matches!(edit, Edit::None)
     }
@@ -653,9 +684,8 @@ impl qobject::PictureView {
         let path = path.to_string();
         let target = target.to_string();
         let edit = self.as_mut().edit("Move Layer", |rust| {
-            let before = rust
-                .session
-                .doc
+            let before_doc = rust.session.doc.clone();
+            let before = before_doc
                 .as_ref()
                 .and_then(|doc| pictura_render::damage::influence(doc, &path));
             let moved = {
@@ -668,12 +698,13 @@ impl qobject::PictureView {
                 return Edit::None;
             };
             rust.select_only_layer(&moved);
-            let after = rust
-                .session
-                .doc
-                .as_ref()
-                .and_then(|doc| pictura_render::damage::influence(doc, &moved));
-            structural(before, after)
+            move_edit(
+                before_doc.as_ref(),
+                rust.session.doc.as_ref(),
+                &path,
+                Some(&moved),
+                before,
+            )
         });
         !matches!(edit, Edit::None)
     }

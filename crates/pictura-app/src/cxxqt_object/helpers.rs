@@ -882,12 +882,16 @@ pub(super) fn join_path(parent: &str, index: usize) -> String {
     }
 }
 
-/// Number of children in the container named by `parent` (empty = document).
-pub(super) fn container_len(doc: &Document, parent: &str) -> Option<usize> {
+/// Children of the container named by `parent` (empty = document).
+pub(super) fn container_slice<'a>(doc: &'a Document, parent: &str) -> Option<&'a [Layer]> {
     if parent.is_empty() {
-        Some(doc.layers.len())
+        Some(doc.layers.as_slice())
     } else {
-        pictura_render::resolve_path(doc, parent).map(|layer| layer.children.len())
+        Some(
+            pictura_render::resolve_path(doc, parent)?
+                .children
+                .as_slice(),
+        )
     }
 }
 
