@@ -1,6 +1,7 @@
 // Structural-edit damage bounds: a bounded delete/reorder/group emits one
 // region update, an unbounded edit rebuilds the canvas (#970). A shape layer's
-// Move and Path Selection drag refresh only the shape's reach (#1185).
+// Move and Path Selection drag refresh only the shape's reach, the drag on
+// its release (#1185).
 
 #include <QtTest/QtTest>
 #include <QtTest/QSignalSpy>
@@ -191,13 +192,18 @@ void DamageBoundsTest::shapePathDragRefreshesItsReach()
     QVERIFY(!addShape(40, 40, 80, 80).isEmpty());
     pictura::path_set_layer_target(*view_, true);
     QSignalSpy damaged(view_, &pictura::PictureView::regionDamaged);
-    QVERIFY(pictura::path_move_subpath(*view_, 0, 30.0, 20.0));
+    QVERIFY(pictura::path_move_subpath(*view_, 0, 20.0, 10.0));
+    QVERIFY(pictura::path_move_subpath(*view_, 0, 10.0, 10.0));
     QCoreApplication::processEvents();
-    QVERIFY2(damaged.count() >= 1, "a drag step refreshes a region");
+    QCOMPARE(damaged.count(), 0);
+    QCOMPARE(view_->sample_argb(45, 45), kShapeRed);
+
+    pictura::path_commit_drag(*view_, "Drag Path");
+    QCoreApplication::processEvents();
+    QCOMPARE(damaged.count(), 1);
     const QSize reach = lastDamage(damaged);
     QVERIFY2(reach.width() <= 80 && reach.height() <= 80,
-             "a drag step refreshes the shape before and after, not the canvas");
-    pictura::path_commit_drag(*view_, "Drag Path");
+             "the release refreshes the shape before and after, not the canvas");
     QCOMPARE(view_->sample_argb(100, 80), kShapeRed);
     QCOMPARE(view_->sample_argb(45, 45), kPaper);
 }
