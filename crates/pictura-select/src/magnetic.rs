@@ -1,7 +1,8 @@
 //! Edge snapping for the Magnetic Lasso: a *live wire*. The segment from the
 //! last fastening point to the pointer is the cheapest path through an
-//! edge-cost field, so it clings to the boundary being traced. The field is
-//! built once per gesture; each pointer move is one bounded Dijkstra query.
+//! edge-cost field, so it clings to the boundary being traced. The field's
+//! peak is found once per gesture and its tiles on first read; each pointer
+//! move is one bounded Dijkstra query.
 //!
 //! **Contrast** (1–100 %) is the gradient strength below which nothing counts
 //! as an edge; **Width** is how far either side of the straight segment the
@@ -17,8 +18,10 @@
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use std::sync::OnceLock;
 
 use pictura_core::PixelBuffer;
+use rayon::prelude::*;
 
 /// Largest corridor, in pixels, a single trace explores. The wire is re-traced
 /// on every pointer move, so past this the query returns a straight line — a
@@ -29,80 +32,171 @@ const MAX_TRACE_PIXELS: usize = 1 << 20;
 /// short route over a long detour along a slightly stronger edge.
 const STEP_COST: f32 = 0.05;
 
+/// Side of the square tiles the cost field is computed in, on first read.
+const TILE: usize = 128;
+
 /// A per-pixel traversal cost field: 0 on a strong edge, 1 on a flat area.
-#[derive(Clone, Debug)]
+///
+/// Only the gradient peak is found up front, in one parallel pass that keeps
+/// nothing; the costs themselves are computed per tile the first time a trace
+/// reads one, so a press on a large document no longer builds document-sized
+/// planes (#1185).
+#[derive(Clone)]
 pub struct EdgeMap {
     width: u32,
     height: u32,
-    cost: Vec<f32>,
+    /// `None` when nothing can snap (a flat, tiny, or short buffer): every
+    /// cost is 1.
+    field: Option<Field>,
+}
+
+#[derive(Clone)]
+struct Field {
+    buffer: PixelBuffer,
+    peak: f32,
+    threshold: f32,
+    span: f32,
+    tiles_x: usize,
+    tiles: Vec<OnceLock<Box<[f32]>>>,
+}
+
+impl std::fmt::Debug for EdgeMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EdgeMap")
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("peak", &self.field.as_ref().map(|field| field.peak))
+            .finish()
+    }
+}
+
+/// The luma of row `y` from column `x0`, one value per `out` entry.
+fn luma_row(buffer: &PixelBuffer, data: &[u8], y: usize, x0: usize, out: &mut [f32]) {
+    let w = buffer.width as usize;
+    let plane = w * buffer.height as usize;
+    let row = y * w + x0;
+    for (x, l) in out.iter_mut().enumerate() {
+        let i = row + x;
+        *l = if buffer.channels >= 3 {
+            0.299 * data[i] as f32
+                + 0.587 * data[plane + i] as f32
+                + 0.114 * data[2 * plane + i] as f32
+        } else {
+            data[i] as f32
+        };
+    }
+}
+
+/// The Sobel magnitude at entry `i` of the middle row of `rows`.
+fn sobel(rows: [&[f32]; 3], i: usize) -> f32 {
+    let at = |dx: usize, dy: usize| rows[dy][i + dx - 1];
+    let gx = -at(0, 0) - 2.0 * at(0, 1) - at(0, 2) + at(2, 0) + 2.0 * at(2, 1) + at(2, 2);
+    let gy = -at(0, 0) - 2.0 * at(1, 0) - at(2, 0) + at(0, 2) + 2.0 * at(1, 2) + at(2, 2);
+    (gx * gx + gy * gy).sqrt()
+}
+
+/// The strongest Sobel magnitude inside the one-pixel border, in parallel
+/// bands that each roll three luma rows.
+fn peak(buffer: &PixelBuffer, data: &[u8]) -> f32 {
+    let (w, h) = (buffer.width as usize, buffer.height as usize);
+    let bands = (1..h - 1).step_by(TILE).collect::<Vec<_>>();
+    bands
+        .into_par_iter()
+        .map(|top| {
+            let bottom = (top + TILE).min(h - 1);
+            let mut rows = [vec![0f32; w], vec![0f32; w], vec![0f32; w]];
+            luma_row(buffer, data, top - 1, 0, &mut rows[0]);
+            luma_row(buffer, data, top, 0, &mut rows[1]);
+            let mut best = 0f32;
+            for y in top..bottom {
+                luma_row(buffer, data, y + 1, 0, &mut rows[2]);
+                for x in 1..w - 1 {
+                    best = best.max(sobel([&rows[0], &rows[1], &rows[2]], x));
+                }
+                rows.rotate_left(1);
+            }
+            best
+        })
+        .reduce(|| 0.0, f32::max)
+}
+
+impl Field {
+    /// The costs of tile `(tx, ty)`, row-major over its clipped extent.
+    fn tile(&self, tx: usize, ty: usize) -> &[f32] {
+        self.tiles[ty * self.tiles_x + tx].get_or_init(|| {
+            let (w, h) = (self.buffer.width as usize, self.buffer.height as usize);
+            let (x0, y0) = (tx * TILE, ty * TILE);
+            let (x1, y1) = ((x0 + TILE).min(w), (y0 + TILE).min(h));
+            let data = self.buffer.data.as_slice();
+            let mut costs = vec![1.0f32; (x1 - x0) * (y1 - y0)];
+            // The tile's columns and the one either side the kernel reads.
+            let (lx0, lx1) = (x0.saturating_sub(1), (x1 + 1).min(w));
+            let mut rows = [0, 1, 2].map(|_| vec![0f32; lx1 - lx0]);
+            for y in y0.max(1)..y1.min(h - 1) {
+                for (k, row) in rows.iter_mut().enumerate() {
+                    luma_row(&self.buffer, data, y + k - 1, lx0, row);
+                }
+                let out = &mut costs[(y - y0) * (x1 - x0)..(y - y0 + 1) * (x1 - x0)];
+                for x in x0.max(1)..x1.min(w - 1) {
+                    let g = sobel([&rows[0], &rows[1], &rows[2]], x - lx0);
+                    let strength = ((g / self.peak - self.threshold) / self.span).clamp(0.0, 1.0);
+                    out[x - x0] = 1.0 - strength;
+                }
+            }
+            costs.into_boxed_slice()
+        })
+    }
+
+    fn cost(&self, x: usize, y: usize) -> f32 {
+        let w = self.buffer.width as usize;
+        let tile_w = (w - (x / TILE) * TILE).min(TILE);
+        self.tile(x / TILE, y / TILE)[(y % TILE) * tile_w + x % TILE]
+    }
 }
 
 impl EdgeMap {
     /// Build the cost field from a planar composite (1–2 planes read as gray,
     /// 3+ as RGB). Gradients below `contrast` % of the image's peak are
     /// flattened to "no edge"; what survives is rescaled across the remaining
-    /// range.
+    /// range. The buffer is kept (a plane clone is a refcount), and a tile's
+    /// costs are computed when a trace first reads it.
     pub fn from_buffer(buffer: &PixelBuffer, contrast: u32) -> Self {
         let (width, height) = (buffer.width, buffer.height);
         let (w, h) = (width as usize, height as usize);
-        let mut cost = vec![1.0f32; w * h];
+        let flat = Self {
+            width,
+            height,
+            field: None,
+        };
         if width < 3 || height < 3 || buffer.data.len() < w * h * buffer.channels as usize {
-            return Self {
-                width,
-                height,
-                cost,
-            };
+            return flat;
         }
-
-        let plane = w * h;
-        let luma: Vec<f32> = (0..plane)
-            .map(|i| {
-                if buffer.channels >= 3 {
-                    0.299 * buffer.data[i] as f32
-                        + 0.587 * buffer.data[plane + i] as f32
-                        + 0.114 * buffer.data[2 * plane + i] as f32
-                } else {
-                    buffer.data[i] as f32
-                }
-            })
-            .collect();
-
-        // Sobel, skipping the one-pixel border; those pixels keep the maximum
-        // cost, which also stops the wire running along the canvas edge.
-        let mut magnitude = vec![0.0f32; plane];
-        let mut peak = 0.0f32;
-        for y in 1..h - 1 {
-            for x in 1..w - 1 {
-                let at = |dx: usize, dy: usize| luma[(y + dy - 1) * w + (x + dx - 1)];
-                let gx =
-                    -at(0, 0) - 2.0 * at(0, 1) - at(0, 2) + at(2, 0) + 2.0 * at(2, 1) + at(2, 2);
-                let gy =
-                    -at(0, 0) - 2.0 * at(1, 0) - at(2, 0) + at(0, 2) + 2.0 * at(1, 2) + at(2, 2);
-                let g = (gx * gx + gy * gy).sqrt();
-                magnitude[y * w + x] = g;
-                peak = peak.max(g);
-            }
-        }
+        let peak = peak(buffer, buffer.data.as_slice());
         if peak <= 0.0 {
             // A flat image has nothing to snap to; the wire comes out straight.
-            return Self {
-                width,
-                height,
-                cost,
-            };
+            return flat;
         }
-
         let threshold = contrast.clamp(1, 100) as f32 / 100.0;
-        let span = (1.0 - threshold).max(1e-6);
-        for (c, &g) in cost.iter_mut().zip(&magnitude) {
-            let strength = ((g / peak - threshold) / span).clamp(0.0, 1.0);
-            *c = 1.0 - strength;
-        }
+        let tiles_x = w.div_ceil(TILE);
         Self {
             width,
             height,
-            cost,
+            field: Some(Field {
+                buffer: buffer.clone(),
+                peak,
+                threshold,
+                span: (1.0 - threshold).max(1e-6),
+                tiles_x,
+                tiles: (0..tiles_x * h.div_ceil(TILE))
+                    .map(|_| OnceLock::new())
+                    .collect(),
+            }),
         }
+    }
+
+    /// The traversal cost of pixel `(x, y)`, which must be on the canvas.
+    fn cost(&self, x: usize, y: usize) -> f32 {
+        self.field.as_ref().map_or(1.0, |field| field.cost(x, y))
     }
 
     pub fn width(&self) -> u32 {
@@ -183,7 +277,7 @@ impl EdgeMap {
                 if settled[next] {
                     continue;
                 }
-                let edge = self.cost[ny as usize * self.width as usize + nx as usize];
+                let edge = self.cost(nx as usize, ny as usize);
                 let candidate = best[at] + (edge + STEP_COST) * length;
                 if candidate < best[next] {
                     best[next] = candidate;
@@ -423,6 +517,104 @@ mod tests {
         assert_eq!(
             EdgeMap::from_buffer(&short, 10).trace((1, 1), (1, 1), 4),
             vec![(1, 1)]
+        );
+    }
+
+    /// The eager field the tiles replaced, kept as their oracle.
+    fn eager(buffer: &PixelBuffer, contrast: u32) -> Vec<f32> {
+        let (w, h) = (buffer.width as usize, buffer.height as usize);
+        let plane = w * h;
+        let data = buffer.data.as_slice();
+        let luma: Vec<f32> = (0..plane)
+            .map(|i| {
+                if buffer.channels >= 3 {
+                    0.299 * data[i] as f32
+                        + 0.587 * data[plane + i] as f32
+                        + 0.114 * data[2 * plane + i] as f32
+                } else {
+                    data[i] as f32
+                }
+            })
+            .collect();
+        let mut magnitude = vec![0.0f32; plane];
+        let mut peak = 0.0f32;
+        for y in 1..h - 1 {
+            for x in 1..w - 1 {
+                let at = |dx: usize, dy: usize| luma[(y + dy - 1) * w + (x + dx - 1)];
+                let gx =
+                    -at(0, 0) - 2.0 * at(0, 1) - at(0, 2) + at(2, 0) + 2.0 * at(2, 1) + at(2, 2);
+                let gy =
+                    -at(0, 0) - 2.0 * at(1, 0) - at(2, 0) + at(0, 2) + 2.0 * at(1, 2) + at(2, 2);
+                let g = (gx * gx + gy * gy).sqrt();
+                magnitude[y * w + x] = g;
+                peak = peak.max(g);
+            }
+        }
+        let mut cost = vec![1.0f32; plane];
+        if peak <= 0.0 {
+            return cost;
+        }
+        let threshold = contrast.clamp(1, 100) as f32 / 100.0;
+        let span = (1.0 - threshold).max(1e-6);
+        for (c, &g) in cost.iter_mut().zip(&magnitude) {
+            *c = 1.0 - ((g / peak - threshold) / span).clamp(0.0, 1.0);
+        }
+        cost
+    }
+
+    fn noise(width: u32, height: u32, channels: u8) -> PixelBuffer {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let data = (0..width as usize * height as usize * channels as usize)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 56) as u8
+            })
+            .collect::<Vec<u8>>();
+        PixelBuffer {
+            width,
+            height,
+            channels,
+            data: data.into(),
+        }
+    }
+
+    #[test]
+    fn lazy_tiles_equal_the_eager_field() {
+        let images = [
+            noise(300, 200, 3),
+            noise(129, 257, 1),
+            vertical_edge(140, 130, 70),
+            gray(150, 150, 9),
+        ];
+        for image in &images {
+            for contrast in [1, 10, 60] {
+                let map = EdgeMap::from_buffer(image, contrast);
+                let expected = eager(image, contrast);
+                let w = image.width as usize;
+                for (i, &want) in expected.iter().enumerate() {
+                    let got = map.cost(i % w, i / w);
+                    assert_eq!(
+                        got.to_bits(),
+                        want.to_bits(),
+                        "pixel {i} at contrast {contrast}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_press_computes_no_tile() {
+        let map = EdgeMap::from_buffer(&noise(600, 500, 3), 10);
+        let field = map.field.as_ref().expect("noise has edges");
+        assert!(field.tiles.iter().all(|t| t.get().is_none()));
+        map.trace((10, 10), (60, 30), 8);
+        let built = field.tiles.iter().filter(|t| t.get().is_some()).count();
+        assert!(
+            built > 0 && built < field.tiles.len(),
+            "built {built} tiles"
         );
     }
 }
