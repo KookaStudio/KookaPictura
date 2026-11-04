@@ -17,7 +17,8 @@ use swash::scale::ScaleContext;
 use swash::zeno::{Command, Mask, Point, Vector, Verb};
 
 use crate::text_render::{glyph_matrix, BundledText};
-use crate::type_layer::{flat_layout, map, type_placement, TypePlacement};
+use crate::type_box::TypePlacement;
+use crate::type_layer::{flat_layout, map, type_placement};
 use crate::type_style::RunStyle;
 
 /// Why Warp Text refuses a type layer.

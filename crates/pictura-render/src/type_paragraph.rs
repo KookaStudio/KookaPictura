@@ -15,7 +15,8 @@ use pictura_core::{CharacterAttrs, ParagraphAttrs, TypeSpec};
 
 use crate::fonts::face_for;
 use crate::text_render::BundledText;
-use crate::type_layer::{align_factor, leading_px, map, type_lines, type_placement};
+use crate::type_box::type_layout_box;
+use crate::type_layer::{align_factor, leading_px, map, type_lines};
 use crate::type_style::shape_styled;
 
 /// Float slack: a line measured at exactly the box width still fits it.
@@ -26,12 +27,36 @@ const FIT: f32 = 0.01;
 pub(crate) struct VisualLine {
     pub text: String,
     pub soft: bool,
+    /// The first visual line of its paragraph.
+    pub first: bool,
 }
 
-/// The laid-out lines, of which the first `visible` fit the box.
+/// Where a visual line sits inside its paragraph box. Horizontal type uses the
+/// inline axis for `start`/`extent` and the block axis for `block`; vertical
+/// type swaps them, with `block` measured from the box's right edge.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct LineBox {
+    /// Left (horizontal) or top (vertical) edge.
+    pub start: f32,
+    /// Width (horizontal) or height (vertical) available to the line.
+    pub extent: f32,
+    /// Baseline from the box top (horizontal) or the column centre's distance
+    /// from the box right edge (vertical).
+    pub block: f32,
+}
+
+/// The laid-out lines, of which the first `visible` fit the box. `inline_size`
+/// is the natural width (horizontal) or height (vertical) before indents;
+/// `inline_low`/`inline_high` are the ink's inline extent and `block_size` the
+/// block extent including paragraph spacing.
 pub(crate) struct Lines {
     pub lines: Vec<VisualLine>,
+    pub boxes: Vec<LineBox>,
     pub visible: usize,
+    pub inline_size: f32,
+    pub inline_low: f32,
+    pub inline_high: f32,
+    pub block_size: f32,
 }
 
 impl Lines {
@@ -109,12 +134,19 @@ pub(crate) fn vertical_cell(bundled: &BundledText, c: &CharacterAttrs) -> f32 {
     (bundled.ascent(size) + bundled.descent(size)) * (c.vertical_scale / 100.0) as f32
 }
 
-/// Break `line` to `width` and append its pieces to `out`.
+/// Break `line` to the first piece's width and then the remaining width, and
+/// append its pieces to `out`.
 ///
 /// ponytail: each candidate break re-shapes its prefix, so a line costs
 /// O(n²) shaping in its length (a single long unbroken word most of all).
 /// Fine for interactive type; cache per-glyph advances if long paragraphs lag.
-fn wrap_line(line: &str, width: f32, measure: &dyn Fn(&str) -> f32, out: &mut Vec<VisualLine>) {
+fn wrap_line(
+    line: &str,
+    first_width: f32,
+    rest_width: f32,
+    measure: &dyn Fn(&str) -> f32,
+    out: &mut Vec<VisualLine>,
+) {
     let chars: Vec<char> = line.chars().collect();
     let n = chars.len();
     let text = |a: usize, b: usize| chars[a..b].iter().collect::<String>();
@@ -122,11 +154,14 @@ fn wrap_line(line: &str, width: f32, measure: &dyn Fn(&str) -> f32, out: &mut Ve
         out.push(VisualLine {
             text: String::new(),
             soft: false,
+            first: true,
         });
         return;
     }
     let mut start = 0;
+    let mut first = true;
     while start < n {
+        let width = if first { first_width } else { rest_width };
         // The furthest break (after a run of spaces, or the line's end) whose
         // ink fits the width.
         let mut best = None;
@@ -154,13 +189,21 @@ fn wrap_line(line: &str, width: f32, measure: &dyn Fn(&str) -> f32, out: &mut Ve
         out.push(VisualLine {
             text: text(start, end),
             soft: end < n,
+            first,
         });
         start = end;
+        first = false;
     }
 }
 
 /// The lines `text` sets in: its hard lines for point type (`box_bounds`
 /// `None`), else wrapped to the box with the fitting count in `visible`.
+///
+/// Each line carries the column its paragraph's indents leave it, and the block
+/// offset its paragraph spacing leaves it. The first line of a paragraph adds
+/// `first_line_indent` to the left (top) indent; a negative value hangs it into
+/// the margin. Space before/after offsets baselines (horizontal) or the gaps
+/// between columns (vertical).
 pub(crate) fn visual_lines(
     bundled: &BundledText,
     text: &str,
@@ -170,54 +213,214 @@ pub(crate) fn visual_lines(
     paragraph: &ParagraphAttrs,
 ) -> Lines {
     let hard = type_lines(text);
-    let Some(b) = box_bounds else {
-        return Lines {
-            visible: hard.len(),
-            lines: hard
-                .into_iter()
-                .map(|text| VisualLine { text, soft: false })
-                .collect(),
-        };
-    };
     let size = c.size as f32;
     let leading = leading_px(size, c.leading, paragraph.auto_leading);
-    let (width, height) = ((b[2] - b[0]) as f32, (b[3] - b[1]) as f32);
-    let mut lines = Vec::new();
-    let fitting = if vertical {
+    let ascent = bundled.ascent(size);
+    let descent = bundled.descent(size);
+    let factor = align_factor(paragraph.justify.index());
+    let start_indent = paragraph.start_indent as f32;
+    let end_indent = paragraph.end_indent as f32;
+    let first_indent = paragraph.first_line_indent as f32;
+    let space_before = paragraph.space_before as f32;
+    let space_after = paragraph.space_after as f32;
+
+    if vertical {
         let cell = vertical_cell(bundled, c);
-        let per = (((height + FIT) / cell).floor() as usize).max(1);
-        for line in &hard {
+        let inline_size = match box_bounds {
+            Some(b) => (b[3] - b[1]) as f32,
+            None => {
+                hard.iter()
+                    .map(|line| line.chars().count())
+                    .max()
+                    .unwrap_or(0) as f32
+                    * cell
+            }
+        };
+        let mut lines = Vec::new();
+        let mut boxes = Vec::new();
+        let mut block = leading / 2.0 + space_before;
+        for (p, line) in hard.iter().enumerate() {
+            let extent = inline_size - start_indent - end_indent - first_indent;
+            if box_bounds.is_none() {
+                lines.push(VisualLine {
+                    text: line.clone(),
+                    soft: false,
+                    first: true,
+                });
+                boxes.push(LineBox {
+                    start: start_indent + first_indent,
+                    extent,
+                    block,
+                });
+                block += leading + space_after;
+                if p + 1 < hard.len() {
+                    block += space_before;
+                }
+                continue;
+            }
             let chars: Vec<char> = line.chars().collect();
             if chars.is_empty() {
                 lines.push(VisualLine {
                     text: String::new(),
                     soft: false,
+                    first: true,
                 });
+                boxes.push(LineBox {
+                    start: start_indent + first_indent,
+                    extent,
+                    block,
+                });
+                block += leading + space_after;
+                if p + 1 < hard.len() {
+                    block += space_before;
+                }
+                continue;
             }
-            let count = chars.chunks(per).count();
-            for (k, column) in chars.chunks(per).enumerate() {
+            let mut index = 0;
+            let mut first = true;
+            while index < chars.len() {
+                let extra = if first { first_indent } else { 0.0 };
+                let extent = inline_size - start_indent - end_indent - extra;
+                let per = (((extent + FIT) / cell).floor() as usize).max(1);
+                let end = (index + per).min(chars.len());
                 lines.push(VisualLine {
-                    text: column.iter().collect(),
-                    soft: k + 1 < count,
+                    text: chars[index..end].iter().collect(),
+                    soft: end < chars.len(),
+                    first,
                 });
+                boxes.push(LineBox {
+                    start: start_indent + extra,
+                    extent,
+                    block,
+                });
+                block += leading;
+                index = end;
+                first = false;
+            }
+            block += space_after;
+            if p + 1 < hard.len() {
+                block += space_before;
             }
         }
-        ((width + FIT) / leading).floor() as usize
-    } else {
-        let measure = |s: &str| line_advance_with(bundled, s, c, paragraph);
-        for line in &hard {
-            wrap_line(line, width, &measure, &mut lines);
-        }
-        let line_height = bundled.ascent(size) + bundled.descent(size);
-        if height + FIT < line_height {
-            0
-        } else {
-            ((height + FIT - line_height) / leading).floor() as usize + 1
+        let block_size = block - leading / 2.0;
+        let visible = match box_bounds {
+            Some(b) => {
+                let width = (b[2] - b[0]) as f32;
+                boxes
+                    .iter()
+                    .take_while(|line| line.block + leading / 2.0 <= width + FIT)
+                    .count()
+            }
+            None => lines.len(),
+        };
+        let (inline_low, inline_high) = inline_bounds(&lines, &boxes, factor, |text| {
+            text.chars().count() as f32 * cell
+        });
+        return Lines {
+            lines,
+            boxes,
+            visible,
+            inline_size,
+            inline_low,
+            inline_high,
+            block_size,
+        };
+    }
+
+    let run = crate::type_style::RunStyle::of(bundled, c);
+    let overhang = ascent * run.skew + run.embolden;
+    let inline_size = match box_bounds {
+        Some(b) => (b[2] - b[0]) as f32,
+        None => {
+            hard.iter()
+                .map(|line| line_advance_with(bundled, line, c, paragraph))
+                .fold(0.0f32, f32::max)
+                + overhang
         }
     };
+    let line_height = ascent + descent;
+    let measure = |s: &str| line_advance_with(bundled, s, c, paragraph);
+    let mut lines = Vec::new();
+    let mut boxes = Vec::new();
+    let mut block = space_before;
+    let mut last_baseline = 0.0f32;
+    for (p, line) in hard.iter().enumerate() {
+        let before = lines.len();
+        if box_bounds.is_some() {
+            wrap_line(
+                line,
+                inline_size - start_indent - end_indent - first_indent,
+                inline_size - start_indent - end_indent,
+                &measure,
+                &mut lines,
+            );
+        } else {
+            lines.push(VisualLine {
+                text: line.clone(),
+                soft: false,
+                first: true,
+            });
+        }
+        for (k, line) in lines[before..].iter().enumerate() {
+            let extra = if line.first { first_indent } else { 0.0 };
+            let line_block = block + k as f32 * leading;
+            boxes.push(LineBox {
+                start: start_indent + extra,
+                extent: inline_size - start_indent - end_indent - extra,
+                block: line_block,
+            });
+            last_baseline = line_block;
+        }
+        block += lines[before..].len() as f32 * leading + space_after;
+        if p + 1 < hard.len() {
+            block += space_before;
+        }
+    }
+    let block_size = last_baseline + line_height + space_after;
+    let visible = match box_bounds {
+        Some(b) => {
+            let height = (b[3] - b[1]) as f32;
+            boxes
+                .iter()
+                .take_while(|line| line.block + line_height <= height + FIT)
+                .count()
+        }
+        None => lines.len(),
+    };
+    let (inline_low, inline_high) = inline_bounds(&lines, &boxes, factor, |text| {
+        line_advance_with(bundled, text, c, paragraph)
+    });
     Lines {
-        visible: fitting.min(lines.len()),
         lines,
+        boxes,
+        visible,
+        inline_size,
+        inline_low,
+        inline_high,
+        block_size,
+    }
+}
+
+/// The laid-out ink's inline extent: the first edge and the last edge of every
+/// line's advance after alignment.
+fn inline_bounds(
+    lines: &[VisualLine],
+    boxes: &[LineBox],
+    factor: f32,
+    advance: impl Fn(&str) -> f32,
+) -> (f32, f32) {
+    let mut low = f32::MAX;
+    let mut high = f32::MIN;
+    for (line, line_box) in lines.iter().zip(boxes) {
+        let advance = advance(&line.text);
+        let start = line_box.start + (line_box.extent - advance) * factor;
+        low = low.min(start);
+        high = high.max(start + advance);
+    }
+    if low == f32::MAX {
+        (0.0, 0.0)
+    } else {
+        (low, high)
     }
 }
 
@@ -254,7 +457,7 @@ pub fn type_to_paragraph(spec: &TypeSpec) -> Option<TypeSpec> {
     if spec.path.is_some() || spec.box_bounds.is_some() {
         return None;
     }
-    let bounds = type_placement(spec)?.bounds;
+    let bounds = type_layout_box(spec)?;
     Some(TypeSpec {
         box_bounds: Some(bounds),
         ..spec.clone()
@@ -281,13 +484,17 @@ pub fn type_to_point(spec: &TypeSpec) -> Option<TypeSpec> {
     );
     let size = c.size as f32;
     let factor = f64::from(align_factor(spec.justification()));
+    let space_before = spec.paragraph.space_before;
     let (u, v) = if spec.vertical {
         let leading = f64::from(leading_px(size, c.leading, spec.paragraph.auto_leading));
-        (b[2] - leading / 2.0, b[1] + (b[3] - b[1]) * factor)
+        (
+            b[2] - leading / 2.0 - space_before,
+            b[1] + (b[3] - b[1]) * factor,
+        )
     } else {
         (
             b[0] + (b[2] - b[0]) * factor,
-            b[1] + f64::from(bundled.ascent(size)),
+            b[1] + f64::from(bundled.ascent(size)) + space_before,
         )
     };
     Some(TypeSpec {
@@ -536,5 +743,196 @@ mod tests {
             "returns at the wraps, overflow dropped"
         );
         assert!(type_to_point(&point).is_none());
+    }
+
+    fn layout_of(spec: &TypeSpec) -> pictura_core::TextLayout {
+        let bundled = face_for(&spec.character.font_family, &spec.character.font_style).unwrap();
+        let placement = crate::type_layer::type_placement(spec).unwrap();
+        crate::text_render::layout_type(
+            bundled,
+            &crate::type_layer::render_view(spec),
+            placement.rect.width(),
+            placement.rect.height(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn paragraph_indents_shape_the_box_lines() {
+        let text = "aaaa bbbb cccc dddd eeee ffff gggg hhhh";
+        let plain = layout_of(&boxed(text, 200.0, 400.0));
+        let mut s = boxed(text, 200.0, 400.0);
+        s.paragraph.start_indent = 20.0;
+        s.paragraph.end_indent = 10.0;
+        s.paragraph.first_line_indent = 15.0;
+        let indented = layout_of(&s);
+        assert!(
+            indented.lines.len() > plain.lines.len(),
+            "the indent narrows the wrap"
+        );
+        assert!((indented.lines[0].glyphs[0].x - 35.0).abs() < 0.01);
+        assert!((indented.lines[1].glyphs[0].x - 20.0).abs() < 0.01);
+        for line in &indented.lines {
+            let right = line.glyphs[0].x + line.advance;
+            assert!(right <= 190.0 + FIT, "line ends at {right}");
+        }
+
+        // A negative first-line indent hangs into the left margin.
+        s.paragraph.first_line_indent = -15.0;
+        let hanging = layout_of(&s);
+        assert!((hanging.lines[0].glyphs[0].x - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn vertical_indents_shape_the_columns() {
+        let mut s = boxed("ABCDEFGHIJ", 200.0, 100.0);
+        s.vertical = true;
+        s.paragraph.start_indent = 20.0;
+        s.paragraph.end_indent = 10.0;
+        s.paragraph.first_line_indent = 15.0;
+        let layout = layout_of(&s);
+        assert!(layout.lines.len() > 1, "chunks into columns");
+        assert!((layout.lines[0].glyphs[0].y - 35.0).abs() < 0.01);
+        assert!((layout.lines[1].glyphs[0].y - 20.0).abs() < 0.01);
+        for line in &layout.lines {
+            let bottom = line.glyphs[0].y + line.advance;
+            assert!(bottom <= 90.0 + FIT, "column bottom {bottom}");
+        }
+
+        // Point type has no box to break into: the indent moves its single
+        // column but never chunks it.
+        let mut point = spec("ABCDEFGHIJ");
+        point.vertical = true;
+        point.paragraph.start_indent = 20.0;
+        point.paragraph.end_indent = 10.0;
+        point.paragraph.first_line_indent = 15.0;
+        let layout = layout_of(&point);
+        assert_eq!(layout.lines.len(), 1, "point type does not chunk");
+        assert!((layout.lines[0].glyphs[0].y - 35.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn point_type_indents_move_the_glyphs() {
+        let mut s = spec("aa\rbb");
+        s.paragraph.start_indent = 20.0;
+        s.paragraph.first_line_indent = 15.0;
+        let (_, pens) = crate::type_layer::type_pens(&s).unwrap();
+        let first_y = pens[0].2;
+        let second_x = pens
+            .iter()
+            .find(|(_, _, y)| (*y - first_y).abs() > 1.0)
+            .unwrap()
+            .1;
+        assert!((pens[0].1 - 35.0).abs() < 0.5, "{}", pens[0].1);
+        assert!((second_x - 35.0).abs() < 0.5, "{second_x}");
+        let placement = crate::type_layer::type_placement(&s).unwrap();
+        assert!(placement.rect.left <= s.origin.0 as i32 + 20);
+        assert!(placement.rect.right >= s.origin.0 as i32 + 35);
+    }
+
+    #[test]
+    fn space_before_and_after_separate_paragraphs() {
+        let bundled = face_for("Liberation Sans", "").unwrap();
+        let leading = 20.0 * 1.2;
+        let line_height = f64::from(bundled.ascent(20.0) + bundled.descent(20.0));
+        let short = leading + line_height + 1.0;
+        let plain = layout_of(&boxed("aa\rbb", 200.0, short));
+        assert_eq!(plain.lines.len(), 2);
+
+        let mut s = boxed("aa\rbb", 200.0, short);
+        s.paragraph.space_before = 8.0;
+        s.paragraph.space_after = 12.0;
+        assert_eq!(
+            layout_of(&s).lines.len(),
+            1,
+            "the second paragraph overflows"
+        );
+        assert!(type_overflows(&s));
+
+        let plain_tall = layout_of(&boxed("aa\rbb", 200.0, 400.0));
+        s.box_bounds = Some([0.0, 0.0, 200.0, 400.0]);
+        let tall = layout_of(&s);
+        let gap = tall.lines[1].baseline - tall.lines[0].baseline;
+        let plain_gap = plain_tall.lines[1].baseline - plain_tall.lines[0].baseline;
+        assert!((gap - plain_gap - 20.0).abs() < 0.01, "{gap}");
+    }
+
+    #[test]
+    fn vertical_space_before_and_after_separate_columns() {
+        let mut s = boxed("A\rB", 200.0, 200.0);
+        s.vertical = true;
+        let plain = layout_of(&s);
+        let plain_gap = plain.lines[0].baseline - plain.lines[1].baseline;
+        s.paragraph.space_before = 8.0;
+        s.paragraph.space_after = 12.0;
+        let spaced = layout_of(&s);
+        let gap = spaced.lines[0].baseline - spaced.lines[1].baseline;
+        assert!((gap - plain_gap - 20.0).abs() < 0.01, "{gap}");
+
+        let mut p = spec("A\rB");
+        p.vertical = true;
+        let plain_rect = crate::type_layer::type_placement(&p).unwrap().rect;
+        p.paragraph.space_before = 8.0;
+        p.paragraph.space_after = 12.0;
+        let spaced_rect = crate::type_layer::type_placement(&p).unwrap().rect;
+        assert_eq!(spaced_rect.width() - plain_rect.width(), 40);
+    }
+
+    #[test]
+    fn caret_follows_indented_lines() {
+        let mut s = boxed("aa bb cc dd", 120.0, 400.0);
+        s.paragraph.start_indent = 10.0;
+        s.paragraph.first_line_indent = 20.0;
+        let stops = crate::type_caret::type_caret_stops(&s);
+        let origin = s.origin.0;
+        let layout = layout_of(&s);
+        let first_pen = origin + f64::from(layout.lines[0].glyphs[0].x);
+        assert!(
+            (stops[0][0] - (origin + 30.0)).abs() < 0.5,
+            "{:?}",
+            stops[0]
+        );
+        assert!(
+            (stops[0][0] - first_pen).abs() < 0.5,
+            "the stop is not on the first pen"
+        );
+        let second = stops
+            .iter()
+            .find(|stop| (stop[1] - stops[0][1]).abs() > 1.0)
+            .expect("the paragraph wraps");
+        assert!((second[0] - (origin + 10.0)).abs() < 0.5, "{:?}", second);
+        let wrapped_pen = origin + f64::from(layout.lines[1].glyphs[0].x);
+        assert!(
+            (second[0] - wrapped_pen).abs() < 0.5,
+            "the wrapped stop is not on its pen"
+        );
+    }
+
+    #[test]
+    fn point_bounds_include_indents_and_spacing() {
+        let mut s = spec("aa");
+        s.paragraph.first_line_indent = -15.0;
+        let plain = crate::type_layer::type_placement(&s).unwrap();
+        s.paragraph.space_after = 12.0;
+        let spaced = crate::type_layer::type_placement(&s).unwrap();
+        assert_eq!(plain.rect.left, s.origin.0 as i32 - 15);
+        assert_eq!(spaced.rect.bottom - plain.rect.bottom, 12);
+    }
+
+    #[test]
+    fn unsupported_paragraph_attributes_do_not_move_glyphs() {
+        let mut s = boxed("aa bb cc dd", 120.0, 200.0);
+        let plain = layout_of(&s);
+        s.paragraph.hanging = true;
+        s.paragraph.hyphenate = true;
+        s.paragraph.composer = pictura_core::Composer::EveryLine;
+        let styled = layout_of(&s);
+        assert_eq!(plain.lines.len(), styled.lines.len());
+        for (a, b) in plain.lines.iter().zip(&styled.lines) {
+            assert!((a.advance - b.advance).abs() < 1e-6);
+            for (ga, gb) in a.glyphs.iter().zip(&b.glyphs) {
+                assert!((ga.x - gb.x).abs() < 1e-6 && (ga.y - gb.y).abs() < 1e-6);
+            }
+        }
     }
 }

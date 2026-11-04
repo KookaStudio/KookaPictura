@@ -19,7 +19,8 @@ use pictura_core::{TextPath, TextPathKind, TypeSpec};
 
 use crate::fonts::face_for;
 use crate::text_render::{blit_glyph, glyph_matrix};
-use crate::type_layer::{render_view, type_lines, TypePlacement};
+use crate::type_box::TypePlacement;
+use crate::type_layer::{render_view, type_lines};
 use crate::type_style::{shape_styled, tracking_step, RunStyle};
 
 const FLATTEN: f64 = 0.25;
@@ -178,7 +179,7 @@ pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
             None => ((left, top), [0.0, 0.0, right - left, bottom - top]),
         };
         return Some(TypePlacement {
-            rect: crate::type_layer::flat_rect(
+            rect: crate::type_box::flat_rect(
                 (origin.0 + box_bounds[0]) as f32,
                 (origin.1 + box_bounds[1]) as f32,
                 (box_bounds[2] - box_bounds[0]) as f32,
@@ -227,7 +228,7 @@ pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
     let right = max.0 + 1.0;
     let bottom = max.1 + 1.0;
     Some(TypePlacement {
-        rect: crate::type_layer::flat_rect(
+        rect: crate::type_box::flat_rect(
             left as f32,
             top as f32,
             (right - left) as f32,

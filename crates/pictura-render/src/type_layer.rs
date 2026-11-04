@@ -21,6 +21,7 @@ use pictura_core::{
 };
 
 use crate::text_render::{blit_glyph, glyph_matrix, layout_type, render_text_buffer, BundledText};
+use crate::type_box::{flat_rect, text_box, TypePlacement};
 use crate::type_style::{shape_styled, RunStyle};
 
 /// The lines of a `TySh` string: `\r` separates them (`\n` and `\r\n` are
@@ -38,31 +39,30 @@ pub(crate) fn align_factor(justification: u8) -> f32 {
     TextAlign::from_justification(justification).factor()
 }
 
-/// Lay out vertical type inside a `width × height` box: column `j` is centred
-/// `leading × (j + ½)` from the right edge, and its characters fall one cell
-/// apart, the column aligned top / bottom / centre by `justification`. Each
-/// character shapes as `c` styles it (its advance carries the horizontal
-/// scale), the vertical scale stretches the cell, and the baseline shift
-/// offsets the column along its axis.
+/// Lay out vertical type inside a `width × height` box: each column's centre
+/// sits `block` from the box's right edge, its characters fall one cell apart
+/// inside the indented height, and the column is aligned top / bottom / centre
+/// by `justification`. Each character shapes as `c` styles it (its advance
+/// carries the horizontal scale), the vertical scale stretches the cell, and the
+/// baseline shift offsets the column along its axis.
 pub(crate) fn vertical_layout(
     bundled: &BundledText,
     lines: &[String],
+    boxes: &[crate::type_paragraph::LineBox],
     c: &CharacterAttrs,
     justification: u8,
     width: f32,
-    height: f32,
-    leading: f32,
 ) -> TextLayout {
     let baseline_shift = c.baseline_shift as f32;
     let cell = crate::type_paragraph::vertical_cell(bundled, c);
     let factor = align_factor(justification);
     let columns: Vec<LayoutLine> = lines
         .iter()
-        .enumerate()
-        .map(|(j, line)| {
-            let centre = width - leading * (j as f32 + 0.5);
+        .zip(boxes)
+        .map(|(line, line_box)| {
+            let centre = width - line_box.block;
             let count = line.chars().count() as f32;
-            let top = (height - count * cell) * factor - baseline_shift;
+            let top = line_box.start + (line_box.extent - count * cell) * factor - baseline_shift;
             let glyphs = line
                 .chars()
                 .enumerate()
@@ -99,6 +99,10 @@ pub(crate) fn vertical_layout(
         .map(|g| g.face.saturating_add(1))
         .max()
         .unwrap_or(1);
+    let height = boxes
+        .iter()
+        .map(|line| line.start + line.extent)
+        .fold(0.0f32, f32::max);
     TextLayout {
         lines: columns,
         width,
@@ -113,102 +117,6 @@ pub(crate) fn leading_px(size: f32, leading: pictura_core::Leading, auto_percent
     match leading {
         pictura_core::Leading::Auto => size * (auto_percent as f32 / 100.0),
         pictura_core::Leading::Fixed(value) => value as f32,
-    }
-}
-
-/// Where point type lands: its layer rect in document pixels, and its box
-/// relative to the origin (left, top, right, bottom) for the `TySh` bounds.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TypePlacement {
-    pub rect: PsdRect,
-    pub bounds: [f64; 4],
-}
-
-/// `spec`'s untransformed text box in document pixels: left, top, width,
-/// height. `None` for empty text, a non-positive size, or a missing face.
-fn text_box(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
-    if type_lines(&spec.text)
-        .iter()
-        .all(|line| line.trim().is_empty())
-    {
-        return None;
-    }
-    text_box_any(spec)
-}
-
-/// [`text_box`] for any text, blank included (the caret still needs a box).
-pub(crate) fn text_box_any(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
-    let bundled = crate::fonts::face_for(&spec.character.font_family, &spec.character.font_style)?;
-    let size = spec.character.size as f32;
-    let lines = type_lines(&spec.text);
-    if size.is_nan() || size <= 0.0 {
-        return None;
-    }
-    // Paragraph type occupies its box, whatever the text inside.
-    if let Some(b) = spec.box_bounds {
-        let (x, y) = (spec.origin.0, spec.origin.1);
-        return Some((
-            (x + b[0]) as f32,
-            (y + b[1]) as f32,
-            (b[2] - b[0]) as f32,
-            (b[3] - b[1]) as f32,
-        ));
-    }
-    let ascent = bundled.ascent(size);
-    let descent = bundled.descent(size);
-    let leading = leading_px(size, spec.character.leading, spec.paragraph.auto_leading);
-    let v = (spec.character.vertical_scale / 100.0) as f32;
-    let factor = align_factor(spec.justification());
-    let (x, y) = (spec.origin.0 as f32, spec.origin.1 as f32);
-    let (left, top, width, height) = if spec.vertical {
-        let longest = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
-        let width = lines.len() as f32 * leading;
-        let height = longest as f32 * (ascent + descent) * v;
-        (
-            x - (width - leading / 2.0),
-            y - height * factor,
-            width,
-            height,
-        )
-    } else {
-        let run = RunStyle::of(bundled, &spec.character);
-        // Faux Italic leans the ascenders past the last advance.
-        let overhang = ascent * run.skew + run.embolden;
-        let width = lines
-            .iter()
-            .map(|line| {
-                crate::type_paragraph::line_advance_with(
-                    bundled,
-                    line,
-                    &spec.character,
-                    &spec.paragraph,
-                )
-            })
-            .fold(0.0f32, f32::max)
-            + overhang;
-        // A subscript or an underline can hang below the font's descent.
-        let drop = (spec.character.baseline_shift as f32 - run.rise).max(0.0);
-        let mut below = descent;
-        if drop > 0.0 {
-            below = below.max(drop + bundled.descent(run.size));
-        }
-        if let Some((offset, thickness)) = run.underline {
-            below = below.max(drop + offset + thickness / 2.0);
-        }
-        let height = (lines.len() - 1) as f32 * leading + ascent + below;
-        (x - width * factor, y - ascent, width, height)
-    };
-    Some((left, top, width, height))
-}
-
-/// The untransformed layer rect of a text box: one spare column on the right
-/// keeps a glyph's overhang past its advance.
-pub(crate) fn flat_rect(left: f32, top: f32, width: f32, height: f32) -> PsdRect {
-    PsdRect {
-        top: top.floor() as i32,
-        left: left.floor() as i32,
-        bottom: (top + height).ceil() as i32,
-        right: (left + width).ceil() as i32 + 1,
     }
 }
 
