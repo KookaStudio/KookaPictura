@@ -9,7 +9,7 @@
 //! marked below.
 
 use pictura_core::mask_ops::{self, Border};
-use pictura_core::{Channel, Layer, LayerMask, PixelBuffer, Plane};
+use pictura_core::{Channel, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 use rayon::prelude::*;
 
 mod color_range;
@@ -32,6 +32,10 @@ pub use refine::{
 mod translate;
 
 mod bounds;
+
+mod polygon;
+
+mod bounded;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SelectError {
@@ -172,38 +176,23 @@ impl Selection {
         sel
     }
 
-    /// Even-odd scanline fill of `points`, sampled at pixel centres and clipped
-    /// to the canvas. Fewer than three points yields an empty selection.
+    /// Even-odd fill of `points`, sampled at pixel centres and clipped to the
+    /// canvas. Fewer than three points yields an empty selection.
     pub fn polygon(width: u32, height: u32, points: &[(i32, i32)]) -> Self {
+        Self::polygon_bounded(width, height, points).0
+    }
+
+    /// [`Selection::polygon`] and the tight bounds of its covered pixels, which
+    /// the fill knows for free: a caller can skip the [`Selection::bounds`]
+    /// scan of the whole mask.
+    pub fn polygon_bounded(
+        width: u32,
+        height: u32,
+        points: &[(i32, i32)],
+    ) -> (Self, Option<PsdRect>) {
         let mut sel = Selection::none(width, height);
-        if points.len() < 3 {
-            return sel;
-        }
-        let n = points.len();
-        let data = sel.data.as_mut_slice();
-        for py in 0..height {
-            let cy = py as f64 + 0.5;
-            for px in 0..width {
-                let cx = px as f64 + 0.5;
-                let mut inside = false;
-                let mut j = n - 1;
-                for i in 0..n {
-                    let (xi, yi) = (points[i].0 as f64, points[i].1 as f64);
-                    let (xj, yj) = (points[j].0 as f64, points[j].1 as f64);
-                    if (yi > cy) != (yj > cy) {
-                        let cross = xi + (cy - yi) / (yj - yi) * (xj - xi);
-                        if cx < cross {
-                            inside = !inside;
-                        }
-                    }
-                    j = i;
-                }
-                if inside {
-                    data[py as usize * width as usize + px as usize] = 255;
-                }
-            }
-        }
-        sel
+        let bounds = polygon::fill(width, height, points, sel.data.as_mut_slice());
+        (sel, bounds)
     }
 
     /// Export this selection as a document-level channel (8-bit grayscale

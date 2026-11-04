@@ -1,5 +1,6 @@
 use super::*;
 
+use super::super::helpers::paint_timing;
 use super::super::picture::picture;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -24,7 +25,13 @@ impl super::super::state::PictureViewRust {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            EdgeMap::from_buffer(&picture(doc, rust), contrast.clamp(1, 100) as u32)
+            let t = std::time::Instant::now();
+            let shown = picture(doc, rust);
+            paint_timing::record("magnetic_picture", t.elapsed());
+            let t = std::time::Instant::now();
+            let map = EdgeMap::from_buffer(&shown, contrast.clamp(1, 100) as u32);
+            paint_timing::record("magnetic_edge_peak", t.elapsed());
+            map
         };
         self.session
             .live

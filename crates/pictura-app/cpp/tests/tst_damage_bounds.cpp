@@ -1,5 +1,7 @@
 // Structural-edit damage bounds: a bounded delete/reorder/group emits one
-// region update, an unbounded edit rebuilds the canvas (#970).
+// region update, an unbounded edit rebuilds the canvas (#970). A shape layer's
+// Move and Path Selection drag refresh only the shape's reach, the drag on
+// its release (#1185).
 
 #include <QtTest/QtTest>
 #include <QtTest/QSignalSpy>
@@ -15,6 +17,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/mask_refine.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include "qt_test_support.h"
@@ -31,6 +34,8 @@ private slots:
     void structuralGroupEmitsOneRegion();
     void unboundedStructuralRebuilds();
     void maskFeatherPreviewEmitsOneRegion();
+    void shapeMoveIsBoundedToTheShape();
+    void shapePathDragRefreshesItsReach();
 
 private:
     bool newDoc(int width, int height);
@@ -143,6 +148,64 @@ void DamageBoundsTest::maskFeatherPreviewEmitsOneRegion()
     QVERIFY(pictura::layer_mask_set_feather(*view_, 8.0, false));
     QCoreApplication::processEvents();
     QVERIFY2(damaged.count() >= 1, "a bounded feather preview emits a region");
+}
+
+namespace {
+
+constexpr quint32 kShapeRed = 0xffff0000u;
+constexpr quint32 kPaper = 0xffffffffu;
+
+// The last regionDamaged rectangle's width and height.
+QSize lastDamage(const QSignalSpy& damaged)
+{
+    const QList<QVariant> last = damaged.last();
+    return QSize(last.at(2).toInt(), last.at(3).toInt());
+}
+
+} // namespace
+
+void DamageBoundsTest::shapeMoveIsBoundedToTheShape()
+{
+    QVERIFY(newDoc(800, 600));
+    QVERIFY(!addShape(40, 40, 80, 80).isEmpty());
+    QVERIFY(view_->begin_move_preview());
+    QCOMPARE(view_->move_preview_x(), 40);
+    QCOMPARE(view_->move_preview_y(), 40);
+    const QImage moving = view_->move_preview_layer();
+    QVERIFY2(moving.width() <= 42 && moving.height() <= 42,
+             "the moving image is the shape's box, not the canvas");
+
+    QSignalSpy damaged(view_, &pictura::PictureView::regionDamaged);
+    QVERIFY(view_->commit_move(30, 20));
+    QCoreApplication::processEvents();
+    QVERIFY2(damaged.count() >= 1, "the commit refreshes a region");
+    const QSize reach = lastDamage(damaged);
+    QVERIFY2(reach.width() <= 80 && reach.height() <= 80,
+             "the commit refreshes the shape before and after, not the canvas");
+    QCOMPARE(view_->sample_argb(100, 80), kShapeRed);
+    QCOMPARE(view_->sample_argb(45, 45), kPaper);
+}
+
+void DamageBoundsTest::shapePathDragRefreshesItsReach()
+{
+    QVERIFY(newDoc(800, 600));
+    QVERIFY(!addShape(40, 40, 80, 80).isEmpty());
+    pictura::path_set_layer_target(*view_, true);
+    QSignalSpy damaged(view_, &pictura::PictureView::regionDamaged);
+    QVERIFY(pictura::path_move_subpath(*view_, 0, 20.0, 10.0));
+    QVERIFY(pictura::path_move_subpath(*view_, 0, 10.0, 10.0));
+    QCoreApplication::processEvents();
+    QCOMPARE(damaged.count(), 0);
+    QCOMPARE(view_->sample_argb(45, 45), kShapeRed);
+
+    pictura::path_commit_drag(*view_, "Drag Path");
+    QCoreApplication::processEvents();
+    QCOMPARE(damaged.count(), 1);
+    const QSize reach = lastDamage(damaged);
+    QVERIFY2(reach.width() <= 80 && reach.height() <= 80,
+             "the release refreshes the shape before and after, not the canvas");
+    QCOMPARE(view_->sample_argb(100, 80), kShapeRed);
+    QCOMPARE(view_->sample_argb(45, 45), kPaper);
 }
 
 QTEST_MAIN(DamageBoundsTest)

@@ -542,10 +542,18 @@ pub(crate) fn composite_solid_fill(
     ctx: &BlendCtx<'_>,
     over: Option<&BlendOverride>,
 ) {
-    let x0 = layer.rect.left.max(canvas.x0());
-    let y0 = layer.rect.top.max(canvas.y0());
-    let x1 = layer.rect.right.min(canvas.x1());
-    let y1 = layer.rect.bottom.min(canvas.y1());
+    // The mask is zero outside the layer's content box, and a zero mask
+    // leaves the backdrop alone, so a shape blends only its own box; a pass
+    // that ignores the mask fills the whole rect.
+    let rect = if over.is_some_and(|over| over.no_mask) {
+        layer.rect
+    } else {
+        crate::layer_effects::fill_content_box(layer).unwrap_or(layer.rect)
+    };
+    let x0 = rect.left.max(canvas.x0());
+    let y0 = rect.top.max(canvas.y0());
+    let x1 = rect.right.min(canvas.x1());
+    let y1 = rect.bottom.min(canvas.y1());
     if x1 <= x0 || y1 <= y0 {
         return;
     }
@@ -908,7 +916,12 @@ pub(crate) fn fill_source(
     }
     let full_rect = layer.rect;
     let (full_w, full_h) = (full_rect.width(), full_rect.height());
-    let rect = full_rect.clip_to(doc.width, doc.height).unwrap_or_default();
+    // A shape's rect is the canvas but its mask is zero outside the mask's
+    // box, so only that box is rasterized and uploaded (#1185).
+    let rect = crate::layer_effects::fill_content_box(layer)
+        .unwrap_or(full_rect)
+        .clip_to(doc.width, doc.height)
+        .unwrap_or_default();
     let (w, h) = (rect.width(), rect.height());
     // A fill with no on-canvas area is the CPU's no-op; keep it on the GPU as an
     // empty source rather than declining the whole document.
@@ -917,14 +930,18 @@ pub(crate) fn fill_source(
     } else {
         match &adjustment {
             Adjustment::SolidFill(rgba) => {
-                let mut buf = PixelBuffer::new(w as u32, h as u32, 4);
-                let n = buf.pixel_count();
-                for i in 0..n {
-                    buf.data[i] = rgba[0];
-                    buf.data[n + i] = rgba[1];
-                    buf.data[2 * n + i] = rgba[2];
-                    buf.data[3 * n + i] = rgba[3];
-                }
+                let n = w as usize * h as usize;
+                let data = pictura_core::Plane::build(n * 4, |out| {
+                    for (plane, &value) in out.chunks_mut(n).zip(rgba) {
+                        plane.fill(value);
+                    }
+                });
+                let buf = PixelBuffer {
+                    width: w as u32,
+                    height: h as u32,
+                    channels: 4,
+                    data,
+                };
                 (buf, true)
             }
             Adjustment::GradientFill(params) => {
@@ -962,6 +979,7 @@ pub(crate) fn fill_source(
         full_rect.bottom,
     ]
     .hash(&mut hasher);
+    [rect.left, rect.top, rect.right, rect.bottom].hash(&mut hasher);
     doc.width.hash(&mut hasher);
     doc.height.hash(&mut hasher);
     doc.mode.hash(&mut hasher);

@@ -40,6 +40,9 @@ pub struct PictureViewRust {
     /// The path calls edit the active shape layer's outline, not the Work
     /// Path (`paths.rs`).
     pub(super) path_on_layer: bool,
+    /// The composite a live path drag on a shape layer has put off until its
+    /// release: `Some(Some(rect))` to refresh, `Some(None)` to recomposite.
+    pub(super) path_drag_damage: Option<Option<PsdRect>>,
     /// The Paths panel row the path calls edit when not on a shape layer.
     pub(super) active_path: super::paths::ActivePath,
     /// Output format remembered from the import source, used to preselect the
@@ -219,6 +222,7 @@ impl Default for PictureViewRust {
             path: None,
             layer_target: LayerTarget::default(),
             path_on_layer: false,
+            path_drag_damage: None,
             active_path: super::paths::ActivePath::Work,
             source_format: "psd".to_string(),
             interop: None,

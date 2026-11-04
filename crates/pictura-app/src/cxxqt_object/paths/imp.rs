@@ -90,8 +90,40 @@ pub(in crate::cxxqt_object) fn edit<T>(
 /// says the edit moved it whole (the live box moves with it), and otherwise
 /// turns it into a regular path.
 pub(super) fn edit_target<T>(
+    view: Pin<&mut PictureView>,
+    moved_by: Option<(f64, f64)>,
+    edit: impl FnOnce(&mut VectorPath) -> T,
+) -> Option<T> {
+    edit_target_with(view, moved_by, false, edit)
+}
+
+/// [`edit_target`] for one step of a live drag: a shape layer's composite is
+/// put off until [`flush_path_drag`] (the release), while the overlay shows
+/// the moving outline, so a step costs no composite of the shape (#1185).
+fn drag_target<T>(
+    view: Pin<&mut PictureView>,
+    moved_by: Option<(f64, f64)>,
+    edit: impl FnOnce(&mut VectorPath) -> T,
+) -> Option<T> {
+    edit_target_with(view, moved_by, true, edit)
+}
+
+/// Composite what a live drag put off, if anything.
+pub(super) fn flush_path_drag(mut view: Pin<&mut PictureView>) {
+    match view.as_mut().rust_mut().path_drag_damage.take() {
+        Some(Some(rect)) => {
+            view.as_mut().refresh_regions(&[rect]);
+            view.as_mut().changed();
+        }
+        Some(None) => view.as_mut().recomposite(),
+        None => {}
+    }
+}
+
+fn edit_target_with<T>(
     mut view: Pin<&mut PictureView>,
     moved_by: Option<(f64, f64)>,
+    defer: bool,
     edit: impl FnOnce(&mut VectorPath) -> T,
 ) -> Option<T> {
     let Some(target) = layer_target(view.rust()) else {
@@ -108,18 +140,32 @@ pub(super) fn edit_target<T>(
     let mut after = before.clone();
     let out = edit(&mut after);
     if after != before {
-        {
+        // The outline moves in place, so only the layer's reach before and
+        // after the edit is recomposited; a drag no longer composites the
+        // whole document on every pointer move (#1185).
+        let damage = {
             let mut rust = view.as_mut().rust_mut();
             let doc = rust.session.doc.as_mut()?;
             let (width, height) = (doc.width, doc.height);
+            let reach_before = pictura_render::damage::content_influence(doc, &target);
             let layer = pictura_render::resolve_path_mut(doc, &target)?;
             pictura_render::set_layer_shape_paths(layer, &after.subpaths, width, height);
             let live = pictura_render::layer_live_shape(layer)
                 .zip(moved_by)
                 .map(|(live, (dx, dy))| live.translated(dx, dy));
             pictura_render::set_layer_live_shape(layer, live.as_ref());
+            let reach_after = pictura_render::damage::content_influence(doc, &target);
+            let damage = pictura_render::damage::union(reach_before, reach_after);
+            // A step joins whatever an earlier step of the drag put off.
+            match rust.path_drag_damage.take() {
+                None => damage,
+                Some(pending) => pictura_render::damage::union(pending, damage),
+            }
+        };
+        view.as_mut().rust_mut().path_drag_damage = Some(damage);
+        if !defer {
+            flush_path_drag(view.as_mut());
         }
-        view.as_mut().recomposite();
     }
     Some(out)
 }
@@ -164,6 +210,7 @@ pub(super) fn path_convert_live_shape(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 pub(super) fn commit(mut view: Pin<&mut PictureView>, label: &str) {
+    flush_path_drag(view.as_mut());
     view.as_mut().edit(label, |_| Edit::Meta);
 }
 
@@ -338,6 +385,7 @@ pub(super) fn path_gesture_abort(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 pub(super) fn path_gesture_end(mut view: Pin<&mut PictureView>) {
+    flush_path_drag(view.as_mut());
     view.as_mut().rust_mut().session.live.clear_path();
 }
 
@@ -436,7 +484,9 @@ pub(super) fn path_move_handle(
     } else {
         HandleSide::Out
     };
-    edit(view, |p| p.move_handle(sp, pt, side, x, y, independent)) == Some(true)
+    drag_target(view, None, |p| {
+        p.move_handle(sp, pt, side, x, y, independent)
+    }) == Some(true)
 }
 
 pub(super) fn path_commit_convert(view: Pin<&mut PictureView>) {
@@ -487,14 +537,14 @@ pub(super) fn path_move_anchor(
     let Some((sp, pt)) = index(sp).zip(index(pt)) else {
         return false;
     };
-    edit(view, |p| p.move_anchor(sp, pt, x, y)) == Some(true)
+    drag_target(view, None, |p| p.move_anchor(sp, pt, x, y)) == Some(true)
 }
 
 pub(super) fn path_move_subpath(view: Pin<&mut PictureView>, sp: i32, dx: f64, dy: f64) -> bool {
     let Some(sp) = index(sp) else {
         return false;
     };
-    edit_target(view, Some((dx, dy)), |p| p.move_subpath(sp, dx, dy)) == Some(true)
+    drag_target(view, Some((dx, dy)), |p| p.move_subpath(sp, dx, dy)) == Some(true)
 }
 
 pub(super) fn path_duplicate_subpath(view: Pin<&mut PictureView>, sp: i32) -> i32 {

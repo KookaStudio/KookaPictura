@@ -31,6 +31,7 @@ No dependency beyond python3's standard library.
 
 import argparse
 import json
+import math
 import os
 import shutil
 import socket
@@ -59,6 +60,55 @@ SCENARIOS = {
     "marquee": ("marquee", {}, "box"),
     "gradient": ("gradient", {}, "line"),
     "paintbucket": ("paintbucket", {}, "click"),
+    # The rest of the toolbox (#1185), one scenario per tool. A fourth element
+    # adds `setup` (calls made before timing, each undone after it when it
+    # leaves history), `mods` (held for the gesture), `finish` (a key sequence
+    # timed after the release, e.g. a Crop commit) and `undo: False` for tools
+    # that leave no history.
+    "lasso": ("lasso", {}, "stroke"),
+    "lasso-feather": ("lasso", {"selection": {"feather": 20}}, "stroke"),
+    "lasso-add": ("lasso", {}, "stroke", {"setup": ["selection"], "mods": "shift"}),
+    "lasso-subtract": ("lasso", {}, "stroke", {"setup": ["selection"], "mods": "alt"}),
+    "polygonal-lasso": ("polygonallasso", {}, "clicks"),
+    "magnetic-lasso": ("magneticlasso", {}, "hover"),
+    "magic-wand": ("magicwand", {}, "click"),
+    "quick-selection": ("quickselection", {}, "stroke"),
+    "crop": ("crop", {}, "box", {"finish": "enter"}),
+    "eyedropper": ("eyedropper", {}, "click", {"undo": False}),
+    "color-sampler": ("colorsampler", {}, "click"),
+    "ruler": ("ruler", {}, "line", {"undo": False}),
+    "count": ("count", {}, "click"),
+    "spot-healing": ("spothealingbrush", {"brush": {"size": 200}}, "stroke"),
+    "healing": ("healingbrush", {"brush": {"size": 200}}, "stroke", {"setup": ["source"]}),
+    "patch": ("patch", {}, "patch", {"setup": ["selection"]}),
+    "red-eye": ("redeye", {}, "box"),
+    "color-replacement": ("colorreplacement", {"brush": {"size": 200}}, "stroke"),
+    "mixer-brush": ("mixerbrush", {"brush": {"size": 200}}, "stroke"),
+    "clone-stamp": ("clonestamp", {"brush": {"size": 200}}, "stroke", {"setup": ["source"]}),
+    "pattern-stamp": ("patternstamp", {"brush": {"size": 200}}, "stroke"),
+    "history-brush": ("historybrush", {"brush": {"size": 200}}, "stroke"),
+    "art-history": ("arthistorybrush", {"brush": {"size": 200}}, "stroke"),
+    "background-eraser": ("backgrounderaser", {"brush": {"size": 200}}, "stroke"),
+    "magic-eraser": ("magiceraser", {}, "click"),
+    "blur": ("blur", {"brush": {"size": 200}}, "stroke"),
+    "sharpen": ("sharpen", {"brush": {"size": 200}}, "stroke"),
+    "smudge": ("smudge", {"brush": {"size": 200}}, "stroke"),
+    "burn": ("burn", {"brush": {"size": 200}}, "stroke"),
+    "pen": ("pen", {}, "clicks"),
+    "freeform-pen": ("freeformpen", {}, "stroke"),
+    "type": ("horizontaltype", {}, "click", {"finish": "escape"}),
+    "rounded-rect-shape": ("roundedrectangle", {"shape": {"mode": 0, "geometry": 0}}, "box"),
+    "polygon-shape": ("polygon", {"shape": {"mode": 0, "geometry": 0}}, "box"),
+    "line-shape": ("line", {"shape": {"mode": 0, "geometry": 0}}, "line"),
+    "custom-shape": ("customshape", {"shape": {"mode": 0, "geometry": 0}}, "box"),
+    "rectangle-path": ("rectangle", {"shape": {"mode": 1, "geometry": 0}}, "box"),
+    "ellipse-pixels": ("ellipse", {"shape": {"mode": 2, "geometry": 0}}, "box"),
+    "shape-move": ("move", {}, "drag", {"setup": ["shape"]}),
+    "shape-stroked-move": ("move", {}, "drag", {"setup": ["stroked-shape"]}),
+    "shape-path-drag": ("pathselection", {}, "drag", {"setup": ["shape"]}),
+    "shape-direct-drag": ("directselection", {}, "drag", {"setup": ["shape"]}),
+    "hand": ("hand", {}, "line", {"undo": False}),
+    "zoom": ("zoom", {}, "click", {"undo": False}),
 }
 # name -> (layer_op op, its params, setup duplicates of the bottom layer).
 LAYER_SCENARIOS = {
@@ -130,10 +180,34 @@ def stroke_points(w, h, moves):
     return points
 
 
+def ring_points(w, h, sides=8):
+    """Vertices of a polygon inscribed in the box gesture's ellipse."""
+    cx, cy, rx, ry = w * 0.45, h * 0.425, w * 0.25, h * 0.225
+    return [(round(cx + rx * math.cos(2 * math.pi * i / sides), 1),
+             round(cy + ry * math.sin(2 * math.pi * i / sides), 1)) for i in range(sides)]
+
+
+def hover_points(w, h, moves):
+    """The ring walked edge by edge: about `moves` hover events in all."""
+    ring = ring_points(w, h)
+    per_side = max(1, moves // len(ring))
+    points = []
+    for i, (x0, y0) in enumerate(ring):
+        x1, y1 = ring[(i + 1) % len(ring)]
+        points += [(round(x0 + (x1 - x0) * k / per_side, 1), round(y0 + (y1 - y0) * k / per_side, 1))
+                   for k in range(1, per_side + 1)]
+    return points
+
+
 def gesture_points(gesture, w, h, moves):
     if gesture == "stroke":
         return stroke_points(w, h, moves)
-    if gesture == "box":
+    if gesture == "drag":
+        # From inside the box gesture's shape, a fifth of the document right.
+        x0, y0, x1, y1 = w * 0.45, h * 0.425, w * 0.65, h * 0.5
+    elif gesture == "patch":
+        x0, y0, x1, y1 = w * 0.4, h * 0.4, w * 0.6, h * 0.45
+    elif gesture == "box":
         x0, y0, x1, y1 = w * 0.2, h * 0.2, w * 0.7, h * 0.65
     elif gesture == "line":
         x0, y0, x1, y1 = w * 0.1, h * 0.5, w * 0.9, h * 0.5
@@ -143,21 +217,75 @@ def gesture_points(gesture, w, h, moves):
     return [(round(x0 + (x1 - x0) * i / steps, 1), round(y0 + (y1 - y0) * i / steps, 1)) for i in range(steps + 1)]
 
 
+SELECTION_BOX = (0.3, 0.3, 0.35, 0.3)  # x, y, w, h in document fractions
+
+
+def run_setup(client, step, w, h):
+    """Run one setup step; return how many history states it added."""
+    if step == "selection":
+        x, y, sw, sh = SELECTION_BOX
+        client.call("selection", op="rect", x=round(w * x), y=round(h * y), w=round(w * sw), h=round(h * sh))
+        return 1
+    if step == "source":
+        client.call("pointer", op="click", space="image", x=w * 0.1, y=h * 0.1, modifiers="alt")
+        return 0
+    if step in ("shape", "stroked-shape"):
+        shape = {"mode": 0, "geometry": 0, "strokeEnabled": step == "stroked-shape", "strokeWidth": 20}
+        client.call("set_tool", tool="rectangle")
+        client.call("tool_options", options={"shape": shape})
+        (x0, y0), (x1, y1) = gesture_points("box", w, h, 2)[::2][:2]
+        client.call("pointer", op="drag", space="image", x=x0, y=y0, x2=x1, y2=y1, steps=4)
+        client.call("tool_options", options={"shape": {"strokeEnabled": False}})
+        return 1
+    raise RuntimeError(f"unknown setup step {step}")
+
+
+def click(client, x, y, **extra):
+    took = client.call("pointer", op="down", space="image", x=x, y=y, **extra)[1]
+    return took + client.call("pointer", op="up", space="image", x=x, y=y, **extra)[1]
+
+
+def run_gesture(client, gesture, w, h, moves, row, mods):
+    """Drive the gesture; return the per-event times between press and release."""
+    extra = {"modifiers": mods} if mods else {}
+    times = []
+    if gesture in ("clicks", "hover"):
+        # A path of clicks closed on its first vertex (Polygonal Lasso, Pen);
+        # the Magnetic Lasso hovers between them. down is the first click, up
+        # the closing one.
+        ring = ring_points(w, h)
+        row["down_ms"] = click(client, *ring[0], **extra)
+        if gesture == "clicks":
+            times = [click(client, x, y) for x, y in ring[1:]]
+        else:
+            times = [client.call("pointer", op="move", space="image", x=x, y=y)[1]
+                     for x, y in hover_points(w, h, moves)[:-1]]
+        row["up_ms"] = click(client, *ring[0])
+        return times
+    points = gesture_points(gesture, w, h, moves)
+    _, row["down_ms"] = client.call("pointer", op="down", space="image", x=points[0][0], y=points[0][1], **extra)
+    for x, y in points[1:]:
+        times.append(client.call("pointer", op="move", space="image", x=x, y=y, **extra)[1])
+    last = points[-1]
+    _, row["up_ms"] = client.call("pointer", op="up", space="image", x=last[0], y=last[1], **extra)
+    return times
+
+
 def run_scenario(client, name, w, h, moves, before_undo):
-    tool, options, gesture = SCENARIOS[name]
+    tool, options, gesture, *rest = SCENARIOS[name]
+    extra = rest[0] if rest else {}
+    setup_states = sum(run_setup(client, step, w, h) for step in extra.get("setup", []))
     client.call("set_tool", tool=tool)
     if options:
         client.call("tool_options", options=options)
     client.call("status")  # settle the tool switch before timing
-    points = gesture_points(gesture, w, h, moves)
-    row = {"tool": tool, "gesture": gesture, "moves": max(0, len(points) - 1)}
+    row = {"tool": tool, "gesture": gesture}
     total = time.perf_counter()
-    _, row["down_ms"] = client.call("pointer", op="down", space="image", x=points[0][0], y=points[0][1])
-    move_times = []
-    for x, y in points[1:]:
-        move_times.append(client.call("pointer", op="move", space="image", x=x, y=y)[1])
-    last = points[-1]
-    _, row["up_ms"] = client.call("pointer", op="up", space="image", x=last[0], y=last[1])
+    move_times = run_gesture(client, gesture, w, h, moves, row, extra.get("mods"))
+    row["moves"] = len(move_times)
+    if extra.get("finish"):
+        _, row["finish_ms"] = client.call("key", sequence=extra["finish"])
+        row["finish_ms"] = ms(row["finish_ms"])
     _, row["settle_ms"] = client.call("status")
     row["total_ms"] = time.perf_counter() - total
     row["down_ms"] = ms(row["down_ms"])
@@ -171,9 +299,13 @@ def run_scenario(client, name, w, h, moves, before_undo):
         row["move_max_ms"] = ms(ordered[-1])
         row["move_sum_ms"] = ms(sum(ordered))
     before_undo(row)
-    _, undo = client.call("edit", op="undo")
-    _, settle = client.call("status")
-    row["undo_ms"] = ms(undo + settle)
+    if extra.get("undo", True):
+        _, undo = client.call("edit", op="undo")
+        _, settle = client.call("status")
+        row["undo_ms"] = ms(undo + settle)
+    for _ in range(setup_states):
+        client.call("edit", op="undo")
+    client.call("status")
     return row
 
 
@@ -294,24 +426,24 @@ def print_phases(results):
     print("(per-phase totals in milliseconds, from PICTURA_METRICS)")
 
 
-COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "settle_ms", "total_ms", "undo_ms", "rss_mb"]
+COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "finish_ms", "settle_ms", "total_ms", "undo_ms", "rss_mb"]
 
 
 def print_table(results):
-    header = f"{'scenario':<18}" + "".join(f"{c.replace('_ms', ''):>11}" for c in COLUMNS)
+    header = f"{'scenario':<20}" + "".join(f"{c.replace('_ms', ''):>11}" for c in COLUMNS)
     print(header)
     print("-" * len(header))
     for name, row in results.items():
         if "error" in row:
-            print(f"{name:<18}  error: {row['error']}")
+            print(f"{name:<20}  error: {row['error']}")
             continue
-        print(f"{name:<18}" + "".join(f"{row.get(c, ''):>11}" for c in COLUMNS))
+        print(f"{name:<20}" + "".join(f"{row.get(c, ''):>11}" for c in COLUMNS))
     print("(milliseconds; move_* are per motion event, total is down through settle)")
 
 
 def print_compare(before, after):
     keys = ["op_ms", "idle_ms", "move_p95_ms", "move_max_ms", "up_ms", "total_ms", "undo_ms"]
-    header = f"{'scenario':<18}" + "".join(f"{k.replace('_ms', ''):>26}" for k in keys)
+    header = f"{'scenario':<20}" + "".join(f"{k.replace('_ms', ''):>26}" for k in keys)
     print(header)
     print("-" * len(header))
     for name, row in after.items():
@@ -326,7 +458,7 @@ def print_compare(before, after):
                 continue
             ratio = f"{b / a:.1f}x" if a > 0 else "-"
             cells.append(f"{f'{b:.1f} -> {a:.1f} ({ratio})':>26}")
-        print(f"{name:<18}" + "".join(cells))
+        print(f"{name:<20}" + "".join(cells))
     print("(before -> after, milliseconds; the ratio is the speed-up)")
 
 

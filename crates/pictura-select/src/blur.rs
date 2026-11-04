@@ -1,5 +1,7 @@
 //! Gaussian blur of an 8-bit coverage plane for `Selection::feather`.
 
+use rayon::prelude::*;
+
 /// Sigma at or above which the direct convolution is replaced by the
 /// variance-matched box stack.
 const BOX_STACK_SIGMA: f64 = 2.0;
@@ -17,6 +19,16 @@ pub(crate) fn blur(src: &[u8], w: usize, h: usize, sigma: f64) -> Vec<u8> {
     }
 }
 
+/// How far, in pixels along each axis, [`blur`] reads from an output pixel:
+/// past it a zero source cannot change the result.
+pub(crate) fn reach(sigma: f64) -> usize {
+    if sigma < BOX_STACK_SIGMA {
+        (sigma * 3.0).ceil().max(1.0) as usize
+    } else {
+        box_widths(sigma).iter().map(|w| w / 2).sum()
+    }
+}
+
 /// Direct separable truncated Gaussian, `O(radius)` per pixel.
 fn gaussian_blur(src: &[u8], w: usize, h: usize, sigma: f64) -> Vec<u8> {
     let radius = (sigma * 3.0).ceil().max(1.0) as isize;
@@ -30,28 +42,30 @@ fn gaussian_blur(src: &[u8], w: usize, h: usize, sigma: f64) -> Vec<u8> {
     for k in &mut kernel {
         *k /= sum;
     }
+    // Rows are independent in each pass, so both run on every core; each
+    // pixel sums the same taps in the same order either way.
     let mut tmp = vec![0f64; w * h];
-    for y in 0..h {
-        for x in 0..w {
+    tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        for (x, t) in row.iter_mut().enumerate() {
             let mut acc = 0.0f64;
             for (ki, i) in (-radius..=radius).enumerate() {
                 let xx = (x as isize + i).clamp(0, w as isize - 1) as usize;
                 acc += src[y * w + xx] as f64 * kernel[ki];
             }
-            tmp[y * w + x] = acc;
+            *t = acc;
         }
-    }
+    });
     let mut out = vec![0u8; w * h];
-    for y in 0..h {
-        for x in 0..w {
+    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        for (x, o) in row.iter_mut().enumerate() {
             let mut acc = 0.0f64;
             for (ki, i) in (-radius..=radius).enumerate() {
                 let yy = (y as isize + i).clamp(0, h as isize - 1) as usize;
                 acc += tmp[yy * w + x] * kernel[ki];
             }
-            out[y * w + x] = acc.round().clamp(0.0, 255.0) as u8;
+            *o = acc.round().clamp(0.0, 255.0) as u8;
         }
-    }
+    });
     out
 }
 
@@ -104,56 +118,101 @@ fn box_widths(sigma: f64) -> [usize; 3] {
 fn box_horizontal(src: &[u8], dst: &mut [u8], w: usize, h: usize, width: usize) {
     let r = (width / 2) as isize;
     let inv = 1.0 / width as f32;
-    for y in 0..h {
-        let row = &src[y * w..(y + 1) * w];
-        let out = &mut dst[y * w..(y + 1) * w];
-        let mut sum = 0.0f32;
-        for i in -r..=r {
-            sum += f32::from(row[i.clamp(0, w as isize - 1) as usize]);
-        }
-        out[0] = (sum * inv).round() as u8;
-        for (x, o) in out.iter_mut().enumerate().skip(1) {
-            let add = (x as isize + r).min(w as isize - 1) as usize;
-            let sub = (x as isize - r - 1).max(0) as usize;
-            sum += f32::from(row[add]) - f32::from(row[sub]);
-            *o = (sum * inv).round() as u8;
-        }
-    }
+    dst[..w * h]
+        .par_chunks_mut(w)
+        .enumerate()
+        .for_each(|(y, out)| {
+            let row = &src[y * w..(y + 1) * w];
+            let mut sum = 0.0f32;
+            for i in -r..=r {
+                sum += f32::from(row[i.clamp(0, w as isize - 1) as usize]);
+            }
+            out[0] = (sum * inv).round() as u8;
+            for (x, o) in out.iter_mut().enumerate().skip(1) {
+                let add = (x as isize + r).min(w as isize - 1) as usize;
+                let sub = (x as isize - r - 1).max(0) as usize;
+                sum += f32::from(row[add]) - f32::from(row[sub]);
+                *o = (sum * inv).round() as u8;
+            }
+        });
 }
 
+/// Rows per band of [`box_vertical`]'s parallel pass.
+const BAND: usize = 64;
+
 /// One vertical moving average of `width` taps, clamp-to-edge. The running sum
-/// is kept per column so rows are read sequentially.
+/// is kept per column so rows are read sequentially; bands of rows run on
+/// every core, each seeding its sums at its first row. The sums are of whole
+/// numbers well inside `f32`'s exact range, so a seeded sum equals the running
+/// one.
 fn box_vertical(src: &[u8], dst: &mut [u8], w: usize, h: usize, width: usize) {
     let r = (width / 2) as isize;
     let inv = 1.0 / width as f32;
-    let mut sum = vec![0f32; w];
-    for i in -r..=r {
-        let y = i.clamp(0, h as isize - 1) as usize;
-        for (s, &v) in sum.iter_mut().zip(&src[y * w..y * w + w]) {
-            *s += f32::from(v);
-        }
-    }
-    for (o, &s) in dst[..w].iter_mut().zip(&sum) {
-        *o = (s * inv).round() as u8;
-    }
-    for y in 1..h {
-        let add = (y as isize + r).min(h as isize - 1) as usize;
-        let sub = (y as isize - r - 1).max(0) as usize;
-        let arow = &src[add * w..add * w + w];
-        let srow = &src[sub * w..sub * w + w];
-        let out = &mut dst[y * w..(y + 1) * w];
-        for (s, (&a, &b)) in sum.iter_mut().zip(arow.iter().zip(srow)) {
-            *s += f32::from(a) - f32::from(b);
-        }
-        for (o, &s) in out.iter_mut().zip(&sum) {
-            *o = (s * inv).round() as u8;
-        }
-    }
+    dst[..w * h]
+        .par_chunks_mut(BAND * w)
+        .enumerate()
+        .for_each(|(band, out)| {
+            let top = band * BAND;
+            let mut sum = vec![0f32; w];
+            for i in -r..=r {
+                let y = (top as isize + i).clamp(0, h as isize - 1) as usize;
+                for (s, &v) in sum.iter_mut().zip(&src[y * w..y * w + w]) {
+                    *s += f32::from(v);
+                }
+            }
+            for (k, row) in out.chunks_exact_mut(w).enumerate() {
+                let y = top + k;
+                if k > 0 {
+                    let add = (y as isize + r).min(h as isize - 1) as usize;
+                    let sub = (y as isize - r - 1).max(0) as usize;
+                    let arow = &src[add * w..add * w + w];
+                    let srow = &src[sub * w..sub * w + w];
+                    for (s, (&a, &b)) in sum.iter_mut().zip(arow.iter().zip(srow)) {
+                        *s += f32::from(a) - f32::from(b);
+                    }
+                }
+                for (o, &s) in row.iter_mut().zip(&sum) {
+                    *o = (s * inv).round() as u8;
+                }
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn banded_vertical_box_equals_the_window_sum() {
+        let (w, h) = (37usize, 3 * BAND + 11);
+        let mut state = 0x1234_5678_9abc_def1u64;
+        let src: Vec<u8> = (0..w * h)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 56) as u8
+            })
+            .collect();
+        for width in [1usize, 3, 9, 41, 301] {
+            let mut fast = vec![0u8; w * h];
+            box_vertical(&src, &mut fast, w, h, width);
+            let r = (width / 2) as isize;
+            for y in 0..h {
+                for x in 0..w {
+                    let sum: f32 = (-r..=r)
+                        .map(|i| {
+                            f32::from(
+                                src[(y as isize + i).clamp(0, h as isize - 1) as usize * w + x],
+                            )
+                        })
+                        .sum();
+                    let want = (sum * (1.0 / width as f32)).round() as u8;
+                    assert_eq!(fast[y * w + x], want, "width {width} at ({x}, {y})");
+                }
+            }
+        }
+    }
     use crate::Selection;
 
     #[test]

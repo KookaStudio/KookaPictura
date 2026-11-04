@@ -38,7 +38,15 @@ pub(super) fn rendered_layer_image(
     }
     let source_doc = materialized.as_ref().unwrap_or(doc);
     let layer = pictura_render::resolve_path(source_doc, path)?;
-    let rect = layer.rect;
+    // A shape layer's rect is the whole canvas; it draws only within its
+    // paint bounds (the outline box and its effects), so render just those.
+    let rect = if pictura_render::is_shape_layer(layer) {
+        pictura_render::layer_paint_bounds(source_doc, path)
+            .and_then(|bounds| bounds.intersect(layer.rect))
+            .unwrap_or(layer.rect)
+    } else {
+        layer.rect
+    };
     let (x0, y0) = (rect.left.max(0), rect.top.max(0));
     let (x1, y1) = (
         rect.right.min(source_doc.width as i32),
@@ -148,11 +156,18 @@ fn backdrop_patch_rect(
     let mut bounds: Option<pictura_core::PsdRect> = None;
     for path in paths {
         let layer = pictura_render::resolve_path(doc, path)?;
-        if layer_has_effects(layer) || layer.adjustment.is_some() || layer.is_group {
+        // A shape layer reaches its outline box, its effects, and its clipped
+        // run; hiding it changes nothing past that reach.
+        let shape = pictura_render::is_shape_layer(layer) && layer.channels.is_empty();
+        if !shape && (layer_has_effects(layer) || layer.adjustment.is_some() || layer.is_group) {
             return None;
         }
         // A painted layer's rect can be the whole canvas around a small mark.
-        let drawn = pictura_render::content_rect(doc, path).unwrap_or(layer.rect);
+        let drawn = if shape {
+            pictura_render::damage::content_influence(doc, path)?
+        } else {
+            pictura_render::content_rect(doc, path).unwrap_or(layer.rect)
+        };
         bounds = Some(bounds.map_or(drawn, |b| b.union(drawn)));
     }
     bounds.filter(|&rect| clamp_region(rect, doc.width, doc.height).is_some())

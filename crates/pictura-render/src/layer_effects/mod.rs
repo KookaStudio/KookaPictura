@@ -529,13 +529,45 @@ fn adjustment_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
     }
 }
 
+/// The box outside which a fill or shape layer's own content is zero: its
+/// rect narrowed to the mask that confines it ([`confined_fill_box`]). `None`
+/// for a layer with pixels or another kind, or a mask that confines nothing;
+/// an empty box when the mask misses the rect.
+pub(crate) fn fill_content_box(layer: &Layer) -> Option<PsdRect> {
+    #[cfg(test)]
+    if WHOLE_FILL_RECT.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    // The block key names a fill without decoding it: a composite asks for
+    // this box once per effect and must still decode the fill once.
+    let fill = layer
+        .adjustment
+        .as_ref()
+        .is_some_and(|a| matches!(&a.key, b"SoCo" | b"GdFl" | b"PtFl"));
+    if !layer.channels.is_empty() || !fill {
+        return None;
+    }
+    let confined = confined_fill_box(layer, 0)?;
+    Some(layer.rect.intersect(confined).unwrap_or_default())
+}
+
+/// Test-only: read a fill or shape layer's whole rect, as before the content
+/// box, so a test can compare the two composites.
+#[cfg(test)]
+pub(crate) static WHOLE_FILL_RECT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// The bounds of a fill/shape layer whose content is confined by its mask.
 /// These layers carry no pixel channels and their `rect` is the canvas, so the
 /// mask is what makes the reach reportable. A vector mask bounds only at full
 /// density and without inversion; a raster mask follows the same rules as an
 /// adjustment mask.
 fn masked_fill_bounds(layer: &Layer) -> Option<PsdRect> {
-    let pad = effects_pad(layer);
+    confined_fill_box(layer, effects_pad(layer))
+}
+
+/// [`masked_fill_bounds`] grown by `pad` instead of the effects' reach.
+fn confined_fill_box(layer: &Layer, pad: i32) -> Option<PsdRect> {
     let grow = |rect: PsdRect, feather: f64| rect.grow(pad.saturating_add(feather_pad(feather)));
     let raster = layer.mask.as_ref().and_then(|mask| {
         (!mask.disabled
@@ -972,14 +1004,17 @@ fn clamp_finite(value: f32, max: f32) -> f32 {
     }
 }
 
-/// The layer rect clamped to the canvas as `(x0, y0, x1, y1)`; empty when the
-/// rect does not intersect the canvas.
+/// The rect an effect reads the layer's content from, clamped to the canvas,
+/// as `(x0, y0, x1, y1)`; empty when it does not intersect the canvas. A fill
+/// or shape layer's `rect` is the canvas, so where its mask confines it the
+/// content box is the mask's (see [`fill_content_box`]).
 fn clip_rect(layer: &Layer, w: i32, h: i32) -> (i32, i32, i32, i32) {
+    let rect = fill_content_box(layer).unwrap_or(layer.rect);
     (
-        layer.rect.left.max(0),
-        layer.rect.top.max(0),
-        layer.rect.right.min(w),
-        layer.rect.bottom.min(h),
+        rect.left.max(0),
+        rect.top.max(0),
+        rect.right.min(w),
+        rect.bottom.min(h),
     )
 }
 

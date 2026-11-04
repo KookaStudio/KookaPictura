@@ -7,6 +7,7 @@ use crate::stroke::{blend_pixel, layer_at, layer_at_mut, parse_layer_path};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect, Sample,
+    BAND_ROWS,
 };
 use rayon::prelude::*;
 
@@ -66,6 +67,22 @@ pub(crate) fn fill_layer(
     alpha: Alpha,
     source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
 ) -> Option<PsdRect> {
+    fill_layer_within(doc, path, mode, selection, alpha, None, source)
+}
+
+/// [`fill_layer`] for a `source` that answers `None` outside `within`
+/// (document pixels): an 8-bit layer is visited and written only in the
+/// bands `within` crosses, so a small fill on a large, history-shared layer
+/// neither walks nor copies the rest of its planes.
+pub(crate) fn fill_layer_within(
+    doc: &mut Document,
+    path: &str,
+    mode: PaintMode,
+    selection: Option<&[u8]>,
+    alpha: Alpha,
+    within: Option<PsdRect>,
+    source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
+) -> Option<PsdRect> {
     // The working model is 8-bit; a document the writer accepts always is.
     if doc.depth != BitDepth::Eight {
         return None;
@@ -89,10 +106,12 @@ pub(crate) fn fill_layer(
         crate::fill_native::NativePlan::Refused => return None,
         crate::fill_native::NativePlan::Copy => {}
     }
-    fill_eight_bit(doc, path, mode, selection, alpha, gray, source)
+    fill_eight_bit(doc, path, mode, selection, alpha, gray, within, source)
 }
 
-/// Fill the layer's 8-bit channels.
+/// Fill the layer's 8-bit channels, only in the bands `within` crosses when
+/// it is given.
+#[allow(clippy::too_many_arguments)]
 fn fill_eight_bit(
     doc: &mut Document,
     path: &str,
@@ -100,6 +119,7 @@ fn fill_eight_bit(
     selection: Option<&[u8]>,
     alpha: Alpha,
     gray: bool,
+    within: Option<PsdRect>,
     source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
 ) -> Option<PsdRect> {
     let canvas = (doc.width as i32, doc.height as i32);
@@ -120,6 +140,45 @@ fn fill_eight_bit(
     let rect = layer.rect;
     let w = rect.width().max(0);
     let n = (w * rect.height().max(0)) as usize;
+    let canvas_rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: canvas.1,
+        right: canvas.0,
+    };
+    if let Some(within) = within {
+        let region = within
+            .intersect(rect)
+            .and_then(|r| r.intersect(canvas_rect))?;
+        if let Some(banded) = fill_bands(layer, n, region, gray) {
+            return banded
+                .into_iter()
+                .filter_map(|(band, [r, g, b, a])| {
+                    let top = rect.top + (band * BAND_ROWS) as i32;
+                    let band_rect = PsdRect {
+                        top,
+                        bottom: (top + BAND_ROWS as i32).min(rect.bottom),
+                        ..rect
+                    };
+                    fill_planes(
+                        r?,
+                        g,
+                        b,
+                        a,
+                        band_rect,
+                        canvas,
+                        mode,
+                        selection,
+                        policy,
+                        gray,
+                        &source,
+                        blend_pixel,
+                        region,
+                    )
+                })
+                .reduce(PsdRect::union);
+        }
+    }
     // The R, G, B and alpha planes, each a whole layer long; a missing colour
     // plane refuses the fill, a missing alpha is an opaque layer.
     let mut planes: [Option<&mut [u8]>; 4] = [None, None, None, None];
@@ -158,6 +217,59 @@ fn fill_eight_bit(
         gray,
         &source,
         blend_pixel,
+        canvas_rect,
+    )
+}
+
+/// One band's R, G, B and alpha slices.
+type BandPlanes<'a> = [Option<&'a mut [u8]>; 4];
+
+/// The layer's R, G, B and alpha planes cut into the 64-row bands `region`
+/// crosses, each band forked from history only when it is shared. `None`
+/// when a colour plane is missing or a plane cannot be banded, so the caller
+/// fills the whole planes instead.
+fn fill_bands(
+    layer: &mut pictura_core::Layer,
+    n: usize,
+    region: PsdRect,
+    gray: bool,
+) -> Option<Vec<(usize, BandPlanes<'_>)>> {
+    let rect = layer.rect;
+    let w = rect.width().max(0) as usize;
+    let first = (region.top - rect.top) as usize / BAND_ROWS;
+    let last = (region.bottom - 1 - rect.top) as usize / BAND_ROWS;
+    let bands: Vec<usize> = (first..=last).collect();
+    let mut seen = [false; 4];
+    let mut planes: [Option<Vec<&mut [u8]>>; 4] = [None, None, None, None];
+    for c in layer.channels.iter_mut() {
+        let k = match c.id {
+            0 => 0,
+            1 => 1,
+            2 => 2,
+            -1 => 3,
+            _ => continue,
+        };
+        if c.data.len() != n || seen[k] {
+            continue;
+        }
+        seen[k] = true;
+        c.data.fracture(w);
+        planes[k] = Some(c.data.write_bands(&bands)?);
+    }
+    if planes[0].is_none() || (!gray && (planes[1].is_none() || planes[2].is_none())) {
+        return None;
+    }
+    let mut iters = planes.map(|p| p.map(Vec::into_iter));
+    let mut next = |k: usize| iters[k].as_mut().and_then(Iterator::next);
+    Some(
+        bands
+            .into_iter()
+            .map(|band| {
+                let (r, g, b, a) = (next(0), next(1), next(2), next(3));
+                let (g, b) = if gray { (None, None) } else { (g, b) };
+                (band, [r, g, b, a])
+            })
+            .collect(),
     )
 }
 
@@ -183,10 +295,17 @@ pub(crate) fn fill_planes<T: Sample + PartialEq + Send + Sync>(
     gray: bool,
     source: &(impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync),
     blend: Blend<T>,
+    within: PsdRect,
 ) -> Option<PsdRect> {
     let w = rect.width().max(0) as usize;
-    let (y0, y1) = (rect.top.max(0), rect.bottom.min(canvas.1));
-    let (x0, x1) = (rect.left.max(0), rect.right.min(canvas.0));
+    let (y0, y1) = (
+        rect.top.max(0).max(within.top),
+        rect.bottom.min(canvas.1).min(within.bottom),
+    );
+    let (x0, x1) = (
+        rect.left.max(0).max(within.left),
+        rect.right.min(canvas.0).min(within.right),
+    );
     if y1 <= y0 || x1 <= x0 {
         return None;
     }

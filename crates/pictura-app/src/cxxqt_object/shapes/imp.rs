@@ -246,6 +246,24 @@ pub(super) fn shape_fill_pixels(
     paint_timing::start("Shape pixels");
     let applied = apply(view, &label(kind), |doc, path, _rust, t, selection| {
         let t0 = std::time::Instant::now();
+        if !t.is_mask {
+            // A layer target is the document: rasterize and fill the shape's
+            // own box, not a document-sized mask (#1185).
+            let (bounds, mask) =
+                shape::coverage_box(&subpath, t.document_size.0, t.document_size.1)?;
+            paint_timing::record("shape_coverage", t0.elapsed());
+            return bucket::fill_within(
+                doc,
+                path,
+                bounds,
+                &mask,
+                paint,
+                PaintMode::Normal,
+                1.0,
+                selection,
+                Alpha::Blend,
+            );
+        }
         let mask = shape::coverage(&subpath, t.document_size.0, t.document_size.1);
         paint_timing::record("shape_coverage", t0.elapsed());
         bucket::fill(

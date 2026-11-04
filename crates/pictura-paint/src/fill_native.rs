@@ -174,6 +174,12 @@ fn fill_at<T: Sample + PartialEq + Send + Sync>(
         gray,
         &source,
         blend_native::<T>,
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: canvas.1,
+            right: canvas.0,
+        },
     );
     // The 8-bit channels are the store's narrowing, so the working copy and
     // the store agree and the writer emits the store's samples.
