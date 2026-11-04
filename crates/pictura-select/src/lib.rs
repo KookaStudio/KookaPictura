@@ -15,7 +15,7 @@ use rayon::prelude::*;
 mod color_range;
 pub use color_range::{color_range, ColorRangeSelect};
 mod contour;
-pub use contour::contour;
+pub use contour::{contour, contour_within};
 
 mod blur;
 
@@ -84,11 +84,13 @@ const BORDER_MAX: u32 = 200;
 const SMOOTH_MAX: u32 = 100;
 
 impl Selection {
+    /// An empty mask in zeroed pages: no fill pass and no copy, so a shape
+    /// drawn into it touches only its own rows.
     pub fn none(width: u32, height: u32) -> Self {
         Self {
             width,
             height,
-            data: vec![0; width as usize * height as usize].into(),
+            data: Plane::build(width as usize * height as usize, |_| {}),
         }
     }
 
@@ -96,7 +98,7 @@ impl Selection {
         Self {
             width,
             height,
-            data: vec![255; width as usize * height as usize].into(),
+            data: Plane::build(width as usize * height as usize, |data| data.fill(255)),
         }
     }
 

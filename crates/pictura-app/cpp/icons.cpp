@@ -50,7 +50,9 @@ QCursor cursor(const QString& id, int hotX, int hotY)
     return cursor(id, hotX, hotY, 0.0);
 }
 
-QCursor cursor(const QString& id, int hotX, int hotY, double degrees)
+namespace {
+
+QCursor renderCursor(const QString& id, int hotX, int hotY, double degrees, qreal dpr)
 {
     const QString path = QStringLiteral(":/cursors/") + id + QStringLiteral(".svg");
     if (!QFile::exists(path)) {
@@ -64,7 +66,6 @@ QCursor cursor(const QString& id, int hotX, int hotY, double degrees)
 
     // ponytail: single-DPR render; add a multi-resolution pixmap set if HiDPI
     // cursors look soft.
-    const qreal dpr = qApp ? qApp->devicePixelRatio() : 1.0;
     const int size = qRound(24 * dpr);
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
@@ -82,18 +83,35 @@ QCursor cursor(const QString& id, int hotX, int hotY, double degrees)
     return QCursor(pixmap, qRound(hotX * dpr), qRound(hotY * dpr));
 }
 
+} // namespace
+
+QCursor cursor(const QString& id, int hotX, int hotY, double degrees)
+{
+    // A hover asks for its cursor on every pointer move. Reusing one QCursor
+    // per key keeps its pixmap's cache key, so xcb reuses the X cursor it made
+    // rather than creating one per move. Leaked so no pixmap is destroyed after
+    // the application in static destruction.
+    static auto* cache = new QHash<QString, QCursor>();
+    const qreal dpr = qApp ? qApp->devicePixelRatio() : 1.0;
+    const QString key = QStringLiteral("%1|%2|%3|%4|%5")
+                            .arg(id)
+                            .arg(hotX)
+                            .arg(hotY)
+                            .arg(degrees, 0, 'g', 17)
+                            .arg(dpr, 0, 'g', 17);
+    auto it = cache->constFind(key);
+    if (it == cache->constEnd()) {
+        it = cache->insert(key, renderCursor(id, hotX, hotY, degrees, dpr));
+    }
+    return *it;
+}
+
 QCursor rotateCursor(const QPointF& centre, const QPointF& pointer)
 {
-    static QHash<int, QCursor> cache;
     const QLineF out(centre, pointer);
     const double heading = out.length() > 1e-6 ? -out.angle() : -45.0;
     const int step = int(std::lround((heading + 45.0) / 5.0)) % 72;
-    const int key = step < 0 ? step + 72 : step;
-    auto it = cache.find(key);
-    if (it == cache.end()) {
-        it = cache.insert(key, cursor(QStringLiteral("cursor.rotate"), 12, 12, key * 5.0));
-    }
-    return it.value();
+    return cursor(QStringLiteral("cursor.rotate"), 12, 12, (step < 0 ? step + 72 : step) * 5.0);
 }
 
 } // namespace pictura

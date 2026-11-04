@@ -966,6 +966,8 @@ pub mod qobject {
         fn selection_revision(&self) -> u64;
         #[qinvokable]
         fn selection_contour_compute_count(&self) -> u64;
+        #[qinvokable]
+        fn selection_bounds_compute_count(&self) -> u64;
 
         /// Append an adjustment layer for `kind` (invert, posterize, threshold,
         /// brightness-contrast, hue-saturation), recomposite, and emit
@@ -1022,15 +1024,13 @@ pub mod qobject {
         #[qinvokable]
         fn brush_shortcut_delta(&self, key: i32, scan: u32, shift: bool, paint: bool) -> i32;
 
-        /// Scale the document to `width`×`height`, recomposite, and emit
-        /// [`changed`]. False without a document, for an unknown resample, or a
-        /// dimension below 1.
+        /// Scale the document to `width`×`height`, recomposite, and emit [`changed`]. False without
+        /// a document, for an unknown resample, or a dimension below 1.
         #[qinvokable]
         fn resize_image(self: Pin<&mut Self>, kind: &QString, width: i32, height: i32) -> bool;
 
-        /// Place the document on a `width`×`height` canvas at `anchor`,
-        /// recomposite, and emit [`changed`]. False without a document, for an
-        /// unknown anchor, or a dimension below 1.
+        /// Place the document on a `width`×`height` canvas at `anchor`, recomposite, and emit
+        /// [`changed`]. False without a document, for an unknown anchor, or a dimension below 1.
         #[qinvokable]
         fn resize_canvas(self: Pin<&mut Self>, anchor: &QString, width: i32, height: i32) -> bool;
 

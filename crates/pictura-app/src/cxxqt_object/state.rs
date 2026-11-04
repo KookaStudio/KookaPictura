@@ -6,6 +6,9 @@ use pictura_render::{CanvasDamage, ViewPyramid};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
+/// A selection mask's `(Plane::ident, width)`: equal keys hold equal masks.
+pub(super) type MaskKey = (u64, u32);
+
 /// A filter dialog's reduced canvas copy and what it was built from.
 pub(super) struct CanvasProxy {
     /// The document region, the scale's bits and the `content_revision`.
@@ -23,6 +26,13 @@ pub struct PictureViewRust {
     pub(super) selection_contour_cache: RefCell<Option<(u64, Vec<i32>)>>,
     /// How many times the committed outline has been traced, for the cache test.
     pub(super) selection_contour_computes: Cell<u64>,
+    /// The selection mask's own bounds by [`MaskKey`]: every write to the mask
+    /// drops its ident.
+    pub(super) selection_bounds_cache: Cell<Option<(MaskKey, Option<PsdRect>)>>,
+    /// How many times the bounds were scanned, for the cache test.
+    pub(super) selection_bounds_computes: Cell<u64>,
+    /// The selected-pixel count, keyed by the mask's `Plane::ident`.
+    pub(super) selection_count_cache: Cell<Option<(u64, i32)>>,
     pub(super) path: Option<String>,
     /// The selected layer paths and the active path. The shared resolver turns
     /// this into the single tool-edit target.
@@ -200,6 +210,9 @@ impl Default for PictureViewRust {
             session: Default::default(),
             selection_contour_cache: RefCell::new(None),
             selection_contour_computes: Cell::new(0),
+            selection_bounds_cache: Cell::new(None),
+            selection_bounds_computes: Cell::new(0),
+            selection_count_cache: Cell::new(None),
             path: None,
             layer_target: LayerTarget::default(),
             path_on_layer: false,
