@@ -844,6 +844,65 @@ fn type_layer_with_channel_composites_from_the_raster() {
 }
 
 #[test]
+fn missing_family_renders_with_the_bundled_face() {
+    let mut style = type_style();
+    style.font = Some("NoSuchFontPictura".into());
+    style.character.font_family = "NoSuchFontPictura".into();
+    let d = doc(200, 80, vec![type_layer(Some(style))]);
+    let out = composite_rgba(&d);
+    let plane = (200 * 80) as usize;
+    let covered = out.data[3 * plane..4 * plane]
+        .iter()
+        .filter(|&&a| a > 0)
+        .count();
+    assert!(covered > 0, "the missing family falls back and paints text");
+    assert!(covered < plane, "the layer is not a filled rectangle");
+}
+
+#[test]
+fn a_missing_family_keeps_its_stored_name() {
+    let mut style = type_style();
+    style.font = Some("NoSuchFontPictura".into());
+    style.character.font_family = "NoSuchFontPictura".into();
+    let d = doc(200, 80, vec![type_layer(Some(style))]);
+    let _ = composite_rgba(&d);
+    let spec = crate::type_layer_spec(&d.layers[0]).expect("a type spec");
+    assert_eq!(spec.character.font_family, "NoSuchFontPictura");
+    assert_eq!(
+        d.layers[0]
+            .type_tool
+            .as_ref()
+            .unwrap()
+            .style
+            .as_ref()
+            .unwrap()
+            .font
+            .as_deref(),
+        Some("NoSuchFontPictura")
+    );
+}
+
+#[test]
+fn proxy_less_type_that_paints_nothing_leaves_the_backdrop() {
+    let base = solid(
+        "base",
+        full(200, 80),
+        (10, 20, 30),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let mut layer = type_layer(Some(type_style()));
+    layer.type_tool.as_mut().unwrap().text = "   ".into();
+    let with = composite_rgba(&doc(200, 80, vec![base.clone(), layer]));
+    let without = composite_rgba(&doc(200, 80, vec![base]));
+    assert_eq!(
+        with.data, without.data,
+        "a type layer that paints nothing leaves the backdrop unchanged"
+    );
+}
+
+#[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn gpu_composites_a_proxy_less_type_layer() {
     let d = doc(200, 80, vec![type_layer(Some(type_style()))]);
