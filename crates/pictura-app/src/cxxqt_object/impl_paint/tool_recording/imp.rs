@@ -3,6 +3,7 @@
 use super::*;
 
 use super::super::super::edit::Edit;
+use super::super::super::presentation::present_core;
 use super::super::PictureViewRust;
 use cxx_qt_lib::QString;
 use pictura_paint::spacing::SpacingMode;
@@ -510,7 +511,8 @@ pub(crate) fn replay_tool_stroke(
     };
     match finished {
         Some(rect) => {
-            view.apply_edit(&step.tool, Edit::regions(vec![rect], false));
+            let presentation = view.apply_edit(&step.tool, Edit::regions(vec![rect], false));
+            present_core(view, &presentation);
             Ok(())
         }
         None => Err(ToolStrokeError::NothingPainted {

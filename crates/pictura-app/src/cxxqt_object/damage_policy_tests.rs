@@ -3,10 +3,11 @@
 
 use crate::cxxqt_object::document_session::{DocumentSession, StrokeSession};
 use crate::cxxqt_object::edit::{
-    effect_of, insertion_edit, regions_influence, structural_paths, Edit, Effect,
+    insertion_edit, presentation_of, regions_influence, structural_paths, Edit,
 };
 use crate::cxxqt_object::impl_layers::{changed_property_region, move_edit};
 use crate::cxxqt_object::metrics::{set_for_this_thread, with};
+use crate::cxxqt_object::presentation::Rebuild;
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::cxxqt_object::PictureViewRust;
 use crate::layer_target::LayerTarget;
@@ -42,19 +43,19 @@ fn dimension_change_recomposites_fully() {
     set_for_this_thread(true);
     // The policy maps an unbounded edit to a full rebuild and a bounded edit to
     // a blit; a canvas-size change is the former.
-    assert_eq!(effect_of(&Edit::Full), Effect::Rebuild);
     assert_eq!(
-        effect_of(&Edit::regions(
-            vec![PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 8,
-                right: 8,
-            }],
-            false
-        )),
-        Effect::Blit { notify: false }
+        presentation_of(&Edit::Full, None, true).rebuild,
+        Rebuild::Sync
     );
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 8,
+        right: 8,
+    };
+    let bounded = presentation_of(&Edit::regions(vec![rect], false), Some(rect), true);
+    assert_eq!(bounded.regions, vec![rect]);
+    assert!(!bounded.notify);
     let mut view = view(vec![pixel_layer("base", 8, 8, (0, 0, 0))]);
     let before = full_composites();
     view.apply_edit("Canvas Size", Edit::Full);
@@ -173,7 +174,7 @@ fn assert_bounded(label: &str, apply: fn(&mut PictureViewRust) -> Edit) {
     let before = full_composites();
     let applied = view.apply_edit(label, edit);
     assert_eq!(full_composites(), before, "{label} used a full composite");
-    assert!(applied.blit.is_some(), "{label} did not use a region");
+    assert!(!applied.regions.is_empty(), "{label} did not use a region");
     let doc = view.session.doc.as_ref().expect("document");
     assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
 }
@@ -290,7 +291,7 @@ fn bounded_group_and_ungroup_refresh_only_their_region() {
     let before = full_composites();
     let applied = view.apply_edit("Ungroup", edit);
     assert_eq!(full_composites(), before);
-    assert!(applied.blit.is_some());
+    assert!(!applied.regions.is_empty());
     let doc = view.session.doc.as_ref().expect("document");
     assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
 }
@@ -382,8 +383,8 @@ fn inserted_edit_with_pending_preview_rebuilds() {
     let before = full_composites();
     let applied = view.apply_edit("New Layer", Edit::Inserted);
     assert_eq!(
-        applied.edit,
-        Edit::Structural { damage: None },
+        applied.declaration,
+        Some(Edit::Structural { damage: None }),
         "a pending preview must upgrade a content-neutral edit to a full rebuild"
     );
     assert_eq!(full_composites(), before + 1);
@@ -508,10 +509,10 @@ fn neutral_move_still_yields_inserted() {
 
 #[test]
 fn bounded_panel_commit_notifies() {
-    assert_eq!(
-        effect_of(&Edit::regions(vec![tiny()], true)),
-        Effect::Blit { notify: true }
-    );
+    let rect = tiny();
+    let presentation = presentation_of(&Edit::regions(vec![rect], true), Some(rect), true);
+    assert_eq!(presentation.regions, vec![rect]);
+    assert!(presentation.notify);
 }
 
 #[test]

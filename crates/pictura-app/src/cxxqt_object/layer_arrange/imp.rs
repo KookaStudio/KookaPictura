@@ -160,7 +160,7 @@ pub(super) fn stamp_selected_run(
 mod tests {
     use super::*;
     use crate::cxxqt_object::document_session::DocumentSession;
-    use crate::cxxqt_object::edit::{effect_of, Effect};
+    use crate::cxxqt_object::edit::Edit;
     use crate::cxxqt_object::state::PictureViewRust;
     use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
 
@@ -193,8 +193,8 @@ mod tests {
             None
         );
         let applied = rust.apply_edit("Arrange Layer", Edit::None);
-        assert_eq!(applied.edit, Edit::None);
-        assert_eq!(effect_of(&applied.edit), Effect::Nothing);
+        assert_eq!(applied.declaration, Some(Edit::None));
+        assert!(applied.is_empty());
         assert_eq!(rust.session.history.count(), 0);
         assert_eq!(rust.session.content_revision, 0);
         let after: Vec<String> = rust

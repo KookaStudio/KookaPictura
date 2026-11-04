@@ -5,8 +5,8 @@
 //! history, and it reports what the Qt adapter must present; nothing here
 //! knows about Qt.
 
-use super::super::edit::Effect;
 use super::super::paths::ActivePath;
+use super::super::presentation::{Presentation, Rebuild};
 use super::super::state::PictureViewRust;
 use super::active::{ActiveSession, PathRestore, SessionKind};
 use super::transform::TransformSession;
@@ -143,27 +143,6 @@ impl DocumentSession {
         self.record_with(target, label, true, None)
     }
 
-    /// As [`Self::record`] with a history hint: only tiles intersecting `hint`
-    /// are compared.
-    pub(in crate::cxxqt_object) fn record_hinted(
-        &mut self,
-        target: &LayerTarget,
-        label: &str,
-        hint: Option<&[PsdRect]>,
-    ) -> bool {
-        self.record_with(target, label, true, hint)
-    }
-
-    /// As [`Self::record_move`] with a history hint.
-    pub(in crate::cxxqt_object) fn record_move_with(
-        &mut self,
-        target: &LayerTarget,
-        label: &str,
-        hint: Option<&[PsdRect]>,
-    ) -> bool {
-        self.record_with(target, label, false, hint)
-    }
-
     fn record_with(
         &mut self,
         target: &LayerTarget,
@@ -171,16 +150,51 @@ impl DocumentSession {
         bump_revision: bool,
         hint: Option<&[PsdRect]>,
     ) -> bool {
+        self.capture_with(target, label, bump_revision, hint, true)
+    }
+
+    fn capture_with(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+        bump_revision: bool,
+        hint: Option<&[PsdRect]>,
+        bookkeeping: bool,
+    ) -> bool {
         let Some(doc) = self.doc.as_mut() else {
             return false;
         };
         self.history
             .capture_live_with(doc, &self.selection, target, label, hint);
-        self.dirty = true;
-        if bump_revision {
-            self.content_revision = self.content_revision.wrapping_add(1);
+        if bookkeeping {
+            self.dirty = true;
+            if bump_revision {
+                self.content_revision = self.content_revision.wrapping_add(1);
+            }
         }
         true
+    }
+
+    /// Capture the live document without writing dirty or the content revision:
+    /// the presentation owns both.
+    pub(in crate::cxxqt_object) fn capture_live_without_bookkeeping(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+        hint: Option<&[PsdRect]>,
+    ) -> bool {
+        self.capture_with(target, label, true, hint, false)
+    }
+
+    /// As [`Self::capture_live_without_bookkeeping`] for a move commit, which
+    /// does not advance the content revision.
+    pub(in crate::cxxqt_object) fn capture_move_without_bookkeeping(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+        hint: Option<&[PsdRect]>,
+    ) -> bool {
+        self.capture_with(target, label, false, hint, false)
     }
 
     /// Record the current history state as the saved one and clear `dirty`.
@@ -198,11 +212,16 @@ impl DocumentSession {
 
     /// Derive `dirty` from the saved identity after history navigation.
     fn refresh_dirty(&mut self) {
-        self.dirty = match (self.doc.as_ref(), self.saved_id) {
+        self.dirty = self.derived_dirty();
+    }
+
+    /// The dirty value the saved identity implies, without writing it.
+    pub(in crate::cxxqt_object) fn derived_dirty(&self) -> bool {
+        match (self.doc.as_ref(), self.saved_id) {
             (None, _) => false,
             (Some(_), Some(saved)) => self.history.current_id() != Some(saved),
             (Some(_), None) => true,
-        };
+        }
     }
 
     /// Step the history into the live document and selection, and report where
@@ -227,8 +246,6 @@ impl DocumentSession {
             }),
         }?;
         self.touch_selection();
-        self.refresh_dirty();
-        self.content_revision = self.content_revision.wrapping_add(1);
         Some(restored)
     }
 }
@@ -249,77 +266,6 @@ impl PendingPreviews {
     /// Whether any uncommitted panel preview has changed the document.
     pub(in crate::cxxqt_object) fn any(&self) -> bool {
         self.opacity_changed || self.fill_changed || self.mask_refine.is_some()
-    }
-}
-
-/// A straight-sRGB region the adapter must blit. `None` means the adapter
-/// composites the region from the current document.
-pub(in crate::cxxqt_object) struct RegionBlit {
-    pub(in crate::cxxqt_object) rect: PsdRect,
-    pub(in crate::cxxqt_object) srgb: Option<pictura_core::PixelBuffer>,
-}
-
-/// What the session reports after a change: the effect to present and the
-/// regions to blit.
-pub(in crate::cxxqt_object) struct SessionChange {
-    pub(in crate::cxxqt_object) effect: Effect,
-    pub(in crate::cxxqt_object) regions: Vec<RegionBlit>,
-}
-
-impl SessionChange {
-    pub(in crate::cxxqt_object) fn none() -> Self {
-        Self {
-            effect: Effect::Nothing,
-            regions: Vec::new(),
-        }
-    }
-
-    pub(in crate::cxxqt_object) fn notify() -> Self {
-        Self {
-            effect: Effect::Notify,
-            regions: Vec::new(),
-        }
-    }
-
-    pub(in crate::cxxqt_object) fn rebuild() -> Self {
-        Self {
-            effect: Effect::Rebuild,
-            regions: Vec::new(),
-        }
-    }
-
-    pub(in crate::cxxqt_object) fn blit(rect: PsdRect) -> Self {
-        Self {
-            effect: Effect::Blit { notify: false },
-            regions: vec![RegionBlit { rect, srgb: None }],
-        }
-    }
-
-    /// Keep the stronger of two reports: a rebuild covers a blit, and a blit
-    /// keeps a notification that came with it.
-    pub(in crate::cxxqt_object) fn merge(self, other: SessionChange) -> SessionChange {
-        let effect = match (self.effect, other.effect) {
-            (Effect::Rebuild, _) | (_, Effect::Rebuild) => Effect::Rebuild,
-            (Effect::Blit { notify: a }, Effect::Blit { notify: b }) => {
-                Effect::Blit { notify: a || b }
-            }
-            (Effect::Blit { .. }, Effect::Notify) | (Effect::Notify, Effect::Blit { .. }) => {
-                Effect::Blit { notify: true }
-            }
-            (Effect::Blit { notify }, _) => Effect::Blit { notify },
-            (_, Effect::Blit { notify }) => Effect::Blit { notify },
-            (Effect::Notify, _) => Effect::Notify,
-            (_, Effect::Notify) => Effect::Notify,
-            (Effect::Nothing, Effect::Nothing) => Effect::Nothing,
-        };
-        let mut regions = self.regions;
-        regions.extend(other.regions);
-        SessionChange { effect, regions }
-    }
-
-    /// Whether the document's display changed and must be presented.
-    pub(in crate::cxxqt_object) fn changed_display(&self) -> bool {
-        !matches!(self.effect, Effect::Nothing)
     }
 }
 
@@ -391,50 +337,86 @@ impl PictureViewRust {
     /// The slot holds one session, so the cancel matches it: the mode preview's
     /// whole-document restore no longer has to run before the in-place
     /// cancels, because only one of them can be live.
-    pub(in crate::cxxqt_object) fn cancel_active_sessions(&mut self) -> SessionChange {
+    pub(in crate::cxxqt_object) fn cancel_active_sessions(&mut self) -> Presentation {
+        self.cancel_active_sessions_with(true)
+    }
+
+    /// As [`Self::cancel_active_sessions`], but skip the display work. Callers
+    /// that replace the document and discard the presentation use this so the
+    /// cancelled session does not composite or refresh pixels nobody reads.
+    pub(in crate::cxxqt_object) fn cancel_active_sessions_report_only(&mut self) -> Presentation {
+        self.cancel_active_sessions_with(false)
+    }
+
+    fn cancel_active_sessions_with(&mut self, refresh_display: bool) -> Presentation {
         if !self.has_active_session() {
             self.clear_pending_previews();
-            return SessionChange::none();
+            return Presentation::none();
         }
-        let mut change = SessionChange::none();
-
-        match std::mem::replace(&mut self.session.live, ActiveSession::Idle) {
-            ActiveSession::Idle => {}
+        let presentation = match std::mem::replace(&mut self.session.live, ActiveSession::Idle) {
+            ActiveSession::Idle => Presentation::none(),
             ActiveSession::ModePreview(base) => {
                 self.session.doc = Some(*base);
-                change = change.merge(SessionChange::rebuild());
+                if refresh_display {
+                    self.composite_into_doc();
+                }
+                Presentation::rebuild(Rebuild::Sync)
             }
             ActiveSession::FilterPreview(preview) => {
-                if let Some(restored) =
-                    super::super::impl_filters::cancel_filter_preview_session(self, *preview)
-                {
-                    change = change.merge(match restored {
-                        Some(rect) => SessionChange::blit(rect),
-                        None => SessionChange::rebuild(),
-                    });
+                match super::super::impl_filters::cancel_filter_preview_session(self, *preview) {
+                    Some(Some(rect)) => {
+                        let regions = if refresh_display {
+                            self.refresh_regions(&[rect]).into_iter().collect()
+                        } else {
+                            vec![rect]
+                        };
+                        Presentation::regions(regions, false)
+                    }
+                    Some(None) => {
+                        if refresh_display {
+                            self.composite_into_doc();
+                        }
+                        Presentation::rebuild(Rebuild::Sync)
+                    }
+                    None => Presentation::none(),
                 }
             }
-            ActiveSession::Stroke(session) => {
-                change = change.merge(match self.cancel_stroke_session(*session) {
-                    Some(rect) => SessionChange::blit(rect),
-                    None => SessionChange::rebuild(),
-                });
-            }
+            ActiveSession::Stroke(session) => match self.cancel_stroke_session(*session) {
+                Some(rect) => {
+                    let regions = if refresh_display {
+                        self.refresh_regions(&[rect]).into_iter().collect()
+                    } else {
+                        vec![rect]
+                    };
+                    Presentation::regions(regions, false)
+                }
+                None => {
+                    if refresh_display {
+                        self.composite_into_doc();
+                    }
+                    Presentation::rebuild(Rebuild::Sync)
+                }
+            },
             ActiveSession::Transform(session) => {
                 if self.cancel_transform_session(*session) {
-                    change = change.merge(SessionChange::rebuild());
+                    if refresh_display {
+                        self.composite_into_doc();
+                    }
+                    Presentation::rebuild(Rebuild::Sync)
+                } else {
+                    Presentation::none()
                 }
             }
             ActiveSession::Path(restore) => {
-                change = change.merge(self.cancel_path_gesture_restore(*restore));
+                self.cancel_path_gesture_restore(*restore, refresh_display)
             }
-            ActiveSession::Heal(_) => {}
-            ActiveSession::Selection(_) => {}
-            ActiveSession::SelectionMove(_) => {}
-        }
+            ActiveSession::Heal(_) => Presentation::none(),
+            ActiveSession::Selection(_) => Presentation::none(),
+            ActiveSession::SelectionMove(_) => Presentation::none(),
+        };
 
         self.clear_pending_previews();
-        change
+        presentation
     }
 
     /// Install a replacement document. Cancellation runs first, against the
@@ -447,7 +429,7 @@ impl PictureViewRust {
         target: LayerTarget,
         pdf_password: Option<String>,
     ) {
-        self.cancel_active_sessions();
+        self.cancel_active_sessions_report_only();
         self.clear_document_scoped_state();
         self.session.install(doc, history, pdf_password);
         self.session.vanishing_planes = self
@@ -544,39 +526,45 @@ impl PictureViewRust {
     pub(in crate::cxxqt_object) fn cancel_path_gesture_restore(
         &mut self,
         restore: PathRestore,
-    ) -> SessionChange {
-        let Some(doc) = self.session.doc.as_mut() else {
-            return SessionChange::none();
-        };
-        match restore {
-            PathRestore::WorkOrSaved { active, path } => {
-                match active {
-                    ActivePath::None | ActivePath::Work => doc.work_path = path,
-                    ActivePath::Saved(i) => match doc.saved_paths.get_mut(i) {
-                        Some(saved) => saved.path = path,
-                        None => return SessionChange::none(),
-                    },
+        refresh_display: bool,
+    ) -> Presentation {
+        let presentation = {
+            let Some(doc) = self.session.doc.as_mut() else {
+                return Presentation::none();
+            };
+            match restore {
+                PathRestore::WorkOrSaved { active, path } => {
+                    match active {
+                        ActivePath::None | ActivePath::Work => doc.work_path = path,
+                        ActivePath::Saved(i) => match doc.saved_paths.get_mut(i) {
+                            Some(saved) => saved.path = path,
+                            None => return Presentation::none(),
+                        },
+                    }
+                    self.active_path = active;
+                    Presentation::notify()
                 }
-                self.active_path = active;
-                SessionChange::notify()
+                PathRestore::Layer { target, subpaths } => {
+                    let (width, height) = (doc.width, doc.height);
+                    if let Some(layer) = pictura_render::resolve_path_mut(doc, &target) {
+                        pictura_render::set_layer_shape_paths(layer, &subpaths, width, height);
+                    }
+                    Presentation::rebuild(Rebuild::Sync)
+                }
             }
-            PathRestore::Layer { target, subpaths } => {
-                let (width, height) = (doc.width, doc.height);
-                let Some(layer) = pictura_render::resolve_path_mut(doc, &target) else {
-                    return SessionChange::rebuild();
-                };
-                pictura_render::set_layer_shape_paths(layer, &subpaths, width, height);
-                SessionChange::rebuild()
-            }
+        };
+        if presentation.rebuild == Rebuild::Sync && refresh_display {
+            self.composite_into_doc();
         }
+        presentation
     }
 
     /// Restore the path a Pen or Path Selection gesture replaced, taking the
     /// gesture out of the slot first.
-    pub(in crate::cxxqt_object) fn cancel_path_gesture(&mut self) -> SessionChange {
+    pub(in crate::cxxqt_object) fn cancel_path_gesture(&mut self) -> Presentation {
         let Some(restore) = self.session.live.take_path() else {
-            return SessionChange::none();
+            return Presentation::none();
         };
-        self.cancel_path_gesture_restore(restore)
+        self.cancel_path_gesture_restore(restore, true)
     }
 }
