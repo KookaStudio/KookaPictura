@@ -104,7 +104,11 @@ pub(super) fn layer_flattened_buffer(
     };
     let mut scratch = doc.clone();
     scratch.layers = pictura_core::LayerStack::from_layers(vec![layer.clone()]);
-    let buffer = pictura_render::composite_active(&scratch, gpu_compute).0;
+    let buffer = pictura_render::composite(pictura_render::CompositeRequest::whole(
+        &scratch,
+        gpu_compute,
+    ))
+    .0;
     let srgb = pictura_codec::buffer_to_srgb(&scratch, &buffer);
     let rgba = buffer_to_rgba_bytes(&srgb);
     let (x0, y0, cw, ch) = layer_bounds(layer, doc.width, doc.height);

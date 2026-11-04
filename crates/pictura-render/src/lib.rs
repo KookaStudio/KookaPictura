@@ -36,8 +36,13 @@ mod composite_clipping;
 mod composite_knockout;
 mod composite_plan;
 mod composite_region;
+mod composite_request;
 mod composite_route;
 mod composite_rows;
+mod document_composite;
+pub use document_composite::{
+    patch_buffer_region, rgba_frame, CompositeScope, DocumentComposite, Refreshed,
+};
 pub mod damage;
 mod layer_source;
 pub use layer_effects::layer_paint_bounds;
@@ -50,14 +55,15 @@ mod smart_source;
 mod view_pyramid;
 pub(crate) use composite::{channel, channel_plane, mask_alpha, render_smart_source};
 pub use composite::{
-    composite_rgba, composite_rgba_region, decode_adjustment, encode_brightness_contrast,
-    encode_hue_saturation, encode_invert, encode_photo_filter, encode_posterize,
-    encode_solid_color_fill, encode_threshold,
+    composite_rgba, decode_adjustment, encode_brightness_contrast, encode_hue_saturation,
+    encode_invert, encode_photo_filter, encode_posterize, encode_solid_color_fill,
+    encode_threshold,
 };
+pub use composite_request::{composite, CompositeRequest};
 pub use view_pyramid::{LevelView, Planes, PyramidLevel, ViewPyramid, SMALLEST_SIDE, TILE};
 
 mod composite_native;
-pub use composite_native::{composite_native, refresh_native_composite};
+pub use composite_native::refresh_native_composite;
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
     Adjustment, AutoKind, ExposureGamma, GradientFillParams, GradientKind, GradientMapParams,
@@ -134,9 +140,8 @@ pub mod gpu;
 /// No workspace manifest enables it; only the GPU parity CI jobs pass it.
 pub const SOFTWARE_GPU: bool = cfg!(feature = "software-gpu");
 pub use gpu::{
-    backend_label, compiled_backends, composite_active, composite_gpu, composite_gpu_or_cpu,
-    composite_region_active, device_available, dx12_compiler, dx12_compiler_label, env_candidates,
-    gpu_adapter_info, gpu_available, gpu_backend_status, platform, probe_backend,
+    backend_label, compiled_backends, device_available, dx12_compiler, dx12_compiler_label,
+    env_candidates, gpu_adapter_info, gpu_available, gpu_backend_status, platform, probe_backend,
     probe_backend_outcome, resolve_candidates, selected_backend, set_backend, set_safe_mode,
     Backend, GpuAdapterInfo, GpuBackend, GpuBackendStatus, GpuError, Platform, ProbeOutcome,
     ProbeReport,

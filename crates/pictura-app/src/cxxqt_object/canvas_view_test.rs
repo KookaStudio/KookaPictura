@@ -1,7 +1,7 @@
 use super::helpers_composite::*;
 use super::PictureViewRust;
 use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect};
-use pictura_render::{CanvasDamage, ViewPyramid};
+use pictura_render::{rgba_frame, CanvasDamage, DocumentComposite, ViewPyramid};
 
 /// A 4-plane RGBA buffer with variation in every channel, so a level mismatch
 /// cannot hide behind uniform pixels.
@@ -329,7 +329,10 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
     // A mid-stroke region refresh keeps the pyramid equal to a full rebuild, so
     // the present path can crop it instead of resampling the full image.
     let working = rust.session.doc.as_ref().unwrap();
-    let region = pictura_render::composite_region_active(working, rect, false).0;
+    let region = pictura_render::composite(pictura_render::CompositeRequest::region(
+        working, rect, false,
+    ))
+    .0;
     let level0 = level0_from_buffer(working, &region);
     rust.refresh_level0_region(level0, rect.left, rect.top);
     rust.update_pyramid(rect);
@@ -382,44 +385,6 @@ fn a_mid_stroke_named_snapshot_stores_an_exact_composite() {
     assert!(!snapshot.doc.layers[0].channels[0]
         .data
         .shares(&live.layers[0].channels[0].data));
-}
-
-#[test]
-fn paint_commit_region_patch_equals_a_full_recomposite() {
-    use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
-
-    let rgba = vec![30u8; 128 * 128 * 4];
-    let mut doc = Document::from_rgba("paint", 128, 128, &rgba);
-    let cfg = StrokeConfig {
-        diameter: 24,
-        ..StrokeConfig::default()
-    };
-    let mut stroke = Stroke::begin_at(&doc, "0", cfg).expect("begin stroke");
-    for i in 0..8 {
-        assert!(stroke.sample(
-            &mut doc,
-            StrokeSample {
-                x: 20.0 + i as f32 * 8.0,
-                y: 64.0,
-                pressure: 1.0,
-            }
-        ));
-        stroke.take_dirty();
-    }
-    let rect = stroke.finish().expect("the stroke painted pixels");
-
-    // Replay `end_paint`'s region commit against the committed bytes.
-    let mut committed = doc.clone();
-    let buffer = pictura_render::composite_region_active(&committed, rect, false).0;
-    let x0 = rect.left.max(0);
-    let y0 = rect.top.max(0);
-    patch_composite_region(&mut committed, &buffer, x0, y0);
-
-    let full = current_buffer(&doc, false);
-    assert_eq!(
-        committed.composite.data, full.data,
-        "the stroke's committed region equals a full recomposite"
-    );
 }
 
 /// Patching a damage rectangle into a cached level-0 crop only works if the
@@ -542,9 +507,11 @@ fn a_multi_rect_stroke_commit_equals_a_full_recomposite() {
     // Replay `end_paint`'s per-rect commit against the committed bytes.
     let mut committed = doc.clone();
     for region in &regions {
-        let buffer = pictura_render::composite_region_active(&committed, *region, false).0;
-        patch_composite_region(
-            &mut committed,
+        let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
+            &committed, *region, false,
+        ))
+        .0;
+        DocumentComposite::new(&mut committed).patch(
             &buffer,
             region.left.max(0),
             region.top.max(0),
@@ -569,8 +536,9 @@ fn layer_opacity_region_refresh_equals_a_full_recomposite() {
     // way `mutate_layer` does.
     doc.layers.last_mut().unwrap().opacity = 128;
     let rect = doc.layers.last().unwrap().rect;
-    let buffer = pictura_render::composite_region_active(&doc, rect, false).0;
-    patch_composite_region(&mut doc, &buffer, rect.left, rect.top);
+    let buffer =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false)).0;
+    DocumentComposite::new(&mut doc).patch(&buffer, rect.left, rect.top);
 
     let full = current_buffer(&doc, false);
     assert_eq!(
@@ -611,8 +579,9 @@ fn content_move_region_fixture() -> (Document, PixelBuffer, PsdRect) {
         &mut doc, &path, &mask, dx, dy, false
     ));
     let dirty = super::impl_selection::move_dirty_rect(&selection, dx, dy).expect("dirty rect");
-    let buffer = pictura_render::composite_region_active(&doc, dirty, false).0;
-    patch_composite_region(&mut doc, &buffer, dirty.left, dirty.top);
+    let buffer =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, false)).0;
+    DocumentComposite::new(&mut doc).patch(&buffer, dirty.left, dirty.top);
     (doc, before, dirty)
 }
 
@@ -667,8 +636,9 @@ fn layer_move_region_refresh_equals_a_full_recomposite() {
     ));
     let after = doc.layers[index].rect;
     let dirty = before.union(after);
-    let buffer = pictura_render::composite_region_active(&doc, dirty, false).0;
-    patch_composite_region(&mut doc, &buffer, dirty.left, dirty.top);
+    let buffer =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, false)).0;
+    DocumentComposite::new(&mut doc).patch(&buffer, dirty.left, dirty.top);
 
     let full = current_buffer(&doc, false);
     assert_eq!(

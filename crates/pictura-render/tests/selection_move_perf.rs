@@ -237,7 +237,7 @@ fn selection_move_drag_costs() {
     report(
         "region composite 2037² (app default)",
         &mut time(3, || {
-            pictura_render::composite_region_active(&doc, dirty, true)
+            pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, true))
         }),
     );
     println!(

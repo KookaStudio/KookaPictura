@@ -154,7 +154,11 @@ fn backdrop(
     // A hidden layer draws nothing; without its planes the reduction skips it.
     target.channels.clear();
     let (buffer, source) = if level == 0 {
-        let (buffer, _) = pictura_render::composite_region_active(&hidden, patch, gpu_compute);
+        let (buffer, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+            &hidden,
+            patch,
+            gpu_compute,
+        ));
         (buffer, hidden)
     } else {
         let reduced =

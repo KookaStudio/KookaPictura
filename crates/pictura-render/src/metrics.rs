@@ -228,7 +228,7 @@ mod tests {
         let doc = solid_doc(4, 4, BlendMode::Dissolve);
         let before = decline_count("unsupported_mode");
         assert!(matches!(
-            crate::composite_gpu(&doc),
+            crate::gpu::composite_gpu(&doc),
             Err(GpuError::UnsupportedMode(BlendMode::Dissolve))
         ));
         assert!(decline_count("unsupported_mode") > before);
@@ -243,7 +243,7 @@ mod tests {
             .find(|(reason, _)| *reason == "unsupported_mode")
             .map_or(0, |(_, n)| *n);
         assert!(matches!(
-            crate::composite_gpu(&doc),
+            crate::gpu::composite_gpu(&doc),
             Err(GpuError::UnsupportedMode(BlendMode::Dissolve))
         ));
         let after = counters()
@@ -282,7 +282,7 @@ mod tests {
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         let before = decline_count("type_source");
         assert!(matches!(
-            crate::composite_gpu(&doc),
+            crate::gpu::composite_gpu(&doc),
             Err(GpuError::UnsupportedText)
         ));
         assert!(decline_count("type_source") > before);

@@ -1,4 +1,5 @@
 use super::*;
+use crate::gpu::composite_gpu;
 use pictura_core::{BlendIf, CharacterAttrs, Knockout, ParagraphAttrs, TextStyle, TypeTool};
 
 // --- compositing pipeline ----------------------------------------------
@@ -479,7 +480,10 @@ fn pass_through_group_vector_mask() {
     for x in 2..4 {
         assert_eq!(rgb(&pass, x, 0), [0, 0, 255], "masked-out column {x}");
     }
-    let gpu = composite_gpu_or_cpu(&scene(BlendMode::PassThrough));
+    let gpu = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(&scene(BlendMode::PassThrough), true),
+    )
+    .0;
     for (i, (a, b)) in gpu.data.iter().zip(pass.data.iter()).enumerate() {
         assert!(
             (*a as i16 - *b as i16).abs() <= 1,
@@ -802,7 +806,9 @@ fn proxy_less_type_layer_composites_live_coverage() {
     } else {
         Backend::Cpu
     };
-    let (active, backend) = composite_active(&d, true);
+    let (active, backend) = crate::composite_request::composite(
+        crate::composite_request::CompositeRequest::whole(&d, true),
+    );
     assert_eq!(backend, expected);
     if backend == Backend::Gpu {
         for (i, (a, b)) in out.data.iter().zip(active.data.iter()).enumerate() {
@@ -841,6 +847,65 @@ fn type_layer_with_channel_composites_from_the_raster() {
             assert_eq!(px(&out, x, y), [10, 20, 30, 255], "at {x},{y}");
         }
     }
+}
+
+#[test]
+fn missing_family_renders_with_the_bundled_face() {
+    let mut style = type_style();
+    style.font = Some("NoSuchFontPictura".into());
+    style.character.font_family = "NoSuchFontPictura".into();
+    let d = doc(200, 80, vec![type_layer(Some(style))]);
+    let out = composite_rgba(&d);
+    let plane = (200 * 80) as usize;
+    let covered = out.data[3 * plane..4 * plane]
+        .iter()
+        .filter(|&&a| a > 0)
+        .count();
+    assert!(covered > 0, "the missing family falls back and paints text");
+    assert!(covered < plane, "the layer is not a filled rectangle");
+}
+
+#[test]
+fn a_missing_family_keeps_its_stored_name() {
+    let mut style = type_style();
+    style.font = Some("NoSuchFontPictura".into());
+    style.character.font_family = "NoSuchFontPictura".into();
+    let d = doc(200, 80, vec![type_layer(Some(style))]);
+    let _ = composite_rgba(&d);
+    let spec = crate::type_layer_spec(&d.layers[0]).expect("a type spec");
+    assert_eq!(spec.character.font_family, "NoSuchFontPictura");
+    assert_eq!(
+        d.layers[0]
+            .type_tool
+            .as_ref()
+            .unwrap()
+            .style
+            .as_ref()
+            .unwrap()
+            .font
+            .as_deref(),
+        Some("NoSuchFontPictura")
+    );
+}
+
+#[test]
+fn proxy_less_type_that_paints_nothing_leaves_the_backdrop() {
+    let base = solid(
+        "base",
+        full(200, 80),
+        (10, 20, 30),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let mut layer = type_layer(Some(type_style()));
+    layer.type_tool.as_mut().unwrap().text = "   ".into();
+    let with = composite_rgba(&doc(200, 80, vec![base.clone(), layer]));
+    let without = composite_rgba(&doc(200, 80, vec![base]));
+    assert_eq!(
+        with.data, without.data,
+        "a type layer that paints nothing leaves the backdrop unchanged"
+    );
 }
 
 #[test]

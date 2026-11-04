@@ -3,9 +3,10 @@
 
 use super::super::state::PictureViewRust;
 use super::active::SessionKind;
-use super::session::{DocumentSession, SessionChange};
+use super::session::DocumentSession;
 use super::transform::TransformMode;
 use crate::cxxqt_object::impl_filters::{apply_filter_active, cancel_filter_preview};
+use crate::cxxqt_object::presentation::{present_core, Presentation, Rebuild};
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::history::History;
 use crate::layer_target::LayerTarget;
@@ -281,7 +282,7 @@ fn only_the_live_sessions_state_exists() {
 
     let change = view.cancel_active_sessions();
     assert!(
-        change.changed_display(),
+        change.has_display_change(),
         "the cancel restores the pre-preview pixels"
     );
     assert!(
@@ -355,7 +356,7 @@ fn undo_cancels_every_session() {
     assert!(view.has_active_session());
 
     let change = view.cancel_active_sessions();
-    assert!(change.changed_display());
+    assert!(change.has_display_change());
     assert!(!view.has_active_session(), "the session is gone");
     assert_eq!(
         view.session.history.count(),
@@ -373,7 +374,7 @@ fn redo_cancels_every_session() {
     assert!(view.has_active_session());
 
     let change = view.cancel_active_sessions();
-    assert!(change.changed_display());
+    assert!(change.has_display_change());
     assert!(!view.has_active_session());
     assert!(view.session.live.mode_preview().is_none());
 }
@@ -389,7 +390,7 @@ fn jump_cancels_a_filter_preview() {
     assert_eq!(view.active_session_kind(), Some(SessionKind::FilterPreview));
 
     let change = view.cancel_active_sessions();
-    assert!(change.changed_display());
+    assert!(change.has_display_change());
     assert!(
         view.session.live.filter_preview().is_none(),
         "the preview is discarded"
@@ -404,7 +405,7 @@ fn snapshot_restore_cancels_the_session() {
     assert!(view.has_active_session());
 
     let change = view.cancel_active_sessions();
-    assert!(change.changed_display());
+    assert!(change.has_display_change());
     assert!(!view.has_active_session());
     assert!(view.session.live.mode_preview().is_none());
 }
@@ -424,11 +425,11 @@ fn a_shape_path_abort_requests_a_rebuild() {
 
     let change = view.cancel_active_sessions();
     assert_eq!(
-        change.effect,
-        crate::cxxqt_object::edit::Effect::Rebuild,
+        change.rebuild,
+        Rebuild::Sync,
         "a shape-layer path abort asks for a rebuild"
     );
-    assert!(change.changed_display());
+    assert!(change.has_display_change());
     assert!(!view.has_active_session(), "the gesture is gone");
     let layer = &view.session.doc.as_ref().expect("document").layers[0];
     assert!(layer.vector_mask.is_some(), "the layer's outline is back");
@@ -545,16 +546,16 @@ fn a_full_change_requests_a_rebuild() {
     view.session.live.set_mode_preview(doc());
     let change = view.cancel_active_sessions();
     assert!(view.session.live.mode_preview().is_none());
-    assert_eq!(change.effect, crate::cxxqt_object::edit::Effect::Rebuild);
-    assert!(change.changed_display());
+    assert_eq!(change.rebuild, Rebuild::Sync);
+    assert!(change.has_display_change());
 }
 
 #[test]
 fn cancelling_without_a_session_is_a_noop() {
     let mut view = view();
     let change = view.cancel_active_sessions();
-    assert_eq!(change.effect, crate::cxxqt_object::edit::Effect::Nothing);
-    assert!(!change.changed_display());
+    assert!(change.is_empty());
+    assert!(!change.has_display_change());
 }
 
 #[test]
@@ -563,7 +564,7 @@ fn cancelling_every_session_restores_state() {
     view.session.selection = Some(Selection::none(8, 8));
     assert!(view.begin_selection_move());
     assert!(view.has_active_session());
-    assert!(view.cancel_active_sessions().effect == crate::cxxqt_object::edit::Effect::Nothing);
+    assert!(view.cancel_active_sessions().is_empty());
     assert!(!view.has_active_session());
     assert!(view.session.live.selection_move_origin().is_none());
     assert!(view.session.live.selection_move_delta().is_none());
@@ -592,7 +593,7 @@ fn a_notification_only_change_emits_no_blit() {
         .work_path
         .finish_editing();
     let change = view.cancel_active_sessions();
-    assert_eq!(change.effect, crate::cxxqt_object::edit::Effect::Notify);
+    assert!(change.notify);
     assert!(!view.has_active_session(), "the gesture is gone");
 }
 
@@ -654,12 +655,10 @@ fn a_region_change_does_not_notify() {
         bottom: 2,
         right: 2,
     };
-    let change = SessionChange::blit(rect);
-    assert_eq!(
-        change.effect,
-        crate::cxxqt_object::edit::Effect::Blit { notify: false }
-    );
-    assert_eq!(change.regions.len(), 1);
+    let change = Presentation::regions(vec![rect], false);
+    assert_eq!(change.regions, vec![rect]);
+    assert!(!change.notify);
+    assert_eq!(change.rebuild, Rebuild::None);
 }
 
 #[test]
@@ -670,14 +669,13 @@ fn a_region_change_can_also_notify() {
         bottom: 2,
         right: 2,
     };
-    let change = SessionChange {
-        effect: crate::cxxqt_object::edit::Effect::Blit { notify: true },
-        regions: vec![super::session::RegionBlit { rect, srgb: None }],
+    let change = Presentation {
+        regions: vec![rect],
+        notify: true,
+        ..Presentation::none()
     };
-    assert_eq!(
-        change.effect,
-        crate::cxxqt_object::edit::Effect::Blit { notify: true }
-    );
+    assert_eq!(change.regions, vec![rect]);
+    assert!(change.notify);
 }
 
 fn group_layer(name: &str, children: Vec<pictura_core::Layer>) -> pictura_core::Layer {
@@ -797,15 +795,19 @@ fn returning_to_the_saved_state_clears_dirty() {
 
     assert!(view.session.record(&target, "Second"));
     assert!(view.session.dirty);
-    assert!(view
+    let restored = view
         .session
         .restore(&mut target, History::undo_live, History::undo)
-        .is_some());
+        .expect("a state to undo");
+    let presentation = view.restore_presentation(restored, view.session.derived_dirty());
+    present_core(&mut view, &presentation);
     assert!(!view.session.dirty, "undo lands on the saved state");
-    assert!(view
+    let restored = view
         .session
         .restore(&mut target, History::redo_live, History::redo)
-        .is_some());
+        .expect("a state to redo");
+    let presentation = view.restore_presentation(restored, view.session.derived_dirty());
+    present_core(&mut view, &presentation);
     assert!(view.session.dirty, "redo leaves the saved state");
 }
 
@@ -822,10 +824,12 @@ fn a_dropped_saved_state_stays_dirty() {
     assert_ne!(view.session.saved_id, view.session.history.current_id());
 
     while view.session.history.can_undo() {
-        assert!(view
+        let restored = view
             .session
             .restore(&mut target, History::undo_live, History::undo)
-            .is_some());
+            .expect("a state to undo");
+        let presentation = view.restore_presentation(restored, view.session.derived_dirty());
+        present_core(&mut view, &presentation);
         assert!(view.session.dirty, "the saved state is no longer retained");
     }
 }

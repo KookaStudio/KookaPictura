@@ -1,131 +1,11 @@
 use cxx_qt_lib::{QImage, QImageFormat};
 use pictura_codec::buffer_to_srgb;
-use pictura_core::{BlendMode, ColorMode, Document, Layer, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{BlendMode, Document, Layer, LayerMask, PixelBuffer, PsdRect};
 use pictura_paint::stamp::{layer_surface, sample_scope, surface_from_composite, CloneSampling};
 #[cfg(test)]
 use pictura_paint::Stroke;
 use pictura_render::{Planes, PyramidLevel};
 use pictura_select::Selection;
-/// The rendered buffer as a 4-plane RGBA frame.
-///
-/// A 1/2/3-plane render (a layerless document's embedded composite) is expanded
-/// with grey replication and opaque alpha exactly as [`buffer_to_image`] does.
-pub(super) fn rgba_frame(rendered: &PixelBuffer) -> PixelBuffer {
-    if rendered.channels == 4 {
-        return rendered.clone();
-    }
-    let plane = rendered.pixel_count();
-    let channels = rendered.channels as usize;
-    let mut data = vec![0u8; plane * 4];
-    for i in 0..plane {
-        let (r, g, b, a) = if channels <= 1 {
-            let v = rendered.data[i];
-            (v, v, v, 255)
-        } else if channels == 2 {
-            let v = rendered.data[i];
-            (v, v, v, rendered.data[plane + i])
-        } else {
-            (
-                rendered.data[i],
-                rendered.data[plane + i],
-                rendered.data[2 * plane + i],
-                255,
-            )
-        };
-        data[i] = r;
-        data[plane + i] = g;
-        data[2 * plane + i] = b;
-        data[3 * plane + i] = a;
-    }
-    PixelBuffer {
-        width: rendered.width,
-        height: rendered.height,
-        channels: 4,
-        data: data.into(),
-    }
-}
-/// Persist a full-frame rendered composite into `doc.composite`.
-///
-/// An RGB document takes the rendered 4-plane RGBA frame, so its merged
-/// composite is RGBA after any rebuild. A non-RGB mode keeps its existing
-/// composite colour-plane count and copies `min(rendered, composite)` planes, so
-/// a 1-plane grayscale composite stays 1-plane. A composite whose dimensions no
-/// longer match the document is replaced with the rendered frame.
-pub(super) fn store_composite(doc: &mut Document, rendered: &PixelBuffer) {
-    if rendered.width != doc.width || rendered.height != doc.height {
-        return;
-    }
-    let rgba = rgba_frame(rendered);
-    if doc.mode == ColorMode::Rgb
-        || doc.composite.width != doc.width
-        || doc.composite.height != doc.height
-    {
-        doc.composite = rgba;
-        return;
-    }
-    let target = doc.composite.channels as usize;
-    let plane = (doc.width as usize) * (doc.height as usize);
-    let mut data = vec![0u8; plane * target];
-    for c in 0..target.min(rgba.channels as usize) {
-        data[c * plane..(c + 1) * plane].copy_from_slice(&rgba.data[c * plane..(c + 1) * plane]);
-    }
-    doc.composite = PixelBuffer {
-        width: doc.width,
-        height: doc.height,
-        channels: target as u8,
-        data: data.into(),
-    };
-}
-/// Copy a region of a 4-plane rendered buffer into `doc.composite` at `(x0, y0)`.
-///
-/// Writes the composite's own colour-plane count (an RGB composite is 4-plane,
-/// a grayscale one 1-plane), mapping region plane `c` to composite plane `c`.
-/// Used to keep the cached document composite consistent with the region blit.
-/// A channel-count or size mismatch is ignored (the region still reaches the
-/// displayed image).
-pub(super) fn patch_composite_region(doc: &mut Document, region: &PixelBuffer, x0: i32, y0: i32) {
-    if doc.composite.width != doc.width || doc.composite.height != doc.height {
-        return;
-    }
-    patch_buffer_region(&mut doc.composite, region, x0, y0);
-}
-/// Overwrite `dst` at `(x0, y0)` with a 4-channel planar region buffer, mapping
-/// region plane `c` to `dst` plane `c` for `min(4, dst.channels)` planes.
-pub(super) fn patch_buffer_region(dst: &mut PixelBuffer, region: &PixelBuffer, x0: i32, y0: i32) {
-    if region.channels != 4 {
-        return;
-    }
-    if x0 < 0 || y0 < 0 {
-        return;
-    }
-    let (x0, y0) = (x0 as usize, y0 as usize);
-    let rw = region.width as usize;
-    let rh = region.height as usize;
-    let (fw, fh) = (dst.width as usize, dst.height as usize);
-    if x0 + rw > fw || y0 + rh > fh {
-        return;
-    }
-    let fplane = fw * fh;
-    let rplane = rw * rh;
-    let planes = (dst.channels as usize).min(4);
-    if fplane == 0 || rw == 0 {
-        return;
-    }
-    // Write row by row: a region patch must not flatten a banded composite
-    // plane that history still shares.
-    for c in 0..planes {
-        for ry in 0..rh {
-            let y = c * fh + y0 + ry;
-            let Some(row) = dst.data.row_mut(y, fw) else {
-                continue;
-            };
-            let src = c * rplane + ry * rw;
-            if x0 + rw <= row.len() {
-                row[x0..x0 + rw].copy_from_slice(&region.data[src..src + rw]);
-            }
-        }
-    }
-}
 /// The `w × h` region of planar `buffer` at `(x0, y0)`, every channel kept.
 /// The caller clamps the region to the buffer.
 pub(super) fn crop_planar(buffer: &PixelBuffer, x0: i32, y0: i32, w: u32, h: u32) -> PixelBuffer {
@@ -234,7 +114,7 @@ pub(super) fn current_buffer(doc: &Document, gpu_compute: bool) -> PixelBuffer {
     if doc.layers.is_empty() {
         doc.composite.clone()
     } else {
-        pictura_render::composite_active(doc, gpu_compute).0
+        pictura_render::composite(pictura_render::CompositeRequest::whole(doc, gpu_compute)).0
     }
 }
 /// Convert the document to a packed RGBA `QImage`.
@@ -909,7 +789,7 @@ pub(super) fn into_rgba_frame(rendered: PixelBuffer) -> PixelBuffer {
     if rendered.channels == 4 {
         rendered
     } else {
-        rgba_frame(&rendered)
+        pictura_render::rgba_frame(&rendered)
     }
 }
 /// The 4-plane straight **sRGB** level-0 frame for `source`: the color-managed

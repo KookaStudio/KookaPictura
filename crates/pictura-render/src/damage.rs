@@ -441,7 +441,7 @@ mod tests {
         assert_eq!(damage, canvas, "the freed full-canvas layer is covered");
 
         let full = crate::composite_rgba(&d);
-        let region = crate::composite_rgba_region(
+        let region = crate::composite_region::composite_rgba_region(
             &d,
             damage.left as u32,
             damage.top as u32,
@@ -478,7 +478,7 @@ mod tests {
         ]);
         let damage = influence(&d, "2").expect("bounded");
         let full = crate::composite_rgba(&d);
-        let region = crate::composite_rgba_region(
+        let region = crate::composite_region::composite_rgba_region(
             &d,
             damage.left as u32,
             damage.top as u32,

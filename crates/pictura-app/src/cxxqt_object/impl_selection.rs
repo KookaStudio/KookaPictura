@@ -1034,7 +1034,7 @@ fn channel_row_selection(
 mod tests {
     use super::*;
     use crate::cxxqt_object::document_session::DocumentSession;
-    use crate::cxxqt_object::edit::{effect_of, Effect};
+    use crate::cxxqt_object::edit::Edit;
     use crate::cxxqt_object::state::PictureViewRust;
     use pictura_core::BitDepth;
 
@@ -1061,8 +1061,8 @@ mod tests {
             .clone();
         let outcome = save_selection_channel(&mut rust);
         let applied = rust.apply_edit("Save Selection", outcome);
-        assert_eq!(applied.edit, Edit::Meta);
-        assert_eq!(effect_of(&applied.edit), Effect::Notify);
+        assert_eq!(applied.declaration, Some(Edit::Meta));
+        assert!(applied.notify);
         assert_eq!(rust.session.history.count(), 1);
         assert_eq!(
             rust.session.doc.as_ref().expect("document").channels.len(),

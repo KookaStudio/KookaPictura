@@ -1,7 +1,6 @@
 use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
 use pictura_render::{
-    composite_active, composite_gpu, composite_rgba, gpu_available, set_backend, Backend,
-    GpuBackend, GpuError,
+    composite, composite_rgba, gpu_available, set_backend, Backend, CompositeRequest, GpuBackend,
 };
 
 fn document() -> Document {
@@ -39,8 +38,7 @@ fn cpu_pin_composites_on_cpu() {
     set_backend(GpuBackend::Cpu).expect("the pin is fresh in this test binary");
     assert!(!gpu_available());
     let doc = document();
-    assert!(matches!(composite_gpu(&doc), Err(GpuError::Unavailable)));
-    let (buf, backend) = composite_active(&doc, true);
+    let (buf, backend) = composite(CompositeRequest::whole(&doc, true));
     assert_eq!(backend, Backend::Cpu);
     assert_eq!(buf.data, composite_rgba(&doc).data);
 }

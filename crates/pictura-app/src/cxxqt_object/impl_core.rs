@@ -11,9 +11,30 @@ use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
     PsdRect,
 };
+use pictura_render::{patch_buffer_region, CompositeScope, DocumentComposite};
 use std::time::Instant;
 
-pub(super) use deferred_pyramid::DeferredPyramid;
+#[cfg(test)]
+std::thread_local! {
+    pub(super) static REFRESH_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn note_refresh() {
+    REFRESH_CALLS.with(|calls| calls.set(calls.get() + 1));
+}
+
+#[cfg(test)]
+pub(super) fn refresh_calls() -> u64 {
+    REFRESH_CALLS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(super) fn reset_refresh_calls() {
+    REFRESH_CALLS.with(|calls| calls.set(0));
+}
+
+pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 
 mod deferred_pyramid;
 mod display;
@@ -111,7 +132,7 @@ impl qobject::PictureView {
         let super::open_jobs::OpenedDocument { doc, target, .. } = opened;
         {
             let mut rust = self.as_mut().rust_mut();
-            rust.cancel_active_sessions();
+            rust.cancel_active_sessions_report_only();
             rust.clear_document_scoped_state();
             rust.path = Some(path);
             rust.session.pdf_password = pdf_password;
@@ -232,7 +253,7 @@ impl qobject::PictureView {
         };
         let gpu_compute = self.rust().gpu_compute;
         let rendered = current_buffer(&doc, gpu_compute);
-        store_composite(&mut doc, &rendered);
+        DocumentComposite::new(&mut doc).store(&rendered);
         {
             let mut view = self.as_mut().rust_mut();
             view.replace_document(Some(doc), History::default(), Default::default(), None);
@@ -903,25 +924,36 @@ impl super::PictureViewRust {
     /// the cached display. Emits nothing; the caller owns the signal.
     pub(super) fn composite_full(&mut self) {
         let t0 = Instant::now();
-        let t = Instant::now();
-        let rendered = self
-            .session
-            .doc
-            .as_ref()
-            .map(|doc| current_buffer(doc, self.gpu_compute));
-        paint_timing::record("recomposite_full_composite", t.elapsed());
-        let Some(rendered) = rendered else {
-            return;
-        };
-        {
+        if self.composite_into_doc() {
             let t = Instant::now();
-            if let Some(doc) = self.session.doc.as_mut() {
-                store_composite(doc, &rendered);
-            }
             self.reset_pyramid();
             paint_timing::record("recomposite_reset_pyramid", t.elapsed());
+            paint_timing::record("recomposite_total", t0.elapsed());
         }
-        paint_timing::record("recomposite_total", t0.elapsed());
+    }
+
+    /// Rebuild the document composite from the current layer stack without
+    /// touching the display. A presentation asks the presenter to reset the
+    /// display, so producers leave the composite exact here. Returns whether a
+    /// composite was stored.
+    pub(super) fn composite_into_doc(&mut self) -> bool {
+        let t = Instant::now();
+        let gpu_compute = self.gpu_compute;
+        let refreshed = {
+            let Some(doc) = self.session.doc.as_mut() else {
+                return false;
+            };
+            DocumentComposite::new(doc).render(CompositeScope::Full, gpu_compute)
+        };
+        #[cfg(test)]
+        note_refresh();
+        paint_timing::record("recomposite_full_composite", t.elapsed());
+        for frame in refreshed {
+            if let Some(doc) = self.session.doc.as_mut() {
+                DocumentComposite::new(doc).store(&frame.buffer);
+            }
+        }
+        true
     }
 
     /// Rebuild the cached sRGB level-0 frame and the matching premultiplied
@@ -1049,10 +1081,7 @@ impl super::PictureViewRust {
     /// runs once.
     pub(super) fn refresh_regions(&mut self, rects: &[PsdRect]) -> Option<PsdRect> {
         let mut union: Option<PsdRect> = None;
-        for &rect in rects {
-            let Some((x0, y0, clipped, srgb)) = self.refresh_region_buffer(rect) else {
-                continue;
-            };
+        for (x0, y0, clipped, srgb) in self.refresh_regions_buffer(rects) {
             self.apply_refreshed_region(x0, y0, clipped, srgb);
             union = Some(union.map_or(clipped, |u| u.union(clipped)));
         }

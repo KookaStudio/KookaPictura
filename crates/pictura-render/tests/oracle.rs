@@ -261,7 +261,8 @@ fn fixture_scenes_match_oracle_on_active_backend() {
         for (mode, suffix, _) in modes {
             let doc = scene(&base, &src, *mode);
             let cpu = pictura_render::composite_rgba(&doc);
-            let (active, backend) = pictura_render::composite_active(&doc, true);
+            let (active, backend) =
+                pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, true));
             match backend {
                 pictura_render::Backend::Gpu => {
                     on_gpu += 1;
@@ -292,7 +293,8 @@ fn declined_fixture_scene_equals_oracle() {
     let base = read_fixture("ramp_base.rgba");
     let src = read_fixture("ramp_src.rgba");
     let doc = scene(&base, &src, BlendMode::Dissolve);
-    let (active, backend) = pictura_render::composite_active(&doc, true);
+    let (active, backend) =
+        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, true));
     assert_eq!(backend, pictura_render::Backend::Cpu);
     assert_eq!(active, pictura_render::composite_rgba(&doc));
 }

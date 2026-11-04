@@ -58,6 +58,7 @@ mod path_list;
 mod paths;
 mod pdf_export;
 mod picture;
+mod presentation;
 mod save_format;
 mod selection_move;
 mod shapes;
@@ -222,7 +223,6 @@ pub mod qobject {
         fn assign_profile(self: Pin<&mut Self>, profile_index: i32) -> bool;
         #[qinvokable]
         fn convert_profile(self: Pin<&mut Self>, profile_index: i32) -> bool;
-
         /// File Info rows: EXIF, parsed XMP properties, IPTC-IIM, and the raw XMP packet.
         #[qinvokable]
         fn exif_rows(&self) -> QStringList;

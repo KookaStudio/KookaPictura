@@ -16,6 +16,7 @@ use super::state::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::{QImage, QRect};
 use pictura_core::{layer_move_locked, Document, LayerStack, PsdRect};
+use pictura_render::patch_buffer_region;
 
 /// Build the move-preview base for the layers at `paths`: the authoritative
 /// composite with each layer's rect recomposited as if hidden, then each layer's
@@ -45,8 +46,9 @@ pub(super) fn build_move_preview_base(
     match move_preview_region(union, doc.width, doc.height, composite_ok) {
         Some((x0, y0, ..)) => {
             set_member_visibility(doc, &members, false);
-            let (region, _backend) =
-                pictura_render::composite_region_active(doc, union, gpu_compute);
+            let (region, _backend) = pictura_render::composite(
+                pictura_render::CompositeRequest::region(doc, union, gpu_compute),
+            );
             restore_member_visibility(doc, &members);
             let mut base_buffer = doc.composite.clone();
             patch_buffer_region(&mut base_buffer, &region, x0, y0);

@@ -1,5 +1,5 @@
 use super::{gpu_paint_mode, preview_blend, preview_level, rasterize_preview};
-use crate::cxxqt_object::edit::{effect_of, Edit, Effect};
+use crate::cxxqt_object::edit::{presentation_of, Edit};
 use crate::cxxqt_object::helpers::TileSet;
 use pictura_core::PsdRect;
 use pictura_paint::{tip_coverage, PaintMode, Rgba, StrokeConfig, StrokeSample};
@@ -224,7 +224,9 @@ fn paint_commit_hints_all_stroke_tiles() {
     let hint = tiles.regions(bounds);
     assert!(!hint.is_empty());
     let edit = Edit::regions_hinted(vec![], hint.clone(), false);
-    assert_eq!(effect_of(&edit), Effect::Blit { notify: false });
+    let presentation = presentation_of(&edit, None, true);
+    assert!(presentation.regions.is_empty());
+    assert!(!presentation.notify);
     assert_eq!(edit.history_hint(), Some(hint.as_slice()));
 }
 
@@ -241,6 +243,71 @@ fn paint_commit_with_no_pending_region_hints_the_whole_stroke() {
     let bounds = tiles.bounds().expect("the stroke covers tiles");
     let hint = tiles.regions(bounds);
     let edit = Edit::regions_hinted(Vec::new(), hint.clone(), false);
-    assert_eq!(effect_of(&edit), Effect::Blit { notify: false });
+    let presentation = presentation_of(&edit, None, true);
+    assert!(presentation.regions.is_empty());
+    assert!(!presentation.notify);
     assert_eq!(edit.history_hint(), Some(hint.as_slice()));
+}
+
+#[test]
+fn a_mask_present_leaves_the_composite_unchanged() {
+    use crate::cxxqt_object::document_session::{DocumentSession, MaskStroke, StrokeSession};
+    use crate::cxxqt_object::state::PictureViewRust;
+    use crate::cxxqt_object::tests::pixel_layer;
+    use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer};
+    use pictura_paint::Stroke;
+
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel_layer("0", 4, 4, (10, 20, 30))]);
+    let full = pictura_render::composite_rgba(&doc);
+    let seed_marker = PixelBuffer {
+        width: 4,
+        height: 4,
+        channels: 4,
+        data: vec![3u8; 4 * 4 * 4].into(),
+    };
+    let before = seed_marker.clone();
+    doc.composite = seed_marker;
+
+    let mask_doc = Document::from_rgba("0", 4, 4, &[0u8; 64]);
+    let stroke =
+        Stroke::begin_at(&mask_doc, "0", StrokeConfig::default()).expect("a mask stroke begins");
+    let mut view = PictureViewRust {
+        session: DocumentSession::with_document(doc),
+        ..Default::default()
+    };
+    view.session.live.set_stroke_session(StrokeSession {
+        mask_stroke: Some(MaskStroke {
+            path: "0".to_string(),
+            rect: rect(4, 4),
+            document: mask_doc,
+            stroke,
+        }),
+        ..Default::default()
+    });
+
+    let region = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 2,
+        right: 2,
+    };
+    let refreshed = view.refresh_region_buffer(region).expect("a region");
+    assert_eq!(refreshed.2, region);
+    assert_eq!(
+        view.session.doc.as_ref().expect("document").composite.data,
+        before.data
+    );
+    // The returned region follows the layer stack, not the seeded cache.
+    let plane = (4 * 4) as usize;
+    let rplane = (2 * 2) as usize;
+    for y in 0..2 {
+        for x in 0..2 {
+            let ri = (y * 2 + x) as usize;
+            let fi = (y * 4 + x) as usize;
+            for c in 0..4 {
+                assert_eq!(refreshed.3.data[c * rplane + ri], full.data[c * plane + fi]);
+            }
+        }
+    }
 }

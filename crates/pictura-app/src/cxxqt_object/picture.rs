@@ -29,7 +29,7 @@
 
 use super::helpers_composite::current_buffer;
 use super::state::PictureViewRust;
-use pictura_core::{ColorMode, Document, PixelBuffer};
+use pictura_core::{Document, PixelBuffer};
 use std::borrow::Cow;
 
 /// The picture the canvas currently shows.
@@ -55,11 +55,8 @@ fn is_current(doc: &Document, view: &PictureViewRust) -> bool {
     !view.is_painting()
         && !view.has_lifted_transform()
         && !view.display_preview_presented()
-        && doc.mode == ColorMode::Rgb
         && doc.source_depth.is_none()
-        && doc.composite.channels == 4
-        && doc.composite.width == doc.width
-        && doc.composite.height == doc.height
+        && pictura_render::DocumentComposite::is_shape_valid(doc)
 }
 
 #[cfg(test)]
@@ -84,7 +81,7 @@ mod tests {
     use crate::cxxqt_object::edit::Edit;
     use crate::cxxqt_object::tests::pixel_layer;
     use crate::history::History;
-    use pictura_core::{BitDepth, PsdRect};
+    use pictura_core::{BitDepth, ColorMode, PsdRect};
     use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
     use pictura_select::Selection;
 

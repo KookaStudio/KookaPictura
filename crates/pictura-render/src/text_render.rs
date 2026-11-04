@@ -424,7 +424,9 @@ pub fn render_text_layer(doc: &mut Document, path: &str) -> bool {
 
 /// Shape, lay out, and paint a type tool into a straight-alpha RGBA buffer of
 /// `width × height` (layer-rect-local). `None` when the style is absent, the
-/// size is non-positive, or no glyph painted a pixel.
+/// size is non-positive, or no glyph painted a pixel. A resolved face that
+/// paints nothing falls back to the bundled face, so a host-registered
+/// substitute for a missing family cannot leave the text unpainted.
 pub(crate) fn render_text_buffer(
     type_tool: &TypeTool,
     width: i32,
@@ -434,20 +436,45 @@ pub(crate) fn render_text_buffer(
     if width <= 0 || height <= 0 {
         return None;
     }
-    let font_size = style.character.size as f32;
-    let color = style.rgba().map(|c| f64::from(c) / 255.0);
-    let bundled = crate::fonts::face_for(
+    let face = crate::fonts::face_for(
         style.font.as_deref().unwrap_or_default(),
         &style.character.font_style,
     )?;
-    let layout = layout_type(bundled, type_tool, width, height)?;
-    let run = RunStyle::of(bundled, &style.character);
-    let ascent = bundled.ascent(font_size);
+    paint_with_fallback(face, bundled(), |face| {
+        paint_text(face, type_tool, width, height)
+    })
+}
+
+/// Paint `type_tool` with `first`; when it paints nothing, try `fallback` once.
+/// The layout is redone for the fallback because the box and advances follow
+/// the face's metrics.
+fn paint_with_fallback(
+    first: &BundledText,
+    fallback: Option<&'static BundledText>,
+    mut paint: impl FnMut(&BundledText) -> Option<PixelBuffer>,
+) -> Option<PixelBuffer> {
+    paint(first).or_else(|| {
+        let fallback = fallback.filter(|face| !std::ptr::eq(*face, first))?;
+        paint(fallback)
+    })
+}
+
+/// Lay out and paint `type_tool` with `face` in a `width × height` box.
+fn paint_text(
+    face: &BundledText,
+    type_tool: &TypeTool,
+    width: i32,
+    height: i32,
+) -> Option<PixelBuffer> {
+    let style = type_tool.style.as_ref()?;
+    let layout = layout_type(face, type_tool, width, height)?;
+    let run = RunStyle::of(face, &style.character);
+    let color = style.rgba().map(|c| f64::from(c) / 255.0);
     paint_run(
-        bundled,
+        face,
         &layout,
         [width, height],
-        ascent,
+        face.ascent(style.character.size as f32),
         &run,
         color,
         type_tool.vertical,

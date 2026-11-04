@@ -152,6 +152,9 @@ pub struct PictureViewRust {
     pub(super) mask_pyramid: ViewPyramid,
     /// The worker build `pyramid` stands in for, while it is coarse.
     pub(super) deferred_pyramid: Option<DeferredPyramid>,
+    /// The deferred pyramid a presentation asked for, waiting for the Qt
+    /// presenter to start it.
+    pub(super) pending_pyramid_job: Option<super::impl_core::PyramidJob>,
     /// Numbers each deferred build, so a superseded result is recognised.
     pub(super) pyramid_generation: u64,
     pub(super) link_sets: HashMap<String, u32>,
@@ -274,6 +277,7 @@ impl Default for PictureViewRust {
             mask_level0: None,
             mask_pyramid: ViewPyramid::default(),
             deferred_pyramid: None,
+            pending_pyramid_job: None,
             pyramid_generation: 0,
             link_sets: HashMap::new(),
             ruler: None,

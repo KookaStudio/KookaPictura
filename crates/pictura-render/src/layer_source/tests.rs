@@ -764,6 +764,7 @@ fn same_passes(a: Artifact, b: Artifact) -> bool {
 /// deterministic.
 #[test]
 fn same_key_lookup_stolen_mid_build_does_not_deadlock() {
+    let _guard = super::cache_test_guard();
     let (outer, inner, ran) = finishes_within(30, "a same-key lookup run mid-build", || {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(1)
@@ -802,6 +803,7 @@ fn same_key_lookup_stolen_mid_build_does_not_deadlock() {
 /// forced, not left to timing.
 #[test]
 fn same_key_lookup_in_a_stolen_half_of_the_build_does_not_deadlock() {
+    let _guard = super::cache_test_guard();
     let (outer, inner, threads) = finishes_within(30, "a same-key lookup in a stolen half", || {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(2)

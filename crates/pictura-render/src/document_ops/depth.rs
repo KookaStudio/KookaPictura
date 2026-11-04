@@ -235,7 +235,7 @@ fn current_composite_samples(doc: &Document, color_len: usize) -> Result<Vec<f32
         } else {
             Vec::new()
         }
-    } else if let Some(Samples::F32(v)) = crate::composite_native(doc) {
+    } else if let Some(Samples::F32(v)) = crate::composite_native::composite_native(doc) {
         if v.len() >= color_len {
             v.to_vec()
         } else {

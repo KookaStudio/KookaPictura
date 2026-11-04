@@ -1,7 +1,7 @@
 use super::*;
 
 use super::super::helpers::decode_import;
-use super::super::helpers_composite::{current_buffer, store_composite};
+use super::super::helpers_composite::current_buffer;
 use super::super::impl_core::format_for_path;
 use super::super::state::PictureViewRust;
 use crate::history::History;
@@ -12,6 +12,7 @@ use cxx_qt_lib::{QString, QStringList};
 use pictura_codec::pdf::import::{self as pdf_import, PdfImages, PdfRect, Rendered};
 use pictura_codec::{eps, Ghostscript, Policy, Raster, RasterError, Resolution};
 use pictura_core::{BitDepth, ColorMode, Document, Layer, LockFlags};
+use pictura_render::DocumentComposite;
 use std::path::Path;
 use std::time::Duration;
 
@@ -101,7 +102,7 @@ pub(super) fn store_opened_composite(doc: &mut Document, gpu: bool) {
         return;
     }
     let rendered = current_buffer(doc, gpu);
-    store_composite(doc, &rendered);
+    DocumentComposite::new(doc).store(&rendered);
 }
 
 /// The application's default open options. The working CMYK profile is the

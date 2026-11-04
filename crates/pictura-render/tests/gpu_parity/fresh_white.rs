@@ -5,7 +5,7 @@ use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
     PsdRect,
 };
-use pictura_render::{composite_active, composite_rgba, Backend};
+use pictura_render::{composite, composite_rgba, Backend, CompositeRequest};
 
 use crate::common::require_gpu;
 
@@ -86,14 +86,14 @@ fn fresh_white_document_composites_uniform_white_on_cpu() {
 fn fresh_white_document_composites_uniform_white_twice() {
     require_gpu();
     let doc = fresh_white_document(W, H);
-    let (first, backend) = composite_active(&doc, true);
+    let (first, backend) = composite(CompositeRequest::whole(&doc, true));
     assert_eq!(
         backend,
         Backend::Gpu,
         "fresh-white composite must run on the GPU"
     );
     assert_uniform_white(&first, "gpu first");
-    let (second, _) = composite_active(&doc, true);
+    let (second, _) = composite(CompositeRequest::whole(&doc, true));
     assert_uniform_white(&second, "gpu second");
     assert_eq!(
         first.data, second.data,

@@ -165,10 +165,14 @@ fn shape_commit_profile() {
                 right: r.ceil() as i32 + 2,
             };
             let t = std::time::Instant::now();
-            let _ = crate::composite_active(&d, backend);
+            let _ = crate::composite_request::composite(
+                crate::composite_request::CompositeRequest::whole(&d, backend),
+            );
             let full = t.elapsed();
             let t = std::time::Instant::now();
-            let _ = crate::composite_region_active(&d, rect, backend);
+            let _ = crate::composite_request::composite(
+                crate::composite_request::CompositeRequest::region(&d, rect, backend),
+            );
             let region = t.elapsed();
             eprintln!(
                 "shape_commit_profile {n}x{n} {kind:?} gpu={backend}: full={:.1}ms \

@@ -165,12 +165,13 @@ fn opacity_preview_profile_4000() {
     let steps = 3usize;
     let start = std::time::Instant::now();
     for _ in 0..steps {
-        let _ = pictura_render::composite_active(&doc, false);
+        let _ = pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false));
     }
     let full = start.elapsed().as_secs_f64() * 1000.0 / steps as f64;
     let start = std::time::Instant::now();
     for _ in 0..steps {
-        let _ = pictura_render::composite_region_active(&doc, rect, false);
+        let _ =
+            pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false));
     }
     let region = start.elapsed().as_secs_f64() * 1000.0 / steps as f64;
     println!("opacity_preview_profile_4000 full={full:.2}ms region={region:.2}ms steps={steps}");
@@ -194,7 +195,7 @@ fn stroke_split_profile_4000() {
                 .collect(),
         );
         // Prime the adapter, allocator and pipelines once, untimed.
-        let _ = pictura_render::composite_active(&doc, true);
+        let _ = pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, true));
         let gpu = pictura_render::gpu_available();
 
         // `Document::clone` is a refcount bump since the planes became
@@ -252,7 +253,9 @@ fn stroke_split_profile_4000() {
 
             // Present: the region composite and display conversion `refresh_region` runs.
             let t = std::time::Instant::now();
-            let (buffer, _) = pictura_render::composite_region_active(&work, rect, gpu);
+            let (buffer, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+                &work, rect, gpu,
+            ));
             let composite = t.elapsed();
             let t = std::time::Instant::now();
             let _ = buffer_to_image(&buffer);
@@ -304,7 +307,8 @@ fn commit_refresh_profile_4000() {
                         .map(|i| pixel_layer(&format!("L{i}"), 4000, 4000, (30, 60, 90)))
                         .collect(),
                 );
-                doc.composite = pictura_render::composite_active(&doc, gpu).0;
+                doc.composite =
+                    pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, gpu)).0;
                 let mut rust = PictureViewRust {
                     session: crate::cxxqt_object::document_session::DocumentSession::with_document(
                         doc,
@@ -375,7 +379,7 @@ fn large_brush_profile_4000() {
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 4000, 4000, (30, 60, 90))]);
-    let _ = pictura_render::composite_active(&doc, true);
+    let _ = pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, true));
     let gpu = pictura_render::gpu_available();
 
     let t = std::time::Instant::now();
@@ -414,7 +418,8 @@ fn large_brush_profile_4000() {
         let rect = stroke.take_dirty().expect("a dab dirties a region");
 
         let t = std::time::Instant::now();
-        let (buffer, _) = pictura_render::composite_region_active(&work, rect, gpu);
+        let (buffer, _) =
+            pictura_render::composite(pictura_render::CompositeRequest::region(&work, rect, gpu));
         let composite = t.elapsed();
         let t = std::time::Instant::now();
         let _ = buffer_to_image(&buffer);
@@ -450,7 +455,8 @@ fn large_document_stroke_profile() {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (30, 60, 90))]);
-    doc.composite = pictura_render::composite_active(&doc, false).0;
+    doc.composite =
+        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
@@ -612,7 +618,8 @@ fn large_document_structural_edit_profile() {
             .map(|i| pixel_layer(&format!("Layer {i}"), w, h, ((i * 11) as u8, 60, 90)))
             .collect(),
     );
-    doc.composite = pictura_render::composite_active(&doc, false).0;
+    doc.composite =
+        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
     let mut history = History::default();
     let mut selection: Option<Selection> = None;
     let mut target = LayerTarget::default();
@@ -687,7 +694,8 @@ fn large_document_filter_profile() {
         }
     }
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.composite = pictura_render::composite_active(&doc, false).0;
+    doc.composite =
+        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
@@ -760,6 +768,7 @@ fn large_document_filter_profile() {
         ),
     ] {
         use super::filter_tools::jobs::{commit_finish, commit_start};
+        use crate::cxxqt_object::presentation::present_core;
         let t = Instant::now();
         assert!(commit_start(
             &mut rust,
@@ -773,7 +782,10 @@ fn large_document_filter_profile() {
         }
         let worker = t.elapsed();
         let t = Instant::now();
-        assert!(commit_finish(&mut rust).is_ok());
+        let presentation = commit_finish(&mut rust).expect("the commit succeeds");
+        if let Some(presentation) = presentation {
+            present_core(&mut rust, &presentation);
+        }
         println!(
             "{kind} background commit: start (UI)={:.0}ms worker={:.0}ms land (UI)={:.0}ms",
             started.as_secs_f64() * 1000.0,
@@ -871,6 +883,7 @@ fn large_document_filter_profile() {
 fn radial_blur_commit_profile() {
     use super::filter_tools::jobs::{commit_finish, commit_start};
     use super::PictureViewRust;
+    use crate::cxxqt_object::presentation::present_core;
     use pictura_filters::{Filter, Quality, RadialMethod};
     use std::time::Instant;
 
@@ -884,7 +897,8 @@ fn radial_blur_commit_profile() {
         }
     }
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.composite = pictura_render::composite_active(&doc, false).0;
+    doc.composite =
+        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
@@ -919,7 +933,10 @@ fn radial_blur_commit_profile() {
         }
         let worker = t.elapsed();
         let t = Instant::now();
-        assert!(commit_finish(&mut rust).is_ok());
+        let presentation = commit_finish(&mut rust).expect("the commit succeeds");
+        if let Some(presentation) = presentation {
+            present_core(&mut rust, &presentation);
+        }
         println!(
             "radial {method:?} 100 Best: worker={:.0}ms land (UI)={:.0}ms history tiles={:.0} MB",
             worker.as_secs_f64() * 1000.0,

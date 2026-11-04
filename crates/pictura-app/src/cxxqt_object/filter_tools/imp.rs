@@ -3,8 +3,7 @@ use super::*;
 use super::super::filter_map::filter_from_kind_params;
 use super::super::helpers::{active_layer_visible, active_mask_target, active_pixel_layer};
 use super::super::helpers_composite::{
-    buffer_to_image, layer_buffer, patch_buffer_region, premultiplied_display_image,
-    selection_to_mask,
+    buffer_to_image, layer_buffer, premultiplied_display_image, selection_to_mask,
 };
 use super::super::impl_filters::{
     apply_filter_active, apply_filter_active_region, apply_op_active_region, cancel_filter_preview,
@@ -15,6 +14,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
+use pictura_render::patch_buffer_region;
 
 pub(super) fn apply_filter_params(
     mut view: Pin<&mut PictureView>,
@@ -537,7 +537,11 @@ pub(super) fn hidden_layer_buffer(
         && rect.height() > 0;
     pictura_render::resolve_path_mut(doc, path)?.visible = false;
     let base = if cached_ok {
-        let (region, _) = pictura_render::composite_region_active(doc, rect, gpu_compute);
+        let (region, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+            doc,
+            rect,
+            gpu_compute,
+        ));
         let mut base = doc.composite.clone();
         patch_buffer_region(&mut base, &region, rect.left, rect.top);
         base

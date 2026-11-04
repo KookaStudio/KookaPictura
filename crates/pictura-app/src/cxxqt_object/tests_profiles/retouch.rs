@@ -19,7 +19,8 @@ fn document() -> Document {
         pixel_layer("Background", W, H, (30, 60, 90)),
         pixel_layer("Layer 1", W, H, (90, 60, 30)),
     ]);
-    doc.composite = pictura_render::composite_active(&doc, false).0;
+    doc.composite =
+        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
     doc
 }
 

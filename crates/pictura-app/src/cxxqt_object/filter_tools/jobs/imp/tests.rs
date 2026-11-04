@@ -1,8 +1,10 @@
 use super::*;
 use crate::cxxqt_object::impl_filters::apply_filter_active;
+use crate::cxxqt_object::presentation::Presentation;
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::layer_target::LayerTarget;
-use pictura_core::{BitDepth, ColorMode};
+use pictura_core::{BitDepth, ColorMode, PsdRect};
+use pictura_render::DocumentComposite;
 
 /// A 96×80 layer of diagonal stripes, so every filter here changes it.
 fn striped() -> PictureViewRust {
@@ -22,7 +24,7 @@ fn striped() -> PictureViewRust {
     }
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
@@ -59,8 +61,8 @@ fn whole() -> PsdRect {
 }
 
 /// Land a started commit, as the bridge does once the worker is done.
-fn finish(rust: &mut PictureViewRust) -> Option<Landed> {
-    commit_finish(rust).ok()
+fn finish(rust: &mut PictureViewRust) -> Option<Presentation> {
+    commit_finish(rust).ok().flatten()
 }
 
 #[test]
@@ -78,14 +80,14 @@ fn a_background_commit_matches_the_synchronous_one_and_records_its_label() {
     ));
     assert_eq!(red(&rust), before, "the live document waits for finish");
     let refresh = finish(&mut rust).expect("committed");
-    assert!(matches!(refresh, Landed::Region { .. }));
+    assert!(!refresh.regions.is_empty());
     assert_eq!(red(&rust), red(&sync));
     assert_eq!(rust.session.history.count(), 2);
     assert_eq!(rust.session.history.label(1), "Filter: Gaussian Blur");
     // The composite the commit patched is the one a recomposite stores.
     let doc = rust.session.doc.as_ref().unwrap();
     let mut recomposited = doc.clone();
-    store_composite(&mut recomposited, &current_buffer(doc, false));
+    DocumentComposite::new(&mut recomposited).store(&current_buffer(doc, false));
     assert_eq!(doc.composite.data, recomposited.composite.data);
 }
 
@@ -185,4 +187,39 @@ fn apply_filter_active_region_section(rust: &mut PictureViewRust, section: PsdRe
         Some(section),
     )
     .expect("section preview");
+}
+
+#[test]
+fn job_writers_store_and_patch_through_the_cache() {
+    let rust = striped();
+    let doc = rust.session.doc.as_ref().expect("document");
+    let filtered_layer = filter_layer(doc, "0", &[blur()], None, false).expect("filter the layer");
+    let mut filtered = doc.clone();
+    *pictura_render::resolve_path_mut(&mut filtered, "0").expect("layer") = filtered_layer;
+    let full = pictura_render::composite_rgba(&filtered);
+
+    // A pre-rendered job buffer reaches the live composite through `store`.
+    let mut live = doc.clone();
+    DocumentComposite::new(&mut live).store(&full);
+    assert_eq!(live.composite.data, full.data);
+
+    // A job region reaches the live composite through `patch`.
+    let region = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 40,
+        right: 48,
+    };
+    let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &filtered, region, false,
+    ))
+    .0;
+    let mut patched = doc.clone();
+    DocumentComposite::new(&mut patched).patch(&buffer, 0, 0);
+    for y in 0..40 {
+        for x in 0..48 {
+            let i = (y * 96 + x) as usize;
+            assert_eq!(patched.composite.data[i], full.data[i]);
+        }
+    }
 }

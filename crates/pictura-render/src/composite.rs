@@ -28,7 +28,7 @@ pub fn composite_rgba(doc: &Document) -> PixelBuffer {
     composite_whole(doc)
 }
 
-pub use crate::composite_region::composite_rgba_region;
+pub(crate) use crate::composite_region::composite_rgba_region;
 
 /// [`composite_rgba`] on one canvas, the path every stack can take; the
 /// banded compositor is held to it.
@@ -348,14 +348,13 @@ pub(crate) fn composite_layer_inner(
             }
         }
         Body::TypeSource { raster, has_proxy } => {
-            let drew = !*has_proxy
-                && raster.as_ref().is_some_and(|raster| {
-                    crate::text_render::composite_type_source(
-                        canvas, layer, doc, raster, &ctx, over,
-                    )
-                });
-            if !drew {
+            // A proxy-less type layer draws its text. When the text paints
+            // nothing, leave the backdrop unchanged: the channel-less fallback
+            // would paint an opaque rect over the layer's box.
+            if *has_proxy {
                 composite_pixels(canvas, node, doc, &ctx, over);
+            } else if let Some(raster) = raster {
+                crate::text_render::composite_type_source(canvas, layer, doc, raster, &ctx, over);
             }
         }
         // A channel-less layer (for example a shape whose `vscg` did not

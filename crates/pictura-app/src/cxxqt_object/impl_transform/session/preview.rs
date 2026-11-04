@@ -63,7 +63,11 @@ pub(super) fn rendered_layer_image(
     // compositor needs to reproduce the layer's appearance.
     let mut scratch = source_doc.clone();
     scratch.layers = LayerStack::from_layers(vec![source]);
-    let (rendered, _) = pictura_render::composite_region_active(&scratch, rect, gpu_compute);
+    let (rendered, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &scratch,
+        rect,
+        gpu_compute,
+    ));
     let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
     Some((image, x0, y0))
 }
@@ -237,8 +241,11 @@ pub(super) fn backdrop_patch(
     gpu_compute: bool,
 ) -> Option<(QImage, (i32, i32))> {
     let rect = backdrop_patch_rect(doc, paths)?;
-    let (rendered, _) =
-        pictura_render::composite_region_active(&hidden(doc, paths), rect, gpu_compute);
+    let (rendered, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &hidden(doc, paths),
+        rect,
+        gpu_compute,
+    ));
     Some((
         buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
         (rect.left.max(0), rect.top.max(0)),

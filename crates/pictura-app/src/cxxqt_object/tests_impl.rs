@@ -3,6 +3,7 @@ use super::helpers_composite::*;
 use super::tests::pixel_layer;
 use crate::history::{History, Snapshot};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
+use pictura_render::{composite, patch_buffer_region, CompositeRequest, DocumentComposite};
 use pictura_select::Selection;
 
 /// Print-only evidence that a region refresh no longer pays a per-pixel FFI
@@ -17,7 +18,7 @@ fn region_refresh_profile_4000() {
         pixel_layer("base", 4000, 4000, (30, 60, 90)),
         pixel_layer("top", 4000, 4000, (200, 100, 50)),
     ]);
-    let (_, backend) = pictura_render::composite_active(&doc, true);
+    let (_, backend) = composite(CompositeRequest::whole(&doc, true));
     for side in [512u32, 1024u32] {
         let rect = PsdRect {
             top: 1024,
@@ -26,10 +27,10 @@ fn region_refresh_profile_4000() {
             right: (1024 + side) as i32,
         };
         let t = std::time::Instant::now();
-        let (buffer, _) = pictura_render::composite_region_active(&doc, rect, true);
+        let (buffer, _) = composite(CompositeRequest::region(&doc, rect, true));
         let composite = t.elapsed();
         let t = std::time::Instant::now();
-        patch_composite_region(&mut doc, &buffer, 1024, 1024);
+        DocumentComposite::new(&mut doc).patch(&buffer, 1024, 1024);
         let patch = t.elapsed();
         let t = std::time::Instant::now();
         let _ = buffer_to_image(&buffer);
@@ -62,7 +63,7 @@ fn paint_dab_profile_4000() {
     ]);
     // Prime the GPU adapter and allocator once, untimed, so the GPU comparison
     // below measures the per-call round-trip rather than first-call setup.
-    let (_, prime_backend) = pictura_render::composite_active(&doc, true);
+    let (_, prime_backend) = composite(CompositeRequest::whole(&doc, true));
     let gpu_available = pictura_render::gpu_available();
 
     let cfg = StrokeConfig {
@@ -90,14 +91,14 @@ fn paint_dab_profile_4000() {
             continue;
         };
         let t = std::time::Instant::now();
-        let (cpu_buffer, cpu_backend) = pictura_render::composite_region_active(&doc, rect, false);
+        let (cpu_buffer, cpu_backend) = composite(CompositeRequest::region(&doc, rect, false));
         let cpu_composite = t.elapsed();
         let t = std::time::Instant::now();
         let _ = buffer_to_image(&cpu_buffer);
         let blit = t.elapsed();
         let gpu_composite = if gpu_available {
             let t = std::time::Instant::now();
-            let _ = pictura_render::composite_region_active(&doc, rect, true);
+            let _ = composite(CompositeRequest::region(&doc, rect, true));
             Some(t.elapsed())
         } else {
             None
@@ -155,15 +156,15 @@ fn visibility_region_profile_4000() {
         small,
     ]);
     let rendered = current_buffer(&doc, false);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
 
     // Region path: hide the small layer and composite only its rect.
     let (_, region) = set_visible_paths_union(&mut doc, &["1"], false);
     let rect = region.expect("small raster layer is bounded");
     let (x0, y0, ..) = clamp_region(rect, doc.width, doc.height).expect("in bounds");
     let t = std::time::Instant::now();
-    let (buffer, backend) = pictura_render::composite_region_active(&doc, rect, false);
-    patch_composite_region(&mut doc, &buffer, x0, y0);
+    let (buffer, backend) = composite(CompositeRequest::region(&doc, rect, false));
+    DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
     let _ = buffer_to_image(&buffer);
     ms("region toggle", t.elapsed());
 
@@ -171,7 +172,7 @@ fn visibility_region_profile_4000() {
     let mut full = doc.clone();
     let t = std::time::Instant::now();
     let rendered = current_buffer(&full, false);
-    store_composite(&mut full, &rendered);
+    DocumentComposite::new(&mut full).store(&rendered);
     let _ = buffer_to_image(&full.composite);
     ms("full recomposite", t.elapsed());
 
@@ -817,7 +818,7 @@ fn move_profile(n: u32) {
     ]);
 
     // Prime the GPU adapter OnceLock and the allocator once, untimed.
-    let (_, backend) = pictura_render::composite_active(&doc, true);
+    let _ = composite(CompositeRequest::whole(&doc, true));
 
     let t = std::time::Instant::now();
     let clone = doc.clone();
@@ -835,12 +836,12 @@ fn move_profile(n: u32) {
     ms("composite_rgba(CPU)", t.elapsed());
 
     let t = std::time::Instant::now();
-    let _ = pictura_render::composite_active(&doc, true);
-    ms("composite_active(gpu=true)", t.elapsed());
+    let _ = composite(CompositeRequest::whole(&doc, true));
+    ms("composite(whole, gpu=true)", t.elapsed());
 
     let t = std::time::Instant::now();
-    let _ = pictura_render::composite_active(&doc, false);
-    ms("composite_active(gpu=false)", t.elapsed());
+    let _ = composite(CompositeRequest::whole(&doc, false));
+    ms("composite(whole, gpu=false)", t.elapsed());
 
     // Reporter's claim: moving the layer outside the canvas should shrink
     // the clamped-rect blend work. Push the top layer fully off-canvas.
@@ -864,8 +865,9 @@ fn move_profile(n: u32) {
     let _ = pictura_render::composite_rgba(&off_all);
     ms("composite_rgba(all off-canvas)", t.elapsed());
 
-    if let Err(err) = pictura_render::composite_gpu(&doc) {
-        println!("move_profile composite_gpu refused: {err}");
+    let (_, backend) = composite(CompositeRequest::whole(&doc, true));
+    if backend == pictura_render::Backend::Cpu {
+        println!("move_profile composite refused (CPU)");
     }
 
     // 4-channel composite, as the app transaction leaves it for the commit path.
@@ -915,7 +917,7 @@ fn move_profile(n: u32) {
             Some((x0, y0, ..)) => {
                 preview.layers[index].visible = false;
                 let (buffer, _backend) =
-                    pictura_render::composite_region_active(&preview, preview_rect, true);
+                    composite(CompositeRequest::region(&preview, preview_rect, true));
                 preview.layers[index].visible = true;
                 let mut base_buffer = preview.composite.clone();
                 patch_buffer_region(&mut base_buffer, &buffer, x0, y0);
@@ -939,7 +941,7 @@ fn move_profile(n: u32) {
         pixel_layer("top", 512, 512, (200, 100, 50)),
     ]);
     let rendered = current_buffer(&partial, true);
-    store_composite(&mut partial, &rendered);
+    DocumentComposite::new(&mut partial).store(&rendered);
     let mut partial_preview = partial.clone();
     let t = std::time::Instant::now();
     let pindex = topmost_pixel_layer_index(&partial_preview).expect("pixel layer");
@@ -956,8 +958,8 @@ fn move_profile(n: u32) {
     ) {
         Some((x0, y0, ..)) => {
             partial_preview.layers[pindex].visible = false;
-            let (buffer, _backend) =
-                pictura_render::composite_region_active(&partial_preview, partial_rect, true);
+            let request = CompositeRequest::region(&partial_preview, partial_rect, true);
+            let (buffer, _backend) = composite(request);
             partial_preview.layers[pindex].visible = true;
             let mut base_buffer = partial_preview.composite.clone();
             patch_buffer_region(&mut base_buffer, &buffer, x0, y0);
@@ -1009,7 +1011,7 @@ fn move_profile(n: u32) {
     ms("commit_move(bridge-equivalent)", t.elapsed());
     assert!(committed_ok);
 
-    println!("move_profile composite_active backend: {backend:?}");
+    println!("move_profile composite backend: {backend:?}");
 }
 
 #[test]
@@ -1046,7 +1048,7 @@ fn undo_profile_4000() {
     ]);
 
     // Prime the GPU adapter and allocator once, untimed.
-    let (_, backend) = pictura_render::composite_active(&doc, true);
+    let (_, backend) = composite(CompositeRequest::whole(&doc, true));
 
     // Old undo display path: full composite + buffer_to_image.
     let t = std::time::Instant::now();
@@ -1055,7 +1057,7 @@ fn undo_profile_4000() {
 
     // Persist the composite the way the bridge's `recomposite` does.
     let rendered = current_buffer(&doc, true);
-    store_composite(&mut doc, &rendered);
+    DocumentComposite::new(&mut doc).store(&rendered);
 
     // New undo display path: the snapshot already holds the composite.
     let t = std::time::Instant::now();
@@ -1074,7 +1076,7 @@ fn undo_profile_4000() {
     );
     ms("History::capture(clone)", t.elapsed());
 
-    println!("undo_profile composite_active backend: {backend:?}");
+    println!("undo_profile composite backend: {backend:?}");
 }
 
 /// The bridge QObject is C++-constructed (cxx-qt 0.10 exposes no Rust
