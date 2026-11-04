@@ -8,6 +8,7 @@
 #include <QtCore/QElapsedTimer>
 
 #include "commands.h"
+#include "panels/info_panel.h"
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
@@ -66,6 +67,7 @@ private slots:
     void aReadSettlesThePendingMove();
     void aSecondPressReusesTheFullPreview();
     void aSecondPressKeepsTheViewPreview();
+    void aHoverReadoutDoesNotSettleTheMove();
 
 private:
     void showFrame();
@@ -232,6 +234,7 @@ void LargeDocumentTest::aLargeMoveCommitLandsOffThread()
     f.view->set_active_layer(QStringLiteral("1"));
     pictura::move_composite_set_delay(*f.view, 400);
     QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    QSignalSpy settled(f.view, &pictura::PictureView::pyramid_settled);
 
     // Stand in for the drag preview: the release keeps it until the composite
     // lands.
@@ -244,6 +247,8 @@ void LargeDocumentTest::aLargeMoveCommitLandsOffThread()
     QVERIFY(committed.wait(30000));
     QVERIFY(!pictura::move_composite_pending(*f.view));
     QVERIFY2(!f.canvas->movePreviewActive(), "the signal drops the preview");
+    QVERIFY2(settled.wait(30000), "the landing defers the exact pyramid");
+    QCOMPARE(pictura::preview_present_level(*f.view), 0);
     QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
 }
 
@@ -345,6 +350,34 @@ void LargeDocumentTest::aSecondPressKeepsTheViewPreview()
     QCOMPARE(committed.count(), 0);
     f.view->end_move_preview();
     f.canvas->endMovePreview();
+}
+
+// [mcr_hover_no_settle]
+void LargeDocumentTest::aHoverReadoutDoesNotSettleTheMove()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_hover_settles_move"));
+    QVERIFY2(f.ok(), "hover readout fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    auto* panel = window_->findChild<pictura::InfoPanel*>(QStringLiteral("infoPanel"));
+    QVERIFY(panel != nullptr);
+    panel->setCursorPosition(QPointF(40, 104));
+    QElapsedTimer timer;
+    timer.start();
+    panel->refresh();
+    QVERIFY2(timer.elapsed() < 1000, "the hover readout must not settle the composite");
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    QVERIFY(committed.wait(30000));
+    panel->refresh();
+    QVERIFY(!pictura::move_composite_pending(*f.view));
 }
 
 QTEST_MAIN(LargeDocumentTest)

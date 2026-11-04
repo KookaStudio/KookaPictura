@@ -13,9 +13,14 @@ moved pixels.
 When the document and the union of a Move commit's dirty rectangles each reach
 16 MP, the commit SHALL translate the layer and return without compositing, and
 a worker SHALL composite the dirty rectangles. The landed composite MUST equal a
-full composite of the moved document. Landing or settling the commit SHALL
-capture one history state labelled with the commit's label. A document or dirty
-union below 16 MP SHALL commit synchronously.
+full composite of the moved document. A landed whole-document region on a
+document over 16 MP SHALL install level 0 and a coarse pyramid on the GUI thread
+and build the exact pyramid on a worker; the canvas SHALL present the coarse
+level until `pyramidSettled`, and the exact pyramid MUST equal a synchronous
+rebuild. A document at or under 16 MP SHALL rebuild the pyramid synchronously.
+Landing or settling the commit SHALL capture one history state labelled with the
+commit's label. A document or dirty union below 16 MP SHALL commit
+synchronously.
 
 #### Scenario: A large commit returns before its composite [mcr_deferred]
 
@@ -24,6 +29,12 @@ union below 16 MP SHALL commit synchronously.
 - **THEN** the commit returns with the layer moved and the composite pending, and
   when the job lands the composite equals a full composite and history gained
   one Move state
+
+#### Scenario: The landing defers the exact pyramid [mcr_deferred_pyramid]
+
+- **WHEN** a whole-document move composite lands on a document over 16 MP
+- **THEN** the canvas presents a coarse level, and after `pyramidSettled` it
+  presents the exact level with bytes equal to a synchronous rebuild
 
 #### Scenario: A small commit stays synchronous [mcr_small_sync]
 
@@ -63,6 +74,20 @@ preview that started after it.
 - **THEN** the press reuses the cached preview or rebuilds the view preview
   without a whole-document composite, and the first landing does not clear the
   second drag's preview
+
+### Requirement: A pointer readout does not settle a pending composite
+
+The Info panel's hover readout SHALL read the maintained composite without
+settling a pending Move composite, so a pointer move after a Move commit does
+not block. It SHALL show the moved pixel after the next refresh once the
+composite lands.
+
+#### Scenario: Hovering after a move does not stall [mcr_hover_no_settle]
+
+- **WHEN** the pointer moves over the canvas while a large Move composite is
+  pending
+- **THEN** the Info panel readout updates without a whole-document composite and
+  catches up after the composite lands
 
 ### Requirement: Every reader settles a pending composite
 

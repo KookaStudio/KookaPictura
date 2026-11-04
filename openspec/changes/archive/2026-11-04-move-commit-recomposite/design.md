@@ -25,9 +25,13 @@ pyramid. The commit splits them:
 - The worker clones the document (a refcount bump over shared planes), runs
   `composite_region` for each dirty rectangle, and queues the result.
 - Landing patches `doc.composite` (replacing it whole when the region is the
-  document), folds the sRGB frame into level 0, the damage account and the
-  pyramid, then captures the move's history state and emits `regionDamaged`
-  and `moveCommitted`.
+  document), folds the sRGB frame into level 0 and the damage account, then
+  captures the move's history state and emits `regionDamaged` and
+  `moveCommitted`. A whole-document region on a document over 16 MP installs a
+  coarse pyramid and leaves the exact pyramid to a worker, as a restore does
+  (#1098): the canvas presents the coarse level until `pyramidSettled`. A
+  partial region, or a document at or under 16 MP, updates the pyramid
+  synchronously.
 
 A `generation` numbers each job. A job lands only when its generation is still
 pending; a later commit, a settle, or a document replacement clears the pending
@@ -64,6 +68,10 @@ a stale composite and never waits on the worker. It is called before:
 
 The `picture()` accessor also reports a pending composite as not current, so
 every remaining consumer composites exactly instead of reading stale bytes.
+
+The Info panel's hover readout is not a settle point: it reads the maintained
+composite through `composite_argb`, so a pointer move never blocks on a pending
+move. The readout catches up on the next refresh after the worker lands.
 
 History capture is part of landing/settling, not of the commit. A history diff
 therefore always sees the patched composite, and a pending move is one history

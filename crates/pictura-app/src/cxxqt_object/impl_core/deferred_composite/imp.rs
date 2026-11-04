@@ -5,6 +5,7 @@ use super::super::super::edit::Edit;
 use super::super::super::helpers_composite::{composite_regions, RegionComposite};
 use super::super::super::qobject::PictureView;
 use super::super::super::{metrics, qobject, PictureViewRust};
+use super::super::PyramidJob;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::{CxxQtType, Threading};
@@ -28,16 +29,17 @@ pub(in crate::cxxqt_object) struct DeferredComposite {
 /// What a worker needs: the generation it answers, the document it reads, and
 /// the dirty rectangles.
 pub(in crate::cxxqt_object) struct CompositeJob {
-    generation: u64,
-    doc: Document,
-    rects: Vec<PsdRect>,
-    gpu_compute: bool,
-    delay_ms: u64,
+    pub(in crate::cxxqt_object) generation: u64,
+    pub(in crate::cxxqt_object) doc: Document,
+    pub(in crate::cxxqt_object) rects: Vec<PsdRect>,
+    pub(in crate::cxxqt_object) gpu_compute: bool,
+    pub(in crate::cxxqt_object) delay_ms: u64,
 }
 
-/// The blit a settle or a landing owes the shell.
+/// The blit and deferred pyramid a settle or a landing owes the shell.
 pub(in crate::cxxqt_object) struct SettledMove {
     blit: Option<PsdRect>,
+    pyramid: Option<PyramidJob>,
 }
 
 impl PictureViewRust {
@@ -97,8 +99,20 @@ impl PictureViewRust {
     }
 
     /// Patch the composite and fold each region into level 0, damage and the
-    /// pyramid. Returns their bounding box for the shell.
-    fn apply_composite_regions(&mut self, regions: Vec<RegionComposite>) -> Option<PsdRect> {
+    /// pyramid. Returns their bounding box and, when `defer_pyramid` is set and
+    /// the region is the whole document, the pyramid job for a worker.
+    fn apply_composite_regions(
+        &mut self,
+        regions: Vec<RegionComposite>,
+        defer_pyramid: bool,
+    ) -> (Option<PsdRect>, Option<PyramidJob>) {
+        let defer_pyramid = defer_pyramid
+            && self.coarse_level().is_some()
+            && self
+                .session
+                .doc
+                .as_ref()
+                .is_some_and(|doc| regions.iter().any(|region| region.is_whole(doc)));
         let mut union: Option<PsdRect> = None;
         for region in regions {
             let whole = self
@@ -114,18 +128,31 @@ impl PictureViewRust {
                     cache.patch(&region.raw, region.x0, region.y0);
                 }
             }
-            self.apply_refreshed_region(region.x0, region.y0, region.clipped, region.srgb);
+            if defer_pyramid {
+                self.apply_refreshed_region_deferred_pyramid(
+                    region.x0,
+                    region.y0,
+                    region.clipped,
+                    region.srgb,
+                );
+            } else {
+                self.apply_refreshed_region(region.x0, region.y0, region.clipped, region.srgb);
+            }
             union = Some(union.map_or(region.clipped, |u| u.union(region.clipped)));
         }
-        union
+        let pyramid = defer_pyramid
+            .then(|| self.defer_pyramid_from_level0())
+            .flatten();
+        (union, pyramid)
     }
 
     fn finish_move_composite(
         &mut self,
         pending: DeferredComposite,
         regions: Vec<RegionComposite>,
+        defer_pyramid: bool,
     ) -> SettledMove {
-        let blit = self.apply_composite_regions(regions);
+        let (blit, pyramid) = self.apply_composite_regions(regions, defer_pyramid);
         let target = pending.target;
         self.session.capture_move_without_bookkeeping(
             &target,
@@ -134,7 +161,7 @@ impl PictureViewRust {
         );
         metrics::mark_composited();
         metrics::end_edit();
-        SettledMove { blit }
+        SettledMove { blit, pyramid }
     }
 
     /// Finish a pending Move composite synchronously, before a reader or
@@ -151,12 +178,12 @@ impl PictureViewRust {
             metrics::cancel_edit();
             return None;
         };
-        Some(self.finish_move_composite(pending, regions))
+        Some(self.finish_move_composite(pending, regions, false))
     }
 
     /// Install a worker's result unless a settle or a later commit superseded
     /// it.
-    pub(super) fn land_move_composite(
+    pub(in crate::cxxqt_object) fn land_move_composite(
         &mut self,
         generation: u64,
         regions: Vec<RegionComposite>,
@@ -169,7 +196,7 @@ impl PictureViewRust {
             return None;
         }
         let pending = self.deferred_composite.take()?;
-        Some(self.finish_move_composite(pending, regions))
+        Some(self.finish_move_composite(pending, regions, true))
     }
 
     /// Drop a pending Move composite: its document is going away.
@@ -244,6 +271,9 @@ impl qobject::PictureView {
     }
 
     fn show_settled_move(mut self: Pin<&mut Self>, settled: SettledMove) {
+        if let Some(job) = settled.pyramid {
+            self.as_mut().build_pyramid(job);
+        }
         if let Some(rect) = settled.blit {
             if rect.width() > 0 && rect.height() > 0 {
                 self.as_mut()
