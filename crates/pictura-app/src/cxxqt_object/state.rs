@@ -91,6 +91,8 @@ pub struct PictureViewRust {
     /// only while this rect is unchanged.
     pub(super) move_prepared_union: Option<(i32, i32, i32, i32)>,
     pub(super) move_preview_cache_hit: bool,
+    /// A Move drag is down. A landing composite must not clear its preview.
+    pub(super) move_drag_active: bool,
     /// The last committed similarity transform, for `Edit > Transform > Again`.
     /// Projective and Warp commits clear it (they are not repeatable this way).
     pub(super) last_transform: Option<super::document_session::RepeatTransform>,
@@ -255,6 +257,7 @@ impl Default for PictureViewRust {
             move_prepared_layer: String::new(),
             move_prepared_union: None,
             move_preview_cache_hit: false,
+            move_drag_active: false,
             last_transform: None,
             transform_controls: false,
             pending_previews: Default::default(),

@@ -250,7 +250,11 @@ impl qobject::PictureView {
                     .region_damaged(rect.left, rect.top, rect.width(), rect.height());
             }
         }
-        self.as_mut().move_committed();
+        // A second drag may have started while this commit was on its worker;
+        // its preview owns the canvas now.
+        if !self.rust().move_drag_active {
+            self.as_mut().move_committed();
+        }
     }
 }
 

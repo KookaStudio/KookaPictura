@@ -5,12 +5,15 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QElapsedTimer>
+
 #include "commands.h"
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
 #include "pictura_app/src/cxxqt_object/impl_core/deferred_composite.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -61,8 +64,12 @@ private slots:
     void aLargeMoveCommitLandsOffThread();
     void aSmallMoveCommitIsSynchronous();
     void aReadSettlesThePendingMove();
+    void aSecondPressReusesTheFullPreview();
+    void aSecondPressKeepsTheViewPreview();
 
 private:
+    void showFrame();
+
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
 };
@@ -72,6 +79,12 @@ void LargeDocumentTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+}
+
+void LargeDocumentTest::showFrame()
+{
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
 }
 
 void LargeDocumentTest::boundedUndoKeepsTheFrame()
@@ -269,6 +282,69 @@ void LargeDocumentTest::aReadSettlesThePendingMove()
     // white there, so the sample must settle the worker's composite first.
     QCOMPARE(f.view->sample_argb(40, 104), kRed);
     QVERIFY(!pictura::move_composite_pending(*f.view));
+}
+
+// [mcr_second_press]
+void LargeDocumentTest::aSecondPressReusesTheFullPreview()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_second_press_full"));
+    QVERIFY2(f.ok(), "second press fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.view->begin_move_preview());
+    f.view->end_move_preview();
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    QElapsedTimer timer;
+    timer.start();
+    QVERIFY(f.view->begin_move_preview());
+    const qint64 elapsed = timer.elapsed();
+    QVERIFY2(f.view->move_preview_cache_hit(), "the second press reuses the cached base");
+    QVERIFY2(elapsed < 1000, "the second press must not settle the whole composite");
+    f.view->end_move_preview();
+}
+
+// [mcr_second_press]
+void LargeDocumentTest::aSecondPressKeepsTheViewPreview()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_second_press_view"));
+    QVERIFY2(f.ok(), "second view press fixture");
+    showFrame();
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    f.canvas->setZoom(0.125, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    QVERIFY(f.view->begin_move_preview());
+    QVERIFY2(pictura::move_preview_scale(*f.view) > 1, "the first press is a view preview");
+    f.view->end_move_preview();
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    QElapsedTimer timer;
+    timer.start();
+    QVERIFY(f.view->begin_move_preview());
+    const qint64 elapsed = timer.elapsed();
+    QVERIFY2(pictura::move_preview_scale(*f.view) > 1, "the second press is a view preview");
+    QVERIFY2(elapsed < 1000, "the second press must not settle the whole composite");
+    f.canvas->beginMovePreview(f.view->move_preview_base(), f.view->move_preview_layer(),
+                               QPointF(f.view->move_preview_x(), f.view->move_preview_y()),
+                               f.view->move_preview_opacity() / 255.0);
+
+    // The first commit lands while the second drag is down; it must not clear
+    // the second drag's preview.
+    QTest::qWait(2000); // wait out the 500 ms worker delay and its composite
+    QVERIFY(f.canvas->movePreviewActive());
+    QCOMPARE(committed.count(), 0);
+    f.view->end_move_preview();
+    f.canvas->endMovePreview();
 }
 
 QTEST_MAIN(LargeDocumentTest)

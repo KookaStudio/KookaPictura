@@ -49,6 +49,21 @@ commit SHALL report it before returning.
 - **THEN** the canvas still presents the drag preview, and drops it when
   `moveCommitted` arrives
 
+### Requirement: A second Move press does not settle a pending composite
+
+A Move press SHALL reuse a still-valid cached full-resolution preview, and SHALL
+build a view preview from the layer stack while a Move composite is pending,
+without settling that composite. A landing composite SHALL NOT clear a drag
+preview that started after it.
+
+#### Scenario: The second press starts without the whole composite [mcr_second_press]
+
+- **WHEN** a large layer is moved, its composite is still pending, and the Move
+  tool presses the layer again
+- **THEN** the press reuses the cached preview or rebuilds the view preview
+  without a whole-document composite, and the first landing does not clear the
+  second drag's preview
+
 ### Requirement: Every reader settles a pending composite
 
 Before an edit, a preview, a Move press, undo, redo, a history jump, a save, an

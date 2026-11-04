@@ -481,10 +481,13 @@ impl qobject::PictureView {
     /// Reuses the cached base when the content revision and move-group key
     /// match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
-        self.as_mut().settle_pending_composite();
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
+        // A committed move leaves the cached base valid: its content and the
+        // hidden-layer backdrop do not change with the layer's position. Reuse
+        // it before settling a pending composite, which is a whole-document
+        // composite on a large document.
         if self.as_ref().move_cache_valid(&paths) {
             {
                 let mut rust = self.as_mut().rust_mut();
@@ -498,11 +501,27 @@ impl qobject::PictureView {
                 rust.move_y = y;
                 rust.move_opacity = opacity;
                 rust.move_preview_cache_hit = true;
+                rust.move_drag_active = true;
             }
             return true;
         }
+        // A view preview reads the layer stack, not the stale composite, so a
+        // pending commit can stay on its worker while the next drag starts.
+        if self.as_ref().rust().move_composite_pending()
+            && self.as_mut().rust_mut().compute_view_move_preview(&paths)
+        {
+            let mut rust = self.as_mut().rust_mut();
+            rust.move_preview_cache_hit = false;
+            rust.move_drag_active = true;
+            return true;
+        }
+        self.as_mut().settle_pending_composite();
         let computed = self.as_mut().compute_move_preview(paths);
-        self.as_mut().rust_mut().move_preview_cache_hit = false;
+        {
+            let mut rust = self.as_mut().rust_mut();
+            rust.move_preview_cache_hit = false;
+            rust.move_drag_active = computed;
+        }
         computed
     }
 
@@ -534,13 +553,13 @@ impl qobject::PictureView {
     /// Move tool may not move (a Background) is never previewed, so it is not
     /// warmed either: the warm composites the whole document.
     pub fn prepare_move_preview(mut self: Pin<&mut Self>) -> bool {
-        self.as_mut().settle_pending_composite();
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
         if self.as_ref().move_cache_valid(&paths) {
             return true;
         }
+        self.as_mut().settle_pending_composite();
         self.as_mut().compute_move_preview(paths)
     }
 
@@ -623,33 +642,12 @@ impl qobject::PictureView {
     /// Compute and store the move-preview base/layer for `paths` and record the
     /// revision and group key they were built from.
     fn compute_move_preview(mut self: Pin<&mut Self>, paths: Vec<String>) -> bool {
+        if self.as_mut().rust_mut().compute_view_move_preview(&paths) {
+            return true;
+        }
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
-        let viewed = rust.session.doc.as_ref().and_then(|doc| {
-            let preview = view_preview::view_preview(
-                doc,
-                &paths,
-                rust.presented_level,
-                rust.presented_rect,
-                gpu_compute,
-            )?;
-            let opacity = pictura_render::resolve_path(doc, &paths[0])?.opacity as i32;
-            Some((preview, opacity))
-        });
-        if let Some((preview, opacity)) = viewed {
-            rust.move_base = Some(preview.base);
-            rust.move_base_origin = Some(preview.base_origin);
-            rust.move_layer = Some(preview.layer);
-            rust.move_x = preview.view.region.left;
-            rust.move_y = preview.view.region.top;
-            rust.move_opacity = opacity;
-            rust.move_view = Some(preview.view);
-            rust.move_prepared_revision = rust.session.content_revision;
-            rust.move_prepared_layer = move_group_key(&paths);
-            rust.move_prepared_union = None;
-            return true;
-        }
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
@@ -744,10 +742,11 @@ impl qobject::PictureView {
         true
     }
 
-    pub fn end_move_preview(self: Pin<&mut Self>) {
+    pub fn end_move_preview(mut self: Pin<&mut Self>) {
         // Keep the cache: the next press reuses a full-resolution preview when
         // the revision, topmost layer, and clamped rect are unchanged. A view
         // preview is rebuilt on every press (`move_cache_valid`).
+        self.as_mut().rust_mut().move_drag_active = false;
     }
 
     /// Drop the transform overlay's prepared base/layer. The C++ canvas clears
@@ -766,6 +765,7 @@ impl qobject::PictureView {
         rust.move_prepared_layer.clear();
         rust.move_prepared_union = None;
         rust.move_preview_cache_hit = false;
+        rust.move_drag_active = false;
     }
 
     pub fn commit_move(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
@@ -805,6 +805,40 @@ impl qobject::PictureView {
 }
 
 impl PictureViewRust {
+    /// Build and store a view preview of `paths` when the canvas presents one.
+    /// It reads the layer stack, not `doc.composite`, so it stays valid while a
+    /// Move commit's composite is still on its worker.
+    pub(in crate::cxxqt_object) fn compute_view_move_preview(&mut self, paths: &[String]) -> bool {
+        let Some(doc) = self.session.doc.as_ref() else {
+            return false;
+        };
+        let Some(preview) = view_preview::view_preview(
+            doc,
+            paths,
+            self.presented_level,
+            self.presented_rect,
+            self.gpu_compute,
+        ) else {
+            return false;
+        };
+        let Some(opacity) =
+            pictura_render::resolve_path(doc, &paths[0]).map(|layer| layer.opacity as i32)
+        else {
+            return false;
+        };
+        self.move_base = Some(preview.base);
+        self.move_base_origin = Some(preview.base_origin);
+        self.move_layer = Some(preview.layer);
+        self.move_x = preview.view.region.left;
+        self.move_y = preview.view.region.top;
+        self.move_opacity = opacity;
+        self.move_view = Some(preview.view);
+        self.move_prepared_revision = self.session.content_revision;
+        self.move_prepared_layer = move_group_key(paths);
+        self.move_prepared_union = None;
+        true
+    }
+
     /// Prepare a transform session on `path` in `mode`: the layer is trimmed to
     /// its content (or the selection lifted onto a floating layer) and the
     /// session's scalars are set. `None` when the target cannot be
