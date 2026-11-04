@@ -31,6 +31,9 @@ pub mod ffi {
         /// Whether the document's type layers can be re-set: only in an 8-bit RGB document.
         fn type_layers_editable(view: &PictureView) -> bool;
 
+        /// Whether the document holds a type layer at any depth (smart-object contents not searched).
+        fn type_document_has_type(view: &PictureView) -> bool;
+
         /// Re-set every type layer whose font is one of `missing` (one name per line) in the default font, recording one "Replace All Missing Fonts" state. Returns how many layers changed; 0 records nothing.
         fn type_replace_fonts(view: Pin<&mut PictureView>, missing: &QString) -> i32;
 

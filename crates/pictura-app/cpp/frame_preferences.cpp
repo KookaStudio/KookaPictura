@@ -28,9 +28,11 @@ void PicturaMainWindow::registerPreferenceHandlers()
                           [this]() { showPreferences(PreferencesDialog::kType); });
     registry_->setHandler(command_ids::EditPreferencesAgentControl,
                           [this]() { showPreferences(PreferencesDialog::kAgentControl); });
-    // Only an interactive window has one.
-    registry_->setEnabledProvider(command_ids::EditPreferencesAgentControl,
-                                  [this]() { return findChild<AgentControl*>() != nullptr; });
+    // Only an interactive window has one, parented to the frame. A recursive
+    // search walks every widget on each command refresh (#1151).
+    registry_->setEnabledProvider(command_ids::EditPreferencesAgentControl, [this]() {
+        return findChild<AgentControl*>(QString(), Qt::FindDirectChildrenOnly) != nullptr;
+    });
 }
 
 void PicturaMainWindow::showPreferences(const QString& page)
@@ -53,7 +55,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setTypeShowAsianOptions(typeShowAsianOptions_);
         preferencesDialog_->setTypeMiddleEastern(typeMiddleEastern_);
         preferencesDialog_->setTypeMissingGlyphProtection(typeMissingGlyphProtection_);
-        if (auto* agent = findChild<AgentControl*>()) {
+        if (auto* agent = findChild<AgentControl*>(QString(), Qt::FindDirectChildrenOnly)) {
             preferencesDialog_->addPage(PreferencesDialog::kAgentControl,
                                         new AgentControlPage(agent));
         }

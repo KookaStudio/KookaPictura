@@ -164,13 +164,32 @@ void registerTypeFont(const QString& family, const QString& style)
     }
 }
 
+namespace {
+
+bool& fallbacksRegistered()
+{
+    static bool registered = false;
+    return registered;
+}
+
+} // namespace
+
+bool typeFallbacksRegistered()
+{
+    return fallbacksRegistered();
+}
+
+void forgetTypeFallbacksForTest()
+{
+    fallbacksRegistered() = false;
+}
+
 void registerTypeFallbacks()
 {
-    static bool done = false;
-    if (done) {
+    if (fallbacksRegistered()) {
         return;
     }
-    done = true;
+    fallbacksRegistered() = true;
     // The bundled UI face is always available and covers Greek and Cyrillic,
     // which the metric-compatible Liberation face does not.
     registerBundledFonts();

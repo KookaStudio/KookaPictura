@@ -5,8 +5,13 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/type_tools/fonts.cxxqt.h"
+#include "type_fonts.h"
 
 namespace pictura::type_api {
+
+// Every function here that reaches type layout calls registerTypeFallbacks()
+// first, so Missing Glyph Protection has its faces whatever the entry point
+// (#1151). Functions that only read stored type data do not.
 
 namespace {
 
@@ -72,6 +77,7 @@ std::uint32_t openTypeFeatures(const QString& family, const QString& style)
 
 QVector<int> previewRect(const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     const ::rust::Vec<std::int32_t> rect = ::pictura::type_preview_rect(
         spec.text, spec.font, spec.setting, spec.character, spec.paragraph);
     QVector<int> out;
@@ -84,30 +90,35 @@ QVector<int> previewRect(const TypeSpec& spec)
 
 QVector<double> caretStops(const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return doubles(::pictura::type_caret_stops(spec.text, spec.font, spec.setting, spec.character,
                                                spec.paragraph));
 }
 
 QVector<double> baselines(const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return doubles(::pictura::type_baselines(spec.text, spec.font, spec.setting, spec.character,
                                              spec.paragraph));
 }
 
 bool overflows(const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return ::pictura::type_overflows(spec.text, spec.font, spec.setting, spec.character,
                                      spec.paragraph);
 }
 
 QVector<double> pathOverflowPoint(const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return doubles(::pictura::type_path_overflow_point(spec.text, spec.font, spec.setting,
                                                        spec.character, spec.paragraph));
 }
 
 QVector<double> localBounds(const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return doubles(::pictura::type_local_bounds(spec.text, spec.font, spec.setting,
                                                 spec.character, spec.paragraph));
 }
@@ -119,11 +130,13 @@ bool isParagraph(const PictureView& view, const QString& path)
 
 bool convert(PictureView& view, const QString& path, bool paragraph)
 {
+    registerTypeFallbacks();
     return ::pictura::type_convert(view, path, paragraph);
 }
 
 QByteArray previewRgba(const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     const ::rust::Vec<std::uint8_t> rgba = ::pictura::type_preview_rgba(
         spec.text, spec.font, spec.setting, spec.character, spec.paragraph);
     return QByteArray(reinterpret_cast<const char*>(rgba.data()), int(rgba.size()));
@@ -131,48 +144,56 @@ QByteArray previewRgba(const TypeSpec& spec)
 
 QString commitLayer(PictureView& view, const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return ::pictura::type_commit_layer(view, spec.text, spec.font, spec.setting, spec.character,
                                         spec.paragraph);
 }
 
 bool commitMask(PictureView& view, const TypeSpec& spec, const QString& mode)
 {
+    registerTypeFallbacks();
     return ::pictura::type_commit_mask(view, spec.text, spec.font, spec.setting, spec.character,
                                        spec.paragraph, mode);
 }
 
 bool updateLayer(PictureView& view, const QString& path, const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return ::pictura::type_update_layer(view, path, spec.text, spec.font, spec.setting,
                                         spec.character, spec.paragraph);
 }
 
 bool previewLayer(PictureView& view, const QString& path, const TypeSpec& spec)
 {
+    registerTypeFallbacks();
     return ::pictura::type_preview_layer(view, path, spec.text, spec.font, spec.setting,
                                          spec.character, spec.paragraph);
 }
 
 bool applyStyle(PictureView& view, const QString& path, const QString& name, bool paragraph)
 {
+    registerTypeFallbacks();
     return ::pictura::type_apply_style(view, path, name, paragraph);
 }
 
 bool createCharacterStyle(PictureView& view, const QString& name, const QString& font,
                           const CharacterSetting& character)
 {
+    registerTypeFallbacks();
     return ::pictura::type_create_character_style(view, name, font, character);
 }
 
 bool editCharacterStyle(PictureView& view, const QString& name, const QString& newName,
                         const QString& font, const CharacterSetting& character)
 {
+    registerTypeFallbacks();
     return ::pictura::type_edit_character_style(view, name, newName, font, character);
 }
 
 bool previewCharacterStyle(PictureView& view, const QString& name, const QString& font,
                            const CharacterSetting& character)
 {
+    registerTypeFallbacks();
     return ::pictura::type_preview_character_style(view, name, font, character);
 }
 
@@ -193,18 +214,21 @@ QVector<CharacterStyle> characterStyles(const PictureView& view)
 bool createParagraphStyle(PictureView& view, const QString& name, const QString& font,
                           const CharacterSetting& character, const ParagraphSetting& paragraph)
 {
+    registerTypeFallbacks();
     return ::pictura::type_create_paragraph_style(view, name, font, character, paragraph);
 }
 
 bool editParagraphStyle(PictureView& view, const QString& name, const QString& font,
                         const CharacterSetting& character, const ParagraphSetting& paragraph)
 {
+    registerTypeFallbacks();
     return ::pictura::type_edit_paragraph_style(view, name, font, character, paragraph);
 }
 
 bool previewParagraphStyle(PictureView& view, const QString& name, const QString& font,
                            const CharacterSetting& character, const ParagraphSetting& paragraph)
 {
+    registerTypeFallbacks();
     return ::pictura::type_preview_paragraph_style(view, name, font, character, paragraph);
 }
 
@@ -244,11 +268,13 @@ QVector<ParagraphStyle> paragraphStyles(const PictureView& view)
 
 bool rasterize(PictureView& view, const QString& path)
 {
+    registerTypeFallbacks();
     return view.rasterize_type(path);
 }
 
 std::optional<EditSession> EditSession::begin(PictureView& view, const QString& path)
 {
+    registerTypeFallbacks();
     if (!view.layer_is_type(path) || !::pictura::type_edit_begin(view, path)) {
         return std::nullopt;
     }
@@ -343,6 +369,7 @@ WarpSession::~WarpSession()
 
 bool WarpSession::preview(const WarpSetting& warp)
 {
+    registerTypeFallbacks();
     if (!view_) {
         open_ = false;
     }
@@ -381,6 +408,7 @@ void setTextGamma(bool enabled, double gamma)
 
 void refreshTextGamma(PictureView& view)
 {
+    registerTypeFallbacks();
     ::pictura::type_text_gamma_refresh(view);
 }
 
@@ -396,12 +424,18 @@ bool missingGlyphProtection()
 
 void refreshMissingGlyphProtection(PictureView& view)
 {
+    registerTypeFallbacks();
     ::pictura::type_missing_glyph_protection_refresh(view);
 }
 
 QStringList documentFonts(const PictureView& view)
 {
     return ::pictura::pdf_type_fonts(view).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+}
+
+bool hasTypeLayers(const PictureView& view)
+{
+    return ::pictura::type_document_has_type(view);
 }
 
 bool layersEditable(const PictureView& view)
@@ -411,6 +445,7 @@ bool layersEditable(const PictureView& view)
 
 int replaceFonts(PictureView& view, const QStringList& missing)
 {
+    registerTypeFallbacks();
     return ::pictura::type_replace_fonts(view, missing.join(QLatin1Char('\n')));
 }
 

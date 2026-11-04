@@ -211,6 +211,8 @@ void setTextGamma(bool enabled, double gamma);
 void refreshTextGamma(PictureView& view);
 /// Every type layer's font name, each once.
 QStringList documentFonts(const PictureView& view);
+/// Whether the document holds a type layer at any depth.
+bool hasTypeLayers(const PictureView& view);
 /// Whether the document's type layers can be re-set (8-bit RGB only).
 bool layersEditable(const PictureView& view);
 /// Re-set every type layer using one of `missing` in the default font as one

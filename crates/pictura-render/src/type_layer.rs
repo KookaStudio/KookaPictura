@@ -396,6 +396,22 @@ pub fn type_layers_editable(doc: &Document) -> bool {
     rgb8(doc)
 }
 
+/// Whether any layer in the tree, groups included, carries type the
+/// compositor lays out. The shell registers its per-script fallback faces only
+/// for such a document, so a session without type never scans the installed
+/// fonts (#1151).
+///
+/// ponytail: type inside a smart object's embedded document is not seen; it
+/// lays out with the faces registered so far.
+pub fn has_type_layers(doc: &Document) -> bool {
+    fn any(layers: &[Layer]) -> bool {
+        layers
+            .iter()
+            .any(|layer| layer.type_tool.is_some() || any(&layer.children))
+    }
+    any(&doc.layers)
+}
+
 /// Commit `spec` as a type layer above `selection_path` (the [`insert_node`]
 /// rule): rendered pixels, an authored `TySh`, and CS6's type locks
 /// (transparency and pixels). Returns the new path; empty when nothing renders
@@ -789,6 +805,22 @@ mod tests {
 
         let mut gray = Document::new(300, 200, ColorMode::Grayscale, BitDepth::Eight);
         assert!(add_type_layer(&mut gray, "", &spec("x", false, 0)).is_empty());
+    }
+
+    #[test]
+    fn has_type_layers_finds_type_at_any_depth() {
+        let mut doc = Document::new(300, 200, ColorMode::Rgb, BitDepth::Eight);
+        assert!(!has_type_layers(&doc), "a blank document");
+        assert!(!add_type_layer(&mut doc, "", &spec("Nested", false, 0)).is_empty());
+        assert!(has_type_layers(&doc), "a top-level type layer");
+
+        let text = doc.layers.remove(&[0]).expect("the type layer");
+        let group = crate::add_group(&mut doc, -1, "Group") as usize;
+        assert!(!has_type_layers(&doc), "an empty group");
+        doc.layers
+            .insert(&[group], 0, text)
+            .expect("nest the type layer");
+        assert!(has_type_layers(&doc), "a type layer inside a group");
     }
 
     #[test]

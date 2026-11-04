@@ -6,6 +6,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonArray>
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLabel>
@@ -257,6 +258,11 @@ void PreferencesAgentTest::stoppingWithdrawsAnApproval()
 
 void PreferencesAgentTest::menuOpensThePage()
 {
+    // The provider finds the frame's direct AgentControl child (#1151).
+    window_->registry()->refresh();
+    QAction* item = window_->registry()->action(QStringLiteral("edit.preferences.agentControl"));
+    QVERIFY(item != nullptr);
+    QVERIFY(item->isEnabled());
     QVERIFY(window_->registry()->dispatch(QStringLiteral("edit.preferences.agentControl")));
     auto* dialog = window_->findChild<pictura::PreferencesDialog*>();
     QVERIFY(dialog != nullptr);

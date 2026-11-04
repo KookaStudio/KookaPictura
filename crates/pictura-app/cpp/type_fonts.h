@@ -16,8 +16,14 @@ QByteArray typeFontBytes(const QString& family, const QString& style);
 void registerTypeFont(const QString& family, const QString& style = QString());
 
 // Register the bundled UI face and one installed family per common non-Roman
-// script once, so Missing Glyph Protection has a covering face to choose.
+// script once, so Missing Glyph Protection has a covering face to choose. The
+// scan opens every installed family, so it waits until type is laid out or a
+// document with type is shown (#1151).
 void registerTypeFallbacks();
+bool typeFallbacksRegistered();
+// The next registerTypeFallbacks() scans again; faces already handed to the
+// engine stay registered.
+void forgetTypeFallbacksForTest();
 
 // The installed family a type layer's font name means: the name itself when
 // Qt knows it, else the family whose spaceless name is a PostScript name's

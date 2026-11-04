@@ -5,6 +5,7 @@
 #include "panels/actions_panel.h"
 #include "update_checker.h"
 
+#include "api/type_api.h"
 #include "pictura_debug_timing.h"
 #include "type_fonts.h"
 
@@ -56,27 +57,35 @@ void PicturaMainWindow::retargetDock()
         infoPanel_->setView(view);
     }
     if (propertiesPanel_) {
+        pictura::ScopedTimer t("cxx_propertiesPanel_refresh");
         propertiesPanel_->setView(view);
     }
     if (adjustmentsPanel_) {
+        pictura::ScopedTimer t("cxx_adjustmentsPanel_refresh");
         adjustmentsPanel_->setView(view);
     }
     if (channelsPanel_) {
+        pictura::ScopedTimer t("cxx_channelsPanel_refresh");
         channelsPanel_->setView(view);
     }
     if (characterPanel_) {
+        pictura::ScopedTimer t("cxx_characterPanel_refresh");
         characterPanel_->setView(view);
     }
     if (paragraphPanel_) {
+        pictura::ScopedTimer t("cxx_paragraphPanel_refresh");
         paragraphPanel_->setView(view);
     }
     if (paragraphStylesPanel_) {
+        pictura::ScopedTimer t("cxx_paragraphStylesPanel_refresh");
         paragraphStylesPanel_->setView(view);
     }
     if (characterStylesPanel_) {
+        pictura::ScopedTimer t("cxx_characterStylesPanel_refresh");
         characterStylesPanel_->setView(view);
     }
     if (notesPanel_) {
+        pictura::ScopedTimer t("cxx_notesPanel_refresh");
         notesPanel_->setView(view);
     }
     // Color Range works on one document; switching away cancels it.
@@ -89,6 +98,7 @@ void PicturaMainWindow::retargetDock()
         replaceColorDialog_->reject();
     }
     if (pathsPanel_) {
+        pictura::ScopedTimer t("cxx_pathsPanel_refresh");
         pathsPanel_->setView(view);
     }
     if (histogramPanel_) {
@@ -114,57 +124,45 @@ bool PicturaMainWindow::dockNeedsRebind() const
 
 void PicturaMainWindow::refreshDock(bool includeSelfRefreshing)
 {
-    if (layersPanel_ && includeSelfRefreshing) {
-        layersPanel_->refresh();
+    // Each panel is timed by name so a panel whose refresh scales with the
+    // document shows up under PICTURA_PAINT_TIMING (#1151).
+    const auto timed = [](const char* label, auto* panel) {
+        if (panel) {
+            pictura::ScopedTimer t(label);
+            panel->refresh();
+        }
+    };
+    if (includeSelfRefreshing) {
+        timed("cxx_layersPanel_refresh", layersPanel_);
+        timed("cxx_historyPanel_refresh", historyPanel_);
     }
-    if (historyPanel_ && includeSelfRefreshing) {
-        historyPanel_->refresh();
-    }
-    if (navigatorPanel_) {
-        navigatorPanel_->refresh();
-    }
-    if (infoPanel_) {
-        infoPanel_->refresh();
-    }
-    if (propertiesPanel_) {
-        propertiesPanel_->refresh();
-    }
-    if (adjustmentsPanel_) {
-        adjustmentsPanel_->refresh();
-    }
-    if (channelsPanel_) {
-        channelsPanel_->refresh();
-    }
-    if (characterPanel_) {
-        characterPanel_->refresh();
-    }
-    if (paragraphPanel_) {
-        paragraphPanel_->refresh();
-    }
-    if (paragraphStylesPanel_) {
-        paragraphStylesPanel_->refresh();
-    }
-    if (characterStylesPanel_) {
-        characterStylesPanel_->refresh();
-    }
-    if (notesPanel_) {
-        notesPanel_->refresh();
-    }
-    if (pathsPanel_) {
-        pathsPanel_->refresh();
-    }
-    if (histogramPanel_) {
-        histogramPanel_->refresh();
-    }
+    timed("cxx_navigatorPanel_refresh", navigatorPanel_);
+    timed("cxx_infoPanel_refresh", infoPanel_);
+    timed("cxx_propertiesPanel_refresh", propertiesPanel_);
+    timed("cxx_adjustmentsPanel_refresh", adjustmentsPanel_);
+    timed("cxx_channelsPanel_refresh", channelsPanel_);
+    timed("cxx_characterPanel_refresh", characterPanel_);
+    timed("cxx_paragraphPanel_refresh", paragraphPanel_);
+    timed("cxx_paragraphStylesPanel_refresh", paragraphStylesPanel_);
+    timed("cxx_characterStylesPanel_refresh", characterStylesPanel_);
+    timed("cxx_notesPanel_refresh", notesPanel_);
+    timed("cxx_pathsPanel_refresh", pathsPanel_);
+    timed("cxx_histogramPanel_refresh", histogramPanel_);
 }
 
 void PicturaMainWindow::refreshPanels()
 {
     pictura::ScopedTimer t("cxx_refreshPanels (debounced timer)");
-    registerTypeFallbacks();
+    PictureView* view = activeView();
+    pictura::MetricsTimer<PictureView> metrics(view, "panels_refresh");
+    // The per-script fallback scan opens every installed family; a document
+    // without type never needs it (#1151). It runs before the early returns
+    // below on purpose: it is once-only, and a held refresh lands soon after.
+    if (view && type_api::hasTypeLayers(*view)) {
+        registerTypeFallbacks();
+    }
     // A filter commit holds the history on its worker; the commit's own
     // refresh restarts this timer once it lands.
-    PictureView* view = activeView();
     if (view && filter_commit_running(*view)) {
         return;
     }
@@ -185,6 +183,7 @@ void PicturaMainWindow::refreshPanels()
     if (registryRefreshPending_) {
         registryRefreshPending_ = false;
         if (registry_) {
+            pictura::ScopedTimer registryTimer("cxx_registry_refresh");
             registry_->refresh();
         }
     }

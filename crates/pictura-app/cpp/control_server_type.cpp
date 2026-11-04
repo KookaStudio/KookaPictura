@@ -74,7 +74,6 @@ QJsonObject ControlServer::methodTypeOp(const QJsonObject& params)
     QJsonObject result;
     result.insert(QStringLiteral("ok"), true);
     if (op == QStringLiteral("add")) {
-        registerTypeFallbacks();
         const QString path = type_api::commitLayer(*view, newSpec(params));
         if (path.isEmpty()) {
             return error(QStringLiteral("refused"), QStringLiteral("add refused"));
