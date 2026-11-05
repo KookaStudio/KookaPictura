@@ -1,5 +1,7 @@
 use super::*;
 
+mod blur;
+
 fn ebbl(items: Vec<(Vec<u8>, DescValue)>) -> DescValue {
     DescValue::Object {
         name: String::new(),

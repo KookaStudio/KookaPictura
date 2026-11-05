@@ -100,6 +100,8 @@ use crate::composite::{mask_alpha, Canvas};
 use crate::composite_rows::serial;
 
 mod bevel;
+#[cfg(test)]
+pub(crate) use bevel::blur_reference;
 mod glows;
 mod legacy;
 mod overlays;
