@@ -6,9 +6,9 @@
 #include "smart_guides.h"
 #include "tools.h"
 
+#include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/transform_bridge.h"
-#include "pictura_app/src/cxxqt_object/impl_core/deferred_composite.cxxqt.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QElapsedTimer>

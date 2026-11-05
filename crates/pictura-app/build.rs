@@ -189,7 +189,6 @@ fn main() {
                 "src/cxxqt_object/image_adjust/image_ops.rs",
                 "src/cxxqt_object/image_adjust/image_size.rs",
                 "src/cxxqt_object/image_adjust/jobs.rs",
-                "src/cxxqt_object/impl_core/deferred_composite.rs",
                 "src/cxxqt_object/impl_core/recovery.rs",
                 "src/cxxqt_object/impl_core/save_jobs.rs",
                 "src/cxxqt_object/image_replace_color.rs",

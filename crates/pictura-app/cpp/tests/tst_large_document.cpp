@@ -12,10 +12,8 @@
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
-#include "pictura_app/src/cxxqt_object/impl_core/deferred_composite.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+#include "api/paint_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 
