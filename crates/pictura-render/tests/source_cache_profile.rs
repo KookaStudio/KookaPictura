@@ -4,8 +4,9 @@
 use std::time::Instant;
 
 use pictura_core::{
-    BitDepth, BlendMode, Channel, CharacterAttrs, ColorMode, Document, Layer, LayerStack, PsdRect,
-    SmartObject, SmartObjectKind, TextStyle, TypeTool,
+    BitDepth, BlendMode, Channel, CharacterAttrs, ColorMode, Document, Layer, LayerStack,
+    PixelBuffer, PsdRect, SmartObject, SmartObjectKind, TextStyle, TypeTool, VectorFillRule,
+    VectorMask, VectorSubpath,
 };
 
 fn region_rect((left, top, width, height): (u32, u32, u32, u32)) -> PsdRect {
@@ -294,5 +295,241 @@ fn canvas_sized_styled_present_is_faster_than_a_full_composite() {
     assert!(
         region_time * 10 <= full_time,
         "region {region_time:?} full {full_time:?}: a dab-sized present must be 10x faster"
+    );
+}
+
+const PROFILE_W: u32 = 4934;
+const PROFILE_H: u32 = 1500;
+
+fn opaque_pixel_layer(name: &str, size: (u32, u32), rgb: (u8, u8, u8)) -> Layer {
+    let n = size.0 as usize * size.1 as usize;
+    Layer {
+        name: name.into(),
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: size.1 as i32,
+            right: size.0 as i32,
+        },
+        channels: vec![
+            Channel {
+                id: 0,
+                data: vec![rgb.0; n].into(),
+            },
+            Channel {
+                id: 1,
+                data: vec![rgb.1; n].into(),
+            },
+            Channel {
+                id: 2,
+                data: vec![rgb.2; n].into(),
+            },
+            Channel {
+                id: -1,
+                data: vec![255u8; n].into(),
+            },
+        ],
+        blend: BlendMode::Normal,
+        ..Default::default()
+    }
+}
+
+fn polygon_mask(points: &[(i32, i32)]) -> VectorMask {
+    VectorMask {
+        subpaths: vec![VectorSubpath {
+            closed: true,
+            operation: 1,
+            fill_rule: VectorFillRule::EvenOdd,
+            points: points.iter().map(|&(x, y)| [x * 256, y * 256]).collect(),
+        }],
+        ..Default::default()
+    }
+}
+
+fn beveled_masked_layer(name: &str, rgb: (u8, u8, u8), points: &[(i32, i32)]) -> Layer {
+    let mut layer = opaque_pixel_layer(name, (PROFILE_W, PROFILE_H), rgb);
+    layer.vector_mask = Some(polygon_mask(points));
+    let _ = pictura_render::set_layer_style_value(&mut layer, "bevel.on", 1.0);
+    let _ = pictura_render::set_layer_style_value(&mut layer, "bevel.size", 250.0);
+    let _ = pictura_render::set_layer_style_value(&mut layer, "bevel.depth", 1000.0);
+    let _ = pictura_render::set_layer_style_value(&mut layer, "bevel.soften", 0.0);
+    let _ = pictura_render::set_layer_style_value(&mut layer, "innerGlow.on", 1.0);
+    layer
+}
+
+fn bevel_fixture() -> Document {
+    let mut d = Document::new(PROFILE_W, PROFILE_H, ColorMode::Rgb, BitDepth::Eight);
+    d.layers = LayerStack::from_layers(vec![
+        opaque_pixel_layer("Background", (PROFILE_W, PROFILE_H), (255, 255, 255)),
+        beveled_masked_layer(
+            "Red",
+            (200, 20, 20),
+            &[(300, 250), (2300, 250), (1300, 1250)],
+        ),
+        beveled_masked_layer(
+            "Blue",
+            (20, 20, 200),
+            &[(2600, 250), (4600, 750), (2600, 1250), (3100, 750)],
+        ),
+    ]);
+    d
+}
+
+fn timed_region(
+    pool: &rayon::ThreadPool,
+    d: &Document,
+    region: PsdRect,
+) -> (std::time::Duration, PixelBuffer) {
+    let start = Instant::now();
+    let out = pool.install(|| {
+        pictura_render::composite(pictura_render::CompositeRequest::region(d, region, false)).0
+    });
+    (start.elapsed(), out)
+}
+
+struct Round {
+    pair: std::time::Duration,
+    union: std::time::Duration,
+    top: PixelBuffer,
+    bottom: PixelBuffer,
+    union_out: PixelBuffer,
+}
+
+fn round(
+    pool: &rayon::ThreadPool,
+    d: &Document,
+    top: PsdRect,
+    bottom: PsdRect,
+    union: PsdRect,
+    pair_first: bool,
+) -> Round {
+    if pair_first {
+        let (t_top, top_out) = timed_region(pool, d, top);
+        let (t_bottom, bottom_out) = timed_region(pool, d, bottom);
+        let (t_union, union_out) = timed_region(pool, d, union);
+        Round {
+            pair: t_top + t_bottom,
+            union: t_union,
+            top: top_out,
+            bottom: bottom_out,
+            union_out,
+        }
+    } else {
+        let (t_union, union_out) = timed_region(pool, d, union);
+        let (t_top, top_out) = timed_region(pool, d, top);
+        let (t_bottom, bottom_out) = timed_region(pool, d, bottom);
+        Round {
+            pair: t_top + t_bottom,
+            union: t_union,
+            top: top_out,
+            bottom: bottom_out,
+            union_out,
+        }
+    }
+}
+
+fn median(mut samples: Vec<std::time::Duration>) -> std::time::Duration {
+    samples.sort();
+    samples[samples.len() / 2]
+}
+
+fn assert_slice(part: &PixelBuffer, full: &PixelBuffer, x0: u32, y0: u32) {
+    let pw = part.width as usize;
+    let fw = full.width as usize;
+    let pplane = pw * part.height as usize;
+    let fplane = fw * full.height as usize;
+    let pdata = part.data.as_slice();
+    let fdata = full.data.as_slice();
+    for y in 0..part.height as usize {
+        for x in 0..part.width as usize {
+            let pi = y * pw + x;
+            let fi = (y0 as usize + y) * fw + x0 as usize + x;
+            for channel in 0..4 {
+                assert_eq!(
+                    pdata[channel * pplane + pi],
+                    fdata[channel * fplane + fi],
+                    "pixel ({x},{y}) channel {channel}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "profile: cargo test -p pictura-render --test source_cache_profile warm_bevel_region_replay_profile -- --ignored --exact --nocapture --test-threads=1"]
+fn warm_bevel_region_replay_profile() {
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .expect("one-worker pool");
+    let d = bevel_fixture();
+    let top = region_rect((0, 512, PROFILE_W, 128));
+    let bottom = region_rect((0, 640, PROFILE_W, 128));
+    let union = region_rect((0, 512, PROFILE_W, 256));
+
+    pictura_render::purge_source_cache();
+    let cold_start = Instant::now();
+    let _ = timed_region(&pool, &d, top);
+    let cold_short = cold_start.elapsed();
+
+    let full_start = Instant::now();
+    let full = pool.install(|| pictura_render::composite_rgba(&d));
+    let warm_full = full_start.elapsed();
+
+    let before = pictura_render::metrics::counters();
+    let warm_sample = pool.install(|| {
+        pictura_render::composite(pictura_render::CompositeRequest::region(&d, top, false)).0
+    });
+    let after = pictura_render::metrics::counters();
+    assert_eq!(
+        after.source_hits,
+        before.source_hits + 4,
+        "a warm short call reuses two effect decodes and two ready passes"
+    );
+    assert_eq!(
+        after.source_misses, before.source_misses,
+        "a warm short call has no source misses"
+    );
+    assert_eq!(
+        after.effect_decodes, before.effect_decodes,
+        "a warm short call decodes no effect"
+    );
+    assert!(
+        after.source_bytes > 0,
+        "the whole-layer passes stay retained"
+    );
+    assert_slice(&warm_sample, &full, 0, 512);
+
+    for round_index in 0..3 {
+        let _ = round(&pool, &d, top, bottom, union, round_index % 2 == 0);
+    }
+
+    let mut pair_samples = Vec::new();
+    let mut union_samples = Vec::new();
+    for round_index in 0..9 {
+        let measured = round(&pool, &d, top, bottom, union, round_index % 2 == 0);
+        assert_slice(&measured.top, &full, 0, 512);
+        assert_slice(&measured.bottom, &full, 0, 640);
+        assert_slice(&measured.union_out, &full, 0, 512);
+        pair_samples.push(measured.pair);
+        union_samples.push(measured.union);
+    }
+
+    let pair = median(pair_samples);
+    let banded = median(union_samples);
+    let ratio = pair.as_secs_f64() / banded.as_secs_f64();
+    eprintln!(
+        "bevel {PROFILE_W}x{PROFILE_H}: cold short {cold_short:?}, warm full {warm_full:?}, \
+         median pair {pair:?}, median union {banded:?}, ratio {ratio:.2}"
+    );
+    eprintln!(
+        "warm short reuse signals: hits +{}, misses +{}, decodes +{}",
+        after.source_hits - before.source_hits,
+        after.source_misses - before.source_misses,
+        after.effect_decodes - before.effect_decodes
+    );
+    assert!(
+        ratio <= 4.0,
+        "median pair {pair:?} / union {banded:?} = {ratio:.2}, expected at most 4.0"
     );
 }

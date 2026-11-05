@@ -765,6 +765,8 @@ pub(crate) fn build_layer_passes(
     region: Option<PsdRect>,
     fill: Option<&Adjustment>,
 ) -> crate::layer_source::LayerPasses {
+    #[cfg(test)]
+    crate::layer_source::note_pass_build(layer, doc);
     let build = BuildRegion {
         region,
         mask_clip: build_mask_clip(region, effects, doc),
