@@ -180,6 +180,10 @@ QList<ToolHint> toolHintEntries(ToolId id);
 // cursor branch; defined in tools_marquee.cpp with the other cursor helpers.
 bool activePixelLocked(PictureView* view);
 
+// Why a Gradient, Paint Bucket, Fill or Stroke was refused when
+// `fill_refused_for_memory()` says the memory gate refused it (#1207).
+QString fillMemoryRefusalMessage();
+
 // Routes canvas pointer events to the active tool. Implemented tools dispatch
 // through the handler registry; the legacy switch covers the rest.
 // The answer to "Apply the transformation?" when a tool switch leaves a pending

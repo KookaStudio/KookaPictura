@@ -9,9 +9,9 @@ mod flood;
 mod median;
 mod morph;
 
-pub use flood::flood;
 #[cfg(test)]
 pub(crate) use flood::flood_peak;
+pub use flood::{flood, flood_from};
 pub use median::median;
 pub use morph::{dilate, erode, Border};
 

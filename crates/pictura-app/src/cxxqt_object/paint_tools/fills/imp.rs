@@ -6,16 +6,15 @@ use super::super::super::helpers::{
 use super::super::super::helpers_composite::crop_selection;
 use super::super::super::picture::picture;
 use super::super::super::PictureViewRust;
+use super::budget;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::{Document, Layer, PsdRect};
-use pictura_paint::bucket::{self, BucketPaint};
-use pictura_paint::eraser::antialias_mask;
+use pictura_paint::bucket::{self, BucketPaint, BucketSource};
 use pictura_paint::gradient::{self, GradientOptions, GradientStyle, PRESET_NAMES};
 use pictura_paint::pattern;
-use pictura_paint::stamp::{layer_surface, surface_from_composite};
 use pictura_paint::Alpha;
 use std::borrow::Cow;
 
@@ -82,12 +81,16 @@ pub(super) fn draw_gradient(
     };
     let (start, end) = ((x0 as f32, y0 as f32), (x1 as f32, y1 as f32));
     apply(view, "Gradient", |doc, path, _rust, t, selection| {
+        if !budget::admit(budget::fork_bytes(doc, path, t.bounds)) {
+            return None;
+        }
         // The drag is in document space; a mask's document sits at its own
         // rectangle, so its points move by the target's origin.
         let (ox, oy) = (t.origin.0 as f32, t.origin.1 as f32);
         let start = (start.0 - ox, start.1 - oy);
         let end = (end.0 - ox, end.1 - oy);
-        gradient::draw(doc, path, &ramp, &options, start, end, selection)
+        let within = selection.map(|_| t.bounds);
+        gradient::draw(doc, path, &ramp, &options, start, end, selection, within)
     })
 }
 
@@ -119,24 +122,37 @@ pub(super) fn bucket_fill_at(
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
     let tolerance = tolerance.clamp(0, 255) as u8;
     apply(view, "Paint Bucket", |doc, path, rust, t, selection| {
-        // All Layers samples the composite of the layer's own document; a mask
-        // has no composite, so it always floods its own coverage.
-        let surface = if all_layers && !t.is_mask {
-            surface_from_composite(&picture(doc, rust))
-        } else {
-            layer_surface(doc, path)?
-        };
+        // The flood's match plane and its result, then the anti-aliased copy
+        // beside the result, then the result beside the bands it forks.
+        let mask_bytes = budget::area(t.bounds);
+        let fork = budget::fork_bytes(doc, path, t.bounds);
+        if !budget::admit(2 * mask_bytes + fork.max(mask_bytes)) {
+            return None;
+        }
         let (ox, oy) = t.origin;
-        let flood = bucket::flood(&surface, (x - ox, y - oy), tolerance, contiguous)?;
+        let seed = (x - ox, y - oy);
+        let flood = {
+            // All Layers samples the composite of the layer's own document; a
+            // mask has no composite, so it always floods its own coverage.
+            let composite = (all_layers && !t.is_mask).then(|| picture(doc, rust));
+            let source = match &composite {
+                Some(composite) => BucketSource::Composite(composite),
+                None => BucketSource::layer(doc, path)?,
+            };
+            bucket::flood(
+                source, doc.width, t.bounds, selection, seed, tolerance, contiguous,
+            )?
+        };
         let mask = if antialias {
-            antialias_mask(&flood, surface.width as usize)
+            bucket::antialias(flood, doc.width, t.bounds, selection)
         } else {
             flood
         };
-        bucket::fill(
+        bucket::fill_within(
             doc,
             path,
-            &mask,
+            t.bounds,
+            Some(&mask),
             paint,
             mode,
             opacity,
@@ -178,9 +194,13 @@ pub(super) fn edit_fill(
     } else {
         Alpha::Blend
     };
-    apply(view, "Fill", |doc, path, _rust, _t, selection| {
-        let mask = vec![255u8; (doc.width * doc.height) as usize];
-        bucket::fill(doc, path, &mask, paint, mode, opacity, selection, alpha)
+    apply(view, "Fill", |doc, path, _rust, t, selection| {
+        if !budget::admit(budget::fork_bytes(doc, path, t.bounds)) {
+            return None;
+        }
+        bucket::fill_within(
+            doc, path, t.bounds, None, paint, mode, opacity, selection, alpha,
+        )
     })
 }
 
@@ -203,13 +223,24 @@ pub(super) fn edit_stroke(
         2 => bucket::StrokeAlign::Outside,
         _ => bucket::StrokeAlign::Center,
     };
-    apply(view, "Stroke", |doc, path, _rust, _t, selection| {
+    let width = width.clamp(0, 250) as u32;
+    apply(view, "Stroke", |doc, path, _rust, t, selection| {
+        let selection = selection?;
+        let canvas = (doc.width as i32, doc.height as i32);
+        let window = bucket::stroke_window(t.bounds, width as i32 + 1, canvas)?;
+        // The window's crop, dilation, erosion and band, beside the bands the
+        // band's fill forks.
+        let fork = budget::fork_bytes(doc, path, window);
+        if !budget::admit(4 * budget::area(window) + fork) {
+            return None;
+        }
         bucket::stroke_selection(
             doc,
             path,
-            selection?,
+            selection,
+            t.bounds,
             rgba_from_argb(color),
-            width.clamp(0, 250) as u32,
+            width,
             align,
             paint_mode_from(&mode.to_string()),
             opacity.clamp(0, 100) as f32 / 100.0,
@@ -232,6 +263,9 @@ pub(crate) struct FillTarget {
     /// Whether the target is a mask, so geometry is translated and a
     /// document-space coverage is confined to the mask's rectangle.
     pub is_mask: bool,
+    /// What the edit can change, in the edited document's coordinates: the
+    /// selection's box, or the whole target without a selection (#1207).
+    pub bounds: PsdRect,
 }
 
 impl FillTarget {
@@ -267,6 +301,7 @@ pub(crate) fn apply(
         Option<&[u8]>,
     ) -> Option<PsdRect>,
 ) -> bool {
+    budget::clear();
     if view.rust().session.live.stroke().is_some() || view.rust().modal_transform_blocks_edit() {
         return false;
     }
@@ -282,18 +317,31 @@ pub(crate) fn apply(
         if active_pixel_layer(doc, Some(path)).is_none() || !active_layer_visible(doc, Some(path)) {
             return false;
         }
+        let canvas = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        };
+        let selection = rust.session.selection.as_ref().map(|s| s.data.as_slice());
+        // A selection that covers nothing leaves nothing to change.
+        let bounds = match selection {
+            Some(_) => match rust
+                .selection_mask_bounds()
+                .and_then(|b| b.intersect(canvas))
+            {
+                Some(bounds) => bounds,
+                None => return false,
+            },
+            None => canvas,
+        };
         let target = FillTarget {
             origin: (0, 0),
             document_size: (doc.width, doc.height),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: doc.height as i32,
-                right: doc.width as i32,
-            },
+            rect: canvas,
             is_mask: false,
+            bounds,
         };
-        let selection = rust.session.selection.as_ref().map(|s| s.data.as_slice());
         let mut edited = doc.clone();
         edit(&mut edited, path, rust, &target, selection).map(|rect| (edited, rect))
     };
@@ -328,11 +376,28 @@ pub(super) fn apply_mask(
         let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
             return Edit::None;
         };
+        let (ox, oy) = (mask.rect.left, mask.rect.top);
+        let doc_bounds = match rust.session.selection {
+            Some(_) => match rust
+                .selection_mask_bounds()
+                .and_then(|b| b.intersect(mask.rect))
+            {
+                Some(bounds) => bounds,
+                None => return Edit::None,
+            },
+            None => mask.rect,
+        };
         let target = FillTarget {
-            origin: (mask.rect.left, mask.rect.top),
+            origin: (ox, oy),
             document_size: (doc.width, doc.height),
             rect: mask.rect,
             is_mask: true,
+            bounds: PsdRect {
+                top: doc_bounds.top - oy,
+                left: doc_bounds.left - ox,
+                bottom: doc_bounds.bottom - oy,
+                right: doc_bounds.right - ox,
+            },
         };
         let selection = rust
             .session

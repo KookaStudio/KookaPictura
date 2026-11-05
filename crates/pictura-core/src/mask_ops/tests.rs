@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use super::{dilate, erode, flood, flood_peak, median, Border};
+use super::{dilate, erode, flood, flood_from, flood_peak, median, Border};
 
 fn next_u64(state: &mut u64) -> u64 {
     let mut x = *state;
@@ -334,4 +334,26 @@ fn kernels_agree_under_one_and_many_threads() {
             )
         });
     assert_eq!(one, many);
+}
+
+#[test]
+fn a_single_seed_floods_as_its_seed_plane_does() {
+    let (w, h) = (11usize, 8usize);
+    let mut state = 0x0bad_5eedu64;
+    for trial in 0..24 {
+        let gate: Vec<u8> = (0..w * h)
+            .map(|_| (next_u64(&mut state) % 3) as u8)
+            .collect();
+        let predicate = |_: usize, to: usize| gate[to] != 0;
+        let seed = (next_u64(&mut state) as usize) % (w * h);
+        let mut seeds = vec![0u8; w * h];
+        seeds[seed] = 1;
+        assert_eq!(
+            flood_from(w, h, seed, predicate),
+            flood(w, h, &seeds, predicate),
+            "trial {trial}"
+        );
+    }
+    assert!(flood_from(4, 4, 16, |_, _| true).is_none());
+    assert!(flood_from(0, 4, 0, |_, _| true).is_none());
 }

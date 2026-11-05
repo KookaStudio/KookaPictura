@@ -6,9 +6,11 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
+mod budget;
 mod imp;
 
 use super::super::qobject::PictureView;
+use budget::{fill_refused_for_memory, set_fill_available_memory_for_test};
 pub(crate) use imp::*;
 
 #[cxx_qt::bridge]
@@ -117,5 +119,14 @@ pub mod ffi {
             mode: &QString,
             opacity: i32,
         ) -> bool;
+
+        /// Whether the last Gradient, Paint Bucket, Fill or Stroke was refused
+        /// because its estimated peak did not fit three quarters of the memory
+        /// available, rather than for its layer or its input.
+        fn fill_refused_for_memory() -> bool;
+
+        /// Test hook: make the fills see `bytes` of available memory; a
+        /// negative value reads the host again.
+        fn set_fill_available_memory_for_test(bytes: i64);
     }
 }

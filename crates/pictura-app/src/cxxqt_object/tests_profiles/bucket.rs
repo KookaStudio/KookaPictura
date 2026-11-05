@@ -7,10 +7,8 @@ use super::super::edit::Edit;
 use super::super::helpers::paint_timing;
 use super::{ms, pixel_layer, LayerTarget, PictureViewRust};
 use crate::history::Restored;
-use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
-use pictura_paint::bucket::{self, BucketPaint};
-use pictura_paint::eraser::antialias_mask;
-use pictura_paint::stamp::layer_surface;
+use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PsdRect};
+use pictura_paint::bucket::{self, BucketPaint, BucketSource};
 use pictura_paint::{Alpha, PaintMode, Rgba};
 use std::time::Instant;
 
@@ -51,18 +49,20 @@ fn bucket_fill_profile() {
     let t = Instant::now();
     let mut edited = view.session.doc.as_ref().expect("document").clone();
     ms("clone", t.elapsed());
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: height as i32,
+        right: width as i32,
+    };
     let t = Instant::now();
-    let surface = layer_surface(&edited, "1").expect("pixel layer");
-    ms("layer surface", t.elapsed());
-    let t = Instant::now();
-    let flood =
-        bucket::flood(&surface, (width as i32 / 2, height as i32 / 2), 32, true).expect("a flood");
+    let source = BucketSource::layer(&edited, "1").expect("pixel layer");
+    let seed = (width as i32 / 2, height as i32 / 2);
+    let flood = bucket::flood(source, width, canvas, None, seed, 32, true).expect("a flood");
     ms("flood", t.elapsed());
-    drop(surface);
     let t = Instant::now();
-    let mask = antialias_mask(&flood, width as usize);
+    let mask = bucket::antialias(flood, width, canvas, None);
     ms("antialias", t.elapsed());
-    drop(flood);
     let t = Instant::now();
     let red = Rgba {
         r: 220,
@@ -70,10 +70,11 @@ fn bucket_fill_profile() {
         b: 40,
         a: 255,
     };
-    let rect = bucket::fill(
+    let rect = bucket::fill_within(
         &mut edited,
         "1",
-        &mask,
+        canvas,
+        Some(&mask),
         BucketPaint::Foreground(red),
         PaintMode::Normal,
         1.0,
