@@ -221,8 +221,8 @@ impl PictureViewRust {
 
     /// As [`Self::apply_edit`] for a transform commit, which changes content
     /// but may still leave a large composite to a worker.
-    pub(super) fn apply_transform(&mut self, label: &str, edit: Edit) -> Presentation {
-        self.apply_edit_with(label, edit, true, true)
+    pub(super) fn apply_transform(&mut self, label: &str, edit: Edit, defer: bool) -> Presentation {
+        self.apply_edit_with(label, edit, true, defer)
     }
 
     fn apply_edit_with(
@@ -435,6 +435,7 @@ impl qobject::PictureView {
     pub(super) fn commit_transform_edit(
         mut self: Pin<&mut Self>,
         label: &str,
+        defer: bool,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
         self.as_mut().settle_pending_composite();
@@ -452,7 +453,7 @@ impl qobject::PictureView {
         let presentation = self
             .as_mut()
             .rust_mut()
-            .apply_transform(label, edit.clone());
+            .apply_transform(label, edit.clone(), defer);
         if let Some(job) = self.as_mut().rust_mut().pending_move_job.take() {
             self.as_mut().build_move_composite(job);
         }

@@ -2,6 +2,7 @@
 //! canvas keeps presenting the drag preview (#1157).
 
 use super::super::super::edit::Edit;
+use super::super::super::helpers::layer_has_effects;
 use super::super::super::helpers_composite::{composite_regions, RegionComposite};
 use super::super::super::qobject::PictureView;
 use super::super::super::{metrics, qobject, PictureViewRust};
@@ -34,6 +35,31 @@ pub(in crate::cxxqt_object) struct CompositeJob {
     pub(in crate::cxxqt_object) rects: Vec<PsdRect>,
     pub(in crate::cxxqt_object) gpu_compute: bool,
     pub(in crate::cxxqt_object) delay_ms: u64,
+}
+
+/// The engine call and layer extent a deferred transform needs.
+#[derive(Clone)]
+pub(in crate::cxxqt_object) struct TransformSpec {
+    pub(in crate::cxxqt_object) path: String,
+    pub(in crate::cxxqt_object) orig_rect: PsdRect,
+    pub(in crate::cxxqt_object) apply: std::sync::Arc<dyn Fn(&mut Document) -> bool + Send + Sync>,
+}
+
+/// A transform engine running on a worker.
+#[derive(Clone)]
+pub(in crate::cxxqt_object) struct DeferredTransform {
+    pub(in crate::cxxqt_object) generation: u64,
+    pub(in crate::cxxqt_object) label: String,
+    pub(in crate::cxxqt_object) spec: TransformSpec,
+}
+
+/// What a transform worker needs: the generation, the engine call and its
+/// document snapshot.
+pub(in crate::cxxqt_object) struct TransformJob {
+    generation: u64,
+    spec: TransformSpec,
+    doc: Document,
+    delay_ms: u64,
 }
 
 /// The blit and deferred pyramid a settle or a landing owes the shell.
@@ -96,6 +122,83 @@ impl PictureViewRust {
             delay_ms: self.move_composite_delay_for_test,
         });
         true
+    }
+
+    /// Leave a transform engine to a worker. The job is parked on the view for
+    /// the QObject to spawn after the commit returns.
+    pub(in crate::cxxqt_object) fn defer_transform(
+        &mut self,
+        label: &str,
+        spec: TransformSpec,
+    ) -> bool {
+        let Some(doc) = self.session.doc.clone() else {
+            return false;
+        };
+        let generation = self.transform_generation.wrapping_add(1);
+        self.transform_generation = generation;
+        self.deferred_transform = Some(DeferredTransform {
+            generation,
+            label: label.to_string(),
+            spec: spec.clone(),
+        });
+        self.pending_transform_job = Some(TransformJob {
+            generation,
+            spec,
+            doc,
+            delay_ms: self.transform_delay_for_test,
+        });
+        true
+    }
+
+    /// Whether a transform engine is still on its worker.
+    pub(in crate::cxxqt_object) fn transform_pending(&self) -> bool {
+        self.deferred_transform.is_some()
+    }
+
+    /// Install a worker's transformed layer and report the edit to commit.
+    pub(in crate::cxxqt_object) fn land_transform(
+        &mut self,
+        generation: u64,
+        layer: Option<pictura_core::Layer>,
+    ) -> Option<(String, Edit)> {
+        let pending = self.deferred_transform.clone()?;
+        if pending.generation != generation {
+            return None;
+        }
+        self.deferred_transform = None;
+        self.pending_transform_job = None;
+        let layer = layer?;
+        let path = pending.spec.path.clone();
+        let dirty = {
+            let doc = self.session.doc.as_mut()?;
+            let dst = pictura_render::resolve_path_mut(doc, &path)?;
+            *dst = layer;
+            pending.spec.orig_rect.union(dst.rect)
+        };
+        Some((pending.label, transform_edit(self, &path, dirty)))
+    }
+
+    /// Apply a pending transform engine on the GUI thread and report its edit.
+    pub(in crate::cxxqt_object) fn settle_transform_engine(&mut self) -> Option<(String, Edit)> {
+        let pending = self.deferred_transform.take()?;
+        self.pending_transform_job = None;
+        let spec = pending.spec.clone();
+        let applied = self
+            .session
+            .doc
+            .as_mut()
+            .is_some_and(|doc| (spec.apply)(doc));
+        if !applied {
+            return None;
+        }
+        let dirty = self
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::resolve_path(doc, &spec.path))
+            .map(|layer| spec.orig_rect.union(layer.rect))
+            .unwrap_or(spec.orig_rect);
+        Some((pending.label, transform_edit(self, &spec.path, dirty)))
     }
 
     /// Patch the composite and fold each region into level 0, damage and the
@@ -199,9 +302,11 @@ impl PictureViewRust {
         Some(self.finish_move_composite(pending, regions, true))
     }
 
-    /// Drop a pending Move composite: its document is going away.
+    /// Drop a pending Move composite or transform: its document is going away.
     pub(in crate::cxxqt_object) fn cancel_move_composite(&mut self) {
         self.pending_move_job = None;
+        self.pending_transform_job = None;
+        self.deferred_transform = None;
         if self.deferred_composite.take().is_some() {
             metrics::cancel_edit();
         }
@@ -215,19 +320,37 @@ impl PictureViewRust {
     /// A pending move is an undoable state even though its history entry has
     /// not been captured yet.
     pub(in crate::cxxqt_object) fn can_undo(&self) -> bool {
-        self.session.history.can_undo()
-            || (self.deferred_composite.is_some() && self.session.history.count() > 0)
+        let pending = self.deferred_composite.is_some() || self.deferred_transform.is_some();
+        self.session.history.can_undo() || (pending && self.session.history.count() > 0)
     }
 
     /// A new capture would truncate redo, so redo is unavailable while a move
-    /// is pending.
+    /// or transform is pending.
     pub(in crate::cxxqt_object) fn can_redo(&self) -> bool {
-        self.deferred_composite.is_none() && self.session.history.can_redo()
+        self.deferred_composite.is_none()
+            && self.deferred_transform.is_none()
+            && self.session.history.can_redo()
     }
 }
 
 fn rect_area(rect: &PsdRect) -> u64 {
     u64::from(rect.width().max(0) as u32) * u64::from(rect.height().max(0) as u32)
+}
+
+/// The edit a transformed layer needs: a bounded region, or the whole document
+/// when an effect can spread outside the layer's rect.
+fn transform_edit(rust: &PictureViewRust, path: &str, dirty: PsdRect) -> Edit {
+    if rust
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::resolve_path(doc, path))
+        .is_some_and(layer_has_effects)
+    {
+        Edit::Full
+    } else {
+        Edit::regions(vec![dirty], false)
+    }
 }
 
 impl qobject::PictureView {
@@ -263,8 +386,59 @@ impl qobject::PictureView {
         });
     }
 
-    /// Finish a pending Move composite before a reader or writer runs.
+    /// Run a transform engine on a worker, install its layer on the GUI thread,
+    /// then hand its composite to the deferred edit.
+    pub(in crate::cxxqt_object) fn build_transform(self: Pin<&mut Self>, job: TransformJob) {
+        let qt_thread = self.as_ref().get_ref().qt_thread();
+        std::thread::spawn(move || {
+            let TransformJob {
+                generation,
+                spec,
+                mut doc,
+                delay_ms,
+            } = job;
+            let layer = {
+                let applied = (spec.apply)(&mut doc);
+                applied
+                    .then(|| pictura_render::resolve_path(&doc, &spec.path).cloned())
+                    .flatten()
+            };
+            // Before landing, so a write does not copy planes nobody reads.
+            drop(doc);
+            if delay_ms > 0 {
+                std::thread::sleep(Duration::from_millis(delay_ms));
+            }
+            qt_thread
+                .queue(move |mut view| {
+                    if let Some((label, edit)) =
+                        view.as_mut().rust_mut().land_transform(generation, layer)
+                    {
+                        view.as_mut().commit_transform_edit(&label, true, |_| edit);
+                        if !view.rust().move_composite_pending() {
+                            view.as_mut().move_committed();
+                        }
+                    } else if !view.rust().transform_pending() && !view.rust().move_drag_active {
+                        view.as_mut().move_committed();
+                    }
+                })
+                .ok();
+        });
+    }
+
+    /// Finish a pending transform or Move composite before a reader or writer
+    /// runs.
     pub(in crate::cxxqt_object) fn settle_pending_composite(mut self: Pin<&mut Self>) {
+        let had_transform = self.rust().transform_pending();
+        if let Some((label, edit)) = self.as_mut().rust_mut().settle_transform_engine() {
+            self.as_mut().commit_transform_edit(&label, false, |_| edit);
+            if !self.rust().move_composite_pending() {
+                self.as_mut().move_committed();
+            }
+            return;
+        }
+        if had_transform && !self.rust().move_drag_active {
+            self.as_mut().move_committed();
+        }
         if let Some(settled) = self.as_mut().rust_mut().settle_move_composite() {
             self.as_mut().show_settled_move(settled);
         }
@@ -294,6 +468,14 @@ pub(in crate::cxxqt_object) fn move_composite_pending(view: &PictureView) -> boo
 
 pub(in crate::cxxqt_object) fn move_composite_set_delay(mut view: Pin<&mut PictureView>, ms: u64) {
     view.as_mut().rust_mut().move_composite_delay_for_test = ms;
+}
+
+pub(in crate::cxxqt_object) fn transform_pending(view: &PictureView) -> bool {
+    view.rust().transform_pending()
+}
+
+pub(in crate::cxxqt_object) fn transform_set_delay(mut view: Pin<&mut PictureView>, ms: u64) {
+    view.as_mut().rust_mut().transform_delay_for_test = ms;
 }
 
 #[cfg(test)]

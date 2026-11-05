@@ -399,14 +399,15 @@ void LargeDocumentTest::aTransformCommitLandsOffThread()
     QVERIFY(f.view->transform_move(corner.x() - 200.0, corner.y() - 200.0, 1.0, false, false));
     f.view->transform_release();
 
-    pictura::move_composite_set_delay(*f.view, 500);
+    pictura::transform_set_delay(*f.view, 500);
     QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
     f.tools->commitFreeTransform();
-    QVERIFY2(pictura::move_composite_pending(*f.view), "a large transform commit defers");
+    QVERIFY2(pictura::transform_pending(*f.view), "the transform engine is on a worker");
     QVERIFY2(f.canvas->movePreviewActive(), "the transform image waits for the landing");
     QVERIFY2(!f.canvas->transformPreviewActive(), "the transform handles are gone");
 
     QVERIFY(committed.wait(30000));
+    QVERIFY(!pictura::transform_pending(*f.view));
     QVERIFY(!pictura::move_composite_pending(*f.view));
     QVERIFY(!f.canvas->movePreviewActive());
     QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));

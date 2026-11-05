@@ -34,7 +34,9 @@ pub(super) fn reset_refresh_calls() {
     REFRESH_CALLS.with(|calls| calls.set(0));
 }
 
-pub(super) use deferred_composite::{CompositeJob, DeferredComposite};
+pub(super) use deferred_composite::{
+    CompositeJob, DeferredComposite, DeferredTransform, TransformJob, TransformSpec,
+};
 pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 
 mod deferred_composite;

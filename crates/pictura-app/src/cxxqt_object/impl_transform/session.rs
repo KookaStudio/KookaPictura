@@ -17,6 +17,9 @@ use cxx_qt_lib::{QImage, QRect, QString};
 use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags};
 use pictura_render::Interpolation;
 
+/// A transform whose layer rect reaches this area runs its engine on a worker.
+const DEFERRED_TRANSFORM_PIXELS: u64 = 4_000_000;
+
 mod preview;
 mod view_preview;
 
@@ -337,33 +340,28 @@ impl qobject::PictureView {
             self.as_mut().clear_transform_preview();
             return false;
         }
-        let changed = match (self.as_mut().rust_mut().session.doc.as_mut(), &warp) {
-            (Some(doc), Some(warp)) => pictura_render::transform_layer_warp(
-                doc,
-                &path,
-                warp,
-                Some(preview_quad),
-                interpolation,
-            ),
-            (Some(doc), None) => apply_session_transform(
-                doc,
-                &path,
-                projective,
-                quad,
-                params,
-                orig_rect,
-                interpolation,
-            ),
-            (None, _) => false,
-        };
-        let lifted = self
-            .as_mut()
-            .rust_mut()
-            .session
-            .live
-            .take_transform()
-            .and_then(|session| session.lifted);
+        let mut session = self.as_mut().rust_mut().session.live.take_transform();
+        let lifted = session.as_mut().and_then(|session| session.lifted.take());
         if let Some((_, before)) = lifted {
+            let changed = match (self.as_mut().rust_mut().session.doc.as_mut(), &warp) {
+                (Some(doc), Some(warp)) => pictura_render::transform_layer_warp(
+                    doc,
+                    &path,
+                    warp,
+                    Some(preview_quad),
+                    interpolation,
+                ),
+                (Some(doc), None) => apply_session_transform(
+                    doc,
+                    &path,
+                    projective,
+                    quad,
+                    params,
+                    orig_rect,
+                    interpolation,
+                ),
+                (None, _) => false,
+            };
             let merged = changed
                 && self
                     .as_mut()
@@ -383,48 +381,95 @@ impl qobject::PictureView {
             self.as_mut().rust_mut().session.set_selection(None);
             self.as_mut().rust_mut().last_transform = repeat;
             self.as_mut()
-                .commit_transform_edit(&history_label, |_| Edit::Structural { damage: None });
+                .commit_transform_edit(&history_label, true, |_| Edit::Structural { damage: None });
             if !self.rust().move_composite_pending() {
                 self.as_mut().move_committed();
             }
             self.as_mut().clear_transform_preview();
             return true;
         }
-        if changed {
-            self.as_mut().rust_mut().last_transform = repeat;
-            self.as_mut().clear_link_sets();
-            // Finish the session before the edit: the layer extent is final,
-            // and the commit may leave a large composite to a worker.
-            self.as_mut().drop_transform_session();
-            // The transform only moves the layer, so the union of its source rect
-            // and its transformed rect bounds the composite change.
-            let after = self
-                .rust()
+
+        // The engine resamples the layer's pixels; on a large layer it belongs
+        // on a worker. The landing installs the transformed layer and hands its
+        // composite to the same deferred edit a Move commit uses.
+        let engine_path = path.clone();
+        let engine_quad = quad;
+        let engine_params = params;
+        let engine_orig = orig_rect;
+        let engine_interp = interpolation;
+        let engine_projective = projective;
+        let engine_warp = warp.clone();
+        let engine_preview_quad = preview_quad;
+        let apply =
+            std::sync::Arc::new(move |doc: &mut pictura_core::Document| match &engine_warp {
+                Some(warp) => pictura_render::transform_layer_warp(
+                    doc,
+                    &engine_path,
+                    warp,
+                    Some(engine_preview_quad),
+                    engine_interp,
+                ),
+                None => apply_session_transform(
+                    doc,
+                    &engine_path,
+                    engine_projective,
+                    engine_quad,
+                    engine_params,
+                    engine_orig,
+                    engine_interp,
+                ),
+            });
+        let area = u64::from(orig_rect.width().max(0) as u32)
+            * u64::from(orig_rect.height().max(0) as u32);
+        if area < DEFERRED_TRANSFORM_PIXELS {
+            let changed = self
+                .as_mut()
+                .rust_mut()
                 .session
                 .doc
-                .as_ref()
-                .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                .map(|layer| (layer.rect, layer_has_effects(layer)));
-            match after {
-                Some((after, false)) => {
-                    let dirty = orig_rect.union(after);
-                    self.as_mut().commit_transform_edit(&history_label, |_| {
-                        Edit::regions(vec![dirty], false)
-                    });
-                }
-                _ => {
-                    // An effect or an unbounded reach needs the whole document;
-                    // a large one still leaves its composite to a worker.
-                    self.as_mut()
-                        .commit_transform_edit(&history_label, |_| Edit::Full);
+                .as_mut()
+                .is_some_and(|doc| (apply)(doc));
+            if changed {
+                self.as_mut().rust_mut().last_transform = repeat;
+                self.as_mut().clear_link_sets();
+                let after = self
+                    .rust()
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
+                    .map(|layer| (layer.rect, layer_has_effects(layer)));
+                let edit = match after {
+                    Some((after, false)) => Edit::regions(vec![orig_rect.union(after)], false),
+                    _ => Edit::Full,
+                };
+                self.as_mut()
+                    .commit_transform_edit(&history_label, true, |_| edit);
+                if !self.rust().move_composite_pending() {
+                    self.as_mut().move_committed();
                 }
             }
-            if !self.rust().move_composite_pending() {
-                self.as_mut().move_committed();
+            self.as_mut().clear_transform_preview();
+            return changed;
+        }
+        let spec = super::super::impl_core::TransformSpec {
+            path: path.clone(),
+            orig_rect,
+            apply,
+        };
+        self.as_mut().rust_mut().last_transform = repeat;
+        self.as_mut().clear_link_sets();
+        let deferred = self
+            .as_mut()
+            .rust_mut()
+            .defer_transform(&history_label, spec);
+        if deferred {
+            if let Some(job) = self.as_mut().rust_mut().pending_transform_job.take() {
+                self.as_mut().build_transform(job);
             }
         }
         self.as_mut().clear_transform_preview();
-        changed
+        deferred
     }
 
     /// Whether a Free Transform session is active.

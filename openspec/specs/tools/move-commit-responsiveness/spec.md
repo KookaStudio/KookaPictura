@@ -77,12 +77,14 @@ preview that started after it.
 
 ### Requirement: A large transform commit leaves the GUI thread
 
-A Free Transform commit on a plain layer of a document over 16 MP SHALL
-resample the transform across rows in parallel, and SHALL leave the region
+A Free Transform commit SHALL resample the transform across rows in parallel.
+When the transformed layer rect reaches 4 MP, the engine transform SHALL run on
+a worker; the landing SHALL install the transformed layer and leave the region
 composite and the exact pyramid to a worker when its dirty union reaches 16 MP.
 The transform image SHALL remain presented until `moveCommitted`; the transform
-handles SHALL be gone immediately. A commit that does not defer SHALL report
-`moveCommitted` before returning.
+handles SHALL be gone immediately. A smaller transform SHALL commit
+synchronously, and a commit that does not defer SHALL report `moveCommitted`
+before returning.
 
 #### Scenario: A large transform release returns to Move [mcr_transform_deferred]
 

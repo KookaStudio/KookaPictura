@@ -80,13 +80,14 @@ undoable state; `can_redo` is false while it is pending.
 
 ## Transform commits
 
-`commit_transform` uses the same deferred edit for a plain layer: it applies the
-engine transform to the layer, then hands the region composite (or the full
-composite for an effect) to the worker. The engine's resample now runs its
-output rows in parallel, so the synchronous half is the layer's own content, not
-the canvas. The C++ canvas drops the transform handles immediately but keeps the
-transformed image until `moveCommitted`; a commit that does not defer emits it
-before returning.
+`commit_transform` resamples the transform's output rows in parallel. When the
+transformed layer rect reaches 4 MP, the engine itself runs on a worker: it
+transforms a document snapshot, and the landing installs the transformed layer
+and hands the region composite (or the full composite for an effect) to the
+deferred edit. A smaller transform keeps the synchronous engine and the same
+deferred edit. The C++ canvas drops the transform handles immediately but keeps
+the transformed image until `moveCommitted`; a commit that does not defer emits
+it before returning.
 
 ## Limits
 
