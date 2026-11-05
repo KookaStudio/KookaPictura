@@ -298,14 +298,7 @@ fn lookup(key: Key, build: impl FnOnce() -> Artifact) -> Artifact {
             }
         }
     };
-    let artifact = cell.resolve(|| {
-        #[cfg(test)]
-        {
-            let mut builds = pass_builds().lock().unwrap_or_else(|e| e.into_inner());
-            *builds.entry(key.hash).or_insert(0) += 1;
-        }
-        build()
-    });
+    let artifact = cell.resolve(build);
     let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
     cache.note_size(key, artifact.size());
     artifact
@@ -605,6 +598,44 @@ pub(crate) fn effect_passes(
     effect_passes_with(layer, doc, effects, region, destructive, None)
 }
 
+/// The ready whole-layer pass for `key`, without building, waiting, or
+/// inserting. A miss is an absent, empty, building, or non-pass slot.
+fn ready_pass(key: Key) -> Option<Arc<LayerPasses>> {
+    let cell = {
+        let cache = cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache
+            .entries
+            .iter()
+            .find(|entry| entry.key == key)
+            .map(|entry| Arc::clone(&entry.cell))
+    };
+    let Some(cell) = cell else {
+        crate::metrics::count_source_miss();
+        return None;
+    };
+    let ready = {
+        let state = cell.lock();
+        match &*state {
+            State::Ready(Artifact::Passes(passes)) => Some(Arc::clone(passes)),
+            State::Empty | State::Building(_) | State::Ready(_) => None,
+        }
+    };
+    match ready {
+        Some(passes) => {
+            crate::metrics::count_source_hit();
+            let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(i) = cache.entries.iter().position(|entry| entry.key == key) {
+                cache.touch(i);
+            }
+            Some(passes)
+        }
+        None => {
+            crate::metrics::count_source_miss();
+            None
+        }
+    }
+}
+
 /// [`effect_passes`] when the caller already knows whether the layer is a
 /// destructive adjustment, so it does not decode the adjustment again.
 pub(crate) fn effect_passes_with(
@@ -622,6 +653,7 @@ pub(crate) fn effect_passes_with(
     use crate::tests::effect_preparation::probe::{observe, Event};
     #[cfg(test)]
     observe(doc, Some(layer), Event::Lookup(region));
+    let key = Key::new(Kind::Passes, pass_key_hash(layer, doc));
     let build = || {
         #[cfg(test)]
         observe(doc, Some(layer), Event::BuildStart(region));
@@ -632,21 +664,43 @@ pub(crate) fn effect_passes_with(
         observe(doc, Some(layer), Event::BuildEnd);
         Artifact::Passes(passes)
     };
-    // A sub-region pass is built for this composite only: retaining it would
-    // let a stroke's ever-changing rectangles evict other layers' sources.
-    // Pattern-driven passes are rebuilt for the same reason.
-    if crate::layer_effects::reads_pattern(layer, effects) || region.is_some() {
-        return match build() {
+    // Pattern-driven passes read the document pattern library, which the key
+    // does not cover, so they are rebuilt rather than probed or retained.
+    if crate::layer_effects::reads_pattern(layer, effects) {
+        let passes = match build() {
             Artifact::Passes(passes) => passes,
             Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
                 Arc::new(LayerPasses::default())
             }
         };
+        #[cfg(test)]
+        observe(
+            doc,
+            Some(layer),
+            Event::Ready(Arc::as_ptr(&passes) as usize),
+        );
+        return passes;
     }
-    let passes = match lookup(Key::new(Kind::Passes, pass_key_hash(layer, doc)), build) {
-        Artifact::Passes(passes) => passes,
-        Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
-            Arc::new(LayerPasses::default())
+    // A short region replays the retained whole-layer pass when one is ready.
+    // On a miss it builds transient passes: retaining a region pass would let
+    // a stroke's ever-changing rectangles evict other layers' sources, and
+    // waiting for a whole-layer build would make a small region pay for it.
+    let passes = if region.is_some() {
+        match ready_pass(key) {
+            Some(passes) => passes,
+            None => match build() {
+                Artifact::Passes(passes) => passes,
+                Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
+                    Arc::new(LayerPasses::default())
+                }
+            },
+        }
+    } else {
+        match lookup(key, build) {
+            Artifact::Passes(passes) => passes,
+            Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
+                Arc::new(LayerPasses::default())
+            }
         }
     };
     #[cfg(test)]
@@ -705,6 +759,13 @@ fn cache_has_key(key: Key) -> bool {
 fn pass_builds() -> &'static Mutex<std::collections::HashMap<u64, usize>> {
     static BUILDS: OnceLock<Mutex<std::collections::HashMap<u64, usize>>> = OnceLock::new();
     BUILDS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+/// Test-only: count one built pass group, cached or transient, by content key.
+#[cfg(test)]
+pub(crate) fn note_pass_build(layer: &Layer, doc: &Document) {
+    let mut builds = pass_builds().lock().unwrap_or_else(|e| e.into_inner());
+    *builds.entry(pass_key_hash(layer, doc)).or_insert(0) += 1;
 }
 
 /// How many times `layer`'s whole-layer pass was actually built, so a test
