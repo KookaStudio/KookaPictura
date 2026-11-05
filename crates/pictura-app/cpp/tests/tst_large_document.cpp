@@ -68,6 +68,7 @@ private slots:
     void aSecondPressKeepsTheViewPreview();
     void aHoverReadoutDoesNotSettleTheMove();
     void aTransformCommitLandsOffThread();
+    void aRotatedPixelEdgeIsAntialiased();
 
 private:
     void showFrame();
@@ -409,6 +410,37 @@ void LargeDocumentTest::aTransformCommitLandsOffThread()
     QVERIFY(!pictura::move_composite_pending(*f.view));
     QVERIFY(!f.canvas->movePreviewActive());
     QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));
+}
+
+// [mcr_transform_antialias]
+void LargeDocumentTest::aRotatedPixelEdgeIsAntialiased()
+{
+    QImage seed(1280, 800, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_rotated_edge"));
+    QVERIFY2(f.ok(), "rotated edge fixture");
+    const int added = f.view->add_layer(0);
+    QVERIFY(added > 0);
+    f.view->set_active_layer(QString::number(added));
+    QVERIFY(f.view->select_rect(200, 200, 400, 300, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+    QVERIFY(f.view->begin_free_transform(QString::number(added)));
+    QVERIFY(pictura::transform_set_angle(*f.view, 30.0));
+    QVERIFY(f.view->commit_transform());
+
+    bool partial = false;
+    for (int y = 100; y < 700 && !partial; ++y) {
+        for (int x = 100; x < 700; ++x) {
+            const int r = qRed(f.view->composite_argb(x, y));
+            if (r > 0 && r < 255) {
+                partial = true;
+                break;
+            }
+        }
+    }
+    QVERIFY2(partial, "the rotated edge has no partial-coverage pixels");
 }
 
 QTEST_MAIN(LargeDocumentTest)

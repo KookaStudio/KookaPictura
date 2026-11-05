@@ -80,8 +80,11 @@ undoable state; `can_redo` is false while it is pending.
 
 ## Transform commits
 
-`commit_transform` resamples the transform's output rows in parallel. When the
-transformed layer rect reaches 4 MP, the engine itself runs on a worker: it
+`commit_transform` resamples the transform's output rows in parallel. The
+resampler pads the source with transparent pixels: clamping at the layer rect
+kept an opaque filled layer's edge at full alpha, so a rotated filled layer had
+a stair-stepped edge. When the transformed layer rect reaches 4 MP, the engine
+itself runs on a worker: it
 transforms a document snapshot, and the landing installs the transformed layer
 and hands the region composite (or the full composite for an effect) to the
 deferred edit. A smaller transform keeps the synchronous engine and the same

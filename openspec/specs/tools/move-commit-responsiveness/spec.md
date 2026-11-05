@@ -77,10 +77,12 @@ preview that started after it.
 
 ### Requirement: A large transform commit leaves the GUI thread
 
-A Free Transform commit SHALL resample the transform across rows in parallel.
-When the transformed layer rect reaches 4 MP, the engine transform SHALL run on
-a worker; the landing SHALL install the transformed layer and leave the region
-composite and the exact pyramid to a worker when its dirty union reaches 16 MP.
+A Free Transform commit SHALL resample the transform across rows in parallel,
+treating pixels outside the source layer rect as transparent so an opaque edge
+anti-aliases when it is rotated or scaled. When the transformed layer rect
+reaches 4 MP, the engine transform SHALL run on a worker; the landing SHALL
+install the transformed layer and leave the region composite and the exact
+pyramid to a worker when its dirty union reaches 16 MP.
 The transform image SHALL remain presented until `moveCommitted`; the transform
 handles SHALL be gone immediately. A smaller transform SHALL commit
 synchronously, and a commit that does not defer SHALL report `moveCommitted`
