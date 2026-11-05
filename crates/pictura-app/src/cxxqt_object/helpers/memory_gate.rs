@@ -3,6 +3,10 @@
 //! the bytes it will hold at its peak and is refused, instead of being left to
 //! the kernel's OOM killer, when they exceed three quarters of the memory
 //! available now: the rule the Image Size gate uses (#1156).
+//!
+//! GUI thread only: the refusal flag and the test override are thread-locals,
+//! so an edit gated on a worker thread would not report its refusal to the
+//! bridge, which reads the flag on the GUI thread.
 
 use pictura_core::{Document, PsdRect, BAND_ROWS};
 use std::cell::Cell;
