@@ -618,10 +618,19 @@ pub(crate) fn effect_passes_with(
     if crate::layer_effects::no_passes(layer, effects, destructive) {
         return Arc::new(LayerPasses::default());
     }
+    #[cfg(test)]
+    use crate::tests::effect_preparation::probe::{observe, Event};
+    #[cfg(test)]
+    observe(doc, Some(layer), Event::Lookup(region));
     let build = || {
-        Artifact::Passes(Arc::new(crate::layer_effects::build_layer_passes(
+        #[cfg(test)]
+        observe(doc, Some(layer), Event::BuildStart(region));
+        let passes = Arc::new(crate::layer_effects::build_layer_passes(
             layer, doc, effects, region, fill,
-        )))
+        ));
+        #[cfg(test)]
+        observe(doc, Some(layer), Event::BuildEnd);
+        Artifact::Passes(passes)
     };
     // A sub-region pass is built for this composite only: retaining it would
     // let a stroke's ever-changing rectangles evict other layers' sources.
@@ -634,11 +643,36 @@ pub(crate) fn effect_passes_with(
             }
         };
     }
-    match lookup(Key::new(Kind::Passes, pass_key_hash(layer, doc)), build) {
+    let passes = match lookup(Key::new(Kind::Passes, pass_key_hash(layer, doc)), build) {
         Artifact::Passes(passes) => passes,
         Artifact::Missing | Artifact::Buffer(_) | Artifact::Effects(_) => {
             Arc::new(LayerPasses::default())
         }
+    };
+    #[cfg(test)]
+    observe(
+        doc,
+        Some(layer),
+        Event::Ready(Arc::as_ptr(&passes) as usize),
+    );
+    passes
+}
+
+#[cfg(test)]
+pub(crate) struct TestBudget(usize);
+
+#[cfg(test)]
+impl TestBudget {
+    pub(crate) fn new(bytes: usize) -> Self {
+        Self(BUDGET.swap(bytes, Ordering::Relaxed))
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestBudget {
+    fn drop(&mut self) {
+        BUDGET.store(self.0, Ordering::Relaxed);
+        purge_source_cache();
     }
 }
 

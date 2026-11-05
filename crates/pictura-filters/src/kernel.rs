@@ -163,19 +163,35 @@ pub fn gaussian_blur_planes(buf: &mut PixelBuffer, sigma: f64) {
                 }
             },
         );
-        buf.data[base..base + n]
-            .par_chunks_mut(w)
+        // Keep adjacent rows' tap working set in private cache. Pixels still
+        // accumulate every tap in order; tiling only changes the pixel schedule.
+        const TILE_ROWS: usize = 16;
+        const TILE_COLS: usize = 128;
+        buf.data.as_mut_slice()[base..base + n]
+            .par_chunks_mut(w * TILE_ROWS)
             .enumerate()
             .for_each_init(
-                || vec![0f32; w],
-                |acc, (y, row)| {
-                    acc.fill(0.0);
-                    for (k, &kw) in kernel.iter().enumerate() {
-                        let sy = clamp_index((y + k) as isize - support as isize, h);
-                        rows::add_f32(acc, &across[sy * w..sy * w + w], kw);
-                    }
-                    for (out, &a) in row.iter_mut().zip(acc.iter()) {
-                        *out = a.round().clamp(0.0, 255.0) as u8;
+                || vec![0f32; TILE_ROWS * TILE_COLS],
+                |acc, (band, output)| {
+                    let height = output.len() / w;
+                    for x0 in (0..w).step_by(TILE_COLS) {
+                        let width = TILE_COLS.min(w - x0);
+                        let acc = &mut acc[..height * width];
+                        acc.fill(0.0);
+                        for (k, &kw) in kernel.iter().enumerate() {
+                            for (row, sums) in acc.chunks_mut(width).enumerate() {
+                                let sy = clamp_index(
+                                    (band * TILE_ROWS + row + k) as isize - support as isize,
+                                    h,
+                                );
+                                rows::add_f32(sums, &across[sy * w + x0..sy * w + x0 + width], kw);
+                            }
+                        }
+                        for (row, sums) in output.chunks_mut(w).zip(acc.chunks(width)) {
+                            for (out, &a) in row[x0..x0 + width].iter_mut().zip(sums) {
+                                *out = a.round().clamp(0.0, 255.0) as u8;
+                            }
+                        }
                     }
                 },
             );
@@ -218,6 +234,23 @@ mod tests {
                     }
                     buf.data[c * n + y * w + x] = acc.round().clamp(0.0, 255.0) as u8;
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn gaussian_tiles_match_scalar_at_block_edges() {
+        for (w, h) in [(127, 15), (128, 16), (129, 17), (257, 35), (1, 33), (33, 1)] {
+            let mut original = PixelBuffer::new(w, h, 4);
+            for (i, value) in original.data.as_mut_slice().iter_mut().enumerate() {
+                *value = ((i * 7919) ^ (i >> 3)) as u8;
+            }
+            for sigma in [0.1, 1.3, 11.0, 250.0 / 9.0] {
+                let mut expected = original.clone();
+                per_pixel_blur(&mut expected, sigma);
+                let mut got = original.clone();
+                gaussian_blur_planes(&mut got, sigma);
+                assert_eq!(got.data, expected.data, "{w}x{h} sigma={sigma}");
             }
         }
     }

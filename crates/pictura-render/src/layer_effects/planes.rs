@@ -1,14 +1,16 @@
 //! Document-space effect passes: build once, replay into any canvas rectangle.
 //!
 //! A pass carries the same per-pixel blend inputs the uncached effect loop
-//! passed to [`crate::composite::blend_parts`], so replaying it through the same
-//! call is byte-identical. Alpha is stored unscaled; the layer's opacity is
-//! applied by `blend_parts` at replay time.
+//! passed to [`crate::composite_rows::blend_parts_row`], so replaying it through
+//! the same arithmetic is byte-identical. Alpha is stored unscaled; the layer's
+//! opacity is applied at replay time.
 
 use pictura_adjust::Adjustment;
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 
-use crate::composite::{blend_parts, channel, Canvas};
+#[cfg(test)]
+use crate::composite::blend_parts;
+use crate::composite::{channel, Canvas};
 
 pub(crate) enum EffectColor {
     Constant([f32; 3]),
@@ -75,6 +77,10 @@ impl PassWriter {
         }
     }
 
+    pub(super) fn alpha_mut(&mut self) -> &mut [f32] {
+        &mut self.alpha
+    }
+
     pub(super) fn finish(self) -> EffectPass {
         EffectPass {
             rect: self.rect,
@@ -87,34 +93,83 @@ impl PassWriter {
 
 /// Replay `passes` into the canvas, clipped to the canvas rectangle.
 pub(super) fn apply(canvas: &mut Canvas, passes: &[EffectPass]) {
-    let (x0, y0) = (canvas.x0(), canvas.y0());
-    let (x1, y1) = (canvas.x1(), canvas.y1());
     for pass in passes {
-        let left = pass.rect.left.max(x0);
-        let top = pass.rect.top.max(y0);
-        let right = pass.rect.right.min(x1);
-        let bottom = pass.rect.bottom.min(y1);
-        if right <= left || bottom <= top {
-            continue;
+        match pass.mode {
+            BlendMode::Normal => apply_pass::<0>(canvas, pass),
+            BlendMode::Multiply => apply_pass::<1>(canvas, pass),
+            BlendMode::Screen => apply_pass::<2>(canvas, pass),
+            _ => apply_pass::<3>(canvas, pass),
         }
-        let width = pass.rect.width().max(0) as usize;
-        let plane = pass.rect.width().max(0) as usize * pass.rect.height().max(0) as usize;
-        for y in top..bottom {
-            for x in left..right {
-                let i = (y - pass.rect.top) as usize * width + (x - pass.rect.left) as usize;
-                let alpha = pass.alpha[i];
-                if alpha <= 0.0 {
-                    continue;
+    }
+}
+
+fn apply_pass<const MODE: u8>(canvas: &mut Canvas, pass: &EffectPass) {
+    let mode = match MODE {
+        0 => BlendMode::Normal,
+        1 => BlendMode::Multiply,
+        2 => BlendMode::Screen,
+        _ => pass.mode,
+    };
+    let left = pass.rect.left.max(canvas.x0());
+    let top = pass.rect.top.max(canvas.y0());
+    let right = pass.rect.right.min(canvas.x1());
+    let bottom = pass.rect.bottom.min(canvas.y1());
+    if right <= left || bottom <= top {
+        return;
+    }
+    let width = pass.rect.width().max(0) as usize;
+    let plane = width * pass.rect.height().max(0) as usize;
+    let ox = canvas.ox;
+    let oy = canvas.oy;
+    let w = canvas.w;
+    let scale = canvas.effect_scale;
+    let Canvas { px, cover, .. } = canvas;
+    for y in top..bottom {
+        let start = (y - oy) as usize * w;
+        let row = &mut px[start..start + w];
+        let mut coverage = cover.as_deref_mut().map(|bits| &mut bits[start..start + w]);
+        let offset = (y - pass.rect.top) as usize * width + (left - pass.rect.left) as usize;
+        let alphas = &pass.alpha[offset..offset + (right - left) as usize];
+        match &pass.color {
+            EffectColor::Constant(color) => {
+                for (dx, &alpha) in alphas.iter().enumerate() {
+                    if alpha <= 0.0 {
+                        continue;
+                    }
+                    crate::composite_rows::blend_parts_row(
+                        row,
+                        coverage.as_deref_mut(),
+                        ox,
+                        left + dx as i32,
+                        y,
+                        *color,
+                        alpha * scale,
+                        mode,
+                    );
                 }
-                let color = match &pass.color {
-                    EffectColor::Constant(color) => *color,
-                    EffectColor::PerPixel(buffer) => [
+            }
+            EffectColor::PerPixel(buffer) => {
+                for (dx, &alpha) in alphas.iter().enumerate() {
+                    if alpha <= 0.0 {
+                        continue;
+                    }
+                    let i = offset + dx;
+                    let color = [
                         buffer.data[i] as f32 / 255.0,
                         buffer.data[plane + i] as f32 / 255.0,
                         buffer.data[2 * plane + i] as f32 / 255.0,
-                    ],
-                };
-                blend_parts(canvas, x as usize, y as usize, color, alpha, pass.mode);
+                    ];
+                    crate::composite_rows::blend_parts_row(
+                        row,
+                        coverage.as_deref_mut(),
+                        ox,
+                        left + dx as i32,
+                        y,
+                        color,
+                        alpha * scale,
+                        mode,
+                    );
+                }
             }
         }
     }
@@ -238,3 +293,42 @@ fn smart_source_matte(layer: &Layer, region: (i32, i32, i32, i32), matte: &mut [
     }
     true
 }
+
+#[cfg(test)]
+fn apply_scalar(canvas: &mut Canvas, passes: &[EffectPass]) {
+    let (x0, y0) = (canvas.x0(), canvas.y0());
+    let (x1, y1) = (canvas.x1(), canvas.y1());
+    for pass in passes {
+        let left = pass.rect.left.max(x0);
+        let top = pass.rect.top.max(y0);
+        let right = pass.rect.right.min(x1);
+        let bottom = pass.rect.bottom.min(y1);
+        if right <= left || bottom <= top {
+            continue;
+        }
+        let width = pass.rect.width().max(0) as usize;
+        let plane = pass.rect.width().max(0) as usize * pass.rect.height().max(0) as usize;
+        for y in top..bottom {
+            for x in left..right {
+                let i = (y - pass.rect.top) as usize * width + (x - pass.rect.left) as usize;
+                let alpha = pass.alpha[i];
+                if alpha <= 0.0 {
+                    continue;
+                }
+                let color = match &pass.color {
+                    EffectColor::Constant(color) => *color,
+                    EffectColor::PerPixel(buffer) => [
+                        buffer.data[i] as f32 / 255.0,
+                        buffer.data[plane + i] as f32 / 255.0,
+                        buffer.data[2 * plane + i] as f32 / 255.0,
+                    ],
+                };
+                blend_parts(canvas, x as usize, y as usize, color, alpha, pass.mode);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "replay_tests.rs"]
+mod replay_tests;

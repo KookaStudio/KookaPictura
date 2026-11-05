@@ -4,9 +4,9 @@ use pictura_adjust::{
     VibranceParams,
 };
 use pictura_codec::DescValue;
-use pictura_core::{
-    AdjustmentData, BlendIf, BlendMode, Document, Layer, LayerMask, PixelBuffer, PsdRect,
-};
+#[cfg(test)]
+use pictura_core::BlendMode;
+use pictura_core::{AdjustmentData, BlendIf, Document, Layer, LayerMask, PixelBuffer, PsdRect};
 
 pub(crate) use crate::blend::blend;
 use crate::composite_blend::BlendOverride;
@@ -988,6 +988,7 @@ pub(crate) fn blend_into_ctx(
 }
 
 /// Composite an opacity-weighted source sample over the backdrop with a blend mode.
+#[cfg(test)]
 pub(crate) fn blend_parts(
     canvas: &mut Canvas,
     x: usize,

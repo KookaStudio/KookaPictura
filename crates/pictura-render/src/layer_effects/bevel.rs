@@ -259,6 +259,12 @@ pub(super) fn build_bevel_emboss(
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded, fill);
     apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_matte"),
+    );
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -272,9 +278,21 @@ pub(super) fn build_bevel_emboss(
         .into_par_iter()
         .map(|d| ((d as f64 - start) / size).clamp(0.0, 1.0) as f32)
         .collect();
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_distance"),
+    );
     if round > 0.0 {
         height = blur(&height, pw, ph, round);
     }
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_blur"),
+    );
     let at = |x: i32, y: i32| -> f64 {
         let sx = (x - px0).clamp(0, pw as i32 - 1) as usize;
         let sy = (y - py0).clamp(0, ph as i32 - 1) as usize;
@@ -352,6 +370,12 @@ pub(super) fn build_bevel_emboss(
         lights = blur(&lights, sw, sh, soften);
         darks = blur(&darks, sw, sh, soften);
     }
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_shading"),
+    );
     let unit = |c: [u8; 3]| c.map(|v| v as f32 / 255.0);
     let shadow_color = unit(bevel.shadow.color);
     let highlight_color = unit(bevel.highlight.color);
@@ -376,32 +400,77 @@ pub(super) fn build_bevel_emboss(
             highlight_color,
         ));
     }
-    for y in region.1..region.3 {
-        for x in region.0..region.2 {
-            let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
-            let i = (y - shade.1) as usize * sw + (x - shade.0) as usize;
-            for (slot, (coverage, sign)) in lit(m).into_iter().enumerate() {
-                if coverage <= 0.0 || slot >= shadows.len() {
-                    continue;
-                }
-                // A sunken side swaps which part is the highlight.
-                let (light, dark) = if sign > 0.0 {
-                    (lights[i], darks[i])
-                } else {
-                    (darks[i], lights[i])
-                };
-                let sh_alpha = coverage * dark.clamp(0.0, 1.0) * sh_opacity;
-                if sh_alpha > 0.0 {
-                    shadows[slot].emit(x, y, shadow_color, sh_alpha);
-                }
-                let hi_alpha = coverage * light.clamp(0.0, 1.0) * hi_opacity;
-                if hi_alpha > 0.0 {
-                    highlights[slot].emit(x, y, highlight_color, hi_alpha);
+    if serial {
+        for y in region.1..region.3 {
+            for x in region.0..region.2 {
+                let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
+                let i = (y - shade.1) as usize * sw + (x - shade.0) as usize;
+                for (slot, (coverage, sign)) in lit(m).into_iter().enumerate() {
+                    if coverage <= 0.0 || slot >= shadows.len() {
+                        continue;
+                    }
+                    // A sunken side swaps which part is the highlight.
+                    let (light, dark) = if sign > 0.0 {
+                        (lights[i], darks[i])
+                    } else {
+                        (darks[i], lights[i])
+                    };
+                    let sh_alpha = coverage * dark.clamp(0.0, 1.0) * sh_opacity;
+                    if sh_alpha > 0.0 {
+                        shadows[slot].emit(x, y, shadow_color, sh_alpha);
+                    }
+                    let hi_alpha = coverage * light.clamp(0.0, 1.0) * hi_opacity;
+                    if hi_alpha > 0.0 {
+                        highlights[slot].emit(x, y, highlight_color, hi_alpha);
+                    }
                 }
             }
         }
+    } else {
+        let rw = rect.width() as usize;
+        for (slot, (shadow, highlight)) in shadows.iter_mut().zip(highlights.iter_mut()).enumerate()
+        {
+            shadow
+                .alpha_mut()
+                .par_chunks_mut(rw)
+                .zip(highlight.alpha_mut().par_chunks_mut(rw))
+                .enumerate()
+                .for_each(|(row, (shadow_row, highlight_row))| {
+                    let y = region.1 + row as i32;
+                    for (column, (shadow, highlight)) in
+                        shadow_row.iter_mut().zip(highlight_row).enumerate()
+                    {
+                        let x = region.0 + column as i32;
+                        let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
+                        let (coverage, sign) = lit(m)[slot];
+                        if coverage <= 0.0 {
+                            continue;
+                        }
+                        let i = (y - shade.1) as usize * sw + (x - shade.0) as usize;
+                        let (light, dark) = if sign > 0.0 {
+                            (lights[i], darks[i])
+                        } else {
+                            (darks[i], lights[i])
+                        };
+                        let sh_alpha = coverage * dark.clamp(0.0, 1.0) * sh_opacity;
+                        if sh_alpha > 0.0 {
+                            *shadow = sh_alpha;
+                        }
+                        let hi_alpha = coverage * light.clamp(0.0, 1.0) * hi_opacity;
+                        if hi_alpha > 0.0 {
+                            *highlight = hi_alpha;
+                        }
+                    }
+                });
+        }
     }
     let mut passes = Vec::with_capacity(shadows.len() * 2);
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_emission"),
+    );
     for (shadow, highlight) in shadows.into_iter().zip(highlights) {
         passes.push(shadow.finish());
         passes.push(highlight.finish());
