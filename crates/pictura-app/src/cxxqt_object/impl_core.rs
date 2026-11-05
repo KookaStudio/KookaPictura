@@ -34,8 +34,12 @@ pub(super) fn reset_refresh_calls() {
     REFRESH_CALLS.with(|calls| calls.set(0));
 }
 
+pub(super) use deferred_composite::{
+    CompositeJob, DeferredComposite, DeferredTransform, TransformJob, TransformSpec,
+};
 pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 
+mod deferred_composite;
 mod deferred_pyramid;
 mod display;
 mod recovery;
@@ -721,7 +725,8 @@ impl qobject::PictureView {
             .unwrap_or(0)
     }
 
-    pub fn sample_argb(&self, x: i32, y: i32) -> u32 {
+    pub fn sample_argb(mut self: Pin<&mut Self>, x: i32, y: i32) -> u32 {
+        self.as_mut().settle_pending_composite();
         let rust = self.rust();
         let Some(doc) = rust.session.doc.as_ref() else {
             return 0;
@@ -732,7 +737,11 @@ impl qobject::PictureView {
     }
 
     pub fn composite_argb(&self, x: i32, y: i32) -> u32 {
-        self.sample_argb(x, y)
+        let rust = self.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return 0;
+        };
+        sample_planar_argb(&doc.composite, x, y)
     }
 
     /// M0.5 GPU smoke probe: offscreen-render the demo gradient and report

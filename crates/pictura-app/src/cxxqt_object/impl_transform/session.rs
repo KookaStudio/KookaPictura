@@ -17,6 +17,9 @@ use cxx_qt_lib::{QImage, QRect, QString};
 use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags};
 use pictura_render::Interpolation;
 
+/// A transform whose layer rect reaches this area runs its engine on a worker.
+const DEFERRED_TRANSFORM_PIXELS: u64 = 4_000_000;
+
 mod preview;
 mod view_preview;
 
@@ -168,6 +171,7 @@ impl qobject::PictureView {
         path: &QString,
         mode: TransformMode,
     ) -> bool {
+        self.as_mut().settle_pending_composite();
         if !self
             .rust()
             .slot_allows(super::super::document_session::SessionKind::Transform)
@@ -336,33 +340,28 @@ impl qobject::PictureView {
             self.as_mut().clear_transform_preview();
             return false;
         }
-        let changed = match (self.as_mut().rust_mut().session.doc.as_mut(), &warp) {
-            (Some(doc), Some(warp)) => pictura_render::transform_layer_warp(
-                doc,
-                &path,
-                warp,
-                Some(preview_quad),
-                interpolation,
-            ),
-            (Some(doc), None) => apply_session_transform(
-                doc,
-                &path,
-                projective,
-                quad,
-                params,
-                orig_rect,
-                interpolation,
-            ),
-            (None, _) => false,
-        };
-        let lifted = self
-            .as_mut()
-            .rust_mut()
-            .session
-            .live
-            .take_transform()
-            .and_then(|session| session.lifted);
+        let mut session = self.as_mut().rust_mut().session.live.take_transform();
+        let lifted = session.as_mut().and_then(|session| session.lifted.take());
         if let Some((_, before)) = lifted {
+            let changed = match (self.as_mut().rust_mut().session.doc.as_mut(), &warp) {
+                (Some(doc), Some(warp)) => pictura_render::transform_layer_warp(
+                    doc,
+                    &path,
+                    warp,
+                    Some(preview_quad),
+                    interpolation,
+                ),
+                (Some(doc), None) => apply_session_transform(
+                    doc,
+                    &path,
+                    projective,
+                    quad,
+                    params,
+                    orig_rect,
+                    interpolation,
+                ),
+                (None, _) => false,
+            };
             let merged = changed
                 && self
                     .as_mut()
@@ -382,30 +381,95 @@ impl qobject::PictureView {
             self.as_mut().rust_mut().session.set_selection(None);
             self.as_mut().rust_mut().last_transform = repeat;
             self.as_mut()
-                .edit(&history_label, |_| Edit::Structural { damage: None });
+                .commit_transform_edit(&history_label, true, |_| Edit::Structural { damage: None });
+            if !self.rust().move_composite_pending() {
+                self.as_mut().move_committed();
+            }
             self.as_mut().clear_transform_preview();
             return true;
         }
-        if changed {
-            self.as_mut().rust_mut().last_transform = repeat;
-            self.as_mut().clear_link_sets();
-            // The transform only moves the layer, so the union of its source rect
-            // and its transformed rect bounds the composite change.
-            let after = self
-                .rust()
+
+        // The engine resamples the layer's pixels; on a large layer it belongs
+        // on a worker. The landing installs the transformed layer and hands its
+        // composite to the same deferred edit a Move commit uses.
+        let engine_path = path.clone();
+        let engine_quad = quad;
+        let engine_params = params;
+        let engine_orig = orig_rect;
+        let engine_interp = interpolation;
+        let engine_projective = projective;
+        let engine_warp = warp.clone();
+        let engine_preview_quad = preview_quad;
+        let apply =
+            std::sync::Arc::new(move |doc: &mut pictura_core::Document| match &engine_warp {
+                Some(warp) => pictura_render::transform_layer_warp(
+                    doc,
+                    &engine_path,
+                    warp,
+                    Some(engine_preview_quad),
+                    engine_interp,
+                ),
+                None => apply_session_transform(
+                    doc,
+                    &engine_path,
+                    engine_projective,
+                    engine_quad,
+                    engine_params,
+                    engine_orig,
+                    engine_interp,
+                ),
+            });
+        let area = u64::from(orig_rect.width().max(0) as u32)
+            * u64::from(orig_rect.height().max(0) as u32);
+        if area < DEFERRED_TRANSFORM_PIXELS {
+            let changed = self
+                .as_mut()
+                .rust_mut()
                 .session
                 .doc
-                .as_ref()
-                .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                .map(|layer| (layer.rect, layer_has_effects(layer)));
-            match after {
-                Some((after, false)) => self.as_mut().refresh_region(orig_rect.union(after)),
-                _ => self.as_mut().recomposite(),
+                .as_mut()
+                .is_some_and(|doc| (apply)(doc));
+            if changed {
+                self.as_mut().rust_mut().last_transform = repeat;
+                self.as_mut().clear_link_sets();
+                let after = self
+                    .rust()
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
+                    .map(|layer| (layer.rect, layer_has_effects(layer)));
+                let edit = match after {
+                    Some((after, false)) => Edit::regions(vec![orig_rect.union(after)], false),
+                    _ => Edit::Full,
+                };
+                self.as_mut()
+                    .commit_transform_edit(&history_label, true, |_| edit);
+                if !self.rust().move_composite_pending() {
+                    self.as_mut().move_committed();
+                }
             }
-            self.as_mut().record(&history_label);
+            self.as_mut().clear_transform_preview();
+            return changed;
+        }
+        let spec = super::super::impl_core::TransformSpec {
+            path: path.clone(),
+            orig_rect,
+            apply,
+        };
+        self.as_mut().rust_mut().last_transform = repeat;
+        self.as_mut().clear_link_sets();
+        let deferred = self
+            .as_mut()
+            .rust_mut()
+            .defer_transform(&history_label, spec);
+        if deferred {
+            if let Some(job) = self.as_mut().rust_mut().pending_transform_job.take() {
+                self.as_mut().build_transform(job);
+            }
         }
         self.as_mut().clear_transform_preview();
-        changed
+        deferred
     }
 
     /// Whether a Free Transform session is active.
@@ -483,6 +547,10 @@ impl qobject::PictureView {
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
+        // A committed move leaves the cached base valid: its content and the
+        // hidden-layer backdrop do not change with the layer's position. Reuse
+        // it before settling a pending composite, which is a whole-document
+        // composite on a large document.
         if self.as_ref().move_cache_valid(&paths) {
             {
                 let mut rust = self.as_mut().rust_mut();
@@ -496,11 +564,27 @@ impl qobject::PictureView {
                 rust.move_y = y;
                 rust.move_opacity = opacity;
                 rust.move_preview_cache_hit = true;
+                rust.move_drag_active = true;
             }
             return true;
         }
+        // A view preview reads the layer stack, not the stale composite, so a
+        // pending commit can stay on its worker while the next drag starts.
+        if self.as_ref().rust().move_composite_pending()
+            && self.as_mut().rust_mut().compute_view_move_preview(&paths)
+        {
+            let mut rust = self.as_mut().rust_mut();
+            rust.move_preview_cache_hit = false;
+            rust.move_drag_active = true;
+            return true;
+        }
+        self.as_mut().settle_pending_composite();
         let computed = self.as_mut().compute_move_preview(paths);
-        self.as_mut().rust_mut().move_preview_cache_hit = false;
+        {
+            let mut rust = self.as_mut().rust_mut();
+            rust.move_preview_cache_hit = false;
+            rust.move_drag_active = computed;
+        }
         computed
     }
 
@@ -509,6 +593,7 @@ impl qobject::PictureView {
     /// move-preview layer, no document change. Otherwise the active pixel layer
     /// is cloned, made active, and previewed.
     pub fn begin_move_duplicate(mut self: Pin<&mut Self>) -> bool {
+        self.as_mut().settle_pending_composite();
         if self.rust().session.selection.is_some() {
             return self.as_mut().begin_selection_duplicate_preview();
         }
@@ -537,6 +622,7 @@ impl qobject::PictureView {
         if self.as_ref().move_cache_valid(&paths) {
             return true;
         }
+        self.as_mut().settle_pending_composite();
         self.as_mut().compute_move_preview(paths)
     }
 
@@ -619,33 +705,12 @@ impl qobject::PictureView {
     /// Compute and store the move-preview base/layer for `paths` and record the
     /// revision and group key they were built from.
     fn compute_move_preview(mut self: Pin<&mut Self>, paths: Vec<String>) -> bool {
+        if self.as_mut().rust_mut().compute_view_move_preview(&paths) {
+            return true;
+        }
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
-        let viewed = rust.session.doc.as_ref().and_then(|doc| {
-            let preview = view_preview::view_preview(
-                doc,
-                &paths,
-                rust.presented_level,
-                rust.presented_rect,
-                gpu_compute,
-            )?;
-            let opacity = pictura_render::resolve_path(doc, &paths[0])?.opacity as i32;
-            Some((preview, opacity))
-        });
-        if let Some((preview, opacity)) = viewed {
-            rust.move_base = Some(preview.base);
-            rust.move_base_origin = Some(preview.base_origin);
-            rust.move_layer = Some(preview.layer);
-            rust.move_x = preview.view.region.left;
-            rust.move_y = preview.view.region.top;
-            rust.move_opacity = opacity;
-            rust.move_view = Some(preview.view);
-            rust.move_prepared_revision = rust.session.content_revision;
-            rust.move_prepared_layer = move_group_key(&paths);
-            rust.move_prepared_union = None;
-            return true;
-        }
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
@@ -740,10 +805,11 @@ impl qobject::PictureView {
         true
     }
 
-    pub fn end_move_preview(self: Pin<&mut Self>) {
+    pub fn end_move_preview(mut self: Pin<&mut Self>) {
         // Keep the cache: the next press reuses a full-resolution preview when
         // the revision, topmost layer, and clamped rect are unchanged. A view
         // preview is rebuilt on every press (`move_cache_valid`).
+        self.as_mut().rust_mut().move_drag_active = false;
     }
 
     /// Drop the transform overlay's prepared base/layer. The C++ canvas clears
@@ -762,6 +828,7 @@ impl qobject::PictureView {
         rust.move_prepared_layer.clear();
         rust.move_prepared_union = None;
         rust.move_preview_cache_hit = false;
+        rust.move_drag_active = false;
     }
 
     pub fn commit_move(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
@@ -783,6 +850,11 @@ impl qobject::PictureView {
         };
         self.as_mut()
             .commit_move_edit("Move Layer", |_| Edit::regions(vec![dirty], false));
+        // A deferred commit reports when its composite lands; a synchronous one
+        // reports now so the canvas drops the drag preview either way.
+        if !self.rust().move_composite_pending() {
+            self.as_mut().move_committed();
+        }
         true
     }
 
@@ -796,6 +868,40 @@ impl qobject::PictureView {
 }
 
 impl PictureViewRust {
+    /// Build and store a view preview of `paths` when the canvas presents one.
+    /// It reads the layer stack, not `doc.composite`, so it stays valid while a
+    /// Move commit's composite is still on its worker.
+    pub(in crate::cxxqt_object) fn compute_view_move_preview(&mut self, paths: &[String]) -> bool {
+        let Some(doc) = self.session.doc.as_ref() else {
+            return false;
+        };
+        let Some(preview) = view_preview::view_preview(
+            doc,
+            paths,
+            self.presented_level,
+            self.presented_rect,
+            self.gpu_compute,
+        ) else {
+            return false;
+        };
+        let Some(opacity) =
+            pictura_render::resolve_path(doc, &paths[0]).map(|layer| layer.opacity as i32)
+        else {
+            return false;
+        };
+        self.move_base = Some(preview.base);
+        self.move_base_origin = Some(preview.base_origin);
+        self.move_layer = Some(preview.layer);
+        self.move_x = preview.view.region.left;
+        self.move_y = preview.view.region.top;
+        self.move_opacity = opacity;
+        self.move_view = Some(preview.view);
+        self.move_prepared_revision = self.session.content_revision;
+        self.move_prepared_layer = move_group_key(paths);
+        self.move_prepared_union = None;
+        true
+    }
+
     /// Prepare a transform session on `path` in `mode`: the layer is trimmed to
     /// its content (or the selection lifted onto a floating layer) and the
     /// session's scalars are set. `None` when the target cannot be

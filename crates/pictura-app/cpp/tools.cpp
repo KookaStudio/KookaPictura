@@ -1060,9 +1060,13 @@ void ToolController::handleReleased(const QPointF& imagePos)
                 // The controls box applies each gesture on release and stays
                 // on the resulting layer.
                 transformControls_ = false;
-                v->commit_transform();
+                const bool committed = v->commit_transform();
                 if (canvas_) {
-                    canvas_->clearTransformPreview();
+                    if (committed) {
+                        canvas_->endTransformOverlay();
+                    } else {
+                        canvas_->clearTransformPreview();
+                    }
                 }
                 syncTransformControls();
             }

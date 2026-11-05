@@ -122,7 +122,8 @@ impl PictureViewRust {
 
 impl qobject::PictureView {
     pub fn undo(mut self: Pin<&mut Self>) -> bool {
-        if !self.rust().session.history.can_undo() {
+        self.as_mut().settle_pending_composite();
+        if !self.rust().can_undo() {
             return false;
         }
         let restored = self
@@ -133,7 +134,8 @@ impl qobject::PictureView {
     }
 
     pub fn redo(mut self: Pin<&mut Self>) -> bool {
-        if !self.rust().session.history.can_redo() {
+        self.as_mut().settle_pending_composite();
+        if !self.rust().can_redo() {
             return false;
         }
         let restored = self
@@ -178,11 +180,11 @@ impl qobject::PictureView {
     }
 
     pub fn can_undo(&self) -> bool {
-        self.rust().session.history.can_undo()
+        self.rust().can_undo()
     }
 
     pub fn can_redo(&self) -> bool {
-        self.rust().session.history.can_redo()
+        self.rust().can_redo()
     }
 
     pub fn history_depth(&self) -> i32 {
@@ -205,6 +207,7 @@ impl qobject::PictureView {
     }
 
     pub fn history_jump(mut self: Pin<&mut Self>, i: i32) -> bool {
+        self.as_mut().settle_pending_composite();
         if i < 0 {
             return false;
         }
@@ -220,6 +223,7 @@ impl qobject::PictureView {
     }
 
     pub fn history_add_snapshot(mut self: Pin<&mut Self>, label: &QString) -> bool {
+        self.as_mut().settle_pending_composite();
         let Some(snapshot) = self.rust().named_snapshot() else {
             return false;
         };
@@ -234,6 +238,7 @@ impl qobject::PictureView {
     }
 
     pub fn history_restore_snapshot(mut self: Pin<&mut Self>, i: i32) -> bool {
+        self.as_mut().settle_pending_composite();
         if i < 0 {
             return false;
         }

@@ -148,6 +148,9 @@ pub mod qobject {
         /// Emitted when the exact pyramid replaced a coarse one: nothing changed, the receiver repaints.
         #[qsignal]
         fn pyramid_settled(self: Pin<&mut Self>);
+        #[qsignal]
+        #[cxx_name = "moveCommitted"]
+        fn move_committed(self: Pin<&mut Self>); // the composite is current; drop the drag preview
         /// Emitted after a document region composite. The receiver patches its present crop over `(x, y, w, h)` and repaints; no region pixels cross the bridge.
         #[qsignal]
         #[cxx_name = "regionDamaged"]
@@ -236,15 +239,12 @@ pub mod qobject {
         fn iptc_edit_fields(&self) -> QStringList;
         #[qinvokable]
         fn apply_metadata_edits(self: Pin<&mut Self>, edits: &QStringList) -> bool;
-
         /// Export the active document's managed metadata to `dest` as a standalone XMP template; records no history.
         #[qinvokable]
         fn export_metadata_template(&self, dest: &QString) -> bool;
-
         /// Apply the XMP template at `path` with `mode` (0 Append, 1 Replace, 2 KeepOriginalReplaceMatching) as one state.
         #[qinvokable]
         fn apply_metadata_template(self: Pin<&mut Self>, path: &QString, mode: i32) -> bool;
-
         /// Working mode: `"rgb"` or `"grayscale"`; empty without a document.
         #[qinvokable]
         fn document_mode(&self) -> QString;
@@ -945,7 +945,7 @@ pub mod qobject {
         /// The composited pixel at `(x, y)` as `0xAARRGGBB`, or 0 when there is
         /// no document or the point is out of bounds.
         #[qinvokable]
-        fn sample_argb(&self, x: i32, y: i32) -> u32;
+        fn sample_argb(self: Pin<&mut Self>, x: i32, y: i32) -> u32;
 
         /// Self-test probe: the stored document composite's pixel at `(x, y)` as
         /// `0xAARRGGBB`, or 0 when there is no document or out of bounds.

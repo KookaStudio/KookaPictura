@@ -123,6 +123,7 @@ pub(in crate::cxxqt_object) fn save_finish_rust(rust: &mut PictureViewRust) -> b
 }
 
 pub(super) fn save_start(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+    view.as_mut().settle_pending_composite();
     save_start_rust(&mut view.as_mut().rust_mut(), &path.to_string())
 }
 

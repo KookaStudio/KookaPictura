@@ -350,7 +350,7 @@ void ImageView::setTransformQuad(const QPolygonF& corners)
     update();
 }
 
-void ImageView::clearTransformPreview()
+void ImageView::endTransformOverlay()
 {
     transformActive_ = false;
     transformProjective_ = QTransform();
@@ -362,6 +362,12 @@ void ImageView::clearTransformPreview()
     transformQuad_.clear();
     transformPivotVisible_ = false;
     transformWarp_ = transform_api::WarpOverlay();
+    update();
+}
+
+void ImageView::clearTransformPreview()
+{
+    endTransformOverlay();
     movePreviewActive_ = false;
     moveBase_ = QImage();
     moveLayer_ = QImage();

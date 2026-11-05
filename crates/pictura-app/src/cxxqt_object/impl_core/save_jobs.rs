@@ -11,6 +11,10 @@ mod imp;
 use super::super::qobject::PictureView;
 pub(in crate::cxxqt_object) use imp::*;
 
+pub(in crate::cxxqt_object) use super::deferred_composite::{
+    move_composite_pending, move_composite_set_delay, transform_pending, transform_set_delay,
+};
+
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
@@ -38,5 +42,17 @@ pub mod ffi {
 
         /// Hold a started save's completion for `ms` milliseconds (test seam).
         fn save_set_delay(view: Pin<&mut PictureView>, ms: u64);
+
+        /// Whether a Move commit's composite is still on its worker.
+        fn move_composite_pending(view: &PictureView) -> bool;
+
+        /// Hold a started Move composite for `ms` milliseconds (test seam).
+        fn move_composite_set_delay(view: Pin<&mut PictureView>, ms: u64);
+
+        /// Whether a transform engine is still on its worker.
+        fn transform_pending(view: &PictureView) -> bool;
+
+        /// Hold a started transform engine for `ms` milliseconds (test seam).
+        fn transform_set_delay(view: Pin<&mut PictureView>, ms: u64);
     }
 }

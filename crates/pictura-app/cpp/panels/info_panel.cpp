@@ -604,7 +604,9 @@ void InfoPanel::refresh(bool full)
 
     const bool inside = x >= 0 && y >= 0 && x < width && y < height;
     if (inside) {
-        const QColor color = QColor::fromRgba(QRgb(view_->sample_argb(x, y)));
+        // The readout follows the pointer; a pending Move composite must not
+        // stall it. It catches up on the next refresh after the worker lands.
+        const QColor color = QColor::fromRgba(QRgb(view_->composite_argb(x, y)));
         refreshColorBlock(topLeft_, color);
         if (!rulerMode_) {
             refreshColorBlock(topRight_, color);
@@ -662,7 +664,8 @@ void InfoPanel::refreshDocumentRows(int width, int height)
             continue;
         }
         const bool pixelInside = p[0] >= 0 && p[1] >= 0 && p[0] < width && p[1] < height;
-        const QColor c = QColor::fromRgba(QRgb(pixelInside ? view_->sample_argb(p[0], p[1]) : 0));
+        const QColor c =
+            QColor::fromRgba(QRgb(pixelInside ? view_->composite_argb(p[0], p[1]) : 0));
         samplers << (pixelInside ? QStringLiteral("#%1  %2, %3  R %4  G %5  B %6")
                                        .arg(i + 1)
                                        .arg(p[0])

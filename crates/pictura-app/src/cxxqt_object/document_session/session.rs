@@ -443,6 +443,8 @@ impl PictureViewRust {
 
     /// Clear every field that names or belongs to the outgoing document.
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
+        self.cancel_move_composite();
+        self.move_drag_active = false;
         self.session.set_selection(None);
         self.session.deselected_selection = None;
         self.session.quick_selection_snapshot = None;

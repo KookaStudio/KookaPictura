@@ -9,6 +9,7 @@
 
 use pictura_core::homography::HOMOGRAPHY_EPSILON;
 use pictura_core::{Channel, Document, Homography, LayerMask, LockFlags, PsdRect, SourceChannels};
+use rayon::prelude::*;
 
 use super::crossed_quad;
 use super::kernel::{self, Interpolation};
@@ -260,7 +261,7 @@ fn bounding_box<M: PlaneMap>(map: &M, rect: PsdRect) -> Option<(i32, i32, i32, i
 }
 
 /// Resample one `w×h` plane into the destination rect; out-of-source → 0.
-pub(super) fn resample_plane<M: PlaneMap>(
+pub(super) fn resample_plane<M: PlaneMap + Sync>(
     src: &[u8],
     w: usize,
     h: usize,
@@ -269,28 +270,39 @@ pub(super) fn resample_plane<M: PlaneMap>(
     dest: (i32, i32, i32, i32),
     interpolation: Interpolation,
 ) -> Vec<u8> {
+    // A layer's opaque pixels can run right up to its rect edge. Clamping the
+    // kernel there keeps the alpha at 255, so a rotated filled layer gets a
+    // hard, stair-stepped edge. Pad with transparent pixels instead: the taps
+    // that fall outside the source read 0 and the edge anti-aliases.
+    const PAD: usize = 2;
+    let (pw, ph) = (w + PAD * 2, h + PAD * 2);
+    let mut padded = vec![0u8; pw * ph];
+    for y in 0..h {
+        let src_row = &src[y * w..(y + 1) * w];
+        let dst = (y + PAD) * pw + PAD;
+        padded[dst..dst + w].copy_from_slice(src_row);
+    }
     let (dl, dt, dr, db) = dest;
     let dw = (dr - dl) as usize;
     let dh = (db - dt) as usize;
     let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
     let mut out = vec![0u8; dw * dh];
-    let wf = w as f64;
-    let hf = h as f64;
-    for oy in 0..dh {
-        for ox in 0..dw {
+    let (pwf, phf) = (pw as f64, ph as f64);
+    out.par_chunks_mut(dw).enumerate().for_each(|(oy, row)| {
+        for (ox, pixel) in row.iter_mut().enumerate() {
             let qx = dl as f64 + ox as f64 + 0.5;
             let qy = dt as f64 + oy as f64 + 0.5;
             let Some((sx, sy)) = map.inverse(qx, qy) else {
                 continue;
             };
-            let lx = sx - rect.left as f64;
-            let ly = sy - rect.top as f64;
-            if lx < 0.0 || ly < 0.0 || lx >= wf || ly >= hf {
+            let lx = sx - rect.left as f64 + PAD as f64;
+            let ly = sy - rect.top as f64 + PAD as f64;
+            if lx < 0.0 || ly < 0.0 || lx >= pwf || ly >= phf {
                 continue;
             }
-            out[oy * dw + ox] = kernel::sample(src, w, h, lx, ly, resolved);
+            *pixel = kernel::sample(&padded, pw, ph, lx, ly, resolved);
         }
-    }
+    });
     out
 }
 
@@ -333,7 +345,7 @@ fn materialized_channels(doc: &Document, layer: &Layer) -> Option<Vec<Channel>> 
 /// has its `rect` transformed (and keeps `data` `None`) so the rect follows the
 /// layer; a similarity map re-centres on the mask's own rect, a projective map
 /// is global.
-fn transform_mask<M: PlaneMap>(
+fn transform_mask<M: PlaneMap + Sync>(
     mask: &LayerMask,
     layer_map: &M,
     interpolation: Interpolation,
@@ -523,7 +535,7 @@ fn apply_layer_map<M, F>(
     interpolation: Interpolation,
 ) -> bool
 where
-    M: PlaneMap,
+    M: PlaneMap + Sync,
     F: Fn(PsdRect) -> Option<M>,
 {
     let Some(prepared) = prepare_layer(doc, path) else {
@@ -765,4 +777,83 @@ pub(crate) fn quad_corner_targets(rect: PsdRect, quad: [(f64, f64); 4]) -> Optio
         out[i] = map.forward(x, y)?;
     }
     Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pictura_core::Document;
+
+    #[test]
+    fn a_rotated_edge_is_antialiased() {
+        let side = 64u32;
+        let mut rgba = vec![0u8; (side * side * 4) as usize];
+        for y in 16..48u32 {
+            for x in 16..48u32 {
+                let i = ((y * side + x) * 4) as usize;
+                rgba[i + 3] = 255;
+            }
+        }
+        let mut doc = Document::from_rgba("square", side, side, &rgba);
+        assert!(transform_layer_with(
+            &mut doc,
+            "0",
+            LayerTransform {
+                scale_x: 1.0,
+                scale_y: 1.0,
+                angle_radians: 30f64.to_radians(),
+                dx: 0.0,
+                dy: 0.0,
+            },
+            Interpolation::Bicubic,
+        ));
+        let layer = resolve_path(&doc, "0").expect("layer");
+        let alpha = layer.channels.iter().find(|c| c.id == -1).expect("alpha");
+        let fractional = alpha
+            .data
+            .bands()
+            .flatten()
+            .filter(|a| **a != 0 && **a != 255)
+            .count();
+        assert!(fractional > 0, "the rotated edge is not anti-aliased");
+    }
+
+    #[test]
+    fn a_quad_rotated_edge_is_antialiased() {
+        let side = 64u32;
+        let mut rgba = vec![0u8; (side * side * 4) as usize];
+        for y in 16..48u32 {
+            for x in 16..48u32 {
+                let i = ((y * side + x) * 4) as usize;
+                rgba[i + 3] = 255;
+            }
+        }
+        let mut doc = Document::from_rgba("square", side, side, &rgba);
+        let rect = resolve_path(&doc, "0").expect("layer").rect;
+        let (cx, cy) = (
+            f64::from(rect.left + rect.right) / 2.0,
+            f64::from(rect.top + rect.bottom) / 2.0,
+        );
+        let (sin, cos) = 30f64.to_radians().sin_cos();
+        let rotate = |x: f64, y: f64| {
+            let (dx, dy) = (x - cx, y - cy);
+            (cx + cos * dx - sin * dy, cy + sin * dx + cos * dy)
+        };
+        let quad = source_corners(rect).map(|(x, y)| rotate(x, y));
+        assert!(transform_layer_quad_with(
+            &mut doc,
+            "0",
+            quad,
+            Interpolation::Bicubic,
+        ));
+        let layer = resolve_path(&doc, "0").expect("layer");
+        let alpha = layer.channels.iter().find(|c| c.id == -1).expect("alpha");
+        let fractional = alpha
+            .data
+            .bands()
+            .flatten()
+            .filter(|a| **a != 0 && **a != 255)
+            .count();
+        assert!(fractional > 0, "the quad-rotated edge is not anti-aliased");
+    }
 }

@@ -5,10 +5,15 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QElapsedTimer>
+
 #include "commands.h"
+#include "panels/info_panel.h"
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -56,8 +61,18 @@ private slots:
     void moveDoesNotWarmTheBackground();
     void layerPropertiesRepaintOnlyTheLayer();
     void aDocumentCanvasHoldsNoImage();
+    void aLargeMoveCommitLandsOffThread();
+    void aSmallMoveCommitIsSynchronous();
+    void aReadSettlesThePendingMove();
+    void aSecondPressReusesTheFullPreview();
+    void aSecondPressKeepsTheViewPreview();
+    void aHoverReadoutDoesNotSettleTheMove();
+    void aTransformCommitLandsOffThread();
+    void aRotatedPixelEdgeIsAntialiased();
 
 private:
+    void showFrame();
+
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
 };
@@ -67,6 +82,12 @@ void LargeDocumentTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+}
+
+void LargeDocumentTest::showFrame()
+{
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
 }
 
 void LargeDocumentTest::boundedUndoKeepsTheFrame()
@@ -201,6 +222,225 @@ void LargeDocumentTest::aDocumentCanvasHoldsNoImage()
     QCOMPARE(shown.size(), QSize(90, 50));
     QCOMPARE(shown.pixel(40, 20), QRgb(kRed));
     QCOMPARE(shown.pixel(40, 45), QRgb(kWhite));
+}
+
+// [mcr_deferred] [mcr_preview]
+void LargeDocumentTest::aLargeMoveCommitLandsOffThread()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_move"));
+    QVERIFY2(f.ok(), "deferred move fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    pictura::move_composite_set_delay(*f.view, 400);
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    QSignalSpy settled(f.view, &pictura::PictureView::pyramid_settled);
+
+    // Stand in for the drag preview: the release keeps it until the composite
+    // lands.
+    f.canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY2(pictura::move_composite_pending(*f.view), "a large commit defers");
+    QVERIFY2(f.canvas->movePreviewActive(), "the preview survives the release");
+    QCOMPARE(committed.count(), 0);
+
+    QVERIFY(committed.wait(30000));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY2(!f.canvas->movePreviewActive(), "the signal drops the preview");
+    QVERIFY2(settled.wait(30000), "the landing defers the exact pyramid");
+    QCOMPARE(pictura::preview_present_level(*f.view), 0);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [mcr_small_sync]
+void LargeDocumentTest::aSmallMoveCommitIsSynchronous()
+{
+    QImage seed(120, 60, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_sync_move"));
+    QVERIFY2(f.ok(), "sync move fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    QVERIFY(f.view->commit_move(2, 2));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QCOMPARE(committed.count(), 1);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [mcr_settle_read]
+void LargeDocumentTest::aReadSettlesThePendingMove()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_read_settles_move"));
+    QVERIFY2(f.ok(), "read settle fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(paintLine(*f.view, 100.0));
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    // The red line moved from row 100 to row 104; the stale composite still has
+    // white there, so the sample must settle the worker's composite first.
+    QCOMPARE(f.view->sample_argb(40, 104), kRed);
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+}
+
+// [mcr_second_press]
+void LargeDocumentTest::aSecondPressReusesTheFullPreview()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_second_press_full"));
+    QVERIFY2(f.ok(), "second press fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.view->begin_move_preview());
+    f.view->end_move_preview();
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    QElapsedTimer timer;
+    timer.start();
+    QVERIFY(f.view->begin_move_preview());
+    const qint64 elapsed = timer.elapsed();
+    QVERIFY2(f.view->move_preview_cache_hit(), "the second press reuses the cached base");
+    QVERIFY2(elapsed < 1000, "the second press must not settle the whole composite");
+    f.view->end_move_preview();
+}
+
+// [mcr_second_press]
+void LargeDocumentTest::aSecondPressKeepsTheViewPreview()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_second_press_view"));
+    QVERIFY2(f.ok(), "second view press fixture");
+    showFrame();
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    f.canvas->setZoom(0.125, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    QVERIFY(f.view->begin_move_preview());
+    QVERIFY2(pictura::move_preview_scale(*f.view) > 1, "the first press is a view preview");
+    f.view->end_move_preview();
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    QElapsedTimer timer;
+    timer.start();
+    QVERIFY(f.view->begin_move_preview());
+    const qint64 elapsed = timer.elapsed();
+    QVERIFY2(pictura::move_preview_scale(*f.view) > 1, "the second press is a view preview");
+    QVERIFY2(elapsed < 1000, "the second press must not settle the whole composite");
+    f.canvas->beginMovePreview(f.view->move_preview_base(), f.view->move_preview_layer(),
+                               QPointF(f.view->move_preview_x(), f.view->move_preview_y()),
+                               f.view->move_preview_opacity() / 255.0);
+
+    // The first commit lands while the second drag is down; it must not clear
+    // the second drag's preview.
+    QTest::qWait(2000); // wait out the 500 ms worker delay and its composite
+    QVERIFY(f.canvas->movePreviewActive());
+    QCOMPARE(committed.count(), 0);
+    f.view->end_move_preview();
+    f.canvas->endMovePreview();
+}
+
+// [mcr_hover_no_settle]
+void LargeDocumentTest::aHoverReadoutDoesNotSettleTheMove()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_hover_settles_move"));
+    QVERIFY2(f.ok(), "hover readout fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    pictura::move_composite_set_delay(*f.view, 500);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    auto* panel = window_->findChild<pictura::InfoPanel*>(QStringLiteral("infoPanel"));
+    QVERIFY(panel != nullptr);
+    panel->setCursorPosition(QPointF(40, 104));
+    QElapsedTimer timer;
+    timer.start();
+    panel->refresh();
+    QVERIFY2(timer.elapsed() < 1000, "the hover readout must not settle the composite");
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    QVERIFY(committed.wait(30000));
+    panel->refresh();
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+}
+
+// [mcr_transform_deferred]
+void LargeDocumentTest::aTransformCommitLandsOffThread()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_transform"));
+    QVERIFY2(f.ok(), "deferred transform fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.tools->beginFreeTransform(QStringLiteral("1")));
+    const QPolygonF quad = pictura::transform_api::quad(*f.view).corners;
+    QCOMPARE(quad.size(), 4);
+    const QPointF corner = quad.at(2);
+    QVERIFY(f.view->transform_press(corner.x(), corner.y(), 1.0, false, false) >= 0);
+    QVERIFY(f.view->transform_move(corner.x() - 200.0, corner.y() - 200.0, 1.0, false, false));
+    f.view->transform_release();
+
+    pictura::transform_set_delay(*f.view, 500);
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    f.tools->commitFreeTransform();
+    QVERIFY2(pictura::transform_pending(*f.view), "the transform engine is on a worker");
+    QVERIFY2(f.canvas->movePreviewActive(), "the transform image waits for the landing");
+    QVERIFY2(!f.canvas->transformPreviewActive(), "the transform handles are gone");
+
+    QVERIFY(committed.wait(30000));
+    QVERIFY(!pictura::transform_pending(*f.view));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY(!f.canvas->movePreviewActive());
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));
+}
+
+// [mcr_transform_antialias]
+void LargeDocumentTest::aRotatedPixelEdgeIsAntialiased()
+{
+    QImage seed(1280, 800, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_rotated_edge"));
+    QVERIFY2(f.ok(), "rotated edge fixture");
+    const int added = f.view->add_layer(0);
+    QVERIFY(added > 0);
+    f.view->set_active_layer(QString::number(added));
+    QVERIFY(f.view->select_rect(200, 200, 400, 300, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+    QVERIFY(f.view->begin_free_transform(QString::number(added)));
+    QVERIFY(pictura::transform_set_angle(*f.view, 30.0));
+    QVERIFY(f.view->commit_transform());
+
+    bool partial = false;
+    for (int y = 100; y < 700 && !partial; ++y) {
+        for (int x = 100; x < 700; ++x) {
+            const int r = qRed(f.view->composite_argb(x, y));
+            if (r > 0 && r < 255) {
+                partial = true;
+                break;
+            }
+        }
+    }
+    QVERIFY2(partial, "the rotated edge has no partial-coverage pixels");
 }
 
 QTEST_MAIN(LargeDocumentTest)

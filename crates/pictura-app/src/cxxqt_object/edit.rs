@@ -210,16 +210,28 @@ impl PictureViewRust {
     /// Execute the pixel half, then capture one state, and report what the
     /// presenter must show.
     pub(super) fn apply_edit(&mut self, label: &str, edit: Edit) -> Presentation {
-        self.apply_edit_with(label, edit, true)
+        self.apply_edit_with(label, edit, true, false)
     }
 
     /// As [`Self::apply_edit`] for a move of the topmost pixel layer, which
     /// leaves the cached move-preview base valid: no content-revision bump.
     pub(super) fn apply_edit_move(&mut self, label: &str, edit: Edit) -> Presentation {
-        self.apply_edit_with(label, edit, false)
+        self.apply_edit_with(label, edit, false, true)
     }
 
-    fn apply_edit_with(&mut self, label: &str, edit: Edit, bump_revision: bool) -> Presentation {
+    /// As [`Self::apply_edit`] for a transform commit, which changes content
+    /// but may still leave a large composite to a worker.
+    pub(super) fn apply_transform(&mut self, label: &str, edit: Edit, defer: bool) -> Presentation {
+        self.apply_edit_with(label, edit, true, defer)
+    }
+
+    fn apply_edit_with(
+        &mut self,
+        label: &str,
+        edit: Edit,
+        bump_revision: bool,
+        defer: bool,
+    ) -> Presentation {
         if matches!(edit, Edit::None) {
             return Presentation {
                 declaration: Some(edit),
@@ -254,24 +266,34 @@ impl PictureViewRust {
             edit.history_hint().map(|rects| rects.to_vec())
         };
         metrics::begin_edit(label);
-        let blit = self.refresh_for(&edit);
+        let deferred =
+            defer && self.should_defer_move(&edit) && self.defer_move_composite(label, &edit);
+        let blit = if deferred {
+            None
+        } else {
+            self.refresh_for(&edit)
+        };
         if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
             self.link_sets.clear();
             self.solo_snapshot = None;
         }
-        let target = self.layer_target.clone();
-        let t = Instant::now();
-        if !matches!(edit, Edit::SelectionPreview) {
-            if bump_revision {
-                self.session
-                    .capture_live_without_bookkeeping(&target, label, hint.as_deref());
-            } else {
-                self.session
-                    .capture_move_without_bookkeeping(&target, label, hint.as_deref());
+        // A deferred move captures its history when its composite lands, so a
+        // diff never sees the stale composite.
+        if !deferred {
+            let target = self.layer_target.clone();
+            let t = Instant::now();
+            if !matches!(edit, Edit::SelectionPreview) {
+                if bump_revision {
+                    self.session
+                        .capture_live_without_bookkeeping(&target, label, hint.as_deref());
+                } else {
+                    self.session
+                        .capture_move_without_bookkeeping(&target, label, hint.as_deref());
+                }
+                metrics::record_phase("history_capture", t.elapsed());
             }
-            metrics::record_phase("history_capture", t.elapsed());
+            metrics::end_edit();
         }
-        metrics::end_edit();
         presentation_of(&edit, blit, bump_revision)
     }
 
@@ -359,6 +381,7 @@ impl qobject::PictureView {
         label: &str,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {
@@ -383,6 +406,7 @@ impl qobject::PictureView {
         label: &str,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {
@@ -398,6 +422,41 @@ impl qobject::PictureView {
             .as_mut()
             .rust_mut()
             .apply_edit_move(label, edit.clone());
+        if let Some(job) = self.as_mut().rust_mut().pending_move_job.take() {
+            self.as_mut().build_move_composite(job);
+        }
+        let outcome = presentation.declaration.clone().unwrap_or(edit);
+        self.as_mut().present(presentation);
+        outcome
+    }
+
+    /// As [`Self::commit_move_edit`] for a transform commit, which bumps the
+    /// content revision and may still leave a large composite to a worker.
+    pub(super) fn commit_transform_edit(
+        mut self: Pin<&mut Self>,
+        label: &str,
+        defer: bool,
+        f: impl FnOnce(&mut PictureViewRust) -> Edit,
+    ) -> Edit {
+        self.as_mut().settle_pending_composite();
+        let edit = {
+            let mut rust = self.as_mut().rust_mut();
+            if rust.session.doc.is_none() {
+                return Edit::None;
+            }
+            metrics::begin_edit(label);
+            f(&mut rust)
+        };
+        if matches!(edit, Edit::None) {
+            metrics::cancel_edit();
+        }
+        let presentation = self
+            .as_mut()
+            .rust_mut()
+            .apply_transform(label, edit.clone(), defer);
+        if let Some(job) = self.as_mut().rust_mut().pending_move_job.take() {
+            self.as_mut().build_move_composite(job);
+        }
         let outcome = presentation.declaration.clone().unwrap_or(edit);
         self.as_mut().present(presentation);
         outcome
@@ -408,6 +467,7 @@ impl qobject::PictureView {
         mut self: Pin<&mut Self>,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {

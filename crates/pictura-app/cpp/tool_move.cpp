@@ -6,6 +6,7 @@
 #include "smart_guides.h"
 #include "tools.h"
 
+#include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/transform_bridge.h"
 
@@ -235,17 +236,22 @@ public:
             return;
         }
         ctx.setDragging(false);
+        bool committed = false;
         if (PictureView* v = ctx.view()) {
             v->end_move_preview();
             const int dx = qRound(totalDelta_.x());
             const int dy = qRound(totalDelta_.y());
             if (dx != 0 || dy != 0) {
-                v->commit_move(dx, dy);
+                // A large commit composites on a worker and keeps the preview
+                // until `moveCommitted`; a small one reports it before returning.
+                committed = v->commit_move(dx, dy) && pictura::move_composite_pending(*v);
             }
         }
         pendingDuplicate_ = false;
         if (ImageView* canvas = ctx.canvas()) {
-            canvas->endMovePreview();
+            if (!committed) {
+                canvas->endMovePreview();
+            }
             canvas->clearDragSizeHint();
             canvas->clearSmartGuides();
         }

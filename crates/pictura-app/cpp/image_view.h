@@ -342,6 +342,9 @@ public:
             * transformProjective_
             * QTransform::fromTranslate(moveLayerPos_.x(), moveLayerPos_.y());
     }
+    // Drop the transform overlay/handles but keep the transformed image until
+    // `endMovePreview`, so a deferred commit can land behind it.
+    void endTransformOverlay();
     void clearTransformPreview();
     bool transformPreviewActive() const { return transformActive_; }
 

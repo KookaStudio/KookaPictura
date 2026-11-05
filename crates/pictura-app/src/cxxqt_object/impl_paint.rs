@@ -223,6 +223,23 @@ impl PictureViewRust {
         // Keep a soloed mask plane in step with the mask's new coverage.
         self.sync_mask_solo_region(clipped);
     }
+
+    /// As [`Self::apply_refreshed_region`] without the pyramid update, for a
+    /// landed whole-document composite whose pyramid is left to a worker.
+    pub(super) fn apply_refreshed_region_deferred_pyramid(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        clipped: PsdRect,
+        srgb: PixelBuffer,
+    ) {
+        let t = Instant::now();
+        self.refresh_level0_region(srgb, x0, y0);
+        paint_timing::record("rr_level0_patch", t.elapsed());
+        self.damage.mark(clipped);
+        // Keep a soloed mask plane in step with the mask's new coverage.
+        self.sync_mask_solo_region(clipped);
+    }
 }
 
 /// The bounding-box area at which a dab's exact rasterization stops fitting the
@@ -447,6 +464,7 @@ impl qobject::PictureView {
     ) -> bool {
         paint_timing::start("stroke (begin -> commit)");
         let _begin = paint_timing::Scope::new("begin_total");
+        self.as_mut().settle_pending_composite();
         let cfg = StrokeConfig {
             color: rgba_from_argb(foreground),
             background: rgba_from_argb(background),

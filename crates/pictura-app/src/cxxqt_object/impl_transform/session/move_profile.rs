@@ -1,6 +1,7 @@
 //! One Move tool gesture on a 16507×16196 document whose top layer covers the
 //! canvas (#1148): the old whole-content press, the view press at fit and at
-//! 100%, and the commit, each timed.
+//! 100%, the deferred commit, its worker composite and its GUI landing, each
+//! timed.
 
 use super::super::super::document_session::DocumentSession;
 use super::super::super::edit::Edit;
@@ -8,7 +9,7 @@ use super::super::super::state::PictureViewRust;
 use super::super::translate_move_group;
 use super::preview::backdrop_patch;
 use super::view_preview::view_preview;
-use crate::cxxqt_object::helpers_composite::layer_image;
+use crate::cxxqt_object::helpers_composite::{composite_regions, layer_image};
 use crate::cxxqt_object::tests::pixel_layer;
 use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PsdRect};
 use std::time::Instant;
@@ -99,6 +100,22 @@ fn move_gesture_profile() {
     ms("translate", t);
 
     let t = Instant::now();
-    view.apply_edit_move("Move Layer", Edit::regions(vec![dirty], false));
-    ms("commit edit", t);
+    let applied = view.apply_edit_move("Move Layer", Edit::regions(vec![dirty], false));
+    ms("commit edit (deferred)", t);
+    println!("commit deferred: {}", view.move_composite_pending());
+    drop(applied);
+
+    if let Some(job) = view.pending_move_job.take() {
+        let t = Instant::now();
+        let regions = composite_regions(&job.doc, &job.rects, job.gpu_compute);
+        ms("worker composite", t);
+        let t = Instant::now();
+        let landed = view.land_move_composite(job.generation, regions);
+        ms("landing (GUI)", t);
+        assert!(landed.is_some(), "the current job lands");
+    } else {
+        let t = Instant::now();
+        view.settle_move_composite();
+        ms("commit settle (synchronous)", t);
+    }
 }

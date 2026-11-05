@@ -217,6 +217,7 @@ pub(super) fn liquify_grid_lines(
 }
 
 pub(super) fn liquify_backdrop(mut view: Pin<&mut PictureView>, path: &QString) -> QImage {
+    view.as_mut().settle_pending_composite();
     let mut rust = view.as_mut().rust_mut();
     let gpu_compute = rust.gpu_compute;
     let Some(active) = rust.layer_target.single().map(str::to_string) else {

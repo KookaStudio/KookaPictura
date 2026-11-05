@@ -47,6 +47,26 @@ impl PictureViewRust {
         })
     }
 
+    /// Coarsen the current `level0` and leave the exact pyramid to a worker.
+    /// Used when a landed whole-document composite already replaced level 0,
+    /// so rebuilding it again would only repeat the conversion.
+    pub(in crate::cxxqt_object) fn defer_pyramid_from_level0(&mut self) -> Option<PyramidJob> {
+        let level = self.coarse_level()?;
+        let planes = self.level0.as_ref().and_then(planes_of)?;
+        self.pyramid = ViewPyramid::coarse(planes, level);
+        self.pyramid_generation = self.pyramid_generation.wrapping_add(1);
+        self.deferred_pyramid = Some(DeferredPyramid {
+            generation: self.pyramid_generation,
+            level,
+        });
+        self.canvas_revision = self.canvas_revision.wrapping_add(1);
+        self.frame_revision = self.frame_revision.wrapping_add(1);
+        Some(PyramidJob {
+            generation: self.pyramid_generation,
+            level0: self.level0.clone()?,
+        })
+    }
+
     /// Install a worker's `pyramid` unless a later reset superseded it.
     fn land_pyramid(&mut self, generation: u64, pyramid: ViewPyramid) -> bool {
         if self.deferred_pyramid.map(|d| d.generation) != Some(generation) {

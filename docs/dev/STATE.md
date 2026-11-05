@@ -4,6 +4,25 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Move commit composite off the GUI thread** (#1157, OpenSpec change
+  `move-commit-recomposite`). A Move commit whose document and dirty union each
+  reach 16 MP translates the layer and returns; a worker composites the dirty
+  rectangles and lands `doc.composite`, level 0, the pyramid and the move's
+  history state. The canvas keeps the drag preview until `moveCommitted`. Every
+  reader — edit, preview, Move press, undo/redo/jump, save, plain eyedropper
+  sample, filter proxy — settles the pending composite first, and `picture()`
+  treats it as stale. The Info panel's hover readout uses the non-settling
+  `composite_argb`, so a pointer move never blocks on a pending move. A landed
+  whole-document region installs a coarse pyramid and builds the exact pyramid
+  on a worker. Free Transform commits use the same deferred edit; the engine
+  resamples in parallel, pads the source with transparency so an opaque rotated
+  edge anti-aliases, and a layer rect at or above 4 MP runs the engine on a
+  worker, so the handles drop immediately while the image waits for
+  `moveCommitted`. A superseded job
+  or one whose document was replaced is dropped by generation. Smaller moves
+  stay synchronous. `move_gesture_profile` records the deferred commit, its
+  worker composite and its GUI landing.
+
 - **Occluded bands and shared history planes** (#1149, OpenSpec change
   `occluded-bands-and-shared-history`). The banded CPU compositor starts a band
   at the topmost plain opaque Normal layer when the stack below is provably
@@ -40,8 +59,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   sums, about twice as fast with the same output. `move_gesture_profile`, at half
   size per side: press 1.2–1.4 s to 57 ms at fit and 115 ms at 100 %. The
   view at the press is not followed through a pan or zoom mid-drag. The commit
-  still recomposites the moved area on the GUI thread (about 4.6 s at full size
-  for a canvas-sized layer), tracked in #1157.
+  defers its composite for large documents (#1157).
 
 - **Structural undo off the GUI thread** (#1098, OpenSpec change
   `structural-undo-responsiveness`). Undo and redo only go whole-document when

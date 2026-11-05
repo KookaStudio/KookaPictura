@@ -25,7 +25,7 @@ fn rect_of(dest: (i32, i32, i32, i32)) -> PsdRect {
 }
 
 /// Resample one native plane through `map` into `dest`.
-pub(super) fn resample_native<M: PlaneMap>(
+pub(super) fn resample_native<M: PlaneMap + Sync>(
     samples: &Samples,
     w: usize,
     h: usize,
@@ -84,7 +84,7 @@ fn resample_typed<M: PlaneMap, T: Sample>(
 /// Resample a layer's retained store through `map`; the `-2` mask plane uses the
 /// mask's own map and destination (`mask` is its old rect and new dest).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn resample_store<M: PlaneMap>(
+pub(super) fn resample_store<M: PlaneMap + Sync>(
     store: &SourceChannels,
     layer_w: usize,
     layer_h: usize,

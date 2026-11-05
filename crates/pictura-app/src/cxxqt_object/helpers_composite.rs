@@ -1,3 +1,4 @@
+use super::helpers::paint_timing;
 use cxx_qt_lib::{QImage, QImageFormat};
 use pictura_codec::buffer_to_srgb;
 use pictura_core::{BlendMode, Document, Layer, LayerMask, PixelBuffer, PsdRect};
@@ -6,6 +7,62 @@ use pictura_paint::stamp::{layer_surface, sample_scope, surface_from_composite, 
 use pictura_paint::Stroke;
 use pictura_render::{Planes, PyramidLevel};
 use pictura_select::Selection;
+use std::time::Instant;
+/// The pure half of a region refresh: the clamped origin, the working-space
+/// buffer and its straight-sRGB frame. Patching the view is the caller's.
+pub(super) struct RegionComposite {
+    pub(super) x0: i32,
+    pub(super) y0: i32,
+    pub(super) clipped: PsdRect,
+    pub(super) raw: PixelBuffer,
+    pub(super) srgb: PixelBuffer,
+}
+
+impl RegionComposite {
+    /// Whether the region covers the document, so it replaces the composite
+    /// instead of patching it.
+    pub(super) fn is_whole(&self, doc: &Document) -> bool {
+        self.x0 == 0
+            && self.y0 == 0
+            && self.clipped.width() == doc.width as i32
+            && self.clipped.height() == doc.height as i32
+    }
+}
+
+/// Composite each rectangle of `doc` without touching the view's composite
+/// cache. `None` entries are empty clamps. The document is cloned so the
+/// renderer can borrow it mutably; the clone shares its planes.
+pub(super) fn composite_regions(
+    doc: &Document,
+    rects: &[PsdRect],
+    gpu_compute: bool,
+) -> Vec<RegionComposite> {
+    let mut clone = doc.clone();
+    let mut cache = pictura_render::DocumentComposite::new(&mut clone);
+    let t = Instant::now();
+    let refreshed = cache.render(
+        pictura_render::CompositeScope::Regions(rects.to_vec()),
+        gpu_compute,
+    );
+    paint_timing::record("rr_composite_region", t.elapsed());
+    let t = Instant::now();
+    let out = refreshed
+        .into_iter()
+        .filter_map(|refreshed| {
+            let srgb = buffer_to_srgb(doc, &refreshed.buffer).into_owned();
+            (srgb.width > 0 && srgb.height > 0).then_some(RegionComposite {
+                x0: refreshed.rect.left,
+                y0: refreshed.rect.top,
+                clipped: refreshed.rect,
+                raw: refreshed.buffer,
+                srgb,
+            })
+        })
+        .collect();
+    paint_timing::record("rr_buffer_to_srgb", t.elapsed());
+    out
+}
+
 /// The `w × h` region of planar `buffer` at `(x0, y0)`, every channel kept.
 /// The caller clamps the region to the buffer.
 pub(super) fn crop_planar(buffer: &PixelBuffer, x0: i32, y0: i32, w: u32, h: u32) -> PixelBuffer {

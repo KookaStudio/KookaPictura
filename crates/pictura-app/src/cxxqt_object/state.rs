@@ -1,4 +1,4 @@
-use super::impl_core::DeferredPyramid;
+use super::impl_core::{DeferredComposite, DeferredPyramid, DeferredTransform, TransformJob};
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::{PixelBuffer, PsdRect};
@@ -91,6 +91,8 @@ pub struct PictureViewRust {
     /// only while this rect is unchanged.
     pub(super) move_prepared_union: Option<(i32, i32, i32, i32)>,
     pub(super) move_preview_cache_hit: bool,
+    /// A Move drag is down. A landing composite must not clear its preview.
+    pub(super) move_drag_active: bool,
     /// The last committed similarity transform, for `Edit > Transform > Again`.
     /// Projective and Warp commits clear it (they are not repeatable this way).
     pub(super) last_transform: Option<super::document_session::RepeatTransform>,
@@ -157,6 +159,24 @@ pub struct PictureViewRust {
     pub(super) pending_pyramid_job: Option<super::impl_core::PyramidJob>,
     /// Numbers each deferred build, so a superseded result is recognised.
     pub(super) pyramid_generation: u64,
+    /// The Move commit's composite waiting for its worker (#1157).
+    pub(super) deferred_composite: Option<DeferredComposite>,
+    /// The job the QObject spawns after the transaction returns.
+    pub(super) pending_move_job: Option<super::impl_core::CompositeJob>,
+    /// The transform engine running on a worker, if any.
+    pub(super) deferred_transform: Option<DeferredTransform>,
+    /// The engine job the QObject spawns after the commit returns.
+    pub(super) pending_transform_job: Option<TransformJob>,
+    /// Numbers each deferred transform, so a superseded result is recognised.
+    pub(super) transform_generation: u64,
+    /// Test seam: hold a started transform engine for this many milliseconds.
+    pub(super) transform_delay_for_test: u64,
+    /// Numbers each deferred Move composite, so a superseded result is
+    /// recognised.
+    pub(super) composite_generation: u64,
+    /// Test seam: hold a started Move composite's result for this many
+    /// milliseconds.
+    pub(super) move_composite_delay_for_test: u64,
     pub(super) link_sets: HashMap<String, u32>,
     /// The Ruler tool's measuring line: view state, never saved or undone.
     pub(super) ruler: Option<pictura_core::Ruler>,
@@ -245,6 +265,7 @@ impl Default for PictureViewRust {
             move_prepared_layer: String::new(),
             move_prepared_union: None,
             move_preview_cache_hit: false,
+            move_drag_active: false,
             last_transform: None,
             transform_controls: false,
             pending_previews: Default::default(),
@@ -279,6 +300,14 @@ impl Default for PictureViewRust {
             deferred_pyramid: None,
             pending_pyramid_job: None,
             pyramid_generation: 0,
+            deferred_composite: None,
+            pending_move_job: None,
+            composite_generation: 0,
+            deferred_transform: None,
+            pending_transform_job: None,
+            transform_generation: 0,
+            transform_delay_for_test: 0,
+            move_composite_delay_for_test: 0,
             link_sets: HashMap::new(),
             ruler: None,
             canvas_proxy: None,
