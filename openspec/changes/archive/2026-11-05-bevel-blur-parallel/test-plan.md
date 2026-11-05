@@ -1,0 +1,18 @@
+# Test plan
+
+All six scenarios have automated coverage implemented. See `verification.md`
+for the executed checks and measurements. Correctness checks and the final opt-in performance acceptance runs pass.
+Earlier slower measurements are retained for comparison.
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `bb_field_bits` | Blur deterministic uniform and nonuniform fields, including negative samples, at radii 0, 0.25, 1.5, 5, 250/3, and 250. Compare the former serial algorithm with the shared helper in one-worker and multi-worker pools. Include fields smaller than the kernel support. | Every output sample's `to_bits()` matches the serial reference, including edge samples. | `pictura-filters::gaussian_blur_f32_matches_serial` |
+| `bb_degenerate` | Run the serial reference and shared helper on 0x0, 0x7, 7x0, 1x1, 1x17, and 17x1 fields with short and long kernels. | Empty output for zero-area fields without panic; identical sample bits for nonempty fields. | `pictura-filters::gaussian_blur_f32_handles_degenerate_fields` |
+| `bb_distance` | Transform empty, fully seeded, and fixed asymmetric seed fields on 0x0, 1x17, 17x1, 37x23, and 97x61 shapes in one-worker and multi-worker pools. Compare against the former column-then-row serial transform. | Every distance sample's bits match. | `pictura-render::parallel_distance_transform_matches_former_serial` |
+| `bb_simd` | Accumulate fixed finite row values with several ordered weights, for lengths 0, 1, 3, 4, 7, 8, 9, 64, 97, and 1024. Exercise runtime-selected and portable functions for all three sample/accumulator type combinations. Run existing Gaussian kernel digests. | All accumulator bits match scalar expressions; existing filter bytes remain unchanged. | `pictura-filters::weighted_rows_match_scalar`, `pictura-filters::blur_matches_the_per_pixel_sum` |
+| `bb_composite` | Generate asymmetric masked bevel layers for Inner, Outer, Emboss, and Pillow across all three techniques, with softening off and on, on documents of at most 128 rows. Composite uncached cases through the scoped test-only former radius-taking blur and serial distance/shading, then through the replacement in one-worker and multi-worker pools. Select the reference before the new sigma conversion; clear caches and verify both paths execute. Include radii exposing omitted or duplicate conversion. Run the existing bevel, layer-effect, and filter regression suites. | Complete replacement composite buffers equal the independent former-blur buffers and each other across worker counts. The selector resets after its scope; existing checks pass without golden changes. | `pictura-render::bevel_blur_composites_match_former_serial`, `pictura-render::bevel_blur_composites_match_across_worker_counts`, `pictura-render::bevel_fixture_decodes_and_composites`, `pictura-render::every_effect_parallel_matches_serial`, `pictura-filters::blur_matches_the_per_pixel_sum` |
+| `bb_cold` | Explicitly run the ignored external-input profiling test in an optimized build with fixed worker count on the acceptance machine. Use a fresh process for each of three runs per revision. Read input from `PICTURA_BENCH_PSD`; time the first full CPU composite separately from read/decode. | Each changed-revision cold composite is under 4 seconds. Report all timings, profile, and worker count; omit the input identifier. | `pictura-render::bevel_cold_composite_profile` |
+
+No manual-only rows. The opt-in performance test needs a local input and the
+acceptance machine; its time limit is not a portable CI assertion. Record
+unavailability as missing performance evidence, never as a measured pass.
