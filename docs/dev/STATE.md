@@ -4,6 +4,31 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Cold styled composite latency** (#1179, OpenSpec change
+  `parallel-effect-passes`, with #1178 / PR #1221's exact kernel work).
+  Banded plans resolve ordered sibling nodes on Rayon through visible groups;
+  ordinary plan builders keep sequential layer scheduling. Passes survive cache
+  eviction through plan ownership. Exact SIMD Gaussian and parallel bevel
+  geometry are combined with resolved matte mask gates, bulk quantization,
+  parallel glow/bevel emission, and specialized row replay. The u8 Gaussian's
+  vertical pass now uses 16-row by 128-column tiles to keep tap working sets in
+  private cache while retaining every pixel's summation order.
+  On a supplied 4934x1500 workload, the production-library acceptance check with
+  16 workers has first-frame and median cold times of 808–990 ms across three
+  fresh processes and 165–194 ms warm, byte-identical to the original scalar
+  buffer. All first/median checks pass the 1000 ms ceiling; one later sample
+  reaches 1022 ms. Peak process RSS reaches about 1.46 GiB,
+  including retained allocations and reference/output buffers. Unit render
+  timings include per-pixel mask-counter contention; use the ignored integration
+  test `effect_cold_latency` for production acceptance. Scalar field, Gaussian
+  tile-edge, mask, replay, and full-composite tests preserve exact output.
+  Review corrections publish resolved feather planes without waiting during
+  nested Rayon work and release scalar sampling's thread-local borrow before
+  construction. Profiling requires an existing independent reference. Four new
+  regressions pass; a post-review acceptance rerun reaches 975 ms first and
+  856 ms median, with exact bytes. See the verification record for the earlier
+  slower timing attempt and test-isolation details.
+
 - **Move commit composite off the GUI thread** (#1157, OpenSpec change
   `move-commit-recomposite`). A Move commit whose document and dirty union each
   reach 16 MP translates the layer and returns; a worker composites the dirty
