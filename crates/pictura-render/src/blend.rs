@@ -4,6 +4,7 @@
 use pictura_core::nonseparable::{lum, sat, set_lum, set_sat};
 use pictura_core::BlendMode;
 
+#[inline]
 pub(crate) fn blend(mode: BlendMode, cb: [f32; 3], cs: [f32; 3]) -> [f32; 3] {
     match mode {
         BlendMode::Hue => set_lum(set_sat(cs, sat(cb)), lum(cb)),
@@ -32,6 +33,7 @@ pub(crate) fn blend(mode: BlendMode, cb: [f32; 3], cs: [f32; 3]) -> [f32; 3] {
     }
 }
 
+#[inline]
 fn sep(mode: BlendMode, cb: f32, cs: f32) -> f32 {
     match mode {
         BlendMode::Normal | BlendMode::Dissolve => cs,

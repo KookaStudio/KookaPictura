@@ -1,0 +1,30 @@
+# Tasks
+
+## 1. Banded preparation and its regression checks
+
+- [x] 1.1 Write `banded_effect_builds_overlap` and `banded_nested_effect_builds_overlap` using generated distinct-key fixtures on dedicated two-worker pools, actual pass-build observations, a bounded entry rendezvous, and a first-band observation; source review must show controlled overlap capability, once-per-layer resolution counts, preparation-before-replay assertions, and per-call preparation selection independent of global row-kernel flags, with no unbounded barrier.
+- [x] 1.2 Write `banded_hidden_subtrees_build_no_effects` and `banded_effect_preparation_one_worker`; source review must show hidden-child zero-work assertions, exact-pixel comparisons, and bounded completion with one worker.
+- [x] 1.3 Write `banded_multiple_effects_reuse_passes`, `banded_effect_passes_survive_eviction`, `banded_parallel_effect_edit_invalidates`, and `banded_shared_effect_key_completes_exactly`; source review must show distinct-key preconditions for exact physical build counts, eviction-safe plan retention with no per-band lookups, and a separate shared-key fixture accepting cache hits or duplicate builds while checking bounded completion, one resolution per layer, common published artifact identity while resident, and fresh-output equality. Use cache test guards and budget/observer cleanup guards.
+- [x] 1.4 Write `banded_parallel_effects_equal_serial_and_whole` and `non_banded_plans_keep_sequential_resolution`; source review must show exact full/offset-region comparisons, masks/clipping/groups, and unchanged scheduling for every non-banded builder named in the plan.
+- [x] 1.5 Write the ignored generated `banded_effect_preparation_profile`; source review must show per-call preparation-only selection, identical intra-layer settings and worker counts for the two modes, cache purges, unsynchronized actual build intervals, generic timing output, and byte-equality assertions. Run this profile alone for timing stability. Finish all planned test sources before implementing the new scheduling; do not compile yet.
+- [x] 1.6 Add the internal banded plan builder with ordered parallel sibling resolution through visible groups, a test-only per-call preparation selector, and the required observation hooks; verify by source inspection that the selector does not read or modify `composite_rows::FORCE_SERIAL`, ordinary builders retain sequential traversal, hidden nodes return before child scheduling, and resolved nodes retain their effect passes. Verify that shared-key lookup and publication still use the existing non-waiting cache behavior.
+- [x] 1.7 Switch only `composite_banded` to the banded builder and replace its obsolete warming comment; verify by source inspection that the plan completes before band 0, bands do not fetch/build passes, and the existing band scheduling, cache keys, synchronization, and effect math remain intact.
+
+## 2. Expanded latency goal
+
+- [x] 2.1 Integrate the exact Gaussian/bevel kernels and their scalar-oracle tests from PR #1221 as a local dependency; preserve its attribution and existing specifications. Add stage profiling and verify bit-identical fields and composites before further changes.
+- [x] 2.2 Write `prepared_effect_mattes_match_scalar` and `effect_row_replay_matches_scalar` and `gaussian_tiles_match_scalar_at_block_edges` before optimizing the measured residual stages. Profile the combined work and optimize remaining measured stages without changing arithmetic or resolution; add regression coverage for each touched kernel before implementing it. Verify exact bytes against the original reference.
+- [x] 2.3 Add and run production integration acceptance `effect_cold_latency`, avoiding unit-only per-pixel counters. Run the explicit workstation acceptance on the supplied workload: first and median cold composite must each take at most 1000 ms, with matching bytes, stated workers, warm latency, stage costs, and peak memory.
+
+## 3. Integration verification and performance acceptance
+
+- [x] 3.1 After all source changes are complete, compile the renderer test targets once using at most 80% of available CPUs, then run the new tests and the existing composite-plan, region, layer-effect, and cache suites; completion requires passing checks without golden changes, including worker reentrancy/panic tests. Rebuild only after fixing source errors.
+- [x] 3.2 Run the ignored synthetic profile in isolation and the manual row in test-plan.md; record generic workload characteristics, cold/warm timings, whether independent builds actually overlap, worker count, #1178 status, observed speed ratio, and peak memory. Investigate any miss of the at-most-1000-ms cold target without treating overlap as guaranteed for arbitrary workloads; keep all supplied input names, paths, and layer names out of committed artifacts and PR text.
+- [x] 3.3 Run formatting, Clippy, the test-plan guard, strict OpenSpec validation, and applicable repository gates after implementation; completion requires every planned coverage reference to resolve to its implemented test and all checks to pass.
+- [x] 3.4 Archive `parallel-effect-passes` in the shipping PR and include the test plan's manual reviewer checklist; verify strict OpenSpec validation, the archived-change guard, and that the archived plan/specs retain the same scenario coverage with generic profiling descriptions.
+
+## 4. Review corrections
+
+- [x] 4.1 Make feather-cache misses nonblocking during nested Rayon work, publish only resolved planes, and release scalar lookup's thread-local borrow before construction. Add bounded same-thread and stolen-half regressions plus exact shared-feather plain-layer composites.
+- [x] 4.2 Remove profiling reference auto-generation; require an existing independently generated baseline and cover missing/existing reference handling without changing baseline bytes.
+- [x] 4.3 After all review corrections are implemented, compile and run focused regressions, full affected suites, guards, and production latency acceptance against the existing independent reference; record actual results.

@@ -1,6 +1,7 @@
 use pictura_adjust::Adjustment;
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
+use rayon::prelude::*;
 
 use crate::composite::desc_item;
 
@@ -319,18 +320,25 @@ pub(super) fn build_inner_glow(
         return Vec::new();
     };
     let mut writer = PassWriter::constant(rect, glow.blend_mode, color);
-    for y in rect.top..rect.bottom {
-        for x in rect.left..rect.right {
-            let i = (y - py0) as usize * pw + (x - px0) as usize;
-            let field = match glow.source {
-                GlowSource::Edge => 1.0 - blurred[i],
-                GlowSource::Center => blurred[i],
-            };
-            let alpha = matte[i] * field * opacity * noise_factor(glow.noise, x, y);
-            if alpha > 0.0 {
-                writer.emit(x, y, color, alpha);
+    let rw = rect.width() as usize;
+    writer
+        .alpha_mut()
+        .par_chunks_mut(rw)
+        .enumerate()
+        .for_each(|(row, output)| {
+            let y = rect.top + row as i32;
+            for (column, out) in output.iter_mut().enumerate() {
+                let x = rect.left + column as i32;
+                let i = (y - py0) as usize * pw + (x - px0) as usize;
+                let field = match glow.source {
+                    GlowSource::Edge => 1.0 - blurred[i],
+                    GlowSource::Center => blurred[i],
+                };
+                let alpha = matte[i] * field * opacity * noise_factor(glow.noise, x, y);
+                if alpha > 0.0 {
+                    *out = alpha;
+                }
             }
-        }
-    }
+        });
     vec![writer.finish()]
 }
