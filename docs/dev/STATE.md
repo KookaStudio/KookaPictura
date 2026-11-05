@@ -14,9 +14,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   treats it as stale. The Info panel's hover readout uses the non-settling
   `composite_argb`, so a pointer move never blocks on a pending move. A landed
   whole-document region installs a coarse pyramid and builds the exact pyramid
-  on a worker. Free Transform commits use the same deferred edit, and the
-  engine resample now runs its output rows in parallel; the transform handles
-  drop immediately while the image waits for `moveCommitted`. A superseded job
+  on a worker. Free Transform commits use the same deferred edit; the engine
+  resamples in parallel and a layer rect at or above 4 MP runs the engine on a
+  worker, so the handles drop immediately while the image waits for
+  `moveCommitted`. A superseded job
   or one whose document was replaced is dropped by generation. Smaller moves
   stay synchronous. `move_gesture_profile` records the deferred commit, its
   worker composite and its GUI landing.
