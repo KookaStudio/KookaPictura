@@ -181,8 +181,12 @@ QList<ToolHint> toolHintEntries(ToolId id);
 bool activePixelLocked(PictureView* view);
 
 // Why a Gradient, Paint Bucket, Fill or Stroke was refused when
-// `fill_refused_for_memory()` says the memory gate refused it (#1207).
+// `edit_refused_for_memory()` says the memory gate refused it (#1207).
 QString fillMemoryRefusalMessage();
+// The same for a Move press or commit (#1207); defined in tool_move.cpp.
+QString moveMemoryRefusalMessage();
+// The same for a Free Transform commit (#1207); defined in tool_transform.cpp.
+QString transformMemoryRefusalMessage();
 
 // Routes canvas pointer events to the active tool. Implemented tools dispatch
 // through the handler registry; the legacy switch covers the rest.

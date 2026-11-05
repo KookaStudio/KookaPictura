@@ -6,8 +6,8 @@ use super::super::super::helpers::{
 use super::super::super::helpers_composite::crop_selection;
 use super::super::super::picture::picture;
 use super::super::super::PictureViewRust;
-use super::budget;
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::helpers::memory_gate as budget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;

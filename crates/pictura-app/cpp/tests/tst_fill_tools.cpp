@@ -547,28 +547,28 @@ void FillToolsTest::fillsRefuseWhatMemoryCannotHold()
     const Colors colors(f.tools, blue, Qt::white);
     const QRgb green = QColor(0, 128, 0).rgba();
     struct Restore {
-        ~Restore() { pictura::set_fill_available_memory_for_test(-1); }
+        ~Restore() { pictura::set_available_memory_for_test(-1); }
     } restore;
-    pictura::set_fill_available_memory_for_test(64);
+    pictura::set_available_memory_for_test(64);
 
     const int base = f.view->history_index();
     frame.setActiveTool(pictura::ToolId::PaintBucket);
     frame.statusBar()->clearMessage();
     f.drag({QPointF(5, 5)});
-    QVERIFY(pictura::fill_refused_for_memory());
+    QVERIFY(pictura::edit_refused_for_memory());
     QCOMPARE(frame.statusBar()->currentMessage(), pictura::fillMemoryRefusalMessage());
 
     frame.setActiveTool(pictura::ToolId::Gradient);
     f.drag({QPointF(0, 20), QPointF(39, 20)});
-    QVERIFY(pictura::fill_refused_for_memory());
+    QVERIFY(pictura::edit_refused_for_memory());
 
     QVERIFY(!pictura::edit_fill(*f.view, blue.rgba(), -1, QStringLiteral("normal"), 100, false));
-    QVERIFY(pictura::fill_refused_for_memory());
+    QVERIFY(pictura::edit_refused_for_memory());
 
     f.view->select_rect(10, 10, 10, 10, QStringLiteral("new"), 0.0);
     const int selected = f.view->history_index();
     QVERIFY(!pictura::edit_stroke(*f.view, blue.rgba(), 2, 1, QStringLiteral("normal"), 100));
-    QVERIFY(pictura::fill_refused_for_memory());
+    QVERIFY(pictura::edit_refused_for_memory());
     QCOMPARE(f.view->history_index(), selected);
     QCOMPARE(f.view->sample_argb(5, 5), green);
     QCOMPARE(f.view->sample_argb(20, 20), green);
@@ -576,10 +576,10 @@ void FillToolsTest::fillsRefuseWhatMemoryCannotHold()
     QVERIFY(f.view->history_index() >= base);
 
     // With the host's memory again, the same fill runs and clears the reason.
-    pictura::set_fill_available_memory_for_test(-1);
+    pictura::set_available_memory_for_test(-1);
     const int again = f.view->history_index();
     QVERIFY(pictura::edit_fill(*f.view, blue.rgba(), -1, QStringLiteral("normal"), 100, false));
-    QVERIFY(!pictura::fill_refused_for_memory());
+    QVERIFY(!pictura::edit_refused_for_memory());
     QVERIFY2(f.committedOnce(again, "Fill"), "one fill state");
     QCOMPARE(f.view->sample_argb(5, 5), blue.rgba());
 }

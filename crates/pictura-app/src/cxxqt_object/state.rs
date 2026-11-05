@@ -80,6 +80,10 @@ pub struct PictureViewRust {
     pub(super) move_layer: Option<QImage>,
     pub(super) move_x: i32,
     pub(super) move_y: i32,
+    /// Where a single pixel layer's moving image sits inside the layer's rect:
+    /// the image covers only the layer's content (#1207), so a cached preview
+    /// is placed at the moved rect plus this offset.
+    pub(super) move_layer_offset: (i32, i32),
     pub(super) move_opacity: i32,
     pub(super) move_prepared_revision: u64,
     /// The move-group key (its paths joined by `\n`) the move-preview base was
@@ -260,6 +264,7 @@ impl Default for PictureViewRust {
             move_layer: None,
             move_x: 0,
             move_y: 0,
+            move_layer_offset: (0, 0),
             move_opacity: 0,
             move_prepared_revision: 0,
             move_prepared_layer: String::new(),

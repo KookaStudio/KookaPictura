@@ -5,6 +5,7 @@
 
 #include "frame_includes.h"
 
+#include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
 
 namespace pictura {
@@ -170,6 +171,8 @@ void PicturaMainWindow::wireTransformMenu()
             }
             if (applied) {
                 refresh();
+            } else if (edit_refused_for_memory()) {
+                statusBar()->showMessage(transformMemoryRefusalMessage(), 6000);
             }
             return applied;
         });

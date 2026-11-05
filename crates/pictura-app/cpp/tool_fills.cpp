@@ -24,7 +24,7 @@ namespace {
 
 void reportRefusal(ToolServices& ctx, PictureView* v)
 {
-    if (fill_refused_for_memory()) {
+    if (edit_refused_for_memory()) {
         ctx.refused(fillMemoryRefusalMessage());
     } else if (activePixelLocked(v)) {
         ctx.refused(QObject::tr("Could not fill: the layer's pixels are locked."));

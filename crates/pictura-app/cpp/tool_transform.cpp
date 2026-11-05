@@ -5,6 +5,7 @@
 #include "image_view.h"
 
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
 
 #include <QtCore/QStringList>
@@ -319,6 +320,9 @@ void ToolController::commitFreeTransform()
     const bool committed = v->commit_transform();
     transformGuideSnap_ = false;
     resetTransformUi(committed);
+    if (edit_refused_for_memory()) {
+        refused(transformMemoryRefusalMessage());
+    }
 }
 
 void ToolController::cancelFreeTransform()
@@ -591,6 +595,12 @@ bool ToolController::setTransformWarpVertical(bool vertical)
     updateTransformOverlay(v);
     emit transformChanged();
     return true;
+}
+
+QString transformMemoryRefusalMessage()
+{
+    return QObject::tr("Could not transform: not enough memory. Make the result smaller, close "
+                       "other documents, or free memory and try again.");
 }
 
 } // namespace pictura

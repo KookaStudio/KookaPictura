@@ -467,6 +467,7 @@ impl PictureViewRust {
         self.move_layer = None;
         self.move_x = 0;
         self.move_y = 0;
+        self.move_layer_offset = (0, 0);
         self.move_opacity = 0;
         self.move_prepared_revision = 0;
         self.move_prepared_layer.clear();
@@ -503,6 +504,7 @@ impl PictureViewRust {
         self.move_layer = None;
         self.move_x = 0;
         self.move_y = 0;
+        self.move_layer_offset = (0, 0);
         self.move_opacity = 0;
         self.move_prepared_revision = 0;
         self.move_prepared_layer.clear();

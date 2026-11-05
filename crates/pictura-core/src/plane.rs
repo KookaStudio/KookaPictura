@@ -250,6 +250,12 @@ impl<T> Plane<T> {
         }
     }
 
+    /// Whether a contiguous copy of a diverged banded plane is cached: the
+    /// cost [`Self::as_slice`] leaves behind until the next write.
+    pub fn is_mirrored(&self) -> bool {
+        self.mirror.get().is_some()
+    }
+
     /// The logical length; never materializes a banded plane.
     pub fn len(&self) -> usize {
         self.base.len()

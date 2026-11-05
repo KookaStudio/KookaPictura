@@ -297,6 +297,7 @@ impl qobject::PictureView {
         rust.move_layer = Some(layer);
         rust.move_x = 0;
         rust.move_y = 0;
+        rust.move_layer_offset = (0, 0);
         rust.move_opacity = opacity;
         rust.move_prepared_revision = rust.session.content_revision;
         // The empty sentinel keeps the whole-layer cache from reusing this base.

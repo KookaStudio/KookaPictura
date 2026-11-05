@@ -34,12 +34,22 @@ pub fn available_memory() -> Option<u64> {
     host::available_memory()
 }
 
+/// The host's physical memory in bytes, or `None` when it cannot be read.
+pub fn total_memory() -> Option<u64> {
+    host::total_memory()
+}
+
 #[cfg(target_os = "linux")]
 mod host {
     /// `MemAvailable` from `/proc/meminfo`: the kernel's estimate of memory
     /// available to start new work, counting reclaimable cache.
     pub(super) fn available_memory() -> Option<u64> {
         super::mem_available(&std::fs::read_to_string("/proc/meminfo").ok()?)
+    }
+
+    /// `MemTotal` from `/proc/meminfo`.
+    pub(super) fn total_memory() -> Option<u64> {
+        super::meminfo_bytes(&std::fs::read_to_string("/proc/meminfo").ok()?, "MemTotal:")
     }
 }
 
@@ -71,6 +81,24 @@ mod host {
             + u64::from(stats.purgeable_count);
         Some(pages * page as u64)
     }
+
+    /// `hw.memsize`: the physical memory installed.
+    pub(super) fn total_memory() -> Option<u64> {
+        let mut bytes: u64 = 0;
+        let mut len = std::mem::size_of::<u64>();
+        // SAFETY: the name is NUL-terminated and `bytes`/`len` describe a
+        // `u64` buffer, which is what `hw.memsize` returns.
+        let status = unsafe {
+            libc::sysctlbyname(
+                c"hw.memsize".as_ptr(),
+                (&mut bytes as *mut u64).cast(),
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        (status == 0 && bytes > 0).then_some(bytes)
+    }
 }
 
 #[cfg(windows)]
@@ -85,6 +113,14 @@ mod host {
         status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
         (unsafe { GlobalMemoryStatusEx(&mut status) } != 0).then_some(status.ullAvailPhys)
     }
+
+    /// `ullTotalPhys`: the physical memory installed.
+    pub(super) fn total_memory() -> Option<u64> {
+        // SAFETY: as in `available_memory`.
+        let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+        status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        (unsafe { GlobalMemoryStatusEx(&mut status) } != 0).then_some(status.ullTotalPhys)
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
@@ -92,13 +128,23 @@ mod host {
     pub(super) fn available_memory() -> Option<u64> {
         None
     }
+
+    pub(super) fn total_memory() -> Option<u64> {
+        None
+    }
 }
 
 /// The `MemAvailable` line of a `/proc/meminfo` text, in bytes.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn mem_available(meminfo: &str) -> Option<u64> {
-    let line = meminfo.lines().find(|l| l.starts_with("MemAvailable:"))?;
-    let mut fields = line["MemAvailable:".len()..].split_whitespace();
+    meminfo_bytes(meminfo, "MemAvailable:")
+}
+
+/// The `key` line (`"MemTotal:"`, …) of a `/proc/meminfo` text, in bytes.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn meminfo_bytes(meminfo: &str, key: &str) -> Option<u64> {
+    let line = meminfo.lines().find(|l| l.starts_with(key))?;
+    let mut fields = line[key.len()..].split_whitespace();
     let kib: u64 = fields.next()?.parse().ok()?;
     (fields.next() == Some("kB")).then(|| kib.saturating_mul(1024))
 }
@@ -203,12 +249,15 @@ mod tests {
         assert_eq!(mem_available(text), Some(22_298_680 * 1024));
         assert_eq!(mem_available("MemTotal: 5 kB\n"), None);
         assert_eq!(mem_available("MemAvailable: lots\n"), None);
+        assert_eq!(meminfo_bytes(text, "MemTotal:"), Some(32_000_000 * 1024));
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     #[test]
     fn the_host_reports_available_memory() {
         assert!(available_memory().is_some_and(|bytes| bytes > 0));
+        let total = total_memory().expect("the host's total memory");
+        assert!(available_memory().is_some_and(|available| available <= total));
     }
 
     #[test]

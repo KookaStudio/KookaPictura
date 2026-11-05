@@ -6,11 +6,10 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
-mod budget;
 mod imp;
 
+use super::super::helpers::memory_gate::{edit_refused_for_memory, set_available_memory_for_test};
 use super::super::qobject::PictureView;
-use budget::{fill_refused_for_memory, set_fill_available_memory_for_test};
 pub(crate) use imp::*;
 
 #[cxx_qt::bridge]
@@ -120,13 +119,14 @@ pub mod ffi {
             opacity: i32,
         ) -> bool;
 
-        /// Whether the last Gradient, Paint Bucket, Fill or Stroke was refused
-        /// because its estimated peak did not fit three quarters of the memory
+        /// Whether the last gated edit (Gradient, Paint Bucket, Fill, Stroke,
+        /// a Move press or commit, a Free Transform commit) was refused because
+        /// its estimated peak did not fit three quarters of the memory
         /// available, rather than for its layer or its input.
-        fn fill_refused_for_memory() -> bool;
+        fn edit_refused_for_memory() -> bool;
 
-        /// Test hook: make the fills see `bytes` of available memory; a
+        /// Test hook: make the gated edits see `bytes` of available memory; a
         /// negative value reads the host again.
-        fn set_fill_available_memory_for_test(bytes: i64);
+        fn set_available_memory_for_test(bytes: i64);
     }
 }

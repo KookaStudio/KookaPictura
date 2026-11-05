@@ -209,7 +209,7 @@ void PicturaMainWindow::registerEditHandlers()
             command.values.insert(QStringLiteral("preserveTransparency"),
                                   dialog.preserveTransparency());
             registry_->recordCommand(command_ids::EditFill, command);
-        } else if (fill_refused_for_memory()) {
+        } else if (edit_refused_for_memory()) {
             statusBar()->showMessage(fillMemoryRefusalMessage(), 6000);
         }
     });
@@ -248,7 +248,7 @@ void PicturaMainWindow::registerEditHandlers()
         if (edit_stroke(*view, uint32_t(argb), dialog.strokeWidth(), dialog.location(),
                         dialog.blendMode(), dialog.opacity())) {
             refresh();
-        } else if (fill_refused_for_memory()) {
+        } else if (edit_refused_for_memory()) {
             statusBar()->showMessage(fillMemoryRefusalMessage(), 6000);
         }
     });

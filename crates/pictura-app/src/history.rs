@@ -6,6 +6,7 @@ use pictura_select::Selection;
 use std::cell::RefCell;
 use std::sync::Arc;
 
+mod budget;
 mod planes;
 mod styles;
 
@@ -131,6 +132,9 @@ pub struct History {
     pinned_id: Option<u64>,
     brush_cache: BrushCache,
     current_target: LayerTarget,
+    /// The byte cap a test sets in place of the host's (see `budget`).
+    #[cfg(test)]
+    byte_cap: Option<usize>,
 }
 
 const MAX_DEPTH: usize = 20;
@@ -312,13 +316,20 @@ impl History {
         });
         self.cursor = self.states.len() - 1;
         while self.states.len() > MAX_DEPTH + 1 {
-            match self.brush_source {
-                BrushSource::Oldest | BrushSource::State(0) => self.pin_source(),
-                BrushSource::State(i) => self.brush_source = BrushSource::State(i - 1),
-                _ => {}
-            }
-            self.drop_oldest();
+            self.drop_oldest_state();
         }
+        self.enforce_byte_cap(doc);
+    }
+
+    /// Drop the oldest state, pinning the History Brush's source first when
+    /// it is that state.
+    fn drop_oldest_state(&mut self) {
+        match self.brush_source {
+            BrushSource::Oldest | BrushSource::State(0) => self.pin_source(),
+            BrushSource::State(i) => self.brush_source = BrushSource::State(i - 1),
+            _ => {}
+        }
+        self.drop_oldest();
     }
 
     pub fn undo(&mut self) -> Option<Snapshot> {
