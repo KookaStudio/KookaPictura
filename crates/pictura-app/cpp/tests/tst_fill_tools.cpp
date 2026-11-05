@@ -20,6 +20,8 @@
 
 #include "qt_test_support.h"
 
+#include <QtWidgets/QStatusBar>
+
 namespace {
 using paint_fixture::BrushState;
 using paint_fixture::Fixture;
@@ -63,6 +65,8 @@ private slots:
     void strokeCommandOnADepth16Document();
     void paintBucketOnADepth16Document();
     void gradientOnADepth16Document();
+    void paintBucketStaysInsideItsSelection();
+    void fillsRefuseWhatMemoryCannotHold();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -492,6 +496,92 @@ void FillToolsTest::gradientOnADepth16Document()
     f.drag({QPointF(0, 0), QPointF(20, 0)});
     QVERIFY2(f.committedOnce(base, "Gradient"), "one gradient state");
     QCOMPARE(f.view->sample_argb(0, 0), QColor(Qt::black).rgba());
+}
+
+// The selection is a wall for the contiguous flood: two selected rooms on one
+// white field, joined by white outside the selection, fill one at a time.
+void FillToolsTest::paintBucketStaysInsideItsSelection()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 20, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_bucket_wall"));
+    QVERIFY2(f.ok(), "bucket fixture");
+    const QColor blue(0, 0, 255);
+    const Colors colors(f.tools, blue, Qt::white);
+    frame.setActiveTool(pictura::ToolId::PaintBucket);
+
+    f.view->select_rect(2, 2, 10, 10, QStringLiteral("new"), 0.0);
+    f.view->select_rect(25, 2, 10, 10, QStringLiteral("add"), 0.0);
+    const int base = f.view->history_index();
+    f.drag({QPointF(5, 5)});
+    QVERIFY2(f.committedOnce(base, "Paint Bucket"), "one bucket state");
+    QCOMPARE(f.view->sample_argb(5, 5), blue.rgba());
+    QCOMPARE(f.view->sample_argb(2, 2), blue.rgba());
+    QCOMPARE(f.view->sample_argb(11, 11), blue.rgba());
+    QCOMPARE(f.view->sample_argb(30, 5), QColor(Qt::white).rgba());
+    QCOMPARE(f.view->sample_argb(18, 5), QColor(Qt::white).rgba());
+
+    // Contiguous off reaches the other room, and still not the gap.
+    auto* contiguous = frame.findChild<QCheckBox*>(QStringLiteral("optionsBucketContiguous"));
+    QVERIFY(contiguous);
+    contiguous->setChecked(false);
+    f.tools->setForeground(Qt::black);
+    f.drag({QPointF(30, 5)});
+    contiguous->setChecked(true);
+    QCOMPARE(f.view->sample_argb(30, 5), QColor(Qt::black).rgba());
+    QCOMPARE(f.view->sample_argb(18, 5), QColor(Qt::white).rgba());
+    f.view->deselect();
+}
+
+// A fill whose estimated peak exceeds three quarters of the memory available
+// is refused with a reason, records nothing, and the next fill that fits runs.
+void FillToolsTest::fillsRefuseWhatMemoryCannotHold()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(0, 128, 0));
+    Fixture f(frame, seed, QStringLiteral("pictura_fill_budget"));
+    QVERIFY2(f.ok(), "budget fixture");
+    const QColor blue(0, 0, 255);
+    const Colors colors(f.tools, blue, Qt::white);
+    const QRgb green = QColor(0, 128, 0).rgba();
+    struct Restore {
+        ~Restore() { pictura::set_available_memory_for_test(-1); }
+    } restore;
+    pictura::set_available_memory_for_test(64);
+
+    const int base = f.view->history_index();
+    frame.setActiveTool(pictura::ToolId::PaintBucket);
+    frame.statusBar()->clearMessage();
+    f.drag({QPointF(5, 5)});
+    QVERIFY(pictura::edit_refused_for_memory());
+    QCOMPARE(frame.statusBar()->currentMessage(), pictura::fillMemoryRefusalMessage());
+
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    f.drag({QPointF(0, 20), QPointF(39, 20)});
+    QVERIFY(pictura::edit_refused_for_memory());
+
+    QVERIFY(!pictura::edit_fill(*f.view, blue.rgba(), -1, QStringLiteral("normal"), 100, false));
+    QVERIFY(pictura::edit_refused_for_memory());
+
+    f.view->select_rect(10, 10, 10, 10, QStringLiteral("new"), 0.0);
+    const int selected = f.view->history_index();
+    QVERIFY(!pictura::edit_stroke(*f.view, blue.rgba(), 2, 1, QStringLiteral("normal"), 100));
+    QVERIFY(pictura::edit_refused_for_memory());
+    QCOMPARE(f.view->history_index(), selected);
+    QCOMPARE(f.view->sample_argb(5, 5), green);
+    QCOMPARE(f.view->sample_argb(20, 20), green);
+    f.view->deselect();
+    QVERIFY(f.view->history_index() >= base);
+
+    // With the host's memory again, the same fill runs and clears the reason.
+    pictura::set_available_memory_for_test(-1);
+    const int again = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, blue.rgba(), -1, QStringLiteral("normal"), 100, false));
+    QVERIFY(!pictura::edit_refused_for_memory());
+    QVERIFY2(f.committedOnce(again, "Fill"), "one fill state");
+    QCOMPARE(f.view->sample_argb(5, 5), blue.rgba());
 }
 
 QTEST_MAIN(FillToolsTest)

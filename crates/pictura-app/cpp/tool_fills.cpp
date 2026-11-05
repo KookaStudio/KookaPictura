@@ -24,7 +24,9 @@ namespace {
 
 void reportRefusal(ToolServices& ctx, PictureView* v)
 {
-    if (activePixelLocked(v)) {
+    if (edit_refused_for_memory()) {
+        ctx.refused(fillMemoryRefusalMessage());
+    } else if (activePixelLocked(v)) {
         ctx.refused(QObject::tr("Could not fill: the layer's pixels are locked."));
     } else if (!v->active_layer_visible()) {
         ctx.refused(QObject::tr("Could not fill: the active layer is invisible."));
@@ -151,6 +153,12 @@ private:
 };
 
 } // namespace
+
+QString fillMemoryRefusalMessage()
+{
+    return QObject::tr("Could not fill: not enough memory. Make a smaller selection, close "
+                       "other documents, or free memory and try again.");
+}
 
 std::unique_ptr<ToolHandler> makeGradientToolHandler(std::shared_ptr<GradientGroup> gradient)
 {

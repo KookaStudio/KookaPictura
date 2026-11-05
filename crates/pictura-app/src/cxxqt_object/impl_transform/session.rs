@@ -11,10 +11,11 @@ use super::{
     move_group_union, move_origin_opacity, rendered_move_group, translate_move_group,
 };
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::helpers::memory_gate;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QRect, QString};
-use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags};
+use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags, PsdRect};
 use pictura_render::Interpolation;
 
 /// A transform whose layer rect reaches this area runs its engine on a worker.
@@ -286,6 +287,7 @@ impl qobject::PictureView {
     /// identity transform or warp records nothing; an engine refusal records
     /// nothing. The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
+        memory_gate::clear();
         let Some((
             path,
             projective,
@@ -335,7 +337,7 @@ impl qobject::PictureView {
             None if projective => unmoved(),
             None => params.is_identity(),
         };
-        if identity {
+        if identity || !memory_gate::admit(transform_commit_bytes(&preview_quad, orig_rect)) {
             self.as_mut().drop_transform_session();
             self.as_mut().clear_transform_preview();
             return false;
@@ -536,6 +538,24 @@ impl qobject::PictureView {
     }
 }
 
+/// What a transform commit holds at its peak: the transformed layer's four
+/// planes over the quad's box, and the composite of the box before and after
+/// with its sRGB copy and display patch.
+fn transform_commit_bytes(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> u64 {
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for &(x, y) in quad {
+        (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+    }
+    let clamp = |v: f64| v.clamp(i32::MIN as f64 / 2.0, i32::MAX as f64 / 2.0) as i32;
+    let out = PsdRect {
+        top: clamp(y0.floor()),
+        left: clamp(x0.floor()),
+        bottom: clamp(y1.ceil()),
+        right: clamp(x1.ceil()),
+    };
+    4 * memory_gate::area(out) + 12 * memory_gate::area(out.union(orig_rect))
+}
+
 impl qobject::PictureView {
     /// Cache the base composite (every move-group layer hidden), the moving
     /// image, its document-space origin, and opacity. One region composite at
@@ -544,6 +564,7 @@ impl qobject::PictureView {
     /// Reuses the cached base when the content revision and move-group key
     /// match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
+        memory_gate::clear();
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
@@ -560,8 +581,9 @@ impl qobject::PictureView {
                     .as_ref()
                     .and_then(|doc| move_origin_opacity(doc, &paths))
                     .unwrap_or((0, 0, 0));
-                rust.move_x = x;
-                rust.move_y = y;
+                let (ox, oy) = rust.move_layer_offset;
+                rust.move_x = x + ox;
+                rust.move_y = y + oy;
                 rust.move_opacity = opacity;
                 rust.move_preview_cache_hit = true;
                 rust.move_drag_active = true;
@@ -714,6 +736,7 @@ impl qobject::PictureView {
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
+        let mut offset = (0, 0);
         let moving = if let [path] = paths.as_slice() {
             let Some(layer) = pictura_render::resolve_path(doc, path) else {
                 return false;
@@ -723,7 +746,18 @@ impl qobject::PictureView {
             if pictura_render::is_shape_layer(layer) {
                 rendered_layer_image(doc, path, gpu_compute)
             } else {
-                layer_image(layer).map(|image| (image, layer.rect.left, layer.rect.top))
+                // A painted layer's rect is often the whole canvas around a
+                // small mark: the moving image covers the mark (#1207).
+                let rect = pictura_render::content_rect(doc, path)
+                    .and_then(|content| content.intersect(layer.rect))
+                    .unwrap_or(layer.rect);
+                // The planar copy, its RGBA bytes, the image, and the copy the
+                // canvas takes of it.
+                if !memory_gate::admit(16 * memory_gate::area(rect)) {
+                    return false;
+                }
+                offset = (rect.left - layer.rect.left, rect.top - layer.rect.top);
+                layer_image_within(layer, rect).map(|image| (image, rect.left, rect.top))
             }
         } else {
             rendered_move_group(doc, &paths, gpu_compute)
@@ -748,6 +782,7 @@ impl qobject::PictureView {
         rust.move_layer = Some(layer_image);
         rust.move_x = x;
         rust.move_y = y;
+        rust.move_layer_offset = offset;
         rust.move_opacity = opacity;
         rust.move_prepared_revision = rust.session.content_revision;
         rust.move_prepared_layer = move_group_key(&paths);
@@ -823,6 +858,7 @@ impl qobject::PictureView {
         rust.move_layer = None;
         rust.move_x = 0;
         rust.move_y = 0;
+        rust.move_layer_offset = (0, 0);
         rust.move_opacity = 0;
         rust.move_prepared_revision = 0;
         rust.move_prepared_layer.clear();
@@ -832,6 +868,7 @@ impl qobject::PictureView {
     }
 
     pub fn commit_move(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
+        memory_gate::clear();
         if dx == 0 && dy == 0 {
             return false;
         }
@@ -843,7 +880,13 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
-            translate_move_group(doc, &paths, dx, dy)
+            let dirty = translate_move_group(doc, &paths, dx, dy);
+            // The damage's composite, its sRGB copy, and the display patch.
+            if dirty.is_some_and(|rect| !memory_gate::admit(12 * memory_gate::area(rect))) {
+                translate_move_group(doc, &paths, -dx, -dy);
+                return false;
+            }
+            dirty
         };
         let Some(dirty) = dirty else {
             return false;
@@ -1033,158 +1076,7 @@ impl PictureViewRust {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::super::document_session::{TransformMode, TransformSession};
-    use super::super::geometry::{pivot_point, rect_center, set_pivot, source_corners};
-    use super::*;
-    use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
-    use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
-    use pictura_render::Interpolation;
-
-    #[test]
-    fn the_selection_test_agrees_with_the_lift_coverage() {
-        let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight));
-        let mut corner = vec![0u8; 64];
-        corner[63] = 1;
-        let cases = [
-            None,
-            Some((8, 8, vec![0u8; 64])),
-            Some((8, 8, corner)),
-            Some((8, 8, vec![255u8; 64])),
-            Some((4, 4, vec![255u8; 16])),
-        ];
-        for (i, case) in cases.into_iter().enumerate() {
-            rust.session.selection = case.map(|(width, height, data)| pictura_select::Selection {
-                width,
-                height,
-                data: data.into(),
-            });
-            assert_eq!(
-                selection_covers(&rust),
-                lift_coverage(&rust).is_some(),
-                "case {i}"
-            );
-        }
-    }
-
-    fn transform_session(rect: PsdRect) -> TransformSession {
-        TransformSession {
-            path: "0".to_string(),
-            orig_rect: rect,
-            scale_x: 1.0,
-            scale_y: 1.0,
-            angle: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            handle: -1,
-            press_x: 0.0,
-            press_y: 0.0,
-            start: [1.0, 1.0, 0.0, 0.0, 0.0],
-            dragging: false,
-            mode: TransformMode::Free,
-            type_layer: false,
-            quad: None,
-            base_quad: None,
-            free_perspective: false,
-            free_distort: false,
-            free_skew: false,
-            perspective_side: None,
-            start_quad: source_corners(rect),
-            pivot: rect_center(rect),
-            pivot_origin: rect_center(rect),
-            start_pivot: rect_center(rect),
-            show_pivot: true,
-            skew_x: 0.0,
-            skew_y: 0.0,
-            interpolation: Interpolation::Bicubic,
-            warp: None,
-            warp_drag: None,
-            warp_editing: false,
-            warp_post: None,
-            lifted: None,
-            untrimmed: None,
-            history_label: "Free Transform".to_string(),
-        }
-    }
-
-    #[test]
-    fn repeatable_transform_records_the_source_pivot() {
-        let rect = PsdRect {
-            left: 0,
-            top: 0,
-            right: 10,
-            bottom: 10,
-        };
-        let mut session = transform_session(rect);
-        // A translated session takes a document pivot at the origin; the
-        // stored source point is its inverse, and the recorded offset is in
-        // the source frame, not the translated document frame.
-        session.dx = 5.0;
-        session.dy = 5.0;
-        assert!(set_pivot(&mut session, 0.0, 0.0));
-        assert_eq!(session.pivot, (-5.0, -5.0));
-        assert_eq!(pivot_point(&session), (0.0, 0.0));
-        let repeat = repeatable_transform(&session).expect("repeatable");
-        assert_eq!(repeat.pivot_offset, (-10.0, -10.0));
-    }
-
-    #[test]
-    fn a_shape_preview_ignores_empty_channels() {
-        let mut doc = Document::new(40, 30, ColorMode::Rgb, BitDepth::Eight);
-        let outline = outline_in_box(
-            ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
-            (4.0, 4.0, 24.0, 20.0),
-        )
-        .expect("outline");
-        let path =
-            pictura_render::add_shape_layer(&mut doc, "", [0, 0, 0, 255], "Shape", &outline, None);
-        assert!(!path.is_empty());
-        // A PSD shape layer may carry empty pixel channels: its visible fill
-        // comes from the descriptor and vector mask, not the channels.
-        let plane = (doc.width * doc.height) as usize;
-        let layer = pictura_render::resolve_path_mut(&mut doc, &path).expect("shape");
-        layer.channels = [0, 1, 2, -1]
-            .into_iter()
-            .map(|id| Channel {
-                id,
-                data: vec![0; plane].into(),
-            })
-            .collect();
-
-        let TransformPreview {
-            image: preview,
-            x,
-            y,
-            ..
-        } = build_transform_preview(&doc, &path, false, false).expect("shape preview");
-        assert_eq!((x, y), (0, 0));
-        let filled = (0..preview.height()).any(|py| {
-            (0..preview.width()).any(|px| {
-                let c = preview.pixel_color(px, py);
-                c.alpha() > 200 && c.red() < 20 && c.green() < 20 && c.blue() < 20
-            })
-        });
-        assert!(filled, "the shape's fill is in the preview layer");
-    }
-
-    #[test]
-    fn a_shape_layer_is_a_transform_target_unless_position_locked() {
-        let mut doc = Document::new(40, 30, ColorMode::Rgb, BitDepth::Eight);
-        let outline = outline_in_box(
-            ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
-            (4.0, 4.0, 24.0, 20.0),
-        )
-        .expect("outline");
-        let path =
-            pictura_render::add_shape_layer(&mut doc, "", [0, 0, 0, 255], "Shape", &outline, None);
-        assert!(can_free_transform(&doc, &path));
-        pictura_render::resolve_path_mut(&mut doc, &path)
-            .expect("shape")
-            .lock = LockFlags::default().with(LockFlags::POSITION, true);
-        assert!(!can_free_transform(&doc, &path));
-    }
-}
+mod tests;
 
 #[cfg(test)]
 mod cow_tests;

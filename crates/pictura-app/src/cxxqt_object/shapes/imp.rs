@@ -256,7 +256,7 @@ pub(super) fn shape_fill_pixels(
                 doc,
                 path,
                 bounds,
-                &mask,
+                Some(&mask),
                 paint,
                 PaintMode::Normal,
                 1.0,

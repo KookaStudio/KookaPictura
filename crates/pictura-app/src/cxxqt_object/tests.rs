@@ -1305,3 +1305,5 @@ fn output_format_classification_matches_suffix() {
 
     assert_eq!(super::PictureViewRust::default().source_format, "psd");
 }
+
+mod move_memory;

@@ -5,6 +5,7 @@ use pictura_core::{
 use pictura_paint::{PaintMode, Rgba};
 use pictura_select::CombineMode;
 
+pub(super) mod memory_gate;
 pub(super) mod safe_io;
 
 /// Whether a `width` × `height` document at `bits` per channel fits the default

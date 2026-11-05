@@ -1,7 +1,9 @@
 // Structural-edit damage bounds: a bounded delete/reorder/group emits one
 // region update, an unbounded edit rebuilds the canvas (#970). A shape layer's
 // Move and Path Selection drag refresh only the shape's reach, the drag on
-// its release (#1185).
+// its release (#1185). A painted mark on a canvas-sized layer moves at the
+// mark's size, and a Move or Free Transform that cannot fit in memory is
+// refused (#1207).
 
 #include <QtTest/QtTest>
 #include <QtTest/QSignalSpy>
@@ -15,6 +17,8 @@
 #include "frame.h"
 
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -32,9 +36,12 @@ private slots:
     void maskFeatherPreviewEmitsOneRegion();
     void shapeMoveIsBoundedToTheShape();
     void shapePathDragRefreshesItsReach();
+    void paintedMoveIsBoundedToTheMark();
+    void moveAndTransformRefuseWhatMemoryCannotHold();
 
 private:
     bool newDoc(int width, int height);
+    QString addMark();
     QString addShape(int x0, int y0, int x1, int y1);
 
     pictura::test::ScopedStateHome stateHome_;
@@ -202,6 +209,94 @@ void DamageBoundsTest::shapePathDragRefreshesItsReach()
              "the release refreshes the shape before and after, not the canvas");
     QCOMPARE(view_->sample_argb(100, 80), kShapeRed);
     QCOMPARE(view_->sample_argb(45, 45), kPaper);
+}
+
+// A black 40×40 mark at (40, 40) on a new canvas-sized layer; its path.
+QString DamageBoundsTest::addMark()
+{
+    const int index = view_->add_layer(0);
+    const QString path = QString::number(index);
+    view_->set_active_layer(path);
+    view_->select_rect(40, 40, 40, 40, QStringLiteral("new"), 0.0);
+    if (!pictura::edit_fill(*view_, QColor(Qt::black).rgba(), -1, QStringLiteral("normal"), 100,
+                            false)) {
+        return {};
+    }
+    view_->deselect();
+    QCoreApplication::processEvents();
+    return path;
+}
+
+void DamageBoundsTest::paintedMoveIsBoundedToTheMark()
+{
+    QVERIFY(newDoc(800, 600));
+    QVERIFY(!addMark().isEmpty());
+    const QRgb black = QColor(Qt::black).rgba();
+    QVERIFY(view_->begin_move_preview());
+    QCOMPARE(view_->move_preview_x(), 40);
+    QCOMPARE(view_->move_preview_y(), 40);
+    QCOMPARE(view_->move_preview_layer().size(), QSize(40, 40));
+
+    QSignalSpy damaged(view_, &pictura::PictureView::regionDamaged);
+    view_->end_move_preview();
+    QVERIFY(view_->commit_move(30, 20));
+    QTRY_VERIFY(damaged.count() >= 1);
+    const QSize reach = lastDamage(damaged);
+    QVERIFY2(reach.width() <= 80 && reach.height() <= 80,
+             "the commit refreshes the mark before and after, not the canvas");
+    QTRY_COMPARE(view_->sample_argb(100, 80), black);
+    QCOMPARE(view_->sample_argb(45, 45), kPaper);
+
+    // The cached preview follows the moved layer.
+    QVERIFY(view_->begin_move_preview());
+    QVERIFY(view_->move_preview_cache_hit());
+    QCOMPARE(view_->move_preview_x(), 70);
+    QCOMPARE(view_->move_preview_y(), 60);
+    view_->end_move_preview();
+}
+
+void DamageBoundsTest::moveAndTransformRefuseWhatMemoryCannotHold()
+{
+    QVERIFY(newDoc(800, 600));
+    const QString path = addMark();
+    QVERIFY(!path.isEmpty());
+    const QRgb black = QColor(Qt::black).rgba();
+    struct Restore {
+        ~Restore() { pictura::set_available_memory_for_test(-1); }
+    } restore;
+    const int base = view_->history_index();
+
+    pictura::set_available_memory_for_test(64);
+    QVERIFY(!view_->begin_move_preview());
+    QVERIFY(pictura::edit_refused_for_memory());
+
+    // A press that fits, then a commit that does not: the layer stays put.
+    pictura::set_available_memory_for_test(-1);
+    QVERIFY(view_->begin_move_preview());
+    QVERIFY(!pictura::edit_refused_for_memory());
+    view_->end_move_preview();
+    pictura::set_available_memory_for_test(64);
+    QVERIFY(!view_->commit_move(30, 20));
+    QVERIFY(pictura::edit_refused_for_memory());
+    QCOMPARE(view_->history_index(), base);
+    QCOMPARE(view_->sample_argb(45, 45), black);
+    QCOMPARE(view_->sample_argb(100, 80), kPaper);
+
+    // A transform commit that does not fit is dropped; the layer is as it was.
+    pictura::set_available_memory_for_test(-1);
+    QVERIFY(view_->begin_free_transform(path));
+    QVERIFY(pictura::transform_apply(*view_, QStringLiteral("flipHorizontal")));
+    pictura::set_available_memory_for_test(64);
+    QVERIFY(!view_->commit_transform());
+    QVERIFY(pictura::edit_refused_for_memory());
+    QVERIFY(!view_->transform_session_active());
+    QCOMPARE(view_->history_index(), base);
+    QCOMPARE(view_->sample_argb(45, 45), black);
+
+    pictura::set_available_memory_for_test(-1);
+    QVERIFY(view_->commit_move(30, 20));
+    QVERIFY(!pictura::edit_refused_for_memory());
+    QTRY_COMPARE(view_->sample_argb(100, 80), black);
 }
 
 QTEST_MAIN(DamageBoundsTest)

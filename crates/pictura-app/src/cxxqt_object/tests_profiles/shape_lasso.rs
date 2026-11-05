@@ -125,7 +125,7 @@ fn shape_lasso_profile() {
         &mut filled,
         "0",
         bounds,
-        &mask,
+        Some(&mask),
         red,
         PaintMode::Normal,
         1.0,

@@ -15,7 +15,7 @@
 //! interpolation space, the dither, and the preset stops are photorust's, not
 //! Adobe's.
 
-use crate::fill::{fill_layer, pixel_noise, Alpha};
+use crate::fill::{fill_layer_within, pixel_noise, Alpha};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
 use pictura_core::{ColorMode, Document, PsdRect};
@@ -214,9 +214,11 @@ const DITHER_LEVELS: f32 = 0.5;
 /// Draw `gradient` over the pixel layer at `path` along the drag from `start`
 /// to `end` (document space), through `selection` (a document-sized coverage
 /// mask) when there is one. The ends of the ramp extend past the drag, so the
-/// whole layer (or selection) is covered. Returns the document rectangle
-/// changed; `None` for a drag with no length, a zero Opacity, or a layer that
-/// cannot be filled.
+/// whole layer (or selection) is covered. `within`, the selection's box when
+/// there is one, confines the visit and the writes to the bands it crosses
+/// (#1207). Returns the document rectangle changed; `None` for a drag with no
+/// length, a zero Opacity, or a layer that cannot be filled.
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     doc: &mut Document,
     path: &str,
@@ -225,6 +227,7 @@ pub fn draw(
     start: (f32, f32),
     end: (f32, f32),
     selection: Option<&[u8]>,
+    within: Option<PsdRect>,
 ) -> Option<PsdRect> {
     let axis = (end.0 - start.0, end.1 - start.1);
     let length = (axis.0 * axis.0 + axis.1 * axis.1).sqrt();
@@ -254,7 +257,13 @@ pub fn draw(
     } else {
         Alpha::Blend
     };
-    fill_layer(doc, path, options.mode, selection, alpha, |x, y| {
+    let outside = |x: i32, y: i32| {
+        within.is_some_and(|r| x < r.left || y < r.top || x >= r.right || y >= r.bottom)
+    };
+    fill_layer_within(doc, path, options.mode, selection, alpha, within, |x, y| {
+        if outside(x, y) {
+            return None;
+        }
         // The pixel's own coordinate, not its centre: a drag from one pixel to
         // another puts the exact ends of the ramp on exactly those pixels.
         let t = position_at(options.style, (x as f32, y as f32), start, axis, length);
@@ -499,6 +508,7 @@ mod tests {
             (0.0, 0.0),
             (2.0, 0.0),
             None,
+            None,
         );
         assert!(drawn.is_some(), "the gradient drew");
         let plane = doc.layers[0].channels[0].data.as_slice();
@@ -532,6 +542,7 @@ mod tests {
             start,
             end,
             None,
+            None,
         );
         d
     }
@@ -563,6 +574,7 @@ mod tests {
             &options,
             (0.0, 2.0),
             (31.0, 2.0),
+            None,
             None,
         );
         assert_eq!(pixel(&d, 0, 2), WHITE_PX);
@@ -607,12 +619,22 @@ mod tests {
         let mut d = doc(16, 16, [255; 4]);
         let options = GradientOptions::default();
         let at = (8.0, 8.0);
-        assert!(draw(&mut d, "0", &black_white(), &options, at, at, None).is_none());
+        assert!(draw(&mut d, "0", &black_white(), &options, at, at, None, None).is_none());
         let clear = GradientOptions {
             opacity: 0.0,
             ..options
         };
-        assert!(draw(&mut d, "0", &black_white(), &clear, at, (12.0, 8.0), None).is_none());
+        assert!(draw(
+            &mut d,
+            "0",
+            &black_white(),
+            &clear,
+            at,
+            (12.0, 8.0),
+            None,
+            None
+        )
+        .is_none());
         assert_eq!(pixel(&d, 8, 8), WHITE_PX);
     }
 
@@ -640,6 +662,7 @@ mod tests {
             (0.0, 2.0),
             (31.0, 2.0),
             None,
+            None,
         );
         assert_eq!(pixel(&d, 0, 2)[3], 255, "the ramp's opaque end");
         assert_eq!(pixel(&d, 31, 2)[3], 0, "the ramp's transparent end");
@@ -664,6 +687,7 @@ mod tests {
             (0.0, 2.0),
             (31.0, 2.0),
             None,
+            None,
         );
         // The plane is 32 px wide: the ramp's ends are (0, 2) and (31, 2).
         let alpha = &d.layers[0].channels[3].data;
@@ -685,6 +709,7 @@ mod tests {
             ends.0,
             ends.1,
             None,
+            None,
         );
         assert_eq!(pixel(&faded, 31, 2)[3], 0);
 
@@ -693,7 +718,7 @@ mod tests {
             transparency: false,
             ..GradientOptions::default()
         };
-        draw(&mut solid, "0", &g, &options, ends.0, ends.1, None);
+        draw(&mut solid, "0", &g, &options, ends.0, ends.1, None, None);
         assert_eq!(pixel(&solid, 31, 2), [255, 0, 0, 255]);
     }
 
@@ -713,6 +738,7 @@ mod tests {
             &options,
             (0.0, 16.0),
             (31.0, 16.0),
+            None,
             None,
         );
         assert_eq!(pixel(&d, 16, 4), BLACK_PX);
@@ -734,6 +760,7 @@ mod tests {
             (0.0, 16.0),
             (31.0, 16.0),
             Some(&mask),
+            None,
         )
         .expect("drawn");
         assert_eq!((dirty.left, dirty.right), (0, 16));
@@ -757,6 +784,7 @@ mod tests {
             ends.0,
             ends.1,
             None,
+            None,
         );
         let noisy = GradientOptions {
             dither: true,
@@ -769,6 +797,7 @@ mod tests {
             &noisy,
             ends.0,
             ends.1,
+            None,
             None,
         );
         let mut differed = 0;
@@ -798,6 +827,7 @@ mod tests {
             &options,
             (0.0, 4.0),
             (199.0, 4.0),
+            None,
             None,
         );
         for x in 0..200 {
@@ -842,5 +872,53 @@ mod tests {
         assert_eq!(r.sample(0.05).a, 0);
         assert_eq!(r.sample(0.15).a, 255);
         assert_eq!(r.sample(0.12).a, 255, "the reversed step blended");
+    }
+
+    #[test]
+    fn a_boxed_gradient_equals_the_unboxed_one_and_forks_only_its_bands() {
+        let (w, h) = (40, 300);
+        let mut base = doc(w, h, [255; 4]);
+        for c in &mut base.layers[0].channels {
+            c.data.fracture(w as usize);
+        }
+        let within = PsdRect {
+            top: 70,
+            left: 5,
+            bottom: 140,
+            right: 30,
+        };
+        let mask: Vec<u8> = (0..w * h)
+            .map(|i| {
+                let (x, y) = (i % w, i / w);
+                let inside = x >= within.left && x < within.right;
+                (inside && y >= within.top && y < within.bottom) as u8 * 200
+            })
+            .collect();
+        let draw_with = |within| {
+            let mut d = base.clone();
+            let dirty = draw(
+                &mut d,
+                "0",
+                &black_white(),
+                &GradientOptions::default(),
+                (0.0, 0.0),
+                (39.0, 299.0),
+                Some(&mask),
+                within,
+            );
+            (d, dirty)
+        };
+        let (whole, dirty) = draw_with(None);
+        let (boxed, boxed_dirty) = draw_with(Some(within));
+        assert_eq!(boxed_dirty, dirty);
+        for ((a, b), c) in boxed.layers[0]
+            .channels
+            .iter()
+            .zip(&whole.layers[0].channels)
+            .zip(&base.layers[0].channels)
+        {
+            assert_eq!(a.data.as_slice(), b.data.as_slice(), "channel {}", a.id);
+            assert!(a.data.shares_band(4, &c.data), "band 4 stayed shared");
+        }
     }
 }

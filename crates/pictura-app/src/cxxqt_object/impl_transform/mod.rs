@@ -110,12 +110,20 @@ pub(super) fn translate_move_group(
 
 /// What a move of the layer at `path` can change: a shape layer's reach (its
 /// outline box with its effects and clipped run; its `rect` is the whole
-/// canvas), and any other layer's rect. `None` when the path does not resolve.
+/// canvas), a plain pixel layer's visible pixels (its rect is often the whole
+/// canvas around a small mark, #1207), and any other layer's rect. `None` when
+/// the path does not resolve.
 fn move_reach(doc: &Document, path: &str) -> Option<PsdRect> {
     let layer = pictura_render::resolve_path(doc, path)?;
     if pictura_render::is_shape_layer(layer) {
         if let Some(reach) = pictura_render::damage::content_influence(doc, path) {
             return Some(reach);
+        }
+    }
+    let plain = !layer.is_group && layer.adjustment.is_none() && !layer_has_effects(layer);
+    if plain {
+        if let Some(content) = pictura_render::content_rect(doc, path) {
+            return Some(content);
         }
     }
     Some(layer.rect)

@@ -8,6 +8,7 @@
 
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
 
 #include <QtCore/QDebug>
@@ -159,6 +160,9 @@ public:
                      (prepared && v->move_preview_cache_hit()) ? 1 : 0, pressNs / 1e6);
         }
         if (!prepared) {
+            if (edit_refused_for_memory()) {
+                ctx.refused(moveMemoryRefusalMessage());
+            }
             return true;
         }
         ctx.setDragging(true);
@@ -245,6 +249,9 @@ public:
                 // A large commit composites on a worker and keeps the preview
                 // until `moveCommitted`; a small one reports it before returning.
                 committed = v->commit_move(dx, dy) && pictura::move_composite_pending(*v);
+                if (edit_refused_for_memory()) {
+                    ctx.refused(moveMemoryRefusalMessage());
+                }
             }
         }
         pendingDuplicate_ = false;
@@ -335,6 +342,12 @@ private:
 std::unique_ptr<ToolHandler> makeMoveToolHandler(std::shared_ptr<MoveGroup> move)
 {
     return std::make_unique<MoveToolHandler>(std::move(move));
+}
+
+QString moveMemoryRefusalMessage()
+{
+    return QObject::tr("Could not move: not enough memory. Close other documents or free "
+                       "memory and try again.");
 }
 
 } // namespace pictura

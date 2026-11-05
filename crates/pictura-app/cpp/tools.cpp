@@ -1068,6 +1068,9 @@ void ToolController::handleReleased(const QPointF& imagePos)
                         canvas_->clearTransformPreview();
                     }
                 }
+                if (edit_refused_for_memory()) {
+                    refused(transformMemoryRefusalMessage());
+                }
                 syncTransformControls();
             }
         }

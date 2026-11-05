@@ -207,61 +207,70 @@ pub(super) fn blend_key(mode: BlendMode) -> String {
 /// Convert a pixel layer's planar channels to an RGBA `QImage`, or `None` for an
 /// empty rect, a missing/wrong-sized color channel, or an alpha mismatch.
 pub(super) fn layer_image(layer: &Layer) -> Option<QImage> {
-    layer_buffer(layer).map(|buffer| buffer_to_image(&buffer))
+    layer_image_within(layer, layer.rect)
+}
+/// [`layer_image`] of the part of the layer inside `rect` (document pixels,
+/// clipped to the layer's rect), so a canvas-sized layer around a small mark
+/// costs the mark (#1207).
+pub(super) fn layer_image_within(layer: &Layer, rect: PsdRect) -> Option<QImage> {
+    layer_buffer_within(layer, rect).map(|buffer| buffer_to_image(&buffer))
 }
 /// A pixel layer's planar channels as a gray+alpha (2) or RGBA (4) buffer, with
 /// [`layer_image`]'s refusals.
 pub(super) fn layer_buffer(layer: &Layer) -> Option<PixelBuffer> {
-    let width = layer.rect.width();
-    let height = layer.rect.height();
-    if width <= 0 || height <= 0 {
-        return None;
-    }
-    let (width, height) = (width as u32, height as u32);
-    let plane = (width * height) as usize;
+    layer_buffer_within(layer, layer.rect)
+}
+/// [`layer_buffer`] of the part of the layer inside `rect`. The planes are read
+/// row by row: reading a banded plane whole would materialize and keep a copy
+/// of it until its next write (#1207).
+pub(super) fn layer_buffer_within(layer: &Layer, rect: PsdRect) -> Option<PixelBuffer> {
+    let own = layer.rect;
+    let rect = rect.intersect(own)?;
+    let (lw, lh) = (own.width() as usize, own.height() as usize);
+    let (width, height) = (rect.width() as usize, rect.height() as usize);
+    let (x0, y0) = (
+        (rect.left - own.left) as usize,
+        (rect.top - own.top) as usize,
+    );
+    let full = lw * lh;
+    let plane = width * height;
     let channel = |id: i16| layer.channels.iter().find(|c| c.id == id).map(|c| &c.data);
-
-    let alpha = channel(-1);
-    let buffer = if channel(1).is_none() && channel(2).is_none() {
-        let gray = channel(0)?;
-        if gray.len() != plane {
-            return None;
-        }
-        let mut data = vec![0u8; plane * 2];
-        data[..plane].copy_from_slice(gray);
-        match alpha {
-            Some(a) if a.len() == plane => data[plane..].copy_from_slice(a),
-            Some(_) => return None,
-            None => data[plane..].fill(255),
-        }
-        PixelBuffer {
-            width,
-            height,
-            channels: 2,
-            data: data.into(),
-        }
-    } else {
-        let (r, g, b) = (channel(0)?, channel(1)?, channel(2)?);
-        if r.len() != plane || g.len() != plane || b.len() != plane {
-            return None;
-        }
-        let mut data = vec![0u8; plane * 4];
-        data[..plane].copy_from_slice(r);
-        data[plane..2 * plane].copy_from_slice(g);
-        data[2 * plane..3 * plane].copy_from_slice(b);
-        match alpha {
-            Some(a) if a.len() == plane => data[3 * plane..].copy_from_slice(a),
-            Some(_) => return None,
-            None => data[3 * plane..].fill(255),
-        }
-        PixelBuffer {
-            width,
-            height,
-            channels: 4,
-            data: data.into(),
+    let copy = |src: &pictura_core::Plane<u8>, dst: &mut [u8]| {
+        for (y, row) in dst.chunks_exact_mut(width).enumerate() {
+            if let Some(line) = src.row(y0 + y, lw) {
+                row.copy_from_slice(&line[x0..x0 + width]);
+            }
         }
     };
-    Some(buffer)
+
+    let alpha = channel(-1);
+    if alpha.is_some_and(|a| a.len() != full) {
+        return None;
+    }
+    let colour: Vec<&pictura_core::Plane<u8>> = if channel(1).is_none() && channel(2).is_none() {
+        vec![channel(0)?]
+    } else {
+        vec![channel(0)?, channel(1)?, channel(2)?]
+    };
+    if colour.iter().any(|c| c.len() != full) {
+        return None;
+    }
+    let channels = colour.len() + 1;
+    let mut data = vec![0u8; plane * channels];
+    for (k, src) in colour.iter().enumerate() {
+        copy(src, &mut data[k * plane..(k + 1) * plane]);
+    }
+    let last = &mut data[colour.len() * plane..];
+    match alpha {
+        Some(a) => copy(a, last),
+        None => last.fill(255),
+    }
+    Some(PixelBuffer {
+        width: width as u32,
+        height: height as u32,
+        channels: channels as u8,
+        data: data.into(),
+    })
 }
 /// Downsample a pixel layer's planar channels straight into a `size`-bounded
 /// RGBA `QImage` (long edge `size`, aspect kept), without first materializing a
