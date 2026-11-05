@@ -15,7 +15,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   `composite_argb`, so a pointer move never blocks on a pending move. A landed
   whole-document region installs a coarse pyramid and builds the exact pyramid
   on a worker. Free Transform commits use the same deferred edit; the engine
-  resamples in parallel and a layer rect at or above 4 MP runs the engine on a
+  resamples in parallel, pads the source with transparency so an opaque rotated
+  edge anti-aliases, and a layer rect at or above 4 MP runs the engine on a
   worker, so the handles drop immediately while the image waits for
   `moveCommitted`. A superseded job
   or one whose document was replaced is dropped by generation. Smaller moves
