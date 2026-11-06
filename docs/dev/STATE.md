@@ -45,6 +45,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   `memory_gate`, `tst_fill_tools`, `tst_move_feedback`, and the updated linked,
   transform, smart-guide and blur-gallery fixtures.
 
+- **Cold full-composite diagnostics** (#1174, OpenSpec change
+  `cold-full-composite`). The diagnostic prerequisite now exists: a public
+  `pictura_render::cold_profile` report/comparator, a `cold_compare` executable
+  with fixed exits, coarse opt-in render phases, an engine fresh-child profile,
+  and an application production-open/first-edit profile. The post-rebase
+  baseline records 808-990 ms cold / 165-194 ms warm on the supplied 4934x1500
+  workload (upstream #1179 verification) and 56-63 ms engine / 66-88 ms
+  application first-edit on a generated 1200x800 scene. Optimization is
+  outstanding; #1174 stays open pending a follow-on proposal.
+
 - **Cold styled composite latency** (#1179, OpenSpec change
   `parallel-effect-passes`, with #1178 / PR #1221's exact kernel work).
   Banded plans resolve ordered sibling nodes on Rayon through visible groups;
