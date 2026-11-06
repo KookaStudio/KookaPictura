@@ -66,6 +66,7 @@ private slots:
     void paintBucketOnADepth16Document();
     void gradientOnADepth16Document();
     void paintBucketStaysInsideItsSelection();
+    void fillGrowsAnEmptyLayer();
     void fillsRefuseWhatMemoryCannotHold();
     void refusedForMemoryShowsStatus();
 
@@ -537,6 +538,37 @@ void FillToolsTest::paintBucketStaysInsideItsSelection()
 
 // A fill whose estimated peak exceeds three quarters of the memory available
 // is refused with a reason, records nothing, and the next fill that fits runs.
+void FillToolsTest::fillGrowsAnEmptyLayer()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_fill_grow"));
+    QVERIFY2(f.ok(), "fill fixture");
+
+    // A new pixel layer stores no pixels. A fill inside a selection away from
+    // the origin grows it to that box (#1208).
+    const int layer = f.view->add_layer(0);
+    QVERIFY(layer >= 0);
+    f.view->set_active_layer(QString::number(layer));
+    QVERIFY(f.view->select_rect(20, 20, 10, 10, QStringLiteral("new"), 0.0));
+    const QColor foreground(10, 20, 30);
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    QVERIFY2(f.committedOnce(base, "Fill"), "one fill state");
+    QCOMPARE(f.view->sample_argb(25, 25), foreground.rgba());
+    QCOMPARE(f.view->sample_argb(5, 5), QColor(Qt::white).rgba());
+
+    // A later fill outside the first box grows the same layer again.
+    QVERIFY(f.view->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0));
+    const int next = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    QVERIFY2(f.committedOnce(next, "Fill"), "the grown layer takes the second fill");
+    QCOMPARE(f.view->sample_argb(3, 3), foreground.rgba());
+}
+
 void FillToolsTest::fillsRefuseWhatMemoryCannotHold()
 {
     pictura::PicturaMainWindow& frame = *window_;

@@ -260,6 +260,10 @@ pub(super) fn read_channel_data(
     }
     let compression = r.u16()?;
     let payload = r.take(declared_len - 2)?;
+    // An empty layer record has no scanlines to decode (#1208).
+    if width == 0 || height == 0 {
+        return Ok((Vec::new(), compression, None));
+    }
     match depth {
         1 => Ok((
             decode_bitmap_channel(compression, payload, width, height, is_psb)?,

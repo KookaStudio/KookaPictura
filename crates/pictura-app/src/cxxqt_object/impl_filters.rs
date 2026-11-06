@@ -326,17 +326,23 @@ pub(super) fn apply_op_active_region(
         rust.filter_error = Some("there is no document".to_string());
         return None;
     };
+    let (doc_w, doc_h) = (doc.width, doc.height);
     let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
         rust.filter_error = Some("the active layer no longer exists".to_string());
         return None;
     };
     // Re-filter from the pre-preview pixels, never from the previous preview.
-    let restored = existing.map(|preview| preview.baseline.restore(layer));
+    // A preview may have grown the layer, so put its rect back too.
+    let restored = existing.map(|preview| {
+        let restored = preview.baseline.restore(layer);
+        pictura_core::layer_bounds::shrink_layer_to(layer, preview.rect);
+        restored
+    });
     if layer.is_group || layer.adjustment.is_some() {
         rust.filter_error = Some("the active layer cannot take a filter".to_string());
         return None;
     }
-    let lrect = layer.rect;
+    let mut lrect = layer.rect;
     let filters = match op {
         ActiveOp::Filter(filter) => std::slice::from_ref(filter),
         ActiveOp::Filters(filters) => filters.as_slice(),
@@ -346,6 +352,29 @@ pub(super) fn apply_op_active_region(
     // the viewport is exact after the whole stack; the renderer clamps it to
     // the layer. A point operation needs no apron.
     let mut apron: i32 = filters.iter().map(|filter| filter.preview_apron()).sum();
+    // A filter may spread past the layer's rect: grow it by the stack's apron
+    // first, so the edge is not clipped (#1208). A preview remembers the rect
+    // it began on, and cancelling it shrinks the layer back.
+    let preview_rect = lrect;
+    if apron > 0 && !lrect.is_empty() {
+        // Grow by the apron inside the canvas; the union keeps a layer that
+        // already extends past the canvas a superset.
+        let canvas = pictura_core::PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc_h as i32,
+            right: doc_w as i32,
+        };
+        let grown = lrect.union(lrect.grow(apron).intersect(canvas).unwrap_or(lrect));
+        match pictura_core::layer_bounds::grow_layer_to(layer, grown, "a filter") {
+            Ok(true) => lrect = layer.rect,
+            Ok(false) => {}
+            Err(error) => {
+                rust.filter_error = Some(error.to_string());
+                return None;
+            }
+        }
+    }
     let section = preview_region
         .filter(|_| !commit)
         .map(|visible| clamp_to(visible.grow(apron), lrect));
@@ -413,6 +442,7 @@ pub(super) fn apply_op_active_region(
         Some(baseline) => rust.session.live.set_filter_preview(FilterPreview {
             layer_path: path,
             baseline,
+            rect: preview_rect,
         }),
         None => rust.session.live.clear_filter_preview(),
     }
@@ -632,6 +662,7 @@ pub(super) fn cancel_filter_preview_session(
             let doc = rust.session.doc.as_mut()?;
             let layer = pictura_render::resolve_path_mut(doc, &preview.layer_path)?;
             let restored = preview.baseline.restore(layer);
+            pictura_core::layer_bounds::shrink_layer_to(layer, preview.rect);
             Some((!layer_has_effects(layer)).then_some(restored))
         }
     }
@@ -703,6 +734,43 @@ mod tests {
             gpu_compute: false,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn blur_grows_the_layer() {
+        let mut doc = Document::new(
+            32,
+            32,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        let mut layer = pixel_layer("px", 12, 12, (40, 120, 200));
+        layer.rect = pictura_core::PsdRect {
+            top: 10,
+            left: 10,
+            bottom: 22,
+            right: 22,
+        };
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        let mut rust = PictureViewRust {
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+            layer_target: LayerTarget::only("0"),
+            gpu_compute: false,
+            ..Default::default()
+        };
+        assert!(apply_filter_active(&mut rust, "gaussian-blur", &[2.0], true).is_some());
+        let layer = &rust.session.doc.as_ref().unwrap().layers[0];
+        assert!(
+            layer.rect.width() > 12 && layer.rect.height() > 12,
+            "the blur grew the layer by its apron: {:?}",
+            layer.rect
+        );
+        let alpha = layer.channels.iter().find(|c| c.id == -1).unwrap();
+        let w = layer.rect.width() as usize;
+        let at = |x: i32, y: i32| {
+            alpha.data[(y - layer.rect.top) as usize * w + (x - layer.rect.left) as usize]
+        };
+        assert!(at(12, 9) > 0, "the blurred edge reaches into the padding");
     }
 
     #[test]

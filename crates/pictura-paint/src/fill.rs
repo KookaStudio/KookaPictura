@@ -59,6 +59,7 @@ pub(crate) enum Row<'a, T> {
 /// The layer's pixels live in its retained native store when the document has
 /// one the compositor reads; the fill writes that copy and keeps the 8-bit
 /// channels as its narrowing. Otherwise the 8-bit channels are the pixels.
+#[cfg(test)]
 pub(crate) fn fill_layer(
     doc: &mut Document,
     path: &str,
@@ -67,7 +68,10 @@ pub(crate) fn fill_layer(
     alpha: Alpha,
     source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
 ) -> Option<PsdRect> {
-    fill_layer_within(doc, path, mode, selection, alpha, None, source)
+    // An unknown source's reach is the layer's own rect: this entry does not
+    // grow the layer. The boxed entries pass their damage box instead.
+    let within = layer_at(doc, &parse_layer_path(path)?).map(|layer| layer.rect);
+    fill_layer_within(doc, path, mode, selection, alpha, within, source)
 }
 
 /// [`fill_layer`] for a `source` that answers `None` outside `within`
@@ -86,6 +90,26 @@ pub(crate) fn fill_layer_within(
     // The working model is 8-bit; a document the writer accepts always is.
     if doc.depth != BitDepth::Eight {
         return None;
+    }
+    // `within` is the box the source may damage. An edit outside a small layer
+    // grows it to that box (#1208); a grow the governor refuses leaves the
+    // layer alone and the fill is refused.
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    if let Some(damage) = within.and_then(|rect| rect.intersect(canvas)) {
+        let target = layer_at_mut(doc, &parse_layer_path(path)?)?;
+        let rect = if target.rect.is_empty() {
+            damage
+        } else {
+            target.rect.union(damage)
+        };
+        if pictura_core::layer_bounds::grow_layer_to(target, rect, "a fill").is_err() {
+            return None;
+        }
     }
     // Clear has no alpha plane to change on an opaque layer; treating the
     // zeroed RGB as a change would dirty a layer the stroke path leaves alone.

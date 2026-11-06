@@ -472,12 +472,12 @@ void TransformControlsTest::idleBoxLeavesTheLayerAlone()
     pictura::PictureView* view = frame.activeView();
     pictura::ImageView* canvas = frame.imageView();
     QVERIFY(view && canvas);
-    // The box hugs the square, but the canvas-sized layer keeps its extent, so
-    // a filter run now can still spread past the square.
+    // The box hugs the square, and the layer is trimmed to the same content
+    // box (#1208); an idle box changes no pixels.
     QCOMPARE(boxRect(*canvas), QStringLiteral("10 8 30 28"));
     const ::rust::Vec<int32_t> rect = pictura::layer_rect_extents(*view, layer);
     QCOMPARE(int(rect.size()), 4);
-    QCOMPARE(QList<int>({rect[0], rect[1], rect[2], rect[3]}), QList<int>({0, 0, 40, 30}));
+    QCOMPARE(QList<int>({rect[0], rect[1], rect[2], rect[3]}), QList<int>({10, 8, 30, 28}));
 }
 
 QTEST_MAIN(TransformControlsTest)

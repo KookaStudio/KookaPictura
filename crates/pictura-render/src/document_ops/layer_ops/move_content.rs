@@ -622,6 +622,34 @@ mod tests {
     }
 
     #[test]
+    fn trim_keeps_the_composite() {
+        let mut layer = pixel_layer("square", 4, 4, 40);
+        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage().into();
+        let before = layer.clone();
+        let mut doc = doc_with(vec![layer]);
+        assert!(trim_to_content(&mut doc, "0"));
+        let after = &doc.layers[0];
+        for y in 0..4 {
+            for x in 0..4 {
+                let at = |layer: &Layer, id: i16| {
+                    let r = layer.rect;
+                    if x < r.left || y < r.top || x >= r.right || y >= r.bottom {
+                        return 0;
+                    }
+                    layer.channels.iter().find(|c| c.id == id).map_or(0, |c| {
+                        c.data[(y - r.top) as usize * r.width() as usize + (x - r.left) as usize]
+                    })
+                };
+                let alpha = at(&before, -1);
+                assert_eq!(alpha, at(after, -1), "alpha at ({x},{y})");
+                if alpha > 0 {
+                    assert_eq!(at(&before, 0), at(after, 0), "red at ({x},{y})");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn content_rect_matches_a_per_pixel_scan() {
         let (w, h) = (9usize, 7usize);
         let patterns: [&dyn Fn(usize, usize) -> u8; 4] = [

@@ -226,6 +226,22 @@ fn pixel_locked_layer_is_refused_and_unchanged() {
 }
 
 #[test]
+fn a_pixel_locked_empty_layer_still_refuses_a_filter() {
+    let mut layer = Layer {
+        lock: LockFlags::default().with(LockFlags::PIXELS, true),
+        ..Layer::default()
+    };
+    let err = apply_filter(
+        &mut layer,
+        &Filter::GaussianBlur { radius: 2.0 },
+        None,
+        false,
+    )
+    .unwrap_err();
+    assert!(matches!(err, FilterError::Locked), "{err:?}");
+}
+
+#[test]
 fn transparency_lock_keeps_alpha_and_skips_clear_pixels() {
     let (w, h) = (4usize, 4usize);
     let mut layer = step_layer(w as i32, h as i32, 255);

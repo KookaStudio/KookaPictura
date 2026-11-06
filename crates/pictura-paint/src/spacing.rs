@@ -77,6 +77,15 @@ impl DabPlacer {
         self.last = Some((x, y));
     }
 
+    /// Move the last sample by `(dx, dy)` when the layer's origin moved under
+    /// a live stroke (#1208).
+    pub fn shift(&mut self, dx: f32, dy: f32) {
+        if let Some((x, y)) = self.last.as_mut() {
+            *x += dx;
+            *y += dy;
+        }
+    }
+
     /// Re-emit the last sample for a time-driven dab. The carried residual
     /// stays put, so path spacing resumes as if the dab had not happened.
     pub fn repeat_last(&self, out: &mut Vec<(f32, f32)>) {

@@ -155,6 +155,27 @@ impl ColorReplacer {
         }
     }
 
+    /// Pad the "already replaced" mask when the layer grows (#1208).
+    pub(crate) fn grow(
+        &mut self,
+        old_w: usize,
+        old_h: usize,
+        new_w: usize,
+        new_h: usize,
+        dx: usize,
+        dy: usize,
+    ) {
+        let mut done = vec![false; new_w * new_h];
+        for y in 0..old_h {
+            let src = y * old_w;
+            let dst = (dy + y) * new_w + dx;
+            if src + old_w <= self.done.len() && dst + old_w <= done.len() {
+                done[dst..dst + old_w].copy_from_slice(&self.done[src..src + old_w]);
+            }
+        }
+        self.done = done;
+    }
+
     /// Apply one dab centred at layer-local `(cx, cy)`, painting `paint`.
     /// Returns the layer-local rectangle changed.
     pub(crate) fn dab(

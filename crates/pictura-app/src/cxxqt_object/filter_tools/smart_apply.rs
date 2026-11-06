@@ -254,6 +254,7 @@ pub(in crate::cxxqt_object) fn smart_preview(
     rust.session.live.set_filter_preview(FilterPreview {
         layer_path: path,
         baseline,
+        rect: layer.rect,
     });
     Some(region)
 }

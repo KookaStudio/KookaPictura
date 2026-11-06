@@ -260,7 +260,14 @@ pub fn draw(
     let outside = |x: i32, y: i32| {
         within.is_some_and(|r| x < r.left || y < r.top || x >= r.right || y >= r.bottom)
     };
-    fill_layer_within(doc, path, options.mode, selection, alpha, within, |x, y| {
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    let damage = Some(within.unwrap_or(canvas));
+    fill_layer_within(doc, path, options.mode, selection, alpha, damage, |x, y| {
         if outside(x, y) {
             return None;
         }

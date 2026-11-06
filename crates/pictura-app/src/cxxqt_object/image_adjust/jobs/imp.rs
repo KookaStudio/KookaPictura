@@ -242,6 +242,7 @@ pub(in crate::cxxqt_object) fn preview_poll(rust: &mut PictureViewRust) -> Optio
             PreviewBaseline::save(layer, None)
         }
     };
+    let layer_rect = result.layer.rect;
     {
         let doc = rust.session.doc.as_mut()?;
         *pictura_render::resolve_path_mut(doc, &path)? = result.layer;
@@ -249,6 +250,7 @@ pub(in crate::cxxqt_object) fn preview_poll(rust: &mut PictureViewRust) -> Optio
     rust.session.live.set_filter_preview(FilterPreview {
         layer_path: path,
         baseline,
+        rect: layer_rect,
     });
     Some(match result.refresh {
         WorkerAdjustRefresh::Region {

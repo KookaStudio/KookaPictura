@@ -1,6 +1,7 @@
 #include "selftest_tools_selection.h"
 #include "selftest_report.h"
 #include "api/layers_api.h"
+#include "api/paint_bridge.h"
 
 #include "api/selection_api.h"
 #include "api/transform_api.h"
@@ -1112,7 +1113,9 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
             return pictura::selfTest().fail(370, "nudge fixture");
         }
         const int nudgeDoc = frame.activeDocumentIndex();
-        const QString nudgeLayer = nudgeView->add_layer_in(QString());
+        // A new pixel layer is empty-rect (#1208); nudge a canvas-sized
+        // duplicate so the translated rect is observable.
+        const QString nudgeLayer = QString::number(nudgeView->duplicate_layer(0));
         nudgeView->set_active_layer(nudgeLayer);
         frame.setActiveTool(pictura::ToolId::Move);
         auto sendArrow = [&frame](int key, Qt::KeyboardModifiers mods) {
@@ -1155,12 +1158,16 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
             return pictura::selfTest().fail(371, "clone fixture");
         }
         const int cloneDoc = frame.activeDocumentIndex();
+        // A new pixel layer is empty-rect (#1208); fill it so the translated
+        // rect is observable.
         const QString cloneSource = cloneView->add_layer_in(QString());
         cloneView->set_active_layer(cloneSource);
+        pictura::edit_fill(*cloneView, 0xFF000000u, -1, QStringLiteral("normal"), 100, false);
         const QString cloneSourceRect = transform_api::layerRect(*cloneView, cloneSource).toString();
         const int cloneLayers = cloneView->select_all_layers().size();
         const int cloneBase = cloneView->history_count();
         frame.setActiveTool(pictura::ToolId::Move);
+        cloneCanvas->setSmartGuidesEnabled(false);
         cloneCanvas->mousePressed(QPointF(4, 4), Qt::LeftButton, int(Qt::AltModifier));
         cloneCanvas->mouseMoved(QPointF(6, 6));
         const QString clonePath = cloneView->active_layer_path();

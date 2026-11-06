@@ -82,11 +82,13 @@ fn apply_op_region(
     region: PsdRect,
 ) -> Result<(), FilterError> {
     let lrect = layer.rect;
-    if lrect.width() <= 0 || lrect.height() <= 0 {
-        return Ok(());
-    }
+    // A lock outranks the empty-rect no-op: a locked layer must refuse the
+    // filter, not report a successful no-op (#1208).
     if layer_pixel_locked(layer) {
         return Err(FilterError::Locked);
+    }
+    if lrect.width() <= 0 || lrect.height() <= 0 {
+        return Ok(());
     }
     let Some(clip) = region.intersect(lrect) else {
         return Ok(());

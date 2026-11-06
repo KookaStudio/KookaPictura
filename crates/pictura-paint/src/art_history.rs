@@ -150,6 +150,11 @@ impl ArtHistoryBrush {
         }
     }
 
+    /// Pad the source snapshot when the layer grows (#1208).
+    pub(crate) fn grow(&mut self, new_w: i32, new_h: i32, dx: i32, dy: i32) {
+        self.source.grow(new_w, new_h, dx, dy);
+    }
+
     /// Scatter the strokes of one dab centred at layer-local `(cx, cy)`.
     /// Returns the layer-local rectangle changed.
     pub(crate) fn dab(

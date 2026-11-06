@@ -766,3 +766,53 @@ fn a_windowed_stroke_equals_the_whole_document_stroke() {
         }
     }
 }
+
+#[test]
+fn a_bucket_fills_an_empty_layer() {
+    use pictura_core::{BitDepth, ColorMode};
+    let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
+    let _ = doc.layers.push(Layer {
+        name: "empty".into(),
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        },
+        channels: [0i16, 1, 2, -1]
+            .into_iter()
+            .map(|id| pictura_core::Channel {
+                id,
+                data: Vec::new().into(),
+            })
+            .collect(),
+        ..Default::default()
+    });
+    let bounds = PsdRect {
+        top: 4,
+        left: 4,
+        bottom: 10,
+        right: 10,
+    };
+    let source = BucketSource::layer(&doc, "0").expect("a source");
+    let flood = flood(source, 16, bounds, None, (6, 6), 32, true).expect("a flood");
+    let mask = antialias(flood, 16, bounds, None);
+    let dirty = fill_within(
+        &mut doc,
+        "0",
+        bounds,
+        Some(&mask),
+        BucketPaint::Foreground(Rgba {
+            r: 10,
+            g: 20,
+            b: 30,
+            a: 255,
+        }),
+        PaintMode::Normal,
+        1.0,
+        None,
+        Alpha::Blend,
+    );
+    assert!(dirty.is_some(), "the empty layer took the fill");
+    assert_eq!(doc.layers[0].rect, bounds);
+}

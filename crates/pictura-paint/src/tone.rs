@@ -147,6 +147,31 @@ impl ToneBrush {
         }
     }
 
+    /// Pad the applied-amount plane when the layer grows (#1208). An empty
+    /// plane is sized on the first dab and needs no padding.
+    pub(crate) fn grow(
+        &mut self,
+        old_w: usize,
+        old_h: usize,
+        new_w: usize,
+        new_h: usize,
+        dx: usize,
+        dy: usize,
+    ) {
+        if self.applied.is_empty() {
+            return;
+        }
+        let mut applied = vec![0f32; new_w * new_h];
+        for y in 0..old_h {
+            let src = y * old_w;
+            let dst = (dy + y) * new_w + dx;
+            if src + old_w <= self.applied.len() && dst + old_w <= applied.len() {
+                applied[dst..dst + old_w].copy_from_slice(&self.applied[src..src + old_w]);
+            }
+        }
+        self.applied = applied;
+    }
+
     /// Tone one dab centred at layer-local `(cx, cy)`. Returns the layer-local
     /// rectangle changed. Toning changes colour, never coverage.
     pub(crate) fn dab(

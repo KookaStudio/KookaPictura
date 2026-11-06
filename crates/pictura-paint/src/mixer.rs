@@ -90,6 +90,13 @@ impl MixerBrush {
         }
     }
 
+    /// Pad the Sample All Layers snapshot when the layer grows (#1208).
+    pub(crate) fn grow(&mut self, new_w: i32, new_h: i32, dx: i32, dy: i32) {
+        if let Some(sampled) = self.sampled.as_mut() {
+            sampled.grow(new_w, new_h, dx, dy);
+        }
+    }
+
     pub(crate) fn reservoir(&self) -> Rgba {
         let [r, g, b, a] = self.reservoir;
         Rgba { r, g, b, a }

@@ -43,7 +43,13 @@ pub(in crate::cxxqt_object) fn fork_bytes(doc: &Document, path: &str, bounds: Ps
     let Some(layer) = pictura_render::resolve_path(doc, path) else {
         return 0;
     };
-    let rect = layer.rect;
+    // The fill grows the layer to its box first (#1208), so the bands it forks
+    // are the grown rect's, not the old rect's.
+    let rect = if layer.rect.is_empty() {
+        bounds
+    } else {
+        layer.rect.union(bounds)
+    };
     let Some(hit) = bounds.intersect(rect) else {
         return 0;
     };
@@ -85,10 +91,10 @@ pub(in crate::cxxqt_object) fn new_document_bytes(
     u64::from(width) * u64::from(height) * per_pixel
 }
 
-/// Add Layer (M2): a canvas-sized layer of colour and transparency planes.
-pub(in crate::cxxqt_object) fn add_layer_bytes(doc: &Document) -> u64 {
-    let planes = u64::from(doc.mode.color_channels()) + 1;
-    canvas(doc) * (sample_bytes(doc.depth) * planes + 2)
+/// Add Layer (M2): an empty-rect layer stores no pixel planes, only its record
+/// and history state (#1208).
+pub(in crate::cxxqt_object) fn add_layer_bytes(_doc: &Document) -> u64 {
+    64 * 1024
 }
 
 /// A brush stroke's start (M6): the target layer's planes and the stroke's
@@ -198,7 +204,36 @@ mod tests {
         assert_eq!(fork_bytes(&doc, "0", rows(70, 140)), planes * 128 * 100);
         // The last band is cut at the layer's bottom.
         assert_eq!(fork_bytes(&doc, "0", rows(290, 300)), planes * 44 * 100);
-        assert_eq!(fork_bytes(&doc, "0", rows(400, 500)), 0, "off the layer");
+        // A box off the layer grows it to the union: 100×500, rows 384..500.
+        assert_eq!(fork_bytes(&doc, "0", rows(400, 500)), planes * 116 * 100);
         assert_eq!(fork_bytes(&doc, "9", rows(0, 10)), 0, "no such layer");
+    }
+
+    #[test]
+    fn a_fill_that_grows_the_layer_forks_the_grown_bands() {
+        let mut doc = Document::new(
+            100,
+            300,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        doc.layers =
+            pictura_core::LayerStack::from_layers(vec![crate::cxxqt_object::tests::pixel_layer(
+                "layer",
+                20,
+                20,
+                (0, 0, 0),
+            )]);
+        // The layer is 20×20 at the origin; a fill box at (80, 80)–(120, 140)
+        // grows it to 120×140, whose bands the fill forks.
+        let bounds = PsdRect {
+            top: 80,
+            left: 80,
+            bottom: 140,
+            right: 120,
+        };
+        let planes = doc.layers[0].channels.iter().filter(|c| c.id >= -1).count() as u64;
+        // Rows 80..140 cross bands 64..128 and 128..140, at the grown width.
+        assert_eq!(fork_bytes(&doc, "0", bounds), planes * 76 * 120);
     }
 }

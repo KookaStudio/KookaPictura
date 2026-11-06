@@ -1,6 +1,7 @@
 #include "selftest_tool_canvas.h"
 #include "selftest_report.h"
 
+#include "api/paint_bridge.h"
 #include "api/selection_api.h"
 #include "api/transform_api.h"
 #include "frame.h"
@@ -216,10 +217,14 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         const int doc = frame.activeDocumentIndex();
         const QString source = view->add_layer_in(QString());
         view->set_active_layer(source);
+        // A new pixel layer is empty-rect (#1208); fill it so the clone's
+        // translated rect is observable.
+        pictura::edit_fill(*view, 0xFF000000u, -1, QStringLiteral("normal"), 100, false);
         const QString sourceRect = transform_api::layerRect(*view, source).toString();
         const int layers = view->select_all_layers().size();
         const int base = view->history_count();
         frame.setActiveTool(ToolId::Move);
+        canvas->setSmartGuidesEnabled(false);
         canvas->mousePressed(QPointF(4, 4), Qt::LeftButton, int(Qt::AltModifier));
         canvas->mouseReleased(QPointF(4, 4));
         const bool clean = view->select_all_layers().size() == layers
