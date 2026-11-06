@@ -17,10 +17,9 @@ pub enum LayerMaskKind {
     FromTransparency,
 }
 
-/// PSD layer-mask flags bit 0: the mask position is linked to (moves with) the
-/// layer. Bit 1 is the disabled flag and lives on [`LayerMask::disabled`]; the
-/// remaining bits are preserved verbatim.
-pub const MASK_FLAG_LINKED: u8 = 0x01;
+/// PSD calls bit 0 "position relative to layer", but Photoshop uses it as
+/// unlinked when set. Mask bounds remain in document coordinates either way.
+pub const MASK_FLAG_UNLINKED: u8 = 0x01;
 
 fn area(rect: PsdRect) -> usize {
     rect.width().max(0) as usize * rect.height().max(0) as usize
@@ -99,7 +98,7 @@ pub fn add_layer_mask(
         rect,
         default_color,
         disabled: false,
-        flags: MASK_FLAG_LINKED,
+        flags: 0,
         data: Some(data.into()),
         extra: Vec::new().into(),
         ..Default::default()
@@ -255,7 +254,7 @@ pub fn set_layer_mask_enabled(doc: &mut Document, path: &str, enabled: bool) -> 
     true
 }
 
-/// Set the mask's linked state by writing only [`MASK_FLAG_LINKED`], preserving
+/// Set the mask's linked state by writing only [`MASK_FLAG_UNLINKED`], preserving
 /// every other flags bit. Returns false without a mask or with no change.
 pub fn set_layer_mask_linked(doc: &mut Document, path: &str, linked: bool) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
@@ -265,9 +264,9 @@ pub fn set_layer_mask_linked(doc: &mut Document, path: &str, linked: bool) -> bo
         return false;
     };
     let flags = if linked {
-        mask.flags | MASK_FLAG_LINKED
+        mask.flags & !MASK_FLAG_UNLINKED
     } else {
-        mask.flags & !MASK_FLAG_LINKED
+        mask.flags | MASK_FLAG_UNLINKED
     };
     if flags == mask.flags {
         return false;
@@ -285,7 +284,7 @@ pub fn has_layer_mask(doc: &Document, path: &str) -> bool {
 pub fn layer_mask_linked(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path)
         .and_then(|layer| layer.mask.as_ref())
-        .is_some_and(|mask| mask.flags & MASK_FLAG_LINKED != 0)
+        .is_some_and(|mask| mask.flags & MASK_FLAG_UNLINKED == 0)
 }
 
 /// Whether the layer at `path`'s mask is disabled (its pixels are ignored).
@@ -654,14 +653,55 @@ mod tests {
             None
         ));
         assert!(layer_mask_linked(&doc, "0"), "a new mask is linked");
-        doc.layers[0].mask.as_mut().unwrap().flags = 0x0E;
+        let mask = doc.layers[0].mask.as_mut().unwrap();
+        mask.flags = 0xA1;
+        mask.rect = PsdRect {
+            top: 4,
+            left: 3,
+            bottom: 5,
+            right: 5,
+        };
+        mask.default_color = 17;
+        mask.data = Some(vec![23, 198].into());
+        mask.density = 91;
+        mask.set_feather(2.5);
+        mask.extra = vec![0x24, 0x42].into();
+        let mut expected = mask.clone();
         assert!(set_layer_mask_linked(&mut doc, "0", true));
-        assert_eq!(doc.layers[0].mask.as_ref().unwrap().flags, 0x0F);
+        expected.flags = 0xA0;
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap(), &expected);
         assert!(layer_mask_linked(&doc, "0"));
+        let linked = doc.clone();
         assert!(!set_layer_mask_linked(&mut doc, "0", true));
+        assert_eq!(doc, linked);
         assert!(set_layer_mask_linked(&mut doc, "0", false));
-        assert_eq!(doc.layers[0].mask.as_ref().unwrap().flags, 0x0E);
+        expected.flags = 0xA1;
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap(), &expected);
         assert!(!layer_mask_linked(&doc, "0"));
+        let unlinked = doc.clone();
+        assert!(!set_layer_mask_linked(&mut doc, "0", false));
+        assert_eq!(doc, unlinked);
+    }
+
+    #[test]
+    fn masks_created_by_commands_are_linked() {
+        let selection = selection(&[43, 192]);
+        for kind in [
+            LayerMaskKind::RevealAll,
+            LayerMaskKind::HideAll,
+            LayerMaskKind::RevealSelection,
+            LayerMaskKind::HideSelection,
+            LayerMaskKind::FromTransparency,
+        ] {
+            let mut doc = doc(2, 1);
+            assert!(add_layer_mask(&mut doc, "0", kind, Some(&selection)));
+            assert!(layer_mask_linked(&doc, "0"), "{kind:?}");
+            assert_eq!(
+                doc.layers[0].mask.as_ref().unwrap().flags & 1,
+                0,
+                "{kind:?}"
+            );
+        }
     }
 
     #[test]

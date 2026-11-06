@@ -301,7 +301,7 @@ fn masks(
         out.push(LayerMask {
             rect: layer.rect,
             default_color: 0,
-            flags: super::layer_masks::MASK_FLAG_LINKED,
+            flags: 0,
             data: Some(grid.expand(&stacked, layer.rect).into()),
             ..Default::default()
         });

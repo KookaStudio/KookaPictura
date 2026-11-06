@@ -68,7 +68,7 @@ pub use layer_ops::{
     AutoBlendCancelled, AutoBlendOptions, AutoBlendPlan, BlendObjective, BlendedLayer, Clip,
     Interpolation, LayerMaskKind, LayerStyle, LayerTransform, MaskDocument, MergeError,
     MergeOutcome, MergeScope, NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke, StampScope,
-    VectorMaskKind, AUTO_BLEND_PROGRESS_MAX, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED,
+    VectorMaskKind, AUTO_BLEND_PROGRESS_MAX, MASK_FLAG_UNLINKED, VECTOR_MASK_FLAG_DISABLED,
     VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use layer_ops::{

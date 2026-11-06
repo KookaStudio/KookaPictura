@@ -92,6 +92,8 @@ Deeper technical status for PSD/PSB lives in
   `crates/pictura-render/src/composite.rs`.
 - [x] **Raster and vector masks, and clipping masks.**
   `crates/pictura-render/src/document_ops/layer_ops/`.
+- [x] **PSD mask linkage** uses the Photoshop flag polarity, and unlinked
+  raster/vector mask controls remain visible at 50% opacity (#1200).
 - [x] **27 blend modes**, plus Pass Through for groups.
   `crates/pictura-core/src/lib.rs`.
 - [x] **Layer styles and effects** — the ten `lfx2` effects, with the Layers
