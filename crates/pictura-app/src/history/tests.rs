@@ -1225,13 +1225,15 @@ fn live_restores_match_a_full_snapshot_history() {
 }
 
 #[test]
-fn undoing_a_reorder_of_equal_layers_reports_no_rectangle() {
+fn a_segment_break_keeps_an_unchanged_composite() {
     let (w, h) = (40u32, 30u32);
     let mut live = doc(w, h, 3);
+    // Identical layers, so the reorder composites to the same pixels.
     live.layers = pictura_core::LayerStack::from_layers(vec![
         model_layer("a", w, h, 1),
-        model_layer("b", w, h, 90),
+        model_layer("a", w, h, 1),
     ]);
+    live.composite = pictura_render::composite_rgba(&live);
     let mut selection: Option<Selection> = None;
     let mut target = LayerTarget::default();
     let mut history = History::default();
@@ -1239,8 +1241,13 @@ fn undoing_a_reorder_of_equal_layers_reports_no_rectangle() {
     let open = live.clone();
 
     assert!(live.layers.move_node(&[0], &[], 2).is_ok());
+    live.composite = pictura_render::composite_rgba(&live);
     history.capture_live(&mut live, &selection, &target, "Reorder");
     assert_eq!(history.anchor_count(), 2, "a reorder starts a new segment");
+    assert!(
+        live.composite.data.shares(&open.composite.data),
+        "an unchanged composite is the open state's plane"
+    );
 
     let restored = history.undo_live(&mut live, &mut selection, &mut target);
     assert_eq!(
@@ -1253,6 +1260,39 @@ fn undoing_a_reorder_of_equal_layers_reports_no_rectangle() {
         }))
     );
     assert!(live == open, "undo restores the original order");
+}
+
+#[test]
+fn a_segment_break_keeps_a_changed_composite() {
+    let (w, h) = (40u32, 30u32);
+    let mut live = doc(w, h, 3);
+    live.layers = pictura_core::LayerStack::from_layers(vec![
+        model_layer("a", w, h, 1),
+        model_layer("b", w, h, 90),
+    ]);
+    live.composite = pictura_render::composite_rgba(&live);
+    let mut selection: Option<Selection> = None;
+    let mut target = LayerTarget::default();
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    let open = live.clone();
+
+    assert!(live.layers.move_node(&[0], &[], 2).is_ok());
+    live.composite = pictura_render::composite_rgba(&live);
+    history.capture_live(&mut live, &selection, &target, "Reorder");
+    assert!(
+        !live.composite.data.shares(&open.composite.data),
+        "a changed composite keeps its own plane"
+    );
+
+    let restored = history.undo_live(&mut live, &mut selection, &mut target);
+    match restored {
+        Some(Restored::Region(rect)) => {
+            assert!(rect.width() > 0 && rect.height() > 0, "a bounded region");
+        }
+        other => panic!("expected a bounded region, got {other:?}"),
+    }
+    assert!(live == open, "undo restores the original state");
 }
 
 fn layered_doc(count: usize) -> Document {
