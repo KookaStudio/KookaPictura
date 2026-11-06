@@ -765,6 +765,7 @@ pub(crate) fn build_layer_passes(
     region: Option<PsdRect>,
     fill: Option<&Adjustment>,
 ) -> crate::layer_source::LayerPasses {
+    let _span = crate::metrics::phase("effect_build", true);
     #[cfg(test)]
     crate::layer_source::note_pass_build(layer, doc);
     let build = BuildRegion {

@@ -40,6 +40,7 @@ pub(crate) fn composite_rgba_region(
         canvas.effect_region = Some(canvas.clip);
     }
     let plan = CompositePlan::build(doc, canvas.clip, canvas.effect_region);
+    let _span = crate::metrics::phase("render_execute", false);
     composite_layers(&mut canvas, doc, &plan);
     canvas.into_pixel_buffer()
 }
@@ -108,6 +109,7 @@ fn composite_banded_with_plan(
     rh: u32,
     plan: &CompositePlan<'_>,
 ) -> PixelBuffer {
+    let _span = crate::metrics::phase("render_execute", false);
     use rayon::prelude::*;
     let (w, plane) = (rw as usize, rw as usize * rh as usize);
     let run = BAND as usize * w;

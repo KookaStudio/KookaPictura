@@ -7,13 +7,21 @@
 //! GPU device timestamps are gated on [`enabled`], because requesting them
 //! changes how the device is created.
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::GpuError;
 
 /// Whether `PICTURA_METRICS` was a non-zero integer at first use.
 pub fn enabled() -> bool {
+    #[cfg(test)]
+    match TEST_ENABLED.load(Relaxed) {
+        1 => return true,
+        2 => return false,
+        _ => {}
+    }
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
         std::env::var("PICTURA_METRICS")
@@ -21,6 +29,97 @@ pub fn enabled() -> bool {
             .and_then(|v| v.trim().parse::<i64>().ok())
             .is_some_and(|v| v != 0)
     })
+}
+
+#[cfg(test)]
+static TEST_ENABLED: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+#[cfg(test)]
+pub(crate) fn set_enabled_for_test(on: Option<bool>) {
+    TEST_ENABLED.store(
+        match on {
+            Some(true) => 1,
+            Some(false) => 2,
+            None => 0,
+        },
+        Relaxed,
+    );
+}
+
+#[derive(Clone, Copy, Default)]
+struct PhaseAccum {
+    total_ns: u64,
+    count: u64,
+    nested: bool,
+}
+
+fn phase_map() -> &'static Mutex<BTreeMap<&'static str, PhaseAccum>> {
+    static PHASES: OnceLock<Mutex<BTreeMap<&'static str, PhaseAccum>>> = OnceLock::new();
+    PHASES.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// A coarse timing span; inert when metrics are off.
+pub struct PhaseSpan {
+    label: &'static str,
+    start: Option<Instant>,
+    nested: bool,
+}
+
+impl Drop for PhaseSpan {
+    fn drop(&mut self) {
+        if let Some(start) = self.start {
+            record_phase(self.label, start.elapsed(), self.nested);
+        }
+    }
+}
+
+/// Start a coarse phase span. Nested spans are labelled, never summed twice.
+pub fn phase(label: &'static str, nested: bool) -> PhaseSpan {
+    PhaseSpan {
+        label,
+        start: enabled().then(Instant::now),
+        nested,
+    }
+}
+
+/// Accumulate one coarse phase. No-op when metrics are off.
+pub fn record_phase(label: &'static str, dt: Duration, nested: bool) {
+    if !enabled() {
+        return;
+    }
+    let mut map = phase_map().lock().unwrap_or_else(|e| e.into_inner());
+    let entry = map.entry(label).or_default();
+    entry.total_ns = entry.total_ns.saturating_add(dt.as_nanos() as u64);
+    entry.count = entry.count.saturating_add(1);
+    entry.nested |= nested;
+}
+
+/// Take the accumulated phases, then reset. Empty when metrics are off.
+pub fn take_phases() -> BTreeMap<String, crate::cold_profile::PhaseReport> {
+    let mut map = phase_map().lock().unwrap_or_else(|e| e.into_inner());
+    let out = map
+        .iter()
+        .map(|(label, phase)| {
+            (
+                label.to_string(),
+                crate::cold_profile::PhaseReport {
+                    total_ns: phase.total_ns,
+                    count: phase.count,
+                    nested: phase.nested,
+                },
+            )
+        })
+        .collect();
+    map.clear();
+    out
+}
+
+/// Drop any accumulated phases.
+pub fn reset_phases() {
+    phase_map()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
 }
 
 /// The decline reasons, in the order [`Counters::declines`] reports them.
@@ -304,5 +403,34 @@ mod tests {
         let counters = counters();
         assert_eq!(counters.resident_entries, 3);
         assert_eq!(counters.resident_bytes, 1234);
+    }
+
+    #[test]
+    fn cold_phase_metrics_are_opt_in() {
+        use std::sync::Mutex;
+        static LOCK: Mutex<()> = Mutex::new(());
+        let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        set_enabled_for_test(Some(false));
+        reset_phases();
+        record_phase("render_plan", Duration::from_millis(1), false);
+        assert!(take_phases().is_empty(), "metrics off retains nothing");
+
+        set_enabled_for_test(Some(true));
+        reset_phases();
+        {
+            let _plan = phase("render_plan", false);
+            let _effect = phase("effect_build", true);
+        }
+        let phases = take_phases();
+        assert!(phases.contains_key("render_plan"));
+        assert!(phases["effect_build"].nested);
+        assert!(
+            !phases.contains_key("mask_prepare"),
+            "an absent phase differs from a measured zero"
+        );
+        assert!(take_phases().is_empty(), "take resets");
+
+        set_enabled_for_test(None);
     }
 }

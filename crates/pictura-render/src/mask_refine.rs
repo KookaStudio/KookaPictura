@@ -427,6 +427,7 @@ impl Feathered {
 }
 
 fn feather_raster(mask: &LayerMask, data: &[u8], radius: f64, clip: PsdRect) -> Feathered {
+    let _span = crate::metrics::phase("mask_prepare", true);
     let r = mask.rect;
     let rect = [r.left, r.top, r.right, r.bottom].map(i64::from);
     let pad = i64::from(reach(radius));
@@ -453,6 +454,7 @@ fn feather_raster(mask: &LayerMask, data: &[u8], radius: f64, clip: PsdRect) -> 
 }
 
 fn feather_vector(mask: &VectorMask, radius: f64, clip: PsdRect) -> Feathered {
+    let _span = crate::metrics::phase("mask_prepare", true);
     let points = mask
         .subpaths
         .iter()
