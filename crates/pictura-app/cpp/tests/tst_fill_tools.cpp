@@ -67,6 +67,7 @@ private slots:
     void gradientOnADepth16Document();
     void paintBucketStaysInsideItsSelection();
     void fillsRefuseWhatMemoryCannotHold();
+    void refusedForMemoryShowsStatus();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -582,6 +583,37 @@ void FillToolsTest::fillsRefuseWhatMemoryCannotHold()
     QVERIFY(!pictura::edit_refused_for_memory());
     QVERIFY2(f.committedOnce(again, "Fill"), "one fill state");
     QCOMPARE(f.view->sample_argb(5, 5), blue.rgba());
+}
+
+// Under a 512 MiB cgroup with 400 MiB already in use, the governor's ceiling
+// (512 MiB less 256 MiB of headroom) has no room left: a Paint Bucket click in
+// a marquee is refused with the fill message, adds no state and leaves the
+// layer's pixels as they were (#1211).
+void FillToolsTest::refusedForMemoryShowsStatus()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(0, 128, 0));
+    Fixture f(frame, seed, QStringLiteral("pictura_fill_cgroup"));
+    QVERIFY2(f.ok(), "cgroup fixture");
+    const Colors colors(f.tools, QColor(0, 0, 255), Qt::white);
+    const QRgb green = QColor(0, 128, 0).rgba();
+    struct Restore {
+        ~Restore() { pictura::set_memory_cgroup_for_test(-1, 0); }
+    } restore;
+    constexpr qint64 kMiB = 1024 * 1024;
+    pictura::set_memory_cgroup_for_test(512 * kMiB, 400 * kMiB);
+
+    f.view->select_rect(10, 10, 10, 10, QStringLiteral("new"), 0.0);
+    const int selected = f.view->history_index();
+    frame.setActiveTool(pictura::ToolId::PaintBucket);
+    frame.statusBar()->clearMessage();
+    f.drag({QPointF(15, 15)});
+    QVERIFY(pictura::edit_refused_for_memory());
+    QCOMPARE(frame.statusBar()->currentMessage(), pictura::fillMemoryRefusalMessage());
+    QCOMPARE(f.view->history_index(), selected);
+    QCOMPARE(f.view->sample_argb(15, 15), green);
+    f.view->deselect();
 }
 
 QTEST_MAIN(FillToolsTest)

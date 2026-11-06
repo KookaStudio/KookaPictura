@@ -18,6 +18,7 @@
 
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/filters_bridge.h"
 #include "api/engine_bridge.h"
 
@@ -396,7 +397,9 @@ QJsonObject ControlServer::methodHistory(const QJsonObject& params)
         return error(QStringLiteral("invalid_param"), QStringLiteral("unknown op: %1").arg(op));
     }
     if (!applied) {
-        return error(QStringLiteral("refused"), QStringLiteral("history op did not apply"));
+        return error(QStringLiteral("refused"), edit_refused_for_memory()
+                                                    ? QStringLiteral("not enough memory")
+                                                    : QStringLiteral("history op did not apply"));
     }
     frame_->refresh();
 

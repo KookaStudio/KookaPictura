@@ -18,6 +18,7 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QRadioButton>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QVBoxLayout>
 
@@ -205,6 +206,22 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     auto* performancePage = new QWidget(this);
     performancePage->setObjectName(QStringLiteral("preferencesPerformancePage"));
     auto* performanceLayout = new QVBoxLayout(performancePage);
+    // Memory Usage (#1211): the share of the host's memory the governor's
+    // ceiling allows. CS6 asks for a restart; ours applies at once.
+    auto* memoryRow = new QWidget(performancePage);
+    auto* memoryLayout = new QHBoxLayout(memoryRow);
+    memoryLayout->setContentsMargins(0, 0, 0, 0);
+    memoryLayout->addWidget(new QLabel(tr("Memory Usage:"), memoryRow));
+    memoryUsage_ = new QSpinBox(memoryRow);
+    memoryUsage_->setObjectName(QStringLiteral("preferencesMemoryUsage"));
+    memoryUsage_->setRange(5, 100);
+    memoryUsage_->setSuffix(QStringLiteral(" %"));
+    memoryUsage_->setValue(60);
+    memoryLayout->addWidget(memoryUsage_);
+    memoryLayout->addStretch(1);
+    performanceLayout->addWidget(memoryRow);
+    connect(memoryUsage_, &QSpinBox::valueChanged, this,
+            &PreferencesDialog::memoryUsagePercentChanged);
     makeCheckbox(QStringLiteral("useGpuCompute"), tr("Use GPU Compute"), performancePage);
     performanceLayout->addStretch(1);
     stack_->addWidget(performancePage);
@@ -433,6 +450,12 @@ void PreferencesDialog::setGpuCompute(bool on)
     if (QCheckBox* box = checkbox(QStringLiteral("useGpuCompute"))) {
         box->setChecked(on);
     }
+}
+
+void PreferencesDialog::setMemoryUsagePercent(int percent)
+{
+    const QSignalBlocker block(memoryUsage_);
+    memoryUsage_->setValue(percent);
 }
 
 void PreferencesDialog::setGpuComputeEnabled(bool on)

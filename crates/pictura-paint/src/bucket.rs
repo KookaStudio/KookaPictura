@@ -158,8 +158,10 @@ pub fn flood(
     };
     // Every pixel is tested once, in parallel; the contiguous flood then only
     // walks the answers. When every pixel matches (an empty or uniform layer)
-    // they are all connected, so the flood is the whole box (#1149).
-    let mut matched = vec![0u8; bw * bh];
+    // they are all connected, so the flood is the whole box (#1149). The match
+    // plane is canvas-scale, so a refused or failed allocation floods nothing
+    // and leaves the governor's refusal for the caller (#1211).
+    let mut matched = pictura_core::memory::try_plane(bw * bh, 0, "a Paint Bucket flood").ok()?;
     matched
         .par_chunks_mut(bw)
         .enumerate()

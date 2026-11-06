@@ -1,43 +1,31 @@
-//! The memory gate an edit passes before it allocates (#1207): the fill family,
-//! the Move press and commit, and the Free Transform commit. An edit estimates
-//! the bytes it will hold at its peak and is refused, instead of being left to
-//! the kernel's OOM killer, when they exceed three quarters of the memory
-//! available now: the rule the Image Size gate uses (#1156).
+//! The memory gate an edit passes before it allocates (#1207, #1211): it
+//! estimates the bytes the edit will hold at its peak and asks the process's
+//! memory governor (`pictura_core::memory`), which refuses them when they
+//! exceed the room under its ceiling, instead of leaving the process to the
+//! kernel's OOM killer.
 //!
-//! GUI thread only: the refusal flag and the test override are thread-locals,
-//! so an edit gated on a worker thread would not report its refusal to the
-//! bridge, which reads the flag on the GUI thread.
+//! GUI thread only: the refusal record and the test host are the governor's
+//! thread-locals, so an edit gated on a worker thread would not report its
+//! refusal to the bridge, which reads it on the GUI thread.
 
-use pictura_core::{Document, PsdRect, BAND_ROWS};
-use std::cell::Cell;
-
-std::thread_local! {
-    /// Whether the last gated edit was refused by this gate.
-    static REFUSED: Cell<bool> = const { Cell::new(false) };
-    /// The available memory a test pretends the host has.
-    static AVAILABLE: Cell<Option<u64>> = const { Cell::new(None) };
-}
+use pictura_core::memory::{self, HostReading};
+use pictura_core::{BitDepth, Document, PsdRect, BAND_ROWS};
 
 /// Forget the last refusal; every gated edit starts here.
 pub(in crate::cxxqt_object) fn clear() {
-    REFUSED.set(false);
+    memory::clear_refusal();
 }
 
-/// Whether `bytes` more fit the memory available now. A refusal is remembered
+/// Whether `bytes` more fit the governor's room now. A refusal is remembered
 /// for [`edit_refused_for_memory`].
 pub(in crate::cxxqt_object) fn admit(bytes: u64) -> bool {
-    let available = AVAILABLE.get().or_else(pictura_codec::available_memory);
-    let fits = fits(bytes, available);
-    if !fits {
-        REFUSED.set(true);
-    }
-    fits
+    memory::governor().admit(bytes, "an edit")
 }
 
-/// The gate's rule: three quarters of `available`, and no limit when the
-/// host's memory cannot be read.
-fn fits(bytes: u64, available: Option<u64>) -> bool {
-    available.is_none_or(|available| bytes <= available / 4 * 3)
+/// [`clear`], then [`admit`]: the gate of a path that runs no other gate.
+pub(in crate::cxxqt_object) fn admit_fresh(bytes: u64) -> bool {
+    clear();
+    admit(bytes)
 }
 
 /// The pixels of `bounds`.
@@ -66,36 +54,118 @@ pub(in crate::cxxqt_object) fn fork_bytes(doc: &Document, path: &str, bounds: Ps
     planes * (last - first).max(0) as u64 * rect.width().max(0) as u64
 }
 
-/// Whether the last gated edit was refused because it did not fit the memory
-/// available.
-pub(in crate::cxxqt_object) fn edit_refused_for_memory() -> bool {
-    REFUSED.get()
+// The estimates of the paths the memory benchmark drives (#1211). Each is
+// fitted to its scenario's peak resident size added at 4250² (the process
+// benchmark, `scripts/profile-tools.py --scenarios memory --peak`), which
+// counts the shell's display buffers beside the engine's heap, rounded up;
+// `estimates_cover_the_measured_peaks` keeps each at or above its scenario's
+// heap peak. They approximate this engine's allocations, not Photoshop's.
+
+fn sample_bytes(depth: BitDepth) -> u64 {
+    match depth {
+        BitDepth::One | BitDepth::Eight => 1,
+        BitDepth::Sixteen => 2,
+        BitDepth::ThirtyTwo => 4,
+    }
 }
 
-/// Pretend the host has `bytes` of memory available to the gated edits; a
-/// negative value reads the host again.
+fn canvas(doc: &Document) -> u64 {
+    u64::from(doc.width) * u64::from(doc.height)
+}
+
+/// New Document (M1): the base layer, the composite, and the display and its
+/// pyramid (21.4 bytes a pixel for RGB at 4250²).
+pub(in crate::cxxqt_object) fn new_document_bytes(
+    width: u32,
+    height: u32,
+    color_channels: u8,
+    depth: BitDepth,
+) -> u64 {
+    let per_pixel = sample_bytes(depth) * (2 * u64::from(color_channels) + 1) + 17;
+    u64::from(width) * u64::from(height) * per_pixel
+}
+
+/// Add Layer (M2): a canvas-sized layer of colour and transparency planes.
+pub(in crate::cxxqt_object) fn add_layer_bytes(doc: &Document) -> u64 {
+    let planes = u64::from(doc.mode.color_channels()) + 1;
+    canvas(doc) * (sample_bytes(doc.depth) * planes + 2)
+}
+
+/// A brush stroke's start (M6): the target layer's planes and the stroke's
+/// canvas-sized buffers.
+pub(in crate::cxxqt_object) fn brush_bytes(doc: &Document, path: &str) -> u64 {
+    let layer = pictura_render::resolve_path(doc, path)
+        .map_or(0, |l| l.channels.iter().map(|c| c.data.len() as u64).sum());
+    layer + 3 * canvas(doc)
+}
+
+/// Undo, Redo or a history jump (M7): the restored composite and the display
+/// (13.1 bytes a pixel at 4250²).
+pub(in crate::cxxqt_object) fn restore_bytes(doc: &Document) -> u64 {
+    doc.composite.data.len() as u64 + 12 * canvas(doc)
+}
+
+/// The display refresh after a fill of `bounds` (M5): the region's composite
+/// and display bytes, beside what the fill itself holds (10.9 bytes a pixel for
+/// a whole-layer bucket at 4250², of which the fill's own planes are 6).
+pub(in crate::cxxqt_object) fn refresh_bytes(bounds: PsdRect) -> u64 {
+    6 * area(bounds)
+}
+
+/// Adding a named snapshot (M8).
+pub(in crate::cxxqt_object) fn snapshot_bytes(doc: &Document) -> u64 {
+    crate::history::document_bytes(doc) + 4 * canvas(doc)
+}
+
+/// Restoring a named snapshot (M8): its detached copy and a full composite.
+pub(in crate::cxxqt_object) fn snapshot_restore_bytes(doc: &Document) -> u64 {
+    crate::history::document_bytes(doc) + 10 * canvas(doc)
+}
+
+/// Save (M11): the save job's copy and the encoder's buffers.
+pub(in crate::cxxqt_object) fn save_bytes(doc: &Document) -> u64 {
+    crate::history::document_bytes(doc) + 8 * canvas(doc)
+}
+
+/// Whether the last gated edit was refused because it did not fit the
+/// governor's room.
+pub(in crate::cxxqt_object) fn edit_refused_for_memory() -> bool {
+    memory::last_refusal().is_some()
+}
+
+/// Pin the host this thread's governor sees to `bytes` of available memory
+/// and nothing else; a negative value reads the host again.
 pub(in crate::cxxqt_object) fn set_available_memory_for_test(bytes: i64) {
-    AVAILABLE.set(u64::try_from(bytes).ok());
+    memory::set_host_for_test(u64::try_from(bytes).ok().map(|available| HostReading {
+        available: Some(available),
+        ..HostReading::default()
+    }));
+}
+
+/// Pin the host to a cgroup limited to `max` bytes with `current` in use; a
+/// negative `max` reads the host again.
+pub(in crate::cxxqt_object) fn set_cgroup_for_test(max: i64, current: i64) {
+    memory::set_host_for_test(u64::try_from(max).ok().map(|max| HostReading {
+        cgroup_max: Some(max),
+        cgroup_current: Some(current.max(0) as u64),
+        ..HostReading::default()
+    }));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_gate_keeps_a_quarter_of_the_memory_free() {
-        assert!(fits(750, Some(1000)));
-        assert!(!fits(751, Some(1000)));
-        assert!(fits(u64::MAX, None), "an unreadable host is not a refusal");
-    }
+    const MIB: i64 = 1024 * 1024;
 
     #[test]
     fn a_refusal_is_remembered_until_the_next_fill() {
-        set_available_memory_for_test(1000);
+        // 1 GiB available leaves 768 MiB of room.
+        set_available_memory_for_test(1024 * MIB);
         clear();
-        assert!(admit(700));
+        assert!(admit(700 * MIB as u64));
         assert!(!edit_refused_for_memory());
-        assert!(!admit(800));
+        assert!(!admit(800 * MIB as u64));
         assert!(edit_refused_for_memory());
         clear();
         assert!(!edit_refused_for_memory());

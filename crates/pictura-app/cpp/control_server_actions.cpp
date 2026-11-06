@@ -348,6 +348,9 @@ QJsonObject ControlServer::methodLayerOp(const QJsonObject& params)
             return invalid(QStringLiteral("index out of range"));
         }
         if (view->add_layer(index) < 0) {
+            if (edit_refused_for_memory()) {
+                return error(QStringLiteral("refused"), QStringLiteral("not enough memory"));
+            }
             return error(QStringLiteral("internal"), QStringLiteral("add_layer failed"));
         }
     } else if (op == QStringLiteral("free_transform")) {

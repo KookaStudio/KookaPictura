@@ -6,6 +6,7 @@ use pictura_paint::{PaintMode, Rgba};
 use pictura_select::CombineMode;
 
 pub(super) mod memory_gate;
+pub(super) mod memory_report;
 pub(super) mod safe_io;
 
 /// Whether a `width` × `height` document at `bits` per channel fits the default
@@ -17,7 +18,7 @@ pub(in crate::cxxqt_object) fn document_budget_allows(width: i32, height: i32, b
 /// Whether a resize to `width` × `height` at `bits` fits the memory available
 /// now. The default document budget never drops below one maximum allocation,
 /// so it cannot see a low-memory host; a resize allocates the target
-/// immediately and also respects three quarters of the memory available now.
+/// immediately and also respects the memory governor's room.
 pub(in crate::cxxqt_object) fn resize_budget_allows(width: i32, height: i32, bits: i32) -> bool {
     document_fits(
         width,
@@ -25,19 +26,19 @@ pub(in crate::cxxqt_object) fn resize_budget_allows(width: i32, height: i32, bit
         bits,
         &bounded_budget(
             pictura_codec::ImageBudget::default(),
-            pictura_codec::available_memory(),
+            pictura_core::memory::governor().room(),
         ),
     )
 }
 
-/// `budget` with its document limit bounded by three quarters of `available`,
-/// or unchanged when the host's memory cannot be read.
-fn bounded_budget(
+/// `budget` with its document limit bounded by `room`, or unchanged without
+/// one.
+pub(in crate::cxxqt_object) fn bounded_budget(
     mut budget: pictura_codec::ImageBudget,
-    available: Option<u64>,
+    room: Option<u64>,
 ) -> pictura_codec::ImageBudget {
-    if let Some(bytes) = available {
-        budget.max_document_bytes = budget.max_document_bytes.min(bytes / 4 * 3);
+    if let Some(bytes) = room {
+        budget.max_document_bytes = budget.max_document_bytes.min(bytes);
     }
     budget
 }

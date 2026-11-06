@@ -10,6 +10,7 @@ mod budget;
 mod planes;
 mod styles;
 
+pub(crate) use budget::document_bytes;
 use planes::{
     adopt_metadata, apply_tiles, composite_change, diff_into, fracture_planes, hollow, mask_rects,
     plane_kinds, planes_agree, shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta,

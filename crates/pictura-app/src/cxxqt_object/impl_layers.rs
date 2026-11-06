@@ -279,6 +279,15 @@ impl qobject::PictureView {
     }
 
     pub fn add_layer(mut self: Pin<&mut Self>, above: i32) -> i32 {
+        let estimate = self
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map_or(0, memory_gate::add_layer_bytes);
+        if !memory_gate::admit_fresh(estimate) {
+            return -1;
+        }
         let mut created = -1;
         self.as_mut().edit("New Layer", |rust| {
             let Some(doc) = rust.session.doc.as_mut() else {
@@ -857,6 +866,15 @@ impl qobject::PictureView {
     }
 
     pub fn add_layer_in(mut self: Pin<&mut Self>, selection_path: &QString) -> QString {
+        let estimate = self
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map_or(0, memory_gate::add_layer_bytes);
+        if !memory_gate::admit_fresh(estimate) {
+            return QString::default();
+        }
         let selection_path = selection_path.to_string();
         let mut created = String::new();
         self.as_mut().edit("New Layer", |rust| {

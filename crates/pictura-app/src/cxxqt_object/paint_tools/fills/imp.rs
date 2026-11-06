@@ -81,7 +81,8 @@ pub(super) fn draw_gradient(
     };
     let (start, end) = ((x0 as f32, y0 as f32), (x1 as f32, y1 as f32));
     apply(view, "Gradient", |doc, path, _rust, t, selection| {
-        if !budget::admit(budget::fork_bytes(doc, path, t.bounds)) {
+        if !budget::admit(budget::fork_bytes(doc, path, t.bounds) + budget::refresh_bytes(t.bounds))
+        {
             return None;
         }
         // The drag is in document space; a mask's document sits at its own
@@ -126,7 +127,7 @@ pub(super) fn bucket_fill_at(
         // beside the result, then the result beside the bands it forks.
         let mask_bytes = budget::area(t.bounds);
         let fork = budget::fork_bytes(doc, path, t.bounds);
-        if !budget::admit(2 * mask_bytes + fork.max(mask_bytes)) {
+        if !budget::admit(2 * mask_bytes + fork.max(mask_bytes) + budget::refresh_bytes(t.bounds)) {
             return None;
         }
         let (ox, oy) = t.origin;
@@ -195,7 +196,8 @@ pub(super) fn edit_fill(
         Alpha::Blend
     };
     apply(view, "Fill", |doc, path, _rust, t, selection| {
-        if !budget::admit(budget::fork_bytes(doc, path, t.bounds)) {
+        if !budget::admit(budget::fork_bytes(doc, path, t.bounds) + budget::refresh_bytes(t.bounds))
+        {
             return None;
         }
         bucket::fill_within(
@@ -231,7 +233,7 @@ pub(super) fn edit_stroke(
         // The window's crop, dilation, erosion and band, beside the bands the
         // band's fill forks.
         let fork = budget::fork_bytes(doc, path, window);
-        if !budget::admit(4 * budget::area(window) + fork) {
+        if !budget::admit(4 * budget::area(window) + fork + budget::refresh_bytes(window)) {
             return None;
         }
         bucket::stroke_selection(

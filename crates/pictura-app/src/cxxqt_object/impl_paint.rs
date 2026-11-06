@@ -494,7 +494,11 @@ impl PictureViewRust {
     /// layer target, or when another session owns the slot.
     pub(super) fn begin_paint(&mut self, cfg: StrokeConfig, label: &str) -> bool {
         self.settle_pyramid();
-        if self.session.doc.is_none() {
+        let Some(doc) = self.session.doc.as_ref() else {
+            return false;
+        };
+        let path = self.layer_target.single().unwrap_or_default();
+        if !memory_gate::admit_fresh(memory_gate::brush_bytes(doc, path)) {
             return false;
         }
         // A mask target paints the mask's coverage instead of the layer: the

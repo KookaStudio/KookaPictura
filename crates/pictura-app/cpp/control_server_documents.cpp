@@ -11,6 +11,7 @@
 #include "frame.h"
 
 #include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 
 namespace pictura {
 
@@ -85,6 +86,9 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
         const PicturaMainWindow::OpenOutcome outcome =
             frame_->openDocumentAtPathOutcome(path, false);
         applied = outcome == PicturaMainWindow::OpenOutcome::Opened;
+        if (!applied && open_refused_for_memory()) {
+            return error(QStringLiteral("refused"), QStringLiteral("not enough memory"));
+        }
         if (!applied) {
             return error(outcome == PicturaMainWindow::OpenOutcome::Cancelled
                              ? QStringLiteral("cancelled")
@@ -131,6 +135,9 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
         } else {
             applied = frame_->newDocument(name, width, height, mode, depth, background);
         }
+        if (!applied && edit_refused_for_memory()) {
+            return error(QStringLiteral("refused"), QStringLiteral("not enough memory"));
+        }
         if (!applied) {
             return error(QStringLiteral("internal"), QStringLiteral("could not create document"));
         }
@@ -167,6 +174,9 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
             applied = frame_->saveActive();
         } else {
             applied = frame_->saveActiveAs(path);
+        }
+        if (!applied && edit_refused_for_memory()) {
+            return error(QStringLiteral("refused"), QStringLiteral("not enough memory"));
         }
         if (!applied) {
             return error(QStringLiteral("io_error"), QStringLiteral("save failed"));
@@ -236,6 +246,9 @@ QJsonObject ControlServer::methodEdit(const QJsonObject& params)
     } else {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("op must be undo or redo"));
+    }
+    if (!applied && edit_refused_for_memory()) {
+        return error(QStringLiteral("refused"), QStringLiteral("not enough memory"));
     }
     QJsonObject result;
     result.insert(QStringLiteral("success"), applied);

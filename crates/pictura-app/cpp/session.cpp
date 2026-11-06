@@ -119,6 +119,8 @@ SessionState loadSession()
     state.themeFamily = obj.value(QStringLiteral("themeFamily")).toInt(0);
     state.uiScalePercent = obj.value(QStringLiteral("uiScalePercent")).toInt(100);
     state.gpuCompute = obj.value(QStringLiteral("gpuCompute")).toBool(true);
+    state.memoryUsagePercent =
+        qBound(5, obj.value(QStringLiteral("memoryUsagePercent")).toInt(60), 100);
     const int colorPolicy = obj.value(QStringLiteral("colorPolicy")).toInt(0);
     state.colorPolicy = (colorPolicy == 1 || colorPolicy == 2) ? colorPolicy : 0;
     const int cmykPolicy = obj.value(QStringLiteral("cmykPolicy")).toInt(0);
@@ -297,6 +299,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("themeFamily"), state.themeFamily);
     obj.insert(QStringLiteral("uiScalePercent"), state.uiScalePercent);
     obj.insert(QStringLiteral("gpuCompute"), state.gpuCompute);
+    obj.insert(QStringLiteral("memoryUsagePercent"), state.memoryUsagePercent);
     obj.insert(QStringLiteral("colorPolicy"), state.colorPolicy);
     obj.insert(QStringLiteral("cmykPolicy"), state.cmykPolicy);
     obj.insert(QStringLiteral("workingCmyk"), state.workingCmyk);

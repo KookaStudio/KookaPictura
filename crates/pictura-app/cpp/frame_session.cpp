@@ -2,6 +2,7 @@
 #include "frame_includes.h"
 
 #include "gpu_probe.h"
+#include "api/paint_bridge.h"
 #include "panels/actions_panel.h"
 #include "update_checker.h"
 
@@ -223,6 +224,7 @@ void PicturaMainWindow::saveSession()
     state.themeFamily = themeFamily_ == 1 ? 1 : 0;
     state.uiScalePercent = uiScalePercent_;
     state.gpuCompute = gpuCompute_;
+    state.memoryUsagePercent = memory_usage_percent();
     state.colorPolicy = colorPolicy_;
     state.cmykPolicy = cmykPolicy_;
     state.workingCmyk = workingCmyk_;

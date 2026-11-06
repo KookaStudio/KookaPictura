@@ -41,17 +41,17 @@ move.
 ### Requirement: A Move or transform that cannot fit in memory is refused
 
 The Move press, the Move commit and the Free Transform commit SHALL estimate
-their peak bytes and SHALL be refused when the estimate exceeds three quarters
-of the memory available now, with the reason reported as not enough memory. A
-refused press SHALL start no drag, a refused Move commit SHALL leave the layers
-where they were, and a refused transform SHALL be dropped with the layer
-restored; none SHALL record a history state.
+their peak bytes and SHALL be refused when the estimate exceeds the memory
+governor's room (`document/memory-governor`), with the reason reported as not
+enough memory. A refused press SHALL start no drag, a refused Move commit SHALL
+leave the layers where they were, and a refused transform SHALL be dropped with
+the layer restored; none SHALL record a history state.
 
 #### Scenario: Each refuses what memory cannot hold [mmb_gate]
 
-- **WHEN** the available memory is made smaller than any estimate and a Move
+- **WHEN** the governor's room is made smaller than any estimate and a Move
   press, a Move commit after a press that fit, and a flipped Free Transform's
-  commit are tried, then the memory is restored and the move committed
+  commit are tried, then the room is restored and the move committed
 - **THEN** each is refused with the memory reason, the history and pixels are
   unchanged, the transform session is gone, and the restored move commits
 
@@ -67,9 +67,9 @@ restored; none SHALL record a history state.
 
 After each capture, history SHALL drop its oldest states while the bytes it
 holds beyond the live document (retained plane allocations counted once, and
-stored tiles) exceed a quarter of the host's physical memory, and SHALL keep at
-least the current state and one undo. Without a readable host memory size, no
-state SHALL be dropped for bytes.
+stored tiles) exceed half the memory governor's ceiling
+(`document/memory-governor`), and SHALL keep at least the current state and one
+undo. Without a ceiling, no state SHALL be dropped for bytes.
 
 #### Scenario: The oldest states go past the cap [mmb_history_cap]
 

@@ -214,22 +214,28 @@ impl qobject::PictureView {
             "transparent" => false,
             _ => return false,
         };
-        let mut doc = Document::new(width as u32, height as u32, mode, BitDepth::Eight);
+        let (w, h) = (width as u32, height as u32);
+        let estimate =
+            memory_gate::new_document_bytes(w, h, mode.color_channels(), BitDepth::Eight);
+        if !memory_gate::admit_fresh(estimate) {
+            return false;
+        }
         let fill = if white { 255 } else { 0 };
+        let pixels = width as usize * height as usize;
+        let mut channels = Vec::new();
+        for id in (0..i16::from(mode.color_channels())).chain([-1]) {
+            let Ok(data) = pictura_core::memory::try_plane(pixels, fill, "a new layer") else {
+                return false;
+            };
+            channels.push(Channel {
+                id,
+                data: data.into(),
+            });
+        }
+        let mut doc = Document::new(w, h, mode, BitDepth::Eight);
         if white {
             doc.composite.data.fill(255);
         }
-        let pixels = width as usize * height as usize;
-        let mut channels: Vec<Channel> = (0..mode.color_channels())
-            .map(|id| Channel {
-                id: id as i16,
-                data: vec![fill; pixels].into(),
-            })
-            .collect();
-        channels.push(Channel {
-            id: -1,
-            data: vec![fill; pixels].into(),
-        });
         {
             let _ = doc.layers.push(Layer {
                 name: "Layer 0".to_string(),

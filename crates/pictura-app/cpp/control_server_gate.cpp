@@ -11,6 +11,7 @@
 #include <QtWidgets/QDialog>
 
 #include "api/document_api.h"
+#include "api/paint_bridge.h"
 #include "control_approval_bar.h"
 #include "frame.h"
 #include "tools.h"
@@ -255,6 +256,9 @@ void ControlServer::onOpenFinished(quint64 token, int outcome)
     if (static_cast<PicturaMainWindow::OpenOutcome>(outcome)
         == PicturaMainWindow::OpenOutcome::Opened) {
         reply(finished.socket, finished.id, documentResult(true));
+    } else if (open_refused_for_memory()) {
+        reply(finished.socket, finished.id,
+              error(QStringLiteral("refused"), QStringLiteral("not enough memory")));
     } else {
         const bool cancelled = static_cast<PicturaMainWindow::OpenOutcome>(outcome)
             == PicturaMainWindow::OpenOutcome::Cancelled;

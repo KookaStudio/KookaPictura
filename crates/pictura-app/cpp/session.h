@@ -22,6 +22,7 @@ struct SessionState {
     int themeFamily = 0;             // Theme family: 0 dark / 1 light
     int uiScalePercent = 100;        // Theme UI scale, normalized on restore
     bool gpuCompute = true;          // GPU compositing preference
+    int memoryUsagePercent = 60;     // Memory Usage, % of the host's memory (#1211)
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
     int cmykPolicy = 0;              // incoming CMYK profile policy (0 Preserve)
     int workingCmyk = 0;             // 0 = bundled Photocraft Coated CMYK

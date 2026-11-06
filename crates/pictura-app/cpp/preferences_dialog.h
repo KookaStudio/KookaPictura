@@ -8,6 +8,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QSpinBox;
 class QLabel;
 class QRadioButton;
 class QListWidget;
@@ -58,6 +59,8 @@ public:
     void setPickerChoice(int choice);
     int pickerChoice() const;
     void setGpuCompute(bool on);
+    // Memory Usage, in percent of the host's memory (#1211).
+    void setMemoryUsagePercent(int percent);
     void setGpuComputeEnabled(bool on);
     // File Handling: Automatically Save Recovery Information Every `minutes`.
     void setAutoSaveRecovery(bool on, int minutes);
@@ -92,6 +95,7 @@ signals:
     void uiScalePercentChanged(int percent);
     void pickerChoiceChanged(int choice);
     void gpuComputeChanged(bool on);
+    void memoryUsagePercentChanged(int percent);
     void autoSaveRecoveryChanged(bool on, int minutes);
     void guideAppearanceChanged(const QColor& color, bool dashed);
     void rulerUnitChanged(int unit);
@@ -118,6 +122,7 @@ private:
     QComboBox* uiScale_ = nullptr;
     QComboBox* pickerChoice_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
+    QSpinBox* memoryUsage_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;
     ColorSwatchWidget* guideSwatch_ = nullptr;

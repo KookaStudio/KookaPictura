@@ -1,15 +1,32 @@
-//! The byte cap on history (#1207). Twenty states of a large document can hold
-//! more than the host has, so after each capture the oldest states are dropped
-//! while what history holds beyond the live document exceeds a quarter of the
-//! host's physical memory. One undo is always kept.
+//! The byte cap on history (#1207, #1211). Twenty states of a large document
+//! can hold more than the host has, so after each capture the oldest states are
+//! dropped while what history holds beyond the live document exceeds half the
+//! memory governor's ceiling. One undo is always kept.
 
 use super::{planes, History, Stored};
 use pictura_core::Document;
 use std::collections::HashSet;
-use std::sync::OnceLock;
 
-/// The share of the host's physical memory history may hold.
-const SHARE: u64 = 4;
+/// History may hold one part in `SHARE` of the governor's ceiling.
+const SHARE: u64 = 2;
+
+/// The bytes of `doc`'s planes, each allocation counted once.
+pub(crate) fn document_bytes(doc: &Document) -> u64 {
+    let mut seen = HashSet::new();
+    let mut bytes = 0u64;
+    planes::each_plane(doc, &mut |p, _, _, _| {
+        let (ptr, len) = p.base_allocation();
+        if len > 0 && seen.insert(ptr) {
+            bytes += len as u64;
+        }
+        for (ptr, len) in p.owned_bands() {
+            if seen.insert(ptr) {
+                bytes += len as u64;
+            }
+        }
+    });
+    bytes
+}
 
 impl History {
     /// Drop the oldest states while the bytes history holds beyond `live`
@@ -28,8 +45,9 @@ impl History {
         if self.byte_cap.is_some() {
             return self.byte_cap;
         }
-        static HOST: OnceLock<Option<usize>> = OnceLock::new();
-        *HOST.get_or_init(|| pictura_codec::total_memory().map(|total| (total / SHARE) as usize))
+        pictura_core::memory::governor()
+            .ceiling()
+            .map(|ceiling| (ceiling / SHARE) as usize)
     }
 
     /// Set the byte cap in place of the host's.
@@ -121,6 +139,36 @@ mod tests {
         }
         assert!(history.count() < 9, "no state was dropped");
         assert!(history.count() >= 2, "the last undo was dropped");
+        let mut selection = None;
+        let mut restored_target = LayerTarget::default();
+        history
+            .undo_live(&mut live, &mut selection, &mut restored_target)
+            .expect("one undo is kept");
+        assert!(live.composite.data.iter().all(|&v| v == 7));
+    }
+
+    #[test]
+    fn the_history_cap_is_half_the_ceiling() {
+        use pictura_core::memory::{self, HostReading};
+        let plane = 64 * 256 * 3;
+        // A cgroup limit of five composites plus the 256 MiB headroom: a
+        // ceiling of five composites, so a cap of two and a half.
+        memory::set_host_for_test(Some(HostReading {
+            cgroup_max: Some(256 * 1024 * 1024 + 5 * plane as u64),
+            cgroup_current: Some(0),
+            ..HostReading::default()
+        }));
+        let mut history = History::default();
+        let target = LayerTarget::default();
+        let mut live = doc(0);
+        history.capture_live(&mut live, &None, &target, "Open");
+        for seed in 1..=8u8 {
+            live.composite.data.as_mut_slice().fill(seed);
+            history.capture_live(&mut live, &None, &target, "Edit");
+            assert!(history.count() <= 2 || history.held_bytes(&live) <= plane * 5 / 2);
+        }
+        memory::set_host_for_test(None);
+        assert!(history.count() < 9, "no state was dropped");
         let mut selection = None;
         let mut restored_target = LayerTarget::default();
         history

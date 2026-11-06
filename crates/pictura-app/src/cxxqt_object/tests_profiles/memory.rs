@@ -357,3 +357,60 @@ fn open_psd_heap_peak_full() {
         |path| sc::open_psd(path),
     );
 }
+
+/// Each memory gate's estimate (#1211) covers the heap peak its scenario
+/// measures at 4250², so the governor refuses a path before the path can
+/// outgrow the room it was given.
+#[test]
+fn estimates_cover_the_measured_peaks() {
+    use crate::cxxqt_object::helpers::memory_gate as gate;
+    use pictura_core::BitDepth;
+    if !alone_in_process("estimates_cover_the_measured_peaks") {
+        return;
+    }
+    let side = GUARD_SIDE;
+    let doc = |view: &PictureViewRust| view.session.doc.clone().expect("document");
+    let check = |name: &str, peak: usize, estimate: u64| {
+        println!(
+            "{name}: heap peak {:.1} MiB, estimate {:.1} MiB",
+            mib(peak),
+            mib(estimate as usize)
+        );
+        assert!(
+            peak as u64 <= estimate,
+            "{name}: heap peak {peak} B is above its estimate {estimate} B"
+        );
+    };
+    let file = sc::TempFile::new("estimate");
+
+    let peak = measure(|| (), |_| drop(view(side)));
+    check(
+        "new_document",
+        peak,
+        gate::new_document_bytes(side, side, 3, BitDepth::Eight),
+    );
+
+    let estimate = gate::add_layer_bytes(&doc(&view(side)));
+    check("add_layer", measure(|| view(side), sc::add_layer), estimate);
+
+    let estimate = gate::brush_bytes(&doc(&with_layer(side)), "1");
+    let peak = measure(|| with_layer(side), |v| sc::brush_stroke(v, side));
+    check("brush_stroke", peak, estimate);
+
+    let estimate = gate::restore_bytes(&doc(&with_history(side)));
+    check(
+        "undo_redo",
+        measure(|| with_history(side), sc::undo_redo),
+        estimate,
+    );
+
+    let start = doc(&with_stroke(side));
+    let estimate = gate::snapshot_bytes(&start) + gate::snapshot_restore_bytes(&start);
+    drop(start);
+    let peak = measure(|| with_stroke(side), sc::snapshot_restore);
+    check("snapshot_restore", peak, estimate);
+
+    let estimate = gate::save_bytes(&doc(&with_square(side)));
+    let peak = measure(|| with_square(side), |v| sc::save_psd(v, &file));
+    check("save_psd", peak, estimate);
+}

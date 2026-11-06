@@ -1,0 +1,40 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `mg_cgroup_limit` | Ceiling of a 32 GiB host at 60 % with `memory.max` 4 GiB, then `max` | 4 GiB − 256 MiB; then 19.2 GiB − 5 % | `pictura-core::a_cgroup_limit_caps_the_ceiling` |
+| `mg_nested_cgroup` | Leaf `memory.max` = `max`, `memory.high` 3 GiB, ancestor `memory.max` 2 GiB | The cgroup limit is 2 GiB | `pictura-core::an_ancestor_limit_and_memory_high_count` |
+| `mg_root_cgroup` | A fake host whose cgroup line is `0::/` with the mount's `memory.max` 1 GiB | Limit 1 GiB; ceiling 768 MiB | `pictura-core::a_process_at_the_cgroup_root_reads_the_root_limit` |
+| `mg_headroom` | Ceiling of limits 1 GiB, 10 GiB, 200 MiB | 768 MiB, 9.5 GiB, 0 | `pictura-core::headroom_is_the_larger_of_five_percent_or_256_mib` |
+| `mg_unreadable_host` | An empty reading; reserve 1 TiB | No ceiling; granted | `pictura-core::an_unreadable_host_refuses_nothing` |
+| `mg_room` | Ceiling 3 GiB, 1 GiB used, 512 MiB reserved; then 1 GiB available | Room 1.5 GiB; then 256 MiB | `pictura-core::use_reservations_and_available_memory_shrink_the_room` |
+| `mg_pressure_psi` | `some avg10` 0.5, 7.25, 31.0 | Normal, Elevated, Critical | `pictura-core::psi_sets_the_pressure_level` |
+| `mg_pressure_fallback` | No PSI; 50 %, 15 %, 5 % available | Normal, Elevated, Critical | `pictura-core::the_free_share_sets_the_level_without_psi` |
+| `mg_reservation_race` | Eight threads race for 1 GiB each in 1.5 GiB of room | Exactly one is granted; nothing stays reserved | `pictura-core::concurrent_reservations_never_overcommit_the_room` |
+| `mg_reservation` | Reserve 1 GiB of 1.5 GiB, ask 1 GiB, drop, ask again | Refused with `Insufficient{purpose, bytes}` and recorded; then granted | `pictura-core::a_reservation_is_released_on_drop` |
+| `mg_injected_roots` | Write a fake `/proc` and cgroup tree in a temp dir and read it; remove `pressure/memory` | Every field read; then only PSI missing | `pictura-core::a_host_is_read_from_injected_roots` |
+| `mg_cached_reading` | Read the governor twice within 250 ms, changing the files between | The second reading equals the first | `pictura-core::the_reading_is_cached_for_250_ms` |
+| `mg_preference_default` | Start with a fresh state home; open Preferences ▸ Performance | Governor at 60; spin box shows 60 | `tst_memory_governor::memoryUsageDefaultsToSixty` |
+| `mg_preference_change` | Set the spin box to 45; save the session and read it back | Governor at 45; the restored session holds 45 | `tst_memory_governor::memoryUsageChangeAppliesAndPersists` |
+| `mg_gates_refuse` | Pin the room to zero; try New Document, Add Layer, brush begin, Undo, Redo, add snapshot, restore snapshot, Save As, Open; restore the room and repeat | Each refused with the memory reason; document, history and modified flag unchanged, no file written; each then runs | `tst_memory_governor::everyPathRefusesWithoutRoom` |
+| `mg_fill_under_cgroup` | Pin a 512 MiB cgroup with 400 MiB in use; Paint Bucket inside a marquee | Refused; no history state; the layer's pixels unchanged | `tst_fill_tools::refusedForMemoryShowsStatus` |
+| `mg_status_message` | Pin the room to zero; Add Layer, Undo and New Document from the app; a refused bucket click | Each leaves its "not enough memory" message on the status bar; the fill shows the fill message | `tst_memory_governor::refusalsShowTheStatusMessage`, `tst_fill_tools::refusedForMemoryShowsStatus` |
+| `mg_control_refused` | Pin the room to zero; send `document new` and `layer_op add` | Each answers the error `refused`; document count and layers unchanged | `tst_memory_governor::controlAnswersRefused` |
+| `mg_estimates_cover_peaks` | Run M1, M2, M6, M7, M8, M11 at 4250² alone in their process and compare each heap peak with its gate's estimate | Every peak ≤ its estimate | `pictura-app::estimates_cover_the_measured_peaks` |
+| `mg_history_share` | Pin a ceiling of five composites (cap 2.5); rewrite the composite eight times | Within 2.5 composites or 2 states; undo restores the previous edit | `pictura-app::the_history_cap_is_half_the_ceiling` |
+| `mg_status_memory` | Call `status`; set Memory Usage to 45 and call it again | `memory` holds the six keys; `usage_percent` 60 then 45 | `tst_memory_governor::statusReportsTheGovernor` |
+| `mg_4g_benchmark` | `scripts/profile-tools.py --scenarios memory --memory-max 4G` at 17000² | No `oom` outcome; each scenario `ok` or `refused` | manual: runs the app in a systemd user scope with swap off at 17000², which the CI runners cannot host; the result is posted on the PR |
+| `fa_try_plane` | `try_plane` 1 KiB and 32 MiB with room; 32 MiB and 1 KiB with no room; armed failpoint | Built, built, refused (purpose, bytes), built, refused | `pictura-core::a_plane_is_built_or_refused` |
+| `fa_failpoint_edit` | Arm the failpoint before New Document, then before a Paint Bucket click | No document created; no history state and the layer unchanged; the memory reason reported | `tst_memory_governor::aFailedAllocationLeavesTheEditUndone` |
+| `fmb_gate` | Pin the room to 64 bytes: bucket, gradient, Fill, Stroke; restore and Fill | Each refused with the reason, pixels and history unchanged; the restored Fill commits one state | `tst_fill_tools::fillsRefuseWhatMemoryCannotHold`, `pictura-app::a_refusal_is_remembered_until_the_next_fill` |
+| `fmb_large_manual` | On a ~7 GB host, 17000×17000: marquee, Paint Bucket inside; then fill with too little memory | No OOM kill; an over-budget fill shows the fill message | manual: a 17000×17000 document does not fit the test runners' memory, and the OOM killer is a property of the real host |
+| `mmb_gate` | Pin the room to 64 bytes: press; press with room then commit without; flipped Free Transform commit; restore and commit | Each refused with the reason; history and pixels unchanged; no transform session; the restored move commits | `tst_damage_bounds::moveAndTransformRefuseWhatMemoryCannotHold` |
+| `mmb_transform_estimate` | Estimate a 10×10 → 20×20 quad and a fractional one | 4·400 + 12·400; 4·110 + 12·110 | `pictura-app::a_transform_commit_charges_its_box_and_the_composite_around_it` |
+| `mmb_history_cap` | Rewrite a 64×256 composite 8 times with a 2.5-composite cap; 5 times with no binding cap | Within the cap or 2 states, fewer than 9 states, undo restores 7; 6 states kept | `pictura-app::the_oldest_states_go_when_history_outgrows_its_cap`, `pictura-app::a_roomy_cap_keeps_every_state` |
+| `mmb_total_memory` | Parse meminfo text; query the host | `MemTotal` in bytes; available ≤ total | `pictura-core::meminfo_available_is_parsed_in_bytes`, `pictura-core::the_host_reports_available_memory` |
+| `mmb_large_manual` | On a ~7 GB host, 17000×17000: paint a box on a new layer, then Move, resize and Free Transform it repeatedly | No OOM kill; an edit that cannot fit shows the memory message | manual: a 17000×17000 document does not fit the test runners' memory, and the OOM killer is a property of the real host |
+| `rs_refuses` | New 40×20 RGB/8 document; `image_size_apply` with `bicubic` to 30000×30000 | Returns false; width, height and history count unchanged | `tst_image_ops::imageSizeRefusesAnOverBudgetTarget` |
+| `rs_bridge_refuses` | New 40×20 document; `PictureView::resize_image` to 30000×30000 | Returns false; the document and its history unchanged | `tst_image_ops::resizeImageRefusesAnOverBudgetTarget` |
+| `rs_allows` | New 40×20 document; accept Image Size at 20×10 | Returns true; 20×10; current label "Image Size" | `tst_image_ops::imageSizeResamplesAndSetsResolution` |
+| `rs_resolution_only` | After the refusal, `image_size_apply` with no resample at 40×20 and 300 ppi | Returns true; 40×20 at 300 ppi | `tst_image_ops::imageSizeRefusesAnOverBudgetTarget` |
+| `rs_shared_budget` | Shared predicate against synthetic budgets; the resize bound against low, high and unknown room | Sides first, byte limits enforced, inside accepted, the resize bound drops the floor | `pictura-app::budget_judges_sides_then_bytes`, `pictura-app::budget_honours_the_document_limit`, `pictura-app::a_resize_document_limit_drops_the_allocation_floor` |

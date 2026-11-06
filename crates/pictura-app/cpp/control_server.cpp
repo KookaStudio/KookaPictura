@@ -42,6 +42,7 @@
 #include "tools.h"
 
 #include "api/view_bridge.h"
+#include "api/paint_bridge.h"
 
 namespace pictura {
 
@@ -679,6 +680,8 @@ QJsonObject ControlServer::methodStatus(const QJsonObject&)
             {QStringLiteral("visible"), column && column->isPanelVisible(name)}});
     }
     result.insert(QStringLiteral("panels"), panels);
+    result.insert(QStringLiteral("memory"),
+                  QJsonDocument::fromJson(memory_status_json().toUtf8()).object());
     return ok(result);
 }
 

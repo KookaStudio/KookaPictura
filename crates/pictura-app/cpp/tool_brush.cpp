@@ -1,6 +1,8 @@
 #include "tool_handler.h"
 
 #include "api/paint_api.h"
+#include "api/paint_bridge.h"
+#include "memory_refusal.h"
 #include "paint_tip.h"
 #include "pictura_debug_timing.h"
 #include "tools.h"
@@ -69,7 +71,9 @@ public:
                                             paint_->pressureSize(), paint_->pressureOpacity());
         }
         if (!stroke_) {
-            if (activePixelLocked(v)) {
+            if (edit_refused_for_memory()) {
+                ctx.refused(memoryRefusalMessage(QObject::tr("paint")));
+            } else if (activePixelLocked(v)) {
                 ctx.refused(QObject::tr("Could not paint: the layer's pixels are locked."));
             } else if (!v->active_layer_visible()) {
                 ctx.refused(QObject::tr("Could not paint: the active layer is invisible."));

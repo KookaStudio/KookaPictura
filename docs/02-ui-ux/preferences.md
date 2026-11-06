@@ -128,7 +128,7 @@ also stored in a preferences file, not the document.
 
 | Setting | Type | CS6 default | Notes |
 |---|---|---|---|
-| Memory Usage | slider (MB / %) | 70 % | Range ~5–100 % of RAM; restart required. |
+| Memory Usage | slider (MB / %) | 60 % | Range ~5–100 % of RAM; restart required in CS6. Default follows `scratch-disks-and-memory.md` (owner decision, #1211). Deviation: Kooka Pictura applies a change at once, since its memory ceiling is computed at each check rather than reserved at launch. |
 | Let Photoshop Use [n] MB | number | derived | Numeric mirror of the slider. |
 | History States | number | 20 | 1–1000 *(secondary)*; more states cost RAM; restart required. |
 | Cache Levels | number | 6 *(CS6-era secondary; Adobe's current KB says 4)* | 1–8 *(secondary)*; higher = faster screen redraw, slower on small edits. |
@@ -268,7 +268,7 @@ against a running CS6 before the spec reaches `Spec'd`.
 | Image Interpolation | enum | Bicubic | Nearest/Bilinear/Bicubic/Bicubic Smoother/Bicubic Sharper/(CS6: Automatic) | Shared with Image Size dialog. |
 | HUD Color Picker | enum | Strip | Hue Strip/Hue Wheel | OpenGL required. |
 | Show Transformation Values | enum | Top Right *(secondary)* | 5 positions + Never | — |
-| Memory Usage | % of RAM | 70 | ~5–100 *(secondary)* | Restart required. |
+| Memory Usage | % of RAM | 60 | ~5–100 *(secondary)* | Restart required in CS6; Kooka Pictura applies it at once (deviation, #1211). Default per `scratch-disks-and-memory.md` (owner decision, #1211); a community guide reports 70. |
 | History States | int | 20 | 1–1000 *(secondary)* | Affects undo depth + scratch usage; restart. |
 | Cache Levels | int | 6 *(CS6-era; Adobe KB: 4)* | 1–8 *(secondary)* | Contested default. |
 | Cache Tile Size | enum | 1024 K *(secondary)* | 128 K/132 K/1024 K *(secondary)* | — |

@@ -9,6 +9,10 @@
 mod imp;
 
 use super::super::helpers::memory_gate::{edit_refused_for_memory, set_available_memory_for_test};
+use super::super::helpers::memory_report::{
+    fail_next_plane_for_test, memory_status_json, memory_usage_percent, open_refused_for_memory,
+    set_memory_cgroup_for_test, set_memory_usage_percent,
+};
 use super::super::qobject::PictureView;
 pub(crate) use imp::*;
 
@@ -119,14 +123,36 @@ pub mod ffi {
             opacity: i32,
         ) -> bool;
 
-        /// Whether the last gated edit (Gradient, Paint Bucket, Fill, Stroke,
-        /// a Move press or commit, a Free Transform commit) was refused because
-        /// its estimated peak did not fit three quarters of the memory
-        /// available, rather than for its layer or its input.
+        /// Whether the last gated edit (a fill, a Move or Free Transform, or a
+        /// path the memory benchmark drives, #1211) was refused because its
+        /// estimated peak did not fit the memory governor's room, rather than
+        /// for its layer or its input.
         fn edit_refused_for_memory() -> bool;
 
-        /// Test hook: make the gated edits see `bytes` of available memory; a
-        /// negative value reads the host again.
+        /// Test hook: pin this thread's host to `bytes` of available memory and
+        /// nothing else; a negative value reads the host again.
         fn set_available_memory_for_test(bytes: i64);
+
+        /// Memory Usage, in percent of the host's memory (5–100, default 60).
+        fn memory_usage_percent() -> i32;
+
+        /// Set Memory Usage; clamped to 5–100.
+        fn set_memory_usage_percent(percent: i32);
+
+        /// The governor now, as the JSON object of `status.memory`: `ceiling`,
+        /// `used`, `reserved`, `room` (bytes, `null` when unknown),
+        /// `pressure` and `usage_percent`.
+        fn memory_status_json() -> QString;
+
+        /// Whether the last PSD open was refused because its decode did not fit
+        /// the governor's room.
+        fn open_refused_for_memory() -> bool;
+
+        /// Test hook: pin this thread's host to a cgroup limited to `max` bytes
+        /// with `current` in use; a negative `max` reads the host again.
+        fn set_memory_cgroup_for_test(max: i64, current: i64);
+
+        /// Test hook: fail the next fallible plane allocation on this thread.
+        fn fail_next_plane_for_test();
     }
 }

@@ -1,7 +1,7 @@
 mod display;
 mod purge;
 
-use super::helpers::{clamp_region, paint_timing};
+use super::helpers::{clamp_region, memory_gate, paint_timing};
 use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame};
 use super::presentation::{Dirty, Presentation, Rebuild};
 use super::{qobject, PictureViewRust};
@@ -24,6 +24,17 @@ struct ShownRestore {
 }
 
 impl PictureViewRust {
+    /// Whether a history restore of the document fits the memory governor's
+    /// room; a refusal is recorded for `edit_refused_for_memory`.
+    pub(super) fn restore_fits(&self) -> bool {
+        let estimate = self
+            .session
+            .doc
+            .as_ref()
+            .map_or(0, memory_gate::restore_bytes);
+        memory_gate::admit_fresh(estimate)
+    }
+
     /// Fold `rect` of the document's own composite into level 0 and the
     /// pyramid without compositing it again — history has just restored those
     /// bytes — and return the damaged document rectangle.
@@ -122,8 +133,9 @@ impl PictureViewRust {
 
 impl qobject::PictureView {
     pub fn undo(mut self: Pin<&mut Self>) -> bool {
+        memory_gate::clear();
         self.as_mut().settle_pending_composite();
-        if !self.rust().can_undo() {
+        if !self.rust().can_undo() || !self.rust().restore_fits() {
             return false;
         }
         let restored = self
@@ -134,8 +146,9 @@ impl qobject::PictureView {
     }
 
     pub fn redo(mut self: Pin<&mut Self>) -> bool {
+        memory_gate::clear();
         self.as_mut().settle_pending_composite();
-        if !self.rust().can_redo() {
+        if !self.rust().can_redo() || !self.rust().restore_fits() {
             return false;
         }
         let restored = self
@@ -207,12 +220,13 @@ impl qobject::PictureView {
     }
 
     pub fn history_jump(mut self: Pin<&mut Self>, i: i32) -> bool {
+        memory_gate::clear();
         self.as_mut().settle_pending_composite();
         if i < 0 {
             return false;
         }
         let i = i as usize;
-        if i >= self.rust().session.history.count() {
+        if i >= self.rust().session.history.count() || !self.rust().restore_fits() {
             return false;
         }
         let restored = self.as_mut().rust_mut().restore(
@@ -224,6 +238,15 @@ impl qobject::PictureView {
 
     pub fn history_add_snapshot(mut self: Pin<&mut Self>, label: &QString) -> bool {
         self.as_mut().settle_pending_composite();
+        let estimate = self
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map_or(0, memory_gate::snapshot_bytes);
+        if !memory_gate::admit_fresh(estimate) {
+            return false;
+        }
         let Some(snapshot) = self.rust().named_snapshot() else {
             return false;
         };
@@ -238,6 +261,7 @@ impl qobject::PictureView {
     }
 
     pub fn history_restore_snapshot(mut self: Pin<&mut Self>, i: i32) -> bool {
+        memory_gate::clear();
         self.as_mut().settle_pending_composite();
         if i < 0 {
             return false;
@@ -245,6 +269,9 @@ impl qobject::PictureView {
         let Some(snapshot) = self.rust().session.history.snapshot(i as usize) else {
             return false;
         };
+        if !memory_gate::admit_fresh(memory_gate::snapshot_restore_bytes(&snapshot.doc)) {
+            return false;
+        }
         let label = self
             .rust()
             .session
