@@ -42,4 +42,10 @@ bash scripts/verify-fast.sh
 echo "== control =="
 bash scripts/verify-control.sh
 
+echo "== memory harness =="
+# The memory benchmark's own checks (#1210): the fixture generator, then the
+# profiler's helpers and every M scenario at 512x512 against the build above.
+python3 scripts/gen-large-fixtures.py --self-check
+python3 scripts/profile-tools.py --self-check --bin ./build/pictura
+
 echo "verify-full: OK"
