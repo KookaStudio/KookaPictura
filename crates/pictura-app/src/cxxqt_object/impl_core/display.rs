@@ -288,20 +288,36 @@ fn mask_sample(mask: &LayerMask, x: i32, y: i32) -> u8 {
 
 /// The document-sized grayscale mask plane: each sample replicated across RGB,
 /// opaque. The grayscale value is the stored channel, not density/feather
-/// (composite-time parameters).
-fn mask_display_plane(mask: &LayerMask, width: u32, height: u32) -> PixelBuffer {
-    let mut buffer = PixelBuffer::new(width, height, 4);
+/// (composite-time parameters). A whole-document restore rebuilds this, so it
+/// fills one plane per core and touches only the pages it writes.
+pub(in crate::cxxqt_object) fn mask_display_plane(
+    mask: &LayerMask,
+    width: u32,
+    height: u32,
+) -> PixelBuffer {
+    use rayon::prelude::*;
+    let mut buffer = PixelBuffer::zeroed(width, height, 4);
     let plane = buffer.pixel_count();
-    for y in 0..height as i32 {
-        for x in 0..width as i32 {
-            let v = mask_sample(mask, x, y);
-            let i = y as usize * width as usize + x as usize;
-            buffer.data[i] = v;
-            buffer.data[plane + i] = v;
-            buffer.data[2 * plane + i] = v;
-            buffer.data[3 * plane + i] = 255;
-        }
+    if plane == 0 {
+        return buffer;
     }
+    let stride = width as usize;
+    buffer
+        .data
+        .as_mut_slice()
+        .par_chunks_mut(plane)
+        .enumerate()
+        .for_each(|(channel, out)| {
+            if channel == 3 {
+                out.fill(255);
+                return;
+            }
+            out.par_chunks_mut(stride).enumerate().for_each(|(y, row)| {
+                for (x, sample) in row.iter_mut().enumerate() {
+                    *sample = mask_sample(mask, x as i32, y as i32);
+                }
+            });
+        });
     buffer
 }
 
@@ -389,6 +405,38 @@ mod tests {
         };
         assert_eq!(at(1, 1), [64, 64, 64, 255], "in-rect sample, opaque");
         assert_eq!(at(2, 0), [128, 128, 128, 255], "off-rect default_color");
+    }
+
+    #[test]
+    fn mask_display_plane_matches_a_serial_build() {
+        let (w, h) = (9u32, 7u32);
+        let rect = PsdRect {
+            top: 2,
+            left: 3,
+            bottom: 5,
+            right: 7,
+        };
+        let data: Vec<u8> = (0..12).map(|i| (i * 17) as u8).collect();
+        let m = mask(rect, 40, false, Some(data));
+        let plane = mask_display_plane(&m, w, h);
+        let n = (w * h) as usize;
+        assert_eq!(plane.data.len(), n * 4);
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let v = mask_sample(&m, x, y);
+                let i = y as usize * w as usize + x as usize;
+                assert_eq!(
+                    [
+                        plane.data[i],
+                        plane.data[n + i],
+                        plane.data[2 * n + i],
+                        plane.data[3 * n + i],
+                    ],
+                    [v, v, v, 255],
+                    "at {x},{y}"
+                );
+            }
+        }
     }
 
     #[test]
