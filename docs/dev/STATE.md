@@ -4,6 +4,16 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Streaming plane access** (#1212, step 4 of #1209; first of several PRs,
+  OpenSpec `document/plane-access`). `Plane` has non-copying `rows`,
+  `rows_mut`, `read_rect_into`, `write_rect_from`, `read_into` and
+  `for_each_band[_mut]` (`pictura-core/src/plane/access.rs`), plus the test
+  guard `assert_no_materialization`. Render compositing, Move, Free Transform,
+  Layer via Copy/Cut, core grow/trim and the history `copy_plane` use them.
+  The heap guards assert 0 materializations for M2–M10 (`STREAMED` in
+  `tests_profiles/memory.rs`). The remaining callers (paint, select, app
+  pyramid and previews, codec write) are listed in the archived change's
+  `design.md`. They follow one crate per PR, and #1212 closes with the last.
 - **Memory benchmark harness** (#1210, step 1 of #1209, OpenSpec change
   `memory-benchmark-harness`). `scripts/profile-tools.py --scenarios memory`
   runs M1–M13 (`scripts/memory_scenarios.py`; 17000² by default, `--size`
