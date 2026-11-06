@@ -198,6 +198,10 @@ mod tests {
     #[test]
     fn a_second_start_while_running_is_refused() {
         let mut rust = view();
+        // Keep the worker provably alive after its encode; an 8×8 document can
+        // otherwise finish inside `thread::spawn`'s window and the second start
+        // legitimately succeeds.
+        rust.save_delay_for_test = 200;
         let path = path("twice.psd");
         assert!(save_start_rust(&mut rust, &path));
         assert!(!save_start_rust(&mut rust, &path));

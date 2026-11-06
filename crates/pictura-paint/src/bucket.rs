@@ -235,9 +235,7 @@ pub fn fill(
     if opacity <= 0.0 || empty_tile || mask.len() < (width * doc.height as i32) as usize {
         return None;
     }
-    let Some(damage) = coverage_bounds(mask, width, doc.height as i32) else {
-        return None;
-    };
+    let damage = coverage_bounds(mask, width, doc.height as i32)?;
     fill_layer_within(doc, path, mode, selection, alpha, Some(damage), |x, y| {
         let cover = mask[(y * width + x) as usize];
         if cover == 0 {
@@ -311,9 +309,7 @@ pub fn fill_within(
     }
     let damage = match mask {
         Some(mask) => {
-            let Some(hit) = coverage_bounds(mask, bw, bounds.height().max(0)) else {
-                return None;
-            };
+            let hit = coverage_bounds(mask, bw, bounds.height().max(0))?;
             PsdRect {
                 top: hit.top + bounds.top,
                 left: hit.left + bounds.left,

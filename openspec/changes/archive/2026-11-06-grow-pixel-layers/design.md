@@ -59,11 +59,14 @@ bytes itself.
 ## Filter growth
 
 A committed filter grows the layer by the filter stack's apron
-(`Filter::preview_apron`, already used by the preview) before applying it. A
-point filter has apron 0 and grows nothing. The preview keeps the current rect;
-only a commit changes the stored rect, so a cancelled preview leaves the layer
-untouched. After the commit the layer is trimmed back to its content, so a blur
-that spreads into transparent padding does not keep the padding forever.
+(`Filter::preview_apron`, already used by the preview) before applying it,
+clipped to the canvas. A canvas-sized layer has no room to grow and keeps its
+rect, so a section preview is unchanged; a content-sized layer gains the padding
+its blur needs. A point filter has apron 0 and grows nothing. A preview grows
+the same way and remembers the rect it began on, so cancelling it restores the
+pixels and shrinks the rect back; a commit keeps the grown rect. The apron
+padding is not trimmed after the commit (a ceiling): a later Move or Free
+Transform trim drops any fully transparent padding it contains.
 
 ## Trimming
 
@@ -84,7 +87,12 @@ byte-identical round trip is unchanged.
 ## Ceilings
 
 - A layer with unmodeled `raw_channels` loses them when it grows.
-- A filter preview does not grow the layer; only its commit does.
+- A committed filter's apron padding is not trimmed until a later Move or Free
+  Transform trim.
+- The first Move of a canvas-sized layer scans it once to trim it; later moves
+  scan only the content-sized rect.
+- A fill whose box only partly overlaps a layer keeps the old rect, so the part
+  outside it is not painted; a fill whose box misses the layer grows to the box.
 - `untrim_to` remains for Free Transform cancel; it is no longer required for a
   later edit to reach outside the rect.
 - A Paint Bucket with no selection still grows to the canvas; the tiled flood

@@ -342,6 +342,8 @@ fn an_empty_layer_converts_to_a_canvas_sized_smart_object() {
     assert!(layer.smart_object.is_some());
 }
 
+// An empty layer is eligible now (it grows to the canvas first); see
+// `an_empty_layer_converts_to_a_canvas_sized_smart_object`.
 #[test]
 fn convert_refuses_ineligible_targets() {
     let cases: Vec<(&str, Document)> = vec![

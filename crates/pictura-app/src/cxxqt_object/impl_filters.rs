@@ -356,15 +356,19 @@ pub(super) fn apply_op_active_region(
     // first, so the edge is not clipped (#1208). A preview remembers the rect
     // it began on, and cancelling it shrinks the layer back.
     let preview_rect = lrect;
-    if apron > 0 {
+    if apron > 0 && !lrect.is_empty() {
+        // Grow by the apron inside the canvas. A canvas-sized layer has no
+        // room to grow and keeps its rect, so a section preview is unchanged;
+        // a content-sized layer gains its apron. The union with `lrect` keeps
+        // a layer that already extends past the canvas a superset, so the grow
+        // never refuses on the outside-canvas side.
         let canvas = pictura_core::PsdRect {
             top: 0,
             left: 0,
             bottom: doc_h as i32,
             right: doc_w as i32,
         };
-        let grown = lrect.grow(apron);
-        let grown = grown.intersect(canvas).unwrap_or(lrect);
+        let grown = lrect.union(lrect.grow(apron).intersect(canvas).unwrap_or(lrect));
         match pictura_core::layer_bounds::grow_layer_to(layer, grown, "a filter") {
             Ok(true) => lrect = layer.rect,
             Ok(false) => {}
