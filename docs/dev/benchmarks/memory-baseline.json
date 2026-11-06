@@ -1,0 +1,258 @@
+{
+  "meta": {
+    "issue": "#1210 (step 1 of #1209)",
+    "tool": "scripts/profile-tools.py --scenarios memory --peak; scenarios in scripts/memory_scenarios.py",
+    "machine": {
+      "cpu": "Icestorm-M1 + Firestorm-M1",
+      "cores": 8,
+      "mem_total_mib": 7499,
+      "kernel": "6.18.15-400.asahi.fc42.aarch64+16k",
+      "arch": "aarch64",
+      "qt": "6.10.2",
+      "commit": "e7029b38bed24f99d6aae3e4f7526ab9e1d0c51b"
+    },
+    "base_commit": "e7029b38bed24f99d6aae3e4f7526ab9e1d0c51b",
+    "notes": [
+      "Recorded with the harness of #1210 on master at base_commit; the harness changes no engine code.",
+      "4G: every scenario that creates a 17000x17000 document is OOM-killed, M1 (the empty document) included; most die in setup at document new.",
+      "4G M12 was re-run alone after a harness fix (an absolute fixture path). The app refused the open: the PSD reader's image budget (#844) allows one document's planes three quarters of MemAvailable, and the fixture decodes to about 5.5 GB of planes. Recorded before the harness had a 'refused' outcome; reclassified from 'crash' with the app's message kept.",
+      "Runs under 6G and just below RAM (the issue's 8G and unlimited) do not fit the 7.3 GiB reference laptop: a 6.3G run froze its desktop. They are left to a machine with at least 16 GB.",
+      "4250@1700M is the same catalogue at 4250x4250 (geometry scaled by the side) under MemoryMax=1700M, so later steps have peaks to compare on this machine."
+    ]
+  },
+  "runs": {
+    "4G": {
+      "meta": {
+        "document": "new 17000x17000",
+        "width": 17000,
+        "height": 17000,
+        "memory_max": "4G",
+        "machine": {
+          "cpu": "Icestorm-M1 + Firestorm-M1",
+          "cores": 8,
+          "mem_total_mib": 7499,
+          "kernel": "6.18.15-400.asahi.fc42.aarch64+16k",
+          "arch": "aarch64",
+          "qt": "6.10.2",
+          "commit": "e7029b38bed24f99d6aae3e4f7526ab9e1d0c51b"
+        }
+      },
+      "results": {
+        "M1": {
+          "gesture": "New document",
+          "outcome": "oom",
+          "oom_phase": "scenario",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M2": {
+          "gesture": "Add one empty layer",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M3": {
+          "gesture": "Marquee 1000² at centre, Edit > Fill on Background",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M4": {
+          "gesture": "Paint Bucket in the marquee on Layer 1",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M5": {
+          "gesture": "Paint Bucket on Layer 1, no selection",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M6": {
+          "gesture": "Brush 300 px hard, 4000 px stroke",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M7": {
+          "gesture": "Undo x3, redo x3 after M3-M6",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M8": {
+          "gesture": "Named snapshot, then restore it",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M9": {
+          "gesture": "Move the square by 500 px",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M10": {
+          "gesture": "Free Transform the square 150 %, 15°",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M11": {
+          "gesture": "Save as PSD",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        },
+        "M12": {
+          "gesture": "Open the generated 4-layer PSD",
+          "outcome": "refused",
+          "phase": "scenario",
+          "error": "document: {'code': 'io_error', 'message': 'could not open /home/mreider/dev/projects/kooka-pictura-worktrees/1210-memory-benchmark-harness/build/memory-fixtures/memory-fixture-17000x17000-seed1210.psd'}"
+        },
+        "M13": {
+          "gesture": "Fit, 100 %, pan across, fit",
+          "outcome": "oom",
+          "oom_phase": "setup",
+          "error": "document: no response (did the app crash?)"
+        }
+      }
+    },
+    "4250@1700M": {
+      "meta": {
+        "document": "new 4250x4250",
+        "width": 4250,
+        "height": 4250,
+        "memory_max": "1700M",
+        "machine": {
+          "cpu": "Icestorm-M1 + Firestorm-M1",
+          "cores": 8,
+          "mem_total_mib": 7499,
+          "kernel": "6.18.15-400.asahi.fc42.aarch64+16k",
+          "arch": "aarch64",
+          "qt": "6.10.2",
+          "commit": "e7029b38bed24f99d6aae3e4f7526ab9e1d0c51b"
+        }
+      },
+      "results": {
+        "M1": {
+          "gesture": "New document",
+          "outcome": "ok",
+          "total_ms": 1176.54,
+          "rss_before_mb": 168,
+          "peak_mb": 533,
+          "peak_added_mb": 364,
+          "rss_mb": 423
+        },
+        "M2": {
+          "gesture": "Add one empty layer",
+          "outcome": "ok",
+          "total_ms": 1076.68,
+          "rss_before_mb": 423,
+          "peak_mb": 492,
+          "peak_added_mb": 69,
+          "rss_mb": 492
+        },
+        "M3": {
+          "gesture": "Marquee 1000² at centre, Edit > Fill on Background",
+          "outcome": "ok",
+          "total_ms": 969.83,
+          "rss_before_mb": 492,
+          "peak_mb": 493,
+          "peak_added_mb": 1,
+          "rss_mb": 493
+        },
+        "M4": {
+          "gesture": "Paint Bucket in the marquee on Layer 1",
+          "outcome": "ok",
+          "total_ms": 1009.33,
+          "rss_before_mb": 492,
+          "peak_mb": 492,
+          "peak_added_mb": 0,
+          "rss_mb": 492
+        },
+        "M5": {
+          "gesture": "Paint Bucket on Layer 1, no selection",
+          "outcome": "ok",
+          "total_ms": 1173.99,
+          "rss_before_mb": 492,
+          "peak_mb": 680,
+          "peak_added_mb": 187,
+          "rss_mb": 680
+        },
+        "M6": {
+          "gesture": "Brush 300 px hard, 4000 px stroke",
+          "outcome": "ok",
+          "total_ms": 1363.37,
+          "rss_before_mb": 492,
+          "peak_mb": 493,
+          "peak_added_mb": 1,
+          "rss_mb": 493
+        },
+        "M7": {
+          "gesture": "Undo x3, redo x3 after M3-M6",
+          "outcome": "ok",
+          "total_ms": 1172.64,
+          "rss_before_mb": 717,
+          "peak_mb": 941,
+          "peak_added_mb": 224,
+          "rss_mb": 807
+        },
+        "M8": {
+          "gesture": "Named snapshot, then restore it",
+          "outcome": "ok",
+          "total_ms": 1187.22,
+          "rss_before_mb": 493,
+          "peak_mb": 1000,
+          "peak_added_mb": 507,
+          "rss_mb": 934
+        },
+        "M9": {
+          "gesture": "Move the square by 500 px",
+          "outcome": "ok",
+          "total_ms": 1090.96,
+          "rss_before_mb": 492,
+          "peak_mb": 494,
+          "peak_added_mb": 1,
+          "rss_mb": 494
+        },
+        "M10": {
+          "gesture": "Free Transform the square 150 %, 15°",
+          "outcome": "ok",
+          "total_ms": 1033.73,
+          "rss_before_mb": 492,
+          "peak_mb": 524,
+          "peak_added_mb": 31,
+          "rss_mb": 495
+        },
+        "M11": {
+          "gesture": "Save as PSD",
+          "outcome": "ok",
+          "total_ms": 1060.38,
+          "rss_before_mb": 493,
+          "peak_mb": 740,
+          "peak_added_mb": 247,
+          "rss_mb": 603
+        },
+        "M12": {
+          "gesture": "Open the generated 4-layer PSD",
+          "outcome": "ok",
+          "total_ms": 1436.42,
+          "rss_before_mb": 168,
+          "peak_mb": 718,
+          "peak_added_mb": 549,
+          "rss_mb": 718
+        },
+        "M13": {
+          "gesture": "Fit, 100 %, pan across, fit",
+          "outcome": "ok",
+          "total_ms": 993.52,
+          "rss_before_mb": 423,
+          "peak_mb": 423,
+          "peak_added_mb": 0,
+          "rss_mb": 423
+        }
+      }
+    }
+  }
+}

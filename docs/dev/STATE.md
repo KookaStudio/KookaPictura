@@ -4,6 +4,27 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Memory benchmark harness** (#1210, step 1 of #1209, OpenSpec change
+  `memory-benchmark-harness`). `scripts/profile-tools.py --scenarios memory`
+  runs M1–M13 (`scripts/memory_scenarios.py`; 17000² by default, `--size`
+  scales them), each in a fresh app, resets the peak with `clear_refs` before
+  the measured steps and reports `peak_mb`, `peak_added_mb`, `rss_mb` and an
+  outcome (`ok`, `oom`, `refused`, `crash`). `--memory-max` runs the app in a
+  swap-off systemd scope; a limit above `MemAvailable` less 1.5 GiB is refused
+  and an unlimited memory run gets that limit, unless `--force` (an earlier
+  6.3G run froze the 7.3 GiB laptop). `--compare
+  docs/dev/benchmarks/memory-baseline.json --compare-run 4G` compares against
+  the baseline. There, at 17000² under 4G, every scenario that makes a
+  document is OOM-killed, M1 included, and the M12 open is refused by the PSD
+  image budget (#844); `4250@1700M` holds peaks on the same machine (largest:
+  M8 snapshot restore, +507 MiB). `scripts/gen-large-fixtures.py` writes the
+  M12 PSD. Engine side: `pictura_testkit::PeakAlloc` is the `pictura-app`
+  unit-test binary's global allocator, and `tests_profiles/memory.rs` guards
+  M1–M12's heap peak at 4250² against recorded baselines × 1.10 (nextest
+  only; `*_heap_peak_full` reports 17000²). `layer_op free_transform` and
+  `document new background_layer` were added to the control server for the
+  catalogue. Runs at 6G and above need a machine with at least 16 GB.
+
 - **Move commit composite off the GUI thread** (#1157, OpenSpec change
   `move-commit-recomposite`). A Move commit whose document and dirty union each
   reach 16 MP translates the layer and returns; a worker composites the dirty
