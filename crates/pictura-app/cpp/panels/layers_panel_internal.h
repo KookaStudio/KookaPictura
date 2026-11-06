@@ -354,6 +354,20 @@ public:
         return thumbnailCard(imageThumbBox(itemRect, index), index);
     }
 
+    /// The lower-right kind badge (shape / smart object) corner on a row's image
+    /// thumbnail slot; empty when thumbnails are off. Shared by paint() and the
+    /// tests so the painted and asserted corners agree.
+    QRect kindBadgeRect(const QRect& itemRect, const QModelIndex& index) const
+    {
+        const int thumb = thumbSize();
+        if (thumb <= 0) {
+            return {};
+        }
+        const int side = qMax(8, thumb / 2);
+        const QRect box = imageThumbBox(itemRect, index);
+        return QRect(box.right() - side + 3, box.bottom() - side + 3, side, side);
+    }
+
     /// The right edge left for the mask thumbnail after the lock and fx badges,
     /// mirroring paint()'s walk so the mask and link rects agree with it.
     int badgesRight(const QRect& itemRect, const QModelIndex& index) const
@@ -694,28 +708,15 @@ public:
             // A shape layer's vector badge sits on the thumbnail's bottom-right
             // corner, as CS6 marks a shape layer.
             if (index.data(LayerRowShapeRole).toBool()) {
-                const int side = qMax(8, thumb / 2);
-                const QPixmap shapeBadge =
-                    pictura::icon(QStringLiteral("layers.kindShape")).pixmap(side, side);
-                if (!shapeBadge.isNull()) {
-                    const QRect corner(box.right() - side + 3, box.bottom() - side + 3, side,
-                                       side);
-                    painter->fillRect(corner, palette.color(QPalette::Base));
-                    painter->drawPixmap(corner, shapeBadge);
-                }
+                paintKindBadge(painter, kindBadgeRect(rect, index),
+                               QStringLiteral("layers.kindShape"), palette.color(QPalette::Base));
             }
             // A smart-object layer shows the CS6 page badge at the same
             // lower-right corner (embedded or placed).
             if (index.data(SmartObjectRole).toBool()) {
-                const int side = qMax(8, thumb / 2);
-                const QPixmap soBadge =
-                    pictura::icon(QStringLiteral("layers.kindSmartObject")).pixmap(side, side);
-                if (!soBadge.isNull()) {
-                    const QRect corner(box.right() - side + 3, box.bottom() - side + 3, side,
-                                       side);
-                    painter->fillRect(corner, palette.color(QPalette::Base));
-                    painter->drawPixmap(corner, soBadge);
-                }
+                paintKindBadge(painter, kindBadgeRect(rect, index),
+                               QStringLiteral("layers.kindSmartObject"),
+                               palette.color(QPalette::Base));
             }
             // A type layer whose font is not installed carries a warning
             // triangle on the card's top-right corner, as CS6 flags it.
@@ -966,6 +967,19 @@ private:
                       rect.top() + (rect.height() - side) / 2, side, side),
                 pixmap);
         }
+    }
+
+    /// The lower-right kind badge (shape / smart object): a base-filled corner
+    /// with the icon rendered at the painter's device pixel ratio, so it stays
+    /// crisp on a high-density display.
+    static void paintKindBadge(QPainter* painter, const QRect& corner, const QString& assetId,
+                               const QColor& base)
+    {
+        if (corner.isEmpty()) {
+            return;
+        }
+        painter->fillRect(corner, base);
+        paintAsset(painter, corner, assetId);
     }
 
     /// The chain glyph between two thumbnails: the link/unlink icon rotated a

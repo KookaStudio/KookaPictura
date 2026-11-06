@@ -9,14 +9,20 @@
 #include <QtCore/QRect>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QColor>
+#include <QtGui/QIcon>
+#include <QtGui/QImage>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QPainter>
 #include <QtGui/QPalette>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QListView>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QTreeView>
 
+#include <limits>
+
 #include "frame.h"
+#include "icons.h"
 #include "image_view.h"
 #include "panels/channels_panel.h"
 #include "panels/color_panel.h"
@@ -79,6 +85,24 @@ QPoint outsideColumnPoint(pictura::PicturaMainWindow* window)
     return central->mapToGlobal(QPoint(central->width() / 2, central->height() / 2));
 }
 
+// The summed per-channel difference between two equally sized, formatted images.
+qint64 imageDistance(const QImage& a, const QImage& b)
+{
+    if (a.size() != b.size() || a.format() != b.format()) {
+        return std::numeric_limits<qint64>::max();
+    }
+    qint64 total = 0;
+    for (int y = 0; y < a.height(); ++y) {
+        for (int x = 0; x < a.width(); ++x) {
+            const QRgb pa = a.pixel(x, y);
+            const QRgb pb = b.pixel(x, y);
+            total += qAbs(qRed(pa) - qRed(pb)) + qAbs(qGreen(pa) - qGreen(pb))
+                + qAbs(qBlue(pa) - qBlue(pb)) + qAbs(qAlpha(pa) - qAlpha(pb));
+        }
+    }
+    return total;
+}
+
 } // namespace
 
 class PanelsParityTest : public QObject {
@@ -90,6 +114,7 @@ private slots:
     void layerHoverCursor();
     void lockBadgeClickUnlocks();
     void lockBadgeShrunk();
+    void kindBadgesHidpi();
     void maskingBackgroundConvertsIt();
     void thumbnailAdjacencyAndActiveThumb();
     void emptyGroupShowsChevron();
@@ -103,6 +128,7 @@ private slots:
 private:
     bool setupLayers();
     int rowOf(const QString& path);
+    void checkKindBadge(const QString& path, const QString& assetId);
     void redockAllFloats(pictura::PanelColumn* column);
 
     pictura::test::ScopedStateHome stateHome_;
@@ -221,6 +247,87 @@ void PanelsParityTest::lockBadgeShrunk()
     QCOMPARE(delegate->lockRect(tree->visualRect(index)).width(), expected);
     QVERIFY(expected < delegate->thumbnailSize());
     window_->closeDocument(doc, false);
+}
+
+// Issue #1201: a shape or smart-object row's lower-right kind badge is painted
+// from a pixmap at the painter's device pixel ratio, so it stays crisp on a
+// high-density display instead of being upscaled from a logical-size pixmap.
+void PanelsParityTest::kindBadgesHidpi()
+{
+    QVERIFY2(setupLayers(), "hidpi badge fixture");
+    const int doc = window_->activeDocumentIndex();
+
+    const QString smart = view_->add_layer_in(QString());
+    QVERIFY(!smart.isEmpty());
+    QVERIFY2(view_->convert_to_smart_object(smart), "convert to smart object");
+
+    pictura::ShapeSpec square{};
+    square.kind = 0;
+    square.boxed = true;
+    square.x0 = 2;
+    square.y0 = 2;
+    square.x1 = 8;
+    square.y1 = 8;
+    const QString shape = pictura::shape_add_layer(*view_, square, 0xffff0000u);
+    QVERIFY(!shape.isEmpty());
+
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(0);
+
+    // The active-thumbnail brackets paint after the badge; clear the selection
+    // so the badge corner holds only the base fill and the badge.
+    if (auto* tree = panel_->findChild<QTreeView*>()) {
+        tree->clearSelection();
+    }
+
+    checkKindBadge(smart, QStringLiteral("layers.kindSmartObject"));
+    checkKindBadge(shape, QStringLiteral("layers.kindShape"));
+    window_->closeDocument(doc, false);
+}
+
+void PanelsParityTest::checkKindBadge(const QString& path, const QString& assetId)
+{
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree != nullptr);
+    QVERIFY(delegate != nullptr);
+    const QModelIndex index = indexForPath(tree->model(), path);
+    QVERIFY2(index.isValid(), qPrintable(path));
+    const QRect vr = tree->visualRect(index);
+    QVERIFY(vr.isValid());
+    const QRect corner = delegate->kindBadgeRect(QRect(0, 0, vr.width(), vr.height()), index);
+    QVERIFY2(!corner.isEmpty(), qPrintable(assetId));
+
+    const qreal dpr = 2.0;
+    const QImage row = panel_->rowImageForTest(path, dpr);
+    QVERIFY(!row.isNull());
+    QImage flat = row;
+    flat.setDevicePixelRatio(1.0);
+    const QRect device(qRound(corner.x() * dpr), qRound(corner.y() * dpr),
+                       qRound(corner.width() * dpr), qRound(corner.height() * dpr));
+    const QImage actual = flat.copy(device);
+    QCOMPARE(actual.size(), device.size());
+
+    // Two references for the same corner: the badge drawn from a 2x pixmap and
+    // the badge drawn from a 1x pixmap upscaled to 2x. The painted badge must
+    // be closer to the crisp one.
+    const QColor base(128, 128, 128);
+    const QIcon badge = pictura::icon(assetId);
+    const auto reference = [&](qreal badgeDpr) {
+        QImage image(device.size(), QImage::Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(dpr);
+        image.fill(base);
+        QPainter painter(&image);
+        painter.drawPixmap(QRect(0, 0, corner.width(), corner.height()),
+                           badge.pixmap(corner.size(), badgeDpr));
+        painter.end();
+        return image;
+    };
+    const QImage crisp = reference(dpr);
+    const QImage blurred = reference(1.0);
+    QVERIFY2(imageDistance(actual, crisp) < imageDistance(actual, blurred),
+             qPrintable(QStringLiteral("%1 badge is rendered at the screen DPR").arg(assetId)));
 }
 
 void PanelsParityTest::maskingBackgroundConvertsIt()

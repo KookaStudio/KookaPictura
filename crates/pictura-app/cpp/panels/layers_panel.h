@@ -262,7 +262,7 @@ public:
     bool rowNameItalicForTest(const QString& path) const;
     bool rowNameUnderlineForTest(const QString& path) const;
     int rowHeightForTest() const;
-    QImage rowImageForTest(const QString& path) const;
+    QImage rowImageForTest(const QString& path, qreal dpr = 1.0) const;
     QRect rowThumbRectForTest(const QString& path) const;
     QRect rowEyeRectForTest(const QString& path) const;
     QRect rowNameRectForTest(const QString& path) const;
