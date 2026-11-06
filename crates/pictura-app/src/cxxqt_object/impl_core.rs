@@ -53,6 +53,8 @@ pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 mod deferred_composite;
 mod deferred_pyramid;
 mod display;
+#[cfg(test)]
+pub(in crate::cxxqt_object) use display::mask_display_plane;
 mod recovery;
 mod save;
 pub(in crate::cxxqt_object) mod save_jobs;
@@ -1020,7 +1022,7 @@ impl super::PictureViewRust {
                 .doc
                 .as_ref()
                 .map(|doc| level0_composited(doc, gpu_compute)),
-            None => self.session.doc.as_ref().map(level0_buffer),
+            None => self.session.doc.as_mut().map(level0_buffer),
         };
         self.level0 = level0;
         paint_timing::record("reset_pyramid_level0", t.elapsed());
@@ -1071,21 +1073,21 @@ impl super::PictureViewRust {
         let whole = dims == Some((region.width, region.height)) && (x0, y0) == (0, 0);
         if matches && whole {
             // The whole frame replaces level 0 rather than being copied into
-            // it row by row (#1145). It never shares the composite's plane:
-            // whichever of the two is written first would copy it whole.
-            let mut frame = region;
-            if let Some(doc) = self.session.doc.as_ref() {
-                if frame.data.shares(&doc.composite.data) {
-                    frame.data = crate::history::copy_plane(&frame.data);
-                }
+            // it row by row (#1145). It may share the composite's plane (a
+            // layerless document's embedded composite); fracturing both keeps
+            // the first write to a single band (#1152).
+            if let Some(doc) = self.session.doc.as_mut() {
+                doc.composite.data.fracture(doc.width as usize);
             }
+            let mut frame = region;
+            frame.data.fracture(frame.width as usize);
             self.level0 = Some(frame);
         } else if matches {
             if let Some(level0) = self.level0.as_mut() {
                 patch_buffer_region(level0, &region, x0, y0);
             }
         } else {
-            self.level0 = self.session.doc.as_ref().map(level0_buffer);
+            self.level0 = self.session.doc.as_mut().map(level0_buffer);
             self.frame_revision = self.frame_revision.wrapping_add(1);
         }
     }

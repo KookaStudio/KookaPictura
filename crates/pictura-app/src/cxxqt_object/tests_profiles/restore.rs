@@ -6,7 +6,7 @@ use super::super::edit::Edit;
 use super::super::helpers_composite::{level0_buffer, planes_of};
 use super::{ms, pixel_layer, LayerTarget, PictureViewRust};
 use crate::history::Restored;
-use pictura_core::{BitDepth, Channel, ColorMode, Document, LayerStack};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, LayerMask, LayerStack, PsdRect};
 use std::time::Instant;
 
 const WIDTH: u32 = 16507;
@@ -66,7 +66,9 @@ fn structural_restore_profile() {
     let mut reorder = view();
     let doc = reorder.session.doc.as_mut().expect("document");
     assert!(doc.layers.move_node(&[0], &[], 2).is_ok());
+    let t = Instant::now();
     reorder.apply_edit("Reorder", Edit::Structural { damage: None });
+    ms("identical reorder capture", t.elapsed());
     undo_and_show("identical reorder", &mut reorder);
     drop(reorder);
 
@@ -76,6 +78,26 @@ fn structural_restore_profile() {
     channel.apply_edit("Channel", Edit::Record);
     undo_and_show("channel", &mut channel);
     drop(channel);
+
+    let mut solo = view();
+    let doc = solo.session.doc.as_mut().expect("document");
+    doc.layers[0].mask = Some(LayerMask {
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2048,
+            right: 2048,
+        },
+        default_color: 255,
+        data: Some(vec![128u8; 2048 * 2048].into()),
+        ..LayerMask::default()
+    });
+    solo.mask_solo = Some("0".into());
+    let t = Instant::now();
+    let job = solo.reset_pyramid_deferred();
+    ms("solo mask deferred display", t.elapsed());
+    assert!(job.is_some(), "a large document defers");
+    drop(solo);
 
     let mut resize = view();
     let doc = resize.session.doc.as_mut().expect("document");
@@ -90,7 +112,7 @@ fn structural_restore_profile() {
     undo_and_show("resize", &mut resize);
 
     let t = Instant::now();
-    let level0 = level0_buffer(resize.session.doc.as_ref().expect("document"));
+    let level0 = level0_buffer(resize.session.doc.as_mut().expect("document"));
     ms("full size level 0", t.elapsed());
     let t = Instant::now();
     let pyramid = pictura_render::ViewPyramid::rebuild(planes_of(&level0).expect("rgba"));
@@ -119,4 +141,44 @@ fn structural_restore_profile() {
     let job = resize.reset_pyramid_deferred();
     ms("deferred display", t.elapsed());
     assert!(job.is_some(), "a large document defers");
+}
+
+/// A soloed mask's display plane on an 8000² document: the same fill on one
+/// core and on every core. Small enough not to swap on a 7 GiB machine.
+#[test]
+#[ignore = "8000x8000 solo mask profile; run explicitly with --ignored --nocapture"]
+fn solo_mask_profile() {
+    const SIDE: u32 = 8000;
+    let mut doc = Document::new(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![pixel_layer("under", SIDE, SIDE, (120, 170, 220))]);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.layers[0].mask = Some(LayerMask {
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2048,
+            right: 2048,
+        },
+        default_color: 255,
+        data: Some(vec![128u8; 2048 * 2048].into()),
+        ..LayerMask::default()
+    });
+    let mask = doc.layers[0].mask.as_ref().expect("mask");
+
+    let one = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .expect("a one-thread pool");
+    let t = Instant::now();
+    let serial = one.install(|| super::super::impl_core::mask_display_plane(mask, SIDE, SIDE));
+    ms("solo mask plane (1 thread)", t.elapsed());
+    drop(serial);
+
+    let t = Instant::now();
+    let plane = super::super::impl_core::mask_display_plane(mask, SIDE, SIDE);
+    ms("solo mask plane (all cores)", t.elapsed());
+    let t = Instant::now();
+    let pyramid = pictura_render::ViewPyramid::rebuild(planes_of(&plane).expect("rgba"));
+    ms("solo mask pyramid", t.elapsed());
+    drop(pyramid);
 }

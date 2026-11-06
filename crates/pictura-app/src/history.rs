@@ -11,12 +11,12 @@ mod planes;
 mod styles;
 
 pub(crate) use budget::document_bytes;
+pub(crate) use planes::detached_copy;
 use planes::{
-    adopt_metadata, apply_tiles, composite_change, diff_into, fracture_planes, hollow, mask_rects,
-    plane_kinds, planes_agree, shared_copy, stamp_agreed, swap_tiles, tile_rect, PlaneDelta,
-    PlaneKind,
+    adopt_metadata, apply_tiles, composite_change, composite_unchanged, diff_into, fracture_planes,
+    hollow, mask_rects, plane_kinds, planes_agree, shared_copy, stamp_agreed, swap_tiles,
+    tile_rect, PlaneDelta, PlaneKind,
 };
-pub(crate) use planes::{copy_plane, detached_copy};
 pub use styles::{
     create_character_style, create_paragraph_style, delete_character_style, delete_paragraph_style,
     edit_character_style, edit_paragraph_style, rename_character_style,
@@ -292,6 +292,13 @@ impl History {
                     })
                 }
                 None => {
+                    // A segment break re-stores the composite even when the
+                    // picture did not change. Keeping the current state's plane
+                    // makes the undo across this boundary free and drops one
+                    // full composite from history (#1152).
+                    if !display_differs(&cur.doc, doc) && composite_unchanged(&mut cur.doc, doc) {
+                        doc.composite = cur.doc.composite.clone();
+                    }
                     let current = Snapshot {
                         doc: shared_copy(doc, &cur.doc),
                         selection: selection.clone(),
