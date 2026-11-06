@@ -7,6 +7,8 @@ use pictura_core::PixelBuffer;
 use rand_chacha::{rand_core::RngCore, ChaCha8Rng};
 use rayon::prelude::*;
 
+mod rows;
+
 /// One uniform `f64` in `[0, 1)` from 53 random bits.
 pub(crate) fn unit_f64(rng: &mut ChaCha8Rng) -> f64 {
     (rng.next_u64() >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
@@ -49,6 +51,51 @@ pub fn clamp_index(i: isize, n: usize) -> usize {
 
 pub(crate) fn to_u8(v: f64) -> u8 {
     v.round().clamp(0.0, 255.0) as u8
+}
+
+/// Row-parallel separable Gaussian blur of a finite `w`×`h` field, clamp-to-edge.
+/// `src` must contain exactly `w * h` samples. Weights and ordered sums use
+/// `f64`; each pass narrows to `f32`, preserving bevel's former serial result.
+/// The caller maps a UI radius with [`sigma_from_radius`].
+pub fn gaussian_blur_f32(src: &[f32], w: usize, h: usize, sigma: f64) -> Vec<f32> {
+    if w == 0 || h == 0 {
+        return Vec::new();
+    }
+    let kernel = gaussian_kernel(sigma);
+    let support = kernel.len() / 2;
+    let mut across = vec![0.0f32; src.len()];
+    // SIMD runs across independent pixels, never across a pixel's ordered sum.
+    across.par_chunks_mut(w).enumerate().for_each_init(
+        || (vec![0.0f64; w + 2 * support], vec![0.0f64; w]),
+        |(padded, acc), (y, row)| {
+            let line = &src[y * w..(y + 1) * w];
+            for (i, p) in padded.iter_mut().enumerate() {
+                *p = f64::from(line[clamp_index(i as isize - support as isize, w)]);
+            }
+            acc.fill(0.0);
+            for (k, &weight) in kernel.iter().enumerate() {
+                rows::add_f64(acc, &padded[k..k + w], weight);
+            }
+            for (out, &value) in row.iter_mut().zip(acc.iter()) {
+                *out = value as f32;
+            }
+        },
+    );
+    let mut out = vec![0.0f32; src.len()];
+    out.par_chunks_mut(w).enumerate().for_each_init(
+        || vec![0.0f64; w],
+        |acc, (y, row)| {
+            acc.fill(0.0);
+            for (k, &weight) in kernel.iter().enumerate() {
+                let sy = clamp_index((y + k) as isize - support as isize, h);
+                rows::add_f32_to_f64(acc, &across[sy * w..(sy + 1) * w], weight);
+            }
+            for (out, &value) in row.iter_mut().zip(acc.iter()) {
+                *out = value as f32;
+            }
+        },
+    );
+    out
 }
 
 /// Separable Gaussian blur of one `w`×`h` plane, clamp-to-edge.
@@ -112,32 +159,48 @@ pub fn gaussian_blur_planes(buf: &mut PixelBuffer, sigma: f64) {
                     *p = f32::from(line[clamp_index(i as isize - support as isize, w)]);
                 }
                 for (k, &kw) in kernel.iter().enumerate() {
-                    for (out, &v) in row.iter_mut().zip(&padded[k..k + w]) {
-                        *out += kw * v;
-                    }
+                    rows::add_f32(row, &padded[k..k + w], kw);
                 }
             },
         );
-        buf.data[base..base + n]
-            .par_chunks_mut(w)
+        // Keep adjacent rows' tap working set in private cache. Pixels still
+        // accumulate every tap in order; tiling only changes the pixel schedule.
+        const TILE_ROWS: usize = 16;
+        const TILE_COLS: usize = 128;
+        buf.data.as_mut_slice()[base..base + n]
+            .par_chunks_mut(w * TILE_ROWS)
             .enumerate()
             .for_each_init(
-                || vec![0f32; w],
-                |acc, (y, row)| {
-                    acc.fill(0.0);
-                    for (k, &kw) in kernel.iter().enumerate() {
-                        let sy = clamp_index((y + k) as isize - support as isize, h);
-                        for (a, &v) in acc.iter_mut().zip(&across[sy * w..sy * w + w]) {
-                            *a += kw * v;
+                || vec![0f32; TILE_ROWS * TILE_COLS],
+                |acc, (band, output)| {
+                    let height = output.len() / w;
+                    for x0 in (0..w).step_by(TILE_COLS) {
+                        let width = TILE_COLS.min(w - x0);
+                        let acc = &mut acc[..height * width];
+                        acc.fill(0.0);
+                        for (k, &kw) in kernel.iter().enumerate() {
+                            for (row, sums) in acc.chunks_mut(width).enumerate() {
+                                let sy = clamp_index(
+                                    (band * TILE_ROWS + row + k) as isize - support as isize,
+                                    h,
+                                );
+                                rows::add_f32(sums, &across[sy * w + x0..sy * w + x0 + width], kw);
+                            }
                         }
-                    }
-                    for (out, &a) in row.iter_mut().zip(acc.iter()) {
-                        *out = a.round().clamp(0.0, 255.0) as u8;
+                        for (row, sums) in output.chunks_mut(w).zip(acc.chunks(width)) {
+                            for (out, &a) in row[x0..x0 + width].iter_mut().zip(sums) {
+                                *out = a.round().clamp(0.0, 255.0) as u8;
+                            }
+                        }
                     }
                 },
             );
     }
 }
+
+#[cfg(test)]
+#[path = "kernel/f32_tests.rs"]
+mod f32_tests;
 
 #[cfg(test)]
 mod tests {
@@ -171,6 +234,23 @@ mod tests {
                     }
                     buf.data[c * n + y * w + x] = acc.round().clamp(0.0, 255.0) as u8;
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn gaussian_tiles_match_scalar_at_block_edges() {
+        for (w, h) in [(127, 15), (128, 16), (129, 17), (257, 35), (1, 33), (33, 1)] {
+            let mut original = PixelBuffer::new(w, h, 4);
+            for (i, value) in original.data.as_mut_slice().iter_mut().enumerate() {
+                *value = ((i * 7919) ^ (i >> 3)) as u8;
+            }
+            for sigma in [0.1, 1.3, 11.0, 250.0 / 9.0] {
+                let mut expected = original.clone();
+                per_pixel_blur(&mut expected, sigma);
+                let mut got = original.clone();
+                gaussian_blur_planes(&mut got, sigma);
+                assert_eq!(got.data, expected.data, "{w}x{h} sigma={sigma}");
             }
         }
     }

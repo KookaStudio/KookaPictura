@@ -71,6 +71,43 @@ fn pattern_driven(layer: &pictura_core::Layer) -> bool {
 /// never holds the region's whole `f32` canvas, which on a 267-megapixel
 /// document is 4 GB.
 pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32) -> PixelBuffer {
+    let clip = PsdRect {
+        top: y0 as i32,
+        left: x0 as i32,
+        bottom: (y0 + rh) as i32,
+        right: (x0 + rw) as i32,
+    };
+    let plan = CompositePlan::build_banded(doc, clip);
+    composite_banded_with_plan(doc, x0, y0, rw, rh, &plan)
+}
+
+#[cfg(test)]
+pub(crate) fn composite_banded_for_test(
+    doc: &Document,
+    x0: u32,
+    y0: u32,
+    rw: u32,
+    rh: u32,
+    parallel: bool,
+) -> PixelBuffer {
+    let clip = PsdRect {
+        top: y0 as i32,
+        left: x0 as i32,
+        bottom: (y0 + rh) as i32,
+        right: (x0 + rw) as i32,
+    };
+    let plan = CompositePlan::build_banded_for_test(doc, clip, parallel);
+    composite_banded_with_plan(doc, x0, y0, rw, rh, &plan)
+}
+
+fn composite_banded_with_plan(
+    doc: &Document,
+    x0: u32,
+    y0: u32,
+    rw: u32,
+    rh: u32,
+    plan: &CompositePlan<'_>,
+) -> PixelBuffer {
     use rayon::prelude::*;
     let (w, plane) = (rw as usize, rw as usize * rh as usize);
     let run = BAND as usize * w;
@@ -80,8 +117,13 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
         bottom: (y0 + rh) as i32,
         right: (x0 + rw) as i32,
     };
-    let plan = CompositePlan::build(doc, clip, None);
     let band_into = |band: usize, r: &mut [u8], g: &mut [u8], b: &mut [u8], a: &mut [u8]| {
+        #[cfg(test)]
+        crate::tests::effect_preparation::probe::observe(
+            doc,
+            None,
+            crate::tests::effect_preparation::probe::Event::Band,
+        );
         let top = y0 as i32 + (band * BAND as usize) as i32;
         let region = PsdRect {
             top,
@@ -89,7 +131,7 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
             bottom: top + (r.len() / w) as i32,
             right: (x0 + rw) as i32,
         };
-        let (start, alone) = first_shown_root(&plan, doc, region);
+        let (start, alone) = first_shown_root(plan, doc, region);
         if alone
             && copy_band(
                 plan.roots[start].layer,
@@ -104,7 +146,7 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
         let mut canvas = Canvas::new_region(x0 as i32, top, w, r.len() / w);
         canvas.clip = clip;
         canvas.effect_region = None;
-        composite_layers_range(&mut canvas, doc, &plan, start, plan.roots.len());
+        composite_layers_range(&mut canvas, doc, plan, start, plan.roots.len());
         for (i, p) in canvas.px.iter().enumerate() {
             r[i] = crate::composite::to_u8(p.r);
             g[i] = crate::composite::to_u8(p.g);
@@ -116,14 +158,8 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
         let (r, rest) = out.split_at_mut(plane);
         let (g, rest) = rest.split_at_mut(plane);
         let (b, a) = rest.split_at_mut(plane);
-        // Every band looks up every visible layer's whole-layer effect passes,
-        // so the first band, composited before the others fan out, builds
-        // each one once; the rest replay it from the cache instead of each
-        // racing to build its own copy (a pool worker never waits on an
-        // in-flight build, #1044). ponytail: a smart-filter or type source
-        // looked up only by bands below the first can still be built by
-        // several bands at once; warm those too if a cold first composite
-        // shows it.
+        // The completed plan retains passes and sources even if the shared
+        // cache evicts them; replay never races to rebuild an artifact.
         let (r0, r) = r.split_at_mut(run.min(plane));
         let (g0, g) = g.split_at_mut(run.min(plane));
         let (b0, b) = b.split_at_mut(run.min(plane));

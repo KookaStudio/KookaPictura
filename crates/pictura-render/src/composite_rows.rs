@@ -109,6 +109,7 @@ where
 /// Composite an opacity-weighted source sample over the backdrop at
 /// `row[x - ox]` with a blend mode.
 #[allow(clippy::too_many_arguments)]
+#[inline]
 pub(crate) fn blend_parts_row(
     row: &mut [Px],
     cover: Option<&mut [bool]>,

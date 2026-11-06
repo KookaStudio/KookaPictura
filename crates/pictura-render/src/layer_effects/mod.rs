@@ -96,10 +96,12 @@ use pictura_core::mask_ops::{self, Border};
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 use rayon::prelude::*;
 
-use crate::composite::{mask_alpha, Canvas};
+use crate::composite::Canvas;
 use crate::composite_rows::serial;
 
 mod bevel;
+#[cfg(test)]
+pub(crate) use bevel::blur_reference;
 mod glows;
 mod legacy;
 mod overlays;
@@ -763,6 +765,8 @@ pub(crate) fn build_layer_passes(
     region: Option<PsdRect>,
     fill: Option<&Adjustment>,
 ) -> crate::layer_source::LayerPasses {
+    #[cfg(test)]
+    crate::layer_source::note_pass_build(layer, doc);
     let build = BuildRegion {
         region,
         mask_clip: build_mask_clip(region, effects, doc),
@@ -1071,14 +1075,18 @@ fn blur_matte(src: &[f32], w: usize, h: usize, size: f64) -> Vec<f32> {
         return src.to_vec();
     }
     let mut buf = PixelBuffer::new(w as u32, h as u32, 1);
-    for (i, &v) in src.iter().enumerate() {
-        buf.data[i] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    }
+    buf.data
+        .as_mut_slice()
+        .par_iter_mut()
+        .zip(src)
+        .for_each(|(out, &v)| {
+            *out = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        });
     pictura_filters::kernel::gaussian_blur_planes(
         &mut buf,
         pictura_filters::kernel::sigma_from_radius(size),
     );
-    buf.data.iter().map(|&b| b as f32 / 255.0).collect()
+    buf.data.par_iter().map(|&b| b as f32 / 255.0).collect()
 }
 
 /// Multiply `matte`, a `w`-wide region whose first sample is document
@@ -1095,10 +1103,19 @@ pub(super) fn apply_mask(
     if w == 0 || matte.is_empty() {
         return;
     }
+    let raster = crate::mask_refine::resolve_raster(layer.mask.as_ref(), clip);
+    let vector = crate::mask_refine::resolve_vector(layer.vector_mask.as_ref(), clip);
     let run = |row: usize, row_matte: &mut [f32]| {
         let y = y0 + row as i32;
         for (i, v) in row_matte.iter_mut().enumerate() {
-            *v *= mask_alpha(layer, clip, x0 + i as i32, y) as f32 / 255.0;
+            if *v == 0.0 {
+                continue;
+            }
+            let x = x0 + i as i32;
+            let r = raster.u8_at(x, y);
+            let vmask = vector.u8_at(x, y);
+            let mask = ((r as u16 * vmask as u16 + 127) / 255) as u8;
+            *v *= mask as f32 / 255.0;
         }
     };
     if serial() {
@@ -1115,3 +1132,6 @@ pub(super) fn apply_mask(
 
 #[cfg(test)]
 mod matte_tests;
+
+#[cfg(test)]
+mod prepared_matte_tests;

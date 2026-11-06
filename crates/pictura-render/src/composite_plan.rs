@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use pictura_adjust::Adjustment;
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect};
+use rayon::prelude::*;
 
 use crate::composite_blend::{BlendCtx, SourcePlanes};
 use crate::composite_route::ContentRoute;
@@ -69,7 +70,20 @@ impl<'a> PlanNode<'a> {
 impl<'a> CompositePlan<'a> {
     pub(crate) fn build(doc: &'a Document, clip: PsdRect, effect_region: Option<PsdRect>) -> Self {
         Self {
-            roots: plan_layers(&doc.layers, doc, clip, effect_region),
+            roots: plan_layers(&doc.layers, doc, clip, effect_region, false),
+        }
+    }
+
+    pub(crate) fn build_banded(doc: &'a Document, clip: PsdRect) -> Self {
+        Self {
+            roots: plan_layers(&doc.layers, doc, clip, None, true),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn build_banded_for_test(doc: &'a Document, clip: PsdRect, parallel: bool) -> Self {
+        Self {
+            roots: plan_layers(&doc.layers, doc, clip, None, parallel),
         }
     }
 
@@ -107,7 +121,7 @@ impl<'a> CompositePlan<'a> {
                 .enumerate()
                 .map(|(i, layer)| {
                     if selected(i) {
-                        plan_node(layer, doc, clip, effect_region)
+                        plan_node(layer, doc, clip, effect_region, false)
                     } else {
                         PlanNode::placeholder(layer)
                     }
@@ -124,7 +138,7 @@ impl<'a> CompositePlan<'a> {
     ) -> Vec<PlanNode<'a>> {
         layers
             .iter()
-            .map(|layer| plan_node(layer, doc, clip, effect_region))
+            .map(|layer| plan_node(layer, doc, clip, effect_region, false))
             .collect()
     }
 }
@@ -134,11 +148,14 @@ fn plan_layers<'a>(
     doc: &'a Document,
     clip: PsdRect,
     effect_region: Option<PsdRect>,
+    parallel: bool,
 ) -> Vec<PlanNode<'a>> {
-    layers
-        .iter()
-        .map(|layer| plan_node(layer, doc, clip, effect_region))
-        .collect()
+    let resolve = |layer| plan_node(layer, doc, clip, effect_region, parallel);
+    if parallel {
+        layers.par_iter().map(resolve).collect()
+    } else {
+        layers.iter().map(resolve).collect()
+    }
 }
 
 fn plan_node<'a>(
@@ -146,6 +163,7 @@ fn plan_node<'a>(
     doc: &'a Document,
     clip: PsdRect,
     effect_region: Option<PsdRect>,
+    parallel: bool,
 ) -> PlanNode<'a> {
     if !layer.visible {
         return PlanNode {
@@ -159,6 +177,12 @@ fn plan_node<'a>(
     }
     #[cfg(test)]
     counters::note_plan(layer);
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Resolve(parallel),
+    );
     let body = match crate::composite_route::content_route(layer) {
         ContentRoute::PassThroughGroup => Body::Group { pass_through: true },
         ContentRoute::IsolatedGroup => Body::Group {
@@ -231,7 +255,7 @@ fn plan_node<'a>(
         blend: Some(BlendCtx::new(layer, doc, clip)),
         sources: Some(SourcePlanes::resolve(layer, doc)),
         children: if layer.is_group {
-            plan_layers(&layer.children, doc, clip, effect_region)
+            plan_layers(&layer.children, doc, clip, effect_region, parallel)
         } else {
             Vec::new()
         },

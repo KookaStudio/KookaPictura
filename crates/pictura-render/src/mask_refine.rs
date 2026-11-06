@@ -5,7 +5,7 @@
 //! feather's Gaussian (`sigma = radius / 2`, clamped at 250 px) over the mask's
 //! coverage, whose ramp runs past a raster mask's rect into its default colour.
 //!
-//! A feathered plane is built once per mask state and sampled per pixel. The
+//! A feathered plane is retained per mask state and sampled per pixel. The
 //! state is named by the source's ident ([`pictura_core::Plane::ident`] or
 //! [`VectorMask::ident`]), so painting the mask retires its plane without any
 //! hook. Lookups go through a small per-thread cache in front of a bounded
@@ -20,7 +20,7 @@
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use pictura_core::{LayerMask, Plane, PsdRect, Samples, VectorMask};
 
@@ -125,7 +125,7 @@ pub(crate) enum RasterGate<'a> {
         density: u8,
     },
     Feathered {
-        plane: Arc<OnceLock<Feathered>>,
+        plane: Arc<Feathered>,
         density: u8,
     },
     Native {
@@ -147,13 +147,7 @@ impl RasterGate<'_> {
                 default_color,
                 density,
             } => plain_mask_at(plane, *rect, *default_color, *density, x, y),
-            RasterGate::Feathered { plane, density: d } => {
-                let m = plane
-                    .get()
-                    .expect("the feathered plane is resolved eagerly")
-                    .at(x, y);
-                density(m, *d)
-            }
+            RasterGate::Feathered { plane, density: d } => density(plane.at(x, y), *d),
             RasterGate::Native { default_color, .. } => *default_color,
         }
     }
@@ -178,7 +172,7 @@ pub(crate) enum VectorGate<'a> {
         density: u8,
     },
     Feathered {
-        plane: Arc<OnceLock<Feathered>>,
+        plane: Arc<Feathered>,
         invert: bool,
         density: u8,
     },
@@ -202,10 +196,7 @@ impl VectorGate<'_> {
                 invert,
                 density: d,
             } => {
-                let c = plane
-                    .get()
-                    .expect("the feathered plane is resolved eagerly")
-                    .at(x, y);
+                let c = plane.at(x, y);
                 let c = if *invert { 255 - c } else { c };
                 density(c, *d)
             }
@@ -240,8 +231,7 @@ pub(crate) fn resolve_raster(mask: Option<&LayerMask>, clip: PsdRect) -> RasterG
             outside: mask.default_color,
             feather: radius.to_bits(),
         };
-        let plane = shared_cell(key);
-        plane.get_or_init(|| feather_raster(mask, data, radius, clip));
+        let plane = shared_plane(key, || feather_raster(mask, data, radius, clip));
         RasterGate::Feathered {
             plane,
             density: mask.density,
@@ -270,8 +260,7 @@ pub(crate) fn resolve_vector(mask: Option<&VectorMask>, clip: PsdRect) -> Vector
             outside: 0,
             feather: radius.to_bits(),
         };
-        let plane = shared_cell(key);
-        plane.get_or_init(|| feather_vector(mask, radius, clip));
+        let plane = shared_plane(key, || feather_vector(mask, radius, clip));
         VectorGate::Feathered {
             plane,
             invert: mask.invert,
@@ -503,7 +492,7 @@ fn feather_vector(mask: &VectorMask, radius: f64, clip: PsdRect) -> Feathered {
     plane.blurred(radius)
 }
 
-type Entry = (Key, Arc<OnceLock<Feathered>>);
+type Entry = (Key, Arc<Feathered>);
 
 /// Bumped whenever the shared cache changes, so per-thread caches drop
 /// entries the shared one no longer pins.
@@ -515,41 +504,70 @@ thread_local! {
 }
 
 fn sample(key: Key, x: i32, y: i32, build: impl FnOnce() -> Feathered) -> u8 {
+    let cached = LOCAL.with(|local| {
+        let mut local = local.borrow_mut();
+        let generation = GENERATION.load(Ordering::Acquire);
+        if local.0 != generation {
+            *local = (generation, Vec::new());
+        }
+        local
+            .1
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, plane)| plane.at(x, y))
+    });
+    if let Some(value) = cached {
+        return value;
+    }
+    // Nested Rayon work may reenter this sampler on the same thread.
+    let plane = shared_plane(key, build);
     LOCAL.with(|local| {
         let mut local = local.borrow_mut();
         let generation = GENERATION.load(Ordering::Acquire);
         if local.0 != generation {
             *local = (generation, Vec::new());
         }
-        let i = match local.1.iter().position(|(k, _)| *k == key) {
-            Some(i) => i,
-            None => {
-                local.1.push((key, shared_cell(key)));
-                local.1.len() - 1
-            }
-        };
-        // The build runs outside every lock; threads asking for the same key
-        // wait on its cell instead of building it twice.
-        local.1[i].1.get_or_init(build).at(x, y)
-    })
+        if !local.1.iter().any(|(k, _)| *k == key) {
+            local.1.push((key, Arc::clone(&plane)));
+        }
+    });
+    plane.at(x, y)
 }
 
-fn shared_cell(key: Key) -> Arc<OnceLock<Feathered>> {
-    let mut shared = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+fn shared_hit(shared: &mut Vec<Entry>, key: Key) -> Option<Arc<Feathered>> {
     if let Some(i) = shared.iter().position(|(k, _)| *k == key) {
         let entry = shared.remove(i);
-        let cell = Arc::clone(&entry.1);
+        let plane = Arc::clone(&entry.1);
         shared.push(entry);
-        return cell;
+        return Some(plane);
     }
-    let cell = Arc::new(OnceLock::new());
-    shared.push((key, Arc::clone(&cell)));
+    None
+}
+
+fn shared_plane(key: Key, build: impl FnOnce() -> Feathered) -> Arc<Feathered> {
+    {
+        let mut shared = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(plane) = shared_hit(&mut shared, key) {
+            return plane;
+        }
+    }
+    // Feathering joins nested Rayon work. Waiting on another initializer can
+    // deadlock a worker executing a queued same-key lookup inside that join.
+    let plane = Arc::new(build());
+    let mut shared = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(first) = shared_hit(&mut shared, key) {
+        return first;
+    }
+    shared.push((key, Arc::clone(&plane)));
     if shared.len() > CAPACITY {
         shared.remove(0);
     }
     GENERATION.fetch_add(1, Ordering::AcqRel);
-    cell
+    plane
 }
+
+#[cfg(test)]
+mod cache_tests;
 
 #[cfg(test)]
 mod tests {

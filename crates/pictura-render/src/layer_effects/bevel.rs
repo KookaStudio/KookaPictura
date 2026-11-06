@@ -25,6 +25,10 @@
 use pictura_adjust::Adjustment;
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
+use rayon::prelude::*;
+
+#[cfg(test)]
+pub(crate) mod blur_reference;
 
 use crate::composite::desc_item;
 
@@ -255,6 +259,12 @@ pub(super) fn build_bevel_emboss(
     let ph = (py1 - py0) as usize;
     let mut matte = content_matte(layer, doc, padded, fill);
     apply_mask(&mut matte, pw, px0, py0, layer, build.mask_clip);
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_matte"),
+    );
     if matte.iter().all(|&v| v <= 0.0) {
         return Vec::new();
     }
@@ -265,12 +275,24 @@ pub(super) fn build_bevel_emboss(
         _ => -size / 2.0,
     };
     let mut height: Vec<f32> = signed_distance(&matte, pw, ph)
-        .into_iter()
+        .into_par_iter()
         .map(|d| ((d as f64 - start) / size).clamp(0.0, 1.0) as f32)
         .collect();
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_distance"),
+    );
     if round > 0.0 {
-        height = blur_f32(&height, pw, ph, round);
+        height = blur(&height, pw, ph, round);
     }
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_blur"),
+    );
     let at = |x: i32, y: i32| -> f64 {
         let sx = (x - px0).clamp(0, pw as i32 - 1) as usize;
         let sy = (y - py0).clamp(0, ph as i32 - 1) as usize;
@@ -314,8 +336,10 @@ pub(super) fn build_bevel_emboss(
     let sw = (shade.2 - shade.0) as usize;
     let sh = (shade.3 - shade.1) as usize;
     let mut shading = vec![0.0f32; sw * sh];
-    for y in shade.1..shade.3 {
-        for x in shade.0..shade.2 {
+    let shade_row = |(row_y, row): (usize, &mut [f32])| {
+        let y = shade.1 + row_y as i32;
+        for (row_x, out) in row.iter_mut().enumerate() {
+            let x = shade.0 + row_x as i32;
             let gx = (at(x + 1, y) - at(x - 1, y)) / 2.0;
             let gy = (at(x, y + 1) - at(x, y - 1)) / 2.0;
             let (nx, ny) = (-gx * scale, -gy * scale);
@@ -324,17 +348,34 @@ pub(super) fn build_bevel_emboss(
             if down {
                 s = -s;
             }
-            shading[(y - shade.1) as usize * sw + (x - shade.0) as usize] = s as f32;
+            *out = s as f32;
         }
+    };
+    #[cfg(test)]
+    let serial = blur_reference::using_serial();
+    #[cfg(not(test))]
+    let serial = false;
+    if serial {
+        shading.chunks_mut(sw).enumerate().for_each(shade_row);
+    } else {
+        shading.par_chunks_mut(sw).enumerate().for_each(shade_row);
     }
     // The highlight and shadow soften apart, so where they meet they spread
     // into each other instead of cancelling out.
-    let (mut lights, mut darks): (Vec<f32>, Vec<f32>) =
-        shading.iter().map(|&s| (s.max(0.0), (-s).max(0.0))).unzip();
+    let (mut lights, mut darks): (Vec<f32>, Vec<f32>) = shading
+        .par_iter()
+        .map(|&s| (s.max(0.0), (-s).max(0.0)))
+        .unzip();
     if soften > 0.0 {
-        lights = blur_f32(&lights, sw, sh, soften);
-        darks = blur_f32(&darks, sw, sh, soften);
+        lights = blur(&lights, sw, sh, soften);
+        darks = blur(&darks, sw, sh, soften);
     }
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_shading"),
+    );
     let unit = |c: [u8; 3]| c.map(|v| v as f32 / 255.0);
     let shadow_color = unit(bevel.shadow.color);
     let highlight_color = unit(bevel.highlight.color);
@@ -359,32 +400,77 @@ pub(super) fn build_bevel_emboss(
             highlight_color,
         ));
     }
-    for y in region.1..region.3 {
-        for x in region.0..region.2 {
-            let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
-            let i = (y - shade.1) as usize * sw + (x - shade.0) as usize;
-            for (slot, (coverage, sign)) in lit(m).into_iter().enumerate() {
-                if coverage <= 0.0 || slot >= shadows.len() {
-                    continue;
-                }
-                // A sunken side swaps which part is the highlight.
-                let (light, dark) = if sign > 0.0 {
-                    (lights[i], darks[i])
-                } else {
-                    (darks[i], lights[i])
-                };
-                let sh_alpha = coverage * dark.clamp(0.0, 1.0) * sh_opacity;
-                if sh_alpha > 0.0 {
-                    shadows[slot].emit(x, y, shadow_color, sh_alpha);
-                }
-                let hi_alpha = coverage * light.clamp(0.0, 1.0) * hi_opacity;
-                if hi_alpha > 0.0 {
-                    highlights[slot].emit(x, y, highlight_color, hi_alpha);
+    if serial {
+        for y in region.1..region.3 {
+            for x in region.0..region.2 {
+                let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
+                let i = (y - shade.1) as usize * sw + (x - shade.0) as usize;
+                for (slot, (coverage, sign)) in lit(m).into_iter().enumerate() {
+                    if coverage <= 0.0 || slot >= shadows.len() {
+                        continue;
+                    }
+                    // A sunken side swaps which part is the highlight.
+                    let (light, dark) = if sign > 0.0 {
+                        (lights[i], darks[i])
+                    } else {
+                        (darks[i], lights[i])
+                    };
+                    let sh_alpha = coverage * dark.clamp(0.0, 1.0) * sh_opacity;
+                    if sh_alpha > 0.0 {
+                        shadows[slot].emit(x, y, shadow_color, sh_alpha);
+                    }
+                    let hi_alpha = coverage * light.clamp(0.0, 1.0) * hi_opacity;
+                    if hi_alpha > 0.0 {
+                        highlights[slot].emit(x, y, highlight_color, hi_alpha);
+                    }
                 }
             }
         }
+    } else {
+        let rw = rect.width() as usize;
+        for (slot, (shadow, highlight)) in shadows.iter_mut().zip(highlights.iter_mut()).enumerate()
+        {
+            shadow
+                .alpha_mut()
+                .par_chunks_mut(rw)
+                .zip(highlight.alpha_mut().par_chunks_mut(rw))
+                .enumerate()
+                .for_each(|(row, (shadow_row, highlight_row))| {
+                    let y = region.1 + row as i32;
+                    for (column, (shadow, highlight)) in
+                        shadow_row.iter_mut().zip(highlight_row).enumerate()
+                    {
+                        let x = region.0 + column as i32;
+                        let m = matte[(y - py0) as usize * pw + (x - px0) as usize];
+                        let (coverage, sign) = lit(m)[slot];
+                        if coverage <= 0.0 {
+                            continue;
+                        }
+                        let i = (y - shade.1) as usize * sw + (x - shade.0) as usize;
+                        let (light, dark) = if sign > 0.0 {
+                            (lights[i], darks[i])
+                        } else {
+                            (darks[i], lights[i])
+                        };
+                        let sh_alpha = coverage * dark.clamp(0.0, 1.0) * sh_opacity;
+                        if sh_alpha > 0.0 {
+                            *shadow = sh_alpha;
+                        }
+                        let hi_alpha = coverage * light.clamp(0.0, 1.0) * hi_opacity;
+                        if hi_alpha > 0.0 {
+                            *highlight = hi_alpha;
+                        }
+                    }
+                });
+        }
     }
     let mut passes = Vec::with_capacity(shadows.len() * 2);
+    #[cfg(test)]
+    crate::tests::effect_preparation::probe::observe(
+        doc,
+        Some(layer),
+        crate::tests::effect_preparation::probe::Event::Stage("bevel_emission"),
+    );
     for (shadow, highlight) in shadows.into_iter().zip(highlights) {
         passes.push(shadow.finish());
         passes.push(highlight.finish());
@@ -396,11 +482,12 @@ pub(super) fn build_bevel_emboss(
 /// level), positive inside. Pixels on the edge take the matte's own fraction,
 /// so an anti-aliased outline gives a sub-pixel distance rather than a step.
 fn signed_distance(matte: &[f32], w: usize, h: usize) -> Vec<f32> {
-    let full: Vec<bool> = matte.iter().map(|&m| m >= 0.999).collect();
-    let empty: Vec<bool> = matte.iter().map(|&m| m <= 0.001).collect();
+    let full: Vec<bool> = matte.par_iter().map(|&m| m >= 0.999).collect();
+    let empty: Vec<bool> = matte.par_iter().map(|&m| m <= 0.001).collect();
     let to_not_full = distance_transform(&full.iter().map(|&f| !f).collect::<Vec<_>>(), w, h);
     let to_not_empty = distance_transform(&empty.iter().map(|&e| !e).collect::<Vec<_>>(), w, h);
     (0..w * h)
+        .into_par_iter()
         .map(|i| {
             if full[i] {
                 to_not_full[i] - 0.5
@@ -416,21 +503,37 @@ fn signed_distance(matte: &[f32], w: usize, h: usize) -> Vec<f32> {
 /// The exact Euclidean distance from every pixel to the nearest `seed` pixel
 /// (Felzenszwalb–Huttenlocher, two separable passes). No seed is "far".
 fn distance_transform(seed: &[bool], w: usize, h: usize) -> Vec<f32> {
+    #[cfg(test)]
+    if blur_reference::using_serial() {
+        return blur_reference::former_distance(seed, w, h);
+    }
+    if w == 0 || h == 0 {
+        return Vec::new();
+    }
     const FAR: f64 = 1.0e12;
-    let mut grid: Vec<f64> = seed.iter().map(|&s| if s { 0.0 } else { FAR }).collect();
-    let mut line = Vec::new();
-    for x in 0..w {
-        line.clear();
-        line.extend((0..h).map(|y| grid[y * w + x]));
-        for (y, v) in squared_distance_1d(&line).into_iter().enumerate() {
-            grid[y * w + x] = v;
-        }
-    }
-    for y in 0..h {
-        let row = squared_distance_1d(&grid[y * w..(y + 1) * w]);
-        grid[y * w..(y + 1) * w].copy_from_slice(&row);
-    }
-    grid.into_iter().map(|d| d.sqrt() as f32).collect()
+    // Each first-pass column owns contiguous storage; no strided shared writes.
+    let columns: Vec<Vec<f64>> = (0..w)
+        .into_par_iter()
+        .map(|x| {
+            let line: Vec<f64> = (0..h)
+                .map(|y| if seed[y * w + x] { 0.0 } else { FAR })
+                .collect();
+            squared_distance_1d(&line)
+        })
+        .collect();
+    let mut out = vec![0.0; w * h];
+    out.par_chunks_mut(w).enumerate().for_each_init(
+        || vec![0.0; w],
+        |line, (y, row)| {
+            for (slot, column) in line.iter_mut().zip(&columns) {
+                *slot = column[y];
+            }
+            for (slot, d) in row.iter_mut().zip(squared_distance_1d(line)) {
+                *slot = d.sqrt() as f32;
+            }
+        },
+    );
+    out
 }
 
 /// The 1-D squared-distance transform of `f` under the lower envelope of
@@ -472,38 +575,49 @@ fn squared_distance_1d(f: &[f64]) -> Vec<f64> {
     out
 }
 
-/// A separable Gaussian blur of an `f32` field with clamped edges; `radius`
-/// maps to sigma as the crate blur does.
-fn blur_f32(src: &[f32], w: usize, h: usize, radius: f64) -> Vec<f32> {
-    let kernel = pictura_filters::kernel::gaussian_kernel(
-        pictura_filters::kernel::sigma_from_radius(radius),
-    );
-    let r = (kernel.len() / 2) as isize;
-    let pass = |src: &[f32], horizontal: bool| -> Vec<f32> {
-        let mut out = vec![0.0f32; src.len()];
-        for y in 0..h {
-            for x in 0..w {
-                let mut acc = 0.0f64;
-                for (i, k) in kernel.iter().enumerate() {
-                    let o = i as isize - r;
-                    let (sx, sy) = if horizontal {
-                        ((x as isize + o).clamp(0, w as isize - 1) as usize, y)
-                    } else {
-                        (x, (y as isize + o).clamp(0, h as isize - 1) as usize)
-                    };
-                    acc += k * src[sy * w + sx] as f64;
-                }
-                out[y * w + x] = acc as f32;
-            }
+fn blur(src: &[f32], w: usize, h: usize, radius: f64) -> Vec<f32> {
+    #[cfg(test)]
+    {
+        let serial = blur_reference::using_serial();
+        blur_reference::record_call(serial);
+        if serial {
+            return blur_reference::former_blur(src, w, h, radius);
         }
-        out
-    };
-    pass(&pass(src, true), false)
+    }
+    pictura_filters::kernel::gaussian_blur_f32(
+        src,
+        w,
+        h,
+        pictura_filters::kernel::sigma_from_radius(radius),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parallel_distance_transform_matches_former_serial() {
+        for workers in [1, 4] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(workers)
+                .build()
+                .unwrap();
+            for (w, h) in [(0, 0), (1, 17), (17, 1), (37, 23), (97, 61)] {
+                let varied = (0..w * h)
+                    .map(|i| ((i * 7919) ^ (i >> 3)) % 13 == 0)
+                    .collect();
+                for seed in [varied, vec![false; w * h], vec![true; w * h]] {
+                    let expected = blur_reference::former_distance(&seed, w, h);
+                    let actual = pool.install(|| distance_transform(&seed, w, h));
+                    assert_eq!(expected.len(), actual.len());
+                    for (a, b) in actual.iter().zip(expected) {
+                        assert_eq!(a.to_bits(), b.to_bits(), "{w}x{h} workers={workers}");
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn distance_transform_matches_brute_force() {

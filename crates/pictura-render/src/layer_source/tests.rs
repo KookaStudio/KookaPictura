@@ -1048,3 +1048,217 @@ fn composited_source_invalidates_on_payload_or_text() {
     let second = composited_source(&text, &d, RasterRoute::Type).expect("raster");
     assert!(!Arc::ptr_eq(&first.buffer, &second.buffer));
 }
+
+fn pixel(buf: &PixelBuffer, x: u32, y: u32) -> [u8; 4] {
+    let w = buf.width as usize;
+    let plane = w * buf.height as usize;
+    let i = y as usize * w + x as usize;
+    let data = buf.data.as_slice();
+    [
+        data[i],
+        data[plane + i],
+        data[2 * plane + i],
+        data[3 * plane + i],
+    ]
+}
+
+#[test]
+fn ready_pass_probe_misses_unavailable_entries() {
+    let _guard = locked();
+    let d = doc(80, 80, vec![styled_layer()]);
+    let layer = &d.layers[0];
+    let effects = decoded_effects(layer);
+    let key = Key::new(Kind::Passes, pass_key_hash(layer, &d));
+    let region = rect(12, 12, 28, 28);
+
+    // Absent: a region request builds transient passes and inserts nothing.
+    let before = cache_len();
+    let passes = effect_passes_with(layer, &d, &effects, Some(region), false, None);
+    assert!(!passes.below.is_empty(), "the styled layer has passes");
+    assert_eq!(cache_len(), before, "an absent probe inserts nothing");
+    assert!(!cache_has_key(key), "an absent probe creates no pass entry");
+
+    // Empty: an empty slot is a miss and stays empty.
+    let cell = Arc::new(Slot::new());
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entries
+        .push(Entry {
+            key,
+            cell: Arc::clone(&cell),
+            bytes: 0,
+        });
+    let _ = effect_passes_with(layer, &d, &effects, Some(region), false, None);
+    assert!(
+        matches!(*cell.lock(), State::Empty),
+        "an empty slot stays empty"
+    );
+    assert!(
+        cache_has_key(key),
+        "the probe keeps the empty entry in place"
+    );
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entries
+        .clear();
+
+    // Building: a miss, no wait, and the slot is not published.
+    let cell = Arc::new(Slot::new());
+    *cell.lock() = State::Building(std::thread::current().id());
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entries
+        .push(Entry {
+            key,
+            cell: Arc::clone(&cell),
+            bytes: 0,
+        });
+    let _ = effect_passes_with(layer, &d, &effects, Some(region), false, None);
+    assert!(
+        matches!(*cell.lock(), State::Building(_)),
+        "an in-flight slot stays in flight"
+    );
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entries
+        .clear();
+
+    // Evicted: no slot is the same miss as absent, and a miss is counted.
+    let misses = crate::metrics::counters().source_misses;
+    let _ = effect_passes_with(layer, &d, &effects, Some(region), false, None);
+    assert!(
+        crate::metrics::counters().source_misses > misses,
+        "a probe miss is counted"
+    );
+    assert!(!cache_has_key(key), "a miss creates no entry");
+
+    // Over budget: a full build is removed, so the probe misses and revives nothing.
+    let _budget = BudgetGuard::set(0);
+    let _ = effect_passes_with(layer, &d, &effects, None, false, None);
+    assert!(!cache_has_key(key), "an over-budget pass is not retained");
+    let _ = effect_passes_with(layer, &d, &effects, Some(region), false, None);
+    assert!(
+        !cache_has_key(key),
+        "the probe does not revive an over-budget pass"
+    );
+}
+
+#[test]
+fn region_does_not_wait_for_inflight_effect_pass() {
+    let _guard = locked();
+    let d = doc(80, 80, vec![styled_layer()]);
+    let layer = &d.layers[0];
+    let key = Key::new(Kind::Passes, pass_key_hash(layer, &d));
+    let (started, is_started) = std::sync::mpsc::channel();
+    let (release, may_finish) = std::sync::mpsc::channel::<()>();
+    let builder = std::thread::spawn(move || {
+        let _ = lookup(key, || {
+            let _ = started.send(());
+            let _ = may_finish.recv();
+            Artifact::Passes(Arc::new(LayerPasses::default()))
+        });
+    });
+    is_started
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("the whole-layer build starts");
+    assert!(
+        matches!(
+            *cache().lock().unwrap_or_else(|e| e.into_inner()).entries[0]
+                .cell
+                .lock(),
+            State::Building(_)
+        ),
+        "the whole-layer slot is in flight"
+    );
+
+    let clone = d.clone();
+    let region = finishes_within(10, "a region behind an in-flight pass", move || {
+        crate::composite::composite_rgba_region(&clone, 12, 12, 16, 16)
+    });
+    assert!(
+        matches!(
+            *cache().lock().unwrap_or_else(|e| e.into_inner()).entries[0]
+                .cell
+                .lock(),
+            State::Building(_)
+        ),
+        "the region publishes nothing under the whole-layer key"
+    );
+
+    let _ = release.send(());
+    builder.join().expect("builder thread");
+    purge_source_cache();
+
+    let full = crate::composite_rgba(&d);
+    for y in 0..16 {
+        for x in 0..16 {
+            assert_eq!(
+                pixel(&region, x, y),
+                pixel(&full, 12 + x, 12 + y),
+                "pixel ({x},{y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn ready_pass_probe_preserves_cache_accounting() {
+    let _guard = locked();
+    let d = doc(80, 80, vec![styled_layer()]);
+    let layer = &d.layers[0];
+    let effects = decoded_effects(layer);
+    let key = Key::new(Kind::Passes, pass_key_hash(layer, &d));
+    let region = rect(12, 12, 28, 28);
+
+    let _ = crate::composite_rgba(&d);
+    let (bytes, entries) = {
+        let cache = cache().lock().unwrap_or_else(|e| e.into_inner());
+        (cache.bytes, cache.entries.len())
+    };
+    let hits = crate::metrics::counters().source_hits;
+
+    let full = effect_passes_with(layer, &d, &effects, None, false, None);
+    let reused = effect_passes_with(layer, &d, &effects, Some(region), false, None);
+    assert!(
+        Arc::ptr_eq(&full, &reused),
+        "the region reuses the retained pass"
+    );
+    assert!(
+        crate::metrics::counters().source_hits > hits,
+        "a probe hit is counted"
+    );
+    {
+        let cache = cache().lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(cache.bytes, bytes, "a hit does not change resident bytes");
+        assert_eq!(cache.entries.len(), entries, "a hit adds no entry");
+        assert!(
+            cache.entries.last().is_some_and(|entry| entry.key == key),
+            "a hit refreshes the entry's LRU position"
+        );
+    }
+
+    // Evict everything, then confirm the probe neither waits nor revives it.
+    let _budget = BudgetGuard::set(1);
+    let _ = lookup(Key::new(Kind::Text, 0xbad), || {
+        Artifact::Buffer(Arc::new(PixelBuffer::new(0, 0, 4)))
+    });
+    assert!(!cache_has_key(key), "the budget evicts the pass");
+    let misses = crate::metrics::counters().source_misses;
+    let rebuilt = effect_passes_with(layer, &d, &effects, Some(region), false, None);
+    assert!(
+        !rebuilt.below.is_empty(),
+        "a miss rebuilds transient passes"
+    );
+    assert!(
+        !cache_has_key(key),
+        "a miss does not revive the evicted pass"
+    );
+    assert!(
+        crate::metrics::counters().source_misses > misses,
+        "the miss is counted"
+    );
+}

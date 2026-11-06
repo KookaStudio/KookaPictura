@@ -562,6 +562,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       (#651)
 - [x] Parallel CPU kernels for adjustments, effect mattes, clipping and the
       display colour transform, byte-identical to the serial path (#1011)
+- [x] Parallel preparation of layer-effect passes before banded CPU compositing,
+      with ordered replay and exact output (#1179)
+- [x] Cold styled composites within 1000 ms on the acceptance workstation, with
+      exact SIMD Gaussian fields and cache-local u8 convolution (#1178, #1179)
+- [x] Reuse warm whole-layer effect passes for short sub-region composites
+      (#1180)
 - [ ] Frame-budget instrumentation (#941)
 - [ ] A tile cache with hit-rate accounting (#942)
 - [ ] Scratch paging and Efficiency accounting (#943)
