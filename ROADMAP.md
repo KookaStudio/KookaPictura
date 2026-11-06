@@ -282,7 +282,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       readout (#570)
 - [x] The Channel Mixer Monochrome UI, and the CMYK and Gray output channels
       (#571)
-- [ ] Color Balance numeric readouts, and Lab and CMYK mapping (#572)
+- [x] Color Balance numeric readouts, and Lab and CMYK mapping (#572)
 - [ ] Hue/Saturation Colorize, range-band editing, eyedroppers, and the
       on-image tool (#573)
 - [ ] Gradient Map dither, and the CS6 print-toning presets (#574)
