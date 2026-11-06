@@ -12,11 +12,21 @@ use crate::tonal::{
     brightness_contrast, curves, desaturate, equalize, exposure, gradient_map, levels, posterize,
     shadows_highlights, threshold,
 };
-use crate::types::{AdjustError, Adjustment};
+use crate::types::{AdjustError, Adjustment, ColorBalanceMode};
 
 /// Apply `adjustment` in place to a planar 8-bit buffer (alpha untouched).
 pub fn apply(adjustment: &Adjustment, buf: &mut PixelBuffer) -> Result<(), AdjustError> {
     apply_with_coverage(adjustment, buf, None)
+}
+
+/// As [`apply`], with the document's visible colour mode for the adjustments
+/// that map into it (currently only Color Balance).
+pub fn apply_in_mode(
+    adjustment: &Adjustment,
+    buf: &mut PixelBuffer,
+    mode: ColorBalanceMode,
+) -> Result<(), AdjustError> {
+    apply_with_coverage_in_mode(adjustment, buf, None, mode)
 }
 
 /// As [`apply`], with an optional one-byte-per-pixel selection coverage used by
@@ -25,6 +35,16 @@ pub fn apply_with_coverage(
     adjustment: &Adjustment,
     buf: &mut PixelBuffer,
     coverage: Option<&[u8]>,
+) -> Result<(), AdjustError> {
+    apply_with_coverage_in_mode(adjustment, buf, coverage, ColorBalanceMode::Rgb)
+}
+
+/// As [`apply_with_coverage`], with the document's visible colour mode.
+pub fn apply_with_coverage_in_mode(
+    adjustment: &Adjustment,
+    buf: &mut PixelBuffer,
+    coverage: Option<&[u8]>,
+    mode: ColorBalanceMode,
 ) -> Result<(), AdjustError> {
     let n = validate(buf)?;
     if coverage.is_some_and(|coverage| coverage.len() < n) {
@@ -43,7 +63,7 @@ pub fn apply_with_coverage(
         Adjustment::ChannelMixer(p) => channel_mixer(p, buf, n),
         Adjustment::Vibrance(p) => vibrance(p, buf, n),
         Adjustment::ShadowsHighlights(p) => shadows_highlights(p, buf, n),
-        Adjustment::ColorBalance(p) => color_balance(p, buf, n),
+        Adjustment::ColorBalance(p) => color_balance(p, buf, n, mode),
         Adjustment::SelectiveColor(p) => selective_color(p, buf, n),
         Adjustment::Auto(kind) => auto(*kind, buf, n, coverage),
         Adjustment::Invert => {

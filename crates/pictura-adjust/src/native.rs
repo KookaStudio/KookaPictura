@@ -9,8 +9,11 @@
 
 use pictura_core::{BitDepth, PixelBuffer, Sample, Samples};
 
+use pictura_color::model;
+
 use crate::color::{
-    hue_saturation_is_identity, hue_saturation_rgb, skin_bump, validate_hue_saturation,
+    band_delta, band_weights, cmyk_unit_to_rgb, hue_saturation_is_identity, hue_saturation_rgb,
+    rgb_unit_to_cmyk, skin_bump, validate_hue_saturation,
 };
 use crate::common::{
     hermite_eval, hsl_to_rgb, linear_to_srgb, luma, monotone_tangents, rgb_to_hsl, srgb_to_linear,
@@ -19,10 +22,10 @@ use crate::lut::sample;
 use crate::tonal::gradient_lut;
 use crate::types::{
     AdjustError, Adjustment, AutoKind, BlackWhiteParams, BrightnessContrastParams,
-    ChannelMixerParams, ColorBalanceParams, ColorLookupParams, CurvesParams, ExposureParams,
-    GradientMapParams, HueSaturationParams, LevelsChannel, Lut3d, PhotoFilterParams,
-    SelectiveColorMethod, SelectiveColorParams, SelectiveRange, ShadowsHighlightsParams,
-    VibranceParams,
+    ChannelMixerParams, ColorBalanceMode, ColorBalanceParams, ColorLookupParams, CurvesParams,
+    ExposureParams, GradientMapParams, HueSaturationParams, LevelsChannel, Lut3d,
+    PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange,
+    ShadowsHighlightsParams, VibranceParams,
 };
 
 type Rgb = [f64; 3];
@@ -36,6 +39,26 @@ pub fn apply_native(
     width: usize,
     height: usize,
     channels: u8,
+) -> Result<(), AdjustError> {
+    apply_native_in_mode(
+        adjustment,
+        samples,
+        width,
+        height,
+        channels,
+        ColorBalanceMode::Rgb,
+    )
+}
+
+/// As [`apply_native`], with the document's visible colour mode for Color
+/// Balance.
+pub fn apply_native_in_mode(
+    adjustment: &Adjustment,
+    samples: &mut Samples,
+    width: usize,
+    height: usize,
+    channels: u8,
+    mode: ColorBalanceMode,
 ) -> Result<(), AdjustError> {
     validate(samples, width, height, channels)?;
     match adjustment {
@@ -108,7 +131,9 @@ pub fn apply_native(
         Adjustment::ShadowsHighlights(p) => {
             shadows_highlights_native(p, samples, width, height, channels)
         }
-        Adjustment::ColorBalance(p) => color_balance_native(p, samples, width, height, channels),
+        Adjustment::ColorBalance(p) => {
+            color_balance_native(p, samples, width, height, channels, mode)
+        }
         Adjustment::BlackWhite(p) => black_white_native(p, samples, width, height, channels),
         Adjustment::PhotoFilter(p) => photo_filter_native(p, samples, width, height, channels),
         Adjustment::ChannelMixer(p) => channel_mixer_native(p, samples, width, height, channels),
@@ -429,6 +454,7 @@ fn color_balance_native(
     width: usize,
     height: usize,
     channels: u8,
+    mode: ColorBalanceMode,
 ) -> Result<(), AdjustError> {
     for band in [&p.shadows, &p.midtones, &p.highlights] {
         if band.iter().any(|v| !v.is_finite() || v.abs() > 100.0) {
@@ -440,32 +466,63 @@ fn color_balance_native(
     if p.shadows == [0.0; 3] && p.midtones == [0.0; 3] && p.highlights == [0.0; 3] {
         return Ok(());
     }
-    let (shadows, midtones, highlights) = (p.shadows, p.midtones, p.highlights);
-    let preserve = p.preserve_luminosity;
+    let params = p.clone();
     map(samples, width, height, channels, move |[r, g, b]| {
-        let (ir, ig, ib) = (r * 255.0, g * 255.0, b * 255.0);
-        let y = luma(ir, ig, ib) / 255.0;
-        let sh = (1.0 - y) * (1.0 - y);
-        let hi = y * y;
-        let mid = (1.0 - sh - hi).max(0.0);
-        let w = [sh, mid, hi];
-        let mut out = [ir, ig, ib];
-        for (c, o) in out.iter_mut().enumerate() {
-            let delta = w[0] * shadows[c] + w[1] * midtones[c] + w[2] * highlights[c];
-            *o = (*o + delta).clamp(0.0, 255.0);
-        }
-        if preserve {
-            let y1 = luma(out[0], out[1], out[2]);
-            if y1 > 0.0 {
-                let scale = luma(ir, ig, ib) / y1;
-                for o in &mut out {
-                    *o = (*o * scale).clamp(0.0, 255.0);
-                }
-            }
-        }
-        [out[0] / 255.0, out[1] / 255.0, out[2] / 255.0]
+        let out = match mode {
+            ColorBalanceMode::Rgb => rgb_pixel_native(&params, r, g, b),
+            ColorBalanceMode::Lab => lab_pixel_native(&params, r, g, b),
+            ColorBalanceMode::Cmyk => cmyk_pixel_native(&params, r, g, b),
+        };
+        out.map(|v| v.clamp(0.0, 1.0))
     });
     Ok(())
+}
+
+fn rgb_pixel_native(p: &ColorBalanceParams, r: f64, g: f64, b: f64) -> [f64; 3] {
+    let (ir, ig, ib) = (r * 255.0, g * 255.0, b * 255.0);
+    let w = band_weights(luma(ir, ig, ib) / 255.0);
+    let mut out = [ir, ig, ib];
+    for (c, o) in out.iter_mut().enumerate() {
+        *o = (*o + band_delta(p, w, c)).clamp(0.0, 255.0);
+    }
+    if p.preserve_luminosity {
+        let y1 = luma(out[0], out[1], out[2]);
+        if y1 > 0.0 {
+            let scale = luma(ir, ig, ib) / y1;
+            for o in &mut out {
+                *o = (*o * scale).clamp(0.0, 255.0);
+            }
+        }
+    }
+    out.map(|v| v / 255.0)
+}
+
+fn lab_pixel_native(p: &ColorBalanceParams, r: f64, g: f64, b: f64) -> [f64; 3] {
+    let lab = model::srgb_unit_to_lab([r, g, b]);
+    let w = band_weights(lab[0] / 100.0);
+    let a = lab[1] + band_delta(p, w, 0) - band_delta(p, w, 1);
+    let bb = lab[2] - band_delta(p, w, 2);
+    model::lab_to_srgb_unit([lab[0], a, bb])
+}
+
+fn cmyk_pixel_native(p: &ColorBalanceParams, r: f64, g: f64, b: f64) -> [f64; 3] {
+    let input_luma = luma(r * 255.0, g * 255.0, b * 255.0) / 255.0;
+    let w = band_weights(input_luma);
+    let mut inks = rgb_unit_to_cmyk([r, g, b]);
+    for (c, ink) in inks.iter_mut().take(3).enumerate() {
+        *ink = (*ink - band_delta(p, w, c) / 255.0).clamp(0.0, 1.0);
+    }
+    let mut out = cmyk_unit_to_rgb(inks);
+    if p.preserve_luminosity {
+        let y1 = luma(out[0] * 255.0, out[1] * 255.0, out[2] * 255.0);
+        if y1 > 0.0 {
+            let scale = input_luma * 255.0 / y1;
+            for o in &mut out {
+                *o = (*o * scale).clamp(0.0, 1.0);
+            }
+        }
+    }
+    out
 }
 
 fn black_white_native(

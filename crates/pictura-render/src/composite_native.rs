@@ -2,7 +2,7 @@
 //! source-depth composite output. Split from `composite.rs` for the file-size
 //! cap.
 
-use pictura_adjust::{AdjustError, Adjustment};
+use pictura_adjust::{AdjustError, Adjustment, ColorBalanceMode};
 use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, PsdRect, Samples};
 
 use rayon::prelude::*;
@@ -158,6 +158,9 @@ pub(crate) fn composite_adjustment(
     if n == 0 {
         return;
     }
+    // The adjustment layers follow the document's visible mode: a Lab or CMYK
+    // document shifts its own chroma/ink channels even though the raster is RGB.
+    let mode = ColorBalanceMode::from(crate::document_color_mode(doc));
     // CS6 exposes no Fill for adjustments: a stored value must not gate the
     // transformed backdrop. Generative fill content returned above keeps its
     // Fill. The gated context lets both the native and 8-bit gates read fill 255.
@@ -189,7 +192,7 @@ pub(crate) fn composite_adjustment(
     // at native precision. An adjustment outside `apply_native`'s set falls
     // back to the 8-bit path below.
     if doc.source_depth.is_some() {
-        match apply_native_rgb(canvas, adjustment) {
+        match apply_native_rgb(canvas, adjustment, mode) {
             Ok(adjusted) => {
                 gate_adjusted(canvas, layer, doc, &adjusted, &gated, Some(&gated_over));
                 return;
@@ -220,7 +223,7 @@ pub(crate) fn composite_adjustment(
                 });
         }
     }
-    if pictura_adjust::apply(adjustment, &mut buf).is_err() {
+    if pictura_adjust::apply_in_mode(adjustment, &mut buf, mode).is_err() {
         return; // invalid/unsupported parameters: no-op, never an error
     }
     let w = canvas.w;
@@ -273,6 +276,7 @@ pub(crate) fn composite_adjustment(
 fn apply_native_rgb(
     canvas: &Canvas,
     adjustment: &Adjustment,
+    mode: ColorBalanceMode,
 ) -> Result<Vec<[f32; 3]>, AdjustError> {
     let n = canvas.w * canvas.h;
     let mut samples = Vec::with_capacity(n * 3);
@@ -286,7 +290,7 @@ fn apply_native_rgb(
         samples.push(p.b);
     }
     let mut store = Samples::F32(samples.into());
-    pictura_adjust::apply_native(adjustment, &mut store, canvas.w, canvas.h, 3)?;
+    pictura_adjust::apply_native_in_mode(adjustment, &mut store, canvas.w, canvas.h, 3, mode)?;
     let Samples::F32(v) = store else {
         return Err(AdjustError::InvalidParams(
             "native store changed type".into(),

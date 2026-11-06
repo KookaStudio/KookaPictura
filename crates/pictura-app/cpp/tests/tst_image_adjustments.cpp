@@ -19,6 +19,7 @@
 #include "dialogs.h"
 #include "hdr_toning_dialog.h"
 #include "tools.h"
+#include "api/document_bridge.h"
 #include "api/filters_bridge.h"
 #include "api/document_bridge.h"
 
@@ -116,6 +117,7 @@ private slots:
     void exposureAndVibranceUseTheWideLayouts();
     void hueSaturationEditsEachRangeAndPresets();
     void colorBalanceEditsEachTone();
+    void colorBalanceReadoutFollowsModeAndTone();
     void channelMixerColorsItsSourcesAndTotals();
     void channelMixerMonochromeToggle();
     void channelMixerCmykOutputs();
@@ -403,6 +405,46 @@ void ImageAdjustmentsTest::colorBalanceEditsEachTone()
     QCOMPARE(cyanRed->value(), 100);
     dialog->reject();
     QCOMPARE(view_->composite_argb(5, 5), before);
+}
+
+// The read-only row above the bars names the active tone's channel changes in
+// the document's mode: R/G/B, A/B, or C/M/Y (#572).
+void ImageAdjustmentsTest::colorBalanceReadoutFollowsModeAndTone()
+{
+    QVERIFY(openImage(QColor(100, 100, 100)));
+    const auto check = [this](const QString& initial, const QString& moved) {
+        const auto dialog = pictura::makeAdjustmentDialog(
+            QStringLiteral("color-balance"), view_, block("color-balance"), QRect());
+        auto* readout =
+            qobject_cast<QLabel*>(dialog->controlForTest(QStringLiteral("colorBalanceReadout")));
+        auto* cyanRed = qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("cyanRed")));
+        auto* magentaGreen =
+            qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("magentaGreen")));
+        auto* yellowBlue =
+            qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("yellowBlue")));
+        auto* midtones =
+            qobject_cast<QRadioButton*>(dialog->controlForTest(QStringLiteral("midtones")));
+        auto* highlights =
+            qobject_cast<QRadioButton*>(dialog->controlForTest(QStringLiteral("highlights")));
+        QVERIFY(readout && cyanRed && magentaGreen && yellowBlue && midtones && highlights);
+        QCOMPARE(readout->text(), initial);
+        cyanRed->setValue(40);
+        magentaGreen->setValue(20);
+        yellowBlue->setValue(10);
+        QCOMPARE(readout->text(), moved);
+        highlights->click();
+        QCOMPARE(readout->text(), initial);
+        midtones->click();
+        QCOMPARE(readout->text(), moved);
+        dialog->reject();
+    };
+    check(QStringLiteral("R: 0    G: 0    B: 0"),
+          QStringLiteral("R: +40    G: +20    B: +10"));
+    QVERIFY(pictura::convert_image_mode(*view_, QStringLiteral("lab")));
+    check(QStringLiteral("A: 0    B: 0"), QStringLiteral("A: +20    B: -10"));
+    QVERIFY(pictura::convert_image_mode(*view_, QStringLiteral("cmyk")));
+    check(QStringLiteral("C: 0    M: 0    Y: 0"),
+          QStringLiteral("C: -40    M: -20    Y: -10"));
 }
 
 // Channel Mixer: each output channel edits its own sources over colour ramps,

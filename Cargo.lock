@@ -967,6 +967,7 @@ dependencies = [
 name = "pictura-adjust"
 version = "0.3.0"
 dependencies = [
+ "pictura-color",
  "pictura-core",
  "pictura-testkit",
  "rayon",

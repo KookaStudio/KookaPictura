@@ -255,6 +255,7 @@ pub(super) fn apply_op_active_region(
         return None;
     };
     let (doc_w, doc_h) = (doc.width, doc.height);
+    let mode = pictura_render::document_color_mode(doc).into();
     let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
         rust.filter_error = Some("the active layer no longer exists".to_string());
         return None;
@@ -326,6 +327,7 @@ pub(super) fn apply_op_active_region(
             mask.as_ref(),
             section.unwrap_or(lrect),
             cmyk.as_ref(),
+            mode,
         ),
         ActiveOp::ApplyImage(params) => pictura_render::apply_image_region(
             layer,

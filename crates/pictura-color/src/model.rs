@@ -29,7 +29,13 @@ const KAPPA: f64 = 24389.0 / 27.0;
 /// CIELAB(D50) ↔ sRGB(D65) pair; it matches lcms2's exact transform within one
 /// unit, not Adobe's closed CMS.
 pub fn srgb_to_lab(rgb: [u8; 3]) -> [f64; 3] {
-    let linear = rgb.map(srgb_decode);
+    srgb_unit_to_lab(rgb.map(|value| f64::from(value) / 255.0))
+}
+
+/// Unit sRGB (`0.0..=1.0`) → CIELAB D50, the f64 form the adjustment kernels
+/// share with [`srgb_to_lab`].
+pub fn srgb_unit_to_lab(rgb: [f64; 3]) -> [f64; 3] {
+    let linear = rgb.map(srgb_decode_unit);
     let xyz = LINEAR_SRGB_TO_XYZ_D50.map(|row| dot(row, linear));
     let fx = lab_fwd(xyz[0] / XN);
     let fy = lab_fwd(xyz[1]);
@@ -40,16 +46,27 @@ pub fn srgb_to_lab(rgb: [u8; 3]) -> [f64; 3] {
 /// CIELAB D50 `[L, a, b]` → 8-bit sRGB, the inverse of [`srgb_to_lab`];
 /// out-of-gamut channels clamp to 0–255.
 pub fn lab_to_srgb(lab: [f64; 3]) -> [u8; 3] {
+    lab_to_srgb_unit(lab).map(srgb_byte)
+}
+
+/// CIELAB D50 `[L, a, b]` → unit sRGB (`0.0..=1.0`), the f64 form the
+/// adjustment kernels share with [`lab_to_srgb`]; out-of-gamut channels clamp.
+pub fn lab_to_srgb_unit(lab: [f64; 3]) -> [f64; 3] {
     let fy = (lab[0] + 16.0) / 116.0;
     let fx = fy + lab[1] / 500.0;
     let fz = fy - lab[2] / 200.0;
-    xyz_d50_to_srgb([XN * lab_f(fx), lab_f(fy), ZN * lab_f(fz)])
+    xyz_d50_to_srgb_unit([XN * lab_f(fx), lab_f(fy), ZN * lab_f(fz)])
 }
 
 /// CIE XYZ (D50) → 8-bit sRGB through the same Bradford matrix as
 /// [`lab_to_srgb`]; out-of-gamut channels clamp.
 pub fn xyz_d50_to_srgb(xyz: [f64; 3]) -> [u8; 3] {
-    XYZ_D50_TO_LINEAR_SRGB.map(|row| srgb_encode(dot(row, xyz)))
+    xyz_d50_to_srgb_unit(xyz).map(srgb_byte)
+}
+
+/// CIE XYZ (D50) → unit sRGB, the f64 form of [`xyz_d50_to_srgb`].
+pub fn xyz_d50_to_srgb_unit(xyz: [f64; 3]) -> [f64; 3] {
+    XYZ_D50_TO_LINEAR_SRGB.map(|row| srgb_encode_unit(dot(row, xyz)))
 }
 
 fn dot(row: [f64; 3], v: [f64; 3]) -> f64 {
@@ -74,17 +91,20 @@ fn lab_fwd(t: f64) -> f64 {
     }
 }
 
-fn srgb_encode(linear: f64) -> u8 {
+fn srgb_encode_unit(linear: f64) -> f64 {
     let value = if linear <= 0.0031308 {
         12.92 * linear
     } else {
         1.055 * linear.powf(1.0 / 2.4) - 0.055
     };
-    (value.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8
+    value.clamp(0.0, 1.0)
 }
 
-fn srgb_decode(value: u8) -> f64 {
-    let value = f64::from(value) / 255.0;
+fn srgb_byte(unit: f64) -> u8 {
+    (unit.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8
+}
+
+fn srgb_decode_unit(value: f64) -> f64 {
     if value <= 0.04045 {
         value / 12.92
     } else {

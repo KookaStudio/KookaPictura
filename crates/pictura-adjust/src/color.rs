@@ -1,9 +1,11 @@
+use pictura_color::model;
 use pictura_core::PixelBuffer;
 
 use crate::common::{hsl_to_rgb, luma, map_rgb, rgb_to_hsl};
 use crate::types::{
-    AdjustError, BlackWhiteParams, ChannelMixerParams, ColorBalanceParams, HueSaturationParams,
-    PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange, VibranceParams,
+    AdjustError, BlackWhiteParams, ChannelMixerParams, ColorBalanceMode, ColorBalanceParams,
+    HueSaturationParams, PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams,
+    SelectiveRange, VibranceParams,
 };
 
 // ---------------------------------------------------------------------------
@@ -155,6 +157,7 @@ pub(crate) fn color_balance(
     p: &ColorBalanceParams,
     buf: &mut PixelBuffer,
     n: usize,
+    mode: ColorBalanceMode,
 ) -> Result<(), AdjustError> {
     for band in [&p.shadows, &p.midtones, &p.highlights] {
         if band.iter().any(|v| !v.is_finite() || v.abs() > 100.0) {
@@ -167,35 +170,108 @@ pub(crate) fn color_balance(
         return Ok(());
     }
     map_rgb(buf, n, |rv, gv, bv| {
-        let (ir, ig, ib) = (rv as f64, gv as f64, bv as f64);
-        let y = luma(ir, ig, ib) / 255.0;
-        // Overlapping parabola windows: shadow=1 at Y=0, highlight=1 at Y=1,
-        // midtone peaks at Y=0.5. The exact falloffs are closed.
-        let sh = (1.0 - y) * (1.0 - y);
-        let hi = y * y;
-        let mid = (1.0 - sh - hi).max(0.0);
-        let w = [sh, mid, hi];
-        let mut out = [ir, ig, ib];
-        for (c, o) in out.iter_mut().enumerate() {
-            let delta = w[0] * p.shadows[c] + w[1] * p.midtones[c] + w[2] * p.highlights[c];
-            *o = (*o + delta).clamp(0.0, 255.0);
-        }
-        if p.preserve_luminosity {
-            let y1 = luma(out[0], out[1], out[2]);
-            if y1 > 0.0 {
-                let scale = luma(ir, ig, ib) / y1;
-                for o in &mut out {
-                    *o = (*o * scale).clamp(0.0, 255.0);
-                }
-            }
-        }
+        let out = match mode {
+            ColorBalanceMode::Rgb => rgb_pixel(p, rv as f64, gv as f64, bv as f64),
+            ColorBalanceMode::Lab => lab_pixel(p, rv, gv, bv),
+            ColorBalanceMode::Cmyk => cmyk_pixel(p, rv, gv, bv),
+        };
         [
-            out[0].round() as u8,
-            out[1].round() as u8,
-            out[2].round() as u8,
+            out[0].round().clamp(0.0, 255.0) as u8,
+            out[1].round().clamp(0.0, 255.0) as u8,
+            out[2].round().clamp(0.0, 255.0) as u8,
         ]
     });
     Ok(())
+}
+
+/// Overlapping parabola windows: shadow=1 at Y=0, highlight=1 at Y=1, midtone
+/// peaks at Y=0.5. The exact falloffs are closed.
+pub(crate) fn band_weights(y: f64) -> [f64; 3] {
+    let sh = (1.0 - y) * (1.0 - y);
+    let hi = y * y;
+    let mid = (1.0 - sh - hi).max(0.0);
+    [sh, mid, hi]
+}
+
+pub(crate) fn band_delta(p: &ColorBalanceParams, w: [f64; 3], channel: usize) -> f64 {
+    w[0] * p.shadows[channel] + w[1] * p.midtones[channel] + w[2] * p.highlights[channel]
+}
+
+fn rgb_pixel(p: &ColorBalanceParams, r: f64, g: f64, b: f64) -> [f64; 3] {
+    let w = band_weights(luma(r, g, b) / 255.0);
+    let mut out = [r, g, b];
+    for (c, o) in out.iter_mut().enumerate() {
+        *o = (*o + band_delta(p, w, c)).clamp(0.0, 255.0);
+    }
+    if p.preserve_luminosity {
+        let y1 = luma(out[0], out[1], out[2]);
+        if y1 > 0.0 {
+            let scale = luma(r, g, b) / y1;
+            for o in &mut out {
+                *o = (*o * scale).clamp(0.0, 255.0);
+            }
+        }
+    }
+    out
+}
+
+/// Lab keeps `L` and moves `a` (green↔red/magenta) and `b` (blue↔yellow).
+/// ponytail: the profile-free D50 model and a constant-shift `a`/`b` are an
+/// approximation of Adobe's closed Lab kernel.
+fn lab_pixel(p: &ColorBalanceParams, r: u8, g: u8, b: u8) -> [f64; 3] {
+    let lab = model::srgb_unit_to_lab([
+        f64::from(r) / 255.0,
+        f64::from(g) / 255.0,
+        f64::from(b) / 255.0,
+    ]);
+    let w = band_weights(lab[0] / 100.0);
+    let a = lab[1] + band_delta(p, w, 0) - band_delta(p, w, 1);
+    let bb = lab[2] - band_delta(p, w, 2);
+    model::lab_to_srgb_unit([lab[0], a, bb]).map(|v| v * 255.0)
+}
+
+/// The working raster carries no K plate, so the CMYK model uses no black
+/// generation (`C = 1 − R`, `M = 1 − G`, `Y = 1 − B`, `K = 0`). Each pair
+/// lowers its right-hand colour's ink; `K` is held.
+/// ponytail: profile-free and additive, so a future profile-mediated ink model
+/// can replace it behind the same `ColorBalanceMode::Cmyk` arm.
+fn cmyk_pixel(p: &ColorBalanceParams, r: u8, g: u8, b: u8) -> [f64; 3] {
+    let input_luma = luma(f64::from(r), f64::from(g), f64::from(b)) / 255.0;
+    let w = band_weights(input_luma);
+    let mut inks = rgb_unit_to_cmyk([
+        f64::from(r) / 255.0,
+        f64::from(g) / 255.0,
+        f64::from(b) / 255.0,
+    ]);
+    for (c, ink) in inks.iter_mut().take(3).enumerate() {
+        *ink = (*ink - band_delta(p, w, c) / 255.0).clamp(0.0, 1.0);
+    }
+    let mut out = cmyk_unit_to_rgb(inks);
+    if p.preserve_luminosity {
+        let y1 = luma(out[0] * 255.0, out[1] * 255.0, out[2] * 255.0);
+        if y1 > 0.0 {
+            let scale = input_luma * 255.0 / y1;
+            for o in &mut out {
+                *o = (*o * scale).clamp(0.0, 1.0);
+            }
+        }
+    }
+    out.map(|v| v * 255.0)
+}
+
+/// Unit sRGB → unit CMYK without black generation, the model the working
+/// raster can represent (it retains no K plate).
+pub(crate) fn rgb_unit_to_cmyk([r, g, b]: [f64; 3]) -> [f64; 4] {
+    [1.0 - r, 1.0 - g, 1.0 - b, 0.0]
+}
+
+/// Unit CMYK → unit sRGB, the inverse of [`rgb_unit_to_cmyk`].
+pub(crate) fn cmyk_unit_to_rgb([c, m, y, k]: [f64; 4]) -> [f64; 3] {
+    [
+        (1.0 - c) * (1.0 - k),
+        (1.0 - m) * (1.0 - k),
+        (1.0 - y) * (1.0 - k),
+    ]
 }
 
 pub(crate) fn black_white(

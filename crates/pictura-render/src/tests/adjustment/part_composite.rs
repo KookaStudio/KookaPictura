@@ -716,6 +716,7 @@ fn destructive_channel_mixer_cmyk() {
         None,
         full(1, 1),
         Some(&mix),
+        pictura_adjust::ColorBalanceMode::Rgb,
     )
     .expect("the destructive mix applies");
     assert_ne!(layer.channels[0].data, before);
