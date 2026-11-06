@@ -6,6 +6,11 @@
 
 #[cfg(test)]
 mod build_config;
+/// Counts the unit-test binary's heap for the memory guards (#1210); the
+/// shipped library keeps the system allocator.
+#[cfg(test)]
+#[global_allocator]
+static HEAP: pictura_testkit::PeakAlloc = pictura_testkit::PeakAlloc::system();
 pub mod cxxqt_object;
 mod decode_bridge;
 pub mod gpu;

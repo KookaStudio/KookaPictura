@@ -39,6 +39,11 @@ rayon = "1"
 [target.'cfg(not(target_vendor = "apple"))'.dependencies]
 ash = "0.38"
 
+# The counting allocator the memory guards install in the unit-test binary
+# (#1210); a workspace crate, no new dependency.
+[dev-dependencies]
+pictura-testkit = { path = "../pictura-testkit" }
+
 [build-dependencies]
 cxx-qt-build = "0.10"
 

@@ -1111,6 +1111,7 @@ dependencies = [
  "pictura-render",
  "pictura-script",
  "pictura-select",
+ "pictura-testkit",
  "pollster",
  "rayon",
  "wgpu",
