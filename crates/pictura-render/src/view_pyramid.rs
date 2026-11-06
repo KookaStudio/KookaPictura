@@ -10,7 +10,7 @@
 //! A damaged rectangle is repaired level by level from the level above, so an
 //! in-place update lands on exactly the pyramid a full rebuild would produce.
 
-use pictura_core::PsdRect;
+use pictura_core::{Plane, PsdRect};
 use std::sync::Arc;
 
 /// Levels stop halving once the next would be smaller than this on its long side.
@@ -25,15 +25,86 @@ pub const TILE: i32 = 64;
 /// The most pixels [`ViewPyramid::coarse`] samples into its first filled level.
 const COARSE_PIXELS: u64 = 4_000_000;
 
-/// A borrowed planar straight-alpha level-0 view, one slice per channel.
+/// A borrowed planar straight-alpha level-0 view, one channel per row.
+///
+/// The channels are either four contiguous slices or one planar RGBA
+/// copy-on-write plane. The plane is read a row at a time through
+/// [`Plane::row`], so a banded or diverged source is never materialized whole.
 #[derive(Clone, Copy)]
 pub struct Planes<'a> {
     pub width: u32,
     pub height: u32,
-    pub r: &'a [u8],
-    pub g: &'a [u8],
-    pub b: &'a [u8],
-    pub a: &'a [u8],
+    source: Source<'a>,
+}
+
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Slices {
+        r: &'a [u8],
+        g: &'a [u8],
+        b: &'a [u8],
+        a: &'a [u8],
+    },
+    /// A planar plane whose channel `c` starts `c * height` rows in.
+    Planar(&'a Plane<u8>),
+}
+
+impl<'a> Planes<'a> {
+    /// A view over four contiguous channel slices.
+    pub fn new(
+        width: u32,
+        height: u32,
+        r: &'a [u8],
+        g: &'a [u8],
+        b: &'a [u8],
+        a: &'a [u8],
+    ) -> Self {
+        Self {
+            width,
+            height,
+            source: Source::Slices { r, g, b, a },
+        }
+    }
+
+    /// A view over a 4-channel planar plane, or `None` unless it holds
+    /// `width × height` samples per channel.
+    pub fn planar(width: u32, height: u32, plane: &'a Plane<u8>) -> Option<Self> {
+        let samples = width as usize * height as usize;
+        (samples > 0 && plane.len() >= samples * 4).then_some(Self {
+            width,
+            height,
+            source: Source::Planar(plane),
+        })
+    }
+
+    /// Channel `channel` (0 = r, 1 = g, 2 = b, 3 = a) of row `y`, or `None`
+    /// past the plane.
+    pub fn row(&self, channel: usize, y: usize) -> Option<&'a [u8]> {
+        let width = self.width as usize;
+        let start = y.checked_mul(width)?;
+        match self.source {
+            Source::Slices { r, g, b, a } => {
+                let plane = match channel {
+                    0 => r,
+                    1 => g,
+                    2 => b,
+                    _ => a,
+                };
+                plane.get(start..start + width)
+            }
+            Source::Planar(plane) => plane.row(channel * self.height as usize + y, width),
+        }
+    }
+
+    /// One line's four channel rows.
+    pub fn rows(&self, y: usize) -> Option<[&'a [u8]; 4]> {
+        Some([
+            self.row(0, y)?,
+            self.row(1, y)?,
+            self.row(2, y)?,
+            self.row(3, y)?,
+        ])
+    }
 }
 
 /// One stored pyramid level: interleaved premultiplied RGBA.
@@ -251,6 +322,11 @@ impl ViewPyramid {
             if sy < 0 || sy >= lh_i {
                 continue;
             }
+            let rows = if level == 0 {
+                level0.rows(sy as usize)
+            } else {
+                None
+            };
             for ox in 0..rw as i32 {
                 let sx = rect.left + ox;
                 if sx < 0 || sx >= lw_i {
@@ -258,7 +334,10 @@ impl ViewPyramid {
                 }
                 let o = (oy as usize * rw as usize + ox as usize) * 4;
                 let px = if level == 0 {
-                    premultiplied_plane_pixel(&level0, sx as usize, sy as usize)
+                    match rows {
+                        Some(rows) => premultiplied_row_pixel(&rows, sx as usize),
+                        None => continue,
+                    }
                 } else {
                     stored_pixel(&self.levels[level - 1], sx as usize, sy as usize)
                 };
@@ -402,13 +481,12 @@ fn average(sum: u32, n: u32) -> u8 {
     ((sum + n / 2) / n) as u8
 }
 
-fn premultiplied_plane_pixel(l0: &Planes<'_>, x: usize, y: usize) -> [u8; 4] {
-    let i = y * l0.width as usize + x;
-    let a = l0.a[i];
+fn premultiplied_row_pixel(rows: &[&[u8]; 4], x: usize) -> [u8; 4] {
+    let a = rows[3][x];
     [
-        premul(l0.r[i], a) as u8,
-        premul(l0.g[i], a) as u8,
-        premul(l0.b[i], a) as u8,
+        premul(rows[0][x], a) as u8,
+        premul(rows[1][x], a) as u8,
+        premul(rows[2][x], a) as u8,
         a,
     ]
 }
@@ -424,9 +502,12 @@ fn sample_from_planes(level0: &Planes<'_>, dst: &mut PyramidLevel, level: usize)
     let whole = rect_of(dst.width, dst.height);
     each_row(dst, whole, |y, row| {
         let sy = ((y as usize) << level).min(level0.height as usize - 1);
+        let Some(rows) = level0.rows(sy) else {
+            return;
+        };
         for (x, texel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let sx = (x << level).min(level0.width as usize - 1);
-            texel.copy_from_slice(&premultiplied_plane_pixel(level0, sx, sy));
+            texel.copy_from_slice(&premultiplied_row_pixel(&rows, sx));
         }
     });
 }
@@ -442,23 +523,31 @@ fn shrink_from_planes(level0: &Planes<'_>, dst: &mut PyramidLevel, rect: PsdRect
     let lw = level0.width as i32;
     let lh = level0.height as i32;
     each_row(dst, rect, |y, row| {
+        let above = [
+            if 2 * y < lh {
+                level0.rows((2 * y) as usize)
+            } else {
+                None
+            },
+            if 2 * y + 1 < lh {
+                level0.rows((2 * y + 1) as usize)
+            } else {
+                None
+            },
+        ];
         for x in rect.left..rect.right {
             let (mut sr, mut sg, mut sb, mut sa, mut n) = (0u32, 0u32, 0u32, 0u32, 0u32);
-            for dy in 0..2 {
-                let sy = 2 * y + dy;
-                if sy >= lh {
-                    continue;
-                }
+            for rows in above.iter().flatten() {
                 for dx in 0..2 {
                     let sx = 2 * x + dx;
                     if sx >= lw {
                         continue;
                     }
-                    let i = sy as usize * lw as usize + sx as usize;
-                    let a = level0.a[i];
-                    sr += premul(level0.r[i], a);
-                    sg += premul(level0.g[i], a);
-                    sb += premul(level0.b[i], a);
+                    let sx = sx as usize;
+                    let a = rows[3][sx];
+                    sr += premul(rows[0][sx], a);
+                    sg += premul(rows[1][sx], a);
+                    sb += premul(rows[2][sx], a);
                     sa += a as u32;
                     n += 1;
                 }
@@ -566,14 +655,7 @@ mod tests {
         }
 
         fn planes(&self) -> Planes<'_> {
-            Planes {
-                width: self.width,
-                height: self.height,
-                r: &self.r,
-                g: &self.g,
-                b: &self.b,
-                a: &self.a,
-            }
+            Planes::new(self.width, self.height, &self.r, &self.g, &self.b, &self.a)
         }
 
         fn blit(&mut self, src: &Built, rect: PsdRect) {
@@ -622,7 +704,7 @@ mod tests {
         for (x, y) in [(0, 0), (31, 17), (399, 299)] {
             assert_eq!(
                 stored_pixel(&coarse.levels[1], x, y),
-                premultiplied_plane_pixel(&p.planes(), x * 4, y * 4)
+                premultiplied_row_pixel(&p.planes().rows(y * 4).expect("row"), x * 4)
             );
         }
         assert!(coarse.levels[0].data().iter().all(|&byte| byte == 0));
@@ -652,7 +734,7 @@ mod tests {
                 for dx in 0..2 {
                     let (sx, sy) = (2 * x + dx, 2 * y + dy);
                     if sx < 1031 && sy < 517 {
-                        let px = premultiplied_plane_pixel(&p.planes(), sx, sy);
+                        let px = premultiplied_row_pixel(&p.planes().rows(sy).expect("row"), sx);
                         for c in 0..4 {
                             sum[c] += px[c] as u32;
                         }
@@ -718,7 +800,7 @@ mod tests {
         assert_eq!((lvl0.width(), lvl0.height()), (32, 16));
         for y in 0..16usize {
             for x in 0..32usize {
-                let want = premultiplied_plane_pixel(&p.planes(), 10 + x, 20 + y);
+                let want = premultiplied_row_pixel(&p.planes().rows(20 + y).expect("row"), 10 + x);
                 let o = (y * 32 + x) * 4;
                 assert_eq!(lvl0.data()[o..o + 4], want[..], "at {x},{y}");
             }
@@ -748,7 +830,7 @@ mod tests {
             }
         }
         // The overlapping 5x5 corner is opaque premultiplied level-0 pixels.
-        let corner = premultiplied_plane_pixel(&p.planes(), 0, 0);
+        let corner = premultiplied_row_pixel(&p.planes().rows(0).expect("row"), 0);
         let o = (5 * 10 + 5) * 4;
         assert_eq!(out.data()[o..o + 4], corner[..]);
     }
@@ -769,14 +851,7 @@ mod tests {
                 }
             }
         }
-        let p = Planes {
-            width: w,
-            height: h,
-            r: &r,
-            g: &[0u8; 600 * 600],
-            b: &[0u8; 600 * 600],
-            a: &a,
-        };
+        let p = Planes::new(w, h, &r, &[0u8; 600 * 600], &[0u8; 600 * 600], &a);
         let pyramid = ViewPyramid::rebuild(p);
         let out = pyramid.crop(p, 1, rect(10, 10, 1, 1));
         let o = 0;
@@ -784,6 +859,108 @@ mod tests {
         assert!((alpha as i32 - 128).abs() <= 1, "alpha {alpha}");
         let unpremul_red = (out.data()[o] as u32 * 255 + alpha as u32 / 2) / alpha as u32;
         assert_eq!(unpremul_red, 255);
+    }
+
+    /// `p`'s four channels as one planar RGBA plane, fractured at the buffer
+    /// width, with band `fork` forked from the shared base so the plane is
+    /// diverged (a copy-on-write plane the pyramid must not materialize).
+    fn planar_plane(p: &Built, fork: usize) -> Plane<u8> {
+        let mut data = Vec::with_capacity((p.width * p.height * 4) as usize);
+        data.extend_from_slice(&p.r);
+        data.extend_from_slice(&p.g);
+        data.extend_from_slice(&p.b);
+        data.extend_from_slice(&p.a);
+        let mut plane = Plane::from(data);
+        plane.fracture(p.width as usize);
+        let mut copy = plane.clone();
+        copy.write_band(fork).expect("a band to fork");
+        assert!(!copy.shares(&plane), "the band was forked");
+        copy
+    }
+
+    #[test]
+    fn a_banded_level0_builds_the_same_levels() {
+        let p = Built::new(600, 400, 3);
+        let plane = planar_plane(&p, 1);
+        let banded = Planes::planar(p.width, p.height, &plane).expect("planar");
+
+        let exact = ViewPyramid::rebuild(p.planes());
+        let from_bands = ViewPyramid::rebuild(banded);
+        assert_eq!(from_bands.level_count(), exact.level_count());
+        for level in 1..exact.level_count() {
+            assert!(
+                from_bands.level_view(level).unwrap().data()
+                    == exact.level_view(level).unwrap().data(),
+                "level {level} differs"
+            );
+        }
+
+        // The coarse stand-in reads level 0 at its texel corners.
+        let coarse = ViewPyramid::coarse(banded, 1);
+        let flat = p.planes();
+        for (x, y) in [(0, 0), (7, 5), (74, 49)] {
+            let want = premultiplied_row_pixel(&flat.rows(y * 2).expect("row"), x * 2);
+            assert_eq!(
+                stored_pixel(&coarse.levels[0], x, y),
+                want,
+                "coarse texel {x},{y}"
+            );
+        }
+        assert!(
+            !plane.is_mirrored(),
+            "a banded level 0 is never materialized"
+        );
+    }
+
+    #[test]
+    fn a_banded_level0_updates_and_crops() {
+        let (w, h) = (400u32, 300u32);
+        let mut flat = Built::new(w, h, 9);
+        let changed = Built::new(w, h, 11);
+        let mut plane = planar_plane(&flat, 1);
+
+        let mut flat_pyramid = ViewPyramid::rebuild(flat.planes());
+        let mut banded_pyramid =
+            ViewPyramid::rebuild(Planes::planar(w, h, &plane).expect("planar"));
+
+        let damage = rect(40, 50, 90, 70);
+        flat.blit(&changed, damage);
+        for channel in 0..4 {
+            for y in damage.top..damage.bottom {
+                let src = match channel {
+                    0 => &flat.r,
+                    1 => &flat.g,
+                    2 => &flat.b,
+                    _ => &flat.a,
+                };
+                let start = y as usize * w as usize + damage.left as usize;
+                let row = plane
+                    .row_mut(channel * h as usize + y as usize, w as usize)
+                    .expect("row");
+                row[damage.left as usize..damage.right as usize]
+                    .copy_from_slice(&src[start..start + damage.width() as usize]);
+            }
+        }
+
+        flat_pyramid.update(flat.planes(), damage);
+        banded_pyramid.update(Planes::planar(w, h, &plane).expect("planar"), damage);
+        for level in 1..flat_pyramid.level_count() {
+            assert!(
+                banded_pyramid.level_view(level).unwrap().data()
+                    == flat_pyramid.level_view(level).unwrap().data(),
+                "level {level} differs after the update"
+            );
+        }
+
+        let crop = rect(10, 20, 30, 40);
+        let banded_crop =
+            banded_pyramid.crop(Planes::planar(w, h, &plane).expect("planar"), 0, crop);
+        let flat_crop = flat_pyramid.crop(flat.planes(), 0, crop);
+        assert!(banded_crop.data() == flat_crop.data(), "the crop differs");
+        assert!(
+            !plane.is_mirrored(),
+            "an update and a crop never materialize level 0"
+        );
     }
 
     fn rect(top: i32, left: i32, width: i32, height: i32) -> PsdRect {
@@ -823,14 +1000,7 @@ mod patch_tests {
     #[test]
     fn a_patch_writes_only_the_rect_of_one_level() {
         let (r, g, b, a) = built(900, 600);
-        let planes = Planes {
-            width: 900,
-            height: 600,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let planes = Planes::new(900, 600, &r, &g, &b, &a);
         let mut pyramid = ViewPyramid::rebuild(planes);
         let level = 1;
         let (lw, lh) = pyramid.level_size(level);
@@ -880,14 +1050,7 @@ mod patch_tests {
     #[test]
     fn a_patch_of_level_zero_or_past_the_last_is_ignored() {
         let (r, g, b, a) = built(900, 600);
-        let planes = Planes {
-            width: 900,
-            height: 600,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let planes = Planes::new(900, 600, &r, &g, &b, &a);
         let mut pyramid = ViewPyramid::rebuild(planes);
         let before: Vec<u8> = pyramid.levels[0].data().to_vec();
         let rect = PsdRect {
@@ -937,14 +1100,7 @@ mod patch_tests {
     #[test]
     fn a_stored_level_view_shares_the_level_bytes() {
         let (r, g, b, a) = built(900, 600);
-        let planes = Planes {
-            width: 900,
-            height: 600,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let planes = Planes::new(900, 600, &r, &g, &b, &a);
         let pyramid = ViewPyramid::rebuild(planes);
         assert!(pyramid.level_view(0).is_none(), "level 0 is not stored");
         let view = pyramid.level_view(1).expect("a stored level");
@@ -962,28 +1118,14 @@ mod patch_tests {
     #[test]
     fn an_update_copies_a_level_a_live_view_holds() {
         let (mut r, mut g, mut b, mut a) = built(900, 600);
-        let original = Planes {
-            width: 900,
-            height: 600,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let original = Planes::new(900, 600, &r, &g, &b, &a);
         let mut pyramid = ViewPyramid::rebuild(original);
         let view = pyramid.level_view(1).expect("a stored level");
         let held = view.data().to_vec();
         let held_id = view.storage_id();
 
         change_tile(&mut r, &mut g, &mut b, &mut a, 900);
-        let changed = Planes {
-            width: 900,
-            height: 600,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let changed = Planes::new(900, 600, &r, &g, &b, &a);
         pyramid.update(changed, damage_tile());
 
         assert_eq!(
@@ -1008,26 +1150,12 @@ mod patch_tests {
     #[test]
     fn an_update_without_a_view_writes_in_place() {
         let (mut r, mut g, mut b, mut a) = built(900, 600);
-        let original = Planes {
-            width: 900,
-            height: 600,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let original = Planes::new(900, 600, &r, &g, &b, &a);
         let mut pyramid = ViewPyramid::rebuild(original);
         let id = pyramid.level_view(1).expect("a stored level").storage_id();
 
         change_tile(&mut r, &mut g, &mut b, &mut a, 900);
-        let changed = Planes {
-            width: 900,
-            height: 600,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let changed = Planes::new(900, 600, &r, &g, &b, &a);
         pyramid.update(changed, damage_tile());
         assert_eq!(
             pyramid
@@ -1042,14 +1170,7 @@ mod patch_tests {
     #[test]
     fn level_zero_has_no_borrowed_view() {
         let (r, g, b, a) = built(300, 200);
-        let planes = Planes {
-            width: 300,
-            height: 200,
-            r: &r,
-            g: &g,
-            b: &b,
-            a: &a,
-        };
+        let planes = Planes::new(300, 200, &r, &g, &b, &a);
         let pyramid = ViewPyramid::rebuild(planes);
         assert_eq!(pyramid.level_count(), 1, "a small composite has one level");
         assert!(pyramid.level_view(0).is_none());

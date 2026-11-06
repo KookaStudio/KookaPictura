@@ -244,6 +244,28 @@ pub(super) fn composite_change(
     })
 }
 
+/// Whether `a` and `b` hold byte-identical composites. Both are fractured first,
+/// so the scan runs one band per core, and it stops at the first differing band.
+/// The fracture is layout only: no pixel is copied.
+pub(super) fn composite_unchanged(a: &mut Document, b: &mut Document) -> bool {
+    fracture_planes(a);
+    fracture_planes(b);
+    let (left, right) = (&a.composite, &b.composite);
+    if (left.width, left.height, left.channels) != (right.width, right.height, right.channels) {
+        return false;
+    }
+    let (left, right) = (&left.data, &right.data);
+    if left.len() != right.len() {
+        return false;
+    }
+    if known_equal(left, right) {
+        return true;
+    }
+    (0..left.band_count())
+        .into_par_iter()
+        .all(|band| left.shares_band(band, right) || left.band(band) == right.band(band))
+}
+
 /// Fracture every tracked plane so a band-level scan and write can share bands.
 pub(super) fn fracture_planes(doc: &mut Document) {
     each_plane_mut(doc, &mut |plane, width, _, _| plane.fracture(width));

@@ -34,6 +34,7 @@ default-filter = """
 package(pictura-render) & (
     binary(gpu_parity) | binary(gpu_filter_parity)
     | test(/^gpu(_filter)?::/) | test(/fixture_scene/)
+    | test(/^cold_engine_profile$/)
 ) & !test(/timing|_1024_|over_1d_limit|full_4000|composite_profile/)
 """
 

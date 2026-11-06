@@ -355,6 +355,7 @@ pub(crate) fn embedded_source(so: &SmartObject) -> Option<Arc<PixelBuffer>> {
 }
 
 fn decode_embedded(so: &SmartObject) -> Option<PixelBuffer> {
+    let _span = crate::metrics::phase("embedded_decode", true);
     let mut embedded = pictura_codec::read_psd(so.payload()?).ok()?;
     // The depth travels in the data, not the call stack: a nested composite
     // may run on another pool thread.
@@ -568,6 +569,7 @@ pub(crate) fn decoded_effects(layer: &Layer) -> Arc<LayerEffects> {
     }
     let hash = key::effect_digest(layer);
     match lookup(Key::new(Kind::Effects, hash), || {
+        let _span = crate::metrics::phase("effect_decode", true);
         crate::metrics::count_effect_decode();
         Artifact::Effects(Arc::new(crate::layer_effects::decode_layer_effects(layer)))
     }) {

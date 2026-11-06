@@ -99,11 +99,17 @@ pub(super) fn history_for(doc: &mut Document, target: &LayerTarget, label: &str)
 /// (the store's 8-bit narrowing) in place lets `convert_depth` see that store
 /// as current. A file without a merged composite still recomposites here.
 pub(super) fn store_opened_composite(doc: &mut Document, gpu: bool) {
+    let started = std::time::Instant::now();
     if doc.source_planes.is_some() && doc.merged_composite_present {
+        crate::cxxqt_object::helpers::paint_timing::record(
+            "opening_composite_skipped",
+            started.elapsed(),
+        );
         return;
     }
     let rendered = current_buffer(doc, gpu);
     DocumentComposite::new(doc).store(&rendered);
+    crate::cxxqt_object::helpers::paint_timing::record("opening_composite", started.elapsed());
 }
 
 /// The application's default open options. The working CMYK profile is the

@@ -69,12 +69,14 @@ impl<'a> PlanNode<'a> {
 
 impl<'a> CompositePlan<'a> {
     pub(crate) fn build(doc: &'a Document, clip: PsdRect, effect_region: Option<PsdRect>) -> Self {
+        let _span = crate::metrics::phase("render_plan", false);
         Self {
             roots: plan_layers(&doc.layers, doc, clip, effect_region, false),
         }
     }
 
     pub(crate) fn build_banded(doc: &'a Document, clip: PsdRect) -> Self {
+        let _span = crate::metrics::phase("render_plan", false);
         Self {
             roots: plan_layers(&doc.layers, doc, clip, None, true),
         }
@@ -114,6 +116,7 @@ impl<'a> CompositePlan<'a> {
         effect_region: Option<PsdRect>,
         selected: impl Fn(usize) -> bool,
     ) -> Self {
+        let _span = crate::metrics::phase("render_plan", false);
         Self {
             roots: doc
                 .layers
@@ -136,6 +139,7 @@ impl<'a> CompositePlan<'a> {
         clip: PsdRect,
         effect_region: Option<PsdRect>,
     ) -> Vec<PlanNode<'a>> {
+        let _span = crate::metrics::phase("render_plan", false);
         layers
             .iter()
             .map(|layer| plan_node(layer, doc, clip, effect_region, false))

@@ -41,6 +41,7 @@ pub(crate) fn composite_whole(doc: &Document) -> PixelBuffer {
     };
     let plan = CompositePlan::build(doc, clip, None);
     let mut canvas = Canvas::new(doc.width as usize, doc.height as usize);
+    let _span = crate::metrics::phase("render_execute", false);
     composite_layers(&mut canvas, doc, &plan);
     canvas.into_pixel_buffer()
 }

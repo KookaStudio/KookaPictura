@@ -6,6 +6,7 @@ use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode, Document, PsdRect};
 
 mod bucket;
+mod cold;
 mod damage;
 mod marquee;
 mod memory;

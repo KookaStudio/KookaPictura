@@ -307,6 +307,18 @@ pub(crate) fn with<T>(f: impl FnOnce(&Metrics) -> T) -> T {
     METRICS.with(|m| f(&m.borrow()))
 }
 
+/// One phase's accumulated nanoseconds on this thread, when recorded.
+#[cfg(test)]
+pub(crate) fn phase_ns(label: &str) -> Option<u64> {
+    with(|metrics| {
+        metrics
+            .phases
+            .iter()
+            .find(|(name, _)| name == label)
+            .map(|(_, phase)| phase.total.as_nanos() as u64)
+    })
+}
+
 /// Turn metrics on (or off) for the calling test thread only.
 #[cfg(test)]
 pub(crate) fn set_for_this_thread(on: bool) {
