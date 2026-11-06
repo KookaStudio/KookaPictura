@@ -15,6 +15,14 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 
+/// Trim every moved pixel layer to its content after a committed translation.
+/// Only fully transparent padding is dropped, so the composite is unchanged.
+fn trim_moved(doc: &mut pictura_core::Document, paths: &[String]) {
+    for path in paths {
+        pictura_render::trim_to_content(doc, path);
+    }
+}
+
 /// Hit-test the session's box through its mode: a Scale session has no rotate
 /// band, and a Rotate session turns every scale handle into the rotate handle.
 fn mode_hit(session: &TransformSession, quad: &[(f64, f64); 4], x: f64, y: f64, zoom: f64) -> i32 {
@@ -226,7 +234,11 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
-            translate_move_group(doc, &paths, dx, dy)
+            let dirty = translate_move_group(doc, &paths, dx, dy);
+            if dirty.is_some() {
+                trim_moved(doc, &paths);
+            }
+            dirty
         };
         let Some(dirty) = dirty else {
             return false;

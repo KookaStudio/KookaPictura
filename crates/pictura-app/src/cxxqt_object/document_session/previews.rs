@@ -9,6 +9,8 @@ pub(in crate::cxxqt_object) struct FilterPreview {
     pub(in crate::cxxqt_object) layer_path: String,
     /// What the preview overwrote.
     pub(in crate::cxxqt_object) baseline: PreviewBaseline,
+    /// The layer's rect before the preview grew it by the filter's apron (#1208).
+    pub(in crate::cxxqt_object) rect: PsdRect,
 }
 
 /// What a filter preview overwrote, so the next one starts from the original.

@@ -298,6 +298,7 @@ pub(super) fn move_layer(view: &mut PictureViewRust, side: u32) {
     let paths = vec!["1".to_string()];
     let doc = view.session.doc.as_mut().expect("document");
     let dirty = translate_move_group(doc, &paths, px(side, 500), 0).expect("moved");
+    pictura_render::trim_to_content(doc, "1");
     view.apply_edit_move("Move", Edit::regions(vec![dirty], false));
     settle_move(view);
 }

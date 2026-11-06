@@ -362,9 +362,16 @@ void TiltShiftTest::onlyTheActiveLayerBlurs()
     // band's upper blur zone: the box feathers, the Background stays sharp.
     pictura::PicturaMainWindow& frame = *window_;
     pictura::PictureView* view = frame.activeView();
-    const int added = view->add_layer(0);
+    // A canvas-sized transparent layer: a copy of the Background, cleared, so
+    // the box has room to feather past its edge (a new layer is empty-rect,
+    // #1208).
+    const int added = view->duplicate_layer(0);
     QVERIFY(added > 0);
     frame.selectLayerPath(QString::number(added));
+    QVERIFY(view->select_rect(0, 0, 96, 64, QStringLiteral("new"), 0.0));
+    QVERIFY(frame.registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::EditClear)));
+    view->deselect();
     QVERIFY(view->select_rect(4, 4, 16, 12, QStringLiteral("new"), 0.0));
     QVERIFY(pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
                                false));

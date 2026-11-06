@@ -82,6 +82,14 @@ impl SmudgeBrush {
         }
     }
 
+    /// Pad the Sample All Layers snapshot when the layer grows (#1208). The
+    /// carried patch is dab-sized and independent of the layer rect.
+    pub(crate) fn grow(&mut self, new_w: i32, new_h: i32, dx: i32, dy: i32) {
+        if let Some(sampled) = self.sampled.as_mut() {
+            sampled.grow(new_w, new_h, dx, dy);
+        }
+    }
+
     /// Smudge one dab centred at layer-local `(cx, cy)`. Returns the
     /// layer-local rectangle changed; the first dab only picks up.
     pub(crate) fn dab(

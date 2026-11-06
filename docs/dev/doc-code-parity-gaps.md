@@ -227,7 +227,7 @@ Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| SEL-1 | `channel-based-masking.md` | Apply Image shipped, but a smaller layer does not grow to the document | PARTIAL | `crates/pictura-render/src/apply_image.rs` | #1139 |
+| SEL-1 | `channel-based-masking.md` | Apply Image shipped, but its write still stops at a smaller layer's rect; paint, fill and filters now grow their layer (#1208) | PARTIAL | `crates/pictura-render/src/apply_image.rs` | #1139 |
 | SEL-2 | `channel-based-masking.md` | Calculations | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #610 |
 | SEL-3 | `channel-based-masking.md` | Channel Options (Masked/Selected Areas) | MISSING | no polarity model | #611 |
 | SEL-4 | `refine-edge.md` | Interactive Refine Radius/Erase brushes | MISSING | `changes/refine-edge` out of scope | #612 |

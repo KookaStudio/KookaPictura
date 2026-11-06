@@ -24,6 +24,27 @@ Snapshot for resuming after a context break. Update after each milestone.
   only; `*_heap_peak_full` reports 17000²). `layer_op free_transform` and
   `document new background_layer` were added to the control server for the
   catalogue. Runs at 6G and above need a machine with at least 16 GB.
+- **Content-sized pixel layers** (#1208, OpenSpec change
+  `grow-pixel-layers`). A new pixel layer stores a 0×0 rect with no planes, so
+  Add Layer (M2) adds no pixel bytes. `pictura_core::layer_bounds::grow_layer_to`
+  pads channels and retained native samples through the memory governor; the
+  ordinary Brush/Pencil stroke grows its layer per sample (padding its saved
+  tiles, coverage buffers and per-dab engines, and shrinking back on cancel),
+  the fill family grows to its mask's or selection's box, and a committed filter
+  grows by its stack's apron (a preview grows too and shrinks back on cancel).
+  Move commits and Free Transform trim to content; a layer created from a fill
+  is content-sized; converting an empty layer to a Background or a Smart Object
+  grows it to the canvas first. PSD writes and reads the 0×0 and grown rects
+  (psd-tools reads both); existing files stay byte-identical. The fill gate's
+  `fork_bytes` estimates the union rect. Ceiling (`ponytail:`): a fill whose box
+  only partly overlaps a layer keeps the old rect, a grow drops preserved
+  `raw_channels`, and per-dab retouch growth preserves its carried patch but
+  rebuilds the sampled surfaces. Tests: `pictura_core::layer_bounds`,
+  `pictura_render::layer_ops`, `pictura_paint::stroke::tests`, the codec
+  round-trips and `empty_layer_oracle`, `pictura_app::impl_filters` and
+  `memory_gate`, `tst_fill_tools`, `tst_move_feedback`, and the updated linked,
+  transform, smart-guide and blur-gallery fixtures.
+
 - **Cold styled composite latency** (#1179, OpenSpec change
   `parallel-effect-passes`, with #1178 / PR #1221's exact kernel work).
   Banded plans resolve ordered sibling nodes on Rayon through visible groups;

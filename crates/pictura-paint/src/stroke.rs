@@ -212,6 +212,9 @@ impl Saved {
 /// against so the stroke's result does not depend on its own earlier dabs.
 pub struct Stroke {
     saved: Saved,
+    /// The target's rect when the stroke began, so a cancelled stroke can
+    /// shrink a layer that grew back to it (#1208).
+    original_rect: PsdRect,
     /// The target layer's transparency lock, read once at the start.
     locked: bool,
     cfg: StrokeConfig,
@@ -297,6 +300,7 @@ impl Stroke {
         let ch = plane_index(target);
         Ok(Stroke {
             saved: Saved::new(target, ch),
+            original_rect: rect,
             locked: layer_transparency_locked(target),
             cfg,
             tip: TipParams::new(&cfg),
@@ -460,6 +464,9 @@ impl Stroke {
     /// place. Returns `true` when any pixel's accumulated coverage changed.
     pub fn sample(&mut self, doc: &mut Document, s: StrokeSample) -> bool {
         let cfg = self.cfg;
+        if !self.ensure_rect_for_sample(doc, s.x, s.y) {
+            return false;
+        }
         if self.rect.width() <= 0 || self.rect.height() <= 0 {
             return false;
         }
@@ -946,12 +953,13 @@ impl Stroke {
     }
 
     /// Abandon the stroke, writing every pixel it changed in `doc` back to its
-    /// pre-stroke value.
+    /// pre-stroke value and shrinking a layer that grew back to its start rect.
     pub fn cancel(self, doc: &mut Document) {
         if let Some(layer) =
             layer_at_mut(doc, &self.layer_path).filter(|l| self.saved.fits(l, self.ch))
         {
             self.saved.restore(layer, self.ch);
+            pictura_core::layer_bounds::shrink_layer_to(layer, self.original_rect);
         }
     }
 
@@ -1173,6 +1181,7 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
 }
 
 mod blend;
+mod grow;
 #[cfg(test)]
 mod hold_tests;
 mod raster;

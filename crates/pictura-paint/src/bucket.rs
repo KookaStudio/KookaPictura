@@ -13,7 +13,7 @@
 //! fill. Behavioural parity only.
 
 use crate::eraser::antialias_mask;
-use crate::fill::{fill_layer, fill_layer_within, Alpha};
+use crate::fill::{fill_layer_within, Alpha};
 use crate::healing::RgbaImage;
 use crate::stroke::{layer_at, layer_planes, parse_layer_path};
 use crate::{PaintMode, Rgba};
@@ -235,7 +235,10 @@ pub fn fill(
     if opacity <= 0.0 || empty_tile || mask.len() < (width * doc.height as i32) as usize {
         return None;
     }
-    fill_layer(doc, path, mode, selection, alpha, |x, y| {
+    let Some(damage) = coverage_bounds(mask, width, doc.height as i32) else {
+        return None;
+    };
+    fill_layer_within(doc, path, mode, selection, alpha, Some(damage), |x, y| {
         let cover = mask[(y * width + x) as usize];
         if cover == 0 {
             return None;
@@ -249,6 +252,38 @@ pub fn fill(
         };
         Some((color, cover as f32 / 255.0 * opacity))
     })
+}
+
+/// The bounding box of the nonzero bytes of a `width`-wide coverage plane, in
+/// plane coordinates; `None` when it covers nothing.
+fn coverage_bounds(mask: &[u8], width: i32, height: i32) -> Option<PsdRect> {
+    let w = width.max(0) as usize;
+    if w == 0 {
+        return None;
+    }
+    let mut rect: Option<PsdRect> = None;
+    for (row, pixels) in mask.chunks(w).take(height.max(0) as usize).enumerate() {
+        let Some(first) = pixels.iter().position(|&v| v > 0) else {
+            continue;
+        };
+        let last = pixels.iter().rposition(|&v| v > 0).unwrap_or(first);
+        let y = row as i32;
+        rect = Some(match rect {
+            None => PsdRect {
+                top: y,
+                left: first as i32,
+                bottom: y + 1,
+                right: last as i32 + 1,
+            },
+            Some(r) => PsdRect {
+                top: r.top,
+                left: r.left.min(first as i32),
+                bottom: y + 1,
+                right: r.right.max(last as i32 + 1),
+            },
+        });
+    }
+    rect
 }
 
 /// [`fill`] through a coverage `mask` that covers only `bounds` (document
@@ -274,7 +309,21 @@ pub fn fill_within(
     if opacity <= 0.0 || empty_tile || short {
         return None;
     }
-    fill_layer_within(doc, path, mode, selection, alpha, Some(bounds), |x, y| {
+    let damage = match mask {
+        Some(mask) => {
+            let Some(hit) = coverage_bounds(mask, bw, bounds.height().max(0)) else {
+                return None;
+            };
+            PsdRect {
+                top: hit.top + bounds.top,
+                left: hit.left + bounds.left,
+                bottom: hit.bottom + bounds.top,
+                right: hit.right + bounds.left,
+            }
+        }
+        None => bounds,
+    };
+    fill_layer_within(doc, path, mode, selection, alpha, Some(damage), |x, y| {
         if x < bounds.left || y < bounds.top || x >= bounds.right || y >= bounds.bottom {
             return None;
         }

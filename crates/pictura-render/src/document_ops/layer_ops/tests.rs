@@ -1,4 +1,6 @@
 use super::create::empty_group;
+
+mod grow;
 use super::*;
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags,
@@ -60,7 +62,7 @@ pub(super) fn doc_with(layers: Vec<Layer>) -> Document {
 }
 
 #[test]
-fn add_layer_inserts_above_and_is_transparent() {
+fn new_layer_is_empty_rect() {
     let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
     let index = add_layer(&mut doc, 0, "Layer 1");
 
@@ -68,14 +70,14 @@ fn add_layer_inserts_above_and_is_transparent() {
     assert_eq!(doc.layers.len(), 2);
     let added = &doc.layers[1];
     assert_eq!(added.name, "Layer 1");
-    assert_eq!(added.rect, rect(4, 4));
+    assert_eq!(added.rect, rect(0, 0), "a new layer stores no pixels");
     assert_eq!(added.blend, BlendMode::Normal);
     assert_eq!((added.opacity, added.fill), (255, 255));
     assert!(added.visible && !added.is_group);
     assert_eq!(added.channels.len(), 4);
     for (id, channel) in [(0i16, 0), (1, 1), (2, 2), (-1, 3)] {
         assert_eq!(added.channels[channel].id, id);
-        assert_eq!(added.channels[channel].data, vec![0u8; 16]);
+        assert!(added.channels[channel].data.is_empty());
     }
 }
 

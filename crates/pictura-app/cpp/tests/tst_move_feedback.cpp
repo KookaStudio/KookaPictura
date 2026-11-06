@@ -11,6 +11,7 @@
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
 
 #include <memory>
@@ -53,6 +54,7 @@ private slots:
     void readoutFollowsTheRulerUnit();
     void switchingToMoveBuildsNoPreview();
     void largeLayerPreviewsFromTheView();
+    void moveThenFillOutsideTheLayer();
 
 private:
     void showFrame();
@@ -194,6 +196,40 @@ void MoveFeedbackTest::largeLayerPreviewsFromTheView()
         pictura::transform_api::layerRect(*f.view, QStringLiteral("1"));
     QVERIFY(moved.valid);
     QCOMPARE(QPoint(moved.left, moved.top), QPoint(40, 16));
+}
+
+void MoveFeedbackTest::moveThenFillOutsideTheLayer()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_grow"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    // A small mark on a new layer, then the Move tool drags it.
+    const int layer = f.view->add_layer(0);
+    QVERIFY(layer >= 0);
+    f.view->set_active_layer(QString::number(layer));
+    QVERIFY(f.view->select_rect(40, 40, 20, 20, QStringLiteral("new"), 0.0));
+    const QColor foreground(10, 20, 30);
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+    frame.setActiveTool(pictura::ToolId::Move);
+
+    f.canvas->mousePressed(QPointF(50, 50), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(80, 50));
+    f.canvas->mouseReleased(QPointF(80, 50));
+    QCOMPARE(f.view->sample_argb(85, 50), foreground.rgba());
+    QCOMPARE(f.view->sample_argb(45, 50), QColor(Qt::white).rgba());
+
+    // The moved layer is content-sized; a fill outside it grows it (#1208).
+    QVERIFY(f.view->select_rect(5, 5, 10, 10, QStringLiteral("new"), 0.0));
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    QVERIFY2(f.committedOnce(base, "Fill"), "the moved layer grows for a fill");
+    QCOMPARE(f.view->sample_argb(10, 10), foreground.rgba());
 }
 
 QTEST_MAIN(MoveFeedbackTest)

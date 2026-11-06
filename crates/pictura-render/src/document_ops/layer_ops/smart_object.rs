@@ -46,11 +46,7 @@ fn uuid_referenced(layers: &[Layer], uuid: &str) -> bool {
 pub fn can_convert_to_smart_object(doc: &Document, path: &str) -> bool {
     doc.depth == BitDepth::Eight
         && resolve_path(doc, path).is_some_and(|layer| {
-            !layer.is_group
-                && layer.adjustment.is_none()
-                && layer.smart_object.is_none()
-                && layer.rect.width() > 0
-                && layer.rect.height() > 0
+            !layer.is_group && layer.adjustment.is_none() && layer.smart_object.is_none()
         })
 }
 
@@ -65,6 +61,29 @@ pub fn can_convert_to_smart_object(doc: &Document, path: &str) -> bool {
 pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
     if !can_convert_to_smart_object(doc, path) {
         return false;
+    }
+    // An empty layer has no pixels to embed; a smart object is canvas-sized,
+    // so grow it transparently first (#1208).
+    if resolve_path(doc, path).is_some_and(|layer| layer.rect.is_empty()) {
+        if doc.width == 0 || doc.height == 0 {
+            return false;
+        }
+        let canvas = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        };
+        let Some(layer) = resolve_path_mut(doc, path) else {
+            return false;
+        };
+        let lock = layer.lock;
+        layer.lock = pictura_core::LockFlags::default();
+        let grown = pictura_core::layer_bounds::grow_layer_to(layer, canvas, "a smart object");
+        layer.lock = lock;
+        if grown.is_err() {
+            return false;
+        }
     }
     let (payload, name, was_background) = {
         let layer = resolve_path(doc, path).expect("can_convert_to_smart_object checked");

@@ -159,11 +159,16 @@ void SmartGuidesTest::smartGuidesToggle()
     QVERIFY2(f.canvas->smartGuidesEnabled(), "the menu turns it back on");
     QVERIFY(pictura::loadSession().smartGuidesVisible);
 
-    f.canvas->mousePressed(QPointF(150, 140), Qt::LeftButton, int(Qt::NoModifier));
-    f.canvas->mouseMoved(QPointF(158, 140));
+    // A fresh canvas-sized square whose content centres on (90, 80): the first
+    // commit trimmed the old layer (#1208), which changes the preview's extent.
+    const QString again = addSquare(f, QPoint(80, 70), 20);
+    QVERIFY2(!again.isEmpty(), "a second square layer");
+    frame.selectLayerPath(again);
+    f.canvas->mousePressed(QPointF(90, 80), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(100, 80));
     QVERIFY2(f.canvas->hasSmartGuidesForTest(), "guides return");
-    f.canvas->mouseReleased(QPointF(158, 140));
-    QCOMPARE(contentRect(f, moving).center(), QPointF(100, 80));
+    f.canvas->mouseReleased(QPointF(100, 80));
+    QCOMPARE(contentRect(f, again).center(), QPointF(100, 80));
 }
 
 void SmartGuidesTest::layerEdge()

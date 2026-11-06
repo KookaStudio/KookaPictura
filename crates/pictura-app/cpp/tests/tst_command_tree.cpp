@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 #include "api/layers_api.h"
+#include "api/paint_bridge.h"
 #include <QtTest/QSignalSpy>
 
 #include <QtCore/QCoreApplication>
@@ -1059,6 +1060,8 @@ void CommandTreeTest::layerArrangeStamp()
     // Two ordinary layers above whatever the fresh document created.
     view->add_layer(-1);
     view->add_layer(-1);
+    // A new layer is empty-rect (#1208); give it content so matting applies.
+    QVERIFY(pictura::edit_fill(*view, 0xFF000000u, -1, QStringLiteral("normal"), 100, false));
     layers->refresh();
     QVERIFY(pictura::layers_api::rowCount(*view) >= 3);
     const QString topName = pictura::layers_api::rowAt(*view, 0).name;
@@ -1229,6 +1232,8 @@ void CommandTreeTest::layerLockCommands()
 
     // Lock Transparency over the selection sets bit 0x01 in one state.
     view->add_layer(-1);
+    // A new layer is empty-rect (#1208); give it content so matting applies.
+    QVERIFY(pictura::edit_fill(*view, 0xFF000000u, -1, QStringLiteral("normal"), 100, false));
     layers->refresh();
     const QString top = pictura::layers_api::rowAt(*view, 0).path;
     layers->selectPaths({top}, top);
@@ -1334,6 +1339,8 @@ void CommandTreeTest::layerMattingCommands()
     }
 
     view->add_layer(-1);
+    // A new layer is empty-rect (#1208); give it content so matting applies.
+    QVERIFY(pictura::edit_fill(*view, 0xFF000000u, -1, QStringLiteral("normal"), 100, false));
     layers->refresh();
     const QString top = pictura::layers_api::rowAt(*view, 0).path;
     layers->selectPaths({top}, top);

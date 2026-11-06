@@ -12,11 +12,41 @@ fn insertion_index(len: usize, above: i32) -> usize {
     }
 }
 
-/// A document-sized raster layer with fully transparent pixels.
-///
-/// ponytail: the reference stores no pixel data until the layer is painted; a
-/// document-sized layer is the lazy stand-in and costs `w*h*4` bytes. Switch to
-/// an empty-rect layer once the paint path can grow a layer on first dab.
+/// A raster layer with an empty rect and no pixel planes. The paint, fill and
+/// filter engines grow it when an edit reaches outside it (#1208).
+pub(super) fn empty_pixel_layer(name: &str) -> Layer {
+    Layer {
+        name: name.to_string(),
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+        },
+        blend: BlendMode::Normal,
+        opacity: 255,
+        fill: 255,
+        lock: LockFlags::default(),
+        color: ColorLabel::None,
+        clipping: false,
+        visible: true,
+        mask: None,
+        adjustment: None,
+        channels: [0i16, 1, 2, -1]
+            .into_iter()
+            .map(|id| Channel {
+                id,
+                data: Plane::default(),
+            })
+            .collect(),
+        children: pictura_core::LayerStack::default(),
+        is_group: false,
+        background: false,
+        ..Default::default()
+    }
+}
+
+/// A sized raster layer with fully transparent pixels.
 pub(super) fn transparent_layer(width: u32, height: u32, name: &str) -> Layer {
     let pixels = width as usize * height as usize;
     Layer {
@@ -187,10 +217,7 @@ pub fn add_layer(doc: &mut Document, above: i32, name: &str) -> i32 {
         return -1;
     }
     let index = insertion_index(doc.layers.len(), above);
-    match doc
-        .layers
-        .insert(&[], index, transparent_layer(doc.width, doc.height, name))
-    {
+    match doc.layers.insert(&[], index, empty_pixel_layer(name)) {
         Ok(()) => index as i32,
         Err(_) => -1,
     }
@@ -293,7 +320,11 @@ pub fn add_layer_full(doc: &mut Document, selection_path: &str, spec: &NewLayerS
         return String::new();
     }
     let name = resolved_name(doc, &spec.name, "Layer");
-    let mut layer = transparent_layer(doc.width, doc.height, &name);
+    let mut layer = if spec.neutral_fill {
+        transparent_layer(doc.width, doc.height, &name)
+    } else {
+        empty_pixel_layer(&name)
+    };
     layer.color = spec.color;
     layer.blend = spec.blend;
     layer.opacity = spec.opacity;
@@ -549,7 +580,27 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
     let Some(segments) = parse_path(path) else {
         return false;
     };
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
     if let Some(layer) = resolve_path_mut(doc, path) {
+        // A Background is canvas-sized and opaque, so an empty or trimmed
+        // layer grows to the canvas first (#1208). The conversion itself
+        // outranks the layer's locks.
+        let lock = layer.lock;
+        layer.lock = LockFlags::default();
+        let rect = if layer.rect.is_empty() {
+            canvas
+        } else {
+            layer.rect.union(canvas)
+        };
+        if pictura_core::layer_bounds::grow_layer_to(layer, rect, "a Background").is_err() {
+            layer.lock = lock;
+            return false;
+        }
         opaque_transparency(layer, [255, 255, 255]);
     }
     doc.layers.promote_background(&segments).is_ok()

@@ -531,6 +531,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       Transform and Image Size are refused with "not enough memory" instead of
       being OOM-killed. A Memory Usage control on the Performance page (#1211).
       `crates/pictura-core/src/memory/`.
+- [x] **Content-sized pixel layers** — a new pixel layer stores no pixels; the
+      paint, fill and filter engines grow a layer to their damage, Move and Free
+      Transform trim it to its content, and PSD keeps the stored rect (#1208).
+      `crates/pictura-core/src/layer_bounds.rs`.
 - [ ] The Performance preferences pane: memory, history states, cache level and
       tile size, scratch disks and GPU, plus the Efficiency and Scratch readouts
       (#636)

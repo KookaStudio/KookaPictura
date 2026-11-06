@@ -179,6 +179,8 @@ void LargeDocumentTest::moveDoesNotWarmTheBackground()
 
     const int added = f.view->add_layer(0);
     f.view->set_active_layer(QString::number(added));
+    // A new layer is empty-rect (#1208); paint it so there is a preview.
+    QVERIFY(paintLine(*f.view, 10.0));
     QVERIFY(f.view->prepare_move_preview());
     QVERIFY(!f.view->move_preview_base().isNull());
 }

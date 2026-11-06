@@ -1,4 +1,5 @@
 mod bands;
+mod grow;
 mod surface;
 use super::*;
 use crate::healing::RgbaImage;

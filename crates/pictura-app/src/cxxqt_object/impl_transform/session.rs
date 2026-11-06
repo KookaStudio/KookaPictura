@@ -886,6 +886,11 @@ impl qobject::PictureView {
                 translate_move_group(doc, &paths, -dx, -dy);
                 return false;
             }
+            if dirty.is_some() {
+                for path in &paths {
+                    pictura_render::trim_to_content(doc, path);
+                }
+            }
             dirty
         };
         let Some(dirty) = dirty else {

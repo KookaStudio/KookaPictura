@@ -128,6 +128,26 @@ pub struct RgbaImage {
 }
 
 impl RgbaImage {
+    /// Pad this image to `new_w`×`new_h`, placing the old pixels at `(dx, dy)`.
+    /// The new area is transparent. Used when a stroke grows its layer (#1208).
+    pub(crate) fn grow(&mut self, new_w: i32, new_h: i32, dx: i32, dy: i32) {
+        if new_w == self.width && new_h == self.height {
+            return;
+        }
+        let mut data = vec![[0u8; 4]; (new_w * new_h).max(0) as usize];
+        for y in 0..self.height.max(0) {
+            let src = (y * self.width) as usize;
+            let dst = ((dy + y) * new_w + dx) as usize;
+            let n = self.width.max(0) as usize;
+            if src + n <= self.data.len() && dst + n <= data.len() {
+                data[dst..dst + n].copy_from_slice(&self.data[src..src + n]);
+            }
+        }
+        self.width = new_w;
+        self.height = new_h;
+        self.data = data;
+    }
+
     pub(crate) fn get(&self, x: i32, y: i32) -> [u8; 4] {
         self.data[(y * self.width + x) as usize]
     }

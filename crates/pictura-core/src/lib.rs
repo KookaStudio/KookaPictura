@@ -12,6 +12,7 @@ mod digest;
 mod guides;
 pub mod hdr;
 pub mod homography;
+pub mod layer_bounds;
 mod layer_stack;
 pub mod mask_ops;
 pub mod memory;

@@ -322,6 +322,27 @@ fn converted_layer_round_trips() {
 }
 
 #[test]
+fn an_empty_layer_converts_to_a_canvas_sized_smart_object() {
+    let mut d = doc(
+        4,
+        4,
+        vec![solid(
+            "Empty",
+            rect(0, 0, 0, 0),
+            (1, 2, 3),
+            255,
+            BlendMode::Normal,
+            255,
+        )],
+    );
+    assert!(can_convert_to_smart_object(&d, "0"));
+    assert!(convert_to_smart_object(&mut d, "0"));
+    let layer = &d.layers[0];
+    assert_eq!(layer.rect, full(4, 4), "the smart object is canvas-sized");
+    assert!(layer.smart_object.is_some());
+}
+
+#[test]
 fn convert_refuses_ineligible_targets() {
     let cases: Vec<(&str, Document)> = vec![
         (
@@ -334,21 +355,6 @@ fn convert_refuses_ineligible_targets() {
                 4,
                 4,
                 vec![adjustment_layer("Adj", *b"inv ", vec![0], 255, None)],
-            ),
-        ),
-        (
-            "zero-size",
-            doc(
-                4,
-                4,
-                vec![solid(
-                    "Zero",
-                    rect(0, 0, 0, 0),
-                    (1, 2, 3),
-                    255,
-                    BlendMode::Normal,
-                    255,
-                )],
             ),
         ),
     ];

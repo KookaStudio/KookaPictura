@@ -4,6 +4,7 @@
 #include <QtTest/QtTest>
 
 #include "api/layers_api.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStringList>
@@ -36,13 +37,27 @@ QList<int> rectOf(pictura::PictureView& view, const QString& path)
     return QList<int>({rect[0], rect[1], rect[2], rect[3]});
 }
 
-// A tight `size` square layer copied from the Background at `at`.
+// The layer's ink box: a Move commit trims the stored rect to it (#1208).
+QList<int> inkOf(pictura::PictureView& view, const QString& path)
+{
+    const pictura::transform_api::LayerRect rect =
+        pictura::transform_api::contentRect(view, path);
+    return QList<int>({rect.left, rect.top, rect.right, rect.bottom});
+}
+
+// A tight `size` square layer at `at`: a new layer filled in a square
+// selection grows to that box (#1208).
 QString squareLayer(pictura::PictureView& view, const QPoint& at, int size)
 {
+    const QString path = view.add_layer_in(QString());
+    if (path.isEmpty()) {
+        return {};
+    }
+    view.set_active_layer(path);
     if (!view.select_rect(at.x(), at.y(), size, size, QStringLiteral("new"), 0.0)) {
         return {};
     }
-    const QString path = view.layer_via_copy(QStringLiteral("0"));
+    pictura::edit_fill(view, 0xFF202020u, -1, QStringLiteral("normal"), 100, false);
     view.deselect();
     return path;
 }
@@ -316,8 +331,8 @@ void LinkedLayersTest::linkedMovePreviewOriginMatchesTheCrop()
     view_->end_move_preview();
 
     // The commit still lands the whole set at the drop offset.
-    const QList<int> beforeA = rectOf(*view_, a);
-    const QList<int> beforeB = rectOf(*view_, b);
+    const QList<int> beforeA = inkOf(*view_, a);
+    const QList<int> beforeB = inkOf(*view_, b);
     QVERIFY(view_->commit_move(6, 4));
     const auto shifted = [](const QList<int>& r, int dx, int dy) {
         return QList<int>({r.at(0) + dx, r.at(1) + dy, r.at(2) + dx, r.at(3) + dy});
@@ -372,8 +387,8 @@ void LinkedLayersTest::canvasDragLandsAtTheDrop()
     QCOMPARE(view_->link_layers({a, b}, true), 2);
     panel_->selectPaths({a, b}, a);
     QCoreApplication::processEvents();
-    const QList<int> beforeA = rectOf(*view_, a);
-    const QList<int> beforeB = rectOf(*view_, b);
+    const QList<int> beforeA = inkOf(*view_, a);
+    const QList<int> beforeB = inkOf(*view_, b);
 
     window_->show();
     window_->setActiveTool(pictura::ToolId::Move);
@@ -392,8 +407,8 @@ void LinkedLayersTest::canvasDragLandsAtTheDrop()
     const auto shifted = [](const QList<int>& r, int dx, int dy) {
         return QList<int>({r.at(0) + dx, r.at(1) + dy, r.at(2) + dx, r.at(3) + dy});
     };
-    QCOMPARE(rectOf(*view_, a), shifted(beforeA, 20, 10));
-    QCOMPARE(rectOf(*view_, b), shifted(beforeB, 20, 10));
+    QCOMPARE(inkOf(*view_, a), shifted(beforeA, 20, 10));
+    QCOMPARE(inkOf(*view_, b), shifted(beforeB, 20, 10));
 }
 
 void LinkedLayersTest::tightSquaresDragLandsAtTheDrop()
@@ -448,8 +463,8 @@ void LinkedLayersTest::canvasSizedBlobsDragLandsAtTheDrop()
     QCOMPARE(view_->link_layers({a, b}, true), 2);
     panel_->selectPaths({a, b}, a);
     QCoreApplication::processEvents();
-    const QList<int> beforeA = rectOf(*view_, a);
-    const QList<int> beforeB = rectOf(*view_, b);
+    const QList<int> beforeA = inkOf(*view_, a);
+    const QList<int> beforeB = inkOf(*view_, b);
 
     window_->show();
     window_->setActiveTool(pictura::ToolId::Move);
@@ -466,13 +481,18 @@ void LinkedLayersTest::canvasSizedBlobsDragLandsAtTheDrop()
     const auto shifted = [](const QList<int>& r, int dx, int dy) {
         return QList<int>({r.at(0) + dx, r.at(1) + dy, r.at(2) + dx, r.at(3) + dy});
     };
-    QCOMPARE(rectOf(*view_, a), shifted(beforeA, 20, 10));
-    QCOMPARE(rectOf(*view_, b), shifted(beforeB, 20, 10));
+    QCOMPARE(inkOf(*view_, a), shifted(beforeA, 20, 10));
+    QCOMPARE(inkOf(*view_, b), shifted(beforeB, 20, 10));
 }
 
 void LinkedLayersTest::dragUnlinkedLayerAlone()
 {
     QVERIFY(newDoc(QStringLiteral("DragAlone"), 2));
+    // A new layer is empty-rect (#1208); fill it so it has a rect to move.
+    view_->set_active_layer(QStringLiteral("1"));
+    QVERIFY(view_->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view_, 0xFF202020u, -1, QStringLiteral("normal"), 100, false));
+    view_->deselect();
     panel_->selectPaths({QStringLiteral("1")}, QStringLiteral("1"));
     QCoreApplication::processEvents();
     const QList<int> before0 = rectOf(*view_, QStringLiteral("0"));
