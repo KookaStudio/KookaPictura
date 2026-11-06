@@ -11,7 +11,7 @@ deferred until all code is finished, following the compile-last rule.
 
 ## 2. External PSD/PSB link-state coverage
 
-- [ ] 2.1 Add small linked/unlinked PSD fixture generators through psd-tools with distinct non-zero layer/mask origins and non-uniform mask pixels, and commit their outputs; verify raw bit values and expected bounds through psd-tools and confirm no pre-existing fixture changed.
+- [x] 2.1 Add small linked/unlinked PSD fixture generators through psd-tools with distinct non-zero layer/mask origins and non-uniform mask pixels, and commit their outputs; verify raw bit values and expected bounds through psd-tools and confirm no pre-existing fixture changed.
 - [x] 2.2 Add `linked_external_mask_preserves_flags_and_bounds`, `unlinked_external_mask_preserves_flags_and_bounds`, and `mask_link_toggles_survive_psd_and_psb` to `crates/pictura-codec/tests/mask_link_state.rs`; verify assertions compare the actual renderer predicate and all preserved mask attributes, and after the final build all three tests pass.
 - [x] 2.3 Add `psd_tools_reads_both_mask_link_states` with the existing dependency-availability self-skip convention; verify after the final build that independent decoding checks both flag polarities, mask bounds, and coverage, without changing the codec reader/writer's raw-flag representation.
 
@@ -26,4 +26,4 @@ deferred until all code is finished, following the compile-last rule.
 - [x] 4.1 After all source and test edits are complete, format and perform the production build using at most 80% of available CPUs; verify the build succeeds and rebuild only when a compiler fix changes code.
 - [x] 4.2 Run the codec/render checks named in `test-plan.md`, `tst_mask_link_state`, and the existing Layers-panel and mask-command suites, then the applicable repository verification gates; verify new checks execute rather than silently skip and distinguish any unavailable external-oracle skips in the result.
 - [x] 4.3 Run `python3 scripts/check-test-plan.py` and `openspec validate --all --strict`; verify all scenario rows have real test coverage and all OpenSpec artifacts validate. Perform the external Photoshop acceptance row when available, otherwise retain it explicitly as a reviewer checklist item with the local-reference instructions.
-- [ ] 4.4 Archive `psd-mask-link-state` after implementation validation and include every manual test-plan row in the implementation PR body; verify the corrected main specs contain the new behavior, no open change remains, and the PR/result records the old-Pictura-file compatibility limitation.
+- [x] 4.4 Archive `psd-mask-link-state` after implementation validation and include every manual test-plan row in the implementation PR body; verify the corrected main specs contain the new behavior, no open change remains, and the PR/result records the old-Pictura-file compatibility limitation.

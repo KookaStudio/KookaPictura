@@ -62,3 +62,14 @@ with psd-tools, not extracted from the user's artwork.
 Older Pictura saves can encode the opposite of their intended mask link state.
 The correction follows the stored PSD bit without guessing file provenance or
 rewriting imported flags. Such a file may need an explicit link/unlink edit.
+
+## Delivery
+
+All 13 implementation/delivery tasks are complete. The implementation and
+generated fixtures are committed, the three main specs are synced, and no
+active OpenSpec change remains. Draft PR:
+https://github.com/KookaStudio/KookaPictura/pull/1244
+
+The external Photoshop reviewer checkbox above remains intentionally pending
+and is copied into the PR body. CI was in progress with no failures when the
+draft was checked; local full verification is complete.
