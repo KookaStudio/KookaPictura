@@ -5,6 +5,16 @@ final-status-level = "all"
 failure-output = "final"
 success-output = "never"
 
+# The heap-peak guards (#1210) each build 4250x4250 documents; two at a time
+# keeps a runner's memory in bounds. Each still runs alone in its process,
+# which is what makes its peak exact.
+[test-groups]
+memory-guards = { max-threads = 2 }
+
+[[profile.default.overrides]]
+filter = "package(pictura_app) & test(/heap_peak/)"
+test-group = "memory-guards"
+
 [profile.default.junit]
 path = "junit.xml"
 report-skipped = "ignored"

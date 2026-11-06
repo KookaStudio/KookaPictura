@@ -8,6 +8,7 @@ use pictura_core::{BitDepth, ColorMode, Document, PsdRect};
 mod bucket;
 mod damage;
 mod marquee;
+mod memory;
 mod open;
 mod pan_zoom;
 mod preview;

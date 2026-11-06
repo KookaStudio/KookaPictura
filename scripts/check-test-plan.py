@@ -7,8 +7,9 @@ ref or in the working tree, fails when:
 - a spec scenario (its `[tag]`, or its title when untagged) has no plan row,
 - a row's Coverage cell is neither `manual: <reason>` nor test references,
 - a referenced test does not exist: `tst_<suite>::<case>` must be a slot in
-  crates/pictura-app/cpp/tests/tst_<suite>.cpp, `<crate>::<fn>` a `fn <fn>`
-  under crates/<crate>/.
+  crates/pictura-app/cpp/tests/tst_<suite>.cpp, `<script>::<fn>` a `def <fn>`
+  in scripts/<script>.py (run by that script's --self-check), `<crate>::<fn>`
+  a `fn <fn>` under crates/<crate>/.
 
 The Coverage cell is a row's last column. Base ref: $GUARD_BASE, else the merge
 base with master/main.
@@ -24,6 +25,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS = ROOT / "scripts"
 CHANGES = ROOT / "openspec" / "changes"
 QT_TESTS = ROOT / "crates" / "pictura-app" / "cpp" / "tests"
 
@@ -71,6 +73,9 @@ def test_exists(owner: str, name: str) -> bool:
         return src.is_file() and re.search(
             rf"\bvoid\s+{name}\s*\(\s*\)", src.read_text(encoding="utf-8")
         ) is not None
+    script = SCRIPTS / f"{owner}.py"
+    if script.is_file():
+        return re.search(rf"^\s*def\s+{name}\s*\(", script.read_text(encoding="utf-8"), re.M) is not None
     crate = ROOT / "crates" / owner
     pattern = re.compile(rf"\bfn\s+{name}\s*\(")
     return crate.is_dir() and any(
@@ -140,6 +145,8 @@ def self_test() -> int:
     assert coverage_errors("`tst_x::b`", exists) == ["no such test: tst_x::b"]
     assert coverage_errors("manual:", exists) == ["manual row without a reason"]
     assert coverage_errors("TODO", exists)[0].startswith("coverage is neither")
+    assert test_exists("check-test-plan", "self_test")
+    assert not test_exists("check-test-plan", "no_such_function")
     print("check-test-plan: self-test OK")
     return 0
 

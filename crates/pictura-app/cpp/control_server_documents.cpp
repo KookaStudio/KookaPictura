@@ -113,7 +113,24 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
         }
         const QString background =
             params.value(QStringLiteral("background")).toString(QStringLiteral("white"));
-        applied = frame_->newDocument(name, width, height, mode, depth, background);
+        if (params.value(QStringLiteral("background_layer")).toBool()) {
+            // File > New's construction: a white document's bottom layer is the
+            // locked Background without an alpha plane (#1210).
+            if (background != QStringLiteral("white")) {
+                return error(QStringLiteral("invalid_param"),
+                             QStringLiteral("background_layer requires a white background"));
+            }
+            auto* view = new PictureView(frame_);
+            applied = create_document(*view, width, height, mode, depth, 0xffffffu, false, 72.0,
+                                      false);
+            if (applied) {
+                frame_->addDocument(view, QString());
+            } else {
+                delete view;
+            }
+        } else {
+            applied = frame_->newDocument(name, width, height, mode, depth, background);
+        }
         if (!applied) {
             return error(QStringLiteral("internal"), QStringLiteral("could not create document"));
         }

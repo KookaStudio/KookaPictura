@@ -27,6 +27,22 @@ The new-layer, new-group, duplicate, move-copy and delete-copy scenarios use
 the scenario.
 Numbers are for one machine and one build; compare runs on the same machine.
 No dependency beyond python3's standard library.
+
+Memory (#1210): --peak resets the app's peak resident size before each scenario
+(5 -> /proc/<pid>/clear_refs) and reports peak_mb (VmHWM), peak_added_mb and
+rss_mb. The memory scenarios M1-M13 (scripts/memory_scenarios.py; --scenarios
+memory for all) default to 17000x17000 and run each in a fresh app, with their
+prerequisites run before the reset. --memory-max 4G runs the app under
+`systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0`; a SIGKILL is the
+row's `oom` outcome, not a harness failure. A limit above the memory available
+now less 1.5 GiB is refused without --force: to make room for the app the kernel
+would swap out everything else, which can freeze a desktop. Memory scenarios
+without --memory-max run under that default limit; --force lifts both.
+
+    python3 scripts/profile-tools.py --scenarios memory --memory-max 4G --save /tmp/4g.json
+    python3 scripts/profile-tools.py --scenarios M5 --compare docs/dev/benchmarks/memory-baseline.json --compare-run 4G
+
+--self-check runs the harness's own checks and every M scenario at 512x512.
 """
 
 import argparse
@@ -40,6 +56,9 @@ import subprocess
 import sys
 import tempfile
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import memory_scenarios  # noqa: E402
 
 # name -> (tool, tool_options patch, gesture). Sizes are document pixels; a
 # gesture's geometry is in fractions of the document, so a scenario means the
@@ -137,6 +156,10 @@ ALL_SCENARIOS = [*SCENARIOS, *LAYER_SCENARIOS, *TYPE_SCENARIOS]
 DEFAULT_SCENARIOS = ",".join(ALL_SCENARIOS)
 
 
+class AppError(RuntimeError):
+    """The app answered a request with an error: it is alive and declined."""
+
+
 class Client:
     def __init__(self, path, timeout):
         self.conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -161,7 +184,7 @@ class Client:
             raise RuntimeError(f"{method}: no response (did the app crash?)")
         response = json.loads(reply)
         if not response.get("ok"):
-            raise RuntimeError(f"{method}: {response.get('error')}")
+            raise AppError(f"{method}: {response.get('error')}")
         return response.get("result", {}), elapsed
 
 
@@ -368,12 +391,37 @@ def run_type_scenario(client, name, w, h, before_undo, metrics):
     return row
 
 
-def rss_mb(pid):
+def status_kib(pid, key):
     with open(f"/proc/{pid}/status") as status:
         for line in status:
-            if line.startswith("VmRSS:"):
-                return int(line.split()[1]) // 1024
+            if line.startswith(key + ":"):
+                return int(line.split()[1])
     return 0
+
+
+def rss_mb(pid):
+    return status_kib(pid, "VmRSS") // 1024
+
+
+def reset_peak(pid):
+    """Reset VmHWM to the current VmRSS (Linux 4.0+)."""
+    with open(f"/proc/{pid}/clear_refs", "w") as refs:
+        refs.write("5")
+
+
+def settle_workers(pid, window=0.5, tolerance_kib=1024, limit=120.0):
+    """Wait until the resident size holds within `tolerance_kib` for `window`
+    seconds: deferred composites and pyramid builds run on workers after the
+    GUI thread is idle."""
+    start = time.perf_counter()
+    last, since = status_kib(pid, "VmRSS"), time.perf_counter()
+    while time.perf_counter() - start < limit:
+        time.sleep(0.05)
+        now = status_kib(pid, "VmRSS")
+        if abs(now - last) > tolerance_kib:
+            last, since = now, time.perf_counter()
+        elif time.perf_counter() - since >= window:
+            return
 
 
 def wait_idle(client, start, window=0.4, quiet_s=0.005):
@@ -397,11 +445,18 @@ def wait_idle(client, start, window=0.4, quiet_s=0.005):
         time.sleep(0.02)
 
 
-def run_any(client, name, w, h, moves, metrics, pid):
+def run_any(client, name, w, h, moves, metrics, pid, peak=False):
     # The snapshot is read before the scenario's undo, whose full restore
     # would otherwise add composite phases the scenario itself never ran.
+    rss_before = status_kib(pid, "VmRSS")
+    if peak:
+        reset_peak(pid)
+
     def before_undo(row):
         row["rss_mb"] = rss_mb(pid)
+        if peak:
+            row["peak_mb"] = status_kib(pid, "VmHWM") // 1024
+            row["peak_added_mb"] = row["peak_mb"] - rss_before // 1024
         if metrics:
             snapshot = client.call("metrics")[0]
             row["phases"] = {label: phase["total_ms"] for label, phase in snapshot.get("phases", {}).items()}
@@ -426,7 +481,294 @@ def print_phases(results):
     print("(per-phase totals in milliseconds, from PICTURA_METRICS)")
 
 
-COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "finish_ms", "settle_ms", "total_ms", "undo_ms", "rss_mb"]
+COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "finish_ms", "settle_ms", "total_ms", "undo_ms", "rss_mb", "peak_mb"]
+
+
+# --- Memory scenarios (#1210) -------------------------------------------------
+
+MEMORY_COLUMNS = ["outcome", "peak_added_mb", "peak_mb", "rss_before_mb", "rss_mb", "total_ms"]
+OOM_CODES = (-9, 137)  # SIGKILL from Popen, or through a shell
+
+
+def app_command(app, sock, state, memory_max=None):
+    """The app's command line, inside a memory-limited scope when asked."""
+    cmd = [app, "--headless", "--control", "--control-socket", sock, "--state-home", state]
+    if not memory_max:
+        return cmd
+    return ["systemd-run", "--user", "--scope", "--quiet",
+            "-p", f"MemoryMax={memory_max}", "-p", "MemorySwapMax=0", "--", *cmd]
+
+
+LIMIT_MARGIN_MIB = 1536  # what the rest of the desktop keeps beside a limited app
+
+
+def size_mib(text):
+    """A systemd size (`4G`, `6475M`, `512K`, bytes) in MiB."""
+    units = {"K": 1 / 1024, "M": 1, "G": 1024, "T": 1024 * 1024}
+    text = text.strip().upper()
+    if text and text[-1] in units:
+        return float(text[:-1]) * units[text[-1]]
+    return float(text) / (1024 * 1024)
+
+
+def available_mib():
+    with open("/proc/meminfo") as meminfo:
+        for line in meminfo:
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) // 1024
+    return 0
+
+
+def limit_problem(limit, available, margin=LIMIT_MARGIN_MIB):
+    """Why `limit` would starve the machine, or None. With swap off inside the
+    scope, the kernel makes room for the app by swapping everything else out:
+    a limit above what is free now, less a margin, can freeze a desktop."""
+    wanted = size_mib(limit)
+    if wanted > available - margin:
+        return (f"--memory-max {limit} ({wanted:.0f} MiB) exceeds the memory available now "
+                f"({available} MiB) less {margin} MiB for the rest of the machine; close other "
+                f"programs, lower the limit, or pass --force")
+    return None
+
+
+def default_limit(available, margin=LIMIT_MARGIN_MIB):
+    """The limit a memory run gets without --memory-max: what is free less the margin."""
+    return f"{max(256, available - margin)}M"
+
+
+def outcome_of(returncode, phase, answered=False):
+    """A failed scenario's outcome: `oom` for a SIGKILL; `refused` when the
+    live app answered a step with an error (an open over the image budget, a
+    gate); else `crash` (an exit, or no answer)."""
+    if returncode in OOM_CODES:
+        return {"outcome": "oom", "oom_phase": phase}
+    if answered and returncode is None:
+        return {"outcome": "refused", "phase": phase}
+    return {"outcome": "crash", "phase": phase, "exit": returncode}
+
+
+def launch(cmd, sock, env, log):
+    """Start the app and wait for its control socket; return the process."""
+    app = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)
+    for _ in range(300):
+        token = sock + ".token"
+        if os.path.exists(sock) and os.path.exists(token) and os.path.getsize(token) > 0:
+            return app
+        if app.poll() is not None:
+            raise RuntimeError(f"app exited ({app.returncode}) before listening; see {log.name}")
+        time.sleep(0.1)
+    app.kill()
+    raise RuntimeError(f"socket never appeared; see {log.name}")
+
+
+def stop(app):
+    if app.poll() is None:
+        app.terminate()
+        try:
+            app.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            app.kill()
+            app.wait()
+
+
+def fixture_path(directory, w, h):
+    """The M12 PSD for this size, generated once into `directory`."""
+    # The control server opens absolute paths only.
+    path = os.path.abspath(os.path.join(directory, f"memory-fixture-{w}x{h}-seed1210.psd"))
+    if not os.path.exists(path):
+        generator = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen-large-fixtures.py")
+        subprocess.run([sys.executable, generator, "--size", f"{w}x{h}", "--out", path],
+                       check=True, stdout=subprocess.DEVNULL)
+    return path
+
+
+def settle(client, pid):
+    client.call("status")
+    wait_idle(client, time.perf_counter())
+    settle_workers(pid)
+
+
+def run_memory_scenario(binary, sid, w, h, memory_max, fixture_dir, timeout, env):
+    """Run one M scenario in a fresh app; return its row."""
+    gesture, setup, measured, needs_fixture = memory_scenarios.SCENARIOS[sid]
+    row = {"gesture": gesture}
+    tmp = tempfile.mkdtemp(prefix="pictura-memory-")
+    sock = os.path.join(tmp, "control.sock")
+    fixture = fixture_path(fixture_dir or tmp, w, h) if needs_fixture else None
+    phase = "launch"
+    app = None
+    try:
+        with open(os.path.join(tmp, "app.log"), "w") as log:
+            app = launch(app_command(binary, sock, os.path.join(tmp, "state"), memory_max), sock, env, log)
+        client = Client(sock, timeout)
+        ctx = memory_scenarios.Ctx(client, w, h, tmp, fixture)
+        phase = "setup"
+        for step in setup:
+            step(ctx)
+        settle(client, app.pid)
+        rss_before = status_kib(app.pid, "VmRSS")
+        reset_peak(app.pid)
+        phase = "scenario"
+        start = time.perf_counter()
+        for step in measured:
+            step(ctx)
+        settle(client, app.pid)
+        peak = status_kib(app.pid, "VmHWM")
+        row.update(outcome="ok", total_ms=ms(time.perf_counter() - start),
+                   rss_before_mb=rss_before // 1024, peak_mb=peak // 1024,
+                   peak_added_mb=(peak - rss_before) // 1024, rss_mb=rss_mb(app.pid))
+    except (RuntimeError, OSError, ValueError) as err:
+        returncode = None
+        if app is not None:
+            try:
+                returncode = app.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        row.update(outcome_of(returncode, phase, isinstance(err, AppError)), error=str(err))
+    finally:
+        if app is not None:
+            stop(app)
+        shutil.rmtree(tmp, ignore_errors=True)
+    return row
+
+
+def machine_info():
+    """The reference machine, for a saved baseline."""
+    def first(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, check=False).stdout.strip()
+        except OSError:
+            return ""
+    # A big.LITTLE CPU lists one model per core type.
+    cpu = " + ".join(line.split(":", 1)[1].strip() for line in first(["lscpu"]).splitlines()
+                     if line.strip().startswith("Model name"))
+    mem_kib = 0
+    with open("/proc/meminfo") as meminfo:
+        for line in meminfo:
+            if line.startswith("MemTotal:"):
+                mem_kib = int(line.split()[1])
+    return {"cpu": cpu, "cores": os.cpu_count(), "mem_total_mib": mem_kib // 1024,
+            "kernel": os.uname().release, "arch": os.uname().machine,
+            "qt": first(["qmake6", "-query", "QT_VERSION"]),
+            "commit": first(["git", "-C", os.path.dirname(os.path.abspath(__file__)), "rev-parse", "HEAD"])}
+
+
+def print_memory_table(results):
+    header = f"{'scenario':<9}" + "".join(f"{c.replace('_mb', ''):>15}" for c in MEMORY_COLUMNS)
+    print(header)
+    print("-" * len(header))
+    for name, row in results.items():
+        cells = "".join(f"{str(row.get(c, '')):>15}" for c in MEMORY_COLUMNS)
+        note = f"  ({row.get('oom_phase') or row.get('phase')}: {row.get('error', '')})" if row.get("outcome") != "ok" else ""
+        print(f"{name:<9}{cells}{note}")
+    print("(MiB; peak_added is the peak above the resident size at the reset; total is milliseconds)")
+
+
+def memory_compare_lines(before, after):
+    """Per scenario: peak and outcome before -> after."""
+    lines = [f"{'scenario':<9}{'outcome':>16}{'peak_mb':>26}{'peak_added_mb':>26}"]
+    for name, row in after.items():
+        base = before.get(name)
+        if base is None:
+            continue
+        cells = [f"{base.get('outcome', '-')} -> {row.get('outcome', '-')}"]
+        for key in ("peak_mb", "peak_added_mb"):
+            b, a = base.get(key), row.get(key)
+            if b is None or a is None:
+                cells.append("")
+                continue
+            ratio = f"{b / a:.1f}x" if a > 0 else "-"
+            cells.append(f"{b} -> {a} ({ratio})")
+        lines.append(f"{name:<9}{cells[0]:>16}{cells[1]:>26}{cells[2]:>26}")
+    lines.append("(before -> after, MiB; the ratio is the saving)")
+    return lines
+
+
+def load_results(path, run=None):
+    """A --save file's results; a baseline holds several runs under `runs`."""
+    with open(path) as f:
+        data = json.load(f)
+    if "runs" in data:
+        if run not in data["runs"]:
+            raise SystemExit(f"profile-tools: {path} has runs {', '.join(data['runs'])}; pick one with --compare-run")
+        data = data["runs"][run]
+    return data
+
+
+# --- Self-check -----------------------------------------------------------------
+
+def check_peak_row(name, row):
+    assert row.get("outcome") == "ok", f"{name}: {row}"
+    for key in ("peak_mb", "peak_added_mb", "rss_mb", "rss_before_mb", "total_ms"):
+        assert isinstance(row.get(key), (int, float)), f"{name}: {key} missing in {row}"
+    assert row["peak_mb"] >= row["rss_before_mb"], f"{name}: peak below the reset's RSS"
+    assert row["peak_added_mb"] >= 0, f"{name}: negative peak added"
+
+
+def check_limit_command():
+    plain = app_command("app", "s", "st")
+    assert plain == ["app", "--headless", "--control", "--control-socket", "s", "--state-home", "st"]
+    limited = app_command("app", "s", "st", "4G")
+    assert limited[:4] == ["systemd-run", "--user", "--scope", "--quiet"]
+    assert "MemoryMax=4G" in limited and "MemorySwapMax=0" in limited
+    assert limited[limited.index("--") + 1:] == plain
+
+
+def check_limit_guard():
+    assert size_mib("4G") == 4096 and size_mib("6475M") == 6475 and size_mib("512K") == 0.5
+    assert limit_problem("4G", 6000) is None
+    assert "exceeds the memory available" in limit_problem("4G", 5000)
+    assert limit_problem("2G", 3600) is None
+    assert default_limit(5000) == "3464M" and limit_problem(default_limit(5000), 5000) is None
+    assert default_limit(1000) == "256M"
+
+
+def check_outcomes():
+    assert outcome_of(-9, "setup") == {"outcome": "oom", "oom_phase": "setup"}
+    assert outcome_of(137, "scenario") == {"outcome": "oom", "oom_phase": "scenario"}
+    assert outcome_of(1, "scenario")["outcome"] == "crash"
+    assert outcome_of(None, "scenario")["outcome"] == "crash"
+    assert outcome_of(None, "scenario", answered=True) == {"outcome": "refused", "phase": "scenario"}
+    assert outcome_of(-9, "scenario", answered=True)["outcome"] == "oom"
+
+
+def check_compare():
+    before = {"M4": {"outcome": "ok", "peak_mb": 400, "peak_added_mb": 300}, "M5": {"outcome": "ok"}}
+    after = {"M4": {"outcome": "ok", "peak_mb": 200, "peak_added_mb": 100}, "M5": {"outcome": "oom"}}
+    lines = memory_compare_lines(before, after)
+    assert "400 -> 200 (2.0x)" in lines[1] and "300 -> 100 (3.0x)" in lines[1], lines
+    assert "ok -> oom" in lines[2], lines
+
+
+def self_check_catalogue(binary, side=512):
+    tmp = tempfile.mkdtemp(prefix="pictura-memory-check-")
+    env = dict(os.environ)
+    env.pop("PICTURA_METRICS", None)
+    try:
+        failed = []
+        for sid in memory_scenarios.SCENARIOS:
+            row = run_memory_scenario(binary, sid, side, side, None, tmp, 120.0, env)
+            try:
+                check_peak_row(sid, row)
+                print(f"profile-tools: self-check {sid} ok (peak +{row['peak_added_mb']} MiB)")
+            except AssertionError as err:
+                failed.append(str(err))
+        assert not failed, "\n".join(failed)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def self_check(binary):
+    check_limit_command()
+    check_limit_guard()
+    check_outcomes()
+    check_compare()
+    print("profile-tools: self-check helpers ok")
+    if not os.access(binary, os.X_OK):
+        print(f"profile-tools: SKIP catalogue (no app at {binary})")
+        return
+    self_check_catalogue(binary)
+    print("profile-tools: self-check OK")
 
 
 def print_table(results):
@@ -467,31 +809,60 @@ def main():
     parser.add_argument("--bin", default="./build/pictura")
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--image", help="open this file as the document")
-    source.add_argument("--size", default="4000x3000", help="new white RGB document WxH (default 4000x3000)")
+    source.add_argument("--size", help="new white RGB document WxH (default 4000x3000; 17000x17000 for M scenarios)")
+    memory_ids = list(memory_scenarios.SCENARIOS)
     parser.add_argument("--scenarios", default=DEFAULT_SCENARIOS,
-                        help=f"comma list, or 'all' (of: {', '.join(ALL_SCENARIOS)})")
+                        help=f"comma list, 'all' (the tools), or 'memory' (of: {', '.join(ALL_SCENARIOS + memory_ids)})")
     parser.add_argument("--moves", type=int, default=60, help="motion events per stroke (default 60)")
     parser.add_argument("--gpu", choices=["on", "off", "default"], default="default",
                         help="force GPU compute on/off for the document (default: the app's own)")
     parser.add_argument("--save", help="write the results as JSON")
     parser.add_argument("--compare", help="print a before/after table against this --save")
+    parser.add_argument("--compare-run", help="the run to compare against in a multi-run baseline")
     parser.add_argument("--timing-log", help="keep the app's stderr with PICTURA_PAINT_TIMING=1")
     parser.add_argument("--metrics", action="store_true",
                         help="run the app with PICTURA_METRICS=1 and print each scenario's phases")
+    parser.add_argument("--peak", action="store_true",
+                        help="reset the peak resident size before each scenario and report it (always on for M scenarios)")
+    parser.add_argument("--memory-max", help="run the app under a systemd MemoryMax (e.g. 4G), swap off")
+    parser.add_argument("--force", action="store_true",
+                        help="allow a --memory-max above the memory available now less 1.5 GiB")
+    parser.add_argument("--fixture-dir", help="keep generated fixtures here between runs")
+    parser.add_argument("--self-check", action="store_true", help="check the harness, then exit")
     parser.add_argument("--timeout", type=float, default=600.0, help="per-request timeout in seconds")
     args = parser.parse_args()
 
-    known = ALL_SCENARIOS
-    names = known if args.scenarios == "all" else [s.strip() for s in args.scenarios.split(",") if s.strip()]
+    if args.self_check:
+        self_check(args.bin)
+        return
+    known = ALL_SCENARIOS + memory_ids
+    if args.scenarios == "all":
+        names = ALL_SCENARIOS
+    elif args.scenarios == "memory":
+        names = memory_ids
+    else:
+        names = [s.strip() for s in args.scenarios.split(",") if s.strip()]
     unknown = [n for n in names if n not in known]
     if unknown:
         parser.error(f"unknown scenario(s): {', '.join(unknown)}")
+    memory = [n for n in names if n in memory_ids]
+    if memory and len(memory) != len(names):
+        parser.error("M scenarios run in their own apps; do not mix them with tool scenarios")
+    if memory and args.image:
+        parser.error("M scenarios make their own documents; drop --image")
     if not os.access(args.bin, os.X_OK):
         sys.exit(f"profile-tools: missing {args.bin} (build first: cmake --build build --parallel)")
+    if memory and not args.memory_max and not args.force:
+        # An unlimited run can take the machine down as surely as a limit too
+        # large: by default a memory run keeps the margin free.
+        args.memory_max = default_limit(available_mib())
+        print(f"profile-tools: no --memory-max; limiting the app to {args.memory_max} "
+              f"(available less {LIMIT_MARGIN_MIB} MiB; --force runs unlimited)")
+    if args.memory_max and not args.force:
+        problem = limit_problem(args.memory_max, available_mib())
+        if problem:
+            sys.exit(f"profile-tools: {problem}")
 
-    tmp = tempfile.mkdtemp(prefix="pictura-profile-")
-    sock = os.path.join(tmp, "control.sock")
-    log_path = args.timing_log or os.path.join(tmp, "app.log")
     env = dict(os.environ)
     if args.timing_log:
         env["PICTURA_PAINT_TIMING"] = "1"
@@ -499,33 +870,43 @@ def main():
         env["PICTURA_METRICS"] = "1"
     else:
         env.pop("PICTURA_METRICS", None)
-    with open(log_path, "w") as log:
-        app = subprocess.Popen(
-            [args.bin, "--headless", "--control", "--control-socket", sock, "--state-home", os.path.join(tmp, "state")],
-            stdout=log, stderr=subprocess.STDOUT, env=env)
+    if memory:
+        w, h = (int(v) for v in (args.size or "17000x17000").lower().split("x"))
+        meta = {"document": f"new {w}x{h}", "width": w, "height": h, "memory_max": args.memory_max,
+                "machine": machine_info()}
+        print(f"profile-tools: memory scenarios at {w}x{h}" + (f" under MemoryMax={args.memory_max}" if args.memory_max else ""))
+        results = {}
+        for name in memory:
+            results[name] = run_memory_scenario(os.path.abspath(args.bin), name, w, h, args.memory_max,
+                                                args.fixture_dir, args.timeout, env)
+            print(f"profile-tools: {name} {results[name].get('outcome')}", flush=True)
+        print_memory_table(results)
+        finish(args, meta, results)
+        return
+
+    tmp = tempfile.mkdtemp(prefix="pictura-profile-")
+    sock = os.path.join(tmp, "control.sock")
+    log_path = args.timing_log or os.path.join(tmp, "app.log")
+    app = None
     try:
-        for _ in range(300):
-            token = sock + ".token"
-            if os.path.exists(sock) and os.path.exists(token) and os.path.getsize(token) > 0:
-                break
-            if app.poll() is not None:
-                sys.exit(f"profile-tools: app exited before listening; see {log_path}")
-            time.sleep(0.1)
-        else:
-            sys.exit(f"profile-tools: socket never appeared; see {log_path}")
+        with open(log_path, "w") as log:
+            try:
+                app = launch(app_command(args.bin, sock, os.path.join(tmp, "state"), args.memory_max), sock, env, log)
+            except RuntimeError as err:
+                sys.exit(f"profile-tools: {err}")
         client = Client(sock, args.timeout)
 
         if args.image:
             _, open_s = client.call("document", op="open", path=os.path.abspath(args.image))
         else:
-            w, h = (int(v) for v in args.size.lower().split("x"))
+            w, h = (int(v) for v in (args.size or "4000x3000").lower().split("x"))
             _, open_s = client.call("document", op="new", width=w, height=h, background="white")
-        _, settle = client.call("status")
+        _, settle_s = client.call("status")
         status = client.call("status")[0]
         info = status["documents_info"][status["active"]]
         w, h = info["width"], info["height"]
         meta = {"document": args.image or f"new {w}x{h}", "width": w, "height": h,
-                "open_ms": ms(open_s + settle), "moves": args.moves}
+                "open_ms": ms(open_s + settle_s), "moves": args.moves}
         if args.gpu != "default":
             gpu = client.call("set_gpu_compute", on=args.gpu == "on")[0]
             meta["gpu_compute"], meta["backend"] = gpu.get("gpu_compute"), gpu.get("backend")
@@ -535,34 +916,37 @@ def main():
         results = {}
         for name in names:
             try:
-                results[name] = run_any(client, name, w, h, args.moves, args.metrics, app.pid)
+                results[name] = run_any(client, name, w, h, args.moves, args.metrics, app.pid, args.peak)
             except (RuntimeError, OSError) as err:
                 results[name] = {"error": str(err)}
                 if app.poll() is not None:
+                    results[name].update(outcome_of(app.returncode, "scenario"))
                     break
         print_table(results)
         if args.metrics:
             print()
             print_phases(results)
-        if args.save:
-            with open(args.save, "w") as out:
-                json.dump({"meta": meta, "results": results}, out, indent=2)
-            print(f"profile-tools: saved {args.save}")
-        if args.compare:
-            with open(args.compare) as f:
-                before = json.load(f)
-            print()
-            print(f"compare against {args.compare} ({before['meta'].get('document')})")
-            print_compare(before["results"], results)
+        finish(args, meta, results)
     finally:
-        if app.poll() is None:
-            app.terminate()
-            try:
-                app.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                app.kill()
+        if app is not None:
+            stop(app)
         if not args.timing_log:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+def finish(args, meta, results):
+    if args.save:
+        with open(args.save, "w") as out:
+            json.dump({"meta": meta, "results": results}, out, indent=2)
+        print(f"profile-tools: saved {args.save}")
+    if args.compare:
+        before = load_results(args.compare, args.compare_run)
+        print()
+        print(f"compare against {args.compare} ({before['meta'].get('document')})")
+        if any("outcome" in row for row in results.values()):
+            print("\n".join(memory_compare_lines(before["results"], results)))
+        else:
+            print_compare(before["results"], results)
 
 
 if __name__ == "__main__":

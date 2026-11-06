@@ -57,6 +57,9 @@ pub fn compare(a: &[u8], b: &[u8], tolerance: u8) -> Result<Diff, String> {
     })
 }
 
+mod peak_alloc;
+pub use peak_alloc::PeakAlloc;
+
 /// Stable content hash for determinism checks.
 pub fn hash_bytes(bytes: &[u8]) -> u64 {
     // FNV-1a: tiny, dependency-free, good enough for M0 determinism checks.
