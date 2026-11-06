@@ -895,16 +895,6 @@ void PicturaMainWindow::buildStatusBar()
     bar->setContentsMargins(6, 0, 0, 0);
     bar->setFixedHeight(Theme::scaled(28));
 
-    // Footer text runs 2px under the app default, matching the tab chrome. A
-    // point-sized default font (pixelSize() < 0) falls back to 12px at 96 DPI.
-    int baseFontPx = QApplication::font().pixelSize();
-    if (baseFontPx <= 0) {
-        baseFontPx = 12;
-    }
-    QFont footerFont = bar->font();
-    footerFont.setPixelSize(baseFontPx - 2);
-    bar->setFont(footerFont);
-
     NumericFieldConfig zoomConfig;
     zoomConfig.minimum = 1;
     zoomConfig.maximum = 3200;
@@ -989,6 +979,8 @@ void PicturaMainWindow::buildStatusBar()
     // Right-aligned: the Help > Search keycap, following its live binding.
     buildSearchHint(bar);
     searchHint_->setFixedHeight(kStatusItemHeight);
+    // One owner for the footer font and the scaled item heights.
+    applyStatusBarScale();
 
     connect(zoomField_, &NumericField::valueCommitted, this, [this](double percent) {
         if (ImageView* canvas = imageView()) {

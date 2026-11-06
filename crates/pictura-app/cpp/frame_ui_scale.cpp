@@ -152,6 +152,17 @@ void PicturaMainWindow::applyStatusBarScale()
     if (!bar) {
         return;
     }
+    // Footer text runs 2px under the app default, matching the tab chrome. A
+    // point-sized default font (pixelSize() < 0) falls back to 12px at 96 DPI.
+    int baseFontPx = QApplication::font().pixelSize();
+    if (baseFontPx <= 0) {
+        baseFontPx = 12;
+    }
+    QFont footerFont = QApplication::font();
+    footerFont.setPixelSize(qMax(1, baseFontPx - 2));
+    // An application stylesheet resolves a child's font against the
+    // application rather than the bar, so the readouts need it set directly.
+    bar->setFont(footerFont);
     bar->setFixedHeight(Theme::scaled(28));
     const int itemHeight = Theme::scaled(22);
     for (QWidget* item : {static_cast<QWidget*>(zoomField_), static_cast<QWidget*>(sizeLabel_),
@@ -159,6 +170,7 @@ void PicturaMainWindow::applyStatusBarScale()
                           static_cast<QWidget*>(backendLabel_), static_cast<QWidget*>(actionLabel_),
                           static_cast<QWidget*>(hintBar_), static_cast<QWidget*>(searchHint_)}) {
         if (item) {
+            item->setFont(footerFont);
             item->setFixedHeight(itemHeight);
         }
     }
