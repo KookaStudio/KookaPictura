@@ -9,10 +9,14 @@ use super::{Band, Plane, BAND_ROWS, MATERIALIZATIONS};
 
 /// Run `f` and panic if it materialized a diverged banded plane.
 ///
-/// The counter is process-wide, so a test using this must run alone in its
-/// process (nextest does that); under the threaded `cargo test` runner another
-/// test can bump it.
+/// The counter is process-wide, so the check is exact only when the test runs
+/// alone in its process. Nextest gives every test its own process and sets
+/// `NEXTEST`; under the threaded `cargo test` runner, where any other test can
+/// bump the counter, `f` runs unchecked.
 pub fn assert_no_materialization<R>(f: impl FnOnce() -> R) -> R {
+    if std::env::var_os("NEXTEST").is_none() {
+        return f();
+    }
     let before = MATERIALIZATIONS.load(Ordering::Relaxed);
     let out = f();
     let after = MATERIALIZATIONS.load(Ordering::Relaxed);

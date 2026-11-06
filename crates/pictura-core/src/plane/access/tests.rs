@@ -204,10 +204,18 @@ fn for_each_band_mut_reaches_every_sample_without_materializing() {
 }
 
 #[test]
-#[should_panic(expected = "materialized")]
 fn assert_no_materialization_catches_a_whole_plane_copy() {
     let (plane, _sharer, _) = diverged();
     let start = materializations();
-    assert_no_materialization(|| plane.as_slice().len());
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        assert_no_materialization(|| plane.as_slice().len())
+    }));
     assert!(materializations() > start);
+    // Outside nextest the guard runs unchecked; see its doc.
+    let alone = std::env::var_os("NEXTEST").is_some();
+    assert_eq!(
+        caught.is_err(),
+        alone,
+        "the guard panics exactly under nextest"
+    );
 }
