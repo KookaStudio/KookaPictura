@@ -7,6 +7,9 @@ use std::sync::{Arc, OnceLock};
 /// Rows per band of a fractured plane.
 pub const BAND_ROWS: usize = 64;
 
+mod access;
+pub use access::assert_no_materialization;
+
 /// One band of a fractured plane: a range of the plane's base allocation, or a
 /// forked copy of that range.
 enum Band<T> {

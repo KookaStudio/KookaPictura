@@ -38,6 +38,7 @@ pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
 pub use homography::Homography;
 pub use layer_stack::{LayerStack, StackError, StackViolation};
+pub use plane::assert_no_materialization;
 pub use plane::{fresh_stamp, materializations, reset_materializations, Plane, BAND_ROWS};
 pub use raw_settings::{
     CameraCalibration, Detail, Effects, Hsl, Lens, PicturaRawSettings, RawMode, SplitToning,
