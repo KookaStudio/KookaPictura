@@ -1361,7 +1361,7 @@ void LayersPanel::expandForTest(const QString& path)
     }
 }
 
-QImage LayersPanel::rowImageForTest(const QString& path) const
+QImage LayersPanel::rowImageForTest(const QString& path, qreal dpr) const
 {
     const QModelIndex index = proxyIndexForPath(path);
     if (!index.isValid() || !delegate_ || !tree_) {
@@ -1371,7 +1371,8 @@ QImage LayersPanel::rowImageForTest(const QString& path) const
     if (vr.width() <= 0 || vr.height() <= 0) {
         return {};
     }
-    QImage image(vr.size(), QImage::Format_ARGB32_Premultiplied);
+    QImage image(vr.size() * dpr, QImage::Format_ARGB32_Premultiplied);
+    image.setDevicePixelRatio(dpr);
     const QColor base(128, 128, 128);
     image.fill(base);
     QPainter painter(&image);
