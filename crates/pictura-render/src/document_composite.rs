@@ -206,25 +206,21 @@ pub fn rgba_frame(rendered: &PixelBuffer) -> PixelBuffer {
     let plane = rendered.pixel_count();
     let channels = rendered.channels as usize;
     let mut data = vec![0u8; plane * 4];
-    for i in 0..plane {
-        let (r, g, b, a) = if channels <= 1 {
-            let v = rendered.data[i];
-            (v, v, v, 255)
-        } else if channels == 2 {
-            let v = rendered.data[i];
-            (v, v, v, rendered.data[plane + i])
-        } else {
-            (
-                rendered.data[i],
-                rendered.data[plane + i],
-                rendered.data[2 * plane + i],
-                255,
-            )
-        };
-        data[i] = r;
-        data[plane + i] = g;
-        data[2 * plane + i] = b;
-        data[3 * plane + i] = a;
+    let (colour, alpha) = data.split_at_mut(3 * plane);
+    let (red, green_blue) = colour.split_at_mut(plane);
+    if channels >= 3 {
+        rendered.data.read_into(0, red);
+        rendered.data.read_into(plane, &mut green_blue[..plane]);
+        rendered.data.read_into(2 * plane, &mut green_blue[plane..]);
+    } else {
+        rendered.data.read_into(0, red);
+        green_blue[..plane].copy_from_slice(red);
+        green_blue[plane..].copy_from_slice(red);
+    }
+    if channels == 2 {
+        rendered.data.read_into(plane, alpha);
+    } else {
+        alpha.fill(255);
     }
     PixelBuffer {
         width: rendered.width,

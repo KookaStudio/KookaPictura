@@ -1070,5 +1070,5 @@ pub(crate) fn mask_value(mask: &LayerMask, x: i32, y: i32) -> u8 {
         return mask.default_color;
     }
     let idx = my as usize * mw as usize + mx as usize;
-    data.get(idx).copied().unwrap_or(mask.default_color)
+    data.sample(idx).unwrap_or(mask.default_color)
 }

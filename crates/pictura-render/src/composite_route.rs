@@ -113,9 +113,9 @@ pub(crate) mod tests {
             "no-op"
         } else if smart_filters_apply_legacy(layer) {
             "smart-filtered"
-        } else if layer.smart_object.is_some() && crate::channel(layer, 0).is_none() {
+        } else if layer.smart_object.is_some() && crate::channel_plane(layer, 0).is_none() {
             "smart-source"
-        } else if layer.type_tool.is_some() && crate::channel(layer, 0).is_none() {
+        } else if layer.type_tool.is_some() && crate::channel_plane(layer, 0).is_none() {
             "type-source"
         } else {
             "pixels"

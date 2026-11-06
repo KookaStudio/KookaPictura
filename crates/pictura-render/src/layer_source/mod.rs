@@ -404,8 +404,9 @@ fn with_merged_alpha(comp: &PixelBuffer, channels: &[pictura_core::Channel]) -> 
     };
     let colors = comp.channels as usize;
     let mut out = PixelBuffer::new(comp.width, comp.height, comp.channels + 1);
-    out.data[..colors * plane].copy_from_slice(&comp.data[..colors * plane]);
-    out.data[colors * plane..].copy_from_slice(&alpha.data[..plane]);
+    let (colour, rest) = out.data.as_mut_slice().split_at_mut(colors * plane);
+    comp.data.read_into(0, colour);
+    alpha.data.read_into(0, rest);
     out
 }
 

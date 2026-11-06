@@ -287,7 +287,7 @@ fn plain_mask_at(plane: &Plane<u8>, rect: PsdRect, default_color: u8, d: u8, x: 
             default_color
         } else {
             let idx = my as usize * mw as usize + mx as usize;
-            plane.get(idx).copied().unwrap_or(default_color)
+            plane.sample(idx).unwrap_or(default_color)
         }
     };
     density(m, d)
@@ -426,7 +426,7 @@ impl Feathered {
     }
 }
 
-fn feather_raster(mask: &LayerMask, data: &[u8], radius: f64, clip: PsdRect) -> Feathered {
+fn feather_raster(mask: &LayerMask, data: &Plane<u8>, radius: f64, clip: PsdRect) -> Feathered {
     let r = mask.rect;
     let rect = [r.left, r.top, r.right, r.bottom].map(i64::from);
     let pad = i64::from(reach(radius));
@@ -439,9 +439,12 @@ fn feather_raster(mask: &LayerMask, data: &[u8], radius: f64, clip: PsdRect) -> 
     let y0 = i64::from(bounds[1]).max(rect[1]);
     let y1 = i64::from(bounds[3]).min(rect[3]);
     if x1 > x0 {
+        let sx = (x0 - rect[0]) as usize;
         for y in y0..y1 {
-            let src = (y - rect[1]) as usize * mw + (x0 - rect[0]) as usize;
-            let Some(src) = data.get(src..src + (x1 - x0) as usize) else {
+            let Some(src) = data
+                .row((y - rect[1]) as usize, mw)
+                .and_then(|row| row.get(sx..sx + (x1 - x0) as usize))
+            else {
                 break;
             };
             let at = (y - i64::from(plane.top)) as usize * plane.width

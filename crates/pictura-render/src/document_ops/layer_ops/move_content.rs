@@ -62,22 +62,26 @@ fn lifted_copy(source: &Layer, coverage: &[u8], doc_w: u32, doc_h: u32) -> Optio
     let mut planes = vec![vec![0u8; w * h]; colour.len()];
     let mut alpha = vec![0u8; w * h];
     for y in 0..h {
+        let dy = rect.top as usize + y;
+        let sy = dy - src.top as usize;
+        let alpha_row = src_alpha.map(|c| layer_row(c, sy, src_w));
+        let colour_rows: Vec<&[u8]> = colour.iter().map(|c| layer_row(c, sy, src_w)).collect();
         for x in 0..w {
-            let (dx, dy) = (rect.left as usize + x, rect.top as usize + y);
+            let dx = rect.left as usize + x;
             let covered = coverage[dy * doc_w as usize + dx];
             if covered == 0 {
                 continue;
             }
-            let si = (dy - src.top as usize) * src_w + (dx - src.left as usize);
-            let a = src_alpha.map_or(255, |c| c.data[si]);
+            let sx = dx - src.left as usize;
+            let a = alpha_row.map_or(255, |row| row[sx]);
             let out = ((a as u32 * covered as u32 + 127) / 255) as u8;
             if out == 0 {
                 continue;
             }
             let di = y * w + x;
             alpha[di] = out;
-            for (plane, channel) in planes.iter_mut().zip(&colour) {
-                plane[di] = channel.data[si];
+            for (plane, row) in planes.iter_mut().zip(&colour_rows) {
+                plane[di] = row[sx];
             }
         }
     }
@@ -164,6 +168,11 @@ pub fn merge_lifted(doc: &mut Document, lifted_path: &str) -> bool {
     true
 }
 
+/// Row `y` of a channel `w` samples wide, read in place.
+fn layer_row(channel: &Channel, y: usize, w: usize) -> &[u8] {
+    channel.data.row(y, w).expect("a layer row")
+}
+
 /// `top`'s raster channels over `base`'s, in place, by straight-alpha "over".
 fn composite_over(base: &mut Layer, top: &Layer) {
     let has_alpha = base.channels.iter().any(|c| c.id == -1);
@@ -176,37 +185,51 @@ fn composite_over(base: &mut Layer, top: &Layer) {
     };
     let (base_w, top_w) = (rect.width() as usize, top_rect.width() as usize);
     let top_alpha = top.channels.iter().find(|c| c.id == -1);
+    let span = area.width() as usize;
+    let (tx0, bx0) = (
+        (area.left - top_rect.left) as usize,
+        (area.left - rect.left) as usize,
+    );
+    // Per column of the row: the top alpha, and the "over" rest and result
+    // alpha, computed from the base alpha before any channel is written.
+    let mut over = vec![(0u32, 0u32, 0u32); span];
     for y in area.top..area.bottom {
-        for x in area.left..area.right {
-            let ti = (y - top_rect.top) as usize * top_w + (x - top_rect.left) as usize;
-            let fa = top_alpha.map_or(255, |c| c.data[ti]) as u32;
-            if fa == 0 {
-                continue;
-            }
-            let bi = (y - rect.top) as usize * base_w + (x - rect.left) as usize;
-            let ba = base
-                .channels
-                .iter()
-                .find(|c| c.id == -1)
-                .map_or(255, |c| c.data[bi]) as u32;
+        let (ty, by) = ((y - top_rect.top) as usize, (y - rect.top) as usize);
+        let top_alpha_row = top_alpha.map(|c| layer_row(c, ty, top_w));
+        let base_alpha_row = base
+            .channels
+            .iter()
+            .find(|c| c.id == -1)
+            .map(|c| layer_row(c, by, base_w));
+        for (i, slot) in over.iter_mut().enumerate() {
+            let fa = top_alpha_row.map_or(255, |row| row[tx0 + i]) as u32;
+            let ba = base_alpha_row.map_or(255, |row| row[bx0 + i]) as u32;
             // Straight-alpha over, in 0..=255 fixed point.
             let rest = ba * (255 - fa) / 255;
-            let out_a = fa + rest;
-            for channel in base.channels.iter_mut() {
-                if channel.id == -1 {
-                    channel.data[bi] = out_a as u8;
+            *slot = (fa, rest, fa + rest);
+        }
+        for channel in base.channels.iter_mut() {
+            let top_row = if channel.id == -1 {
+                None
+            } else {
+                match top.channels.iter().find(|c| c.id == channel.id) {
+                    Some(c) => Some(layer_row(c, ty, top_w)),
+                    None => continue,
+                }
+            };
+            let row = channel.data.row_mut(by, base_w).expect("a base row");
+            for (i, &(fa, rest, out_a)) in over.iter().enumerate() {
+                if fa == 0 {
                     continue;
                 }
-                let Some(fc) = top
-                    .channels
-                    .iter()
-                    .find(|c| c.id == channel.id)
-                    .map(|c| c.data[ti] as u32)
-                else {
-                    continue;
-                };
-                let bc = channel.data[bi] as u32;
-                channel.data[bi] = ((fc * fa + bc * rest + out_a / 2) / out_a) as u8;
+                let bx = bx0 + i;
+                match top_row {
+                    None => row[bx] = out_a as u8,
+                    Some(top_row) => {
+                        let (fc, bc) = (top_row[tx0 + i] as u32, row[bx] as u32);
+                        row[bx] = ((fc * fa + bc * rest + out_a / 2) / out_a) as u8;
+                    }
+                }
             }
         }
     }
@@ -228,7 +251,7 @@ fn grow_to(layer: &mut Layer, rect: PsdRect) {
         let mut data = vec![0u8; w * rect.height() as usize];
         for y in 0..old.height() as usize {
             let at = (y0 + y) * w + x0;
-            data[at..at + old_w].copy_from_slice(&channel.data[y * old_w..(y + 1) * old_w]);
+            data[at..at + old_w].copy_from_slice(layer_row(channel, y, old_w));
         }
         channel.data = data.into();
     }
@@ -331,8 +354,8 @@ fn trim_layer(layer: &mut pictura_core::Layer, bounds: PsdRect) {
     for channel in &mut layer.channels {
         let mut data = Vec::with_capacity(w * new.height() as usize);
         for y in new.top..new.bottom {
-            let row = (y - old.top) as usize * old_w + x0;
-            data.extend_from_slice(&channel.data[row..row + w]);
+            let row = layer_row(channel, (y - old.top) as usize, old_w);
+            data.extend_from_slice(&row[x0..x0 + w]);
         }
         channel.data = data.into();
     }
