@@ -17,6 +17,17 @@ use std::time::Instant;
 #[cfg(test)]
 std::thread_local! {
     pub(super) static REFRESH_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    pub(super) static LAST_BACKEND: std::cell::Cell<Option<pictura_render::Backend>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(super) fn last_backend() -> Option<pictura_render::Backend> {
+    LAST_BACKEND.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(super) fn reset_last_backend() {
+    LAST_BACKEND.with(|slot| slot.set(None));
 }
 
 #[cfg(test)]
@@ -962,6 +973,10 @@ impl super::PictureViewRust {
         };
         #[cfg(test)]
         note_refresh();
+        #[cfg(test)]
+        if let Some(frame) = refreshed.first() {
+            LAST_BACKEND.with(|slot| slot.set(Some(frame.backend)));
+        }
         paint_timing::record("recomposite_full_composite", t.elapsed());
         for frame in refreshed {
             if let Some(doc) = self.session.doc.as_mut() {

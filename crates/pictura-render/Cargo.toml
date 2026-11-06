@@ -8,6 +8,10 @@ rust-version.workspace = true
 [lib]
 doctest = false
 
+[[bin]]
+name = "cold_compare"
+path = "src/bin/cold_compare.rs"
+
 [features]
 # Test-only: let the GPU probe accept a software (CPU-type) device so the GPU
 # parity tests run on lavapipe (Linux) or WARP (Windows) in CI. Never enable it

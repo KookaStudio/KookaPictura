@@ -29,6 +29,7 @@
 
 mod blend;
 mod canvas_damage;
+pub mod cold_profile;
 pub use canvas_damage::CanvasDamage;
 mod composite;
 mod composite_blend;
