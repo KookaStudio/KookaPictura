@@ -143,7 +143,26 @@ Snapshot for resuming after a context break. Update after each milestone.
   526 ms to 0.4 ms and a document channel undo from 460 ms to 0.1 ms. Undoing a
   resize keeps 104 ms on the GUI thread, down from 315 ms; level 0's copy is
   most of that. An identical reorder still byte-compares the composite, at 42 ms.
-  The soloed mask rebuild stays synchronous. All three are tracked in #1152.
+  The soloed mask rebuild stays synchronous. All three are tracked in #1152 and
+  fixed by the change below.
+
+- **Geometry undo shares level 0** (#1152, OpenSpec change
+  `geometry-undo-level0-share`). `ViewPyramid` reads a level-0 source a row at a
+  time (`Planes` over a planar `Plane`), so a banded or diverged plane is never
+  materialized. A whole-document restore installs level 0 by sharing the
+  restored composite's copy-on-write plane, and both planes are fractured, so
+  the first write forks only the bands it touches; a converted document still
+  owns its frame. A capture that starts a new geometry segment compares the
+  composite once (`composite_unchanged`, one band per core, early exit) and, when
+  the picture did not change, keeps the previous state's plane, so the undo
+  across that boundary reports an empty rectangle without reading a composite
+  pixel. A soloed mask's display plane fills one plane per core. In the same
+  test build at 16507×16196: level-0 install 217 ms to 0 ms, the resize undo's
+  deferred display 5.7 ms, and an identical reorder's undo 50.6 ms to 0.2 ms,
+  with its composite scan moving to the edit's capture (80 ms to 135 ms). At
+  8000² (`solo_mask_profile`) the solo mask plane drops from 694 ms on one core
+  to 151 ms on all cores; the full-size mask restore still builds its exact
+  pyramid synchronously, about a second at 16507².
 
 - **Command refresh on large documents** (#1145, OpenSpec change
   `command-refresh-responsiveness`). Menu enabled checks no longer measure
