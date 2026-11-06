@@ -620,9 +620,23 @@ pub(crate) fn detached_copy(doc: &Document) -> Document {
     copy
 }
 
-/// A uniquely held copy of `plane`, copied on every core.
+/// A uniquely held copy of `plane`, copied on every core band by band, so a
+/// diverged banded plane is never materialized first.
 pub(crate) fn copy_plane(plane: &Plane<u8>) -> Plane<u8> {
-    Plane::build(plane.len(), |dst| copy_par(dst, plane.as_slice()))
+    Plane::build(plane.len(), |dst| {
+        let bands: Vec<&[u8]> = plane.bands().collect();
+        let mut targets = Vec::with_capacity(bands.len());
+        let mut rest = dst;
+        for band in &bands {
+            let (head, tail) = rest.split_at_mut(band.len());
+            targets.push(head);
+            rest = tail;
+        }
+        targets
+            .into_par_iter()
+            .zip(bands)
+            .for_each(|(d, s)| copy_par(d, s));
+    })
 }
 
 fn copy_par(dst: &mut [u8], src: &[u8]) {
