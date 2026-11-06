@@ -1037,11 +1037,16 @@ void PicturaMainWindow::closeEvent(QCloseEvent* event)
 }
 void PicturaMainWindow::updateStatus()
 {
-    // One owner for footer visibility: an empty workspace shows none of it.
+    // One owner for footer visibility: an empty workspace shows none of it, and
+    // a temporary message takes the readouts' row so the banner never overprints
+    // them. Qt hides the normal widgets itself, but a later refresh re-shows
+    // them, so the gate has to live here.
     const bool hasDoc = !docs_.isEmpty();
+    const bool messageShown = statusBar() && !statusBar()->currentMessage().isEmpty();
+    const bool showReadouts = hasDoc && !messageShown;
     ImageView* canvas = imageView();
     if (zoomField_) {
-        zoomField_->setVisible(hasDoc);
+        zoomField_->setVisible(showReadouts);
         if (canvas) {
             // Integer percent like the tab title: the readouts agree and the
             // value always fits the width the box reserves for its range.
@@ -1049,7 +1054,7 @@ void PicturaMainWindow::updateStatus()
         }
     }
     if (sizeLabel_) {
-        sizeLabel_->setVisible(hasDoc);
+        sizeLabel_->setVisible(showReadouts);
         QString text = QStringLiteral("—");
         PictureView* view = activeView();
         if (view && view->has_document()) {
@@ -1066,7 +1071,7 @@ void PicturaMainWindow::updateStatus()
         sizeLabel_->setText(text);
     }
     if (backendLabel_) {
-        backendLabel_->setVisible(hasDoc);
+        backendLabel_->setVisible(showReadouts);
         PictureView* view = activeView();
         backendLabel_->setText(view ? activeBackendLabel(view->gpu_compute())
                                      : QStringLiteral("—"));
@@ -1091,20 +1096,29 @@ void PicturaMainWindow::updateStatus()
             }
         }
         actionLabel_->setText(action);
-        actionLabel_->setVisible(!action.isEmpty());
+        actionLabel_->setVisible(showReadouts && !action.isEmpty());
         if (actionSeparator_) {
-            actionSeparator_->setVisible(!action.isEmpty());
+            actionSeparator_->setVisible(showReadouts && !action.isEmpty());
         }
     }
-    const bool showHints = hasDoc && hintsVisible_;
+    const bool showHints = showReadouts && hintsVisible_;
     if (hintBar_) {
         hintBar_->setVisible(showHints);
     }
     if (hintSeparator_) {
         hintSeparator_->setVisible(showHints);
     }
+    // The two static rules are normal widgets like the readouts, so a message
+    // hides them too; the action and hint rules follow their own owners.
+    if (QStatusBar* bar = statusBar()) {
+        for (QFrame* separator : bar->findChildren<QFrame*>(QStringLiteral("statusSeparator"))) {
+            if (separator != actionSeparator_ && separator != hintSeparator_) {
+                separator->setVisible(showReadouts);
+            }
+        }
+    }
     if (statusOptionsButton_) {
-        statusOptionsButton_->setVisible(hasDoc);
+        statusOptionsButton_->setVisible(showReadouts);
     }
 }
 QStringList PicturaMainWindow::selectedLayerPaths() const

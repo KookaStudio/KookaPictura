@@ -2,6 +2,8 @@
 
 #include <QtGui/QPainter>
 #include <QtGui/QPaintEvent>
+#include <QtWidgets/QStyle>
+#include <QtWidgets/QStyleOption>
 
 namespace pictura {
 
@@ -12,7 +14,15 @@ NotificationStatusBar::NotificationStatusBar(QWidget* parent)
 
 void NotificationStatusBar::paintEvent(QPaintEvent* event)
 {
-    QStatusBar::paintEvent(event);
+    Q_UNUSED(event);
+
+    // The banner owns the message: draw the themed panel, then the pill and its
+    // text once. The base paintEvent would draw the message text a second time
+    // across the whole bar, including the readouts the message is replacing.
+    QPainter painter(this);
+    QStyleOption option;
+    option.initFrom(this);
+    style()->drawPrimitive(QStyle::PE_PanelStatusBar, &option, &painter, this);
 
     const QString message = currentMessage();
     if (message.isEmpty()) {
@@ -20,7 +30,6 @@ void NotificationStatusBar::paintEvent(QPaintEvent* event)
     }
 
     const QRect rect = messageRect();
-    QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(QPen(QColor(0xd4, 0xb1, 0x06), 1));
     painter.setBrush(QColor(0xff, 0xf3, 0xb0));
@@ -34,7 +43,9 @@ QRect NotificationStatusBar::messageRect() const
 {
     int left = 6;
     int right = width() - 12;
-    for (QWidget* child : findChildren<QWidget*>()) {
+    // Direct children only: a readout's internal widget has its own coordinate
+    // space and would collapse the banner.
+    for (QWidget* child : findChildren<QWidget*>(Qt::FindDirectChildrenOnly)) {
         if (!child->isVisible()) {
             continue;
         }
