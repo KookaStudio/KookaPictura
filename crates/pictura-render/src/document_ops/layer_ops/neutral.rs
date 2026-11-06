@@ -126,7 +126,7 @@ pub(crate) fn layer_is_inert(node: &Layer) -> bool {
     node.channels
         .iter()
         .find(|c| c.id == -1)
-        .is_some_and(|alpha| alpha.data.iter().all(|&a| a == 0))
+        .is_some_and(|alpha| alpha.data.bands().flatten().all(|&a| a == 0))
 }
 
 /// Whether moving the node at `path_before` to `path_after` leaves the document

@@ -50,10 +50,25 @@ const BASELINE: &[(&str, usize)] = &[
     ("open_psd", 521_690_071),
 ];
 
-/// The peak heap `run` adds over what `setup` left, with both in one pool of
-/// [`THREADS`] threads. The pool exists before the reset, so its own
-/// bookkeeping is not counted.
-fn measure<T>(setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut T) + Send) -> usize {
+/// The scenarios whose measured step must not materialize a banded plane into
+/// one contiguous copy (#1212). The list grows as each crate's hot paths move
+/// to streaming plane access, until it holds M2–M10.
+const STREAMED: &[&str] = &[
+    "add_layer",
+    "edit_fill",
+    "bucket_in_selection",
+    "bucket_whole_layer",
+    "brush_stroke",
+    "undo_redo",
+    "snapshot_restore",
+    "move_layer",
+    "free_transform",
+];
+
+/// The peak heap `run` adds over what `setup` left, and how many banded planes
+/// it materialized, with both steps in one pool of [`THREADS`] threads. The
+/// pool exists before the reset, so its own bookkeeping is not counted.
+fn measure<T>(setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut T) + Send) -> (usize, u64) {
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(THREADS)
         .build()
@@ -61,11 +76,13 @@ fn measure<T>(setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut T) + Send)
     pool.install(|| {
         let mut state = setup();
         let base = crate::HEAP.current();
+        let materialized = pictura_core::materializations();
         crate::HEAP.reset();
         run(&mut state);
         let peak = crate::HEAP.peak().saturating_sub(base);
+        let materialized = pictura_core::materializations() - materialized;
         drop(state);
-        peak
+        (peak, materialized)
     })
 }
 
@@ -92,10 +109,11 @@ fn guard<T>(name: &str, setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut 
         .find(|(key, _)| *key == name)
         .map(|(_, bytes)| *bytes)
         .expect("a recorded baseline");
-    let peak = measure(setup, run);
+    let (peak, materialized) = measure(setup, run);
     let limit = baseline + baseline / 10;
     println!(
-        "{name} at {GUARD_SIDE}²: heap peak {:.1} MiB ({peak} B), baseline {:.1} MiB",
+        "{name} at {GUARD_SIDE}²: heap peak {:.1} MiB ({peak} B), baseline {:.1} MiB, \
+         {materialized} materialization(s)",
         mib(peak),
         mib(baseline)
     );
@@ -104,15 +122,21 @@ fn guard<T>(name: &str, setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut 
         "{name}: heap peak {peak} B is above the baseline {baseline} B x 1.10 ({limit} B); \
          a setup that retains less raises this delta, so check the scenario's absolute peak too"
     );
+    if STREAMED.contains(&name) {
+        assert_eq!(
+            materialized, 0,
+            "{name}: materialized a banded plane into a contiguous copy"
+        );
+    }
 }
 
 fn report<T>(name: &str, setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut T) + Send) {
     if !alone_in_process(name) {
         return;
     }
-    let peak = measure(setup, run);
+    let (peak, materialized) = measure(setup, run);
     println!(
-        "{name} at {FULL_SIDE}²: heap peak {:.1} MiB ({peak} B)",
+        "{name} at {FULL_SIDE}²: heap peak {:.1} MiB ({peak} B), {materialized} materialization(s)",
         mib(peak)
     );
 }
@@ -391,7 +415,7 @@ fn estimates_cover_the_measured_peaks() {
     };
     let file = sc::TempFile::new("estimate");
 
-    let peak = measure(|| (), |_| drop(view(side)));
+    let peak = measure(|| (), |_| drop(view(side))).0;
     check(
         "new_document",
         peak,
@@ -399,26 +423,30 @@ fn estimates_cover_the_measured_peaks() {
     );
 
     let estimate = gate::add_layer_bytes(&doc(&view(side)));
-    check("add_layer", measure(|| view(side), sc::add_layer), estimate);
+    check(
+        "add_layer",
+        measure(|| view(side), sc::add_layer).0,
+        estimate,
+    );
 
     let estimate = gate::brush_bytes(&doc(&with_layer(side)), "1");
-    let peak = measure(|| with_layer(side), |v| sc::brush_stroke(v, side));
+    let peak = measure(|| with_layer(side), |v| sc::brush_stroke(v, side)).0;
     check("brush_stroke", peak, estimate);
 
     let estimate = gate::restore_bytes(&doc(&with_history(side)));
     check(
         "undo_redo",
-        measure(|| with_history(side), sc::undo_redo),
+        measure(|| with_history(side), sc::undo_redo).0,
         estimate,
     );
 
     let start = doc(&with_stroke(side));
     let estimate = gate::snapshot_bytes(&start) + gate::snapshot_restore_bytes(&start);
     drop(start);
-    let peak = measure(|| with_stroke(side), sc::snapshot_restore);
+    let peak = measure(|| with_stroke(side), sc::snapshot_restore).0;
     check("snapshot_restore", peak, estimate);
 
     let estimate = gate::save_bytes(&doc(&with_square(side)));
-    let peak = measure(|| with_square(side), |v| sc::save_psd(v, &file));
+    let peak = measure(|| with_square(side), |v| sc::save_psd(v, &file)).0;
     check("save_psd", peak, estimate);
 }

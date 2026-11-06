@@ -10,7 +10,7 @@ use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 
 #[cfg(test)]
 use crate::composite::blend_parts;
-use crate::composite::{channel, Canvas};
+use crate::composite::{channel_plane, Canvas};
 
 pub(crate) enum EffectColor {
     Constant([f32; 3]),
@@ -222,18 +222,19 @@ pub(crate) fn content_matte(
         return matte;
     }
     let at = |x: i32, y: i32| (y - y0) as usize * rw + (x - x0) as usize;
-    match channel(layer, -1) {
+    match channel_plane(layer, -1) {
         Some(alpha) => {
             let lw = layer.rect.width();
             if lw <= 0 {
                 return matte;
             }
             for y in iy0..iy1 {
+                let row = alpha.row((y - layer.rect.top) as usize, lw as usize);
                 for x in ix0..ix1 {
-                    let li = (y - layer.rect.top) as usize * lw as usize
-                        + (x - layer.rect.left) as usize;
+                    let lx = (x - layer.rect.left) as usize;
                     // A missing alpha sample is opaque, matching the content path.
-                    matte[at(x, y)] = alpha.get(li).copied().unwrap_or(255) as f32 / 255.0;
+                    let a = row.and_then(|r| r.get(lx)).copied().unwrap_or(255);
+                    matte[at(x, y)] = a as f32 / 255.0;
                 }
             }
         }

@@ -81,17 +81,7 @@ pub fn grow_layer_to(
         if channel.data.len() != old_n {
             continue;
         }
-        channel.data = pad_u8(
-            channel.data.as_slice(),
-            old_w,
-            old_h,
-            new_w,
-            new_h,
-            x0,
-            y0,
-            purpose,
-        )?
-        .into();
+        channel.data = pad_u8(&channel.data, old_w, old_h, new_w, new_h, x0, y0, purpose)?.into();
     }
     if let Some(store) = layer.source_channels.as_mut() {
         if store.rect == old {
@@ -146,15 +136,10 @@ pub fn shrink_layer_to(layer: &mut Layer, rect: PsdRect) {
         if channel.data.len() != old_w * old_h {
             continue;
         }
-        let src = channel.data.as_slice();
         let mut out = vec![0u8; new_w * new_h];
-        for y in 0..new_h {
-            let from = (y0 + y) * old_w + x0;
-            let to = y * new_w;
-            if from + new_w <= src.len() {
-                out[to..to + new_w].copy_from_slice(&src[from..from + new_w]);
-            }
-        }
+        channel
+            .data
+            .read_rect_into(x0..x0 + new_w, y0..y0 + new_h, old_w, &mut out);
         channel.data = out.into();
     }
     if let Some(store) = layer.source_channels.as_mut() {
@@ -212,7 +197,7 @@ fn crop_samples(
 
 #[allow(clippy::too_many_arguments)]
 fn pad_u8(
-    data: &[u8],
+    data: &crate::Plane<u8>,
     old_w: usize,
     old_h: usize,
     new_w: usize,
@@ -242,19 +227,19 @@ fn pad_samples(
         Samples::U8(plane) => {
             let mut out = allocate(new_w * new_h, purpose)?;
             out.resize(new_w * new_h, 0u8);
-            copy_rows(&mut out, plane.as_slice(), old_w, old_h, new_w, x0, y0);
+            copy_rows(&mut out, plane, old_w, old_h, new_w, x0, y0);
             Samples::U8(out.into())
         }
         Samples::U16(plane) => {
             let mut out = allocate(new_w * new_h, purpose)?;
             out.resize(new_w * new_h, 0u16);
-            copy_rows(&mut out, plane.as_slice(), old_w, old_h, new_w, x0, y0);
+            copy_rows(&mut out, plane, old_w, old_h, new_w, x0, y0);
             Samples::U16(out.into())
         }
         Samples::F32(plane) => {
             let mut out = allocate(new_w * new_h, purpose)?;
             out.resize(new_w * new_h, 0f32);
-            copy_rows(&mut out, plane.as_slice(), old_w, old_h, new_w, x0, y0);
+            copy_rows(&mut out, plane, old_w, old_h, new_w, x0, y0);
             Samples::F32(out.into())
         }
     })
@@ -272,18 +257,17 @@ fn allocate<T>(len: usize, purpose: &'static str) -> Result<Vec<T>, MemoryError>
 
 fn copy_rows<T: Copy>(
     out: &mut [T],
-    old: &[T],
+    old: &crate::Plane<T>,
     old_w: usize,
     old_h: usize,
     new_w: usize,
     x0: usize,
     y0: usize,
 ) {
-    for y in 0..old_h {
-        let src = y * old_w;
+    for (y, row) in old.rows(0..old_h, old_w).enumerate() {
         let dst = (y0 + y) * new_w + x0;
-        if src + old_w <= old.len() && dst + old_w <= out.len() {
-            out[dst..dst + old_w].copy_from_slice(&old[src..src + old_w]);
+        if row.len() == old_w && dst + old_w <= out.len() {
+            out[dst..dst + old_w].copy_from_slice(row);
         }
     }
 }

@@ -8,7 +8,9 @@
 //! composite refresh.
 
 use pictura_core::homography::HOMOGRAPHY_EPSILON;
-use pictura_core::{Channel, Document, Homography, LayerMask, LockFlags, PsdRect, SourceChannels};
+use pictura_core::{
+    Channel, Document, Homography, LayerMask, LockFlags, Plane, PsdRect, SourceChannels,
+};
 use rayon::prelude::*;
 
 use super::crossed_quad;
@@ -262,7 +264,7 @@ fn bounding_box<M: PlaneMap>(map: &M, rect: PsdRect) -> Option<(i32, i32, i32, i
 
 /// Resample one `w×h` plane into the destination rect; out-of-source → 0.
 pub(super) fn resample_plane<M: PlaneMap + Sync>(
-    src: &[u8],
+    src: &Plane<u8>,
     w: usize,
     h: usize,
     map: &M,
@@ -278,7 +280,7 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
     let (pw, ph) = (w + PAD * 2, h + PAD * 2);
     let mut padded = vec![0u8; pw * ph];
     for y in 0..h {
-        let src_row = &src[y * w..(y + 1) * w];
+        let src_row = src.row(y, w).expect("a source row");
         let dst = (y + PAD) * pw + PAD;
         padded[dst..dst + w].copy_from_slice(src_row);
     }

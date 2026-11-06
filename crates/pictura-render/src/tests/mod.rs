@@ -17,6 +17,7 @@ mod gradient_fill;
 pub(crate) mod layer_effects;
 mod native_depth;
 mod pattern_fill;
+mod plane_streaming;
 mod raster_import;
 mod rasterize;
 mod region;

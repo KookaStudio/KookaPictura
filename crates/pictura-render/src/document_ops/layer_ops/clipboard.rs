@@ -92,13 +92,7 @@ pub fn copy_layer(doc: &Document, path: &str, selection: Option<&[u8]>) -> Optio
         None => region,
     };
     let src_w = layer.rect.width() as usize;
-    let plane = |id: i16| {
-        layer
-            .channels
-            .iter()
-            .find(|c| c.id == id)
-            .map(|c| c.data.as_slice())
-    };
+    let plane = |id: i16| layer.channels.iter().find(|c| c.id == id).map(|c| &c.data);
     let red = plane(0)?;
     // A grayscale layer has only channel 0; replicate it into G and B.
     let green = plane(1).unwrap_or(red);
@@ -106,13 +100,8 @@ pub fn copy_layer(doc: &Document, path: &str, selection: Option<&[u8]>) -> Optio
     let alpha = plane(-1);
     build(region, doc.width, selection, |x, y| {
         let i = (y - layer.rect.top) as usize * src_w + (x - layer.rect.left) as usize;
-        let at = |data: &[u8]| data.get(i).copied().unwrap_or(0);
-        [
-            at(red),
-            at(green),
-            at(blue),
-            alpha.map_or(255, |a| a.get(i).copied().unwrap_or(0)),
-        ]
+        let at = |data: &Plane<u8>| data.sample(i).unwrap_or(0);
+        [at(red), at(green), at(blue), alpha.map_or(255, at)]
     })
 }
 
@@ -136,7 +125,7 @@ pub fn copy_merged(
     let plane = doc.width as usize * doc.height as usize;
     build(region, doc.width, selection, |x, y| {
         let i = y as usize * doc.width as usize + x as usize;
-        let at = |c: usize| composite.data.get(c * plane + i).copied().unwrap_or(0);
+        let at = |c: usize| composite.data.sample(c * plane + i).unwrap_or(0);
         [at(0), at(1), at(2), at(3)]
     })
 }
@@ -197,8 +186,7 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
             if selection.is_some() && (y < 0 || y >= doc_h as i32) {
                 continue;
             }
-            let start = row * src_w + col0;
-            let pixels = &mut channel.data[start..start + (col1 - col0)];
+            let pixels = &mut channel.data.row_mut(row, src_w).expect("a layer row")[col0..col1];
             let coverage = selection.map(|coverage| {
                 let base = y as usize * doc_w as usize + (rect.left + col0 as i32) as usize;
                 &coverage[base..base + (col1 - col0)]

@@ -89,8 +89,7 @@ fn copy_source(
             }
             let si = sy as usize * src_w as usize + sx as usize;
             let src_a = src_alpha
-                .and_then(|channel| channel.data.get(si))
-                .copied()
+                .and_then(|channel| channel.data.sample(si))
                 .unwrap_or(255);
             let out_a = scale(src_a, coverage);
             let di = y as usize * w + x as usize;
@@ -103,8 +102,7 @@ fn copy_source(
                     .channels
                     .iter()
                     .find(|channel| channel.id == id)
-                    .and_then(|channel| channel.data.get(si))
-                    .copied()
+                    .and_then(|channel| channel.data.sample(si))
                 {
                     set_channel(&mut layer, id, di, value);
                 }
@@ -131,18 +129,19 @@ fn clear_source(doc: &mut Document, segments: &[usize], mask: &LayerMask, mask_d
         return;
     };
     for sy in 0..src_h {
-        for sx in 0..src_w {
-            let x = rect.left + sx;
-            let y = rect.top + sy;
+        let y = rect.top + sy;
+        let covered = (0..src_w).any(|sx| coverage_at(mask, mask_data, rect.left + sx, y) != 0);
+        if !covered {
+            continue;
+        }
+        let Some(row) = alpha.data.row_mut(sy as usize, src_w as usize) else {
+            continue;
+        };
+        for (x, current) in (rect.left..).zip(row.iter_mut()) {
             let coverage = coverage_at(mask, mask_data, x, y);
-            if coverage == 0 {
-                continue;
+            if coverage != 0 {
+                *current = ((*current as u32 * (255 - coverage as u32) + 127) / 255) as u8;
             }
-            let index = sy as usize * src_w as usize + sx as usize;
-            let Some(current) = alpha.data.get(index).copied() else {
-                continue;
-            };
-            alpha.data[index] = ((current as u32 * (255 - coverage as u32) + 127) / 255) as u8;
         }
     }
 }
