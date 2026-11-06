@@ -7,6 +7,8 @@
 #include <QtCore/QJsonValue>
 #include <QtCore/QString>
 
+#include <cmath>
+
 #include "api/selection_api.h"
 #include "frame.h"
 #include "gpu_probe.h"
@@ -14,6 +16,7 @@
 #include "tools.h"
 
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/selection_bridge.h"
 
 namespace pictura {
@@ -346,6 +349,37 @@ QJsonObject ControlServer::methodLayerOp(const QJsonObject& params)
         }
         if (view->add_layer(index) < 0) {
             return error(QStringLiteral("internal"), QStringLiteral("add_layer failed"));
+        }
+    } else if (op == QStringLiteral("free_transform")) {
+        // Free Transform through the tool's own session, set the way the
+        // options bar sets it, then committed (#1210). A session someone else
+        // opened is theirs, so it is refused rather than taken over.
+        if (!indexValid) {
+            return invalid(QStringLiteral("index out of range"));
+        }
+        auto* tools = frame_->findChild<ToolController*>();
+        if (!tools) {
+            return error(QStringLiteral("internal"), QStringLiteral("no tool controller"));
+        }
+        if (tools->transformSessionActive()) {
+            return refused(QStringLiteral("a transform session is open"));
+        }
+        const double scale = params.value(QStringLiteral("scale")).toDouble(100.0);
+        const double angle = params.value(QStringLiteral("angle")).toDouble(0.0);
+        if (!(scale > 0.0 && scale <= 10000.0) || !std::isfinite(angle)) {
+            return invalid(QStringLiteral("scale must be in (0, 10000] and angle finite"));
+        }
+        if (!tools->beginFreeTransform(QString::number(index))) {
+            return refused(QStringLiteral("the layer cannot be transformed"));
+        }
+        if (!tools->setTransformWidth(scale, false) || !tools->setTransformHeight(scale, false)
+            || !tools->setTransformAngle(angle)) {
+            tools->cancelFreeTransform();
+            return refused(QStringLiteral("free_transform values refused"));
+        }
+        tools->commitFreeTransform();
+        if (tools->transformSessionActive() || edit_refused_for_memory()) {
+            return refused(QStringLiteral("free_transform did not commit"));
         }
     } else if (op == QStringLiteral("add_group")) {
         if (index < -1 || index >= layerCount) {

@@ -12,6 +12,7 @@
 #include "control_server.h"
 #include "control_test_client.h"
 #include "frame.h"
+#include "tools.h"
 #include "api/view_bridge.h"
 
 #include "qt_test_support.h"
@@ -47,8 +48,12 @@ private slots:
     void eachMutatorAddsOneState_data();
     void eachMutatorAddsOneState();
     void lassoIsOneCall();
+    void freeTransformScalesAndRotates();
+    void freeTransformIsRefusedDuringASession();
+    void newDocumentCanHaveABackgroundLayer();
 
 private:
+    void paintCentreSquare();
     QJsonObject call(const QString& method, const QJsonObject& params = {});
     pictura::PictureView& view() { return *window_->activeView(); }
 
@@ -353,6 +358,87 @@ void ControlEditingTest::lassoIsOneCall()
     }
     QCOMPARE(errorCode(call(QStringLiteral("selection"), {{QStringLiteral("op"), QStringLiteral("lasso")},
                                                           {QStringLiteral("points"), tooMany}})),
+             QStringLiteral("invalid_param"));
+}
+
+// An opaque black 8x8 square in the middle of the active (otherwise empty) layer.
+void ControlEditingTest::paintCentreSquare()
+{
+    QVERIFY(succeeded(call(QStringLiteral("selection"),
+                           {{QStringLiteral("op"), QStringLiteral("rect")},
+                            {QStringLiteral("x"), 12}, {QStringLiteral("y"), 12},
+                            {QStringLiteral("w"), 8}, {QStringLiteral("h"), 8}})));
+    QVERIFY(succeeded(call(QStringLiteral("run_command"),
+                           {{QStringLiteral("id"), QStringLiteral("edit.fill")},
+                            {QStringLiteral("params"),
+                             QJsonObject{{QStringLiteral("color"), double(0xFF000000u)}}}})));
+    QVERIFY(succeeded(call(QStringLiteral("selection"),
+                           {{QStringLiteral("op"), QStringLiteral("deselect")}})));
+}
+
+void ControlEditingTest::freeTransformScalesAndRotates()
+{
+    paintCentreSquare();
+    // Just outside the square, inside it once scaled 150 % and turned 15°.
+    QCOMPARE(view().sample_argb(11, 16), qRgba(255, 255, 255, 255));
+    const int before = history_api::count(view());
+    const int index = view().active_layer_path().toInt();
+    QVERIFY(succeeded(call(QStringLiteral("layer_op"),
+                           {{QStringLiteral("op"), QStringLiteral("free_transform")},
+                            {QStringLiteral("index"), index},
+                            {QStringLiteral("scale"), 150.0},
+                            {QStringLiteral("angle"), 15.0}})));
+    QVERIFY(succeeded(call(QStringLiteral("status"))));
+    QCOMPARE(history_api::count(view()), before + 1);
+    QCOMPARE(view().sample_argb(11, 16), qRgba(0, 0, 0, 255));
+    QCOMPARE(view().sample_argb(16, 16), qRgba(0, 0, 0, 255));
+    QCOMPARE(errorCode(call(QStringLiteral("layer_op"),
+                            {{QStringLiteral("op"), QStringLiteral("free_transform")},
+                             {QStringLiteral("index"), index},
+                             {QStringLiteral("scale"), 0.0}})),
+             QStringLiteral("invalid_param"));
+}
+
+void ControlEditingTest::freeTransformIsRefusedDuringASession()
+{
+    paintCentreSquare();
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    const QString path = view().active_layer_path();
+    QVERIFY(tools->beginFreeTransform(path));
+    const int before = history_api::count(view());
+    QCOMPARE(errorCode(call(QStringLiteral("layer_op"),
+                            {{QStringLiteral("op"), QStringLiteral("free_transform")},
+                             {QStringLiteral("index"), path.toInt()},
+                             {QStringLiteral("scale"), 150.0}})),
+             QStringLiteral("refused"));
+    QVERIFY(tools->transformSessionActive());
+    QCOMPARE(history_api::count(view()), before);
+    tools->cancelFreeTransform();
+}
+
+void ControlEditingTest::newDocumentCanHaveABackgroundLayer()
+{
+    const int before = window_->documentCount();
+    QVERIFY(succeeded(call(QStringLiteral("document"),
+                           {{QStringLiteral("op"), QStringLiteral("new")},
+                            {QStringLiteral("width"), 24}, {QStringLiteral("height"), 16},
+                            {QStringLiteral("background_layer"), true}})));
+    QCOMPARE(window_->documentCount(), before + 1);
+    const QJsonArray layers = call(QStringLiteral("layer_tree"))
+                                  .value(QStringLiteral("result")).toObject()
+                                  .value(QStringLiteral("layers")).toArray();
+    QCOMPARE(layers.size(), 1);
+    QCOMPARE(layers.first().toObject().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Background"));
+    QCOMPARE(view().document_width(), 24);
+    QCOMPARE(view().sample_argb(3, 3), qRgba(255, 255, 255, 255));
+    QCOMPARE(history_api::count(view()), 1);
+    QCOMPARE(errorCode(call(QStringLiteral("document"),
+                            {{QStringLiteral("op"), QStringLiteral("new")},
+                             {QStringLiteral("width"), 24}, {QStringLiteral("height"), 16},
+                             {QStringLiteral("background"), QStringLiteral("transparent")},
+                             {QStringLiteral("background_layer"), true}})),
              QStringLiteral("invalid_param"));
 }
 
