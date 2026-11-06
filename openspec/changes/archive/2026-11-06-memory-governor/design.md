@@ -16,7 +16,7 @@ memory/
 |---|---|---|
 | `total`, `available` | `meminfo` `MemTotal` / `MemAvailable` | the OS calls that moved here from `pictura-codec` |
 | `rss` | `self/status` `VmRSS` | none |
-| `cgroup_max`, `cgroup_high` | the smallest `memory.max` / `memory.high` of the process's cgroup (`self/cgroup`, the `0::` line) and every ancestor below the root; `max` means none | none |
+| `cgroup_max`, `cgroup_high` | the smallest `memory.max` / `memory.high` of the process's cgroup (`self/cgroup`, the `0::` line) and every ancestor up to the mount root (the root itself under `0::/`, a cgroup-namespaced container); `max` means none | none |
 | `cgroup_current` | the leaf's `memory.current` | none |
 | `psi_some_avg10` | `pressure/memory`, the `some` line | none |
 
@@ -43,7 +43,9 @@ below 20 % Elevated. Nothing acts on pressure in this step; `status` reports it
 and the eviction of later steps (#1216, #1217) will read it.
 
 **Caching.** The reading is cached and refreshed when older than 250 ms, so a
-gate costs a mutex and a clock read. `reserved` is an atomic.
+gate costs a mutex and a clock read. `reserved` is an atomic, and a reservation
+checks the room and adds its bytes in one compare-and-swap, so a Save worker
+and a GUI gate cannot both pass against the same room.
 
 **Test hook.** `set_host_for_test(Option<HostReading>)` pins the reading for the
 calling thread (a thread-local, as the gate's old fake was), so parallel tests
@@ -60,8 +62,9 @@ work allocates right after. Every refusal is recorded for the calling thread
 ## Fallible allocation
 
 `try_plane(len, value, purpose) -> Result<Vec<u8>, MemoryError>`: for 16 MiB
-or more it first takes `admit` (so a buffer that would cross the ceiling is
-refused before the allocator is asked), then `Vec::try_reserve_exact`; an
+or more it holds a reservation across the allocation and its fill (so a buffer
+that would cross the ceiling is refused before the allocator is asked, and a
+concurrent reservation sees it), then `Vec::try_reserve_exact`; an
 allocator error becomes `Insufficient` and is recorded like any refusal. A
 thread-local failpoint (`fail_next_plane_for_test`) makes the next call fail,
 to test the error path without exhausting memory.

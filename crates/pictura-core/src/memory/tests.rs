@@ -104,6 +104,52 @@ fn an_ancestor_limit_and_memory_high_count() {
 }
 
 #[test]
+fn a_process_at_the_cgroup_root_reads_the_root_limit() {
+    // A cgroup-namespaced container sees its own cgroup as `0::/`.
+    let root = FakeRoot::new("namespaced");
+    root.write(
+        "proc/meminfo",
+        "MemTotal: 33554432 kB\nMemAvailable: 16777216 kB\n",
+    );
+    root.write("proc/self/cgroup", "0::/\n");
+    root.write("cgroup/memory.max", "1073741824\n");
+    root.write("cgroup/memory.current", "268435456\n");
+    let reading = system::read(&root.paths());
+    assert_eq!(reading.cgroup_max, Some(GIB));
+    assert_eq!(reading.cgroup_current, Some(256 * MIB));
+    assert_eq!(ceiling_of(&reading, 60), Some(768 * MIB));
+}
+
+#[test]
+fn concurrent_reservations_never_overcommit_the_room() {
+    let governor = Governor::new(HostPaths::default());
+    governor.set_usage_percent(100);
+    // 1.5 GiB of room: one 1 GiB reservation fits, never two.
+    let mut reading = host(64 * GIB);
+    reading.cgroup_max = Some(3 * GIB / 2 + 256 * MIB);
+    reading.cgroup_current = Some(0);
+    let granted = std::sync::atomic::AtomicUsize::new(0);
+    let barrier = std::sync::Barrier::new(8);
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            scope.spawn(|| {
+                set_host_for_test(Some(reading));
+                barrier.wait();
+                if let Ok(held) = governor.reserve(GIB, "a race") {
+                    granted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    barrier.wait();
+                    drop(held);
+                } else {
+                    barrier.wait();
+                }
+            });
+        }
+    });
+    assert_eq!(granted.into_inner(), 1);
+    assert_eq!(governor.reserved(), 0);
+}
+
+#[test]
 fn headroom_is_the_larger_of_five_percent_or_256_mib() {
     assert_eq!(less_headroom(GIB), 768 * MIB);
     assert_eq!(less_headroom(10 * GIB), 10 * GIB - 512 * MIB);

@@ -83,16 +83,23 @@ pub fn read(paths: &HostPaths) -> HostReading {
     }
 }
 
-/// The process's cgroup directory and each ancestor below the root, leaf
-/// first.
+/// The process's cgroup directory and each ancestor up to the mount root,
+/// leaf first. In a cgroup-namespaced container (`0::/`) the process's cgroup
+/// is the root itself, and its limit is the one that applies.
 fn cgroup_dirs(root: &Path, leaf: &str) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     let mut path = leaf.trim_matches('/');
-    while !path.is_empty() {
-        dirs.push(root.join(path));
+    loop {
+        dirs.push(if path.is_empty() {
+            root.to_path_buf()
+        } else {
+            root.join(path)
+        });
+        if path.is_empty() {
+            return dirs;
+        }
         path = path.rsplit_once('/').map_or("", |(parent, _)| parent);
     }
-    dirs
 }
 
 /// The cgroup v2 path of a `/proc/self/cgroup` text (its `0::` line).
@@ -175,7 +182,15 @@ mod os {
 mod os {
     /// Free, inactive, and purgeable pages from the Mach VM statistics: the
     /// pages macOS can hand out without paging anything else out.
+    /// The host port, asked for once: `mach_host_self` hands out a new send
+    /// right on each call, which would leak at every refresh of the reading.
     #[allow(deprecated)] // libc points `mach_host_self` at the mach2 crate.
+    fn host_port() -> libc::mach_port_t {
+        static PORT: std::sync::OnceLock<libc::mach_port_t> = std::sync::OnceLock::new();
+        // SAFETY: `mach_host_self` has no preconditions.
+        *PORT.get_or_init(|| unsafe { libc::mach_host_self() })
+    }
+
     pub(super) fn available_memory() -> Option<u64> {
         let mut stats: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
         let mut count = libc::HOST_VM_INFO64_COUNT;
@@ -183,7 +198,7 @@ mod os {
         // `integer_t` units, as `host_statistics64` requires.
         let status = unsafe {
             libc::host_statistics64(
-                libc::mach_host_self(),
+                host_port(),
                 libc::HOST_VM_INFO64,
                 (&mut stats as *mut libc::vm_statistics64).cast(),
                 &mut count,

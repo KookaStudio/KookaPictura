@@ -16,8 +16,8 @@ const MIN_HEADROOM: u64 = 256 * MIB;
 const REFRESH: Duration = Duration::from_millis(250);
 /// Buffers from this size up are charged to the governor by [`try_plane`].
 pub const CANVAS_SCALE_BYTES: usize = 16 * 1024 * 1024;
-/// Memory Usage's default, in percent (`scratch-disks-and-memory.md`; owner
-/// decision over the 70 % of `preferences.md`).
+/// Memory Usage's default, in percent (`scratch-disks-and-memory.md` and
+/// `preferences.md`; owner decision over a community guide's 70 %).
 pub const DEFAULT_USAGE_PERCENT: u8 = 60;
 
 /// Why memory was refused.
@@ -188,7 +188,7 @@ impl Governor {
     }
 
     pub fn reserved(&self) -> u64 {
-        self.reserved.load(Ordering::Relaxed)
+        self.reserved.load(Ordering::Acquire)
     }
 
     pub fn ceiling(&self) -> Option<u64> {
@@ -220,10 +220,17 @@ impl Governor {
         bytes: u64,
         purpose: &'static str,
     ) -> Result<Reservation<'_>, MemoryError> {
-        if self.room().is_some_and(|room| bytes > room) {
-            return Err(refuse(purpose, bytes));
-        }
-        self.reserved.fetch_add(bytes, Ordering::Relaxed);
+        let reading = self.reading();
+        let percent = self.usage_percent();
+        // Check and add in one step, so two threads (a Save worker and a GUI
+        // gate) cannot both pass against the same room.
+        self.reserved
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |reserved| {
+                let room = room_of(&reading, percent, reserved);
+                room.is_none_or(|room| bytes <= room)
+                    .then(|| reserved.saturating_add(bytes))
+            })
+            .map_err(|_| refuse(purpose, bytes))?;
         Ok(Reservation {
             governor: self,
             bytes,
@@ -254,7 +261,7 @@ impl Drop for Reservation<'_> {
     fn drop(&mut self) {
         self.governor
             .reserved
-            .fetch_sub(self.bytes, Ordering::Relaxed);
+            .fetch_sub(self.bytes, Ordering::AcqRel);
     }
 }
 
@@ -286,7 +293,7 @@ pub fn fail_next_plane_for_test() {
 }
 
 /// A `len`-byte buffer of `value` for `purpose`. A canvas-scale buffer
-/// (16 MiB or more) is first admitted by the governor; the allocation is
+/// (16 MiB or more) is reserved with the governor while it is built; the allocation is
 /// fallible, so an allocator failure is [`MemoryError::Insufficient`] (recorded
 /// like any refusal), never an abort.
 pub fn try_plane(len: usize, value: u8, purpose: &'static str) -> Result<Vec<u8>, MemoryError> {
@@ -294,9 +301,13 @@ pub fn try_plane(len: usize, value: u8, purpose: &'static str) -> Result<Vec<u8>
     if FAIL_NEXT_PLANE.replace(false) {
         return Err(refuse(purpose, bytes));
     }
-    if len >= CANVAS_SCALE_BYTES && !governor().admit(bytes, purpose) {
-        return Err(MemoryError::Insufficient { purpose, bytes });
-    }
+    // Held across the allocation and its fill, so a concurrent reservation
+    // sees these bytes until the reading counts them as resident.
+    let _held = if len >= CANVAS_SCALE_BYTES {
+        Some(governor().reserve(bytes, purpose)?)
+    } else {
+        None
+    };
     let mut plane = Vec::new();
     plane
         .try_reserve_exact(len)

@@ -4,11 +4,13 @@
 |---|---|---|---|
 | `mg_cgroup_limit` | Ceiling of a 32 GiB host at 60 % with `memory.max` 4 GiB, then `max` | 4 GiB − 256 MiB; then 19.2 GiB − 5 % | `pictura-core::a_cgroup_limit_caps_the_ceiling` |
 | `mg_nested_cgroup` | Leaf `memory.max` = `max`, `memory.high` 3 GiB, ancestor `memory.max` 2 GiB | The cgroup limit is 2 GiB | `pictura-core::an_ancestor_limit_and_memory_high_count` |
+| `mg_root_cgroup` | A fake host whose cgroup line is `0::/` with the mount's `memory.max` 1 GiB | Limit 1 GiB; ceiling 768 MiB | `pictura-core::a_process_at_the_cgroup_root_reads_the_root_limit` |
 | `mg_headroom` | Ceiling of limits 1 GiB, 10 GiB, 200 MiB | 768 MiB, 9.5 GiB, 0 | `pictura-core::headroom_is_the_larger_of_five_percent_or_256_mib` |
 | `mg_unreadable_host` | An empty reading; reserve 1 TiB | No ceiling; granted | `pictura-core::an_unreadable_host_refuses_nothing` |
 | `mg_room` | Ceiling 3 GiB, 1 GiB used, 512 MiB reserved; then 1 GiB available | Room 1.5 GiB; then 256 MiB | `pictura-core::use_reservations_and_available_memory_shrink_the_room` |
 | `mg_pressure_psi` | `some avg10` 0.5, 7.25, 31.0 | Normal, Elevated, Critical | `pictura-core::psi_sets_the_pressure_level` |
 | `mg_pressure_fallback` | No PSI; 50 %, 15 %, 5 % available | Normal, Elevated, Critical | `pictura-core::the_free_share_sets_the_level_without_psi` |
+| `mg_reservation_race` | Eight threads race for 1 GiB each in 1.5 GiB of room | Exactly one is granted; nothing stays reserved | `pictura-core::concurrent_reservations_never_overcommit_the_room` |
 | `mg_reservation` | Reserve 1 GiB of 1.5 GiB, ask 1 GiB, drop, ask again | Refused with `Insufficient{purpose, bytes}` and recorded; then granted | `pictura-core::a_reservation_is_released_on_drop` |
 | `mg_injected_roots` | Write a fake `/proc` and cgroup tree in a temp dir and read it; remove `pressure/memory` | Every field read; then only PSI missing | `pictura-core::a_host_is_read_from_injected_roots` |
 | `mg_cached_reading` | Read the governor twice within 250 ms, changing the files between | The second reading equals the first | `pictura-core::the_reading_is_cached_for_250_ms` |

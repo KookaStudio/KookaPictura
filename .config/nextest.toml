@@ -12,7 +12,7 @@ success-output = "never"
 memory-guards = { max-threads = 2 }
 
 [[profile.default.overrides]]
-filter = "package(pictura_app) & test(/heap_peak/)"
+filter = "package(pictura_app) & test(/heap_peak|estimates_cover/)"
 test-group = "memory-guards"
 
 [profile.default.junit]

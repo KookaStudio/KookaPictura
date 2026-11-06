@@ -6,7 +6,9 @@ One process-wide governor in `pictura-core::memory` SHALL compute a memory
 ceiling as the smallest of Memory Usage % × `MemTotal`, the cgroup v2
 `memory.max` and `memory.high` of the process's cgroup and of each ancestor
 cgroup, over the values that can be read, less headroom of the larger of 5 % of
-that limit or 256 MiB. A cgroup value of `max` SHALL mean no limit. When no value
+that limit or 256 MiB. A cgroup value of `max` SHALL mean no limit. A process whose cgroup is the
+mount root (`0::/`, a cgroup-namespaced container) SHALL read the root's
+limits. When no value
 can be read the governor SHALL have no ceiling and SHALL NOT refuse for it.
 
 #### Scenario: A cgroup limit caps the ceiling [mg_cgroup_limit]
@@ -21,6 +23,12 @@ can be read the governor SHALL have no ceiling and SHALL NOT refuse for it.
 - **WHEN** the process sits in a nested cgroup whose own `memory.max` is `max`,
   an ancestor's is 2 GiB, and the leaf's `memory.high` is 3 GiB
 - **THEN** the cgroup limit read is 2 GiB, from the ancestor
+
+#### Scenario: A namespaced container reads the root's limit [mg_root_cgroup]
+
+- **WHEN** the process's cgroup line is `0::/` and the cgroup mount's own
+  `memory.max` is 1 GiB
+- **THEN** the cgroup limit read is 1 GiB and the ceiling 768 MiB
 
 #### Scenario: Headroom is the larger of 5 % or 256 MiB [mg_headroom]
 
@@ -69,7 +77,14 @@ available (Elevated below 20 %, Critical below 10 %).
 `Governor::reserve(bytes, purpose)` SHALL return a `Reservation` that holds its
 bytes against the room until it is dropped, or fail with
 `MemoryError::Insufficient { purpose, bytes }` when the bytes exceed the room.
-The failure SHALL be recorded for the calling thread until cleared.
+The failure SHALL be recorded for the calling thread until cleared. The check
+against the room and the addition of the bytes SHALL be one atomic step, so
+concurrent reservations never together exceed the room.
+
+#### Scenario: Concurrent reservations never overcommit [mg_reservation_race]
+
+- **WHEN** eight threads each ask for 1 GiB of 1.5 GiB of room at once
+- **THEN** exactly one is granted, and nothing stays reserved after it drops
 
 #### Scenario: A reservation is released on drop [mg_reservation]
 
