@@ -19,6 +19,19 @@ and a session restore share one computation. The item heights stay
 `Theme::scaled(22)`; a 10 px footer needs 14 px of line height and a 7 px footer
 9 px, both below the 22 px and 17 px items, so no height floor is needed.
 
+## The zoom field's nested text
+
+The zoom readout is a `NumericField`, and its `QLineEdit` and suffix `QLabel`
+are children of the field. The generic `QLineEdit` input rule sizes the edit at
+the input token (1 px under the app font) and leaves the suffix at the app font,
+so a font set on the field alone never reaches either. Setting the font on the
+edit from `applyStatusBarScale()` would work until the next theme re-polish
+(a brightness change regenerates the stylesheet), which resets a stylesheet-
+sized edit back to the input token. The footer therefore gets its own
+`font-size-footer` token and a `QLineEdit#statusZoomEdit, QLabel#statusZoomSuffix`
+rule, so both stay 2 px under the app font across scale changes and brightness
+re-polishes alike.
+
 ## Scale application order
 
 `applyStatusBarScale()` applies the font before resizing the bar and the items,
@@ -31,8 +44,10 @@ scale in the constructor before `buildStatusBar()` runs, so a frame built at
 
 ## Test seam
 
-`tst_ui_scale::statusBarTextFollowsScale` reads the bar and the readout widgets
-through the object names the frame already exposes (`statusSizeLabel`,
-`statusBackendLabel`, `toolHintBar`) and compares each font against the
-application font minus two pixels, plus the readout height against
-`QFontMetrics::height()`. It repeats after `setUiScalePercent(75)`.
+`tst_ui_scale::statusBarTextFollowsScale` reads the bar and every text carrier
+through the object names the frame already exposes (`statusZoomField`,
+`statusZoomEdit`, `statusZoomSuffix`, `statusSizeLabel`, `statusOptionsButton`,
+`statusBackendLabel`, `statusActionLabel`, `toolHintBar`, `statusSearchHint`)
+and compares each font against the application font minus two pixels, plus the
+carrier height against `QFontMetrics::height()`. It repeats after
+`setUiScalePercent(75)`.

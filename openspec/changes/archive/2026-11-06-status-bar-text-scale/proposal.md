@@ -23,13 +23,18 @@ percentage it was built with.
   it derives the size from the current application font (2 px under, floored at
   1 px) and sets it on the bar and on every readout, hint strip, and the search
   hint directly, next to the item heights it already applies.
+- Add a `font-size-footer` stylesheet token and a rule for the zoom field's
+  nested edit and suffix, which the generic input rule would otherwise leave
+  1 px (edit) and 2 px (suffix) larger than the footer; the rule survives a
+  theme re-polish that would reset a directly set font on the edit.
 - Call `applyStatusBarScale()` at the end of `buildStatusBar()` instead of the
   old bar-only font block, so construction, a live scale change, and a session
   restore all recompute the footer text and it fits its items at every choice
   from 75 % to 200 %.
 - Add a Qt Test that asserts the footer font is the application font minus two
-  pixels on the bar and every readout, that each readout's height holds its font
-  metrics, and that both hold after a live change to 75 %.
+  pixels on the bar and every text carrier, including the zoom field's edit and
+  suffix, that each carrier's height holds its font metrics, and that both hold
+  after a live change to 75 %.
 
 ## Capabilities
 
@@ -49,6 +54,8 @@ None.
   `buildStatusBar()`; the scale helper is called after the readouts exist).
 - `crates/pictura-app/cpp/frame_ui_scale.cpp` (`applyStatusBarScale()` applies
   the footer font to the bar and every readout as well as the item heights).
+- `crates/pictura-app/cpp/theme.cpp` (the `font-size-footer` token and the zoom
+  edit/suffix rule).
 - `crates/pictura-app/cpp/tests/tst_ui_scale.cpp` (new
   `statusBarTextFollowsScale`).
 - No header, document, codec, compositing, or dependency changes.

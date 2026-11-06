@@ -137,18 +137,29 @@ void UiScaleTest::statusBarTextFollowsScale()
 {
     QStatusBar* bar = window_->statusBar();
     QVERIFY(bar != nullptr);
-    auto* sizeLabel = window_->findChild<QLabel*>(QStringLiteral("statusSizeLabel"));
-    auto* backendLabel = window_->findChild<QLabel*>(QStringLiteral("statusBackendLabel"));
-    auto* hintBar = window_->findChild<QWidget*>(QStringLiteral("toolHintBar"));
-    QVERIFY(sizeLabel != nullptr);
-    QVERIFY(backendLabel != nullptr);
-    QVERIFY(hintBar != nullptr);
 
-    const auto footerFitsTheBar = [bar, sizeLabel, backendLabel, hintBar]() {
+    // Every text carrier in the footer, including the zoom field's nested edit
+    // and suffix; a stylesheet makes each resolve its font against the
+    // application, so the helper must reach all of them.
+    const QList<QWidget*> carriers = {
+        window_->findChild<QWidget*>(QStringLiteral("statusZoomField")),
+        window_->findChild<QWidget*>(QStringLiteral("statusZoomEdit")),
+        window_->findChild<QWidget*>(QStringLiteral("statusZoomSuffix")),
+        window_->findChild<QWidget*>(QStringLiteral("statusSizeLabel")),
+        window_->findChild<QWidget*>(QStringLiteral("statusOptionsButton")),
+        window_->findChild<QWidget*>(QStringLiteral("statusBackendLabel")),
+        window_->findChild<QWidget*>(QStringLiteral("statusActionLabel")),
+        window_->findChild<QWidget*>(QStringLiteral("toolHintBar")),
+        window_->findChild<QWidget*>(QStringLiteral("statusSearchHint")),
+    };
+    for (QWidget* widget : carriers) {
+        QVERIFY2(widget != nullptr, "the footer lost a text carrier");
+    }
+
+    const auto footerFitsTheBar = [bar, carriers]() {
         const int footerPx = QApplication::font().pixelSize() - 2;
         QCOMPARE(bar->font().pixelSize(), footerPx);
-        for (QWidget* item : {static_cast<QWidget*>(sizeLabel), static_cast<QWidget*>(backendLabel),
-                              static_cast<QWidget*>(hintBar)}) {
+        for (QWidget* item : carriers) {
             QCOMPARE(item->font().pixelSize(), footerPx);
             QVERIFY2(item->height() >= QFontMetrics(item->font()).height(),
                      qPrintable(QStringLiteral("%1 h=%2 needs %3")

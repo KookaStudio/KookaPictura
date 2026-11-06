@@ -3,11 +3,13 @@
 ## 1. Test
 
 - [x] 1.1 Add `tst_ui_scale::statusBarTextFollowsScale`: assert the status bar
-  and its size label, backend label, and tool hint strip use the application
-  font minus two pixels, that each readout's height holds its font metrics, and
-  that both still hold after `setUiScalePercent(75)`; verify it fails on the
-  current tree (the labels render at the application font and the bar font does
-  not follow the scale) and passes after the fix.
+  and every text carrier (the zoom field, its nested edit and suffix, the size
+  and backend labels, the options button, the action label, the tool hint strip,
+  and the search hint) use the application font minus two pixels, that each
+  carrier's height holds its font metrics, and that both still hold after
+  `setUiScalePercent(75)`; verify it fails on the current tree (the labels
+  render at the application font, the zoom edit at the input font, and the bar
+  font does not follow the scale) and passes after the fix.
 
 ## 2. Fix
 
@@ -18,6 +20,10 @@
 - [x] 2.2 Call `applyStatusBarScale()` at the end of `buildStatusBar()`,
   replacing the old bar-only font block, so the initial footer text and the
   readout heights come from the same owner as a live scale change.
+- [x] 2.3 Add the `font-size-footer` stylesheet token and the
+  `QLineEdit#statusZoomEdit, QLabel#statusZoomSuffix` rule, so the zoom
+  readout's nested text is 2 px under the app font and keeps that size across a
+  theme re-polish.
 
 ## 3. Verification
 

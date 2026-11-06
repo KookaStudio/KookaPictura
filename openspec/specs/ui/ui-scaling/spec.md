@@ -39,9 +39,9 @@ application. The application font, the stylesheet's pixel metrics, tab fonts,
 tool-slot geometry, status-bar chrome and footer text, menu-corner icons,
 panel-column bounds, and panel-group icon controls SHALL follow the new scale.
 The status bar's footer text SHALL be recomputed from the new application font
-and SHALL be set on the bar and on each of its readouts, hint strip, and search
-hint, so it is two pixels under the application font and fits its item at every
-scale. The document image, its zoom, and its rendered pixels SHALL NOT change.
+and SHALL be applied to the bar and to each of its readouts, including the zoom
+field's nested edit and suffix, its hint strip, and its search hint, so all of
+it is two pixels under the application font and fits its item at every scale. The document image, its zoom, and its rendered pixels SHALL NOT change.
 The chosen percentage SHALL persist in the session and be restored before the
 chrome is built.
 
@@ -60,9 +60,10 @@ chrome is built.
 #### Scenario: The status-bar footer follows the scale [uis_status_bar_font]
 
 - **WHEN** the scale changes to 75 percent
-- **THEN** the status bar and its readouts, hint strip, and search hint use a
-  font two pixels under the 75-percent application font, and every readout is
-  tall enough for that font's metrics, so the text is not clipped
+- **THEN** the status bar and all of its text, including the zoom readout's edit
+  and suffix, the hint strip, and the search hint, uses a font two pixels under
+  the 75-percent application font, and every carrier is tall enough for that
+  font's metrics, so the text is not clipped
 
 #### Scenario: Canvas pixels are unaffected [uis_canvas_unaffected]
 
