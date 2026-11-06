@@ -20,10 +20,13 @@ AdjustmentsPanel::AdjustmentsPanel(QWidget* parent)
     : QWidget(parent)
 {
     auto* scroll = new QScrollArea(this);
+    scroll->setObjectName(QStringLiteral("adjustmentsScroll"));
+    scroll->viewport()->setObjectName(QStringLiteral("adjustmentsViewport"));
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
 
     auto* gridHost = new QWidget;
+    gridHost->setObjectName(QStringLiteral("adjustmentsGridHost"));
     auto* grid = new QGridLayout(gridHost);
     grid->setContentsMargins(6, 6, 6, 6);
     grid->setSpacing(1);

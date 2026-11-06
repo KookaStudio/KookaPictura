@@ -14,12 +14,30 @@
 #include "api/view_bridge.h"
 
 #include <QtGui/QAction>
+#include <QtGui/QColor>
+#include <QtGui/QImage>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QScrollBar>
 #include <QtWidgets/QToolButton>
 
+#include "theme.h"
 #include "qt_test_support.h"
+
+namespace {
+
+// The panel's rendered background, sampled just inside its top-left corner:
+// inside the grid layout's 6 px margin for Adjustments, and above the centered
+// placeholder label for Styles.
+QColor panelSurfaceColor(QWidget* window, const QWidget* panel)
+{
+    const QImage image = window->grab().toImage();
+    const qreal dpr = image.devicePixelRatio();
+    const QPoint point = panel->mapTo(window, QPoint(3, 3));
+    return image.pixelColor(qRound(point.x() * dpr), qRound(point.y() * dpr));
+}
+
+} // namespace
 
 class AdjustmentsPanelTest : public QObject {
     Q_OBJECT
@@ -39,6 +57,8 @@ private slots:
     void narrowPanelWrapsGrid();
     void tilesAndMenuFollowCatalogue();
     void layersPanelAdjustmentMenuFollowsCatalogue();
+    void panelSurfaceMatchesStylesPanel();
+    void surfaceFollowsTheme();
 
 private:
     pictura::AdjustmentsPanel* panel() const;
@@ -363,6 +383,67 @@ void AdjustmentsPanelTest::layersPanelAdjustmentMenuFollowsCatalogue()
     levels->trigger();
     QCoreApplication::processEvents();
     QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
+}
+
+// Issue #1205: the grid's scroll viewport defaulted to QPalette::Base
+// (`surface-field`), darker than the panel surface. The panel, its viewport,
+// and the grid host must render the same surface as the Styles panel.
+void AdjustmentsPanelTest::panelSurfaceMatchesStylesPanel()
+{
+    window_->resize(1200, 800);
+    window_->show();
+    QTest::qWait(0);
+
+    pictura::PanelColumn* column =
+        window_->columnForPanel(QStringLiteral("adjustmentsPanel"));
+    QVERIFY(column);
+    pictura::PanelGroup* group = column->groupForPanel(QStringLiteral("adjustmentsPanel"));
+    QVERIFY(group);
+    QVERIFY(group->containsPanel(QStringLiteral("stylesPanel")));
+
+    QVERIFY(group->setCurrentPanel(QStringLiteral("adjustmentsPanel")));
+    QTest::qWait(0);
+    QVERIFY(panel() && panel()->isVisible());
+    const QColor adjustments = panelSurfaceColor(window_.get(), panel());
+
+    QVERIFY(group->setCurrentPanel(QStringLiteral("stylesPanel")));
+    QTest::qWait(0);
+    QWidget* styles = window_->findChild<QWidget*>(QStringLiteral("stylesPanel"));
+    QVERIFY(styles && styles->isVisible());
+    const QColor stylesSurface = panelSurfaceColor(window_.get(), styles);
+
+    group->setCurrentPanel(QStringLiteral("adjustmentsPanel"));
+
+    QCOMPARE(adjustments.rgba(), stylesSurface.rgba());
+    QCOMPARE(adjustments.rgba(),
+             pictura::Theme::tokenColor(QStringLiteral("surface")).rgba());
+    QVERIFY2(adjustments.rgba()
+                 != pictura::Theme::tokenColor(QStringLiteral("surface-field")).rgba(),
+             "the panel must not keep the scroll viewport's Base fill");
+}
+
+void AdjustmentsPanelTest::surfaceFollowsTheme()
+{
+    window_->resize(1200, 800);
+    window_->show();
+    QTest::qWait(0);
+
+    pictura::PanelColumn* column =
+        window_->columnForPanel(QStringLiteral("adjustmentsPanel"));
+    QVERIFY(column);
+    pictura::PanelGroup* group = column->groupForPanel(QStringLiteral("adjustmentsPanel"));
+    QVERIFY(group);
+    QVERIFY(group->setCurrentPanel(QStringLiteral("adjustmentsPanel")));
+    QTest::qWait(0);
+
+    pictura::Theme::apply(pictura::Theme::ThemeFamily::Dark,
+                          pictura::Theme::kDefaultLevel + 1);
+    const QColor expected = pictura::Theme::tokenColor(QStringLiteral("surface"));
+    const QColor painted = panelSurfaceColor(window_.get(), panel());
+    pictura::Theme::apply(pictura::Theme::kDefaultFamily, pictura::Theme::kDefaultLevel);
+    QTest::qWait(0);
+
+    QCOMPARE(painted.rgba(), expected.rgba());
 }
 
 QTEST_MAIN(AdjustmentsPanelTest)
