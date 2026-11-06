@@ -1000,6 +1000,11 @@ void PicturaMainWindow::buildStatusBar()
         connect(tools_, &ToolController::transformChanged, this, [this]() { updateStatus(); });
         installTransformLock();
     }
+    // Qt hides the normal readouts while a temporary message shows, but a later
+    // refresh re-shows them; the bar's message signal restores them too, so the
+    // footer has one visibility owner.
+    connect(bar, &QStatusBar::messageChanged, this,
+            [this](const QString&) { updateStatus(); });
     updateToolHint();
 }
 
