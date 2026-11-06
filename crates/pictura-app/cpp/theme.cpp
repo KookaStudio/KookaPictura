@@ -339,6 +339,13 @@ QWidget#panelWidgetCorner QToolButton::menu-indicator { image: none; width: 0; }
 QWidget#panelWidgetCorner QToolButton:hover { background: ${surface-hover}; }
 QWidget#panelWidgetCorner QToolButton:pressed { background: ${surface-pressed}; }
 
+/* The Adjustments grid is a scroll area, and a QAbstractScrollArea viewport
+   defaults to QPalette::Base (`${surface-field}`), which reads darker than the
+   panel. Paint the scroll area, its viewport, and the grid host with the panel
+   surface so the panel matches the other tabs (Styles is the reference). */
+QScrollArea#adjustmentsScroll { background: ${surface}; border: 0; }
+QWidget#adjustmentsViewport, QWidget#adjustmentsGridHost { background: ${surface}; }
+
 QTabWidget::pane { border: ${border-width-panel}px solid ${border}; background: ${surface-canvas}; }
 QTabWidget#panelGroupTabs { border: ${border-width-panel}px solid ${border}; }
 QTabWidget#panelGroupTabs::pane { border: 0; background: ${surface}; }
