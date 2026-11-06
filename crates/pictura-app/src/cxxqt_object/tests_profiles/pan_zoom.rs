@@ -21,14 +21,16 @@ fn naive_rescale(src: &Planes<'_>, w: u32, h: u32) -> Vec<u8> {
     let mut out = vec![0u8; (w * h * 4) as usize];
     for y in 0..h {
         let sy = (y as u64 * src.height as u64 / h as u64) as usize;
+        let Some(rows) = src.rows(sy) else {
+            continue;
+        };
         for x in 0..w {
             let sx = (x as u64 * src.width as u64 / w as u64) as usize;
-            let i = sy * src.width as usize + sx;
             let o = ((y * w + x) * 4) as usize;
-            out[o] = src.r[i];
-            out[o + 1] = src.g[i];
-            out[o + 2] = src.b[i];
-            out[o + 3] = src.a[i];
+            out[o] = rows[0][sx];
+            out[o + 1] = rows[1][sx];
+            out[o + 2] = rows[2][sx];
+            out[o + 3] = rows[3][sx];
         }
     }
     out
@@ -51,14 +53,14 @@ fn scroll_zoom_pan_profile(n: u32) {
         channels: 4,
         data: data.into(),
     };
-    let planes = Planes {
-        width: n,
-        height: n,
-        r: &doc.composite.data[..plane],
-        g: &doc.composite.data[plane..2 * plane],
-        b: &doc.composite.data[2 * plane..3 * plane],
-        a: &doc.composite.data[3 * plane..4 * plane],
-    };
+    let planes = Planes::new(
+        n,
+        n,
+        &doc.composite.data[..plane],
+        &doc.composite.data[plane..2 * plane],
+        &doc.composite.data[2 * plane..3 * plane],
+        &doc.composite.data[3 * plane..4 * plane],
+    );
 
     let t = std::time::Instant::now();
     let pyramid = ViewPyramid::rebuild(planes);

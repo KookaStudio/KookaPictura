@@ -836,18 +836,7 @@ pub(super) fn planes_of(buffer: &PixelBuffer) -> Option<Planes<'_>> {
     if buffer.channels != 4 {
         return None;
     }
-    let plane = buffer.pixel_count();
-    if buffer.data.len() < plane * 4 {
-        return None;
-    }
-    Some(Planes {
-        width: buffer.width,
-        height: buffer.height,
-        r: &buffer.data[..plane],
-        g: &buffer.data[plane..2 * plane],
-        b: &buffer.data[2 * plane..3 * plane],
-        a: &buffer.data[3 * plane..4 * plane],
-    })
+    Planes::planar(buffer.width, buffer.height, &buffer.data)
 }
 /// Expand an owned rendered buffer to a 4-plane RGBA frame, taking it over
 /// without a copy when it is already RGBA.
@@ -860,20 +849,24 @@ pub(super) fn into_rgba_frame(rendered: PixelBuffer) -> PixelBuffer {
 }
 /// The 4-plane straight **sRGB** level-0 frame for `source`: the color-managed
 /// composite the display image, pyramid, and canvas crops all share.
-pub(super) fn level0_buffer(source: &Document) -> PixelBuffer {
+///
+/// The frame shares the composite's copy-on-write bands when the document needs
+/// no display conversion, so a whole-document restore installs it without
+/// copying. Both planes are fractured first, so the first write to either forks
+/// only the bands it touches.
+pub(super) fn level0_buffer(source: &mut Document) -> PixelBuffer {
+    source.composite.data.fracture(source.width as usize);
     level0_from_buffer(source, &source.composite)
 }
 
 /// The level-0 frame for an already-rendered `buffer` of `source`.
 ///
 /// Level 0 is patched on its own (mid-stroke it runs ahead of the document's
-/// composite), so it never shares the buffer's plane: a shared plane would be
-/// copied whole by whichever of the two is written first.
+/// composite), so its plane is fractured: a band write then forks only that
+/// band instead of copying the whole frame.
 pub(super) fn level0_from_buffer(source: &Document, buffer: &PixelBuffer) -> PixelBuffer {
     let mut frame = into_rgba_frame(buffer_to_srgb(source, buffer).into_owned());
-    if frame.data.shares(&buffer.data) {
-        frame.data = crate::history::copy_plane(&frame.data);
-    }
+    frame.data.fracture(frame.width as usize);
     frame
 }
 

@@ -28,19 +28,26 @@ const THREADS: usize = 4;
 /// memory-baseline.json) at the harness's commit, which changes no engine
 /// code. Every scenario but snapshot_restore repeats to the byte; that one
 /// varied by 3.6 %. Lower an entry when a change saves memory.
+///
+/// A change that makes a *setup* retain less raises its delta without raising
+/// the absolute peak, because the delta is measured from the setup's heap.
+/// `edit_fill`, `bucket_in_selection` and `undo_redo` are that case since level
+/// 0 shares the composite's plane (#1152): their absolute peaks are unchanged
+/// or lower while their setups hold one 4250² RGBA plane less. Record the
+/// measured delta and keep the absolute peak in mind.
 const BASELINE: &[(&str, usize)] = &[
-    ("new_document", 222_964_924),
+    ("new_document", 180_644_790),
     ("add_layer", 90_313_011),
-    ("edit_fill", 9_879_176),
-    ("bucket_in_selection", 11_130_688),
+    ("edit_fill", 15_047_480),
+    ("bucket_in_selection", 16_298_976),
     ("bucket_whole_layer", 218_450_072),
     ("brush_stroke", 110_827_969),
-    ("undo_redo", 194_550_888),
-    ("snapshot_restore", 500_107_054),
+    ("undo_redo", 264_624_776),
+    ("snapshot_restore", 482_699_518),
     ("move_layer", 5_815_545),
     ("free_transform", 36_187_521),
-    ("save_psd", 291_159_428),
-    ("open_psd", 530_126_460),
+    ("save_psd", 291_159_444),
+    ("open_psd", 521_690_071),
 ];
 
 /// The peak heap `run` adds over what `setup` left, with both in one pool of
@@ -94,7 +101,8 @@ fn guard<T>(name: &str, setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut 
     );
     assert!(
         peak <= limit,
-        "{name}: heap peak {peak} B is above the baseline {baseline} B x 1.10 ({limit} B)"
+        "{name}: heap peak {peak} B is above the baseline {baseline} B x 1.10 ({limit} B); \
+         a setup that retains less raises this delta, so check the scenario's absolute peak too"
     );
 }
 

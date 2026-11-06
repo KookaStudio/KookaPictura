@@ -155,7 +155,7 @@ fn level0_carries_the_document_profile_conversion() {
     doc.composite = varied_rgba(16, 16, 4);
     pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
 
-    let expected = level0_buffer(&doc);
+    let expected = level0_buffer(&mut doc);
     let raw = rgba_frame(&doc.composite);
     assert_ne!(
         expected.data, raw.data,
@@ -171,6 +171,11 @@ fn level0_carries_the_document_profile_conversion() {
     assert_eq!(
         level0.data, expected.data,
         "the crop source is color managed"
+    );
+    let doc = rust.session.doc.as_ref().expect("document");
+    assert!(
+        !level0.data.shares(&doc.composite.data),
+        "a converted frame owns its plane"
     );
 }
 
@@ -207,7 +212,11 @@ fn region_refresh_reuses_the_level0_frame_when_it_matches() {
         before,
         "the frame is patched in place"
     );
-    assert_eq!(level0.data, level0_buffer(&doc).data, "and stays in sync");
+    assert_eq!(
+        level0.data,
+        level0_buffer(&mut doc).data,
+        "and stays in sync"
+    );
 }
 
 #[test]
@@ -248,7 +257,7 @@ fn image_after_region_refresh_matches_a_full_recomposite() {
 
     let rebuilt =
         rebuild_display(&rust.session.doc, rust.session.live.stroke(), false).expect("document");
-    let full = premultiplied_display_image(&level0_buffer(&doc));
+    let full = premultiplied_display_image(&level0_buffer(&mut doc));
     assert_eq!(rebuilt, full, "image() equals a full recomposite");
 }
 
@@ -973,15 +982,104 @@ fn a_whole_document_region_refresh_installs_its_frames() {
     };
     assert_eq!(view.refresh_regions(&[whole]), Some(whole));
 
+    let expected = level0_buffer(view.session.doc.as_mut().expect("document"));
     let doc = view.session.doc.as_ref().expect("document");
     assert!(doc.composite == pictura_render::composite_rgba(doc));
     let level0 = view.level0.as_ref().expect("level 0");
-    assert!(*level0 == level0_buffer(doc));
+    assert!(*level0 == expected);
     assert!(
-        !level0.data.shares(&doc.composite.data),
-        "level 0 keeps its own plane"
+        level0.data.shares(&doc.composite.data),
+        "the whole frame shares the composite's plane"
     );
     assert_eq!(view.frame_revision, frame, "the frame is reused");
     let rebuilt = ViewPyramid::rebuild(planes_of(level0).expect("planes"));
     assert_pyramids_equal(&view.pyramid, &rebuilt, level0);
+}
+
+#[test]
+fn a_whole_document_restore_shares_the_composite_plane() {
+    let (w, h) = (300u32, 200u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
+        "px",
+        w,
+        h,
+        (10, 20, 30),
+    )]);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let mut view = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.reset_pyramid();
+
+    let doc = view.session.doc.as_ref().expect("document");
+    let level0 = view.level0.as_ref().expect("level 0");
+    assert!(
+        level0.data.shares(&doc.composite.data),
+        "the frame shares the restored composite's plane"
+    );
+    assert!(*level0 == doc.composite, "the frame equals the composite");
+}
+
+#[test]
+fn a_region_patch_forks_only_its_bands() {
+    let (w, h) = (300u32, 400u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
+        "px",
+        w,
+        h,
+        (10, 20, 30),
+    )]);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let mut view = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.reset_pyramid();
+    let before = view
+        .session
+        .doc
+        .as_ref()
+        .expect("document")
+        .composite
+        .data
+        .clone();
+    assert!(
+        view.level0.as_ref().expect("level 0").data.shares(&before),
+        "level 0 starts shared with the composite"
+    );
+
+    let rect = PsdRect {
+        top: 10,
+        left: 30,
+        bottom: 60,
+        right: 60,
+    };
+    let patch = varied_rgba(30, 50, 5);
+    view.refresh_level0_region(patch.clone(), rect.left, rect.top);
+
+    let doc = view.session.doc.as_ref().expect("document");
+    assert!(doc.composite.data == before, "the composite is untouched");
+    let level0 = view.level0.as_ref().expect("level 0");
+    assert!(
+        !level0.data.shares(&doc.composite.data),
+        "the frame owns its patched band"
+    );
+    assert!(
+        !level0.data.shares_band(0, &doc.composite.data),
+        "band 0 forked"
+    );
+    assert!(
+        level0.data.shares_band(1, &doc.composite.data),
+        "band 1 stays shared"
+    );
+    let row = level0.data.row(rect.top as usize, w as usize).expect("row");
+    assert_eq!(
+        row[rect.left as usize], patch.data[0],
+        "the frame shows the patched pixels"
+    );
 }
