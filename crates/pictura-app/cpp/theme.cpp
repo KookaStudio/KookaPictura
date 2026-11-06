@@ -420,6 +420,9 @@ QWidget#infoBlock QToolButton:pressed { background: ${surface-pressed}; }
 )") + QStringLiteral(R"(
 QStatusBar { background: ${surface}; color: ${content}; }
 QStatusBar::item { border: 0; }
+/* The footer runs 2px under the app font, including the zoom field's edit and
+   suffix, which the generic input rule would otherwise leave 1px larger. */
+QLineEdit#statusZoomEdit, QLabel#statusZoomSuffix { font-size: ${font-size-footer}px; }
 QFrame#statusSeparator { background: ${border-subtle}; border: 0; }
 
 QScrollBar:vertical { background: ${surface-scrollbar}; width: 12px; border: 0; margin: 0; }
@@ -596,6 +599,7 @@ QLabel#sectionTabLabel { font-weight: 700; padding: 3px 0; }
     }
     qss.replace(QStringLiteral("${font-size-tab}"), QString::number(baseFontPx - 2));
     qss.replace(QStringLiteral("${font-size-input}"), QString::number(baseFontPx - 1));
+    qss.replace(QStringLiteral("${font-size-footer}"), QString::number(qMax(1, baseFontPx - 2)));
     return qss;
 }
 

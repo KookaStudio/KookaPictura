@@ -5,6 +5,7 @@
 #include <QtCore/QFile>
 #include <QtGui/QAction>
 #include <QtGui/QFont>
+#include <QtGui/QFontMetrics>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLabel>
@@ -37,6 +38,7 @@ private slots:
     void themeScaleContract();
     void fontAndStyleSheetFollowScale();
     void frameChromeFollowsScale();
+    void statusBarTextFollowsScale();
     void canvasUnaffectedByScale();
     void sessionPersistsScale();
     void windowMenuSingleControl();
@@ -129,6 +131,51 @@ void UiScaleTest::frameChromeFollowsScale()
     QCOMPARE(pictura::PanelColumn::minNormalWidth(), Theme::scaled(300));
     QCOMPARE(pictura::PanelColumn::maxNormalWidth(), Theme::scaled(400));
     QVERIFY(window_->panelColumn()->minimumWidth() >= baseFloor);
+}
+
+void UiScaleTest::statusBarTextFollowsScale()
+{
+    QStatusBar* bar = window_->statusBar();
+    QVERIFY(bar != nullptr);
+
+    // Every text carrier in the footer, including the zoom field's nested edit
+    // and suffix; a stylesheet makes each resolve its font against the
+    // application, so the helper must reach all of them.
+    const QList<QWidget*> carriers = {
+        window_->findChild<QWidget*>(QStringLiteral("statusZoomField")),
+        window_->findChild<QWidget*>(QStringLiteral("statusZoomEdit")),
+        window_->findChild<QWidget*>(QStringLiteral("statusZoomSuffix")),
+        window_->findChild<QWidget*>(QStringLiteral("statusSizeLabel")),
+        window_->findChild<QWidget*>(QStringLiteral("statusOptionsButton")),
+        window_->findChild<QWidget*>(QStringLiteral("statusBackendLabel")),
+        window_->findChild<QWidget*>(QStringLiteral("statusActionLabel")),
+        window_->findChild<QWidget*>(QStringLiteral("toolHintBar")),
+        window_->findChild<QWidget*>(QStringLiteral("statusSearchHint")),
+    };
+    for (QWidget* widget : carriers) {
+        QVERIFY2(widget != nullptr, "the footer lost a text carrier");
+    }
+
+    const auto footerFitsTheBar = [bar, carriers]() {
+        const int footerPx = QApplication::font().pixelSize() - 2;
+        QCOMPARE(bar->font().pixelSize(), footerPx);
+        for (QWidget* item : carriers) {
+            QCOMPARE(item->font().pixelSize(), footerPx);
+            QVERIFY2(item->height() >= QFontMetrics(item->font()).height(),
+                     qPrintable(QStringLiteral("%1 h=%2 needs %3")
+                                    .arg(item->objectName())
+                                    .arg(item->height())
+                                    .arg(QFontMetrics(item->font()).height())));
+        }
+    };
+
+    footerFitsTheBar();
+
+    window_->show();
+    QCoreApplication::processEvents();
+    window_->setUiScalePercent(75);
+    QCoreApplication::processEvents();
+    footerFitsTheBar();
 }
 
 void UiScaleTest::canvasUnaffectedByScale()
