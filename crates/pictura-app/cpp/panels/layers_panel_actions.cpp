@@ -4,6 +4,7 @@
 #include "dialogs.h"
 #include "layer_new_dialog.h"
 #include "layer_style_dialog.h"
+#include "memory_refusal.h"
 
 #include "api/layers_bridge.h"
 
@@ -57,6 +58,8 @@ void LayersPanel::addLayerAt(const QString& path)
     const QString created = view_->add_layer_in(path);
     if (!created.isEmpty()) {
         refresh();
+    } else {
+        reportMemoryRefusal(this, tr("add a layer"));
     }
 }
 

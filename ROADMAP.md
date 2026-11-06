@@ -524,6 +524,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       panes (#505)
 - [ ] The sparse existing panes: General, Interface, File Handling, Performance,
       Units and Guides (#506)
+- [x] **Memory governor** — one process-wide ceiling (Memory Usage % of RAM,
+      default 60 %, capped by the cgroup's `memory.max` and `memory.high`),
+      memory-pressure tracking, and fallible reservations. New Document, Add
+      Layer, brushing, history, snapshots, Save, Open, the fills, Move, Free
+      Transform and Image Size are refused with "not enough memory" instead of
+      being OOM-killed. A Memory Usage control on the Performance page (#1211).
+      `crates/pictura-core/src/memory/`.
 - [ ] The Performance preferences pane: memory, history states, cache level and
       tile size, scratch disks and GPU, plus the Efficiency and Scratch readouts
       (#636)

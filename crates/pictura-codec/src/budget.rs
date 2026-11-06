@@ -31,122 +31,12 @@ pub(crate) fn document_bytes(available: Option<u64>, per_allocation: u64) -> u64
 /// The memory the host can give a new allocation now without swapping, in
 /// bytes, or `None` when it cannot be read.
 pub fn available_memory() -> Option<u64> {
-    host::available_memory()
+    pictura_core::memory::available_memory()
 }
 
 /// The host's physical memory in bytes, or `None` when it cannot be read.
 pub fn total_memory() -> Option<u64> {
-    host::total_memory()
-}
-
-#[cfg(target_os = "linux")]
-mod host {
-    /// `MemAvailable` from `/proc/meminfo`: the kernel's estimate of memory
-    /// available to start new work, counting reclaimable cache.
-    pub(super) fn available_memory() -> Option<u64> {
-        super::mem_available(&std::fs::read_to_string("/proc/meminfo").ok()?)
-    }
-
-    /// `MemTotal` from `/proc/meminfo`.
-    pub(super) fn total_memory() -> Option<u64> {
-        super::meminfo_bytes(&std::fs::read_to_string("/proc/meminfo").ok()?, "MemTotal:")
-    }
-}
-
-#[cfg(target_os = "macos")]
-mod host {
-    /// Free, inactive, and purgeable pages from the Mach VM statistics: the
-    /// pages macOS can hand out without paging anything else out.
-    #[allow(deprecated)] // libc points `mach_host_self` at the mach2 crate.
-    pub(super) fn available_memory() -> Option<u64> {
-        let mut stats: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
-        let mut count = libc::HOST_VM_INFO64_COUNT;
-        // SAFETY: `stats` is a zeroed `vm_statistics64` and `count` its size in
-        // `integer_t` units, as `host_statistics64` requires.
-        let status = unsafe {
-            libc::host_statistics64(
-                libc::mach_host_self(),
-                libc::HOST_VM_INFO64,
-                (&mut stats as *mut libc::vm_statistics64).cast(),
-                &mut count,
-            )
-        };
-        // SAFETY: `sysconf` has no preconditions.
-        let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-        if status != libc::KERN_SUCCESS || page <= 0 {
-            return None;
-        }
-        let pages = u64::from(stats.free_count)
-            + u64::from(stats.inactive_count)
-            + u64::from(stats.purgeable_count);
-        Some(pages * page as u64)
-    }
-
-    /// `hw.memsize`: the physical memory installed.
-    pub(super) fn total_memory() -> Option<u64> {
-        let mut bytes: u64 = 0;
-        let mut len = std::mem::size_of::<u64>();
-        // SAFETY: the name is NUL-terminated and `bytes`/`len` describe a
-        // `u64` buffer, which is what `hw.memsize` returns.
-        let status = unsafe {
-            libc::sysctlbyname(
-                c"hw.memsize".as_ptr(),
-                (&mut bytes as *mut u64).cast(),
-                &mut len,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        (status == 0 && bytes > 0).then_some(bytes)
-    }
-}
-
-#[cfg(windows)]
-mod host {
-    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-
-    /// `ullAvailPhys`: physical memory available without paging.
-    pub(super) fn available_memory() -> Option<u64> {
-        // SAFETY: MEMORYSTATUSEX is plain data; `dwLength` is set as the API
-        // requires before the call fills the rest.
-        let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
-        status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
-        (unsafe { GlobalMemoryStatusEx(&mut status) } != 0).then_some(status.ullAvailPhys)
-    }
-
-    /// `ullTotalPhys`: the physical memory installed.
-    pub(super) fn total_memory() -> Option<u64> {
-        // SAFETY: as in `available_memory`.
-        let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
-        status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
-        (unsafe { GlobalMemoryStatusEx(&mut status) } != 0).then_some(status.ullTotalPhys)
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-mod host {
-    pub(super) fn available_memory() -> Option<u64> {
-        None
-    }
-
-    pub(super) fn total_memory() -> Option<u64> {
-        None
-    }
-}
-
-/// The `MemAvailable` line of a `/proc/meminfo` text, in bytes.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn mem_available(meminfo: &str) -> Option<u64> {
-    meminfo_bytes(meminfo, "MemAvailable:")
-}
-
-/// The `key` line (`"MemTotal:"`, …) of a `/proc/meminfo` text, in bytes.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn meminfo_bytes(meminfo: &str, key: &str) -> Option<u64> {
-    let line = meminfo.lines().find(|l| l.starts_with(key))?;
-    let mut fields = line[key.len()..].split_whitespace();
-    let kib: u64 = fields.next()?.parse().ok()?;
-    (fields.next() == Some("kB")).then(|| kib.saturating_mul(1024))
+    pictura_core::memory::total_memory()
 }
 
 /// Running allocation budget for one document decode.
@@ -241,23 +131,6 @@ mod tests {
         assert_eq!(document_bytes(Some(GIB), 2 * GIB), 2 * GIB);
         assert_eq!(document_bytes(None, 2 * GIB), 16 * GIB);
         assert!(ImageBudget::default().max_document_bytes >= 2 * GIB);
-    }
-
-    #[test]
-    fn meminfo_available_is_parsed_in_bytes() {
-        let text = "MemTotal:       32000000 kB\nMemFree:  100 kB\nMemAvailable:   22298680 kB\n";
-        assert_eq!(mem_available(text), Some(22_298_680 * 1024));
-        assert_eq!(mem_available("MemTotal: 5 kB\n"), None);
-        assert_eq!(mem_available("MemAvailable: lots\n"), None);
-        assert_eq!(meminfo_bytes(text, "MemTotal:"), Some(32_000_000 * 1024));
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
-    #[test]
-    fn the_host_reports_available_memory() {
-        assert!(available_memory().is_some_and(|bytes| bytes > 0));
-        let total = total_memory().expect("the host's total memory");
-        assert!(available_memory().is_some_and(|available| available <= total));
     }
 
     #[test]

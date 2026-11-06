@@ -1,6 +1,7 @@
 use super::*;
 
 use super::super::super::open_jobs::make_background;
+use crate::cxxqt_object::helpers::memory_gate;
 use crate::history::History;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -76,6 +77,17 @@ pub(crate) fn create_document(
         return false;
     };
     if !ppi.is_finite() || ppi <= 0.0 {
+        return false;
+    }
+    // A deeper or wider document than the 8-bit base is charged as it ends.
+    let channels = target.map_or(if base == "rgb" { 3 } else { 1 }, |m| m.color_channels());
+    let estimate = memory_gate::new_document_bytes(
+        width.max(0) as u32,
+        height.max(0) as u32,
+        channels,
+        depth.unwrap_or(BitDepth::Eight),
+    );
+    if !memory_gate::admit_fresh(estimate) {
         return false;
     }
     let background = if transparent { "transparent" } else { "white" };

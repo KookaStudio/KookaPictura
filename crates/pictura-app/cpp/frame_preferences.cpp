@@ -3,6 +3,7 @@
 
 #include "frame_includes.h"
 #include "agent_control.h"
+#include "api/paint_bridge.h"
 #include "api/type_api.h"
 #include "frame_update.h"
 #include "preferences_agent_page.h"
@@ -50,6 +51,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setUiScalePercent(uiScalePercent_);
         preferencesDialog_->setPickerChoice(pickerChoice_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
+        preferencesDialog_->setMemoryUsagePercent(memory_usage_percent());
         preferencesDialog_->setGpuComputeEnabled(gpuCandidatesAvailable_);
         preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
         preferencesDialog_->setTypeShowAsianOptions(typeShowAsianOptions_);
@@ -112,6 +114,11 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 });
         connect(preferencesDialog_, &PreferencesDialog::gpuComputeChanged, this,
                 &PicturaMainWindow::applyGpuComputePreference);
+        connect(preferencesDialog_, &PreferencesDialog::memoryUsagePercentChanged, this,
+                [this](int percent) {
+                    set_memory_usage_percent(percent);
+                    saveSession();
+                });
         connect(preferencesDialog_, &PreferencesDialog::typePlaceholderTextChanged, this,
                 [this](bool on) {
                     if (tools_) {

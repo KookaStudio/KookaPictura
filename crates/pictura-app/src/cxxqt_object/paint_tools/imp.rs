@@ -143,6 +143,18 @@ pub(super) fn begin_brush(
     cfg.pressure_size = pressure_size;
     cfg.pressure_opacity = pressure_opacity;
     let label = if aliased { "Pencil" } else { "Brush" };
+    crate::cxxqt_object::helpers::memory_gate::clear();
+    let fits = {
+        let rust = view.rust();
+        let path = rust.layer_target.single().unwrap_or_default();
+        rust.session.doc.as_ref().is_none_or(|doc| {
+            let gate = crate::cxxqt_object::helpers::memory_gate::brush_bytes(doc, path);
+            crate::cxxqt_object::helpers::memory_gate::admit_fresh(gate)
+        })
+    };
+    if !fits {
+        return false;
+    }
     if let Some(path) = active_mask_target(view.rust()) {
         let mask_cfg = mask_stroke_config(cfg);
         let begun = view.begin_mask_paint(&path, mask_cfg, label);

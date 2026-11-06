@@ -10,6 +10,7 @@
 #include "frame_includes.h"
 
 #include "loading_card.h"
+#include "memory_refusal.h"
 #include "tab_spinner.h"
 
 #include "api/document_api.h"
@@ -395,7 +396,10 @@ void PicturaMainWindow::reportOpenFailure(int index, const QString& status)
         break;
     case OpenKind::Psd:
     case OpenKind::Raster:
-        if (openFailureMessages_.contains(entry.token)) {
+        if (status == QStringLiteral("error:memory")) {
+            statusBar()->showMessage(memoryRefusalMessage(tr("open %1").arg(documentName(index))),
+                                     6000);
+        } else if (openFailureMessages_.contains(entry.token)) {
             const QString source = entry.path.isEmpty() ? entry.recentPath : entry.path;
             reportImportError(source, openFailureMessages_.value(entry.token));
         } else if (reportFailureTokens_.contains(entry.token)) {

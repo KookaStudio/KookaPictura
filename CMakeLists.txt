@@ -701,6 +701,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/tool_stamps.cpp
     crates/pictura-app/cpp/tool_eraser.cpp
     crates/pictura-app/cpp/tool_fills.cpp
+    crates/pictura-app/cpp/memory_refusal.cpp
+    crates/pictura-app/cpp/memory_refusal.h
     crates/pictura-app/cpp/tool_retouch.cpp
     crates/pictura-app/cpp/tool_pen.cpp
     crates/pictura-app/cpp/tool_path_selection.cpp

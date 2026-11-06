@@ -10,3 +10,11 @@ doctest = false
 
 [dependencies]
 rayon = "1"
+
+# The host memory queries of `memory::system` (#1211), moved here from
+# pictura-codec with them; both already in Cargo.lock.
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_SystemInformation"] }

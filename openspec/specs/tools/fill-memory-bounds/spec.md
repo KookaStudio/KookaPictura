@@ -74,16 +74,17 @@ rectangle MUST equal the whole-document computation's.
 ### Requirement: A fill that cannot fit in memory is refused
 
 Before it allocates, the Gradient, the Paint Bucket, the Fill and the Stroke
-SHALL estimate their peak bytes (their box-sized planes and the bands they
-fork) and SHALL refuse the edit, recording no history state, when the estimate
-exceeds three quarters of the memory available now. The refusal SHALL be
-reported as "not enough memory" on the status bar, and the next fill that fits
-SHALL run. When the host's memory cannot be read, the gate SHALL NOT refuse.
+SHALL estimate their peak bytes (their box-sized planes, the bands they fork,
+and the display refresh of the box) and SHALL refuse the edit, recording no history state, when the estimate
+exceeds the memory governor's room (`document/memory-governor`). The refusal
+SHALL be reported as "not enough memory" on the status bar, and the next fill
+that fits SHALL run. When the host's memory cannot be read, the gate SHALL NOT
+refuse.
 
 #### Scenario: Each fill refuses what memory cannot hold [fmb_gate]
 
-- **WHEN** the available memory is made smaller than any fill's estimate and a
-  bucket click, a gradient, a Fill and a Stroke are tried, then the memory is
+- **WHEN** the governor's room is made smaller than any fill's estimate and a
+  bucket click, a gradient, a Fill and a Stroke are tried, then the room is
   restored and the Fill tried again
 - **THEN** each is refused with the memory reason, the pixels and history are
   unchanged, and the restored Fill commits one state and clears the reason

@@ -4,6 +4,7 @@
 #include "api/engine_bridge.h"
 
 #include "api/history_api.h"
+#include "memory_refusal.h"
 #include "text_input.h"
 
 
@@ -442,7 +443,10 @@ void PicturaMainWindow::wireEditHistory()
         if (!view) {
             return;
         }
-        history_api::canUndo(*view) ? history_api::undo(*view) : history_api::redo(*view);
+        const bool undo = history_api::canUndo(*view);
+        if (!(undo ? history_api::undo(*view) : history_api::redo(*view))) {
+            reportMemoryRefusal(this, undo ? tr("undo") : tr("redo"));
+        }
     });
     registry_->setEnabledProvider(command_ids::EditUndo, [this]() {
         PictureView* view = activeView();
@@ -473,8 +477,8 @@ void PicturaMainWindow::wireEditHistory()
             refresh();
             return;
         }
-        if (PictureView* view = activeView()) {
-            history_api::redo(*view);
+        if (PictureView* view = activeView(); view && !history_api::redo(*view)) {
+            reportMemoryRefusal(this, tr("redo"));
         }
     });
     registry_->setEnabledProvider(command_ids::EditRedo, [this]() {
@@ -483,16 +487,16 @@ void PicturaMainWindow::wireEditHistory()
     });
 
     registry_->setHandler(command_ids::EditStepBackward, [this]() {
-        if (PictureView* view = activeView()) {
-            history_api::undo(*view);
+        if (PictureView* view = activeView(); view && !history_api::undo(*view)) {
+            reportMemoryRefusal(this, tr("undo"));
         }
     });
     registry_->setEnabledProvider(command_ids::EditStepBackward,
                                   [this]() { return activeView() && history_api::canUndo(*activeView()); });
 
     registry_->setHandler(command_ids::EditStepForward, [this]() {
-        if (PictureView* view = activeView()) {
-            history_api::redo(*view);
+        if (PictureView* view = activeView(); view && !history_api::redo(*view)) {
+            reportMemoryRefusal(this, tr("redo"));
         }
     });
     registry_->setEnabledProvider(command_ids::EditStepForward,

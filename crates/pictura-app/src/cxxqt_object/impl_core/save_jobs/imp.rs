@@ -20,6 +20,7 @@ pub(in crate::cxxqt_object) struct SaveJob {
 }
 
 pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path: &str) -> bool {
+    super::super::super::helpers::memory_gate::clear();
     if rust
         .save_job
         .as_ref()
@@ -40,6 +41,14 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
     let Some(doc_ref) = session.doc.as_ref() else {
         return false;
     };
+    // Held by the worker until its write lands, so other edits see the room
+    // the save is using.
+    let Ok(reservation) = pictura_core::memory::governor().reserve(
+        super::super::super::helpers::memory_gate::save_bytes(doc_ref),
+        "a save",
+    ) else {
+        return false;
+    };
     let embed = rust
         .save_embed_profile
         .unwrap_or_else(|| save_embed_default(rust, true));
@@ -56,6 +65,7 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
     let worker_path = path.to_string();
     let job_path = path.to_string();
     let handle = std::thread::spawn(move || {
+        let _reservation = reservation;
         let mut doc = doc;
         if dirty {
             pictura_render::refresh_native_composite(&mut doc);

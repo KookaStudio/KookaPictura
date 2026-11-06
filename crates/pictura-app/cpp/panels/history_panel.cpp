@@ -1,6 +1,7 @@
 #include "history_panel.h"
 
 #include "api/history_api.h"
+#include "memory_refusal.h"
 #include "icons.h"
 
 #include <QtCore/QSize>
@@ -124,9 +125,11 @@ void HistoryPanel::activate(QListWidgetItem* item)
     }
     const int index = item->data(kIndexRole).toInt();
     if (item->data(kKindRole).toInt() == kSnapshotKind) {
-        history_api::restoreSnapshot(*view_, index);
-    } else {
-        history_api::jump(*view_, index);
+        if (!history_api::restoreSnapshot(*view_, index)) {
+            reportMemoryRefusal(this, tr("restore the snapshot"));
+        }
+    } else if (!history_api::jump(*view_, index)) {
+        reportMemoryRefusal(this, tr("step through history"));
     }
 }
 
@@ -149,12 +152,12 @@ bool HistoryPanel::eventFilter(QObject* watched, QEvent* event)
 bool HistoryPanel::performPanelMenuAction(const QString& actionId)
 {
     if (actionId == QLatin1String("stepForward")) {
-        if (view_) {
-            history_api::redo(*view_);
+        if (view_ && !history_api::redo(*view_)) {
+            reportMemoryRefusal(this, tr("redo"));
         }
     } else if (actionId == QLatin1String("stepBackward")) {
-        if (view_) {
-            history_api::undo(*view_);
+        if (view_ && !history_api::undo(*view_)) {
+            reportMemoryRefusal(this, tr("undo"));
         }
     } else if (actionId == QLatin1String("newSnapshot")) {
         createSnapshot();
@@ -175,7 +178,9 @@ void HistoryPanel::createSnapshot()
     if (!accepted || label.isEmpty()) {
         return;
     }
-    history_api::addSnapshot(*view_, label);
+    if (!history_api::addSnapshot(*view_, label)) {
+        reportMemoryRefusal(this, tr("create the snapshot"));
+    }
 }
 
 } // namespace pictura

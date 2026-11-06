@@ -14,6 +14,7 @@ use pictura_codec::{eps, Ghostscript, Policy, Raster, RasterError, Resolution};
 use pictura_core::{BitDepth, ColorMode, Document, Layer, LockFlags};
 use pictura_render::DocumentComposite;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 /// What an open does to the view's file path.
@@ -122,19 +123,53 @@ pub(in crate::cxxqt_object) fn decode_psd(
     gpu: bool,
     progress: &dyn Fn(u8, &str),
 ) -> Option<OpenedDocument> {
-    decode_psd_with(path, open_options(policy), gpu, progress)
+    decode_psd_with(path, open_options(policy), open_budget(), gpu, progress)
+}
+
+/// Whether the last PSD open was refused because its decode did not fit the
+/// memory governor's room. Set on the open's worker, read on the GUI thread.
+static OPEN_REFUSED_FOR_MEMORY: AtomicBool = AtomicBool::new(false);
+
+pub(in crate::cxxqt_object) fn open_refused_for_memory() -> bool {
+    OPEN_REFUSED_FOR_MEMORY.load(Ordering::Relaxed)
+}
+
+/// The decode budget of an open, read on the calling (GUI) thread: the default,
+/// with its document limit bounded by two thirds of the governor's room (the
+/// rest is the composite, history and display the open builds after the
+/// decode, #1211), and whether the room bounded it.
+pub(in crate::cxxqt_object) fn open_budget() -> (pictura_codec::ImageBudget, bool) {
+    let default = pictura_codec::ImageBudget::default();
+    let room = pictura_core::memory::governor()
+        .room()
+        .map(|room| room / 3 * 2);
+    let budget = super::super::helpers::bounded_budget(default, room);
+    (
+        budget,
+        budget.max_document_bytes < default.max_document_bytes,
+    )
 }
 
 pub(super) fn decode_psd_with(
     path: &str,
     options: pictura_codec::OpenOptions,
+    (budget, bounded): (pictura_codec::ImageBudget, bool),
     gpu: bool,
     progress: &dyn Fn(u8, &str),
 ) -> Option<OpenedDocument> {
+    OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
     progress(5, "Reading file");
     let bytes = std::fs::read(path).ok()?;
     progress(25, "Decoding");
-    let mut doc = pictura_codec::read_psd_with_options(&bytes, &options).ok()?;
+    let mut doc = match pictura_codec::read_psd_within_options(&bytes, &options, budget) {
+        Ok(doc) => doc,
+        Err(error) => {
+            // The codec names a budget refusal "… exceeds the decode budget".
+            let memory = bounded && error.to_string().contains("decode budget");
+            OPEN_REFUSED_FOR_MEMORY.store(memory, Ordering::Relaxed);
+            return None;
+        }
+    };
     progress(65, "Compositing");
     store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
@@ -632,9 +667,12 @@ pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
         };
         (options, rust.gpu_compute)
     };
+    let budget = open_budget();
+    OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
     start(&mut view, move |progress| {
-        match decode_psd_with(&path, options, gpu, progress) {
+        match decode_psd_with(&path, options, budget, gpu, progress) {
             Some(opened) => (Some(opened), "ok".to_string(), Vec::new()),
+            None if open_refused_for_memory() => (None, "error:memory".to_string(), Vec::new()),
             None => (None, "error".to_string(), Vec::new()),
         }
     });

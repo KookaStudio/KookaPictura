@@ -12,6 +12,8 @@
 #include "frame_canvas.h"
 #include "frame_update.h"
 #include "gpu_probe.h"
+#include "memory_refusal.h"
+#include "api/paint_bridge.h"
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
@@ -110,6 +112,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     recent_ = state.recent;
     setFileDialogRecentPaths(recent_);
     gpuCompute_ = state.gpuCompute;
+    set_memory_usage_percent(state.memoryUsagePercent);
     colorPolicy_ = state.colorPolicy;
     cmykPolicy_ = state.cmykPolicy;
     workingCmyk_ = state.workingCmyk;
@@ -478,6 +481,7 @@ bool PicturaMainWindow::newDocument(const QString& name, int width, int height,
     auto* view = new PictureView(this);
     if (!document_api::newDocument(*view, width, height, mode, depth, background)) {
         delete view;
+        reportMemoryRefusal(this, tr("create the document"));
         return false;
     }
     addDocument(view, QString());
@@ -586,6 +590,9 @@ bool PicturaMainWindow::saveActiveAs(const QString& path)
                      [view] { return document_api::saveFinish(*view); })
         : document_api::save(*view, path);
     if (!saved) {
+        if (saveRunsOnWorker(path)) {
+            reportMemoryRefusal(this, tr("save the document"));
+        }
         return false;
     }
     docs_[index]->path = path;
@@ -720,7 +727,9 @@ void PicturaMainWindow::showNewDocumentDialog()
     if (!create_document(*view, spec.width, spec.height, spec.mode, spec.depth,
                          spec.fill.rgb() & 0xffffffu, spec.transparent, spec.ppi, spec.perCm)) {
         delete view;
-        statusBar()->showMessage(tr("Could not create the document."));
+        if (!reportMemoryRefusal(this, tr("create the document"))) {
+            statusBar()->showMessage(tr("Could not create the document."));
+        }
         return;
     }
     const int index = addDocument(view, QString());
