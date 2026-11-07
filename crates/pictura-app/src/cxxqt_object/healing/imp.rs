@@ -1,6 +1,5 @@
 use super::*;
 
-use super::super::helpers::active_mask_target;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -18,7 +17,7 @@ impl super::super::state::PictureViewRust {
     /// Begin a healing gesture on the active layer. False without a document, a
     /// layer target, or when another session owns the slot.
     pub(in crate::cxxqt_object) fn begin_heal(&mut self, diameter: i32, hardness: i32) -> bool {
-        if active_mask_target(self).is_some() {
+        if crate::cxxqt_object::helpers::mask_editing(self) {
             return false;
         }
         if !self.slot_allows(super::super::document_session::SessionKind::Healing) {

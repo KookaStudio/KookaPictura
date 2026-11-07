@@ -4,7 +4,6 @@
 //! canvas shows rather than what the document holds. The document is untouched
 //! until OK filters it at full resolution.
 
-use super::super::helpers::active_mask_target;
 use super::super::helpers_composite::selection_to_mask;
 use super::super::state::{CanvasProxy, PictureViewRust};
 #[cfg(test)]
@@ -75,7 +74,8 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
 ) -> Option<PixelBuffer> {
     // A Smart Object's preview is its chain on the canvas, so the dialog falls
     // back to the section preview.
-    if active_mask_target(rust).is_some() || super::smart_apply::on_smart_object(rust) {
+    if crate::cxxqt_object::helpers::mask_editing(rust) || super::smart_apply::on_smart_object(rust)
+    {
         return None;
     }
     proxy_render(rust, std::slice::from_ref(filter), region, scale)
@@ -170,7 +170,7 @@ pub(in crate::cxxqt_object) fn section_buffer(
     filter: &pictura_filters::Filter,
     section: PsdRect,
 ) -> Option<PixelBuffer> {
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         return None;
     }
     let path = rust.layer_target.single().map(str::to_string)?;

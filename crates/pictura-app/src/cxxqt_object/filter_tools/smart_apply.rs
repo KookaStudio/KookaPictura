@@ -12,7 +12,7 @@ use pictura_core::{FilterMask, PsdRect, SmartFilter};
 use pictura_filters::catalogue;
 
 use super::super::document_session::{FilterPreview, PreviewBaseline};
-use super::super::helpers::{active_mask_target, layer_has_effects};
+use super::super::helpers::layer_has_effects;
 use super::super::qobject::PictureView;
 use super::super::state::PictureViewRust;
 use crate::cxxqt_object::edit::structural;
@@ -21,7 +21,7 @@ use crate::cxxqt_object::edit::structural;
 /// carrying a smart object, with no layer mask targeted. Linked and legacy
 /// objects count, so the destructive paths refuse them.
 pub(in crate::cxxqt_object) fn on_smart_object(rust: &PictureViewRust) -> bool {
-    active_mask_target(rust).is_none()
+    !crate::cxxqt_object::helpers::mask_editing(rust)
         && rust
             .session
             .doc
@@ -33,7 +33,7 @@ pub(in crate::cxxqt_object) fn on_smart_object(rust: &PictureViewRust) -> bool {
 
 /// The path of the embedded Smart Object a Smart Filter can attach to.
 pub(in crate::cxxqt_object) fn smart_filter_target(rust: &PictureViewRust) -> Option<String> {
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         return None;
     }
     let doc = rust.session.doc.as_ref()?;

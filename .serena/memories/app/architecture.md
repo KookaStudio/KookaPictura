@@ -27,6 +27,13 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
 - Qt decodes images at the app boundary to packed RGBA8888 (`cpp/decode_image.cpp`); the engine
   never sees Qt types.
 
+## Quick Mask selection and presentation
+
+- Runtime mask coverage is `DocumentSession.quick_mask.coverage` (None means implicit full coverage). While active, `DocumentSession.selection` is the independent temporary editing constraint; entry moves the original selection into coverage, exit replaces the constraint with coverage. Never write mask strokes into the selection slot.
+- `Snapshot.quick_mask: Option<Option<Selection>>` distinguishes ordinary history entries from Quick Mask entries, including implicit-full coverage. The session attaches it after capture and interprets restores according to the current mode; mode toggles do not create history states.
+- Quick Mask strokes participate in `is_painting` and the existing region/deferred-present queue. Dabs emit damage without whole-frame revision or `changed`; mode/display/history changes invalidate the whole presentation. Native RGBA crops sample coverage rows directly.
+- Crop-backed canvas modes need damage patches at every pyramid level. Stored-level views do not keep the crop cache; assuming every zoomed-out view has one causes full overlay redraws per dab.
+
 ## C++/Qt shell (`crates/pictura-app/cpp/`)
 
 - **New `.cpp`/`.h` files MUST be added to `CMakeLists.txt` explicitly — there is no globbing.**

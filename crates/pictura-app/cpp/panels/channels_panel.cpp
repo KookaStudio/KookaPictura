@@ -1,10 +1,11 @@
 #include "channels_panel.h"
+#include "api/layers_bridge.h"
+#include <QtCore/QScopedValueRollback>
 
 #include "api/document_api.h"
 #include "color_models.h"
 #include "icons.h"
 #include "theme.h"
-#include "api/layers_bridge.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QEvent>
@@ -172,7 +173,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
     updateFooter();
 }
 
-void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alpha)
+void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind)
 {
     auto* rowWidget = new QWidget(list_);
     rowWidget->setAutoFillBackground(true);
@@ -205,12 +206,15 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
     auto* item = new QListWidgetItem(list_);
     item->setSizeHint(QSize(0, kThumbnailSize + 8));
     list_->setItemWidget(item, rowWidget);
-    rows_.append(Row{name, shortcut, alpha, eye, thumb, rowWidget});
+    rows_.append(Row{name, shortcut, alpha>=0?RowKind::Alpha:(alpha==kMaskChannel?RowKind::LayerMask:kind), alpha, eye, thumb, rowWidget});
     styleRows();
 }
 
 void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
 {
+    QScopedValueRollback<bool> syncing(syncing_,true);
+    quickMask_=view_ && quick_mask_active(*view_);
+    quickMaskRowIndex_=-1;
     list_->clear();
     rows_.clear();
     maskRowIndex_ = -1;
@@ -234,6 +238,10 @@ void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
     for (int i = 0; i < alphaCount; ++i, ++key) {
         addRow(QStringLiteral("Alpha %1").arg(i + 1),
                key <= 9 ? QStringLiteral("Ctrl+%1").arg(key) : QString(), i);
+    }
+    if(quickMask_) {
+        quickMaskRowIndex_=rows_.size();
+        addRow(QStringLiteral("Quick Mask"),QString(),-1,RowKind::QuickMask);
     }
     // Only the working modes' channels can be hidden on the canvas; a lone
     // channel has nothing to hide behind.
@@ -280,7 +288,7 @@ void ChannelsPanel::refresh()
     const QString mode = document ? QString(channels_mode(*view_)) : QStringLiteral("rgb");
     const int alphas = document ? view_->selection_channel_count() : 0;
     const QString maskName = document ? QString(channels_active_mask_name(*view_)) : QString();
-    if (mode != mode_ || alphas != alphaCount_ || maskName != maskName_) {
+    if (mode != mode_ || alphas != alphaCount_ || maskName != maskName_ || quickMask_ != (document && quick_mask_active(*view_))) {
         rebuild(mode, alphas);
     }
     refreshThumbnails();
@@ -306,6 +314,10 @@ void ChannelsPanel::refreshThumbnails()
     }
     for (int i = 0; i < rows_.size(); ++i) {
         const Row& row = rows_.at(i);
+        if(row.kind==RowKind::QuickMask) {
+            row.thumbnail->setPixmap(QPixmap::fromImage(quick_mask_thumbnail(*view_,kThumbnailSize)));
+            continue;
+        }
         if (row.alpha == kMaskChannel) {
             int w = 0;
             int h = 0;
@@ -374,6 +386,8 @@ void ChannelsPanel::applyChannelSolo(int row)
     if (!view_ || !view_->has_document()) {
         return;
     }
+    if(row>=0 && row==quickMaskRowIndex_) {quick_mask_set_grayscale(*view_,true);return;}
+    if(quick_mask_active(*view_)) quick_mask_set(*view_,false);
     if (row >= 0 && row == maskRowIndex_) {
         mask_solo_set(*view_, layer_selection_anchor(*view_));
     } else {
@@ -387,8 +401,9 @@ void ChannelsPanel::updateFooter()
     const bool alpha = selectedAlpha() >= 0;
     load_->setEnabled(document && alpha);
     remove_->setEnabled(document && alpha);
-    add_->setEnabled(document);
-    save_->setEnabled(document && view_->has_selection());
+    const bool temporary=list_->currentRow()>=0 && list_->currentRow()==quickMaskRowIndex_;
+    add_->setEnabled(document && !temporary);
+    save_->setEnabled(document && view_->has_selection() && !temporary);
     styleRows();
 }
 
@@ -445,6 +460,7 @@ int ChannelsPanel::rowAt(const QPoint& viewportPos) const
 
 void ChannelsPanel::loadRowSelection(int row)
 {
+    if(row>=0 && row==quickMaskRowIndex_) return;
     if (!view_ || row < 0 || row >= rows_.size()) {
         return;
     }

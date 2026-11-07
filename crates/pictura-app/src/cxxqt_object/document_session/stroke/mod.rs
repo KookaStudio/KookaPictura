@@ -21,6 +21,8 @@ use pictura_render::gpu::GpuStroke;
 /// begins — so the session never holds both.
 #[derive(Default)]
 pub(in crate::cxxqt_object) struct StrokeSession {
+    pub(in crate::cxxqt_object) quick_mask:
+        Option<crate::cxxqt_object::quick_mask::QuickMaskStroke>,
     /// The CPU stroke on a layer's pixels.
     pub(in crate::cxxqt_object) stroke: Option<Stroke>,
     /// The stroke on a layer mask's coverage instead of the layer's pixels.

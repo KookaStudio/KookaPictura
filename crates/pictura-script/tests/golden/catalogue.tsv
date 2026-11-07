@@ -489,6 +489,7 @@ view.proof.setup.color.blindness.protanopia.type	View/Proof Setup/Color Blindnes
 view.proof.setup.color.blindness.deuteranopia.type	View/Proof Setup/Color Blindness/Deuteranopia-type	Deuteranopia-type		0	0
 view.proof.colors	View/Proof Colors	Proof Colors	Ctrl+Y	0	0
 view.gamut.warning	View/Gamut Warning	Gamut Warning	Shift+Ctrl+Y	0	0
+view.quickMask	View/Quick Mask Mode	Quick Mask Mode	Q	1	1
 view.zoomIn	View/Zoom In	Zoom In	Ctrl++	1	0
 view.zoomOut	View/Zoom Out	Zoom Out	Ctrl+-	1	0
 view.fitOnScreen	View/Fit On Screen	Fit On Screen	Ctrl+0	1	0

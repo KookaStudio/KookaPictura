@@ -740,6 +740,7 @@ QVector<ThemeToken> Theme::tokens(Theme::ThemeFamily family, int level)
         color("content-control", ramp.contentControl),
         color("icon", ramp.icon),
         color("selection", ramp.selection),
+        color("quick-mask-active", QColor(QStringLiteral("#963f3f"))),
         color("content-on-selection", ramp.contentOnSelection),
         color("surface-tooltip", ramp.surfaceTooltip),
         color("content-tooltip", ramp.contentTooltip),

@@ -29,7 +29,7 @@ pub(super) fn perspective_crop_commit_sized(
             return false;
         }
         // Canvas dimensions changed, so the old selection no longer maps.
-        rust.session.set_selection(None);
+        rust.session.clear_geometry_selection();
         true
     };
     if cropped {
@@ -60,7 +60,7 @@ pub(super) fn crop_to(
             return false;
         }
         // Canvas dimensions changed, so the old selection no longer maps.
-        rust.session.set_selection(None);
+        rust.session.clear_geometry_selection();
     }
     view.as_mut().edit(&crop_label(label), |_| Edit::Full);
     true
@@ -150,7 +150,7 @@ pub(super) fn straighten_crop(
             return false;
         }
         // Canvas dimensions changed, so the old selection no longer maps.
-        rust.session.set_selection(None);
+        rust.session.clear_geometry_selection();
         true
     };
     if cropped {

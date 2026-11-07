@@ -77,6 +77,33 @@ fn view_with_two_layers() -> PictureViewRust {
 }
 
 #[test]
+fn geometry_selection_clear_discards_quick_mask_and_clip() {
+    let mut view = view();
+    let remembered = Selection::rect(8, 8, 1, 1, 3, 3);
+    view.session.deselected_selection = Some(remembered.clone());
+    view.session
+        .set_selection(Some(Selection::rect(8, 8, 2, 2, 4, 4)));
+    assert!(view.set_quick_mask_mode(true));
+    view.session
+        .set_selection(Some(Selection::rect(8, 8, 3, 3, 2, 2)));
+    view.session.doc = Some(Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight));
+    let revision = view.session.selection_revision;
+    let history = view.session.history.count();
+
+    view.session.clear_geometry_selection();
+
+    assert!(view.session.selection.is_none());
+    assert!(view.session.quick_mask.coverage.is_none());
+    assert!(view.session.quick_mask.active);
+    assert_eq!(view.session.selection_revision, revision.wrapping_add(1));
+    assert_eq!(view.session.history.count(), history);
+    assert_eq!(view.session.quick_mask.deselected, Some(remembered.clone()));
+    assert!(view.set_quick_mask_mode(false));
+    assert!(view.session.selection.is_none());
+    assert_eq!(view.session.deselected_selection, Some(remembered));
+}
+
+#[test]
 fn a_second_session_is_refused() {
     let mut view = view();
     assert!(view.begin_heal(20, 50), "the healing gesture starts");

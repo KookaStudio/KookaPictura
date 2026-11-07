@@ -36,6 +36,7 @@ mod bounds;
 mod polygon;
 
 mod bounded;
+pub mod quick_mask;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SelectError {

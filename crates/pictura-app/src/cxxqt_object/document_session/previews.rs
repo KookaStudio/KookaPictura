@@ -125,6 +125,9 @@ impl PreviewBaseline {
 /// The two are the same kind of session, so the slot holds one of them, never
 /// both.
 pub(in crate::cxxqt_object) enum FilterPreviewSession {
+    QuickMask {
+        original: Option<pictura_select::Selection>,
+    },
     /// A preview on a layer's pixels, with the baseline it overwrote.
     Layer(FilterPreview),
     /// A preview on a mask's coverage, with the coverage it overwrote.

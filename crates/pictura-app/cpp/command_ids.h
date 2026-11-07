@@ -178,6 +178,7 @@ inline constexpr char LayerSmartObjectResetTransform[] = "layer.smartObject.rese
 inline constexpr char LayerSmartObjectConvertToLayers[] = "layer.smartObject.convertToLayers";
 inline constexpr char LayerSmartObjectNewViaCopy[] = "layer.smartObject.newViaCopy";
 inline constexpr char LayerSmartFiltersClear[] = "layer.smartFilters.clear";
+inline constexpr char ViewQuickMask[] = "view.quickMask";
 inline constexpr char ViewZoomIn[] = "view.zoomIn";
 inline constexpr char ViewZoomOut[] = "view.zoomOut";
 inline constexpr char ViewFitOnScreen[] = "view.fitOnScreen";

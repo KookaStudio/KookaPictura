@@ -9,11 +9,18 @@
 mod imp;
 
 use super::qobject::PictureView;
+pub(super) use super::quick_mask::{
+    quick_mask_active, quick_mask_color, quick_mask_coverage, quick_mask_grayscale,
+    quick_mask_opacity, quick_mask_selected_areas, quick_mask_set, quick_mask_set_grayscale,
+    quick_mask_set_options, quick_mask_thumbnail,
+};
 pub(super) use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
 
@@ -24,6 +31,22 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        fn quick_mask_active(view: &PictureView) -> bool;
+        fn quick_mask_coverage(view: &PictureView, x: i32, y: i32) -> i32;
+        fn quick_mask_set(view: Pin<&mut PictureView>, active: bool) -> bool;
+        fn quick_mask_selected_areas(view: &PictureView) -> bool;
+        fn quick_mask_color(view: &PictureView) -> u32;
+        fn quick_mask_opacity(view: &PictureView) -> i32;
+        fn quick_mask_set_options(
+            view: Pin<&mut PictureView>,
+            selected: bool,
+            color: u32,
+            opacity: i32,
+        ) -> bool;
+        fn quick_mask_grayscale(view: &PictureView) -> bool;
+        fn quick_mask_set_grayscale(view: Pin<&mut PictureView>, gray: bool) -> bool;
+        fn quick_mask_thumbnail(view: &PictureView, side: i32) -> QImage;
+
         /// The mode the Channels panel lists: `"rgb"`, `"grayscale"`, `"cmyk"`, `"lab"`, `"multichannel"`, `"indexed"`, `"bitmap"`, or `"duotone"` — the opened file's mode when it was converted for editing. Empty without a document.
         fn channels_mode(view: &PictureView) -> QString;
 

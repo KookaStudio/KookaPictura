@@ -201,7 +201,7 @@ impl ActiveSession {
         match self {
             ActiveSession::Idle => None,
             ActiveSession::Stroke(session) => {
-                if session.mask_stroke.is_some() {
+                if session.mask_stroke.is_some() || session.quick_mask.is_some() {
                     Some(SessionKind::MaskPaint)
                 } else {
                     Some(SessionKind::Paint)
@@ -520,7 +520,7 @@ impl ActiveSession {
         match self {
             ActiveSession::FilterPreview(preview) => match &**preview {
                 FilterPreviewSession::Layer(layer) => Some(layer),
-                FilterPreviewSession::Mask { .. } => None,
+                FilterPreviewSession::Mask { .. } | FilterPreviewSession::QuickMask { .. } => None,
             },
             _ => None,
         }
@@ -534,7 +534,7 @@ impl ActiveSession {
         match self {
             ActiveSession::FilterPreview(preview) => match &**preview {
                 FilterPreviewSession::Mask { path, original } => Some((path, original.as_ref())),
-                FilterPreviewSession::Layer(_) => None,
+                FilterPreviewSession::Layer(_) | FilterPreviewSession::QuickMask { .. } => None,
             },
             _ => None,
         }
@@ -574,7 +574,7 @@ impl ActiveSession {
         match std::mem::replace(self, ActiveSession::Idle) {
             ActiveSession::FilterPreview(preview) => match *preview {
                 FilterPreviewSession::Layer(layer) => Some(layer),
-                FilterPreviewSession::Mask { .. } => None,
+                FilterPreviewSession::Mask { .. } | FilterPreviewSession::QuickMask { .. } => None,
             },
             other => {
                 *self = other;

@@ -19,6 +19,7 @@ class QMenu;
 class QMouseEvent;
 class QPaintEvent;
 class QToolButton;
+class QTimer;
 class QVBoxLayout;
 
 namespace pictura {
@@ -78,6 +79,7 @@ class Toolbox : public QWidget {
 
 public:
     explicit Toolbox(ToolController* controller, ColorState* colors, QWidget* parent = nullptr);
+    void setQuickMaskState(bool enabled, bool active, bool selectedAreas);
     ~Toolbox() override;
 
     // The group slot buttons in catalogue order (self-test accessor).
@@ -134,6 +136,8 @@ public:
 
 signals:
     void paintMaskToggled(bool checked);
+    void quickMaskOptionsRequested();
+    void quickMaskPolarityRequested();
     void columnsChanged(int columns);
 
 private:
@@ -176,6 +180,7 @@ private:
     QToolButton* screenMode_ = nullptr;
     QList<QAction*> screenModeActions_;
     QToolButton* paintMask_ = nullptr;
+    QTimer* paintMaskClick_ = nullptr;
     QMenu* openSlotMenu_ = nullptr;
     QToolButton* openSlotButton_ = nullptr;
     QSize slotSize_ { 36, 28 };

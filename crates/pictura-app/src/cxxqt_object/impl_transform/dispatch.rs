@@ -221,6 +221,9 @@ impl qobject::PictureView {
 
 impl qobject::PictureView {
     pub fn translate_layer(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
+        if !self.rust().quick_mask_content_allowed() {
+            return false;
+        }
         if let Some(path) = super::mask_move::target(self.rust()) {
             return self.commit_mask_move(path, dx, dy);
         }
@@ -256,6 +259,9 @@ impl qobject::PictureView {
     }
 
     pub fn move_preview(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
+        if !self.rust().quick_mask_content_allowed() {
+            return false;
+        }
         if dx == 0 && dy == 0 {
             return false;
         }
@@ -318,7 +324,7 @@ impl qobject::PictureView {
             pictura_render::resize_document(doc, width as u32, height as u32, resample).is_ok()
         };
         if resized {
-            self.as_mut().rust_mut().session.set_selection(None);
+            self.as_mut().rust_mut().session.clear_geometry_selection();
             self.as_mut().edit("Image Size", |_| Edit::Full);
         }
         resized
@@ -347,7 +353,7 @@ impl qobject::PictureView {
             pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor).is_ok()
         };
         if resized {
-            self.as_mut().rust_mut().session.set_selection(None);
+            self.as_mut().rust_mut().session.clear_geometry_selection();
             self.as_mut().edit("Canvas Size", |_| Edit::Full);
         }
         resized
@@ -368,7 +374,7 @@ impl qobject::PictureView {
             pictura_render::rotate_document(doc, quarter_turns as u8).is_ok()
         };
         if rotated {
-            self.as_mut().rust_mut().session.set_selection(None);
+            self.as_mut().rust_mut().session.clear_geometry_selection();
             self.as_mut().edit("Rotate", |_| Edit::Full);
         }
         rotated
@@ -384,7 +390,7 @@ impl qobject::PictureView {
                 return false;
             };
             pictura_render::flip_document(doc, horizontal);
-            rust.session.set_selection(None);
+            rust.session.clear_geometry_selection();
         }
         self.as_mut().edit("Flip", |_| Edit::Full);
         true

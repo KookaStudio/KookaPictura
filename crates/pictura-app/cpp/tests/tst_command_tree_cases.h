@@ -34,6 +34,7 @@ inline void crMenuCatalogue(pictura::PicturaMainWindow& window)
         ++catalogueCommands;
         QVERIFY2(byId.contains(row.id), qPrintable(row.id));
         const pictura::CommandInfo info = byId.value(row.id);
+        QVERIFY2(info.path.size() >= 2, qPrintable(info.id));
         QCOMPARE(info.path, row.path);
         QCOMPARE(info.label, row.label);
     }
@@ -54,12 +55,17 @@ inline void crMenuCatalogue(pictura::PicturaMainWindow& window)
             visit(menu);
         }
     }
-    // The UI-size steps are shortcut-only: the frame keeps them on the window
-    // and takes their rows out of the Window menu.
+    // These commands stay on the window for shortcuts and toolbar controls;
+    // their catalogue categories also keep the shortcut editor navigable.
     const QSet<QString> shortcutOnly = {
         QString::fromLatin1(pictura::command_ids::WindowUiEnlarge),
         QString::fromLatin1(pictura::command_ids::WindowUiDecrease),
-        QString::fromLatin1(pictura::command_ids::WindowUiReset)};
+        QString::fromLatin1(pictura::command_ids::WindowUiReset),
+        QString::fromLatin1(pictura::command_ids::ViewQuickMask)};
+    for (const QString& id : shortcutOnly) {
+        QVERIFY2(!menuIds.contains(id), qPrintable(id));
+        QVERIFY2(window.actions().contains(window.registry()->action(id)), qPrintable(id));
+    }
     for (const pictura::CommandSpecRow& row : rows) {
         if (!row.id.isEmpty() && !shortcutOnly.contains(row.id)) {
             QVERIFY2(menuIds.contains(row.id), qPrintable(row.id));
@@ -109,7 +115,7 @@ inline void crListCommands(pictura::PicturaMainWindow& window)
 {
     window.registry()->refresh();
     const QList<pictura::CommandInfo> infos = window.registry()->describe();
-    QCOMPARE(infos.size(), 596);
+    QCOMPARE(infos.size(), 597);
     QHash<QString, pictura::CommandInfo> byId;
     for (const pictura::CommandInfo& info : infos) {
         byId.insert(info.id, info);
@@ -127,7 +133,7 @@ inline void crListCommands(pictura::PicturaMainWindow& window)
         QCOMPARE(info.path, row.path);
         QCOMPARE(info.label, row.label);
     }
-    QCOMPARE(index, 596);
+    QCOMPARE(index, 597);
     QCOMPARE(index, infos.size());
 
     const pictura::CommandInfo fileNew =

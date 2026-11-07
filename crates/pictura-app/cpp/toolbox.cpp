@@ -12,6 +12,7 @@
 #include <QtCore/QEvent>
 #include <QtCore/QSize>
 #include <QtCore/QTimer>
+#include <QtCore/QSignalBlocker>
 #include <QtGui/QAction>
 #include <QtGui/QKeySequence>
 #include <QtGui/QMouseEvent>
@@ -483,9 +484,12 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
         paintMask_->setText(QStringLiteral("Q"));
     }
     paintMask_->setToolTip(tr("Edit in Quick Mask Mode"));
-    // ponytail: button stub, Quick Mask behavior tracked in #172
+    paintMask_->installEventFilter(this);
+    paintMaskClick_ = new QTimer(this);
+    paintMaskClick_->setSingleShot(true);
+    connect(paintMaskClick_, &QTimer::timeout, paintMask_, &QToolButton::click);
     connect(paintMask_, &QToolButton::toggled, this,
-            [this](bool checked) { emit paintMaskToggled(checked); });
+        [this](bool checked) { emit paintMaskToggled(checked); });
 
     screenMode_ = new QToolButton(this);
     screenMode_->setObjectName(QStringLiteral("screenModeButton"));
@@ -848,14 +852,61 @@ QToolButton* Toolbox::slotButtonAt(const QPoint& globalPos) const
     return nullptr;
 }
 
+void Toolbox::setQuickMaskState(bool enabled, bool active, bool selectedAreas)
+{
+    QSignalBlocker blocker(paintMask_);
+    paintMask_->setEnabled(enabled);
+    paintMask_->setChecked(active);
+    paintMask_->setToolTip(active ? tr("Edit in Standard Mode (Q)")
+                                  : tr("Edit in Quick Mask Mode (Q)"));
+    QPixmap glyph(20, 16);
+    const QColor gray = Theme::tokenColor(QStringLiteral("content-disabled"));
+    glyph.fill(selectedAreas ? QColor(Qt::white) : gray);
+    QPainter painter(&glyph);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(selectedAreas ? gray : QColor(Qt::white));
+    painter.drawEllipse(QRect(5, 3, 10, 10));
+    painter.end();
+    paintMask_->setIcon(QIcon(glyph));
+}
+
 // While a slot flyout is open the popup owns the mouse, so a press on another
 // slot would only dismiss it (needing a second click). Catch the press here,
 // close the flyout, and forward the press to the target slot so its own
 // hold/click semantics run: a quick release activates, a hold opens its menu.
 bool Toolbox::eventFilter(QObject* watched, QEvent* event)
 {
-    if (event->type() == QEvent::MouseButtonPress && openSlotMenu_
-        && openSlotMenu_->isVisible()) {
+    if (watched == paintMask_ && paintMask_->isEnabled()) {
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            if (static_cast<QMouseEvent*>(event)->button() != Qt::LeftButton)
+                return true;
+            paintMaskClick_->stop();
+            paintMask_->setProperty("suppressQuickMaskRelease", true);
+            emit quickMaskOptionsRequested();
+            return true;
+        }
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() != Qt::LeftButton)
+                return true;
+            if (mouse->modifiers().testFlag(Qt::AltModifier)) {
+                paintMaskClick_->stop();
+                paintMask_->setProperty("suppressQuickMaskRelease", true);
+                emit quickMaskPolarityRequested();
+            }
+            return true;
+        }
+        if (event->type() == QEvent::MouseButtonRelease) {
+            if (static_cast<QMouseEvent*>(event)->button() != Qt::LeftButton)
+                return true;
+            if (paintMask_->property("suppressQuickMaskRelease").toBool())
+                paintMask_->setProperty("suppressQuickMaskRelease", false);
+            else
+                paintMaskClick_->start(QApplication::doubleClickInterval());
+            return true;
+        }
+    }
+    if (event->type() == QEvent::MouseButtonPress && openSlotMenu_ && openSlotMenu_->isVisible()) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         const QPoint globalPos = mouse->globalPosition().toPoint();
         if (!openSlotMenu_->geometry().contains(globalPos)) {
@@ -866,13 +917,14 @@ bool Toolbox::eventFilter(QObject* watched, QEvent* event)
                 // release, so without the synthetic one the target's hold timer
                 // would keep running and open its flyout on a plain click.
                 QMouseEvent forwardPress(QEvent::MouseButtonPress,
-                                         target->mapFromGlobal(globalPos), mouse->globalPosition(),
-                                         mouse->button(), mouse->buttons(), mouse->modifiers());
+                    target->mapFromGlobal(globalPos),
+                    mouse->globalPosition(), mouse->button(),
+                    mouse->buttons(), mouse->modifiers());
                 QApplication::sendEvent(target, &forwardPress);
                 QMouseEvent forwardRelease(QEvent::MouseButtonRelease,
-                                           target->mapFromGlobal(globalPos),
-                                           mouse->globalPosition(), mouse->button(), Qt::NoButton,
-                                           mouse->modifiers());
+                    target->mapFromGlobal(globalPos),
+                    mouse->globalPosition(), mouse->button(),
+                    Qt::NoButton, mouse->modifiers());
                 QApplication::sendEvent(target, &forwardRelease);
                 return true;
             }

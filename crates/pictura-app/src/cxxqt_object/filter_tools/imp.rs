@@ -1,7 +1,7 @@
 use super::*;
 
 use super::super::filter_map::filter_from_kind_params;
-use super::super::helpers::{active_layer_visible, active_mask_target, active_pixel_layer};
+use super::super::helpers::{active_layer_visible, active_pixel_layer};
 use super::super::helpers_composite::{
     buffer_to_image, layer_buffer, premultiplied_display_image, selection_to_mask,
 };
@@ -46,9 +46,13 @@ pub(super) fn apply_filter_params(
         eprintln!("pictura: filter '{kind_s}' refused: {reason}");
         return false;
     };
-    let outcome = match region {
-        Some(rect) => Edit::regions(vec![rect], false),
-        None => Edit::Full,
+    let outcome = if view.rust().session.quick_mask.active {
+        Edit::Meta
+    } else {
+        match region {
+            Some(rect) => Edit::regions(vec![rect], false),
+            None => Edit::Full,
+        }
     };
     view.as_mut().edit("Filter", |_| outcome);
     true
@@ -182,7 +186,7 @@ pub(super) fn filter_target_ready(view: Pin<&mut PictureView>) -> bool {
     // A mask target routes filters and adjustments to coverage instead of the
     // layer, so a fill/adjustment/group layer is a valid target while its mask
     // is active.
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         return true;
     }
     let active = rust.layer_target.single();

@@ -11,6 +11,7 @@ use pictura_core::{Channel, ColorMode, Document, PixelBuffer, PsdRect};
 use pictura_select::{CombineMode, Selection};
 
 mod bridge;
+mod query;
 mod quick;
 mod refine;
 
@@ -133,6 +134,9 @@ impl qobject::PictureView {
         duplicate: bool,
         _background: u32,
     ) -> bool {
+        if !self.rust().quick_mask_content_allowed() {
+            return false;
+        }
         if dx == 0 && dy == 0 {
             return false;
         }
@@ -284,7 +288,7 @@ impl qobject::PictureView {
     /// agree. No history. False without a document, selection, editable active
     /// layer, or when the engine refuses (a locked source).
     pub fn begin_selection_duplicate_preview(mut self: Pin<&mut Self>) -> bool {
-        if active_mask_target(self.rust()).is_some() {
+        if crate::cxxqt_object::helpers::mask_editing(self.rust()) {
             return false;
         }
         let prepared = {
@@ -555,20 +559,6 @@ impl qobject::PictureView {
             .apply_selection_labeled(shape, mode, "Mask to Selection")
     }
 
-    pub fn has_selection(&self) -> bool {
-        self.rust().session.selection.is_some()
-    }
-
-    pub fn selection_count(&self) -> i32 {
-        self.rust().selection_pixel_count()
-    }
-
-    /// Coverage byte at `(x, y)` (0 outside, 255 fully inside, intermediate on
-    /// a feathered edge). 0 without a document/selection or out of bounds.
-    pub fn selection_coverage(&self, x: i32, y: i32) -> i32 {
-        i32::from(self.rust().selection_coverage_at(x, y))
-    }
-
     /// Merge a document-sized `shape` into the current selection with `mode`,
     /// capturing history and emitting [`changed`]. Returns false without a doc.
     ///
@@ -726,7 +716,7 @@ impl qobject::PictureView {
                 return false;
             }
             // Canvas dimensions changed, so the old selection no longer maps.
-            rust.session.set_selection(None);
+            rust.session.clear_geometry_selection();
             true
         };
         if cropped {

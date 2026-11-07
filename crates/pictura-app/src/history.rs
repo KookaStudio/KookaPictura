@@ -26,6 +26,8 @@ pub use styles::{
 pub struct Snapshot {
     pub doc: Document,
     pub selection: Option<Selection>,
+    /// Outer `Some` marks a Quick Mask entry; inner `None` is implicit full coverage.
+    pub quick_mask: Option<Option<Selection>>,
 }
 
 /// Where restoring a state changed the picture of the live document.
@@ -52,6 +54,7 @@ struct Delta {
     meta: Document,
     tiles: Vec<PlaneDelta>,
     selection: Option<Selection>,
+    quick_mask: Option<Option<Selection>>,
 }
 
 /// A state is an anchor (the oldest state, or a geometry change that breaks
@@ -222,8 +225,13 @@ impl History {
     /// [`History::capture_live`] for capturing a live document by reference.
     #[cfg(test)]
     pub fn capture(&mut self, snapshot: Snapshot, label: &str) {
-        let Snapshot { mut doc, selection } = snapshot;
+        let Snapshot {
+            mut doc,
+            selection,
+            quick_mask,
+        } = snapshot;
         self.capture_live(&mut doc, &selection, &LayerTarget::default(), label);
+        self.set_current_quick_mask(quick_mask);
     }
 
     /// Capture the live document as the next state: diff it against the
@@ -263,12 +271,14 @@ impl History {
             let stored = Stored::Hollow(Snapshot {
                 doc: hollow(doc),
                 selection: selection.clone(),
+                quick_mask: None,
             });
             stamp_agreed(&mut current, doc);
             (
                 Snapshot {
                     doc: current,
                     selection: selection.clone(),
+                    quick_mask: None,
                 },
                 stored,
             )
@@ -283,12 +293,14 @@ impl History {
                 Some(tiles) => {
                     adopt_metadata(&mut cur.doc, doc);
                     cur.selection = selection.clone();
+                    cur.quick_mask = None;
                     stamp_agreed(&mut cur.doc, doc);
                     self.current = Some(cur);
                     Stored::Delta(Delta {
                         meta: hollow(doc),
                         tiles,
                         selection: selection.clone(),
+                        quick_mask: None,
                     })
                 }
                 None => {
@@ -302,10 +314,12 @@ impl History {
                     let current = Snapshot {
                         doc: shared_copy(doc, &cur.doc),
                         selection: selection.clone(),
+                        quick_mask: None,
                     };
                     let stored = Stored::Hollow(Snapshot {
                         doc: hollow(doc),
                         selection: selection.clone(),
+                        quick_mask: None,
                     });
                     self.fill_anchor(cur);
                     self.current = Some(current);
@@ -422,6 +436,7 @@ impl History {
                 stored: Stored::Hollow(Snapshot {
                     doc: hollow(&current.doc),
                     selection: current.selection.clone(),
+                    quick_mask: current.quick_mask.clone(),
                 }),
                 target_before: self.current_target.clone(),
                 target_after: self.current_target.clone(),
@@ -507,9 +522,22 @@ impl History {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn current_snapshot(&self) -> Option<&Snapshot> {
         self.current.as_ref()
+    }
+
+    /// Attach runtime mask metadata to both representations of the current state.
+    pub(crate) fn set_current_quick_mask(&mut self, quick_mask: Option<Option<Selection>>) {
+        let (Some(current), Some(entry)) =
+            (self.current.as_mut(), self.states.get_mut(self.cursor))
+        else {
+            return;
+        };
+        current.quick_mask = quick_mask.clone();
+        match &mut entry.stored {
+            Stored::Full(snapshot) | Stored::Hollow(snapshot) => snapshot.quick_mask = quick_mask,
+            Stored::Delta(delta) => delta.quick_mask = quick_mask,
+        }
     }
 
     pub fn snapshot_count(&self) -> usize {
@@ -656,10 +684,10 @@ impl History {
     }
 
     /// State `k`'s metadata document and selection.
-    fn meta_of(&self, k: usize) -> (&Document, &Option<Selection>) {
+    fn meta_of(&self, k: usize) -> (&Document, &Option<Selection>, &Option<Option<Selection>>) {
         match &self.states[k].stored {
-            Stored::Full(s) | Stored::Hollow(s) => (&s.doc, &s.selection),
-            Stored::Delta(d) => (&d.meta, &d.selection),
+            Stored::Full(s) | Stored::Hollow(s) => (&s.doc, &s.selection, &s.quick_mask),
+            Stored::Delta(d) => (&d.meta, &d.selection, &d.quick_mask),
         }
     }
 
@@ -683,9 +711,10 @@ impl History {
             }
         }
         if from != to {
-            let (meta, selection) = self.meta_of(to);
+            let (meta, selection, quick_mask) = self.meta_of(to);
             adopt_metadata(&mut snap.doc, meta);
             snap.selection = selection.clone();
+            snap.quick_mask = quick_mask.clone();
         }
     }
 
@@ -707,9 +736,10 @@ impl History {
             }
         }
         if from != to {
-            let (meta, selection) = self.meta_of(to);
+            let (meta, selection, quick_mask) = self.meta_of(to);
             adopt_metadata(&mut snap.doc, meta);
             snap.selection = selection.clone();
+            snap.quick_mask = quick_mask.clone();
         }
     }
 
@@ -762,6 +792,7 @@ impl History {
                         meta: Document::default(),
                         tiles: Vec::new(),
                         selection: None,
+                        quick_mask: None,
                     }),
                 ) else {
                     unreachable!("an anchor outside the cursor's segment is full");
@@ -769,6 +800,7 @@ impl History {
                 self.states[prev].stored = Stored::Hollow(Snapshot {
                     doc: hollow(&base.doc),
                     selection: base.selection.clone(),
+                    quick_mask: base.quick_mask.clone(),
                 });
                 let mut moved = base;
                 let mut ignored = Damage::new(&moved.doc);
@@ -786,6 +818,7 @@ impl History {
                         meta: Document::default(),
                         tiles: Vec::new(),
                         selection: None,
+                        quick_mask: None,
                     }),
                 ) else {
                     unreachable!("an anchor outside the cursor's segment is full");
@@ -793,6 +826,7 @@ impl History {
                 self.states[end].stored = Stored::Hollow(Snapshot {
                     doc: hollow(&next.doc),
                     selection: next.selection.clone(),
+                    quick_mask: next.quick_mask.clone(),
                 });
                 self.current = Some(next);
                 self.cursor = end;
@@ -825,6 +859,7 @@ impl History {
             (Stored::Hollow(_), Stored::Delta(d)) => Some(Stored::Hollow(Snapshot {
                 doc: d.meta.clone(),
                 selection: d.selection.clone(),
+                quick_mask: d.quick_mask.clone(),
             })),
             _ => Some(Stored::Full(self.materialize(1))),
         };
@@ -1009,5 +1044,7 @@ impl History {
 mod tests;
 #[cfg(test)]
 mod tests_crossing;
+#[cfg(test)]
+mod tests_quick_mask;
 #[cfg(test)]
 mod tests_retention;

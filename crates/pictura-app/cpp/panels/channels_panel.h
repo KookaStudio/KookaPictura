@@ -65,9 +65,11 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    enum class RowKind { Color, Alpha, LayerMask, QuickMask };
     struct Row {
         QString name;
         QString shortcut;
+        RowKind kind=RowKind::Color;
         int alpha = -1;          // the alpha channel's index, or -1 for a colour row
         QToolButton* eye = nullptr;
         QLabel* thumbnail = nullptr;
@@ -75,7 +77,7 @@ private:
     };
 
     void rebuild(const QString& mode, int alphaCount);
-    void addRow(const QString& name, const QString& shortcut, int alpha);
+    void addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind=RowKind::Color);
     void refreshThumbnails();
     void toggle(int index);
     void updateFooter();
@@ -101,6 +103,8 @@ private:
     // The active layer's mask channel row (`-1` when it has no raster mask) and
     // its name, so `refresh` rebuilds when the mask appears or disappears.
     int maskRowIndex_ = -1;
+    int quickMaskRowIndex_ = -1;
+    bool quickMask_ = false;
     QString maskName_;
     // Guards the panel's own row changes during `rebuild` from ending a solo.
     bool syncing_ = false;
