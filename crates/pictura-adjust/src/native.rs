@@ -466,12 +466,11 @@ fn color_balance_native(
     if p.shadows == [0.0; 3] && p.midtones == [0.0; 3] && p.highlights == [0.0; 3] {
         return Ok(());
     }
-    let params = p.clone();
     map(samples, width, height, channels, move |[r, g, b]| {
         let out = match mode {
-            ColorBalanceMode::Rgb => rgb_pixel_native(&params, r, g, b),
-            ColorBalanceMode::Lab => lab_pixel_native(&params, r, g, b),
-            ColorBalanceMode::Cmyk => cmyk_pixel_native(&params, r, g, b),
+            ColorBalanceMode::Rgb => rgb_pixel_native(p, r, g, b),
+            ColorBalanceMode::Lab => lab_pixel_native(p, r, g, b),
+            ColorBalanceMode::Cmyk => cmyk_pixel_native(p, r, g, b),
         };
         out.map(|v| v.clamp(0.0, 1.0))
     });
