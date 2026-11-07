@@ -297,7 +297,7 @@ void QuickMaskTest::unsupportedToolsRefuse()
     QVERIFY(!begin_eraser(*view_, 0xffffffffu, tip, 0, 100, 100, true, 1));
     QVERIFY(!vp_begin(*view_));
     const std::array<double, 8> plane { 4, 4, 28, 4, 28, 28, 4, 28 };
-    QCOMPARE(vp_create(rust::Slice<const double>(plane.data(), plane.size())), -1);
+    QCOMPARE(vp_create(::rust::Slice<const double>(plane.data(), plane.size())), -1);
     QCOMPARE(vp_finish(*view_, true, true), 0);
     QCOMPARE(view_->history_count(), history);
     QCOMPARE(view_->image(), image);
