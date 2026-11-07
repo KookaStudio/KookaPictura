@@ -125,6 +125,16 @@ pub(super) fn move_preview_content_extents(view: &PictureView) -> Vec<i32> {
     })
 }
 
+pub(super) fn move_preview_above_origin(view: &PictureView) -> Vec<i32> {
+    view.rust()
+        .move_above_origin
+        .map_or_else(Vec::new, |(x, y)| vec![x, y])
+}
+
+pub(super) fn move_preview_above_scale(view: &PictureView) -> i32 {
+    view.rust().move_above_scale
+}
+
 pub(super) fn move_preview_follow(view: Pin<&mut PictureView>, dx: i32, dy: i32) -> bool {
     view.follow_move_preview(dx, dy)
 }

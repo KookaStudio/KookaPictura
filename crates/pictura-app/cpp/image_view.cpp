@@ -249,45 +249,6 @@ void ImageView::updateAntsTimer()
     }
 }
 
-void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                                 double opacity, std::optional<QPoint> basePos, int scale)
-{
-    moveBase_ = base;
-    moveBasePos_ = basePos;
-    moveLayer_ = layer;
-    moveLayerPos_ = layerPos;
-    moveDelta_ = QPointF();
-    moveOpacity_ = opacity;
-    moveScale_ = std::max(1, scale);
-    movePreviewActive_ = true;
-    update();
-}
-
-void ImageView::setMovePreviewLayer(const QImage& layer, const QPointF& layerPos)
-{
-    moveLayer_ = layer;
-    moveLayerPos_ = layerPos;
-    update();
-}
-
-void ImageView::setMovePreviewDelta(const QPointF& delta)
-{
-    moveDelta_ = delta;
-    update();
-}
-
-void ImageView::endMovePreview()
-{
-    setMoveOutline(QRectF());
-    movePreviewActive_ = false;
-    moveBase_ = QImage();
-    moveLayer_ = QImage();
-    moveDelta_ = QPointF();
-    moveOpacity_ = 1.0;
-    moveScale_ = 1;
-    update();
-}
-
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
                                       const QPointF& layerPos, double opacity,
                                       std::optional<QPoint> basePos)
@@ -302,6 +263,10 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
     moveScale_ = 1;
+    moveAbove_ = QImage();
+    moveAbovePos_.reset();
+    moveAboveScale_ = 1;
+    lastMoveRect_ = QRect();
     movePreviewActive_ = true;
     transformActive_ = true;
     transformScaleX_ = 1.0;
@@ -371,6 +336,10 @@ void ImageView::clearTransformPreview()
     movePreviewActive_ = false;
     moveBase_ = QImage();
     moveLayer_ = QImage();
+    moveAbove_ = QImage();
+    moveAbovePos_.reset();
+    moveAboveScale_ = 1;
+    lastMoveRect_ = QRect();
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
     moveScale_ = 1;
@@ -759,6 +728,24 @@ void ImageView::paintEvent(QPaintEvent* event)
             painter.setOpacity(1.0);
         }
     }
+    // A layer below others: draw the layers above the moving group back over
+    // the moving image, clipped to it, so the preview keeps the stacking order
+    // (#1250). The overlay covers the presented rect; outside the moving image
+    // the live canvas already shows those layers.
+    // ponytail: clipped to the moving image's box, so a semi-transparent above
+    // layer blends twice where the moving image is itself transparent.
+    if (movePreviewActive_ && !transformActive_ && !moveAbove_.isNull()
+        && moveAbovePos_.has_value()) {
+        painter.save();
+        painter.setClipRect(QRectF(moveLayerPos_ + moveDelta_,
+                                   QSizeF(moveLayer_.size()) * moveScale_),
+                            Qt::IntersectClip);
+        painter.drawImage(
+            QRectF(QPointF(*moveAbovePos_), QSizeF(moveAbove_.size()) * moveAboveScale_),
+            moveAbove_);
+        painter.restore();
+    }
+    lastMoveRect_ = moveImageWidgetRect();
     paintFilterPreview(painter);
     paintMaskOverlay(painter);
     // Hidden channels (two still shown): zero them with one multiply.

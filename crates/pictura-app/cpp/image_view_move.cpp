@@ -1,6 +1,6 @@
 // ImageView feedback for the Move tool: the moving layer's content box as
-// marching ants, the ΔX / ΔY readout in the rulers' unit, and the idle
-// `Show Transform Controls` box.
+// marching ants, the ΔX / ΔY readout in the rulers' unit, the idle
+// `Show Transform Controls` box, and the Move preview's state.
 
 #include "image_view.h"
 
@@ -8,7 +8,58 @@
 
 #include <QtGui/QPainter>
 
+#include <algorithm>
+
 namespace pictura {
+
+void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
+                                 double opacity, std::optional<QPoint> basePos, int scale,
+                                 const QImage& above, std::optional<QPoint> abovePos,
+                                 int aboveScale)
+{
+    moveBase_ = base;
+    moveBasePos_ = basePos;
+    moveLayer_ = layer;
+    moveLayerPos_ = layerPos;
+    moveDelta_ = QPointF();
+    moveOpacity_ = opacity;
+    moveScale_ = std::max(1, scale);
+    moveAbove_ = above;
+    moveAbovePos_ = abovePos;
+    moveAboveScale_ = std::max(1, aboveScale);
+    lastMoveRect_ = QRect();
+    movePreviewActive_ = true;
+    update();
+}
+
+void ImageView::setMovePreviewLayer(const QImage& layer, const QPointF& layerPos)
+{
+    moveLayer_ = layer;
+    moveLayerPos_ = layerPos;
+    update();
+}
+
+void ImageView::setMovePreviewDelta(const QPointF& delta)
+{
+    moveDelta_ = delta;
+    update();
+}
+
+void ImageView::endMovePreview()
+{
+    setMoveOutline(QRectF());
+    movePreviewActive_ = false;
+    moveBase_ = QImage();
+    moveLayer_ = QImage();
+    moveAbove_ = QImage();
+    moveAbovePos_.reset();
+    moveAboveScale_ = 1;
+    lastMoveRect_ = QRect();
+    moveDelta_ = QPointF();
+    moveOpacity_ = 1.0;
+    moveScale_ = 1;
+    update();
+}
 
 void ImageView::setMeasureUnit(RulerUnit unit, bool traditionalPoints)
 {
@@ -53,6 +104,22 @@ void ImageView::setMoveOutline(const QRectF& bounds)
     update();
 }
 
+QRect ImageView::moveImageWidgetRect() const
+{
+    if (!movePreviewActive_ || moveLayer_.isNull() || zoom_ <= 0.0) {
+        return QRect();
+    }
+    const QRectF moving(moveLayerPos_ + moveDelta_,
+                        QSizeF(moveLayer_.size()) * moveScale_);
+    const QRectF scaled(moving.x() * zoom_ + offset_.x(), moving.y() * zoom_ + offset_.y(),
+                        moving.width() * zoom_, moving.height() * zoom_);
+    return viewRotation()
+        .mapRect(scaled)
+        .adjusted(-2.0, -2.0, 2.0, 2.0)
+        .toAlignedRect()
+        .intersected(rect());
+}
+
 QRect ImageView::antsUpdateRect() const
 {
     QRectF imageBounds;
@@ -77,9 +144,16 @@ QRect ImageView::antsUpdateRect() const
                         imageBounds.y() * zoom_ + offset_.y(),
                         imageBounds.width() * zoom_, imageBounds.height() * zoom_);
     const QRectF widget = viewRotation().mapRect(scaled);
-    return widget.adjusted(-2.0, -2.0, 2.0, 2.0)
-        .toAlignedRect()
-        .intersected(rect());
+    QRect out = widget.adjusted(-2.0, -2.0, 2.0, 2.0)
+                    .toAlignedRect()
+                    .intersected(rect());
+    // The moving image can reach past the ants box (a view preview carries a
+    // margin), and the frame it just left must be cleared too: an ants-only
+    // repaint that covered only the new place would leave the old one (#1250).
+    if (movePreviewActive_) {
+        out = out.united(moveImageWidgetRect()).united(lastMoveRect_);
+    }
+    return out;
 }
 
 void ImageView::paintMoveOutline(QPainter& painter)

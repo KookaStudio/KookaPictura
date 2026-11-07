@@ -18,6 +18,8 @@
 
 #include "qt_test_support.h"
 
+#include <QtGui/QPainter>
+
 namespace {
 
 using paint_fixture::Fixture;
@@ -55,6 +57,9 @@ private slots:
     void switchingToMoveBuildsNoPreview();
     void largeLayerPreviewsFromTheView();
     void moveThenFillOutsideTheLayer();
+    void movedLayerStaysUnderTheLayersAbove();
+    void linkedSetStaysUnderTheLayersAbove();
+    void antsRepaintClearsThePreviousFrame();
 
 private:
     void showFrame();
@@ -230,6 +235,140 @@ void MoveFeedbackTest::moveThenFillOutsideTheLayer()
                                false));
     QVERIFY2(f.committedOnce(base, "Fill"), "the moved layer grows for a fill");
     QCOMPARE(f.view->sample_argb(10, 10), foreground.rgba());
+}
+
+// [lct_move_preview_stack] a moved layer keeps the layers above it on top
+void MoveFeedbackTest::movedLayerStaysUnderTheLayersAbove()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_stack"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    // A blue square below a red square; the two overlap once the blue moves.
+    const int blueIndex = f.view->add_layer(0);
+    QVERIFY(blueIndex > 0);
+    const QString blue = QString::number(blueIndex);
+    f.view->set_active_layer(blue);
+    QVERIFY(f.view->select_rect(20, 20, 40, 40, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 255, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+    const int redIndex = f.view->add_layer(blueIndex);
+    QVERIFY(redIndex > blueIndex);
+    f.view->set_active_layer(QString::number(redIndex));
+    QVERIFY(f.view->select_rect(40, 40, 40, 40, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(255, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    f.view->set_active_layer(blue);
+    QCoreApplication::processEvents();
+
+    // Press the blue (the red does not reach its top-left), drag it under the
+    // red. The blue lands at (60, 40) - (100, 80); the red stays at (40, 40).
+    f.canvas->mousePressed(QPointF(30.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(70.0, 50.0));
+    const QImage shot = f.canvas->grab().toImage();
+    const auto at = [&](double x, double y) {
+        return shot.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(70.0, 50.0), QColor(Qt::red));    // the layer above stays on top
+    QCOMPARE(at(90.0, 45.0), QColor(Qt::blue));   // the moving content shows
+    QCOMPARE(at(25.0, 25.0), QColor(Qt::white));  // the old place is the backdrop
+    f.canvas->mouseReleased(QPointF(70.0, 50.0));
+}
+
+// [lct_move_preview_link_stack] a moved linked set keeps the layers above it on top
+void MoveFeedbackTest::linkedSetStaysUnderTheLayersAbove()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_link_stack"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    const auto square = [&](int above, const QRect& box, QRgb colour) {
+        const int index = f.view->add_layer(above);
+        if (index < 0) {
+            return QString();
+        }
+        const QString path = QString::number(index);
+        f.view->set_active_layer(path);
+        if (!f.view->select_rect(box.x(), box.y(), box.width(), box.height(),
+                                 QStringLiteral("new"), 0.0)
+            || !pictura::edit_fill(*f.view, colour, -1, QStringLiteral("normal"), 100, false)) {
+            return QString();
+        }
+        f.view->deselect();
+        return path;
+    };
+    const QString a = square(0, QRect(10, 10, 30, 30), qRgba(0, 0, 255, 255));
+    QVERIFY2(!a.isEmpty(), "first linked square");
+    const QString b = square(a.toInt(), QRect(90, 10, 30, 30), qRgba(0, 0, 255, 255));
+    QVERIFY2(!b.isEmpty(), "second linked square");
+    const QString red = square(b.toInt(), QRect(50, 40, 40, 40), qRgba(255, 0, 0, 255));
+    QVERIFY2(!red.isEmpty(), "layer above the set");
+    QCOMPARE(f.view->link_layers({a, b}, true), 2);
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    f.view->set_active_layer(a);
+    QCoreApplication::processEvents();
+
+    // Drag the set by (40, 30): the first square lands under the red layer.
+    f.canvas->mousePressed(QPointF(20.0, 20.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(60.0, 50.0));
+    const QImage shot = f.canvas->grab().toImage();
+    const auto at = [&](double x, double y) {
+        return shot.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(60.0, 50.0), QColor(Qt::red));    // the layer above stays on top
+    QCOMPARE(at(135.0, 50.0), QColor(Qt::blue));  // the second member shows
+    f.canvas->mouseReleased(QPointF(60.0, 50.0));
+}
+
+// [cvda_move_previous_frame] a repaint limited to the ants clears the last frame
+void MoveFeedbackTest::antsRepaintClearsThePreviousFrame()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_repaint"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    const int index = f.view->add_layer(0);
+    QVERIFY(index > 0);
+    f.view->set_active_layer(QString::number(index));
+    QVERIFY(f.view->select_rect(20, 20, 40, 40, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 255, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+    frame.setActiveTool(pictura::ToolId::Move);
+
+    f.canvas->mousePressed(QPointF(30.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(40.0, 30.0));
+    QImage shot = f.canvas->grab().toImage();
+    const QPoint previous = f.canvas->imageToWidget(QPointF(45.0, 30.0)).toPoint();
+    QCOMPARE(shot.pixelColor(previous), QColor(Qt::blue));
+
+    // Move again, then keep only what a repaint limited to the marching ants
+    // would repaint: the previous frame's pixels must not survive it.
+    f.canvas->mouseMoved(QPointF(60.0, 30.0));
+    const QRect ants = f.canvas->antsUpdateRectForTest();
+    const QImage current = f.canvas->grab().toImage();
+    QPainter painter(&shot);
+    painter.setClipRect(ants);
+    painter.drawImage(QPoint(), current);
+    painter.end();
+    QCOMPARE(shot.pixelColor(previous), QColor(Qt::white));
+    QCOMPARE(shot.pixelColor(f.canvas->imageToWidget(QPointF(75.0, 30.0)).toPoint()),
+             QColor(Qt::blue));
+    f.canvas->mouseReleased(QPointF(60.0, 30.0));
 }
 
 QTEST_MAIN(MoveFeedbackTest)

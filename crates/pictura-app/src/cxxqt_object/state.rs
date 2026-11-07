@@ -80,6 +80,16 @@ pub struct PictureViewRust {
     pub(super) move_layer: Option<QImage>,
     pub(super) move_x: i32,
     pub(super) move_y: i32,
+    /// The layers above a moving group over transparency, drawn back over the
+    /// moving image so a Move preview keeps the document's stacking order
+    /// (#1250); `None` when the moving group is topmost. `move_above_scale` is
+    /// document pixels per image pixel.
+    pub(super) move_above: Option<QImage>,
+    pub(super) move_above_origin: Option<(i32, i32)>,
+    pub(super) move_above_scale: i32,
+    /// The presented level and rect `move_above` was built for; a pan or zoom
+    /// makes its coverage stale.
+    pub(super) move_above_presented: Option<(i32, PsdRect)>,
     /// Where a single pixel layer's moving image sits inside the layer's rect:
     /// the image covers only the layer's content (#1207), so a cached preview
     /// is placed at the moved rect plus this offset.
@@ -265,6 +275,10 @@ impl Default for PictureViewRust {
             move_layer: None,
             move_x: 0,
             move_y: 0,
+            move_above: None,
+            move_above_origin: None,
+            move_above_scale: 1,
+            move_above_presented: None,
             move_layer_offset: (0, 0),
             move_opacity: 0,
             move_prepared_revision: 0,

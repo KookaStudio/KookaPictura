@@ -292,10 +292,13 @@ public:
     // image-space offset, so the drag never composites the document. `scale`
     // is document pixels per image pixel: a preview built from the view is at
     // the presented level. A patch preview with a null base draws only the
-    // layer over the live canvas.
+    // layer over the live canvas. `above` is the layers over the moving group
+    // over transparency, drawn back on top so the preview keeps the stacking
+    // order (#1250); it is null when the moving group is topmost.
     void beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
                           double opacity, std::optional<QPoint> basePos = std::nullopt,
-                          int scale = 1);
+                          int scale = 1, const QImage& above = QImage(),
+                          std::optional<QPoint> abovePos = std::nullopt, int aboveScale = 1);
     // Replace the moving image mid-drag (a view preview that followed the drag).
     void setMovePreviewLayer(const QImage& layer, const QPointF& layerPos);
     void setMovePreviewDelta(const QPointF& delta);
@@ -594,6 +597,8 @@ public:
     // as marching ants that follow the move preview; empty clears it.
     void setMoveOutline(const QRectF& bounds);
     QRectF moveOutlineForTest() const { return moveOutline_.translated(moveDelta_); }
+    // The rectangle the marching-ants timer repaints.
+    QRect antsUpdateRectForTest() const { return antsUpdateRect(); }
     // The Move tool's idle `Show Transform Controls` box (no session): drawn
     // like Free Transform's box; empty hides it.
     void setControlsBox(const QPolygonF& box);
@@ -749,6 +754,9 @@ private:
     // The widget region covered by the animated outline(s), for a partial
     // repaint on each ants tick.
     QRect antsUpdateRect() const;
+    // The moving image's widget rectangle, for the ants repaint and the
+    // previous-frame clear.
+    QRect moveImageWidgetRect() const;
 
     struct PresentCache {
         qint64 key = -1;
@@ -863,6 +871,13 @@ private:
     QPointF moveDelta_;
     double moveOpacity_ = 1.0;
     int moveScale_ = 1;
+    // The layers above the moving group, drawn back over the moving image.
+    QImage moveAbove_;
+    std::optional<QPoint> moveAbovePos_;
+    int moveAboveScale_ = 1;
+    // The moving layer's widget rectangle at the last paint, so the marching
+    // ants repaint clears the frame it leaves behind (#1250).
+    QRect lastMoveRect_;
 
     bool transformActive_ = false;
     double transformScaleX_ = 1.0;

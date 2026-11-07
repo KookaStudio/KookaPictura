@@ -38,6 +38,11 @@ pub mod ffi {
         /// A view preview's layer content bounds as `[left, top, right,
         /// bottom]`; empty for a full-resolution preview.
         fn move_preview_content_extents(view: &PictureView) -> Vec<i32>;
+        /// Where the above-layer image sits, as `[left, top]`; empty when there
+        /// is none.
+        fn move_preview_above_origin(view: &PictureView) -> Vec<i32>;
+        /// Document pixels per pixel of the above-layer image.
+        fn move_preview_above_scale(view: &PictureView) -> i32;
         /// Rebuild a view preview's moving image once a drag of `(dx, dy)`
         /// shows layer pixels it does not cover; true when it changed.
         fn move_preview_follow(view: Pin<&mut PictureView>, dx: i32, dy: i32) -> bool;

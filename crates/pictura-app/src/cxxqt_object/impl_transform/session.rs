@@ -28,6 +28,7 @@ pub(in crate::cxxqt_object) use preview::transform_preview_layer;
 #[cfg(test)]
 use preview::TransformPreview;
 use preview::{backdrop_patch, build_transform_preview, rendered_layer_image};
+use view_preview::above_patch;
 pub(in crate::cxxqt_object) use view_preview::MoveView;
 
 /// Whether `path` resolves to a transformable target: a raster pixel layer, a
@@ -251,6 +252,10 @@ impl qobject::PictureView {
         rust.move_layer = Some(preview.image);
         rust.move_x = preview.x;
         rust.move_y = preview.y;
+        rust.move_above = None;
+        rust.move_above_origin = None;
+        rust.move_above_scale = 1;
+        rust.move_above_presented = None;
         rust.move_opacity = preview.opacity;
         rust.move_prepared_revision = rust.session.content_revision;
         rust.move_prepared_layer = String::new();
@@ -744,10 +749,14 @@ impl qobject::PictureView {
         let shape = paths.iter().any(|path| {
             pictura_render::resolve_path(doc, path).is_some_and(pictura_render::is_shape_layer)
         });
-        // A view preview covers only what the canvas showed at its press.
+        // A view preview covers only what the canvas showed at its press. The
+        // above-layer image covers the presented rect, so a pan or zoom between
+        // drags makes it stale even when the base is still valid.
+        let presented = (rust.presented_level, rust.presented_rect);
         !shape
             && rust.move_view.is_none()
             && rust.move_base.is_some()
+            && (rust.move_above.is_none() || rust.move_above_presented == Some(presented))
             && rust.move_prepared_revision == rust.session.content_revision
             && rust.move_prepared_layer == move_group_key(paths)
     }
@@ -761,6 +770,16 @@ impl qobject::PictureView {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
+        let presented = (rust.presented_level, rust.presented_rect);
+        let above = rust.session.doc.as_ref().and_then(|doc| {
+            above_patch(
+                doc,
+                &paths,
+                presented.0.max(0) as u32,
+                presented.1,
+                gpu_compute,
+            )
+        });
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
@@ -812,6 +831,14 @@ impl qobject::PictureView {
         rust.move_y = y;
         rust.move_layer_offset = offset;
         rust.move_opacity = opacity;
+        let (above_image, above_origin, above_scale) = match above {
+            Some((image, origin)) => (Some(image), Some(origin), 1i32 << presented.0.clamp(0, 16)),
+            None => (None, None, 1),
+        };
+        rust.move_above = above_image;
+        rust.move_above_origin = above_origin;
+        rust.move_above_scale = above_scale;
+        rust.move_above_presented = above_origin.map(|_| presented);
         rust.move_prepared_revision = rust.session.content_revision;
         rust.move_prepared_layer = move_group_key(&paths);
         rust.move_prepared_union = if paths.len() > 1 {
@@ -824,6 +851,13 @@ impl qobject::PictureView {
 
     pub fn move_preview_base(&self) -> QImage {
         self.rust().move_base.clone().unwrap_or_default()
+    }
+
+    /// The layers above the moving group over transparency, drawn back over the
+    /// moving image so the preview keeps the stacking order (#1250); null when
+    /// the group is topmost.
+    pub fn move_preview_above(&self) -> QImage {
+        self.rust().move_above.clone().unwrap_or_default()
     }
 
     pub fn move_preview_layer(&self) -> QImage {
@@ -892,6 +926,10 @@ impl qobject::PictureView {
         rust.move_layer = None;
         rust.move_x = 0;
         rust.move_y = 0;
+        rust.move_above = None;
+        rust.move_above_origin = None;
+        rust.move_above_scale = 1;
+        rust.move_above_presented = None;
         rust.move_layer_offset = (0, 0);
         rust.move_opacity = 0;
         rust.move_prepared_revision = 0;
@@ -978,6 +1016,13 @@ impl PictureViewRust {
         else {
             return false;
         };
+        let above = above_patch(
+            doc,
+            paths,
+            self.presented_level.max(0) as u32,
+            self.presented_rect,
+            self.gpu_compute,
+        );
         self.move_base = Some(preview.base);
         self.move_base_origin = Some(preview.base_origin);
         self.move_layer = Some(preview.layer);
@@ -985,6 +1030,15 @@ impl PictureViewRust {
         self.move_y = preview.view.region.top;
         self.move_opacity = opacity;
         self.move_view = Some(preview.view);
+        let (above_image, above_origin) = match above {
+            Some((image, origin)) => (Some(image), Some(origin)),
+            None => (None, None),
+        };
+        self.move_above = above_image;
+        self.move_above_origin = above_origin;
+        self.move_above_scale = 1i32 << self.presented_level.clamp(0, 16);
+        self.move_above_presented =
+            above_origin.map(|_| (self.presented_level, self.presented_rect));
         self.move_prepared_revision = self.session.content_revision;
         self.move_prepared_layer = move_group_key(paths);
         self.move_prepared_union = None;

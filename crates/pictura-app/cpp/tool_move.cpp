@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 namespace pictura {
 
@@ -302,9 +303,16 @@ private:
     {
         const QImage layer = v.move_preview_layer();
         const QPointF origin(v.move_preview_x(), v.move_preview_y());
+        const ::rust::Vec<int32_t> aboveOrigin = move_preview_above_origin(v);
+        std::optional<QPoint> abovePos;
+        if (aboveOrigin.size() == 2) {
+            abovePos = QPoint(aboveOrigin[0], aboveOrigin[1]);
+        }
         canvas.beginMovePreview(v.move_preview_base(), layer, origin,
                                 v.move_preview_opacity() / 255.0,
-                                transform_api::previewBaseOrigin(v), move_preview_scale(v));
+                                transform_api::previewBaseOrigin(v), move_preview_scale(v),
+                                v.move_preview_above(), abovePos,
+                                move_preview_above_scale(v));
         // A view preview covers part of the layer, so Rust reports its box. A
         // full image is scanned once per image.
         const ::rust::Vec<int32_t> content = move_preview_content_extents(v);
