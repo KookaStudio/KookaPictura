@@ -528,10 +528,12 @@ impl ActiveSession {
 
     /// The live filter preview on a mask's coverage: the mask's panel path
     /// and its pre-preview coverage.
-    pub(in crate::cxxqt_object) fn mask_filter_preview(&self) -> Option<(&String, &Vec<u8>)> {
+    pub(in crate::cxxqt_object) fn mask_filter_preview(
+        &self,
+    ) -> Option<(&String, &pictura_core::Layer)> {
         match self {
             ActiveSession::FilterPreview(preview) => match &**preview {
-                FilterPreviewSession::Mask { path, original } => Some((path, original)),
+                FilterPreviewSession::Mask { path, original } => Some((path, original.as_ref())),
                 FilterPreviewSession::Layer(_) => None,
             },
             _ => None,
@@ -550,10 +552,12 @@ impl ActiveSession {
     pub(in crate::cxxqt_object) fn set_mask_filter_preview(
         &mut self,
         path: String,
-        original: Vec<u8>,
+        original: pictura_core::Layer,
     ) {
-        *self =
-            ActiveSession::FilterPreview(Box::new(FilterPreviewSession::Mask { path, original }));
+        *self = ActiveSession::FilterPreview(Box::new(FilterPreviewSession::Mask {
+            path,
+            original: Box::new(original),
+        }));
     }
 
     /// Take the live layer preview out of the slot. A mask preview stays.

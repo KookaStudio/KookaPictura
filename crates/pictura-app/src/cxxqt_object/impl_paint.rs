@@ -126,7 +126,13 @@ impl PictureViewRust {
             let dirty = ctx.stroke.dirty();
             ctx.stroke.cancel(&mut ctx.document);
             if let Some(doc) = self.session.doc.as_mut() {
-                pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, None);
+                if let Some(baseline) = ctx.baseline {
+                    if let Some(layer) = pictura_render::resolve_path_mut(doc, &ctx.path) {
+                        *layer = baseline;
+                    }
+                } else {
+                    pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, None);
+                }
             }
             return dirty.map(|rect| {
                 PsdRect {
@@ -503,7 +509,7 @@ impl PictureViewRust {
         }
         // A mask target paints the mask's coverage instead of the layer: the
         // foreground's Rec.601 luma is the painted value, so black hides and
-        // white reveals. The stroke runs on a mask-sized grayscale document.
+        // white reveals. The stroke runs on a canvas-sized grayscale document.
         // The target is resolved before the slot is taken, so a mask stroke
         // does not begin a second session inside this one.
         if let Some(path) = active_mask_target(self) {

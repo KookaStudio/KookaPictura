@@ -272,13 +272,13 @@ fn mask_sample(mask: &LayerMask, x: i32, y: i32) -> u8 {
     let Some(data) = mask.data.as_ref() else {
         return 255;
     };
-    let mw = mask.rect.width();
-    let mh = mask.rect.height();
+    let mw = i64::from(mask.rect.right) - i64::from(mask.rect.left);
+    let mh = i64::from(mask.rect.bottom) - i64::from(mask.rect.top);
     if mw <= 0 || mh <= 0 {
         return mask.default_color;
     }
-    let mx = x - mask.rect.left;
-    let my = y - mask.rect.top;
+    let mx = i64::from(x) - i64::from(mask.rect.left);
+    let my = i64::from(y) - i64::from(mask.rect.top);
     if mx < 0 || my < 0 || mx >= mw || my >= mh {
         return mask.default_color;
     }
@@ -483,5 +483,39 @@ mod tests {
             calls < u64::from(width) * u64::from(height) / 1000,
             "the thumbnail must not scan the document: {calls} samples"
         );
+    }
+
+    #[test]
+    fn canvas_mask_thumbnail_samples_only_grid() {
+        for missing in [false, true] {
+            let mut m = mask(
+                RECT,
+                0,
+                false,
+                if missing {
+                    None
+                } else {
+                    Some(vec![0, 1, 128, 255])
+                },
+            );
+            let original = m.clone();
+            let mut outputs = Vec::new();
+            for disabled in [false, true] {
+                m.disabled = disabled;
+                MASK_SAMPLE_CALLS.with(|calls| calls.set(0));
+                let output = pictura_core::assert_no_materialization(|| {
+                    mask_thumbnail_samples(&m, 4096, 2048, 24).unwrap()
+                });
+                assert_eq!((output.1, output.2), (24, 12));
+                assert_eq!(MASK_SAMPLE_CALLS.with(std::cell::Cell::get), 24 * 12);
+                if missing {
+                    assert!(output.0.iter().all(|&v| v == 255));
+                }
+                outputs.push(output);
+            }
+            assert_eq!(outputs[0], outputs[1]);
+            m.disabled = false;
+            assert_eq!(m, original);
+        }
     }
 }

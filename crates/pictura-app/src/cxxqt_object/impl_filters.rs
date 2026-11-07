@@ -12,7 +12,7 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::layer_pixel_locked;
+use pictura_core::{layer_pixel_locked, PsdRect};
 
 impl qobject::PictureView {
     pub fn apply_filter(mut self: Pin<&mut Self>, kind: &QString) -> bool {
@@ -445,7 +445,7 @@ fn clamp_to(rect: pictura_core::PsdRect, bounds: pictura_core::PsdRect) -> pictu
 }
 
 /// Apply `op` to the active layer's mask coverage instead of its pixels: the
-/// mask is exposed as a mask-sized grayscale document, filtered whole (the
+/// mask is exposed as a canvas-sized grayscale document, filtered whole (the
 /// document selection confines it), and written back. A preview snapshots the
 /// pre-preview coverage and re-filters from it; a commit drops the snapshot;
 /// cancel restores it. Returns the mask rectangle to refresh.
@@ -473,39 +473,23 @@ fn apply_mask_op(
         .mask_filter_preview()
         .filter(|(p, _)| p.as_str() == path)
         .map(|(_, coverage)| coverage.clone());
-    let (mut mask, selection) = {
-        let doc = rust.session.doc.as_ref()?;
-        let Some(mut mask) = pictura_render::mask_document(doc, path) else {
+    let (mut mask, selection, original) = {
+        let current = rust.session.doc.as_ref()?;
+        let original = baseline
+            .clone()
+            .or_else(|| pictura_render::resolve_path(current, path).cloned())?;
+        let mut source = current.clone();
+        *pictura_render::resolve_path_mut(&mut source, path)? = original.clone();
+        let Some(mask) = pictura_render::mask_document(&source, path) else {
             rust.filter_error = Some("the active layer has no mask to filter".to_string());
             return None;
         };
-        // Re-filter from the pre-preview coverage, never from the last preview.
-        if let Some(original) = &baseline {
-            if let Some(channel) = mask.document.layers[0]
-                .channels
-                .iter_mut()
-                .find(|c| c.id == 0)
-            {
-                if channel.data.len() == original.len() {
-                    channel.data = original.clone().into();
-                }
-            }
-        }
         let selection = rust
             .session
             .selection
             .as_ref()
             .map(|s| selection_mask_for(s, mask.rect));
-        (mask, selection)
-    };
-    let snapshot = if !commit && baseline.is_none() {
-        mask.document.layers[0]
-            .channels
-            .iter()
-            .find(|c| c.id == 0)
-            .map(|c| c.data.to_vec())
-    } else {
-        None
+        (mask, selection, original)
     };
     let mask_origin = mask.rect;
     let result = {
@@ -542,14 +526,18 @@ fn apply_mask_op(
         return None;
     }
     let doc = rust.session.doc.as_mut()?;
-    if !pictura_render::write_mask_back(doc, path, &mask.document, None) {
-        rust.filter_error = Some("the mask disappeared during the filter".to_string());
+    let mut candidate = doc.clone();
+    *pictura_render::resolve_path_mut(&mut candidate, path)? = original.clone();
+    if !pictura_render::write_mask_back(&mut candidate, path, &mask.document, None) {
+        let _ = cancel_filter_preview(rust);
+        rust.filter_error = Some("could not allocate the mask edit".to_string());
         return None;
     }
+    *pictura_render::resolve_path_mut(doc, path)? =
+        pictura_render::resolve_path(&candidate, path)?.clone();
     if commit {
         rust.session.live.clear_mask_filter_preview();
     } else {
-        let original = baseline.or(snapshot).expect("a preview has a baseline");
         rust.session
             .live
             .set_mask_filter_preview(path.to_string(), original);
@@ -576,18 +564,14 @@ pub(super) fn cancel_filter_preview_session(
     match session {
         super::document_session::FilterPreviewSession::Mask { path, original } => {
             let doc = rust.session.doc.as_mut()?;
-            let mut mask = pictura_render::mask_document(doc, &path)?;
-            if let Some(channel) = mask.document.layers[0]
-                .channels
-                .iter_mut()
-                .find(|c| c.id == 0)
-            {
-                if channel.data.len() == original.len() {
-                    channel.data = original.into();
-                }
-            }
-            pictura_render::write_mask_back(doc, &path, &mask.document, None);
-            Some(Some(mask.rect))
+            let rect = PsdRect {
+                left: 0,
+                top: 0,
+                right: doc.width as i32,
+                bottom: doc.height as i32,
+            };
+            *pictura_render::resolve_path_mut(doc, &path)? = *original;
+            Some(Some(rect))
         }
         super::document_session::FilterPreviewSession::Layer(preview) => {
             let doc = rust.session.doc.as_mut()?;

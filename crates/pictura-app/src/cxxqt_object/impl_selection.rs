@@ -131,7 +131,7 @@ impl qobject::PictureView {
         dx: i32,
         dy: i32,
         duplicate: bool,
-        background: u32,
+        _background: u32,
     ) -> bool {
         if dx == 0 && dy == 0 {
             return false;
@@ -147,12 +147,21 @@ impl qobject::PictureView {
             return false;
         }
         if let Some(path) = active_mask_target(self.rust()) {
+            let Some(doc) = self.rust().session.doc.as_ref() else {
+                return false;
+            };
+            let Ok(_held) = pictura_core::memory::governor().reserve(
+                u64::from(doc.width) * u64::from(doc.height) * 2,
+                "mask selection move",
+            ) else {
+                return false;
+            };
             let prepared = {
                 let rust = self.rust();
                 let Some(doc) = rust.session.doc.as_ref() else {
                     return false;
                 };
-                let Some(mask) =
+                let Some(_mask) =
                     pictura_render::resolve_path(doc, &path).and_then(|layer| layer.mask.as_ref())
                 else {
                     return false;
@@ -165,15 +174,24 @@ impl qobject::PictureView {
                 else {
                     return false;
                 };
+                let Some(bounds) = selection.bounds() else {
+                    return false;
+                };
+                if [
+                    bounds.left.checked_add(dx),
+                    bounds.right.checked_add(dx),
+                    bounds.top.checked_add(dy),
+                    bounds.bottom.checked_add(dy),
+                ]
+                .iter()
+                .any(Option::is_none)
+                {
+                    return false;
+                }
                 (
-                    crop_selection(
-                        &selection.data,
-                        selection.width,
-                        selection.height,
-                        mask.rect,
-                    ),
+                    selection.data.to_vec(),
                     selection.translate(dx, dy),
-                    luma_u8(rgba_from_argb(background)),
+                    0,
                     move_dirty_rect(selection, dx, dy),
                 )
             };

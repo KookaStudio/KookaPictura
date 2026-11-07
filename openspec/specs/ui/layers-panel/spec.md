@@ -1217,20 +1217,23 @@ edge and the proportional length on the short edge), placing the layer's content
 at its document-relative position, so a sub-canvas layer shows its content at
 its document position with transparent margins and a full-width layer has no
 transparent padding strip and is not squashed. A shape layer's thumbnail SHALL
-likewise carry the document aspect. A layer mask's thumbnail SHALL likewise
-carry the document aspect in Entire Document placement: it SHALL size its output
-from the document aspect, place the mask rect at its document-relative position
-clipped to the document bounds, and leave the area outside the mask rect
-transparent so the transparency checkerboard shows. In Layer Bounds placement
-the mask image SHALL keep sizing from the mask rect while its card stays
-letterboxed to the document, so the uncovered bands show the checkerboard. The
-vector-mask thumbnail samples the document extent in both placements. The
-thumbnail outline, the transparency checkerboard, the active bracket, and the
-thumbnail hit-target SHALL all use the letterboxed rect. A group's folder glyph
-keeps its square slot. A **type card, an adjustment-kind icon card, a fill
-preview, and a content-less synthetic row's card SHALL be drawn as a 1:1
-square** instead of the letterboxed rect (see the thumbnail-layout requirement),
-so an icon is not stretched and a gradient ramp or pattern tile is not squashed.
+likewise carry the document aspect. A raster layer mask's thumbnail image SHALL
+carry the document aspect in both Entire Document and Layer Bounds placement,
+sampling mask coverage over the document bounds at its document coordinates.
+Its image pixels SHALL be opaque grayscale throughout; zero-coverage margins
+SHALL be black rather than transparent or checkerboard. A mask extending outside
+the canvas SHALL be clipped only for the thumbnail's sampled view, not scaled
+down or changed in storage. The mask card, outline, brackets and hit target SHALL follow the document
+aspect for every owner, including adjustment, fill, type and group layers.
+Raster and vector masks SHALL use document-aspect cards independently of the
+left content thumbnail; adjustment and fill content cards remain square. The vector-mask thumbnail samples the
+document extent in both placements. The thumbnail outline, the transparency
+checkerboard, the active bracket, and the thumbnail hit-target SHALL all use
+the letterboxed rect. A group's folder glyph keeps its square slot. A **type
+card, an adjustment-kind icon card, a fill preview, and a content-less synthetic
+row's card SHALL be drawn as a 1:1 square** instead of the letterboxed rect (see
+the thumbnail-layout requirement), so an icon is not stretched and a gradient
+ramp or pattern tile is not squashed.
 
 #### Scenario: A non-square document is not stretched [lpr_thumb_aspect]
 
@@ -1262,16 +1265,17 @@ so an icon is not stretched and a gradient ramp or pattern tile is not squashed.
 
 #### Scenario: A raster mask uses the document aspect [lpr_thumb_mask_aspect]
 
-- **WHEN** a layer-sized raster mask is shown on a non-square document with
-  Entire Document thumbnail contents
-- **THEN** the mask thumbnail image carries the document's aspect ratio, the
-  mask content sits at its document-relative position with the checkerboard
-  outside it, and its aspect matches the layer image thumbnail
+- **WHEN** a raster mask on a pixel, adjustment, fill, type or group layer is shown on a
+  non-square document with Entire Document thumbnail contents
+- **THEN** the mask thumbnail image carries the document's aspect ratio, its
+  coverage sits at its document-relative position with opaque black
+  zero-coverage margins, independently of the left content thumbnail card
 - **AND WHEN** the mask extends past the document bounds
-- **THEN** the mask thumbnail is clipped to the document rather than scaled down
+- **THEN** the mask thumbnail is clipped to the document rather than scaled down,
+  without changing the stored mask samples
 - **AND WHEN** the same row is shown with Layer Bounds thumbnail contents
-- **THEN** the mask image is sized from the mask rect while its card stays
-  document-aspect, with the checkerboard in the uncovered bands
+- **THEN** the mask image keeps its document aspect and opaque grayscale canvas
+  coverage while its card retains the existing document-aspect layout
 
 ### Requirement: Layer drag shows a CS6 drop indicator
 
@@ -1447,10 +1451,14 @@ that mask (the solo keeps showing the mask's stored coverage); those clicks SHAL
 be consumed so they do not start a rename, select another row, or begin a drag. A plain click on a layer mask
 thumbnail SHALL make that mask the view's mask edit target through the bridge,
 and a plain click on the layer thumbnail SHALL clear the target, so the mask
-thumbnail of the targeted row SHALL draw a focus border. An `Alt`/`Option`-click
+thumbnail of the targeted row SHALL use the existing white corner brackets as
+its only white selection indicator. Raster mask cards SHALL have the normal
+black thumbnail outline and SHALL NOT gain a white rectangular focus outline.
+The brackets SHALL follow the selected thumbnail and SHALL clear from the mask
+when its layer thumbnail or another layer is selected. An `Alt`/`Option`-click
 on a layer mask thumbnail SHALL toggle the mask solo view (see
 `ui/mask-solo-view`): it SHALL select the clicked row (activating its layer),
-make that mask the mask edit target so the focus border stays on it, and toggle
+make that mask the mask edit target so the brackets stay on it, and toggle
 the solo display, recording no history state. It SHALL be consumed so it starts
 no rename, selects no *other* row, and begins no drag. `Alt`+`Shift`-clicking a
 mask thumbnail SHALL be consumed without toggling the mask's enabled state or
@@ -1493,20 +1501,20 @@ linked and disabled states through roles populated from the bridge.
 #### Scenario: A plain click activates the mask [lmk_row_activate]
 
 - **WHEN** the user clicks the mask thumbnail of a row that carries a mask
-- **THEN** that mask becomes the mask edit target and the thumbnail draws a focus
-  border, with no history state
+- **THEN** that mask becomes the mask edit target and the thumbnail draws white corner
+  brackets and a black outline, with no history state
 
 #### Scenario: A layer-thumbnail click deactivates the mask [lmk_row_deactivate]
 
 - **WHEN** a mask is the edit target and the user clicks that row's layer
   thumbnail
-- **THEN** the mask edit target is cleared and the focus border disappears
+- **THEN** the mask edit target is cleared and the mask brackets disappear and the image brackets become active
 
 #### Scenario: Alt-clicking the mask thumbnail toggles solo [lmk_row_alt_solo]
 
 - **WHEN** the user `Alt`-clicks the mask thumbnail of a raster-mask row
-- **THEN** the row is selected, the mask becomes the edit target with its focus
-  border, and the canvas shows the mask plane, with no history state
+- **THEN** the row is selected, the mask becomes the edit target with its white corner
+  brackets, and the canvas shows the mask plane, with no history state
 
 #### Scenario: A second Alt-click restores the composite [lmk_row_alt_restore]
 
@@ -1538,6 +1546,16 @@ linked and disabled states through roles populated from the bridge.
 
 - **WHEN** the user `Shift`-clicks the vector-mask thumbnail of an enabled vector mask
 - **THEN** the vector mask is disabled in one undoable step
+
+#### Scenario: Mask selection keeps a black outline [mtp_black_outline]
+
+- **WHEN** a raster mask thumbnail on a pixel layer or group is selected
+- **THEN** its card has the normal black outline and white corner brackets, without an additional white rectangular outline
+
+#### Scenario: Another layer clears mask highlighting [mtp_other_layer]
+
+- **WHEN** a mask thumbnail is selected and the user clicks another layer's raster thumbnail
+- **THEN** only the newly active raster thumbnail has white brackets and the old mask retains only its black outline
 
 ### Requirement: Fill / Adjustment creation menu
 
@@ -1801,13 +1819,14 @@ blend-mode select SHALL be no wider than needed for its values.
 - **WHEN** a mask is added to a Background layer
 - **THEN** the layer becomes a regular layer with its lock removed
 
-### Requirement: Layers panel thumbnail layout
+### Requirement: Layers panel content and mask thumbnail layout
 
 Within a layer row the mask thumbnail SHALL sit immediately to the right of the
 image thumbnail with a chain glyph between them (a broken-chain glyph when the
 link is off), and a vector-mask thumbnail SHALL sit immediately to the right of
 the mask thumbnail with the same chain glyph between them. The mask and vector
-thumbnails SHALL have the same aspect ratio as the image thumbnail. The chain
+thumbnails SHALL follow the document aspect independently of the image
+thumbnail and owning layer kind. The chain
 glyph SHALL be drawn two pixels larger than its slot and rotated a quarter turn
 so it reads vertically between the side-by-side thumbnails, in both the linked
 and unlinked states. A row's active edit target SHALL be marked with brackets
@@ -1818,9 +1837,8 @@ SHALL be a neutral card bearing the icon for its decoded adjustment kind**, with
 no checkerboard; a **fill row's image thumbnail SHALL show its content preview**
 (a flat solid swatch, a gradient ramp, or a scaled pattern tile) **in a 1:1
 square card**, the preview image itself rendered square rather than at the
-document aspect so a ramp or tile is not stretched into the card. An adjustment
-or fill row's mask and vector-mask thumbnails SHALL use that same 1:1 card,
-with their preview drawn fit inside the card.
+document aspect so a ramp or tile is not stretched into the card. Mask and vector-mask cards on adjustment, fill, type and group rows SHALL
+use the document aspect; the left content card keeps its existing geometry.
 
 #### Scenario: Mask thumbnail adjacency [uip_layers_mask_adjacency]
 
@@ -1862,11 +1880,11 @@ with their preview drawn fit inside the card.
 - **THEN** its card is 1:1, the preview image the bridge supplies is square, and
   the preview fills the card without a document-aspect margin or distortion
 
-#### Scenario: A mask thumbnail matches the 1:1 card [lpr_thumb_mask_square]
+#### Scenario: A mask thumbnail follows the document beside a square card [lpr_thumb_mask_square]
 
 - **WHEN** an adjustment or fill layer carries a layer mask or a vector mask
-- **THEN** the mask and vector-mask thumbnails use the same 1:1 card as the
-  image thumbnail
+- **THEN** the mask and vector-mask cards follow the document aspect while the
+  left content thumbnail keeps its square card
 
 ### Requirement: Layers panel folder rows
 
@@ -2740,3 +2758,52 @@ thumbnails, not the separate layer-to-layer link badge or toolbar button.
 
 - **WHEN** the user clicks an unlinked raster or vector mask's dimmed control and then undoes and redoes the edit
 - **THEN** only the clicked mask becomes linked in one history step, undo restores the unlinked half-opacity glyph, and redo restores the linked full-opacity glyph
+
+### Requirement: Opaque document-aspect mask cards
+
+The Layers delegate SHALL cover the entire document-aspect raster mask card
+with its opaque grayscale preview, including when independently rounded image
+and card sizes differ. A second aspect fit SHALL NOT expose the checkerboard
+along any card edge. Mask cards on group, type, adjustment and fill rows SHALL also follow the
+document aspect and stay filled by their opaque previews. Their geometry SHALL
+be independent of the left content card.
+
+#### Scenario: A portrait PSD opens without an edge strip [mtp_portrait]
+
+- **WHEN** portrait and landscape PSD masks are opened at each thumbnail size
+- **THEN** their source thumbnails are opaque and their document-aspect cards contain grayscale coverage through every interior edge, with a black outline and no checkerboard strip, including at fractional display scale
+
+#### Scenario: Mask cards use the document shape for every owner [mtp_square]
+
+- **WHEN** mask previews are displayed on adjustment or fill rows in a portrait document
+- **THEN** the mask cards follow the document aspect and their opaque previews fill those cards, while the adjustment or fill content cards stay square
+
+### Requirement: Plain layer-row clicks activate content by default
+
+A plain click on a real layer row outside its dedicated controls SHALL activate
+that row's left content thumbnail, regardless of the layer kind or a previously
+active raster or vector mask. It SHALL clear raster-mask editing and solo view
+without changing pixels or recording history. Explicit mask-thumbnail clicks
+SHALL continue to activate the clicked mask. Creating an adjustment layer with
+a mask SHALL select the new layer and activate its mask; this creation policy
+SHALL NOT be replaced by the plain-row-click default.
+
+#### Scenario: Clicking the current row returns to content [mcd_row_same]
+
+- **WHEN** a raster mask is active or soloed and its layer's row body is clicked
+- **THEN** the left content thumbnail is active, raster mask editing and solo are cleared, and history is unchanged
+
+#### Scenario: Revisiting a row defaults to content [mcd_row_other]
+
+- **WHEN** a pixel, adjustment, fill, type or group row previously had a raster or separately displayed vector mask active, another row is selected, and its row body is clicked again
+- **THEN** the revisited row's left content thumbnail is active instead of a remembered mask target
+
+#### Scenario: A direct mask click activates the mask [mcd_explicit_mask]
+
+- **WHEN** a raster or vector mask thumbnail is clicked directly
+- **THEN** the clicked mask remains the active thumbnail rather than the default content thumbnail
+
+#### Scenario: Adjustment creation activates its mask [mcd_creation]
+
+- **WHEN** a new adjustment layer with a mask is created while another layer's content thumbnail is active
+- **THEN** the new adjustment is selected and its mask thumbnail is active in the normal single creation history state

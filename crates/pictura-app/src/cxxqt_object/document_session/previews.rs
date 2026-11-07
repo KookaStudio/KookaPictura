@@ -131,7 +131,7 @@ pub(in crate::cxxqt_object) enum FilterPreviewSession {
     Mask {
         /// The panel path of the layer whose mask is previewed.
         path: String,
-        /// The mask's pre-preview coverage.
-        original: Vec<u8>,
+        /// The owning layer before the preview, including retained native channels.
+        original: Box<pictura_core::Layer>,
     },
 }

@@ -17,6 +17,7 @@ set(PICTURA_QT_TESTS
     tst_edit_clipboard
     tst_edit_refresh
     tst_mask_edit
+    tst_canvas_mask_domain
     tst_layers_mask_commands
     tst_mask_link_state
     tst_last_layer
@@ -224,6 +225,7 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 # independent, so each passes run alone by name and in any share; a suite
 # whose functions build on each other's state keeps one entry.
 set(PICTURA_QT_TEST_SHARDS
+    tst_canvas_mask_domain
     tst_document_arrange
     tst_document_float
     tst_document_windows

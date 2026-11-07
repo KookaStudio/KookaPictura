@@ -1060,13 +1060,13 @@ pub(crate) fn mask_value(mask: &LayerMask, x: i32, y: i32) -> u8 {
     let Some(data) = &mask.data else {
         return 255;
     };
-    let mw = mask.rect.width();
-    let mh = mask.rect.height();
+    let mw = i64::from(mask.rect.right) - i64::from(mask.rect.left);
+    let mh = i64::from(mask.rect.bottom) - i64::from(mask.rect.top);
     if mw <= 0 || mh <= 0 {
         return mask.default_color;
     }
-    let mx = x - mask.rect.left;
-    let my = y - mask.rect.top;
+    let mx = i64::from(x) - i64::from(mask.rect.left);
+    let my = i64::from(y) - i64::from(mask.rect.top);
     if mx < 0 || my < 0 || mx >= mw || my >= mh {
         return mask.default_color;
     }

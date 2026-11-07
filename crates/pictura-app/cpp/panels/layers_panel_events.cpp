@@ -388,6 +388,13 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 }
                 return true;
             }
+            if (index.isValid() && view_ && mouse->modifiers() == Qt::NoModifier
+                && !index.data(SyntheticRole).toBool()) {
+                mask_edit_target_set(*view_, QString());
+                mask_solo_set(*view_, QString());
+                setActiveThumb(pathForProxyIndex(index), 0);
+                syncEditTarget();
+            }
         }
     }
     if (watched == tree_->viewport() && event->type() == QEvent::MouseButtonDblClick) {

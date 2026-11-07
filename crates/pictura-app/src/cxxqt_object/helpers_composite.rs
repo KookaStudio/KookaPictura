@@ -924,7 +924,7 @@ mod tests {
 
 #[cfg(test)]
 mod bundle_tests {
-    use super::super::helpers_masks::mask_thumbnail_image;
+    use super::super::helpers_masks::mask_thumbnail_positioned;
     use super::*;
 
     #[test]
@@ -938,7 +938,7 @@ mod bundle_tests {
         let mask = default_layer_mask(&doc, None);
         assert_eq!(mask.rect.width(), 16);
         assert_eq!(mask.data.as_ref().map(|d| d.len()), Some(256));
-        assert!(mask_thumbnail_image(&mask, 24).is_some());
+        assert!(mask_thumbnail_positioned(&mask, doc.width, doc.height, 24).is_some());
     }
 
     fn rect(size: i32) -> PsdRect {
@@ -997,7 +997,7 @@ mod bundle_tests {
         pictura_core::reset_materializations();
         assert!(layer_thumbnail_image(&layer, 24).is_some());
         assert!(layer_thumbnail_positioned(&layer, 256, 256, 24).is_some());
-        assert!(mask_thumbnail_image(mask, 24).is_some());
+        assert!(mask_thumbnail_positioned(mask, 256, 256, 24).is_some());
         assert_eq!(pictura_core::materializations(), 0);
     }
 
@@ -1019,8 +1019,8 @@ mod bundle_tests {
             );
         }
         assert_eq!(
-            mask_thumbnail_image(layer.mask.as_ref().expect("mask"), 32),
-            mask_thumbnail_image(flat.mask.as_ref().expect("mask"), 32)
+            mask_thumbnail_positioned(layer.mask.as_ref().expect("mask"), 256, 256, 32),
+            mask_thumbnail_positioned(flat.mask.as_ref().expect("mask"), 256, 256, 32)
         );
     }
 }

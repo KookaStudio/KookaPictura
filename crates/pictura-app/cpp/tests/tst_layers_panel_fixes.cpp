@@ -180,7 +180,7 @@ private slots:
     void typeThumbnailIsSquareWithoutOutline();
     void adjustmentThumbnailIsSquareWithoutOutline();
     void fillThumbnailIsSquareWithOutline();
-    void maskThumbnailMatchesSquareCard();
+    void maskThumbnailKeepsDocumentAspectOnSquareRows();
     void maskThumbnailKeepsDocumentAspect();
     void labelGlyphTintFollowsFill();
     void groupIconIsLarger();
@@ -1306,9 +1306,8 @@ void LayersPanelFixesTest::fillThumbnailIsSquareWithOutline()
              "a fill row keeps its black outline");
 }
 
-// An adjustment or fill row's mask thumbnail uses the same 1:1 card as its image
-// thumbnail, so the row's cards share one aspect (#982).
-void LayersPanelFixesTest::maskThumbnailMatchesSquareCard()
+// Content cards stay square; their mask cards follow the document aspect.
+void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspectOnSquareRows()
 {
     const bool created = window_->newDocument(QStringLiteral("AdjMaskThumb"), 80, 160,
                                               QStringLiteral("rgb"), 8, QStringLiteral("white"));
@@ -1344,8 +1343,8 @@ void LayersPanelFixesTest::maskThumbnailMatchesSquareCard()
         const QRect mask = delegate->maskThumbRect(row, index);
         QVERIFY2(!image.isEmpty() && !mask.isEmpty(), "image and mask cards laid out");
         QCOMPARE(image.width(), image.height());
-        QCOMPARE(mask.width(), mask.height());
-        QCOMPARE(mask.size(), image.size());
+        QVERIFY(qAbs(mask.width()*160-mask.height()*80)<=80);
+        QVERIFY(mask.width()<mask.height());
     }
 }
 
@@ -1379,7 +1378,7 @@ void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspect()
     const QImage mask = index.data(pictura::MaskThumbnailRole).value<QImage>();
     QCOMPARE(index.data(pictura::ThumbnailRole).value<QImage>().size(), QSize(24, 6));
     QCOMPARE(mask.size(), QSize(24, 6));
-    QCOMPARE(mask.pixelColor(0, 0).alpha(), 0);
+    QCOMPARE(mask.pixelColor(0, 0), QColor(Qt::black));
     QCOMPARE(mask.pixelColor(3, 2).alpha(), 255);
     const QRect imageCard = delegate->thumbRect(rowRect, index);
     const QRect maskCard = delegate->maskThumbRect(rowRect, index);
@@ -1387,7 +1386,7 @@ void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspect()
     QCOMPARE(maskCard.size(), QSize(24, 6));
     const QImage painted = panel_->rowImageForTest(pasted);
     QCOMPARE(qGray(painted.pixelColor(imageCard.left() + 1, imageCard.top() + 1).rgb()), 255);
-    QCOMPARE(qGray(painted.pixelColor(maskCard.left() + 1, maskCard.top() + 1).rgb()), 255);
+    QCOMPARE(qGray(painted.pixelColor(maskCard.left() + 1, maskCard.top() + 1).rgb()), 0);
     window_->closeDocument(window_->activeDocumentIndex(), false);
 }
 

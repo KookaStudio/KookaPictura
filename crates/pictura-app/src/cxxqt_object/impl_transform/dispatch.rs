@@ -221,6 +221,9 @@ impl qobject::PictureView {
 
 impl qobject::PictureView {
     pub fn translate_layer(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
+        if let Some(path) = super::mask_move::target(self.rust()) {
+            return self.commit_mask_move(path, dx, dy);
+        }
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
@@ -255,6 +258,12 @@ impl qobject::PictureView {
     pub fn move_preview(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
         if dx == 0 && dy == 0 {
             return false;
+        }
+        if let Some(path) = super::mask_move::target(self.rust()) {
+            if self.rust().mask_move_baseline.is_none() && !self.as_mut().begin_mask_move(path) {
+                return false;
+            }
+            return self.render_mask_move_preview(dx, dy);
         }
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;

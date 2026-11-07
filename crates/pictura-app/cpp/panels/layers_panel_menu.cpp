@@ -1,3 +1,4 @@
+#include "memory_refusal.h"
 #include "layers_panel.h"
 
 #include "export_as_dialog.h"
@@ -881,9 +882,11 @@ bool LayersPanel::performRowAction(const QString& id, const QString& path)
         moveCurrent(-1);
     } else if (id == QLatin1String("addLayerMask")) {
         if (view_) {
-            layer_mask_add_path(*view_, path,
+            if (!layer_mask_add_path(*view_, path,
                                 view_->has_selection() ? QStringLiteral("reveal-selection")
-                                                       : QStringLiteral("reveal-all"));
+                                                       : QStringLiteral("reveal-all"))) {
+                reportMemoryRefusal(this, tr("add layer mask"));
+            }
         }
     } else if (id == QLatin1String("deleteLayerMask")) {
         if (view_) {

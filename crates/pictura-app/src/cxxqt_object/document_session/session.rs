@@ -445,6 +445,7 @@ impl PictureViewRust {
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
         self.cancel_move_composite();
         self.move_drag_active = false;
+        self.mask_move_baseline = None;
         self.session.set_selection(None);
         self.session.deselected_selection = None;
         self.session.quick_selection_snapshot = None;

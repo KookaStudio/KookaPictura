@@ -278,6 +278,7 @@ fn a_mask_present_leaves_the_composite_unchanged() {
     };
     view.session.live.set_stroke_session(StrokeSession {
         mask_stroke: Some(MaskStroke {
+            baseline: None,
             path: "0".to_string(),
             rect: rect(4, 4),
             document: mask_doc,

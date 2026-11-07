@@ -28,6 +28,7 @@ pub(super) fn one(path: &str) -> QStringList {
 }
 
 pub(super) fn layer_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bool {
+    pictura_core::memory::clear_refusal();
     let Some(path) = active_path(&view) else {
         return false;
     };
@@ -39,6 +40,7 @@ pub(super) fn layer_mask_add_path(
     path: &QString,
     kind: &QString,
 ) -> bool {
+    pictura_core::memory::clear_refusal();
     let Some(kind) = kind_from(&kind.to_string()) else {
         return false;
     };

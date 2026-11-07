@@ -1,3 +1,4 @@
+#include "memory_refusal.h"
 #include "properties_panel.h"
 #include "api/type_api.h"
 
@@ -381,7 +382,9 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     wireRefinement(vectorMaskFeather_, &vector_mask_set_feather);
     connect(maskInvert_, &QToolButton::clicked, this, [this]() {
         if (view_) {
-            layer_mask_invert(*view_);
+            if (!layer_mask_invert(*view_)) {
+                reportMemoryRefusal(this, tr("invert layer mask"));
+            }
         }
     });
 
