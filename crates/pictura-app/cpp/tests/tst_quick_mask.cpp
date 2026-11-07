@@ -12,6 +12,7 @@
 #include "panels/color_swatch_widget.h"
 #include "panels/layers_panel.h"
 #include "qt_test_support.h"
+#include "theme.h"
 #include "toolbox.h"
 #include "tools.h"
 #include <QtCore/QTemporaryDir>
@@ -24,6 +25,7 @@
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
+#include <QtWidgets/QTreeView>
 #include <array>
 using namespace pictura;
 class QuickMaskTest : public QObject {
@@ -99,16 +101,11 @@ private:
         const auto bytes = channels_active_mask_thumbnail(*view_, 32, w, h);
         return QByteArray(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     }
-    bool hasRed(const QImage& image)
+    QColor layerRowSurface(LayersPanel* panel, const QString& path)
     {
-        int pixels = 0;
-        for (int y = 0; y < image.height(); ++y)
-            for (int x = 0; x < image.width(); ++x) {
-                QColor c = image.pixelColor(x, y);
-                if (c.red() > c.green() * 1.4 && c.red() > c.blue() * 1.4 && c.red() > 70)
-                    ++pixels;
-            }
-        return pixels > 100;
+        const QImage image = panel->rowImageForTest(path);
+        // The trailing padding isolates the highlight from thumbnails and icons.
+        return image.isNull() ? QColor() : image.pixelColor(image.width() - 2, 2);
     }
     test::ScopedStateHome stateHome_;
     std::unique_ptr<PicturaMainWindow> window_;
@@ -283,6 +280,7 @@ void QuickMaskTest::blendModesRespectPolarity()
 
 void QuickMaskTest::unsupportedToolsRefuse()
 {
+    QVERIFY(paint(Qt::black));
     QTemporaryDir dir;
     QVERIFY(document_api::save(*view_, dir.filePath(QStringLiteral("unsupported.psd"))));
     QVERIFY(enter());
@@ -727,14 +725,20 @@ void QuickMaskTest::activeLayerHighlightFollowsMode()
 {
     auto* p = window_->findChild<LayersPanel*>();
     QVERIFY(p);
-    const QImage normal = p->grab().toImage();
+    auto* tree = p->findChild<QTreeView*>();
+    QVERIFY(tree);
+    const QString path = layer_selection_anchor(*view_);
+    const QColor normal = layerRowSurface(p, path);
+    const QColor red = Theme::tokenColor(QStringLiteral("quick-mask-active"));
+    QVERIFY(normal.isValid());
+    QVERIFY(normal != red);
     const int history = view_->history_count();
     QVERIFY(enter());
-    const QImage red = p->grab().toImage();
-    QVERIFY(red != normal);
-    QVERIFY(hasRed(red));
+    QCOMPARE(tree->property("quickMaskActivePath").toString(), path);
+    QCOMPARE(layerRowSurface(p, path), red);
     QVERIFY(quick_mask_set(*view_, false));
-    QVERIFY(!hasRed(p->grab().toImage()));
+    QVERIFY(tree->property("quickMaskActivePath").toString().isEmpty());
+    QCOMPARE(layerRowSurface(p, path), normal);
     QCOMPARE(view_->history_count(), history);
 }
 
@@ -742,10 +746,19 @@ void QuickMaskTest::redHighlightFollowsActiveTarget()
 {
     QVERIFY(enter());
     auto* p = window_->findChild<LayersPanel*>();
-    QVERIFY(hasRed(p->grab().toImage()));
+    QVERIFY(p);
+    auto* tree = p->findChild<QTreeView*>();
+    QVERIFY(tree);
+    const QString path = layer_selection_anchor(*view_);
+    const QColor red = Theme::tokenColor(QStringLiteral("quick-mask-active"));
+    QCOMPARE(tree->property("quickMaskActivePath").toString(), path);
+    QCOMPARE(layerRowSurface(p, path), red);
     set_layer_target(*view_, QStringList(), QString());
     QCoreApplication::processEvents();
-    QVERIFY(!hasRed(p->grab().toImage()));
+    QVERIFY(tree->property("quickMaskActivePath").toString().isEmpty());
+    const QColor unselected = layerRowSurface(p, path);
+    QVERIFY(unselected.isValid());
+    QVERIFY(unselected != red);
 }
 
 void QuickMaskTest::contentMovesRefuseWithoutPreview()
