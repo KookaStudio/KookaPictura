@@ -539,6 +539,11 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       paint, fill and filter engines grow a layer to their damage, Move and Free
       Transform trim it to its content, and PSD keeps the stored rect (#1208).
       `crates/pictura-core/src/layer_bounds.rs`.
+- [x] **Tiled pixel planes** — document planes are 256² tiles per channel that
+      are empty, uniform or shared copy-on-write, so a white Background costs
+      nothing, an edit forks only the tiles it touches, history shares untouched
+      tiles, and PSD read and write stream through them (#1212, #1213).
+      `crates/pictura-core/src/tiled_plane.rs`.
 - [ ] The Performance preferences pane: memory, history states, cache level and
       tile size, scratch disks and GPU, plus the Efficiency and Scratch readouts
       (#636)
