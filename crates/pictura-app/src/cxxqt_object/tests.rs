@@ -634,6 +634,7 @@ fn move_duplicate_records_one_state_and_undo_restores_the_layer_count() {
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -651,6 +652,7 @@ fn move_duplicate_records_one_state_and_undo_restores_the_layer_count() {
     ));
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -710,6 +712,7 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     let rendered = current_buffer(&doc, false);
     DocumentComposite::new(&mut doc).store(&rendered);
     let open = Snapshot {
+        quick_mask: None,
         doc: doc.clone(),
         selection: None,
     };
@@ -722,6 +725,7 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     DocumentComposite::new(&mut doc).store(&rendered);
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -740,6 +744,7 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },

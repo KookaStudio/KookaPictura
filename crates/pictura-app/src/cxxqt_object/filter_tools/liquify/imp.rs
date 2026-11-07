@@ -10,7 +10,7 @@ use pictura_core::{PixelBuffer, PsdRect};
 use pictura_filters::{LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool};
 use pictura_select::Selection;
 
-use super::super::super::helpers::{active_mask_target, active_pixel_layer};
+use super::super::super::helpers::active_pixel_layer;
 use super::super::super::helpers_composite::{layer_buffer, rgba_image};
 use super::super::hidden_layer_buffer;
 
@@ -122,7 +122,7 @@ pub(super) const TOOLS: [LiquifyTool; 10] = [
 
 pub(super) fn liquify_begin(view: &PictureView) -> bool {
     let rust = view.rust();
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         return false;
     }
     let Some(doc) = rust.session.doc.as_ref() else {

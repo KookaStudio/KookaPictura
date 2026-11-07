@@ -402,7 +402,7 @@ void CommandTreeTest::toolboxInteractions()
     QCOMPARE(fgbg->foregroundForTest(), bgBefore);
     QCOMPARE(fgbg->backgroundForTest(), fgBefore);
 
-    // The Paint Mask stub is checkable with a mapped icon, left of screen mode.
+    // The mode control keeps the footer geometry and follows its document.
     auto* paintMask = toolbox->findChild<QToolButton*>(QStringLiteral("paintMaskButton"));
     auto* screenMode = toolbox->findChild<QToolButton*>(QStringLiteral("screenModeButton"));
     QVERIFY(paintMask != nullptr);
@@ -426,10 +426,14 @@ void CommandTreeTest::toolboxInteractions()
              "two-column footer fits the content width");
     toolbox->setColumns(1);
     QCoreApplication::processEvents();
+    const bool madeMaskDocument=window_->activeDocumentIndex()<0;
+    if(madeMaskDocument) QVERIFY(window_->newDocument(QStringLiteral("Quick Mask"),16,16,QStringLiteral("rgb"),8,QStringLiteral("white")));
     QSignalSpy maskSpy(paintMask, &QToolButton::toggled);
     paintMask->click();
     QCOMPARE(maskSpy.count(), 1);
     QVERIFY(paintMask->isChecked());
+    paintMask->click();
+    if(madeMaskDocument) window_->closeDocument(window_->activeDocumentIndex(),false);
 
     // The screen-mode button opens an InstantPopup of the three registry
     // commands, and choosing one switches the frame.

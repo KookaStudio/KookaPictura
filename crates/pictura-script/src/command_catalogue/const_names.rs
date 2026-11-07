@@ -178,6 +178,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("LayerSmartObjectConvertToLayers", "layer.smartObject.convertToLayers"),
     ("LayerSmartObjectNewViaCopy", "layer.smartObject.newViaCopy"),
     ("LayerSmartFiltersClear", "layer.smartFilters.clear"),
+    ("ViewQuickMask", "view.quickMask"),
     ("ViewZoomIn", "view.zoomIn"),
     ("ViewZoomOut", "view.zoomOut"),
     ("ViewFitOnScreen", "view.fitOnScreen"),

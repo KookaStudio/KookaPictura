@@ -242,6 +242,8 @@ pub struct Stroke {
     /// Raster every dab on one thread: the reference the banded raster is
     /// held to.
     serial: bool,
+    inverse_grayscale: bool,
+    coverage_clip: Option<pictura_core::Plane>,
 }
 
 impl Stroke {
@@ -320,6 +322,8 @@ impl Stroke {
             per_dab,
             source: None,
             serial: false,
+            inverse_grayscale: false,
+            coverage_clip: None,
         })
     }
 
@@ -539,6 +543,8 @@ impl Stroke {
             painted,
             rect,
             source,
+            inverse_grayscale,
+            coverage_clip,
             ..
         } = self;
         let path: &[usize] = layer_path;
@@ -559,6 +565,8 @@ impl Stroke {
             );
         }
         let stencil = Stencil {
+            inverse_grayscale: *inverse_grayscale,
+            coverage_clip: coverage_clip.as_ref(),
             base: saved.planes(),
             locked: *locked,
             cfg,
@@ -1018,77 +1026,6 @@ impl Stroke {
     }
 }
 
-/// A stroke's per-pixel inputs, resolved once per sample so a dab's loop walks
-/// neither the layer path nor the channel list and re-derives no profile.
-struct Stencil<'a> {
-    base: [Option<&'a [u8]>; 4],
-    locked: bool,
-    cfg: StrokeConfig,
-    paint: Rgba,
-    /// Clone Stamp / Pattern Stamp / History Brush: the colour at each pixel
-    /// comes from the source instead of `paint`.
-    source: Option<&'a StampSource>,
-    rect: PsdRect,
-}
-
-impl Stencil<'_> {
-    /// Lay the paint at `coverage` over the saved pixel `i` (layer-local) and
-    /// write it to `planes` at `at`, the same pixel's index in the band the
-    /// planes were cut to. `rng` is the stroke's Dissolve state.
-    fn composite(
-        &self,
-        planes: &mut BandPlanes<'_>,
-        at: usize,
-        i: usize,
-        rng: Option<&mut u64>,
-        coverage: u8,
-    ) -> bool {
-        let cov = coverage as f32 / 255.0;
-        let a = (cov * self.cfg.opacity as f32 / 100.0).clamp(0.0, 1.0);
-        let plane = |k: usize, missing: u8| {
-            self.base[k]
-                .and_then(|d| d.get(i))
-                .copied()
-                .unwrap_or(missing)
-        };
-        let dr = plane(0, 0);
-        let dg = plane(1, 0);
-        let db = plane(2, 0);
-        // A layer without an alpha channel (a Background) is opaque.
-        let da = plane(3, 255);
-        let s = match self.source {
-            None => self.paint,
-            Some(source) => {
-                let w = self.rect.width() as usize;
-                let (x, y) = ((i % w) as i32, (i / w) as i32);
-                match source.at(self.rect.left + x, self.rect.top + y) {
-                    Some(color) => color,
-                    None => return false,
-                }
-            }
-        };
-        let mode = self.cfg.mode;
-        let roll = match rng {
-            Some(rng) if mode == PaintMode::Dissolve => Stroke::next_f32(rng),
-            _ => 0.0,
-        };
-        let Some((r, g, b, alpha)) = blend_pixel(mode, (dr, dg, db, da), &s, a, roll) else {
-            return false;
-        };
-        // A transparency lock preserves each pixel's alpha: fully transparent
-        // pixels stay untouched, everything else keeps its pre-stroke alpha.
-        // (Clear/auto-erase are refused for the whole stroke in `begin_at`.)
-        if self.locked {
-            if da == 0 {
-                return false;
-            }
-            write_band(planes, at, mode, (r, g, b, da))
-        } else {
-            write_band(planes, at, mode, (r, g, b, alpha))
-        }
-    }
-}
-
 /// Feed a whole sample list into a destructive stroke and commit on success.
 pub fn paint_stroke(
     doc: &mut Document,
@@ -1181,6 +1118,8 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
 }
 
 mod blend;
+mod stencil;
+use stencil::Stencil;
 mod grow;
 #[cfg(test)]
 mod hold_tests;

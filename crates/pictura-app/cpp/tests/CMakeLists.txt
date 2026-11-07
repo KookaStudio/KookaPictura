@@ -17,6 +17,8 @@ set(PICTURA_QT_TESTS
     tst_edit_clipboard
     tst_edit_refresh
     tst_mask_edit
+    tst_quick_mask
+    tst_quick_mask_regressions
     tst_canvas_mask_domain
     tst_layers_mask_commands
     tst_mask_link_state

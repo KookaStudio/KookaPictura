@@ -22,6 +22,17 @@ impl qobject::PictureView {
         let Some(filter) = filter_from_kind(&kind.to_string()) else {
             return false;
         };
+        if self.rust().session.quick_mask.active {
+            let applied = self
+                .as_mut()
+                .rust_mut()
+                .apply_quick_mask_op(&ActiveOp::Filter(filter), true)
+                .is_some();
+            if applied {
+                self.as_mut().edit("Filter", |_| Edit::Meta);
+            }
+            return applied;
+        }
         let routed = super::filter_tools::smart_apply::route_commit(
             self.as_mut(),
             &kind.to_string(),
@@ -206,6 +217,9 @@ pub(super) fn apply_op_active_region(
     if !commit && !rust.slot_allows(super::document_session::SessionKind::FilterPreview) {
         rust.filter_error = Some("another session is live".to_string());
         return None;
+    }
+    if rust.session.quick_mask.active {
+        return rust.apply_quick_mask_op(op, commit);
     }
     if let Some(path) = active_mask_target(rust) {
         return apply_mask_op(rust, &path, op, commit, preview_region);
@@ -562,6 +576,11 @@ pub(super) fn cancel_filter_preview_session(
     session: super::document_session::FilterPreviewSession,
 ) -> Option<Option<pictura_core::PsdRect>> {
     match session {
+        super::document_session::FilterPreviewSession::QuickMask { original } => {
+            rust.session.quick_mask.coverage = original;
+            rust.invalidate_quick_mask();
+            Some(None)
+        }
         super::document_session::FilterPreviewSession::Mask { path, original } => {
             let doc = rust.session.doc.as_mut()?;
             let rect = PsdRect {

@@ -2,7 +2,7 @@ use super::*;
 
 use super::super::super::document_session::{FilterPreview, PreviewBaseline, SessionKind};
 use super::super::super::filter_tools::jobs::commit_op_start;
-use super::super::super::helpers::{active_mask_target, clamp_region, layer_has_effects};
+use super::super::super::helpers::{clamp_region, layer_has_effects};
 use super::super::super::helpers_composite::{current_buffer, selection_to_mask};
 use super::super::super::impl_filters::{cancel_filter_preview, pixel_filter_target, ActiveOp};
 use super::super::super::presentation::{Dirty, Presentation, Rebuild};
@@ -191,7 +191,7 @@ pub(in crate::cxxqt_object) fn preview_start(
     adjustment: Adjustment,
 ) -> bool {
     rust.filter_error = None;
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         return false;
     }
     if !rust.slot_allows(SessionKind::FilterPreview) {
@@ -390,7 +390,7 @@ pub(super) fn image_adjust_apply_start(
     let Some(adjustment) = decode(block) else {
         return false;
     };
-    if active_mask_target(view.rust()).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(view.rust()) {
         let label = label.to_string();
         return super::super::run(view, adjustment, None, Some(label.as_str()));
     }

@@ -909,6 +909,7 @@ void PicturaMainWindow::refresh()
         }
     }
 
+    syncQuickMask();
     presentWindows();
     if (tools_) {
         tools_->bindCanvas(canvas);

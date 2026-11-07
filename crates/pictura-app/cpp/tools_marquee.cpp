@@ -52,6 +52,11 @@ void ToolController::refreshCursor(Qt::KeyboardModifiers mods)
         return canvas_->setCursor(c.pixmap().isNull() ? QCursor(info.cursor) : c);
     }
     PictureView* hoverView = view();
+    if (hoverView && quick_mask_active(*hoverView)
+        && (isBrushTool(active_) || active_ == ToolId::PaintBucket || active_ == ToolId::Gradient)
+        && layer_selection_anchor(*hoverView).isEmpty()) {
+        return canvas_->setCursor(Qt::ForbiddenCursor);
+    }
     const bool ctrlPreview = isSelectionTool(active_) && hoverView
         && mods.testFlag(Qt::ControlModifier) && hoverView->has_selection();
     // An in-progress combine drag keeps the cursor captured at press for the

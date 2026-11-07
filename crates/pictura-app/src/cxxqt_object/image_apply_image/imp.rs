@@ -1,6 +1,5 @@
 use super::*;
 
-use super::super::helpers::active_mask_target;
 use super::super::impl_filters::{apply_op_active_region, cancel_filter_preview, ActiveOp};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -68,7 +67,7 @@ pub(super) fn apply_image_target_label(view: &PictureView) -> QString {
         pictura_render::resolve_path(doc, path).map(|layer| layer.name.clone())
     });
     let name = name.unwrap_or_default();
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         QString::from(format!("{name} (Layer Mask)").as_str())
     } else {
         QString::from(name.as_str())

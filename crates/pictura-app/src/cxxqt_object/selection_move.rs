@@ -14,6 +14,9 @@ use super::state::PictureViewRust;
 impl PictureViewRust {
     /// Capture the current selection as the drag origin. False without one.
     pub(super) fn begin_selection_move(&mut self) -> bool {
+        if !self.quick_mask_content_allowed() {
+            return false;
+        }
         if !self.slot_allows(super::document_session::SessionKind::SelectionMove) {
             return false;
         }
@@ -30,6 +33,9 @@ impl PictureViewRust {
 
     /// Record the drag offset. False when no drag is active.
     pub(super) fn preview_selection_move(&mut self, dx: i32, dy: i32) -> bool {
+        if !self.quick_mask_content_allowed() {
+            return false;
+        }
         if self.session.live.selection_move_origin().is_none() {
             return false;
         }

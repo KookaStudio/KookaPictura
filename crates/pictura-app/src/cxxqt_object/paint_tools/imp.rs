@@ -143,6 +143,9 @@ pub(super) fn begin_brush(
     cfg.pressure_size = pressure_size;
     cfg.pressure_opacity = pressure_opacity;
     let label = if aliased { "Pencil" } else { "Brush" };
+    if view.rust().session.quick_mask.active {
+        return view.begin_quick_mask_paint(cfg, label);
+    }
     crate::cxxqt_object::helpers::memory_gate::clear();
     let fits = {
         let rust = view.rust();
@@ -311,6 +314,19 @@ pub(super) fn begin_eraser(
         ..tip_config(tip)
     };
     let mode = EraserMode::from_i32(mode).unwrap_or_default();
+    if view.rust().session.quick_mask.active {
+        if to_history {
+            return false;
+        }
+        return view.begin_quick_mask_paint(
+            StrokeConfig {
+                color: cfg.background,
+                aliased: mode == EraserMode::Pencil,
+                ..cfg
+            },
+            "Eraser",
+        );
+    }
     // Erasing a mask paints the background colour's coverage, as on a
     // Background layer. ponytail: Block mode erases with the brush tip, and
     // Erase To History has no mask source, so it is refused.
@@ -544,7 +560,7 @@ pub(super) fn magic_erase_at(
             return false;
         };
         if rust.session.live.stroke().is_some()
-            || active_mask_target(rust).is_some()
+            || crate::cxxqt_object::helpers::mask_editing(rust)
             || x < 0
             || y < 0
             || active_pixel_layer(doc, Some(path)).is_none()
@@ -805,7 +821,7 @@ pub(super) fn begin_kind(
         // painting tools refuse rather than write the layer's pixels.
         if !rust.slot_allows(super::super::document_session::SessionKind::Paint)
             || rust.session.live.stroke().is_some()
-            || active_mask_target(rust).is_some()
+            || crate::cxxqt_object::helpers::mask_editing(rust)
             || active_pixel_layer(doc, Some(path)).is_none()
             || !active_layer_visible(doc, Some(path))
         {

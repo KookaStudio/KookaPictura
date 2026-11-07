@@ -575,7 +575,10 @@ public:
         // The item surface matches the widget surface; the gutter and a selected
         // row step off it so the row still reads. Never the palette blue.
         const QColor rowSurface = Theme::shade(option.palette.color(QPalette::Window), 1);
-        const QColor selectionSurface = Theme::shade(option.palette.color(QPalette::Window), 3);
+        const bool quickMask=parent()->property("quickMaskActivePath").toString()==index.data(PathRole).toString()
+            && !index.data(PathRole).toString().isEmpty();
+        const QColor selectionSurface = quickMask?Theme::tokenColor(QStringLiteral("quick-mask-active"))
+            : Theme::shade(option.palette.color(QPalette::Window), 3);
         const QColor gutterSurface = Theme::shade(option.palette.color(QPalette::Window), 0);
         painter->fillRect(rect, selected ? selectionSurface : rowSurface);
         const QRect eye = eyeRect(rect);

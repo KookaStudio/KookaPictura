@@ -102,7 +102,7 @@ pub(super) fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
         ) {
             return Edit::None;
         }
-        rust.session.set_selection(None);
+        rust.session.clear_geometry_selection();
         Edit::Full
     });
     !matches!(edited, Edit::None)
@@ -124,7 +124,7 @@ pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_d
         pictura_render::rotate_document_in(doc, angle_deg, pivot)
     };
     if rotated {
-        view.as_mut().rust_mut().session.set_selection(None);
+        view.as_mut().rust_mut().session.clear_geometry_selection();
         view.as_mut().edit("Rotate", |_| Edit::Full);
     }
     rotated

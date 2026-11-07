@@ -145,6 +145,7 @@ fn brush_source_surface_invalidates_on_history_change() {
     history.add_snapshot(
         "snap",
         Snapshot {
+            quick_mask: None,
             doc: layered(50, 2),
             selection: None,
         },

@@ -1,7 +1,7 @@
 use super::*;
 
 use super::super::super::filter_map::filter_from_kind_params;
-use super::super::super::helpers::{active_mask_target, clamp_region, layer_has_effects};
+use super::super::super::helpers::{clamp_region, layer_has_effects};
 use super::super::super::helpers_composite::{current_buffer, premultiplied_display_image};
 use super::super::super::impl_filters::{
     apply_op_active_region, cancel_filter_preview, pixel_filter_target, ActiveOp,
@@ -216,7 +216,9 @@ pub(in crate::cxxqt_object) fn exact_preview_start(
     scale: f64,
 ) -> bool {
     // A Smart Object previews its chain on the canvas instead.
-    if active_mask_target(rust).is_some() || super::super::smart_apply::on_smart_object(rust) {
+    if crate::cxxqt_object::helpers::mask_editing(rust)
+        || super::super::smart_apply::on_smart_object(rust)
+    {
         return false;
     }
     let Some(path) = rust.layer_target.single().map(str::to_string) else {
@@ -444,7 +446,7 @@ pub(super) fn commit_filters(
     if view.rust().modal_transform_blocks_edit() {
         return false;
     }
-    if active_mask_target(view.rust()).is_none() {
+    if !crate::cxxqt_object::helpers::mask_editing(view.rust()) {
         let mut rust = view.as_mut().rust_mut();
         return commit_start(&mut rust, filters, label, last_filter);
     }

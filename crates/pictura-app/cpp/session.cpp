@@ -1,6 +1,7 @@
 #include "session.h"
 
 #include <QtCore/QByteArray>
+#include <QtGui/QColor>
 #include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
@@ -137,6 +138,10 @@ SessionState loadSession()
     state.textGammaEnabled = obj.value(QStringLiteral("textGammaEnabled")).toBool(true);
     state.textGamma = qBound(1.0, obj.value(QStringLiteral("textGamma")).toDouble(1.45), 2.2);
     state.layersThumbSize = obj.value(QStringLiteral("layersThumbSize")).toInt(2);
+    state.quickMaskSelected=obj.value(QStringLiteral("quickMaskSelected")).toBool(false);
+    const QColor quickColor(obj.value(QStringLiteral("quickMaskColor")).toString());
+    state.quickMaskColor=quickColor.isValid()?quickColor.name():QStringLiteral("#ff0000");
+    state.quickMaskOpacity=qBound(0,obj.value(QStringLiteral("quickMaskOpacity")).toInt(50),100);
     state.layersThumbContents = obj.value(QStringLiteral("layersThumbContents")).toInt(0);
     state.layersExpandNewEffects =
         obj.value(QStringLiteral("layersExpandNewEffects")).toBool(true);
@@ -312,6 +317,9 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("textGammaEnabled"), state.textGammaEnabled);
     obj.insert(QStringLiteral("textGamma"), state.textGamma);
     obj.insert(QStringLiteral("layersThumbSize"), state.layersThumbSize);
+    obj.insert(QStringLiteral("quickMaskSelected"),state.quickMaskSelected);
+    obj.insert(QStringLiteral("quickMaskColor"),state.quickMaskColor);
+    obj.insert(QStringLiteral("quickMaskOpacity"),state.quickMaskOpacity);
     obj.insert(QStringLiteral("layersThumbContents"), state.layersThumbContents);
     obj.insert(QStringLiteral("layersExpandNewEffects"), state.layersExpandNewEffects);
     obj.insert(QStringLiteral("layersAddCopyOnDuplicate"), state.layersAddCopyOnDuplicate);
