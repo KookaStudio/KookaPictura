@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 #include "api/layers_api.h"
+#include "api/document_bridge.h"
 
 #include "frame.h"
 #include "panels/layers_panel.h"
@@ -32,6 +33,8 @@ private slots:
     void clipIsDisabledAboveABackground();
     void slidersEditLiveAndCommitOnce();
     void groupsCurvesAndFooter();
+    void channelMixerMonochrome();
+    void channelMixerCmykGroups();
     void canvasSectionReadsAndResizes();
     void maskSectionAppearsForAMaskedLayer();
     void vectorMaskSectionAppears();
@@ -373,8 +376,68 @@ bool PropertiesPanelTest::setupLayer(const QString& name)
     return true;
 }
 
-// Density and Feather preview while dragged and record one state on commit;
-// Invert flips the mask in one state (lmk_props_refine, lmk_props_invert).
+// The panel's Monochrome check switches a Channel Mixer to its Gray group and
+// seeds the 40/40/20 mix; unchecking returns the three RGB groups.
+void PropertiesPanelTest::channelMixerMonochrome()
+{
+    QVERIFY2(setupAdjustment(QStringLiteral("channel-mixer")), "channel mixer fixture");
+    auto* group = panel_->findChild<QComboBox*>(QStringLiteral("adjustmentGroup"));
+    auto* check = panel_->findChild<QCheckBox*>(QStringLiteral("adjustmentCheck.monochrome"));
+    QVERIFY(group && check);
+    QCOMPARE(group->count(), 3);
+    QVERIFY(!check->isChecked());
+    check->click();
+    panel_->commitForTest();
+    panel_->refresh();
+    group = panel_->findChild<QComboBox*>(QStringLiteral("adjustmentGroup"));
+    QVERIFY(group);
+    QCOMPARE(group->count(), 1);
+    QCOMPARE(group->itemText(0), QStringLiteral("Gray"));
+    auto* red = qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("0.red")));
+    QVERIFY(red);
+    QCOMPARE(red->value(), 40);
+    check = panel_->findChild<QCheckBox*>(QStringLiteral("adjustmentCheck.monochrome"));
+    QVERIFY(check);
+    check->click();
+    panel_->commitForTest();
+    panel_->refresh();
+    group = panel_->findChild<QComboBox*>(QStringLiteral("adjustmentGroup"));
+    QVERIFY(group);
+    QCOMPARE(group->count(), 3);
+}
+
+// A CMYK Channel Mixer page has the four ink groups and no Monochrome check.
+void PropertiesPanelTest::channelMixerCmykGroups()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Adjust"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_ && pictura::convert_image_mode(*view_, QStringLiteral("cmyk")));
+    QCOMPARE(pictura::image_mode(*view_), QStringLiteral("cmyk"));
+    panel_ = window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));
+    layers_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_ && layers_ && view_->add_adjustment(QStringLiteral("channel-mixer")));
+    QString path;
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        if (pictura::layers_api::rowAt(*view_, i).hasAdjustment) {
+            path = pictura::layers_api::rowAt(*view_, i).path;
+        }
+    }
+    QVERIFY(!path.isEmpty());
+    panel_->setView(view_);
+    layers_->setView(view_);
+    QVERIFY(layers_->selectRowForTest(path));
+    view_->set_presented_view(0, 0, 0, 16, 16);
+    panel_->refresh();
+    auto* group = panel_->findChild<QComboBox*>(QStringLiteral("adjustmentGroup"));
+    QVERIFY(group);
+    QCOMPARE(group->count(), 4);
+    QCOMPARE(group->itemText(0), QStringLiteral("Cyan"));
+    QCOMPARE(group->itemText(3), QStringLiteral("Black"));
+    QVERIFY(qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("0.cyan"))));
+    QVERIFY(qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("3.black"))));
+    QVERIFY(!panel_->findChild<QCheckBox*>(QStringLiteral("adjustmentCheck.monochrome")));
+}
 void PropertiesPanelTest::maskDensityFeatherAndInvertEdit()
 {
     QVERIFY2(setupLayer(QStringLiteral("MaskRefine")), "mask refine fixture");

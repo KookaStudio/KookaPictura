@@ -195,6 +195,29 @@ pub struct ChannelMixerParams {
     pub blue: [f64; 3],
     /// Per-output-channel constant in percent.
     pub constant: [f64; 3],
+    /// CMYK output rows (C, M, Y, K) over `[C, M, Y, K]` sources.
+    pub ink: [[f64; 4]; 4],
+    /// Per-output-channel constant in percent for the CMYK rows.
+    pub ink_constant: [f64; 4],
+}
+
+impl Default for ChannelMixerParams {
+    fn default() -> Self {
+        Self {
+            monochrome: false,
+            red: [100.0, 0.0, 0.0],
+            green: [0.0, 100.0, 0.0],
+            blue: [0.0, 0.0, 100.0],
+            constant: [0.0; 3],
+            ink: [
+                [100.0, 0.0, 0.0, 0.0],
+                [0.0, 100.0, 0.0, 0.0],
+                [0.0, 0.0, 100.0, 0.0],
+                [0.0, 0.0, 0.0, 100.0],
+            ],
+            ink_constant: [0.0; 4],
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

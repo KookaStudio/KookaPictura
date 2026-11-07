@@ -78,7 +78,10 @@ pub use color_balance::encode_color_balance;
 pub use gradient_map::{encode_gradient_map, gradient_map_dither};
 
 mod channel_mixer;
-pub use channel_mixer::encode_channel_mixer;
+pub use channel_mixer::{encode_channel_mixer, encode_channel_mixer_ink};
+
+mod channel_mixer_cmyk;
+pub use channel_mixer_cmyk::CmykMix;
 
 mod curves;
 pub use curves::encode_curves;
@@ -88,11 +91,12 @@ pub use adjustment_catalogue::{
     adjustment_entry, AdjustmentEntry, ImageCommand, LayerEntry, ADJUSTMENT_CATALOGUE,
 };
 mod adjustment_defaults;
-pub use adjustment_defaults::default_adjustment_block;
+pub use adjustment_defaults::{default_adjustment_block, default_adjustment_block_in_mode};
 mod adjustment_params;
 mod adjustment_presets;
 pub use adjustment_params::{
-    adjustment_editor, curve_points, reset_adjustment, set_adjustment_param, set_curve_points,
+    adjustment_editor, adjustment_editor_in_mode, curve_points, reset_adjustment,
+    reset_adjustment_in_mode, set_adjustment_param, set_adjustment_param_in_mode, set_curve_points,
     AdjustmentEditor, AdjustmentParam, ParamKind,
 };
 pub use adjustment_presets::{
@@ -154,7 +158,9 @@ pub use apply_image::{
     ApplyImageParams, ApplyImagePlanes, ApplyImageTarget,
 };
 mod filter;
-pub use filter::{apply_adjustment_region, apply_filter, apply_filter_region};
+pub use filter::{
+    apply_adjustment_region, apply_adjustment_region_in_mode, apply_filter, apply_filter_region,
+};
 
 mod smart_filter;
 pub use smart_filter::{apply_smart_filter_chain, decode_smart_filter, SmartFilterOp};

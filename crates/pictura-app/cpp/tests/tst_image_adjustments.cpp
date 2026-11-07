@@ -20,6 +20,7 @@
 #include "hdr_toning_dialog.h"
 #include "tools.h"
 #include "api/filters_bridge.h"
+#include "api/document_bridge.h"
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>
@@ -44,7 +45,7 @@ namespace {
 QByteArray block(const char* kind)
 {
     const ::rust::Vec<std::uint8_t> v =
-        pictura::image_adjustment_default(QString::fromLatin1(kind), 0x000000u, 0xffffffu);
+        pictura::image_adjustment_default(QString::fromLatin1(kind), 0x000000u, 0xffffffu, false);
     return QByteArray(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
 }
 
@@ -70,8 +71,10 @@ void verifyRanges(pictura::PictureView* view, const char* kind,
                   const QList<QPair<QString, QString>>& fields)
 {
     const QByteArray opening = block(kind);
-    const QStringList page = pictura::image_adjustment_page(::rust::Slice<const std::uint8_t>(
-        reinterpret_cast<const std::uint8_t*>(opening.constData()), std::size_t(opening.size())));
+    const QStringList page = pictura::image_adjustment_page(
+        ::rust::Slice<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(opening.constData()),
+                                          std::size_t(opening.size())),
+        false);
     const auto dialog =
         pictura::makeAdjustmentDialog(QString::fromLatin1(kind), view, opening, QRect());
     for (const auto& [name, key] : fields) {
@@ -114,6 +117,8 @@ private slots:
     void hueSaturationEditsEachRangeAndPresets();
     void colorBalanceEditsEachTone();
     void channelMixerColorsItsSourcesAndTotals();
+    void channelMixerMonochromeToggle();
+    void channelMixerCmykOutputs();
     void canvasPansWhileADialogIsOpen();
     void blackWhiteMixesTintsAndPresets();
     void gradientMapEditsItsGradient();
@@ -426,6 +431,54 @@ void ImageAdjustmentsTest::channelMixerColorsItsSourcesAndTotals()
     dialog->reject();
 }
 
+// Monochrome switches the RGB dialog to its one Gray output and seeds the
+// 40/40/20 luminance mix; switching it off keeps that mix as the Red row.
+void ImageAdjustmentsTest::channelMixerMonochromeToggle()
+{
+    QVERIFY(openImage(QColor(100, 150, 200)));
+    const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("channel-mixer"), view_,
+                                                      block("channel-mixer"), QRect());
+    auto* output = qobject_cast<QComboBox*>(dialog->controlForTest(QStringLiteral("outputChannel")));
+    auto* monochrome =
+        qobject_cast<QCheckBox*>(dialog->controlForTest(QStringLiteral("monochrome")));
+    auto* red = qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("red")));
+    QVERIFY(output && monochrome && red);
+    QCOMPARE(output->count(), 3);
+    QVERIFY(!monochrome->isChecked());
+    monochrome->click();
+    QCOMPARE(output->count(), 1);
+    QCOMPARE(output->itemText(0), QStringLiteral("Gray"));
+    QCOMPARE(red->value(), 40);
+    monochrome->click();
+    QCOMPARE(output->count(), 3);
+    QCOMPARE(red->value(), 40);
+    dialog->reject();
+}
+
+// A CMYK document offers the four ink outputs and four source rows, and has no
+// Monochrome checkbox.
+void ImageAdjustmentsTest::channelMixerCmykOutputs()
+{
+    QVERIFY(openImage(QColor(100, 150, 200)));
+    QVERIFY(pictura::convert_image_mode(*view_, QStringLiteral("cmyk")));
+    QCOMPARE(pictura::image_mode(*view_), QStringLiteral("cmyk"));
+    const ::rust::Vec<std::uint8_t> v = pictura::image_adjustment_default(
+        QStringLiteral("channel-mixer"), 0x000000u, 0xffffffu, true);
+    const QByteArray opening(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
+    const auto dialog =
+        pictura::makeAdjustmentDialog(QStringLiteral("channel-mixer"), view_, opening, QRect());
+    auto* output = qobject_cast<QComboBox*>(dialog->controlForTest(QStringLiteral("outputChannel")));
+    auto* cyan = qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("cyan")));
+    QVERIFY(output && cyan);
+    QCOMPARE(output->count(), 4);
+    QCOMPARE(output->itemText(0), QStringLiteral("Cyan"));
+    QCOMPARE(output->itemText(3), QStringLiteral("Black"));
+    QCOMPARE(cyan->value(), 100);
+    QVERIFY(qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("black"))));
+    QVERIFY(!dialog->controlForTest(QStringLiteral("monochrome")));
+    dialog->reject();
+}
+
 // While a dialog runs, the canvas still pans on a middle-button drag; every
 // other click on the main window stays blocked.
 void ImageAdjustmentsTest::canvasPansWhileADialogIsOpen()
@@ -664,7 +717,7 @@ void ImageAdjustmentsTest::photoFilterUsesAFilterOrAColor()
     const QByteArray custom = QByteArray(block("photo-filter"));
     const ::rust::Vec<std::uint8_t> edited = pictura::image_adjustment_set(
         {reinterpret_cast<const std::uint8_t*>(custom.constData()), std::size_t(custom.size())},
-        QStringLiteral("color"), double(0x123456));
+        QStringLiteral("color"), double(0x123456), false);
     const QByteArray reopened(reinterpret_cast<const char*>(edited.data()), qsizetype(edited.size()));
     const auto again =
         pictura::makeAdjustmentDialog(QStringLiteral("photo-filter"), view_, reopened, QRect());
@@ -880,8 +933,10 @@ void ImageAdjustmentsTest::genericDialogRangesMatchLayout()
     verifyRanges(view_, "brightness-contrast", same({"brightness", "contrast"}));
     verifyRanges(view_, "vibrance", same({"vibrance", "saturation"}));
     const QByteArray bc = block("brightness-contrast");
-    const QStringList page = pictura::image_adjustment_page(::rust::Slice<const std::uint8_t>(
-        reinterpret_cast<const std::uint8_t*>(bc.constData()), std::size_t(bc.size())));
+    const QStringList page = pictura::image_adjustment_page(
+        ::rust::Slice<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(bc.constData()),
+                                          std::size_t(bc.size())),
+        false);
     const auto spec = pictura::AdjustmentDialog::paramSpec(page, QStringLiteral("brightness"));
     QCOMPARE(spec.min, -150.0);
     QCOMPARE(spec.max, 150.0);

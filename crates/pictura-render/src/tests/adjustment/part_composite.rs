@@ -592,3 +592,176 @@ fn curves_layer_changes_backdrop_and_per_channel_isolates() {
         assert!(after[0] > before[0], "red follows its curve at {x}");
     }
 }
+
+#[test]
+fn default_channel_mixer_is_neutral() {
+    let base = solid(
+        "base",
+        full(2, 1),
+        (30, 90, 210),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let plain = composite_rgba(&doc(2, 1, vec![base.clone()]));
+    let neutral = encode_channel_mixer(
+        false,
+        [100.0, 0.0, 0.0],
+        [0.0, 100.0, 0.0],
+        [0.0, 0.0, 100.0],
+        [0.0; 3],
+    );
+    let mixed = composite_rgba(&doc(
+        2,
+        1,
+        vec![
+            base,
+            adjustment_layer("channel-mixer", *b"mixr", neutral.data.to_vec(), 255, None),
+        ],
+    ));
+    assert_eq!(
+        mixed.data, plain.data,
+        "the identity leaves the backdrop alone"
+    );
+}
+
+#[test]
+fn composite_channel_mixer_cmyk() {
+    let base = solid(
+        "base",
+        full(2, 1),
+        (30, 90, 210),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let patch = solid(
+        "patch",
+        rect(0, 0, 1, 1),
+        (200, 100, 50),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let mut plain_doc = doc(2, 1, vec![base.clone(), patch.clone()]);
+    plain_doc.source_mode = Some(ColorMode::Cmyk);
+    let plain = composite_rgba(&plain_doc);
+
+    let ink = encode_channel_mixer_ink(
+        [
+            [0.0, 100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0, 0.0],
+            [0.0, 0.0, 100.0, 0.0],
+            [0.0, 0.0, 0.0, 100.0],
+        ],
+        [0.0; 4],
+    );
+    let mut mixed_doc = doc(
+        2,
+        1,
+        vec![
+            base,
+            patch,
+            adjustment_layer("channel-mixer", *b"mixr", ink.data.to_vec(), 255, None),
+        ],
+    );
+    mixed_doc.source_mode = Some(ColorMode::Cmyk);
+    let mixed = composite_rgba(&mixed_doc);
+    assert_ne!(
+        mixed.data, plain.data,
+        "a CMYK ink mix must change a CMYK backdrop"
+    );
+}
+
+#[test]
+fn destructive_channel_mixer_cmyk() {
+    let mut d = doc(
+        1,
+        1,
+        vec![solid(
+            "base",
+            full(1, 1),
+            (30, 90, 210),
+            255,
+            BlendMode::Normal,
+            255,
+        )],
+    );
+    d.source_mode = Some(ColorMode::Cmyk);
+    let mix = CmykMix::for_document(&d).expect("a CMYK context");
+    let ink = encode_channel_mixer_ink(
+        [
+            [0.0, 100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0, 0.0],
+            [0.0, 0.0, 100.0, 0.0],
+            [0.0, 0.0, 0.0, 100.0],
+        ],
+        [0.0; 4],
+    );
+    let Some(Adjustment::ChannelMixer(params)) = decode_adjustment(&ink) else {
+        panic!("the ink block decodes");
+    };
+    let mut layer = solid(
+        "layer",
+        full(1, 1),
+        (30, 90, 210),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let before = layer.channels[0].data.clone();
+    apply_adjustment_region_in_mode(
+        &mut layer,
+        &Adjustment::ChannelMixer(params),
+        None,
+        full(1, 1),
+        Some(&mix),
+    )
+    .expect("the destructive mix applies");
+    assert_ne!(layer.channels[0].data, before);
+}
+
+#[test]
+fn monochrome_channel_mixer_in_cmyk_document() {
+    let base = solid(
+        "base",
+        full(2, 1),
+        (30, 90, 210),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let patch = solid(
+        "patch",
+        rect(0, 0, 1, 1),
+        (200, 100, 50),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let mono = encode_channel_mixer(
+        true,
+        [40.0, 40.0, 20.0],
+        [0.0, 100.0, 0.0],
+        [0.0, 0.0, 100.0],
+        [0.0; 3],
+    );
+    let mut d = doc(
+        2,
+        1,
+        vec![
+            base,
+            patch,
+            adjustment_layer("channel-mixer", *b"mixr", mono.data.to_vec(), 255, None),
+        ],
+    );
+    d.source_mode = Some(ColorMode::Cmyk);
+    let out = composite_rgba(&d);
+    for y in 0..1 {
+        for x in 0..2 {
+            let p = rgb(&out, x, y);
+            assert_eq!(p[0], p[1], "monochrome must be neutral at {x},{y}");
+            assert_eq!(p[1], p[2], "monochrome must be neutral at {x},{y}");
+        }
+    }
+}

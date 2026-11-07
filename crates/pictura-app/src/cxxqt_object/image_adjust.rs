@@ -37,14 +37,19 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// The block the `kind` dialog opens on (`"levels"`, `"curves"`, …; colours `0xRRGGBB` for Gradient Map), or empty for an unknown kind.
-        fn image_adjustment_default(kind: &QString, foreground: u32, background: u32) -> Vec<u8>;
+        /// The block the `kind` dialog opens on (`"levels"`, `"curves"`, …; colours `0xRRGGBB` for Gradient Map), or empty for an unknown kind. `cmyk` selects the CMYK identity for a CMYK document.
+        fn image_adjustment_default(
+            kind: &QString,
+            foreground: u32,
+            background: u32,
+            cmyk: bool,
+        ) -> Vec<u8>;
 
-        /// `block`'s descriptor page (the Properties panel's row format), or empty.
-        fn image_adjustment_page(block: &[u8]) -> QStringList;
+        /// `block`'s descriptor page (the Properties panel's row format), or empty. `cmyk` reads the block as a CMYK document.
+        fn image_adjustment_page(block: &[u8], cmyk: bool) -> QStringList;
 
-        /// `block` with parameter `key` set to `value`, or empty when refused.
-        fn image_adjustment_set(block: &[u8], key: &QString, value: f64) -> Vec<u8>;
+        /// `block` with parameter `key` set to `value`, or empty when refused. `cmyk` reads the block as a CMYK document.
+        fn image_adjustment_set(block: &[u8], key: &QString, value: f64, cmyk: bool) -> Vec<u8>;
 
         /// A Curves `block`'s `channel` points as `"x,y x,y …"`, or empty.
         fn image_adjustment_curve(block: &[u8], channel: i32) -> QString;

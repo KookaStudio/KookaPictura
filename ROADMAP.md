@@ -278,7 +278,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       profile discovery (#569)
 - [ ] 32-bit Preview Options, the HDR colour picker, and the 32-bit Info
       readout (#570)
-- [ ] The Channel Mixer Monochrome UI, and the CMYK and Gray output channels
+- [x] The Channel Mixer Monochrome UI, and the CMYK and Gray output channels
       (#571)
 - [ ] Color Balance numeric readouts, and Lab and CMYK mapping (#572)
 - [ ] Hue/Saturation Colorize, range-band editing, eyedroppers, and the

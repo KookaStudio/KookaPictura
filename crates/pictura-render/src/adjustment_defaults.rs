@@ -7,9 +7,10 @@ use pictura_codec::DescValue;
 use pictura_core::AdjustmentData;
 
 use crate::{
-    encode_brightness_contrast, encode_channel_mixer, encode_color_balance, encode_color_lookup,
-    encode_curves, encode_gradient_map, encode_hue_saturation, encode_photo_filter,
-    encode_posterize, encode_selective_color, encode_threshold, identity_cube,
+    encode_brightness_contrast, encode_channel_mixer, encode_channel_mixer_ink,
+    encode_color_balance, encode_color_lookup, encode_curves, encode_gradient_map,
+    encode_hue_saturation, encode_photo_filter, encode_posterize, encode_selective_color,
+    encode_threshold, identity_cube,
 };
 
 fn descriptor(key: [u8; 4], items: Vec<(&[u8], DescValue)>) -> AdjustmentData {
@@ -41,6 +42,16 @@ pub fn default_adjustment_block(
     kind: &str,
     foreground: [u8; 3],
     background: [u8; 3],
+) -> Option<AdjustmentData> {
+    default_adjustment_block_in_mode(kind, foreground, background, false)
+}
+
+/// As [`default_adjustment_block`], with the CMYK identity for a CMYK document.
+pub fn default_adjustment_block_in_mode(
+    kind: &str,
+    foreground: [u8; 3],
+    background: [u8; 3],
+    cmyk: bool,
 ) -> Option<AdjustmentData> {
     Some(match kind {
         "brightness-contrast" => encode_brightness_contrast(0, 0),
@@ -109,13 +120,27 @@ pub fn default_adjustment_block(
         ),
         // CS6's default, Warming Filter (85).
         "photo-filter" => encode_photo_filter([236, 138, 0], 25.0, true),
-        "channel-mixer" => encode_channel_mixer(
-            false,
-            [100.0, 0.0, 0.0],
-            [0.0, 100.0, 0.0],
-            [0.0, 0.0, 100.0],
-            [0.0; 3],
-        ),
+        "channel-mixer" => {
+            if cmyk {
+                encode_channel_mixer_ink(
+                    [
+                        [100.0, 0.0, 0.0, 0.0],
+                        [0.0, 100.0, 0.0, 0.0],
+                        [0.0, 0.0, 100.0, 0.0],
+                        [0.0, 0.0, 0.0, 100.0],
+                    ],
+                    [0.0; 4],
+                )
+            } else {
+                encode_channel_mixer(
+                    false,
+                    [100.0, 0.0, 0.0],
+                    [0.0, 100.0, 0.0],
+                    [0.0, 0.0, 100.0],
+                    [0.0; 3],
+                )
+            }
+        }
         "posterize" => encode_posterize(4),
         "threshold" => encode_threshold(128),
         "gradient-map" => encode_gradient_map(

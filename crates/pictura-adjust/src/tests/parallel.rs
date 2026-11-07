@@ -119,6 +119,7 @@ fn every_kernel() -> Vec<(&'static str, Adjustment)> {
                 green: [0.0, 100.0, 0.0],
                 blue: [0.0, -10.0, 110.0],
                 constant: [0.0, 0.0, 0.0],
+                ..Default::default()
             }),
         ),
         (

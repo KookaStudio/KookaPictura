@@ -35,27 +35,28 @@ pub(super) fn image_adjustment_default(
     kind: &QString,
     foreground: u32,
     background: u32,
+    cmyk: bool,
 ) -> Vec<u8> {
-    to_block(pictura_render::default_adjustment_block(
+    to_block(pictura_render::default_adjustment_block_in_mode(
         &kind.to_string(),
         rgb(foreground),
         rgb(background),
+        cmyk,
     ))
 }
 
-pub(super) fn image_adjustment_page(block: &[u8]) -> QStringList {
+pub(super) fn image_adjustment_page(block: &[u8], cmyk: bool) -> QStringList {
     from_block(block)
         .as_ref()
-        .and_then(pictura_render::adjustment_editor)
+        .and_then(|data| pictura_render::adjustment_editor_in_mode(data, cmyk))
         .map(|editor| page_rows(&editor))
         .unwrap_or_default()
 }
 
-pub(super) fn image_adjustment_set(block: &[u8], key: &QString, value: f64) -> Vec<u8> {
-    to_block(
-        from_block(block)
-            .and_then(|d| pictura_render::set_adjustment_param(&d, &key.to_string(), value)),
-    )
+pub(super) fn image_adjustment_set(block: &[u8], key: &QString, value: f64, cmyk: bool) -> Vec<u8> {
+    to_block(from_block(block).and_then(|d| {
+        pictura_render::set_adjustment_param_in_mode(&d, &key.to_string(), value, cmyk)
+    }))
 }
 
 pub(super) fn image_adjustment_curve(block: &[u8], channel: i32) -> QString {
@@ -187,11 +188,34 @@ mod tests {
             [255; 3],
         ));
         assert_eq!(&block[..4], b"thrs");
-        let edited = image_adjustment_set(&block, &QString::from("level"), 200.0);
+        let edited = image_adjustment_set(&block, &QString::from("level"), 200.0, false);
         assert_eq!(decode(&edited), Some(Adjustment::Threshold(200)));
-        assert!(image_adjustment_set(&block, &QString::from("nope"), 1.0).is_empty());
+        assert!(image_adjustment_set(&block, &QString::from("nope"), 1.0, false).is_empty());
         assert!(from_block(b"thr").is_none());
         assert_eq!(rgb(0x12_34_56), [0x12, 0x34, 0x56]);
         assert!(direct("equalize").is_some() && direct("match-color").is_none());
+    }
+
+    #[test]
+    fn channel_mixer_default_in_cmyk_document() {
+        let block = image_adjustment_default(&QString::from("channel-mixer"), 0, 0xffffff, true);
+        let Some(Adjustment::ChannelMixer(p)) = decode(&block) else {
+            panic!("a channel-mixer block decodes");
+        };
+        assert_eq!(
+            p.ink,
+            [
+                [100.0, 0.0, 0.0, 0.0],
+                [0.0, 100.0, 0.0, 0.0],
+                [0.0, 0.0, 100.0, 0.0],
+                [0.0, 0.0, 0.0, 100.0],
+            ]
+        );
+        assert_eq!(p.ink_constant, [0.0; 4]);
+        assert_eq!(p.red, [100.0, 0.0, 0.0], "the RGB view is also identity");
+        let page = image_adjustment_page(&block, true);
+        assert!(page.iter().any(|row| row
+            .to_string()
+            .starts_with("groups\tCyan|Magenta|Yellow|Black")));
     }
 }

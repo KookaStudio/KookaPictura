@@ -958,6 +958,11 @@ void PropertiesPanel::commit()
     if (view_) {
         adjustment_commit(*view_, title_);
     }
+    // Monochrome changes the page's group set; rebuild after the checkbox's
+    // own signal has returned, so its widget is not deleted mid-emit.
+    if (pendingKey_ == QLatin1String("monochrome")) {
+        QTimer::singleShot(0, this, [this] { refresh(); });
+    }
 }
 
 QString PropertiesPanel::messageForTest() const { return header_->text(); }

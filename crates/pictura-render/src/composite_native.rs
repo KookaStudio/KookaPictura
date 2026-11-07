@@ -169,6 +169,22 @@ pub(crate) fn composite_adjustment(
         fill: Some(255),
         ..Default::default()
     });
+    // A CMYK Channel Mixer mixes ink values, which the RGB working canvas does
+    // not hold. Convert, mix, and gate the adjusted colors; a monochrome mixer
+    // keeps the RGB path.
+    if let Adjustment::ChannelMixer(params) = adjustment {
+        if !params.monochrome {
+            if let Some(mix) = crate::channel_mixer_cmyk::CmykMix::for_document(doc) {
+                let mut adjusted = canvas.clone();
+                if crate::channel_mixer_cmyk::apply_canvas(&mut adjusted, params, &mix) {
+                    let colors: Vec<[f32; 3]> =
+                        adjusted.px.iter().map(|p| [p.r, p.g, p.b]).collect();
+                    gate_adjusted(canvas, layer, doc, &colors, &gated, Some(&gated_over));
+                }
+                return;
+            }
+        }
+    }
     // A document read at 16/32 applies the adjustment to the f32 accumulator
     // at native precision. An adjustment outside `apply_native`'s set falls
     // back to the 8-bit path below.

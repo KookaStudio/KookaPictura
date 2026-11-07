@@ -63,12 +63,23 @@ fn document_fits(width: i32, height: i32, bits: i32, budget: &pictura_codec::Ima
 /// composite; a few kinds (e.g. Color Balance) use the reference's neutral default.
 /// Editing parameters is out of scope for M4-C. `mask` confines the effect to a
 /// selection when one is active.
+#[cfg(test)]
 pub(super) fn adjustment_layer(kind: &str, mask: Option<LayerMask>) -> Option<Layer> {
+    adjustment_layer_in_mode(kind, mask, false)
+}
+
+/// As [`adjustment_layer`], with the CMYK identity for a CMYK document.
+pub(super) fn adjustment_layer_in_mode(
+    kind: &str,
+    mask: Option<LayerMask>,
+    cmyk: bool,
+) -> Option<Layer> {
     use pictura_render::{
-        encode_brightness_contrast, encode_channel_mixer, encode_color_balance,
-        encode_color_lookup, encode_gradient_map, encode_hue_saturation, encode_invert,
-        encode_photo_filter, encode_posterize, encode_selective_color, encode_threshold,
-        identity_cube, GradientMapParams, GradientStop, SelectiveColorMethod, SelectiveRange,
+        encode_brightness_contrast, encode_channel_mixer, encode_channel_mixer_ink,
+        encode_color_balance, encode_color_lookup, encode_gradient_map, encode_hue_saturation,
+        encode_invert, encode_photo_filter, encode_posterize, encode_selective_color,
+        encode_threshold, identity_cube, GradientMapParams, GradientStop, SelectiveColorMethod,
+        SelectiveRange,
     };
 
     let data: AdjustmentData = match kind {
@@ -96,13 +107,27 @@ pub(super) fn adjustment_layer(kind: &str, mask: Option<LayerMask>) -> Option<La
             false,
         ),
         "color-balance" => encode_color_balance([0.0; 3], [0.0; 3], [0.0; 3], true),
-        "channel-mixer" => encode_channel_mixer(
-            false,
-            [100.0, 0.0, 0.0],
-            [0.0, 100.0, 0.0],
-            [0.0, 0.0, 100.0],
-            [0.0; 3],
-        ),
+        "channel-mixer" => {
+            if cmyk {
+                encode_channel_mixer_ink(
+                    [
+                        [100.0, 0.0, 0.0, 0.0],
+                        [0.0, 100.0, 0.0, 0.0],
+                        [0.0, 0.0, 100.0, 0.0],
+                        [0.0, 0.0, 0.0, 100.0],
+                    ],
+                    [0.0; 4],
+                )
+            } else {
+                encode_channel_mixer(
+                    false,
+                    [100.0, 0.0, 0.0],
+                    [0.0, 100.0, 0.0],
+                    [0.0, 0.0, 100.0],
+                    [0.0; 3],
+                )
+            }
+        }
         "selective-color" => encode_selective_color(
             SelectiveColorMethod::Relative,
             &[SelectiveRange::default(); 9],
@@ -1000,10 +1025,22 @@ pub(super) fn topmost_path<'a>(paths: impl IntoIterator<Item = &'a str>) -> Opti
 
 #[cfg(test)]
 mod tests {
+    use super::adjustment_kind;
     use super::adjustment_layer;
     use super::TileSet;
     use pictura_core::PsdRect;
     use pictura_render::TILE;
+
+    #[test]
+    fn channel_mixer_adjustment_layer() {
+        let layer = adjustment_layer("channel-mixer", None).expect("channel mixer");
+        assert_eq!(layer.adjustment.as_ref().map(|d| d.key), Some(*b"mixr"));
+        assert!(matches!(
+            pictura_render::decode_adjustment(layer.adjustment.as_ref().expect("block")),
+            Some(pictura_render::Adjustment::ChannelMixer(_))
+        ));
+        assert_eq!(adjustment_kind(&layer), "channel-mixer");
+    }
 
     #[test]
     fn adjustment_layer_covers_every_kind_and_rejects_unknown() {

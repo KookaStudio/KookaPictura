@@ -594,6 +594,7 @@ fn channel_mixer_identity_and_green_blend() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         original.clone(),
     );
@@ -610,6 +611,7 @@ fn channel_mixer_identity_and_green_blend() {
             green: [0.0, 50.0, 50.0],
             blue: [0.0, 0.0, 100.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         &mut buf,
     )
