@@ -496,12 +496,15 @@ void LayersPanel::setView(PictureView* view)
     rememberedGeneration_ = view ? view->document_generation() : 0;
     model_->setView(view);
     tree_->setDragSource(view);
+    connectVisibility(view);
     if (view_) {
         set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_,
                                  addMaskByDefault_);
         // One queued refresh per burst of changes; a synchronous refresh
         // before it runs (New Layer from the panel) consumes it.
         viewConnection_ = connect(view_, &PictureView::changed, this, [this] {
+            // A notifying edit supersedes any in-place visibility patch.
+            visibilityPatched_ = false;
             if (refreshQueued_) {
                 return;
             }
@@ -537,6 +540,7 @@ bool LayersPanel::patternActionEnabledForTest() const
 void LayersPanel::refresh()
 {
     refreshQueued_ = false;
+    visibilityPatched_ = false;
     ++refreshCount_;
     refreshPatternAction();
     const MetricsTimer<PictureView> timer(view_, "layers_panel_refresh");

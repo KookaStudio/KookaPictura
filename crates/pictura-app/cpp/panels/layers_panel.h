@@ -100,6 +100,10 @@ public:
     bool selectRowForTest(const QString& path);
     /// Synthesize a left click on `path`'s row name, as a user would.
     bool clickRowForTest(const QString& path);
+    /// Consume the in-place visibility patch recorded by
+    /// `layerVisibilityChanged`. True once when the rows already match the
+    /// document, so the frame's debounced pass can skip this panel's rebuild.
+    bool consumeVisibilityPatch();
     int refreshCountForTest() const { return refreshCount_; }
     bool patternActionEnabledForTest() const;
 
@@ -401,6 +405,9 @@ protected:
 
 private:
     void syncControls();
+    // Connect the in-place visibility signal for `view`, disconnecting the
+    // previous view's connection.
+    void connectVisibility(PictureView* view);
     // Write the tree selection into the document target (user intent only).
     void writeTarget();
     // Resolve a pending transform before a panel change: true when it is safe to
@@ -577,6 +584,10 @@ private:
     bool refreshQueued_ = false;
     bool applyingTarget_ = false;
     QMetaObject::Connection viewConnection_;
+    QMetaObject::Connection visibilityConnection_;
+    // The visibility signal patched the rows and the debounced pass has not
+    // consumed that patch yet.
+    bool visibilityPatched_ = false;
     // A modal transform is pending: the layer list stays selectable, the
     // editing controls are disabled, and a change of the active layer resolves
     // the transform first.

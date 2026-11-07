@@ -581,6 +581,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       exact SIMD Gaussian fields and cache-local u8 convolution (#1178, #1179)
 - [x] Reuse warm whole-layer effect passes for short sub-region composites
       (#1180)
+- [x] Visibility toggles patch the Layers row in place instead of rebuilding
+      the panel snapshot and thumbnails (#1197)
 - [ ] Frame-budget instrumentation (#941)
 - [ ] A tile cache with hit-rate accounting (#942)
 - [ ] Scratch paging and Efficiency accounting (#943)

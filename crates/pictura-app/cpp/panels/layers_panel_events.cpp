@@ -379,12 +379,10 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 }
                 const bool on = !model_->visibleInDocument(path);
                 if (view_ && !targets.isEmpty()) {
+                    // The bridge emits `layerVisibilityChanged`, which patches
+                    // these rows synchronously, so a second quick toggle reads
+                    // the new value instead of a stale one.
                     view_->set_layers_visible(targets, on);
-                    // Patch the toggled rows in place so a second quick toggle
-                    // reads the new value instead of a stale one.
-                    for (const QString& target : targets) {
-                        model_->setVisible(target, on);
-                    }
                 }
                 return true;
             }
