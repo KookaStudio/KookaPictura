@@ -167,6 +167,132 @@ fn encode_packbits_row(row: &[u8], out: &mut Vec<u8>) {
     }
 }
 
+/// A plane the encoders read one scanline at a time.
+pub(crate) trait ScanRows {
+    /// The bytes the plane holds.
+    fn byte_len(&self) -> usize;
+    /// Row `row`, `row_bytes` long: borrowed, or copied into `scratch`.
+    fn scan_row<'s>(&'s self, row: usize, row_bytes: usize, scratch: &'s mut Vec<u8>) -> &'s [u8];
+}
+
+impl<T: AsRef<[u8]> + ?Sized> ScanRows for &T {
+    fn byte_len(&self) -> usize {
+        (*self).as_ref().len()
+    }
+
+    fn scan_row<'s>(&'s self, row: usize, row_bytes: usize, _: &'s mut Vec<u8>) -> &'s [u8] {
+        &(*self).as_ref()[row * row_bytes..(row + 1) * row_bytes]
+    }
+}
+
+/// One plane to encode: native-depth bytes, or rows of an 8-bit plane read in
+/// place, so a tiled plane is never materialized to be written (#1213).
+pub(crate) enum PlaneBytes<'a> {
+    Bytes(Cow<'a, [u8]>),
+    /// Rows `first_row .. first_row + height` of `plane`, `width` wide.
+    Rows {
+        plane: &'a Plane<u8>,
+        first_row: usize,
+        width: usize,
+        height: usize,
+    },
+}
+
+impl<'a> From<Cow<'a, [u8]>> for PlaneBytes<'a> {
+    fn from(bytes: Cow<'a, [u8]>) -> Self {
+        PlaneBytes::Bytes(bytes)
+    }
+}
+
+impl PlaneBytes<'_> {
+    /// Append every byte of the plane to `out`.
+    pub(crate) fn extend_into(&self, out: &mut Vec<u8>) {
+        match self {
+            PlaneBytes::Bytes(bytes) => out.extend_from_slice(bytes),
+            PlaneBytes::Rows { width, height, .. } => {
+                let mut scratch = Vec::new();
+                for row in 0..*height {
+                    out.extend_from_slice(self.scan_row(row, *width, &mut scratch));
+                }
+            }
+        }
+    }
+}
+
+impl ScanRows for PlaneBytes<'_> {
+    fn byte_len(&self) -> usize {
+        match self {
+            PlaneBytes::Bytes(bytes) => bytes.len(),
+            PlaneBytes::Rows {
+                plane,
+                first_row,
+                width,
+                height,
+            } => {
+                let whole = (first_row + height) * width <= plane.len();
+                if whole {
+                    width * height
+                } else {
+                    0
+                }
+            }
+        }
+    }
+
+    fn scan_row<'s>(&'s self, row: usize, row_bytes: usize, scratch: &'s mut Vec<u8>) -> &'s [u8] {
+        match self {
+            PlaneBytes::Bytes(bytes) => &bytes[row * row_bytes..(row + 1) * row_bytes],
+            PlaneBytes::Rows {
+                plane,
+                first_row,
+                width,
+                ..
+            } => {
+                scratch.resize(row_bytes, 0);
+                let y = first_row + row;
+                plane.read_rect_into(0..row_bytes, y..y + 1, *width, scratch);
+                scratch
+            }
+        }
+    }
+}
+
+/// [`native_plane`] for rows `first_row ..` of an 8-bit `plane`: at depth 8 the
+/// rows are read in place when encoding; deeper output widens a copy.
+///
+/// ponytail: a 16/32-bit output copies the 8-bit plane once to compare it with
+/// the retained native samples; the native stores are flat anyway.
+pub(crate) fn native_plane_rows<'a>(
+    retained: Option<&Samples>,
+    plane: &'a Plane<u8>,
+    first_row: usize,
+    width: usize,
+    height: usize,
+    depth: u16,
+) -> Result<PlaneBytes<'a>, PsdError> {
+    let pixels = width
+        .checked_mul(height)
+        .ok_or_else(|| PsdError::Invalid("channel plane size overflow".into()))?;
+    // A whole number of channels: the composite stacks several, a layer
+    // channel holds exactly one.
+    let whole = pixels > 0 && plane.len().is_multiple_of(pixels);
+    if (first_row + height) * width > plane.len() || !(whole || plane.len() == pixels) {
+        return Err(PsdError::Invalid("channel plane length mismatch".into()));
+    }
+    if depth == 8 {
+        return Ok(PlaneBytes::Rows {
+            plane,
+            first_row,
+            width,
+            height,
+        });
+    }
+    let mut current = vec![0u8; pixels];
+    plane.read_into(first_row * width, &mut current);
+    let native = native_plane(retained, &current, width, height, depth)?;
+    Ok(PlaneBytes::Bytes(Cow::Owned(native.into_owned())))
+}
+
 /// The native-depth plane to emit for one channel. When `depth` is 8 the
 /// current plane is borrowed unchanged. At 16/32, `retained` (the decoded source
 /// samples, when its length matches the plane) is used if narrowing it yields
@@ -236,8 +362,8 @@ pub(crate) fn layer_retained(layer: &Layer, depth: u16, id: i16) -> Option<Sampl
 /// compression word is not included. PackBits is byte-wise, so `row_bytes` is
 /// the native row stride (`width` at depth 8, `2 * width` at 16, `4 * width` at
 /// 32).
-pub(crate) fn encode_scanlines(
-    planes: &[&[u8]],
+pub(crate) fn encode_scanlines<P: ScanRows>(
+    planes: &[P],
     row_bytes: usize,
     height: usize,
     psb: bool,
@@ -249,14 +375,14 @@ pub(crate) fn encode_scanlines(
     let mut counts = Vec::with_capacity(planes.len() * height * count_width);
     let mut rows = Vec::new();
     let mut packed = Vec::with_capacity(row_bytes + row_bytes / 128 + 1);
+    let mut scratch = Vec::new();
     for plane in planes {
-        if plane.len() != plane_len {
+        if plane.byte_len() != plane_len {
             return Err(PsdError::Invalid("RLE plane length mismatch".into()));
         }
         for row in 0..height {
-            let start = row * row_bytes;
             packed.clear();
-            encode_packbits_row(&plane[start..start + row_bytes], &mut packed);
+            encode_packbits_row(plane.scan_row(row, row_bytes, &mut scratch), &mut packed);
             // The PSD maximum width (30 000) cannot reach the u16 limit, so the
             // guard only fires for a PSB row approaching u32; it errs rather
             // than truncate. ponytail: one uncompressed row, not the whole plane.
@@ -286,8 +412,8 @@ pub(crate) fn encode_scanlines(
 /// plane-major) and zlib-wrap the result. When `predict`, apply the forward
 /// depth-specific per-row delta first (the inverse of the reader's
 /// `undo_prediction`); no scanline count table.
-pub(crate) fn zip_scanlines(
-    planes: &[&[u8]],
+pub(crate) fn zip_scanlines<P: ScanRows>(
+    planes: &[P],
     width: usize,
     height: usize,
     predict: bool,
@@ -296,12 +422,18 @@ pub(crate) fn zip_scanlines(
     let plane_len = row_bytes(width, depth)
         .checked_mul(height)
         .ok_or_else(|| PsdError::Invalid("ZIP plane size overflow".into()))?;
+    // ponytail: ZIP deflates one contiguous payload, so the planes are
+    // gathered first; RLE, the default, streams row by row.
+    let stride = row_bytes(width, depth);
     let mut data = Vec::with_capacity(planes.len() * plane_len);
+    let mut scratch = Vec::new();
     for plane in planes {
-        if plane.len() != plane_len {
+        if plane.byte_len() != plane_len {
             return Err(PsdError::Invalid("ZIP plane length mismatch".into()));
         }
-        data.extend_from_slice(plane);
+        for row in 0..height {
+            data.extend_from_slice(plane.scan_row(row, stride, &mut scratch));
+        }
     }
     if predict {
         apply_prediction(&mut data, width, planes.len() * height, depth);
@@ -322,28 +454,27 @@ pub(crate) fn channel_stream(
     kind: Compression,
     width: usize,
     height: usize,
-    plane: &[u8],
+    plane: &PlaneBytes<'_>,
     depth: u16,
     psb: bool,
 ) -> Result<Vec<u8>, PsdError> {
     let stride = row_bytes(width, depth);
-    let mut out = Vec::with_capacity(2 + plane.len());
+    let plane = std::slice::from_ref(plane);
+    let mut out = Vec::with_capacity(2 + plane[0].byte_len());
     out.extend_from_slice(&kind.to_code().to_be_bytes());
     match kind {
-        Compression::Rle => {
-            out.extend_from_slice(&encode_scanlines(&[plane], stride, height, psb)?)
-        }
+        Compression::Rle => out.extend_from_slice(&encode_scanlines(plane, stride, height, psb)?),
         Compression::Raw => {
-            if plane.len() != stride * height {
+            if plane[0].byte_len() != stride * height {
                 return Err(PsdError::Invalid("raw channel length mismatch".into()));
             }
-            out.extend_from_slice(plane);
+            plane[0].extend_into(&mut out);
         }
         Compression::Zip => {
-            out.extend_from_slice(&zip_scanlines(&[plane], width, height, false, depth)?)
+            out.extend_from_slice(&zip_scanlines(plane, width, height, false, depth)?)
         }
         Compression::ZipPrediction => {
-            out.extend_from_slice(&zip_scanlines(&[plane], width, height, true, depth)?)
+            out.extend_from_slice(&zip_scanlines(plane, width, height, true, depth)?)
         }
     }
     Ok(out)
@@ -587,8 +718,11 @@ fn write_container(
             .to_bytes()
     });
     let flat_composite = flat_source.as_ref().map(|(_, _, planes)| planes);
-    let planes: Vec<Cow<[u8]>> = if bitmap_mode {
+    let planes: Vec<PlaneBytes> = if bitmap_mode {
         crate::write_bitmap::bitmap_planes(doc)?
+            .into_iter()
+            .map(PlaneBytes::from)
+            .collect()
     } else {
         let mut planes = Vec::with_capacity(channels);
         for c in 0..out_color_channels {
@@ -601,27 +735,40 @@ fn write_container(
             } else if let Some(flat) = &flat_composite {
                 &flat[c * plane..(c + 1) * plane]
             } else {
-                &doc.composite.data[c * plane..(c + 1) * plane]
+                // The working composite is read row by row in place.
+                planes.push(native_plane_rows(
+                    composite_retained(doc, depth, c).as_ref(),
+                    &doc.composite.data,
+                    c * height,
+                    width,
+                    height,
+                    depth,
+                )?);
+                continue;
             };
-            planes.push(native_plane(
-                composite_retained(doc, depth, c).as_ref(),
-                current,
-                width,
-                height,
-                depth,
-            )?);
+            planes.push(
+                native_plane(
+                    composite_retained(doc, depth, c).as_ref(),
+                    current,
+                    width,
+                    height,
+                    depth,
+                )?
+                .into(),
+            );
         }
         if crate::write_bitmap::is_bitmap_source(doc) {
             for expanded in crate::write_bitmap::fallback_extra_planes(doc)? {
-                planes.push(Cow::Owned(expanded));
+                planes.push(PlaneBytes::Bytes(Cow::Owned(expanded)));
             }
         } else {
             for (i, channel) in doc.channels.iter().enumerate() {
-                planes.push(native_plane(
+                planes.push(native_plane_rows(
                     // A CMYK output stores four color planes before the extras,
                     // so the retained extras offset is the output color count.
                     composite_retained(doc, depth, out_color_channels + i).as_ref(),
                     &channel.data,
+                    0,
                     width,
                     height,
                     depth,
@@ -630,7 +777,6 @@ fn write_container(
         }
         planes
     };
-    let planes: Vec<&[u8]> = planes.iter().map(Cow::as_ref).collect();
     match doc.composite_compression {
         Compression::Rle => out.extend_from_slice(&encode_scanlines(
             &planes,
@@ -640,7 +786,7 @@ fn write_container(
         )?),
         Compression::Raw => {
             for plane in &planes {
-                out.extend_from_slice(plane);
+                plane.extend_into(&mut out);
             }
         }
         Compression::Zip => {

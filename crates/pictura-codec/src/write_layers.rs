@@ -14,7 +14,9 @@ use std::sync::Arc;
 use crate::common::*;
 use crate::depth::output_depth;
 use crate::error::PsdError;
-use crate::write::{channel_stream, layer_retained, native_plane, write_tag};
+use crate::write::{
+    channel_stream, layer_retained, native_plane, native_plane_rows, write_tag, PlaneBytes,
+};
 use crate::write_cache::{ChannelKey, EncodeCache};
 use crate::write_indexed::index_layer_plane;
 
@@ -51,7 +53,7 @@ impl OutChannel {
 }
 
 enum ChannelSource<'a> {
-    Encode(Cow<'a, [u8]>),
+    Encode(PlaneBytes<'a>),
     Verbatim(Vec<u8>),
 }
 
@@ -68,14 +70,14 @@ impl<'a> ChannelPlan<'a> {
         id: i16,
         width: usize,
         height: usize,
-        data: Cow<'a, [u8]>,
+        data: impl Into<PlaneBytes<'a>>,
         key: Option<ChannelKey>,
     ) -> Self {
         Self {
             id,
             width,
             height,
-            source: ChannelSource::Encode(data),
+            source: ChannelSource::Encode(data.into()),
             key,
         }
     }
@@ -281,7 +283,7 @@ fn layer_plans<'a>(
                         id,
                         layer_w,
                         layer_h,
-                        Cow::Owned(plane.into_owned()),
+                        PlaneBytes::Bytes(Cow::Owned(plane.into_owned())),
                         None,
                     ));
                 }
@@ -306,7 +308,7 @@ fn layer_plans<'a>(
                     0,
                     layer_w,
                     layer_h,
-                    Cow::Owned(plane.into_owned()),
+                    PlaneBytes::Bytes(Cow::Owned(plane.into_owned())),
                     None,
                 ));
             }
@@ -339,11 +341,12 @@ fn layer_plans<'a>(
                             layer_h,
                             depth,
                         )?;
-                        Cow::Owned(plane.into_owned())
+                        PlaneBytes::Bytes(Cow::Owned(plane.into_owned()))
                     }
-                    None => native_plane(
+                    None => native_plane_rows(
                         layer_retained(layer, depth, channel.id).as_ref(),
-                        channel.data.as_slice(),
+                        &channel.data,
+                        0,
                         layer_w,
                         layer_h,
                         depth,
@@ -371,7 +374,7 @@ fn layer_plans<'a>(
                     channel.id,
                     layer_w,
                     layer_h,
-                    Cow::Owned(plane.into_owned()),
+                    PlaneBytes::Bytes(Cow::Owned(plane.into_owned())),
                     None,
                 ));
             }
@@ -381,17 +384,9 @@ fn layer_plans<'a>(
                 let pixels = width
                     .checked_mul(height)
                     .ok_or_else(|| PsdError::Invalid("layer mask size overflow".into()))?;
-                let data = match &mask.data {
-                    Some(data) => {
-                        if data.len() != pixels {
-                            return Err(PsdError::Invalid(
-                                "layer mask data length mismatch".into(),
-                            ));
-                        }
-                        data.to_vec()
-                    }
-                    None => vec![mask.default_color; pixels],
-                };
+                if mask.data.as_ref().is_some_and(|data| data.len() != pixels) {
+                    return Err(PsdError::Invalid("layer mask data length mismatch".into()));
+                }
                 let ident = mask.data.as_ref().map(|plane| plane.ident()).unwrap_or(0);
                 let key = if cacheable && ident != 0 {
                     Some(ChannelKey {
@@ -406,20 +401,18 @@ fn layer_plans<'a>(
                 } else {
                     None
                 };
-                let plane = native_plane(
-                    layer_retained(layer, depth, -2).as_ref(),
-                    &data,
-                    width,
-                    height,
-                    depth,
-                )?;
-                channels.push(ChannelPlan::encode(
-                    -2,
-                    width,
-                    height,
-                    Cow::Owned(plane.into_owned()),
-                    key,
-                ));
+                let retained = layer_retained(layer, depth, -2);
+                let plane = match &mask.data {
+                    Some(data) => {
+                        native_plane_rows(retained.as_ref(), data, 0, width, height, depth)?
+                    }
+                    None => {
+                        let data = vec![mask.default_color; pixels];
+                        let plane = native_plane(retained.as_ref(), &data, width, height, depth)?;
+                        PlaneBytes::Bytes(Cow::Owned(plane.into_owned()))
+                    }
+                };
+                channels.push(ChannelPlan::encode(-2, width, height, plane, key));
             }
         }
         if channels.len() > MAX_CHANNELS as usize {
@@ -460,15 +453,8 @@ fn encode_channel(
                         key: Some(key),
                     });
                 }
-                let bytes: Arc<[u8]> = channel_stream(
-                    kind,
-                    channel.width,
-                    channel.height,
-                    data.as_ref(),
-                    depth,
-                    psb,
-                )?
-                .into();
+                let bytes: Arc<[u8]> =
+                    channel_stream(kind, channel.width, channel.height, data, depth, psb)?.into();
                 cache.put_channel(key, Arc::clone(&bytes));
                 return Ok(EncodedChannel {
                     channel: OutChannel::Encoded(bytes),
@@ -476,15 +462,8 @@ fn encode_channel(
                     key: Some(key),
                 });
             }
-            let bytes: Arc<[u8]> = channel_stream(
-                kind,
-                channel.width,
-                channel.height,
-                data.as_ref(),
-                depth,
-                psb,
-            )?
-            .into();
+            let bytes: Arc<[u8]> =
+                channel_stream(kind, channel.width, channel.height, data, depth, psb)?.into();
             Ok(EncodedChannel {
                 channel: OutChannel::Encoded(bytes),
                 encoded: true,
