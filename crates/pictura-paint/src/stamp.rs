@@ -318,10 +318,10 @@ pub fn surface_from_composite_rect(buf: &PixelBuffer, rect: PsdRect) -> RgbaImag
             return;
         }
         let sy = sy as usize;
-        let r = buf.data.row(sy, bw).unwrap_or(&[]);
-        let g = buf.data.row(bh + sy, bw).unwrap_or(&[]);
-        let b = buf.data.row(2 * bh + sy, bw).unwrap_or(&[]);
-        let a = buf.data.row(3 * bh + sy, bw).unwrap_or(&[]);
+        let r = buf.data.row(sy, bw).unwrap_or_default();
+        let g = buf.data.row(bh + sy, bw).unwrap_or_default();
+        let b = buf.data.row(2 * bh + sy, bw).unwrap_or_default();
+        let a = buf.data.row(3 * bh + sy, bw).unwrap_or_default();
         for (lx, px) in row.iter_mut().enumerate() {
             let sx = rect.left + lx as i32;
             if sx < 0 || sx >= bw as i32 {
@@ -377,10 +377,10 @@ pub fn layer_surface(doc: &Document, path: &str) -> Option<RgbaImage> {
                 return;
             }
             let ly = ly as usize;
-            let r = planes[0].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
-            let g = planes[1].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
-            let b = planes[2].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
-            let a = planes[3].and_then(|p| p.row(ly, lw)).unwrap_or(&[]);
+            let r = planes[0].and_then(|p| p.row(ly, lw)).unwrap_or_default();
+            let g = planes[1].and_then(|p| p.row(ly, lw)).unwrap_or_default();
+            let b = planes[2].and_then(|p| p.row(ly, lw)).unwrap_or_default();
+            let a = planes[3].and_then(|p| p.row(ly, lw)).unwrap_or_default();
             for (dx, px) in row.iter_mut().enumerate() {
                 let lx = dx as i32 - rect.left;
                 if lx < 0 || lx >= lw as i32 {
@@ -674,7 +674,7 @@ mod tests {
     fn surface_from_composite_matches_serial_builder() {
         for (w, h) in [(8, 6), (1, 1), (0, 0)] {
             let mut buf = composite(w, h, 7);
-            buf.data.fracture(w.max(1) as usize);
+            buf.data.tile(w as usize, h as usize);
             assert_eq!(
                 surface_from_composite(&buf),
                 composite_surface_serial(&buf),
@@ -687,7 +687,7 @@ mod tests {
             .map(|i| (i as u8).wrapping_add(9))
             .collect::<Vec<u8>>()
             .into();
-        three.data.fracture(8);
+        three.data.tile(8, 6);
         assert_eq!(
             surface_from_composite(&three),
             composite_surface_serial(&three),
@@ -706,7 +706,7 @@ mod tests {
                         id,
                         data: plane(c).into(),
                     };
-                    channel.data.fracture(width);
+                    channel.data.tile(width, h.max(1) as usize);
                     channel
                 })
                 .into(),
@@ -811,7 +811,7 @@ mod tests {
                         id,
                         data: vec![value; 16].into(),
                     };
-                    channel.data.fracture(4);
+                    channel.data.tile(4, 4);
                     channel
                 })
                 .into(),

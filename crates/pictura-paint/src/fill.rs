@@ -7,7 +7,7 @@ use crate::stroke::{blend_pixel, layer_at, layer_at_mut, parse_layer_path};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect, Sample,
-    BAND_ROWS,
+    TileMut,
 };
 use rayon::prelude::*;
 
@@ -76,7 +76,7 @@ pub(crate) fn fill_layer(
 
 /// [`fill_layer`] for a `source` that answers `None` outside `within`
 /// (document pixels): an 8-bit layer is visited and written only in the
-/// bands `within` crosses, so a small fill on a large, history-shared layer
+/// tiles `within` crosses, so a small fill on a large, history-shared layer
 /// neither walks nor copies the rest of its planes.
 pub(crate) fn fill_layer_within(
     doc: &mut Document,
@@ -133,8 +133,9 @@ pub(crate) fn fill_layer_within(
     fill_eight_bit(doc, path, mode, selection, alpha, gray, within, source)
 }
 
-/// Fill the layer's 8-bit channels, only in the bands `within` crosses when
-/// it is given.
+/// Fill the layer's 8-bit channels tile by tile, only in the tiles `within`
+/// crosses when it is given; tiles the fill leaves holding one value collapse
+/// to `Uniform` afterwards.
 #[allow(clippy::too_many_arguments)]
 fn fill_eight_bit(
     doc: &mut Document,
@@ -170,38 +171,44 @@ fn fill_eight_bit(
         bottom: canvas.1,
         right: canvas.0,
     };
-    if let Some(within) = within {
-        let region = within
+    let region = match within {
+        Some(within) => within
             .intersect(rect)
-            .and_then(|r| r.intersect(canvas_rect))?;
-        if let Some(banded) = fill_bands(layer, n, region, gray) {
-            return banded
-                .into_iter()
-                .filter_map(|(band, [r, g, b, a])| {
-                    let top = rect.top + (band * BAND_ROWS) as i32;
-                    let band_rect = PsdRect {
-                        top,
-                        bottom: (top + BAND_ROWS as i32).min(rect.bottom),
-                        ..rect
-                    };
-                    fill_planes(
-                        r?,
-                        g,
-                        b,
-                        a,
-                        band_rect,
-                        canvas,
-                        mode,
-                        selection,
-                        policy,
-                        gray,
-                        &source,
-                        blend_pixel,
-                        region,
-                    )
-                })
-                .reduce(PsdRect::union);
+            .and_then(|r| r.intersect(canvas_rect))?,
+        None => rect.intersect(canvas_rect)?,
+    };
+    if let Some(tiles) = fill_tiles(layer, n, region, gray) {
+        let changed = tiles
+            .into_iter()
+            .filter_map(|((tx, ty, tw, th), [r, g, b, a])| {
+                let (left, top) = (rect.left + tx as i32, rect.top + ty as i32);
+                let tile_rect = PsdRect {
+                    top,
+                    left,
+                    bottom: top + th as i32,
+                    right: left + tw as i32,
+                };
+                fill_planes(
+                    r?,
+                    g,
+                    b,
+                    a,
+                    tile_rect,
+                    canvas,
+                    mode,
+                    selection,
+                    policy,
+                    gray,
+                    &source,
+                    blend_pixel,
+                    region,
+                )
+            })
+            .reduce(PsdRect::union);
+        for c in layer.channels.iter_mut() {
+            c.data.settle();
         }
+        return changed;
     }
     // The R, G, B and alpha planes, each a whole layer long; a missing colour
     // plane refuses the fill, a missing alpha is an opaque layer.
@@ -245,26 +252,26 @@ fn fill_eight_bit(
     )
 }
 
-/// One band's R, G, B and alpha slices.
-type BandPlanes<'a> = [Option<&'a mut [u8]>; 4];
+/// One tile's R, G, B and alpha samples, stride the tile width.
+type TilePlanes<'a> = [Option<&'a mut [u8]>; 4];
 
-/// The layer's R, G, B and alpha planes cut into the 64-row bands `region`
-/// crosses, each band forked from history only when it is shared. `None`
-/// when a colour plane is missing or a plane cannot be banded, so the caller
-/// fills the whole planes instead.
-fn fill_bands(
+/// The layer's R, G, B and alpha planes, tiled, with the tiles `region`
+/// crosses forked for writing, each as `((x, y, w, h), planes)` in layer
+/// coordinates. `None` when a colour plane is missing or a plane cannot be
+/// tiled, so the caller fills the whole planes instead.
+#[allow(clippy::type_complexity)]
+fn fill_tiles(
     layer: &mut pictura_core::Layer,
     n: usize,
     region: PsdRect,
     gray: bool,
-) -> Option<Vec<(usize, BandPlanes<'_>)>> {
+) -> Option<Vec<((usize, usize, usize, usize), TilePlanes<'_>)>> {
     let rect = layer.rect;
-    let w = rect.width().max(0) as usize;
-    let first = (region.top - rect.top) as usize / BAND_ROWS;
-    let last = (region.bottom - 1 - rect.top) as usize / BAND_ROWS;
-    let bands: Vec<usize> = (first..=last).collect();
+    let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
+    let xs = (region.left - rect.left) as usize..(region.right - rect.left) as usize;
+    let ys = (region.top - rect.top) as usize..(region.bottom - rect.top) as usize;
     let mut seen = [false; 4];
-    let mut planes: [Option<Vec<&mut [u8]>>; 4] = [None, None, None, None];
+    let mut planes: [Option<Vec<TileMut<'_, u8>>>; 4] = [None, None, None, None];
     for c in layer.channels.iter_mut() {
         let k = match c.id {
             0 => 0,
@@ -277,21 +284,30 @@ fn fill_bands(
             continue;
         }
         seen[k] = true;
-        c.data.fracture(w);
-        planes[k] = Some(c.data.write_bands(&bands)?);
+        if !c.data.tile(w, h) {
+            return None;
+        }
+        planes[k] = Some(c.data.tiles_mut(xs.clone(), ys.clone(), w));
     }
     if planes[0].is_none() || (!gray && (planes[1].is_none() || planes[2].is_none())) {
         return None;
     }
+    let count = planes[0].as_ref().map_or(0, Vec::len);
     let mut iters = planes.map(|p| p.map(Vec::into_iter));
-    let mut next = |k: usize| iters[k].as_mut().and_then(Iterator::next);
     Some(
-        bands
-            .into_iter()
-            .map(|band| {
-                let (r, g, b, a) = (next(0), next(1), next(2), next(3));
+        (0..count)
+            .filter_map(|_| {
+                let tiles = iters
+                    .each_mut()
+                    .map(|it| it.as_mut().and_then(Iterator::next));
+                let at = tiles
+                    .iter()
+                    .flatten()
+                    .next()
+                    .map(|t| (t.x, t.y, t.w, t.h))?;
+                let [r, g, b, a] = tiles.map(|t| t.map(|t| t.data));
                 let (g, b) = if gray { (None, None) } else { (g, b) };
-                (band, [r, g, b, a])
+                Some((at, [r, g, b, a]))
             })
             .collect(),
     )

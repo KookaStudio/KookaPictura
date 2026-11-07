@@ -21,7 +21,7 @@ impl Stencil<'_> {
     /// planes were cut to. `rng` is the stroke's Dissolve state.
     pub(super) fn composite(
         &self,
-        planes: &mut BandPlanes<'_>,
+        planes: &mut CellPlanes<'_>,
         at: usize,
         i: usize,
         rng: Option<&mut u64>,
@@ -72,9 +72,9 @@ impl Stencil<'_> {
             if da == 0 {
                 return false;
             }
-            write_band(planes, at, mode, (r, g, b, da))
+            write_pixel(planes, at, mode, (r, g, b, da))
         } else {
-            write_band(planes, at, mode, (r, g, b, alpha))
+            write_pixel(planes, at, mode, (r, g, b, alpha))
         }
     }
 }

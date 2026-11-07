@@ -882,11 +882,11 @@ mod tests {
     }
 
     #[test]
-    fn a_boxed_gradient_equals_the_unboxed_one_and_forks_only_its_bands() {
+    fn a_boxed_gradient_equals_the_unboxed_one_and_forks_only_its_tiles() {
         let (w, h) = (40, 300);
         let mut base = doc(w, h, [255; 4]);
         for c in &mut base.layers[0].channels {
-            c.data.fracture(w as usize);
+            c.data.tile(w as usize, h as usize);
         }
         let within = PsdRect {
             top: 70,
@@ -925,7 +925,7 @@ mod tests {
             .zip(&base.layers[0].channels)
         {
             assert_eq!(a.data.as_slice(), b.data.as_slice(), "channel {}", a.id);
-            assert!(a.data.shares_band(4, &c.data), "band 4 stayed shared");
+            assert!(a.data.shares_tile(1, &c.data), "tile 1 stayed shared");
         }
     }
 }

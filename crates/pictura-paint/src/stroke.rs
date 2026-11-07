@@ -13,10 +13,9 @@ use crate::tip::TipParams;
 use crate::tone::{ToneBrush, ToneOptions};
 use crate::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, PsdRect,
+    layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, Plane, PsdRect,
 };
-use raster::{plane_slices, split_bands, write_back, write_band, BandPlanes, DabRaster};
-use rayon::prelude::*;
+use raster::{cells, write_back, write_pixel, CellPlanes, DabRaster};
 use std::sync::Arc;
 use surface::LazyPixels;
 
@@ -140,17 +139,16 @@ impl Saved {
                         continue;
                     };
                     for y in top as usize..bottom {
-                        // Read the row, not the whole plane: a banded plane
-                        // must not be materialized just to save one tile row.
-                        let Some(row) = src.data.row(y, w) else {
-                            continue;
-                        };
+                        // Read the tile's row in place: a tiled plane must not
+                        // be materialized just to save one tile row.
                         let (a, b) = (y * w + left as usize, (y * w + right).min(plane.len()));
-                        let from = (left as usize).min(row.len());
-                        let to = right.min(row.len());
-                        if a < b && from < to {
-                            let n = (to - from).min(b - a);
-                            plane[a..a + n].copy_from_slice(&row[from..from + n]);
+                        if a < b {
+                            src.data.read_rect_into(
+                                left as usize..right,
+                                y..y + 1,
+                                w,
+                                &mut plane[a..b],
+                            );
                         }
                     }
                 }
@@ -199,9 +197,11 @@ impl Saved {
                 for y in top as usize..bottom {
                     let (a, b) = (y * w + left as usize, (y * w + right).min(plane.len()));
                     if a < b {
-                        dst.data[a..b].copy_from_slice(&plane[a..b]);
+                        dst.data
+                            .write_rect_from(left as usize..right, y..y + 1, w, &plane[a..b]);
                     }
                 }
+                dst.data.settle();
             }
         }
     }
@@ -220,8 +220,11 @@ pub struct Stroke {
     cfg: StrokeConfig,
     tip: TipParams,
     placer: DabPlacer,
-    scratch: Vec<u8>,
-    applied: Vec<u8>,
+    /// The stroke's accumulated and applied coverage, tiled like the layer
+    /// and empty until a dab reaches a tile, so their memory follows the
+    /// tiles the stroke covers (#1213).
+    scratch: Plane<u8>,
+    applied: Plane<u8>,
     dirty: Option<PsdRect>,
     dab_dirty: Option<PsdRect>,
     layer_path: Vec<usize>,
@@ -276,9 +279,8 @@ impl Stroke {
         let rect = target.rect;
         let w = rect.width().max(0) as usize;
         let h = rect.height().max(0) as usize;
-        // ponytail: layer-sized coverage buffer; move to tiled/sparse coverage only if huge layers matter.
-        let scratch = vec![0u8; w * h];
-        let applied = vec![0u8; w * h];
+        let scratch = Plane::filled(w, h, 1, 0u8);
+        let applied = Plane::filled(w, h, 1, 0u8);
         let per_dab =
             match kind {
                 StrokeKind::Paint => None,
@@ -594,7 +596,11 @@ impl Stroke {
             if y1 < y0 {
                 continue;
             }
-            let rows = (y1 - y0 + 1) as usize;
+            let x0 = ((dab_x - radius).floor() as i32).max(0);
+            let x1 = ((dab_x + radius).ceil() as i32).min(w as i32 - 1);
+            if x1 < x0 {
+                continue;
+            }
             let dab = DabRaster {
                 params: &params,
                 dab_x,
@@ -603,27 +609,18 @@ impl Stroke {
                 width: w,
                 stencil: &stencil,
             };
-            let planes = plane_slices(work_layer, *ch, w, h, y0 as usize, (y1 + 1) as usize);
-            let bands = split_bands(y0 as usize, rows, w, scratch, applied, planes);
-            let bbox = if bands.len() == 1 {
-                bands
-                    .into_iter()
-                    .next()
-                    .and_then(|band| dab.band(band, serial.then_some(&mut *rng)))
-            } else if serial {
-                let mut acc: Option<PsdRect> = None;
-                for band in bands {
-                    if let Some(rect) = dab.band(band, Some(&mut *rng)) {
-                        acc = Some(acc.map_or(rect, |b| b.union(rect)));
-                    }
-                }
-                acc
-            } else {
-                bands
-                    .into_par_iter()
-                    .filter_map(|band| dab.band(band, None))
-                    .reduce_with(PsdRect::union)
-            };
+            let cells = cells(
+                work_layer,
+                *ch,
+                w,
+                h,
+                x0 as usize..(x1 + 1) as usize,
+                y0 as usize..(y1 + 1) as usize,
+                scratch,
+                applied,
+            );
+            let ys = y0 as usize..(y1 + 1) as usize;
+            let bbox = dab.raster(cells, ys, serial.then_some(&mut *rng));
             if let Some(bbox) = bbox {
                 Self::grow_dirty(dirty, dab_dirty, bbox.left, bbox.top);
                 Self::grow_dirty(dirty, dab_dirty, bbox.right - 1, bbox.bottom - 1);
@@ -772,11 +769,13 @@ impl Stroke {
             return false;
         };
         self.saved.save(layer, ch, left, top, right - 1, bottom - 1);
+        let (lwu, lhu) = (lw.max(0) as usize, lh.max(0) as usize);
         for (idx, c) in layer.channels.iter_mut().enumerate() {
             if ch.contains(&Some(idx)) {
-                c.data.fracture(lw.max(0) as usize);
+                c.data.tile(lwu, lhu);
             }
         }
+        let mut current = vec![0u8; run];
         let mut changed: Option<PsdRect> = None;
         for (row, ly) in (top..bottom).enumerate() {
             let src = (first_row + row) * bw + runner;
@@ -788,16 +787,16 @@ impl Stroke {
                 let Some(bytes) = planes.get(k * plane_stride + src..) else {
                     continue;
                 };
-                let Some(slot) = c.data.row_mut(ly as usize, lw.max(0) as usize) else {
+                let (at, y) = (left as usize, ly as usize);
+                if at + run > lwu || y >= lhu || c.data.len() != lwu * lhu {
                     continue;
-                };
-                let at = left as usize;
-                if at + run <= slot.len() {
-                    if let Some(chunk) = bytes.get(..run) {
-                        if slot[at..at + run] != chunk[..] {
-                            slot[at..at + run].copy_from_slice(chunk);
-                            row_changed = true;
-                        }
+                }
+                if let Some(chunk) = bytes.get(..run) {
+                    c.data
+                        .read_rect_into(at..at + run, y..y + 1, lwu, &mut current);
+                    if current[..] != chunk[..] {
+                        c.data.write_rect_from(at..at + run, y..y + 1, lwu, chunk);
+                        row_changed = true;
                     }
                 }
             }
