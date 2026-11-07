@@ -252,19 +252,15 @@ pub fn patch_buffer_region(dst: &mut PixelBuffer, region: &PixelBuffer, x0: i32,
     if fplane == 0 || rw == 0 {
         return;
     }
-    // Write row by row: a region patch must not flatten a banded composite
-    // plane that history still shares.
+    // Write through the tiles: a region patch forks only the tiles it covers
+    // of a composite that history still shares. No settle here: a stroke
+    // patches the same tiles on every move, and the history capture settles
+    // the composite when the edit commits.
+    dst.data.tile(fw, fh);
     for c in 0..planes {
-        for ry in 0..rh {
-            let y = c * fh + y0 + ry;
-            let Some(row) = dst.data.row_mut(y, fw) else {
-                continue;
-            };
-            let src = c * rplane + ry * rw;
-            if x0 + rw <= row.len() {
-                row[x0..x0 + rw].copy_from_slice(&region.data[src..src + rw]);
-            }
-        }
+        let ys = c * fh + y0..c * fh + y0 + rh;
+        let src = &region.data[c * rplane..(c + 1) * rplane];
+        dst.data.write_rect_from(x0..x0 + rw, ys, fw, src);
     }
 }
 

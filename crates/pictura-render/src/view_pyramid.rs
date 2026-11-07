@@ -11,6 +11,8 @@
 //! in-place update lands on exactly the pyramid a full rebuild would produce.
 
 use pictura_core::{Plane, PsdRect};
+use std::borrow::Cow;
+use std::ops::Range;
 use std::sync::Arc;
 
 /// Levels stop halving once the next would be smaller than this on its long side.
@@ -79,7 +81,13 @@ impl<'a> Planes<'a> {
 
     /// Channel `channel` (0 = r, 1 = g, 2 = b, 3 = a) of row `y`, or `None`
     /// past the plane.
-    pub fn row(&self, channel: usize, y: usize) -> Option<&'a [u8]> {
+    pub fn row(&self, channel: usize, y: usize) -> Option<Cow<'a, [u8]>> {
+        self.row_span(channel, y, 0..self.width as usize)
+    }
+
+    /// Columns `xs` of channel `channel` of row `y`: a tiled level 0 copies
+    /// only those columns, so a small update stays small.
+    fn row_span(&self, channel: usize, y: usize, xs: Range<usize>) -> Option<Cow<'a, [u8]>> {
         let width = self.width as usize;
         let start = y.checked_mul(width)?;
         match self.source {
@@ -90,14 +98,24 @@ impl<'a> Planes<'a> {
                     2 => b,
                     _ => a,
                 };
-                plane.get(start..start + width)
+                plane.get(start..start + width)?.get(xs).map(Cow::Borrowed)
             }
-            Source::Planar(plane) => plane.row(channel * self.height as usize + y, width),
+            Source::Planar(plane) => plane.row_span(channel * self.height as usize + y, xs, width),
         }
     }
 
+    /// Columns `xs` of one line's four channel rows.
+    fn span(&self, y: usize, xs: Range<usize>) -> Option<[Cow<'a, [u8]>; 4]> {
+        Some([
+            self.row_span(0, y, xs.clone())?,
+            self.row_span(1, y, xs.clone())?,
+            self.row_span(2, y, xs.clone())?,
+            self.row_span(3, y, xs)?,
+        ])
+    }
+
     /// One line's four channel rows.
-    pub fn rows(&self, y: usize) -> Option<[&'a [u8]; 4]> {
+    pub fn rows(&self, y: usize) -> Option<[Cow<'a, [u8]>; 4]> {
         Some([
             self.row(0, y)?,
             self.row(1, y)?,
@@ -334,8 +352,8 @@ impl ViewPyramid {
                 }
                 let o = (oy as usize * rw as usize + ox as usize) * 4;
                 let px = if level == 0 {
-                    match rows {
-                        Some(rows) => premultiplied_row_pixel(&rows, sx as usize),
+                    match &rows {
+                        Some(rows) => premultiplied_row_pixel(rows, sx as usize),
                         None => continue,
                     }
                 } else {
@@ -481,7 +499,7 @@ fn average(sum: u32, n: u32) -> u8 {
     ((sum + n / 2) / n) as u8
 }
 
-fn premultiplied_row_pixel(rows: &[&[u8]; 4], x: usize) -> [u8; 4] {
+fn premultiplied_row_pixel(rows: &[Cow<'_, [u8]>; 4], x: usize) -> [u8; 4] {
     let a = rows[3][x];
     [
         premul(rows[0][x], a) as u8,
@@ -522,15 +540,18 @@ fn shrink_from_planes(level0: &Planes<'_>, dst: &mut PyramidLevel, rect: PsdRect
     }
     let lw = level0.width as i32;
     let lh = level0.height as i32;
+    // Only the level-0 columns under `rect` are read.
+    let from = (2 * rect.left).min(lw) as usize;
+    let cols = from..(2 * rect.right).min(lw) as usize;
     each_row(dst, rect, |y, row| {
         let above = [
             if 2 * y < lh {
-                level0.rows((2 * y) as usize)
+                level0.span((2 * y) as usize, cols.clone())
             } else {
                 None
             },
             if 2 * y + 1 < lh {
-                level0.rows((2 * y + 1) as usize)
+                level0.span((2 * y + 1) as usize, cols.clone())
             } else {
                 None
             },
@@ -543,7 +564,7 @@ fn shrink_from_planes(level0: &Planes<'_>, dst: &mut PyramidLevel, rect: PsdRect
                     if sx >= lw {
                         continue;
                     }
-                    let sx = sx as usize;
+                    let sx = sx as usize - from;
                     let a = rows[3][sx];
                     sr += premul(rows[0][sx], a);
                     sg += premul(rows[1][sx], a);
@@ -861,9 +882,9 @@ mod tests {
         assert_eq!(unpremul_red, 255);
     }
 
-    /// `p`'s four channels as one planar RGBA plane, fractured at the buffer
-    /// width, with band `fork` forked from the shared base so the plane is
-    /// diverged (a copy-on-write plane the pyramid must not materialize).
+    /// `p`'s four channels as one planar RGBA plane, tiled per channel, with
+    /// tile `fork` forked from a held clone so the plane is diverged (a
+    /// copy-on-write plane the pyramid must not materialize).
     fn planar_plane(p: &Built, fork: usize) -> Plane<u8> {
         let mut data = Vec::with_capacity((p.width * p.height * 4) as usize);
         data.extend_from_slice(&p.r);
@@ -871,15 +892,16 @@ mod tests {
         data.extend_from_slice(&p.b);
         data.extend_from_slice(&p.a);
         let mut plane = Plane::from(data);
-        plane.fracture(p.width as usize);
+        plane.tile(p.width as usize, p.height as usize);
         let mut copy = plane.clone();
-        copy.write_band(fork).expect("a band to fork");
-        assert!(!copy.shares(&plane), "the band was forked");
+        let (x, y, _, _) = copy.tile_rect(fork).expect("a tile to fork");
+        drop(copy.tiles_mut(x..x + 1, y..y + 1, p.width as usize));
+        assert!(!copy.shares(&plane), "the tile was forked");
         copy
     }
 
     #[test]
-    fn a_banded_level0_builds_the_same_levels() {
+    fn a_tiled_level0_builds_the_same_levels() {
         let p = Built::new(600, 400, 3);
         let plane = planar_plane(&p, 1);
         let banded = Planes::planar(p.width, p.height, &plane).expect("planar");
@@ -908,12 +930,12 @@ mod tests {
         }
         assert!(
             !plane.is_mirrored(),
-            "a banded level 0 is never materialized"
+            "a tiled level 0 is never materialized"
         );
     }
 
     #[test]
-    fn a_banded_level0_updates_and_crops() {
+    fn a_tiled_level0_updates_and_crops() {
         let (w, h) = (400u32, 300u32);
         let mut flat = Built::new(w, h, 9);
         let changed = Built::new(w, h, 11);
@@ -934,11 +956,13 @@ mod tests {
                     _ => &flat.a,
                 };
                 let start = y as usize * w as usize + damage.left as usize;
-                let row = plane
-                    .row_mut(channel * h as usize + y as usize, w as usize)
-                    .expect("row");
-                row[damage.left as usize..damage.right as usize]
-                    .copy_from_slice(&src[start..start + damage.width() as usize]);
+                let py = channel * h as usize + y as usize;
+                plane.write_rect_from(
+                    damage.left as usize..damage.right as usize,
+                    py..py + 1,
+                    w as usize,
+                    &src[start..start + damage.width() as usize],
+                );
             }
         }
 

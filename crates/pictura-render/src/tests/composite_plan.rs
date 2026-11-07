@@ -266,8 +266,10 @@ fn banded_composite_does_not_materialize_a_fractured_plane() {
         .iter_mut()
         .find(|channel| channel.id == 0)
         .expect("styled layer has a red channel");
-    red.data.fracture(W as usize);
-    red.data.write_band(0).expect("band 0 exists");
+    red.data.tile(W as usize, H as usize);
+    let held = red.data.clone();
+    red.data
+        .write_rect_from(0..1, 0..1, W as usize, &[held.sample(0).unwrap()]);
 
     pictura_core::reset_materializations();
     let _ = crate::composite_rgba(&d);
@@ -310,9 +312,8 @@ fn content_key_invalidates_on_edit() {
             .iter_mut()
             .find(|channel| channel.id == -1)
             .expect("alpha channel");
-        alpha.data.fracture(W as usize);
-        let band = alpha.data.write_band(0).expect("band 0 exists");
-        band[0] = 0;
+        alpha.data.tile(W as usize, H as usize);
+        alpha.data.write_rect_from(0..1, 0..1, W as usize, &[0]);
     });
 
     let mut mask = doc(W, H, vec![base_layer()]);

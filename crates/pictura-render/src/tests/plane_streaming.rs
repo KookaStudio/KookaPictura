@@ -45,13 +45,18 @@ fn with_mask(mut layer: Layer) -> Layer {
     layer
 }
 
-/// Every plane of `planes` fractured at `width` with band 1 forked from a held
-/// clone, so a whole-plane read would have to materialize it.
+/// `plane` tiled at `width` with the tile under row 64 (or its last row)
+/// forked from a held clone, so a whole-plane read would have to materialize
+/// it.
 fn diverge_plane(plane: &mut Plane<u8>, width: usize, held: &mut Vec<Plane<u8>>) {
-    plane.fracture(width);
+    let height = plane.len().checked_div(width).unwrap_or(0);
+    if !plane.tile(width, height) {
+        return;
+    }
     held.push(plane.clone());
-    if let Some(band) = plane.write_band(1) {
-        band[0] = band[0].wrapping_add(1);
+    let y = 64.min(height - 1);
+    if let Some(v) = plane.sample(y * width) {
+        plane.write_rect_from(0..1, y..y + 1, width, &[v.wrapping_add(1)]);
     }
 }
 

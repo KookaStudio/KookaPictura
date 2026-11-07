@@ -134,16 +134,19 @@ fn clear_source(doc: &mut Document, segments: &[usize], mask: &LayerMask, mask_d
         if !covered {
             continue;
         }
-        let Some(row) = alpha.data.row_mut(sy as usize, src_w as usize) else {
+        let Some(row) = alpha.data.row(sy as usize, src_w as usize) else {
             continue;
         };
+        let mut row = row.into_owned();
         for (x, current) in (rect.left..).zip(row.iter_mut()) {
             let coverage = coverage_at(mask, mask_data, x, y);
             if coverage != 0 {
                 *current = ((*current as u32 * (255 - coverage as u32) + 127) / 255) as u8;
             }
         }
+        alpha.data.write_row_from(sy as usize, src_w as usize, &row);
     }
+    alpha.data.settle();
 }
 
 /// `round(value * coverage / 255)`.

@@ -7,6 +7,10 @@ use pictura_core::{
     ColorLabel, Document, Layer, LayerMask, LockFlags, PsdRect,
 };
 
+use std::borrow::Cow;
+
+use pictura_core::layer_bounds::{cropped_plane, padded_plane};
+
 use super::clipboard::{clear_layer, coverage_bounds, plane_coverage_bounds};
 use super::merge::{merge_scope, MergeScope};
 use super::paths::{format_segments, parse_path, resolve_path, resolve_path_mut};
@@ -65,7 +69,9 @@ fn lifted_copy(source: &Layer, coverage: &[u8], doc_w: u32, doc_h: u32) -> Optio
         let dy = rect.top as usize + y;
         let sy = dy - src.top as usize;
         let alpha_row = src_alpha.map(|c| layer_row(c, sy, src_w));
-        let colour_rows: Vec<&[u8]> = colour.iter().map(|c| layer_row(c, sy, src_w)).collect();
+        let alpha_row = alpha_row.as_deref();
+        let colour_rows: Vec<Cow<'_, [u8]>> =
+            colour.iter().map(|c| layer_row(c, sy, src_w)).collect();
         for x in 0..w {
             let dx = rect.left as usize + x;
             let covered = coverage[dy * doc_w as usize + dx];
@@ -168,8 +174,9 @@ pub fn merge_lifted(doc: &mut Document, lifted_path: &str) -> bool {
     true
 }
 
-/// Row `y` of a channel `w` samples wide, read in place.
-fn layer_row(channel: &Channel, y: usize, w: usize) -> &[u8] {
+/// Row `y` of a channel `w` samples wide: borrowed from a flat plane, copied
+/// out of a tiled one.
+fn layer_row(channel: &Channel, y: usize, w: usize) -> Cow<'_, [u8]> {
     channel.data.row(y, w).expect("a layer row")
 }
 
@@ -196,11 +203,13 @@ fn composite_over(base: &mut Layer, top: &Layer) {
     for y in area.top..area.bottom {
         let (ty, by) = ((y - top_rect.top) as usize, (y - rect.top) as usize);
         let top_alpha_row = top_alpha.map(|c| layer_row(c, ty, top_w));
+        let top_alpha_row = top_alpha_row.as_deref();
         let base_alpha_row = base
             .channels
             .iter()
             .find(|c| c.id == -1)
             .map(|c| layer_row(c, by, base_w));
+        let base_alpha_row = base_alpha_row.as_deref();
         for (i, slot) in over.iter_mut().enumerate() {
             let fa = top_alpha_row.map_or(255, |row| row[tx0 + i]) as u32;
             let ba = base_alpha_row.map_or(255, |row| row[bx0 + i]) as u32;
@@ -217,7 +226,8 @@ fn composite_over(base: &mut Layer, top: &Layer) {
                     None => continue,
                 }
             };
-            let row = channel.data.row_mut(by, base_w).expect("a base row");
+            let top_row = top_row.as_deref();
+            let mut row = layer_row(channel, by, base_w).into_owned();
             for (i, &(fa, rest, out_a)) in over.iter().enumerate() {
                 if fa == 0 {
                     continue;
@@ -231,7 +241,16 @@ fn composite_over(base: &mut Layer, top: &Layer) {
                     }
                 }
             }
+            channel.data.write_rect_from(
+                bx0..bx0 + span,
+                by..by + 1,
+                base_w,
+                &row[bx0..bx0 + span],
+            );
         }
+    }
+    for channel in base.channels.iter_mut() {
+        channel.data.settle();
     }
 }
 
@@ -247,13 +266,9 @@ fn grow_to(layer: &mut Layer, rect: PsdRect) {
         (old.left - rect.left) as usize,
         (old.top - rect.top) as usize,
     );
+    let (h, old_h) = (rect.height() as usize, old.height() as usize);
     for channel in &mut layer.channels {
-        let mut data = vec![0u8; w * rect.height() as usize];
-        for y in 0..old.height() as usize {
-            let at = (y0 + y) * w + x0;
-            data[at..at + old_w].copy_from_slice(layer_row(channel, y, old_w));
-        }
-        channel.data = data.into();
+        channel.data = padded_plane(&channel.data, old_w, old_h, w, h, x0, y0);
     }
     layer.rect = rect;
 }
@@ -312,7 +327,7 @@ pub fn content_rect(doc: &Document, path: &str) -> Option<PsdRect> {
             .channels
             .iter()
             .find(|c| c.id == -1)
-            .is_some_and(|alpha| alpha.data.bands().flatten().all(|a| *a == 0));
+            .is_some_and(|alpha| alpha.data.all_eq(0));
     (!empty).then_some(layer.rect)
 }
 
@@ -351,13 +366,9 @@ fn trim_layer(layer: &mut pictura_core::Layer, bounds: PsdRect) {
     }
     let old_w = old.width() as usize;
     let (w, x0) = (new.width() as usize, (new.left - old.left) as usize);
+    let (h, y0) = (new.height() as usize, (new.top - old.top) as usize);
     for channel in &mut layer.channels {
-        let mut data = Vec::with_capacity(w * new.height() as usize);
-        for y in new.top..new.bottom {
-            let row = layer_row(channel, (y - old.top) as usize, old_w);
-            data.extend_from_slice(&row[x0..x0 + w]);
-        }
-        channel.data = data.into();
+        channel.data = cropped_plane(&channel.data, old_w, x0, y0, w, h);
     }
     layer.rect = new;
 }
@@ -707,9 +718,9 @@ mod tests {
         let mut layer = pixel_layer("banded", w, h, 40);
         let alpha = layer.channels.iter_mut().find(|c| c.id == -1).unwrap();
         alpha.data = vec![255; (w * h) as usize].into();
-        alpha.data.fracture(w as usize);
+        alpha.data.tile(w as usize, h as usize);
         let held = alpha.data.clone();
-        alpha.data.write_band(0).expect("band")[0] = 0;
+        alpha.data.write_rect_from(0..1, 0..1, w as usize, &[0]);
         let doc = doc_with(vec![layer]);
         let before = pictura_core::materializations();
         assert!(content_rect(&doc, "0").is_some());

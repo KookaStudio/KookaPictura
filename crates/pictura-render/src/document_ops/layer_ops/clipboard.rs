@@ -12,6 +12,7 @@ use pictura_core::{
     PsdRect,
 };
 use rayon::prelude::*;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
@@ -186,7 +187,11 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
             if selection.is_some() && (y < 0 || y >= doc_h as i32) {
                 continue;
             }
-            let pixels = &mut channel.data.row_mut(row, src_w).expect("a layer row")[col0..col1];
+            let mut pixels = vec![0u8; col1 - col0];
+            channel
+                .data
+                .read_rect_into(col0..col1, row..row + 1, src_w, &mut pixels);
+            let mut row_changed = false;
             let coverage = selection.map(|coverage| {
                 let base = y as usize * doc_w as usize + (rect.left + col0 as i32) as usize;
                 &coverage[base..base + (col1 - col0)]
@@ -202,7 +207,7 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
                 None => {
                     for value in pixels.iter_mut() {
                         let next = clear(*value, 255);
-                        changed |= next != *value;
+                        row_changed |= next != *value;
                         *value = next;
                     }
                 }
@@ -212,12 +217,19 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
                             continue;
                         }
                         let next = clear(*value, cov);
-                        changed |= next != *value;
+                        row_changed |= next != *value;
                         *value = next;
                     }
                 }
             }
+            if row_changed {
+                changed = true;
+                channel
+                    .data
+                    .write_rect_from(col0..col1, row..row + 1, src_w, &pixels);
+            }
         }
+        channel.data.settle();
     }
     changed
 }
@@ -277,7 +289,7 @@ pub fn coverage_bounds(coverage: &[u8], width: u32, height: u32) -> Option<PsdRe
     if w == 0 || coverage.len() < w * h {
         return None;
     }
-    row_bounds(h, |y| coverage.get(y * w..(y + 1) * w))
+    row_bounds(h, |y| coverage.get(y * w..(y + 1) * w).map(Cow::Borrowed))
 }
 
 /// [`coverage_bounds`] of a plane, read by rows so a plane whose bands have
@@ -347,7 +359,7 @@ pub fn plane_has_coverage(coverage: &Plane<u8>, width: u32, height: u32) -> bool
 
 fn row_bounds<'a>(
     height: usize,
-    row: impl Fn(usize) -> Option<&'a [u8]> + Sync,
+    row: impl Fn(usize) -> Option<Cow<'a, [u8]>> + Sync,
 ) -> Option<PsdRect> {
     (0..height)
         .into_par_iter()
