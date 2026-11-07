@@ -9,7 +9,7 @@
 //! refusal to the bridge, which reads it on the GUI thread.
 
 use pictura_core::memory::{self, HostReading};
-use pictura_core::{BitDepth, Document, PsdRect, BAND_ROWS};
+use pictura_core::{BitDepth, Document, PsdRect, TILE};
 
 /// Forget the last refusal; every gated edit starts here.
 pub(in crate::cxxqt_object) fn clear() {
@@ -34,11 +34,11 @@ pub(in crate::cxxqt_object) fn area(bounds: PsdRect) -> u64 {
 }
 
 /// The bytes a write of `bounds` into the layer at `path` forks from history:
-/// each 64-row band it crosses, of each colour and transparency plane, at the
-/// layer's width.
+/// each 256² tile it crosses, of each colour and transparency plane, at the
+/// document's sample size (#1213).
 ///
-/// ponytail: 8-bit planes only; a 16- or 32-bit native store written beside
-/// them is not charged, so the gate under-counts a deep document's fill.
+/// ponytail: a 16- or 32-bit native store stays flat, so a write that also
+/// rewrites it copies the whole store; that copy is not charged here.
 pub(in crate::cxxqt_object) fn fork_bytes(doc: &Document, path: &str, bounds: PsdRect) -> u64 {
     let Some(layer) = pictura_render::resolve_path(doc, path) else {
         return 0;
@@ -53,11 +53,16 @@ pub(in crate::cxxqt_object) fn fork_bytes(doc: &Document, path: &str, bounds: Ps
     let Some(hit) = bounds.intersect(rect) else {
         return 0;
     };
-    let band = BAND_ROWS as i32;
-    let first = (hit.top - rect.top) / band * band;
-    let last = ((hit.bottom - rect.top + band - 1) / band * band).min(rect.height());
+    let tile = TILE as i32;
+    let span = |from: i32, to: i32, extent: i32| {
+        let first = from / tile * tile;
+        let last = ((to + tile - 1) / tile * tile).min(extent);
+        (last - first).max(0) as u64
+    };
+    let rows = span(hit.top - rect.top, hit.bottom - rect.top, rect.height());
+    let cols = span(hit.left - rect.left, hit.right - rect.left, rect.width());
     let planes = layer.channels.iter().filter(|c| c.id >= -1).count() as u64;
-    planes * (last - first).max(0) as u64 * rect.width().max(0) as u64
+    planes * rows * cols * sample_bytes(doc.depth)
 }
 
 // The estimates of the paths the memory benchmark drives (#1211). Each is
@@ -79,22 +84,24 @@ fn canvas(doc: &Document) -> u64 {
     u64::from(doc.width) * u64::from(doc.height)
 }
 
-/// New Document (M1): the base layer, the composite, and the display and its
-/// pyramid (21.4 bytes a pixel for RGB at 4250²).
+/// New Document (M1): the rendered composite and the display and its pyramid;
+/// the base layer and the stored composite are uniform tiles (#1213).
 pub(in crate::cxxqt_object) fn new_document_bytes(
     width: u32,
     height: u32,
     color_channels: u8,
     depth: BitDepth,
 ) -> u64 {
-    let per_pixel = sample_bytes(depth) * (2 * u64::from(color_channels) + 1) + 17;
+    // The base layer and the stored composite start as uniform tiles and hold
+    // nothing (#1213); the rendered composite and the display remain.
+    let per_pixel = sample_bytes(depth) * u64::from(color_channels) + 17;
     u64::from(width) * u64::from(height) * per_pixel
 }
 
 /// Add Layer (M2): an empty-rect layer stores no pixel planes, only its record
 /// and history state (#1208).
 pub(in crate::cxxqt_object) fn add_layer_bytes(_doc: &Document) -> u64 {
-    64 * 1024
+    256 * 1024
 }
 
 /// A brush stroke's start (M6): the target layer's planes and the stroke's
@@ -179,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn a_write_forks_the_bands_it_crosses() {
+    fn a_write_forks_the_tiles_it_crosses() {
         let mut doc = Document::new(
             100,
             300,
@@ -200,17 +207,41 @@ mod tests {
             bottom,
             right: 20,
         };
-        // Rows 70..140 cross bands 1 and 2: rows 64..192.
-        assert_eq!(fork_bytes(&doc, "0", rows(70, 140)), planes * 128 * 100);
-        // The last band is cut at the layer's bottom.
+        // Rows 70..140 lie in tile row 0: 256 rows, clipped to the 100 columns.
+        assert_eq!(fork_bytes(&doc, "0", rows(70, 140)), planes * 256 * 100);
+        // The last tile row is cut at the layer's bottom: rows 256..300.
         assert_eq!(fork_bytes(&doc, "0", rows(290, 300)), planes * 44 * 100);
-        // A box off the layer grows it to the union: 100×500, rows 384..500.
-        assert_eq!(fork_bytes(&doc, "0", rows(400, 500)), planes * 116 * 100);
+        // A box off the layer grows it to the union: 100×500, rows 256..500.
+        assert_eq!(fork_bytes(&doc, "0", rows(400, 500)), planes * 244 * 100);
         assert_eq!(fork_bytes(&doc, "9", rows(0, 10)), 0, "no such layer");
     }
 
+    // [tp_gate]
     #[test]
-    fn a_fill_that_grows_the_layer_forks_the_grown_bands() {
+    fn fork_bytes_counts_tiles() {
+        for (depth, bytes) in [
+            (pictura_core::BitDepth::Eight, 1),
+            (pictura_core::BitDepth::Sixteen, 2),
+            (pictura_core::BitDepth::ThirtyTwo, 4),
+        ] {
+            let mut doc = Document::new(1000, 1000, pictura_core::ColorMode::Rgb, depth);
+            doc.layers = pictura_core::LayerStack::from_layers(vec![
+                crate::cxxqt_object::tests::pixel_layer("layer", 1000, 1000, (0, 0, 0)),
+            ]);
+            let planes = doc.layers[0].channels.iter().filter(|c| c.id >= -1).count() as u64;
+            let inside = PsdRect {
+                top: 300,
+                left: 300,
+                bottom: 310,
+                right: 310,
+            };
+            let one_tile = (TILE * TILE) as u64;
+            assert_eq!(fork_bytes(&doc, "0", inside), planes * one_tile * bytes);
+        }
+    }
+
+    #[test]
+    fn a_fill_that_grows_the_layer_forks_the_grown_tiles() {
         let mut doc = Document::new(
             100,
             300,
@@ -225,7 +256,7 @@ mod tests {
                 (0, 0, 0),
             )]);
         // The layer is 20×20 at the origin; a fill box at (80, 80)–(120, 140)
-        // grows it to 120×140, whose bands the fill forks.
+        // grows it to 120×140, whose tiles the fill forks.
         let bounds = PsdRect {
             top: 80,
             left: 80,
@@ -233,7 +264,7 @@ mod tests {
             right: 120,
         };
         let planes = doc.layers[0].channels.iter().filter(|c| c.id >= -1).count() as u64;
-        // Rows 80..140 cross bands 64..128 and 128..140, at the grown width.
-        assert_eq!(fork_bytes(&doc, "0", bounds), planes * 76 * 120);
+        // The grown layer is one 120×140 tile.
+        assert_eq!(fork_bytes(&doc, "0", bounds), planes * 140 * 120);
     }
 }

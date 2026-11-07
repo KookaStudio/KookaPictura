@@ -32,7 +32,7 @@ fn px(side: u32, reference: u32) -> i32 {
     (u64::from(reference) * u64::from(side) / u64::from(REFERENCE_SIDE)).max(1) as i32
 }
 
-fn square(side: u32) -> PsdRect {
+pub(super) fn square(side: u32) -> PsdRect {
     let half = px(side, 1000) / 2;
     let c = side as i32 / 2;
     PsdRect {
@@ -67,13 +67,15 @@ impl Drop for TempFile {
 /// M1, as `new_document` + `create_document`: a white locked Background, its
 /// composite, the view and the "New" state.
 pub(super) fn new_document(side: u32) -> PictureViewRust {
+    // As the bridge builds it: uniform white tiles that hold nothing (#1213).
     let mut doc = Document::new(side, side, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data.fill(255);
-    let pixels = side as usize * side as usize;
+    let n = side as usize;
+    let stacked = usize::from(doc.composite.channels);
+    doc.composite.data = pictura_core::Plane::filled(n, n, stacked, 255);
     let channels = (0..4)
         .map(|id| Channel {
             id: if id == 3 { -1 } else { id },
-            data: vec![255u8; pixels].into(),
+            data: pictura_core::Plane::filled(n, n, 1, 255),
         })
         .collect();
     doc.layers

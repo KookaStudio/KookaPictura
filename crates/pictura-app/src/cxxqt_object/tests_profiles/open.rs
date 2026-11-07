@@ -26,8 +26,9 @@ fn large_document_open_profile() {
     );
 
     let plane = &mut doc.layers[0].channels[0].data;
-    plane.fracture(w as usize);
-    plane.write_band(0).expect("a band")[0] ^= 1;
+    plane.tile(w as usize, h as usize);
+    let v = plane.sample(0).expect("a sample");
+    plane.write_rect_from(0..1, 0..1, w as usize, &[v ^ 1]);
     pictura_core::reset_materializations();
     let paint = std::time::Instant::now();
     history.capture_live(&mut doc, &None, &target, "Paint");

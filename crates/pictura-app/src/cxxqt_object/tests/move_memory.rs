@@ -62,14 +62,14 @@ fn a_bounded_buffer_is_the_crop_of_the_whole() {
 }
 
 #[test]
-fn reading_a_diverged_banded_layer_builds_no_mirror() {
+fn reading_a_diverged_tiled_layer_builds_no_mirror() {
     let mut doc = marked(90, 300, MARK);
     let history = doc.clone();
     for c in &mut doc.layers[0].channels {
-        c.data.fracture(90);
-        if let Some(band) = c.data.write_band(1) {
-            band[0] = band[0].wrapping_add(1);
-        }
+        c.data.tile(90, 300);
+        let v = c.data.sample(256 * 90).expect("a sample");
+        c.data
+            .write_rect_from(0..1, 256..257, 90, &[v.wrapping_add(1)]);
     }
     let expected = {
         let mut flat = doc.clone();

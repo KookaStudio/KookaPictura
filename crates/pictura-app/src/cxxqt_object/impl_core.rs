@@ -232,22 +232,21 @@ impl qobject::PictureView {
         if !memory_gate::admit_fresh(estimate) {
             return false;
         }
+        // Every plane starts as uniform tiles, so a white Background and its
+        // composite hold no pixel allocation until they are painted (#1213).
         let fill = if white { 255 } else { 0 };
-        let pixels = width as usize * height as usize;
+        let (wu, hu) = (width as usize, height as usize);
         let mut channels = Vec::new();
         for id in (0..i16::from(mode.color_channels())).chain([-1]) {
-            let Ok(data) = pictura_core::memory::try_plane(pixels, fill, "a new layer") else {
+            let Ok(data) = pictura_core::memory::try_filled_plane(wu, hu, fill, "a new layer")
+            else {
                 return false;
             };
-            channels.push(Channel {
-                id,
-                data: data.into(),
-            });
+            channels.push(Channel { id, data });
         }
         let mut doc = Document::new(w, h, mode, BitDepth::Eight);
-        if white {
-            doc.composite.data.fill(255);
-        }
+        let stacked = usize::from(doc.composite.channels);
+        doc.composite.data = pictura_core::Plane::filled(wu, hu, stacked, fill);
         {
             let _ = doc.layers.push(Layer {
                 name: "Layer 0".to_string(),
@@ -1073,13 +1072,21 @@ impl super::PictureViewRust {
         if matches && whole {
             // The whole frame replaces level 0 rather than being copied into
             // it row by row (#1145). It may share the composite's plane (a
-            // layerless document's embedded composite); fracturing both keeps
-            // the first write to a single band (#1152).
-            if let Some(doc) = self.session.doc.as_mut() {
-                doc.composite.data.fracture(doc.width as usize);
-            }
+            // layerless document's embedded composite); tiling both keeps the
+            // first write to the tiles it touches (#1152, #1213).
             let mut frame = region;
-            frame.data.fracture(frame.width as usize);
+            if let Some(doc) = self.session.doc.as_mut() {
+                // Tiling copies a flat plane, so a frame that is the composite's
+                // own allocation takes the composite's tiles instead of a copy.
+                let same = doc.composite.data.shares(&frame.data);
+                doc.composite
+                    .data
+                    .tile(doc.width as usize, doc.height as usize);
+                if same {
+                    frame.data = doc.composite.data.clone();
+                }
+            }
+            frame.data.tile(frame.width as usize, frame.height as usize);
             self.level0 = Some(frame);
         } else if matches {
             if let Some(level0) = self.level0.as_mut() {

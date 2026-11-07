@@ -15,12 +15,8 @@ pub(crate) fn document_bytes(doc: &Document) -> u64 {
     let mut seen = HashSet::new();
     let mut bytes = 0u64;
     planes::each_plane(doc, &mut |p, _, _, _| {
-        let (ptr, len) = p.base_allocation();
-        if len > 0 && seen.insert(ptr) {
-            bytes += len as u64;
-        }
-        for (ptr, len) in p.owned_bands() {
-            if seen.insert(ptr) {
+        for (ptr, len) in p.allocations() {
+            if len > 0 && seen.insert(ptr) {
                 bytes += len as u64;
             }
         }
@@ -61,18 +57,13 @@ impl History {
     fn held_bytes(&self, live: &Document) -> usize {
         let mut shared = HashSet::new();
         planes::each_plane(live, &mut |p, _, _, _| {
-            shared.insert(p.base_allocation().0);
-            shared.extend(p.owned_bands().map(|(ptr, _)| ptr));
+            shared.extend(p.allocations().into_iter().map(|(ptr, _)| ptr));
         });
         let mut bytes = 0;
         let mut count = |doc: &Document| {
             planes::each_plane(doc, &mut |p, _, _, _| {
-                let (ptr, len) = p.base_allocation();
-                if len > 0 && shared.insert(ptr) {
-                    bytes += len;
-                }
-                for (ptr, len) in p.owned_bands() {
-                    if shared.insert(ptr) {
+                for (ptr, len) in p.allocations() {
+                    if len > 0 && shared.insert(ptr) {
                         bytes += len;
                     }
                 }

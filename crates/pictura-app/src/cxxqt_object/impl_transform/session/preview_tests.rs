@@ -96,13 +96,13 @@ fn effects_and_lifts_keep_the_whole_backdrop() {
 // [tpr_sample_banded]
 #[test]
 fn sample_planar_argb_reads_a_diverged_composite_without_materializing() {
-    let (w, h) = (4usize, 128usize);
+    let (w, h) = (4usize, 300usize);
     let mut buffer = PixelBuffer::new(w as u32, h as u32, 4);
-    buffer.data.fracture(w);
+    buffer.data.tile(w, h);
     let held = buffer.data.clone();
-    buffer.data.write_band(1).expect("band")[0] = 200;
+    buffer.data.write_rect_from(0..1, 256..257, w, &[200]);
     let before = pictura_core::materializations();
-    assert_eq!(sample_planar_argb(&buffer, 0, 64) >> 16 & 0xff, 200);
+    assert_eq!(sample_planar_argb(&buffer, 0, 256) >> 16 & 0xff, 200);
     assert_eq!(pictura_core::materializations(), before);
     drop(held);
 }
