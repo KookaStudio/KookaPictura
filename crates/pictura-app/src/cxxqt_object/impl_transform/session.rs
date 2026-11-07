@@ -121,6 +121,9 @@ fn repeatable_transform(session: &TransformSession) -> Option<RepeatTransform> {
 /// Distort's and Perspective's refusal for editable type (a lifted selection targets pixels, not
 /// the type layer).
 pub(super) fn can_begin_mode(rust: &PictureViewRust, path: &str, mode: TransformMode) -> bool {
+    if !rust.quick_mask_content_allowed() {
+        return false;
+    }
     let lift = lifts_selection(rust, path);
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
@@ -564,6 +567,9 @@ impl qobject::PictureView {
     /// Reuses the cached base when the content revision and move-group key
     /// match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
+        if !self.rust().quick_mask_content_allowed() {
+            return false;
+        }
         memory_gate::clear();
         if let Some(path) = super::mask_move::target(self.rust()) {
             return self.begin_mask_move(path);
@@ -618,10 +624,19 @@ impl qobject::PictureView {
     /// move-preview layer, no document change. Otherwise the active pixel layer
     /// is cloned, made active, and previewed.
     pub fn begin_move_duplicate(mut self: Pin<&mut Self>) -> bool {
+        if !self.rust().quick_mask_content_allowed() {
+            return false;
+        }
         self.as_mut().settle_pending_composite();
         if self.rust().session.selection.is_some() {
             return self.as_mut().begin_selection_duplicate_preview();
         }
+        let baseline = self
+            .rust()
+            .session
+            .doc
+            .clone()
+            .map(|doc| (doc, self.rust().layer_target.clone()));
         let new_path = {
             let mut guard = self.as_mut().rust_mut();
             let rust = &mut *guard;
@@ -634,13 +649,20 @@ impl qobject::PictureView {
             new_path
         };
         self.as_mut().recomposite();
-        self.as_mut().compute_move_preview(vec![new_path])
+        let begun = self.as_mut().compute_move_preview(vec![new_path]);
+        if begun {
+            self.as_mut().rust_mut().session.quick_mask.move_origin = baseline;
+        }
+        begun
     }
 
     /// Warm the move-preview cache without entering preview mode. A layer the
     /// Move tool may not move (a Background) is never previewed, so it is not
     /// warmed either: the warm composites the whole document.
     pub fn prepare_move_preview(mut self: Pin<&mut Self>) -> bool {
+        if !self.rust().quick_mask_content_allowed() {
+            return false;
+        }
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
@@ -850,6 +872,7 @@ impl qobject::PictureView {
     }
 
     pub fn end_move_preview(mut self: Pin<&mut Self>) {
+        self.as_mut().rust_mut().session.quick_mask.move_origin = None;
         self.as_mut().end_mask_move();
         // Keep the cache: the next press reuses a full-resolution preview when
         // the revision, topmost layer, and clamped rect are unchanged. A view
@@ -879,6 +902,9 @@ impl qobject::PictureView {
     }
 
     pub fn commit_move(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
+        if !self.rust().quick_mask_content_allowed() {
+            return false;
+        }
         memory_gate::clear();
         if dx == 0 && dy == 0 {
             return false;

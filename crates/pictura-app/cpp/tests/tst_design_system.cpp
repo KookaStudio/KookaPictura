@@ -79,7 +79,7 @@ QString ruleBody(const QString& qss, const QString& selector)
 bool isPaintOnlyToken(const QString& key)
 {
     return key == QLatin1String("graph-fill") || key == QLatin1String("graph-axis")
-           || key == QLatin1String("icon");
+           || key == QLatin1String("icon") || key == QLatin1String("quick-mask-active");
 }
 
 bool imageHasColor(const QImage& image, const QColor& color)

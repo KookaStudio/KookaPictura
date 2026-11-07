@@ -502,6 +502,7 @@ mod tests {
         );
         history.capture(
             Snapshot {
+                quick_mask: None,
                 doc: doc.clone(),
                 selection: None,
             },

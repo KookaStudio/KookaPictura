@@ -177,31 +177,35 @@ void ImageView::damageRegion(const QRect& damaged)
     if (docRect.isEmpty()) {
         return;
     }
-    if (presentLevel() != 0) {
-        // A stored level needs no pixels: its view reads live bytes.
-        dropPresentCache();
-    } else if (!(presentCacheEnabledForTest_ && presentCache_.valid
-                 && presentCache_.level == 0 && !presentCache_.crop.isNull()
-                 && levelProvider_.crop)) {
+    const int level = presentLevel();
+    if (!(presentCacheEnabledForTest_ && presentCache_.valid
+            && presentCache_.level == level && !presentCache_.crop.isNull()
+            && levelProvider_.crop)) {
         presentCache_.valid = false;
     } else {
-        const QRect hit = docRect.intersected(presentCache_.docRect);
+        // Crop-backed modes need a patch at every zoom; a stored-level view
+        // drops its crop cache in paintEvent and never enters this branch.
+        const qint64 scale = qint64(1) << std::clamp(level, 0, 30);
+        const int left = int(docRect.x() / scale), top = int(docRect.y() / scale);
+        const int right = int((qint64(docRect.x()) + docRect.width() + scale - 1) / scale);
+        const int bottom = int((qint64(docRect.y()) + docRect.height() + scale - 1) / scale);
+        const QRect hit = QRect(left, top, right - left, bottom - top).intersected(presentCache_.levelRect);
         // A damage outside the cached rectangle needs no work: the crop stays
         // exactly as it was.
         if (!hit.isEmpty()) {
             bool patched = false;
-            QImage part = levelProvider_.crop(0, hit.x(), hit.y(), hit.width(), hit.height());
+            QImage part = levelProvider_.crop(level, hit.x(), hit.y(), hit.width(), hit.height());
             if (part.size() == hit.size() && part.format() == presentCache_.crop.format()) {
                 const int bpp = std::max(1, presentCache_.crop.depth() / 8);
-                const QPoint origin = presentCache_.docRect.topLeft();
+                const QPoint origin = presentCache_.levelRect.topLeft();
                 for (int row = 0; row < hit.height(); ++row) {
                     std::memcpy(presentCache_.crop.scanLine(hit.y() - origin.y() + row)
-                                    + (hit.x() - origin.x()) * bpp,
-                                part.constScanLine(row), hit.width() * bpp);
+                            + (hit.x() - origin.x()) * bpp,
+                        part.constScanLine(row), hit.width() * bpp);
                 }
                 presentCache_.revision = levelProvider_.canvasRevision
-                                             ? levelProvider_.canvasRevision()
-                                             : quint64(0);
+                    ? levelProvider_.canvasRevision()
+                    : quint64(0);
                 // The crop's cache key survives an in-place patch, so a
                 // single-channel conversion keyed on it must be rebuilt.
                 channelImageKey_ = -1;

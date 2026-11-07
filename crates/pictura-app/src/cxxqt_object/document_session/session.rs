@@ -31,6 +31,7 @@ pub(in crate::cxxqt_object) struct QuickSelectionSnapshot {
 /// a headless test can drive it without a QObject.
 #[derive(Default)]
 pub(in crate::cxxqt_object) struct DocumentSession {
+    pub(in crate::cxxqt_object) quick_mask: crate::cxxqt_object::quick_mask::QuickMaskState,
     /// The live document, `None` without one.
     pub(in crate::cxxqt_object) doc: Option<Document>,
     /// The live selection.
@@ -103,6 +104,12 @@ impl DocumentSession {
         self.touch_selection();
     }
 
+    /// Geometry changes invalidate both the editing clip and temporary mask coverage.
+    pub(in crate::cxxqt_object) fn clear_geometry_selection(&mut self) {
+        self.set_selection(None);
+        self.quick_mask.coverage = None;
+    }
+
     /// Take the live selection, bumping its revision when there was one.
     pub(in crate::cxxqt_object) fn take_selection(&mut self) -> Option<Selection> {
         let selection = self.selection.take();
@@ -166,6 +173,11 @@ impl DocumentSession {
         };
         self.history
             .capture_live_with(doc, &self.selection, target, label, hint);
+        self.history.set_current_quick_mask(
+            self.quick_mask
+                .active
+                .then(|| self.quick_mask.coverage.clone()),
+        );
         if bookkeeping {
             self.dirty = true;
             if bump_revision {
@@ -224,6 +236,20 @@ impl DocumentSession {
         }
     }
 
+    pub(in crate::cxxqt_object) fn restore_quick_mask_selection(
+        &mut self,
+        coverage: Option<Option<Selection>>,
+    ) {
+        if self.quick_mask.active {
+            self.quick_mask.coverage = match coverage {
+                Some(coverage) => coverage,
+                None => self.selection.take(),
+            };
+        } else if let Some(coverage) = coverage {
+            self.selection = coverage;
+        }
+    }
+
     /// Step the history into the live document and selection, and report where
     /// the picture changed.
     pub(in crate::cxxqt_object) fn restore(
@@ -245,6 +271,11 @@ impl DocumentSession {
                 Restored::Everywhere
             }),
         }?;
+        let quick_mask = self
+            .history
+            .current_snapshot()
+            .and_then(|s| s.quick_mask.clone());
+        self.restore_quick_mask_selection(quick_mask);
         self.touch_selection();
         Some(restored)
     }
@@ -285,7 +316,9 @@ impl PictureViewRust {
     /// A layer stroke patches the composite only where it has presented, and a
     /// mask stroke never patches it, so the composite lags the pixels.
     pub(in crate::cxxqt_object) fn is_painting(&self) -> bool {
-        self.session.live.stroke().is_some() || self.session.live.mask_stroke().is_some()
+        self.session.live.stroke().is_some()
+            || self.session.live.mask_stroke().is_some()
+            || self.quick_mask_stroke_active()
     }
 
     /// Whether a lifted transform owns the document.
@@ -446,6 +479,12 @@ impl PictureViewRust {
         self.cancel_move_composite();
         self.move_drag_active = false;
         self.mask_move_baseline = None;
+        self.session.quick_mask.active = false;
+        self.session.quick_mask.coverage = None;
+        self.session.quick_mask.deselected = None;
+        self.session.quick_mask.gray = false;
+        self.session.quick_mask.pending = None;
+        self.session.quick_mask.move_origin = None;
         self.session.set_selection(None);
         self.session.deselected_selection = None;
         self.session.quick_selection_snapshot = None;

@@ -10,7 +10,7 @@ use pictura_filters::{
     awa_two_to_one, AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
 };
 
-use super::super::super::helpers::{active_mask_target, active_pixel_layer};
+use super::super::super::helpers::active_pixel_layer;
 use super::super::document_supported;
 
 /// Focal Length × Crop Factor (the 35 mm equivalent) stays in this range, so
@@ -168,7 +168,7 @@ pub(super) fn orientation_of(code: i32) -> AwaOrientation {
 
 pub(super) fn awa_begin(view: &PictureView) -> bool {
     let rust = view.rust();
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         return false;
     }
     let Some(doc) = rust.session.doc.as_ref().filter(|d| document_supported(d)) else {

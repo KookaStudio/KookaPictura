@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "api/layers_bridge.h"
 
 #include "api/document_api.h"
 #include "color_picker_dialog.h"
@@ -6,7 +7,6 @@
 #include "command_ids.h"
 #include "notification_status_bar.h"
 
-#include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/engine_bridge.h"
 
@@ -437,6 +437,13 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
         if (!colorState_) {
             return;
         }
+        if ((activeView() && quick_mask_active(*activeView())) || quickMaskUi_.colorsActive) {
+            syncQuickMask();
+            return;
+        }
+        if (colorState_->maskActive() == mask) {
+            return;
+        }
         colorState_->setMaskActive(mask);
         if (tools_) {
             tools_->setMaskActive(mask);
@@ -566,6 +573,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
 
     auto* toolbox = new Toolbox(tools_, colorState_, this);
     toolbox_ = toolbox;
+    wireQuickMask();
     toolbox->setShiftKeyForToolSwitch(useShiftKeyForToolSwitch);
 
     // D1: the Tools panel is a tabless, atomic `PanelColumn` hosting the tool

@@ -16,6 +16,7 @@ fn doc(w: u32, h: u32, seed: u8) -> Document {
 
 fn snap(seed: u8) -> Snapshot {
     Snapshot {
+        quick_mask: None,
         doc: doc(1, 1, seed),
         selection: None,
     }
@@ -25,6 +26,7 @@ fn snap(seed: u8) -> Snapshot {
 fn capture_undo_round_trip_restores_doc_and_selection() {
     let mut history = History::default();
     let open = Snapshot {
+        quick_mask: None,
         doc: doc(2, 1, 7),
         selection: None,
     };
@@ -34,6 +36,7 @@ fn capture_undo_round_trip_restores_doc_and_selection() {
         data: vec![255, 0].into(),
     };
     let selected = Snapshot {
+        quick_mask: None,
         doc: doc(2, 1, 7),
         selection: Some(selection.clone()),
     };
@@ -55,6 +58,7 @@ fn style_sheet_edits_are_one_undoable_state_each() {
     let mut doc = doc(1, 1, 7);
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -72,6 +76,7 @@ fn style_sheet_edits_are_one_undoable_state_each() {
         .unwrap();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -89,6 +94,7 @@ fn style_sheet_edits_are_one_undoable_state_each() {
         .unwrap();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -98,6 +104,7 @@ fn style_sheet_edits_are_one_undoable_state_each() {
     doc.text_styles.delete_character_style("Heading").unwrap();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -179,6 +186,7 @@ fn applying_a_style_is_one_undoable_state() {
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -193,6 +201,7 @@ fn applying_a_style_is_one_undoable_state() {
     );
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -245,6 +254,7 @@ fn selection_none_round_trips() {
     let doc0 = doc(2, 2, 3);
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc0.clone(),
             selection: Some(Selection {
                 width: 2,
@@ -256,6 +266,7 @@ fn selection_none_round_trips() {
     );
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc(3, 3, 4),
             selection: None,
         },
@@ -462,6 +473,7 @@ fn region_deltas_retain_only_changed_tiles() {
     let full_state_bytes = doc.composite.data.len();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -473,6 +485,7 @@ fn region_deltas_retain_only_changed_tiles() {
         doc.composite.data[0] = i;
         history.capture(
             Snapshot {
+                quick_mask: None,
                 doc: doc.clone(),
                 selection: None,
             },
@@ -524,12 +537,14 @@ fn every_state_matches_a_reference_copy() {
     let mut reference: Vec<Snapshot> = Vec::new();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
         "Open",
     );
     reference.push(Snapshot {
+        quick_mask: None,
         doc: doc.clone(),
         selection: None,
     });
@@ -557,6 +572,7 @@ fn every_state_matches_a_reference_copy() {
         });
         doc.composite.data[0] = seed;
         let snapshot = Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection,
         };
@@ -587,6 +603,7 @@ fn geometry_change_uses_a_full_anchor_and_still_undoes() {
     let open = doc(32, 32, 4);
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: open.clone(),
             selection: None,
         },
@@ -596,6 +613,7 @@ fn geometry_change_uses_a_full_anchor_and_still_undoes() {
     let resized = doc(48, 48, 9);
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: resized.clone(),
             selection: None,
         },
@@ -809,6 +827,7 @@ fn paint_commit_undo_restores_the_prior_pixels() {
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -825,6 +844,7 @@ fn paint_commit_undo_restores_the_prior_pixels() {
     }
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: painted,
             selection: None,
         },
@@ -958,6 +978,7 @@ fn a_style_operation_records_one_undoable_state_each() {
     let mut doc = doc(1, 1, 7);
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -975,6 +996,7 @@ fn a_style_operation_records_one_undoable_state_each() {
     .unwrap();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -993,6 +1015,7 @@ fn a_style_operation_records_one_undoable_state_each() {
     .unwrap();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -1015,6 +1038,7 @@ fn a_style_operation_records_one_undoable_state_each() {
     delete_character_style(&mut doc, "Heading").unwrap();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -1102,6 +1126,7 @@ fn live_restores_match_a_full_snapshot_history() {
         let mut history = History::default();
         history.capture_live(&mut live, &selection, &target, "Open");
         let mut reference = vec![Snapshot {
+            quick_mask: None,
             doc: live.clone(),
             selection: selection.clone(),
         }];
@@ -1185,6 +1210,7 @@ fn live_restores_match_a_full_snapshot_history() {
                 history.capture_live(&mut live, &selection, &target, "Edit");
                 reference.truncate(cursor + 1);
                 reference.push(Snapshot {
+                    quick_mask: None,
                     doc: live.clone(),
                     selection: selection.clone(),
                 });
@@ -1295,101 +1321,4 @@ fn a_segment_break_keeps_a_changed_composite() {
     assert!(live == open, "undo restores the original state");
 }
 
-fn layered_doc(count: usize) -> Document {
-    let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-    let layers = (0..count)
-        .map(|index| Layer {
-            name: format!("layer {index}"),
-            rect: pictura_core::PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 8,
-                right: 8,
-            },
-            ..Layer::default()
-        })
-        .collect();
-    doc.layers = pictura_core::LayerStack::from_layers(layers);
-    doc
-}
-
-#[test]
-fn undo_restores_layer_target() {
-    let mut live = layered_doc(3);
-    let selection = None;
-    let mut history = History::default();
-    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
-    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Edit");
-    let mut target = LayerTarget::only("0");
-    let mut no_selection: Option<Selection> = None;
-    history.undo_live(&mut live, &mut no_selection, &mut target);
-    assert_eq!(target, LayerTarget::only("1"));
-}
-
-#[test]
-fn undo_keeps_a_later_selection() {
-    let mut live = layered_doc(3);
-    let selection = None;
-    let mut history = History::default();
-    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
-    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Edit");
-    let mut target = LayerTarget::only("2");
-    let mut no_selection: Option<Selection> = None;
-    history.undo_live(&mut live, &mut no_selection, &mut target);
-    assert_eq!(target, LayerTarget::only("2"));
-}
-
-#[test]
-fn redo_restores_post_operation_target() {
-    let mut live = layered_doc(3);
-    let selection = None;
-    let mut history = History::default();
-    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
-    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Edit");
-    let mut target = LayerTarget::only("0");
-    let mut no_selection: Option<Selection> = None;
-    history.undo_live(&mut live, &mut no_selection, &mut target);
-    history.redo_live(&mut live, &mut no_selection, &mut target);
-    assert_eq!(target, LayerTarget::only("0"));
-}
-
-#[test]
-fn jump_restores_target_across_multiple_states() {
-    let mut live = layered_doc(3);
-    let selection = None;
-    let mut history = History::default();
-    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Open");
-    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Edit 1");
-    history.capture_live(&mut live, &selection, &LayerTarget::only("2"), "Edit 2");
-    let mut target = LayerTarget::only("2");
-    let mut no_selection: Option<Selection> = None;
-    let _ = history.jump_live(0, &mut live, &mut no_selection, &mut target);
-    assert_eq!(target, LayerTarget::only("0"));
-    let _ = history.jump_live(2, &mut live, &mut no_selection, &mut target);
-    assert_eq!(target, LayerTarget::only("2"));
-}
-
-#[test]
-fn named_snapshot_restores_layer_target() {
-    let mut live = layered_doc(3);
-    let selection = None;
-    let mut history = History::default();
-    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
-    history.add_snapshot("Named", snap(3), LayerTarget::only("1"));
-    assert_eq!(history.snapshot_target(0), Some(LayerTarget::only("1")));
-}
-
-#[test]
-fn undo_restores_structural_target() {
-    let mut live = layered_doc(3);
-    let selection = None;
-    let mut history = History::default();
-    history.capture_live(&mut live, &selection, &LayerTarget::only("2"), "Open");
-    live.layers =
-        pictura_core::LayerStack::from_layers(live.layers.iter().take(2).cloned().collect());
-    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Delete");
-    let mut target = LayerTarget::only("1");
-    let mut no_selection: Option<Selection> = None;
-    history.undo_live(&mut live, &mut no_selection, &mut target);
-    assert_eq!(target, LayerTarget::only("2"));
-}
+mod targets;

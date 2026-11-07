@@ -10,7 +10,7 @@ use pictura_filters::{
     VpCanvas, VpDragMode, VpEdit, VpEditor, VpPart, VpPatch, VpPlanes, VP_DEFAULT_GRID,
 };
 
-use super::super::super::helpers::{active_mask_target, active_pixel_layer};
+use super::super::super::helpers::{active_pixel_layer, mask_editing};
 use super::super::super::helpers_composite::{buffer_to_rgba_bytes, layer_buffer};
 use super::super::{document_supported, hidden_layer_buffer};
 
@@ -100,7 +100,7 @@ pub(super) fn plane_index(editor: &VpEditor, index: i32) -> Option<usize> {
 pub(super) fn vp_begin(mut view: Pin<&mut PictureView>) -> bool {
     view.as_mut().settle_pending_composite();
     let mut rust = view.as_mut().rust_mut();
-    if active_mask_target(&rust).is_some() {
+    if mask_editing(&rust) {
         return false;
     }
     let gpu_compute = rust.gpu_compute;

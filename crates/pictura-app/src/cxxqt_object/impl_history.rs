@@ -68,6 +68,11 @@ impl PictureViewRust {
             DocumentComposite::new(&mut doc).store(&rendered);
         }
         Some(Snapshot {
+            quick_mask: self
+                .session
+                .quick_mask
+                .active
+                .then(|| self.session.quick_mask.coverage.clone()),
             doc,
             selection: self.session.selection.clone(),
         })
@@ -90,6 +95,9 @@ impl PictureViewRust {
         let cancelled = self.cancel_active_sessions_report_only();
         let t = Instant::now();
         let restored = self.session.restore(&mut self.layer_target, step, legacy)?;
+        if self.session.quick_mask.active {
+            self.invalidate_quick_mask();
+        }
         paint_timing::record("history_restore", t.elapsed());
         Some(ShownRestore {
             restored: if cancelled.has_display_change() {
@@ -283,6 +291,11 @@ impl qobject::PictureView {
         rust.cancel_active_sessions_report_only();
         rust.session.doc = Some(detached_copy(&snapshot.doc));
         rust.session.set_selection(snapshot.selection);
+        rust.session
+            .restore_quick_mask_selection(snapshot.quick_mask);
+        if rust.session.quick_mask.active {
+            rust.invalidate_quick_mask();
+        }
         if let Some(mut target) = target {
             if let Some(doc) = rust.session.doc.as_ref() {
                 target.retain_resolving(doc);

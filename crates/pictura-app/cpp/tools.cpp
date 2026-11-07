@@ -1,4 +1,5 @@
 #include "tools.h"
+#include "api/layers_bridge.h"
 
 #include "api/transform_api.h"
 #include "icons.h"
@@ -888,6 +889,10 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     }
     PictureView* v = view();
     const Qt::KeyboardModifiers mods = Qt::KeyboardModifiers(modifiers);
+    if(v && quick_mask_active(*v)) {
+        if(active_==ToolId::Move || (isSelectionTool(active_) && mods.testFlag(Qt::ControlModifier))) return;
+        if(isBrushTool(active_) && active_!=ToolId::Brush && active_!=ToolId::Pencil && active_!=ToolId::Eraser) return;
+    }
     // The idle controls box: a handle starts its session for this gesture;
     // anywhere else is an ordinary Move drag, the box hidden until release.
     if (v && controlsIdle_ && !v->transform_session_active()) {
@@ -1158,6 +1163,7 @@ bool ToolController::handleNudgeKey(int key, Qt::KeyboardModifiers mods)
     case Qt::Key_Down: dy = 1; break;
     default: return false;
     }
+    if (active_ == ToolId::Move && view() && quick_mask_active(*view())) return true;
     const int step = mods.testFlag(Qt::ShiftModifier) ? 10 : 1;
     if (ToolHandler* h = registry_.forTool(active_); h && h->nudge(dx * step, dy * step)) {
         return true;

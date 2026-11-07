@@ -11,7 +11,7 @@ use pictura_filters::{
     LensSource,
 };
 
-use super::super::super::helpers::{active_mask_target, active_pixel_layer};
+use super::super::super::helpers::active_pixel_layer;
 use super::super::adaptive_wide_angle::exif_text;
 use super::super::lens_profiles::{by_id, installed};
 use super::super::lens_supported;
@@ -99,7 +99,7 @@ pub(super) fn list<'a>(items: impl IntoIterator<Item = &'a str>) -> QStringList 
 
 pub(super) fn lc_begin(view: &PictureView) -> bool {
     let rust = view.rust();
-    if active_mask_target(rust).is_some() {
+    if crate::cxxqt_object::helpers::mask_editing(rust) {
         return false;
     }
     let Some(doc) = rust.session.doc.as_ref().filter(|d| lens_supported(d)) else {

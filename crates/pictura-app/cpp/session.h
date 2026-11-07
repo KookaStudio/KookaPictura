@@ -21,6 +21,9 @@ struct SessionState {
     int brightnessLevel = 1;         // Theme level
     int themeFamily = 0;             // Theme family: 0 dark / 1 light
     int uiScalePercent = 100;        // Theme UI scale, normalized on restore
+    bool quickMaskSelected = false;
+    QString quickMaskColor = QStringLiteral("#ff0000");
+    int quickMaskOpacity = 50;
     bool gpuCompute = true;          // GPU compositing preference
     int memoryUsagePercent = 60;     // Memory Usage, % of the host's memory (#1211)
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)

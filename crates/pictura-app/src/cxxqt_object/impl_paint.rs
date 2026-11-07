@@ -121,6 +121,9 @@ impl PictureViewRust {
     /// whole pre-stroke document when the stroke changed its structure), and
     /// return the document rectangle it had painted.
     pub(super) fn cancel_stroke_session(&mut self, session: StrokeSession) -> Option<PsdRect> {
+        if let Some(ctx) = session.quick_mask {
+            return self.cancel_quick_mask_stroke(ctx);
+        }
         let pad = session.paint_pad;
         if let Some(mut ctx) = session.mask_stroke {
             let dirty = ctx.stroke.dirty();
@@ -499,6 +502,9 @@ impl PictureViewRust {
     /// coverage when a mask is the edit target. False without a document, a
     /// layer target, or when another session owns the slot.
     pub(super) fn begin_paint(&mut self, cfg: StrokeConfig, label: &str) -> bool {
+        if self.session.quick_mask.active {
+            return self.begin_quick_mask_paint(cfg, label);
+        }
         self.settle_pyramid();
         let Some(doc) = self.session.doc.as_ref() else {
             return false;
@@ -668,6 +674,9 @@ impl PictureViewRust {
 
 impl qobject::PictureView {
     pub fn paint_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
+        if self.rust().quick_mask_stroke_active() {
+            return self.quick_mask_dab(x, y, pressure, false);
+        }
         let _dab = paint_timing::Scope::new("dab_total");
         tool_recording::sample(x, y, pressure);
         if self.rust().session.live.mask_stroke().is_some() {
@@ -718,6 +727,9 @@ impl qobject::PictureView {
     // ponytail: a recorded action replays the path only; held dabs are not
     // captured, so Airbrush build-up is lost on replay.
     pub fn paint_hold(mut self: Pin<&mut Self>) -> bool {
+        if self.rust().quick_mask_stroke_active() {
+            return self.quick_mask_dab(0.0, 0.0, 1.0, true);
+        }
         if self.rust().session.live.mask_stroke().is_some() {
             return self.as_mut().mask_hold();
         }
@@ -775,10 +787,18 @@ impl qobject::PictureView {
     pub fn flush_present(mut self: Pin<&mut Self>) -> bool {
         let _flush = paint_timing::Scope::new("flush_present_total");
         let previewing = self.rust().session.live.preview().is_some();
+        let quick_mask = self.rust().quick_mask_stroke_active();
         let pending = {
             let mut rust = self.as_mut().rust_mut();
             rust.take_pending_present()
         };
+        if quick_mask {
+            if let Some(rect) = pending {
+                self.as_mut().quick_mask_present(rect);
+                return true;
+            }
+            return false;
+        }
         if previewing {
             return pending.is_some() && self.as_mut().present_preview();
         }
@@ -989,6 +1009,9 @@ impl qobject::PictureView {
     }
 
     pub fn end_paint(mut self: Pin<&mut Self>) -> bool {
+        if self.rust().quick_mask_stroke_active() {
+            return self.end_quick_mask_paint();
+        }
         let t0 = Instant::now();
         let (session, pending) = {
             let mut rust = self.as_mut().rust_mut();
@@ -1109,6 +1132,11 @@ impl qobject::PictureView {
     }
 
     pub fn cancel_paint(mut self: Pin<&mut Self>) {
+        if self.rust().quick_mask_stroke_active() {
+            self.as_mut().rust_mut().cancel_stroke();
+            self.as_mut().changed();
+            return;
+        }
         tool_recording::cancel();
         // The stroke puts back the layer pixels it changed, and
         // `cancel_stroke` re-composites its extent into the document composite

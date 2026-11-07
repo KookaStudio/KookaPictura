@@ -35,7 +35,7 @@ impl qobject::PictureView {
     /// RGBA8888), or an empty image for level 0 or past the last level. The
     /// handle behind the image is dropped with the image.
     pub fn canvas_level_image(&self, level: i32) -> QImage {
-        if level <= 0 {
+        if level <= 0 || self.rust().session.quick_mask.active {
             return QImage::default();
         }
         let rust = self.rust();
@@ -137,6 +137,9 @@ impl PictureViewRust {
     /// Falls back to the composite if the soloed mask's source is absent (e.g.
     /// the mask was just deleted), so the canvas never goes blank.
     pub(crate) fn canvas_present_image(&self, level: i32, rect: PsdRect) -> QImage {
+        if self.session.quick_mask.active {
+            return self.quick_mask_crop(level, rect);
+        }
         match (self.mask_solo.as_ref(), self.mask_level0.as_ref()) {
             (Some(_), Some(level0)) => {
                 Self::crop_source(&self.mask_pyramid, Some(level0), level, rect)

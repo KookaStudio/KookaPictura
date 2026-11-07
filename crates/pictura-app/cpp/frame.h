@@ -11,20 +11,17 @@
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
 #include <QtWidgets/QMainWindow>
-
 #include <functional>
 #include <memory>
-
 #include "canvas_ruler.h"
 #include "document_window.h"
 #include "panels/panel_column.h"
 #include "recovery_store.h"
+#include "quick_mask_ui.h"
 #include "save_format_options.h"
 #include "tools.h"
 #include "workspace_store.h"
-
 class QDialog;
-
 class QDockWidget;
 class QFrame;
 class QLabel;
@@ -42,9 +39,7 @@ class QTimer;
 class QToolButton;
 class QUrl;
 class QWidget;
-
 namespace pictura {
-
 class ActionsEngineBridge;
 class ActionsPanel;
 class CommandRegistry;
@@ -652,6 +647,9 @@ private:
     // frame_mask_overlay.cpp: re-render the rubylith overlay when the Layers
     // panel changes it, and draw the view's overlay on `canvas`.
     void wireMaskOverlay();
+    void wireQuickMask();
+    void syncQuickMask();
+    void showQuickMaskOptions();
     void syncMaskOverlay(PictureView* view, ImageView* canvas);
     // frame_menus_smart_object.cpp: Layer > Smart Filter > Clear Smart Filters.
     void wireSmartFilterActions();
@@ -1053,6 +1051,8 @@ private:
     QPointer<DesignSystemDialog> designSystemDialog_;
     QPointer<SystemInfoDialog> systemInfoDialog_;
     ToolController* tools_ = nullptr;
+    QuickMaskUiState quickMaskUi_;
+
     OptionsBar* optionsBar_ = nullptr;
     Toolbox* toolbox_ = nullptr;
     // The tabless, atomic Tools column that hosts `toolbox_` in the splitter.

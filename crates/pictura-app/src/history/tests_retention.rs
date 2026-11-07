@@ -74,7 +74,7 @@ fn native_samples_and_selection_are_shared_across_captures() {
         "the fixture must carry a non-empty selection"
     );
     for k in 0..history.states.len() {
-        let (meta, sel) = history.meta_of(k);
+        let (meta, sel, _) = history.meta_of(k);
         assert_eq!(
             sel.as_ref().expect("selection").data.len(),
             4,
@@ -117,7 +117,7 @@ fn payloads_and_byte_blocks_are_shared_across_captures() {
         "the fixture must carry an embedded payload"
     );
     for k in 0..history.states.len() {
-        let (meta, _) = history.meta_of(k);
+        let (meta, _, _) = history.meta_of(k);
         assert!(current
             .doc
             .layer_section_extra
@@ -143,7 +143,7 @@ fn a_capture_forks_the_tree_container_but_shares_nodes() {
     history.capture_live(&mut doc, &selection, &target, "Open");
     history.capture_live(&mut doc, &selection, &target, "Noop");
     let current = history.current.as_ref().expect("current");
-    let (meta, _) = history.meta_of(0);
+    let (meta, _, _) = history.meta_of(0);
     assert_ne!(
         current.doc.layers.as_slice().as_ptr(),
         meta.layers.as_slice().as_ptr(),
@@ -170,8 +170,8 @@ fn a_native_plane_edit_forks_only_that_plane() {
         plane.as_mut_slice()[0] = 999;
     }
     history.capture_live(&mut doc, &selection, &target, "Edit");
-    let (before, _) = history.meta_of(0);
-    let (after, _) = history.meta_of(1);
+    let (before, _, _) = history.meta_of(0);
+    let (after, _, _) = history.meta_of(1);
     assert!(
         !share_u16(u16_plane(before, 0), u16_plane(after, 0)),
         "the edited plane forks"

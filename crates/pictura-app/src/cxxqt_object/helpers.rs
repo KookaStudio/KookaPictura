@@ -374,6 +374,9 @@ pub(super) fn paint_mode_from(mode: &str) -> PaintMode {
 }
 /// The active layer's path when its raster mask is the mask edit target, so the
 /// brush, fill, and filters write coverage instead of the layer's pixels.
+pub(super) fn mask_editing(rust: &super::state::PictureViewRust) -> bool {
+    rust.session.quick_mask.active || active_mask_target(rust).is_some()
+}
 pub(super) fn active_mask_target(rust: &super::state::PictureViewRust) -> Option<String> {
     rust.mask_edit_target
         .clone()

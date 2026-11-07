@@ -874,11 +874,11 @@ fn move_profile(n: u32) {
     let t = std::time::Instant::now();
     let _ = buffer_to_image(&moved.composite);
     ms("buffer_to_image", t.elapsed());
-
     let t = std::time::Instant::now();
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -995,13 +995,13 @@ fn move_profile(n: u32) {
         partial_preview.layers[hit_index].opacity,
     );
     ms("begin_move_preview(cache hit)", t.elapsed());
-
     let mut committed = doc.clone();
     let t = std::time::Instant::now();
     let committed_ok = pictura_render::translate_layer_active(&mut committed, 50, 50, true);
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: committed.clone(),
             selection: None,
         },
@@ -1063,12 +1063,12 @@ fn undo_profile_4000() {
     let t = std::time::Instant::now();
     let _ = buffer_to_image(&doc.composite);
     ms("new buffer_to_image(snapshot.composite)", t.elapsed());
-
     // The remaining per-snapshot undo cost: the whole-document clone.
     let t = std::time::Instant::now();
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -1078,7 +1078,6 @@ fn undo_profile_4000() {
 
     println!("undo_profile composite backend: {backend:?}");
 }
-
 /// The bridge QObject is C++-constructed (cxx-qt 0.10 exposes no Rust
 /// constructor), so this replays the public `convert_profile(1)` + `undo()`
 /// sequence against the same codec and `History` and checks the restored bytes.
@@ -1092,12 +1091,12 @@ fn convert_profile_is_byte_reversible_through_history() {
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
         "Open",
     );
-
     assert!(pictura_codec::convert_document(
         &mut doc,
         &pictura_codec::Profile::adobe_rgb()
@@ -1114,6 +1113,7 @@ fn convert_profile_is_byte_reversible_through_history() {
     );
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
@@ -1127,7 +1127,6 @@ fn convert_profile_is_byte_reversible_through_history() {
     assert_eq!(restored.doc.document_icc, original.document_icc);
     assert!(restored.doc.document_icc.is_none());
 }
-
 /// Bridge-equivalent byte-level check for `assign_profile(1)` + `undo()`:
 /// assign leaves every pixel byte untouched, then undo restores the working
 /// profile and the image-resource section exactly.
@@ -1141,12 +1140,12 @@ fn assign_profile_retags_and_is_reversible_through_history() {
     let mut history = History::default();
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },
         "Open",
     );
-
     pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
     let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
     assert_eq!(
@@ -1164,6 +1163,7 @@ fn assign_profile_retags_and_is_reversible_through_history() {
     );
     history.capture(
         Snapshot {
+            quick_mask: None,
             doc: doc.clone(),
             selection: None,
         },

@@ -611,6 +611,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_menus_matting.cpp
     crates/pictura-app/cpp/frame_menus_smart_object.cpp
     crates/pictura-app/cpp/frame_mask_overlay.cpp
+    crates/pictura-app/cpp/frame_quick_mask.cpp
+    crates/pictura-app/cpp/quick_mask_ui.h
     crates/pictura-app/cpp/frame_menus_image.cpp
     crates/pictura-app/cpp/frame_menus_image_mode.cpp
     crates/pictura-app/cpp/frame_recent.cpp

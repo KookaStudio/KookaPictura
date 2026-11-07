@@ -275,6 +275,9 @@ void PicturaMainWindow::saveSession()
     state.smartGuidesVisible = smartGuidesVisible_;
     state.freePan = freePan_;
     state.snapCanvasToWorkspace = snapCanvasToWorkspace_;
+    state.quickMaskSelected=quickMaskUi_.selected;
+    state.quickMaskColor=quickMaskUi_.color.name();
+    state.quickMaskOpacity=quickMaskUi_.opacity;
     state.guideColor = guideColor_.name();
     state.guideDashed = guideDashed_;
     state.saveFormatOptions = saveFormatOptions_;

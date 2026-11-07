@@ -307,6 +307,49 @@ pub(crate) fn apply(
     if view.rust().session.live.stroke().is_some() || view.rust().modal_transform_blocks_edit() {
         return false;
     }
+    if view.rust().session.quick_mask.active {
+        if view.rust().layer_target.is_empty() || view.rust().session.live.kind().is_some() {
+            return false;
+        }
+        let Some(mut document) = view.rust().quick_mask_document(true) else {
+            return false;
+        };
+        let rect = document.layers[0].rect;
+        let clip = view.rust().session.selection.as_ref();
+        let bounds = match clip {
+            Some(selection) => match selection.bounds().and_then(|b| b.intersect(rect)) {
+                Some(bounds) => bounds,
+                None => return false,
+            },
+            None => rect,
+        };
+        let target = FillTarget {
+            origin: (0, 0),
+            document_size: (document.width, document.height),
+            rect,
+            is_mask: true,
+            bounds,
+        };
+        if edit(
+            &mut document,
+            "0",
+            view.rust(),
+            &target,
+            clip.map(|s| s.data.as_slice()),
+        )
+        .is_none()
+        {
+            return false;
+        }
+        let changed = view
+            .as_mut()
+            .rust_mut()
+            .adopt_quick_mask_document(document, true);
+        if changed {
+            view.as_mut().edit(label, |_| Edit::Meta);
+        }
+        return changed;
+    }
     if let Some(path) = active_mask_target(view.rust()) {
         return apply_mask(view, label, &path, edit);
     }
