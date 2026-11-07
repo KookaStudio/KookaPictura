@@ -287,9 +287,25 @@ pub fn set_host_for_test(reading: Option<HostReading>) {
     PINNED.set(reading);
 }
 
-/// Make the next [`try_plane`] on this thread fail as an allocator failure.
+/// Make the next [`try_plane`] or [`try_filled_plane`] on this thread fail as
+/// an allocator failure.
 pub fn fail_next_plane_for_test() {
     FAIL_NEXT_PLANE.set(true);
+}
+
+/// A tiled `width × height` plane of `value` for `purpose`. Its tiles are
+/// uniform and hold no allocation (#1213), so only the test failpoint refuses
+/// it; the refusal is recorded like any other.
+pub fn try_filled_plane(
+    width: usize,
+    height: usize,
+    value: u8,
+    purpose: &'static str,
+) -> Result<crate::Plane<u8>, MemoryError> {
+    if FAIL_NEXT_PLANE.replace(false) {
+        return Err(refuse(purpose, (width * height) as u64));
+    }
+    Ok(crate::Plane::filled(width, height, 1, value))
 }
 
 /// A `len`-byte buffer of `value` for `purpose`. A canvas-scale buffer

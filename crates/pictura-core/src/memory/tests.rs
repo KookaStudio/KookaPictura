@@ -331,3 +331,12 @@ fn the_host_reports_available_memory() {
     let total = total_memory().expect("the host's total memory");
     assert!(available_memory().is_some_and(|available| available <= total));
 }
+
+#[test]
+fn a_filled_plane_honours_the_failpoint_and_holds_nothing() {
+    fail_next_plane_for_test();
+    assert!(try_filled_plane(64, 64, 255, "failpoint").is_err());
+    let plane = try_filled_plane(64, 64, 255, "failpoint").expect("a plane");
+    assert_eq!(plane.allocated_bytes(), 0);
+    assert_eq!(plane.sample(64 * 64 - 1), Some(255));
+}

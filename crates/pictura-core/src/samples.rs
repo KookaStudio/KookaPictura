@@ -174,17 +174,23 @@ impl Samples {
 
 /// Row `y` of `plane`, keeping the available slice when the plane is shorter
 /// than `y * width + width`. `None` only when the row start is out of range.
-fn available_row<T: Clone>(plane: &Plane<T>, y: usize, width: usize) -> Option<&[T]> {
+///
+/// ponytail: a native store is flat, so this borrows its slice; a tiled store
+/// would be materialized (counted) here.
+fn available_row<T: crate::tiled_plane::TileSample>(
+    plane: &Plane<T>,
+    y: usize,
+    width: usize,
+) -> Option<&[T]> {
     if width == 0 {
         return None;
     }
     let start = y.checked_mul(width)?;
-    if start >= plane.len() {
+    let data = plane.as_slice();
+    if start >= data.len() {
         return None;
     }
-    plane
-        .row(y, width)
-        .or_else(|| plane.as_slice().get(start..))
+    data.get(start..(start + width).min(data.len()))
 }
 
 /// A scalar sample that converts to and from the `[0, 1]` unit domain.
@@ -487,15 +493,5 @@ mod tests {
         let row = short.row(1, 2).expect("the row start is in range");
         assert_eq!(row.unit(0), Some(3.0 / 255.0));
         assert_eq!(row.unit(1), None);
-    }
-
-    #[test]
-    fn sample_rows_read_a_banded_plane() {
-        let mut plane = Plane::from((0..800).map(|i| (i % 256) as u8).collect::<Vec<_>>());
-        plane.fracture(10);
-        let samples = Samples::U8(plane);
-        let row = samples.row(70, 10).expect("row 70 is in range");
-        assert_eq!(row.unit(0), Some(188.0 / 255.0));
-        assert_eq!(row.unit(9), Some(197.0 / 255.0));
     }
 }

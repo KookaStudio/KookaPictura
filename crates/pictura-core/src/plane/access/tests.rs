@@ -1,24 +1,31 @@
-use super::super::{materializations, Plane, BAND_ROWS};
+use super::super::{materializations, Plane};
 use super::assert_no_materialization;
+use crate::tiled_plane::TILE;
 
-const WIDTH: usize = 7;
-const HEIGHT: usize = BAND_ROWS * 3 - 5;
+const WIDTH: usize = 300;
+const HEIGHT: usize = 2 * TILE + 5;
 
 fn pattern(len: usize) -> Vec<u8> {
     (0..len).map(|i| (i.wrapping_mul(37) % 251) as u8).collect()
 }
 
-/// A fractured plane whose band 1 has diverged from a live clone, plus the
-/// logical bytes it holds (read from a separate clone's `as_slice`).
+/// A tiled plane whose middle-row tile 2 (`x 0..256`, `y 256..512`) has
+/// diverged from a live clone, plus the logical bytes it holds.
 fn diverged() -> (Plane<u8>, Plane<u8>, Vec<u8>) {
     let mut plane: Plane<u8> = pattern(WIDTH * HEIGHT).into();
-    plane.fracture(WIDTH);
+    plane.tile(WIDTH, HEIGHT);
     let sharer = plane.clone();
-    for byte in plane.write_band(1).expect("band 1").iter_mut() {
-        *byte = byte.wrapping_add(3);
+    for tile in plane.tiles_mut(0..1, TILE..TILE + 1, WIDTH) {
+        tile.data.iter_mut().for_each(|b| *b = b.wrapping_add(3));
     }
-    assert!(plane.diverged());
-    let expected = plane.clone().as_slice().to_vec();
+    plane.settle();
+    assert!(!plane.shares_tile(2, &sharer));
+    let mut expected = pattern(WIDTH * HEIGHT);
+    for y in TILE..2 * TILE {
+        for b in &mut expected[y * WIDTH..y * WIDTH + TILE] {
+            *b = b.wrapping_add(3);
+        }
+    }
     (plane, sharer, expected)
 }
 
@@ -28,11 +35,18 @@ fn rect(bytes: &[u8], xs: std::ops::Range<usize>, ys: std::ops::Range<usize>) ->
 }
 
 #[test]
-fn rows_match_the_materialized_slice_across_band_edges() {
+fn rows_copy_out_of_a_diverged_plane_across_tile_edges() {
     let (plane, _sharer, expected) = diverged();
-    let ys = BAND_ROWS - 2..2 * BAND_ROWS + 3;
-    let rows: Vec<Vec<u8>> =
-        assert_no_materialization(|| plane.rows(ys.clone(), WIDTH).map(<[u8]>::to_vec).collect());
+    let ys = TILE - 2..2 * TILE + 3;
+    let rows: Vec<Vec<u8>> = assert_no_materialization(|| {
+        ys.clone()
+            .map(|y| {
+                let mut row = vec![0; WIDTH];
+                assert!(plane.read_row_into(y, WIDTH, &mut row));
+                row
+            })
+            .collect()
+    });
     let want: Vec<Vec<u8>> = expected
         .chunks(WIDTH)
         .skip(ys.start)
@@ -41,34 +55,28 @@ fn rows_match_the_materialized_slice_across_band_edges() {
         .collect();
     assert_eq!(rows, want);
     assert!(!plane.is_mirrored());
-}
 
-#[test]
-fn rows_stop_at_the_last_row_and_read_a_flat_plane() {
-    let (plane, _sharer, expected) = diverged();
-    let rows: Vec<&[u8]> = plane.rows(HEIGHT - 2..HEIGHT + 4, WIDTH).collect();
-    assert_eq!(rows.len(), 2, "rows past the end are not yielded");
-    assert_eq!(rows[1], &expected[(HEIGHT - 1) * WIDTH..]);
-    let flat: Plane<u8> = expected.clone().into();
-    let all: Vec<u8> = flat.rows(0..HEIGHT, WIDTH).flatten().copied().collect();
-    assert_eq!(all, expected);
-    assert_eq!(plane.rows(3..3, WIDTH).count(), 0, "an empty range");
+    let mut past = vec![0xAA; WIDTH];
+    assert!(!plane.read_row_into(HEIGHT, WIDTH, &mut past));
+    assert!(
+        past.iter().all(|&b| b == 0xAA),
+        "a row past the end is untouched"
+    );
 }
 
 #[test]
 fn read_rect_into_matches_the_slice_and_clips_to_the_plane() {
     let (plane, _sharer, expected) = diverged();
-    let (xs, ys) = (2..6, BAND_ROWS - 1..2 * BAND_ROWS + 1);
+    let (xs, ys) = (250..262, TILE - 1..2 * TILE + 1);
     let mut out = vec![0; xs.len() * ys.len()];
     assert_no_materialization(|| plane.read_rect_into(xs.clone(), ys.clone(), WIDTH, &mut out));
     assert_eq!(out, rect(&expected, xs, ys));
 
-    // The last band is partial; columns and rows past the plane stay untouched.
-    let (xs, ys) = (5..WIDTH + 2, HEIGHT - 1..HEIGHT + 1);
+    let (xs, ys) = (WIDTH - 2..WIDTH + 3, HEIGHT - 1..HEIGHT + 1);
     let mut out = vec![0xAA; xs.len() * ys.len()];
     plane.read_rect_into(xs.clone(), ys, WIDTH, &mut out);
     let last = &expected[(HEIGHT - 1) * WIDTH..];
-    assert_eq!(&out[..2], &last[5..]);
+    assert_eq!(&out[..2], &last[WIDTH - 2..]);
     assert!(out[2..].iter().all(|&b| b == 0xAA));
 }
 
@@ -83,10 +91,10 @@ fn read_rect_into_an_empty_rect_copies_nothing() {
 }
 
 #[test]
-fn read_into_copies_a_logical_range_across_bands() {
+fn read_into_copies_a_logical_range_across_tiles() {
     let (plane, _sharer, expected) = diverged();
-    let start = BAND_ROWS * WIDTH - 3;
-    let mut out = vec![0; WIDTH * BAND_ROWS + 6];
+    let start = TILE * WIDTH - 3;
+    let mut out = vec![0; WIDTH * 2 + 6];
     assert_no_materialization(|| plane.read_into(start, &mut out));
     assert_eq!(out, expected[start..start + out.len()]);
 
@@ -100,71 +108,69 @@ fn read_into_copies_a_logical_range_across_bands() {
 }
 
 #[test]
-fn for_each_band_reports_every_band_and_its_first_row() {
+fn for_each_tile_visits_every_tile_with_its_position() {
     let (plane, _sharer, expected) = diverged();
-    let mut seen = Vec::new();
-    let mut starts = Vec::new();
+    let mut seen = vec![0u8; expected.len()];
+    let mut rects = Vec::new();
     assert_no_materialization(|| {
-        plane.for_each_band(|y0, band| {
-            starts.push(y0);
-            seen.extend_from_slice(band);
+        plane.for_each_tile(0..WIDTH, 0..HEIGHT, WIDTH, |tile| {
+            rects.push((tile.x, tile.y, tile.w, tile.h));
+            for dy in 0..tile.h {
+                let at = (tile.y + dy) * WIDTH + tile.x;
+                tile.copy_row(dy, 0..tile.w, &mut seen[at..at + tile.w]);
+            }
         })
     });
-    assert_eq!(starts, vec![0, BAND_ROWS, 2 * BAND_ROWS]);
+    assert_eq!(rects.len(), 6);
+    assert_eq!(rects[3], (256, 256, 44, 256));
+    assert_eq!(rects[5], (256, 512, 44, 5));
     assert_eq!(seen, expected);
 }
 
 #[test]
-fn rows_mut_forks_only_the_bands_it_touches() {
-    let (mut plane, sharer, mut expected) = diverged();
-    let before = sharer.as_slice().to_vec();
-    let ys = 2 * BAND_ROWS + 1..2 * BAND_ROWS + 3;
-    assert_no_materialization(|| {
-        for row in plane.rows_mut(ys.clone(), WIDTH) {
-            row.fill(0x11);
-        }
+fn a_flat_plane_presents_full_width_strips() {
+    let bytes = pattern(7 * 300);
+    let plane: Plane<u8> = bytes.clone().into();
+    let mut strips = Vec::new();
+    plane.for_each_tile(0..7, 10..290, 7, |tile| {
+        strips.push((tile.y, tile.h, tile.w));
+        assert_eq!(tile.row(0), Some(&bytes[tile.y * 7..tile.y * 7 + 7]));
     });
-    for y in ys {
-        expected[y * WIDTH..(y + 1) * WIDTH].fill(0x11);
-    }
-    assert_eq!(plane, expected);
-    assert!(
-        plane.shares_band(0, &sharer),
-        "an untouched band stays shared"
-    );
-    assert!(!plane.shares_band(2, &sharer), "the written band forked");
-    assert_eq!(sharer, before, "the sharer keeps its bytes");
+    assert_eq!(strips, vec![(0, 256, 7), (256, 44, 7)]);
 }
 
 #[test]
-fn rows_mut_writes_a_unique_base_in_place_and_a_flat_plane() {
-    let mut plane: Plane<u8> = pattern(WIDTH * HEIGHT).into();
-    plane.fracture(WIDTH);
-    let (ptr, _) = plane.base_allocation();
-    for row in plane.rows_mut(0..BAND_ROWS + 1, WIDTH) {
-        row[0] = 0;
-    }
-    assert_eq!(
-        plane.base_allocation().0,
-        ptr,
-        "a unique base is written in place"
+fn a_mutable_access_forks_only_the_tiles_it_touches() {
+    let (mut plane, sharer, mut expected) = diverged();
+    let before = sharer.as_slice().to_vec();
+    let y = 2 * TILE + 1;
+    assert_no_materialization(|| {
+        plane.write_row_from(y, WIDTH, &[0x11; WIDTH]);
+    });
+    expected[y * WIDTH..(y + 1) * WIDTH].fill(0x11);
+    assert_eq!(plane, expected);
+    assert!(
+        plane.shares_tile(0, &sharer),
+        "an untouched tile stays shared"
     );
-    assert_eq!(plane.owned_bands().count(), 0);
-    assert!((0..BAND_ROWS + 1).all(|y| plane.sample(y * WIDTH) == Some(0)));
+    assert!(!plane.shares_tile(4, &sharer), "the written tile forked");
+    assert_eq!(sharer, before, "the sharer keeps its bytes");
 
-    let mut flat: Plane<u8> = pattern(WIDTH * 3).into();
-    let rows: Vec<usize> = flat.rows_mut(1..9, WIDTH).map(|r| r.len()).collect();
-    assert_eq!(
-        rows,
-        vec![WIDTH, WIDTH],
-        "rows past the end are not yielded"
-    );
+    assert_no_materialization(|| {
+        plane.for_each_tile_mut(260..261, 0..1, WIDTH, |mut tile| {
+            tile.row_mut(0)[4] = 0x22;
+        })
+    });
+    expected[260] = 0x22;
+    assert_eq!(plane, expected);
+    assert!(!plane.shares_tile(1, &sharer));
+    assert!(plane.shares_tile(0, &sharer));
 }
 
 #[test]
 fn write_rect_from_round_trips_and_clips() {
     let (mut plane, sharer, mut expected) = diverged();
-    let (xs, ys) = (1..5, BAND_ROWS - 2..BAND_ROWS + 2);
+    let (xs, ys) = (1..5, TILE - 2..TILE + 2);
     let src: Vec<u8> = (0..(xs.len() * ys.len()) as u8).collect();
     assert_no_materialization(|| plane.write_rect_from(xs.clone(), ys.clone(), WIDTH, &src));
     for (dy, y) in ys.clone().enumerate() {
@@ -175,7 +181,7 @@ fn write_rect_from_round_trips_and_clips() {
     let mut back = vec![0; src.len()];
     plane.read_rect_into(xs, ys, WIDTH, &mut back);
     assert_eq!(back, src);
-    assert!(plane.shares_band(2, &sharer));
+    assert!(plane.shares_tile(5, &sharer));
 
     plane.write_rect_from(
         WIDTH - 1..WIDTH + 1,
@@ -188,19 +194,19 @@ fn write_rect_from_round_trips_and_clips() {
 }
 
 #[test]
-fn for_each_band_mut_reaches_every_sample_without_materializing() {
-    let (mut plane, sharer, expected) = diverged();
-    let mut starts = Vec::new();
-    assert_no_materialization(|| {
-        plane.for_each_band_mut(|y0, band| {
-            starts.push(y0);
-            band.iter_mut().for_each(|b| *b = b.wrapping_add(1));
-        })
-    });
-    assert_eq!(starts, vec![0, BAND_ROWS, 2 * BAND_ROWS]);
-    let want: Vec<u8> = expected.iter().map(|b| b.wrapping_add(1)).collect();
-    assert_eq!(plane, want);
-    assert_ne!(sharer, plane);
+fn flat_planes_serve_the_same_access() {
+    let mut flat: Plane<u8> = pattern(7 * 3).into();
+    let mut row = [0u8; 7];
+    assert!(flat.read_row_into(2, 7, &mut row));
+    assert_eq!(&row[..], &pattern(21)[14..]);
+    assert!(!flat.read_row_into(3, 7, &mut row));
+    flat.write_rect_from(5..9, 2..4, 7, &[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(&flat[19..21], &[1, 2]);
+    for mut tile in flat.tiles_mut(0..7, 0..3, 7) {
+        tile.row_mut(0)[0] = 42;
+    }
+    assert_eq!(flat[0], 42);
+    assert!(!flat.is_tiled());
 }
 
 #[test]
@@ -217,5 +223,25 @@ fn assert_no_materialization_catches_a_whole_plane_copy() {
         caught.is_err(),
         alone,
         "the guard panics exactly under nextest"
+    );
+}
+
+#[test]
+fn a_span_inside_one_dense_tile_is_borrowed() {
+    let (plane, _sharer, expected) = diverged();
+    let y = TILE + 3;
+    let span = plane.row_span(y, 10..40, WIDTH).expect("a span");
+    assert!(
+        matches!(span, std::borrow::Cow::Borrowed(_)),
+        "read in place"
+    );
+    assert_eq!(&span[..], &expected[y * WIDTH + 10..y * WIDTH + 40]);
+    let across = plane
+        .row_span(y, 250..262, WIDTH)
+        .expect("a span across tiles");
+    assert_eq!(&across[..], &expected[y * WIDTH + 250..y * WIDTH + 262]);
+    assert!(
+        plane.row_span(y, 290..WIDTH + 1, WIDTH).is_none(),
+        "past the row"
     );
 }
