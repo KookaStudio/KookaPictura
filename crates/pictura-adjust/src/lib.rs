@@ -25,12 +25,15 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use apply::{adjustment_lut, apply, apply_with_coverage, gradient_luma_index, AdjustmentLut};
+pub use apply::{
+    adjustment_lut, apply, apply_in_mode, apply_with_coverage, apply_with_coverage_in_mode,
+    gradient_luma_index, AdjustmentLut,
+};
 pub use color::apply_channel_mixer_ink;
 pub use hdr_toning::{exposure_gamma, tone_map, ExposureGamma, HdrToneMap, LocalAdaptationParams};
 pub use lut::parse_cube;
 pub use match_color::{match_color_stats, MatchColorParams, MatchColorStats};
-pub use native::apply_native;
+pub use native::{apply_native, apply_native_in_mode};
 pub use pictura_raw::render_pictura_raw;
 pub use replace_color::{
     replace_color_mask, replace_color_result, replace_color_shift_for, ReplaceColorParams,
@@ -38,9 +41,9 @@ pub use replace_color::{
 };
 pub use types::{
     AdjustError, Adjustment, AutoKind, BlackWhiteParams, BrightnessContrastParams,
-    ChannelMixerParams, ColorBalanceParams, ColorLookupKind, ColorLookupParams, CurvesParams,
-    ExposureParams, GradientFillParams, GradientKind, GradientMapParams, GradientStop, HueRange,
-    HueSaturationParams, LevelsChannel, LevelsParams, Lut3d, OpacityStop, PatternFillParams,
-    PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange,
-    ShadowsHighlightsParams, VibranceParams,
+    ChannelMixerParams, ColorBalanceMode, ColorBalanceParams, ColorLookupKind, ColorLookupParams,
+    CurvesParams, ExposureParams, GradientFillParams, GradientKind, GradientMapParams,
+    GradientStop, HueRange, HueSaturationParams, LevelsChannel, LevelsParams, Lut3d, OpacityStop,
+    PatternFillParams, PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams,
+    SelectiveRange, ShadowsHighlightsParams, VibranceParams,
 };

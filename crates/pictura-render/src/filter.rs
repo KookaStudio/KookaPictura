@@ -5,7 +5,7 @@
 //! transparency-locked. [`apply_filter_region`] bounds the work to a document
 //! rectangle for viewport-sized previews.
 
-use pictura_adjust::Adjustment;
+use pictura_adjust::{Adjustment, ColorBalanceMode};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, Layer, LayerMask, PixelBuffer, PsdRect,
 };
@@ -52,7 +52,14 @@ pub fn apply_filter_region(
         Filter::Liquify { mesh } if mesh.clip().is_some() => None,
         _ => mask,
     };
-    apply_op_region(layer, Op::Filter(filter, gpu_enabled), mask, region, None)
+    apply_op_region(
+        layer,
+        Op::Filter(filter, gpu_enabled),
+        mask,
+        region,
+        None,
+        ColorBalanceMode::Rgb,
+    )
 }
 
 /// Apply a destructive Image > Adjustments `adjustment` to a pixel layer's
@@ -65,19 +72,35 @@ pub fn apply_adjustment_region(
     mask: Option<&LayerMask>,
     region: PsdRect,
 ) -> Result<(), FilterError> {
-    apply_op_region(layer, Op::Adjustment(adjustment), mask, region, None)
+    apply_op_region(
+        layer,
+        Op::Adjustment(adjustment),
+        mask,
+        region,
+        None,
+        ColorBalanceMode::Rgb,
+    )
 }
 
 /// As [`apply_adjustment_region`], with the document's CMYK state so a Channel
-/// Mixer mixes ink values. `None` keeps the RGB path.
+/// Mixer mixes ink values, and its visible mode so Color Balance maps into Lab
+/// or CMYK. `None` / `Rgb` keep the RGB path.
 pub fn apply_adjustment_region_in_mode(
     layer: &mut Layer,
     adjustment: &Adjustment,
     mask: Option<&LayerMask>,
     region: PsdRect,
     cmyk: Option<&crate::channel_mixer_cmyk::CmykMix>,
+    color_balance: ColorBalanceMode,
 ) -> Result<(), FilterError> {
-    apply_op_region(layer, Op::Adjustment(adjustment), mask, region, cmyk)
+    apply_op_region(
+        layer,
+        Op::Adjustment(adjustment),
+        mask,
+        region,
+        cmyk,
+        color_balance,
+    )
 }
 
 /// What [`apply_op_region`] runs on the working buffer.
@@ -93,6 +116,7 @@ fn apply_op_region(
     mask: Option<&LayerMask>,
     region: PsdRect,
     cmyk: Option<&crate::channel_mixer_cmyk::CmykMix>,
+    color_balance: ColorBalanceMode,
 ) -> Result<(), FilterError> {
     let lrect = layer.rect;
     // A lock outranks the empty-rect no-op: a locked layer must refuse the
@@ -191,7 +215,7 @@ fn apply_op_region(
     let orig = (mask.is_some() || alpha_locked).then(|| buf.clone());
     // Auto's histograms count only selected pixels. The coverage plane is in
     // clip coordinates; any nonzero coverage selects the pixel.
-    let coverage_plane = if matches!(op, Op::Adjustment(_)) {
+    let coverage_plane = if matches!(op, Op::Adjustment(..)) {
         mask.map(|mask| {
             let mut plane = vec![0u8; n];
             for y in 0..ch {
@@ -220,8 +244,13 @@ fn apply_op_region(
                     return Ok(());
                 }
             } else {
-                pictura_adjust::apply_with_coverage(adjustment, &mut buf, coverage_plane.as_deref())
-                    .map_err(|error| FilterError::InvalidParams(error.to_string()))?
+                pictura_adjust::apply_with_coverage_in_mode(
+                    adjustment,
+                    &mut buf,
+                    coverage_plane.as_deref(),
+                    color_balance,
+                )
+                .map_err(|error| FilterError::InvalidParams(error.to_string()))?
             }
         }
     }

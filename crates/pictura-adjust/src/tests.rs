@@ -4,6 +4,7 @@ use crate::common::{luma, rgb_to_hsl, srgb_to_linear};
 use pictura_core::PixelBuffer;
 
 mod channel_mixer;
+mod color_balance;
 mod gradient_map;
 mod hue_ranges;
 mod levels;
@@ -803,45 +804,6 @@ fn channel_mixer_monochrome_and_constant_and_validation() {
             blue: [0.0, 0.0, 100.0],
             constant: [0.0, 0.0, 0.0],
             ..Default::default()
-        }),
-        &mut b
-    )
-    .is_err());
-}
-
-#[test]
-fn color_balance_midtone_red_and_luminosity() {
-    let params = ColorBalanceParams {
-        shadows: [0.0, 0.0, 0.0],
-        midtones: [100.0, 0.0, 0.0],
-        highlights: [0.0, 0.0, 0.0],
-        preserve_luminosity: false,
-    };
-    let mut b = buf3(2, 1, &[[0, 0, 0], [128, 128, 128]]);
-    apply(&Adjustment::ColorBalance(params.clone()), &mut b).unwrap();
-    assert_eq!(px3(&b, 0), [0, 0, 0], "midtones must not touch black");
-    assert!(px3(&b, 1)[0] > 128, "mid grey shifts toward red");
-
-    let mut b = buf3(1, 1, &[[128, 128, 128]]);
-    let params_lum = ColorBalanceParams {
-        preserve_luminosity: true,
-        ..params
-    };
-    apply(&Adjustment::ColorBalance(params_lum), &mut b).unwrap();
-    let out = px3(&b, 0);
-    let y = luma(out[0] as f64, out[1] as f64, out[2] as f64);
-    assert!((y - 128.0).abs() < 3.0, "luminosity preserved");
-}
-
-#[test]
-fn color_balance_validation() {
-    let mut b = buf3(1, 1, &[[10, 10, 10]]);
-    assert!(apply(
-        &Adjustment::ColorBalance(ColorBalanceParams {
-            shadows: [0.0, 0.0, 0.0],
-            midtones: [200.0, 0.0, 0.0],
-            highlights: [0.0, 0.0, 0.0],
-            preserve_luminosity: false,
         }),
         &mut b
     )

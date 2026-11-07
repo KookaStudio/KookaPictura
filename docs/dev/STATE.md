@@ -27,6 +27,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tests_profiles/memory.rs`). The remaining callers (paint, select, app
   pyramid and previews, codec write) are listed in the archived change's
   `design.md`. They follow one crate per PR, and #1212 closes with the last.
+- **Color Balance Lab/CMYK mapping and readout** (#572, OpenSpec change
+  `color-balance-lab-cmyk`). Color Balance now runs in the document's visible
+  mode: `ColorBalanceMode` (Rgb/Lab/Cmyk) travels from
+  `document_color_mode(doc)` through `apply_adjustment_region` and the
+  adjustment-layer compositor. Lab shifts `a` by Cyan–Red minus Magenta–Green
+  and `b` by minus Yellow–Blue; CMYK lowers C/M/Y by the three pairs with K
+  held (the working raster has no K plate, so the model uses no black
+  generation). RGB stays byte-identical. The dialog adds a read-only
+  `colorBalanceReadout` row naming the active tone's channel changes as R/G/B,
+  A/B, or C/M/Y. Tests:
+  `pictura_adjust::tests::color_balance_{rgb_mode_is_the_default,
+  lab_shifts_a_and_b, cmyk_lowers_the_named_ink,
+  other_adjustments_ignore_the_mode}`, the native Lab parity test, and
+  `tst_image_adjustments::colorBalanceReadoutFollowsModeAndTone`.
+
 - **Memory benchmark harness** (#1210, step 1 of #1209, OpenSpec change
   `memory-benchmark-harness`). `scripts/profile-tools.py --scenarios memory`
   runs M1–M13 (`scripts/memory_scenarios.py`; 17000² by default, `--size`

@@ -2,12 +2,12 @@
 //! for `u16`/`f32` stores, and the unsupported ceiling.
 
 use pictura_adjust::{
-    apply, apply_native, parse_cube, AdjustError, Adjustment, AutoKind, BlackWhiteParams,
-    BrightnessContrastParams, ChannelMixerParams, ColorBalanceParams, ColorLookupKind,
-    ColorLookupParams, CurvesParams, ExposureParams, GradientMapParams, GradientStop,
-    HueSaturationParams, LevelsParams, MatchColorParams, MatchColorStats, PhotoFilterParams,
-    SelectiveColorMethod, SelectiveColorParams, SelectiveRange, ShadowsHighlightsParams,
-    VibranceParams,
+    apply, apply_in_mode, apply_native, apply_native_in_mode, parse_cube, AdjustError, Adjustment,
+    AutoKind, BlackWhiteParams, BrightnessContrastParams, ChannelMixerParams, ColorBalanceMode,
+    ColorBalanceParams, ColorLookupKind, ColorLookupParams, CurvesParams, ExposureParams,
+    GradientMapParams, GradientStop, HueSaturationParams, LevelsParams, MatchColorParams,
+    MatchColorStats, PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange,
+    ShadowsHighlightsParams, VibranceParams,
 };
 use pictura_core::{PixelBuffer, Samples};
 
@@ -464,6 +464,30 @@ fn native_bw_channel_mixer() {
         v.iter().any(|s| (s >> 8) != (s & 0xff)),
         "Channel Mixer must not stay on the 8-bit grid: {v:?}"
     );
+}
+
+#[test]
+fn color_balance_lab_mode_matches_the_eight_bit_shift() {
+    let base = fixed_rgb();
+    let adjustment = Adjustment::ColorBalance(ColorBalanceParams {
+        shadows: [0.0; 3],
+        midtones: [70.0, -20.0, 30.0],
+        highlights: [0.0; 3],
+        preserve_luminosity: false,
+    });
+    let mut expected = base.clone();
+    apply_in_mode(&adjustment, &mut expected, ColorBalanceMode::Lab).unwrap();
+    let mut store = Samples::U8(base.data.clone());
+    apply_native_in_mode(
+        &adjustment,
+        &mut store,
+        W as usize,
+        H as usize,
+        3,
+        ColorBalanceMode::Lab,
+    )
+    .unwrap();
+    assert_eq!(store, Samples::U8(expected.data));
 }
 
 #[test]

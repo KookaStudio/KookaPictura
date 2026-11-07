@@ -96,13 +96,21 @@ pub(super) fn adjust_preview(
     let mask = selection
         .as_ref()
         .map(|selection| selection_to_mask(selection, &doc));
+    let mode = pictura_render::document_color_mode(&doc).into();
     let layer = pictura_render::resolve_path_mut(&mut doc, &request.path)?;
     if layer.is_group || layer.adjustment.is_some() || layer_pixel_locked(layer) {
         return None;
     }
     let rect = layer.rect;
-    pictura_render::apply_adjustment_region(layer, &request.adjustment, mask.as_ref(), rect)
-        .ok()?;
+    pictura_render::apply_adjustment_region_in_mode(
+        layer,
+        &request.adjustment,
+        mask.as_ref(),
+        rect,
+        None,
+        mode,
+    )
+    .ok()?;
     let layer = layer.clone();
     let refresh = if layer_has_effects(&layer) {
         let rendered = current_buffer(&doc, gpu);

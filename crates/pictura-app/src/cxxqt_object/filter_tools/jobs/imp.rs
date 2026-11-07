@@ -118,8 +118,11 @@ pub(super) fn apply_op(
         }
         ActiveOp::Adjustment(adjustment) => {
             let rect = layer.rect;
-            pictura_render::apply_adjustment_region(&mut layer, adjustment, mask, rect)
-                .map_err(|e| e.to_string())?;
+            let mode = pictura_render::document_color_mode(doc).into();
+            pictura_render::apply_adjustment_region_in_mode(
+                &mut layer, adjustment, mask, rect, None, mode,
+            )
+            .map_err(|e| e.to_string())?;
         }
         ActiveOp::ApplyImage(params) => {
             let rect = layer.rect;

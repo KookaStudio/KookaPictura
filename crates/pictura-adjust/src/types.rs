@@ -245,6 +245,27 @@ pub struct ColorBalanceParams {
     pub preserve_luminosity: bool,
 }
 
+/// The channel space Color Balance shifts in. The working raster is always
+/// RGB; a Lab or CMYK document selects its source space so the three pairs
+/// move the channels the Help's readout names.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ColorBalanceMode {
+    #[default]
+    Rgb,
+    Lab,
+    Cmyk,
+}
+
+impl From<pictura_core::ColorMode> for ColorBalanceMode {
+    fn from(mode: pictura_core::ColorMode) -> Self {
+        match mode {
+            pictura_core::ColorMode::Lab => Self::Lab,
+            pictura_core::ColorMode::Cmyk => Self::Cmyk,
+            _ => Self::Rgb,
+        }
+    }
+}
+
 /// How a Selective Color correction scales: relative scales by the source ink,
 /// absolute by full scale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

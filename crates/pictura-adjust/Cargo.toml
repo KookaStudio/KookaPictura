@@ -10,6 +10,9 @@ doctest = false
 
 [dependencies]
 pictura-core = { path = "../pictura-core" }
+# Color Balance's Lab mapping shares the D50 sRGB↔Lab model with the picker and
+# the Info panel; no new external crate, the binary already links lcms2.
+pictura-color = { path = "../pictura-color" }
 thiserror.workspace = true
 # Chunked per-pixel kernels. Already a workspace dependency used by
 # pictura-filters, pictura-render and pictura-codec.

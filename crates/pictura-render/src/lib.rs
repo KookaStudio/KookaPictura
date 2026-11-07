@@ -67,9 +67,9 @@ mod composite_native;
 pub use composite_native::refresh_native_composite;
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
-    Adjustment, AutoKind, ExposureGamma, GradientFillParams, GradientKind, GradientMapParams,
-    GradientStop, HdrToneMap, LocalAdaptationParams, MatchColorParams, MatchColorStats,
-    OpacityStop, PatternFillParams, ReplaceColorParams, ReplaceColorSample,
+    Adjustment, AutoKind, ColorBalanceMode, ExposureGamma, GradientFillParams, GradientKind,
+    GradientMapParams, GradientStop, HdrToneMap, LocalAdaptationParams, MatchColorParams,
+    MatchColorStats, OpacityStop, PatternFillParams, ReplaceColorParams, ReplaceColorSample,
 };
 
 mod color_balance;
