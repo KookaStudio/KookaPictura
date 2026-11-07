@@ -627,6 +627,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/layers_panel_target.cpp
     crates/pictura-app/cpp/panels/layers_panel_preview.cpp
     crates/pictura-app/cpp/panels/layers_panel_events.cpp
+    crates/pictura-app/cpp/panels/layers_panel_visibility.cpp
     crates/pictura-app/cpp/panels/paths_panel.cpp
     crates/pictura-app/cpp/panels/layers_filter_proxy.cpp
     crates/pictura-app/cpp/panels/layers_filter_bar.cpp

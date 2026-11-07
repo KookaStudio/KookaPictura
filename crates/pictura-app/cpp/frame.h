@@ -710,7 +710,7 @@ private:
     void layoutWorkspaceFrame();
     void updateColumnFrameEdges();
     void retargetDock();
-    void refreshDock(bool includeSelfRefreshing);
+    void refreshDock(bool includeSelfRefreshing, bool includeLayers);
     bool dockNeedsRebind() const;
     void refreshPanels();
     void updateStatus();

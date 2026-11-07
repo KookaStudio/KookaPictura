@@ -136,6 +136,8 @@ private slots:
     void aDeferredBindSurvivesClosingTheBoundDocument();
     void anEditDoesNotRebindTheDock();
     void aCommittedEditRefreshesLayersOnce();
+    void visibilityTogglePatchesRowsWithoutARebuild();
+    void soloVisibilityRebuildsTheLayersPanel();
     void aStrokeCommitRefreshesPanels();
     void anUndoLeavesThePanelsToTheDebounce();
     void anUndoThatCancelsAStrokeRefreshesPanelsAtOnce();
@@ -595,6 +597,81 @@ void EditRefreshTest::aCommittedEditRefreshesLayersOnce()
     // negative window: proves no extra refresh or retarget lands after the debounce
     QTest::qWait(250);
     QCOMPARE(layers->refreshCountForTest(), beforeActive + 1);
+
+    closeAll(*window_);
+}
+
+void EditRefreshTest::visibilityTogglePatchesRowsWithoutARebuild()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("VisibilityRefresh"), 512, 512,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    // Many layers make a snapshot rebuild visible as a refresh, and keep the
+    // toggle on a row that is not the only one in the tree.
+    for (int i = 0; i < 32; ++i) {
+        QVERIFY(!view->add_layer_in(QString()).isEmpty());
+    }
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
+    QTest::qWait(250);
+    auto* layers = window_->layersPanelForTest();
+    QVERIFY(layers != nullptr);
+
+    // The Background holds pixels, so its visibility edit has a bounded
+    // influence and presents through the region path.
+    const QString target = QStringLiteral("0");
+    const int top = 0;
+    QVERIFY(layers->rowVisibleForTest(target));
+
+    // The panel eye path: patch the row in place, never rebuild the snapshot.
+    const int panelBase = layers->refreshCountForTest();
+    QVERIFY(view->set_layers_visible(QStringList{target}, false) > 0);
+    QCOMPARE(layers->rowVisibleForTest(target), false);
+    QCOMPARE(view->layer_visible(top), false);
+    // negative window: proves the debounce did not rebuild the snapshot
+    QTest::qWait(250);
+    QCOMPARE(layers->refreshCountForTest(), panelBase);
+
+    // The menu / Properties / control bridge path patches the same row.
+    const int bridgeBase = layers->refreshCountForTest();
+    view->set_layer_visible(top, true);
+    QCOMPARE(layers->rowVisibleForTest(target), true);
+    QCOMPARE(view->layer_visible(top), true);
+    // negative window: proves the debounce did not rebuild the snapshot
+    QTest::qWait(250);
+    QCOMPARE(layers->refreshCountForTest(), bridgeBase);
+
+    // The skip is scoped to the visibility pass: the next edit rebuilds once.
+    QVERIFY(view->set_layer_name_path(QStringLiteral("1"), QStringLiteral("Renamed")));
+    QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), bridgeBase + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
+    QTest::qWait(250);
+    QCOMPARE(layers->refreshCountForTest(), bridgeBase + 1);
+
+    closeAll(*window_);
+}
+
+void EditRefreshTest::soloVisibilityRebuildsTheLayersPanel()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("VisibilitySolo"), 64, 64,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    QVERIFY(!view->add_layer_in(QString()).isEmpty());
+    QVERIFY(!view->add_layer_in(QString()).isEmpty());
+    // settle: drains the 120 ms panel refresh and dock retarget; no hook marks it
+    QTest::qWait(250);
+    auto* layers = window_->layersPanelForTest();
+    QVERIFY(layers != nullptr);
+
+    const QString target = QString::number(view->layer_count() - 1);
+    const int base = layers->refreshCountForTest();
+    // A solo edit changes every row, so the panel keeps its full rebuild.
+    QVERIFY(view->apply_visibility(QStringList{target}, QStringLiteral("Solo")) > 0);
+    QTRY_COMPARE_WITH_TIMEOUT(layers->refreshCountForTest(), base + 1, 1000);
+    // negative window: proves no extra refresh or retarget lands after the debounce
+    QTest::qWait(250);
+    QCOMPARE(layers->refreshCountForTest(), base + 1);
 
     closeAll(*window_);
 }

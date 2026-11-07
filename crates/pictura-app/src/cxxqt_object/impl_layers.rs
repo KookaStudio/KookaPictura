@@ -110,7 +110,7 @@ impl qobject::PictureView {
     }
 
     pub fn set_layer_visible(mut self: Pin<&mut Self>, i: i32, visible: bool) {
-        self.as_mut().edit("Layer Visibility", |rust| {
+        let edit = self.as_mut().edit("Layer Visibility", |rust| {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
@@ -123,6 +123,10 @@ impl qobject::PictureView {
                 None => Edit::Full,
             }
         });
+        if !matches!(edit, Edit::None) {
+            let paths: QStringList = core::iter::once(QString::from(i.to_string())).collect();
+            self.as_mut().layer_visibility_changed(paths, visible);
+        }
     }
 
     pub fn layer_blend(&self, i: i32) -> QString {
@@ -741,6 +745,9 @@ impl qobject::PictureView {
         });
         if changed == 0 {
             paint_timing::report();
+        } else {
+            self.as_mut()
+                .layer_visibility_changed(paths.clone(), visible);
         }
         changed as i32
     }

@@ -141,6 +141,10 @@ pub mod qobject {
         /// Emitted whenever the layer stack changes and the image is refreshed.
         #[qsignal]
         fn changed(self: Pin<&mut Self>);
+        /// A visibility-only edit; the Layers panel patches these rows in place.
+        #[qsignal]
+        #[cxx_name = "layerVisibilityChanged"]
+        fn layer_visibility_changed(self: Pin<&mut Self>, paths: QStringList, visible: bool);
         /// Emitted after a region composite. The receiver blits `region` at `(x, y)`; the full image was not rebuilt.
         #[qsignal]
         #[cxx_name = "regionBlitted"]
@@ -403,8 +407,7 @@ pub mod qobject {
         #[qinvokable]
         fn move_layer_path(self: Pin<&mut Self>, path: &QString, delta: i32) -> bool;
 
-        /// Move node `path` next to (or into) `target`: 0 above, 1 below, 2 into a
-        /// group. Refuses the Background, locked sources, and a bad drop target.
+        /// Move node `path` next to (or into) `target`: 0 above, 1 below, 2 into a group. Refuses the Background, locked sources, and a bad drop target.
         #[qinvokable]
         fn move_layer_to(self: Pin<&mut Self>, path: &QString, target: &QString, mode: i32)
             -> bool;
@@ -441,8 +444,7 @@ pub mod qobject {
         #[qinvokable]
         fn preview_layers_fill(self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32;
 
-        /// Commit fill opacity: apply and record one undo state when the value
-        /// changed or a preview ran. Returns the number changed.
+        /// Commit fill opacity: apply and record one undo state when the value changed or a preview ran. Returns the number changed.
         #[qinvokable]
         fn commit_layers_fill(self: Pin<&mut Self>, paths: &QStringList, value: i32) -> i32;
 
@@ -479,8 +481,7 @@ pub mod qobject {
         #[qinvokable]
         fn ungroup_layers(self: Pin<&mut Self>, paths: &QStringList) -> i32;
 
-        /// Insert a new transparent raster layer inside `selection_path` when it
-        /// is a group else above it, returning the new path or empty.
+        /// Insert a new transparent raster layer inside `selection_path` when it is a group else above it, returning the new path or empty.
         #[qinvokable]
         fn add_layer_in(self: Pin<&mut Self>, selection_path: &QString) -> QString;
 
@@ -505,8 +506,7 @@ pub mod qobject {
             clipping: bool,
         ) -> QString;
 
-        /// Create an empty group from the New Group dialog, carrying
-        /// name/color/blend/opacity. Records one "New Group" state.
+        /// Create an empty group from the New Group dialog, carrying name/color/blend/opacity. Records one "New Group" state.
         #[qinvokable]
         fn new_group_dialog(
             self: Pin<&mut Self>,

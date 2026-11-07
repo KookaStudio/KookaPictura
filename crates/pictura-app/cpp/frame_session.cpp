@@ -123,7 +123,7 @@ bool PicturaMainWindow::dockNeedsRebind() const
            || (view && view->document_generation() != dockGeneration_);
 }
 
-void PicturaMainWindow::refreshDock(bool includeSelfRefreshing)
+void PicturaMainWindow::refreshDock(bool includeSelfRefreshing, bool includeLayers)
 {
     // Each panel is timed by name so a panel whose refresh scales with the
     // document shows up under PICTURA_PAINT_TIMING (#1151).
@@ -134,7 +134,11 @@ void PicturaMainWindow::refreshDock(bool includeSelfRefreshing)
         }
     };
     if (includeSelfRefreshing) {
-        timed("cxx_layersPanel_refresh", layersPanel_);
+        // A visibility edit already patched its rows in place; its pending
+        // pass skips this panel rather than rebuilding every thumbnail.
+        if (includeLayers) {
+            timed("cxx_layersPanel_refresh", layersPanel_);
+        }
         timed("cxx_historyPanel_refresh", historyPanel_);
     }
     timed("cxx_navigatorPanel_refresh", navigatorPanel_);
@@ -176,9 +180,10 @@ void PicturaMainWindow::refreshPanels()
         panelsFreshlyBound_ = false;
     } else {
         const bool includeSelfRefreshing = !panelsRefreshedByChanged_;
+        const bool includeLayers = !layersPanel_ || !layersPanel_->consumeVisibilityPatch();
         panelsRefreshedByChanged_ = false;
         refreshingDock_ = true;
-        refreshDock(includeSelfRefreshing);
+        refreshDock(includeSelfRefreshing, includeLayers);
         refreshingDock_ = false;
     }
     if (registryRefreshPending_) {
