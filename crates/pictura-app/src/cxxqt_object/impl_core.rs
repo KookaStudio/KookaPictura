@@ -53,7 +53,6 @@ pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 mod deferred_composite;
 mod deferred_pyramid;
 mod display;
-#[cfg(test)]
 pub(in crate::cxxqt_object) use display::mask_display_plane;
 mod recovery;
 mod save;

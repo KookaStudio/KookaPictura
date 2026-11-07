@@ -12,6 +12,7 @@ mod crossed_quad;
 mod kernel;
 mod layer_masks;
 mod layer_style;
+mod mask_domain;
 mod mask_edit;
 mod merge;
 #[cfg(test)]
@@ -87,6 +88,8 @@ pub use layer_style::{
     scale_layer_effects, set_all_effects_visible, set_document_layer_style_value,
     set_layer_style_value, LayerStyle,
 };
+pub(crate) use mask_domain::normalize_layer_mask;
+pub use mask_domain::translate_layer_mask;
 pub use mask_edit::{
     mask_document, mask_document_coverage, move_mask_selection_content, write_mask_back,
     MaskDocument,

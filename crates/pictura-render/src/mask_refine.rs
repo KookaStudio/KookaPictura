@@ -276,13 +276,13 @@ pub(crate) fn resolve_vector(mask: Option<&VectorMask>, clip: PsdRect) -> Vector
 }
 
 fn plain_mask_at(plane: &Plane<u8>, rect: PsdRect, default_color: u8, d: u8, x: i32, y: i32) -> u8 {
-    let mw = rect.width();
-    let mh = rect.height();
+    let mw = i64::from(rect.right) - i64::from(rect.left);
+    let mh = i64::from(rect.bottom) - i64::from(rect.top);
     let m = if mw <= 0 || mh <= 0 {
         default_color
     } else {
-        let mx = x - rect.left;
-        let my = y - rect.top;
+        let mx = i64::from(x) - i64::from(rect.left);
+        let my = i64::from(y) - i64::from(rect.top);
         if mx < 0 || my < 0 || mx >= mw || my >= mh {
             default_color
         } else {
@@ -294,13 +294,13 @@ fn plain_mask_at(plane: &Plane<u8>, rect: PsdRect, default_color: u8, d: u8, x: 
 }
 
 fn native_mask_sample(samples: &Samples, rect: PsdRect, x: i32, y: i32) -> Option<f32> {
-    let mw = rect.width();
-    let mh = rect.height();
+    let mw = i64::from(rect.right) - i64::from(rect.left);
+    let mh = i64::from(rect.bottom) - i64::from(rect.top);
     if mw <= 0 || mh <= 0 {
         return None;
     }
-    let mx = x - rect.left;
-    let my = y - rect.top;
+    let mx = i64::from(x) - i64::from(rect.left);
+    let my = i64::from(y) - i64::from(rect.top);
     if mx < 0 || my < 0 || mx >= mw || my >= mh {
         return None;
     }

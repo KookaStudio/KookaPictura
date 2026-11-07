@@ -159,6 +159,8 @@ private slots:
     void fillThumbnailPreviews();
     void fillThumbnailIsSquare();
     void subCanvasLayerPlacement();
+    void maskThumbnailUsesOpaqueCanvasCoverage();
+    void canvasAspectThumbnailRegression();
 };
 
 void LayersSnapshotTest::fixtureExpectations()
@@ -356,13 +358,70 @@ void LayersSnapshotTest::subCanvasLayerPlacement()
     QCOMPARE(row.thumbnail.pixelColor(0, 0).alpha(), 0);
     QCOMPARE(row.thumbnail.pixelColor(7, 2).alpha(), 255);
     QCOMPARE(row.maskThumbnail.size(), QSize(24, 12));
-    QCOMPARE(row.maskThumbnail.pixelColor(0, 0).alpha(), 0);
+    QCOMPARE(row.maskThumbnail.pixelColor(0, 0), QColor(Qt::black));
     QCOMPARE(row.maskThumbnail.pixelColor(7, 2).alpha(), 255);
 
     const Snapshot bounded = pictura::layers_api::snapshot(*view, 24, false);
     const LayerRow bounds = findRow(bounded);
     QCOMPARE(bounds.thumbnail.size(), QSize(24, 24));
-    QCOMPARE(bounds.maskThumbnail.size(), QSize(24, 24));
+    QCOMPARE(bounds.maskThumbnail.size(), QSize(24, 12));
+}
+
+void LayersSnapshotTest::maskThumbnailUsesOpaqueCanvasCoverage()
+{
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 20, 10, QStringLiteral("rgb"), 8,
+                                     0xffffffu, false, 72.0, false));
+    QVERIFY(view.select_rect(6, 2, 4, 4, QStringLiteral("new"), 0.0));
+    const QString base = view.active_layer_path();
+    QVERIFY(pictura::clipboard_copy(view, base, false));
+    const QString pasted = pictura::clipboard_paste(view, base, pictura::PasteKind::Plain, 0, 0);
+    QVERIFY(!pasted.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(view, pasted, QStringLiteral("reveal-all")));
+    for (bool entire : {false, true}) {
+        const Snapshot snap = pictura::layers_api::snapshot(view, 24, entire);
+        bool found = false;
+        for (const auto& row : snap.rows) {
+            if (row.path != pasted) { continue; }
+            found = true;
+            QCOMPARE(row.maskThumbnail.size(), QSize(24, 12));
+            QCOMPARE(row.maskThumbnail.pixelColor(0, 0), QColor(Qt::black));
+            QCOMPARE(row.maskThumbnail.pixelColor(8, 3), QColor(Qt::white));
+            for (int y=0; y<12; ++y) { for (int x=0; x<24; ++x) {
+                QCOMPARE(row.maskThumbnail.pixelColor(x,y).alpha(), 255);
+            }}
+            QCOMPARE(row.thumbnail.size(), entire ? QSize(24,12) : QSize(24,24));
+        }
+        QVERIFY(found);
+    }
+}
+
+void LayersSnapshotTest::canvasAspectThumbnailRegression()
+{
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 20, 40, QStringLiteral("rgb"), 8,
+                                     0xffffffu, false, 72.0, false));
+    const auto full = pictura::layers_api::snapshot(view,24,true);
+    QCOMPARE(full.rows.size(), 1);
+    QCOMPARE(full.rows[0].thumbnail.size(),QSize(12,24));
+    QCOMPARE(full.rows[0].thumbnail.pixelColor(11,12).alpha(),255);
+    QVERIFY(view.select_rect(4,8,3,4,QStringLiteral("new"),0));
+    const QString base = view.active_layer_path();
+    QVERIFY(pictura::clipboard_copy(view,base,false));
+    const QString path = pictura::clipboard_paste(view,base,pictura::PasteKind::Plain,0,0);
+    QVERIFY(!path.isEmpty());
+    for (const auto& row : pictura::layers_api::snapshot(view,24,true).rows) {
+        if (row.path == path) {
+            QCOMPARE(row.thumbnail.size(),QSize(12,24));
+            QCOMPARE(row.thumbnail.pixelColor(0,0).alpha(),0);
+            QCOMPARE(row.thumbnail.pixelColor(3,6).alpha(),255);
+        }
+    }
+    const QString fill = view.add_solid_fill(0xffaabbccu);
+    QVERIFY(!fill.isEmpty());
+    for (const auto& row : pictura::layers_api::snapshot(view,24,true).rows) {
+        if (row.path == fill) { QCOMPARE(row.thumbnail.size(),QSize(24,24)); }
+    }
 }
 
 QTEST_MAIN(LayersSnapshotTest)

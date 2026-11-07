@@ -98,6 +98,7 @@ pub(super) fn layer_mask_set_feather(
 }
 
 pub(super) fn layer_mask_invert(view: Pin<&mut PictureView>) -> bool {
+    pictura_core::memory::clear_refusal();
     edit(view, "Invert", true, pictura_render::invert_layer_mask)
 }
 

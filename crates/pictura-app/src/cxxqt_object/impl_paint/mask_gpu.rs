@@ -112,7 +112,7 @@ impl qobject::PictureView {
         let Some(dirty) = dirty else {
             return false;
         };
-        {
+        let written = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let (Some(doc), Some(ctx)) =
@@ -120,7 +120,11 @@ impl qobject::PictureView {
             else {
                 return false;
             };
-            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
+            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty))
+        };
+        if !written {
+            self.as_mut().cancel_paint();
+            return false;
         }
         let pad = self.rust().session.live.paint_pad();
         let present = PsdRect {

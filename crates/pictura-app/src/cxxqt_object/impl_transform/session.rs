@@ -565,6 +565,9 @@ impl qobject::PictureView {
     /// match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
         memory_gate::clear();
+        if let Some(path) = super::mask_move::target(self.rust()) {
+            return self.begin_mask_move(path);
+        }
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
@@ -657,6 +660,9 @@ impl qobject::PictureView {
     /// (pixel/shape), visible, position-unlocked layers and ordered by panel
     /// position (topmost-first). `None` when the selection has no such layer.
     pub(super) fn move_group_paths(&self) -> Option<Vec<String>> {
+        if let Some(path) = super::mask_move::target(self.rust()) {
+            return Some(vec![path]);
+        }
         let rust = self.rust();
         let doc = rust.session.doc.as_ref()?;
         if rust.layer_target.is_empty() {
@@ -822,6 +828,9 @@ impl qobject::PictureView {
         dx: i32,
         dy: i32,
     ) -> bool {
+        if self.rust().mask_move_baseline.is_some() {
+            return self.render_mask_move_preview(dx, dy);
+        }
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let (Some(view), Some(doc)) = (rust.move_view, rust.session.doc.as_ref()) else {
@@ -841,6 +850,7 @@ impl qobject::PictureView {
     }
 
     pub fn end_move_preview(mut self: Pin<&mut Self>) {
+        self.as_mut().end_mask_move();
         // Keep the cache: the next press reuses a full-resolution preview when
         // the revision, topmost layer, and clamped rect are unchanged. A view
         // preview is rebuilt on every press (`move_cache_valid`).
@@ -850,7 +860,8 @@ impl qobject::PictureView {
     /// Drop the transform overlay's prepared base/layer. The C++ canvas clears
     /// its copy separately; this keeps the Rust side from handing a stale
     /// preview to a later undo or move.
-    pub fn clear_transform_preview(self: Pin<&mut Self>) {
+    pub fn clear_transform_preview(mut self: Pin<&mut Self>) {
+        self.as_mut().end_mask_move();
         let mut rust = self.rust_mut();
         rust.move_base = None;
         rust.move_base_origin = None;
@@ -872,6 +883,9 @@ impl qobject::PictureView {
         if dx == 0 && dy == 0 {
             return false;
         }
+        if let Some(path) = super::mask_move::target(self.rust()) {
+            return self.commit_mask_move(path, dx, dy);
+        }
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
@@ -880,10 +894,11 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
+            let original = doc.clone();
             let dirty = translate_move_group(doc, &paths, dx, dy);
             // The damage's composite, its sRGB copy, and the display patch.
             if dirty.is_some_and(|rect| !memory_gate::admit(12 * memory_gate::area(rect))) {
-                translate_move_group(doc, &paths, -dx, -dy);
+                *doc = original;
                 return false;
             }
             if dirty.is_some() {

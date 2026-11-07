@@ -268,11 +268,11 @@ public:
     }
 
     /// Letterbox a square thumbnail `box` to the document's aspect ratio, so a
-    /// wide or tall document is not stretched. A group (folder glyph) or a
-    /// zero-size document keeps the square box.
+    /// wide or tall document is not stretched. A zero-size document keeps
+    /// the original box.
     QRect letterboxedThumb(const QRect& box, const QModelIndex& index) const
     {
-        if (box.isEmpty() || index.data(KindRole).toString() == QLatin1String("group")) {
+        if (box.isEmpty()) {
             return box;
         }
         const int documentWidth = index.data(DocumentWidthRole).toInt();
@@ -332,7 +332,7 @@ public:
     /// letterboxed to the document. A group keeps its slot.
     QRect thumbnailCard(const QRect& box, const QModelIndex& index) const
     {
-        if (box.isEmpty()) {
+        if (box.isEmpty() || index.data(KindRole).toString() == QLatin1String("group")) {
             return box;
         }
         if (squareThumbCard(index)) {
@@ -417,7 +417,7 @@ public:
         }
         const int side = linkSide(thumb);
         const int left = imageSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
-        return thumbnailCard(thumbSlot(itemRect, left), index);
+        return letterboxedThumb(thumbSlot(itemRect, left), index);
     }
 
     /// The x just past the mask thumbnail's square slot (or the image slot when
@@ -456,7 +456,7 @@ public:
         }
         const int side = linkSide(thumb);
         const int left = maskSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
-        return thumbnailCard(thumbSlot(itemRect, left), index);
+        return letterboxedThumb(thumbSlot(itemRect, left), index);
     }
 
     /// The x just past the last thumbnail slot (image, mask, or vector).
@@ -757,24 +757,14 @@ public:
                                     linkPix);
             }
             maskRect = maskThumbRect(rect, index);
-            // Only a raster row's mask card is the document-aspect slot; a
-            // group, type, adjustment, or fill card keeps its previous bands.
-            if (!squareThumbCard(index)
-                && index.data(KindRole).toString() != QLatin1String("group")) {
-                painter->drawTiledPixmap(maskRect, checkerTile());
-            }
-            drawImageFit(painter, maskRect, mask);
-            if (index.data(MaskTargetRole).toBool()) {
-                // The active mask thumbnail wears the CS6 focus border: a dark
-                // outline outside a white line, legible over any coverage.
-                painter->save();
-                painter->setBrush(Qt::NoBrush);
-                painter->setPen(QColor(0, 0, 0, 200));
-                painter->drawRect(maskRect.adjusted(-1, -1, 0, 0));
-                painter->setPen(Qt::white);
-                painter->drawRect(maskRect.adjusted(0, 0, -1, -1));
-                painter->restore();
-            }
+            // Both grids represent the document; fitting the rounded preview
+            // again can leave an uncovered edge in a taller row slot.
+            painter->drawImage(maskRect, mask);
+            painter->save();
+            painter->setBrush(Qt::NoBrush);
+            painter->setPen(QPen(Qt::black, 1));
+            painter->drawRect(maskRect.adjusted(0, 0, -1, -1));
+            painter->restore();
             if (index.data(MaskDisabledRole).toBool()) {
                 paintDisabledCross(painter, maskRect, thumb);
             }
@@ -790,7 +780,7 @@ public:
                                     linkPix);
             }
             vectorRect = vectorMaskThumbRect(rect, index);
-            drawImageFit(painter, vectorRect, vectorMask);
+            painter->drawImage(vectorRect, vectorMask);
             if (index.data(VectorMaskDisabledRole).toBool()) {
                 paintDisabledCross(painter, vectorRect, thumb);
             }
@@ -869,8 +859,10 @@ public:
         // White 1 px corner brackets one pixel outside the outline, on the
         // active edit target's thumbnail only; never around a group's icon.
         const int active = index.data(ActiveThumbRole).toInt();
-        if (thumb > 0 && index.data(KindRole).toString() != QLatin1String("group")
-            && singularActive(selected, option.widget, index)) {
+        if (thumb > 0 && singularActive(selected, option.widget, index)
+            && (index.data(KindRole).toString() != QLatin1String("group")
+                || (active == 1 && !maskRect.isEmpty())
+                || (active == 2 && !vectorRect.isEmpty()))) {
             QRect target = imageRect;
             if (active == 2 && !vectorRect.isEmpty()) {
                 target = vectorRect;
@@ -905,22 +897,6 @@ private:
         painter->drawLine(r.left(), r.bottom(), r.left() + len, r.bottom());
         painter->drawLine(r.right() - len, r.bottom(), r.right(), r.bottom());
         painter->drawLine(r.right(), r.bottom() - len, r.right(), r.bottom());
-    }
-
-    /// Draw `image` centred in `card`, scaled to fit while preserving its aspect
-    /// ratio, so a document-aspect mask in a square icon-row card is letterboxed
-    /// rather than stretched. A card whose aspect matches the image is filled
-    /// exactly.
-    static void drawImageFit(QPainter* painter, const QRect& card, const QImage& image)
-    {
-        if (card.isEmpty() || image.isNull()) {
-            return;
-        }
-        const QSize scaled = image.size().scaled(card.size(), Qt::KeepAspectRatio);
-        const QRect target(card.left() + (card.width() - scaled.width()) / 2,
-                           card.top() + (card.height() - scaled.height()) / 2,
-                           scaled.width(), scaled.height());
-        painter->drawImage(target, image);
     }
 
     /// The CS6 disabled-mask mark: a red cross over the thumbnail.

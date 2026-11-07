@@ -503,13 +503,7 @@ impl qobject::PictureView {
                                 .mask
                                 .as_ref()
                                 .and_then(|mask| {
-                                    if entire_document {
-                                        mask_thumbnail_positioned(
-                                            mask, doc.width, doc.height, thumb,
-                                        )
-                                    } else {
-                                        mask_thumbnail_image(mask, thumb)
-                                    }
+                                    mask_thumbnail_positioned(mask, doc.width, doc.height, thumb)
                                 })
                                 .unwrap_or_default()
                         };

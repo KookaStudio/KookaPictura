@@ -3,6 +3,7 @@ mod convex;
 mod dispatch;
 mod distort;
 mod geometry;
+mod mask_move;
 mod perspective;
 mod session;
 mod skew;
@@ -93,17 +94,26 @@ pub(super) fn translate_move_group(
     dx: i32,
     dy: i32,
 ) -> Option<PsdRect> {
+    let mut candidate = doc.clone();
     let mut dirty: Option<PsdRect> = None;
     for path in paths {
-        let Some(before) = move_reach(doc, path) else {
-            continue;
-        };
-        if !pictura_render::translate_layer_path(doc, path, dx, dy) {
+        if movable_layer(&candidate, path).is_none()
+            || pictura_render::resolve_path(&candidate, path).is_some_and(layer_move_locked)
+        {
             continue;
         }
-        let after = move_reach(doc, path).unwrap_or(before);
+        let Some(before) = move_reach(&candidate, path) else {
+            continue;
+        };
+        if !pictura_render::translate_layer_path(&mut candidate, path, dx, dy) {
+            return None;
+        }
+        let after = move_reach(&candidate, path).unwrap_or(before);
         let rect = before.union(after);
         dirty = Some(dirty.map_or(rect, |acc| acc.union(rect)));
+    }
+    if dirty.is_some() {
+        *doc = candidate;
     }
     dirty
 }

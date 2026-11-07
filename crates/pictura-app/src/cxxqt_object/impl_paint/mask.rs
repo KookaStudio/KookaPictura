@@ -124,11 +124,10 @@ fn snapshot_region(preview: &PreviewStroke, rect: PsdRect) -> Vec<u8> {
 
 impl qobject::PictureView {
     /// Begin a stroke on the raster mask of the layer at `path`: the mask is
-    /// exposed as a mask-sized grayscale document and an ordinary [`Stroke`]
+    /// exposed as a canvas-sized grayscale document and an ordinary [`Stroke`]
     /// runs on it, so the mask gains the exact brush behaviour. A dab over the
     /// raster budget runs the GPU stroke, or previews at a pyramid level when
-    /// the GPU stroke is not taken. False without a mask, on a zero-sized mask
-    /// rectangle, or when the stroke is refused.
+    /// the GPU stroke is not taken. False without a mask, or when the stroke is refused.
     pub(in super::super) fn begin_mask_paint(
         mut self: Pin<&mut Self>,
         path: &str,
@@ -141,9 +140,9 @@ impl qobject::PictureView {
 
 impl PictureViewRust {
     /// Begin a stroke on the raster mask of the layer at `path`: the mask is
-    /// exposed as a mask-sized grayscale document and an ordinary [`Stroke`]
+    /// exposed as a canvas-sized grayscale document and an ordinary [`Stroke`]
     /// runs on it, so the mask gains the exact brush behaviour. False without
-    /// a mask, on a zero-sized mask rectangle, or when the stroke is refused.
+    /// a mask or when the stroke is refused.
     pub(in crate::cxxqt_object) fn begin_mask_paint(
         &mut self,
         path: &str,
@@ -162,6 +161,9 @@ impl PictureViewRust {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
+            if !memory_gate::admit(u64::from(doc.width) * u64::from(doc.height) * 4) {
+                return false;
+            }
             let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
                 return false;
             };
@@ -169,6 +171,7 @@ impl PictureViewRust {
                 .ok()
                 .map(|stroke| MaskStroke {
                     path: path.to_string(),
+                    baseline: pictura_render::resolve_path(doc, path).cloned(),
                     rect: mask.rect,
                     document: mask.document,
                     stroke,
@@ -292,7 +295,7 @@ impl qobject::PictureView {
         let Some(dirty) = dirty else {
             return false;
         };
-        {
+        let written = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let (Some(doc), Some(ctx)) =
@@ -300,7 +303,11 @@ impl qobject::PictureView {
             else {
                 return false;
             };
-            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
+            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty))
+        };
+        if !written {
+            self.as_mut().cancel_paint();
+            return false;
         }
         let pad = self.rust().session.live.paint_pad();
         let present = to_document(dirty, rect).grow(pad);
@@ -333,7 +340,7 @@ impl qobject::PictureView {
         let Some(dirty) = dirty else {
             return false;
         };
-        {
+        let written = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let (Some(doc), Some(ctx)) =
@@ -341,7 +348,11 @@ impl qobject::PictureView {
             else {
                 return false;
             };
-            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
+            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty))
+        };
+        if !written {
+            self.as_mut().cancel_paint();
+            return false;
         }
         let pad = self.rust().session.live.paint_pad();
         let present = to_document(dirty, rect).grow(pad);
@@ -399,7 +410,14 @@ impl qobject::PictureView {
                 }
             }
             if let (Some(dirty), Some(doc)) = (ctx.stroke.dirty(), rust.session.doc.as_mut()) {
-                pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
+                if !pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty)) {
+                    if let Some(original) = ctx.baseline.take() {
+                        if let Some(layer) = pictura_render::resolve_path_mut(doc, &ctx.path) {
+                            *layer = original;
+                        }
+                    }
+                    return false;
+                }
             }
             paint_timing::record("commit_replay_mask_stroke", t.elapsed());
         }
@@ -542,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dab_past_the_mask_edge_previews_there_and_restores() {
+    fn a_dab_past_the_stored_mask_edge_is_editable_and_preview_restores() {
         use super::super::super::helpers_composite::display_rgba_bytes;
         use super::super::super::tests::pixel_layer;
         use super::super::rasterize_preview;
@@ -614,11 +632,29 @@ mod tests {
             start,
             "the preview paints past the mask's rectangle"
         );
-        let mask_doc = pictura_render::mask_document_coverage(&doc, "0").unwrap();
+        let mut mask_doc = pictura_render::mask_document_coverage(&doc, "0").unwrap();
+        assert_eq!(mask_doc.document.height, 64, "the canvas is editable");
+        let mut stroke = pictura_paint::Stroke::begin_at(&mask_doc.document, "0", cfg).unwrap();
+        assert!(stroke.sample(
+            &mut mask_doc.document,
+            StrokeSample {
+                x: 32.0,
+                y: 30.0,
+                pressure: 1.0
+            }
+        ));
+        let dirty = stroke.finish().unwrap();
         assert_eq!(
-            mask_doc.document.height, 32,
-            "the exact stroke cannot reach it"
+            mask_doc.document.layers[0].channels[0].data[36 * 64 + 32],
+            0
         );
+        assert!(pictura_render::write_mask_back(
+            &mut doc,
+            "0",
+            &mask_doc.document,
+            Some(dirty)
+        ));
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap().rect, whole);
         let restore = snapshot_region(&p, extent);
         let row = (below.top - extent.top) as usize * extent.width() as usize;
         let i = (row + (below.left - extent.left) as usize) * 4;

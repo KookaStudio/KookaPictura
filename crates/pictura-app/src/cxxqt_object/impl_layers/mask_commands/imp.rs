@@ -10,12 +10,17 @@ use pictura_core::{Document, LayerMask};
 /// sees it: its data inside the rectangle, `default_color` outside or without
 /// data. Disabled masks read the same: the coverage is what is edited.
 pub(in crate::cxxqt_object) fn coverage_at(mask: &LayerMask, x: i32, y: i32) -> u8 {
-    let (mw, mh) = (mask.rect.width(), mask.rect.height());
-    let (mx, my) = (x - mask.rect.left, y - mask.rect.top);
+    let (mw, mh) = (
+        i64::from(mask.rect.right) - i64::from(mask.rect.left),
+        i64::from(mask.rect.bottom) - i64::from(mask.rect.top),
+    );
+    let (mx, my) = (
+        i64::from(x) - i64::from(mask.rect.left),
+        i64::from(y) - i64::from(mask.rect.top),
+    );
     match &mask.data {
         Some(data) if mx >= 0 && my >= 0 && mx < mw && my < mh => data
-            .get(my as usize * mw as usize + mx as usize)
-            .copied()
+            .sample(my as usize * mw as usize + mx as usize)
             .unwrap_or(mask.default_color),
         _ => mask.default_color,
     }

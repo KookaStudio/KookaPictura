@@ -1,20 +1,20 @@
 //! Editing a raster layer mask's coverage.
 //!
 //! The paint, fill, and filter engines edit a [`Layer`](pictura_core::Layer)'s
-//! colour channels, so a mask is exposed as a standalone mask-sized grayscale
+//! colour channels, so a mask is exposed as a standalone canvas-sized grayscale
 //! document they can edit unchanged: [`mask_document`] builds it and
 //! [`write_mask_back`] copies the result into the real mask. The document's
 //! single layer is transparency-locked so opacity stays 255 while its colour
 //! plane carries the coverage.
 
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, Plane, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
 
 use super::clipboard::coverage_bounds;
 use super::paths::{resolve_path, resolve_path_mut};
 
-/// A layer's raster mask as a standalone document: `document` is a mask-sized
+/// A layer's raster mask as a standalone document: `document` is a canvas-sized
 /// grayscale image whose one layer's colour plane is the coverage, and `rect`
-/// is the mask's document-space rectangle (the layer itself sits at the
+/// is the document-space editing window (the layer itself sits at the
 /// origin, so mask-local edits map 1:1).
 pub struct MaskDocument {
     pub document: Document,
@@ -22,42 +22,44 @@ pub struct MaskDocument {
 }
 
 /// The mask of the layer at `path` as a grayscale document, or `None` without
-/// a layer mask, for a zero-sized mask rectangle, or when the path does not
-/// resolve. A data-less mask is materialised from its default colour.
+/// a layer mask, for an empty document, or when the path does not
+/// resolve. A data-less import retains its existing visible white coverage.
 pub fn mask_document(doc: &Document, path: &str) -> Option<MaskDocument> {
-    build_mask_document(doc, path)
+    mask_document_coverage(doc, path)
 }
 
-/// [`mask_document`] as a **single-channel** grayscale document: its one layer
-/// carries the coverage as channel `0` only, sharing the mask's plane, and the
-/// document has no composite. The paint stroke edits the mask through this
-/// form, so starting a stroke copies nothing, a dab writes one byte per pixel,
-/// and only the coverage plane forks, on the first write. Filters and fills
-/// keep the RGBA [`mask_document`] a filter may expect.
+/// Canvas-sized single-channel editing view, leaving retained storage untouched.
 pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument> {
+    let rect = super::mask_domain::canvas(doc)?;
     let mask = resolve_path(doc, path)?.mask.as_ref()?;
-    let rect = mask.rect;
-    let (w, h) = (rect.width().max(0) as u32, rect.height().max(0) as u32);
-    let count = (w as usize) * (h as usize);
-    if count == 0 {
+    let n = super::mask_domain::pixels(rect)?;
+    if mask
+        .data
+        .as_ref()
+        .is_some_and(|data| Some(data.len()) != super::mask_domain::pixels(mask.rect))
+    {
         return None;
     }
-    let coverage: Plane<u8> = match &mask.data {
-        Some(data) if data.len() == count => data.clone(),
-        _ => vec![mask.default_color; count].into(),
+    let coverage = if mask.rect == rect && mask.data.as_ref().is_some_and(|p| p.len() == n) {
+        mask.data.as_ref()?.clone()
+    } else {
+        let _held = super::mask_domain::reserve(n.checked_mul(2)?)?;
+        let mut out = super::mask_domain::allocate(n, 0)?;
+        let w = doc.width as usize;
+        for y in 0..doc.height as usize {
+            let row = out.row_mut(y, w)?;
+            for (x, value) in row.iter_mut().enumerate() {
+                *value = super::mask_domain::stored(mask, x as i32, y as i32);
+            }
+        }
+        out
     };
-    // Sized after construction, so `new` allocates no composite.
     let mut document = Document::new(0, 0, ColorMode::Grayscale, BitDepth::Eight);
-    document.width = w;
-    document.height = h;
+    document.width = doc.width;
+    document.height = doc.height;
     document.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "Mask".to_string(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h as i32,
-            right: w as i32,
-        },
+        name: "Mask".into(),
+        rect,
         channels: vec![Channel {
             id: 0,
             data: coverage,
@@ -68,113 +70,57 @@ pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument
     Some(MaskDocument { document, rect })
 }
 
-fn build_mask_document(doc: &Document, path: &str) -> Option<MaskDocument> {
-    let layer = resolve_path(doc, path)?;
-    let mask = layer.mask.as_ref()?;
-    let rect = mask.rect;
-    let (w, h) = (rect.width().max(0) as u32, rect.height().max(0) as u32);
-    if w == 0 || h == 0 {
-        return None;
-    }
-    let count = (w as usize) * (h as usize);
-    let coverage = match &mask.data {
-        Some(data) if data.len() == count => data.as_slice(),
-        _ => {
-            return Some(MaskDocument {
-                document: gray_document(w, h, None, mask.default_color),
-                rect,
-            })
-        }
-    };
-    Some(MaskDocument {
-        document: gray_document(w, h, Some(coverage), 0),
-        rect,
-    })
-}
-
-/// A `w × h` opaque RGBA document whose colour plane is `coverage` (or `fill`
-/// when absent), with transparency locked so an edit cannot rewrite the opacity.
-fn gray_document(w: u32, h: u32, coverage: Option<&[u8]>, fill: u8) -> Document {
-    let count = (w as usize) * (h as usize);
-    let mut rgba = Vec::with_capacity(count * 4);
-    for i in 0..count {
-        let v = coverage.map_or(fill, |data| data.get(i).copied().unwrap_or(fill));
-        rgba.extend_from_slice(&[v, v, v, 255]);
-    }
-    let mut document = Document::from_rgba("Mask", w, h, &rgba);
-    if let Some(layer) = document.layers.first_mut() {
-        layer.lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
-    }
-    document
-}
-
-/// Copy the edited document's colour plane back into the mask of the layer at
-/// `path`, limited to `region` in mask-local coordinates (`None` copies the
-/// whole plane). A data-less mask is materialised from its default colour
-/// first. Returns whether the mask exists and the copy ran.
+/// Patch a canvas edit into retained mask storage; the region is document-space.
 pub fn write_mask_back(
     doc: &mut Document,
     path: &str,
     edited: &Document,
     region: Option<PsdRect>,
 ) -> bool {
-    let Some(layer) = resolve_path_mut(doc, path) else {
+    let Some(canvas) = super::mask_domain::canvas(doc) else {
         return false;
     };
-    let Some(mask) = layer.mask.as_mut() else {
-        return false;
-    };
-    let w = mask.rect.width().max(0) as usize;
-    let h = mask.rect.height().max(0) as usize;
-    if w == 0 || h == 0 {
+    if edited.width != doc.width || edited.height != doc.height {
         return false;
     }
     let Some(source) = edited
         .layers
         .first()
-        .and_then(|layer| layer.channels.iter().find(|c| c.id == 0))
+        .and_then(|l| l.channels.iter().find(|c| c.id == 0))
     else {
         return false;
     };
-    if source.data.len() < w * h {
+    if Some(source.data.len()) != super::mask_domain::pixels(canvas) {
         return false;
     }
-    let src = source.data.as_slice();
-    let dst: &mut [u8] = match &mut mask.data {
-        Some(data) if data.len() == w * h => &mut *data,
-        _ => {
-            mask.data = Some(vec![mask.default_color; w * h].into());
-            &mut *mask.data.as_mut().expect("just materialised")
-        }
+    let Some(region) = region.unwrap_or(canvas).intersect(canvas) else {
+        return false;
     };
-    match region {
-        None => dst.copy_from_slice(&src[..w * h]),
-        Some(region) => {
-            let (x0, y0) = (region.left.max(0) as usize, region.top.max(0) as usize);
-            let (x1, y1) = (
-                (region.right.max(0) as usize).min(w),
-                (region.bottom.max(0) as usize).min(h),
-            );
-            if x1 <= x0 || y1 <= y0 {
-                return true;
-            }
-            for y in y0..y1 {
-                let (a, b) = (y * w + x0, y * w + x1);
-                dst[a..b].copy_from_slice(&src[a..b]);
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    let Some(mut pending) = super::mask_domain::prepare(layer, canvas, region) else {
+        return false;
+    };
+    let w = canvas.width() as usize;
+    for y in region.top..region.bottom {
+        let Some(row) = source.data.row(y as usize, w) else {
+            return false;
+        };
+        for x in region.left..region.right {
+            if pending.write(x, y, row[x as usize]).is_none() {
+                return false;
             }
         }
     }
+    pending.publish(layer);
     true
 }
 
-/// Move the coverage selected by `coverage` (mask-local, `0..=255`) inside the
-/// mask of the layer at `path` by `(dx, dy)`. The vacated source coverage is
-/// blended toward `background` by the selection coverage, and the moved
-/// coverage is composited at the destination using the source coverage as its
-/// alpha. With `duplicate`, the source coverage stays and the moved copy is
-/// composited over the destination. The mask rectangle and the layer's pixels
-/// are untouched. Returns false without a mask, for a zero-sized mask, a
-/// zero offset, or a selection plane that does not match the mask size.
+/// Move document-sized selection coverage within a raster mask. Destinations
+/// outside the canvas stay in retained storage; vacated samples blend toward
+/// black. Duplicates preserve the source. Reads use the immutable source mask
+/// so overlapping moves never feed on prior writes.
 pub fn move_mask_selection_content(
     doc: &mut Document,
     path: &str,
@@ -182,64 +128,67 @@ pub fn move_mask_selection_content(
     dx: i32,
     dy: i32,
     duplicate: bool,
-    background: u8,
+    _background: u8,
 ) -> bool {
     if dx == 0 && dy == 0 {
         return false;
     }
+    let Some(canvas) = super::mask_domain::canvas(doc) else {
+        return false;
+    };
+    let w = doc.width as usize;
+    let h = doc.height;
+    if coverage.len() != w * h as usize {
+        return false;
+    }
+    let Some(bounds) = coverage_bounds(coverage, doc.width, h) else {
+        return false;
+    };
+    let Some(dest) = super::mask_domain::translated(bounds, dx, dy) else {
+        return false;
+    };
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    let Some(mask) = layer.mask.as_mut() else {
+    let Some(original) = layer.mask.clone() else {
         return false;
     };
-    let w = mask.rect.width().max(0) as usize;
-    let h = mask.rect.height().max(0) as usize;
-    if w == 0 || h == 0 || coverage.len() != w * h {
-        return false;
-    }
-    // An empty selection has nothing to lift; refusing here keeps it from
-    // materialising a data-less mask and recording an empty move.
-    let Some(bounds) = coverage_bounds(coverage, w as u32, h as u32) else {
+    let Some(mut pending) = super::mask_domain::prepare(layer, canvas, dest) else {
         return false;
     };
-    let snapshot: Vec<u8> = match &mask.data {
-        Some(data) if data.len() == w * h => data.as_slice().to_vec(),
-        _ => vec![mask.default_color; w * h],
-    };
-    let mut out = snapshot.clone();
     if !duplicate {
         for y in bounds.top..bounds.bottom {
-            let row = y as usize * w;
-            let start = row + bounds.left as usize;
-            let end = row + bounds.right as usize;
-            for (i, &selected) in coverage[start..end].iter().enumerate() {
-                if selected != 0 {
-                    let at = start + i;
-                    out[at] = blend(background, selected, snapshot[at]);
+            for x in bounds.left..bounds.right {
+                let selected = coverage[y as usize * w + x as usize];
+                if selected != 0
+                    && pending
+                        .write(
+                            x,
+                            y,
+                            blend(0, selected, super::mask_domain::stored(&original, x, y)),
+                        )
+                        .is_none()
+                {
+                    return false;
                 }
             }
         }
     }
-    let dest_top = (bounds.top + dy).max(0);
-    let dest_bottom = (bounds.bottom + dy).min(h as i32);
-    let dest_left = (bounds.left + dx).max(0);
-    let dest_right = (bounds.right + dx).min(w as i32);
-    let span = (dest_right - dest_left).max(0) as usize;
-    for dest_y in dest_top..dest_bottom {
-        let src_start = (dest_y - dy) as usize * w + (dest_left - dx) as usize;
-        let dest_start = dest_y as usize * w + dest_left as usize;
-        let covered = &coverage[src_start..src_start + span];
-        let source = &snapshot[src_start..src_start + span];
-        let target = &mut out[dest_start..dest_start + span];
-        for i in 0..span {
-            let selected = covered[i];
-            if selected != 0 {
-                target[i] = blend(source[i], selected, target[i]);
+    for y in bounds.top..bounds.bottom {
+        for x in bounds.left..bounds.right {
+            let selected = coverage[y as usize * w + x as usize];
+            if selected == 0 {
+                continue;
+            }
+            let (tx, ty) = (x + dx, y + dy);
+            let under = super::mask_domain::stored(&pending.mask, tx, ty);
+            let value = blend(super::mask_domain::stored(&original, x, y), selected, under);
+            if pending.write(tx, ty, value).is_none() {
+                return false;
             }
         }
     }
-    mask.data = Some(out.into());
+    pending.publish(layer);
     true
 }
 
@@ -440,7 +389,13 @@ mod tests {
             document
         };
 
-        let rgba = paint(mask_document(&doc, "0").unwrap().document);
+        let pixels = coverage(&doc)
+            .into_iter()
+            .flat_map(|v| [v, v, v, 255])
+            .collect::<Vec<_>>();
+        let mut reference = Document::from_rgba("reference", doc.width, doc.height, &pixels);
+        reference.layers[0].lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
+        let rgba = paint(reference);
         let coverage = paint(mask_document_coverage(&doc, "0").unwrap().document);
 
         let channel0 = |d: &Document| {
@@ -476,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn a_zero_sized_mask_refuses() {
+    fn a_malformed_zero_sized_mask_refuses() {
         let mut doc = masked_doc();
         doc.layers[0].mask.as_mut().unwrap().rect = PsdRect {
             top: 0,
@@ -506,7 +461,51 @@ mod tests {
             data: data.map(Into::into),
             ..Default::default()
         });
-        doc_with(vec![layer])
+        let mut doc = Document::new(
+            rect.right.max(1) as u32,
+            rect.bottom.max(1) as u32,
+            ColorMode::Rgb,
+            BitDepth::Eight,
+        );
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        doc
+    }
+
+    fn move_mask_selection_content(
+        doc: &mut Document,
+        path: &str,
+        coverage: &[u8],
+        dx: i32,
+        dy: i32,
+        duplicate: bool,
+        background: u8,
+    ) -> bool {
+        let canvas = doc.width as usize * doc.height as usize;
+        if coverage.len() == canvas {
+            return super::move_mask_selection_content(
+                doc, path, coverage, dx, dy, duplicate, background,
+            );
+        }
+        let Some(mask) = resolve_path(doc, path).and_then(|l| l.mask.as_ref()) else {
+            return false;
+        };
+        let w = mask.rect.width().max(0) as usize;
+        let h = mask.rect.height().max(0) as usize;
+        if coverage.len() != w * h {
+            return super::move_mask_selection_content(
+                doc, path, coverage, dx, dy, duplicate, background,
+            );
+        }
+        let mut expanded = vec![0; canvas];
+        for y in 0..h {
+            for x in 0..w {
+                let (tx, ty) = (mask.rect.left + x as i32, mask.rect.top + y as i32);
+                if tx >= 0 && ty >= 0 && tx < doc.width as i32 && ty < doc.height as i32 {
+                    expanded[ty as usize * doc.width as usize + tx as usize] = coverage[y * w + x];
+                }
+            }
+        }
+        super::move_mask_selection_content(doc, path, &expanded, dx, dy, duplicate, background)
     }
 
     #[test]
@@ -516,7 +515,7 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 4], 1, 0, false, 255
         ));
-        assert_eq!(coverage(&doc), vec![255, 0, 64, 128]);
+        assert_eq!(coverage(&doc), vec![0, 0, 64, 128, 255]);
         assert_eq!(doc.layers[0].channels, channels, "layer pixels untouched");
         assert!(doc.layers[0].mask.is_some());
     }
@@ -533,18 +532,27 @@ mod tests {
             false,
             255
         ));
-        assert_eq!(coverage(&doc), vec![0, 255, 192, 0]);
+        assert_eq!(coverage(&doc), vec![0, 127, 128, 0]);
     }
 
     #[test]
-    fn move_mask_selection_clips_at_the_mask_rect() {
+    fn move_mask_selection_retains_past_the_mask_rect() {
         let mut doc = masked_with(mask_rect(5, 7, 3, 1), Some(vec![10, 20, 30]), 0);
         let rect = doc.layers[0].mask.as_ref().unwrap().rect;
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 3], 1, 0, false, 99
         ));
-        assert_eq!(coverage(&doc), vec![99, 10, 20]);
-        assert_eq!(doc.layers[0].mask.as_ref().unwrap().rect, rect);
+        let mask = doc.layers[0].mask.as_ref().unwrap();
+        assert_eq!(
+            (
+                super::super::mask_domain::stored(mask, 5, 7),
+                super::super::mask_domain::stored(mask, 6, 7),
+                super::super::mask_domain::stored(mask, 7, 7),
+                super::super::mask_domain::stored(mask, 8, 7)
+            ),
+            (0, 10, 20, 30)
+        );
+        assert_eq!(mask.rect, mask_rect(0, 0, rect.right + 1, rect.bottom));
     }
 
     #[test]
@@ -553,7 +561,7 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 6], 3, 0, true, 99
         ));
-        assert_eq!(coverage(&doc), vec![10, 20, 30, 10, 20, 30]);
+        assert_eq!(coverage(&doc), vec![10, 20, 30, 10, 20, 30, 0, 0, 0]);
     }
 
     #[test]
@@ -566,7 +574,7 @@ mod tests {
         ));
         assert_eq!(doc.layers[0].channels, channels);
         let mask = doc.layers[0].mask.as_ref().unwrap();
-        assert_eq!(mask.rect, rect);
+        assert_eq!(mask.rect, mask_rect(0, 0, rect.right + 1, rect.bottom));
         assert_eq!(mask.default_color, 0);
     }
 
@@ -576,13 +584,14 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 2], 1, 0, false, 0
         ));
-        assert_eq!(coverage(&doc), vec![0, 200]);
+        assert_eq!(coverage(&doc), vec![0, 255, 255]);
 
         let mut doc = masked_with(mask_rect(0, 0, 2, 1), Some(vec![7, 7, 7]), 200);
-        assert!(move_mask_selection_content(
+        let original = doc.clone();
+        assert!(!move_mask_selection_content(
             &mut doc, "0", &[255; 2], 1, 0, false, 0
         ));
-        assert_eq!(coverage(&doc), vec![0, 200]);
+        assert_eq!(doc, original);
     }
 
     #[test]
@@ -631,7 +640,7 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 2], 1, 0, false, 99
         ));
-        assert_eq!(coverage(&doc), vec![99, 0]);
+        assert_eq!(coverage(&doc), vec![0, 0, 255]);
     }
 
     #[test]
@@ -649,17 +658,14 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 4], 1, 0, false, 0
         ));
+        let mask = doc.layers[0].mask.as_ref().unwrap();
         assert_eq!(
-            doc.layers[0]
-                .mask
-                .as_ref()
-                .unwrap()
-                .data
-                .as_ref()
-                .unwrap()
-                .to_vec(),
-            vec![0, 0, 255, 0]
+            (0..5)
+                .map(|x| super::super::mask_domain::stored(mask, x, 0))
+                .collect::<Vec<_>>(),
+            vec![0, 0, 255, 0, 255]
         );
+        assert_eq!(mask.rect, mask_rect(0, 0, 5, 4));
     }
 
     /// The pre-bounding full-plane loop, kept as the oracle for the bounded move.
@@ -672,7 +678,7 @@ mod tests {
         dy: i32,
         duplicate: bool,
     ) -> Vec<u8> {
-        let background = 7;
+        let background = 0;
         let snapshot = mask.to_vec();
         let mut out = snapshot.clone();
         if !duplicate {
@@ -735,13 +741,8 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", coverage, dx, dy, duplicate, 7
         ));
-        doc.layers[0]
-            .mask
-            .as_ref()
-            .unwrap()
+        mask_document_coverage(&doc, "0").unwrap().document.layers[0].channels[0]
             .data
-            .as_ref()
-            .unwrap()
             .to_vec()
     }
 

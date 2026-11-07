@@ -85,7 +85,10 @@ pub fn grow_layer_to(
     }
     if let Some(store) = layer.source_channels.as_mut() {
         if store.rect == old {
-            for (_, samples) in &mut store.planes {
+            for (id, samples) in &mut store.planes {
+                if *id == -2 {
+                    continue;
+                }
                 if samples.len() != old_n {
                     continue;
                 }
@@ -114,7 +117,10 @@ pub fn shrink_layer_to(layer: &mut Layer, rect: PsdRect) {
             channel.data = crate::Plane::default();
         }
         if let Some(store) = layer.source_channels.as_mut() {
-            for (_, samples) in &mut store.planes {
+            for (id, samples) in &mut store.planes {
+                if *id == -2 {
+                    continue;
+                }
                 *samples = match samples {
                     Samples::U8(_) => Samples::U8(Vec::new().into()),
                     Samples::U16(_) => Samples::U16(Vec::new().into()),
@@ -144,7 +150,10 @@ pub fn shrink_layer_to(layer: &mut Layer, rect: PsdRect) {
     }
     if let Some(store) = layer.source_channels.as_mut() {
         if store.rect == old {
-            for (_, samples) in &mut store.planes {
+            for (id, samples) in &mut store.planes {
+                if *id == -2 {
+                    continue;
+                }
                 if samples.len() != old_w * old_h {
                     continue;
                 }

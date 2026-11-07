@@ -152,19 +152,65 @@ pub(crate) fn offset_layer(layer: &mut Layer, dx: i32, dy: i32) {
     }
 }
 
+fn translate_checked(layer: &mut Layer, canvas: PsdRect, dx: i32, dy: i32) -> bool {
+    let can_shift = |rect: PsdRect| {
+        [
+            rect.left.checked_add(dx),
+            rect.right.checked_add(dx),
+            rect.top.checked_add(dy),
+            rect.bottom.checked_add(dy),
+        ]
+        .iter()
+        .all(Option::is_some)
+    };
+    if !can_shift(layer.rect)
+        || layer
+            .source_channels
+            .as_ref()
+            .is_some_and(|s| !can_shift(s.rect))
+    {
+        return false;
+    }
+    let mut candidate = layer.clone();
+    let linked = candidate
+        .mask
+        .as_ref()
+        .is_some_and(|m| m.flags & super::MASK_FLAG_UNLINKED == 0);
+    if linked {
+        if !super::layer_ops::normalize_layer_mask(&mut candidate, canvas) {
+            return false;
+        }
+        if candidate.mask.as_ref().is_some_and(|m| !can_shift(m.rect)) {
+            return false;
+        }
+    }
+    let stationary = if linked { None } else { candidate.mask.take() };
+    offset_layer(&mut candidate, dx, dy);
+    if !linked {
+        candidate.mask = stationary;
+    }
+    *layer = candidate;
+    true
+}
+
 /// Shift the topmost pixel layer's bounds by `(dx, dy)`.
 ///
 /// Groups and adjustment layers are ignored; no pixels move, the compositor
 /// reads the shifted `rect`. Returns false when there is no pixel layer.
 pub fn translate_layer(doc: &mut Document, dx: i32, dy: i32) -> bool {
+    let canvas = PsdRect {
+        left: 0,
+        top: 0,
+        right: doc.width as i32,
+        bottom: doc.height as i32,
+    };
     let Some(layer) = topmost_pixel_layer(&mut doc.layers) else {
         return false;
     };
     if layer_move_locked(layer) {
         return false;
     }
-    offset_layer(layer, dx, dy);
-    true
+    translate_checked(layer, canvas, dx, dy)
 }
 
 /// Shift the topmost pixel layer's bounds by `(dx, dy)` without recompositing.
@@ -175,14 +221,19 @@ pub fn translate_layer(doc: &mut Document, dx: i32, dy: i32) -> bool {
 /// Returns
 /// false when there is no pixel layer.
 pub fn translate_layer_rect(doc: &mut Document, dx: i32, dy: i32) -> bool {
+    let canvas = PsdRect {
+        left: 0,
+        top: 0,
+        right: doc.width as i32,
+        bottom: doc.height as i32,
+    };
     let Some(layer) = topmost_pixel_layer(&mut doc.layers) else {
         return false;
     };
     if layer_move_locked(layer) {
         return false;
     }
-    offset_layer(layer, dx, dy);
-    true
+    translate_checked(layer, canvas, dx, dy)
 }
 
 /// Shift the topmost pixel layer's bounds by `(dx, dy)` and refresh the
@@ -192,13 +243,21 @@ pub fn translate_layer_rect(doc: &mut Document, dx: i32, dy: i32) -> bool {
 /// differs — [`crate::composite`] uses the GPU when `gpu_enabled` and an
 /// adapter is usable, falling back to the CPU oracle otherwise.
 pub fn translate_layer_active(doc: &mut Document, dx: i32, dy: i32, gpu_enabled: bool) -> bool {
+    let canvas = PsdRect {
+        left: 0,
+        top: 0,
+        right: doc.width as i32,
+        bottom: doc.height as i32,
+    };
     let Some(layer) = topmost_pixel_layer(&mut doc.layers) else {
         return false;
     };
     if layer_move_locked(layer) {
         return false;
     }
-    offset_layer(layer, dx, dy);
+    if !translate_checked(layer, canvas, dx, dy) {
+        return false;
+    }
     let (composite, _) = crate::composite_request::composite(
         crate::composite_request::CompositeRequest::whole(doc, gpu_enabled),
     );
@@ -210,6 +269,12 @@ pub fn translate_layer_active(doc: &mut Document, dx: i32, dy: i32, gpu_enabled:
 /// recompositing; the caller refreshes the dirty region. Returns false for an
 /// out-of-range index, a group/adjustment, or a position-locked layer.
 pub fn translate_layer_index(doc: &mut Document, index: usize, dx: i32, dy: i32) -> bool {
+    let canvas = PsdRect {
+        left: 0,
+        top: 0,
+        right: doc.width as i32,
+        bottom: doc.height as i32,
+    };
     let Some(layer) = doc.layers.get_mut(index) else {
         return false;
     };
@@ -219,8 +284,7 @@ pub fn translate_layer_index(doc: &mut Document, index: usize, dx: i32, dy: i32)
     if layer_move_locked(layer) {
         return false;
     }
-    offset_layer(layer, dx, dy);
-    true
+    translate_checked(layer, canvas, dx, dy)
 }
 
 /// Shift the layer at `path`'s bounds by `(dx, dy)` without recompositing; the
@@ -228,6 +292,12 @@ pub fn translate_layer_index(doc: &mut Document, index: usize, dx: i32, dy: i32)
 /// Returns false for an unresolved path, a group/adjustment, or a
 /// position-locked layer.
 pub fn translate_layer_path(doc: &mut Document, path: &str, dx: i32, dy: i32) -> bool {
+    let canvas = PsdRect {
+        left: 0,
+        top: 0,
+        right: doc.width as i32,
+        bottom: doc.height as i32,
+    };
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
@@ -241,8 +311,7 @@ pub fn translate_layer_path(doc: &mut Document, path: &str, dx: i32, dy: i32) ->
     if layer_move_locked(layer) {
         return false;
     }
-    offset_layer(layer, dx, dy);
-    true
+    translate_checked(layer, canvas, dx, dy)
 }
 
 fn topmost_pixel_layer(layers: &mut pictura_core::LayerStack) -> Option<&mut Layer> {

@@ -2,7 +2,9 @@
 //! Selection / Hide Selection / From Transparency), delete, apply, enable, and
 //! link. The compositor already honours [`LayerMask`]; these edit the model.
 
-use pictura_core::{Channel, Document, LayerMask, PsdRect};
+#[cfg(test)]
+use pictura_core::PsdRect;
+use pictura_core::{Channel, Document, LayerMask};
 
 use super::create::layer_from_background;
 use super::paths::{resolve_path, resolve_path_mut};
@@ -21,22 +23,9 @@ pub enum LayerMaskKind {
 /// unlinked when set. Mask bounds remain in document coordinates either way.
 pub const MASK_FLAG_UNLINKED: u8 = 0x01;
 
-fn area(rect: PsdRect) -> usize {
-    rect.width().max(0) as usize * rect.height().max(0) as usize
-}
-
-/// A coverage plane's samples, or `default_color` repeated for a data-less mask.
-fn coverage_of(mask: &LayerMask) -> Vec<u8> {
-    match &mask.data {
-        Some(data) => data.as_slice().to_vec(),
-        None => vec![mask.default_color; area(mask.rect)],
-    }
-}
-
 /// Add a raster layer mask to the layer at `path`. Reveal All, Hide All, and
-/// From Transparency size the mask to the layer's content rect; the selection
-/// variants size it to `selection` and use its coverage (inverted for Hide
-/// Selection). Does nothing and returns false when the layer already has a mask,
+/// From Transparency retain their source coverage in a canvas-covering mask;
+/// selection variants sample coverage in document coordinates. Does nothing and returns false when the layer already has a mask,
 /// the path does not resolve, or a selection variant has no selection.
 pub fn add_layer_mask(
     doc: &mut Document,
@@ -44,11 +33,8 @@ pub fn add_layer_mask(
     kind: LayerMaskKind,
     selection: Option<&LayerMask>,
 ) -> bool {
-    let doc_rect = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: doc.height as i32,
-        right: doc.width as i32,
+    let Some(canvas) = super::mask_domain::canvas(doc) else {
+        return false;
     };
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
@@ -56,53 +42,101 @@ pub fn add_layer_mask(
     if layer.mask.is_some() {
         return false;
     }
-    // A group has no content rectangle of its own, and an adjustment or fill
-    // layer may carry a zero-area rect; both take a document-sized mask.
-    let content_rect = if layer.is_group || layer.rect.width() <= 0 || layer.rect.height() <= 0 {
-        doc_rect
+    let selection_kind = matches!(
+        kind,
+        LayerMaskKind::RevealSelection | LayerMaskKind::HideSelection
+    );
+    if selection_kind && selection.is_none() {
+        return false;
+    }
+    let fallback = layer.is_group || layer.rect.is_empty();
+    let content = if fallback { canvas } else { layer.rect };
+    let source_rect = if selection_kind {
+        selection.unwrap().rect
     } else {
-        layer.rect
+        content
     };
-    let (rect, data, default_color) = match kind {
-        LayerMaskKind::RevealAll => (content_rect, vec![255; area(content_rect)], 255),
-        LayerMaskKind::HideAll => (content_rect, vec![0; area(content_rect)], 0),
-        LayerMaskKind::FromTransparency => {
-            let pixels = area(content_rect);
-            let data = layer
-                .channels
-                .iter()
-                .find(|channel| channel.id == -1)
-                .map(|channel| channel.data.as_slice().to_vec())
-                .filter(|data| data.len() == pixels)
-                .unwrap_or_else(|| vec![255; pixels]);
-            (content_rect, data, 255)
-        }
-        LayerMaskKind::RevealSelection => {
-            let Some(selection) = selection else {
-                return false;
-            };
-            (selection.rect, coverage_of(selection), 0)
-        }
-        LayerMaskKind::HideSelection => {
-            let Some(selection) = selection else {
-                return false;
-            };
-            let mut data = coverage_of(selection);
-            for value in &mut data {
-                *value = 255 - *value;
-            }
-            (selection.rect, data, 255)
-        }
+    let rect = if source_rect.is_empty() {
+        canvas
+    } else {
+        canvas.union(source_rect)
     };
+    let Some(n) = super::mask_domain::pixels(rect) else {
+        return false;
+    };
+    let Some(_held) = n.checked_mul(2).and_then(super::mask_domain::reserve) else {
+        return false;
+    };
+    let Some(mut data) = super::mask_domain::allocate(n, 0) else {
+        return false;
+    };
+    let Some((w, h)) = super::mask_domain::dimensions(rect) else {
+        return false;
+    };
+    let alpha = layer
+        .channels
+        .iter()
+        .find(|c| c.id == -1)
+        .filter(|c| Some(c.data.len()) == super::mask_domain::pixels(content));
+    for y in 0..h {
+        let Some(row) = data.row_mut(y, w) else {
+            return false;
+        };
+        for (x, out) in row.iter_mut().enumerate() {
+            let (dx, dy) = (rect.left + x as i32, rect.top + y as i32);
+            let inside = dx >= content.left
+                && dx < content.right
+                && dy >= content.top
+                && dy < content.bottom;
+            *out = match kind {
+                LayerMaskKind::RevealAll => {
+                    if inside {
+                        255
+                    } else {
+                        0
+                    }
+                }
+                LayerMaskKind::HideAll => 0,
+                LayerMaskKind::FromTransparency => {
+                    if inside {
+                        alpha
+                            .and_then(|c| {
+                                c.data.sample(
+                                    (dy - content.top) as usize * content.width() as usize
+                                        + (dx - content.left) as usize,
+                                )
+                            })
+                            .unwrap_or(255)
+                    } else {
+                        0
+                    }
+                }
+                LayerMaskKind::RevealSelection | LayerMaskKind::HideSelection => {
+                    let sel = selection.unwrap();
+                    let v = if sel.data.is_none() {
+                        sel.default_color
+                    } else {
+                        super::mask_domain::stored(sel, dx, dy)
+                    };
+                    if kind == LayerMaskKind::HideSelection {
+                        255 - v
+                    } else {
+                        v
+                    }
+                }
+            };
+        }
+    }
     layer.mask = Some(LayerMask {
         rect,
-        default_color,
-        disabled: false,
+        default_color: 0,
+        data: Some(data),
         flags: 0,
-        data: Some(data.into()),
-        extra: Vec::new().into(),
         ..Default::default()
     });
+    if let Some(store) = layer.source_channels.as_mut() {
+        store.planes.retain(|(id, _)| *id != -2);
+    }
     true
 }
 
@@ -215,19 +249,21 @@ pub fn set_layer_mask_feather(doc: &mut Document, path: &str, radius: f64) -> bo
     true
 }
 
-/// Invert the mask's pixels and its default colour in place, the Properties
-/// panel's Invert. Returns false without a mask.
+/// Invert canvas coverage while preserving retained off-canvas pixels. Returns false without a mask.
 pub fn invert_layer_mask(doc: &mut Document, path: &str) -> bool {
-    let Some(mask) = resolve_path_mut(doc, path).and_then(|layer| layer.mask.as_mut()) else {
+    let Some(mut view) = super::mask_edit::mask_document_coverage(doc, path) else {
         return false;
     };
-    mask.default_color = 255 - mask.default_color;
-    if let Some(data) = mask.data.as_mut() {
-        for v in data.as_mut_slice() {
-            *v = 255 - *v;
+    let width = view.document.width as usize;
+    for row in view.document.layers[0].channels[0]
+        .data
+        .rows_mut(0..view.document.height as usize, width)
+    {
+        for value in row {
+            *value = 255 - *value;
         }
     }
-    true
+    super::mask_edit::write_mask_back(doc, path, &view.document, None)
 }
 
 /// The mask's density (0-255) and feather radius in pixels; `None` without a
@@ -368,14 +404,14 @@ mod tests {
     }
 
     #[test]
-    fn invert_flips_pixels_and_default_colour() {
+    fn invert_flips_canvas_pixels_and_keeps_black_exterior() {
         let mut doc = doc(2, 1);
         assert!(!invert_layer_mask(&mut doc, "0"), "no mask");
         doc.layers[0].mask = Some(selection(&[40, 255]));
         assert!(invert_layer_mask(&mut doc, "0"));
         let mask = doc.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.data.as_deref(), Some(&[215u8, 0][..]));
-        assert_eq!(mask.default_color, 255);
+        assert_eq!(mask.default_color, 0);
         assert_eq!(alpha(&composite_rgba(&doc), 1, 0), 0);
     }
 
@@ -394,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn add_creates_one_sized_to_the_layer_and_refuses_a_second() {
+    fn add_creates_canvas_coverage_and_refuses_a_second() {
         let mut doc = doc(2, 2);
         let plain = composite_rgba(&doc).data;
         assert!(add_layer_mask(
@@ -405,12 +441,12 @@ mod tests {
         ));
         let mask = doc.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.rect, full(2, 2));
-        assert_eq!(mask.default_color, 255);
+        assert_eq!(mask.default_color, 0);
         assert_eq!(mask.data.as_deref(), Some(&[255u8; 4][..]));
         assert!(has_layer_mask(&doc, "0"));
         assert_eq!(composite_rgba(&doc).data, plain, "reveal all is a no-op");
         assert!(!add_layer_mask(&mut doc, "0", LayerMaskKind::HideAll, None));
-        assert_eq!(doc.layers[0].mask.as_ref().unwrap().default_color, 255);
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap().default_color, 0);
         assert!(!add_layer_mask(
             &mut doc,
             "9",
@@ -562,7 +598,7 @@ mod tests {
         ));
         let mask = hide.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.data.as_deref(), Some(&[0u8, 255][..]));
-        assert_eq!(mask.default_color, 255);
+        assert_eq!(mask.default_color, 0);
         assert_eq!(alpha(&composite_rgba(&hide), 0, 0), 0);
         assert_eq!(alpha(&composite_rgba(&hide), 1, 0), 255);
 

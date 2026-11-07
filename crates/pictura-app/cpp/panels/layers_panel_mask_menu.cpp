@@ -1,3 +1,4 @@
+#include "memory_refusal.h"
 // The Layers panel's action strip (including the mask and trash buttons) at the
 // foot of the panel, the vector-mask thumbnail menu, and the Refine Mask and
 // Layer Mask Display Options dialogs the layer-mask thumbnail menu opens (that
@@ -67,9 +68,11 @@ void LayersPanel::addMaskFromButton(bool alt)
         return;
     }
     if (!layer_mask_present(*view_)) {
-        layer_mask_add(*view_, alt                      ? QStringLiteral("hide-all")
+        if (!layer_mask_add(*view_, alt                      ? QStringLiteral("hide-all")
                                : view_->has_selection() ? QStringLiteral("reveal-selection")
-                                                        : QStringLiteral("reveal-all"));
+                                                        : QStringLiteral("reveal-all"))) {
+            reportMemoryRefusal(this, tr("add layer mask"));
+        }
     } else if (!vector_mask_present(*view_)) {
         vector_mask_add(*view_, alt ? QStringLiteral("hide-all") : QStringLiteral("reveal-all"));
     }

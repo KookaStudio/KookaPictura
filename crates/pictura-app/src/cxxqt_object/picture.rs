@@ -243,6 +243,7 @@ mod tests {
         ));
         view.session.live.set_stroke_session(StrokeSession {
             mask_stroke: Some(MaskStroke {
+                baseline: None,
                 path: "0".to_string(),
                 rect: doc_rect(),
                 document: mask_doc,

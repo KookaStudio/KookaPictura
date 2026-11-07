@@ -1,3 +1,4 @@
+#include "memory_refusal.h"
 #include "frame_includes.h"
 
 #include "fill_layer_editor.h"
@@ -494,7 +495,9 @@ void PicturaMainWindow::registerHandlers()
     const auto addLayerMask = [this](const QString& kind) {
         PictureView* view = activeView();
         if (view) {
-            layer_mask_add(*view, kind);
+            if (!layer_mask_add(*view, kind)) {
+                reportMemoryRefusal(this, tr("add layer mask"));
+            }
         }
     };
     const auto enableWhenNoMask = [this](const char* id) {
