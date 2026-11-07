@@ -3,6 +3,7 @@ use super::*;
 use crate::common::{luma, rgb_to_hsl, srgb_to_linear};
 use pictura_core::PixelBuffer;
 
+mod channel_mixer;
 mod gradient_map;
 mod hue_ranges;
 mod levels;
@@ -738,6 +739,7 @@ fn channel_mixer_known_example_and_identity() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         &mut b,
     )
@@ -753,6 +755,7 @@ fn channel_mixer_known_example_and_identity() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         &mut b,
     )
@@ -770,6 +773,7 @@ fn channel_mixer_monochrome_and_constant_and_validation() {
             green: [40.0, 40.0, 20.0],
             blue: [40.0, 40.0, 20.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         &mut b,
     )
@@ -784,6 +788,7 @@ fn channel_mixer_monochrome_and_constant_and_validation() {
             green: [40.0, 40.0, 20.0],
             blue: [40.0, 40.0, 20.0],
             constant: [10.0, 10.0, 10.0],
+            ..Default::default()
         }),
         &mut b,
     )
@@ -797,6 +802,7 @@ fn channel_mixer_monochrome_and_constant_and_validation() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         &mut b
     )
@@ -1188,6 +1194,7 @@ fn alpha_is_never_modified() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         Adjustment::Vibrance(VibranceParams {
             vibrance: 20,

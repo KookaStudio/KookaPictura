@@ -185,6 +185,7 @@ fn covered() -> Vec<Adjustment> {
             green: [10.0, 110.0, -15.0],
             blue: [-10.0, 20.0, 130.0],
             constant: [5.0, -3.0, 2.0],
+            ..Default::default()
         }),
         Adjustment::ChannelMixer(ChannelMixerParams {
             monochrome: true,
@@ -192,6 +193,7 @@ fn covered() -> Vec<Adjustment> {
             green: [0.0, 0.0, 0.0],
             blue: [0.0, 0.0, 0.0],
             constant: [0.0, 0.0, 0.0],
+            ..Default::default()
         }),
         Adjustment::SelectiveColor(SelectiveColorParams {
             method: SelectiveColorMethod::Relative,
@@ -454,6 +456,7 @@ fn native_bw_channel_mixer() {
         green: [10.0, 110.0, -15.0],
         blue: [-10.0, 20.0, 130.0],
         constant: [5.0, -3.0, 2.0],
+        ..Default::default()
     });
     apply_native(&mix, &mut store, 4, 1, 3).unwrap();
     let Samples::U16(v) = &store else { panic!() };

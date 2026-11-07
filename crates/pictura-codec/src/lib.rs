@@ -100,7 +100,7 @@ pub use filter_effects::remove_filter_mask;
 pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind};
 pub use icc::{
     assign_cmyk_profile, assign_document_profile, buffer_to_srgb, convert_document,
-    convert_document_with, profile_description, remove_document_profile,
+    convert_document_with, document_cmyk_profile, profile_description, remove_document_profile,
 };
 pub use image_resources::{
     decode_image_resources, document_resolution, encode_image_resources, frame_image_resource,

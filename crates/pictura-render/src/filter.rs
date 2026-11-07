@@ -52,7 +52,7 @@ pub fn apply_filter_region(
         Filter::Liquify { mesh } if mesh.clip().is_some() => None,
         _ => mask,
     };
-    apply_op_region(layer, Op::Filter(filter, gpu_enabled), mask, region)
+    apply_op_region(layer, Op::Filter(filter, gpu_enabled), mask, region, None)
 }
 
 /// Apply a destructive Image > Adjustments `adjustment` to a pixel layer's
@@ -65,7 +65,19 @@ pub fn apply_adjustment_region(
     mask: Option<&LayerMask>,
     region: PsdRect,
 ) -> Result<(), FilterError> {
-    apply_op_region(layer, Op::Adjustment(adjustment), mask, region)
+    apply_op_region(layer, Op::Adjustment(adjustment), mask, region, None)
+}
+
+/// As [`apply_adjustment_region`], with the document's CMYK state so a Channel
+/// Mixer mixes ink values. `None` keeps the RGB path.
+pub fn apply_adjustment_region_in_mode(
+    layer: &mut Layer,
+    adjustment: &Adjustment,
+    mask: Option<&LayerMask>,
+    region: PsdRect,
+    cmyk: Option<&crate::channel_mixer_cmyk::CmykMix>,
+) -> Result<(), FilterError> {
+    apply_op_region(layer, Op::Adjustment(adjustment), mask, region, cmyk)
 }
 
 /// What [`apply_op_region`] runs on the working buffer.
@@ -80,6 +92,7 @@ fn apply_op_region(
     op: Op,
     mask: Option<&LayerMask>,
     region: PsdRect,
+    cmyk: Option<&crate::channel_mixer_cmyk::CmykMix>,
 ) -> Result<(), FilterError> {
     let lrect = layer.rect;
     // A lock outranks the empty-rect no-op: a locked layer must refuse the
@@ -198,8 +211,18 @@ fn apply_op_region(
             crate::gpu_filter::apply_filter_active(filter, &mut buf, gpu)?;
         }
         Op::Adjustment(adjustment) => {
-            pictura_adjust::apply_with_coverage(adjustment, &mut buf, coverage_plane.as_deref())
-                .map_err(|error| FilterError::InvalidParams(error.to_string()))?
+            let ink = match (cmyk, adjustment) {
+                (Some(mix), Adjustment::ChannelMixer(params)) if !params.monochrome => Some(mix),
+                _ => None,
+            };
+            if let (Some(mix), Adjustment::ChannelMixer(params)) = (ink, adjustment) {
+                if !crate::channel_mixer_cmyk::apply_planes(&mut buf, params, mix) {
+                    return Ok(());
+                }
+            } else {
+                pictura_adjust::apply_with_coverage(adjustment, &mut buf, coverage_plane.as_deref())
+                    .map_err(|error| FilterError::InvalidParams(error.to_string()))?
+            }
         }
     }
 

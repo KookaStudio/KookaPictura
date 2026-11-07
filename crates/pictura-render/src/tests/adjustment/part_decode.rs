@@ -225,6 +225,13 @@ fn encode_decode_round_trips() {
             green: [10.0, 90.0, 0.0],
             blue: [0.0, 20.0, 110.0],
             constant: [5.0, -20.0, 40.0],
+            ink: [
+                [30.0, -10.0, 50.0, 0.0],
+                [10.0, 90.0, 0.0, 0.0],
+                [0.0, 20.0, 110.0, 0.0],
+                [30.0, -10.0, 50.0, 0.0],
+            ],
+            ink_constant: [5.0, -20.0, 40.0, 5.0],
         }))
     );
     let cm_mono = encode_channel_mixer(
@@ -243,6 +250,7 @@ fn encode_decode_round_trips() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [-15.0, 0.0, 0.0],
+            ..Default::default()
         }))
     );
     let cm_clamped =
@@ -255,6 +263,13 @@ fn encode_decode_round_trips() {
             green: [0.0; 3],
             blue: [0.0; 3],
             constant: [0.0; 3],
+            ink: [
+                [200.0, -200.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [200.0, -200.0, 0.0, 0.0],
+            ],
+            ink_constant: [0.0; 4],
         }))
     );
 
@@ -799,6 +814,13 @@ fn mixr_decodes_channels_and_ignores_gray_and_trailing() {
             green: [10.0, 90.0, 0.0],
             blue: [0.0, 20.0, 110.0],
             constant: [5.0, -20.0, 40.0],
+            ink: [
+                [30.0, -10.0, 50.0, 0.0],
+                [10.0, 90.0, 0.0, 0.0],
+                [0.0, 20.0, 110.0, 0.0],
+                [100.0, 0.0, 0.0, 0.0],
+            ],
+            ink_constant: [5.0, -20.0, 40.0, 0.0],
         }))
     );
 
@@ -812,6 +834,7 @@ fn mixr_decodes_channels_and_ignores_gray_and_trailing() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [-15.0, 0.0, 0.0],
+            ..Default::default()
         }))
     );
 }
@@ -878,6 +901,13 @@ fn fixture_channel_mixer_decodes() {
             green: [10.0, 90.0, 0.0],
             blue: [0.0, 20.0, 110.0],
             constant: [5.0, -20.0, 40.0],
+            ink: [
+                [30.0, -10.0, 50.0, 0.0],
+                [10.0, 90.0, 0.0, 0.0],
+                [0.0, 20.0, 110.0, 0.0],
+                [100.0, 0.0, 0.0, 0.0],
+            ],
+            ink_constant: [5.0, -20.0, 40.0, 0.0],
         }))
     );
 
@@ -894,6 +924,7 @@ fn fixture_channel_mixer_decodes() {
             green: [0.0, 100.0, 0.0],
             blue: [0.0, 0.0, 100.0],
             constant: [-15.0, 0.0, 0.0],
+            ..Default::default()
         }))
     );
 }
@@ -945,4 +976,142 @@ fn gradient_map_opacity_stops_round_trip() {
             ..params
         }))
     );
+}
+
+fn ink_identity() -> [[f64; 4]; 4] {
+    [
+        [100.0, 0.0, 0.0, 0.0],
+        [0.0, 100.0, 0.0, 0.0],
+        [0.0, 0.0, 100.0, 0.0],
+        [0.0, 0.0, 0.0, 100.0],
+    ]
+}
+
+#[test]
+fn channel_mixer_ink_roundtrip() {
+    let ink = [
+        [20.0, 0.0, 0.0, 0.0],
+        [0.0, 30.0, 0.0, 0.0],
+        [0.0, 0.0, 40.0, 0.0],
+        [0.0, 0.0, 0.0, 50.0],
+    ];
+    let block = encode_channel_mixer_ink(ink, [5.0, -10.0, 15.0, -20.0]);
+    assert_eq!(block.key, *b"mixr");
+    assert_eq!(block.data.len(), 44);
+    let Some(Adjustment::ChannelMixer(params)) = decode_adjustment(&block) else {
+        panic!("the ink block decodes");
+    };
+    assert_eq!(params.ink, ink);
+    assert_eq!(params.ink_constant, [5.0, -10.0, 15.0, -20.0]);
+    assert_eq!(params.red, [20.0, 0.0, 0.0]);
+    assert_eq!(params.green, [0.0, 30.0, 0.0]);
+    assert_eq!(params.blue, [0.0, 0.0, 40.0]);
+}
+
+#[test]
+fn channel_mixer_ink_reads_k_source() {
+    let mut data = vec![0, 1, 0, 0];
+    for row in [
+        [10i16, 20, 30, 40, 5],
+        [0, 100, 0, 0, 0],
+        [0, 0, 100, 0, 0],
+        [0, 0, 0, 100, 0],
+    ] {
+        for value in row {
+            data.extend_from_slice(&value.to_be_bytes());
+        }
+    }
+    let Some(Adjustment::ChannelMixer(params)) = decode_adjustment(&adjdata(*b"mixr", data)) else {
+        panic!("the hand-built block decodes");
+    };
+    assert_eq!(params.ink[0], [10.0, 20.0, 30.0, 40.0]);
+    assert_eq!(params.ink_constant[0], 5.0);
+    assert_eq!(
+        params.red,
+        [10.0, 20.0, 30.0],
+        "RGB view keeps three sources"
+    );
+}
+
+#[test]
+fn channel_mixer_ink_clamps() {
+    let block = encode_channel_mixer_ink(
+        [
+            [999.0, -999.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0, 0.0],
+            [0.0, 0.0, 100.0, 0.0],
+            [0.0, 0.0, 0.0, 100.0],
+        ],
+        [0.0; 4],
+    );
+    let Some(Adjustment::ChannelMixer(params)) = decode_adjustment(&block) else {
+        panic!("the clamped block decodes");
+    };
+    assert_eq!(params.ink[0], [200.0, -200.0, 0.0, 0.0]);
+}
+
+#[test]
+fn channel_mixer_cmyk_page() {
+    let block = encode_channel_mixer_ink(ink_identity(), [0.0; 4]);
+    let editor = adjustment_editor_in_mode(&block, true).expect("a CMYK page");
+    assert_eq!(editor.groups, vec!["Cyan", "Magenta", "Yellow", "Black"]);
+    assert_eq!(
+        editor.params.len(),
+        20,
+        "four rows of four sources and a constant"
+    );
+    assert!(editor.params.iter().all(|p| p.key != "monochrome"));
+    let cyan = editor
+        .params
+        .iter()
+        .find(|p| p.key == "0.cyan")
+        .expect("cyan");
+    assert_eq!(cyan.value, 100.0);
+    assert!(editor.params.iter().any(|p| p.key == "3.black"));
+    assert!(editor.params.iter().any(|p| p.key == "3.constant"));
+}
+
+#[test]
+fn channel_mixer_monochrome_toggle() {
+    let block = encode_channel_mixer(
+        false,
+        [100.0, 0.0, 0.0],
+        [0.0, 100.0, 0.0],
+        [0.0, 0.0, 100.0],
+        [0.0; 3],
+    );
+    let rgb = adjustment_editor_in_mode(&block, false).expect("an RGB page");
+    assert!(rgb.params.iter().any(|p| p.key == "monochrome"));
+
+    let on = set_adjustment_param_in_mode(&block, "monochrome", 1.0, false).expect("on");
+    let editor = adjustment_editor_in_mode(&on, false).expect("gray page");
+    assert_eq!(editor.groups, vec!["Gray"]);
+    let red = editor
+        .params
+        .iter()
+        .find(|p| p.key == "0.red")
+        .expect("red");
+    assert_eq!(red.value, 40.0);
+    let green = editor
+        .params
+        .iter()
+        .find(|p| p.key == "0.green")
+        .expect("green");
+    assert_eq!(green.value, 40.0);
+
+    let off = set_adjustment_param_in_mode(&on, "monochrome", 0.0, false).expect("off");
+    let editor = adjustment_editor_in_mode(&off, false).expect("rgb page");
+    assert_eq!(editor.groups, vec!["Red", "Green", "Blue"]);
+    let value = |key: &str| {
+        editor
+            .params
+            .iter()
+            .find(|p| p.key == key)
+            .map_or(f64::NAN, |p| p.value)
+    };
+    assert_eq!(value("0.red"), 40.0);
+    assert_eq!(value("0.green"), 40.0);
+    assert_eq!(value("0.blue"), 20.0);
+    assert_eq!(value("1.green"), 100.0);
+    assert_eq!(value("2.blue"), 100.0);
 }

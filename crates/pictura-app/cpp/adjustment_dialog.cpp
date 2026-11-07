@@ -5,6 +5,7 @@
 #include <QtCore/QDebug>
 
 #include "api/document_api.h"
+#include "api/document_bridge.h"
 #include "busy_job.h"
 #include "dialogs.h"
 #include "image_view.h"
@@ -67,6 +68,7 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     , block_(block)
     , visible_(visible)
 {
+    cmyk_ = view_ && image_mode(*view_) == QLatin1String("cmyk");
     setObjectName(QStringLiteral("adjustmentDialog"));
     setUpPreviewTimers();
     // The same frame as the hand-laid-out pages: controls with Preview under
@@ -78,7 +80,7 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     controls_ = new AdjustmentControls(this);
     controls_->setCurveSource(
         [this](int channel) { return QString(image_adjustment_curve(slice(block_), channel)); });
-    controls_->setPage(image_adjustment_page(slice(block_)));
+    controls_->setPage(image_adjustment_page(slice(block_), cmyk_));
     title_ = controls_->title();
     setWindowTitle(title_);
     addPresetRow(left);
@@ -93,7 +95,7 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
 
     connect(controls_, &AdjustmentControls::valueChanged, this,
             [this](const QString& key, double value) {
-                edited(bytes(image_adjustment_set(slice(block_), key, value)));
+                edited(bytes(image_adjustment_set(slice(block_), key, value, cmyk_)));
             });
     connect(controls_, &AdjustmentControls::curveChanged, this,
             [this](int channel, const QString& points) {
@@ -110,6 +112,7 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     , visible_(visible)
     , title_(title)
 {
+    cmyk_ = view_ && image_mode(*view_) == QLatin1String("cmyk");
     setObjectName(QStringLiteral("adjustmentDialog"));
     setWindowTitle(title_);
     setUpPreviewTimers();
@@ -158,7 +161,7 @@ const std::array<int, 256>& AdjustmentDialog::histogram(int channel) const
 
 QStringList AdjustmentDialog::page() const
 {
-    return image_adjustment_page(slice(block_));
+    return image_adjustment_page(slice(block_), cmyk_);
 }
 
 AdjustmentDialog::ParamSpec AdjustmentDialog::paramSpec(const QStringList& page,
@@ -196,7 +199,7 @@ bool AdjustmentDialog::setParams(const QList<QPair<QString, double>>& edits)
 {
     QByteArray next = block_;
     for (const auto& [key, value] : edits) {
-        next = bytes(image_adjustment_set(slice(next), key, value));
+        next = bytes(image_adjustment_set(slice(next), key, value, cmyk_));
         if (next.isEmpty()) {
             return false;
         }
@@ -233,7 +236,7 @@ bool AdjustmentDialog::setBlock(const QByteArray& next)
 void AdjustmentDialog::reloadFromBlock()
 {
     if (controls_) {
-        controls_->setPage(image_adjustment_page(slice(block_)));
+        controls_->setPage(image_adjustment_page(slice(block_), cmyk_));
     }
 }
 
@@ -406,7 +409,7 @@ void AdjustmentDialog::edited(const QByteArray& next)
     // good block; reload the controls to match it.
     if (next.isEmpty()) {
         if (controls_) {
-            controls_->setPage(image_adjustment_page(slice(block_)));
+            controls_->setPage(image_adjustment_page(slice(block_), cmyk_));
         }
         return;
     }
@@ -581,7 +584,8 @@ bool runAdjustmentDialog(QWidget* parent, PictureView* view, const QString& kind
         return false;
     }
     const QByteArray block = bytes(image_adjustment_default(
-        kind, tools->foreground().rgb() & 0xffffffu, tools->background().rgb() & 0xffffffu));
+        kind, tools->foreground().rgb() & 0xffffffu, tools->background().rgb() & 0xffffffu,
+        view && image_mode(*view) == QLatin1String("cmyk")));
     if (block.isEmpty()) {
         return false;
     }

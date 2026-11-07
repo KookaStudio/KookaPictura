@@ -12,6 +12,10 @@ use pictura_core::{BlendMode, Layer};
 
 use crate::smart_filter::decode_smart_filter;
 
+// The decoded adjustment is held by value: this route is built once per layer
+// and consumed immediately, so boxing it would add an allocation on the
+// composite path for no lifetime benefit.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ContentRoute {
     /// A group that recurses onto the running canvas (exact only at opacity
     /// 255 with no mask).

@@ -227,8 +227,8 @@ QJsonObject ControlServer::methodListAdjustments(const QJsonObject&)
 {
     QJsonArray adjustments;
     for (const QString& kind : adjustmentKinds()) {
-        const QByteArray block = bytes(image_adjustment_default(kind, 0x000000u, 0xffffffu));
-        const QStringList page = image_adjustment_page(slice(block));
+        const QByteArray block = bytes(image_adjustment_default(kind, 0x000000u, 0xffffffu, false));
+        const QStringList page = image_adjustment_page(slice(block), false);
         adjustments.append(QJsonObject{{QStringLiteral("kind"), kind},
                                        {QStringLiteral("page"), QJsonArray::fromStringList(page)}});
     }
@@ -248,14 +248,14 @@ QJsonObject ControlServer::methodAdjustApply(const QJsonObject& params)
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("unknown adjustment kind: %1").arg(kind));
     }
-    QByteArray block = bytes(image_adjustment_default(kind, 0x000000u, 0xffffffu));
+    QByteArray block = bytes(image_adjustment_default(kind, 0x000000u, 0xffffffu, false));
     const QJsonObject values = params.value(QStringLiteral("values")).toObject();
     for (auto it = values.begin(); it != values.end(); ++it) {
         if (!it.value().isDouble()) {
             return error(QStringLiteral("invalid_param"),
                          QStringLiteral("%1 must be a number").arg(it.key()));
         }
-        block = bytes(image_adjustment_set(slice(block), it.key(), it.value().toDouble()));
+        block = bytes(image_adjustment_set(slice(block), it.key(), it.value().toDouble(), false));
         if (block.isEmpty()) {
             return error(QStringLiteral("invalid_param"),
                          QStringLiteral("refused value for %1").arg(it.key()));

@@ -14,7 +14,7 @@
 //! are not editable here. Color Lookup edits only its preset (the embedded
 //! `.CUBE` is rebuilt, not patched).
 
-use pictura_adjust::Adjustment;
+use pictura_adjust::{Adjustment, ChannelMixerParams};
 use pictura_codec::DescValue;
 use pictura_core::AdjustmentData;
 
@@ -152,7 +152,7 @@ type Layout = (
     Option<&'static str>,
 );
 
-fn layout(data: &AdjustmentData, adjustment: &Adjustment) -> Option<Layout> {
+fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<Layout> {
     use Field::*;
     let plain = |title, specs| Some((title, Vec::new(), specs, false, None));
     match adjustment {
@@ -386,6 +386,31 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment) -> Option<Layout> {
         }
         Adjustment::ChannelMixer(params) => {
             let mut specs = Vec::new();
+            if cmyk {
+                let outputs = ["Cyan", "Magenta", "Yellow", "Black"];
+                let sources = ["cyan", "magenta", "yellow", "black"];
+                for (output, _) in outputs.iter().enumerate() {
+                    let at = 4 + output * 10;
+                    for (source, label) in ["Cyan", "Magenta", "Yellow", "Black"]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        let key = format!("{output}.{}", sources[source]);
+                        let field = I16(at + source * 2);
+                        let default = f64::from(u8::from(source == output) * 100);
+                        specs.push(grouped(
+                            slider(&key, label, field, (-200.0, 200.0), default),
+                            output,
+                        ));
+                    }
+                    let key = format!("{output}.constant");
+                    specs.push(grouped(
+                        slider(&key, "Constant", I16(at + 8), (-200.0, 200.0), 0.0),
+                        output,
+                    ));
+                }
+                return Some(("Channel Mixer", outputs.to_vec(), specs, false, None));
+            }
             let outputs: Vec<&'static str> = if params.monochrome {
                 vec!["Gray"]
             } else {
@@ -413,6 +438,7 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment) -> Option<Layout> {
                     output,
                 ));
             }
+            specs.push(check("monochrome", "Monochrome", U16(2), false));
             Some((
                 "Channel Mixer",
                 outputs,
@@ -616,8 +642,13 @@ fn value_of(data: &AdjustmentData, spec: &Spec) -> f64 {
 /// The Properties page for an adjustment or fill layer's block; `None` when
 /// the block does not decode.
 pub fn adjustment_editor(data: &AdjustmentData) -> Option<AdjustmentEditor> {
+    adjustment_editor_in_mode(data, false)
+}
+
+/// As [`adjustment_editor`], reading the block as a CMYK document when `cmyk`.
+pub fn adjustment_editor_in_mode(data: &AdjustmentData, cmyk: bool) -> Option<AdjustmentEditor> {
     let adjustment = decode_adjustment(data)?;
-    let (title, groups, specs, curves, note) = layout(data, &adjustment)?;
+    let (title, groups, specs, curves, note) = layout(data, &adjustment, cmyk)?;
     let params = specs
         .iter()
         .map(|spec| AdjustmentParam {
@@ -646,13 +677,32 @@ pub fn set_adjustment_param(
     key: &str,
     value: f64,
 ) -> Option<AdjustmentData> {
+    set_adjustment_param_in_mode(data, key, value, false)
+}
+
+/// As [`set_adjustment_param`], reading the block as a CMYK document when
+/// `cmyk`. Toggling `monochrome` rebuilds the RGB form instead of patching a
+/// field, because the block cannot carry the hidden per-output rows.
+pub fn set_adjustment_param_in_mode(
+    data: &AdjustmentData,
+    key: &str,
+    value: f64,
+    cmyk: bool,
+) -> Option<AdjustmentData> {
     let adjustment = decode_adjustment(data)?;
+    if key == "monochrome" {
+        if let Adjustment::ChannelMixer(params) = &adjustment {
+            if !cmyk {
+                return Some(set_channel_mixer_monochrome(params, value != 0.0));
+            }
+        }
+    }
     // A Color Lookup preset is not a scalar field: rebuild the embedded `.CUBE`.
     if key == "preset" && matches!(adjustment, Adjustment::ColorLookup(_)) {
         let last = (crate::color_lookup_presets::COLOR_LOOKUP_PRESETS.len() - 1) as f64;
         return crate::set_color_lookup_preset(data, value.clamp(0.0, last).round() as usize);
     }
-    let (_, _, specs, _, _) = layout(data, &adjustment)?;
+    let (_, _, specs, _, _) = layout(data, &adjustment, cmyk)?;
     let spec = specs.into_iter().find(|s| s.key == key)?;
     let value = match spec.kind {
         ParamKind::Slider { min, max, .. } => value.clamp(min, max),
@@ -665,16 +715,40 @@ pub fn set_adjustment_param(
     decode_adjustment(&out).map(|_| out)
 }
 
+fn set_channel_mixer_monochrome(params: &ChannelMixerParams, on: bool) -> AdjustmentData {
+    let identity = params.red == [100.0, 0.0, 0.0]
+        && params.green == [0.0, 100.0, 0.0]
+        && params.blue == [0.0, 0.0, 100.0]
+        && params.constant == [0.0, 0.0, 0.0];
+    let red = if on && identity {
+        [40.0, 40.0, 20.0]
+    } else {
+        params.red
+    };
+    crate::encode_channel_mixer(
+        on,
+        red,
+        [0.0, 100.0, 0.0],
+        [0.0, 0.0, 100.0],
+        [params.constant[0], 0.0, 0.0],
+    )
+}
+
 /// Every parameter back to its default, and a Curves layer back to the
 /// identity line.
 pub fn reset_adjustment(data: &AdjustmentData) -> Option<AdjustmentData> {
-    let editor = adjustment_editor(data)?;
+    reset_adjustment_in_mode(data, false)
+}
+
+/// As [`reset_adjustment`], reading the block as a CMYK document when `cmyk`.
+pub fn reset_adjustment_in_mode(data: &AdjustmentData, cmyk: bool) -> Option<AdjustmentData> {
+    let editor = adjustment_editor_in_mode(data, cmyk)?;
     let mut out = data.clone();
     if editor.curves {
         out = crate::encode_curves(&[(0, 0), (255, 255)], None, None, None);
     }
     for param in &editor.params {
-        out = set_adjustment_param(&out, &param.key, param.default).unwrap_or(out);
+        out = set_adjustment_param_in_mode(&out, &param.key, param.default, cmyk).unwrap_or(out);
     }
     Some(out)
 }

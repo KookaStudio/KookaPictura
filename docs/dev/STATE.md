@@ -4,6 +4,19 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Channel Mixer Monochrome and CMYK** (#571, OpenSpec change
+  `channel-mixer-monochrome-cmyk`). The RGB dialog and Properties panel gain a
+  Monochrome checkbox (the Gray output; enabling from the identity seeds
+  40/40/20, disabling keeps the Gray mix as the Red row). `ChannelMixerParams`
+  carries a 4×4 ink matrix and four constants; a CMYK document mixes in unit
+  ink, converting through its embedded CMYK profile when the document is 8-bit
+  and through an f32 GCR round trip otherwise. The `mixr` block's two
+  ag-psd-reserved bytes carry the K source in a CMYK row; that layout is
+  inferred (no independent decoder models it) and covered by round-trip and
+  hand-built tests only. Verified: `cargo nextest run -p pictura-adjust -p
+  pictura-render -p pictura-codec -p pictura_app` 3323 passed/119 skipped;
+  `tst_image_adjustments`, `tst_properties_panel`, and `tst_adjustment_presets`
+  pass; the headless self-test is 469/0/1; clippy is clean.
 - **Streaming plane access** (#1212, step 4 of #1209; first of several PRs,
   OpenSpec `document/plane-access`). `Plane` has non-copying `rows`,
   `rows_mut`, `read_rect_into`, `write_rect_from`, `read_into` and

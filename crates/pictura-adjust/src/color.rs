@@ -359,6 +359,49 @@ pub(crate) fn channel_mixer(
     Ok(())
 }
 
+/// Mix four planar unit-ink planes (`0` no ink, `1` full ink) in place.
+///
+/// A negative constant adds ink (black); a positive constant removes it
+/// (white). The caller owns the RGB-to-ink conversion.
+pub fn apply_channel_mixer_ink(
+    p: &ChannelMixerParams,
+    ink: &mut [f32],
+    n: usize,
+) -> Result<(), AdjustError> {
+    if p.ink
+        .iter()
+        .chain(std::iter::once(&p.ink_constant))
+        .any(|row| row.iter().any(|v| !v.is_finite() || v.abs() > 200.0))
+    {
+        return Err(AdjustError::InvalidParams(
+            "channel mixer ink weights must be -200..=200 percent".into(),
+        ));
+    }
+    if ink.len() < n.saturating_mul(4) {
+        return Err(AdjustError::InvalidParams(
+            "channel mixer ink buffer must hold four planes".into(),
+        ));
+    }
+    for i in 0..n {
+        let input = [
+            f64::from(ink[i]),
+            f64::from(ink[n + i]),
+            f64::from(ink[2 * n + i]),
+            f64::from(ink[3 * n + i]),
+        ];
+        for (c, row) in p.ink.iter().enumerate() {
+            let mixed = row
+                .iter()
+                .zip(input)
+                .map(|(w, v)| w / 100.0 * v)
+                .sum::<f64>()
+                - p.ink_constant[c] / 100.0;
+            ink[c * n + i] = mixed.clamp(0.0, 1.0) as f32;
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Selective Color (libpsd's integer RGB -> CMYK -> RGB pipeline)
 // ---------------------------------------------------------------------------

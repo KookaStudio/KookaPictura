@@ -86,6 +86,9 @@ protected:
                      const QString& title, QWidget* parent);
 
     ToolController* tools() const { return tools_; }
+    // The document is CMYK, so the hand-laid pages read their descriptor page
+    // as ink rows.
+    bool cmyk() const { return cmyk_; }
     // The composite colour at document `pos` as it was before the preview
     // (the image a picker samples); invalid outside the document.
     QColor originalColorAt(const QPoint& pos);
@@ -156,6 +159,7 @@ private:
     QByteArray block_;
     QRect visible_;
     QString title_;
+    bool cmyk_ = false;
     bool previewing_ = false;
     AdjustmentControls* controls_ = nullptr;
     PresetCombo* preset_ = nullptr;

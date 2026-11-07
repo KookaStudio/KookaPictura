@@ -25,7 +25,7 @@ QByteArray bytes(const ::rust::Vec<std::uint8_t>& v)
 
 QByteArray setParam(const QByteArray& block, const char* key, double value)
 {
-    return bytes(image_adjustment_set(slice(block), QString::fromLatin1(key), value));
+    return bytes(image_adjustment_set(slice(block), QString::fromLatin1(key), value, false));
 }
 
 QByteArray setCurve(const QByteArray& block, int channel, const QList<QPair<int, int>>& points)
@@ -40,7 +40,7 @@ QByteArray setCurve(const QByteArray& block, int channel, const QList<QPair<int,
 
 double paramValue(const QByteArray& block, const char* key)
 {
-    const QStringList page = image_adjustment_page(slice(block));
+    const QStringList page = image_adjustment_page(slice(block), false);
     for (const QString& row : page) {
         const QStringList cells = row.split(QLatin1Char('\t'));
         if (cells.size() > 4 && cells[1] == QLatin1String(key)) {
@@ -234,7 +234,10 @@ bool adjustmentPresetMatches(const QByteArray& a, const QByteArray& b)
 
 QByteArray defaultPresetBlock(const QString& kind)
 {
-    return bytes(image_adjustment_default(kind, 0x000000u, 0xffffffu));
+    // The CMYK identity's first three rows are the RGB identity, so one block
+    // is neutral in both modes.
+    return bytes(image_adjustment_default(kind, 0x000000u, 0xffffffu,
+                                          kind == QLatin1String("channel-mixer")));
 }
 
 PresetCombo::PresetCombo(QWidget* parent)

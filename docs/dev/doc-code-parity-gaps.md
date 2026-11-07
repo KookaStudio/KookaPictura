@@ -6,7 +6,7 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 158 gaps — 5 systemic in §B, 153 per-domain in §C.
+- **Rows:** 157 gaps — 5 systemic in §B, 152 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -165,7 +165,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | IMG-15 | `image-rotation-and-flip.md` | Arbitrary rotation dialog, interpolation preference, ruler-straighten prefill | DIVERGENT | `frame_menus_image.cpp:115` | #567 |
 | IMG-17 | `color-settings.md` | `.csf` save/load, Gray/Spot working spaces, and installed-profile discovery | MISSING | `color_settings_dialog.cpp` | #569 |
 | IMG-18 | `32-bit-hdr.md` | 32-bit Preview Options, HDR colour picker, 32-bit Info readout | MISSING | `info_panel.cpp:377` | #570 |
-| ADJ-1 | `adjustments/channel-mixer.md` | Monochrome UI + CMYK/Gray outputs | MISSING | `channel_mixer_dialog.h:15` | #571 |
 | ADJ-2 | `adjustments/color-balance.md` | Numeric readouts + Lab/CMYK mapping | MISSING | `color_balance_dialog.cpp:33-53`; `color.rs:165-192` | #572 |
 | ADJ-3 | `adjustments/hue-saturation.md` | Colorize, range-band editing, eyedroppers, on-image tool | MISSING | `hue_saturation_dialog.h:17-21` | #573 |
 | ADJ-4 | `adjustments/gradient-map.md` | Dither + CS6 print-toning presets | MISSING | `gradient_map_dialog.cpp:82-91`; `gradient.rs:295-310` | #574 |

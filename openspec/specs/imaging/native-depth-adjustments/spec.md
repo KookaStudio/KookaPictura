@@ -149,6 +149,10 @@ byte-for-byte, including the Black & White tint path. Both SHALL clamp their
 output to `[0, 1]` before encoding, and Black & White SHALL clamp the computed
 grey to `[0, 1]` before applying the tint.
 
+A CMYK Channel Mixer on a 16/32-bit document SHALL mix in the f32 unit ink
+domain using the profile-free GCR conversion and SHALL NOT route through the
+8-bit profile conversion.
+
 #### Scenario: 16-bit Posterize uses native levels [nda_posterize_native]
 
 - **WHEN** Posterize with `levels == 5` is applied to a depth-16 store spanning
@@ -163,3 +167,9 @@ grey to `[0, 1]` before applying the tint.
 - **THEN** the Black & White grey clamps at the store's range before tinting, and
   in either case at least one output sample's low byte differs from its high
   byte, i.e. the result is not constrained to the 8-bit widening `high * 257`
+
+#### Scenario: 16-bit CMYK mixing keeps native precision [nda_cm_cmyk_native]
+
+- **WHEN** a non-identity CMYK Channel Mixer is applied to a depth-16 CMYK document
+- **THEN** the result uses the f32 GCR path and at least one output sample's low
+  byte differs from its high byte

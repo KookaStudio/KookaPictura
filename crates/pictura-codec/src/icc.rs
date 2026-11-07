@@ -238,6 +238,11 @@ pub(crate) fn cmyk_profile_from_resources(doc: &Document) -> Option<Profile> {
     (parsed.channels() == Some(4)).then_some(parsed)
 }
 
+/// The document's embedded four-channel CMYK profile, if it parses.
+pub fn document_cmyk_profile(doc: &Document) -> Option<Profile> {
+    cmyk_profile_from_resources(doc)
+}
+
 /// Replace or remove resource 1039 while preserving every other resource and
 /// the unparsed tail byte-for-byte.
 pub(crate) fn set_icc_resource(doc: &mut Document, icc: Option<&[u8]>) {

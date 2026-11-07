@@ -51,11 +51,18 @@ pub(super) fn adjustment_set_block(
 }
 
 pub(super) fn adjustment_page(view: &PictureView, path: &QString) -> QStringList {
+    let cmyk = document_is_cmyk(view);
     adjustment_data(view, &path.to_string())
         .as_ref()
-        .and_then(pictura_render::adjustment_editor)
+        .and_then(|data| pictura_render::adjustment_editor_in_mode(data, cmyk))
         .map(|editor| page_rows(&editor))
         .unwrap_or_default()
+}
+
+fn document_is_cmyk(view: &PictureView) -> bool {
+    view.rust().session.doc.as_ref().is_some_and(|doc| {
+        pictura_render::document_color_mode(doc) == pictura_core::ColorMode::Cmyk
+    })
 }
 
 /// An editor page as the tab-separated rows [`adjustment_page`] documents
@@ -153,9 +160,10 @@ pub(super) fn adjustment_set(
     key: &QString,
     value: f64,
 ) -> bool {
+    let cmyk = document_is_cmyk(&view);
     let key = key.to_string();
-    edit_adjustment(view, path, |data| {
-        pictura_render::set_adjustment_param(data, &key, value)
+    edit_adjustment(view, path, move |data| {
+        pictura_render::set_adjustment_param_in_mode(data, &key, value, cmyk)
     })
 }
 
@@ -203,7 +211,10 @@ pub(super) fn adjustment_set_curve(
 }
 
 pub(super) fn adjustment_reset(view: Pin<&mut PictureView>, path: &QString) -> bool {
-    edit_adjustment(view, path, pictura_render::reset_adjustment)
+    let cmyk = document_is_cmyk(&view);
+    edit_adjustment(view, path, move |data| {
+        pictura_render::reset_adjustment_in_mode(data, cmyk)
+    })
 }
 
 pub(super) fn adjustment_commit(mut view: Pin<&mut PictureView>, title: &QString) {

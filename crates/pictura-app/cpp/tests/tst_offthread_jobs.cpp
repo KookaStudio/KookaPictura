@@ -38,14 +38,14 @@ namespace {
 QByteArray blockOf(const char* kind)
 {
     const ::rust::Vec<std::uint8_t> v = pictura::image_adjustment_default(
-        QString::fromLatin1(kind), 0x000000u, 0xffffffu);
+        QString::fromLatin1(kind), 0x000000u, 0xffffffu, false);
     return QByteArray(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
 }
 
 QByteArray lightnessBlock(double value)
 {
     const ::rust::Vec<std::uint8_t> v = pictura::image_adjustment_set(
-        slice(blockOf("hue-saturation")), QStringLiteral("lightness"), value);
+        slice(blockOf("hue-saturation")), QStringLiteral("lightness"), value, false);
     return QByteArray(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
 }
 
