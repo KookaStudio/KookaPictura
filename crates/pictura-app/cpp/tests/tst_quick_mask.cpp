@@ -15,6 +15,7 @@
 #include "theme.h"
 #include "toolbox.h"
 #include "tools.h"
+#include <QtCore/QItemSelectionModel>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
 #include <QtGui/QAction>
@@ -751,14 +752,29 @@ void QuickMaskTest::redHighlightFollowsActiveTarget()
     QVERIFY(tree);
     const QString path = layer_selection_anchor(*view_);
     const QColor red = Theme::tokenColor(QStringLiteral("quick-mask-active"));
+    const int history = view_->history_count();
     QCOMPARE(tree->property("quickMaskActivePath").toString(), path);
     QCOMPARE(layerRowSurface(p, path), red);
-    set_layer_target(*view_, QStringList(), QString());
+    clear_layer_target(*view_);
     QCoreApplication::processEvents();
+    QVERIFY(layer_selection_anchor(*view_).isEmpty());
     QVERIFY(tree->property("quickMaskActivePath").toString().isEmpty());
     const QColor unselected = layerRowSurface(p, path);
     QVERIFY(unselected.isValid());
     QVERIFY(unselected != red);
+    QVERIFY(p->clickRowForTest(path));
+    QCOMPARE(layer_selection_anchor(*view_), path);
+    QCOMPARE(tree->property("quickMaskActivePath").toString(), path);
+    QCOMPARE(layerRowSurface(p, path), red);
+    tree->selectionModel()->clearSelection();
+    QVERIFY(layer_selection_anchor(*view_).isEmpty());
+    QVERIFY(tree->property("quickMaskActivePath").toString().isEmpty());
+    QCOMPARE(layerRowSurface(p, path), unselected);
+    QVERIFY(p->clickRowForTest(path));
+    QCOMPARE(layer_selection_anchor(*view_), path);
+    QCOMPARE(tree->property("quickMaskActivePath").toString(), path);
+    QCOMPARE(layerRowSurface(p, path), red);
+    QCOMPARE(view_->history_count(), history);
 }
 
 void QuickMaskTest::contentMovesRefuseWithoutPreview()

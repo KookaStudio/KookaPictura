@@ -456,6 +456,8 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
         otherBackground_ = background;
     });
     connect(layersPanel_, &LayersPanel::selectionChanged, this, [this] {
+        // Panel target writes are silent even when the mask/image edit kind stays unchanged.
+        syncQuickMask();
         if (propertiesPanel_) {
             propertiesPanel_->refresh();
         }
