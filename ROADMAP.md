@@ -213,7 +213,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] 16-bit and 32-bit operation for Smudge, Blur and Sharpen (#551)
 - [ ] The cross-document colour-mode rule, and Pattern Stamp Impressionist
       (#552)
-- [ ] Quick Mask (#172)
+- [x] Quick Mask (#172)
 
 ## Selections
 
@@ -237,7 +237,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       (#614)
 - [ ] Combine operations, the layer-mask target, and modifier-click combine on
       saved selections (#615)
-- [ ] Quick Mask (#172)
+- [x] Quick Mask (#172)
 
 ## Adjustments and image operations
 
