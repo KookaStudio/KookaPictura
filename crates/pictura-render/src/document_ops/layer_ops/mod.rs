@@ -79,7 +79,7 @@ pub use layer_masks::{
     add_layer_mask, add_layer_mask_converting_background, apply_layer_mask, delete_layer_mask,
     has_layer_mask, invert_layer_mask, layer_mask_disabled, layer_mask_linked,
     layer_mask_refinement, replace_layer_mask, set_layer_mask_density, set_layer_mask_enabled,
-    set_layer_mask_feather, set_layer_mask_linked, LayerMaskKind, MASK_FLAG_LINKED,
+    set_layer_mask_feather, set_layer_mask_linked, LayerMaskKind, MASK_FLAG_UNLINKED,
 };
 pub use layer_style::{
     any_effects_visible, clear_layer_style, copy_layer_style, has_layer_style,

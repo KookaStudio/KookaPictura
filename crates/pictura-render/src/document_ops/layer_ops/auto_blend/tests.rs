@@ -243,6 +243,22 @@ fn auto_blend_skips_ineligible_layers() {
 }
 
 #[test]
+fn auto_blend_masks_are_linked() {
+    for options in [STACK, PANORAMA] {
+        let mut d = pair();
+        blend(&mut d, &["0", "1"], options);
+        for path in ["0", "1"] {
+            assert!(crate::layer_mask_linked(&d, path));
+            let mask = d.layers[path.parse::<usize>().unwrap()]
+                .mask
+                .as_ref()
+                .unwrap();
+            assert_eq!(mask.flags & 1, 0);
+        }
+    }
+}
+
+#[test]
 fn stack_images_beats_each_input_focus() {
     let mut d = crossed_focus();
     let inputs = d.clone();

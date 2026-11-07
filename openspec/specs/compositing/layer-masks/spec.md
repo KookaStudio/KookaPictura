@@ -163,31 +163,6 @@ change.
 - **WHEN** a disabled mask is re-enabled
 - **THEN** the composite hides the same pixels it hid before being disabled
 
-### Requirement: Mask link flag
-
-The system SHALL expose the PSD layer-mask "position relative to layer" flag as
-the mask's linked state. The link flag SHALL be bit 0 of the mask's flags byte;
-setting the linked state SHALL set or clear that bit while preserving every other
-bit, so the raw flags byte keeps round-tripping through PSD save and read. The
-linked state SHALL default to linked for a newly created mask, matching CS6.
-
-#### Scenario: Linking sets only bit 0
-
-- **WHEN** a mask whose flags byte has other bits set is linked
-- **THEN** bit 0 becomes set, every other bit is preserved, and the mask reads as
-  linked
-
-#### Scenario: Unlinking clears only bit 0
-
-- **WHEN** a linked mask is unlinked
-- **THEN** bit 0 is cleared, every other bit is preserved, and the mask reads as
-  unlinked
-
-#### Scenario: A new mask is linked
-
-- **WHEN** a mask is created
-- **THEN** it reads as linked
-
 ### Requirement: Mask read predicates
 
 The system SHALL report whether a target layer currently has a raster layer mask
@@ -500,3 +475,34 @@ before.
 
 - **WHEN** a text layer's mask is the edit target and the Gradient drags across it
 - **THEN** the mask's coverage takes the ramp and one "Gradient" state is recorded
+
+### Requirement: Raster mask link flag polarity
+
+The system SHALL interpret bit 0 of a raster layer mask's PSD flags byte as
+unlinked when set and linked when clear. Linking SHALL clear only bit 0;
+unlinking SHALL set only bit 0, preserving every other flags bit and the mask's
+bounds and coverage. Setting the state it already has SHALL report no change
+and leave the document unchanged. A newly created raster mask SHALL be linked
+with bit 0 clear, including masks created by vector-mask rasterization and
+Auto Blend. The raw flags byte SHALL retain its PSD representation through
+save and read; linking SHALL NOT reinterpret the mask's stored coordinates.
+
+#### Scenario: Linking clears only bit 0 [pml_link_clears_bit]
+
+- **WHEN** an unlinked mask with flags `0xA1` is linked
+- **THEN** its flags become `0xA0`, it reads as linked, and its bounds and coverage are unchanged
+
+#### Scenario: Unlinking sets only bit 0 [pml_unlink_sets_bit]
+
+- **WHEN** a linked mask with flags `0xA0` is unlinked
+- **THEN** its flags become `0xA1`, it reads as unlinked, and its bounds and coverage are unchanged
+
+#### Scenario: A new mask is linked [pml_new_mask_linked]
+
+- **WHEN** a raster mask is created by an ordinary mask command, vector-mask rasterization, or Auto Blend
+- **THEN** the created mask reads as linked and its flags have bit 0 clear
+
+#### Scenario: Repeating the linked state is a no-op [pml_link_noop]
+
+- **WHEN** a mask is set to the linked or unlinked state it already has
+- **THEN** the operation reports no change and leaves the document unchanged

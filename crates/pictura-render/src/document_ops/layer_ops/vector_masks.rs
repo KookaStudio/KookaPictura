@@ -6,7 +6,6 @@
 use pictura_core::path::{PathPoint, Subpath};
 use pictura_core::{Document, Layer, LayerBlock, LayerMask, PsdRect, VectorMask};
 
-use super::layer_masks::MASK_FLAG_LINKED;
 use super::paths::{resolve_path, resolve_path_mut};
 
 /// The `vmsk` additional-layer-information key.
@@ -268,7 +267,7 @@ pub fn rasterize_vector_mask(doc: &mut Document, path: &str) -> bool {
         rect,
         default_color: 255,
         disabled: false,
-        flags: MASK_FLAG_LINKED,
+        flags: 0,
         data: Some(data.into()),
         ..Default::default()
     });
@@ -359,6 +358,15 @@ mod tests {
         assert_eq!(composite_rgba(&doc).data, plain, "reveal all is a no-op");
         assert!(!add_vector_mask(&mut doc, "0", VectorMaskKind::RevealAll));
         assert!(!add_vector_mask(&mut doc, "9", VectorMaskKind::RevealAll));
+    }
+
+    #[test]
+    fn rasterized_vector_mask_is_linked() {
+        let mut doc = doc(4, 4);
+        assert!(add_vector_mask(&mut doc, "0", VectorMaskKind::RevealAll));
+        assert!(rasterize_vector_mask(&mut doc, "0"));
+        assert!(crate::layer_mask_linked(&doc, "0"));
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap().flags & 1, 0);
     }
 
     #[test]

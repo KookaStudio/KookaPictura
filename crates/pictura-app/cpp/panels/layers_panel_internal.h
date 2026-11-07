@@ -993,7 +993,19 @@ private:
         if (base.isNull()) {
             return {};
         }
-        return base.transformed(QTransform().rotate(90), Qt::SmoothTransformation);
+        const QPixmap rotated =
+            base.transformed(QTransform().rotate(90), Qt::SmoothTransformation);
+        if (linked) {
+            return rotated;
+        }
+        QPixmap dimmed(rotated.size());
+        dimmed.setDevicePixelRatio(rotated.devicePixelRatio());
+        dimmed.fill(Qt::transparent);
+        QPainter painter(&dimmed);
+        painter.setOpacity(0.5);
+        painter.drawPixmap(QPoint(0, 0), rotated);
+        painter.end();
+        return dimmed;
     }
 
     int thumbnailSize_ = 24;

@@ -409,6 +409,19 @@ def masked() -> PSDImage:
     return psd
 
 
+def mask_link_state(unlinked: bool) -> PSDImage:
+    """Raster mask linkage with distinct document-space layer/mask origins."""
+    psd = PSDImage.new("RGB", (16, 12), color=(255, 255, 255))
+    layer = psd.create_pixel_layer(
+        _solid((8, 6), (128, 64, 32)), name="Mask link", top=3, left=2
+    )
+    image = Image.new("L", (3, 2))
+    image.putdata([0, 64, 255, 192, 128, 32])
+    layer.create_mask(image, top=5, left=4)
+    layer._record.mask_data.flags.pos_relative_to_layer = unlinked
+    return psd
+
+
 def gray() -> PSDImage:
     """Grayscale, one named pixel layer."""
     psd = PSDImage.new("L", (WIDTH, HEIGHT), color=0)
@@ -2112,6 +2125,8 @@ FIXTURES = {
     "group.psd": group,
     "pass_through_vector_mask.psd": pass_through_vector_mask,
     "masked.psd": masked,
+    "mask_linked.psd": lambda: mask_link_state(False),
+    "mask_unlinked.psd": lambda: mask_link_state(True),
     "gray.psd": gray,
     "indexed.psd": indexed,
     "cmyk.psd": cmyk,
