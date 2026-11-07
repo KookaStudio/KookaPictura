@@ -127,7 +127,7 @@ fn quick_mask_presentation_avoids_materialization() {
     let mut rust = fixture();
     rust.set_quick_mask_mode(true);
     let mut selection = Selection::all(8, 8);
-    selection.data.fracture(8);
+    selection.data.tile(8, 8);
     rust.session.quick_mask.coverage = Some(selection);
     pictura_core::assert_no_materialization(|| {
         assert_eq!(rust.quick_mask_coverage(4, 4), 255);
