@@ -319,10 +319,17 @@ pub(super) fn remap_after_insert(
             .filter(|s| !s.is_empty())
             .map(str::to_string)
             .collect();
-        if let Some(segment) = path_segments.get_mut(depth) {
-            if let Ok(value) = segment.parse::<usize>() {
-                if value >= index {
-                    *segment = (value + 1).to_string();
+        let same_parent = path_segments.len() > depth
+            && path_segments[..depth]
+                .iter()
+                .map(String::as_str)
+                .eq(parent.iter().copied());
+        if same_parent {
+            if let Some(segment) = path_segments.get_mut(depth) {
+                if let Ok(value) = segment.parse::<usize>() {
+                    if value >= index {
+                        *segment = (value + 1).to_string();
+                    }
                 }
             }
         }
@@ -397,6 +404,13 @@ mod tests {
         let links = links(&[("1/2", 1), ("1/3", 1), ("2/0", 2), ("2/1", 2)]);
         let remapped = remap_after_insert(&links, "1/2");
         assert_eq!(paths(&remapped), vec!["1/3", "1/4", "2/0", "2/1"]);
+    }
+
+    #[test]
+    fn a_nested_insertion_in_another_parent_keeps_its_paths() {
+        let links = links(&[("2/0", 1), ("2/1", 1)]);
+        let remapped = remap_after_insert(&links, "1/0");
+        assert_eq!(paths(&remapped), vec!["2/0", "2/1"]);
     }
 
     #[test]
