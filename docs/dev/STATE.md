@@ -4,6 +4,20 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Maximum/Minimum Preserve and radius** (#364, OpenSpec change
+  `maximum-minimum-preserve`). `Filter::Maximum`/`Minimum` carry a
+  `MorphologyPreserve` choice: `Squareness` keeps the existing `(2r+1)²`
+  separable square and its golden digests, `Roundness` uses the disk
+  `dx² + dy² <= r²` (a row-segment decomposition in
+  `pictura-core::mask_ops::disk_dilate/disk_erode`). The radius clamp rises from
+  100 to 500. The shared dialog shows a `Preserve:` menu (default `Squareness`)
+  and an inline, non-blocking warning above 100 px; the GPU accelerates only the
+  square footprint. The 8-bit engine remains the oracle. Tests:
+  `pictura-filters::maximum_squareness_keeps_the_square_footprint`,
+  `maximum_roundness_uses_the_disk_footprint`, `roundness_moves_the_alpha_plane`,
+  `morphology_radius_reaches_five_hundred_and_clamps`,
+  `morphology_preserve_selects_the_footprint`, `catalogue::tests::
+  morphology_warning_appears_above_one_hundred`, and `tst_maximum_filter`.
 - **Channel Mixer Monochrome and CMYK** (#571, OpenSpec change
   `channel-mixer-monochrome-cmyk`). The RGB dialog and Properties panel gain a
   Monochrome checkbox (the Gray output; enabling from the identity seeds

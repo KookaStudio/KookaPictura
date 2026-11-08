@@ -3,7 +3,7 @@
 - **Spec ID:** `FILT-070`
 - **Status:** `Draft`
 - **Parity tier:** `Core` (High Pass, Offset, Custom, Maximum, Minimum) + `Extended-only` for **HSB/HSL** (optional plug-in, not in a default install)
-- **New in CS6:** `No` — the Other submenu is unchanged from CS5. (The `Preserve: Squareness/Roundness` option on Maximum/Minimum arrives later, in CC; it is not in CS6.)
+- **New in CS6:** `No` — the Other submenu is unchanged from CS5. (The `Preserve: Squareness/Roundness` option on Maximum/Minimum arrives later, in CC; it is not in CS6. Pictura offers it, together with a 500 px radius and an above-100 warning, as the project extension tracked by #364.)
 - **Depends on:** `06-filters/filters-overview.md`, `06-filters/blur-filters.md`, `06-filters/sharpen-filters.md`, `06-filters/noise-filters.md`, `06-filters/pixelate-filters.md`, `04-image-ops/bit-depth-and-conversion.md`, `04-image-ops/image-modes.md`, `04-image-ops/adjustments/threshold.md`, `01-architecture/color-management.md`, `01-architecture/document-model.md`, `05-layers/smart-filters.md`, `05-layers/blend-modes.md`
 
 > All crate, module, widget, and type names below are **design proposals**. The
@@ -28,7 +28,7 @@
 
 **Custom is convolution.** Help describes it as reassigning each pixel from the values of its surrounding pixels, similar to the Add and Subtract channel calculations. Custom is saved/loaded as presets. (Sourced.)
 
-**Maximum/Minimum modify masks.** Help frames both explicitly as mask tools. In CS6 they expose **Radius** only. *(The later CC "Preserve: Squareness/Roundness" menu is not part of CS6; confirmed by the archived Adobe reference which dates the Preserve menu to "In Photoshop CC".)*
+**Maximum/Minimum modify masks.** Help frames both explicitly as mask tools. In CS6 they expose **Radius** only. *(The later CC "Preserve: Squareness/Roundness" menu is not part of CS6; confirmed by the archived Adobe reference which dates the Preserve menu to "In Photoshop CC".)* Pictura adds that menu as a project extension (#364): `Squareness` keeps the CS6 square footprint, `Roundness` uses a disk, the radius reaches 500 px, and the dialog warns above 100 px.
 
 **HSB/HSL is optional.** Adobe ships it in the **Optional Multiplugin**, which converts RGB to HSL and to HSB inside Photoshop so that hue, saturation, and luminosity can be edited as independent channels. It appears under `Filter > Other` only after installation. This means an independent-creation CS6 parity build should treat it as an optional plugin and gate its menu entry, not as a built-in filter. (Sourced — Adobe optional-plugins KB, echoed by tutorial sources.)
 
@@ -38,8 +38,8 @@
 |---|---|---|---|
 | `Filter > Other > Custom` | Menu / modal dialog | — | 5×5 grid, Scale, Offset, Save/Load |
 | `Filter > Other > High Pass` | Menu / modal dialog | — | Radius only |
-| `Filter > Other > Maximum` | Menu / modal dialog | — | Radius only (CS6) |
-| `Filter > Other > Minimum` | Menu / modal dialog | — | Radius only (CS6) |
+| `Filter > Other > Maximum` | Menu / modal dialog | — | Radius 1–500 and Preserve (Pictura extension; CS6 radius only) |
+| `Filter > Other > Minimum` | Menu / modal dialog | — | Radius 1–500 and Preserve (Pictura extension; CS6 radius only) |
 | `Filter > Other > Offset` | Menu / modal dialog | — | Horizontal/Vertical + Undefined Areas |
 | `Filter > Other > HSB/HSL` | Menu / modal dialog | — | Only when the optional plug-in is installed |
 | Smart Filter row | Layers panel | — | High Pass/Custom/Maximum/Minimum/Offset are Smart-Filter capable; see bit-depth list |
@@ -56,8 +56,10 @@ Ranges marked **[AS]** are from the Photoshop CS6 AppleScript Scripting Referenc
 | Custom | Offset | int | 0 *(inferred)* | value added after scaling; range *(inferred)* −9999…+9999 | [Help] (control), range *(inferred)* |
 | Custom | Save / Load | buttons | — | Save/load custom filter presets | [Help] |
 | High Pass | Radius | real px | 10 *(inferred)* | 0.1–250.0 | [AS] |
-| Maximum | Radius | real px | 1 *(inferred)* | 1–100 | [AS] |
-| Minimum | Radius | real px | 1 *(inferred)* | 1–100 | [AS] |
+| Maximum | Radius | integer px | 2 | 1–500 *(Pictura extension; CS6 1–100)* | [AS] (CS6 range) |
+| Maximum | Preserve | enum | Squareness *(Pictura)* | Squareness / Roundness *(Pictura extension)* | #364 |
+| Minimum | Radius | integer px | 2 | 1–500 *(Pictura extension; CS6 1–100)* | [AS] (CS6 range) |
+| Minimum | Preserve | enum | Squareness *(Pictura)* | Squareness / Roundness *(Pictura extension)* | #364 |
 | Offset | Horizontal | real (unit value) | 0 | min/max depend on layer size | [AS] |
 | Offset | Vertical | real (unit value) | 0 | min/max depend on layer size | [AS] |
 | Offset | Undefined Areas | enum | Set To Background *(inferred)* | Wrap Around / Repeat Edge Pixels / Set To Background (AS: "set to layer fill") | [Help][AS] |
@@ -114,8 +116,8 @@ Sharpen:                            Scale = 1,  Offset = 0
 | Filter | Algorithm family | Notes |
 |---|---|---|
 | High Pass | `src − Gaussian(src, r) + 128` (unsharp-style band split) | Retains the high-frequency band around mid-gray; large radius keeps broad edges, 0.1 keeps only edge pixels. Adobe's blur kernel is closed; behavioral parity only. *(inferred formula, sourced behavior)* |
-| Maximum | Morphological dilation (max filter) | Per-channel max over the radius; brightens/spreads whites, chokes blacks. Mask-oriented. *[Help]* |
-| Minimum | Morphological erosion (min filter) | Per-channel min over the radius; spreads blacks, shrinks whites. *[Help]* |
+| Maximum | Morphological dilation (max filter) | Per-channel max over the footprint; brightens/spreads whites, chokes blacks. Mask-oriented. `Squareness` is the `(2r+1)²` square; `Roundness` is the disk `dx² + dy² <= r²`. *[Help]* (disk is the Pictura extension) |
+| Minimum | Morphological erosion (min filter) | Per-channel min over the footprint; spreads blacks, shrinks whites. The same square and disk footprints as Maximum. *[Help]* (disk is the Pictura extension) |
 | Offset | Translation with edge handling | Pure integer/real translation; Wrap Around = modulo, Repeat Edge Pixels = clamp, Set To Background = fill exposed area with the background color. *[Help]* |
 | HSB/HSL | Color-space re-encoding of channel data | Input RGB → target HSB/HSL: H→R slot, S→G slot, B or L→B slot (and the reverse). This is a lossy 8-bit re-encoding used to isolate hue/saturation/luminance as channels; it is not a normal-mode conversion. *(inferred internals; sourced intent)* |
 
@@ -126,7 +128,7 @@ Sharpen:                            Scale = 1,  Offset = 0
 - `pictura_filter::other` — per-filter submodules implementing `Filter`.
 - `pictura_filter::other::custom` — `CustomKernel { k: [[i32; 5]; 5], scale: i32, offset: i32 }`; `convolve()` shared with `FILT-050` Emboss/Find Edges.
 - `pictura_filter::other::high_pass` — separable Gaussian via `pictura_filter::blur`, then `src − blur + mid`.
-- `pictura_filter::other::maximum` / `minimum` — separable dilation/erosion (max/min over a square or round radius; CS6 squareness-only, no Preserve).
+- `pictura_filter::other::maximum` / `minimum` — dilation/erosion with a `MorphologyPreserve` choice: `Squareness` is the separable `(2r+1)²` square, `Roundness` the disk `dx² + dy² <= r²` (a row-segment decomposition over the shared sliding window). The radius clamps at 500. CS6 has the square only; the choice is the Pictura extension.
 - `pictura_filter::other::offset` — integer translation + `EdgeMode::{WrapAround, RepeatEdgePixels, SetToBackground}` (needs fg/bg color).
 - `pictura_filter::other::hsb_hsl` — optional plugin; `InputMode`, `RowOrder`; runs only when the optional-plugin flag is enabled.
 - `pictura_filter::registry` — filter id + CS6 four-char event ids (`'Cstm'`, `'HghP'`, `'Mxm '`, `'Mnm '`, `'Ofst'`, `'HsbP'`) → implementation + `supported(mode, depth)`.
@@ -140,7 +142,7 @@ Crossing types: `Tile`, `Rect`, `CustomKernel`, `EdgeMode`, `ColorMode`, `BitDep
 | `OtherOptionsDialog` | `QDialog` | Per-filter forms in a `QStackedWidget` |
 | `CustomMatrixWidget` | `QWidget` | 5×5 grid of `QSpinBox`/`QLineEdit` (−999…999), Scale/Offset spins, Save/Load buttons |
 | `HighPassPanel` | `QWidget` | Radius spin (0.1–250.0) |
-| `MorphologyPanel` | `QWidget` | Radius spin (1–100); Preserve absent (CS6) |
+| `MorphologyPanel` | `QWidget` | Radius spin (1–500); Preserve menu (Squareness / Roundness, default Squareness); inline warning above 100 px |
 | `OffsetPanel` | `QWidget` | H/V fields honoring document units + Undefined Areas combo |
 | `HsbHslPanel` | `QWidget` | Input Mode + Row Order combos; entry only present when the optional plugin is enabled |
 | `FilterMenuBuilder` | helper | Hides HSB/HSL unless the optional plugin is installed; greys Custom on 32-bit |
@@ -163,7 +165,8 @@ Widgets over QML for the numeric dialogs, consistent with `ARCH-003`. The Custom
 - **Custom alpha/multichannel.** Whether alpha is convolved is unconfirmed; default to color channels only and document.
 - **High Pass radius 0.1.** Help says only edge pixels survive; the Gaussian must support sub-pixel sigma (0.1 px).
 - **High Pass + Threshold/Bitmap.** The documented use case; verify the output is mid-gray-centered so Threshold behaves predictably.
-- **Maximum/Minimum radius.** Max 100 px per the scriptable range; larger requests must clamp. CS6 has **no** Preserve (squareness/roundness) control.
+- **Maximum/Minimum radius and footprint.** Pictura clamps at 500 px; a larger request behaves as 500. The dialog warns above 100 px because the round footprint costs `O(r)` passes and the square is separable. CS6 has **no** Preserve control; Pictura's `Squareness` default keeps the CS6 output and `Roundness` is an approximation of the closed Adobe disk kernel.
+- **Roundness cost.** The disk kernel is a union of one horizontal segment per row, so it costs `O(r·w·h)` and declines the GPU. The square kernel stays `O(w·h)` and remains accelerated.
 - **Offset units.** H/V are unit values, not raw pixels; convert using document resolution. The exposed fill area must use the current background color at apply time.
 - **Offset wrap on selection.** Wrap should be relative to the selection bounds, not the full document (verify against CS6).
 - **HSB/HSL absent.** With no optional plugin installed the menu entry must not appear; a document using it should still open.
@@ -182,7 +185,9 @@ Widgets over QML for the numeric dialogs, consistent with `ARCH-003`. The Custom
 - Given a Custom filter, Save then Load restores the same 25 values, Scale, and Offset.
 - Given High Pass radius 0.1, only edge pixels remain non-mid-gray; at a large radius, broad tonal contours survive.
 - Given High Pass followed by `Image > Adjustments > Threshold`, the result is a clean line/mask extraction (the documented use).
-- Given Maximum at radius `r`, every output pixel equals the maximum of its neighbors within `r`; Minimum equals the minimum. Maximum on a white-on-black mask grows the white region; Minimum shrinks it.
+- Given Maximum at radius `r` with `Squareness`, every output pixel equals the maximum of its neighbors within the `(2r+1)²` square; Minimum equals the minimum. Maximum on a white-on-black mask grows the white region; Minimum shrinks it.
+- Given Maximum or Minimum at radius 1 with `Roundness`, the four diagonal neighbours are outside the disk; at radius 2 the `(1, 1)` offset is inside it.
+- Given a radius above 500, the output is bit-identical to radius 500. Given radius 150, a bright sample 120 px away is inside the footprint that radius 100 misses.
 - Given Maximum followed by Minimum at the same radius (closing), small black holes in a white mask are filled.
 - Given Offset with Wrap Around by `(w, 0)`, the image is shifted and the wrapped column re-enters on the other side.
 - Given Offset with Set To Background at the edge of an image, the exposed area is the current background color.
@@ -201,6 +206,7 @@ Fetched for this document:
 - `https://mattlauder.com.au/make-vibrancy-saturation-masks` — tutorial. Established the HSB/HSL dialog controls in practice (Input Mode = RGB, Row Order = HSB) and the saturation-mask workflow where the green channel becomes saturation; also that HSB/HSL requires Adobe's Optional Multiplugin.
 - `https://photoshoptrainingchannel.com/hsb-hsl-filter-saturation-mask` — tutorial. Corroborated that HSB/HSL ships with the optional plug-in ("Filter for Photoshop CC 2019 and earlier (Including CS6)") and is used to build saturation masks.
 - `https://www.computerhope.com/jargon/p/photoshop-glass.htm` — used only to confirm that filters such as these are Filter-Gallery/8-bit-capable where Help is silent (not central to this spec).
+- Issue #364 — the project extension's requirement: a 500 px maximum radius, an above-100 warning, and a `Preserve` menu with `Squareness` and `Roundness`. The disk footprint formula and the above-100 threshold are the project's recorded choices.
 
 Not used in this pass:
 
@@ -211,7 +217,7 @@ Not used in this pass:
 - **Custom matrix defaults.** The initial dialog values (identity vs all-zero) and the exact `Scale`/`Offset` ranges are inferred from Help prose. Resolve from a CS6 UI capture.
 - **Custom convolution edge policy and alpha.** Photoshop's out-of-bounds policy and whether the alpha channel is convolved are undocumented. Resolve by fitting.
 - **High Pass formula.** The `src − Gaussian + 128` form is inferred; Adobe's exact blur kernel, sigma-to-radius mapping, and sign/offset are closed. Resolve by fitting.
-- **Maximum/Minimum kernel shape.** CS6 has no Preserve control, but the default footprint (square vs circular) and per-channel behavior in CMYK are unconfirmed. Resolve by fitting.
+- **Maximum/Minimum kernel shape.** CS6 has no Preserve control. Pictura's extension defaults to `Squareness` (the CS6 square) and offers `Roundness` as the disk `dx² + dy² <= r²`; Adobe's exact disk kernel and its per-channel behavior in CMYK remain unconfirmed, so the disk is an approximation. Resolve the disk by fitting against a modern Photoshop capture.
 - **Offset wrap reference frame.** Whether Wrap Around is relative to the selection or the document is unconfirmed. Resolve with a CS6 test.
 - **HSB/HSL exact encoding.** The precise H/S/B (and H/S/L) scaling to 8-bit channels and the rounding are closed; the plug-in is optional, so the independent choice may be to recreate it as an optional plugin with behavioral parity only. Resolve with the Optional Multiplugin binary's documented behavior.
 - **HSB/HSL presets/serialization.** Whether the input mode/row order are stored per Smart Filter instance is unconfirmed.
