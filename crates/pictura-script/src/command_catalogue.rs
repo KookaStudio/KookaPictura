@@ -83,4 +83,57 @@ mod tests {
         let spec = find("window.panels.actions").expect("actions panel row");
         assert_eq!(spec.shortcut, "F9");
     }
+
+    #[test]
+    fn default_shortcuts_are_unique() {
+        let mut owners = std::collections::HashMap::new();
+        for spec in command_catalogue() {
+            if spec.shortcut.is_empty() {
+                continue;
+            }
+            if let Some(previous) = owners.insert(spec.shortcut, spec.id) {
+                panic!(
+                    "{} is the default of both {} and {}",
+                    spec.shortcut, previous, spec.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cs6_function_key_panels() {
+        let expected = [
+            ("window.panels.brushes", "F5"),
+            ("window.panels.color", "F6"),
+            ("window.panels.layers", "F7"),
+            ("window.panels.info", "F8"),
+            ("window.panels.actions", "F9"),
+        ];
+        for (id, shortcut) in expected {
+            let spec = find(id).unwrap_or_else(|| panic!("{id} row"));
+            assert_eq!(spec.shortcut, shortcut, "{id} default");
+        }
+    }
+
+    #[test]
+    fn proof_colors_owns_ctrl_y() {
+        assert_eq!(
+            find("view.proof.colors")
+                .expect("proof colors row")
+                .shortcut,
+            "Ctrl+Y"
+        );
+        assert_eq!(find("edit.redo").expect("redo row").shortcut, "");
+    }
+
+    #[test]
+    fn stamp_visible_owns_ctrl_alt_shift_e() {
+        assert_eq!(
+            find("layer.stamp.visible")
+                .expect("stamp visible row")
+                .shortcut,
+            "Ctrl+Alt+Shift+E"
+        );
+        assert_eq!(find("file.exportAs").expect("export as row").shortcut, "");
+    }
 }

@@ -33,6 +33,7 @@ private slots:
     void deleteKeyLeavesAFocusedTextFieldAlone();
     void deleteKeyActsAfterAFieldLosesFocus();
     void ctrlZWorksWhileHistoryIconFlyoutIsOpen();
+    void undoTogglesToRedo();
     void textFieldKeepsNativeCtrlZUndo();
     void ctrlEqualsZoomsIn();
     void freeTransformLiftsTheSelectedPixels();
@@ -217,6 +218,34 @@ void EditShortcutsTest::ctrlZWorksWhileHistoryIconFlyoutIsOpen()
     frame.registry()->refresh();
     QTest::keyClick(list, Qt::Key_Z, Qt::ControlModifier);
     QCOMPARE(view->layer_count(), 1);
+}
+
+// CS6's Undo command toggles to Redo once no undo state remains; Redo itself
+// has no default binding because Ctrl+Y belongs to Proof Colors.
+void EditShortcutsTest::undoTogglesToRedo()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Undo Toggle"), 40, 30, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+    const int doc = frame.activeDocumentIndex();
+    const int initial = view->history_index();
+    QVERIFY(view->select_rect(5, 5, 20, 16, QStringLiteral("new"), 0.0));
+    QCOMPARE(view->history_index(), initial + 1);
+
+    canvas->setFocus();
+    QTest::keyClick(canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(view->history_index(), initial);
+    QVERIFY(!view->can_undo());
+    QVERIFY(view->can_redo());
+
+    QTest::keyClick(canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(view->history_index(), initial + 1);
+    QVERIFY(view->can_undo());
+    QVERIFY(!view->can_redo());
+    frame.closeDocument(doc, false);
 }
 
 void EditShortcutsTest::textFieldKeepsNativeCtrlZUndo()
