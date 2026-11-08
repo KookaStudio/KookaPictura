@@ -90,6 +90,9 @@ pub(in crate::cxxqt_object) enum WarpDrag {
 /// current similarity transform about its reference point, and the drag state.
 pub(in crate::cxxqt_object) struct TransformSession {
     pub(in crate::cxxqt_object) path: String,
+    /// Every layer the session transforms with the source rect its map is
+    /// centred on, in panel order. `orig_rect` is the union of their rects.
+    pub(in crate::cxxqt_object) members: Vec<(String, PsdRect)>,
     pub(in crate::cxxqt_object) orig_rect: PsdRect,
     pub(in crate::cxxqt_object) scale_x: f64,
     pub(in crate::cxxqt_object) scale_y: f64,
@@ -156,9 +159,10 @@ pub(in crate::cxxqt_object) struct TransformSession {
     /// source): the source path and the document before the lift, which a
     /// cancel restores.
     pub(in crate::cxxqt_object) lifted: Option<(String, Box<pictura_core::Document>)>,
-    /// The layer's rect before `trim_to_content` hugged the box to its pixels;
-    /// a session dropped without a transform pads the layer back out to it.
-    pub(in crate::cxxqt_object) untrimmed: Option<PsdRect>,
+    /// Each member's rect before `trim_to_content` hugged the box to its
+    /// pixels; a session dropped without a transform pads every member back
+    /// out to it.
+    pub(in crate::cxxqt_object) untrimmed: Vec<(String, PsdRect)>,
     /// The history label a commit records. `Free Transform` for an interactive
     /// session; an exact command (`Rotate 90° Clockwise`, `Transform Again`, …)
     /// sets its own before committing immediately.

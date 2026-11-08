@@ -519,6 +519,7 @@ impl PictureViewRust {
         self.ruler = None;
         self.canvas_proxy = None;
         self.link_sets.clear();
+        self.link_remap = None;
         self.source_format = "psd".to_string();
         self.filter_error = None;
         self.save_embed_profile = None;
@@ -550,9 +551,9 @@ impl PictureViewRust {
         self.move_prepared_layer.clear();
         self.move_prepared_union = None;
         self.move_preview_cache_hit = false;
-        if let Some(rect) = session.untrimmed {
+        for (member, rect) in &session.untrimmed {
             if let Some(doc) = self.session.doc.as_mut() {
-                pictura_render::untrim_to(doc, &session.path, rect);
+                pictura_render::untrim_to(doc, member, *rect);
             }
         }
         if let Some((_, before)) = session.lifted {

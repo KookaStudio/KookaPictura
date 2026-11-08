@@ -10,7 +10,7 @@ use crate::cxxqt_object::presentation::{present_core, Presentation, Rebuild};
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::history::History;
 use crate::layer_target::LayerTarget;
-use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PixelBuffer, PsdRect};
+use pictura_core::{BitDepth, ColorMode, Document, LayerStack, LockFlags, PixelBuffer, PsdRect};
 use pictura_paint::StrokeConfig;
 use pictura_select::Selection;
 
@@ -196,6 +196,69 @@ fn a_transform_on_another_target_replaces_the_session() {
     );
     view.session.live.set_transform(second);
     assert_eq!(view.active_session_kind(), Some(SessionKind::Transform));
+}
+
+#[test]
+fn a_linked_transform_includes_a_hidden_partner() {
+    let mut view = view_with_two_layers();
+    view.link_sets.insert("0".to_string(), 1);
+    view.link_sets.insert("1".to_string(), 1);
+    if let Some(doc) = view.session.doc.as_mut() {
+        if let Some(layer) = pictura_render::resolve_path_mut(doc, "1") {
+            layer.visible = false;
+        }
+    }
+
+    let session = view
+        .prepare_transform("0", TransformMode::Free)
+        .expect("the linked session");
+    assert_eq!(session.path, "0", "the started-on layer stays the primary");
+    let mut members: Vec<&str> = session
+        .members
+        .iter()
+        .map(|(path, _)| path.as_str())
+        .collect();
+    members.sort_unstable();
+    assert_eq!(
+        members,
+        vec!["0", "1"],
+        "the hidden linked partner transforms with the set"
+    );
+    assert_eq!(
+        session.orig_rect,
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 8,
+            right: 8,
+        },
+        "the box is the union of every member"
+    );
+}
+
+#[test]
+fn a_linked_transform_skips_a_position_locked_partner() {
+    let mut view = view_with_two_layers();
+    view.link_sets.insert("0".to_string(), 1);
+    view.link_sets.insert("1".to_string(), 1);
+    if let Some(doc) = view.session.doc.as_mut() {
+        if let Some(layer) = pictura_render::resolve_path_mut(doc, "1") {
+            layer.lock = layer.lock.with(LockFlags::POSITION, true);
+        }
+    }
+
+    let session = view
+        .prepare_transform("0", TransformMode::Free)
+        .expect("the session");
+    assert_eq!(
+        session
+            .members
+            .iter()
+            .map(|(path, _)| path.as_str())
+            .collect::<Vec<_>>(),
+        vec!["0"],
+        "a position-locked partner stays put"
+    );
 }
 
 #[test]

@@ -301,6 +301,7 @@ impl qobject::PictureView {
             created = pictura_render::add_layer(doc, above, &name);
             if created >= 0 {
                 let edit = insertion_edit(doc, &created.to_string());
+                super::impl_layers_select::remap_links_after_insert(rust, &created.to_string());
                 rust.layer_target.select_only(&created.to_string());
                 edit
             } else {
@@ -320,6 +321,7 @@ impl qobject::PictureView {
             created = pictura_render::add_group(doc, above, &name);
             if created >= 0 {
                 let edit = insertion_edit(doc, &created.to_string());
+                super::impl_layers_select::remap_links_after_insert(rust, &created.to_string());
                 rust.layer_target.select_only(&created.to_string());
                 edit
             } else {
@@ -345,6 +347,7 @@ impl qobject::PictureView {
             if created >= 0 {
                 let after = pictura_render::damage::influence(doc, &created.to_string());
                 let edit = duplicate_edit(doc, &[created.to_string()], structural(before, after));
+                super::impl_layers_select::remap_links_after_insert(rust, &created.to_string());
                 rust.layer_target.select_only(&created.to_string());
                 edit
             } else {
@@ -887,6 +890,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             let edit = insertion_edit(doc, &created);
+            super::impl_layers_select::remap_links_after_insert(rust, &created);
             rust.select_only_layer(&created);
             edit
         });
@@ -905,6 +909,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             let edit = insertion_edit(doc, &created);
+            super::impl_layers_select::remap_links_after_insert(rust, &created);
             rust.select_only_layer(&created);
             edit
         });

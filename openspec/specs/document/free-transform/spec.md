@@ -96,18 +96,19 @@ be refused with no mutation.
 ### Requirement: Free Transform session lifecycle and undo contract
 
 The system SHALL provide a modal, per-`PictureView` Free Transform session. It
-SHALL begin on an explicit target path, hold the target path, the original rect,
-and the current `scale_x`, `scale_y`, `angle_radians`, and `(dx, dy)`, and SHALL
-expose press, move, and release callbacks that take document-space image
-coordinates and modifier flags. Enter/Return SHALL commit: the session SHALL call
-`transform_layer` once, recomposite, and record exactly one history state
-labelled `"Free Transform"`. Escape SHALL cancel: the session SHALL end with the
-document bit-identical to its state before the session began and with no history
-state added. Beginning a session on the path already active SHALL be a no-op;
-beginning one on a different path SHALL cancel the active session and start a
-new session on the new path. Switching tools, switching documents, or closing
-the document SHALL cancel the active session. Committing an unchanged (identity)
-transform SHALL record no history state.
+SHALL begin on an explicit target path, hold the target paths, the union of
+their rects, and the current `scale_x`, `scale_y`, `angle_radians`, and
+`(dx, dy)`, and SHALL expose press, move, and release callbacks that take
+document-space image coordinates and modifier flags. Enter/Return SHALL commit:
+the session SHALL apply the transform to every target path, recomposite, and
+record exactly one history state labelled `"Free Transform"`. Escape SHALL
+cancel: the session SHALL end with the document bit-identical to its state
+before the session began and with no history state added. Beginning a session
+on the path already active SHALL be a no-op; beginning one on a different path
+SHALL cancel the active session and start a new session on the new path.
+Switching tools, switching documents, or closing the document SHALL cancel the
+active session. Committing an unchanged (identity) transform SHALL record no
+history state.
 
 #### Scenario: Begin, gesture, commit records one state
 
@@ -879,3 +880,45 @@ SHALL leave the document bit-identical.
 
 - **WHEN** a transform is pending, another layer is clicked in the Layers panel, and `Cancel` is answered
 - **THEN** the session is still pending, the previous layer is still active, and the panel's layer-editing controls stay disabled
+
+### Requirement: Linked layers transform as one and keep their link
+
+A Free Transform session begun on a layer that belongs to a link set SHALL
+include every transformable member of that set. The transform box SHALL be the
+union of the members' content rects and the default reference point SHALL be
+its centre. Every gesture and exact transform command (scale, rotate, skew,
+distort, perspective, flip, and warp) SHALL apply the same map to each member,
+with the reference point and translation shared across the set. The live preview SHALL draw the visible
+members composited over transparency under the same map, without rebuilding the
+document composite on each pointer move. A hidden member SHALL transform with
+the set. A position-locked member, a group, an adjustment
+layer, a Background layer, or any other member the transform engine refuses
+SHALL be left in place, matching the Move tool. The commit SHALL record one
+history state and SHALL NOT clear the link set; the members SHALL remain
+linked afterwards. A lifted selection SHALL keep its existing single-target
+behaviour.
+
+#### Scenario: Rotating a linked layer rotates the set [ftr_linked_rotate]
+
+- **WHEN** two pixel layers are linked, Free Transform begins on one, and a 90° rotation is committed
+- **THEN** both layers rotate about the union centre, exactly one history state is recorded, and the two layers remain linked
+
+#### Scenario: A hidden linked member transforms too [ftr_linked_hidden]
+
+- **WHEN** one member of a linked pair is hidden and the other is rotated
+- **THEN** the hidden member's content receives the same transform
+
+#### Scenario: A position-locked member stays put [ftr_linked_locked]
+
+- **WHEN** a linked set contains a position-locked layer and another member is transformed
+- **THEN** the locked member is unchanged and the other member transforms
+
+#### Scenario: A projective mode transforms the set [ftr_linked_projective]
+
+- **WHEN** a Skew, Distort, or Perspective session is begun on a linked layer
+- **THEN** every transformable member receives the member-local quad of the same projective map
+
+#### Scenario: Warp transforms the set [ftr_linked_warp]
+
+- **WHEN** a Warp session is begun on a linked layer and the mesh is edited
+- **THEN** the preview and the commit apply the same mesh to every transformable member

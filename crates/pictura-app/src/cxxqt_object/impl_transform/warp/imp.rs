@@ -4,7 +4,7 @@ use super::super::super::document_session::{TransformSession, WarpDrag};
 use super::super::geometry::{
     projective_coefficients, session_quad, source_corners, store_quad, unmap_quad, MapParams,
 };
-use super::super::session::transform_preview_layer;
+use super::super::session::{rendered_transform_group, transform_preview_layer};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -346,15 +346,33 @@ pub(in crate::cxxqt_object::impl_transform) fn refresh_warp_preview(
         let warp = session.warp.as_ref()?;
         let mut clone = doc.clone();
         let quad = warp_preview_quad(session).unwrap_or_else(|| session_quad(session));
-        // An identity (or refused) warp previews the untouched layer.
-        pictura_render::transform_layer_warp(
-            &mut clone,
-            &session.path,
-            warp,
-            Some(quad),
-            session.interpolation,
-        );
-        transform_preview_layer(&clone, &session.path, gpu_compute)
+        let members: Vec<String> = session
+            .members
+            .iter()
+            .map(|(member, _)| member.clone())
+            .collect();
+        // An identity (or refused) warp previews the untouched layer. Every
+        // linked member carries the same document-space mesh.
+        for member in &members {
+            pictura_render::transform_layer_warp(
+                &mut clone,
+                member,
+                warp,
+                Some(quad),
+                session.interpolation,
+            );
+        }
+        if members.len() > 1 {
+            let rect = members
+                .iter()
+                .filter_map(|member| {
+                    pictura_render::resolve_path(&clone, member).map(|layer| layer.rect)
+                })
+                .reduce(pictura_core::PsdRect::union)?;
+            rendered_transform_group(&clone, &members, rect, gpu_compute)
+        } else {
+            transform_preview_layer(&clone, &session.path, gpu_compute)
+        }
     })();
     let Some((image, x, y)) = prepared else {
         return false;
@@ -699,6 +717,7 @@ mod tests {
         let center = (45.0, 30.0);
         TransformSession {
             path: "0".to_string(),
+            members: vec![("0".to_string(), rect)],
             orig_rect: rect,
             scale_x: 1.0,
             scale_y: 1.0,
@@ -731,7 +750,7 @@ mod tests {
             warp_editing: false,
             warp_post: None,
             lifted: None,
-            untrimmed: None,
+            untrimmed: Vec::new(),
             history_label: "Free Transform".to_string(),
         }
     }

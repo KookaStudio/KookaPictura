@@ -193,6 +193,9 @@ pub struct PictureViewRust {
     /// milliseconds.
     pub(super) move_composite_delay_for_test: u64,
     pub(super) link_sets: HashMap<String, u32>,
+    /// Link sets a structural command remapped instead of clearing. The edit
+    /// transaction installs them; `None` clears the links as before.
+    pub(super) link_remap: Option<HashMap<String, u32>>,
     /// The Ruler tool's measuring line: view state, never saved or undone.
     pub(super) ruler: Option<pictura_core::Ruler>,
     /// The filter dialog's reduced copy of the canvas.
@@ -330,6 +333,7 @@ impl Default for PictureViewRust {
             transform_delay_for_test: 0,
             move_composite_delay_for_test: 0,
             link_sets: HashMap::new(),
+            link_remap: None,
             ruler: None,
             canvas_proxy: None,
             filter_jobs: Default::default(),

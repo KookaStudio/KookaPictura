@@ -10,12 +10,13 @@ use std::collections::HashMap;
 use super::edit::{structural_before, Edit};
 use super::helpers::*;
 use super::qobject;
+use super::state::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 
-fn remap_after_delete(path: &str, deleted: &[String]) -> Option<String> {
+pub(super) fn remap_path_after_delete(path: &str, deleted: &[String]) -> Option<String> {
     let mut old_parent = String::new();
     let mut remapped = Vec::new();
     for segment in path.split('/') {
@@ -171,10 +172,16 @@ impl qobject::PictureView {
     pub fn delete_hidden_layers(mut self: Pin<&mut Self>) -> i32 {
         let mut removed = 0;
         self.as_mut().edit("Delete Hidden Layers", |rust| {
+            let hidden = {
+                let Some(doc) = rust.session.doc.as_ref() else {
+                    return Edit::None;
+                };
+                pictura_render::hidden_layer_paths(doc)
+            };
+            remap_links_after_delete(rust, &hidden);
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
-            let hidden = pictura_render::hidden_layer_paths(doc);
             let hidden_refs: Vec<&str> = hidden.iter().map(String::as_str).collect();
             let before = pictura_render::damage::influence_paths(doc, &hidden_refs);
             removed = pictura_render::delete_hidden_layers(doc);
@@ -187,11 +194,11 @@ impl qobject::PictureView {
                     let selected: Vec<String> = target
                         .selected()
                         .iter()
-                        .filter_map(|path| remap_after_delete(path, &hidden))
+                        .filter_map(|path| remap_path_after_delete(path, &hidden))
                         .collect();
                     let anchor = target
                         .anchor()
-                        .and_then(|path| remap_after_delete(path, &hidden));
+                        .and_then(|path| remap_path_after_delete(path, &hidden));
                     target.select(selected, anchor, Some(doc));
                 }
                 target
@@ -219,7 +226,9 @@ impl qobject::PictureView {
     /// Drop the transient link map. Structural commands call this: paths are
     /// positional, so any tree edit invalidates them (design D9).
     pub(super) fn clear_link_sets(mut self: Pin<&mut Self>) {
-        self.as_mut().rust_mut().link_sets.clear();
+        let rust = &mut *self.as_mut().rust_mut();
+        rust.link_sets.clear();
+        rust.link_remap = None;
     }
 }
 
@@ -285,4 +294,122 @@ fn prune_singleton_links(link_sets: &mut HashMap<String, u32>) {
         *counts.entry(*id).or_default() += 1;
     }
     link_sets.retain(|_, id| counts.get(id).copied().unwrap_or(0) >= 2);
+}
+
+/// The link sets with every path shifted for a node inserted at `inserted`.
+/// A path at the insertion parent whose segment there is at or below the new
+/// index moves down one; other parents are untouched. A set that loses all but
+/// one member is dropped.
+pub(super) fn remap_after_insert(
+    link_sets: &HashMap<String, u32>,
+    inserted: &str,
+) -> HashMap<String, u32> {
+    let segments: Vec<&str> = inserted.split('/').filter(|s| !s.is_empty()).collect();
+    let Some((index, parent)) = segments.split_last() else {
+        return link_sets.clone();
+    };
+    let Ok(index) = index.parse::<usize>() else {
+        return link_sets.clone();
+    };
+    let depth = parent.len();
+    let mut out = HashMap::with_capacity(link_sets.len());
+    for (path, id) in link_sets {
+        let mut path_segments: Vec<String> = path
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect();
+        if let Some(segment) = path_segments.get_mut(depth) {
+            if let Ok(value) = segment.parse::<usize>() {
+                if value >= index {
+                    *segment = (value + 1).to_string();
+                }
+            }
+        }
+        out.insert(path_segments.join("/"), *id);
+    }
+    prune_singleton_links(&mut out);
+    out
+}
+
+/// The link sets with every path remapped after `deleted` nodes were removed;
+/// a member that was deleted (or lived inside a deleted group) leaves its set.
+pub(super) fn remap_after_delete(
+    link_sets: &HashMap<String, u32>,
+    deleted: &[String],
+) -> HashMap<String, u32> {
+    let mut out = HashMap::with_capacity(link_sets.len());
+    for (path, id) in link_sets {
+        if let Some(remapped) = remap_path_after_delete(path, deleted) {
+            out.insert(remapped, *id);
+        }
+    }
+    prune_singleton_links(&mut out);
+    out
+}
+
+/// Stash the remapped link sets for the pending structural edit.
+pub(super) fn remap_links_after_insert(rust: &mut PictureViewRust, inserted: &str) {
+    let remapped = remap_after_insert(&rust.link_sets, inserted);
+    rust.link_remap = Some(remapped);
+}
+
+/// Stash the remapped link sets for the pending structural edit.
+pub(super) fn remap_links_after_delete(rust: &mut PictureViewRust, deleted: &[String]) {
+    let remapped = remap_after_delete(&rust.link_sets, deleted);
+    rust.link_remap = Some(remapped);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn links(entries: &[(&str, u32)]) -> HashMap<String, u32> {
+        entries
+            .iter()
+            .map(|(path, id)| ((*path).to_string(), *id))
+            .collect()
+    }
+
+    fn paths(links: &HashMap<String, u32>) -> Vec<String> {
+        let mut out: Vec<String> = links.keys().cloned().collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn an_insertion_below_the_linked_layers_keeps_their_paths() {
+        let links = links(&[("1", 1), ("2", 1)]);
+        let remapped = remap_after_insert(&links, "3");
+        assert_eq!(paths(&remapped), vec!["1", "2"]);
+    }
+
+    #[test]
+    fn an_insertion_above_shifts_the_linked_paths() {
+        let links = links(&[("1", 1), ("2", 1)]);
+        let remapped = remap_after_insert(&links, "1");
+        assert_eq!(paths(&remapped), vec!["2", "3"]);
+        assert_eq!(remapped.values().copied().collect::<Vec<_>>(), vec![1, 1]);
+    }
+
+    #[test]
+    fn a_nested_insertion_only_shifts_its_own_parent() {
+        let links = links(&[("1/2", 1), ("1/3", 1), ("2/0", 2), ("2/1", 2)]);
+        let remapped = remap_after_insert(&links, "1/2");
+        assert_eq!(paths(&remapped), vec!["1/3", "1/4", "2/0", "2/1"]);
+    }
+
+    #[test]
+    fn a_deletion_shifts_the_paths_below_it() {
+        let links = links(&[("1", 1), ("2", 1)]);
+        let remapped = remap_after_delete(&links, &["0".to_string()]);
+        assert_eq!(paths(&remapped), vec!["0", "1"]);
+    }
+
+    #[test]
+    fn deleting_a_linked_member_drops_the_set() {
+        let links = links(&[("1", 1), ("2", 1)]);
+        let remapped = remap_after_delete(&links, &["1".to_string()]);
+        assert!(remapped.is_empty(), "a one-member set is not linked");
+    }
 }

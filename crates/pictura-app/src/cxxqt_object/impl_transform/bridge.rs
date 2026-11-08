@@ -67,8 +67,12 @@ pub mod ffi {
         fn layer_content_bounds_extents(view: &PictureView, path: &QString) -> Vec<i32>;
         /// The rect the Move tool's controls box hugs on the layer at `path`
         /// (the content Free Transform trims to) as flat `[left, top, right,
-        /// bottom]`, changing nothing; empty when the path does not resolve.
+        /// bottom]`, changing nothing; for a linked layer the union of its
+        /// set's content. Empty when the path does not resolve.
         fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// The link set containing `path` as a cache key for the controls box;
+        /// empty when the layer is unlinked.
+        fn layer_link_key(view: &PictureView, path: &QString) -> QString;
         /// Hit-test the box `left, top, right, bottom` at document-space
         /// `(x, y)` as `transform_hit_test` does a session's: 0..=7 scale
         /// handles, 8 rotate, 9 inside, -1 none.

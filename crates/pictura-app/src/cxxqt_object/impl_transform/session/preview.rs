@@ -185,21 +185,37 @@ pub(super) struct TransformPreview {
     pub(super) opacity: i32,
 }
 
-/// Build the transform overlay images for `path`: the backdrop with the target
-/// hidden, the target's own RGBA image (materializing a channel-less embedded
-/// object into a clone), its document-space origin, and opacity. `bounded` says
-/// the canvas shows the document as it stands, so a patch of the target's bounds
-/// can stand in for the whole backdrop.
+/// Build the transform overlay images for `path` (or, for a linked set, every
+/// member in `members`): the backdrop with the targets hidden, the moving RGBA
+/// image (materializing a channel-less embedded object into a clone), its
+/// document-space origin, and opacity. `bounded` says the canvas shows the
+/// document as it stands, so a patch of the targets' bounds can stand in for
+/// the whole backdrop.
 pub(super) fn build_transform_preview(
     doc: &pictura_core::Document,
     path: &str,
+    members: &[String],
+    orig_rect: PsdRect,
     gpu_compute: bool,
     bounded: bool,
 ) -> Option<TransformPreview> {
-    let opacity = pictura_render::resolve_path(doc, path)?.opacity as i32;
-    let (image, x, y) = transform_preview_layer(doc, path, gpu_compute)?;
-    let group = clipping_group(doc, path);
-    let patch = bounded.then(|| backdrop_patch(doc, &group, gpu_compute));
+    let linked = members.len() > 1;
+    let opacity = if linked {
+        255
+    } else {
+        pictura_render::resolve_path(doc, path)?.opacity as i32
+    };
+    let (image, x, y) = if linked {
+        rendered_transform_group(doc, members, orig_rect, gpu_compute)?
+    } else {
+        transform_preview_layer(doc, path, gpu_compute)?
+    };
+    let hide = if linked {
+        members.to_vec()
+    } else {
+        clipping_group(doc, path)
+    };
+    let patch = bounded.then(|| backdrop_patch(doc, &hide, gpu_compute));
     if let Some((base, origin)) = patch.flatten() {
         return Some(TransformPreview {
             base,
@@ -210,7 +226,7 @@ pub(super) fn build_transform_preview(
             opacity,
         });
     }
-    let rendered = current_buffer(&hidden(doc, &group), gpu_compute);
+    let rendered = current_buffer(&hidden(doc, &hide), gpu_compute);
     Some(TransformPreview {
         base: buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
         base_origin: None,
@@ -219,6 +235,46 @@ pub(super) fn build_transform_preview(
         y,
         opacity,
     })
+}
+
+/// Render a linked transform group over transparency, cropped to `rect` (the
+/// members' union), for the transform preview. Hidden members transform with
+/// the set but are not drawn, so they are skipped here. Each member keeps its
+/// own opacity and blend; the preview applies no extra opacity.
+///
+/// ponytail: a member whose blend mode reads the layers below previews as if
+/// over transparency, and a member's clipping run is not carried; the commit
+/// transforms every member's own pixels correctly.
+pub(in crate::cxxqt_object) fn rendered_transform_group(
+    doc: &pictura_core::Document,
+    members: &[String],
+    rect: PsdRect,
+    gpu_compute: bool,
+) -> Option<(QImage, i32, i32)> {
+    let (x0, y0) = (rect.left.max(0), rect.top.max(0));
+    let (x1, y1) = (
+        rect.right.min(doc.width as i32),
+        rect.bottom.min(doc.height as i32),
+    );
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    let mut layers = Vec::with_capacity(members.len());
+    // The compositor wants bottom-first; the panel list is topmost-first.
+    for path in members.iter().rev() {
+        let layer = pictura_render::resolve_path(doc, path)?;
+        if layer.visible {
+            layers.push(layer.clone());
+        }
+    }
+    if layers.is_empty() {
+        return Some((QImage::default(), x0, y0));
+    }
+    let mut scratch = doc.clone();
+    scratch.layers = LayerStack::from_layers(layers);
+    let rendered = current_buffer(&scratch, gpu_compute);
+    let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
+    Some((image.copy(&QRect::new(x0, y0, x1 - x0, y1 - y0)), x0, y0))
 }
 
 /// `doc` with the layers at `paths` hidden.

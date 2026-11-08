@@ -66,6 +66,8 @@ private slots:
     void largeLayerUnderOthersLeavesNoResidue();
     void rasterizedShapeLayersLeaveNoResidue();
     void scrolledDocumentLeavesNoResidue();
+    void secondDragAfterACommittedMoveLeavesNoResidue();
+    void basePatchEdgeLeavesNoSeam();
 
 private:
     void showFrame();
@@ -473,23 +475,20 @@ void MoveFeedbackTest::rasterizedShapeLayersLeaveNoResidue()
 
     f.canvas->mousePressed(QPointF(30.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
     QVERIFY(f.canvas->movePreviewActive());
-    f.canvas->mouseMoved(QPointF(70.0, 30.0));
-    QImage shot = f.canvas->grab().toImage();
-    f.canvas->mouseMoved(QPointF(70.0, 10.0));
-    const QRect ants = f.canvas->antsUpdateRectForTest();
+    // A fast drag right and down, as the report's pointer moves.
+    for (int i = 1; i <= 12; ++i) {
+        f.canvas->mouseMoved(
+            QPointF(30.0 + i * (40.0 / 12.0), 30.0 + i * (20.0 / 12.0)));
+    }
+    QTest::qWait(150);  // let the marching-ants tick clear the last frame
     const QImage current = f.canvas->grab().toImage();
     const auto at = [&](const QImage& image, double x, double y) {
         return image.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
     };
-    QCOMPARE(at(current, 80.0, 90.0), QColor(Qt::white));
-    QCOMPARE(at(current, 25.0, 50.0), QColor(Qt::white));
-    QPainter painter(&shot);
-    painter.setClipRect(ants);
-    painter.drawImage(QPoint(), current);
-    painter.end();
-    QCOMPARE(at(shot, 80.0, 90.0), QColor(Qt::white));
-    QCOMPARE(at(shot, 25.0, 50.0), QColor(Qt::white));
-    f.canvas->mouseReleased(QPointF(70.0, 10.0));
+    QCOMPARE(at(current, 95.0, 25.0), QColor(Qt::white));  // old top-right corner
+    QCOMPARE(at(current, 25.0, 95.0), QColor(Qt::white));  // old bottom-left corner
+    QCOMPARE(at(current, 80.0, 50.0), QColor(Qt::black));  // the moved square
+    f.canvas->mouseReleased(QPointF(70.0, 50.0));
 }
 
 // The report's document: 1280x800 at 126%, larger than the canvas.
@@ -529,11 +528,11 @@ void MoveFeedbackTest::scrolledDocumentLeavesNoResidue()
 
     f.canvas->mousePressed(QPointF(300.0, 200.0), Qt::LeftButton, int(Qt::NoModifier));
     QVERIFY(f.canvas->movePreviewActive());
-    QTest::qWait(60);
+    QTest::qWait(60);  // let the press frame paint
     f.canvas->mouseMoved(QPointF(412.0, 200.0));
-    QTest::qWait(200);
+    QTest::qWait(200);  // let the ants tick clear the previous frame
     f.canvas->mouseMoved(QPointF(412.0, 129.0));
-    QTest::qWait(200);
+    QTest::qWait(200);  // let the ants tick clear the previous frame
 
     const QImage current = f.canvas->grab().toImage();
     const auto at = [&](const QImage& image, double x, double y) {
@@ -541,6 +540,104 @@ void MoveFeedbackTest::scrolledDocumentLeavesNoResidue()
     };
     QCOMPARE(at(current, 400.0, 390.0), QColor(Qt::white));  // the old bottom strip
     f.canvas->mouseReleased(QPointF(412.0, 129.0));
+}
+
+// A second drag after a committed move: the cached preview is placed from the
+// layer's new rect, so its old patch origin must not survive the move.
+void MoveFeedbackTest::secondDragAfterACommittedMoveLeavesNoResidue()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_second_drag"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    const auto square = [&](int above, const QRect& box, QRgb colour) {
+        const int index = f.view->add_layer(above);
+        if (index < 0) {
+            return QString();
+        }
+        const QString path = QString::number(index);
+        f.view->set_active_layer(path);
+        if (!f.view->select_rect(box.x(), box.y(), box.width(), box.height(),
+                                 QStringLiteral("new"), 0.0)
+            || !pictura::edit_fill(*f.view, colour, -1, QStringLiteral("normal"), 100, false)) {
+            return QString();
+        }
+        f.view->deselect();
+        return path;
+    };
+    const QString black = square(0, QRect(20, 20, 80, 80), qRgba(0, 0, 0, 255));
+    QVERIFY2(!black.isEmpty(), "black layer");
+    QVERIFY(!square(black.toInt(), QRect(40, 40, 20, 20), qRgba(255, 0, 0, 255)).isEmpty());
+    QVERIFY(!square(black.toInt(), QRect(40, 70, 20, 20), qRgba(0, 128, 0, 255)).isEmpty());
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    f.view->set_active_layer(black);
+    QCoreApplication::processEvents();
+
+    // First drag commits: the black layer lands at (60, 20).
+    f.canvas->mousePressed(QPointF(30.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(70.0, 30.0));
+    f.canvas->mouseReleased(QPointF(70.0, 30.0));
+
+    // A second drag from the committed position. The press rect (60, 20) is
+    // hidden by the backdrop; the moving image leaves it for (60, 60), so the
+    // strip beyond the old patch's right edge must not still show the layer.
+    f.canvas->mousePressed(QPointF(70.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(70.0, 70.0));
+    const QImage current = f.canvas->grab().toImage();
+    const auto at = [&](const QImage& image, double x, double y) {
+        return image.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(current, 120.0, 40.0), QColor(Qt::white));
+    QCOMPARE(at(current, 80.0, 40.0), QColor(Qt::white));  // no shifted above-layer ghost
+    QCOMPARE(at(current, 80.0, 80.0), QColor(Qt::black));
+    f.canvas->mouseReleased(QPointF(70.0, 70.0));
+}
+
+// The backdrop patch is scaled at a fractional zoom; its edge must not blend
+// with the live canvas's old layer pixels and leave a seam (#1250).
+void MoveFeedbackTest::basePatchEdgeLeavesNoSeam()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(1280, 800, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_move_seam"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    const int index = f.view->add_layer(0);
+    QVERIFY(index > 0);
+    f.view->set_active_layer(QString::number(index));
+    QVERIFY(f.view->select_rect(300, 150, 200, 200, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+    frame.setActiveTool(pictura::ToolId::Move);
+    // A fractional zoom makes the backdrop patch land between device pixels.
+    f.canvas->setZoom(0.51, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    QCoreApplication::processEvents();
+
+    f.canvas->mousePressed(QPointF(350.0, 200.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(400.0, 200.0));
+    const QImage current = f.canvas->grab().toImage();
+    // The layer's old left edge (x = 300) is backdrop now; the moving image
+    // starts at x = 350. Scan every widget pixel of the strip between them: a
+    // seam is a partially blended pixel along the patch's edge.
+    const int first = f.canvas->imageToWidget(QPointF(280.0, 200.0)).x();
+    const int last = f.canvas->imageToWidget(QPointF(345.0, 200.0)).x();
+    const int row = f.canvas->imageToWidget(QPointF(320.0, 200.0)).y();
+    for (int x = first; x <= last; ++x) {
+        const QColor pixel = current.pixelColor(x, row);
+        QVERIFY2(pixel == QColor(Qt::white),
+                 qPrintable(QStringLiteral("seam at widget x=%1: %2").arg(x).arg(pixel.name())));
+    }
+    f.canvas->mouseReleased(QPointF(400.0, 200.0));
 }
 
 QTEST_MAIN(MoveFeedbackTest)

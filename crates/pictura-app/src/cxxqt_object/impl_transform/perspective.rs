@@ -282,6 +282,7 @@ mod tests {
         let corners = source_corners(rect100());
         TransformSession {
             path: "0".to_string(),
+            members: vec![("0".to_string(), rect100())],
             orig_rect: rect100(),
             scale_x: 1.0,
             scale_y: 1.0,
@@ -314,7 +315,7 @@ mod tests {
             warp_editing: false,
             warp_post: None,
             lifted: None,
-            untrimmed: None,
+            untrimmed: Vec::new(),
             history_label: "Free Transform".to_string(),
         }
     }

@@ -707,14 +707,21 @@ void ImageView::paintEvent(QPaintEvent* event)
         // Only the target's own bounds differ from the live canvas. A clear
         // patch must reveal the checkerboard, not the target still under it.
         if (!moveBase_.isNull()) {
+            // Bleed the patch one device pixel past the layer's content edge.
+            // The patch is drawn over the live canvas, which still shows the
+            // layer at its old place; without the overlap the scaled patch's
+            // anti-aliased edge blends with those pixels and leaves a seam
+            // along the old edge (#1250).
+            const qreal bleed = 1.0 / std::max(zoom_, 1e-6);
             const QRectF patch(QPointF(*moveBasePos_), QSizeF(moveBase_.size()) * moveScale_);
-            const QRectF device(offset_ + patch.topLeft() * zoom_, patch.size() * zoom_);
+            const QRectF grown = patch.adjusted(-bleed, -bleed, bleed, bleed);
+            const QRectF device(offset_ + grown.topLeft() * zoom_, grown.size() * zoom_);
             painter.save();
             painter.resetTransform();
             painter.setBrushOrigin(docDevice.topLeft());
             painter.fillRect(device, transparencyTile());
             painter.restore();
-            painter.drawImage(patch, moveBase_);
+            painter.drawImage(grown, moveBase_);
         }
         if (transformActive_) {
             paintTransformLayer(painter);

@@ -1,10 +1,14 @@
-use super::super::document_session::{RepeatTransform, TransformMode, TransformSession};
+use super::super::document_session::{TransformMode, TransformSession};
 use super::super::helpers::*;
 use super::super::helpers_composite::*;
 use super::super::qobject;
 use super::super::state::PictureViewRust;
 use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
+};
+use super::group::{
+    can_free_transform, commit_bytes, group_apply, repeatable_transform, transform_group,
+    transform_group_edit, transform_rect,
 };
 use super::{
     build_move_preview_base, duplicate_move_target, link_members, movable_layer, move_group_key,
@@ -15,7 +19,7 @@ use crate::cxxqt_object::helpers::memory_gate;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QRect, QString};
-use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags, PsdRect};
+use pictura_core::{layer_move_locked, BlendMode, LayerStack, PsdRect};
 use pictura_render::Interpolation;
 
 /// A transform whose layer rect reaches this area runs its engine on a worker.
@@ -24,43 +28,12 @@ const DEFERRED_TRANSFORM_PIXELS: u64 = 4_000_000;
 mod preview;
 mod view_preview;
 
-pub(in crate::cxxqt_object) use preview::transform_preview_layer;
 #[cfg(test)]
 use preview::TransformPreview;
 use preview::{backdrop_patch, build_transform_preview, rendered_layer_image};
+pub(in crate::cxxqt_object) use preview::{rendered_transform_group, transform_preview_layer};
 use view_preview::above_patch;
 pub(in crate::cxxqt_object) use view_preview::MoveView;
-
-/// Whether `path` resolves to a transformable target: a raster pixel layer, a
-/// shape layer with an outline of some area, or a channel-less embedded smart
-/// object whose source materializes. False for a
-/// hidden layer, a group, adjustment layer, Background layer, position-locked
-/// layer, or a zero-area target.
-fn can_free_transform(doc: &pictura_core::Document, path: &str) -> bool {
-    let Some(layer) = pictura_render::resolve_path(doc, path) else {
-        return false;
-    };
-    if pictura_render::is_shape_layer(layer) {
-        return layer.visible
-            && !layer.lock.contains(LockFlags::POSITION)
-            && pictura_render::shape_layer_rect(layer, doc.width, doc.height)
-                .is_some_and(|rect| rect.width() > 0 && rect.height() > 0);
-    }
-    if !layer.visible
-        || layer.is_group
-        || layer.adjustment.is_some()
-        || layer.background
-        || layer.lock.contains(LockFlags::POSITION)
-        || layer.rect.width() <= 0
-        || layer.rect.height() <= 0
-    {
-        return false;
-    }
-    if layer.channels.iter().any(|c| c.id == 0) {
-        return true;
-    }
-    pictura_render::can_materialize_smart_source(layer)
-}
 
 /// The selection's coverage when it is document-sized and not empty: Free
 /// Transform then lifts the selected pixels instead of moving the whole layer.
@@ -96,28 +69,6 @@ fn selection_covers(rust: &PictureViewRust) -> bool {
         .is_some_and(|s| pictura_render::plane_has_coverage(&s.data, doc.width, doc.height))
 }
 
-/// The repeatable part of a committed session: the similarity parameters and
-/// the reference point's offset from the source rect's centre. Projective and
-/// Warp sessions are not repeatable through `Transform Again`.
-fn repeatable_transform(session: &TransformSession) -> Option<RepeatTransform> {
-    if session.mode.is_projective() || session.base_quad.is_some() || session.warp.is_some() {
-        return None;
-    }
-    let (cx, cy) = rect_center(session.orig_rect);
-    Some(RepeatTransform {
-        scale_x: session.scale_x,
-        scale_y: session.scale_y,
-        angle: session.angle,
-        skew_x: session.skew_x,
-        skew_y: session.skew_y,
-        dx: session.dx,
-        dy: session.dy,
-        // `pivot` is a source-frame point, so this offset is not shifted by a
-        // gesture that carried the pivot through the map.
-        pivot_offset: (session.pivot.0 - cx, session.pivot.1 - cy),
-    })
-}
-
 /// Whether `mode` may begin on `path`: the Free Transform target rules, plus
 /// Distort's and Perspective's refusal for editable type (a lifted selection targets pixels, not
 /// the type layer).
@@ -132,9 +83,10 @@ pub(super) fn can_begin_mode(rust: &PictureViewRust, path: &str, mode: Transform
     if !lift && !can_free_transform(doc, path) {
         return false;
     }
-    !(matches!(mode, TransformMode::Distort | TransformMode::Perspective)
-        && !lift
-        && pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.is_type()))
+    let type_member = transform_group(rust, doc, path).iter().any(|member| {
+        pictura_render::resolve_path(doc, member).is_some_and(|layer| layer.is_type())
+    });
+    !(matches!(mode, TransformMode::Distort | TransformMode::Perspective) && !lift && type_member)
 }
 
 impl qobject::PictureView {
@@ -214,10 +166,17 @@ impl qobject::PictureView {
             return false;
         };
         let bounded = session.lifted.is_none();
-        if !self
-            .as_mut()
-            .compute_transform_preview(&session.path, bounded)
-        {
+        let members: Vec<String> = session
+            .members
+            .iter()
+            .map(|(member, _)| member.clone())
+            .collect();
+        if !self.as_mut().compute_transform_preview(
+            &session.path,
+            &members,
+            session.orig_rect,
+            bounded,
+        ) {
             self.as_mut().rust_mut().restore_transform_begin(session);
             return false;
         }
@@ -233,16 +192,16 @@ impl qobject::PictureView {
     pub(super) fn compute_transform_preview(
         mut self: Pin<&mut Self>,
         path: &str,
+        members: &[String],
+        orig_rect: PsdRect,
         bounded: bool,
     ) -> bool {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
-        let prepared = rust
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| build_transform_preview(doc, path, gpu_compute, bounded));
+        let prepared = rust.session.doc.as_ref().and_then(|doc| {
+            build_transform_preview(doc, path, members, orig_rect, gpu_compute, bounded)
+        });
         let Some(preview) = prepared else {
             return false;
         };
@@ -274,12 +233,11 @@ impl qobject::PictureView {
     /// selected layer, and a trimmed layer would clip later filters).
     fn drop_transform_session(mut self: Pin<&mut Self>) {
         let session = self.as_mut().rust_mut().session.live.take_transform();
-        if let Some((path, rect)) = session
-            .as_ref()
-            .and_then(|s| s.untrimmed.map(|rect| (s.path.clone(), rect)))
-        {
-            if let Some(doc) = self.as_mut().rust_mut().session.doc.as_mut() {
-                pictura_render::untrim_to(doc, &path, rect);
+        if let Some(session) = &session {
+            for (member, rect) in &session.untrimmed {
+                if let Some(doc) = self.as_mut().rust_mut().session.doc.as_mut() {
+                    pictura_render::untrim_to(doc, member, *rect);
+                }
             }
         }
         if let Some((_, before)) = session.and_then(|session| session.lifted) {
@@ -298,6 +256,7 @@ impl qobject::PictureView {
         memory_gate::clear();
         let Some((
             path,
+            members,
             projective,
             quad,
             preview_quad,
@@ -313,8 +272,14 @@ impl qobject::PictureView {
             } else {
                 quad
             };
+            let members: Vec<(String, PsdRect)> = session
+                .members
+                .iter()
+                .map(|(member, rect)| (member.clone(), *rect))
+                .collect();
             (
                 session.path.clone(),
+                members,
                 quad_driven(session),
                 quad,
                 preview_quad,
@@ -345,7 +310,7 @@ impl qobject::PictureView {
             None if projective => unmoved(),
             None => params.is_identity(),
         };
-        if identity || !memory_gate::admit(transform_commit_bytes(&preview_quad, orig_rect)) {
+        if identity || !memory_gate::admit(commit_bytes(&preview_quad, orig_rect)) {
             self.as_mut().drop_transform_session();
             self.as_mut().clear_transform_preview();
             return false;
@@ -390,8 +355,10 @@ impl qobject::PictureView {
             // it is dropped here rather than left outlining the old pixels.
             self.as_mut().rust_mut().session.set_selection(None);
             self.as_mut().rust_mut().last_transform = repeat;
+            // A lifted transform changes pixels, not the layer tree, so it
+            // keeps the link set; only the pixels moved.
             self.as_mut()
-                .commit_transform_edit(&history_label, true, |_| Edit::Structural { damage: None });
+                .commit_transform_edit(&history_label, true, |_| Edit::Full);
             if !self.rust().move_composite_pending() {
                 self.as_mut().move_committed();
             }
@@ -399,36 +366,19 @@ impl qobject::PictureView {
             return true;
         }
 
-        // The engine resamples the layer's pixels; on a large layer it belongs
-        // on a worker. The landing installs the transformed layer and hands its
-        // composite to the same deferred edit a Move commit uses.
-        let engine_path = path.clone();
-        let engine_quad = quad;
-        let engine_params = params;
-        let engine_orig = orig_rect;
-        let engine_interp = interpolation;
-        let engine_projective = projective;
-        let engine_warp = warp.clone();
-        let engine_preview_quad = preview_quad;
-        let apply =
-            std::sync::Arc::new(move |doc: &mut pictura_core::Document| match &engine_warp {
-                Some(warp) => pictura_render::transform_layer_warp(
-                    doc,
-                    &engine_path,
-                    warp,
-                    Some(engine_preview_quad),
-                    engine_interp,
-                ),
-                None => apply_session_transform(
-                    doc,
-                    &engine_path,
-                    engine_projective,
-                    engine_quad,
-                    engine_params,
-                    engine_orig,
-                    engine_interp,
-                ),
-            });
+        // The engine resamples each member's pixels; on a large set it belongs
+        // on a worker. The landing installs the transformed members and hands
+        // their composite to the same deferred edit a Move commit uses.
+        let apply = group_apply(
+            members.clone(),
+            projective,
+            quad,
+            params,
+            interpolation,
+            warp.clone(),
+            preview_quad,
+            orig_rect,
+        );
         let area = u64::from(orig_rect.width().max(0) as u32)
             * u64::from(orig_rect.height().max(0) as u32);
         if area < DEFERRED_TRANSFORM_PIXELS {
@@ -441,18 +391,9 @@ impl qobject::PictureView {
                 .is_some_and(|doc| (apply)(doc));
             if changed {
                 self.as_mut().rust_mut().last_transform = repeat;
-                self.as_mut().clear_link_sets();
-                let after = self
-                    .rust()
-                    .session
-                    .doc
-                    .as_ref()
-                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                    .map(|layer| (layer.rect, layer_has_effects(layer)));
-                let edit = match after {
-                    Some((after, false)) => Edit::regions(vec![orig_rect.union(after)], false),
-                    _ => Edit::Full,
-                };
+                let edit = self.rust().session.doc.as_ref().map_or(Edit::Full, |doc| {
+                    transform_group_edit(doc, &members, orig_rect)
+                });
                 self.as_mut()
                     .commit_transform_edit(&history_label, true, |_| edit);
                 if !self.rust().move_composite_pending() {
@@ -463,12 +404,11 @@ impl qobject::PictureView {
             return changed;
         }
         let spec = super::super::impl_core::TransformSpec {
-            path: path.clone(),
+            paths: members.iter().map(|(member, _)| member.clone()).collect(),
             orig_rect,
             apply,
         };
         self.as_mut().rust_mut().last_transform = repeat;
-        self.as_mut().clear_link_sets();
         let deferred = self
             .as_mut()
             .rust_mut()
@@ -546,24 +486,6 @@ impl qobject::PictureView {
     }
 }
 
-/// What a transform commit holds at its peak: the transformed layer's four
-/// planes over the quad's box, and the composite of the box before and after
-/// with its sRGB copy and display patch.
-fn transform_commit_bytes(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> u64 {
-    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-    for &(x, y) in quad {
-        (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
-    }
-    let clamp = |v: f64| v.clamp(i32::MIN as f64 / 2.0, i32::MAX as f64 / 2.0) as i32;
-    let out = PsdRect {
-        top: clamp(y0.floor()),
-        left: clamp(x0.floor()),
-        bottom: clamp(y1.ceil()),
-        right: clamp(x1.ceil()),
-    };
-    4 * memory_gate::area(out) + 12 * memory_gate::area(out.union(orig_rect))
-}
-
 impl qobject::PictureView {
     /// Cache the base composite (every move-group layer hidden), the moving
     /// image, its document-space origin, and opacity. One region composite at
@@ -587,22 +509,55 @@ impl qobject::PictureView {
         // it before settling a pending composite, which is a whole-document
         // composite on a large document.
         if self.as_ref().move_cache_valid(&paths) {
-            {
-                let mut rust = self.as_mut().rust_mut();
-                let (x, y, opacity) = rust
-                    .session
-                    .doc
-                    .as_ref()
-                    .and_then(|doc| move_origin_opacity(doc, &paths))
-                    .unwrap_or((0, 0, 0));
-                let (ox, oy) = rust.move_layer_offset;
-                rust.move_x = x + ox;
-                rust.move_y = y + oy;
-                rust.move_opacity = opacity;
-                rust.move_preview_cache_hit = true;
-                rust.move_drag_active = true;
+            let union = self
+                .rust()
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| move_group_union(doc, &paths));
+            let moved = union != self.rust().move_prepared_union;
+            // A whole-document base is position-independent. A patch cropped to
+            // the content rect is tied to the rect it was built over: its
+            // backdrop (including the layers above the group) would shift with
+            // the layer, so a committed move must rebuild it rather than
+            // translate it (#1250).
+            let whole = {
+                let rust = self.rust();
+                rust.move_base_origin.is_none()
+                    || rust.session.doc.as_ref().is_some_and(|doc| {
+                        rust.move_base_origin == Some((0, 0))
+                            && rust.move_base.as_ref().is_some_and(|base| {
+                                base.width() == doc.width as i32
+                                    && base.height() == doc.height as i32
+                            })
+                    })
+            };
+            if moved && !whole && !self.as_mut().refresh_move_base(&paths) {
+                // The patch could not be rebuilt; fall through to a full
+                // preview compute.
+            } else {
+                {
+                    let mut rust = self.as_mut().rust_mut();
+                    if moved {
+                        // A commit trims each member to its content.
+                        rust.move_layer_offset = (0, 0);
+                        rust.move_prepared_union = union;
+                    }
+                    let (x, y, opacity) = rust
+                        .session
+                        .doc
+                        .as_ref()
+                        .and_then(|doc| move_origin_opacity(doc, &paths))
+                        .unwrap_or((0, 0, 0));
+                    let (ox, oy) = rust.move_layer_offset;
+                    rust.move_x = x + ox;
+                    rust.move_y = y + oy;
+                    rust.move_opacity = opacity;
+                    rust.move_preview_cache_hit = true;
+                    rust.move_drag_active = true;
+                }
+                return true;
             }
-            return true;
         }
         // A view preview reads the layer stack, not the stale composite, so a
         // pending commit can stay on its worker while the next drag starts.
@@ -723,27 +678,44 @@ impl qobject::PictureView {
         Some(group)
     }
 
+    /// Rebuild the cached Move backdrop patch for `paths` after their rects
+    /// moved. The patch is cropped to the content rect, so its backdrop is tied
+    /// to the rect it was built over; the moving image and the above-layer
+    /// overlay stay valid, so only the base is recomposited.
+    fn refresh_move_base(mut self: Pin<&mut Self>, paths: &[String]) -> bool {
+        let mut guard = self.as_mut().rust_mut();
+        let rust = &mut *guard;
+        let gpu_compute = rust.gpu_compute;
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return false;
+        };
+        let (base, origin) = match backdrop_patch(doc, paths, gpu_compute) {
+            Some((base, origin)) => (base, Some(origin)),
+            None => (build_move_preview_base(doc, paths, gpu_compute), None),
+        };
+        rust.move_base = Some(base);
+        rust.move_base_origin = origin;
+        true
+    }
+
     fn move_cache_valid(&self, paths: &[String]) -> bool {
         let rust = self.rust();
-        // The base is the document with every move-group layer hidden, so it
-        // does not depend on their positions: a committed move leaves it valid.
-        // The move commit deliberately does not bump `content_revision` for this
-        // reason; keying on a layer rect here would throw the base away on
-        // every drag and force a full region recomposite on the next press.
-        // A shape's moving image is rendered at its outline, which a move
-        // shifts without changing the layer rect, so a group with one is never
-        // reused. A rendered group's moving image is composited at the layers'
-        // positions and clipped to the canvas, so any move makes it stale; the
-        // group's union rect must match too.
+        // The base image is the document with every move-group layer hidden, so
+        // its pixels do not depend on their positions: a committed move leaves
+        // it valid. Its *placement* does, though: a patch base is cropped to the
+        // content rect at the press, and the moving image's origin follows the
+        // layer rect. The move commit deliberately does not bump
+        // `content_revision`, so the group's union rect is the cheap signal that
+        // the layers moved; `begin_move_preview` refreshes a single layer's
+        // patch. A rendered group's moving image is composited at the layers'
+        // positions and clipped to the canvas, so any move makes it stale and
+        // the group must recompute. A shape's moving image is rendered at its
+        // outline, which a move shifts without changing the layer rect, so a
+        // group with one is never reused.
         let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
-        let union = if paths.len() > 1 {
-            move_group_union(doc, paths)
-        } else {
-            None
-        };
-        if union != rust.move_prepared_union {
+        if paths.len() > 1 && move_group_union(doc, paths) != rust.move_prepared_union {
             return false;
         }
         let shape = paths.iter().any(|path| {
@@ -841,11 +813,7 @@ impl qobject::PictureView {
         rust.move_above_presented = above_origin.map(|_| presented);
         rust.move_prepared_revision = rust.session.content_revision;
         rust.move_prepared_layer = move_group_key(&paths);
-        rust.move_prepared_union = if paths.len() > 1 {
-            move_group_union(doc, &paths)
-        } else {
-            None
-        };
+        rust.move_prepared_union = move_group_union(doc, &paths);
         true
     }
 
@@ -1023,6 +991,7 @@ impl PictureViewRust {
             self.presented_rect,
             self.gpu_compute,
         );
+        let union = move_group_union(doc, paths);
         self.move_base = Some(preview.base);
         self.move_base_origin = Some(preview.base_origin);
         self.move_layer = Some(preview.layer);
@@ -1041,7 +1010,7 @@ impl PictureViewRust {
             above_origin.map(|_| (self.presented_level, self.presented_rect));
         self.move_prepared_revision = self.session.content_revision;
         self.move_prepared_layer = move_group_key(paths);
-        self.move_prepared_union = None;
+        self.move_prepared_union = union;
         true
     }
 
@@ -1058,13 +1027,13 @@ impl PictureViewRust {
         if !can_begin_mode(self, path, mode) {
             return None;
         }
-        // The outgoing session goes first: its trim and its floating layer go
+        // The outgoing session goes first: its trims and its floating layer go
         // back, so the new session starts from the same document.
         let outgoing = self.session.live.take_transform();
         if let Some(session) = &outgoing {
-            if let Some(rect) = session.untrimmed {
+            for (member, rect) in &session.untrimmed {
                 if let Some(doc) = self.session.doc.as_mut() {
-                    pictura_render::untrim_to(doc, &session.path, rect);
+                    pictura_render::untrim_to(doc, member, *rect);
                 }
             }
         }
@@ -1073,17 +1042,9 @@ impl PictureViewRust {
         }
         let mut path = path.to_string();
         let mut lifted = None;
-        let mut untrimmed = None;
-        if !lift {
-            // The box hugs the layer's visible pixels, not its (often
-            // canvas-sized) rect; the composite is unchanged.
-            if let Some(doc) = self.session.doc.as_mut() {
-                let before = pictura_render::resolve_path(doc, &path).map(|layer| layer.rect);
-                if pictura_render::trim_to_content(doc, &path) {
-                    untrimmed = before;
-                }
-            }
-        } else {
+        let mut untrimmed: Vec<(String, PsdRect)> = Vec::new();
+        let mut members: Vec<(String, PsdRect)> = Vec::new();
+        if lift {
             let coverage = lift_coverage(self).unwrap_or_default();
             let doc = self.session.doc.as_mut()?;
             let before = Box::new(doc.clone());
@@ -1093,20 +1054,56 @@ impl PictureViewRust {
                 return None;
             }
             lifted = Some((std::mem::replace(&mut path, floating), before));
+            let rect = self
+                .session
+                .doc
+                .as_ref()
+                .and_then(|doc| transform_rect(doc, &path));
+            if let Some(rect) = rect {
+                members.push((path.clone(), rect));
+            }
+        } else {
+            let group = {
+                let doc = self.session.doc.as_ref()?;
+                transform_group(self, doc, &path)
+            };
+            for member in group {
+                // The box hugs each layer's visible pixels, not its (often
+                // canvas-sized) rect; the composite is unchanged. A hidden
+                // linked partner is trimmed too: it transforms with the set.
+                let before = self
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| pictura_render::resolve_path(doc, &member))
+                    .map(|layer| layer.rect);
+                let trimmed = self
+                    .session
+                    .doc
+                    .as_mut()
+                    .is_some_and(|doc| pictura_render::trim_to_content(doc, &member));
+                if trimmed {
+                    if let Some(rect) = before {
+                        untrimmed.push((member.clone(), rect));
+                    }
+                }
+                if let Some(rect) = self
+                    .session
+                    .doc
+                    .as_ref()
+                    .and_then(|doc| transform_rect(doc, &member))
+                {
+                    if rect.width() > 0 && rect.height() > 0 {
+                        members.push((member, rect));
+                    }
+                }
+            }
         }
-        // A shape layer's box is its outline's; its own rect is the canvas.
-        let rect = self.session.doc.as_ref().and_then(|doc| {
-            let layer = pictura_render::resolve_path(doc, &path)?;
-            Some(
-                pictura_render::shape_layer_rect(layer, doc.width, doc.height)
-                    .unwrap_or(layer.rect),
-            )
-        });
-        let Some(orig_rect) = rect else {
-            // A refused begin leaves the layer as it was.
-            if let Some(rect) = untrimmed {
+        let Some(orig_rect) = members.iter().map(|(_, rect)| *rect).reduce(PsdRect::union) else {
+            // A refused begin leaves every layer as it was.
+            for (member, rect) in &untrimmed {
                 if let Some(doc) = self.session.doc.as_mut() {
-                    pictura_render::untrim_to(doc, &path, rect);
+                    pictura_render::untrim_to(doc, member, *rect);
                 }
             }
             if let Some((_, before)) = lifted {
@@ -1114,16 +1111,19 @@ impl PictureViewRust {
             }
             return None;
         };
-        let type_layer = self
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, &path))
-            .is_some_and(|layer| layer.is_type());
+        // Any editable type in the set keeps the projective gestures a
+        // parallelogram (and refuses Distort/Perspective), as a single type
+        // layer does.
+        let type_layer = self.session.doc.as_ref().is_some_and(|doc| {
+            members.iter().any(|(member, _)| {
+                pictura_render::resolve_path(doc, member).is_some_and(|layer| layer.is_type())
+            })
+        });
         let corners = source_corners(orig_rect);
         let center = rect_center(orig_rect);
         Some(TransformSession {
             path,
+            members,
             orig_rect,
             scale_x: 1.0,
             scale_y: 1.0,
@@ -1164,9 +1164,9 @@ impl PictureViewRust {
     /// Put back what a refused transform begin changed: the pre-trim layer
     /// extent and the pre-lift document.
     pub(in crate::cxxqt_object) fn restore_transform_begin(&mut self, session: TransformSession) {
-        if let Some(rect) = session.untrimmed {
+        for (member, rect) in &session.untrimmed {
             if let Some(doc) = self.session.doc.as_mut() {
-                pictura_render::untrim_to(doc, &session.path, rect);
+                pictura_render::untrim_to(doc, member, *rect);
             }
         }
         if let Some((_, before)) = session.lifted {

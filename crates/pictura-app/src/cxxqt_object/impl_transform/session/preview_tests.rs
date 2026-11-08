@@ -61,7 +61,8 @@ fn rendered_layer_preview_equals_the_cropped_full_render() {
 #[test]
 fn a_small_layer_gets_a_backdrop_patch() {
     let doc = document(small_layer());
-    let preview = build_transform_preview(&doc, "1", false, true).expect("preview");
+    let preview =
+        build_transform_preview(&doc, "1", &["1".to_string()], RECT, false, true).expect("preview");
     assert_eq!(preview.base_origin, Some((10, 8)));
     assert_eq!((preview.base.width(), preview.base.height()), (12, 9));
 
@@ -83,12 +84,27 @@ fn effects_and_lifts_keep_the_whole_backdrop() {
         key: *b"lfx2",
         data: Vec::new().into(),
     });
-    let styled = build_transform_preview(&document(effected), "1", false, true).expect("preview");
+    let styled = build_transform_preview(
+        &document(effected),
+        "1",
+        &["1".to_string()],
+        RECT,
+        false,
+        true,
+    )
+    .expect("preview");
     assert_eq!(styled.base_origin, None);
     assert_eq!((styled.base.width(), styled.base.height()), (40, 30));
 
-    let lifted =
-        build_transform_preview(&document(small_layer()), "1", false, false).expect("lift");
+    let lifted = build_transform_preview(
+        &document(small_layer()),
+        "1",
+        &["1".to_string()],
+        RECT,
+        false,
+        false,
+    )
+    .expect("lift");
     assert_eq!(lifted.base_origin, None);
     assert_eq!((lifted.base.width(), lifted.base.height()), (40, 30));
 }

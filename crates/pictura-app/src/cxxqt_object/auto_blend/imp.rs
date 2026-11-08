@@ -163,6 +163,7 @@ pub(super) fn auto_blend_finish(mut view: Pin<&mut PictureView>) -> QStringList 
                 }
                 paths = apply_auto_blend(doc, plan);
                 rust.link_sets.clear();
+                rust.link_remap = None;
                 rust.solo_snapshot = None;
                 rust.mask_edit_target = None;
                 Edit::Structural { damage: None }

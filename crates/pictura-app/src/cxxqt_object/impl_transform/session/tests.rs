@@ -1,8 +1,9 @@
 use super::super::super::document_session::{TransformMode, TransformSession};
 use super::super::geometry::{pivot_point, rect_center, set_pivot, source_corners};
+use super::super::group::commit_bytes;
 use super::*;
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
-use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags, PsdRect};
 use pictura_render::Interpolation;
 
 #[test]
@@ -35,6 +36,7 @@ fn the_selection_test_agrees_with_the_lift_coverage() {
 fn transform_session(rect: PsdRect) -> TransformSession {
     TransformSession {
         path: "0".to_string(),
+        members: vec![("0".to_string(), rect)],
         orig_rect: rect,
         scale_x: 1.0,
         scale_y: 1.0,
@@ -67,7 +69,7 @@ fn transform_session(rect: PsdRect) -> TransformSession {
         warp_editing: false,
         warp_post: None,
         lifted: None,
-        untrimmed: None,
+        untrimmed: Vec::new(),
         history_label: "Free Transform".to_string(),
     }
 }
@@ -121,7 +123,20 @@ fn a_shape_preview_ignores_empty_channels() {
         x,
         y,
         ..
-    } = build_transform_preview(&doc, &path, false, false).expect("shape preview");
+    } = build_transform_preview(
+        &doc,
+        &path,
+        std::slice::from_ref(&path),
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        },
+        false,
+        false,
+    )
+    .expect("shape preview");
     assert_eq!((x, y), (0, 0));
     let filled = (0..preview.height()).any(|py| {
         (0..preview.width()).any(|px| {
@@ -159,8 +174,8 @@ fn a_transform_commit_charges_its_box_and_the_composite_around_it() {
     };
     // Scaled to twice its size from its top-left corner: a 20×20 box.
     let quad = [(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)];
-    assert_eq!(transform_commit_bytes(&quad, orig), 4 * 400 + 12 * 400);
+    assert_eq!(commit_bytes(&quad, orig), 4 * 400 + 12 * 400);
     // A fractional corner rounds the box outward.
     let quad = [(0.5, 0.5), (10.2, 0.5), (10.2, 9.7), (0.5, 9.7)];
-    assert_eq!(transform_commit_bytes(&quad, orig), 4 * 110 + 12 * 110);
+    assert_eq!(commit_bytes(&quad, orig), 4 * 110 + 12 * 110);
 }
