@@ -119,6 +119,17 @@ fn hdr_toning_is_engine_only() {
 }
 
 #[test]
+fn morphology_warning_appears_above_one_hundred() {
+    let maximum = descriptor("maximum").expect("Maximum row");
+    assert!(maximum.warning(&[100.0, 0.0]).is_none());
+    assert!(maximum.warning(&[100.1, 0.0]).is_some());
+    let minimum = descriptor("minimum").expect("Minimum row");
+    assert!(minimum.warning(&[500.0, 1.0]).is_some());
+    let blur = descriptor("gaussian-blur").expect("Gaussian Blur row");
+    assert!(blur.warning(&[1000.0]).is_none());
+}
+
+#[test]
 fn add_noise_amount_has_one_range() {
     let spec = descriptor("add-noise").expect("Add Noise row");
     assert_eq!(spec.range_for_slot(0), Some(0.1..=400.0));

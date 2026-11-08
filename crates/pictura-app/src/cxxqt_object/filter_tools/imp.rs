@@ -297,6 +297,15 @@ pub(super) fn filter_param_arity(kind: &QString) -> i32 {
         .unwrap_or(-1)
 }
 
+pub(super) fn filter_param_warning(kind: &QString, params: &QList<f64>) -> QString {
+    let id = kind.to_string();
+    let values: Vec<f64> = params.into_iter().copied().collect();
+    pictura_filters::catalogue::descriptor(&id)
+        .and_then(|spec| spec.warning(&values))
+        .map(QString::from)
+        .unwrap_or_default()
+}
+
 /// Read the active pixel layer's in-tree watermark. The reader inspects the
 /// layer's own buffer, so embed and read share the layer's origin.
 pub(super) fn read_watermark(view: &PictureView) -> ffi::WatermarkRow {

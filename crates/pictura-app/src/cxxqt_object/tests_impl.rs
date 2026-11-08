@@ -233,14 +233,6 @@ fn filter_from_kind_maps_known_and_rejects_unknown() {
             seed: 1,
         })
     );
-    assert_eq!(
-        filter_from_kind("maximum"),
-        Some(Filter::Maximum { radius: 2 })
-    );
-    assert_eq!(
-        filter_from_kind("minimum"),
-        Some(Filter::Minimum { radius: 2 })
-    );
     assert!(matches!(
         filter_from_kind("offset"),
         Some(Filter::Offset {

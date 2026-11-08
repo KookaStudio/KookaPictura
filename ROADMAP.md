@@ -304,6 +304,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **Liquify, Oil Paint, the Blur Gallery, and the Filter Gallery.**
       `crates/pictura-app/cpp/filter_gallery_dialog.cpp`,
       `crates/pictura-app/cpp/blur_gallery_dialog.cpp`.
+- [x] Maximum/Minimum Preserve (Squareness/Roundness), a 500 px radius, and the
+      above-100 warning (#364)
 - [ ] Reduce Noise, including the Advanced per-channel view (#593)
 - [x] The Radial Blur Blur Center, honored by the kernel (#594)
 - [ ] The Smart Sharpen Basic and Advanced split, and the 32-bpc disable (#595)

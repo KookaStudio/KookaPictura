@@ -1,4 +1,4 @@
-//! Shared exact mask kernels: separable square-footprint morphology,
+//! Shared exact mask kernels: square- and disk-footprint morphology,
 //! clamped-window median, and a scanline four-connected flood.
 //!
 //! Every kernel here produces the same samples as the naive scan it replaces.
@@ -22,7 +22,7 @@ pub use flood_tiled::{
     flood_tiled, match_mask, FloodSource, Grid, MatchTiles, Seeds, TileBits, TileMatch,
 };
 pub use median::median;
-pub use morph::{dilate, erode, Border};
+pub use morph::{dilate, disk_dilate, disk_erode, erode, Border};
 pub use windows::{coverage_bounds, first_covered, last_covered, map_bands, tiled_view, zip_tiles};
 
 /// A coverage mask (0–255 per pixel) stored as the tiled `Plane<u8>` of

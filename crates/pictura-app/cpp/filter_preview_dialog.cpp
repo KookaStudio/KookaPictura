@@ -190,6 +190,7 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
                                         hasPad ? documentPreviewImage(view_, kPadImageEdge)
                                                : QImage());
     connect(controls_, &FilterParamControls::changed, this, &FilterPreviewDialog::valuesChanged);
+    connect(controls_, &FilterParamControls::changed, this, &FilterPreviewDialog::updateWarning);
     connect(controls_, &FilterParamControls::changedLive, this, &FilterPreviewDialog::updateThumbnail);
     QList<QWidget*> rows = controls_->rows();
     if (spec.stacked) {
@@ -264,6 +265,12 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
     buttonColumn->addStretch(1);
     body->addLayout(buttonColumn);
     outer->addLayout(body);
+    warning_ = new QLabel(this);
+    warning_->setObjectName(QStringLiteral("filterWarning"));
+    warning_->setWordWrap(true);
+    warning_->setTextFormat(Qt::PlainText);
+    warning_->hide();
+    outer->addWidget(warning_);
     if (previewBelow) {
         outer->addWidget(thumbnail_, 1);
     }
@@ -287,7 +294,15 @@ FilterPreviewDialog::~FilterPreviewDialog()
 void FilterPreviewDialog::applyInitial(const QList<double>& initial)
 {
     controls_->setValues(initial);
+    updateWarning();
     updateThumbnail();
+}
+
+void FilterPreviewDialog::updateWarning()
+{
+    const QString text = filter_param_warning(spec_.kind, values());
+    warning_->setText(text);
+    warning_->setVisible(!text.isEmpty());
 }
 
 QList<double> FilterPreviewDialog::values() const

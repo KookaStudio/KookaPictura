@@ -65,6 +65,10 @@ pub use render::{
 pub use stylize::DiffuseMode;
 pub use video::{DeinterlaceMethod, InterlaceField};
 
+/// The Maximum/Minimum radius ceiling. Larger requests clamp to this value in
+/// both the CPU kernels and the GPU plan.
+pub const MAX_MORPHOLOGY_RADIUS: u32 = 500;
+
 #[derive(Debug, thiserror::Error)]
 pub enum FilterError {
     #[error("unsupported: {0}")]
@@ -92,6 +96,14 @@ pub enum Quality {
 pub enum NoiseDistribution {
     Uniform,
     Gaussian,
+}
+
+/// The footprint of the Maximum/Minimum morphology. `Squareness` is the
+/// `(2r+1)²` square; `Roundness` is the disk `dx² + dy² <= r²`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MorphologyPreserve {
+    Squareness,
+    Roundness,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -4,8 +4,8 @@
 use pictura_core::PixelBuffer;
 use pictura_filters::{
     apply, BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DepthMap,
-    Filter, FilterKind, IrisPin, IrisShape, NoiseDistribution, PathMotion, Quality, RadialMethod,
-    ReduceNoiseParams, SmartBlurMode, SpinPin, SpinStrobe, TiltPin,
+    Filter, FilterKind, IrisPin, IrisShape, MorphologyPreserve, NoiseDistribution, PathMotion,
+    Quality, RadialMethod, ReduceNoiseParams, SmartBlurMode, SpinPin, SpinStrobe, TiltPin,
 };
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
@@ -132,8 +132,20 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 mode: SmartBlurMode::EdgeOnly,
             },
         ),
-        ("maximum 2", Filter::Maximum { radius: 2 }),
-        ("minimum 5", Filter::Minimum { radius: 5 }),
+        (
+            "maximum 2",
+            Filter::Maximum {
+                radius: 2,
+                preserve: MorphologyPreserve::Squareness,
+            },
+        ),
+        (
+            "minimum 5",
+            Filter::Minimum {
+                radius: 5,
+                preserve: MorphologyPreserve::Squareness,
+            },
+        ),
         (
             "custom",
             Filter::Custom {

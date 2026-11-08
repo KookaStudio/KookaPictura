@@ -4,6 +4,7 @@ pub(crate) fn build_maximum(ctx: &BuildCtx) -> Option<Filter> {
         ctx.arity()?;
         Filter::Maximum {
             radius: ctx.u32v(0),
+            preserve: preserve(ctx),
         }
     })
 }
@@ -13,8 +14,20 @@ pub(crate) fn build_minimum(ctx: &BuildCtx) -> Option<Filter> {
         ctx.arity()?;
         Filter::Minimum {
             radius: ctx.u32v(0),
+            preserve: preserve(ctx),
         }
     })
+}
+
+fn preserve(ctx: &BuildCtx) -> crate::MorphologyPreserve {
+    ctx.pick(
+        &[
+            crate::MorphologyPreserve::Squareness,
+            crate::MorphologyPreserve::Roundness,
+        ],
+        1,
+        0,
+    )
 }
 
 pub(crate) fn build_offset(ctx: &BuildCtx) -> Option<Filter> {

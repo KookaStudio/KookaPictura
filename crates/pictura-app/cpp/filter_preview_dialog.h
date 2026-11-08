@@ -74,6 +74,9 @@ private:
     // Schedule a canvas preview of the current values; changes that arrive
     // before it runs (queued behind a slow preview) coalesce into one.
     void valuesChanged();
+    // Show or hide the non-blocking warning the current kind and values ask
+    // for (Maximum/Minimum above a 100 px radius).
+    void updateWarning();
     void runPreview();
     void discardPreview();
     void updateThumbnail();
@@ -114,6 +117,7 @@ private:
     const FilterCommandSpec spec_;
     FilterParamControls* controls_ = nullptr;
     QCheckBox* preview_ = nullptr;
+    QLabel* warning_ = nullptr;
     QLabel* thumbnail_ = nullptr;
     QLabel* zoomLabel_ = nullptr;
     int zoom_ = 2;

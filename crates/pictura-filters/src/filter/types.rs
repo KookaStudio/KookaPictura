@@ -5,10 +5,10 @@ use crate::{
     DeinterlaceMethod, DepthMap, DiffuseMode, DisplaceFit, DisplaceMap, Durability, ExtrudeType,
     FrameOptions, GlassTexture, GrainType, HalftoneType, HdrToningParams, InterlaceField, IrisPin,
     IrisShape, LensCorrectionParams, LensType, LightDirection, Lighting, LiquifyMesh,
-    MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
-    ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, SpinPin,
-    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, VpEdit,
-    WatermarkKind, WaveType, WindMethod, ZigZagStyle,
+    MezzotintType, MorphologyPreserve, NoiseDistribution, PathMotion, PolarKind, Quality,
+    RadialMethod, ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
+    SpherizeMode, SpinPin, SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin,
+    TonalFade, VpEdit, WatermarkKind, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -143,9 +143,11 @@ pub enum Filter {
     ReduceNoise(ReduceNoiseParams),
     Maximum {
         radius: u32,
+        preserve: MorphologyPreserve,
     },
     Minimum {
         radius: u32,
+        preserve: MorphologyPreserve,
     },
     Offset {
         horizontal: i32,

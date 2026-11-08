@@ -127,8 +127,8 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
         Filter::Median { radius } => noise::median(buf, *radius),
         Filter::Despeckle => noise::despeckle(buf),
         Filter::ReduceNoise(params) => noise::reduce_noise(buf, params),
-        Filter::Maximum { radius } => other::maximum(buf, *radius),
-        Filter::Minimum { radius } => other::minimum(buf, *radius),
+        Filter::Maximum { radius, preserve } => other::maximum(buf, *radius, *preserve),
+        Filter::Minimum { radius, preserve } => other::minimum(buf, *radius, *preserve),
         Filter::Offset {
             horizontal,
             vertical,

@@ -9,7 +9,7 @@
 //! without one. The timing evidence stays opt-in through `PICTURA_GPU_BENCH`.
 
 use pictura_core::PixelBuffer;
-use pictura_filters::{apply, Filter, FilterKind, Quality, RadialMethod};
+use pictura_filters::{apply, Filter, FilterKind, MorphologyPreserve, Quality, RadialMethod};
 use pictura_render::{apply_filter_active, filter_gpu_available, Backend};
 
 const SIZE: u32 = 32;
@@ -59,10 +59,31 @@ fn accelerated_filters() -> Vec<Filter> {
             radius: 12,
             threshold: 40,
         },
-        Filter::Maximum { radius: 5 },
-        Filter::Maximum { radius: 11 },
-        Filter::Minimum { radius: 5 },
-        Filter::Minimum { radius: 11 },
+        Filter::Maximum {
+            radius: 5,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        Filter::Maximum {
+            radius: 11,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        Filter::Minimum {
+            radius: 5,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        Filter::Minimum {
+            radius: 11,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        // Above the 500 px ceiling the plan clamps like the CPU oracle.
+        Filter::Maximum {
+            radius: 600,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        Filter::Minimum {
+            radius: 600,
+            preserve: MorphologyPreserve::Squareness,
+        },
         Filter::Median { radius: 1 },
         Filter::Median { radius: 4 },
         Filter::OilPaint {

@@ -6,9 +6,9 @@ use std::time::Instant;
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{
-    apply, BrushType, Filter, LensType, LightDirection, MezzotintType, NoiseDistribution,
-    PolarKind, Quality, RippleSize, ShearFill, SmartBlurMode, SpherizeMode, TextureOptions,
-    WaveType, ZigZagStyle,
+    apply, BrushType, Filter, LensType, LightDirection, MezzotintType, MorphologyPreserve,
+    NoiseDistribution, PolarKind, Quality, RippleSize, ShearFill, SmartBlurMode, SpherizeMode,
+    TextureOptions, WaveType, ZigZagStyle,
 };
 
 const SIZE: u32 = 1024;
@@ -113,8 +113,20 @@ fn filters() -> Vec<(&'static str, Filter)> {
         ("SharpenEdges", Filter::SharpenEdges),
         ("Median", Filter::Median { radius: 5 }),
         ("Despeckle", Filter::Despeckle),
-        ("Maximum", Filter::Maximum { radius: 5 }),
-        ("Minimum", Filter::Minimum { radius: 5 }),
+        (
+            "Maximum",
+            Filter::Maximum {
+                radius: 5,
+                preserve: MorphologyPreserve::Squareness,
+            },
+        ),
+        (
+            "Minimum",
+            Filter::Minimum {
+                radius: 5,
+                preserve: MorphologyPreserve::Squareness,
+            },
+        ),
         (
             "AddNoise",
             Filter::AddNoise {

@@ -15,8 +15,8 @@
 |---|---|
 | Custom… | Your own filter matrix |
 | High Pass… | Keeps edges and removes smooth areas |
-| Maximum… | Spreads light areas |
-| Minimum… | Spreads dark areas |
+| Maximum… | Spreads light areas; choose a square or round footprint |
+| Minimum… | Spreads dark areas; choose a square or round footprint |
 | Offset… | Shifts the picture |
 
 ### High Pass
@@ -28,6 +28,18 @@ edges showing.
 
 A common use is sharpening: apply High Pass to a copy of the layer, cancel the grey with the
 [Overlay or Soft Light blend mode](blend-modes.md), and the edges become crisper.
+
+### Maximum and Minimum
+
+**Filter ▸ Other ▸ Maximum…** spreads light areas and **Minimum…** spreads dark areas. Set a
+**Radius** from 1 to 500 pixels and choose **Preserve**:
+
+- **Squareness** keeps square corners (the CS6 behaviour, and the default).
+- **Roundness** rounds the corners with a circular footprint.
+
+A radius above 100 pixels can use a lot of CPU and run slowly, so the dialog shows a warning.
+`Roundness` is slower than `Squareness`, which is why the larger radii are best used on small
+selections or masks.
 
 ## Digimarc
 
