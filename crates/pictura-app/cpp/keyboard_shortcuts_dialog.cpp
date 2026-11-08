@@ -366,14 +366,32 @@ void KeyboardShortcutsDialog::buildRows()
         tree_->setRootIsDecorated(true);
         QHash<QString, QTreeWidgetItem*> menus;
         for (const CommandInfo& info : registry_->describe()) {
+            // A panel-only command has no menu path; group it under its panel.
+            QStringList displayPath = info.path;
+            if (displayPath.isEmpty()) {
+                QString group;
+                if (info.id.startsWith(QLatin1String("panel."))) {
+                    const QStringList parts = info.id.split(QLatin1Char('.'));
+                    group = parts.size() >= 2 ? parts.at(1) : QString();
+                } else {
+                    group = info.id.section(QLatin1Char('.'), 0, 0);
+                }
+                if (group.isEmpty()) {
+                    group = QStringLiteral("Panel");
+                } else {
+                    group[0] = group.at(0).toUpper();
+                }
+                displayPath = {tr("Panel Commands"), group + QStringLiteral(" Panel"),
+                               info.label};
+            }
             QTreeWidgetItem* parent = nullptr;
             QString path;
-            for (int i = 0; i + 1 < info.path.size(); ++i) {
-                path += info.path.at(i) + QLatin1Char('/');
+            for (int i = 0; i + 1 < displayPath.size(); ++i) {
+                path += displayPath.at(i) + QLatin1Char('/');
                 QTreeWidgetItem* menu = menus.value(path);
                 if (!menu) {
-                    menu = parent ? new QTreeWidgetItem(parent, {info.path.at(i)})
-                                  : new QTreeWidgetItem(tree_, {info.path.at(i)});
+                    menu = parent ? new QTreeWidgetItem(parent, {displayPath.at(i)})
+                                  : new QTreeWidgetItem(tree_, {displayPath.at(i)});
                     menu->setFlags(Qt::ItemIsEnabled);
                     menus.insert(path, menu);
                 }
@@ -384,7 +402,7 @@ void KeyboardShortcutsDialog::buildRows()
             const QStringList texts = bindingTexts(info.id);
             const int rows = qMax(1, int(texts.size()) + (addingKey_ == info.id ? 1 : 0));
             for (int binding = 0; binding < rows; ++binding) {
-                const QString label = binding == 0 ? info.path.last() : QString();
+                const QString label = binding == 0 ? info.label : QString();
                 const QString text = binding < texts.size() ? texts.at(binding) : QString();
                 auto* item = parent ? new QTreeWidgetItem(parent, {label, text})
                                     : new QTreeWidgetItem(tree_, {label, text});
@@ -845,6 +863,18 @@ QString KeyboardShortcutsDialog::rowShortcutForTest(const QString& key) const
 {
     const QStringList texts = rowShortcutsForTest(key);
     return texts.isEmpty() ? QString() : texts.first();
+}
+
+QString KeyboardShortcutsDialog::rowLabelForTest(const QString& key) const
+{
+    QTreeWidgetItem* item = rowFor(key, 0);
+    return item ? item->text(0) : QString();
+}
+
+QString KeyboardShortcutsDialog::rowGroupForTest(const QString& key) const
+{
+    QTreeWidgetItem* item = rowFor(key, 0);
+    return item && item->parent() ? item->parent()->text(0) : QString();
 }
 
 QWidget* KeyboardShortcutsDialog::captureFieldForTest() const { return capture_; }

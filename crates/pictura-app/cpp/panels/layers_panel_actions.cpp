@@ -235,6 +235,57 @@ void LayersPanel::moveCurrent(int delta)
     view_->move_layer_path(path, delta);
 }
 
+void LayersPanel::createLayerAtAnchor()
+{
+    if (!view_) {
+        return;
+    }
+    addLayerAt(layer_selection_anchor(*view_));
+}
+
+void LayersPanel::createGroupAtAnchor()
+{
+    if (!view_) {
+        return;
+    }
+    addGroupAt(layer_selection_anchor(*view_));
+}
+
+void LayersPanel::moveAnchor(int delta)
+{
+    moveCurrent(delta);
+}
+
+void LayersPanel::editAnchor()
+{
+    if (!view_) {
+        return;
+    }
+    emit editContentRequested(layer_selection_anchor(*view_));
+}
+
+void LayersPanel::refineMaskAtAnchor()
+{
+    if (view_) {
+        openRefineMask(layer_selection_anchor(*view_));
+    }
+}
+
+void LayersPanel::openMaskOptionsFromMenu()
+{
+    openMaskOptions();
+}
+
+void LayersPanel::deletePathFromFooter(const QString& path)
+{
+    if (!view_ || path.isEmpty() || !layers_can_delete(*view_, QStringList{path})) {
+        return;
+    }
+    clearSolo();
+    view_->delete_layers(QStringList{path});
+    refresh();
+}
+
 void LayersPanel::toggleSolo(const QString& path)
 {
     if (path.isEmpty() || !view_) {

@@ -49,9 +49,9 @@ void PicturaMainWindow::wireTypeMenu()
         return path;
     };
     for (const bool toParagraph : {false, true}) {
-        const QString id = commandIdForPath(
-            {QStringLiteral("Type"), toParagraph ? QStringLiteral("Convert To Paragraph Text")
-                                                 : QStringLiteral("Convert To Point Text")});
+        const QString id = QString::fromLatin1(toParagraph
+                                               ? command_ids::TypeConvertToParagraphText
+                                               : command_ids::TypeConvertToPointText);
         registry_->setImplemented(id, true);
         registry_->setHandler(id, [this, convertible, toParagraph]() {
             PictureView* view = activeView();
@@ -77,8 +77,7 @@ void PicturaMainWindow::wireWarpText()
         const QString path = layerAnchor();
         return view && !path.isEmpty() && type_api::readLayer(*view, path).isType ? path : QString();
     };
-    const QString id
-        = commandIdForPath({QStringLiteral("Type"), QStringLiteral("Warp Text…")});
+    const QString id = QString::fromLatin1(command_ids::TypeWarpText);
     registry_->setImplemented(id, true);
     registry_->setEnabledProvider(id, [target]() { return !target().isEmpty(); });
     registry_->setHandler(id, [this, target]() {
@@ -128,8 +127,7 @@ void PicturaMainWindow::wireReplaceMissingFonts()
         PictureView* view = activeView();
         return view ? missingFonts(type_api::documentFonts(*view)) : QStringList();
     };
-    const QString id = commandIdForPath(
-        {QStringLiteral("Type"), QStringLiteral("Replace All Missing Fonts")});
+    const QString id = QString::fromLatin1(command_ids::TypeReplaceAllMissingFonts);
     registry_->setImplemented(id, true);
     // Type is only re-set in 8-bit RGB, so elsewhere the command stays off and
     // the open-time alert says why.

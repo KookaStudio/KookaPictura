@@ -23,6 +23,9 @@ private slots:
 
     void rowBlocksInOrder();
     void kindTextLists();
+    void rowActionsCarryCommandIds();
+    void rightClickAnchorsInsideSelection();
+    void clearLayerStyleClearsSelection();
     void backgroundBriefMenu();
     void groupRows();
     void pixelMaskAndClippingRows();
@@ -158,6 +161,9 @@ void LayersRowMenuTest::rowBlocksInOrder()
 
 void LayersRowMenuTest::kindTextLists()
 {
+    // Layout-only: the helper passes an empty path, so the group-specific
+    // Duplicate/Delete/Merge labels fall back to the layer forms here.
+    // groupRows() is the path-based label coverage.
     QVERIFY(newDoc(QStringLiteral("KindLists")));
     QCOMPARE(panel_->rowMenuTextsForTest(QStringLiteral("pixel")),
              (QStringList{QStringLiteral("Rename"),
@@ -196,8 +202,8 @@ void LayersRowMenuTest::kindTextLists()
                           QStringLiteral("Blending Options…"),
                           QStringLiteral("Copy CSS"),
                           QStringLiteral("Copy SVG"),
-                          QStringLiteral("Duplicate Group…"),
-                          QStringLiteral("Delete Group"),
+                          QStringLiteral("Duplicate Layer…"),
+                          QStringLiteral("Delete Layer"),
                           QStringLiteral("Group from Layers…"),
                           QStringLiteral("New Layer"),
                           QStringLiteral("New Group"),
@@ -223,7 +229,7 @@ void LayersRowMenuTest::kindTextLists()
                           QStringLiteral("Copy Layer Style"),
                           QStringLiteral("Paste Layer Style"),
                           QStringLiteral("Clear Layer Style"),
-                          QStringLiteral("Merge Layers"),
+                          QStringLiteral("Merge Down"),
                           QStringLiteral("Merge Visible"),
                           QStringLiteral("Merge Clipping Mask"),
                           QStringLiteral("Flatten Image"),
@@ -307,6 +313,18 @@ void LayersRowMenuTest::backgroundBriefMenu()
     QVERIFY(!texts.contains(QStringLiteral("Rename")));
     QVERIFY(!texts.contains(QStringLiteral("Blending Options…")));
     QVERIFY(!texts.contains(QStringLiteral("Color Label")));
+
+    // Every row is a registry command.
+    const QStringList ids = panel_->rowMenuCommandIdsForTest(QStringLiteral("background"));
+    QVERIFY2(ids.contains(QStringLiteral("layer.new.layerFromBackground")), "layer from background");
+    QVERIFY2(ids.contains(QStringLiteral("layer.duplicate.layer")), "duplicate");
+    QVERIFY2(ids.contains(QStringLiteral("layer.delete.layer")), "delete");
+    QVERIFY2(ids.contains(QStringLiteral("file.quickExportPng")), "quick export");
+    QVERIFY2(ids.contains(QStringLiteral("file.exportAs")), "export as");
+    QVERIFY2(ids.contains(QStringLiteral("layer.smartObject.convertTo")), "convert");
+    QVERIFY2(!panel_->rowMenuEnabledForTest(QStringLiteral("background"),
+                                            QStringLiteral("Delete Layer")),
+             "the Background's Delete stays disabled");
 }
 
 void LayersRowMenuTest::groupRows()
@@ -583,5 +601,47 @@ void LayersRowMenuTest::unimplementedDisabled()
                 .contains(QStringLiteral("not implemented yet")));
 }
 
+
+void LayersRowMenuTest::rowActionsCarryCommandIds()
+{
+    QVERIFY(newDoc(QStringLiteral("CommandIds")));
+    const QString path = pictura::layers_api::rowAt(*view_, 0).path;
+    const QStringList ids = panel_->rowMenuCommandIdsForPathForTest(path);
+    QVERIFY2(ids.contains(QStringLiteral("layer.duplicate.layer")), "duplicate id");
+    QVERIFY2(ids.contains(QStringLiteral("layer.mask.delete")), "delete mask id");
+    QVERIFY2(ids.contains(QStringLiteral("layer.smartObject.convertTo")), "convert id");
+}
+
+void LayersRowMenuTest::rightClickAnchorsInsideSelection()
+{
+    QVERIFY(newDoc(QStringLiteral("Anchor")));
+    view_->add_layer(-1);
+    panel_->refresh();
+    const QString a = pictura::layers_api::rowAt(*view_, 0).path;
+    const QString b = pictura::layers_api::rowAt(*view_, 1).path;
+    panel_->selectPaths({a, b}, a);
+    panel_->performRowActionForTest(QStringLiteral("clearLayerStyle"), b);
+    QCOMPARE(pictura::layer_selection_anchor(*view_), b);
+    QCOMPARE(pictura::selected_layer_paths(*view_).size(), 2);
+}
+void LayersRowMenuTest::clearLayerStyleClearsSelection()
+{
+    QVERIFY(newDoc(QStringLiteral("ClearStyle")));
+    const QString a = view_->add_layer_in(QString());
+    const QString b = view_->add_layer_in(QString());
+    QVERIFY(!a.isEmpty() && !b.isEmpty());
+    for (const QString& path : {a, b}) {
+        QVERIFY(pictura::layer_style_set(*view_, path, QStringLiteral("colorOverlay.on"), 1.0));
+        pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    }
+    QVERIFY(pictura::layer_style_has(*view_, a));
+    QVERIFY(pictura::layer_style_has(*view_, b));
+    panel_->selectPaths({a, b}, a);
+    // The row action dispatches the Layer-menu command, which is
+    // selection-wide: both layers lose the style.
+    QVERIFY(panel_->performRowActionForTest(QStringLiteral("clearLayerStyle"), b));
+    QVERIFY2(!pictura::layer_style_has(*view_, a), "the first selected layer is cleared");
+    QVERIFY2(!pictura::layer_style_has(*view_, b), "the clicked layer is cleared");
+}
 QTEST_MAIN(LayersRowMenuTest)
 #include "tst_layers_row_menu.moc"

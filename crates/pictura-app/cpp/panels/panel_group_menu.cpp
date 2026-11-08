@@ -1,6 +1,7 @@
 #include "panel_group.h"
 
 #include "actions_panel.h"
+#include "commands.h"
 #include "adjustment_catalogue.h"
 #include "character_panel.h"
 #include "frame.h"
@@ -327,8 +328,67 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
     return it == table.end() ? empty : it.value();
 }
 
+QString panelCommandId(const QString& panel, const QString& action)
+{
+    if (action.isEmpty()) {
+        return {};
+    }
+    if (action.startsWith(QStringLiteral("adjustment:"))) {
+        const QString kind = action.mid(11);
+        for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+            if (entry.kind == kind) {
+                return commandIdForPath({QStringLiteral("Layer"),
+                                         QStringLiteral("New Adjustment Layer"), entry.title});
+            }
+        }
+        return {};
+    }
+    if (panel == QStringLiteral("layersPanel")) {
+        static const QHash<QString, const char*> map = {
+            {QStringLiteral("newLayer"), command_ids::PanelLayersNewLayer},
+            {QStringLiteral("duplicate"), command_ids::LayerDuplicateLayer},
+            {QStringLiteral("delete"), command_ids::LayerDeleteLayer},
+            {QStringLiteral("deleteHidden"), command_ids::LayerDeleteHiddenLayers},
+            {QStringLiteral("newGroup"), command_ids::PanelLayersNewGroup},
+            {QStringLiteral("group"), command_ids::LayerGroupLayers},
+            {QStringLiteral("ungroup"), command_ids::LayerUngroupLayers},
+            {QStringLiteral("hide"), command_ids::LayerHideLayers},
+            {QStringLiteral("link"), command_ids::LayerLinkLayers},
+            {QStringLiteral("selectLinked"), command_ids::LayerSelectLinked},
+            {QStringLiteral("mergeDown"), command_ids::LayerMergeLayers},
+            {QStringLiteral("mergeVisible"), command_ids::LayerMergeVisible},
+            {QStringLiteral("mergeClippingMask"), command_ids::LayerMergeClippingMask},
+            {QStringLiteral("flatten"), command_ids::LayerFlattenImage},
+            {QStringLiteral("panelOptions"), command_ids::PanelLayersPanelOptions},
+        };
+        return map.contains(action) ? QString::fromLatin1(map.value(action)) : QString();
+    }
+    if (panel == QStringLiteral("historyPanel")) {
+        static const QHash<QString, const char*> map = {
+            {QStringLiteral("stepForward"), command_ids::PanelHistoryStepForward},
+            {QStringLiteral("stepBackward"), command_ids::PanelHistoryStepBackward},
+            {QStringLiteral("newSnapshot"), command_ids::PanelHistoryNewSnapshot},
+        };
+        return map.contains(action) ? QString::fromLatin1(map.value(action)) : QString();
+    }
+    if (panel == QStringLiteral("propertiesPanel")) {
+        static const QHash<QString, const char*> map = {
+            {QStringLiteral("savePreset"), command_ids::PanelPropertiesSavePreset},
+            {QStringLiteral("loadPreset"), command_ids::PanelPropertiesLoadPreset},
+        };
+        return map.contains(action) ? QString::fromLatin1(map.value(action)) : QString();
+    }
+    if (action.startsWith(QStringLiteral("actions."))
+        || action.startsWith(QStringLiteral("character."))
+        || action.startsWith(QStringLiteral("paragraph."))) {
+        return action;
+    }
+    return {};
+}
+
 void populatePanelMenu(QMenu* menu, const QString& panelName,
-                       const std::function<void(const QString&)>& dispatch)
+                       const std::function<void(const QString&)>& dispatch,
+                       CommandRegistry* registry)
 {
     QMenu* submenu = nullptr;
     for (const MenuRow& row : rowsForPanel(panelName)) {
@@ -344,44 +404,74 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
                     QStringLiteral("%1 — not implemented yet").arg(row.label));
                 continue;
             }
-            QAction* action = menu->addAction(row.label);
-            action->setCheckable(row.checkable);
-            if (!row.action.isEmpty()) {
-                action->setData(row.action);
+            const QString command = panelCommandId(panelName, row.action);
+            const bool preference = row.action == QStringLiteral("addMaskByDefault");
+            QAction* action = nullptr;
+            if (!command.isEmpty() && registry) {
+                action = registry->detachedAction(command, menu);
+                if (action) {
+                    action->setCheckable(row.checkable || action->isCheckable());
+                    menu->addAction(action);
+                }
             }
-            if (row.label == QStringLiteral("(installed sets)")) {
-                action->setData(QStringLiteral("actions.installedPlaceholder"));
+            if (!action) {
+                action = menu->addAction(row.label);
+                action->setCheckable(row.checkable);
+                if (!row.action.isEmpty()) {
+                    action->setData(row.action);
+                }
+                if (row.label == QStringLiteral("(installed sets)")) {
+                    action->setData(QStringLiteral("actions.installedPlaceholder"));
+                }
+                if (row.action.isEmpty()) {
+                    action->setEnabled(false);
+                    action->setToolTip(
+                        QStringLiteral("%1 — not implemented yet").arg(row.label));
+                } else if (preference || command.isEmpty()) {
+                    const QString id = row.action;
+                    if (dispatch) {
+                        QObject::connect(action, &QAction::triggered, menu,
+                                         [dispatch, id]() { dispatch(id); });
+                    }
+                }
             }
-            if (row.action.isEmpty()) {
-                action->setEnabled(false);
-                action->setToolTip(
-                    QStringLiteral("%1 — not implemented yet").arg(row.label));
-            } else if (dispatch) {
-                const QString id = row.action;
+            if (!command.isEmpty() && action && registry) {
                 QObject::connect(action, &QAction::triggered, menu,
-                                 [dispatch, id]() { dispatch(id); });
+                                 [registry, command]() { registry->dispatch(command); });
             }
             continue;
         }
         if (!submenu) {
             continue;
         }
-        QAction* action = submenu->addAction(row.label);
-        action->setCheckable(row.checkable);
-        if (!row.action.isEmpty()) {
-            action->setData(row.action);
+        const QString command = panelCommandId(panelName, row.action);
+        QAction* action = nullptr;
+        if (!command.isEmpty() && registry) {
+            action = registry->detachedAction(command, submenu);
+            if (action) {
+                action->setCheckable(row.checkable || action->isCheckable());
+                submenu->addAction(action);
+            }
         }
-        if (row.action.isEmpty()) {
-            action->setEnabled(false);
-            action->setToolTip(QStringLiteral("%1 — not implemented yet").arg(row.label));
-        } else {
-            submenu->menuAction()->setEnabled(true);
-            submenu->menuAction()->setToolTip(QString());
-            if (dispatch) {
+        if (!action) {
+            action = submenu->addAction(row.label);
+            action->setCheckable(row.checkable);
+            if (!row.action.isEmpty()) {
+                action->setData(row.action);
+            }
+            if (row.action.isEmpty()) {
+                action->setEnabled(false);
+                action->setToolTip(QStringLiteral("%1 — not implemented yet").arg(row.label));
+            } else if (dispatch) {
                 const QString id = row.action;
                 QObject::connect(action, &QAction::triggered, menu,
                                  [dispatch, id]() { dispatch(id); });
             }
+        } else {
+            submenu->menuAction()->setEnabled(true);
+            submenu->menuAction()->setToolTip(QString());
+            QObject::connect(action, &QAction::triggered, menu,
+                             [registry, command]() { registry->dispatch(command); });
         }
     }
     // M47: every live per-widget menu also closes the active tab and the whole
@@ -439,20 +529,16 @@ void PanelGroup::updateHeaderMenu()
                                   : tr("%1 Panel Menu").arg(titleForPanel(panel)));
     headerMenu_ = new QMenu(headerButton_);
     populatePanelMenu(headerMenu_, panel,
-                      [this](const QString& id) { runPanelMenuAction(id); });
+                      [this](const QString& id) { runPanelPreference(id); },
+                      owningFrame() ? owningFrame()->registry() : nullptr);
     QObject::connect(headerMenu_, &QMenu::aboutToShow, headerMenu_, [this, panel] {
-        auto* layers = qobject_cast<LayersPanel*>(tabs_->currentWidget());
-        for (QAction* action : headerMenu_->findChildren<QAction*>()) {
-            const QString id = action->data().toString();
-            if (id == QLatin1String("moveUp") || id == QLatin1String("moveDown")) {
-                action->setEnabled(layers
-                                   && layers->canMoveCurrent(
-                                       id == QLatin1String("moveUp") ? 1 : -1));
-            } else if (id == QLatin1String("mergeDown")) {
-                const bool one = layers && layers->targetLayerPaths().size() == 1;
-                action->setText(one ? PanelGroup::tr("Merge Down")
-                                    : PanelGroup::tr("Merge Layers"));
-                action->setEnabled(layers && layers->canMergeSelection());
+        // The menu is built once; re-read every command's state so a document
+        // opened (or a selection changed) since then is reflected.
+        if (PicturaMainWindow* frame = owningFrame()) {
+            if (CommandRegistry* registry = frame->registry()) {
+                for (QAction* action : headerMenu_->findChildren<QAction*>()) {
+                    registry->applyState(action);
+                }
             }
         }
         if (panel == QStringLiteral("adjustmentsPanel")) {
@@ -484,10 +570,8 @@ void PanelGroup::updateHeaderMenu()
     headerButton_->setMenu(headerMenu_);
 }
 
-void PanelGroup::runPanelMenuAction(const QString& actionId)
+void PanelGroup::runPanelPreference(const QString& actionId)
 {
-    // M47: the per-widget menu's close entries. The column that wires this group
-    // owns the close behaviour, so the group only forwards the request.
     if (actionId == QStringLiteral("close")) {
         emit closePanelRequested(currentPanelName());
         return;
@@ -496,38 +580,7 @@ void PanelGroup::runPanelMenuAction(const QString& actionId)
         emit closeGroupRequested();
         return;
     }
-    QWidget* panel = tabs_->currentWidget();
-    if (!panel) {
-        return;
-    }
-    if (auto* layers = qobject_cast<LayersPanel*>(panel)) {
-        layers->performPanelMenuAction(actionId);
-        return;
-    }
-    if (auto* history = qobject_cast<HistoryPanel*>(panel)) {
-        history->performPanelMenuAction(actionId);
-        return;
-    }
-    if (auto* actions = qobject_cast<ActionsPanel*>(panel)) {
-        actions->performPanelMenuAction(actionId);
-        return;
-    }
-    if (auto* character = qobject_cast<CharacterPanel*>(panel)) {
-        character->performPanelMenuAction(actionId);
-        return;
-    }
-    if (auto* paragraph = qobject_cast<ParagraphPanel*>(panel)) {
-        paragraph->performPanelMenuAction(actionId);
-        return;
-    }
-    if (auto* properties = qobject_cast<PropertiesPanel*>(panel)) {
-        properties->performPanelMenuAction(actionId);
-        return;
-    }
-    // The Adjustments panel is a launcher with no view handle; its adjustment
-    // kinds and mask preference run through the Layers panel, which owns the view.
-    if (actionId == QStringLiteral("addMaskByDefault")
-        || actionId.startsWith(QStringLiteral("adjustment:"))) {
+    if (actionId == QStringLiteral("addMaskByDefault")) {
         if (QWidget* win = window()) {
             if (auto* layers = win->findChild<LayersPanel*>(QStringLiteral("layersPanel"))) {
                 layers->performPanelMenuAction(actionId);
@@ -546,7 +599,7 @@ bool PanelGroup::panelHasMenu(const QString& panelName)
 QStringList PanelGroup::menuTextsForPanel(const QString& panelName)
 {
     QMenu menu;
-    populatePanelMenu(&menu, panelName, nullptr);
+    populatePanelMenu(&menu, panelName, nullptr, nullptr);
     QStringList texts;
     for (QAction* action : menu.actions()) {
         if (!action->isSeparator()) {

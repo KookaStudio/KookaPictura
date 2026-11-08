@@ -14,21 +14,20 @@ namespace pictura {
 
 namespace {
 
-// Menu leaf and the dialog page it opens; "" is Blending Options.
+// Command id and the dialog page it opens; "" is Blending Options.
 const std::pair<const char*, const char*> kDialogLeaves[] = {
-    {"Blending Options…", ""},          {"Drop Shadow…", "dropShadow"},
-    {"Inner Shadow…", "innerShadow"},   {"Outer Glow…", "outerGlow"},
-    {"Inner Glow…", "innerGlow"},       {"Bevel & Emboss…", "bevel"},
-    {"Satin…", "satin"},                {"Color Overlay…", "colorOverlay"},
-    {"Gradient Overlay…", "gradientOverlay"}, {"Pattern Overlay…", "patternOverlay"},
-    {"Stroke…", "stroke"},
+    {command_ids::LayerStyleBlendingOptions, ""},
+    {command_ids::LayerStyleDropShadow, "dropShadow"},
+    {command_ids::LayerStyleInnerShadow, "innerShadow"},
+    {command_ids::LayerStyleOuterGlow, "outerGlow"},
+    {command_ids::LayerStyleInnerGlow, "innerGlow"},
+    {command_ids::LayerStyleBevelEmboss, "bevel"},
+    {command_ids::LayerStyleSatin, "satin"},
+    {command_ids::LayerStyleColorOverlay, "colorOverlay"},
+    {command_ids::LayerStyleGradientOverlay, "gradientOverlay"},
+    {command_ids::LayerStylePatternOverlay, "patternOverlay"},
+    {command_ids::LayerStyleStroke, "stroke"},
 };
-
-QString styleCommand(const char* leaf)
-{
-    return commandIdForPath(
-        {QStringLiteral("Layer"), QStringLiteral("Layer Style"), QString::fromUtf8(leaf)});
-}
 
 } // namespace
 
@@ -51,10 +50,10 @@ void PicturaMainWindow::wireLayerStyleMenu()
         return view && view->has_document() && layer_style_can_edit(*view, current());
     };
 
-    for (const auto& [leaf, effect] : kDialogLeaves) {
+    for (const auto& [id, effect] : kDialogLeaves) {
         const QString key = QString::fromLatin1(effect);
         wire(
-            styleCommand(leaf),
+            id,
             [this, current, key]() {
                 PictureView* view = activeView();
                 const QString path = current();
@@ -68,7 +67,7 @@ void PicturaMainWindow::wireLayerStyleMenu()
     }
 
     wire(
-        styleCommand("Copy Layer Style"),
+        QString::fromLatin1(command_ids::LayerStyleCopyLayerStyle),
         [this, current]() {
             if (PictureView* view = activeView()) {
                 layer_style_copy(*view, current());
@@ -79,7 +78,7 @@ void PicturaMainWindow::wireLayerStyleMenu()
             return canEdit() && layer_style_has(*activeView(), current());
         });
     wire(
-        styleCommand("Paste Layer Style"),
+        QString::fromLatin1(command_ids::LayerStylePasteLayerStyle),
         [this, selected]() {
             PictureView* view = activeView();
             if (view) {
@@ -104,7 +103,7 @@ void PicturaMainWindow::wireLayerStyleMenu()
         return false;
     };
     wire(
-        styleCommand("Clear Layer Style"),
+        QString::fromLatin1(command_ids::LayerStyleClearLayerStyle),
         [this, selected]() {
             PictureView* view = activeView();
             if (view) {
@@ -113,7 +112,7 @@ void PicturaMainWindow::wireLayerStyleMenu()
         },
         anyStyled);
     wire(
-        styleCommand("Scale Effects"),
+        QString::fromLatin1(command_ids::LayerStyleScaleEffects),
         [this, selected]() {
             PictureView* view = activeView();
             bool ok = false;
@@ -126,7 +125,7 @@ void PicturaMainWindow::wireLayerStyleMenu()
         anyStyled);
     for (const bool visible : {false, true}) {
         wire(
-            styleCommand(visible ? "Show All Effects" : "Hide All Effects"),
+            QString::fromLatin1(visible ? command_ids::LayerStyleShowAllEffects : command_ids::LayerStyleHideAllEffects),
             [this, visible]() {
                 PictureView* view = activeView();
                 if (view) {

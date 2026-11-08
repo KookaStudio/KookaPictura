@@ -55,6 +55,9 @@ public:
     // The key's bindings as portable text, one per row (a blank row is "").
     QStringList rowShortcutsForTest(const QString& key) const;
     QString rowShortcutForTest(const QString& key) const;
+    // The first row's label and its parent group item, for panel grouping.
+    QString rowLabelForTest(const QString& key) const;
+    QString rowGroupForTest(const QString& key) const;
     QWidget* captureFieldForTest() const;
     QPushButton* buttonForTest(const QString& objectName) const;
     QString infoTextForTest() const;

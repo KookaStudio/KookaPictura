@@ -262,7 +262,6 @@ public:
 
     bool panelsHidden() const { return panelsHidden_; }
     void setPanelsHidden(bool hidden);
-
     void refresh();
     void saveSession();
     // The per-format Save As options (frame_menus.cpp).
@@ -629,6 +628,7 @@ private:
     // frame_menus_layer_ops.cpp: Layer > Arrange / Reverse, Delete Layer, and
     // the non-destructive Stamp Visible / Stamp Selected.
     void wireLayerArrangeStamp();
+    void wirePanelMenuCommands();
     // frame_menus_layer_ops.cpp: Layer > Rasterize Shape and Copy/Paste Shape
     // Attributes over the current shape layer.
     void wireShapeLayerActions();

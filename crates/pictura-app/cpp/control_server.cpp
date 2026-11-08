@@ -35,7 +35,6 @@
 
 #include "commands.h"
 #include "dialogs.h"
-#include "filter_commands.h"
 #include "frame.h"
 #include "image_view.h"
 #include "panels/panel_column.h"
@@ -47,78 +46,6 @@
 namespace pictura {
 
 namespace {
-
-// Commands whose real menu handler can open a modal dialog (`QFileDialog`,
-// `QInputDialog`, `QMessageBox`, the New Document / Preferences / File Info
-// dialogs) or reach the unsaved prompt (`close`/`revert`/`exit` call
-// `askUnsaved`). `dispatch_command` refuses these because dispatch is
-// synchronous on the GUI thread, so a modal would hang the socket forever.
-//
-// ponytail: hand-maintained denylist — a new modal-opening command must be
-// added here or `dispatch_command` will hang the GUI thread on it. When
-// uncertain, add it.
-bool isModalCommand(const QString& id)
-{
-    static const QSet<QString> kModal = {
-        QString::fromLatin1(command_ids::FileNew),
-        QString::fromLatin1(command_ids::FileOpen),
-        QString::fromLatin1(command_ids::FileOpenAsSmartObject),
-        QString::fromLatin1(command_ids::FileOpenAs),
-        QString::fromLatin1(command_ids::FilePlace),
-        QString::fromLatin1(command_ids::FileInfo),
-        QString::fromLatin1(command_ids::FileSave),
-        QString::fromLatin1(command_ids::FileSaveAs),
-        QString::fromLatin1(command_ids::FileExportAs),
-        QString::fromLatin1(command_ids::FileQuickExportPng),
-        QString::fromLatin1(command_ids::FileRevert),
-        QString::fromLatin1(command_ids::FileClose),
-        QString::fromLatin1(command_ids::FileCloseAll),
-        QString::fromLatin1(command_ids::FileExit),
-        QString::fromLatin1(command_ids::EditAssignProfile),
-        QString::fromLatin1(command_ids::EditConvertProfile),
-        QString::fromLatin1(command_ids::EditColorSettings),
-        QString::fromLatin1(command_ids::EditPreferencesGeneral),
-        QString::fromLatin1(command_ids::EditPreferencesInterface),
-        QString::fromLatin1(command_ids::EditPreferencesPerformance),
-        QString::fromLatin1(command_ids::EditPreferencesUnits),
-        QString::fromLatin1(command_ids::EditPreferencesGuides),
-        QString::fromLatin1(command_ids::EditPreferencesType),
-        QString::fromLatin1(command_ids::EditPreferencesAgentControl),
-        QString::fromLatin1(command_ids::ViewNewGuide),
-        // Entering full screen can show the CS6 advisory (a modal message box).
-        QString::fromLatin1(command_ids::ViewScreenModeFullWithMenuBar),
-        QString::fromLatin1(command_ids::ViewScreenModeFull),
-        QString::fromLatin1(command_ids::LayerNewLayer),
-        QString::fromLatin1(command_ids::LayerNewGroup),
-        QString::fromLatin1(command_ids::LayerNewGroupFromLayers),
-        QString::fromLatin1(command_ids::LayerSmartObjectReplaceContents),
-        QString::fromLatin1(command_ids::LayerSmartObjectExportContents),
-        QString::fromLatin1(command_ids::SelectModifyBorder),
-        QString::fromLatin1(command_ids::SelectModifySmooth),
-        QString::fromLatin1(command_ids::SelectModifyExpand),
-        QString::fromLatin1(command_ids::SelectModifyContract),
-        QString::fromLatin1(command_ids::SelectModifyFeather),
-        QString::fromLatin1(command_ids::SelectSave),
-        QString::fromLatin1(command_ids::SelectLoad),
-        QString::fromLatin1(command_ids::HelpAbout),
-    };
-    if (kModal.contains(id)) {
-        return true;
-    }
-    // Every parameterised Filter entry opens its dialog and blocks the GUI
-    // thread the same way; derive them from the command table so a new filter
-    // cannot be forgotten here.
-    static const QSet<QString> kFilterDialogs = [] {
-        QSet<QString> ids;
-        for (const FilterCommandSpec& spec : filterCommands()) {
-            if (!spec.params.isEmpty()) {
-                ids.insert(commandIdForPath(spec.path));
-            }
-        }
-        return ids;
-    }();
-    return kFilterDialogs.contains(id);
-}
 
 QString screenModeName(PicturaMainWindow::ScreenMode mode)
 {
@@ -783,7 +710,7 @@ QJsonObject ControlServer::methodDispatchCommand(const QJsonObject& params)
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("unknown command id: %1").arg(id));
     }
-    if (isModalCommand(id)) {
+    if (registry->isModal(id)) {
         return error(QStringLiteral("refused"),
                      QStringLiteral("command opens a modal dialog: %1").arg(id));
     }

@@ -45,6 +45,8 @@ class PresetCombo;
 // the controls an engine descriptor omits are absent.
 // The Canvas section has no X/Y, orientation toggle, or Fill menu, and the
 // resolution is read-only.
+class CommandRegistry;
+
 class PropertiesPanel : public QWidget {
     Q_OBJECT
 
@@ -53,6 +55,10 @@ public:
 
     void setView(PictureView* view);
     void refresh();
+    // Commit a pending live edit before a footer command changes the layer.
+    void flushPending() { commit(); }
+    void setCommandRegistry(CommandRegistry* registry) { registry_ = registry; }
+    QString currentPath() const { return path_; }
 
     // The header: the adjustment's name, "Layer Properties", "Document", or
     // "No Properties".
@@ -145,6 +151,7 @@ private:
     QWidget* footer_ = nullptr;
     QToolButton* clip_ = nullptr;
     QToolButton* visible_ = nullptr;
+    QToolButton* remove_ = nullptr;
 
     // Layer page.
     QFormLayout* info_ = nullptr;
@@ -179,6 +186,7 @@ private:
     QLabel* resolution_ = nullptr;
     QComboBox* mode_ = nullptr;
     QComboBox* depth_ = nullptr;
+    CommandRegistry* registry_ = nullptr;
 };
 
 } // namespace pictura

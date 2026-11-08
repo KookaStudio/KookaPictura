@@ -446,7 +446,7 @@ QMenu* selectionCanvasMenu(ToolServices& ctx, const QPointF& imagePos)
     add(QObject::tr("Inverse"), QString::fromLatin1(command_ids::SelectInverse));
     add(QObject::tr("Feather…"), QString::fromLatin1(command_ids::SelectModifyFeather));
     add(QObject::tr("Refine Edge…"),
-        commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
+        QString::fromLatin1(command_ids::SelectRefineEdge));
     return menu;
 }
 

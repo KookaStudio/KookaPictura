@@ -5,6 +5,13 @@
 #include "frame_update.h"
 #include "gpu_probe.h"
 
+#include "panels/actions_panel.h"
+#include "panels/character_panel.h"
+#include "panels/history_panel.h"
+#include "panels/layers_panel.h"
+#include "panels/paragraph_panel.h"
+#include "panels/properties_panel.h"
+
 #include "api/layers_bridge.h"
 
 #include "api/type_api.h"
@@ -178,9 +185,10 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::FileExportAs,
                           [this]() { exportAsFromView(this, activeView()); });
     // File > Print… and Print One Copy (WF-013).
-    for (const char* leaf : {"Print…", "Print One Copy"}) {
-        const QString id = commandIdForPath({QStringLiteral("File"), QString::fromUtf8(leaf)});
-        const bool once = QByteArray(leaf) == "Print One Copy";
+    const char* const printIds[] = {command_ids::FilePrint, command_ids::FilePrintOneCopy};
+    for (int i = 0; i < 2; ++i) {
+        const QString id = QString::fromLatin1(printIds[i]);
+        const bool once = i == 1;
         registry_->setImplemented(id, true);
         registry_->setHandler(id, [this, once]() {
             once ? printOneCopyFromView(this, activeView()) : printFromView(this, activeView());
@@ -426,8 +434,14 @@ void PicturaMainWindow::registerHandlers()
             && view->can_merge_layers(selectedLayerPaths());
     });
     registry_->setLabelProvider(command_ids::LayerMergeLayers, [this]() {
-        const bool one = layersPanel_ && selectedLayerPaths().size() == 1;
-        return one ? QStringLiteral("Merge Down") : QStringLiteral("Merge Layers");
+        PictureView* view = activeView();
+        const QString path = layerAnchor();
+        const bool one = selectedLayerPaths().size() == 1;
+        const bool group = view && !path.isEmpty()
+            && pictura::layers_api::rowForPath(*view, path).kind == QLatin1String("group");
+        const bool fill = view && !path.isEmpty() && view->layer_is_fill_content(path);
+        return (one && !group && !fill) ? QStringLiteral("Merge Down")
+                                        : QStringLiteral("Merge Layers");
     });
 
     registry_->setHandler(command_ids::LayerMergeVisible, [this]() {
@@ -558,14 +572,8 @@ void PicturaMainWindow::registerHandlers()
     simpleMaskAction(command_ids::LayerMaskUnlink,
                      [](PictureView& view) { return layer_mask_set_linked(view, false); });
 
-    registry_->setHandler(command_ids::LayerFlattenImage, [this]() {
-        PictureView* view = activeView();
-        if (view && view->has_document() && view->flatten_image() > 0) {
-            registry_->recordCommand(command_ids::LayerFlattenImage, CommandParams{});
-        }
-    });
-    registry_->setEnabledProvider(command_ids::LayerFlattenImage,
-                                  [this]() { return activeView() && activeView()->has_document(); });
+    wirePanelMenuCommands();
+
 
     // Background conversion. The applicable kind gates each command: "Layer
     // from Background…" needs the Background; "Background From Layer" needs a
@@ -655,8 +663,10 @@ void PicturaMainWindow::registerHandlers()
         refresh();
     });
     registry_->setEnabledProvider(command_ids::LayerSelectLinked, [this]() {
-        return activeView() && activeView()->has_document() && layersPanel_
-            && !layerAnchor().isEmpty();
+        PictureView* view = activeView();
+        const QString path = layerAnchor();
+        return view && view->has_document() && !path.isEmpty()
+            && pictura::layers_api::rowForPath(*view, path).linked;
     });
 
     registry_->setHandler(command_ids::LayerLinkLayers, [this]() {
@@ -832,8 +842,11 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerSmartObjectConvertTo, [this, currentSmartPath]() {
         if (PictureView* view = activeView()) {
             const QString path = currentSmartPath();
-            if (!path.isEmpty()) {
-                view->convert_to_smart_object(path);
+            if (!path.isEmpty() && view->convert_to_smart_object(path)) {
+                if (layersPanel_) {
+                    layersPanel_->refresh();
+                }
+                refresh();
             }
         }
     });
@@ -1179,5 +1192,6 @@ void PicturaMainWindow::selectLayerPath(const QString& path)
         layersPanel_->refresh();
     }
 }
+
 
 } // namespace pictura

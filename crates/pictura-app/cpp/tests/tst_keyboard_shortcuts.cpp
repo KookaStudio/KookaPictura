@@ -81,6 +81,7 @@ private slots:
     void initTestCase();
     void cleanup() { pictura::resetToolShortcuts(); }
     void listsMenusAndTools();
+    void listsPanelCommands();
     void selectedRowTakesTypedKeys();
     void leavingRowKeepsNewShortcut();
     void conflictShownInline();
@@ -579,5 +580,26 @@ void KeyboardShortcutsTest::toolCatalogueMatchesGolden()
     }
 }
 
+
+void KeyboardShortcutsTest::listsPanelCommands()
+{
+    auto registry = makeRegistry();
+    KeyboardShortcutsDialog dialog(registry.get());
+    const QString id = QString::fromLatin1(pictura::command_ids::PanelLayersNewLayer);
+    QVERIFY(dialog.selectRowForTest(id));
+    QCOMPARE(dialog.selectedRowForTest(), id);
+    QCOMPARE(dialog.rowLabelForTest(id), QStringLiteral("New Layer"));
+    QCOMPARE(dialog.rowGroupForTest(id), QStringLiteral("Layers Panel"));
+
+    // The actions/character/paragraph prefixes group by their first segment.
+    const QString action = QString::fromLatin1(pictura::command_ids::ActionsNewAction);
+    QVERIFY(dialog.selectRowForTest(action));
+    QCOMPARE(dialog.rowLabelForTest(action), QStringLiteral("New Action…"));
+    QCOMPARE(dialog.rowGroupForTest(action), QStringLiteral("Actions Panel"));
+    const QString character = QString::fromLatin1(pictura::command_ids::CharacterFauxBold);
+    QVERIFY(dialog.selectRowForTest(character));
+    QCOMPARE(dialog.rowLabelForTest(character), QStringLiteral("Faux Bold"));
+    QCOMPARE(dialog.rowGroupForTest(character), QStringLiteral("Character Panel"));
+}
 QTEST_MAIN(KeyboardShortcutsTest)
 #include "tst_keyboard_shortcuts.moc"

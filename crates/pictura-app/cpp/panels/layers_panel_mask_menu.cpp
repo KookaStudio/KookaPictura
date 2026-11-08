@@ -5,6 +5,7 @@
 // menu itself is in layers_panel_menu.cpp).
 
 #include "layers_panel.h"
+#include "commands.h"
 
 #include "dialogs.h"
 #include "icons.h"
@@ -81,16 +82,26 @@ void LayersPanel::addMaskFromButton(bool alt)
 
 void LayersPanel::populateVectorMaskMenu(QMenu& menu, const QString& path)
 {
-    const auto add = [this, &menu, path](const char* id, const QString& label) {
-        QAction* action = menu.addAction(label);
-        connect(action, &QAction::triggered, this,
-                [this, id, path] { performMaskAction(QLatin1String(id), path); });
+    const auto add = [this, &menu](const char* id, const QString& label) {
+        const QString command = QString::fromLatin1(id);
+        QAction* action = registry_ ? registry_->detachedAction(command, &menu) : nullptr;
+        if (!action) {
+            return;
+        }
+        action->setText(label);
+        menu.addAction(action);
+        connect(action, &QAction::triggered, this, [this, command]() {
+            if (registry_) {
+                registry_->dispatch(command);
+            }
+        });
     };
     const bool disabled = view_ && vector_mask_disabled_path(*view_, path);
-    add("vectorToggleEnabled", disabled ? tr("Enable Vector Mask") : tr("Disable Vector Mask"));
+    add(disabled ? command_ids::LayerVectorMaskEnable : command_ids::LayerVectorMaskDisable,
+        disabled ? tr("Enable Vector Mask") : tr("Disable Vector Mask"));
     menu.addSeparator();
-    add("vectorDelete", tr("Delete Vector Mask"));
-    add("vectorRasterize", tr("Rasterize Vector Mask"));
+    add(command_ids::LayerVectorMaskDelete, tr("Delete Vector Mask"));
+    add(command_ids::LayerRasterizeVectorMask, tr("Rasterize Vector Mask"));
 }
 
 QString LayersPanel::trashVectorMaskPath() const

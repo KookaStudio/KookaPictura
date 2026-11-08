@@ -10,10 +10,12 @@
 
 #include "api/layers_api.h"
 
+#include "commands.h"
 #include "frame.h"
 #include "image_view.h"
 #include "mask_display_options_dialog.h"
 #include "panels/layers_panel.h"
+#include "panels/properties_panel.h"
 #include "refine_edge_dialog.h"
 #include "session.h"
 
@@ -24,6 +26,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QTreeView>
 
 class LayersMaskCommandsTest : public QObject {
@@ -33,6 +36,9 @@ private slots:
     void initTestCase();
     void cleanup();
     void rowMenuFollowsTheMaskState();
+    void addMaskSubmenu();
+    void addVectorMaskSubmenu();
+    void layerMenuApplyAvailability();
     void maskButtonFollowsTheMasks();
     void maskButtonRespectsSelection();
     void maskButtonAltHidesAll();
@@ -121,7 +127,9 @@ void LayersMaskCommandsTest::rowMenuFollowsTheMaskState()
                  disable);
     };
     expect(true, false, false, false);
-    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    if (!pictura::layer_mask_present_path(*view, path)) {
+        QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    }
     expect(false, true, false, true);
     QVERIFY(pictura::layer_mask_set_enabled_path(*view, path, false));
     expect(false, true, true, false);
@@ -194,7 +202,9 @@ void LayersMaskCommandsTest::maskMenuRows()
     const QString path = fillLayer(16);
     QVERIFY(!path.isEmpty());
     pictura::PictureView* view = window_->activeView();
-    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    if (!pictura::layer_mask_present_path(*view, path)) {
+        QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    }
     QCoreApplication::processEvents();
     panel_->refresh();
 
@@ -626,5 +636,95 @@ void LayersMaskCommandsTest::groupMaskPaintRoundTrip()
     QVERIFY(!row.maskThumbnail.isNull());
 }
 
+
+void LayersMaskCommandsTest::addMaskSubmenu()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    view->deselect();
+
+    const QStringList submenu =
+        panel_->rowMenuSubmenuTextsForPathForTest(path, QStringLiteral("Add Layer Mask"));
+    QCOMPARE(submenu,
+             (QStringList{QStringLiteral("Reveal All"), QStringLiteral("Hide All"),
+                          QStringLiteral("Reveal Selection"), QStringLiteral("Hide Selection"),
+                          QStringLiteral("From Transparency")}));
+    QVERIFY2(panel_->rowMenuSubmenuItemEnabledForPathForTest(
+                 path, QStringLiteral("Add Layer Mask"), QStringLiteral("Reveal All")),
+             "Reveal All is enabled without a selection");
+    QVERIFY2(!panel_->rowMenuSubmenuItemEnabledForPathForTest(
+                 path, QStringLiteral("Add Layer Mask"), QStringLiteral("Reveal Selection")),
+             "Reveal Selection is disabled without a selection");
+    view->select_all();
+    QVERIFY2(panel_->rowMenuSubmenuItemEnabledForPathForTest(
+                 path, QStringLiteral("Add Layer Mask"), QStringLiteral("Reveal Selection")),
+             "Reveal Selection is enabled with a selection");
+    view->deselect();
+
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    QVERIFY(registry->dispatch(
+        QString::fromLatin1(pictura::command_ids::LayerMaskRevealAll)));
+    QVERIFY(pictura::layer_mask_present_path(*view, path));
+    QVERIFY(registry->dispatch(
+        QString::fromLatin1(pictura::command_ids::LayerMaskDelete)));
+    QVERIFY(!pictura::layer_mask_present_path(*view, path));
+}
+
+void LayersMaskCommandsTest::addVectorMaskSubmenu()
+{
+    const QString path = fillLayer(16);
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    QVERIFY(registry->dispatch(
+        QString::fromLatin1(pictura::command_ids::LayerVectorMaskRevealAll)));
+    QVERIFY(pictura::vector_mask_present_path(*window_->activeView(), path));
+}
+
+void LayersMaskCommandsTest::layerMenuApplyAvailability()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ApplyGate"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view->add_adjustment(QStringLiteral("hue-saturation")));
+    QString path;
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        const auto row = pictura::layers_api::rowAt(*view, i);
+        if (row.hasAdjustment) {
+            path = row.path;
+        }
+    }
+    QVERIFY(!path.isEmpty());
+    window_->selectLayerPath(path);
+    QCoreApplication::processEvents();
+    if (!pictura::layer_mask_present_path(*view, path)) {
+        QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    }
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    registry->refresh();
+    QVERIFY(!registry->action(QString::fromLatin1(pictura::command_ids::LayerMaskApply))
+                 ->isEnabled());
+    // The mask-thumbnail menu and the Properties panel agree with the Layer menu.
+    QVERIFY2(!panel_->maskMenuEnabledForPathForTest(path, QStringLiteral("Apply Layer Mask")),
+             "the mask-thumbnail menu greys out Apply on an adjustment");
+
+    const QString group = view->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    QVERIFY(!view->add_layer_in(group).isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, group, QStringLiteral("reveal-all")));
+    window_->selectLayerPath(group);
+    QCoreApplication::processEvents();
+    auto* properties =
+        window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));
+    QVERIFY(properties != nullptr);
+    properties->refresh();
+    auto* apply = properties->findChild<QToolButton*>(QStringLiteral("propertiesMaskApply"));
+    QVERIFY(apply != nullptr);
+    QVERIFY2(!apply->isEnabled(), "the Properties panel greys out Apply on a group");
+    QVERIFY2(!panel_->maskMenuEnabledForPathForTest(group, QStringLiteral("Apply Layer Mask")),
+             "the mask-thumbnail menu greys out Apply on a group");
+}
 QTEST_MAIN(LayersMaskCommandsTest)
 #include "tst_layers_mask_commands.moc"

@@ -45,6 +45,12 @@ private slots:
     void initTestCase();
     void menus();
     void dispatch();
+    void modalMetadata();
+    void panelCommandAbsentFromMenuBar();
+    void panelCommandShortcutWired();
+    void panelCommandsInShortcuts();
+    void panelPreferencesNotCommands();
+    void undoLabelTracksHistory();
 
     void cr_menu_catalogue() { pictura::test::crMenuCatalogue(*window_); }
     void cr_identifiers_stable() { pictura::test::crIdentifiersStable(*window_); }
@@ -104,7 +110,6 @@ void CommandTreeTest::menus()
         QStringLiteral("Help")};
     QCOMPARE(window_->topLevelMenuTitles(), expectedMenus);
 }
-
 void CommandTreeTest::dispatch()
 {
     pictura::PicturaMainWindow& frame = *window_;
@@ -119,6 +124,18 @@ void CommandTreeTest::dispatch()
     view->deselect();
 }
 
+void CommandTreeTest::modalMetadata()
+{
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    QVERIFY(registry->isModal(QString::fromLatin1(pictura::command_ids::ImageImageSize)));
+    QVERIFY(registry->isModal(QString::fromLatin1(pictura::command_ids::FileNew)));
+    QVERIFY(!registry->isModal(QString::fromLatin1(pictura::command_ids::SelectAll)));
+    QVERIFY(registry->isModal(pictura::commandIdForPath(
+        {QStringLiteral("Filter"), QStringLiteral("Blur"), QStringLiteral("Gaussian Blur")})));
+    QVERIFY(!registry->isModal(QString::fromLatin1(pictura::command_ids::FilterLastFilter)));
+    QVERIFY(!registry->isModal(QString::fromLatin1(pictura::command_ids::LayerStyleCopyLayerStyle)));
+}
 void CommandTreeTest::menusPanel()
 {
     auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
@@ -133,9 +150,9 @@ void CommandTreeTest::menusPanel()
     QVERIFY2(panel->rowMenuEnabledForTest(QStringLiteral("pixel"),
                                           QStringLiteral("Add Layer Mask")),
              "wired mask row is enabled");
-    QVERIFY2(!panel->rowMenuEnabledForTest(QStringLiteral("pixel"),
-                                           QStringLiteral("Blending Options…")),
-             "a kind-only row with no editable path is disabled");
+    QVERIFY2(panel->rowMenuEnabledForTest(QStringLiteral("pixel"),
+                                          QStringLiteral("Blending Options…")),
+             "Blending Options follows the active layer");
     QVERIFY2(!panel->rowMenuToolTipForTest(QStringLiteral("pixel"),
                                            QStringLiteral("Blending Options…"))
                   .contains(QStringLiteral("not implemented yet")),
@@ -1374,5 +1391,10 @@ void CommandTreeTest::layerMattingCommands()
     window_->closeDocument(doc, false);
 }
 
+void CommandTreeTest::panelCommandAbsentFromMenuBar() { pictura::test::panelCommandAbsentFromMenuBar(*window_); }
+void CommandTreeTest::panelCommandShortcutWired() { pictura::test::panelCommandShortcutWired(*window_); }
+void CommandTreeTest::panelCommandsInShortcuts() { pictura::test::panelCommandsInShortcuts(*window_); }
+void CommandTreeTest::panelPreferencesNotCommands() { pictura::test::panelPreferencesNotCommands(*window_); }
+void CommandTreeTest::undoLabelTracksHistory() { pictura::test::undoLabelTracksHistory(*window_); }
 QTEST_MAIN(CommandTreeTest)
 #include "tst_command_tree.moc"
