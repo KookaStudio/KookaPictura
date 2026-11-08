@@ -45,11 +45,16 @@ fn bounds_of(coverage: &[u8], w: i32) -> PsdRect {
 }
 
 /// Flood layer 0 of `d` over the whole canvas, with no selection.
-fn flood_layer(d: &Document, seed: (i32, i32), tolerance: u8, contiguous: bool) -> Option<Vec<u8>> {
+fn flood_layer(
+    d: &Document,
+    seed: (i32, i32),
+    tolerance: u8,
+    contiguous: bool,
+) -> Option<TiledMask> {
     let source = BucketSource::layer(d, "0").unwrap();
     flood(
         source,
-        d.width,
+        (d.width, d.height),
         canvas(d),
         None,
         seed,
@@ -75,9 +80,9 @@ fn bucket(d: &mut Document, seed: (i32, i32), tolerance: u8, contiguous: bool) {
 }
 
 /// A `w × h` document whose selection covers the rectangle at `(left, top)`.
-fn selected(w: i32, h: i32, left: i32, top: i32, sw: i32, sh: i32) -> (Document, Vec<u8>) {
+fn selected(w: i32, h: i32, left: i32, top: i32, sw: i32, sh: i32) -> (Document, TiledMask) {
     let d = doc(w, h, WHITE);
-    let mut selection = vec![0u8; (w * h) as usize];
+    let mut selection = TiledMask::from(vec![0u8; (w * h) as usize]);
     for y in top..top + sh {
         for x in left..left + sw {
             selection[(y * w + x) as usize] = 255;
@@ -315,7 +320,7 @@ fn a_pattern_tiles_from_the_document_origin_inside_the_selection() {
         data: vec![[10, 10, 10, 255], [200, 200, 200, 255]],
     };
     let mut d = doc(6, 2, WHITE);
-    let selection = [255, 255, 255, 255, 0, 0].repeat(2);
+    let selection = TiledMask::from([255, 255, 255, 255, 0, 0].repeat(2));
     fill(
         &mut d,
         "0",
@@ -355,7 +360,7 @@ fn a_pattern_tiles_from_the_document_origin_inside_the_selection() {
 fn a_selection_stroke_bands_the_edge_where_asked() {
     let red = RED;
     // An 8×1 row: selection covers the middle four pixels.
-    let selection = [0, 0, 255, 255, 255, 255, 0, 0];
+    let selection = TiledMask::from(vec![0, 0, 255, 255, 255, 255, 0, 0]);
     let mut d = doc(8, 1, WHITE);
 
     // Outside 1 px: the two pixels just outside the selection take the
@@ -535,10 +540,20 @@ fn a_boxed_flood_reads_the_planes_as_the_surface_does() {
         let d = noise(w, h, origin, background);
         let seed = (11, 9);
         let source = BucketSource::layer(&d, "0").unwrap();
-        let whole = flood(source, d.width, canvas(&d), None, seed, 0, false).unwrap();
+        let size = (d.width, d.height);
+        let whole = flood(source, size, canvas(&d), None, seed, 0, false).unwrap();
         assert_eq!(whole, surface_matches(&d, seed, 0), "origin {origin:?}");
-        let boxed = flood(source, d.width, bounds, None, seed, 0, false).unwrap();
-        assert_eq!(boxed, crop(&whole, w, bounds), "origin {origin:?}");
+        let boxed = flood(source, size, bounds, None, seed, 0, false).unwrap();
+        assert_eq!(
+            crop(&boxed, w, bounds),
+            crop(&whole, w, bounds),
+            "origin {origin:?}"
+        );
+        assert_eq!(
+            boxed.iter().filter(|&&v| v > 0).count(),
+            crop(&boxed, w, bounds).iter().filter(|&&v| v > 0).count(),
+            "the flood left its box"
+        );
         // A contiguous flood in the box is the whole flood of the box alone.
         let mut seeds = vec![0u8; (bounds.width() * bounds.height()) as usize];
         seeds[((seed.1 - 4) * bounds.width() + seed.0 - 6) as usize] = 1;
@@ -549,8 +564,12 @@ fn a_boxed_flood_reads_the_planes_as_the_surface_does() {
             &seeds,
             |_, to| cropped[to] != 0,
         );
-        let contiguous = flood(source, d.width, bounds, None, seed, 0, true);
-        assert_eq!(contiguous, expected, "origin {origin:?}");
+        let contiguous = flood(source, size, bounds, None, seed, 0, true);
+        assert_eq!(
+            contiguous.map(|m| crop(&m, w, bounds)),
+            expected,
+            "origin {origin:?}"
+        );
     }
 }
 
@@ -573,7 +592,16 @@ fn a_composite_source_reads_its_planes() {
         bottom: h as i32,
         right: w as i32,
     };
-    let got = flood(BucketSource::Composite(&buf), w, all, None, seed, 0, false).unwrap();
+    let got = flood(
+        BucketSource::Composite(&buf),
+        (w, h),
+        all,
+        None,
+        seed,
+        0,
+        false,
+    )
+    .unwrap();
     assert_eq!(got, surface_matches(&d, seed, 0));
 }
 
@@ -583,7 +611,7 @@ fn the_selection_is_a_wall_for_the_contiguous_flood() {
     // selection, but the flood may not leave it.
     let (w, h) = (30, 10);
     let d = doc(w, h, WHITE);
-    let mut selection = vec![0u8; (w * h) as usize];
+    let mut selection = TiledMask::from(vec![0u8; (w * h) as usize]);
     for y in 2..8 {
         for x in (2..8).chain(20..28) {
             selection[(y * w + x) as usize] = 255;
@@ -592,12 +620,13 @@ fn the_selection_is_a_wall_for_the_contiguous_flood() {
     let bounds = bounds_of(&selection, w);
     let source = BucketSource::layer(&d, "0").unwrap();
     let count = |m: &[u8]| m.iter().filter(|&&v| v == 255).count();
-    let left = flood(source, d.width, bounds, Some(&selection), (4, 4), 0, true).unwrap();
+    let size = (d.width, d.height);
+    let left = flood(source, size, bounds, Some(&selection), (4, 4), 0, true).unwrap();
     assert_eq!(count(&left), 36, "the flood crossed the unselected gap");
-    let both = flood(source, d.width, bounds, Some(&selection), (4, 4), 0, false).unwrap();
+    let both = flood(source, size, bounds, Some(&selection), (4, 4), 0, false).unwrap();
     assert_eq!(count(&both), 36 + 48);
     assert!(
-        flood(source, d.width, bounds, Some(&selection), (12, 4), 0, true).is_none(),
+        flood(source, size, bounds, Some(&selection), (12, 4), 0, true).is_none(),
         "a seed outside the selection floods nothing"
     );
 }
@@ -608,7 +637,7 @@ fn the_selection_edge_is_not_softened() {
     // so the anti-aliased mask is solid wherever the selection is.
     let (w, h) = (20, 20);
     let d = doc(w, h, WHITE);
-    let selection: Vec<u8> = (0..w * h)
+    let selection: TiledMask = (0..w * h)
         .map(|i| {
             if i % w + i / w < 25 && i % w > 2 {
                 255
@@ -619,8 +648,9 @@ fn the_selection_edge_is_not_softened() {
         .collect();
     let bounds = bounds_of(&selection, w);
     let source = BucketSource::layer(&d, "0").unwrap();
-    let mask = flood(source, d.width, bounds, Some(&selection), (5, 5), 0, true).unwrap();
-    let soft = antialias(mask, d.width, bounds, Some(&selection));
+    let size = (d.width, d.height);
+    let mask = flood(source, size, bounds, Some(&selection), (5, 5), 0, true).unwrap();
+    let soft = crop(&antialias(mask, size, bounds, Some(&selection)), w, bounds);
     let selected = crop(&selection, w, bounds);
     for (i, (&m, &s)) in soft.iter().zip(&selected).enumerate() {
         if s > 0 {
@@ -746,7 +776,7 @@ fn a_windowed_stroke_equals_the_whole_document_stroke() {
                 let dirty = stroke_selection(
                     &mut got,
                     "0",
-                    &selection,
+                    &TiledMask::from(selection.clone()),
                     bounds,
                     RED,
                     width,
@@ -795,13 +825,13 @@ fn a_bucket_fills_an_empty_layer() {
         right: 10,
     };
     let source = BucketSource::layer(&doc, "0").expect("a source");
-    let flood = flood(source, 16, bounds, None, (6, 6), 32, true).expect("a flood");
-    let mask = antialias(flood, 16, bounds, None);
-    let dirty = fill_within(
+    let flood = flood(source, (16, 16), bounds, None, (6, 6), 32, true).expect("a flood");
+    let mask = antialias(flood, (16, 16), bounds, None);
+    let dirty = fill_tiled(
         &mut doc,
         "0",
         bounds,
-        Some(&mask),
+        &mask,
         BucketPaint::Foreground(Rgba {
             r: 10,
             g: 20,
@@ -815,4 +845,126 @@ fn a_bucket_fills_an_empty_layer() {
     );
     assert!(dirty.is_some(), "the empty layer took the fill");
     assert_eq!(doc.layers[0].rect, bounds);
+}
+
+#[test]
+fn a_whole_canvas_bucket_writes_uniform_tiles() {
+    use pictura_core::{BitDepth, ColorMode, TileState};
+    let (w, h) = (600u32, 520u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    let _ = doc.layers.push(Layer {
+        name: "empty".into(),
+        channels: [0i16, 1, 2, -1]
+            .into_iter()
+            .map(|id| pictura_core::Channel {
+                id,
+                data: Vec::new().into(),
+            })
+            .collect(),
+        ..Default::default()
+    });
+    let all = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    };
+    let source = BucketSource::layer(&doc, "0").expect("a source");
+    let flood = flood(source, (w, h), all, None, (300, 260), 32, true).expect("a flood");
+    let mask = antialias(flood, (w, h), all, None);
+    assert_eq!(mask.allocated_bytes(), 0, "the mask holds no pixels");
+    let teal = Rgba {
+        r: 0,
+        g: 128,
+        b: 128,
+        a: 255,
+    };
+    let dirty = fill_tiled(
+        &mut doc,
+        "0",
+        all,
+        &mask,
+        BucketPaint::Foreground(teal),
+        PaintMode::Normal,
+        1.0,
+        None,
+        Alpha::Blend,
+    );
+    assert_eq!(dirty, Some(all));
+    let layer = &doc.layers[0];
+    assert_eq!(layer.rect, all);
+    for c in &layer.channels {
+        assert_eq!(c.data.allocated_bytes(), 0, "channel {} holds pixels", c.id);
+        for t in 0..c.data.tile_count() {
+            assert!(
+                matches!(
+                    c.data.tile_state(t),
+                    Some(TileState::Uniform(_) | TileState::Empty)
+                ),
+                "channel {} tile {t}",
+                c.id
+            );
+        }
+    }
+    for (x, y) in [(0, 0), (599, 519), (300, 260), (255, 256)] {
+        assert_eq!(pixel(&doc, x, y), [0, 128, 128, 255]);
+    }
+}
+
+#[test]
+fn uniform_tiles_are_filled_without_allocating() {
+    use crate::fill::tests::doc_at;
+    use pictura_core::TileState;
+    let (w, h) = (700i32, 600i32);
+    // A marquee whose interior covers whole tiles, on a uniform tiled layer.
+    let bounds = PsdRect {
+        top: 100,
+        left: 200,
+        bottom: 560,
+        right: 650,
+    };
+    let dense: Vec<u8> = (0..w * h)
+        .map(|i| {
+            let (x, y) = (i % w, i / w);
+            let inside =
+                x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom;
+            inside as u8 * 255
+        })
+        .collect();
+    let mut tiled = TiledMask::from(dense.clone());
+    assert!(tiled.tile(w as usize, h as usize));
+    let flat = TiledMask::from(dense);
+    let mut base = doc_at((w, h), (0, 0), [90, 140, 200, 255], false);
+    for c in &mut base.layers[0].channels {
+        c.data.tile(w as usize, h as usize);
+    }
+    let red = BucketPaint::Foreground(RED);
+    let run = |selection: &TiledMask| {
+        let mut d = base.clone();
+        let dirty = fill_within(
+            &mut d,
+            "0",
+            bounds,
+            None,
+            red,
+            PaintMode::Normal,
+            0.6,
+            Some(selection),
+            Alpha::Blend,
+        );
+        (d, dirty)
+    };
+    let (fast, fast_dirty) = run(&tiled);
+    let (slow, slow_dirty) = run(&flat);
+    assert_eq!(fast_dirty, slow_dirty);
+    for (a, b) in fast.layers[0].channels.iter().zip(&slow.layers[0].channels) {
+        assert!(a.data == b.data, "channel {}", a.id);
+        // Tile (1, 1) lies inside the marquee whole.
+        let inner = (w as usize).div_ceil(256) + 1;
+        assert!(
+            matches!(a.data.tile_state(inner), Some(TileState::Uniform(_))),
+            "channel {} interior tile",
+            a.id
+        );
+    }
 }

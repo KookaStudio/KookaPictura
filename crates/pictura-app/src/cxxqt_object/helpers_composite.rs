@@ -1,7 +1,7 @@
 use super::helpers::paint_timing;
 use cxx_qt_lib::{QImage, QImageFormat};
 use pictura_codec::buffer_to_srgb;
-use pictura_core::{BlendMode, Document, Layer, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{BlendMode, Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 use pictura_paint::stamp::{layer_surface, sample_scope, surface_from_composite, CloneSampling};
 #[cfg(test)]
 use pictura_paint::Stroke;
@@ -130,6 +130,28 @@ pub(super) fn default_layer_mask(doc: &Document, selection: Option<LayerMask>) -
 /// A document-sized selection plane cropped to `rect` in mask-local coordinates
 /// (row-major over the rectangle); pixels outside the document are unselected.
 pub(super) fn crop_selection(data: &[u8], doc_w: u32, doc_h: u32, rect: PsdRect) -> Vec<u8> {
+    crop_rows(doc_w, doc_h, rect, |y, xs, out| {
+        let src = y * doc_w as usize;
+        out.copy_from_slice(&data[src + xs.start..src + xs.end]);
+    })
+}
+
+/// [`crop_selection`] of a plane, tiled or flat, read one row at a time so a
+/// tiled selection is never materialized (#1214).
+pub(super) fn crop_plane(data: &Plane<u8>, doc_w: u32, doc_h: u32, rect: PsdRect) -> Vec<u8> {
+    crop_rows(doc_w, doc_h, rect, |y, xs, out| {
+        data.read_rect_into(xs, y..y + 1, doc_w as usize, out);
+    })
+}
+
+/// A `rect`-sized crop of a `doc_w × doc_h` coverage whose document row `y`,
+/// columns `xs`, `read` copies; zero outside the document.
+fn crop_rows(
+    doc_w: u32,
+    doc_h: u32,
+    rect: PsdRect,
+    read: impl Fn(usize, std::ops::Range<usize>, &mut [u8]),
+) -> Vec<u8> {
     let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
     let mut out = vec![0u8; w * h];
     if w == 0 || h == 0 {
@@ -146,9 +168,12 @@ pub(super) fn crop_selection(data: &[u8], doc_w: u32, doc_h: u32, rect: PsdRect)
         if dy < 0 || dy >= doc_h as i32 {
             continue;
         }
-        let src = dy as usize * doc_w as usize + x0 as usize;
         let dst = y * w + col0;
-        out[dst..dst + cols].copy_from_slice(&data[src..src + cols]);
+        read(
+            dy as usize,
+            x0 as usize..x1 as usize,
+            &mut out[dst..dst + cols],
+        );
     }
     out
 }
@@ -164,7 +189,7 @@ pub(super) fn selection_mask_for(selection: &Selection, rect: PsdRect) -> LayerM
             right: w,
         },
         default_color: 0,
-        data: Some(crop_selection(&selection.data, selection.width, selection.height, rect).into()),
+        data: Some(crop_plane(&selection.data, selection.width, selection.height, rect).into()),
         ..Default::default()
     }
 }

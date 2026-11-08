@@ -33,6 +33,24 @@ pub(in crate::cxxqt_object) fn area(bounds: PsdRect) -> u64 {
     bounds.width().max(0) as u64 * bounds.height().max(0) as u64
 }
 
+/// The most a tiled mask over `bounds` holds (#1214): for each 256² tile the
+/// box crosses, a dense tile and two bitmaps of one bit a pixel (the flood's
+/// visited state and its match answers). Uniform tiles hold none of it, so a
+/// flood over one colour costs far less.
+pub(in crate::cxxqt_object) fn flood_bytes(bounds: PsdRect) -> u64 {
+    let tile = TILE as i64;
+    let span = |from: i32, to: i32| {
+        let (from, to) = (i64::from(from).max(0), i64::from(to).max(0));
+        if to <= from {
+            return 0;
+        }
+        (to + tile - 1) / tile - from / tile
+    };
+    let tiles = span(bounds.left, bounds.right) * span(bounds.top, bounds.bottom);
+    let per_tile = (TILE * TILE + 2 * TILE * TILE / 8) as u64;
+    tiles.max(0) as u64 * per_tile
+}
+
 /// The bytes a write of `bounds` into the layer at `path` forks from history:
 /// each 256² tile it crosses, of each colour and transparency plane, at the
 /// document's sample size (#1213).

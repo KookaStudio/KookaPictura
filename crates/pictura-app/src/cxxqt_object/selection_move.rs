@@ -127,15 +127,29 @@ impl PictureViewRust {
         }
         // Every selected pixel lies in the bounds, which a lasso commit
         // already knows: count only them.
+        // Tile by tile (#1214): a uniform tile counts without a read.
         let w = sel.width as usize;
         let count = self.selection_mask_bounds().map_or(0, |b| {
-            let data = sel.data.as_slice();
-            (b.top as usize..b.bottom as usize)
-                .map(|y| {
-                    let row = &data[y * w + b.left as usize..y * w + b.right as usize];
-                    row.iter().filter(|&&v| v > 0).count()
-                })
-                .sum::<usize>()
+            let (xs, ys) = (
+                b.left as usize..b.right as usize,
+                b.top as usize..b.bottom as usize,
+            );
+            let mut count = 0usize;
+            sel.data.for_each_tile(xs.clone(), ys.clone(), w, |tile| {
+                let cols = xs.start.max(tile.x)..xs.end.min(tile.x + tile.w);
+                let rows = ys.start.max(tile.y)..ys.end.min(tile.y + tile.h);
+                match tile.uniform() {
+                    Some(v) => count += usize::from(v > 0) * cols.len() * rows.len(),
+                    None => {
+                        for y in rows {
+                            let row = tile.row(y - tile.y).unwrap_or(&[]);
+                            let span = cols.start - tile.x..cols.end - tile.x;
+                            count += row[span].iter().filter(|&&v| v > 0).count();
+                        }
+                    }
+                }
+            });
+            count
         }) as i32;
         self.selection_count_cache.set(Some((key, count)));
         count
@@ -156,7 +170,9 @@ impl PictureViewRust {
         if x < 0 || y < 0 || x >= sel.width as i32 || y >= sel.height as i32 {
             return 0;
         }
-        sel.data[y as usize * sel.width as usize + x as usize]
+        sel.data
+            .sample(y as usize * sel.width as usize + x as usize)
+            .unwrap_or(0)
     }
 }
 

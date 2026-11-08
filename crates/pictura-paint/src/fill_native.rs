@@ -7,7 +7,7 @@
 //! them to. The fill writes the store and re-narrows the channels, so the two
 //! agree and a save re-emits the native samples.
 
-use crate::fill::{fill_planes, Alpha};
+use crate::fill::{fill_planes, Alpha, Pass, Through};
 use crate::stroke::{layer_at, layer_at_mut, parse_layer_path};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
@@ -62,16 +62,14 @@ pub(crate) fn fill_native(
     path: &str,
     depth: BitDepth,
     mode: PaintMode,
-    selection: Option<&[u8]>,
+    through: Through<'_>,
     alpha: Alpha,
     gray: bool,
-    source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
+    source: impl Fn(i32, i32, u8) -> Option<(Rgba, f32)> + Sync,
 ) -> Option<PsdRect> {
     match depth {
-        BitDepth::Sixteen => fill_at::<u16>(doc, path, depth, mode, selection, alpha, gray, source),
-        BitDepth::ThirtyTwo => {
-            fill_at::<f32>(doc, path, depth, mode, selection, alpha, gray, source)
-        }
+        BitDepth::Sixteen => fill_at::<u16>(doc, path, depth, mode, through, alpha, gray, source),
+        BitDepth::ThirtyTwo => fill_at::<f32>(doc, path, depth, mode, through, alpha, gray, source),
         _ => None,
     }
 }
@@ -83,15 +81,12 @@ fn fill_at<T: Sample + PartialEq + Send + Sync>(
     path: &str,
     depth: BitDepth,
     mode: PaintMode,
-    selection: Option<&[u8]>,
+    through: Through<'_>,
     alpha: Alpha,
     gray: bool,
-    source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
+    source: impl Fn(i32, i32, u8) -> Option<(Rgba, f32)> + Sync,
 ) -> Option<PsdRect> {
     let canvas = (doc.width as i32, doc.height as i32);
-    if selection.is_some_and(|s| s.len() < (canvas.0 * canvas.1) as usize) {
-        return None;
-    }
     let layer = layer_at_mut(doc, &parse_layer_path(path)?)?;
     if layer.is_group || layer.adjustment.is_some() || layer_pixel_locked(layer) {
         return None;
@@ -161,25 +156,28 @@ fn fill_at<T: Sample + PartialEq + Send + Sync>(
             None => None,
         },
     };
+    let pass = Pass {
+        canvas,
+        mode,
+        through,
+        alpha: policy,
+        gray,
+        within: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: canvas.1,
+            right: canvas.0,
+        },
+    };
     let dirty = fill_planes(
         r,
         g,
         b,
         alpha_plane,
         rect,
-        canvas,
-        mode,
-        selection,
-        policy,
-        gray,
+        &pass,
         &source,
         blend_native::<T>,
-        PsdRect {
-            top: 0,
-            left: 0,
-            bottom: canvas.1,
-            right: canvas.0,
-        },
     );
     // The 8-bit channels are the store's narrowing, so the working copy and
     // the store agree and the writer emits the store's samples.

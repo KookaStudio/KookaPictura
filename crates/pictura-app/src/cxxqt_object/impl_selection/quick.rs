@@ -76,12 +76,7 @@ pub(super) fn combine_selection_boxed(
                     }),
                     _ => None,
                 };
-                match boxed {
-                    Some(b) if same => {
-                        let _ = base.combine_within(&shape, mode.into(), b.zero_outside);
-                    }
-                    _ => base.combine_with(&shape, mode),
-                }
+                base.combine_with(&shape, mode);
                 (base, seed.filter(|_| same))
             }
             None => (Selection::none(shape.width, shape.height), Some(None)),
@@ -152,7 +147,10 @@ impl qobject::PictureView {
                     && y >= 0
                     && (x as u32) < sel.width
                     && (y as u32) < sel.height
-                    && sel.data.get(y as usize * sel.width as usize + x as usize) == Some(&255)
+                    && sel
+                        .data
+                        .sample(y as usize * sel.width as usize + x as usize)
+                        == Some(255)
             });
             if inside {
                 return true;
