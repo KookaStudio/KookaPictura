@@ -99,8 +99,11 @@ static archives. Release and packaging builds pass `-DBUILD_TESTING=OFF`, keep
 the static shell, and are the only installable form; `cmake --install` on a
 development build is not supported.
 
-`CMakeLists.txt` lists every `.cpp`/`.h` explicitly, so a new source file must be
-added there. Each QObject header's matching `.cpp` ends with
+The `cmake/sources/*.cmake` fragments list every shell `.cpp` explicitly (the
+matching `.h` may be listed too for IDE grouping), so a new shell source must be
+added to the matching fragment. Qt Test sources go to
+`crates/pictura-app/cpp/tests/CMakeLists.txt`. Each QObject header's matching
+`.cpp` ends with
 `#include "moc_<name>.cpp"` so a header edit recompiles that translation unit
 instead of a central moc unit. The CMake configure also links
 `compile_commands.json` into the repo root for clangd/Serena C++ navigation; if
@@ -153,15 +156,16 @@ a thin Qt shell around it.
 - **Shell.** `cpp/main.cpp` is startup only: it selects the offscreen QPA plugin
   before `QApplication` for `--headless` (which implies `--self-test` when no
   document is given), then calls `runSelfTest`. Large classes are split across
-  several translation units registered in `CMakeLists.txt` (for example
+  several translation units registered in `cmake/sources/*.cmake` (for example
   `frame.cpp` → `frame_{columns,session,menus,build,test}.cpp`).
 - **Rendering.** The CPU compositor is the reference; the wgpu/Vulkan path is an
   accelerator, never an oracle. GPU interop notes live in
   `crates/pictura-app/GPU-INTEROP-NOTES.md`.
 
 A typical edit therefore touches: engine crate (math + unit test), the cxx-qt
-bridge (expose it), the C++/Qt shell (UI), and `CMakeLists.txt` for any new
-file.
+bridge (expose it), the C++/Qt shell (UI), and the matching
+`cmake/sources/*.cmake` fragment for any new shell source. Qt Test sources go to
+`crates/pictura-app/cpp/tests/CMakeLists.txt`.
 
 ## OpenSpec — the required spec workflow
 
@@ -339,10 +343,11 @@ one atomic add per composite or upload. They are only reported.)
   (`pictura-filters`, `pictura-adjust`, …) with an inline `#[cfg(test)]` unit
   test, then expose it through the cxx-qt bridge and the Qt shell.
 - **Add a GUI check.** Add a Qt Test case under `crates/pictura-app/cpp/tests/`
-  (registered in `CMakeLists.txt`). Do not add `runSelfTest()` checks.
+  (registered in `crates/pictura-app/cpp/tests/CMakeLists.txt`). Do not add
+  `runSelfTest()` checks.
 - **Add a self-test check (shrinking path).** Put it in a `selftest_*.cpp`
   translation unit, take the next free exit code, and register the file in
-  `CMakeLists.txt`. Never grow `selftest.cpp`; keep within its
+  `cmake/sources/selftest.cmake`. Never grow `selftest.cpp`; keep within its
   `scripts/file-size-allowlist.txt` ceiling.
 - **Keep Help > Search complete.** The Shift+Space search bar rebuilds its
   index from the live app each time it opens, so new menu commands, tools

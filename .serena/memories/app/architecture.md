@@ -36,11 +36,11 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
 
 ## C++/Qt shell (`crates/pictura-app/cpp/`)
 
-- **New `.cpp`/`.h` files MUST be added to `CMakeLists.txt` explicitly — there is no globbing.**
+- **New shell `.cpp` files MUST be added to the matching `cmake/sources/*.cmake` fragment explicitly — there is no globbing. The matching `.h` may be listed too for IDE grouping; self-test TUs go in `cmake/sources/selftest.cmake` and Qt Test sources in `crates/pictura-app/cpp/tests/CMakeLists.txt`.**
 - `main.cpp` is startup only: selects the offscreen QPA plugin before `QApplication` for `--headless`
   (which implies `--self-test` when no document is given), then calls `runSelfTest`.
   `--dump-theme` prints the theme token JSON and exits before any window/session code.
-- Large classes are split across several TUs registered in `CMakeLists.txt` (`frame.cpp` →
+- Large classes are split across several TUs registered in `cmake/sources/*.cmake` (`frame.cpp` →
   `frame_{columns,session,menus,build,test}.cpp`; `panels/panel_column.cpp` →
   `panel_column{,_drag,_iconic,_menu,_test}.cpp` + `panel_float.cpp`; etc.).
 
@@ -69,7 +69,7 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
 - **The exit code is the failure identity.** `ST_FAIL(code, ...)` returns its code; codes run from
   `2` upward and are **append-only**, so they stay stable identifiers. Exit `0` = all passed.
 - Macros: `ST_BEGIN` / `ST_PASS` / `ST_SKIP` / `ST_FAIL` / `ST_FINISH`. Names carry **no milestone**.
-- Checks live in per-concern `selftest_*.cpp` TUs (registered in `CMakeLists.txt`).
+- Checks live in per-concern `selftest_*.cpp` TUs (registered in `cmake/sources/selftest.cmake`).
   `selftest.cpp` itself is the **single allowlisted** file with a fixed ceiling in
   `scripts/file-size-allowlist.txt` — add new checks to a `selftest_*.cpp`, never grow it.
 - `scripts/report_tests.py` parses both self-test invocations' token streams and merges checks by

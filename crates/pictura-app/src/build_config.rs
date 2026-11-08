@@ -759,9 +759,17 @@ fn bridge_count_within_budget() {
 
 #[test]
 fn adapter_and_membrane_headers_are_registered() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let cmake = read(&root.join("../../CMakeLists.txt"));
-    let dir = root.join("cpp/api");
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = repo_root();
+    let mut cmake = read(&root.join("CMakeLists.txt"));
+    for entry in fs::read_dir(root.join("cmake/sources")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|ext| ext == "cmake") {
+            cmake.push('\n');
+            cmake.push_str(&read(&path));
+        }
+    }
+    let dir = manifest.join("cpp/api");
     let mut missing = Vec::new();
     for entry in fs::read_dir(&dir).unwrap() {
         let path = entry.unwrap().path();
@@ -778,7 +786,7 @@ fn adapter_and_membrane_headers_are_registered() {
     }
     assert!(
         missing.is_empty(),
-        "cpp/api headers missing from CMakeLists.txt:\n{}",
+        "cpp/api headers missing from cmake/sources/*.cmake:\n{}",
         missing.join("\n")
     );
 }

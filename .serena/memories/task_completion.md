@@ -25,7 +25,7 @@ Non-trivial logic (a branch, loop, parser, or money/security path) needs one run
 ## Self-test additions
 
 - Add a new check to a `selftest_*.cpp` TU, **not** to `selftest.cpp` (the one allowlisted file —
-  respect its `scripts/file-size-allowlist.txt` ceiling). Register a new TU in `CMakeLists.txt`.
+  respect its `scripts/file-size-allowlist.txt` ceiling). Register a new TU in `cmake/sources/selftest.cmake`.
 - Take the **next free code** — codes are append-only stable identifiers.
 - Descriptive, milestone-free name; see `mem:app/architecture` for the token protocol.
 
