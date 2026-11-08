@@ -75,6 +75,15 @@ fn accelerated_filters() -> Vec<Filter> {
             radius: 11,
             preserve: MorphologyPreserve::Squareness,
         },
+        // Above the 500 px ceiling the plan clamps like the CPU oracle.
+        Filter::Maximum {
+            radius: 600,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        Filter::Minimum {
+            radius: 600,
+            preserve: MorphologyPreserve::Squareness,
+        },
         Filter::Median { radius: 1 },
         Filter::Median { radius: 4 },
         Filter::OilPaint {

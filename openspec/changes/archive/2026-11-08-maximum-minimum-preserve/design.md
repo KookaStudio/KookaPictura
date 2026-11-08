@@ -83,8 +83,10 @@ current 100 clamp does.
 
 `gpu_filter/plan.rs` builds a `Plan::Morph` only for `Squareness`; `Roundness`
 returns `None`, so `apply_filter_active` falls back to the CPU oracle. The
-square plan no longer caps at 100, because the shader already loops over the
-support and the submit budget chunks large jobs.
+square plan clamps to the shared `MAX_MORPHOLOGY_RADIUS` (500), so a scriptable
+radius above the ceiling produces the same picture on both backends. The shader
+loops over the support and the submit budget chunks large jobs, so radii above
+the old 100 cap stay accelerated.
 
 ### Warning
 

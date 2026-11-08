@@ -65,6 +65,10 @@ pub use render::{
 pub use stylize::DiffuseMode;
 pub use video::{DeinterlaceMethod, InterlaceField};
 
+/// The Maximum/Minimum radius ceiling. Larger requests clamp to this value in
+/// both the CPU kernels and the GPU plan.
+pub const MAX_MORPHOLOGY_RADIUS: u32 = 500;
+
 #[derive(Debug, thiserror::Error)]
 pub enum FilterError {
     #[error("unsupported: {0}")]

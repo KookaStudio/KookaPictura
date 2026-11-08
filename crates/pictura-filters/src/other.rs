@@ -12,13 +12,8 @@ use pictura_core::mask_ops::{self, Border};
 use pictura_core::PixelBuffer;
 
 use crate::kernel::{clamp_index, gaussian_blur_planes, sigma_from_radius};
-use crate::{validate, FilterError, MorphologyPreserve};
+use crate::{validate, FilterError, MorphologyPreserve, MAX_MORPHOLOGY_RADIUS};
 use rayon::prelude::*;
-
-/// Radius ceiling for Maximum/Minimum; larger requests clamp rather than
-/// error. The dialog warns above 100 because the round footprint and the
-/// larger square footprints are expensive.
-const MAX_RADIUS: u32 = 500;
 
 pub fn maximum(
     buf: &mut PixelBuffer,
@@ -176,7 +171,7 @@ fn morphology(
     if radius == 0 {
         return Ok(());
     }
-    let r = radius.min(MAX_RADIUS) as usize;
+    let r = radius.min(MAX_MORPHOLOGY_RADIUS) as usize;
     let w = buf.width as usize;
     let h = buf.height as usize;
     let planes = buf.channels as usize;
