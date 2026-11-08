@@ -446,6 +446,48 @@ impl<T: TileSample> TiledPlane<T> {
         out
     }
 
+    /// Make tile `i` hold `value` everywhere, without an allocation, under a
+    /// new generation.
+    pub(crate) fn set_uniform(&mut self, i: usize, value: T) {
+        self.tiles[i] = if value.same(T::default()) {
+            Tile::Empty
+        } else {
+            Tile::Uniform(value)
+        };
+        self.gens[i] = crate::fresh_stamp();
+        self.dirty[i] = false;
+    }
+
+    /// The one value every sample of columns `xs` × global rows `ys` holds,
+    /// when every tile meeting them is uniform at that value; `None` when one
+    /// is dense or two disagree. Samples are not scanned.
+    pub(crate) fn uniform_over(&self, xs: Range<usize>, ys: Range<usize>) -> Option<T> {
+        let mut found: Option<T> = None;
+        let mut mixed = false;
+        self.each_tile_in(xs, ys, |i| {
+            if mixed {
+                return;
+            }
+            let v = match &self.tiles[i] {
+                Tile::Empty => T::default(),
+                Tile::Uniform(v) => *v,
+                Tile::Dense(_) => {
+                    mixed = true;
+                    return;
+                }
+            };
+            match found {
+                Some(f) if !f.same(v) => mixed = true,
+                _ => found = Some(v),
+            }
+        });
+        if mixed {
+            None
+        } else {
+            found
+        }
+    }
+
     /// A copy holding the same samples in allocations of its own (dense
     /// tiles copied in parallel), with fresh generations, so neither side's
     /// next write copies anything the other holds.

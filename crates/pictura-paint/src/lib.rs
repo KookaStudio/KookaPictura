@@ -5,6 +5,7 @@ pub mod bucket;
 pub mod eraser;
 mod fill;
 mod fill_native;
+mod fill_uniform;
 pub mod focus;
 pub mod gradient;
 pub mod healing;

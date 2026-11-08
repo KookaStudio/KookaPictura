@@ -67,6 +67,7 @@ private slots:
     void gradientOnADepth16Document();
     void paintBucketStaysInsideItsSelection();
     void fillGrowsAnEmptyLayer();
+    void paintBucketFillsAWholeEmptyLayer();
     void fillsRefuseWhatMemoryCannotHold();
     void refusedForMemoryShowsStatus();
 
@@ -534,6 +535,32 @@ void FillToolsTest::paintBucketStaysInsideItsSelection()
     QCOMPARE(f.view->sample_argb(30, 5), QColor(Qt::black).rgba());
     QCOMPARE(f.view->sample_argb(18, 5), QColor(Qt::white).rgba());
     f.view->deselect();
+}
+
+// A whole-canvas bucket on an empty layer (#1214): the flood covers every
+// tile whole, so the layer is filled as uniform tiles; every pixel, the tile
+// edges included, takes the colour.
+void FillToolsTest::paintBucketFillsAWholeEmptyLayer()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(600, 520, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_bucket_whole_layer"));
+    QVERIFY2(f.ok(), "bucket fixture");
+    const QColor teal(0, 128, 128);
+    const Colors colors(f.tools, teal, Qt::white);
+    const int layer = f.view->add_layer(0);
+    QVERIFY(layer >= 0);
+    f.view->set_active_layer(QString::number(layer));
+    frame.setActiveTool(pictura::ToolId::PaintBucket);
+
+    const int base = f.view->history_index();
+    f.drag({QPointF(300, 260)});
+    QVERIFY2(f.committedOnce(base, "Paint Bucket"), "one bucket state");
+    for (const QPoint p : {QPoint(0, 0), QPoint(599, 519), QPoint(255, 255), QPoint(256, 256),
+                           QPoint(511, 300), QPoint(599, 0)}) {
+        QCOMPARE(f.view->sample_argb(p.x(), p.y()), teal.rgba());
+    }
 }
 
 // A fill whose estimated peak exceeds three quarters of the memory available

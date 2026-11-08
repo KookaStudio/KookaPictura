@@ -203,6 +203,30 @@ impl<T: TileSample> Plane<T> {
         }
     }
 
+    /// Make tile `i` hold `value` everywhere without allocating it: the
+    /// uniform write of a fill or a flood that covers the tile whole. `false`,
+    /// leaving the plane alone, while flat or past the last tile.
+    pub fn set_tile_uniform(&mut self, i: usize, value: T) -> bool {
+        if i >= self.tile_count() {
+            return false;
+        }
+        self.touch();
+        match &mut self.store {
+            Store::Tiled(t) => {
+                t.set_uniform(i, value);
+                true
+            }
+            Store::Flat(_) => false,
+        }
+    }
+
+    /// The one value every sample of columns `xs` × rows `ys` holds, read from
+    /// the tile states alone: `None` while flat, for an empty rectangle, or
+    /// when a tile it meets is dense or two disagree.
+    pub fn uniform_over(&self, xs: Range<usize>, ys: Range<usize>) -> Option<T> {
+        self.tiled().and_then(|t| t.uniform_over(xs, ys))
+    }
+
     /// A copy with the same samples that shares no allocation with `self`.
     pub fn detached(&self) -> Self {
         match &self.store {

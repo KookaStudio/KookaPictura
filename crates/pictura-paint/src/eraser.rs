@@ -36,6 +36,7 @@ use crate::replace::{dab_bounds, grow, match_strength, reachable, Limits, Sampli
 use crate::stamp::StampSource;
 use crate::stroke::{layer_at, layer_at_mut, parse_layer_path};
 use crate::{tip_coverage, PaintError, PaintMode, Rgba, Stroke, StrokeConfig};
+use pictura_core::mask_ops::{coverage_bounds, TiledMask};
 use pictura_core::{layer_transparency_locked, Channel, Document, Layer, PsdRect};
 use rayon::prelude::*;
 
@@ -292,71 +293,119 @@ pub fn ensure_alpha(layer: &mut Layer) {
 }
 
 /// Erase the layer at `path` through a document-sized coverage `mask`
-/// (0–255, row-major over `doc.width`) scaled by `opacity` (0.0–1.0): the
-/// Magic Eraser's commit. A layer without alpha or with Lock Transparency is
-/// blended toward `background` instead. Returns the document rectangle
-/// changed, or `None` when nothing changed.
+/// (0–255, tiled on the document grid or flat) scaled by `opacity`
+/// (0.0–1.0): the Magic Eraser's commit. A layer without alpha or with Lock
+/// Transparency is blended toward `background` instead. Returns the document
+/// rectangle changed, or `None` when nothing changed.
+///
+/// Only the layer tiles the mask covers are visited, each reading the mask
+/// one row at a time (#1214).
 pub fn magic_erase(
     doc: &mut Document,
     path: &str,
-    mask: &[u8],
+    mask: &TiledMask,
     opacity: f32,
     background: Rgba,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
     let canvas = (doc.width as i32, doc.height as i32);
-    if opacity <= 0.0 || mask.len() < (canvas.0 * canvas.1) as usize {
+    let (cw, ch) = (canvas.0.max(0) as usize, canvas.1.max(0) as usize);
+    if opacity <= 0.0 || mask.len() < cw * ch {
         return None;
     }
+    let (mx0, my0, mx1, my1) = coverage_bounds(mask, cw, ch)?;
     let layer = layer_at_mut(doc, &parse_layer_path(path)?)?;
     if layer.is_group || layer.adjustment.is_some() {
         return None;
     }
     let fill = erases_to_background(layer).then_some([background.r, background.g, background.b]);
     let rect = layer.rect;
-    let (w, n) = (
-        rect.width().max(0),
-        (rect.width().max(0) * rect.height().max(0)) as usize,
-    );
-    let plane = |layer: &mut Layer, id: i16| {
-        layer
-            .channels
-            .iter()
-            .position(|c| c.id == id && c.data.len() >= n)
+    let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
+    let region = rect.intersect(PsdRect {
+        top: my0 as i32,
+        left: mx0 as i32,
+        bottom: my1 as i32,
+        right: mx1 as i32,
+    })?;
+    // Each written plane and the value it moves toward: the colour planes
+    // toward the background, or the transparency toward empty.
+    let targets: Vec<(i16, Option<u8>)> = match fill {
+        Some(rgb) => (0..3).map(|c| (c as i16, Some(rgb[c]))).collect(),
+        None => vec![(-1, None)],
     };
-    let planes = [0, 1, 2, -1].map(|id| plane(layer, id));
-    let mut dirty = None;
-    for y in rect.top.max(0)..rect.bottom.min(canvas.1) {
-        for x in rect.left.max(0)..rect.right.min(canvas.0) {
-            let cover = mask[(y * canvas.0 + x) as usize] as f32 / 255.0 * opacity;
-            if cover <= 0.0 {
-                continue;
-            }
-            let i = ((y - rect.top) * w + (x - rect.left)) as usize;
-            let changed = match fill {
-                Some(rgb) => {
-                    let mut changed = false;
-                    for (c, target) in rgb.iter().enumerate() {
-                        let Some(p) = planes[c] else { continue };
-                        let v = &mut layer.channels[p].data[i];
-                        let out = (*v as f32 + (*target as f32 - *v as f32) * cover).round() as u8;
-                        changed |= out != *v;
-                        *v = out;
+    let xs = (region.left - rect.left) as usize..(region.right - rect.left) as usize;
+    let ys = (region.top - rect.top) as usize..(region.bottom - rect.top) as usize;
+    let mut dirty: Option<PsdRect> = None;
+    for (id, target) in targets {
+        let Some(channel) = layer
+            .channels
+            .iter_mut()
+            .find(|c| c.id == id && c.data.len() == w * h)
+        else {
+            continue;
+        };
+        if !channel.data.tile(w, h) {
+            continue;
+        }
+        let covered: Vec<usize> = channel
+            .data
+            .tiles_in(xs.clone(), ys.clone())
+            .into_iter()
+            .filter(|&t| {
+                channel.data.tile_rect(t).is_some_and(|(lx, ly, tw, th)| {
+                    // The tile's part on the canvas, in document pixels.
+                    let x0 = (rect.left as i64 + lx as i64).clamp(0, cw as i64) as usize;
+                    let y0 = (rect.top as i64 + ly as i64).clamp(0, ch as i64) as usize;
+                    let x1 = (rect.left as i64 + (lx + tw) as i64).clamp(0, cw as i64) as usize;
+                    let y1 = (rect.top as i64 + (ly + th) as i64).clamp(0, ch as i64) as usize;
+                    x0 < x1 && y0 < y1 && mask.uniform_over(x0..x1, y0..y1) != Some(0)
+                })
+            })
+            .collect();
+        let changed = channel
+            .data
+            .tiles_mut_at(&covered)
+            .into_par_iter()
+            .filter_map(|mut tile| {
+                let mut dirty = None;
+                let (left, top) = (rect.left + tile.x as i32, rect.top + tile.y as i32);
+                let mut row = vec![0u8; tile.w];
+                // The tile's columns on the canvas; the rest read as uncovered.
+                let x0 = left.clamp(0, canvas.0);
+                let x1 = (left + tile.w as i32).clamp(0, canvas.0);
+                for dy in 0..tile.h {
+                    let y = top + dy as i32;
+                    row.fill(0);
+                    if y < 0 || y >= canvas.1 || x0 >= x1 {
+                        continue;
                     }
-                    changed
+                    mask.read_rect_into(
+                        x0 as usize..x1 as usize,
+                        y as usize..y as usize + 1,
+                        cw,
+                        &mut row[(x0 - left) as usize..(x1 - left) as usize],
+                    );
+                    for (dx, v) in tile.row_mut(dy).iter_mut().enumerate() {
+                        let cover = row[dx] as f32 / 255.0 * opacity;
+                        if cover <= 0.0 {
+                            continue;
+                        }
+                        let out = match target {
+                            Some(t) => (*v as f32 + (t as f32 - *v as f32) * cover).round() as u8,
+                            None => (*v as f32 * (1.0 - cover)).round() as u8,
+                        };
+                        if out != *v {
+                            *v = out;
+                            dirty = Some(grow(dirty, left + dx as i32, y));
+                        }
+                    }
                 }
-                None => {
-                    let Some(p) = planes[3] else { continue };
-                    let a = &mut layer.channels[p].data[i];
-                    let out = (*a as f32 * (1.0 - cover)).round() as u8;
-                    let changed = out != *a;
-                    *a = out;
-                    changed
-                }
-            };
-            if changed {
-                dirty = Some(grow(dirty, x, y));
-            }
+                dirty
+            })
+            .reduce_with(PsdRect::union);
+        channel.data.settle();
+        if let Some(c) = changed {
+            dirty = Some(dirty.map_or(c, |d| d.union(c)));
         }
     }
     dirty
@@ -767,7 +816,7 @@ mod tests {
         let mut d = doc(false);
         let mut mask = vec![0u8; 40 * 20];
         mask[10 * 40 + 5] = 255;
-        let dirty = magic_erase(&mut d, "0", &mask, 0.5, TEAL).expect("erased");
+        let dirty = magic_erase(&mut d, "0", &TiledMask::from(mask), 0.5, TEAL).expect("erased");
         assert_eq!((dirty.left, dirty.top), (5, 10));
         let half = pixel(&d, 5, 10);
         assert!((half[3] as i32 - 128).abs() <= 1, "alpha {}", half[3]);
@@ -779,7 +828,7 @@ mod tests {
     fn the_magic_eraser_fills_a_locked_layer_with_the_background_colour() {
         let mut d = doc(true);
         let mask = vec![255u8; 40 * 20];
-        magic_erase(&mut d, "0", &mask, 1.0, TEAL).expect("filled");
+        magic_erase(&mut d, "0", &TiledMask::from(mask), 1.0, TEAL).expect("filled");
         assert_eq!(pixel(&d, 3, 3), [0, 128, 128, 255]);
         let mut layer = d.layers[0].clone();
         layer.background = false;
@@ -859,5 +908,104 @@ mod tests {
             );
         }
         assert_eq!(antialias_mask(&[5, 6], 0), vec![5, 6]);
+    }
+
+    /// The Magic Eraser as it was before #1214: the wand over the whole
+    /// interleaved surface, a dense mask, and a per-pixel erase.
+    fn magic_erase_reference(
+        d: &mut Document,
+        seed: (i32, i32),
+        tolerance: u8,
+        contiguous: bool,
+        soften: bool,
+    ) {
+        let surface = layer_surface(d, "0").unwrap();
+        let (w, h) = (d.width as usize, d.height as usize);
+        let at = |p: usize| surface.data[p];
+        let target = at(seed.1 as usize * w + seed.0 as usize);
+        let near = |p: usize| (0..3).all(|k| at(p)[k].abs_diff(target[k]) <= tolerance);
+        let mut flood: Vec<u8> = (0..w * h).map(|p| u8::from(near(p)) * 255).collect();
+        if contiguous {
+            flood = pictura_core::mask_ops::flood_from(
+                w,
+                h,
+                seed.1 as usize * w + seed.0 as usize,
+                |_, to| near(to),
+            )
+            .unwrap();
+        }
+        let mask = if soften {
+            antialias_mask(&flood, w)
+        } else {
+            flood
+        };
+        let layer = &mut d.layers[0];
+        let rect = layer.rect;
+        let lw = rect.width() as usize;
+        let alpha = layer.channels.iter().position(|c| c.id == -1).unwrap();
+        let data = layer.channels[alpha].data.as_mut_slice();
+        for y in rect.top.max(0)..rect.bottom.min(h as i32) {
+            for x in rect.left.max(0)..rect.right.min(w as i32) {
+                let cover = mask[y as usize * w + x as usize] as f32 / 255.0 * 0.8;
+                if cover <= 0.0 {
+                    continue;
+                }
+                let i = (y - rect.top) as usize * lw + (x - rect.left) as usize;
+                data[i] = (data[i] as f32 * (1.0 - cover)).round() as u8;
+            }
+        }
+    }
+
+    #[test]
+    fn magic_erase_tiled_matches_dense() {
+        use crate::bucket::{antialias, magic_flood, BucketSource};
+        let (w, h) = (600i32, 420i32);
+        let mut base = crate::fill::tests::doc_at((w, h), (-20, 15), [90, 90, 90, 255], false);
+        let n = base.layers[0].rect.width() * base.layers[0].rect.height();
+        let lw = base.layers[0].rect.width();
+        let mut state = 0x77u64;
+        let cells: Vec<u8> = (0..64)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                [90u8, 92, 200, 10][(state % 4) as usize]
+            })
+            .collect();
+        for c in &mut base.layers[0].channels[..3] {
+            let data: Vec<u8> = (0..n)
+                .map(|i| cells[(((i / lw) / 70) * 8 + (i % lw) / 90) as usize % 64])
+                .collect();
+            c.data = data.into();
+        }
+        let canvas = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h,
+            right: w,
+        };
+        for contiguous in [true, false] {
+            for soften in [true, false] {
+                let mut expected = base.clone();
+                magic_erase_reference(&mut expected, (100, 100), 4, contiguous, soften);
+                let mut got = base.clone();
+                let size = (w as u32, h as u32);
+                let source = BucketSource::layer(&got, "0").unwrap();
+                let flood = magic_flood(source, size, (100, 100), 4, contiguous).unwrap();
+                let mask = if soften {
+                    antialias(flood, size, canvas, None)
+                } else {
+                    flood
+                };
+                magic_erase(&mut got, "0", &mask, 0.8, TEAL);
+                for (a, b) in got.layers[0]
+                    .channels
+                    .iter()
+                    .zip(&expected.layers[0].channels)
+                {
+                    assert!(a.data == b.data, "channel {} {contiguous} {soften}", a.id);
+                }
+            }
+        }
     }
 }

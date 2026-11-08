@@ -58,10 +58,11 @@ fn bucket_fill_profile() {
     let t = Instant::now();
     let source = BucketSource::layer(&edited, "1").expect("pixel layer");
     let seed = (width as i32 / 2, height as i32 / 2);
-    let flood = bucket::flood(source, width, canvas, None, seed, 32, true).expect("a flood");
+    let size = (width, height);
+    let flood = bucket::flood(source, size, canvas, None, seed, 32, true).expect("a flood");
     ms("flood", t.elapsed());
     let t = Instant::now();
-    let mask = bucket::antialias(flood, width, canvas, None);
+    let mask = bucket::antialias(flood, size, canvas, None);
     ms("antialias", t.elapsed());
     let t = Instant::now();
     let red = Rgba {
@@ -70,11 +71,11 @@ fn bucket_fill_profile() {
         b: 40,
         a: 255,
     };
-    let rect = bucket::fill_within(
+    let rect = bucket::fill_tiled(
         &mut edited,
         "1",
         canvas,
-        Some(&mask),
+        &mask,
         BucketPaint::Foreground(red),
         PaintMode::Normal,
         1.0,

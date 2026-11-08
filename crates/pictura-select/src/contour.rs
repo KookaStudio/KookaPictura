@@ -46,7 +46,14 @@ pub fn contour_within(selection: &Selection, threshold: u8, window: PsdRect) -> 
     }
     let vw = w as i64 + 1;
     let key = |x: usize, y: usize| y as i64 * vw + x as i64;
-    let row_at = |y: usize| &selection.data[y * w + x0..y * w + x1];
+    // Rows are copied out of a tiled mask one at a time (#1214).
+    let row_at = |y: usize| {
+        selection
+            .data
+            .row_span(y, x0..x1, w)
+            .unwrap_or(std::borrow::Cow::Borrowed(&[]))
+    };
+    let mut previous: Option<std::borrow::Cow<'_, [u8]>> = None;
     let mut edges: Vec<[i64; 2]> = Vec::new();
     let mut above: Vec<(usize, usize)> = Vec::new();
     let mut below: Vec<(usize, usize)> = Vec::new();
@@ -57,13 +64,13 @@ pub fn contour_within(selection: &Selection, threshold: u8, window: PsdRect) -> 
     // down, bottoms right, right sides up, tops left.
     for y in y0..=y1 {
         let row = (y < y1).then(|| row_at(y));
-        let same = match row {
-            Some(r) => y > y0 && r == row_at(y - 1),
+        let same = match &row {
+            Some(r) => y > y0 && previous.as_deref() == Some(&r[..]),
             None => above.is_empty(),
         };
         if !same {
             below.clear();
-            if let Some(r) = row {
+            if let Some(r) = &row {
                 inside_runs(r, threshold, x0, &mut below);
             }
             for (a, b) in difference(&below, &above) {
@@ -83,6 +90,7 @@ pub fn contour_within(selection: &Selection, threshold: u8, window: PsdRect) -> 
                 full_rows += 1;
             }
         }
+        previous = row;
     }
     if full_rows == h {
         // Select All: the outline is the document rectangle.

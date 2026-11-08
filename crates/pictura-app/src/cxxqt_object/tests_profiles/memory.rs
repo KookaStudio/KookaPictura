@@ -41,7 +41,9 @@ const BASELINE: &[(&str, usize)] = &[
     ("add_layer", 157_541),
     ("edit_fill", 3_093_603),
     ("bucket_in_selection", 1_823_460),
-    ("bucket_whole_layer", 90_558_540),
+    // The tiled flood and masks (#1214): the edit itself holds under 1 MiB;
+    // the rest is the display refresh of the whole canvas (#1216).
+    ("bucket_whole_layer", 72_326_344),
     ("brush_stroke", 2_449_828),
     ("undo_redo", 144_368_840),
     ("snapshot_restore", 98_100_677),
@@ -49,6 +51,8 @@ const BASELINE: &[(&str, usize)] = &[
     ("free_transform", 3_659_676),
     ("save_psd", 128_664_188),
     ("open_psd", 374_746_666),
+    // Measured after the tiled floods and masks (#1214).
+    ("magic_wand", 354_245),
 ];
 
 /// The scenarios whose measured step must not materialize a tiled plane into
@@ -66,6 +70,7 @@ const STREAMED: &[&str] = &[
     "free_transform",
     "save_psd",
     "open_psd",
+    "magic_wand",
 ];
 
 /// The peak heap `run` adds over what `setup` left, and how many banded planes
@@ -281,6 +286,28 @@ fn fill_plane_cost_full() {
     fill_cost(FULL_SIDE);
 }
 
+/// M5's acceptance: a whole-canvas bucket on an empty layer leaves the layer
+/// holding at most 4 MiB (#1214); its tiles are uniform.
+fn bucket_layer_cost(side: u32) {
+    let mut view = with_layer(side);
+    sc::bucket(&mut view);
+    let bytes = layer_plane_bytes(&view);
+    println!("bucketed layer at {side}²: {bytes} B");
+    assert!(bytes <= 4 << 20, "the bucketed layers hold {bytes} B");
+}
+
+// [tf_heap]
+#[test]
+fn bucket_layer_plane_cost() {
+    bucket_layer_cost(GUARD_SIDE);
+}
+
+#[test]
+#[ignore = "17000x17000 document; run explicitly with --run-ignored only"]
+fn bucket_layer_plane_cost_full() {
+    bucket_layer_cost(FULL_SIDE);
+}
+
 // M2
 #[test]
 fn add_layer_heap_peak() {
@@ -474,6 +501,28 @@ fn open_psd_heap_peak_full() {
         "open_psd",
         || sc::write_fixture(FULL_SIDE, &file),
         |path| sc::open_psd(path),
+    );
+}
+
+// The Magic Wand on one disc of the M12 fixture (#1214) [tf_wand_heap]
+#[test]
+fn magic_wand_heap_peak() {
+    let file = sc::TempFile::new("wand");
+    guard(
+        "magic_wand",
+        || sc::opened(&sc::write_fixture(GUARD_SIDE, &file)),
+        sc::magic_wand,
+    );
+}
+
+#[test]
+#[ignore = "17000x17000 heap peak; run explicitly with --run-ignored only"]
+fn magic_wand_heap_peak_full() {
+    let file = sc::TempFile::new("wand");
+    report(
+        "magic_wand",
+        || sc::opened(&sc::write_fixture(FULL_SIDE, &file)),
+        sc::magic_wand,
     );
 }
 
