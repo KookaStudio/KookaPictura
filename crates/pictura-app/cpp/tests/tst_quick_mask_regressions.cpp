@@ -126,7 +126,8 @@ void QuickMaskRegressionsTest::keyboardUndoRepaintsMask()
     QCOMPARE(view_->history_index(), history);
     QCOMPARE(mask(32, 32), 255);
     QCOMPARE(displayed(32, 32), QColor(Qt::white));
-    QTest::keyClick(window_->imageView(), Qt::Key_Y, Qt::ControlModifier);
+    QTest::keyClick(window_->imageView(), Qt::Key_Z,
+                    Qt::ControlModifier | Qt::ShiftModifier);
     QCOMPARE(view_->history_index(), history + 1);
     QCOMPARE(mask(32, 32), 0);
     QCOMPARE(displayed(32, 32), QColor(255, 128, 128));

@@ -144,6 +144,7 @@ private slots:
     void deletedPresetHidesMenuAction();
     void menuSectionsAreExact();
     void windowPanelsReflectAppliedWorkspace();
+    void functionKeysTogglePanels();
     void activeWorkspaceSurvivesRestart();
     void toolsColumnLeftBranch();
     void emptySpecApplyIsSafe();
@@ -1148,6 +1149,46 @@ void WorkspacesTest::windowPanelsReflectAppliedWorkspace()
                 ->isPanelVisible(QStringLiteral("navigatorPanel")));
     QVERIFY(!window->columnForPanel(QStringLiteral("colorPanel"))
                  ->isPanelVisible(QStringLiteral("colorPanel")));
+}
+
+// CS6 binds the Brush, Color, Layers, Info, and Actions panels to F5-F9. The
+// catalogue carries F5/F9 already; this proves the three added keys reach the
+// panel toggle commands and keep the checked state in step with visibility.
+void WorkspacesTest::functionKeysTogglePanels()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    window->resize(1100, 700);
+    window->show();
+    window->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window.get()));
+
+    struct Case {
+        const char* command;
+        const char* panel;
+        Qt::Key key;
+    };
+    const Case cases[] = {
+        {pictura::command_ids::WindowPanelsColor, "colorPanel", Qt::Key_F6},
+        {pictura::command_ids::WindowPanelsLayers, "layersPanel", Qt::Key_F7},
+        {pictura::command_ids::WindowPanelsInfo, "infoPanel", Qt::Key_F8},
+    };
+    for (const Case& entry : cases) {
+        const QString command = QString::fromLatin1(entry.command);
+        const QString panel = QString::fromLatin1(entry.panel);
+        QAction* action = window->registry()->action(command);
+        QVERIFY2(action != nullptr, entry.command);
+        QVERIFY2(action->shortcuts().contains(QKeySequence(entry.key)), entry.command);
+        pictura::PanelColumn* column = window->columnForPanel(panel);
+        QVERIFY2(column != nullptr, entry.panel);
+        const bool before = action->isChecked();
+        QTest::keyClick(window.get(), entry.key);
+        QCoreApplication::processEvents();
+        QCOMPARE(action->isChecked(), !before);
+        QCOMPARE(column->isPanelVisible(panel), action->isChecked());
+    }
 }
 
 void WorkspacesTest::activeWorkspaceSurvivesRestart()

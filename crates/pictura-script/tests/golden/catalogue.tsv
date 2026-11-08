@@ -7,7 +7,7 @@ file.close	File/Close	Close	Ctrl+W	1	0
 file.closeAll	File/Close All	Close All	Ctrl+Alt+W	1	0
 file.save	File/Save	Save	Ctrl+S	1	0
 file.saveAs	File/Save As…	Save As…	Shift+Ctrl+S	1	0
-file.exportAs	File/Export As…	Export As…	Ctrl+Alt+Shift+E	1	0
+file.exportAs	File/Export As…	Export As…		1	0
 file.quickExportPng	File/Quick Export as PNG	Quick Export as PNG		1	0
 file.check.in	File/Check In…	Check In…		0	0
 file.saveForWeb	File/Save for Web & Devices…	Save for Web & Devices…	Ctrl+Alt+Shift+S	1	0
@@ -38,7 +38,7 @@ file.print	File/Print…	Print…	Ctrl+P	0	0
 file.print.one.copy	File/Print One Copy	Print One Copy	Ctrl+Alt+Shift+P	0	0
 file.exit	File/Exit	Exit	Ctrl+Q	1	0
 edit.undo	Edit/Undo	Undo	Ctrl+Z	1	0
-edit.redo	Edit/Redo	Redo	Ctrl+Y	1	0
+edit.redo	Edit/Redo	Redo		1	0
 edit.stepForward	Edit/Step Forward	Step Forward	Ctrl+Shift+Z	1	0
 edit.stepBackward	Edit/Step Backward	Step Backward	Ctrl+Alt+Z	1	0
 edit.fade	Edit/Fade…	Fade…	Shift+Ctrl+F	0	0
@@ -558,14 +558,14 @@ window.panels.channels	Window/Panels/Channels	Channels		1	1
 window.panels.character	Window/Panels/Character	Character		1	1
 window.panels.characterStyles	Window/Panels/Character Styles	Character Styles		1	1
 window.panels.cloneSource	Window/Panels/Clone Source	Clone Source		1	1
-window.panels.color	Window/Panels/Color	Color		1	1
+window.panels.color	Window/Panels/Color	Color	F6	1	1
 window.panels.glyphs	Window/Panels/Glyphs	Glyphs		1	1
 window.panels.gradients	Window/Panels/Gradients	Gradients		1	1
 window.panels.histogram	Window/Panels/Histogram	Histogram		1	1
 window.panels.history	Window/Panels/History	History		1	1
-window.panels.info	Window/Panels/Info	Info		1	1
+window.panels.info	Window/Panels/Info	Info	F8	1	1
 window.panels.layer.comps	Window/Panels/Layer Comps	Layer Comps		0	0
-window.panels.layers	Window/Panels/Layers	Layers		1	1
+window.panels.layers	Window/Panels/Layers	Layers	F7	1	1
 window.panels.measurement.log	Window/Panels/Measurement Log	Measurement Log		0	0
 window.panels.navigator	Window/Panels/Navigator	Navigator		1	1
 window.panels.notes	Window/Panels/Notes	Notes		1	1
