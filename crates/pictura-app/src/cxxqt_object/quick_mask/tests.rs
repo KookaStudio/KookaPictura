@@ -285,3 +285,33 @@ fn quick_mask_soft_clip_is_applied_once() {
     assert!(rust.finish_quick_mask_paint());
     assert_eq!(rust.quick_mask_coverage(4, 4), 191);
 }
+
+/// [tsm_quick_mask] A marquee enters and leaves Quick Mask as a tiled mask
+/// whose interior stays `Uniform(255)` (#1214).
+#[test]
+fn a_quick_mask_round_trip_keeps_the_tiles() {
+    use pictura_core::TileState;
+    let (w, h) = (900u32, 700u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers
+        .push(pixel_layer("pixels", w, h, (20, 40, 60)))
+        .unwrap();
+    let mut rust = PictureViewRust {
+        session: DocumentSession::with_document(doc),
+        layer_target: LayerTarget::only("0"),
+        ..Default::default()
+    };
+    let marquee = Selection::rect(w, h, 100, 60, 700, 600);
+    rust.session.selection = Some(marquee.clone());
+    assert!(rust.set_quick_mask_mode(true));
+    assert!(rust.set_quick_mask_mode(false));
+    let selection = rust.session.selection.clone().expect("a selection");
+    assert_eq!(selection, marquee);
+    assert!(selection.data.is_tiled());
+    // Tile (1, 1) lies inside the marquee whole.
+    let inner = (w as usize).div_ceil(256) + 1;
+    assert_eq!(
+        selection.data.tile_state(inner),
+        Some(TileState::Uniform(255))
+    );
+}

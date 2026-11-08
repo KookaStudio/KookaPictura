@@ -15,9 +15,10 @@
 //! interpolation space, the dither, and the preset stops are photorust's, not
 //! Adobe's.
 
-use crate::fill::{fill_layer_within, pixel_noise, Alpha};
+use crate::fill::{fill_layer_within, pixel_noise, Alpha, Through};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
+use pictura_core::mask_ops::TiledMask;
 use pictura_core::{ColorMode, Document, PsdRect};
 use std::borrow::Cow;
 
@@ -226,7 +227,7 @@ pub fn draw(
     options: &GradientOptions,
     start: (f32, f32),
     end: (f32, f32),
-    selection: Option<&[u8]>,
+    selection: Option<&TiledMask>,
     within: Option<PsdRect>,
 ) -> Option<PsdRect> {
     let axis = (end.0 - start.0, end.1 - start.1);
@@ -267,28 +268,40 @@ pub fn draw(
         right: doc.width as i32,
     };
     let damage = Some(within.unwrap_or(canvas));
-    fill_layer_within(doc, path, options.mode, selection, alpha, damage, |x, y| {
-        if outside(x, y) {
-            return None;
-        }
-        // The pixel's own coordinate, not its centre: a drag from one pixel to
-        // another puts the exact ends of the ramp on exactly those pixels.
-        let t = position_at(options.style, (x as f32, y as f32), start, axis, length);
-        let mut raw = ramp.sample_raw(t);
-        if options.dither {
-            // One value for all four channels: per-channel noise would show as
-            // colour speckle rather than as grain.
-            let n = (pixel_noise(x, y) * 2.0 - 1.0) * DITHER_LEVELS;
-            for v in &mut raw {
-                *v += n;
+    let through = Through {
+        selection,
+        ..Through::default()
+    };
+    fill_layer_within(
+        doc,
+        path,
+        options.mode,
+        through,
+        alpha,
+        damage,
+        |x, y, _| {
+            if outside(x, y) {
+                return None;
             }
-        }
-        let mut color = quantise(raw);
-        if !options.transparency {
-            color.a = 255;
-        }
-        Some((color, opacity))
-    })
+            // The pixel's own coordinate, not its centre: a drag from one pixel to
+            // another puts the exact ends of the ramp on exactly those pixels.
+            let t = position_at(options.style, (x as f32, y as f32), start, axis, length);
+            let mut raw = ramp.sample_raw(t);
+            if options.dither {
+                // One value for all four channels: per-channel noise would show as
+                // colour speckle rather than as grain.
+                let n = (pixel_noise(x, y) * 2.0 - 1.0) * DITHER_LEVELS;
+                for v in &mut raw {
+                    *v += n;
+                }
+            }
+            let mut color = quantise(raw);
+            if !options.transparency {
+                color.a = 255;
+            }
+            Some((color, opacity))
+        },
+    )
 }
 
 /// Where `point` falls along the ramp, 0.0–1.0 before clamping.
@@ -755,7 +768,7 @@ mod tests {
     #[test]
     fn a_selection_confines_the_gradient() {
         let mut d = doc(32, 32, [255; 4]);
-        let mask: Vec<u8> = (0..32 * 32)
+        let mask: TiledMask = (0..32 * 32)
             .map(|i| if i % 32 < 16 { 255 } else { 0 })
             .collect();
         let black = Gradient::two_stop(BLACK, BLACK);
@@ -894,13 +907,14 @@ mod tests {
             bottom: 140,
             right: 30,
         };
-        let mask: Vec<u8> = (0..w * h)
+        let mut mask: TiledMask = (0..w * h)
             .map(|i| {
                 let (x, y) = (i % w, i / w);
                 let inside = x >= within.left && x < within.right;
                 (inside && y >= within.top && y < within.bottom) as u8 * 200
             })
             .collect();
+        mask.tile(w as usize, h as usize);
         let draw_with = |within| {
             let mut d = base.clone();
             let dirty = draw(

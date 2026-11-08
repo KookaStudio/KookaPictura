@@ -97,10 +97,10 @@ fn fill_outside_rect_grows_layer() {
         &mut doc,
         "0",
         PaintMode::Normal,
-        None,
+        crate::fill::Through::default(),
         crate::Alpha::Blend,
         Some(box_),
-        |x, y| {
+        |x, y, _| {
             (x >= box_.left && x < box_.right && y >= box_.top && y < box_.bottom).then_some((
                 Rgba {
                     r: 10,

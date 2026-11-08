@@ -3,7 +3,7 @@ use super::*;
 use super::super::super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, paint_mode_from, rgba_from_argb,
 };
-use super::super::super::helpers_composite::crop_selection;
+use super::super::super::helpers_composite::{crop_plane, crop_selection};
 use super::super::super::picture::picture;
 use super::super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
@@ -11,6 +11,7 @@ use crate::cxxqt_object::helpers::memory_gate as budget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_core::mask_ops::TiledMask;
 use pictura_core::{Document, Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint, BucketSource};
 use pictura_paint::gradient::{self, GradientOptions, GradientStyle, PRESET_NAMES};
@@ -123,9 +124,9 @@ pub(super) fn bucket_fill_at(
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
     let tolerance = tolerance.clamp(0, 255) as u8;
     apply(view, "Paint Bucket", |doc, path, rust, t, selection| {
-        // The flood's match plane and its result, then the anti-aliased copy
-        // beside the result, then the result beside the bands it forks.
-        let mask_bytes = budget::area(t.bounds);
+        // The flood's visited bits and its mask, then the anti-aliased copy
+        // beside the mask, then the mask beside the tiles the fill forks.
+        let mask_bytes = budget::flood_bytes(t.bounds);
         let fork = budget::fork_bytes(doc, path, t.bounds);
         if !budget::admit(2 * mask_bytes + fork.max(mask_bytes) + budget::refresh_bytes(t.bounds)) {
             return None;
@@ -140,20 +141,21 @@ pub(super) fn bucket_fill_at(
                 Some(composite) => BucketSource::Composite(composite),
                 None => BucketSource::layer(doc, path)?,
             };
+            let size = (doc.width, doc.height);
             bucket::flood(
-                source, doc.width, t.bounds, selection, seed, tolerance, contiguous,
+                source, size, t.bounds, selection, seed, tolerance, contiguous,
             )?
         };
         let mask = if antialias {
-            bucket::antialias(flood, doc.width, t.bounds, selection)
+            bucket::antialias(flood, (doc.width, doc.height), t.bounds, selection)
         } else {
             flood
         };
-        bucket::fill_within(
+        bucket::fill_tiled(
             doc,
             path,
             t.bounds,
-            Some(&mask),
+            &mask,
             paint,
             mode,
             opacity,
@@ -230,10 +232,10 @@ pub(super) fn edit_stroke(
         let selection = selection?;
         let canvas = (doc.width as i32, doc.height as i32);
         let window = bucket::stroke_window(t.bounds, width as i32 + 1, canvas)?;
-        // The window's crop, dilation, erosion and band, beside the bands the
-        // band's fill forks.
+        // The dilation, erosion and band of the window's edge tiles, beside
+        // the tiles the band's fill forks.
         let fork = budget::fork_bytes(doc, path, window);
-        if !budget::admit(4 * budget::area(window) + fork + budget::refresh_bytes(window)) {
+        if !budget::admit(3 * budget::flood_bytes(window) + fork + budget::refresh_bytes(window)) {
             return None;
         }
         bucket::stroke_selection(
@@ -300,7 +302,7 @@ pub(crate) fn apply(
         &str,
         &PictureViewRust,
         &FillTarget,
-        Option<&[u8]>,
+        Option<&TiledMask>,
     ) -> Option<PsdRect>,
 ) -> bool {
     budget::clear();
@@ -335,7 +337,7 @@ pub(crate) fn apply(
             "0",
             view.rust(),
             &target,
-            clip.map(|s| s.data.as_slice()),
+            clip.map(|s| &s.data),
         )
         .is_none()
         {
@@ -368,7 +370,7 @@ pub(crate) fn apply(
             bottom: doc.height as i32,
             right: doc.width as i32,
         };
-        let selection = rust.session.selection.as_ref().map(|s| s.data.as_slice());
+        let selection = rust.session.selection.as_ref().map(|s| &s.data);
         // A selection that covers nothing leaves nothing to change.
         let bounds = match selection {
             Some(_) => match rust
@@ -411,7 +413,7 @@ pub(super) fn apply_mask(
         &str,
         &PictureViewRust,
         &FillTarget,
-        Option<&[u8]>,
+        Option<&TiledMask>,
     ) -> Option<PsdRect>,
 ) -> bool {
     let outcome = view.as_mut().edit(label, |rust| {
@@ -448,9 +450,9 @@ pub(super) fn apply_mask(
             .session
             .selection
             .as_ref()
-            .map(|s| crop_selection(&s.data, s.width, s.height, mask.rect));
+            .map(|s| TiledMask::from(crop_plane(&s.data, s.width, s.height, mask.rect)));
         let mut document = mask.document;
-        let Some(dirty) = edit(&mut document, "0", rust, &target, selection.as_deref()) else {
+        let Some(dirty) = edit(&mut document, "0", rust, &target, selection.as_ref()) else {
             return Edit::None;
         };
         let Some(real) = rust.session.doc.as_mut() else {

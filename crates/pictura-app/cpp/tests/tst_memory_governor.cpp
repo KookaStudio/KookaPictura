@@ -259,17 +259,8 @@ void MemoryGovernorTest::aFailedAllocationLeavesTheEditUndone()
                                   QStringLiteral("white")));
     QVERIFY(pictura::edit_refused_for_memory());
     QCOMPARE(window_->documentCount(), documents);
-
-    pictura::PictureView* view = newDocument();
-    QVERIFY(view);
-    const int index = view->history_index();
-    const QRgb white = QColor(Qt::white).rgba();
-    pictura::fail_next_plane_for_test();
-    QVERIFY(!pictura::bucket_fill_at(*view, 5, 5, 0xff0000ffu, -1, QStringLiteral("normal"), 100,
-                                     32, true, true, false));
-    QVERIFY(pictura::edit_refused_for_memory());
-    QCOMPARE(view->history_index(), index);
-    QCOMPARE(view->sample_argb(5, 5), white);
+    // The Paint Bucket was the other edit with a canvas-sized allocation to
+    // fail; its flood is tiled since #1214 and allocates none.
 }
 
 QTEST_MAIN(MemoryGovernorTest)

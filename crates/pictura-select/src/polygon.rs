@@ -7,11 +7,10 @@
 //! edge (#1096). The crossing formula is the per-pixel test's, so the spans
 //! select exactly the pixels it did.
 
+use pictura_core::mask_ops::{empty_mask, TiledMask};
 use pictura_core::PsdRect;
 
-/// Rows each parallel scan task fills.
-const BAND_ROWS: usize = 64;
-use rayon::prelude::*;
+use crate::tiled::rasterize;
 
 struct Edge {
     xi: f64,
@@ -49,17 +48,14 @@ fn first_at_or_after(c: f64, width: i64) -> i64 {
     px
 }
 
-/// Fill `points` into `data` (`width`×`height`, zeroed) at 255 and return the
-/// tight bounds of the filled pixels, `None` when none is inside.
-pub(crate) fn fill(
-    width: u32,
-    height: u32,
-    points: &[(i32, i32)],
-    data: &mut [u8],
-) -> Option<PsdRect> {
+/// `points` filled at 255 into a `width`×`height` tiled mask, and the tight
+/// bounds of the filled pixels, `None` when none is inside. Only the tiles
+/// along the outline are dense (#1214).
+pub(crate) fn fill(width: u32, height: u32, points: &[(i32, i32)]) -> (TiledMask, Option<PsdRect>) {
+    let (w, h) = (width as usize, height as usize);
     let n = points.len();
-    if n < 3 || width == 0 || height == 0 {
-        return None;
+    if n < 3 || w == 0 || h == 0 {
+        return (empty_mask(w, h), None);
     }
     let edges: Vec<Edge> = (0..n)
         .map(|i| {
@@ -80,61 +76,35 @@ pub(crate) fn fill(
     let lo = edges.iter().map(|e| e.lo).fold(f64::INFINITY, f64::min);
     let hi = edges.iter().map(|e| e.hi).fold(f64::NEG_INFINITY, f64::max);
     if lo >= hi {
-        return None;
+        return (empty_mask(w, h), None);
     }
     // A row centre `py + 0.5` meets an edge only inside `lo..hi`.
-    let first_row = ((lo - 0.5).floor().max(0.0) as usize).min(height as usize);
-    let last_row = ((hi + 0.5).ceil().max(0.0) as usize).min(height as usize);
-    let w = width as usize;
-    let band_len = BAND_ROWS * w;
-    let bands = &mut data[..w * height as usize];
-    bands
-        .par_chunks_mut(band_len)
-        .enumerate()
-        .skip(first_row / BAND_ROWS)
-        .take((last_row.saturating_sub(first_row)).div_ceil(BAND_ROWS) + 1)
-        .filter_map(|(band, rows)| {
-            let top = band * BAND_ROWS;
-            let (y0, y1) = (top as f64 + 0.5, (top + BAND_ROWS) as f64 + 0.5);
-            let near: Vec<&Edge> = edges.iter().filter(|e| e.lo < y1 && e.hi >= y0).collect();
-            let mut crossings = Vec::new();
-            let mut bounds: Option<PsdRect> = None;
-            for (r, row) in rows.chunks_exact_mut(w).enumerate() {
-                let py = top + r;
-                if py < first_row || py >= last_row {
-                    continue;
-                }
-                let cy = py as f64 + 0.5;
-                crossings.clear();
-                crossings.extend(near.iter().filter_map(|e| e.crossing(cy)));
-                crossings.sort_by(f64::total_cmp);
-                for &[enter, leave] in crossings.as_chunks::<2>().0 {
-                    let start = first_at_or_after(enter, w as i64) as usize;
-                    let end = first_at_or_after(leave, w as i64) as usize;
-                    if start >= end {
-                        continue;
-                    }
-                    row[start..end].fill(255);
-                    let span = PsdRect {
-                        top: py as i32,
-                        left: start as i32,
-                        bottom: py as i32 + 1,
-                        right: end as i32,
-                    };
-                    bounds = Some(bounds.map_or(span, |b| b.union(span)));
-                }
+    let first_row = ((lo - 0.5).floor().max(0.0) as usize).min(h);
+    let last_row = ((hi + 0.5).ceil().max(0.0) as usize).min(h);
+    rasterize(w, h, first_row..last_row, |py, runs| {
+        let cy = py as f64 + 0.5;
+        let mut crossings: Vec<f64> = edges
+            .iter()
+            .filter(|e| e.lo <= cy && e.hi >= cy)
+            .filter_map(|e| e.crossing(cy))
+            .collect();
+        crossings.sort_by(f64::total_cmp);
+        for &[enter, leave] in crossings.as_chunks::<2>().0 {
+            let start = first_at_or_after(enter, w as i64) as usize;
+            let end = first_at_or_after(leave, w as i64) as usize;
+            if start < end {
+                runs.push((start, end));
             }
-            bounds
-        })
-        .reduce_with(PsdRect::union)
+        }
+    })
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::Selection;
 
     /// The per-pixel test the scanline fill replaced, kept as its oracle.
-    fn reference(width: u32, height: u32, points: &[(i32, i32)]) -> Vec<u8> {
+    pub(crate) fn reference(width: u32, height: u32, points: &[(i32, i32)]) -> Vec<u8> {
         let mut data = vec![0u8; width as usize * height as usize];
         let n = points.len();
         if n < 3 {

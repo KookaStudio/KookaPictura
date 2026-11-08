@@ -1,75 +1,23 @@
+use pictura_core::mask_ops::coverage_bounds;
 use pictura_core::PsdRect;
 
 use super::Selection;
-
-/// The first covered (`> 0`) column of `row`, eight bytes at a time so an empty
-/// padding row costs one word compare per eight pixels.
-fn first_covered(row: &[u8]) -> Option<usize> {
-    let (chunks, tail) = row.as_chunks::<8>();
-    for (i, chunk) in chunks.iter().enumerate() {
-        if u64::from_le_bytes(*chunk) != 0 {
-            return Some(i * 8 + chunk.iter().position(|&v| v > 0)?);
-        }
-    }
-    tail.iter()
-        .position(|&v| v > 0)
-        .map(|p| chunks.len() * 8 + p)
-}
-
-/// The last covered (`> 0`) column of `row`, from the end.
-fn last_covered(row: &[u8]) -> Option<usize> {
-    let (chunks, tail) = row.as_chunks::<8>();
-    if let Some(p) = tail.iter().rposition(|&v| v > 0) {
-        return Some(chunks.len() * 8 + p);
-    }
-    for (i, chunk) in chunks.iter().enumerate().rev() {
-        if u64::from_le_bytes(*chunk) != 0 {
-            return Some(i * 8 + chunk.iter().rposition(|&v| v > 0)?);
-        }
-    }
-    None
-}
 
 impl Selection {
     /// The bounding box of the covered pixels (coverage `> 0`), or `None` when
     /// the plane covers nothing.
     ///
-    /// Row by row: each row is searched only for its first and last covered
-    /// pixel, so a selection with empty padding costs one pass over the
-    /// padding rows rather than a division per pixel.
+    /// A tiled mask skips its `Empty` tiles and takes a covered `Uniform` tile
+    /// whole, so only the tiles along the edge are scanned; a flat one is
+    /// searched row by row for each row's first and last covered pixel.
     pub fn bounds(&self) -> Option<PsdRect> {
-        let w = self.width as usize;
-        if w == 0 || self.data.len() < w * self.height as usize {
-            return None;
-        }
-        let mut bounds: Option<PsdRect> = None;
-        for (y, row) in self
-            .data
-            .chunks_exact(w)
-            .take(self.height as usize)
-            .enumerate()
-        {
-            let Some(first) = first_covered(row) else {
-                continue;
-            };
-            let last = last_covered(row).unwrap_or(first);
-            let (y, first, last) = (y as i32, first as i32, last as i32);
-            bounds = Some(match bounds {
-                None => PsdRect {
-                    top: y,
-                    left: first,
-                    bottom: y + 1,
-                    right: last + 1,
-                },
-                Some(b) => PsdRect {
-                    top: b.top,
-                    left: b.left.min(first),
-                    bottom: y + 1,
-                    right: b.right.max(last + 1),
-                },
-            });
-        }
-        bounds
+        let (w, h) = (self.width as usize, self.height as usize);
+        coverage_bounds(&self.data, w, h).map(|(x0, y0, x1, y1)| PsdRect {
+            top: y0 as i32,
+            left: x0 as i32,
+            bottom: y1 as i32,
+            right: x1 as i32,
+        })
     }
 }
 

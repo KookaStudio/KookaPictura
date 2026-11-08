@@ -14,8 +14,9 @@ use cxx_qt_lib::QString;
 use ffi::PaintTip;
 use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
 use pictura_paint::art_history::{ArtHistoryOptions, ArtStyle, STYLE_NAMES};
+use pictura_paint::bucket::{self, BucketSource};
 use pictura_paint::eraser::{
-    antialias_mask, begin_erase, ensure_alpha, magic_erase, BackgroundEraseOptions, EraserMode,
+    begin_erase, ensure_alpha, magic_erase, BackgroundEraseOptions, EraserMode,
 };
 use pictura_paint::focus::{Focus, FocusOptions, RetouchMode};
 use pictura_paint::mixer::MixerOptions;
@@ -569,24 +570,32 @@ pub(super) fn magic_erase_at(
         {
             return false;
         }
-        let sampled = if sample_all {
-            super::super::picture::picture(doc, rust)
-        } else {
-            let Some(surface) = layer_surface(doc, path) else {
-                return false;
-            };
-            std::borrow::Cow::Owned(planar(&surface))
-        };
         let tolerance = tolerance.clamp(0, 255) as u8;
-        let Ok(flood) =
+        let size = (doc.width, doc.height);
+        // The wand's flood, over the composite or straight off the layer's
+        // planes, as a tiled mask (#1214).
+        let flood = if sample_all {
+            let sampled = super::super::picture::picture(doc, rust);
             pictura_select::magic_wand(&sampled, x as u32, y as u32, tolerance, contiguous)
-        else {
+                .ok()
+                .map(|s| s.data)
+        } else {
+            BucketSource::layer(doc, path)
+                .and_then(|source| bucket::magic_flood(source, size, (x, y), tolerance, contiguous))
+        };
+        let Some(flood) = flood else {
             return false;
         };
         let mask = if antialias {
-            antialias_mask(&flood.data, flood.width as usize)
+            let canvas = PsdRect {
+                top: 0,
+                left: 0,
+                bottom: size.1 as i32,
+                right: size.0 as i32,
+            };
+            bucket::antialias(flood, size, canvas, None)
         } else {
-            flood.data.to_vec()
+            flood
         };
         let mut edited = unlocked_background(doc, path).unwrap_or_else(|| doc.clone());
         let opacity = opacity.clamp(0, 100) as f32 / 100.0;
@@ -605,23 +614,6 @@ pub(super) fn magic_erase_at(
     view.as_mut().rust_mut().session.doc = Some(doc);
     view.as_mut().edit("Magic Eraser", |_| Edit::Full);
     true
-}
-
-/// A document-space surface as the planar RGBA buffer the Magic Wand reads.
-pub(super) fn planar(surface: &pictura_paint::healing::RgbaImage) -> pictura_core::PixelBuffer {
-    let n = surface.data.len();
-    let mut data = vec![0u8; n * 4];
-    for (i, px) in surface.data.iter().enumerate() {
-        for (c, v) in px.iter().enumerate() {
-            data[c * n + i] = *v;
-        }
-    }
-    pictura_core::PixelBuffer {
-        width: surface.width as u32,
-        height: surface.height as u32,
-        channels: 4,
-        data: data.into(),
-    }
 }
 
 pub(super) fn stamp_pattern_count() -> i32 {

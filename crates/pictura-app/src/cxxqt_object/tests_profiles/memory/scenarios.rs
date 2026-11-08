@@ -12,6 +12,7 @@ use crate::cxxqt_object::open_jobs::{apply_opened, decode_psd, make_background};
 use crate::cxxqt_object::state::PictureViewRust;
 use crate::history::{detached_copy, History, Restored};
 use crate::layer_target::LayerTarget;
+use pictura_core::mask_ops::TiledMask;
 use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint, BucketSource};
 use pictura_paint::stroke::Stroke;
@@ -132,16 +133,14 @@ pub(super) fn add_layer(view: &mut PictureViewRust) {
 /// The 1000² marquee at the centre, as the Marquee tool's mask.
 pub(super) fn marquee(view: &mut PictureViewRust, side: u32) {
     let rect = square(side);
-    let mut data = vec![0u8; side as usize * side as usize];
-    for y in rect.top..rect.bottom {
-        let row = y as usize * side as usize;
-        data[row + rect.left as usize..row + rect.right as usize].fill(255);
-    }
-    view.session.set_selection(Some(Selection {
-        width: side,
-        height: side,
-        data: data.into(),
-    }));
+    view.session.set_selection(Some(Selection::rect(
+        side,
+        side,
+        rect.left,
+        rect.top,
+        rect.width(),
+        rect.height(),
+    )));
 }
 
 /// `fills::apply`: run `edit` on a copy of the document, adopt it, refresh
@@ -150,12 +149,12 @@ fn apply_fill(
     view: &mut PictureViewRust,
     path: &str,
     label: &str,
-    edit: impl FnOnce(&mut Document, PsdRect, Option<&[u8]>) -> Option<PsdRect>,
+    edit: impl FnOnce(&mut Document, PsdRect, Option<&TiledMask>) -> Option<PsdRect>,
 ) {
     view.layer_target = LayerTarget::only(path);
     let doc = view.session.doc.as_ref().expect("document");
     let canvas = canvas(doc.width);
-    let selection = view.session.selection.as_ref().map(|s| s.data.as_slice());
+    let selection = view.session.selection.as_ref().map(|s| &s.data);
     let bounds = match selection {
         Some(_) => view
             .selection_mask_bounds()
@@ -200,13 +199,14 @@ pub(super) fn bucket_at(view: &mut PictureViewRust, quarter: i32) {
     apply_fill(view, "1", "Paint Bucket", |doc, bounds, selection| {
         let seed = (doc.width as i32 / quarter, doc.height as i32 / quarter);
         let source = BucketSource::layer(doc, "1")?;
-        let flood = bucket::flood(source, doc.width, bounds, selection, seed, 32, true)?;
-        let mask = bucket::antialias(flood, doc.width, bounds, selection);
-        bucket::fill_within(
+        let size = (doc.width, doc.height);
+        let flood = bucket::flood(source, size, bounds, selection, seed, 32, true)?;
+        let mask = bucket::antialias(flood, size, bounds, selection);
+        bucket::fill_tiled(
             doc,
             "1",
             bounds,
-            Some(&mask),
+            &mask,
             BucketPaint::Foreground(BLACK),
             PaintMode::Normal,
             1.0,
@@ -409,11 +409,35 @@ pub(super) fn write_fixture(side: u32, file: &TempFile) -> String {
 
 /// M12, as File ▸ Open of a PSD: the open job's decode and its landing.
 pub(super) fn open_psd(path: &str) {
+    assert!(opened(path).session.doc.is_some());
+}
+
+/// The document at `path`, opened as the open job lands it.
+pub(super) fn opened(path: &str) -> PictureViewRust {
     let opened = decode_psd(path, Default::default(), false, &|_, _| {}).expect("the PSD opens");
     let mut view = PictureViewRust {
         gpu_compute: false,
         ..Default::default()
     };
     apply_opened(&mut view, opened);
-    assert!(view.session.doc.is_some());
+    view
+}
+
+/// The Magic Wand on the first disc the middle row of the M12 fixture meets
+/// (tolerance 32, contiguous), as `magic_wand` runs it on the composite.
+pub(super) fn magic_wand(view: &mut PictureViewRust) {
+    let doc = view.session.doc.as_ref().expect("document");
+    let picture = crate::cxxqt_object::picture::picture(doc, view);
+    let side = doc.width as usize;
+    let y = side / 2;
+    let mut row = vec![0u8; side];
+    picture.data.read_row_into(y, side, &mut row);
+    let x = row
+        .iter()
+        .position(|&v| v != 255)
+        .expect("a disc on the middle row");
+    let selection =
+        pictura_select::magic_wand(&picture, x as u32, y as u32, 32, true).expect("a flood");
+    drop(picture);
+    view.session.set_selection(Some(selection));
 }
