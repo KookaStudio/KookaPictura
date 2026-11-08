@@ -19,6 +19,21 @@ pub(crate) fn command_catalogue() -> Vec<CommandSpecRow> {
 pub(crate) fn command_id_for_path(path: &QStringList) -> QString {
     let parts: Vec<String> = path.iter().map(ToString::to_string).collect();
     let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
-    let id = catalogue::command_id_for_path(&refs);
-    QString::from(id.as_str())
+    match catalogue::id_for_path(&refs) {
+        Some(id) => QString::from(id.as_str()),
+        None => {
+            eprintln!(
+                "pictura: command path is not in the catalogue: {}",
+                parts.join(" > ")
+            );
+            QString::default()
+        }
+    }
+}
+
+pub(crate) fn command_is_modal(id: &QString) -> bool {
+    let id = id.to_string();
+    catalogue::modal_ids()
+        .iter()
+        .any(|candidate| *candidate == id)
 }

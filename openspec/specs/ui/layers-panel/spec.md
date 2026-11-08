@@ -499,8 +499,10 @@ separator between adjacent non-empty command blocks, in this order:
    type rows enabled; group and adjustment rows disabled).
 5. Rasterize Type, Rasterize Shape, Rasterize Layer, and Rasterize Layer Style
    (applicable kinds; the style row is not yet implemented and is disabled).
-6. Add/Delete/Enable/Disable Layer Mask, Add/Delete/Enable/Disable Vector Mask,
-   and Create/Release Clipping Mask.
+6. Add Layer Mask (a submenu of Reveal All, Hide All, Reveal Selection, Hide
+   Selection, and From Transparency), Delete/Enable/Disable Layer Mask, Add
+   Vector Mask (a submenu of Reveal All, Hide All, and Current Path),
+   Delete/Enable/Disable Vector Mask, and Create/Release Clipping Mask.
 7. Link Layers (or Unlink Layers when the row is linked) and Select Linked
    Layers.
 8. Copy Layer Style, Paste Layer Style, and Clear Layer Style.
@@ -522,8 +524,9 @@ include Rename and a color-label submenu containing `None`, `Red`, `Orange`,
 
 The **Background row SHALL use a brief dedicated menu**: `Layer from
 Background…`, `Duplicate Layer…`, `Delete Layer` (disabled), `Quick Export as
-PNG`, `Export As…`, and `Convert to Smart Object`. It SHALL NOT offer Rename,
-Blending Options…, the color-label submenu, merge/flatten, or any other row.
+PNG`, `Export As…`, and `Convert to Smart Object`. Each of those rows SHALL map
+to a registry command id. It SHALL NOT offer Rename, Blending Options…, the
+color-label submenu, merge/flatten, or any other row.
 
 A shape row SHALL, in addition to its kind's commands, offer **Copy Shape
 Attributes**, **Paste Shape Attributes**, and **Rasterize Shape**, each wired to
@@ -549,16 +552,21 @@ Contents SHALL be enabled only for a smart object with a non-empty payload. A
 non-smart row SHALL NOT offer the smart-object-only rows. Each applied action
 SHALL be one undoable step.
 
-For a pixel, group, or adjustment/fill row the menu SHALL offer **Add Layer Mask**,
-**Delete Layer Mask**, **Enable Layer Mask**, and **Disable Layer Mask**, each
-wired to the layer-mask bridge: Add Layer Mask SHALL add a `reveal-selection`
-mask when a selection exists and a `reveal-all` mask otherwise; Delete Layer
-Mask SHALL remove the mask; and Enable/Disable Layer Mask SHALL set the mask's
-enabled state. A pixel, group, or adjustment/fill row SHALL also offer **Add Vector Mask**, **Delete
-Vector Mask**, **Enable Vector Mask**, and **Disable Vector Mask**, each wired
-to the vector-mask bridge and gated by vector-mask presence. A pixel or
-adjustment/fill row SHALL offer **Create Clipping Mask** when the row can clip,
-and **Release Clipping Mask** when it is clipped. Each applied action SHALL be one undoable step.
+For a pixel, group, or adjustment/fill row the menu SHALL offer the **Add Layer
+Mask** submenu, **Delete Layer Mask**, **Enable Layer Mask**, and **Disable
+Layer Mask**, each wired to the layer-mask bridge. The Add Layer Mask submenu
+SHALL offer **Reveal All**, **Hide All**, **Reveal Selection**, **Hide
+Selection**, and **From Transparency**; the two selection commands SHALL be
+enabled only while a selection exists. The submenu SHALL be enabled only when
+the clicked layer has no layer mask, Delete Layer Mask only when it has one,
+Enable Layer Mask only when that mask is disabled, and Disable Layer Mask only
+when it is enabled. A pixel, group, or adjustment/fill row SHALL also offer the
+**Add Vector Mask** submenu (**Reveal All**, **Hide All**, **Current Path**),
+**Delete Vector Mask**, **Enable Vector Mask**, and **Disable Vector Mask**,
+each wired to the vector-mask bridge and gated by vector-mask presence. A pixel
+or adjustment/fill row SHALL offer **Create Clipping Mask** when the row can
+clip, and **Release Clipping Mask** when it is clipped. Each applied action
+SHALL be one undoable step.
 
 A pixel, group, or adjustment/fill row SHALL offer **Merge Down** when a single row is targeted,
 **Merge Layers** when several rows are targeted, **Merge Visible**, **Merge
@@ -571,8 +579,21 @@ SHALL offer the style rows. **Rasterize Type** SHALL rasterize a type row,
 **Rasterize Shape** a shape row, and **Rasterize Layer** a smart-object or
 fill-content row; a plain pixel row and a group SHALL hide the rasterize rows.
 **Rasterize Layer Style** SHALL appear disabled with the `— not implemented
-yet` tooltip on a styled row. Right-clicking an unselected row SHALL select it
-before a row command runs, so every row action acts on the clicked row.
+yet` tooltip on a styled row.
+
+Every row action that maps to a document command SHALL be a registry command:
+the action SHALL carry the command's stable identifier, its enabled, checked,
+and label state SHALL come from the registry, and triggering it SHALL dispatch
+that identifier. Rename (an inline tree edit) and the Color Label submenu MAY
+remain panel controls. The Background menu rows SHALL map to registry ids. For a
+command offered on more than one surface, the surfaces that offer it SHALL agree
+on its enabled, checked, and label state.
+
+Right-clicking a row SHALL make it the active anchor before a row command runs:
+an unselected row SHALL become the only selected row, and a row already inside a
+multi-selection SHALL become the active path while every selected path stays
+selected. A row command SHALL act on that anchor, and a selection-wide command
+SHALL act on the whole selection.
 
 Right-clicking the visibility toggle SHALL offer show/hide this layer only and
 show/hide all. The bottom action strip SHALL remain exactly the CS6 seven
@@ -669,8 +690,18 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 
 #### Scenario: The row menu adds and deletes a mask [lmk_rowmenu]
 
-- **WHEN** the user picks Add Layer Mask for a pixel row, then Delete Layer Mask
+- **WHEN** the user picks Add Layer Mask > Reveal All for a pixel row, then Delete Layer Mask
 - **THEN** a mask is added and then removed from the active layer, each in one undo step
+
+#### Scenario: The Add Layer Mask submenu creates a mask [lpr_add_mask_submenu]
+
+- **WHEN** the user opens the Add Layer Mask submenu on a pixel row and picks Reveal All, then picks Reveal Selection with a selection active
+- **THEN** the first adds a reveal-all mask and the second adds a reveal-selection mask, each in one undo step, and Reveal Selection is disabled while no selection exists
+
+#### Scenario: The Add Vector Mask submenu creates a vector mask [lpr_add_vector_mask_submenu]
+
+- **WHEN** the user opens the Add Vector Mask submenu on a pixel row and picks Reveal All
+- **THEN** a reveal-all vector mask is added in one undo step
 
 #### Scenario: The row menu toggles mask enablement [lmk_rowmenu_enable]
 
@@ -708,12 +739,12 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 #### Scenario: A group row offers the mask and merge rows [lpr_group_rows]
 
 - **WHEN** the user opens the row menu for a group
-- **THEN** it offers Add/Delete/Enable/Disable Layer Mask, the four vector-mask rows, Quick Export/Export As, Link/Unlink Layers, Select Linked Layers, Merge Layers/Merge Visible/Merge Clipping Mask, and Flatten Image, and it does not offer fill rows
+- **THEN** it offers the Add/Delete/Enable/Disable Layer Mask rows, the Add/Delete/Enable/Disable Vector Mask rows, Quick Export/Export As, Link/Unlink Layers, Select Linked Layers, Merge Layers/Merge Visible/Merge Clipping Mask, and Flatten Image, and it does not offer fill rows
 
 #### Scenario: A pixel row offers clipping and vector-mask rows [lpr_pixel_mask_rows]
 
 - **WHEN** the user opens the row menu for a pixel layer that can clip
-- **THEN** it offers Create Clipping Mask and the four vector-mask rows, and a clipped row offers Release Clipping Mask instead of Create Clipping Mask
+- **THEN** it offers Create Clipping Mask and the Add/Delete/Enable/Disable Vector Mask rows, and a clipped row offers Release Clipping Mask instead of Create Clipping Mask
 
 #### Scenario: The row menu links and selects linked layers [lpr_link_rows]
 
@@ -740,6 +771,15 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 - **WHEN** the user right-clicks an unselected row and picks a row action
 - **THEN** the panel selects that row first and the action applies to it
 
+#### Scenario: Right-clicking inside a selection makes the row the anchor [lpr_row_action_anchor]
+
+- **WHEN** two layers are selected and the user right-clicks the second and picks a layer-specific command
+- **THEN** both layers stay selected, the clicked row becomes the active path, and the command applies to it
+
+#### Scenario: A row action carries its command id [lpr_row_action_registry]
+
+- **WHEN** the row menu is opened for a pixel layer
+- **THEN** every implemented row action that maps to a document command carries the registry command identifier, and its enabled, checked, and label state equals the registry's
 ### Requirement: Layer row tooltips
 
 The system SHALL provide a tooltip for each row that includes the layer's name

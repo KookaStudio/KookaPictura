@@ -595,3 +595,67 @@ help.system.info	Help/System Info	System Info		1	0
 help.submit.issue	Help/Submit Issue	Submit Issue		1	0
 help.about	Help/About Kooka Pictura	About Kooka Pictura		1	0
 help.developer.designSystem	Help/Developer/Design System...	Design System...		1	0
+panel.layers.newLayer		New Layer		1	0
+panel.layers.newGroup		New Group		1	0
+panel.layers.moveUp		Move Layer Up		1	0
+panel.layers.moveDown		Move Layer Down		1	0
+panel.layers.editAdjustment		Edit Adjustment…		1	0
+panel.layers.maskAdd		Add Mask To Selection		1	0
+panel.layers.maskSubtract		Subtract Mask From Selection		1	0
+panel.layers.maskIntersect		Intersect Mask With Selection		1	0
+panel.layers.refineMask		Refine Mask…		1	0
+panel.layers.maskOptions		Mask Options…		1	0
+panel.layers.panelOptions		Panel Options…		1	0
+panel.history.stepForward		Step Forward		1	0
+panel.history.stepBackward		Step Backward		1	0
+panel.history.newSnapshot		New Snapshot…		1	0
+actions.buttonMode		Button Mode		1	0
+actions.newAction		New Action…		1	0
+actions.newSet		New Set…		1	0
+actions.duplicate		Duplicate		1	0
+actions.delete		Delete		1	0
+actions.play		Play		1	0
+actions.toggleRecording		Start Recording		1	0
+actions.recordAgain		Record Again…		1	0
+actions.insertMenuItem		Insert Menu Item…		1	0
+actions.insertStop		Insert Stop…		1	0
+actions.insertConditional		Insert Conditional…		1	0
+actions.insertPath		Insert Path		1	0
+actions.options		Action Options…		1	0
+actions.playbackOptions		Playback Options…		1	0
+actions.allowToolRecording		Allow Tool Recording		1	0
+actions.clear		Clear All Actions		1	0
+actions.reset		Reset Actions		1	0
+actions.load		Load Actions…		1	0
+actions.replace		Replace Actions…		1	0
+actions.save		Save Actions…		1	0
+character.fauxBold		Faux Bold		1	0
+character.fauxItalic		Faux Italic		1	0
+character.allCaps		All Caps		1	0
+character.smallCaps		Small Caps		1	0
+character.superscript		Superscript		1	0
+character.subscript		Subscript		1	0
+character.underline		Underline		1	0
+character.strikethrough		Strikethrough		1	0
+character.fractionalWidths		Fractional Widths		1	0
+character.systemLayout		System Layout		1	0
+character.standardLigatures		Standard Ligatures		1	0
+character.contextualAlternates		Contextual Alternates		1	0
+character.discretionaryLigatures		Discretionary Ligatures		1	0
+character.swash		Swash		1	0
+character.stylisticAlternates		Stylistic Alternates		1	0
+character.titlingAlternates		Titling Alternates		1	0
+character.ordinals		Ordinals		1	0
+character.fractions		Fractions		1	0
+character.reset		Reset Character		1	0
+paragraph.hanging		Roman Hanging Punctuation		1	0
+paragraph.justification		Justification…		1	0
+paragraph.singleLineComposer		Single-line Composer		1	0
+paragraph.everyLineComposer		Every-line Composer		1	0
+paragraph.reset		Reset Paragraph		1	0
+panel.properties.savePreset		Save Preset…		1	0
+panel.properties.loadPreset		Load Preset…		1	0
+panel.properties.clipToggle		Clip to Layer		1	0
+panel.properties.reset		Reset		1	0
+panel.properties.toggleVisibility		Toggle Visibility		1	0
+panel.properties.deleteLayer		Delete Layer		1	0

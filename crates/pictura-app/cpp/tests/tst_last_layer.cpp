@@ -6,6 +6,8 @@
 #include <QtTest/QtTest>
 
 #include "commands.h"
+#include "api/layers_api.h"
+#include "api/layers_bridge.h"
 #include "frame.h"
 #include "panels/layers_panel.h"
 
@@ -14,6 +16,8 @@
 #include "qt_test_support.h"
 
 #include <QtGui/QAction>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QToolButton>
 
 class LastLayerTest : public QObject {
     Q_OBJECT
@@ -22,6 +26,7 @@ private slots:
     void initTestCase();
     void theLastLayerCannotBeDeleted();
     void removeLayerKeepsTheLastLayer();
+    void canDeleteAgrees();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -50,6 +55,21 @@ void LastLayerTest::theLastLayerCannotBeDeleted()
     const QAction* deleteCommand =
         registry->action(QString::fromLatin1(pictura::command_ids::LayerDeleteLayer));
     QVERIFY(deleteCommand != nullptr);
+    const auto flyoutDelete = [&frame]() -> QAction* {
+        auto* button =
+            frame.findChild<QToolButton*>(QStringLiteral("panelWidgetMenu_layersPanel"));
+        if (!button || !button->menu()) {
+            return nullptr;
+        }
+        emit button->menu()->aboutToShow();
+        for (QAction* action : button->menu()->actions()) {
+            if (action->data().toString()
+                == QString::fromLatin1(pictura::command_ids::LayerDeleteLayer)) {
+                return action;
+            }
+        }
+        return nullptr;
+    };
 
     // One extra layer: everything can delete it.
     const QString extra = view->add_layer_in(QString());
@@ -62,6 +82,9 @@ void LastLayerTest::theLastLayerCannotBeDeleted()
     QVERIFY(panel->deleteButtonEnabledForTest());
     QVERIFY(panel->rowMenuEnabledForPathForTest(extra, QStringLiteral("Delete Layer")));
     QVERIFY(deleteCommand->isEnabled());
+    QAction* flyoutWithExtra = flyoutDelete();
+    QVERIFY(flyoutWithExtra != nullptr);
+    QVERIFY2(flyoutWithExtra->isEnabled(), "the flyout Delete is enabled with two layers");
 
     panel->clickDeleteButtonForTest();
     QCoreApplication::processEvents();
@@ -76,6 +99,9 @@ void LastLayerTest::theLastLayerCannotBeDeleted()
     QVERIFY2(!panel->rowMenuEnabledForPathForTest(last, QStringLiteral("Delete Layer")),
              "row menu greyed out");
     QVERIFY2(!deleteCommand->isEnabled(), "Layer > Delete > Layer greyed out");
+    QAction* flyoutLast = flyoutDelete();
+    QVERIFY(flyoutLast != nullptr);
+    QVERIFY2(!flyoutLast->isEnabled(), "the flyout Delete is greyed out on the last layer");
 
     // The Delete key path still reaches the bridge, which refuses.
     const int history = view->history_count();
@@ -111,5 +137,21 @@ void LastLayerTest::removeLayerKeepsTheLastLayer()
     frame.closeDocument(frame.activeDocumentIndex(), false);
 }
 
+
+void LastLayerTest::canDeleteAgrees()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("CanDelete"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    const QString bottom = pictura::layers_api::rowAt(*view, 0).path;
+    QVERIFY(!pictura::layers_can_delete(*view, QStringList{}));
+    QVERIFY(!pictura::layers_can_delete(*view, QStringList{bottom}));
+    view->add_layer(-1);
+    const QString top = pictura::layers_api::rowAt(*view, 0).path;
+    QVERIFY(pictura::layers_can_delete(*view, QStringList{top}));
+    QVERIFY(pictura::layers_can_delete(*view, QStringList{top, bottom}));
+    frame.closeDocument(frame.activeDocumentIndex(), false);
+}
 QTEST_MAIN(LastLayerTest)
 #include "tst_last_layer.moc"

@@ -17,9 +17,22 @@ namespace pictura {
 
 namespace {
 
-// Menu order, which is also the engine's edge index (0 Top ... 5 Right).
-const char* const kEdgeLeaves[] = {"Top",  "Vertical Center",   "Bottom",
-                                   "Left", "Horizontal Center", "Right"};
+// Edge order, which is also the engine's edge index (0 Top ... 5 Right).
+const char* const kAlignIds[] = {
+    command_ids::LayerAlignTop,          command_ids::LayerAlignVerticalCenter,
+    command_ids::LayerAlignBottom,       command_ids::LayerAlignLeft,
+    command_ids::LayerAlignHorizontalCenter, command_ids::LayerAlignRight};
+const char* const kAlignToSelectionIds[] = {
+    command_ids::LayerAlignLayersToSelectionTop,
+    command_ids::LayerAlignLayersToSelectionVerticalCenter,
+    command_ids::LayerAlignLayersToSelectionBottom,
+    command_ids::LayerAlignLayersToSelectionLeft,
+    command_ids::LayerAlignLayersToSelectionHorizontalCenter,
+    command_ids::LayerAlignLayersToSelectionRight};
+const char* const kDistributeIds[] = {
+    command_ids::LayerDistributeTop,      command_ids::LayerDistributeVerticalCenter,
+    command_ids::LayerDistributeBottom,   command_ids::LayerDistributeLeft,
+    command_ids::LayerDistributeHorizontalCenter, command_ids::LayerDistributeRight};
 
 } // namespace
 
@@ -29,9 +42,7 @@ void PicturaMainWindow::wireAlignMenu()
         return selectedLayerPaths();
     };
     for (int edge = 0; edge < 6; ++edge) {
-        const QString leaf = QLatin1String(kEdgeLeaves[edge]);
-
-        const QString align = commandIdForPath({QStringLiteral("Layer"), QStringLiteral("Align"), leaf});
+        const QString align = QString::fromLatin1(kAlignIds[edge]);
         registry_->setImplemented(align, true);
         registry_->setHandler(align, [this, edge]() { alignSelectedLayers(edge, false); });
         registry_->setEnabledProvider(align, [this, selectedPaths]() {
@@ -39,8 +50,7 @@ void PicturaMainWindow::wireAlignMenu()
             return view && align_can(*view, selectedPaths(), false, 0);
         });
 
-        const QString toSelection = commandIdForPath(
-            {QStringLiteral("Layer"), QStringLiteral("Align Layers To Selection"), leaf});
+        const QString toSelection = QString::fromLatin1(kAlignToSelectionIds[edge]);
         registry_->setImplemented(toSelection, true);
         registry_->setHandler(toSelection, [this, edge]() { alignSelectedLayers(edge, true); });
         registry_->setEnabledProvider(toSelection, [this, selectedPaths]() {
@@ -48,8 +58,7 @@ void PicturaMainWindow::wireAlignMenu()
             return view && view->has_selection() && align_can(*view, selectedPaths(), true, 0);
         });
 
-        const QString distribute =
-            commandIdForPath({QStringLiteral("Layer"), QStringLiteral("Distribute"), leaf});
+        const QString distribute = QString::fromLatin1(kDistributeIds[edge]);
         registry_->setImplemented(distribute, true);
         registry_->setHandler(distribute, [this, edge]() { distributeSelectedLayers(edge); });
         registry_->setEnabledProvider(distribute, [this, selectedPaths]() {
@@ -58,7 +67,7 @@ void PicturaMainWindow::wireAlignMenu()
         });
     }
 
-    const QString autoBlend = commandIdForPath({QStringLiteral("Edit"), QStringLiteral("Auto-Blend Layers…")});
+    const QString autoBlend = QString::fromLatin1(command_ids::EditAutoBlendLayers);
     registry_->setImplemented(autoBlend, true);
     registry_->setHandler(autoBlend, [this, last = AutoBlendChoice{}]() mutable {
         PictureView* view = activeView();

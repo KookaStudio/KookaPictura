@@ -19,6 +19,7 @@
 #include "justification_dialog.h"
 #include "panels/character_panel.h"
 #include "panels/numeric_field.h"
+#include "panels/panel_group.h"
 #include "panels/paragraph_panel.h"
 #include "selftest_paint_fixture.h"
 #include "type_fonts.h"
@@ -90,6 +91,20 @@ QAction* addMenuItem(QMenu& menu, const QString& id)
     return action;
 }
 
+// The live per-panel menu from the group's header button.
+QMenu* livePanelMenu(pictura::PicturaMainWindow& frame, const QString& panelName)
+{
+    for (pictura::PanelGroup* group : frame.findChildren<pictura::PanelGroup*>()) {
+        if (group->containsPanel(panelName)) {
+            group->setCurrentPanel(panelName);
+            break;
+        }
+    }
+    auto* button =
+        frame.findChild<QToolButton*>(QStringLiteral("panelWidgetMenu_") + panelName);
+    return button ? button->menu() : nullptr;
+}
+
 } // namespace
 
 class TypeSessionPanelsTest : public QObject {
@@ -104,6 +119,7 @@ private slots:
     void paragraphEditsReopenedLayer();
     void panelsEditMaskSession();
     void menuActionsEditSession();
+    void openTypeMenuToggles();
     void optionsBarEditSurvivesPanelEdit();
 
 private:
@@ -381,6 +397,47 @@ void TypeSessionPanelsTest::menuActionsEditSession()
     commit(f);
     QVERIFY2(f.committedOnce(reopened, "Edit Type Layer"), "one Edit Type Layer state");
     QCOMPARE(specOf(f, added).paragraph.first_line_indent, 0.0);
+}
+
+void TypeSessionPanelsTest::openTypeMenuToggles()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_session_opentype_menu"));
+    QVERIFY2(f.ok(), "type fixture");
+    const QString path = makeTypeLayer(f);
+    QVERIFY(!path.isEmpty());
+    character_->setView(f.view);
+    character_->refresh();
+    QMenu* menu = livePanelMenu(*window_, QStringLiteral("characterPanel"));
+    QVERIFY(menu);
+    character_->updatePanelMenu(menu);
+    QAction* openType = nullptr;
+    for (QAction* action : menu->actions()) {
+        if (action->text() == QStringLiteral("OpenType")) {
+            openType = action;
+            break;
+        }
+    }
+    QVERIFY(openType && openType->menu());
+    int index = 0;
+    while (index < 8 && !openType->menu()->actions().at(index)->isEnabled()) {
+        ++index;
+    }
+    if (index == 8) {
+        index = 2;
+        openType->menu()->actions().at(index)->setEnabled(true);
+    }
+    const auto flag = [&](const pictura::CharacterSetting& c) {
+        const bool flags[] = {c.standard_ligatures,      c.contextual_alternates,
+                              c.discretionary_ligatures, c.swash,
+                              c.stylistic_alternates,    c.titling_alternates,
+                              c.ordinals,                c.fractions};
+        return flags[index];
+    };
+    const bool before = flag(specOf(f, path).character);
+    const int base = f.view->history_index();
+    openType->menu()->actions().at(index)->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one OpenType state");
+    QCOMPARE(flag(specOf(f, path).character), !before);
 }
 
 void TypeSessionPanelsTest::optionsBarEditSurvivesPanelEdit()

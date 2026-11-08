@@ -353,8 +353,7 @@ void PicturaMainWindow::wireFilterMenu()
 
     // Filter > Filter Gallery: the stacked gallery dialog; OK commits the
     // visible effects as one history state.
-    const QString gallery =
-        commandIdForPath({QStringLiteral("Filter"), QStringLiteral("Filter Gallery…")});
+    const QString gallery = QString::fromLatin1(command_ids::FilterFilterGallery);
     registry_->setImplemented(gallery, true);
     registry_->setHandler(gallery, [this, gallery]() {
         PictureView* view = activeView();
@@ -501,8 +500,7 @@ void PicturaMainWindow::wireFilterMenu()
     // Filter > Digimarc > Read Watermark: report the active layer's in-tree
     // watermark and mark the document when one is found. The reader is the
     // project's own approximate carrier, not Digimarc Barcode.
-    const QString readWatermark = commandIdForPath(
-        {QStringLiteral("Filter"), QStringLiteral("Digimarc"), QStringLiteral("Read Watermark")});
+    const QString readWatermark = QString::fromLatin1(command_ids::FilterDigimarcReadWatermark);
     registry_->setImplemented(readWatermark, true);
     registry_->setHandler(readWatermark, [this]() {
         PictureView* view = activeView();

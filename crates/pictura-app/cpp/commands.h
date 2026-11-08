@@ -123,6 +123,10 @@ public:
 
     QAction* action(const QString& id) const;
 
+    // A fresh action for a panel menu: provider label/state, data(id), and no
+    // shortcut. `action(id)` is null for a command with no menu path.
+    QAction* detachedAction(const QString& id, QObject* parent) const;
+
     // The command's current and built-in key bindings (Edit > Keyboard
     // Shortcuts may give a command several, or none). setShortcuts() also
     // updates the live action.
@@ -140,12 +144,22 @@ public:
     // Re-evaluate enabled/checked/label for every action.
     void refresh();
 
+    // Re-evaluate one action (a panel menu's detached action) from its command
+    // id in `data()`. A menu built once at startup would otherwise keep the
+    // enabled/label/checked state it was created with.
+    void applyState(QAction* action) const;
+
     // How many times refresh() has run. Test-only probe so a self-test can
     // prove the paint region path does not fan out per dab.
     int refreshCount() const { return refreshCount_; }
 
     // Run the handler for `id`; returns false and does nothing when none is set.
     bool dispatch(const QString& id);
+
+    // Whether `id` opens a modal dialog or reaches the unsaved prompt. The
+    // catalogue supplies the menu commands; parameterised filter dialogs are
+    // derived from the filter table.
+    bool isModal(const QString& id) const;
 
     // Titles of the top-level menus in creation order.
     QStringList topLevelTitles() const;
@@ -181,6 +195,9 @@ private:
     QHash<QString, std::function<bool()>> checkedProviders_;
     QHash<QString, std::function<QString()>> labelProviders_;
     QMenuBar* menuBar_ = nullptr;
+    // Commands with no menu path still need an action so their shortcut is
+    // live; these are attached to the window, never to the menu bar.
+    QList<QAction*> shortcutActions_;
     int refreshCount_ = 0;
 };
 

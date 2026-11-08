@@ -112,17 +112,33 @@ fn every_wired_filter_has_a_definition() {
 #[test]
 fn default_catalogue_shape_is_stable() {
     let catalogue = command_catalogue();
-    assert_eq!(catalogue.len(), 597);
+    assert_eq!(catalogue.len(), 661);
     assert_eq!(
         catalogue.iter().filter(|spec| spec.implemented).count(),
-        367
+        431
     );
-    assert_eq!(const_names().len(), 239);
+    assert_eq!(const_names().len(), 355);
 }
 
 #[test]
 fn every_command_has_a_shortcut_editor_category() {
     for spec in command_catalogue() {
+        if spec.path.is_empty() {
+            assert!(
+                spec.id.starts_with("panel.")
+                    || spec.id.starts_with("actions.")
+                    || spec.id.starts_with("character.")
+                    || spec.id.starts_with("paragraph."),
+                "uncategorized panel command: {}",
+                spec.id
+            );
+            assert!(
+                !spec.label.is_empty(),
+                "empty panel command label: {}",
+                spec.id
+            );
+            continue;
+        }
         assert!(spec.path.len() >= 2, "uncategorized command: {}", spec.id);
         assert!(
             spec.path.iter().all(|part| !part.is_empty()),

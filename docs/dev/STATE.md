@@ -4,6 +4,21 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Unified command wiring** (#277, closes #830; OpenSpec change
+  `unify-command-wiring`). The Rust catalogue now carries the modal id list and
+  the panel-only commands (`panel.*`, `actions.*`, `character.*`,
+  `paragraph.*`); `dispatch_command` refuses from it and the C++ denylist is
+  gone. Handlers register against frozen `command_ids::` constants, and
+  `commandIdForPath` rejects a path the catalogue does not own. The Layers row,
+  mask, and vector menus and the panel flyout dispatch registry ids through
+  `CommandRegistry::detachedAction` (a fresh action with no menu-bar shortcut);
+  a right-click makes the clicked row the active anchor while preserving the
+  selection. Add Layer Mask and Add Vector Mask are CS6 submenus. The
+  Properties footer dispatches `panel.properties.*`, with its Delete
+  path-scoped and gated by `layers_can_delete`. Dynamic Duplicate/Delete/Merge
+  labels come from registry providers, and panel commands are grouped in the
+  Keyboard Shortcuts editor. Verified: the relevant Qt suites (13) and the
+  headless self-test (471/0/0) pass.
 - **Maximum/Minimum Preserve and radius** (#364, OpenSpec change
   `maximum-minimum-preserve`). `Filter::Maximum`/`Minimum` carry a
   `MorphologyPreserve` choice: `Squareness` keeps the existing `(2r+1)²`

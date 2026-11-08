@@ -4,13 +4,17 @@
 #include <QtTest/QtTest>
 
 #include <QtCore/QRect>
+#include <QtGui/QAction>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QToolButton>
 
 #include "api/layers_api.h"
 
 #include "api/layers_bridge.h"
 
+#include "commands.h"
 #include "frame.h"
 #include "panels/layers_panel.h"
 #include "qt_test_support.h"
@@ -39,6 +43,7 @@ private slots:
     void adjustmentMaskFromSelection();
     void adjustmentMaskWhite();
     void adjustmentMaskOff();
+    void flyoutStateFollowsDocument();
 
 private:
     bool newDoc(const QString& name);
@@ -57,6 +62,32 @@ void LayersPanelBundleTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+}
+
+// The panel flyout is built at construction, before a document exists; opening
+// a document must re-enable its registry commands without a tab switch.
+void LayersPanelBundleTest::flyoutStateFollowsDocument()
+{
+    QCOMPARE(window_->documentCount(), 0);
+    QVERIFY(window_->newDocument(QStringLiteral("FlyoutState"), 16, 16,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    auto* button =
+        window_->findChild<QToolButton*>(QStringLiteral("panelWidgetMenu_layersPanel"));
+    QVERIFY(button != nullptr);
+    QMenu* menu = button->menu();
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QAction* newLayer = nullptr;
+    for (QAction* action : menu->actions()) {
+        if (action->data().toString()
+            == QString::fromLatin1(pictura::command_ids::PanelLayersNewLayer)) {
+            newLayer = action;
+            break;
+        }
+    }
+    QVERIFY2(newLayer != nullptr, "the flyout carries the New Layer command");
+    QVERIFY2(newLayer->isEnabled(),
+             "New Layer follows a document opened after the menu was built");
 }
 
 void LayersPanelBundleTest::cleanup()

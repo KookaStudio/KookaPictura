@@ -103,8 +103,7 @@ void PicturaMainWindow::wireImageMenu()
 
     // Apply Image blends an open document of the same size into the active
     // layer or mask; Indexed and Bitmap documents have no blendable channels.
-    const QString applyImage =
-        commandIdForPath({QStringLiteral("Image"), QStringLiteral("Apply Image…")});
+    const QString applyImage = QString::fromLatin1(command_ids::ImageApplyImage);
     registry_->setImplemented(applyImage, true);
     registry_->setEnabledProvider(applyImage, [this]() {
         PictureView* view = activeView();
@@ -134,8 +133,7 @@ void PicturaMainWindow::wireImageMenu()
         }
     });
 
-    const QString imageSize =
-        commandIdForPath({QStringLiteral("Image"), QStringLiteral("Image Size…")});
+    const QString imageSize = QString::fromLatin1(command_ids::ImageImageSize);
     registry_->setImplemented(imageSize, true);
     registry_->setEnabledProvider(imageSize, imageEnabled);
     registry_->setHandler(imageSize, [this, imageSize, applyImageSize]() {
@@ -200,8 +198,7 @@ void PicturaMainWindow::wireImageMenu()
         return applyImageSize(view, kind, width, height, ppi, perCm);
     });
 
-    const QString canvasSize =
-        commandIdForPath({QStringLiteral("Image"), QStringLiteral("Canvas Size…")});
+    const QString canvasSize = QString::fromLatin1(command_ids::ImageCanvasSize);
     registry_->setImplemented(canvasSize, true);
     registry_->setEnabledProvider(canvasSize, imageEnabled);
     registry_->setHandler(canvasSize, [this, canvasSize]() {

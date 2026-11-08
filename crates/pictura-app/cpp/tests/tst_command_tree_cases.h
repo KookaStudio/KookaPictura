@@ -14,6 +14,7 @@
 #include "commands.h"
 #include "frame.h"
 #include "api/engine_bridge.h"
+#include "api/layers_api.h"
 
 namespace pictura::test {
 
@@ -34,7 +35,9 @@ inline void crMenuCatalogue(pictura::PicturaMainWindow& window)
         ++catalogueCommands;
         QVERIFY2(byId.contains(row.id), qPrintable(row.id));
         const pictura::CommandInfo info = byId.value(row.id);
-        QVERIFY2(info.path.size() >= 2, qPrintable(info.id));
+        if (!row.path.isEmpty()) {
+            QVERIFY2(info.path.size() >= 2, qPrintable(info.id));
+        }
         QCOMPARE(info.path, row.path);
         QCOMPARE(info.label, row.label);
     }
@@ -67,7 +70,7 @@ inline void crMenuCatalogue(pictura::PicturaMainWindow& window)
         QVERIFY2(window.actions().contains(window.registry()->action(id)), qPrintable(id));
     }
     for (const pictura::CommandSpecRow& row : rows) {
-        if (!row.id.isEmpty() && !shortcutOnly.contains(row.id)) {
+        if (!row.id.isEmpty() && !row.path.isEmpty() && !shortcutOnly.contains(row.id)) {
             QVERIFY2(menuIds.contains(row.id), qPrintable(row.id));
         }
     }
@@ -115,7 +118,13 @@ inline void crListCommands(pictura::PicturaMainWindow& window)
 {
     window.registry()->refresh();
     const QList<pictura::CommandInfo> infos = window.registry()->describe();
-    QCOMPARE(infos.size(), 597);
+    int expected = 0;
+    for (const pictura::CommandSpecRow& row : pictura::command_catalogue()) {
+        if (!row.id.isEmpty()) {
+            ++expected;
+        }
+    }
+    QCOMPARE(infos.size(), expected);
     QHash<QString, pictura::CommandInfo> byId;
     for (const pictura::CommandInfo& info : infos) {
         byId.insert(info.id, info);
@@ -133,7 +142,7 @@ inline void crListCommands(pictura::PicturaMainWindow& window)
         QCOMPARE(info.path, row.path);
         QCOMPARE(info.label, row.label);
     }
-    QCOMPARE(index, 597);
+    QCOMPARE(index, expected);
     QCOMPARE(index, infos.size());
 
     const pictura::CommandInfo fileNew =
@@ -235,6 +244,94 @@ inline void imageAdjustmentsFollowCatalogue(pictura::PicturaMainWindow& window)
         }
     }
     QCOMPARE(wired, 22);
+}
+
+inline void panelCommandAbsentFromMenuBar(pictura::PicturaMainWindow& window)
+{
+    pictura::CommandRegistry* registry = window.registry();
+    const QString id = QString::fromLatin1(pictura::command_ids::PanelLayersNewLayer);
+    QAction* action = registry->action(id);
+    QVERIFY2(action != nullptr, "a panel-only command keeps an action for its shortcut");
+    QVERIFY2(window.actions().contains(action), "the shortcut action is on the window");
+    bool inMenu = false;
+    std::function<void(QMenu*)> visit = [&](QMenu* menu) {
+        for (QAction* item : menu->actions()) {
+            if (item->menu()) {
+                visit(item->menu());
+            } else if (item->data().toString() == id) {
+                inMenu = true;
+            }
+        }
+    };
+    for (QAction* item : window.menuBar()->actions()) {
+        if (QMenu* menu = item->menu()) {
+            visit(menu);
+        }
+    }
+    QVERIFY2(!inMenu, "a panel-only command is absent from the menu bar");
+    bool found = false;
+    for (const pictura::CommandInfo& info : registry->describe()) {
+        if (info.id == id) {
+            found = true;
+            QVERIFY(info.path.isEmpty());
+        }
+    }
+    QVERIFY(found);
+}
+
+inline void panelCommandShortcutWired(pictura::PicturaMainWindow& window)
+{
+    pictura::CommandRegistry* registry = window.registry();
+    const QString id = QString::fromLatin1(pictura::command_ids::PanelLayersNewLayer);
+    QAction* action = registry->action(id);
+    QVERIFY2(action != nullptr, "the panel command has a shortcut action");
+    const QKeySequence sequence(Qt::CTRL | Qt::Key_F12);
+    registry->setShortcuts(id, {sequence});
+    QCOMPARE(action->shortcuts(), (QList<QKeySequence>{sequence}));
+    pictura::PictureView* view = window.activeView();
+    QVERIFY(view != nullptr);
+    window.selectLayerPath(pictura::layers_api::rowAt(*view, 0).path);
+    const int before = view->layer_count();
+    action->trigger();
+    QVERIFY2(view->layer_count() > before, "triggering the panel command creates a layer");
+    QVERIFY(view->undo());
+    QCOMPARE(view->layer_count(), before);
+    registry->setShortcuts(id, {});
+}
+
+inline void panelCommandsInShortcuts(pictura::PicturaMainWindow& window)
+{
+    bool found = false;
+    for (const pictura::CommandInfo& info : window.registry()->describe()) {
+        if (info.id == QString::fromLatin1(pictura::command_ids::PanelLayersNewLayer)) {
+            found = true;
+            QVERIFY(info.path.isEmpty());
+        }
+    }
+    QVERIFY(found);
+}
+
+inline void panelPreferencesNotCommands(pictura::PicturaMainWindow& window)
+{
+    for (const pictura::CommandInfo& info : window.registry()->describe()) {
+        QVERIFY(info.id != QStringLiteral("addMaskByDefault"));
+    }
+}
+
+inline void undoLabelTracksHistory(pictura::PicturaMainWindow& window)
+{
+    pictura::PictureView* view = window.activeView();
+    pictura::CommandRegistry* registry = window.registry();
+    QVERIFY(view != nullptr && registry != nullptr);
+    registry->refresh();
+    const QString before = registry->action(
+        QString::fromLatin1(pictura::command_ids::EditUndo))->text();
+    view->add_layer(-1);
+    registry->refresh();
+    const QString after = registry->action(
+        QString::fromLatin1(pictura::command_ids::EditUndo))->text();
+    QVERIFY(after != before);
+    view->undo();
 }
 
 } // namespace pictura::test

@@ -1,4 +1,5 @@
 #include "layers_panel.h"
+#include "commands.h"
 
 #include "layers_filter_bar.h"
 #include "layers_filter_proxy.h"
@@ -220,6 +221,20 @@ QStringList LayersPanel::rowMenuTextsForTest(const QString& kind)
         }
     }
     return texts;
+}
+
+QStringList LayersPanel::rowMenuCommandIdsForTest(const QString& kind)
+{
+    QMenu menu;
+    populateRowMenu(menu, QString(), 0, kind);
+    QStringList ids;
+    for (QAction* action : menu.actions()) {
+        const QString id = action->data().toString();
+        if (!id.isEmpty()) {
+            ids.push_back(id);
+        }
+    }
+    return ids;
 }
 
 bool LayersPanel::rowMenuEnabledForTest(const QString& kind, const QString& text)
@@ -522,40 +537,25 @@ QRect LayersPanel::rowBlendIfRectForTest(const QString& path) const
     return delegate_->blendIfRect(QRect(0, 0, vr.width(), vr.height()), index);
 }
 
-QStringList LayersPanel::rowMenuTextsForPathForTest(const QString& path)
-{
-    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
-    QMenu menu;
-    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
-                    index.data(LayerRowShapeRole).toBool(),
-                    index.data(SmartObjectRole).toBool());
-    QStringList texts;
-    for (QAction* action : menu.actions()) {
-        if (!action->isSeparator()) {
-            texts.push_back(action->text());
-        }
-    }
-    return texts;
-}
-
-bool LayersPanel::rowMenuEnabledForPathForTest(const QString& path, const QString& text)
-{
-    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
-    QMenu menu;
-    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
-                    index.data(LayerRowShapeRole).toBool(),
-                    index.data(SmartObjectRole).toBool());
-    for (QAction* action : menu.actions()) {
-        if (!action->isSeparator() && action->text() == text) {
-            return action->isEnabled();
-        }
-    }
-    return false;
-}
-
 bool LayersPanel::performRowActionForTest(const QString& id, const QString& path)
 {
-    return performRowAction(id, path);
+    if (!registry_ || !view_) {
+        return false;
+    }
+    static const QHash<QString, const char*> kCommands = {
+        {QStringLiteral("moveUp"), command_ids::PanelLayersMoveUp},
+        {QStringLiteral("moveDown"), command_ids::PanelLayersMoveDown},
+        {QStringLiteral("convertToSmartObject"), command_ids::LayerSmartObjectConvertTo},
+        {QStringLiteral("editContents"), command_ids::LayerSmartObjectEditContents},
+        {QStringLiteral("deleteLayerMask"), command_ids::LayerMaskDelete},
+        {QStringLiteral("clearLayerStyle"), command_ids::LayerStyleClearLayerStyle},
+    };
+    const auto it = kCommands.find(id);
+    if (it == kCommands.end()) {
+        return false;
+    }
+    makeRowAnchor(path);
+    return registry_->dispatch(QString::fromLatin1(it.value()));
 }
 
 void LayersPanel::setFilterEffectForTest(const QString& effect, bool enabled)

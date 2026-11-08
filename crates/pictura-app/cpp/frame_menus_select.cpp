@@ -179,8 +179,7 @@ void PicturaMainWindow::registerSelectHandlers()
 
     // Select > Color Range…: non-modal, so its eyedropper reaches the canvas;
     // OK selects (or narrows a live selection) as one "Color Range" state.
-    const QString colorRange =
-        commandIdForPath({QStringLiteral("Select"), QStringLiteral("Color Range…")});
+    const QString colorRange = QString::fromLatin1(command_ids::SelectColorRange);
     registry_->setImplemented(colorRange, true);
     registry_->setHandler(colorRange, [this]() {
         PictureView* view = activeView();
@@ -210,8 +209,7 @@ void PicturaMainWindow::registerSelectHandlers()
 
     // Select > Refine Edge…: the dialog previews the refined mask; OK applies
     // the settings once as one "Refine Edge" state.
-    const QString refineEdge =
-        commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")});
+    const QString refineEdge = QString::fromLatin1(command_ids::SelectRefineEdge);
     registry_->setImplemented(refineEdge, true);
     const auto openRefineEdge = [this]() {
         PictureView* view = activeView();

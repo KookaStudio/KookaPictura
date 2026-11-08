@@ -45,6 +45,7 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
 
     layersPanel_ = new LayersPanel(colorState_, this);
     layersPanel_->setObjectName(QStringLiteral("layersPanel"));
+    layersPanel_->setCommandRegistry(registry_);
     connect(layersPanel_, &LayersPanel::editContentRequested, this, [this](const QString& path) {
         PictureView* view = activeView();
         // A content-thumbnail double-click may target a row that is not
@@ -77,8 +78,7 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
                     registry_->dispatch(QString::fromLatin1(command_ids::FilterPicturaRaw));
                     break;
                 case 2:
-                    registry_->dispatch(commandIdForPath(
-                        {QStringLiteral("Filter"), QStringLiteral("Lens Correction…")}));
+                    registry_->dispatch(QString::fromLatin1(command_ids::FilterLensCorrection));
                     break;
                 case 3:
                 case 4:
@@ -135,6 +135,7 @@ QList<PanelGroup*> PicturaMainWindow::buildPanels(const SessionState& state)
 
     propertiesPanel_ = new PropertiesPanel(this);
     propertiesPanel_->setObjectName(QStringLiteral("propertiesPanel"));
+    propertiesPanel_->setCommandRegistry(registry_);
     connect(propertiesPanel_, &PropertiesPanel::modeRequested, this,
             &PicturaMainWindow::convertImageMode);
     connect(propertiesPanel_, &PropertiesPanel::depthRequested, this,
@@ -766,7 +767,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             &PicturaMainWindow::updateAlignControls);
     connect(optionsBar_, &OptionsBar::refineEdgeRequested, this, [this]() {
         registry_->dispatch(
-            commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
+            QString::fromLatin1(command_ids::SelectRefineEdge));
     });
     // While text is being set the Character and Paragraph panels edit that
     // session. An options bar change reaches them too: they write back every
@@ -788,7 +789,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     });
     connect(optionsBar_, &OptionsBar::warpTextRequested, this, [this]() {
         registry_->dispatch(
-            commandIdForPath({QStringLiteral("Type"), QStringLiteral("Warp Text…")}));
+            QString::fromLatin1(command_ids::TypeWarpText));
     });
     brushPanel_->setController(tools_);
     cloneSourcePanel_->setController(tools_);

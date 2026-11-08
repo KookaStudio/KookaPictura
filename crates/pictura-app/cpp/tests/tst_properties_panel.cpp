@@ -2,6 +2,7 @@
 #include "api/layers_api.h"
 #include "api/document_bridge.h"
 
+#include "commands.h"
 #include "frame.h"
 #include "panels/layers_panel.h"
 #include "panels/properties_panel.h"
@@ -41,6 +42,7 @@ private slots:
     void maskDensityFeatherAndInvertEdit();
     void vectorMaskDensityAndFeatherEdit();
     void maskRefineEditsStayScoped();
+    void footerDeleteUsesTheGate();
 
 private:
     // A white 16x16 document whose layer is selected and shown in the panel.
@@ -562,5 +564,27 @@ void PropertiesPanelTest::clipIsDisabledAboveABackground()
     QVERIFY2(!clip->isEnabled(), "clip is disabled above a Background");
 }
 
+
+void PropertiesPanelTest::footerDeleteUsesTheGate()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("hue-saturation")));
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    auto* remove = panel_->findChild<QToolButton*>(QStringLiteral("propertiesDelete"));
+    QVERIFY(remove != nullptr);
+    panel_->refresh();
+    QVERIFY2(remove->isEnabled(), "the footer Delete is enabled for a deletable layer");
+
+    QVERIFY(view_->set_layers_lock(QStringList{path_}, QStringLiteral("all"), true) >= 0);
+    panel_->refresh();
+    QVERIFY2(!remove->isEnabled(), "the footer Delete greys out with the layer locked");
+    const int before = view_->layer_count();
+    registry->dispatch(QString::fromLatin1(pictura::command_ids::PanelPropertiesDeleteLayer));
+    QCOMPARE(view_->layer_count(), before);
+
+    QVERIFY(view_->set_layers_lock(QStringList{path_}, QStringLiteral("all"), false) >= 0);
+    panel_->refresh();
+    QVERIFY2(remove->isEnabled(), "unlocking re-enables the footer Delete");
+}
 QTEST_MAIN(PropertiesPanelTest)
 #include "tst_properties_panel.moc"

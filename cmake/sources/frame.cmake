@@ -31,6 +31,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_menus_transform.cpp
     crates/pictura-app/cpp/frame_menus_type.cpp
     crates/pictura-app/cpp/frame_open.cpp
+    crates/pictura-app/cpp/frame_panel_commands.cpp
     crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_preferences.cpp
     crates/pictura-app/cpp/frame_quick_mask.cpp

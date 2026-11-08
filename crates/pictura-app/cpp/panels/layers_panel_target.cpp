@@ -92,6 +92,26 @@ void LayersPanel::writeTarget()
     rememberTarget();
 }
 
+void LayersPanel::makeRowAnchor(const QString& path)
+{
+    if (!view_ || path.isEmpty() || isSyntheticRowPath(path)) {
+        return;
+    }
+    if (!resolvePendingTransform()) {
+        return;
+    }
+    QStringList paths = selected_layer_paths(*view_);
+    if (!paths.contains(path)) {
+        paths = QStringList{path};
+    }
+    const bool wasApplying = applyingTarget_;
+    applyingTarget_ = true;
+    set_layer_target(*view_, paths, path);
+    rememberTarget();
+    setTreeSelection(paths, path);
+    applyingTarget_ = wasApplying;
+}
+
 void LayersPanel::writeCurrentAnchor()
 {
     if (!view_ || applyingTarget_ || syncing_) {

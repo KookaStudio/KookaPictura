@@ -50,6 +50,7 @@ class LayersModel;
 class LayersTreeView;
 class PercentField;
 class PictureView;
+class CommandRegistry;
 
 class LayersPanel : public QWidget {
     Q_OBJECT
@@ -303,6 +304,12 @@ public:
     bool rowHasBlendIfForTest(const QString& path) const;
     QRect rowBlendIfRectForTest(const QString& path) const;
     QStringList rowMenuTextsForPathForTest(const QString& path);
+    QStringList rowMenuCommandIdsForPathForTest(const QString& path);
+    QStringList rowMenuCommandIdsForTest(const QString& kind);
+    // The actions inside a row-menu submenu (e.g. "Add Layer Mask").
+    QStringList rowMenuSubmenuTextsForPathForTest(const QString& path, const QString& submenuText);
+    bool rowMenuSubmenuItemEnabledForPathForTest(const QString& path, const QString& submenuText,
+                                                 const QString& itemText);
     int rowMenuSeparatorCountForPathForTest(const QString& path);
     bool rowMenuHasAdjacentSeparatorsForPathForTest(const QString& path);
     QString rowMenuToolTipForPathForTest(const QString& path, const QString& text);
@@ -311,7 +318,6 @@ public:
     bool rowMenuEnabledForPathForTest(const QString& path, const QString& text);
     // Build the row menu and trigger the action with `text`.
     bool triggerRowMenuActionForPathForTest(const QString& path, const QString& text);
-    bool performRowActionForTest(const QString& id, const QString& path);
     // Layer-effects rows: the synthetic row's kind/name/eye, a click on its
     // eye, its expansion, the CS6 layer-style menu, and a double-click on the
     // fx badge or a row's centre.
@@ -331,6 +337,7 @@ public:
     QStringList maskMenuTextsForPathForTest(const QString& path);
     bool maskMenuEnabledForPathForTest(const QString& path, const QString& text);
     bool performMaskActionForTest(const QString& id, const QString& path);
+    bool performRowActionForTest(const QString& id, const QString& path);
     void setFilterEffectForTest(const QString& effect, bool enabled);
 
     // The mask button (layers_panel_mask_menu.cpp).
@@ -355,6 +362,10 @@ public:
     // Returns false for ids this panel does not own.
     bool performPanelMenuAction(const QString& actionId);
 
+    // The command table the row and flyout menus dispatch through.
+    void setCommandRegistry(CommandRegistry* registry) { registry_ = registry; }
+    CommandRegistry* commandRegistry() const { return registry_; }
+
     // Adjustments panel "Add Mask by Default" preference (session-persisted).
     bool addMaskByDefault() const { return addMaskByDefault_; }
     void setAddMaskByDefault(bool on);
@@ -363,6 +374,16 @@ public:
     // Layer > New menu and the panel's Alt-click route here; no-op without a view.
     void openNewLayerDialog();
     void openNewGroupDialog();
+
+    // The row menu's immediate create and move commands, which act on the
+    // current anchor rather than opening a dialog.
+    void createLayerAtAnchor();
+    void createGroupAtAnchor();
+    void moveAnchor(int delta);
+    void editAnchor();
+    void refineMaskAtAnchor();
+    void openMaskOptionsFromMenu();
+    void deletePathFromFooter(const QString& path);
     void openGroupFromLayersDialog();
 
     /// Wrap the panel's selected layers in one group / splice selected groups
@@ -410,6 +431,9 @@ private:
     void connectVisibility(PictureView* view);
     // Write the tree selection into the document target (user intent only).
     void writeTarget();
+    // Make `path` the active path of the target, keeping the selected set when
+    // the row is already in it. A right-click calls this before a row command.
+    void makeRowAnchor(const QString& path);
     // Resolve a pending transform before a panel change: true when it is safe to
     // proceed (none pending, or the user applied/cancelled it), false when the
     // user cancelled the prompt and the change must not happen.
@@ -489,7 +513,6 @@ private:
     void toggleEffectVisibility(const QModelIndex& index, const QString& kind);
     // CS6's type-only rows (orientation, anti-aliasing, text kind, warp).
     void addTypeRows(QMenu& menu, const QString& path, bool& emitted);
-    bool performRowAction(const QString& id, const QString& path);
     void showEyeMenu(const QPoint& pos, const QModelIndex& index);
     void showMaskThumbMenu(const QPoint& pos, const QModelIndex& index);
     void populateMaskMenu(QMenu& menu, const QString& path, const QModelIndex& index);
@@ -572,6 +595,7 @@ private:
     bool addCopyOnDuplicate_ = true;
     bool useDefaultMasksOnFill_ = true;
     bool addMaskByDefault_ = true;
+    CommandRegistry* registry_ = nullptr;
     bool syncing_ = false;
     int refreshCount_ = 0;
     const PictureView* patternView_ = nullptr;

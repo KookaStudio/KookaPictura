@@ -11,7 +11,7 @@ use self::adjustment_catalogue::adjustment_catalogue;
 use self::blend_modes::blend_mode_rows;
 use self::color_models::{channel_plane, lab_to_srgb, srgb_to_lab};
 use self::tool_catalogue::tool_catalogue_rows;
-use super::command_catalogue::{command_catalogue, command_id_for_path};
+use super::command_catalogue::{command_catalogue, command_id_for_path, command_is_modal};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -107,8 +107,12 @@ pub mod ffi {
         /// Every catalogue row, in menu order.
         fn command_catalogue() -> Vec<CommandSpecRow>;
 
-        /// The stable id derived from a command path.
+        /// The stable id derived from a command path, or empty when the
+        /// catalogue does not own the derived id.
         fn command_id_for_path(path: &QStringList) -> QString;
+
+        /// Whether the catalogue marks `id` as opening a modal dialog.
+        fn command_is_modal(id: &QString) -> bool;
 
         /// 8-bit sRGB → CIELAB in the D50 connection space.
         fn srgb_to_lab(r: u8, g: u8, b: u8) -> LabValue;
