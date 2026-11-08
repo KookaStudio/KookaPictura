@@ -3,6 +3,7 @@ use super::helpers_composite::*;
 use super::tests::pixel_layer;
 use crate::history::{History, Snapshot};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
+use pictura_filters::MorphologyPreserve;
 use pictura_render::{composite, patch_buffer_region, CompositeRequest, DocumentComposite};
 use pictura_select::Selection;
 
@@ -235,11 +236,17 @@ fn filter_from_kind_maps_known_and_rejects_unknown() {
     );
     assert_eq!(
         filter_from_kind("maximum"),
-        Some(Filter::Maximum { radius: 2 })
+        Some(Filter::Maximum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness
+        })
     );
     assert_eq!(
         filter_from_kind("minimum"),
-        Some(Filter::Minimum { radius: 2 })
+        Some(Filter::Minimum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness
+        })
     );
     assert!(matches!(
         filter_from_kind("offset"),

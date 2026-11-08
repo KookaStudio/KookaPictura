@@ -12,19 +12,28 @@ use pictura_core::mask_ops::{self, Border};
 use pictura_core::PixelBuffer;
 
 use crate::kernel::{clamp_index, gaussian_blur_planes, sigma_from_radius};
-use crate::{validate, FilterError};
+use crate::{validate, FilterError, MorphologyPreserve};
 use rayon::prelude::*;
 
-/// Scriptable radius ceiling for Maximum/Minimum per `FILT-070`; larger
-/// requests clamp rather than error.
-const MAX_RADIUS: u32 = 100;
+/// Radius ceiling for Maximum/Minimum; larger requests clamp rather than
+/// error. The dialog warns above 100 because the round footprint and the
+/// larger square footprints are expensive.
+const MAX_RADIUS: u32 = 500;
 
-pub fn maximum(buf: &mut PixelBuffer, radius: u32) -> Result<(), FilterError> {
-    morphology(buf, radius, true)
+pub fn maximum(
+    buf: &mut PixelBuffer,
+    radius: u32,
+    preserve: MorphologyPreserve,
+) -> Result<(), FilterError> {
+    morphology(buf, radius, preserve, true)
 }
 
-pub fn minimum(buf: &mut PixelBuffer, radius: u32) -> Result<(), FilterError> {
-    morphology(buf, radius, false)
+pub fn minimum(
+    buf: &mut PixelBuffer,
+    radius: u32,
+    preserve: MorphologyPreserve,
+) -> Result<(), FilterError> {
+    morphology(buf, radius, preserve, false)
 }
 
 /// Translate the color planes by `(horizontal, vertical)`; positive moves the
@@ -155,9 +164,14 @@ pub fn custom(
     Ok(())
 }
 
-/// Max (dilate) or min (erode) over the `(2r+1)²` clamped square, delegated to
-/// the shared separable sliding-window kernel.
-fn morphology(buf: &mut PixelBuffer, radius: u32, dilate: bool) -> Result<(), FilterError> {
+/// Max (dilate) or min (erode) over the clamped square or disk footprint,
+/// delegated to the shared sliding-window kernels.
+fn morphology(
+    buf: &mut PixelBuffer,
+    radius: u32,
+    preserve: MorphologyPreserve,
+    dilate: bool,
+) -> Result<(), FilterError> {
     let n = validate(buf)?;
     if radius == 0 {
         return Ok(());
@@ -169,10 +183,19 @@ fn morphology(buf: &mut PixelBuffer, radius: u32, dilate: bool) -> Result<(), Fi
     for c in 0..planes {
         let base = c * n;
         let src = buf.data[base..base + n].to_vec();
-        let out = if dilate {
-            mask_ops::dilate(&src, w, h, r, Border::Clamp)
-        } else {
-            mask_ops::erode(&src, w, h, r, Border::Clamp)
+        let out = match (preserve, dilate) {
+            (MorphologyPreserve::Squareness, true) => {
+                mask_ops::dilate(&src, w, h, r, Border::Clamp)
+            }
+            (MorphologyPreserve::Squareness, false) => {
+                mask_ops::erode(&src, w, h, r, Border::Clamp)
+            }
+            (MorphologyPreserve::Roundness, true) => {
+                mask_ops::disk_dilate(&src, w, h, r, Border::Clamp)
+            }
+            (MorphologyPreserve::Roundness, false) => {
+                mask_ops::disk_erode(&src, w, h, r, Border::Clamp)
+            }
         };
         buf.data[base..base + n].copy_from_slice(&out);
     }
@@ -182,6 +205,7 @@ fn morphology(buf: &mut PixelBuffer, radius: u32, dilate: bool) -> Result<(), Fi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Filter;
 
     fn buf3(w: u32, h: u32, px: &[[u8; 3]]) -> PixelBuffer {
         let n = (w * h) as usize;
@@ -240,13 +264,13 @@ mod tests {
     fn maximum_brightens_and_minimum_darkens_known_values() {
         let base = gray3(3, 1, &[10, 20, 30]);
         let mut mx = base.clone();
-        maximum(&mut mx, 1).unwrap();
+        maximum(&mut mx, 1, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(px3(&mx, 0, 0), [20, 20, 20]);
         assert_eq!(px3(&mx, 1, 0), [30, 30, 30]);
         assert_eq!(px3(&mx, 2, 0), [30, 30, 30]);
 
         let mut mn = base.clone();
-        minimum(&mut mn, 1).unwrap();
+        minimum(&mut mn, 1, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(px3(&mn, 0, 0), [10, 10, 10]);
         assert_eq!(px3(&mn, 1, 0), [10, 10, 10]);
         assert_eq!(px3(&mn, 2, 0), [20, 20, 20]);
@@ -254,11 +278,11 @@ mod tests {
         // Vertical axis exercises the separable column pass.
         let col = gray3(1, 3, &[10, 20, 30]);
         let mut vx = col.clone();
-        maximum(&mut vx, 1).unwrap();
+        maximum(&mut vx, 1, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(px3(&vx, 0, 0), [20, 20, 20]);
         assert_eq!(px3(&vx, 0, 2), [30, 30, 30]);
         let mut vn = col.clone();
-        minimum(&mut vn, 1).unwrap();
+        minimum(&mut vn, 1, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(px3(&vn, 0, 0), [10, 10, 10]);
         assert_eq!(px3(&vn, 0, 2), [20, 20, 20]);
     }
@@ -267,10 +291,10 @@ mod tests {
     fn morphology_radius_zero_is_noop() {
         let base = gray3(3, 1, &[10, 20, 30]);
         let mut a = base.clone();
-        maximum(&mut a, 0).unwrap();
+        maximum(&mut a, 0, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(a, base);
         let mut b = base.clone();
-        minimum(&mut b, 0).unwrap();
+        minimum(&mut b, 0, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(b, base);
     }
 
@@ -279,11 +303,148 @@ mod tests {
         let base = buf4(3, 1, &[[10, 0, 0, 111], [20, 0, 0, 222], [30, 0, 0, 255]]);
         let n = base.pixel_count();
         let mut a = base.clone();
-        maximum(&mut a, 1).unwrap();
+        maximum(&mut a, 1, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(&a.data[3 * n..], &[222, 255, 255]);
         let mut b = base.clone();
-        minimum(&mut b, 1).unwrap();
+        minimum(&mut b, 1, MorphologyPreserve::Squareness).unwrap();
         assert_eq!(&b.data[3 * n..], &[111, 111, 222]);
+    }
+
+    #[test]
+    fn maximum_squareness_keeps_the_square_footprint() {
+        // Only the diagonal neighbour of the centre is bright.
+        let mut bright_diagonal = vec![0u8; 9];
+        bright_diagonal[2 * 3 + 2] = 200;
+        let mut mx = gray3(3, 3, &bright_diagonal);
+        maximum(&mut mx, 1, MorphologyPreserve::Squareness).unwrap();
+        assert_eq!(
+            px3(&mx, 1, 1),
+            [200, 200, 200],
+            "the square includes the diagonal"
+        );
+
+        // Only the diagonal neighbour of the centre is dark.
+        let mut dark_diagonal = vec![200u8; 9];
+        dark_diagonal[2 * 3 + 2] = 0;
+        let mut mn = gray3(3, 3, &dark_diagonal);
+        minimum(&mut mn, 1, MorphologyPreserve::Squareness).unwrap();
+        assert_eq!(
+            px3(&mn, 1, 1),
+            [0, 0, 0],
+            "the square includes the diagonal"
+        );
+    }
+
+    #[test]
+    fn maximum_roundness_uses_the_disk_footprint() {
+        let mut bright_diagonal = vec![0u8; 9];
+        bright_diagonal[2 * 3 + 2] = 200;
+        let mut mx = gray3(3, 3, &bright_diagonal);
+        maximum(&mut mx, 1, MorphologyPreserve::Roundness).unwrap();
+        assert_eq!(px3(&mx, 1, 1), [0, 0, 0], "radius 1 excludes the diagonal");
+        let mut mx2 = gray3(3, 3, &bright_diagonal);
+        maximum(&mut mx2, 2, MorphologyPreserve::Roundness).unwrap();
+        assert_eq!(
+            px3(&mx2, 1, 1),
+            [200, 200, 200],
+            "radius 2 includes the (1, 1) offset"
+        );
+
+        let mut dark_diagonal = vec![200u8; 9];
+        dark_diagonal[2 * 3 + 2] = 0;
+        let mut mn = gray3(3, 3, &dark_diagonal);
+        minimum(&mut mn, 1, MorphologyPreserve::Roundness).unwrap();
+        assert_eq!(
+            px3(&mn, 1, 1),
+            [200, 200, 200],
+            "radius 1 excludes the diagonal"
+        );
+        let mut mn2 = gray3(3, 3, &dark_diagonal);
+        minimum(&mut mn2, 2, MorphologyPreserve::Roundness).unwrap();
+        assert_eq!(
+            px3(&mn2, 1, 1),
+            [0, 0, 0],
+            "radius 2 includes the (1, 1) offset"
+        );
+
+        // A radius past the larger side still reaches the opposite corner:
+        // the disk bound is the diagonal, not max(w, h).
+        let mut corner = vec![0u8; 25];
+        corner[4 * 5 + 4] = 200;
+        let mut far = gray3(5, 5, &corner);
+        maximum(&mut far, 100, MorphologyPreserve::Roundness).unwrap();
+        assert_eq!(
+            px3(&far, 0, 0),
+            [200, 200, 200],
+            "radius 100 covers a 5x5 image"
+        );
+    }
+
+    #[test]
+    fn roundness_moves_the_alpha_plane() {
+        let mut alpha = [0u8; 9];
+        alpha[2 * 3 + 2] = 200;
+        let px: Vec<[u8; 4]> = alpha.iter().map(|&a| [0, 0, 0, a]).collect();
+        let n = 9;
+        let mut mx = buf4(3, 3, &px);
+        maximum(&mut mx, 1, MorphologyPreserve::Roundness).unwrap();
+        assert_eq!(mx.data[3 * n + 4], 0, "radius 1 excludes the diagonal");
+        let mut mx2 = buf4(3, 3, &px);
+        maximum(&mut mx2, 2, MorphologyPreserve::Roundness).unwrap();
+        assert_eq!(mx2.data[3 * n + 4], 200, "radius 2 includes the diagonal");
+    }
+
+    #[test]
+    fn morphology_radius_reaches_five_hundred_and_clamps() {
+        let mut reach = vec![0u8; 600];
+        reach[120] = 200;
+        let mut at_100 = gray3(600, 1, &reach);
+        maximum(&mut at_100, 100, MorphologyPreserve::Squareness).unwrap();
+        assert_eq!(px3(&at_100, 0, 0), [0, 0, 0], "radius 100 misses 120 px");
+        let mut at_150 = gray3(600, 1, &reach);
+        maximum(&mut at_150, 150, MorphologyPreserve::Squareness).unwrap();
+        assert_eq!(px3(&at_150, 0, 0), [200, 200, 200], "radius 150 reaches");
+
+        let mut far = vec![0u8; 1100];
+        far[520] = 200;
+        let mut at_500 = gray3(1100, 1, &far);
+        maximum(&mut at_500, 500, MorphologyPreserve::Squareness).unwrap();
+        let mut at_600 = gray3(1100, 1, &far);
+        maximum(&mut at_600, 600, MorphologyPreserve::Squareness).unwrap();
+        assert_eq!(at_500, at_600, "radius 600 clamps to 500");
+        assert_eq!(
+            px3(&at_500, 0, 0),
+            [0, 0, 0],
+            "the 520 px sample stays outside the clamped footprint"
+        );
+    }
+
+    #[test]
+    fn morphology_preserve_selects_the_footprint() {
+        use crate::catalogue::{build, NullResources};
+
+        assert_eq!(
+            build("maximum", &[], &NullResources),
+            Some(Filter::Maximum {
+                radius: 2,
+                preserve: MorphologyPreserve::Squareness,
+            })
+        );
+        assert_eq!(
+            build("maximum", &[3.0, 0.0], &NullResources),
+            Some(Filter::Maximum {
+                radius: 3,
+                preserve: MorphologyPreserve::Squareness,
+            })
+        );
+        assert_eq!(
+            build("minimum", &[4.0, 1.0], &NullResources),
+            Some(Filter::Minimum {
+                radius: 4,
+                preserve: MorphologyPreserve::Roundness,
+            })
+        );
+        assert!(build("maximum", &[3.0, 1.0, 0.0], &NullResources).is_none());
     }
 
     #[test]
@@ -428,9 +589,9 @@ mod tests {
         let base = buf4(1, 1, &[[100, 150, 200, 255]]);
         for radius in [0u32, 1, 1000] {
             let mut a = base.clone();
-            assert!(maximum(&mut a, radius).is_ok());
+            assert!(maximum(&mut a, radius, MorphologyPreserve::Squareness).is_ok());
             let mut b = base.clone();
-            assert!(minimum(&mut b, radius).is_ok());
+            assert!(minimum(&mut b, radius, MorphologyPreserve::Squareness).is_ok());
         }
         let mut a = base.clone();
         assert!(offset(&mut a, 5, -3, true, false, [0, 0, 0], false).is_ok());

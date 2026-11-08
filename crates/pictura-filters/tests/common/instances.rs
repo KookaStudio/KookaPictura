@@ -151,8 +151,14 @@ pub fn all() -> Vec<Filter> {
                 },
             ],
         }),
-        Filter::Maximum { radius: 2 },
-        Filter::Minimum { radius: 2 },
+        Filter::Maximum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        Filter::Minimum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        },
         Filter::Offset {
             horizontal: 5,
             vertical: -3,

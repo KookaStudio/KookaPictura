@@ -62,7 +62,10 @@ pub(crate) const MAXIMUM: FilterSpec = FilterSpec {
     path: &["Filter", "Other", "Maximum"],
     menu: true,
     label: "Maximum",
-    params: &[FilterParam { control: FilterControl::Slider, label: "Radius:", minimum: 1.0, maximum: 100.0, value: 2.0, decimals: 0, suffix: " pixels", pixel_distance: true, choices: &[], initial: &[], }],
+    params: &[
+        FilterParam { control: FilterControl::Slider, label: "Radius:", minimum: 1.0, maximum: 500.0, value: 2.0, decimals: 0, suffix: " pixels", pixel_distance: true, choices: &[], initial: &[], },
+        FilterParam { control: FilterControl::Choice, label: "Preserve:", minimum: 0.0, maximum: 1.0, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &["Squareness", "Roundness"], initial: &[], },
+    ],
     whole_layer: false,
     dialog: DialogKind::Shared,
     map_after_ok: false,
@@ -85,7 +88,10 @@ pub(crate) const MINIMUM: FilterSpec = FilterSpec {
     path: &["Filter", "Other", "Minimum"],
     menu: true,
     label: "Minimum",
-    params: &[FilterParam { control: FilterControl::Slider, label: "Radius:", minimum: 1.0, maximum: 100.0, value: 2.0, decimals: 0, suffix: " pixels", pixel_distance: true, choices: &[], initial: &[], }],
+    params: &[
+        FilterParam { control: FilterControl::Slider, label: "Radius:", minimum: 1.0, maximum: 500.0, value: 2.0, decimals: 0, suffix: " pixels", pixel_distance: true, choices: &[], initial: &[], },
+        FilterParam { control: FilterControl::Choice, label: "Preserve:", minimum: 0.0, maximum: 1.0, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &["Squareness", "Roundness"], initial: &[], },
+    ],
     whole_layer: false,
     dialog: DialogKind::Shared,
     map_after_ok: false,

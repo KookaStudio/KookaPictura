@@ -1,6 +1,6 @@
 //! The filters with a faithful ImageMagick operator, diffed differentially.
 
-use pictura_filters::Filter;
+use pictura_filters::{Filter, MorphologyPreserve};
 
 use crate::common::differential;
 
@@ -129,7 +129,10 @@ const CUSTOM_TEST_KERNEL: [[f64; 5]; 5] = [
 #[test]
 fn maximum_matches_imagemagick() {
     differential(
-        &Filter::Maximum { radius: 2 },
+        &Filter::Maximum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        },
         &["--op", "maximum", "--radius", "2"],
         0,
         "Maximum radius 2",
@@ -139,7 +142,10 @@ fn maximum_matches_imagemagick() {
 #[test]
 fn minimum_matches_imagemagick() {
     differential(
-        &Filter::Minimum { radius: 2 },
+        &Filter::Minimum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        },
         &["--op", "minimum", "--radius", "2"],
         0,
         "Minimum radius 2",

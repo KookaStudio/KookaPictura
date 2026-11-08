@@ -94,6 +94,14 @@ pub enum NoiseDistribution {
     Gaussian,
 }
 
+/// The footprint of the Maximum/Minimum morphology. `Squareness` is the
+/// `(2r+1)²` square; `Roundness` is the disk `dx² + dy² <= r²`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MorphologyPreserve {
+    Squareness,
+    Roundness,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MezzotintType {
     FineDots,

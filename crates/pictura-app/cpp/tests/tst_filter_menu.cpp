@@ -703,7 +703,7 @@ void FilterMenuTest::pixelParametersScaleWithTheCopy()
              QList<double>({150.0, 0.5, 0.0}));
     QCOMPARE(scaled(QStringLiteral("Noise"), QStringLiteral("Median"), 0.1), QList<double>({1.0}));
     QCOMPARE(scaled(QStringLiteral("Other"), QStringLiteral("Maximum"), 0.5),
-             QList<double>({1.0}));
+             QList<double>({1.0, 0.0}));
     const pictura::FilterCommandSpec* offsetSpec =
         pictura::filterCommandForPath({QStringLiteral("Filter"), QStringLiteral("Other"),
                                        QStringLiteral("Offset")});

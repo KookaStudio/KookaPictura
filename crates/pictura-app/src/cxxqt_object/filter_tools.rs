@@ -175,6 +175,10 @@ pub mod ffi {
         /// kind.
         fn filter_param_arity(kind: &QString) -> i32;
 
+        /// A non-blocking dialog warning for `kind` at `params`, or an empty
+        /// string. Maximum/Minimum warn above a 100 px radius.
+        fn filter_param_warning(kind: &QString, params: &QList_f64) -> QString;
+
         /// The filter parameter descriptors, in the C++ table's order.
         fn filter_descriptors() -> Vec<FilterDescriptorRow>;
 

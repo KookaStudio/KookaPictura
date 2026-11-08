@@ -1,7 +1,7 @@
 use pictura_filters::blur::{BLUR_MORE_RADIUS, BLUR_RADIUS};
 use pictura_filters::kernel::{gaussian_kernel, sigma_from_radius};
 use pictura_filters::sharpen::{SHARPEN_AMOUNT, SHARPEN_MORE_AMOUNT, SHARPEN_RADIUS};
-use pictura_filters::{Filter, Quality, RadialMethod};
+use pictura_filters::{Filter, MorphologyPreserve, Quality, RadialMethod};
 
 use super::MAX_WEIGHTS;
 
@@ -182,23 +182,21 @@ pub(super) fn plan(filter: &Filter) -> Option<Plan> {
                 threshold: u32::from(*threshold),
             })
         }
-        Filter::Maximum { radius } => {
-            let r = (*radius).min(100);
-            if r == 0 {
+        Filter::Maximum { radius, preserve } => {
+            if *preserve == MorphologyPreserve::Roundness || *radius == 0 {
                 return None;
             }
             Some(Plan::Morph {
-                radius: r,
+                radius: *radius,
                 dilate: true,
             })
         }
-        Filter::Minimum { radius } => {
-            let r = (*radius).min(100);
-            if r == 0 {
+        Filter::Minimum { radius, preserve } => {
+            if *preserve == MorphologyPreserve::Roundness || *radius == 0 {
                 return None;
             }
             Some(Plan::Morph {
-                radius: r,
+                radius: *radius,
                 dilate: false,
             })
         }

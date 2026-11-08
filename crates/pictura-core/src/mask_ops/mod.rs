@@ -13,7 +13,7 @@ mod morph;
 pub(crate) use flood::flood_peak;
 pub use flood::{flood, flood_from};
 pub use median::median;
-pub use morph::{dilate, erode, Border};
+pub use morph::{dilate, disk_dilate, disk_erode, erode, Border};
 
 #[cfg(test)]
 mod tests;

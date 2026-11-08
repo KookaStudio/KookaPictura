@@ -23,6 +23,9 @@ pub const SHEAR_SLOTS: usize = 1 + 2 * SHEAR_MAX_POINTS + 1;
 pub const LIGHTING_RIG_SLOTS: usize = 9;
 pub const LIGHTING_LIGHT_SLOTS: usize = 13;
 
+/// Maximum/Minimum radii above this warn that the filter can be slow.
+const MORPHOLOGY_WARN_RADIUS: f64 = 100.0;
+
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilterControl {
@@ -172,8 +175,8 @@ impl ApronPolicy {
                 | Filter::SurfaceBlur { radius, .. }
                 | Filter::LensBlur { radius, .. }
                 | Filter::Median { radius }
-                | Filter::Maximum { radius }
-                | Filter::Minimum { radius } => f64::from(*radius),
+                | Filter::Maximum { radius, .. }
+                | Filter::Minimum { radius, .. } => f64::from(*radius),
                 _ => 128.0,
             },
             Self::Distance => match filter {
@@ -409,6 +412,23 @@ impl FilterSpec {
 
     pub fn defaults_are_in_range(&self) -> bool {
         self.params.iter().all(FilterParam::defaults_are_in_range)
+    }
+
+    /// A non-blocking warning for the dialog's current values, or `None`. The
+    /// Maximum/Minimum radius is the only rule today: above 100 px the
+    /// morphology can take a long time.
+    pub fn warning(&self, params: &[f64]) -> Option<&'static str> {
+        match self.id {
+            "maximum" | "minimum" => {
+                let radius = params
+                    .first()
+                    .copied()
+                    .unwrap_or_else(|| self.params.first().map_or(0.0, |param| param.value));
+                (radius > MORPHOLOGY_WARN_RADIUS)
+                    .then_some("A radius above 100 pixels can use a lot of CPU and run slowly.")
+            }
+            _ => None,
+        }
     }
 
     pub fn scale_pixel_params(&self, params: &[f64], scale: f64) -> Vec<f64> {

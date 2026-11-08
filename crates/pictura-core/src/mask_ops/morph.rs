@@ -1,7 +1,9 @@
-//! Separable square-footprint dilation and erosion.
+//! Square- and disk-footprint dilation and erosion.
 //!
-//! Each axis is a monotonic-deque sliding window, so a line costs `O(n)` and
-//! the plane costs `O(1)` per sample per axis regardless of the radius.
+//! The square kernel is separable: each axis is a monotonic-deque sliding
+//! window, so a line costs `O(n)` and the plane costs `O(1)` per sample per axis
+//! regardless of the radius. The disk kernel decomposes into one horizontal
+//! segment per row, so it costs `O(radius)` passes over the plane.
 
 use std::collections::VecDeque;
 
@@ -36,6 +38,30 @@ pub fn erode<T: Copy + PartialOrd + Send + Sync>(
     border: Border<T>,
 ) -> Vec<T> {
     morph(src, w, h, radius, border, false)
+}
+
+/// Dilate over a disk of `radius`: the offsets `(dx, dy)` with
+/// `dx² + dy² <= radius²`.
+pub fn disk_dilate<T: Copy + PartialOrd + Send + Sync>(
+    src: &[T],
+    w: usize,
+    h: usize,
+    radius: usize,
+    border: Border<T>,
+) -> Vec<T> {
+    disk_morph(src, w, h, radius, border, true)
+}
+
+/// Erode over a disk of `radius`: the offsets `(dx, dy)` with
+/// `dx² + dy² <= radius²`.
+pub fn disk_erode<T: Copy + PartialOrd + Send + Sync>(
+    src: &[T],
+    w: usize,
+    h: usize,
+    radius: usize,
+    border: Border<T>,
+) -> Vec<T> {
+    disk_morph(src, w, h, radius, border, false)
 }
 
 fn morph<T: Copy + PartialOrd + Send + Sync>(
@@ -82,6 +108,65 @@ fn morph<T: Copy + PartialOrd + Send + Sync>(
 /// row-contiguous reads and writes, narrow enough for small planes.
 const COLUMN_BLOCK: usize = 64;
 
+/// Dilate or erode over the union of one horizontal segment per row: at
+/// vertical offset `dy` the segment half-width is `floor(sqrt(r² - dy²))`.
+/// Each pass is the same sliding window as the square kernel, so the disk costs
+/// `2r+1` passes and needs no radius-sized allocation.
+fn disk_morph<T: Copy + PartialOrd + Send + Sync>(
+    src: &[T],
+    w: usize,
+    h: usize,
+    radius: usize,
+    border: Border<T>,
+    want_max: bool,
+) -> Vec<T> {
+    let n = w.saturating_mul(h);
+    if radius == 0 || n == 0 || src.len() != n {
+        return src.to_vec();
+    }
+    let zero = match border {
+        Border::Zero(value) => Some(value),
+        Border::Clamp => None,
+    };
+    // Past the diagonal reach the disk already covers every pixel, so a larger
+    // radius cannot change the result. The diagonal, not the larger side, is
+    // the bound: a disk of radius max(w, h) misses a far corner.
+    let reach = ((w.max(h)) as f64 * std::f64::consts::SQRT_2).ceil() as usize;
+    let radius = radius.min(reach);
+    let r = radius as i64;
+    let mut out = src.to_vec();
+    let mut tmp = src.to_vec();
+    for dy in -r..=r {
+        let hw = (((r * r - dy * dy) as f64).sqrt()) as usize;
+        tmp.par_chunks_mut(w)
+            .enumerate()
+            .for_each_init(VecDeque::new, |deque, (y, tmp_row)| {
+                slide_with(&src[y * w..(y + 1) * w], hw, zero, want_max, tmp_row, deque);
+            });
+        out.par_chunks_mut(w).enumerate().for_each(|(y, out_row)| {
+            let sy = y as i64 + dy;
+            if sy < 0 || sy >= h as i64 {
+                if let Some(z) = zero {
+                    for o in out_row.iter_mut() {
+                        if (want_max && z > *o) || (!want_max && z < *o) {
+                            *o = z;
+                        }
+                    }
+                    return;
+                }
+            }
+            let sy = sy.clamp(0, h as i64 - 1) as usize;
+            let tmp_row = &tmp[sy * w..(sy + 1) * w];
+            for (o, &t) in out_row.iter_mut().zip(tmp_row) {
+                if (want_max && t > *o) || (!want_max && t < *o) {
+                    *o = t;
+                }
+            }
+        });
+    }
+    out
+}
+
 fn slide<T: Copy + PartialOrd + Send + Sync>(
     line: &[T],
     radius: usize,
@@ -89,13 +174,25 @@ fn slide<T: Copy + PartialOrd + Send + Sync>(
     want_max: bool,
     out: &mut [T],
 ) {
+    let mut deque = VecDeque::new();
+    slide_with(line, radius, zero, want_max, out, &mut deque);
+}
+
+fn slide_with<T: Copy + PartialOrd + Send + Sync>(
+    line: &[T],
+    radius: usize,
+    zero: Option<T>,
+    want_max: bool,
+    out: &mut [T],
+    deque: &mut VecDeque<(usize, T)>,
+) {
     let n = line.len();
     // Cap at the line length so the padded walk stays O(n) when the radius
     // exceeds the line; duplicate and zero taps cannot change a max or min.
     let radius = radius.min(n);
     let window = 2 * radius + 1;
     let padded = n + 2 * radius;
-    let mut deque: VecDeque<(usize, T)> = VecDeque::new();
+    deque.clear();
     for p in 0..padded {
         let value = sample(line, p as isize - radius as isize, zero);
         while let Some(&(_, back)) = deque.back() {

@@ -1,6 +1,6 @@
 use super::*;
 use pictura_core::{BlendMode, Channel, ColorLabel, LockFlags, PsdRect};
-use pictura_filters::{FilterKind, IrisShape, NoiseDistribution};
+use pictura_filters::{FilterKind, IrisShape, MorphologyPreserve, NoiseDistribution};
 
 fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
     PsdRect {
@@ -485,7 +485,10 @@ fn cpu_preferred_kernels_skip_the_gpu() {
             threshold: 0,
         },
         Filter::Median { radius: 2 },
-        Filter::Maximum { radius: 2 },
+        Filter::Maximum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        },
     ] {
         assert!(filter.cpu_outruns_gpu());
         let mut gpu = varied_layer(40, 30);
@@ -587,8 +590,14 @@ fn moving_kernels() -> Vec<Filter> {
         },
         Filter::Median { radius: 2 },
         Filter::Despeckle,
-        Filter::Maximum { radius: 2 },
-        Filter::Minimum { radius: 2 },
+        Filter::Maximum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        },
+        Filter::Minimum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        },
         Filter::DustAndScratches {
             radius: 2,
             threshold: 0,

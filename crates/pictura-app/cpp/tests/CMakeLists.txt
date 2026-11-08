@@ -141,6 +141,7 @@ set(PICTURA_QT_TESTS
     tst_displace
     tst_de_interlace
     tst_custom_filter
+    tst_maximum_filter
     tst_digimarc_watermark
     tst_shape_blur
     tst_smart_blur
