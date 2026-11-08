@@ -72,14 +72,17 @@ pub(super) fn crop_planar(buffer: &PixelBuffer, x0: i32, y0: i32, w: u32, h: u32
     let mut data = Vec::with_capacity(w * h * buffer.channels as usize);
     for c in 0..buffer.channels as usize {
         for y in y0..y0 + h {
-            // Read the stacked row, not the whole plane: a banded composite
-            // plane must not be materialized just to crop a region.
-            let Some(row) = buffer.data.row(c * fh + y, fw) else {
+            // Read the region of the stacked row, not the whole plane: a
+            // tiled composite plane must not be materialized just to crop.
+            let row = c * fh + y;
+            if y >= fh || x0 + w > fw || (row + 1) * fw > buffer.data.len() {
                 continue;
-            };
-            if x0 + w <= row.len() {
-                data.extend_from_slice(&row[x0..x0 + w]);
             }
+            let at = data.len();
+            data.resize(at + w, 0);
+            buffer
+                .data
+                .read_rect_into(x0..x0 + w, row..row + 1, fw, &mut data[at..]);
         }
     }
     PixelBuffer {
@@ -713,35 +716,46 @@ fn strip_adjustments(layers: &mut pictura_core::LayerStack) {
     layers.retain_tree(&[], &mut |layer| layer.adjustment.is_none());
 }
 
+/// Pixels `start .. start + out.len()` of a planar 8-bit buffer (1 = gray,
+/// 2 = gray+alpha, 3 = RGB, 4 = RGBA) as straight RGBA, read channel by
+/// channel in place so a tiled plane is never materialized. Gray replicates
+/// across RGB; RGB gets opaque alpha.
+fn rgba_run(buffer: &PixelBuffer, start: usize, out: &mut [[u8; 4]]) {
+    let plane = buffer.pixel_count();
+    let channels = buffer.channels as usize;
+    let n = out.len();
+    let read = |c: usize| {
+        let mut run = vec![0u8; n];
+        buffer.data.read_into(c * plane + start, &mut run);
+        run
+    };
+    let (r, g, b, a) = match channels {
+        0 | 1 => {
+            let v = read(0);
+            (v.clone(), v.clone(), v, vec![255; n])
+        }
+        2 => {
+            let v = read(0);
+            (v.clone(), v.clone(), v, read(1))
+        }
+        3 => (read(0), read(1), read(2), vec![255; n]),
+        _ => (read(0), read(1), read(2), read(3)),
+    };
+    for (k, px) in out.iter_mut().enumerate() {
+        *px = [r[k], g[k], b[k], a[k]];
+    }
+}
+
+/// Pixels per run of the RGBA conversions.
+const RGBA_RUN: usize = 1 << 16;
+
 /// Convert a planar 8-bit buffer (1 = gray, 2 = gray+alpha, 3 = RGB, 4 = RGBA)
 /// to interleaved RGBA8888. Gray replicates across RGB; RGB gets opaque alpha.
 pub(super) fn buffer_to_rgba_bytes(buffer: &PixelBuffer) -> Vec<u8> {
-    let plane = buffer.width as usize * buffer.height as usize;
-    let channels = buffer.channels as usize;
-
+    let plane = buffer.pixel_count();
     let mut rgba = vec![0u8; plane * 4];
-    for i in 0..plane {
-        let (r, g, b, a) = if channels <= 1 {
-            let v = buffer.data[i];
-            (v, v, v, 255)
-        } else if channels == 2 {
-            let v = buffer.data[i];
-            (v, v, v, buffer.data[plane + i])
-        } else {
-            let a = if channels >= 4 {
-                buffer.data[3 * plane + i]
-            } else {
-                255
-            };
-            (
-                buffer.data[i],
-                buffer.data[plane + i],
-                buffer.data[2 * plane + i],
-                a,
-            )
-        };
-        let o = i * 4;
-        rgba[o..o + 4].copy_from_slice(&[r, g, b, a]);
+    for (run, out) in rgba.chunks_mut(RGBA_RUN * 4).enumerate() {
+        rgba_run(buffer, run * RGBA_RUN, out.as_chunks_mut::<4>().0);
     }
     rgba
 }
@@ -770,36 +784,17 @@ fn premul(c: u8, a: u8) -> u8 {
 pub(super) fn display_rgba_bytes(buffer: &PixelBuffer) -> Vec<u8> {
     use rayon::prelude::*;
     let plane = buffer.pixel_count();
-    let channels = buffer.channels as usize;
     let mut rgba = vec![0u8; plane * 4];
     // A full-document frame is hundreds of megabytes on a large image; spread
     // it over every core in runs of pixels.
-    const RUN: usize = 1 << 16;
-    rgba.par_chunks_mut(RUN * 4)
+    rgba.par_chunks_mut(RGBA_RUN * 4)
         .enumerate()
         .for_each(|(run, out)| {
-            for (k, px) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-                let i = run * RUN + k;
-                let (r, g, b, a) = if channels <= 1 {
-                    let v = buffer.data[i];
-                    (v, v, v, 255)
-                } else if channels == 2 {
-                    let v = buffer.data[i];
-                    (v, v, v, buffer.data[plane + i])
-                } else {
-                    let a = if channels >= 4 {
-                        buffer.data[3 * plane + i]
-                    } else {
-                        255
-                    };
-                    (
-                        buffer.data[i],
-                        buffer.data[plane + i],
-                        buffer.data[2 * plane + i],
-                        a,
-                    )
-                };
-                px.copy_from_slice(&[premul(r, a), premul(g, a), premul(b, a), a]);
+            let px = out.as_chunks_mut::<4>().0;
+            rgba_run(buffer, run * RGBA_RUN, px);
+            for p in px.iter_mut() {
+                let [r, g, b, a] = *p;
+                *p = [premul(r, a), premul(g, a), premul(b, a), a];
             }
         });
     rgba
@@ -850,23 +845,24 @@ pub(super) fn into_rgba_frame(rendered: PixelBuffer) -> PixelBuffer {
 /// The 4-plane straight **sRGB** level-0 frame for `source`: the color-managed
 /// composite the display image, pyramid, and canvas crops all share.
 ///
-/// The frame shares the composite's copy-on-write bands when the document needs
+/// The frame shares the composite's copy-on-write tiles when the document needs
 /// no display conversion, so a whole-document restore installs it without
-/// copying. Both planes are fractured first, so the first write to either forks
-/// only the bands it touches.
+/// copying. Both planes are tiled first, so the first write to either forks
+/// only the tiles it touches.
 pub(super) fn level0_buffer(source: &mut Document) -> PixelBuffer {
-    source.composite.data.fracture(source.width as usize);
+    let (w, h) = (source.width as usize, source.height as usize);
+    source.composite.data.tile(w, h);
     level0_from_buffer(source, &source.composite)
 }
 
 /// The level-0 frame for an already-rendered `buffer` of `source`.
 ///
 /// Level 0 is patched on its own (mid-stroke it runs ahead of the document's
-/// composite), so its plane is fractured: a band write then forks only that
-/// band instead of copying the whole frame.
+/// composite), so its plane is tiled: a write then forks only the tiles it
+/// touches instead of copying the whole frame.
 pub(super) fn level0_from_buffer(source: &Document, buffer: &PixelBuffer) -> PixelBuffer {
     let mut frame = into_rgba_frame(buffer_to_srgb(source, buffer).into_owned());
-    frame.data.fracture(frame.width as usize);
+    frame.data.tile(frame.width as usize, frame.height as usize);
     frame
 }
 
@@ -950,23 +946,23 @@ mod bundle_tests {
         }
     }
 
-    /// A 128×128 RGBA layer and mask whose bands have diverged, the state an
+    /// A 300×300 RGBA layer and mask whose tiles have diverged, the state an
     /// in-place undo leaves in the live document.
     fn diverged_layer() -> Layer {
-        let size = 128usize;
+        let size = 300usize;
         let channel = |id: i16, seed: u8| {
             let mut data: pictura_core::Plane<u8> = (0..size * size)
                 .map(|i| (i as u8).wrapping_mul(seed))
                 .collect::<Vec<u8>>()
                 .into();
-            data.fracture(size);
+            data.tile(size, size);
             let shared = data.clone();
-            data.write_band(0).expect("a band")[0] = seed;
+            data.write_rect_from(0..1, 0..1, size, &[seed]);
             drop(shared);
             pictura_core::Channel { id, data }
         };
         let mut mask = channel(0, 3).data;
-        mask.fracture(size);
+        mask.tile(size, size);
         Layer {
             rect: rect(size as i32),
             channels: vec![channel(0, 3), channel(1, 5), channel(2, 7), channel(-1, 11)],

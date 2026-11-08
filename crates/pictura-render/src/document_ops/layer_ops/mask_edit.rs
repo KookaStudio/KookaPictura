@@ -46,8 +46,9 @@ pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument
         let _held = super::mask_domain::reserve(n.checked_mul(2)?)?;
         let mut out = super::mask_domain::allocate(n, 0)?;
         let w = doc.width as usize;
+        let flat = out.as_mut_slice();
         for y in 0..doc.height as usize {
-            let row = out.row_mut(y, w)?;
+            let row = flat.get_mut(y * w..(y + 1) * w)?;
             for (x, value) in row.iter_mut().enumerate() {
                 *value = super::mask_domain::stored(mask, x as i32, y as i32);
             }

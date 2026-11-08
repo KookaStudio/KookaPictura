@@ -228,10 +228,14 @@ pub(crate) fn content_matte(
             if lw <= 0 {
                 return matte;
             }
+            let from = (ix0 - layer.rect.left) as usize;
+            let span = from..(ix1 - layer.rect.left) as usize;
             for y in iy0..iy1 {
-                let row = alpha.row((y - layer.rect.top) as usize, lw as usize);
+                let ly = (y - layer.rect.top) as usize;
+                let row = alpha.row_span(ly, span.clone(), lw as usize);
+                let row = row.as_deref();
                 for x in ix0..ix1 {
-                    let lx = (x - layer.rect.left) as usize;
+                    let lx = (x - layer.rect.left) as usize - from;
                     // A missing alpha sample is opaque, matching the content path.
                     let a = row.and_then(|r| r.get(lx)).copied().unwrap_or(255);
                     matte[at(x, y)] = a as f32 / 255.0;

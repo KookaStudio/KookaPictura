@@ -161,14 +161,22 @@ pub(crate) fn blend_parts_row(
 
 /// A source sample from the resolved native row, or the 8-bit plane.
 #[inline]
-fn source_unit(native: Option<SampleRow<'_>>, bytes: Option<&[u8]>, lx: usize, default: u8) -> f32 {
+/// `bytes` holds the 8-bit row from column `from`, so sample `lx` is at
+/// `lx - from`; `native` holds the whole row.
+fn source_unit(
+    native: Option<SampleRow<'_>>,
+    bytes: Option<&[u8]>,
+    lx: usize,
+    from: usize,
+    default: u8,
+) -> f32 {
     if let Some(row) = native {
         if let Some(v) = row.unit(lx) {
             return v;
         }
     }
     bytes
-        .and_then(|row| row.get(lx))
+        .and_then(|row| row.get(lx - from))
         .copied()
         .unwrap_or(default) as f32
         / 255.0
@@ -224,32 +232,33 @@ pub(crate) fn composite_pixels(
         .sources
         .as_ref()
         .expect("a visible layer resolves its native planes");
+    let span = (x0 - rect.left) as usize..(x1 - rect.left) as usize;
+    let from = span.start;
 
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
-        // A row lies inside one band, so reading rows keeps a banded plane
-        // shared instead of materializing it into one contiguous slice.
+        // A row is copied out of a tiled plane (borrowed from a flat one), so
+        // the plane is never materialized into one contiguous slice.
         let ly = (y - rect.top) as usize;
-        let r0 = ch0.and_then(|p| p.row(ly, lw));
-        let r1 = ch1.and_then(|p| p.row(ly, lw));
-        let r2 = ch2.and_then(|p| p.row(ly, lw));
-        let ra = alpha.and_then(|p| p.row(ly, lw));
+        // Only the columns the canvas shows are copied out of a tiled plane.
+        let rows = [ch0, ch1, ch2, alpha].map(|p| p.and_then(|p| p.row_span(ly, span.clone(), lw)));
+        let [r0, r1, r2, ra] = rows.each_ref().map(Option::as_deref);
         let native = source.row(ly, lw);
         for x in x0..x1 {
             let lx = (x - rect.left) as usize;
             // A high-depth Grayscale/RGB layer reads its native samples; a
             // channel missing from the store falls back to its 8-bit plane.
-            let a = source_unit(native[3], ra, lx, 255);
+            let a = source_unit(native[3], ra, lx, from, 255);
             if a <= 0.0 {
                 continue;
             }
             let (r, g, b) = if gray {
-                let v = source_unit(native[0], r0, lx, 0);
+                let v = source_unit(native[0], r0, lx, from, 0);
                 (v, v, v)
             } else {
                 (
-                    source_unit(native[0], r0, lx, 0),
-                    source_unit(native[1], r1, lx, 0),
-                    source_unit(native[2], r2, lx, 0),
+                    source_unit(native[0], r0, lx, from, 0),
+                    source_unit(native[1], r1, lx, from, 0),
+                    source_unit(native[2], r2, lx, from, 0),
                 )
             };
             blend_into_row_ctx(
@@ -309,10 +318,8 @@ fn composite_pixels_legacy(
     let clip = canvas.clip();
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         let ly = (y - rect.top) as usize;
-        let r0 = ch0.and_then(|p| p.row(ly, lw));
-        let r1 = ch1.and_then(|p| p.row(ly, lw));
-        let r2 = ch2.and_then(|p| p.row(ly, lw));
-        let ra = alpha.and_then(|p| p.row(ly, lw));
+        let rows = [ch0, ch1, ch2, alpha].map(|p| p.and_then(|p| p.row(ly, lw)));
+        let [r0, r1, r2, ra] = rows.each_ref().map(Option::as_deref);
         for x in x0..x1 {
             let lx = (x - rect.left) as usize;
             let li = ly * lw + lx;

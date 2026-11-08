@@ -1,4 +1,5 @@
 use super::*;
+use pictura_core::TILE;
 
 fn history_planes(history: &History) -> Vec<pictura_core::Plane<u8>> {
     let mut out = Vec::new();
@@ -21,8 +22,26 @@ fn history_planes(history: &History) -> Vec<pictura_core::Plane<u8>> {
     out
 }
 
+/// Flip sample `(0, y)` of a `w × h` plane by `xor`, tiling it first.
+fn flip(plane: &mut pictura_core::Plane<u8>, w: u32, h: u32, y: usize, xor: u8) {
+    plane.tile(w as usize, h as usize);
+    let v = plane.sample(y * w as usize).expect("an in-plane sample");
+    plane.write_rect_from(0..1, y..y + 1, w as usize, &[v ^ xor]);
+}
+
+fn last_delta(history: &History) -> &Delta {
+    history
+        .states
+        .last()
+        .and_then(|entry| match &entry.stored {
+            Stored::Delta(delta) => Some(delta),
+            _ => None,
+        })
+        .expect("a paint capture is a delta")
+}
+
 #[test]
-fn opening_a_document_shares_bands_with_history() {
+fn opening_a_document_shares_tiles_with_history() {
     let (w, h) = (32u32, 24u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
@@ -33,14 +52,12 @@ fn opening_a_document_shares_bands_with_history() {
 
     let current = &history.current.as_ref().expect("current").doc;
     assert!(
-        shares_a_band(&live, current),
-        "opening must share untouched bands with the history"
+        shares_a_tile(&live, current),
+        "opening must share untouched tiles with the history"
     );
 
     let before = live.clone();
-    let plane = &mut live.layers[0].channels[0].data;
-    plane.fracture(w as usize);
-    plane.write_band(0).expect("a band")[0] ^= 0x55;
+    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x55);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
     let mut selection = None;
@@ -52,8 +69,8 @@ fn opening_a_document_shares_bands_with_history() {
 }
 
 #[test]
-fn a_capture_scans_only_changed_bands() {
-    let (w, h) = (32u32, 24u32);
+fn a_capture_scans_only_changed_tiles() {
+    let (w, h) = (32u32, 600u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
     let mut history = History::default();
@@ -61,34 +78,24 @@ fn a_capture_scans_only_changed_bands() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    let plane = &mut live.layers[0].channels[0].data;
-    plane.fracture(w as usize);
-    plane.write_band(0).expect("a band")[0] ^= 0x11;
+    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x11);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
-    let delta = history
-        .states
-        .last()
-        .and_then(|entry| match &entry.stored {
-            Stored::Delta(delta) => Some(delta),
-            _ => None,
-        })
-        .expect("a paint capture is a delta");
-    let layer = delta
+    let layer = last_delta(&history)
         .tiles
         .iter()
         .find(|d| d.index == 1)
         .expect("the painted layer plane");
     assert!(!layer.tiles.is_empty());
     assert!(
-        layer.tiles.iter().all(|t| t.y < pictura_core::BAND_ROWS),
-        "the scan must stay inside the touched band"
+        layer.tiles.iter().all(|t| t.y < TILE),
+        "the scan must stay inside the touched tile"
     );
 }
 
 #[test]
-fn a_contiguous_read_collapses_band_sharing() {
-    let (w, h) = (32u32, 128u32);
+fn a_contiguous_write_collapses_tile_sharing() {
+    let (w, h) = (32u32, 600u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
     let mut history = History::default();
@@ -97,43 +104,29 @@ fn a_contiguous_read_collapses_band_sharing() {
     history.capture_live(&mut live, &selection, &target, "Open");
 
     let plane = &mut live.layers[0].channels[0].data;
-    plane.fracture(w as usize);
-    assert_eq!(plane.band_count(), 2, "128 rows of 64-row bands");
-    plane.write_band(0).expect("a band")[0] ^= 0x77;
-    let _ = plane.as_slice();
-    // The next write adopts the materialized view as the base and rebuilds
-    // every band over it, so no band is the allocation history still holds.
-    let _ = plane.write_band(0).expect("a band");
-
+    plane.tile(w as usize, h as usize);
+    assert_eq!(plane.tile_count(), 3, "600 rows of 256-row tiles");
+    // A whole-plane write flattens the plane: nothing is shared any more.
+    plane.as_mut_slice()[0] ^= 0x77;
     let theirs = &history.current.as_ref().expect("current").doc.layers[0].channels[0].data;
-    assert!(
-        (0..plane.band_count()).all(|i| !plane.shares_band(i, theirs)),
-        "a contiguous read collapses every band's sharing, so the capture scans fully"
-    );
+    assert!(!plane.shares(theirs));
 
     history.capture_live(&mut live, &selection, &target, "Paint");
-    let delta = history
-        .states
-        .last()
-        .and_then(|entry| match &entry.stored {
-            Stored::Delta(delta) => Some(delta),
-            _ => None,
-        })
-        .expect("a paint capture is a delta");
-    let layer = delta
+    let layer = last_delta(&history)
         .tiles
         .iter()
         .find(|d| d.index == 1)
         .expect("the painted layer plane");
     assert!(
         !layer.tiles.is_empty(),
-        "the touched band still records its tiles; unchanged bands scan but yield none"
+        "the touched tile still records its deltas; unchanged tiles scan but yield none"
     );
+    assert!(layer.tiles.iter().all(|t| t.y < TILE));
 }
 
 #[test]
-fn a_live_write_forks_only_touched_bands() {
-    let (w, h) = (32u32, 128u32);
+fn a_live_write_forks_only_touched_tiles() {
+    let (w, h) = (32u32, 600u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
     let mut history = History::default();
@@ -145,21 +138,20 @@ fn a_live_write_forks_only_touched_bands() {
         .data
         .clone();
     let plane = &mut live.layers[0].channels[0].data;
-    plane.fracture(w as usize);
-    plane.write_band(1).expect("a band")[0] ^= 0x22;
+    flip(plane, w, h, TILE, 0x22);
 
     let current = &history.current.as_ref().unwrap().doc.layers[0].channels[0].data;
     assert!(
-        plane.shares_band(0, current),
-        "the untouched band stays shared"
+        plane.shares_tile(0, current),
+        "the untouched tile stays shared"
     );
-    assert!(!plane.shares_band(1, current), "the written band forked");
-    assert_eq!(current.as_slice(), before.as_slice());
+    assert!(!plane.shares_tile(1, current), "the written tile forked");
+    assert_eq!(*current, before);
 }
 
 #[test]
-fn a_written_band_is_not_shared_with_history() {
-    let (w, h) = (32u32, 128u32);
+fn a_written_tile_is_not_shared_with_history() {
+    let (w, h) = (32u32, 600u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
     let mut history = History::default();
@@ -170,18 +162,49 @@ fn a_written_band_is_not_shared_with_history() {
     history.capture_live(&mut live, &selection, &target, "New Layer");
 
     let plane = &mut live.layers[0].channels[0].data;
-    plane.fracture(w as usize);
-    plane.write_band(1).expect("a band")[0] ^= 0x44;
+    flip(plane, w, h, TILE, 0x44);
     let theirs = history_planes(&history);
     assert!(
-        theirs.iter().all(|q| !plane.shares_band(1, q)),
-        "a written band must not share with any history state"
+        theirs.iter().all(|q| !plane.shares_tile(1, q)),
+        "a written tile must not share with any history state"
     );
 }
 
+// [tp_history]
 #[test]
-fn a_stroke_path_materializes_no_plane_and_scans_only_touched_bands() {
-    let (w, h) = (32u32, 24u32);
+fn untouched_tile_keeps_its_arc() {
+    let (w, h) = (600u32, 600u32);
+    let mut live = doc(w, h, 3);
+    live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
+    let mut history = History::default();
+    let selection = None;
+    let target = LayerTarget::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    let opened = history.current.as_ref().unwrap().doc.layers[0].channels[0]
+        .data
+        .clone();
+
+    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x33);
+    history.capture_live(&mut live, &selection, &target, "Paint");
+
+    let current = &history.current.as_ref().unwrap().doc.layers[0].channels[0].data;
+    let live_plane = &live.layers[0].channels[0].data;
+    for i in 1..current.tile_count() {
+        assert!(
+            current.shares_tile(i, &opened),
+            "tile {i} kept its allocation"
+        );
+        assert!(
+            live_plane.shares_tile(i, current),
+            "tile {i} is shared with live"
+        );
+    }
+    assert!(!current.shares_tile(0, &opened), "the written tile is new");
+}
+
+#[test]
+fn a_stroke_path_materializes_no_plane_and_scans_only_touched_tiles() {
+    let (w, h) = (32u32, 600u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
     let mut history = History::default();
@@ -189,9 +212,7 @@ fn a_stroke_path_materializes_no_plane_and_scans_only_touched_bands() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    let plane = &mut live.layers[0].channels[0].data;
-    plane.fracture(w as usize);
-    plane.write_band(0).expect("a band")[0] ^= 0x66;
+    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x66);
 
     pictura_core::reset_materializations();
     history.capture_live(&mut live, &selection, &target, "Paint");
@@ -200,17 +221,9 @@ fn a_stroke_path_materializes_no_plane_and_scans_only_touched_bands() {
         0,
         "the capture must not materialize a plane"
     );
-    let delta = history
-        .states
-        .last()
-        .and_then(|entry| match &entry.stored {
-            Stored::Delta(delta) => Some(delta),
-            _ => None,
-        })
-        .expect("a paint capture is a delta");
-    assert!(delta
+    assert!(last_delta(&history)
         .tiles
         .iter()
         .flat_map(|d| d.tiles.iter())
-        .all(|t| t.y < pictura_core::BAND_ROWS));
+        .all(|t| t.y < TILE));
 }

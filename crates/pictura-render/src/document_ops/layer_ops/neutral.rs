@@ -3,7 +3,6 @@
 //! for moves of an inert or hidden layer.
 
 use pictura_core::{BitDepth, BlendMode, ColorMode, Document, Knockout, Layer};
-use rayon::prelude::*;
 
 use super::paths::{container_of, parse_path};
 
@@ -94,13 +93,7 @@ fn is_plain_opaque(node: &Layer) -> bool {
         return false;
     }
     match node.channels.iter().find(|c| c.id == -1) {
-        Some(alpha) => {
-            let bands: Vec<&[u8]> = alpha.data.bands().collect();
-            bands.iter().all(|band| {
-                band.par_chunks(1 << 16)
-                    .all(|chunk| chunk.iter().all(|&a| a == 255))
-            })
-        }
+        Some(alpha) => alpha.data.all_eq(255),
         None => node.background,
     }
 }
@@ -126,7 +119,7 @@ pub(crate) fn layer_is_inert(node: &Layer) -> bool {
     node.channels
         .iter()
         .find(|c| c.id == -1)
-        .is_some_and(|alpha| alpha.data.bands().flatten().all(|&a| a == 0))
+        .is_some_and(|alpha| alpha.data.all_eq(0))
 }
 
 /// Whether moving the node at `path_before` to `path_after` leaves the document

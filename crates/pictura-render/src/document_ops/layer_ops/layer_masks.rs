@@ -78,8 +78,10 @@ pub fn add_layer_mask(
         .iter()
         .find(|c| c.id == -1)
         .filter(|c| Some(c.data.len()) == super::mask_domain::pixels(content));
+    // The new plane is flat; the history tiles it when the edit is captured.
+    let flat = data.as_mut_slice();
     for y in 0..h {
-        let Some(row) = data.row_mut(y, w) else {
+        let Some(row) = flat.get_mut(y * w..(y + 1) * w) else {
             return false;
         };
         for (x, out) in row.iter_mut().enumerate() {
@@ -254,15 +256,14 @@ pub fn invert_layer_mask(doc: &mut Document, path: &str) -> bool {
     let Some(mut view) = super::mask_edit::mask_document_coverage(doc, path) else {
         return false;
     };
-    let width = view.document.width as usize;
-    for row in view.document.layers[0].channels[0]
-        .data
-        .rows_mut(0..view.document.height as usize, width)
-    {
-        for value in row {
+    let (width, height) = (view.document.width as usize, view.document.height as usize);
+    let coverage = &mut view.document.layers[0].channels[0].data;
+    coverage.tile(width, height);
+    coverage.for_each_tile_mut(0..width, 0..height, width, |tile| {
+        for value in tile.data.iter_mut() {
             *value = 255 - *value;
         }
-    }
+    });
     super::mask_edit::write_mask_back(doc, path, &view.document, None)
 }
 

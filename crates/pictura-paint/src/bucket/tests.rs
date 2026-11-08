@@ -398,10 +398,10 @@ fn a_selection_stroke_bands_the_edge_where_asked() {
 }
 
 #[test]
-fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_bands() {
+fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_tiles() {
     use crate::fill::tests::doc_at;
     let (w, h) = (90i32, 300i32);
-    // A soft box crossing two bands, on a layer offset from the canvas
+    // A soft box inside one tile, on a layer offset from the canvas
     // and on a Background, both shared with a history snapshot.
     let bounds = PsdRect {
         top: 70,
@@ -435,7 +435,7 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_bands() {
         );
         let mut history = base.clone();
         for c in &mut history.layers[0].channels {
-            c.data.fracture(w as usize);
+            c.data.tile(w as usize, h as usize);
         }
         let mut got = history.clone();
         let boxed_dirty = fill_within(
@@ -467,8 +467,8 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_bands() {
             .iter()
             .zip(&history.layers[0].channels)
         {
-            assert!(a.data.shares_band(4, &b.data), "band 4 stayed shared");
-            assert!(!a.data.shares_band(1, &b.data), "band 1 was written");
+            assert!(a.data.shares_tile(1, &b.data), "tile 1 stayed shared");
+            assert!(!a.data.shares_tile(0, &b.data), "tile 0 was written");
         }
     }
 }

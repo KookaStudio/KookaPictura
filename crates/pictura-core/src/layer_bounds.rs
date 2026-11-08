@@ -6,6 +6,7 @@
 //! fallible so a full host gets the typed refusal instead of an abort.
 
 use crate::memory::{self, MemoryError};
+use crate::tiled_plane::{TileSample, TILE};
 use crate::{layer_pixel_locked, layer_transparency_locked, Layer, PsdRect, Samples};
 
 /// Grow `layer`'s rect to `rect`, padding every plane with zeroes.
@@ -57,12 +58,6 @@ pub fn grow_layer_to(
             0
         }
     });
-    let planes = layer
-        .channels
-        .iter()
-        .filter(|channel| channel.data.len() == old_n)
-        .count()
-        + source_planes;
     let sample_bytes = layer
         .source_channels
         .as_ref()
@@ -71,17 +66,33 @@ pub fn grow_layer_to(
             crate::BitDepth::ThirtyTwo => 4,
             _ => 1,
         });
-    let added = u64::try_from(new_n.saturating_sub(old_n))
+    // The 8-bit planes are tiled: the grown area is empty tiles, and only the
+    // tiles the old content lands on are written (#1213). The native store
+    // stays flat and pays the whole grown area.
+    let tiled_planes = layer
+        .channels
+        .iter()
+        .filter(|channel| channel.data.len() == old_n)
+        .count() as u64;
+    let landed = if old_n == 0 {
+        0
+    } else {
+        ((old_w + 2 * TILE).min(new_w) * (old_h + 2 * TILE).min(new_h)) as u64
+    };
+    let flat_added = u64::try_from(new_n.saturating_sub(old_n))
         .unwrap_or(u64::MAX)
-        .saturating_mul(planes as u64)
+        .saturating_mul(source_planes as u64)
         .saturating_mul(sample_bytes as u64);
+    let added = landed
+        .saturating_mul(tiled_planes)
+        .saturating_add(flat_added);
     let _held = memory::governor().reserve(added, purpose)?;
 
     for channel in &mut layer.channels {
         if channel.data.len() != old_n {
             continue;
         }
-        channel.data = pad_u8(&channel.data, old_w, old_h, new_w, new_h, x0, y0, purpose)?.into();
+        channel.data = padded_plane(&channel.data, old_w, old_h, new_w, new_h, x0, y0);
     }
     if let Some(store) = layer.source_channels.as_mut() {
         if store.rect == old {
@@ -142,11 +153,7 @@ pub fn shrink_layer_to(layer: &mut Layer, rect: PsdRect) {
         if channel.data.len() != old_w * old_h {
             continue;
         }
-        let mut out = vec![0u8; new_w * new_h];
-        channel
-            .data
-            .read_rect_into(x0..x0 + new_w, y0..y0 + new_h, old_w, &mut out);
-        channel.data = out.into();
+        channel.data = cropped_plane(&channel.data, old_w, x0, y0, new_w, new_h);
     }
     if let Some(store) = layer.source_channels.as_mut() {
         if store.rect == old {
@@ -204,8 +211,30 @@ fn crop_samples(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn pad_u8(
+/// The `new_w × new_h` window of `data` (`old_w` wide) at `(x0, y0)`, as a
+/// tiled plane built one strip of tiles at a time.
+pub fn cropped_plane(
+    data: &crate::Plane<u8>,
+    old_w: usize,
+    x0: usize,
+    y0: usize,
+    new_w: usize,
+    new_h: usize,
+) -> crate::Plane<u8> {
+    let cropped = crate::Plane::build_tiled(new_w, new_h, 1, |y, row| {
+        data.read_rect_into(x0..x0 + new_w, y0 + y..y0 + y + 1, old_w, row);
+        Ok::<(), std::convert::Infallible>(())
+    });
+    match cropped {
+        Ok(plane) => plane,
+        Err(never) => match never {},
+    }
+}
+
+/// `data` (`old_w × old_h`) placed at `(x0, y0)` in an otherwise empty
+/// `new_w × new_h` tiled plane, copied one strip of tiles at a time; the empty
+/// area holds no tile.
+pub fn padded_plane(
     data: &crate::Plane<u8>,
     old_w: usize,
     old_h: usize,
@@ -213,12 +242,19 @@ fn pad_u8(
     new_h: usize,
     x0: usize,
     y0: usize,
-    purpose: &'static str,
-) -> Result<Vec<u8>, MemoryError> {
-    let mut out = allocate(new_w * new_h, purpose)?;
-    out.resize(new_w * new_h, 0);
-    copy_rows(&mut out, data, old_w, old_h, new_w, x0, y0);
-    Ok(out)
+) -> crate::Plane<u8> {
+    let mut out = crate::Plane::filled(new_w, new_h, 1, 0u8);
+    let mut strip = vec![0u8; old_w * TILE.min(old_h)];
+    let mut y = 0;
+    while y < old_h {
+        let h = TILE.min(old_h - y);
+        let buf = &mut strip[..old_w * h];
+        data.read_rect_into(0..old_w, y..y + h, old_w, buf);
+        out.write_rect_from(x0..x0 + old_w, y0 + y..y0 + y + h, new_w, buf);
+        y += h;
+    }
+    out.settle();
+    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -264,7 +300,7 @@ fn allocate<T>(len: usize, purpose: &'static str) -> Result<Vec<T>, MemoryError>
     Ok(out)
 }
 
-fn copy_rows<T: Copy>(
+fn copy_rows<T: TileSample>(
     out: &mut [T],
     old: &crate::Plane<T>,
     old_w: usize,
@@ -273,10 +309,10 @@ fn copy_rows<T: Copy>(
     x0: usize,
     y0: usize,
 ) {
-    for (y, row) in old.rows(0..old_h, old_w).enumerate() {
+    for y in 0..old_h {
         let dst = (y0 + y) * new_w + x0;
-        if row.len() == old_w && dst + old_w <= out.len() {
-            out[dst..dst + old_w].copy_from_slice(row);
+        if dst + old_w <= out.len() {
+            old.read_row_into(y, old_w, &mut out[dst..dst + old_w]);
         }
     }
 }

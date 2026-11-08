@@ -1,13 +1,21 @@
-//! Streaming access to a plane: rows, rectangles and bands that never build a
-//! contiguous copy of a diverged banded plane.
+//! Streaming access to a plane: tiles, row copies, rectangles and ranges that
+//! never build a contiguous copy of a tiled plane.
+//!
+//! `width` follows one rule everywhere: a tiled plane uses its own width, and a
+//! flat plane uses the argument. A flat plane presents itself as full-width
+//! strips of [`TILE`] rows, so a tile walk also serves a plane never tiled.
 
+use std::borrow::Cow;
 use std::ops::Range;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use super::{Band, Plane, BAND_ROWS, MATERIALIZATIONS};
+use rayon::prelude::*;
 
-/// Run `f` and panic if it materialized a diverged banded plane.
+use super::{Plane, Store, MATERIALIZATIONS};
+use crate::tiled_plane::{TileData, TileMut, TileRef, TileSample, TileState, TILE};
+
+/// Run `f` and panic if it materialized a tiled plane.
 ///
 /// The counter is process-wide, so the check is exact only when the test runs
 /// alone in its process. Nextest gives every test its own process and sets
@@ -23,171 +31,366 @@ pub fn assert_no_materialization<R>(f: impl FnOnce() -> R) -> R {
     assert_eq!(
         after - before,
         0,
-        "a diverged banded plane was materialized into a contiguous copy"
+        "a tiled plane was materialized into a contiguous copy"
     );
     out
 }
 
-impl<T> Plane<T> {
-    /// The row width a row access uses: the fractured width for a banded
-    /// plane, `width` while the plane is flat.
-    fn row_width(&self, width: usize) -> usize {
-        self.bands.as_ref().map_or(width, |b| b.width)
+/// The full-width strips of a flat plane meeting rows `ys`, as
+/// `(first row, rows)`.
+fn strips(len: usize, width: usize, ys: Range<usize>) -> Vec<(usize, usize)> {
+    if width == 0 {
+        return Vec::new();
+    }
+    let total = len / width;
+    let (y0, y1) = (ys.start.min(total), ys.end.min(total));
+    let mut out = Vec::new();
+    let mut y = y0 / TILE * TILE;
+    while y < y1 {
+        let h = TILE.min(total - y);
+        out.push((y, h));
+        y += h;
+    }
+    out
+}
+
+impl<T: TileSample> Plane<T> {
+    /// The number of tiles; `0` while the plane is flat.
+    pub fn tile_count(&self) -> usize {
+        self.tiled().map_or(0, |t| t.tile_count())
     }
 
-    /// Rows `ys`, each `width` samples, read in place; stops at the first row
-    /// past the end.
-    pub fn rows(&self, ys: Range<usize>, width: usize) -> impl Iterator<Item = &[T]> + '_ {
-        // A banded `row` past the end of the last band is an empty slice.
-        ys.map_while(move |y| self.row(y, width).filter(|row| !row.is_empty()))
+    /// Tile `i`'s generation: a clone keeps it and a write to the tile
+    /// replaces it, so two tiles at the same index with the same generation
+    /// hold the same samples. `0` while flat.
+    pub fn tile_generation(&self, i: usize) -> u64 {
+        self.tiled().map_or(0, |t| t.generation(i))
     }
 
-    /// Every band with the row it starts at; a flat plane is one band at row 0.
-    pub fn for_each_band(&self, mut f: impl FnMut(usize, &[T])) {
-        for (i, band) in self.bands().enumerate() {
-            f(i * BAND_ROWS, band);
+    /// What tile `i` holds; `None` while flat or past the last tile.
+    pub fn tile_state(&self, i: usize) -> Option<TileState<T>> {
+        self.tiled().and_then(|t| t.state(i))
+    }
+
+    /// Tile `i`'s first column, first global row, width and height.
+    pub fn tile_rect(&self, i: usize) -> Option<(usize, usize, usize, usize)> {
+        self.tiled()
+            .filter(|t| i < t.tile_count())
+            .map(|t| t.tile_rect(i))
+    }
+
+    /// Tile `i`, read in place.
+    pub fn tile_at(&self, i: usize) -> Option<TileRef<'_, T>> {
+        self.tiled()
+            .filter(|t| i < t.tile_count())
+            .map(|t| t.tile_ref(i))
+    }
+
+    /// The indices of the tiles meeting columns `xs` × global rows `ys`, in
+    /// row-major order; empty while flat.
+    pub fn tiles_in(&self, xs: Range<usize>, ys: Range<usize>) -> Vec<usize> {
+        self.tiled().map_or_else(Vec::new, |t| t.tiles_in(xs, ys))
+    }
+
+    /// Whether tile `i` is the same tile in `self` and `other` (same geometry,
+    /// same generation).
+    pub fn shares_tile(&self, i: usize, other: &Self) -> bool {
+        match (self.tiled(), other.tiled()) {
+            (Some(a), Some(b)) => a.shares_tile(i, b),
+            _ => false,
         }
     }
 
-    /// Copy the logical samples from index `start` into `out`, band by band;
-    /// the part of `out` past the plane's end is left untouched. For a buffer
-    /// that stacks several channels in one plane, this reads one channel.
-    pub fn read_into(&self, start: usize, out: &mut [T])
-    where
-        T: Clone,
-    {
-        let mut band_start = 0;
-        let mut written = 0;
-        for band in self.bands() {
-            let band_end = band_start + band.len();
-            let at = start + written;
-            if written < out.len() && at < band_end && at >= band_start {
-                let n = (band_end - at).min(out.len() - written);
-                out[written..written + n]
-                    .clone_from_slice(&band[at - band_start..at - band_start + n]);
-                written += n;
+    /// Take `other`'s tile `i`, allocation and generation, so the two share
+    /// it. `false`, leaving the plane alone, when the geometries differ.
+    pub fn share_tile_from(&mut self, i: usize, other: &Self) -> bool {
+        let Some(src) = other.tiled() else {
+            return false;
+        };
+        if self.tiled().is_none_or(|t| !t.same_geometry(src)) {
+            return false;
+        }
+        self.touch();
+        match &mut self.store {
+            Store::Tiled(t) => t.adopt_tile(i, src),
+            Store::Flat(_) => false,
+        }
+    }
+
+    /// Visit the tiles meeting columns `xs` × rows `ys`, in row-major order.
+    /// Each tile is whole: the caller clips it to the rectangle.
+    pub fn for_each_tile(
+        &self,
+        xs: Range<usize>,
+        ys: Range<usize>,
+        width: usize,
+        mut f: impl FnMut(TileRef<'_, T>),
+    ) {
+        match &self.store {
+            Store::Tiled(t) => {
+                for i in t.tiles_in(xs, ys) {
+                    f(t.tile_ref(i));
+                }
             }
-            band_start = band_end;
+            Store::Flat(data) => {
+                if xs.start >= xs.end.min(width) {
+                    return;
+                }
+                for (y, h) in strips(data.len(), width, ys) {
+                    f(TileRef {
+                        x: 0,
+                        y,
+                        w: width,
+                        h,
+                        stride: width,
+                        data: TileData::Dense(&data[y * width..(y + h) * width]),
+                    });
+                }
+            }
+        }
+    }
+
+    /// The tiles meeting columns `xs` × rows `ys`, forked and writable, in
+    /// row-major order. They are disjoint, so they can be split across
+    /// threads. Call [`Self::settle`] when the write is done.
+    pub fn tiles_mut(
+        &mut self,
+        xs: Range<usize>,
+        ys: Range<usize>,
+        width: usize,
+    ) -> Vec<TileMut<'_, T>> {
+        self.touch();
+        match &mut self.store {
+            Store::Tiled(t) => t.tiles_mut(xs, ys),
+            Store::Flat(data) => {
+                if xs.start >= xs.end.min(width) {
+                    return Vec::new();
+                }
+                let parts = strips(data.len(), width, ys);
+                let Some(&(first, _)) = parts.first() else {
+                    return Vec::new();
+                };
+                let mut rest = &mut Arc::make_mut(data)[first * width..];
+                let mut out = Vec::with_capacity(parts.len());
+                for (y, h) in parts {
+                    let (head, tail) = std::mem::take(&mut rest).split_at_mut(h * width);
+                    out.push(TileMut {
+                        x: 0,
+                        y,
+                        w: width,
+                        h,
+                        stride: width,
+                        data: head,
+                    });
+                    rest = tail;
+                }
+                out
+            }
+        }
+    }
+
+    /// The tiles at `indices` (strictly ascending), forked and writable;
+    /// empty while flat or when `indices` is not ascending and in range.
+    pub fn tiles_mut_at(&mut self, indices: &[usize]) -> Vec<TileMut<'_, T>> {
+        let count = self.tile_count();
+        if indices.windows(2).any(|p| p[0] >= p[1]) || indices.last().is_some_and(|&i| i >= count) {
+            return Vec::new();
+        }
+        self.touch();
+        match &mut self.store {
+            Store::Tiled(t) => t.tiles_mut_at(indices),
+            Store::Flat(_) => Vec::new(),
+        }
+    }
+
+    /// A copy with the same samples that shares no allocation with `self`.
+    pub fn detached(&self) -> Self {
+        match &self.store {
+            Store::Flat(data) => Plane::from(data.to_vec()),
+            Store::Tiled(t) => Plane::with_store(Store::Tiled(t.detached())),
+        }
+    }
+
+    /// Run `f` on every tile meeting the rectangle, in parallel, then settle.
+    pub fn for_each_tile_mut(
+        &mut self,
+        xs: Range<usize>,
+        ys: Range<usize>,
+        width: usize,
+        f: impl Fn(TileMut<'_, T>) + Sync + Send,
+    ) {
+        self.tiles_mut(xs, ys, width).into_par_iter().for_each(f);
+        self.settle();
+    }
+
+    /// Collapse the tiles written since the last settle that hold one value
+    /// into `Uniform` (or `Empty`). No sample changes, so the stamp, the
+    /// ident and every generation are kept. A flat plane has nothing to do.
+    pub fn settle(&mut self) {
+        if let Store::Tiled(t) = &mut self.store {
+            t.settle();
+        }
+    }
+
+    /// Copy row `y` into `out`, at most `out.len()` samples. `false`, with
+    /// `out` untouched, when the row is past the end.
+    pub fn read_row_into(&self, y: usize, width: usize, out: &mut [T]) -> bool {
+        match &self.store {
+            Store::Tiled(t) => t.read_row_into(y, out),
+            Store::Flat(data) => {
+                let Some(start) = y.checked_mul(width).filter(|s| *s < data.len()) else {
+                    return false;
+                };
+                let n = out.len().min(width).min(data.len() - start);
+                out[..n].copy_from_slice(&data[start..start + n]);
+                true
+            }
+        }
+    }
+
+    /// Row `y`'s `width` samples: borrowed from a flat plane, copied from a
+    /// tiled one (which uses its own width). `None` past the last whole row.
+    pub fn row(&self, y: usize, width: usize) -> Option<Cow<'_, [T]>> {
+        match &self.store {
+            Store::Flat(data) => {
+                let start = y.checked_mul(width).filter(|_| width > 0)?;
+                data.get(start..start + width).map(Cow::Borrowed)
+            }
+            Store::Tiled(t) => {
+                if y >= t.height * t.channels {
+                    return None;
+                }
+                let mut row = vec![T::default(); t.width];
+                t.read_row_into(y, &mut row);
+                Some(Cow::Owned(row))
+            }
+        }
+    }
+
+    /// Columns `xs` of row `y`: borrowed from a flat plane, copied from a tiled
+    /// one, so a narrow region costs its own width. `None` past the last whole
+    /// row or when `xs` runs past the row.
+    pub fn row_span(&self, y: usize, xs: Range<usize>, width: usize) -> Option<Cow<'_, [T]>> {
+        match &self.store {
+            Store::Flat(data) => {
+                let start = y.checked_mul(width).filter(|_| xs.end <= width)?;
+                data.get(start + xs.start..start + xs.end)
+                    .map(Cow::Borrowed)
+            }
+            Store::Tiled(t) => {
+                if y >= t.height * t.channels || xs.end > t.width {
+                    return None;
+                }
+                if let Some(span) = t.span_in_tile(y, xs.clone()) {
+                    return Some(Cow::Borrowed(span));
+                }
+                let mut span = vec![T::default(); xs.len()];
+                t.read_rect_into(xs, y..y + 1, &mut span);
+                Some(Cow::Owned(span))
+            }
+        }
+    }
+
+    /// Write `src` into row `y` from column 0; samples past the row end are
+    /// ignored. A tile the row leaves unchanged is not forked. `false` when
+    /// the row is past the end.
+    pub fn write_row_from(&mut self, y: usize, width: usize, src: &[T]) -> bool {
+        if y >= self.rows(width) {
+            return false;
+        }
+        self.touch();
+        match &mut self.store {
+            Store::Tiled(t) => t.write_row_from(y, src),
+            Store::Flat(data) => {
+                let start = y * width;
+                let n = src.len().min(width).min(data.len() - start);
+                Arc::make_mut(data)[start..start + n].copy_from_slice(&src[..n]);
+                true
+            }
+        }
+    }
+
+    /// The number of whole rows: global rows for a tiled plane.
+    fn rows(&self, width: usize) -> usize {
+        match &self.store {
+            Store::Tiled(t) => t.height * t.channels,
+            Store::Flat(data) => data.len().checked_div(width).unwrap_or(0),
+        }
+    }
+
+    /// Copy the logical samples from index `start` into `out`; the part of
+    /// `out` past the plane's end is left untouched. For a buffer that stacks
+    /// several channels in one plane, this reads one channel.
+    pub fn read_into(&self, start: usize, out: &mut [T]) {
+        match &self.store {
+            Store::Tiled(t) => t.read_span(start, out),
+            Store::Flat(data) => {
+                let end = (start + out.len()).min(data.len());
+                if start < end {
+                    out[..end - start].copy_from_slice(&data[start..end]);
+                }
+            }
         }
     }
 
     /// Copy the samples of columns `xs` × rows `ys` into `out`, `xs.len()` per
     /// row. The part of the rectangle outside the plane is left untouched in
     /// `out`, so an empty or fully outside rectangle copies nothing.
-    pub fn read_rect_into(&self, xs: Range<usize>, ys: Range<usize>, width: usize, out: &mut [T])
-    where
-        T: Clone,
-    {
-        let stride = xs.len();
-        if stride == 0 {
-            return;
-        }
-        let x1 = xs.end.min(self.row_width(width));
-        for (dy, y) in ys.enumerate() {
-            let Some(row) = self.row(y, width) else {
-                break;
-            };
-            let end = x1.min(row.len());
-            if xs.start >= end {
-                continue;
-            }
-            let at = dy * stride;
-            out[at..at + end - xs.start].clone_from_slice(&row[xs.start..end]);
-        }
-    }
-}
-
-impl<T: Clone> Plane<T> {
-    /// The mutable slices of bands `range`, forking each shared one, so only
-    /// those bands diverge and nothing is materialized.
-    fn band_slices_mut(&mut self, range: Range<usize>) -> Vec<&mut [T]> {
-        for i in range.clone() {
-            let _ = self.write_band(i);
-        }
-        let Plane { base, bands, .. } = self;
-        let Some(bands) = bands.as_mut() else {
-            return Vec::new();
-        };
-        let end = range.end.min(bands.bands.len());
-        let start = range.start.min(end);
-        let selected = &mut bands.bands[start..end];
-        let mut rest: &mut [T] = if selected.iter().any(|b| matches!(b, Band::Shared(_))) {
-            // write_band leaves a band shared only while the base is unique.
-            Arc::get_mut(base).expect("a shared band left by write_band has a unique base")
-        } else {
-            &mut []
-        };
-        let mut position = 0;
-        let mut out = Vec::with_capacity(selected.len());
-        for band in selected {
-            match band {
-                Band::Owned(data) => out.push(Arc::get_mut(data).expect("a forked band is unique")),
-                Band::Shared(r) => {
-                    let (_, after) = std::mem::take(&mut rest).split_at_mut(r.start - position);
-                    let (slice, tail) = after.split_at_mut(r.end - r.start);
-                    out.push(slice);
-                    rest = tail;
-                    position = r.end;
+    pub fn read_rect_into(&self, xs: Range<usize>, ys: Range<usize>, width: usize, out: &mut [T]) {
+        match &self.store {
+            Store::Tiled(t) => t.read_rect_into(xs, ys, out),
+            Store::Flat(data) => {
+                let stride = xs.len();
+                let x1 = xs.end.min(width);
+                if stride == 0 || xs.start >= x1 {
+                    return;
+                }
+                for (dy, y) in ys.enumerate() {
+                    let start = y * width;
+                    if start + x1 > data.len() {
+                        break;
+                    }
+                    let at = dy * stride;
+                    out[at..at + x1 - xs.start]
+                        .copy_from_slice(&data[start + xs.start..start + x1]);
                 }
             }
-        }
-        out
-    }
-
-    /// Rows `ys` mutably; a banded plane forks only the bands they fall in.
-    pub fn rows_mut(&mut self, ys: Range<usize>, width: usize) -> impl Iterator<Item = &mut [T]> {
-        let w = self.row_width(width);
-        let mut rows = Vec::new();
-        if w == 0 || ys.is_empty() {
-            return rows.into_iter();
-        }
-        if self.bands.is_none() {
-            let total = self.len() / w;
-            let (y0, y1) = (ys.start.min(total), ys.end.min(total));
-            let flat = &mut self.as_mut_slice()[y0 * w..y1 * w];
-            rows.extend(flat.chunks_mut(w));
-            return rows.into_iter();
-        }
-        let first = ys.start / BAND_ROWS;
-        let last = ys.end.div_ceil(BAND_ROWS);
-        for (b, band) in (first..).zip(self.band_slices_mut(first..last)) {
-            for (k, row) in band.chunks_mut(w).enumerate() {
-                if ys.contains(&(b * BAND_ROWS + k)) {
-                    rows.push(row);
-                }
-            }
-        }
-        rows.into_iter()
-    }
-
-    /// Every band mutably with the row it starts at, forking each shared band.
-    pub fn for_each_band_mut(&mut self, mut f: impl FnMut(usize, &mut [T])) {
-        if self.bands.is_none() {
-            f(0, self.as_mut_slice());
-            return;
-        }
-        let count = self.band_count();
-        for (i, band) in self.band_slices_mut(0..count).into_iter().enumerate() {
-            f(i * BAND_ROWS, band);
         }
     }
 
     /// Write `src` (`xs.len()` per row) into columns `xs` × rows `ys`. The part
-    /// of the rectangle outside the plane is skipped.
+    /// of the rectangle outside the plane is skipped, and a tile the write
+    /// leaves unchanged is not forked. Call [`Self::settle`] when the edit is
+    /// done.
     pub fn write_rect_from(&mut self, xs: Range<usize>, ys: Range<usize>, width: usize, src: &[T]) {
         let stride = xs.len();
         if stride == 0 || ys.is_empty() {
             return;
         }
-        let x1 = xs.end.min(self.row_width(width));
-        let y0 = ys.start;
-        for (y, row) in (y0..).zip(self.rows_mut(ys, width)) {
-            let end = x1.min(row.len());
-            if xs.start >= end {
-                continue;
+        self.touch();
+        match &mut self.store {
+            Store::Tiled(t) => t.write_rect_from(xs, ys, src),
+            Store::Flat(data) => {
+                let x1 = xs.end.min(width);
+                if xs.start >= x1 {
+                    return;
+                }
+                let total = data.len().checked_div(width).unwrap_or(0);
+                let dst = Arc::make_mut(data);
+                for (dy, y) in ys.enumerate().take_while(|(_, y)| *y < total) {
+                    let (start, at) = (y * width, dy * stride);
+                    dst[start + xs.start..start + x1].copy_from_slice(&src[at..at + x1 - xs.start]);
+                }
             }
-            let at = (y - y0) * stride;
-            row[xs.start..end].clone_from_slice(&src[at..at + end - xs.start]);
+        }
+    }
+
+    /// Whether every sample equals `value`. Uniform and empty tiles are not
+    /// scanned, and nothing is materialized.
+    pub fn all_eq(&self, value: T) -> bool {
+        match &self.store {
+            Store::Tiled(t) => t.all_eq(value),
+            Store::Flat(data) => data.iter().all(|s| *s == value),
         }
     }
 }

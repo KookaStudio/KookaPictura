@@ -241,24 +241,22 @@ fn copy_band(layer: &Layer, doc: &Document, region: PsdRect, out: [&mut [u8]; 3]
         (region.right - rect.left) as usize,
     );
     let w = to - from;
-    let row = |id: i16, ly: usize| {
-        crate::composite::channel_plane(layer, id)?
-            .row(ly, lw)?
-            .get(from..to)
-    };
-    let rows: Option<Vec<[&[u8]; 3]>> = (region.top..region.bottom)
-        .map(|y| {
-            let ly = (y - rect.top) as usize;
-            Some([row(0, ly)?, row(1, ly)?, row(2, ly)?])
-        })
+    let h = (region.bottom - region.top) as usize;
+    let (y0, y1) = (
+        (region.top - rect.top) as usize,
+        (region.bottom - rect.top) as usize,
+    );
+    if to > lw {
+        return false;
+    }
+    let planes: Option<Vec<&pictura_core::Plane<u8>>> = (0..3)
+        .map(|id| crate::composite::channel_plane(layer, id).filter(|p| p.len() >= y1 * lw))
         .collect();
-    let Some(rows) = rows else {
+    let Some(planes) = planes else {
         return false;
     };
-    for (c, plane) in out.into_iter().enumerate() {
-        for (dst, src) in plane.chunks_mut(w).zip(&rows) {
-            dst.copy_from_slice(src[c]);
-        }
+    for (dst, plane) in out.into_iter().zip(planes) {
+        plane.read_rect_into(from..to, y0..y1, lw, &mut dst[..w * h]);
     }
     true
 }
@@ -302,11 +300,16 @@ fn opaque_over(node: &PlanNode<'_>, region: PsdRect) -> bool {
     // A missing or short alpha row is not opaque. The compositor reads a
     // missing sample as 255 too, but being strict costs only the skip, never
     // a byte.
+    if to > lw {
+        return false;
+    }
+    let mut span = vec![0u8; to - from];
     (region.top..region.bottom).all(|y| {
-        alpha
-            .row((y - rect.top) as usize, lw)
-            .and_then(|row| row.get(from..to))
-            .is_some_and(|span| span.iter().all(|&v| v == 255))
+        let ly = (y - rect.top) as usize;
+        (ly + 1) * lw <= alpha.len() && {
+            alpha.read_rect_into(from..to, ly..ly + 1, lw, &mut span);
+            span.iter().all(|&v| v == 255)
+        }
     })
 }
 

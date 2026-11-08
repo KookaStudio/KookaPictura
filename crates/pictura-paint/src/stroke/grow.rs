@@ -1,6 +1,7 @@
 //! Growing a stroke's target layer (#1208).
 
 use super::*;
+use pictura_core::layer_bounds::padded_plane;
 
 impl Saved {
     /// Pad the saved planes when the layer grows (#1208). Saved tiles keep
@@ -32,20 +33,27 @@ impl Saved {
                 }
             }
             if let Some(source) = ch[k].and_then(|i| layer.channels.get(i)) {
-                let bytes = source.data.as_slice();
-                for y in 0..old_h {
-                    let ty = y / SAVED_TILE;
-                    for x in 0..old_w {
-                        let tx = x / SAVED_TILE;
+                // The layer has already grown, so an old pixel sits at its
+                // grown position; the unsaved tiles' rows are read in place.
+                let stride = new_w as usize;
+                for ty in 0..(old_h + SAVED_TILE - 1) / SAVED_TILE {
+                    for tx in 0..old_columns {
                         if old_tiles[(ty * old_columns + tx) as usize] {
                             continue;
                         }
-                        // The layer has already grown, so the old pixel sits at
-                        // its grown local index, not its old local index.
-                        let at = ((dy + y) * new_w + dx + x) as usize;
-                        if let Some(&value) = bytes.get(at) {
-                            if at < data.len() {
-                                data[at] = value;
+                        let (x0, y0) = (tx * SAVED_TILE, ty * SAVED_TILE);
+                        let x1 = (x0 + SAVED_TILE).min(old_w);
+                        let n = (x1 - x0) as usize;
+                        for y in y0..(y0 + SAVED_TILE).min(old_h) {
+                            let (gx, gy) = ((dx + x0) as usize, (dy + y) as usize);
+                            let at = gy * stride + gx;
+                            if at + n <= data.len() {
+                                source.data.read_rect_into(
+                                    gx..gx + n,
+                                    gy..gy + 1,
+                                    stride,
+                                    &mut data[at..at + n],
+                                );
                             }
                         }
                     }
@@ -131,8 +139,8 @@ impl Stroke {
             (old.left - new.left).max(0) as usize,
             (old.top - new.top).max(0) as usize,
         );
-        pad_vec(&mut self.scratch, old_w, old_h, new_w, new_h, dx, dy);
-        pad_vec(&mut self.applied, old_w, old_h, new_w, new_h, dx, dy);
+        self.scratch = padded_plane(&self.scratch, old_w, old_h, new_w, new_h, dx, dy);
+        self.applied = padded_plane(&self.applied, old_w, old_h, new_w, new_h, dx, dy);
         self.saved.grow(layer, self.ch, new);
         if let Some(per) = self.per_dab.as_mut() {
             per.pixels
@@ -173,29 +181,4 @@ impl Stroke {
         self.placer.shift(dx as f32, dy as f32);
         self.rect = new;
     }
-}
-
-/// Pad a layer-local plane to `new_w`×`new_h`, placing the old pixels at
-/// `(dx, dy)`. The new area takes `T::default()` (#1208).
-fn pad_vec<T: Copy + Default>(
-    data: &mut Vec<T>,
-    old_w: usize,
-    old_h: usize,
-    new_w: usize,
-    new_h: usize,
-    dx: usize,
-    dy: usize,
-) {
-    if new_w == old_w && new_h == old_h {
-        return;
-    }
-    let mut out = vec![T::default(); new_w * new_h];
-    for y in 0..old_h {
-        let src = y * old_w;
-        let dst = (dy + y) * new_w + dx;
-        if src + old_w <= data.len() && dst + old_w <= out.len() {
-            out[dst..dst + old_w].copy_from_slice(&data[src..src + old_w]);
-        }
-    }
-    *data = out;
 }

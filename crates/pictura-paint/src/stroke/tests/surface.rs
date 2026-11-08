@@ -13,7 +13,7 @@ fn layer_with(rect: PsdRect, channels: &[(i16, u8)]) -> Layer {
                     id,
                     data: vec![value; n].into(),
                 };
-                channel.data.fracture(width);
+                channel.data.tile(width, n / width);
                 channel
             })
             .collect::<Vec<_>>(),

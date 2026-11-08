@@ -7,7 +7,10 @@
 //! edge (#1096). The crossing formula is the per-pixel test's, so the spans
 //! select exactly the pixels it did.
 
-use pictura_core::{PsdRect, BAND_ROWS};
+use pictura_core::PsdRect;
+
+/// Rows each parallel scan task fills.
+const BAND_ROWS: usize = 64;
 use rayon::prelude::*;
 
 struct Edge {

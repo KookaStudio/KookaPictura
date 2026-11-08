@@ -97,7 +97,9 @@ impl Prepared {
             return Some(());
         }
         let row = (y - self.mask.rect.top) as usize;
-        data.row_mut(row, w)?[(x - self.mask.rect.left) as usize] = value;
+        let col = (x - self.mask.rect.left) as usize;
+        let (xs, ys) = (col..col + 1, row..row + 1);
+        data.write_rect_from(xs.clone(), ys.clone(), w, &[value]);
         if let Some(samples) = self.source.as_mut().and_then(|s| {
             s.planes
                 .iter_mut()
@@ -105,14 +107,9 @@ impl Prepared {
                 .map(|(_, p)| p)
         }) {
             match samples {
-                Samples::U8(p) => p.row_mut(row, w)?[(x - self.mask.rect.left) as usize] = value,
-                Samples::U16(p) => {
-                    p.row_mut(row, w)?[(x - self.mask.rect.left) as usize] = u16::from(value) * 257
-                }
-                Samples::F32(p) => {
-                    p.row_mut(row, w)?[(x - self.mask.rect.left) as usize] =
-                        f32::from(value) / 255.0
-                }
+                Samples::U8(p) => p.write_rect_from(xs, ys, w, &[value]),
+                Samples::U16(p) => p.write_rect_from(xs, ys, w, &[u16::from(value) * 257]),
+                Samples::F32(p) => p.write_rect_from(xs, ys, w, &[f32::from(value) / 255.0]),
             }
         }
         Some(())
@@ -170,21 +167,26 @@ pub(super) fn prepare(layer: &Layer, canvas: PsdRect, required: PsdRect) -> Opti
             .flatten()
         {
             if let Some(hit) = area.intersect(rect) {
+                // The new plane is flat until it is tiled below.
+                let flat = data.as_mut_slice();
                 for y in hit.top..hit.bottom {
-                    data.row_mut((y - rect.top) as usize, w)?
-                        [(hit.left - rect.left) as usize..(hit.right - rect.left) as usize]
-                        .fill(fill);
+                    let at = (y - rect.top) as usize * w;
+                    let (a, b) = (
+                        (hit.left - rect.left) as usize,
+                        (hit.right - rect.left) as usize,
+                    );
+                    flat.get_mut(at + a..at + b)?.fill(fill);
                 }
             }
         }
         if let Some(source) = old.data.as_ref() {
             let (ow, oh) = dimensions(old.rect)?;
             let (w, _) = dimensions(rect)?;
+            let flat = data.as_mut_slice();
             for y in 0..oh {
                 let sy = old.rect.top + y as i32;
-                let dst = data.row_mut((sy - rect.top) as usize, w)?;
-                let x = (old.rect.left - rect.left) as usize;
-                source.read_into(y * ow, &mut dst[x..x + ow]);
+                let at = (sy - rect.top) as usize * w + (old.rect.left - rect.left) as usize;
+                source.read_into(y * ow, flat.get_mut(at..at + ow)?);
             }
         }
         mask.data = Some(data);
@@ -200,17 +202,10 @@ pub(super) fn prepare(layer: &Layer, canvas: PsdRect, required: PsdRect) -> Opti
             store.planes.retain(|(id, _)| *id != -2);
         }
     }
-    let (width, _) = dimensions(rect)?;
-    mask.data.as_mut()?.fracture(width);
-    if let Some(store) = source.as_mut() {
-        if let Some((_, samples)) = store.planes.iter_mut().find(|(id, _)| *id == -2) {
-            match samples {
-                Samples::U8(p) => p.fracture(width),
-                Samples::U16(p) => p.fracture(width),
-                Samples::F32(p) => p.fracture(width),
-            }
-        }
-    }
+    // The 8-bit mask is tiled so an edit forks only the tiles it touches.
+    // ponytail: the retained native mask stays flat, as every native store does.
+    let (width, height) = dimensions(rect)?;
+    mask.data.as_mut()?.tile(width, height);
     Some(Prepared {
         mask,
         source,

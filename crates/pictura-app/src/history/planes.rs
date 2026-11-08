@@ -1,13 +1,13 @@
 //! The tracked planes of a document, their tile deltas, and the shared state
 //! the history keeps at its cursor.
 
-use pictura_core::{fresh_stamp, Document, Layer, Plane, PsdRect, BAND_ROWS};
+use pictura_core::{fresh_stamp, Document, Layer, Plane, PsdRect, TileRef};
 use rayon::prelude::*;
 
 /// Tile edge for the region deltas: a changed plane keeps only the 64×64 tiles
 /// whose bytes differ, so a small edit costs a small delta rather than a whole
-/// 61 MiB plane.
-pub(super) const TILE: usize = 64;
+/// 61 MiB plane. It divides the planes' 256² tiles, so a delta never spans two.
+pub(super) const DELTA: usize = 64;
 
 /// One changed tile of one plane, laid out row-major with the plane's stride.
 /// It holds one side of the change, whichever side the materialized state it
@@ -103,8 +103,8 @@ pub(super) fn diff_into(
     hint: Option<&[PsdRect]>,
 ) -> Option<Vec<PlaneDelta>> {
     let hint = hint.filter(|hint| !hint.is_empty());
-    fracture_planes(current);
-    fracture_planes(next);
+    tile_planes(current);
+    tile_planes(next);
     let prev_planes = planes(current);
     let next_planes = planes(next);
     if prev_planes.len() != next_planes.len()
@@ -122,43 +122,48 @@ pub(super) fn diff_into(
     drop(prev_planes);
     let mut out = Vec::new();
     let mut index = 0;
-    each_plane_mut(current, &mut |plane, width, _, placement| {
+    each_plane_mut(current, &mut |plane, width, height, placement| {
         let (after, _, _, _) = &next_planes[index];
         if !known_equal(plane, after) {
-            let scanned: Vec<(usize, Vec<TileDelta>)> = (0..plane.band_count())
-                .into_par_iter()
-                .filter(|&band| !plane.shares_band(band, after))
-                .map(|band| {
-                    let before = plane.band(band).unwrap_or(&[]);
-                    let after = after.band(band).unwrap_or(&[]);
-                    let tiles = changed_band(
-                        before,
-                        after,
-                        width,
-                        placement,
-                        doc_height,
-                        hint,
-                        band * BAND_ROWS,
-                    );
-                    (band, tiles)
-                })
-                .collect();
+            let scanned: Vec<(Option<usize>, Vec<TileDelta>)> =
+                regions(plane, after, width, height)
+                    .into_par_iter()
+                    .map(|(tile, region)| {
+                        let at = (width, region, tile);
+                        let deltas = changed_region(plane, after, at, placement, doc_height, hint);
+                        (tile, deltas)
+                    })
+                    .collect();
             if scanned.iter().any(|(_, tiles)| !tiles.is_empty()) {
                 if hint.is_none() {
                     // Every differing tile was taken, so the plane becomes
                     // `after` byte for byte: share it instead of forking the
-                    // bands to copy the tiles in (#1149).
+                    // tiles to copy the deltas in (#1149).
                     *plane = after.clone();
                 } else {
-                    for (band, tiles) in &scanned {
-                        if tiles.is_empty() {
+                    for (tile, deltas) in &scanned {
+                        if deltas.is_empty() {
                             continue;
                         }
-                        let src = after.band(*band).unwrap_or(&[]);
-                        if let Some(dst) = plane.write_band(*band) {
-                            write_tiles_in_band(dst, src, width, tiles);
+                        let whole = tile.is_some_and(|i| {
+                            plane.tile_rect(i).is_some_and(|(x, y, w, h)| {
+                                tile_hits_all(hint, placement, doc_height, x, y, w, h)
+                            })
+                        });
+                        match tile {
+                            // Every differing sample of a fully hinted tile was
+                            // taken: share `after`'s tile instead of copying.
+                            Some(i) if whole => {
+                                plane.share_tile_from(*i, after);
+                            }
+                            _ => {
+                                for delta in deltas {
+                                    copy_delta(plane, after, width, delta);
+                                }
+                            }
                         }
                     }
+                    plane.settle();
                 }
                 out.push(PlaneDelta {
                     index,
@@ -170,6 +175,22 @@ pub(super) fn diff_into(
         index += 1;
     });
     Some(out)
+}
+
+/// A plane region `(x, y, w, h)` with the tile it is, when it is one.
+type Region = (Option<usize>, (usize, usize, usize, usize));
+
+/// The regions of `before` to compare with `after`: each tile the two do not
+/// share, or the whole plane when they are not tiled alike.
+fn regions(before: &Plane<u8>, after: &Plane<u8>, width: usize, height: usize) -> Vec<Region> {
+    let alike = before.is_tiled() && before.geometry() == after.geometry();
+    if !alike {
+        return vec![(None, (0, 0, width, height))];
+    }
+    (0..before.tile_count())
+        .filter(|&i| !before.shares_tile(i, after))
+        .filter_map(|i| Some((Some(i), before.tile_rect(i)?)))
+        .collect()
 }
 
 /// What a state from another segment changes on screen.
@@ -190,8 +211,8 @@ pub(super) fn composite_change(
     live: &mut Document,
     restored: &mut Document,
 ) -> Option<CompositeChange> {
-    fracture_planes(live);
-    fracture_planes(restored);
+    tile_planes(live);
+    tile_planes(restored);
     let shown = |doc: &Document, wanted: fn(PlaneKind) -> bool| {
         planes(doc)
             .into_iter()
@@ -207,7 +228,7 @@ pub(super) fn composite_change(
             a.1 != b.1
                 || a.2 != b.2
                 || a.0.len() != b.0.len()
-                || (!known_equal(&a.0, &b.0) && !a.0.bands().eq(b.0.bands()))
+                || (!known_equal(&a.0, &b.0) && a.0 != b.0)
         });
     let is_composite = |kind: PlaneKind| matches!(kind, PlaneKind::Composite);
     let (from, to) = (
@@ -217,20 +238,18 @@ pub(super) fn composite_change(
     if from.1 != to.1 || from.2 != to.2 || from.0.len() != to.0.len() {
         return None;
     }
-    let (plane, width) = (&from.0, from.1);
+    let (plane, width, height) = (&from.0, from.1, from.2);
     let doc_height = live.height as usize;
-    let tiles: Vec<TileDelta> = (0..plane.band_count())
+    let tiles: Vec<TileDelta> = regions(plane, &to.0, width, height)
         .into_par_iter()
-        .filter(|&band| !plane.shares_band(band, &to.0))
-        .flat_map_iter(|band| {
-            changed_band(
-                plane.band(band).unwrap_or(&[]),
-                to.0.band(band).unwrap_or(&[]),
-                width,
+        .flat_map_iter(|(tile, region)| {
+            changed_region(
+                plane,
+                &to.0,
+                (width, region, tile),
                 PlanePlacement::Composite,
                 doc_height,
                 None,
-                band * BAND_ROWS,
             )
         })
         .collect();
@@ -244,12 +263,12 @@ pub(super) fn composite_change(
     })
 }
 
-/// Whether `a` and `b` hold byte-identical composites. Both are fractured first,
-/// so the scan runs one band per core, and it stops at the first differing band.
-/// The fracture is layout only: no pixel is copied.
+/// Whether `a` and `b` hold byte-identical composites. Both are tiled first,
+/// so tiles the two share are skipped and the rest compare one tile per core,
+/// stopping at the first that differs.
 pub(super) fn composite_unchanged(a: &mut Document, b: &mut Document) -> bool {
-    fracture_planes(a);
-    fracture_planes(b);
+    tile_planes(a);
+    tile_planes(b);
     let (left, right) = (&a.composite, &b.composite);
     if (left.width, left.height, left.channels) != (right.width, right.height, right.channels) {
         return false;
@@ -261,14 +280,25 @@ pub(super) fn composite_unchanged(a: &mut Document, b: &mut Document) -> bool {
     if known_equal(left, right) {
         return true;
     }
-    (0..left.band_count())
+    let width = a.composite.width as usize;
+    let height = left.len().checked_div(width).unwrap_or(0);
+    regions(left, right, width, height)
         .into_par_iter()
-        .all(|band| left.shares_band(band, right) || left.band(band) == right.band(band))
+        .all(|(_, (x, y, w, h))| region_eq(left, right, width, x, y, w, h))
 }
 
-/// Fracture every tracked plane so a band-level scan and write can share bands.
-pub(super) fn fracture_planes(doc: &mut Document) {
-    each_plane_mut(doc, &mut |plane, width, _, _| plane.fracture(width));
+/// Tile every tracked plane (the composite per channel), and settle it, so a
+/// tile-level scan and write can share tiles and uniform tiles hold nothing.
+pub(super) fn tile_planes(doc: &mut Document) {
+    let doc_height = doc.height as usize;
+    each_plane_mut(doc, &mut |plane, width, height, placement| {
+        let height = match placement {
+            PlanePlacement::Composite => doc_height,
+            _ => height,
+        };
+        plane.tile(width, height);
+        plane.settle();
+    });
 }
 
 /// Whether a stamped plane of `next` sits at a different index than the
@@ -293,72 +323,117 @@ fn known_equal(a: &Plane<u8>, b: &Plane<u8>) -> bool {
     (a.stamp() != 0 && a.stamp() == b.stamp()) || (a.len() == b.len() && a.shares(b))
 }
 
-/// The tiles of one band of `before` that differ from `after`, each holding
-/// `before`'s bytes. `y0` is the band's first row in plane coordinates.
-fn changed_band(
-    before: &[u8],
-    after: &[u8],
+/// Whether `a` and `b` hold the same samples in the `w × h` region at
+/// `(x, y)`.
+fn region_eq(
+    a: &Plane<u8>,
+    b: &Plane<u8>,
     width: usize,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) -> bool {
+    let (mut l, mut r) = (vec![0u8; w * DELTA], vec![0u8; w * DELTA]);
+    (y..y + h).step_by(DELTA).all(|y0| {
+        let rows = DELTA.min(y + h - y0);
+        let n = w * rows;
+        a.read_rect_into(x..x + w, y0..y0 + rows, width, &mut l[..n]);
+        b.read_rect_into(x..x + w, y0..y0 + rows, width, &mut r[..n]);
+        l[..n] == r[..n]
+    })
+}
+
+/// Whether sub-rectangle `(x, y, w, h)` (tile-local) holds the same samples in
+/// two tiles at the same index, read in place.
+fn sub_eq(
+    a: &TileRef<'_, u8>,
+    b: &TileRef<'_, u8>,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) -> bool {
+    fn span<'t>(t: &'t TileRef<'_, u8>, r: usize, x: usize, w: usize) -> Option<&'t [u8]> {
+        t.row(r).map(|row| &row[x..x + w])
+    }
+    (y..y + h).all(|r| match (span(a, r, x, w), span(b, r, x, w)) {
+        (Some(p), Some(q)) => p == q,
+        (Some(p), None) => p.iter().all(|&v| Some(v) == b.uniform()),
+        (None, Some(q)) => q.iter().all(|&v| Some(v) == a.uniform()),
+        (None, None) => a.uniform() == b.uniform(),
+    })
+}
+
+/// The `DELTA²` tiles of the region `(x, y, w, h)` of `before` (rows `width`
+/// wide) that differ from `after`, each holding `before`'s bytes. When the
+/// region is plane tile `i` of both, the sub-tiles compare in place and only
+/// the differing ones are copied.
+fn changed_region(
+    before: &Plane<u8>,
+    after: &Plane<u8>,
+    (width, region, tile): (usize, (usize, usize, usize, usize), Option<usize>),
     placement: PlanePlacement,
     doc_height: usize,
     hint: Option<&[PsdRect]>,
-    y0: usize,
 ) -> Vec<TileDelta> {
-    if width == 0 {
+    let (rx, ry, rw, rh) = region;
+    if width == 0 || rw == 0 || rh == 0 {
         return Vec::new();
     }
-    let height = before.len() / width;
-    if height == 0 {
-        return Vec::new();
-    }
-    let columns = width.div_ceil(TILE);
-    let hinted: Vec<bool> = (0..columns)
-        .map(|c| {
-            let x0 = c * TILE;
-            let w = TILE.min(width - x0);
-            tile_hits(hint, placement, doc_height, x0, y0, w, height)
-        })
-        .collect();
-    if hinted.iter().all(|hit| !hit) {
-        return Vec::new();
-    }
-    let mut changed = vec![false; columns];
-    for row in 0..height {
-        let start = row * width;
-        let (b, a) = (&before[start..start + width], &after[start..start + width]);
-        if b == a {
-            continue;
-        }
-        for (c, flag) in changed.iter_mut().enumerate() {
-            if !hinted[c] {
+    let tiles = tile.and_then(|i| Some((before.tile_at(i)?, after.tile_at(i)?)));
+    let mut out = Vec::new();
+    let (mut b, mut a) = (vec![0u8; DELTA * DELTA], vec![0u8; DELTA * DELTA]);
+    for y0 in (ry..ry + rh).step_by(DELTA) {
+        let h = DELTA.min(ry + rh - y0);
+        for x0 in (rx..rx + rw).step_by(DELTA) {
+            let w = DELTA.min(rx + rw - x0);
+            if !tile_hits(hint, placement, doc_height, x0, y0, w, h) {
                 continue;
             }
-            let x0 = c * TILE;
-            let x1 = (x0 + TILE).min(width);
-            *flag = *flag || b[x0..x1] != a[x0..x1];
+            let n = w * h;
+            let differs = match &tiles {
+                Some((tb, ta)) => !sub_eq(tb, ta, x0 - rx, y0 - ry, w, h),
+                None => {
+                    after.read_rect_into(x0..x0 + w, y0..y0 + h, width, &mut a[..n]);
+                    before.read_rect_into(x0..x0 + w, y0..y0 + h, width, &mut b[..n]);
+                    b[..n] != a[..n]
+                }
+            };
+            if differs {
+                before.read_rect_into(x0..x0 + w, y0..y0 + h, width, &mut b[..n]);
+                out.push(TileDelta {
+                    x: x0,
+                    y: y0,
+                    w,
+                    h,
+                    bytes: b[..n].to_vec(),
+                });
+            }
         }
     }
-    changed
-        .iter()
-        .enumerate()
-        .filter(|(_, f)| **f)
-        .map(|(c, _)| {
-            let x0 = c * TILE;
-            let w = TILE.min(width - x0);
-            let mut bytes = Vec::with_capacity(w * height);
-            for row in 0..height {
-                let start = row * width + x0;
-                bytes.extend_from_slice(&before[start..start + w]);
-            }
-            TileDelta {
-                x: x0,
-                y: y0,
-                w,
-                h: height,
-                bytes,
-            }
-        })
-        .collect()
+    out
+}
+
+/// Whether the hint covers the whole `w × h` region at `(x, y)`, so a scan
+/// of it took every differing sample.
+fn tile_hits_all(
+    hint: Option<&[PsdRect]>,
+    placement: PlanePlacement,
+    doc_height: usize,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) -> bool {
+    let Some(hint) = hint else {
+        return true;
+    };
+    if matches!(placement, PlanePlacement::Unmapped) {
+        return false;
+    }
+    let tile = tile_doc_rect(placement, doc_height, x, y, w, h);
+    hint.iter().any(|rect| rect.union(tile) == *rect)
 }
 
 fn tile_hits(
@@ -421,18 +496,12 @@ fn intersects(a: PsdRect, b: PsdRect) -> bool {
     a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
 }
 
-/// Copy `after`'s bytes into one band's changed tiles, whose `y` is relative to
-/// the band's first row.
-fn write_tiles_in_band(dst: &mut [u8], src: &[u8], width: usize, tiles: &[TileDelta]) {
-    for tile in tiles {
-        for row in 0..tile.h {
-            let at = row * width + tile.x;
-            let end = at + tile.w;
-            if end <= dst.len() && end <= src.len() {
-                dst[at..end].copy_from_slice(&src[at..end]);
-            }
-        }
-    }
+/// Copy `after`'s bytes of `delta`'s region into `plane`.
+fn copy_delta(plane: &mut Plane<u8>, after: &Plane<u8>, width: usize, delta: &TileDelta) {
+    let mut bytes = vec![0u8; delta.w * delta.h];
+    let (xs, ys) = (delta.x..delta.x + delta.w, delta.y..delta.y + delta.h);
+    after.read_rect_into(xs.clone(), ys.clone(), width, &mut bytes);
+    plane.write_rect_from(xs, ys, width, &bytes);
 }
 
 /// Write each tile's stored bytes into `doc` (and into `live` when given): a
@@ -445,6 +514,7 @@ pub(super) fn apply_tiles(doc: &mut Document, deltas: &[PlaneDelta]) {
                 for tile in &delta.tiles {
                     write_tile(plane, delta.width, tile, &tile.bytes);
                 }
+                plane.settle();
             }
             index += 1;
         });
@@ -495,80 +565,72 @@ pub(super) fn swap_tiles(
     });
 }
 
-/// Swap one plane's tiles with it. Tiles one band high and band-aligned, as
-/// [`diff_into`] makes them, swap a band per core; any other tile swaps row by
-/// row.
+/// Swap one plane's deltas with it. On a tiled plane every delta lies inside
+/// one of its tiles, so the tiles swap one per core; any other plane swaps
+/// delta by delta.
 fn swap_plane_tiles(plane: &mut Plane<u8>, width: usize, tiles: &mut [TileDelta]) {
-    let banded = width > 0
-        && plane.width() == Some(width)
-        && tiles
-            .iter()
-            .all(|tile| tile.y % BAND_ROWS == 0 && tile.h <= BAND_ROWS);
-    if banded {
-        let bands: Vec<usize> = tiles
-            .chunk_by(|a, b| a.y == b.y)
-            .map(|group| group[0].y / BAND_ROWS)
-            .collect();
-        if let Some(slices) = plane.write_bands(&bands) {
-            let groups: Vec<&mut [TileDelta]> = tiles.chunk_by_mut(|a, b| a.y == b.y).collect();
-            slices
-                .into_par_iter()
-                .zip(groups)
-                .for_each(|(band, group)| {
-                    for tile in group {
-                        swap_in_band(band, width, tile);
-                    }
-                });
-            return;
+    let owner = |t: &TileDelta| -> Option<usize> {
+        let i = *plane.tiles_in(t.x..t.x + 1, t.y..t.y + 1).first()?;
+        let (x, y, w, h) = plane.tile_rect(i)?;
+        (t.x + t.w <= x + w && t.y + t.h <= y + h).then_some(i)
+    };
+    let owners: Option<Vec<usize>> = tiles.iter().map(owner).collect();
+    if let Some(owners) = owners.filter(|o| !o.is_empty()) {
+        let mut keyed: Vec<(usize, &mut TileDelta)> =
+            owners.into_iter().zip(tiles.iter_mut()).collect();
+        keyed.sort_by_key(|(i, _)| *i);
+        let mut indices: Vec<usize> = keyed.iter().map(|(i, _)| *i).collect();
+        indices.dedup();
+        let mut groups: Vec<Vec<&mut TileDelta>> = Vec::with_capacity(indices.len());
+        let mut last = None;
+        for (i, delta) in keyed {
+            if last != Some(i) {
+                groups.push(Vec::new());
+                last = Some(i);
+            }
+            groups.last_mut().expect("a group").push(delta);
         }
+        let cells = plane.tiles_mut_at(&indices);
+        cells.into_par_iter().zip(groups).for_each(|(cell, group)| {
+            for delta in group {
+                for row in 0..delta.h {
+                    let at = (delta.y - cell.y + row) * cell.stride + (delta.x - cell.x);
+                    let src = row * delta.w;
+                    cell.data[at..at + delta.w]
+                        .swap_with_slice(&mut delta.bytes[src..src + delta.w]);
+                }
+            }
+        });
+        plane.settle();
+        return;
     }
     for tile in tiles {
         swap_tile(plane, width, tile);
     }
-}
-
-/// Swap a tile with its rows in `band`, the slice of the band it lies in.
-fn swap_in_band(band: &mut [u8], width: usize, tile: &mut TileDelta) {
-    for row in 0..tile.h {
-        let at = row * width + tile.x;
-        let src = row * tile.w;
-        if at + tile.w > band.len() || src + tile.w > tile.bytes.len() {
-            return;
-        }
-        band[at..at + tile.w].swap_with_slice(&mut tile.bytes[src..src + tile.w]);
-    }
+    plane.settle();
 }
 
 fn write_tile(plane: &mut Plane<u8>, width: usize, tile: &TileDelta, bytes: &[u8]) {
     if width == 0 {
         return;
     }
-    for row in 0..tile.h {
-        let y = tile.y + row;
-        let Some(dst) = plane.row_mut(y, width) else {
-            return;
-        };
-        let src = row * tile.w;
-        if tile.x + tile.w <= dst.len() {
-            dst[tile.x..tile.x + tile.w].copy_from_slice(&bytes[src..src + tile.w]);
-        }
-    }
+    plane.write_rect_from(
+        tile.x..tile.x + tile.w,
+        tile.y..tile.y + tile.h,
+        width,
+        bytes,
+    );
 }
 
 fn swap_tile(plane: &mut Plane<u8>, width: usize, tile: &mut TileDelta) {
     if width == 0 || tile.h == 0 {
         return;
     }
-    for row in 0..tile.h {
-        let y = tile.y + row;
-        let Some(dst) = plane.row_mut(y, width) else {
-            return;
-        };
-        let src = row * tile.w;
-        if tile.x + tile.w <= dst.len() {
-            dst[tile.x..tile.x + tile.w].swap_with_slice(&mut tile.bytes[src..src + tile.w]);
-        }
-    }
+    let (xs, ys) = (tile.x..tile.x + tile.w, tile.y..tile.y + tile.h);
+    let mut current = vec![0u8; tile.w * tile.h];
+    plane.read_rect_into(xs.clone(), ys.clone(), width, &mut current);
+    plane.write_rect_from(xs, ys, width, &tile.bytes);
+    tile.bytes = current;
 }
 
 /// The document rectangle a composite tile covers.
@@ -642,30 +704,10 @@ pub(crate) fn detached_copy(doc: &Document) -> Document {
     copy
 }
 
-/// A uniquely held copy of `plane`, copied on every core band by band, so a
-/// diverged banded plane is never materialized first.
+/// A copy of `plane` sharing no allocation with it, its dense tiles copied
+/// on every core, so a tiled plane is never materialized first.
 pub(crate) fn copy_plane(plane: &Plane<u8>) -> Plane<u8> {
-    Plane::build(plane.len(), |dst| {
-        let bands: Vec<&[u8]> = plane.bands().collect();
-        let mut targets = Vec::with_capacity(bands.len());
-        let mut rest = dst;
-        for band in &bands {
-            let (head, tail) = rest.split_at_mut(band.len());
-            targets.push(head);
-            rest = tail;
-        }
-        targets
-            .into_par_iter()
-            .zip(bands)
-            .for_each(|(d, s)| copy_par(d, s));
-    })
-}
-
-fn copy_par(dst: &mut [u8], src: &[u8]) {
-    const CHUNK: usize = 1 << 20;
-    dst.par_chunks_mut(CHUNK)
-        .zip(src.par_chunks(CHUNK))
-        .for_each(|(d, s)| d.copy_from_slice(s));
+    plane.detached()
 }
 
 /// Whether every tracked plane of `live` is known to equal `private`'s, so

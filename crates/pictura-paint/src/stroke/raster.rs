@@ -1,37 +1,33 @@
-//! The banded dab raster: a large dab's rows cut into bands that run in
-//! parallel, each writing only its own rows of the coverage buffers and planes.
+//! The tiled dab raster: a dab's box cut into the layer's 256² tiles, which
+//! run in parallel, each writing only its own tile of the coverage planes and
+//! the layer planes.
+
+use std::ops::Range;
 
 use super::{PlaneIndex, Stencil};
 use crate::healing::RgbaImage;
 use crate::tip::TipParams;
 use crate::PaintMode;
-use pictura_core::{Layer, PsdRect, BAND_ROWS};
+use pictura_core::{Layer, Plane, PsdRect, TileMut};
 use rayon::prelude::*;
 
-/// The target layer's R, G, B and alpha planes, or a cut of the same rows of
-/// each, in that order.
-pub(super) type BandPlanes<'a> = [Option<&'a mut [u8]>; 4];
+/// The target layer's R, G, B and alpha samples of one tile, in that order.
+pub(super) type CellPlanes<'a> = [Option<&'a mut [u8]>; 4];
 
-/// The mutable bands of one channel covering a dab's rows, in band order.
-pub(super) struct PlaneCut<'a> {
-    bands: Vec<&'a mut [u8]>,
-    first_band: usize,
-}
-
-/// The per-channel band cuts for a dab.
-pub(super) type PlaneCuts<'a> = [Option<PlaneCut<'a>>; 4];
-
-/// Whole rows `y .. y + scratch.len() / width` of the layer: the coverage
-/// buffers and the planes a band of a dab writes, disjoint from every other
-/// band's.
-pub(super) struct Band<'a> {
+/// One tile of the layer under a dab: the coverage samples and the plane
+/// samples, each `w × h` with stride `w`, at layer-local `(x, y)`. Disjoint
+/// from every other cell's.
+pub(super) struct Cell<'a> {
+    pub(super) x: usize,
     pub(super) y: usize,
+    pub(super) w: usize,
+    pub(super) h: usize,
     pub(super) scratch: &'a mut [u8],
     applied: &'a mut [u8],
-    pub(super) planes: BandPlanes<'a>,
+    pub(super) planes: CellPlanes<'a>,
 }
 
-/// One dab's raster inputs, shared by its bands.
+/// One dab's raster inputs, shared by its cells.
 pub(super) struct DabRaster<'a> {
     pub(super) params: &'a TipParams,
     pub(super) dab_x: f32,
@@ -42,214 +38,250 @@ pub(super) struct DabRaster<'a> {
 }
 
 impl DabRaster<'_> {
-    /// Raster the dab over `band`, returning the layer-local box of the pixels
-    /// whose applied coverage changed.
-    pub(super) fn band(&self, mut band: Band<'_>, mut rng: Option<&mut u64>) -> Option<PsdRect> {
-        let w = self.width;
-        let mut bbox: Option<PsdRect> = None;
-        for row in 0..band.scratch.len() / w {
-            let ly = band.y + row;
-            let dy = (ly as f32 + 0.5) - self.dab_y;
-            // A round tip's support on this row is a chord, so the corners
-            // of its square bounding box cost nothing. A non-round shape
-            // returns the full width and its out-of-support pixels fall to
-            // the `cov <= 0.0` filter below.
-            let Some((xlo, xhi)) = self.params.x_span(dy) else {
-                continue;
-            };
-            let x0 = ((self.dab_x + xlo).floor() as i32).max(0);
-            let x1 = ((self.dab_x + xhi).ceil() as i32).min(w as i32 - 1);
-            let mut first = None;
-            let mut last = 0;
-            for lx in x0..=x1 {
-                let dx = (lx as f32 + 0.5) - self.dab_x;
-                let cov = self.params.coverage(dx, dy);
-                if cov <= 0.0 {
-                    continue;
-                }
-                let at = row * w + lx as usize;
-                let acc = 1.0 - (1.0 - band.scratch[at] as f32 / 255.0) * (1.0 - self.flow * cov);
-                let v = (acc.clamp(0.0, 1.0) * 255.0).round() as u8;
-                band.scratch[at] = v;
-                let cfg = &self.stencil.cfg;
-                let v = if cfg.wet_edges { crate::wet_edge(v) } else { v };
-                // The pencil's paper grain: a fixed alpha modulation keyed to
-                // the layer coordinates. It dims the stroke by up to `grain` %
-                // where the noise is lowest instead of dropping pixels to zero,
-                // which would scatter the stroke into isolated dots; the pattern
-                // is fixed, so overlapping dabs only deepen it. The noise is
-                // clumped at 2–3 px so the stroke reads as pencil texture
-                // rather than static.
-                let v = if cfg.grain > 0 {
-                    let noise = crate::fill::grain_noise(lx, ly as i32);
-                    let keep = 1.0 - cfg.grain as f32 / 100.0 * (1.0 - noise);
-                    (v as f32 * keep).round() as u8
-                } else {
-                    v
-                };
-                if v == band.applied[at] {
-                    continue;
-                }
-                band.applied[at] = v;
-                let i = ly * w + lx as usize;
-                if !self
-                    .stencil
-                    .composite(&mut band.planes, at, i, rng.as_deref_mut(), v)
-                {
-                    continue;
-                }
-                first.get_or_insert(lx);
-                last = lx;
+    /// Raster the dab over every cell, returning the layer-local box of the
+    /// pixels whose applied coverage changed. With `rng` (Dissolve), the
+    /// pixels are visited in raster order across the cells so each roll
+    /// lands where the serial raster put it; otherwise the cells run in
+    /// parallel, each cut to the strips that meet the dab's rows `ys`.
+    pub(super) fn raster(
+        &self,
+        mut cells: Vec<Cell<'_>>,
+        ys: Range<usize>,
+        rng: Option<&mut u64>,
+    ) -> Option<PsdRect> {
+        let Some(rng) = rng else {
+            let tasks: Vec<Cell<'_>> = cells
+                .into_iter()
+                .flat_map(|cell| split_rows(cell, &ys))
+                .collect();
+            if tasks.len() == 1 {
+                // One task runs inline: a small dab is not worth a thread hop.
+                return tasks.into_iter().find_map(|mut cell| {
+                    (0..cell.h)
+                        .filter_map(|r| self.row(&mut cell, r, None))
+                        .reduce(PsdRect::union)
+                });
             }
-            if let Some(first) = first {
-                let row_box = PsdRect {
-                    top: ly as i32,
-                    left: first,
-                    bottom: ly as i32 + 1,
-                    right: last + 1,
-                };
-                bbox = Some(bbox.map_or(row_box, |b| b.union(row_box)));
+            return tasks
+                .into_par_iter()
+                .filter_map(|mut cell| {
+                    (0..cell.h)
+                        .filter_map(|r| self.row(&mut cell, r, None))
+                        .reduce(PsdRect::union)
+                })
+                .reduce_with(PsdRect::union);
+        };
+        let mut bbox: Option<PsdRect> = None;
+        for strip in cells.chunk_by_mut(|a, b| a.y == b.y) {
+            for r in 0..strip[0].h {
+                for cell in strip.iter_mut() {
+                    if let Some(b) = self.row(cell, r, Some(&mut *rng)) {
+                        bbox = Some(bbox.map_or(b, |a| a.union(b)));
+                    }
+                }
             }
         }
         bbox
     }
+
+    /// Raster row `r` of `cell`, returning the box of the pixels that changed.
+    fn row(&self, cell: &mut Cell<'_>, r: usize, mut rng: Option<&mut u64>) -> Option<PsdRect> {
+        let w = self.width;
+        let ly = cell.y + r;
+        let dy = (ly as f32 + 0.5) - self.dab_y;
+        // A round tip's support on this row is a chord, so the corners of its
+        // square bounding box cost nothing. A non-round shape returns the full
+        // width and its out-of-support pixels fall to the `cov <= 0.0` filter
+        // below.
+        let (xlo, xhi) = self.params.x_span(dy)?;
+        let x0 = ((self.dab_x + xlo).floor() as i32).max(cell.x as i32);
+        let x1 = ((self.dab_x + xhi).ceil() as i32)
+            .min(w as i32 - 1)
+            .min((cell.x + cell.w) as i32 - 1);
+        let mut first = None;
+        let mut last = 0;
+        for lx in x0..=x1 {
+            let dx = (lx as f32 + 0.5) - self.dab_x;
+            let cov = self.params.coverage(dx, dy);
+            if cov <= 0.0 {
+                continue;
+            }
+            let at = r * cell.w + (lx as usize - cell.x);
+            let acc = 1.0 - (1.0 - cell.scratch[at] as f32 / 255.0) * (1.0 - self.flow * cov);
+            let v = (acc.clamp(0.0, 1.0) * 255.0).round() as u8;
+            cell.scratch[at] = v;
+            let cfg = &self.stencil.cfg;
+            let v = if cfg.wet_edges { crate::wet_edge(v) } else { v };
+            // The pencil's paper grain: a fixed alpha modulation keyed to the
+            // layer coordinates. It dims the stroke by up to `grain` % where the
+            // noise is lowest instead of dropping pixels to zero, which would
+            // scatter the stroke into isolated dots; the pattern is fixed, so
+            // overlapping dabs only deepen it. The noise is clumped at 2–3 px so
+            // the stroke reads as pencil texture rather than static.
+            let v = if cfg.grain > 0 {
+                let noise = crate::fill::grain_noise(lx, ly as i32);
+                let keep = 1.0 - cfg.grain as f32 / 100.0 * (1.0 - noise);
+                (v as f32 * keep).round() as u8
+            } else {
+                v
+            };
+            if v == cell.applied[at] {
+                continue;
+            }
+            cell.applied[at] = v;
+            let i = ly * w + lx as usize;
+            if !self
+                .stencil
+                .composite(&mut cell.planes, at, i, rng.as_deref_mut(), v)
+            {
+                continue;
+            }
+            first.get_or_insert(lx);
+            last = lx;
+        }
+        first.map(|first| PsdRect {
+            top: ly as i32,
+            left: first,
+            bottom: ly as i32 + 1,
+            right: last + 1,
+        })
+    }
 }
 
-/// The target layer's planes fractured and cut to the bands covering rows
-/// `y0 .. y1`, so a dab forks only the bands it touches.
-pub(super) fn plane_slices<'a>(
+/// The cells of the layer's tiles meeting columns `xs` × rows `ys`: the
+/// coverage planes' tiles beside the target planes', all forked for writing, so
+/// a dab forks only the tiles it touches. The layer planes are tiled first.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn cells<'a>(
     layer: &'a mut Layer,
     ch: PlaneIndex,
     width: usize,
     height: usize,
-    y0: usize,
-    y1: usize,
-) -> PlaneCuts<'a> {
+    xs: Range<usize>,
+    ys: Range<usize>,
+    scratch: &'a mut Plane<u8>,
+    applied: &'a mut Plane<u8>,
+) -> Vec<Cell<'a>> {
     let len = width * height;
-    let mut out: PlaneCuts<'a> = [None, None, None, None];
-    let first = y0 / BAND_ROWS;
-    let last = y1.saturating_sub(1) / BAND_ROWS;
-    let indices: Vec<usize> = (first..=last).collect();
+    let mut planes: [Option<std::vec::IntoIter<TileMut<'a, u8>>>; 4] = [None, None, None, None];
     for (idx, c) in layer.channels.iter_mut().enumerate() {
-        if let Some(k) = ch.iter().position(|&x| x == Some(idx)) {
-            if c.data.len() == len {
-                c.data.fracture(width);
-                if let Some(bands) = c.data.write_bands(&indices) {
-                    out[k] = Some(PlaneCut {
-                        bands,
-                        first_band: first,
-                    });
-                }
-            }
+        let Some(k) = ch.iter().position(|&x| x == Some(idx)) else {
+            continue;
+        };
+        if c.data.len() == len && c.data.tile(width, height) {
+            planes[k] = Some(c.data.tiles_mut(xs.clone(), ys.clone(), width).into_iter());
         }
     }
-    out
+    let coverage = scratch.tiles_mut(xs.clone(), ys.clone(), width);
+    let applied = applied.tiles_mut(xs, ys, width);
+    coverage
+        .into_iter()
+        .zip(applied)
+        .map(|(s, a)| Cell {
+            x: s.x,
+            y: s.y,
+            w: s.w,
+            h: s.h,
+            scratch: s.data,
+            applied: a.data,
+            planes: planes
+                .each_mut()
+                .map(|it| it.as_mut().and_then(|it| it.next()).map(|t| t.data)),
+        })
+        .collect()
 }
 
-/// Cut rows `y0 .. y0 + rows` of the coverage buffers and the plane bands into
-/// one band per plane band. Rows of a band outside the dab are harmless: the
-/// tip has no coverage there.
-pub(super) fn split_bands<'a>(
-    y0: usize,
-    rows: usize,
-    w: usize,
-    scratch: &'a mut [u8],
-    applied: &'a mut [u8],
-    cuts: PlaneCuts<'a>,
-) -> Vec<Band<'a>> {
-    let end = y0 + rows;
-    let first_band = cuts
-        .iter()
-        .flatten()
-        .next()
-        .map_or(y0 / BAND_ROWS, |cut| cut.first_band);
-    let mut iters: [Option<std::vec::IntoIter<&'a mut [u8]>>; 4] =
-        cuts.map(|cut| cut.map(|cut| cut.bands.into_iter()));
-    let total = scratch.len();
-    let applied_total = applied.len();
-    let height = total.checked_div(w).unwrap_or(0);
-    let mut scratch_rest = scratch;
-    let mut applied_rest = applied;
-    let mut row = 0usize;
-    let mut bands = Vec::new();
-    let mut band = first_band;
-    while band * BAND_ROWS < end {
-        let sy = band * BAND_ROWS;
-        let ey = (sy + BAND_ROWS).min(height);
-        if ey <= sy {
-            break;
-        }
-        let b = ey * w;
-        if b > total || b > applied_total || sy < row {
-            break;
-        }
-        let slice = std::mem::take(&mut scratch_rest);
-        let (_, rest) = slice.split_at_mut((sy - row) * w);
-        let (band_scratch, rest) = rest.split_at_mut((ey - sy) * w);
-        scratch_rest = rest;
-        let slice = std::mem::take(&mut applied_rest);
-        let (_, rest) = slice.split_at_mut((sy - row) * w);
-        let (band_applied, rest) = rest.split_at_mut((ey - sy) * w);
-        applied_rest = rest;
-        let planes = iters
-            .each_mut()
-            .map(|it| it.as_mut().and_then(|it| it.next()));
-        bands.push(Band {
-            y: sy,
-            scratch: band_scratch,
-            applied: band_applied,
-            planes,
-        });
-        row = ey;
-        band += 1;
-    }
-    bands
+/// Rows per parallel task: a tile is cut into strips so a dab a few tiles
+/// wide still spreads over every core, as the 64-row bands did.
+const TASK_ROWS: usize = 64;
+
+/// The strips of [`TASK_ROWS`] rows of `cell` that meet rows `ys`, each its
+/// own disjoint cell; strips the dab does not reach are not tasks.
+fn split_rows<'a>(cell: Cell<'a>, ys: &Range<usize>) -> Vec<Cell<'a>> {
+    let Cell {
+        x,
+        y,
+        w,
+        h,
+        scratch,
+        applied,
+        planes,
+    } = cell;
+    let n = (w * TASK_ROWS).max(1);
+    let (mut s, mut a) = (scratch.chunks_mut(n), applied.chunks_mut(n));
+    let mut p = planes.map(|plane| plane.map(|d| d.chunks_mut(n)));
+    (0..h.div_ceil(TASK_ROWS))
+        .filter_map(|k| {
+            let strip = (
+                s.next()?,
+                a.next()?,
+                p.each_mut().map(|it| it.as_mut().and_then(Iterator::next)),
+            );
+            let top = y + k * TASK_ROWS;
+            let rows = TASK_ROWS.min(h - k * TASK_ROWS);
+            if top >= ys.end || top + rows <= ys.start {
+                return None;
+            }
+            Some(Cell {
+                x,
+                y: top,
+                w,
+                h: rows,
+                scratch: strip.0,
+                applied: strip.1,
+                planes: strip.2,
+            })
+        })
+        .collect()
 }
 
 /// Copy the layer-local `rect` of a per-dab engine's `pixels` into the layer's
-/// planes, forking only the bands it reaches. Returns the box of the pixels that
-/// changed.
+/// planes, forking only the tiles it reaches. Returns the box of the pixels
+/// that changed.
 pub(super) fn write_back(
     layer: &mut Layer,
     ch: PlaneIndex,
     pixels: &RgbaImage,
     rect: PsdRect,
-    scratch: &mut [u8],
-    applied: &mut [u8],
+    scratch: &mut Plane<u8>,
+    applied: &mut Plane<u8>,
     serial: bool,
 ) -> Option<PsdRect> {
     let (w, h) = (pixels.width as usize, pixels.height as usize);
-    let (y0, y1) = (rect.top as usize, rect.bottom as usize);
-    let planes = plane_slices(layer, ch, w, h, y0, y1);
-    let bands = split_bands(y0, y1 - y0, w, scratch, applied, planes);
+    let xs = rect.left as usize..rect.right as usize;
+    let ys = rect.top as usize..rect.bottom as usize;
+    let cells = cells(layer, ch, w, h, xs, ys, scratch, applied);
     if serial {
-        bands
+        cells
             .into_iter()
-            .filter_map(|band| write_back_band(band, pixels, rect))
+            .filter_map(|cell| write_back_cell(cell, pixels, rect))
             .reduce(PsdRect::union)
     } else {
-        bands
+        cells
+            .into_iter()
+            .flat_map(|cell| split_rows(cell, &(rect.top as usize..rect.bottom as usize)))
+            .collect::<Vec<_>>()
             .into_par_iter()
-            .filter_map(|band| write_back_band(band, pixels, rect))
+            .filter_map(|cell| write_back_cell(cell, pixels, rect))
             .reduce_with(PsdRect::union)
     }
 }
 
-fn write_back_band(mut band: Band<'_>, pixels: &RgbaImage, rect: PsdRect) -> Option<PsdRect> {
+fn write_back_cell(mut cell: Cell<'_>, pixels: &RgbaImage, rect: PsdRect) -> Option<PsdRect> {
     let w = pixels.width as usize;
-    let rows = band.scratch.len() / w;
-    let top = band.y.max(rect.top as usize);
-    let bottom = (band.y + rows).min(rect.bottom as usize);
-    let columns = rect.left as usize..rect.right as usize;
+    let top = cell.y.max(rect.top as usize);
+    let bottom = (cell.y + cell.h).min(rect.bottom as usize);
+    let left = cell.x.max(rect.left as usize);
+    let right = (cell.x + cell.w).min(rect.right as usize);
     let mut bbox: Option<PsdRect> = None;
     for ly in top..bottom {
         let source = &pixels.data[ly * w..(ly + 1) * w];
-        let row = (ly - band.y) * w;
+        let row = (ly - cell.y) * cell.w;
         let mut first = None;
         let mut last = 0;
-        for lx in columns.clone() {
-            let [r, g, b, a] = source[lx];
-            if write_band(&mut band.planes, row + lx, PaintMode::Normal, (r, g, b, a)) {
+        for (lx, &[r, g, b, a]) in source.iter().enumerate().take(right).skip(left) {
+            let at = row + lx - cell.x;
+            if write_pixel(&mut cell.planes, at, PaintMode::Normal, (r, g, b, a)) {
                 first.get_or_insert(lx);
                 last = lx;
             }
@@ -267,9 +299,10 @@ fn write_back_band(mut band: Band<'_>, pixels: &RgbaImage, rect: PsdRect) -> Opt
     bbox
 }
 
-/// Write one pixel at offset `at` of a band's planes; `true` when a byte changed.
-pub(super) fn write_band(
-    planes: &mut BandPlanes<'_>,
+/// Write one pixel at offset `at` of a cell's planes; `true` when a byte
+/// changed.
+pub(super) fn write_pixel(
+    planes: &mut CellPlanes<'_>,
     at: usize,
     mode: PaintMode,
     rgba: (u8, u8, u8, u8),

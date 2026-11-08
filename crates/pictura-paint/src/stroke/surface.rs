@@ -13,16 +13,17 @@ pub(crate) fn layer_planes(layer: &Layer) -> LayerPlanes<'_> {
 
 /// Columns `x0..x0 + out.len()` of row `y` of `planes` as straight RGBA.
 fn interleave(planes: LayerPlanes<'_>, y: usize, w: usize, x0: usize, out: &mut [[u8; 4]]) {
-    let at = |k: usize| planes[k].and_then(|p| p.row(y, w)).unwrap_or(&[]);
-    let (r, g, b, a) = (at(0), at(1), at(2), at(3));
+    let n = out.len();
+    let at = |k: usize, missing: u8| {
+        let mut span = vec![missing; n];
+        if let Some(p) = planes[k] {
+            p.read_rect_into(x0..x0 + n, y..y + 1, w, &mut span);
+        }
+        span
+    };
+    let (r, g, b, a) = (at(0, 0), at(1, 0), at(2, 0), at(3, 255));
     for (i, px) in out.iter_mut().enumerate() {
-        let x = x0 + i;
-        *px = [
-            r.get(x).copied().unwrap_or(0),
-            g.get(x).copied().unwrap_or(0),
-            b.get(x).copied().unwrap_or(0),
-            a.get(x).copied().unwrap_or(255),
-        ];
+        *px = [r[i], g[i], b[i], a[i]];
     }
 }
 

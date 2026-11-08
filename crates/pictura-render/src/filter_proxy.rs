@@ -10,7 +10,7 @@
 //! scale inside the proxy, so a preview over such layers is approximate beyond
 //! the filter itself; scale them too if a gallery preview over one matters.
 
-use pictura_core::{Document, Layer, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 use pictura_filters::{Filter, FilterError};
 use rayon::prelude::*;
 
@@ -224,9 +224,17 @@ impl Map {
 
     /// Reduce the plane `data` covering `rect` to its part inside the region:
     /// the proxy rect and its samples, or `None` when nothing is inside.
-    fn plane(&self, data: &[u8], rect: PsdRect) -> Option<(PsdRect, Vec<u8>)> {
+    /// Reduce the `rect`-sized channel that starts at row `first_row` of
+    /// `data` (a stacked buffer holds one channel per `height` rows), read row
+    /// by row so a tiled plane is never materialized.
+    fn plane(
+        &self,
+        data: &Plane<u8>,
+        first_row: usize,
+        rect: PsdRect,
+    ) -> Option<(PsdRect, Vec<u8>)> {
         let (sw, sh) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
-        if data.len() < sw * sh {
+        if data.len() < (first_row + sh) * sw {
             return None;
         }
         let sub = rect.intersect(self.region)?;
@@ -239,6 +247,7 @@ impl Map {
         };
         let samples = box_reduce(
             data,
+            first_row,
             sw,
             window,
             out.width() as usize,
@@ -266,10 +275,10 @@ fn reduce_flat(flat: &PixelBuffer, map: &Map, full: PsdRect) -> PixelBuffer {
     let mut out = PixelBuffer::new(full.width() as u32, full.height() as u32, flat.channels);
     let m = out.pixel_count();
     for c in 0..flat.channels as usize {
-        if let Some((_, samples)) = flat
-            .data
-            .get(c * n..(c + 1) * n)
-            .and_then(|plane| map.plane(plane, canvas))
+        let first_row = c * flat.height as usize;
+        if let Some((_, samples)) = (flat.data.len() >= (c + 1) * n)
+            .then(|| map.plane(&flat.data, first_row, canvas))
+            .flatten()
         {
             if samples.len() == m {
                 out.data[c * m..(c + 1) * m].copy_from_slice(&samples);
@@ -283,7 +292,7 @@ fn reduce_layer(layer: &mut Layer, map: &Map) {
     let rect = layer.rect;
     let mut reduced = None;
     for channel in &mut layer.channels {
-        match map.plane(&channel.data, rect) {
+        match map.plane(&channel.data, 0, rect) {
             Some((r, samples)) => {
                 channel.data = samples.into();
                 reduced = Some(r);
@@ -318,7 +327,7 @@ fn reduce_layer(layer: &mut Layer, map: &Map) {
 fn reduce_mask(mask: &LayerMask, map: &Map) -> LayerMask {
     let mut out = mask.clone();
     match &mask.data {
-        Some(data) => match map.plane(data, mask.rect) {
+        Some(data) => match map.plane(data, 0, mask.rect) {
             Some((rect, samples)) => {
                 out.rect = rect;
                 out.data = Some(samples.into());
@@ -349,7 +358,14 @@ struct Window {
 /// Average `window` of the `stride`-wide plane `src` down to `dw × dh`: each
 /// output sample is the mean of the source cells its footprint covers, so
 /// fine detail averages out rather than aliasing. Rows run in parallel.
-fn box_reduce(src: &[u8], stride: usize, window: Window, dw: usize, dh: usize) -> Vec<u8> {
+fn box_reduce(
+    src: &Plane<u8>,
+    first_row: usize,
+    stride: usize,
+    window: Window,
+    dw: usize,
+    dh: usize,
+) -> Vec<u8> {
     let span = |o: usize, n: usize, d: usize| {
         let a = o * n / d;
         (a, ((o + 1) * n / d).max(a + 1))
@@ -361,9 +377,12 @@ fn box_reduce(src: &[u8], stride: usize, window: Window, dw: usize, dh: usize) -
         // Whole source rows add into per-column sums, which vectorizes; each
         // output then sums its columns. A column holds at most 255 per row.
         let mut columns = vec![0u32; window.w];
+        let cols = window.x..window.x + window.w;
         for y in y0..y1 {
-            let at = (window.y + y) * stride + window.x;
-            for (sum, &v) in columns.iter_mut().zip(&src[at..at + window.w]) {
+            let Some(src_row) = src.row_span(first_row + window.y + y, cols.clone(), stride) else {
+                continue;
+            };
+            for (sum, &v) in columns.iter_mut().zip(src_row.iter()) {
                 *sum += u32::from(v);
             }
         }
@@ -390,6 +409,30 @@ mod tests {
     }
 
     #[test]
+    fn box_reduce_reads_a_tiled_plane_in_place() {
+        let (w, h) = (600usize, 520usize);
+        let bytes: Vec<u8> = (0..w * h).map(|i| (i * 31 % 251) as u8).collect();
+        let flat = Plane::from(bytes.clone());
+        let mut tiled = Plane::from(bytes);
+        tiled.tile(w, h);
+        let held = tiled.clone();
+        tiled.write_rect_from(300..301, 300..301, w, &[7]);
+        let mut reference = flat.clone();
+        reference.write_rect_from(300..301, 300..301, w, &[7]);
+        let window = Window {
+            x: 13,
+            y: 9,
+            w: 500,
+            h: 480,
+        };
+        let got =
+            pictura_core::assert_no_materialization(|| box_reduce(&tiled, 0, w, window, 125, 120));
+        let want = box_reduce(&reference, 0, w, window, 125, 120);
+        assert_eq!(got, want);
+        drop(held);
+    }
+
+    #[test]
     fn box_reduce_averages_each_footprint() {
         // 4×2 → 2×1: each output is the mean of a 2×2 block.
         let src = [0, 10, 100, 200, 20, 30, 100, 0];
@@ -399,7 +442,10 @@ mod tests {
             w: 4,
             h: 2,
         };
-        assert_eq!(box_reduce(&src, 4, window, 2, 1), vec![15, 100]);
+        assert_eq!(
+            box_reduce(&Plane::from(src.to_vec()), 0, 4, window, 2, 1),
+            vec![15, 100]
+        );
         // Scale 1 copies the window.
         let window = Window {
             x: 1,
@@ -407,7 +453,10 @@ mod tests {
             w: 2,
             h: 2,
         };
-        assert_eq!(box_reduce(&src, 4, window, 2, 2), vec![10, 100, 30, 100]);
+        assert_eq!(
+            box_reduce(&Plane::from(src.to_vec()), 0, 4, window, 2, 2),
+            vec![10, 100, 30, 100]
+        );
     }
 
     fn doc_with_layer(w: u32, h: u32, layer_rect: PsdRect) -> Document {

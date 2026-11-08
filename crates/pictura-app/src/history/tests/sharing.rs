@@ -18,10 +18,10 @@ fn shares_layer_planes(a: &Document, b: &Document) -> bool {
         .iter()
         .zip(&b.layers[0].channels)
         .all(|(a, b)| {
-            // A swapped plane's bands have diverged from its base, so they are
+            // A swapped plane's tiles have diverged one by one, so they are
             // compared one by one.
             let (a, b) = (&a.data, &b.data);
-            a.shares(b) || (0..a.band_count()).all(|i| a.shares_band(i, b))
+            a.shares(b) || (a.tile_count() > 0 && (0..a.tile_count()).all(|i| a.shares_tile(i, b)))
         })
 }
 
@@ -66,7 +66,7 @@ fn a_whole_layer_change_is_shared_and_undoes_in_place() {
 }
 
 #[test]
-fn a_hinted_capture_still_writes_only_its_tiles() {
+fn a_hinted_capture_shares_its_fully_hinted_tiles() {
     let (w, h) = (40u32, 200u32);
     let mut live = doc(w, h, 3);
     live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
@@ -84,7 +84,9 @@ fn a_hinted_capture_still_writes_only_its_tiles() {
     }];
     history.capture_live_with(&mut live, &selection, &target, "Fill", Some(&hint));
     let current = &history.current.as_ref().expect("current").doc;
-    assert!(!shares_layer_planes(current, &live));
+    // The hint covers every tile, so each changed tile is taken from live
+    // whole, sharing its allocation instead of copying its deltas (#1213).
+    assert!(shares_layer_planes(current, &live));
     assert_eq!(current.layers[0].channels, live.layers[0].channels);
 
     assert!(history

@@ -1,6 +1,6 @@
-mod bands;
 mod grow;
 mod surface;
+mod tiles;
 use super::*;
 use crate::healing::RgbaImage;
 use crate::spacing::SpacingMode;

@@ -539,6 +539,17 @@ fn convert_pixels(
     }
 }
 
+/// A decoded 8-bit channel of `rect`, tiled so its uniform regions hold
+/// nothing; a plane whose length does not match `rect` stays flat.
+///
+/// ponytail: the channel is decoded whole and then tiled, so one channel's
+/// contiguous bytes are held at a time; a row-sink decoder would not need them.
+fn tiled(data: Vec<u8>, rect: PsdRect) -> Plane<u8> {
+    let mut plane = Plane::from(data);
+    plane.tile(rect.width().max(0) as usize, rect.height().max(0) as usize);
+    plane
+}
+
 /// Split the planar image-data section into the mode's color planes (the
 /// composite) and the trailing extra channels (saved selections / alpha).
 /// `plane` is one channel's byte length (depth-aware). `color_channels` is the
@@ -775,7 +786,7 @@ fn read_layer_info(
                 -2 => mask_data = Some(data),
                 _ => channels.push(Channel {
                     id,
-                    data: data.into(),
+                    data: tiled(data, raw.layer.rect),
                 }),
             }
         }
@@ -794,7 +805,7 @@ fn read_layer_info(
         raw.layer.raw_channels = raw_channels;
         if let Some(data) = mask_data {
             match raw.layer.mask.as_mut() {
-                Some(mask) => mask.data = Some(data.into()),
+                Some(mask) => mask.data = Some(tiled(data, mask.rect)),
                 None => {
                     raw.layer.mask = Some(LayerMask {
                         rect: raw.layer.rect,

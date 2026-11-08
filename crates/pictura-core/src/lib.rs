@@ -18,11 +18,13 @@ pub mod mask_ops;
 pub mod memory;
 pub mod nonseparable;
 pub mod path;
+mod pixel_buffer;
 mod plane;
 mod raw_settings;
 mod samples;
 pub mod shape;
 mod text_render;
+pub mod tiled_plane;
 mod type_tool;
 mod vector;
 pub mod warp;
@@ -38,8 +40,9 @@ pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
 pub use homography::Homography;
 pub use layer_stack::{LayerStack, StackError, StackViolation};
+pub use pixel_buffer::PixelBuffer;
 pub use plane::assert_no_materialization;
-pub use plane::{fresh_stamp, materializations, reset_materializations, Plane, BAND_ROWS};
+pub use plane::{fresh_stamp, materializations, reset_materializations, Plane};
 pub use raw_settings::{
     CameraCalibration, Detail, Effects, Hsl, Lens, PicturaRawSettings, RawMode, SplitToning,
     ToneCurve, HSL_RANGES,
@@ -49,6 +52,7 @@ pub use text_render::{
     layout_lines, FontPolicy, GlyphMask, LayoutLine, LayoutParams, PlacedGlyph, RasterRequest,
     Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
 };
+pub use tiled_plane::{TileData, TileMut, TileRef, TileSample, TileState, TILE};
 pub use type_tool::{
     AntiAlias, CharacterAttrs, CharacterOverrides, CharacterStyle, Composer, Justify, KerningMode,
     Leading, ParagraphAttrs, ParagraphOverrides, ParagraphStyle, ResolvedStyle, StyleError,
@@ -134,51 +138,6 @@ impl Compression {
             3 => Compression::ZipPrediction,
             _ => return None,
         })
-    }
-}
-
-/// A planar, row-major pixel buffer holding one sample type per channel.
-///
-/// `data.len() == width * height * channels`. Planar means channel `c` for the
-/// whole image comes first, matching the PSD image-data layout. A bare
-/// `PixelBuffer` is `PixelBuffer<u8>`, so 8-bit code is unchanged.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PixelBuffer<T = u8> {
-    pub width: u32,
-    pub height: u32,
-    pub channels: u8,
-    pub data: Plane<T>,
-}
-
-impl PixelBuffer<u8> {
-    /// As [`PixelBuffer::new`] without touching the memory, so a mostly empty
-    /// buffer costs only the pages written to it.
-    pub fn zeroed(width: u32, height: u32, channels: u8) -> Self {
-        let len = width as usize * height as usize * usize::from(channels);
-        Self {
-            width,
-            height,
-            channels,
-            data: Plane::build(len, |_| {}),
-        }
-    }
-}
-
-impl<T: Clone + Default> PixelBuffer<T> {
-    pub fn new(width: u32, height: u32, channels: u8) -> Self {
-        Self {
-            width,
-            height,
-            channels,
-            data: vec![T::default(); width as usize * height as usize * channels as usize].into(),
-        }
-    }
-}
-
-impl<T> PixelBuffer<T> {
-    /// Number of pixels (not samples).
-    pub fn pixel_count(&self) -> usize {
-        self.width as usize * self.height as usize
     }
 }
 

@@ -287,8 +287,8 @@ fn plane_coverage_test_matches_its_bounds() {
     let mut one = vec![0u8; n];
     one[n - 3] = 1;
     let mut banded = pictura_core::Plane::from(vec![0u8; n]);
-    banded.fracture(w as usize);
-    banded.row_mut(129, w as usize).expect("row")[7] = 9;
+    banded.tile(w as usize, h as usize);
+    banded.write_rect_from(7..8, 129..130, w as usize, &[9]);
     let cases = [
         pictura_core::Plane::from(vec![0u8; n]),
         pictura_core::Plane::from(one),
@@ -329,8 +329,8 @@ fn an_unchanged_plane_is_scanned_once() {
 fn a_diverged_plane_is_checked_without_materializing() {
     let (w, h) = (16u32, 200u32);
     let mut plane = pictura_core::Plane::from(vec![0u8; (w * h) as usize]);
-    plane.fracture(w as usize);
-    plane.row_mut(150, w as usize).expect("row")[3] = 4;
+    plane.tile(w as usize, h as usize);
+    plane.write_rect_from(3..4, 150..151, w as usize, &[4]);
     let before = pictura_core::materializations();
     assert!(plane_has_coverage(&plane, w, h));
     assert_eq!(pictura_core::materializations(), before);

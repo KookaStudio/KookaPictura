@@ -17,16 +17,25 @@ Snapshot for resuming after a context break. Update after each milestone.
   pictura-render -p pictura-codec -p pictura_app` 3323 passed/119 skipped;
   `tst_image_adjustments`, `tst_properties_panel`, and `tst_adjustment_presets`
   pass; the headless self-test is 469/0/1; clippy is clean.
-- **Streaming plane access** (#1212, step 4 of #1209; first of several PRs,
-  OpenSpec `document/plane-access`). `Plane` has non-copying `rows`,
-  `rows_mut`, `read_rect_into`, `write_rect_from`, `read_into` and
-  `for_each_band[_mut]` (`pictura-core/src/plane/access.rs`), plus the test
-  guard `assert_no_materialization`. Render compositing, Move, Free Transform,
-  Layer via Copy/Cut, core grow/trim and the history `copy_plane` use them.
-  The heap guards assert 0 materializations for M2–M10 (`STREAMED` in
-  `tests_profiles/memory.rs`). The remaining callers (paint, select, app
-  pyramid and previews, codec write) are listed in the archived change's
-  `design.md`. They follow one crate per PR, and #1212 closes with the last.
+- **Tiled planes** (#1213 with the rest of #1212, steps 4–5 of #1209;
+  OpenSpec `document/tiled-planes`, `document/plane-access`). A document
+  `Plane` is flat until tiled (`tile(w, h)`, `Plane::filled`,
+  `Plane::build_tiled`). After that each channel is 256² tiles that are
+  `Empty`, `Uniform` or a copy-on-write `Dense` allocation, with per-tile
+  generations (`pictura-core/src/tiled_plane.rs`).
+  - **Access.** Tiles are read through `for_each_tile`, `tiles_mut` and
+    `for_each_tile_mut`; rows through `row()` (a `Cow`), `read_row_into` and
+    `write_row_from`; `settle()` collapses uniform tiles. The band API is gone.
+  - **Callers.** Paint rasters over tile cells, with tiled coverage buffers.
+    History diffs and swaps per tile and shares untouched tiles. `fork_bytes`
+    counts tiles. New Document is uniform tiles. PSD write streams rows, so
+    its bytes are identical, and read tiles each channel.
+  - **Measurements.** The heap guards report 0 materializations for M1–M12.
+    At 4250², brush 105.7→2.3 MiB, add layer 86.1→0.2 MiB, snapshot
+    460→94 MiB; brush and M-scenario times at or better than master;
+    table in the archived `tiled-planes` design.md.
+  - **Shortcuts left.** Filters, whole-document ops, non-RGB writes and native
+    16/32-bit stores still materialize (`ponytail:`).
 - **Color Balance Lab/CMYK mapping and readout** (#572, OpenSpec change
   `color-balance-lab-cmyk`). Color Balance now runs in the document's visible
   mode: `ColorBalanceMode` (Rgb/Lab/Cmyk) travels from

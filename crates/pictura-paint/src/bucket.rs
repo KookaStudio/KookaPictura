@@ -60,24 +60,28 @@ impl<'a> BucketSource<'a> {
                     return;
                 }
                 let planes = layer_planes(layer);
-                let at = |k: usize| {
-                    planes[k]
-                        .and_then(|p| p.row(ly as usize, lw as usize))
-                        .unwrap_or(&[])
-                };
-                let (r, g, b, a) = (at(0), at(1), at(2), at(3));
-                for (i, px) in out.iter_mut().enumerate() {
-                    let lx = left + i as i32 - rect.left;
-                    if lx < 0 || lx >= lw {
-                        continue;
+                let lx0 = (left - rect.left).max(0);
+                let lx1 = (left + out.len() as i32 - rect.left).min(lw);
+                if lx1 <= lx0 {
+                    return;
+                }
+                let (n, ly) = ((lx1 - lx0) as usize, ly as usize);
+                let at = |k: usize, missing: u8| {
+                    let mut span = vec![missing; n];
+                    if let Some(p) = planes[k] {
+                        p.read_rect_into(
+                            lx0 as usize..lx1 as usize,
+                            ly..ly + 1,
+                            lw as usize,
+                            &mut span,
+                        );
                     }
-                    let lx = lx as usize;
-                    *px = [
-                        r.get(lx).copied().unwrap_or(0),
-                        g.get(lx).copied().unwrap_or(0),
-                        b.get(lx).copied().unwrap_or(0),
-                        a.get(lx).copied().unwrap_or(255),
-                    ];
+                    span
+                };
+                let (r, g, b, a) = (at(0, 0), at(1, 0), at(2, 0), at(3, 255));
+                let skip = (lx0 - (left - rect.left)) as usize;
+                for (i, px) in out[skip..skip + n].iter_mut().enumerate() {
+                    *px = [r[i], g[i], b[i], a[i]];
                 }
             }
             Self::Composite(buf) => {
@@ -86,20 +90,23 @@ impl<'a> BucketSource<'a> {
                     return;
                 }
                 let y = y as usize;
-                let at = |k: usize| buf.data.row(k * bh + y, bw).unwrap_or(&[]);
+                let x0 = left.max(0);
+                let x1 = (left + out.len() as i32).min(bw as i32);
+                if x1 <= x0 {
+                    return;
+                }
+                let n = (x1 - x0) as usize;
+                let at = |k: usize| {
+                    let mut span = vec![0u8; n];
+                    let row = k * bh + y;
+                    buf.data
+                        .read_rect_into(x0 as usize..x1 as usize, row..row + 1, bw, &mut span);
+                    span
+                };
                 let (r, g, b, a) = (at(0), at(1), at(2), at(3));
-                for (i, px) in out.iter_mut().enumerate() {
-                    let x = left + i as i32;
-                    if x < 0 {
-                        continue;
-                    }
-                    let x = x as usize;
-                    *px = [
-                        r.get(x).copied().unwrap_or(0),
-                        g.get(x).copied().unwrap_or(0),
-                        b.get(x).copied().unwrap_or(0),
-                        a.get(x).copied().unwrap_or(0),
-                    ];
+                let skip = (x0 - left) as usize;
+                for (i, px) in out[skip..skip + n].iter_mut().enumerate() {
+                    *px = [r[i], g[i], b[i], a[i]];
                 }
             }
         }

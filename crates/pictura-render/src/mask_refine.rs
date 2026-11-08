@@ -442,8 +442,9 @@ fn feather_raster(mask: &LayerMask, data: &Plane<u8>, radius: f64, clip: PsdRect
     if x1 > x0 {
         let sx = (x0 - rect[0]) as usize;
         for y in y0..y1 {
-            let Some(src) = data
-                .row((y - rect[1]) as usize, mw)
+            let row = data.row((y - rect[1]) as usize, mw);
+            let Some(src) = row
+                .as_deref()
                 .and_then(|row| row.get(sx..sx + (x1 - x0) as usize))
             else {
                 break;

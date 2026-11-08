@@ -13,8 +13,8 @@ mod styles;
 pub(crate) use budget::document_bytes;
 pub(crate) use planes::detached_copy;
 use planes::{
-    adopt_metadata, apply_tiles, composite_change, composite_unchanged, diff_into, fracture_planes,
-    hollow, mask_rects, plane_kinds, planes_agree, shared_copy, stamp_agreed, swap_tiles,
+    adopt_metadata, apply_tiles, composite_change, composite_unchanged, diff_into, hollow,
+    mask_rects, plane_kinds, planes_agree, shared_copy, stamp_agreed, swap_tiles, tile_planes,
     tile_rect, PlaneDelta, PlaneKind,
 };
 pub use styles::{
@@ -266,7 +266,7 @@ impl History {
         let target_before = self.current_target.clone();
         self.current_target = target.clone();
         let fresh_segment = |doc: &mut Document| {
-            fracture_planes(doc);
+            tile_planes(doc);
             let mut current = doc.clone();
             let stored = Stored::Hollow(Snapshot {
                 doc: hollow(doc),
@@ -929,16 +929,11 @@ impl History {
         for named in &self.snapshots {
             collect(&named.snapshot.doc, &mut all);
         }
-        let mut bases = std::collections::HashSet::new();
-        let mut owned = std::collections::HashSet::new();
+        let mut seen = std::collections::HashSet::new();
         let mut bytes = 0;
         for plane in &all {
-            let (ptr, len) = plane.base_allocation();
-            if bases.insert(ptr) {
-                bytes += len;
-            }
-            for (ptr, len) in plane.owned_bands() {
-                if owned.insert(ptr) {
+            for (ptr, len) in plane.allocations() {
+                if seen.insert(ptr) {
                     bytes += len;
                 }
             }

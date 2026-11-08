@@ -103,10 +103,8 @@ pub(super) fn assemble_source_per_pixel(layer: &Layer, g: &SourceGeom) -> Vec<u8
     for y in g.y0..g.y1 {
         let row = (y - g.y0) as usize;
         let ly = (y - layer.rect.top) as usize;
-        let r0 = ch0.and_then(|p| p.row(ly, lw));
-        let r1 = ch1.and_then(|p| p.row(ly, lw));
-        let r2 = ch2.and_then(|p| p.row(ly, lw));
-        let ra = alpha.and_then(|p| p.row(ly, lw));
+        let rows = [ch0, ch1, ch2, alpha].map(|p| p.and_then(|p| p.row(ly, lw)));
+        let [r0, r1, r2, ra] = rows.each_ref().map(Option::as_deref);
         for (col, x) in (g.x0..g.x1).enumerate() {
             let lx = (x - layer.rect.left) as usize;
             let at = |r: Option<&[u8]>| r.and_then(|r| r.get(lx)).copied();
@@ -209,11 +207,14 @@ fn write_source_range(
         let mut dst = out.slice(at - start..stop - start);
         match src.planes[plane] {
             Some(p) => {
-                let bytes = p.row(src.first_row + row, src.lw).unwrap_or(&[]);
                 let from = src.x0 + col;
                 let n = stop - at;
-                if from + n <= bytes.len() {
-                    dst.copy_from_slice(&bytes[from..from + n]);
+                let y = src.first_row + row;
+                let whole = (y + 1) * src.lw <= p.len() && from + n <= src.lw;
+                if whole {
+                    let mut buf = vec![0u8; n];
+                    p.read_rect_into(from..from + n, y..y + 1, src.lw, &mut buf);
+                    dst.copy_from_slice(&buf);
                 } else {
                     dst.fill(0);
                 }

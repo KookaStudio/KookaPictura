@@ -184,7 +184,9 @@ impl PictureViewRust {
             self.session.quick_mask.coverage = self.session.take_selection();
             self.session.quick_mask.deselected = self.session.deselected_selection.take();
             if let Some(coverage) = &mut self.session.quick_mask.coverage {
-                coverage.data.fracture(coverage.width as usize);
+                coverage
+                    .data
+                    .tile(coverage.width as usize, coverage.height as usize);
             }
         } else {
             let coverage = self.session.quick_mask.coverage.take();
@@ -253,16 +255,10 @@ impl PictureViewRust {
             .coverage
             .clone()
             .unwrap_or_else(|| Selection::all(real.width, real.height));
-        coverage.data.fracture(real.width as usize);
+        let (w, h) = (real.width as usize, real.height as usize);
+        coverage.data.tile(w, h);
         if working && self.session.quick_mask.selected {
-            for row in coverage
-                .data
-                .rows_mut(0..real.height as usize, real.width as usize)
-            {
-                for c in row {
-                    *c = 255 - *c;
-                }
-            }
+            invert(&mut coverage.data, w, h);
         }
         let mut document = Document::new(0, 0, ColorMode::Grayscale, BitDepth::Eight);
         document.width = real.width;
@@ -294,11 +290,9 @@ impl PictureViewRust {
     ) -> bool {
         let mut data = document.layers[0].channels[0].data.clone();
         if working && self.session.quick_mask.selected {
-            for row in data.rows_mut(0..document.height as usize, document.width as usize) {
-                for c in row {
-                    *c = 255 - *c;
-                }
-            }
+            let (w, h) = (document.width as usize, document.height as usize);
+            data.tile(w, h);
+            invert(&mut data, w, h);
         }
         let selection = Selection {
             width: document.width,
@@ -307,10 +301,7 @@ impl PictureViewRust {
         };
         let changed = match self.session.quick_mask.coverage.as_ref() {
             Some(before) => before != &selection,
-            None => selection
-                .data
-                .rows(0..selection.height as usize, selection.width as usize)
-                .any(|r| r.iter().any(|&c| c != 255)),
+            None => !selection.data.all_eq(255),
         };
         if changed {
             self.session.quick_mask.coverage = Some(selection);
@@ -435,6 +426,7 @@ impl PictureViewRust {
                 continue;
             }
             let mask = coverage.and_then(|p| p.row(y as usize, doc.width as usize));
+            let mask = mask.as_deref();
             for (ox, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let x = (rect.left as i64 + ox as i64) * scale;
                 if x < 0 || x >= i64::from(doc.width) {
@@ -461,3 +453,13 @@ mod paint;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+/// Invert a `w × h` coverage plane through its tiles, so no contiguous copy is
+/// built.
+fn invert(plane: &mut pictura_core::Plane, w: usize, h: usize) {
+    plane.for_each_tile_mut(0..w, 0..h, w, |tile| {
+        for c in tile.data.iter_mut() {
+            *c = 255 - *c;
+        }
+    });
+}

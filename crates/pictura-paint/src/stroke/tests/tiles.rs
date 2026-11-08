@@ -4,8 +4,8 @@ use crate::smudge::SmudgeOptions;
 use crate::tone::ToneOptions;
 
 #[test]
-fn a_stroke_forks_only_touched_bands() {
-    let (w, h) = (8usize, 128usize);
+fn a_stroke_forks_only_touched_tiles() {
+    let (w, h) = (8usize, 300usize);
     let mut layer = Layer {
         name: "px".into(),
         rect: PsdRect {
@@ -20,43 +20,53 @@ fn a_stroke_forks_only_touched_bands() {
         }],
         ..Default::default()
     };
-    layer.channels[0].data.fracture(w);
+    layer.channels[0].data.tile(w, h);
     let holder = layer.channels[0].data.clone();
 
     let ch: PlaneIndex = [Some(0), None, None, None];
-    let mut scratch = vec![0u8; w * h];
-    let mut applied = vec![0u8; w * h];
-    let cuts = crate::stroke::raster::plane_slices(&mut layer, ch, w, h, 0, 64);
-    let bands = crate::stroke::raster::split_bands(0, 64, w, &mut scratch, &mut applied, cuts);
-    for mut band in bands {
-        if let Some(plane) = band.planes[0].as_mut() {
+    let mut scratch = Plane::filled(w, h, 1, 0u8);
+    let mut applied = Plane::filled(w, h, 1, 0u8);
+    let cells = crate::stroke::raster::cells(
+        &mut layer,
+        ch,
+        w,
+        h,
+        0..w,
+        0..64,
+        &mut scratch,
+        &mut applied,
+    );
+    assert_eq!(cells.len(), 1, "one tile under the rows");
+    for mut cell in cells {
+        if let Some(plane) = cell.planes[0].as_mut() {
             plane[0] = 9;
         }
     }
 
     assert!(
-        !layer.channels[0].data.shares_band(0, &holder),
-        "the touched band forked"
+        !layer.channels[0].data.shares_tile(0, &holder),
+        "the touched tile forked"
     );
     assert!(
-        layer.channels[0].data.shares_band(1, &holder),
-        "the untouched band stayed shared"
+        layer.channels[0].data.shares_tile(1, &holder),
+        "the untouched tile stayed shared"
     );
-    assert_eq!(holder.band(1).expect("band 1")[0], 1);
+    assert_eq!(holder.sample(0), Some(1));
+    assert_eq!(scratch.tile_state(1), Some(pictura_core::TileState::Empty));
 }
 
 // [tsr_first_dab]
 #[test]
-fn a_tone_stroke_forks_only_touched_bands() {
+fn a_tone_stroke_forks_only_touched_tiles() {
     let rect = PsdRect {
         top: 0,
         left: 0,
-        bottom: 256,
+        bottom: 600,
         right: 64,
     };
-    let mut doc = offset_layer_doc(64, 256, rect, (120, 90, 60, 255));
+    let mut doc = offset_layer_doc(64, 600, rect, (120, 90, 60, 255));
     for channel in &mut doc.layers[0].channels {
-        channel.data.fracture(64);
+        channel.data.tile(64, 600);
     }
     let history = doc.clone();
     let cfg = StrokeConfig {
@@ -71,14 +81,14 @@ fn a_tone_stroke_forks_only_touched_bands() {
         .iter()
         .zip(&history.layers[0].channels)
     {
-        assert!(live.data.band_count() > 1, "the plane was flattened");
+        assert!(live.data.is_tiled(), "the plane was flattened");
         assert!(
-            live.data.shares_band(3, &held.data),
-            "an untouched band was copied"
+            live.data.shares_tile(2, &held.data),
+            "an untouched tile was copied"
         );
     }
     let red = &doc.layers[0].channels[0].data;
-    assert!(!red.shares_band(0, &history.layers[0].channels[0].data));
+    assert!(!red.shares_tile(0, &history.layers[0].channels[0].data));
 }
 
 // [tsr_write_back]
@@ -187,4 +197,44 @@ fn a_tone_stroke_refuses_a_layer_that_changed_under_it() {
     let moved = doc.clone();
     assert!(!stroke.sample(&mut doc, sample(40.0, 40.0)));
     assert!(doc == moved);
+}
+
+// [tp_stroke]
+#[test]
+fn a_stroke_costs_the_tiles_it_covers_not_the_document_width() {
+    let forked = |side: i32| {
+        let rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: side,
+            right: side,
+        };
+        let mut doc = offset_layer_doc(side as u32, side as u32, rect, (120, 90, 60, 255));
+        for channel in &mut doc.layers[0].channels {
+            channel.data.tile(side as usize, side as usize);
+        }
+        let history = doc.clone();
+        let cfg = StrokeConfig {
+            diameter: 40,
+            ..StrokeConfig::default()
+        };
+        let mut stroke = Stroke::begin_at(&doc, "0", cfg).expect("begin");
+        for i in 0..=10 {
+            stroke.sample(&mut doc, sample(100.0 + 30.0 * i as f32, 100.0));
+        }
+        assert!(stroke.finish().is_some(), "the stroke painted");
+        doc.layers[0]
+            .channels
+            .iter()
+            .zip(&history.layers[0].channels)
+            .map(|(live, held)| {
+                (0..live.data.tile_count())
+                    .filter(|&i| !live.data.shares_tile(i, &held.data))
+                    .count()
+            })
+            .sum::<usize>()
+    };
+    let small = forked(1024);
+    assert!(small > 0, "the stroke forked the tiles under it");
+    assert_eq!(forked(4096), small, "the fork does not grow with the width");
 }

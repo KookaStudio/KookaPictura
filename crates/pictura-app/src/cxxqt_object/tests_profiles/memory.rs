@@ -36,24 +36,25 @@ const THREADS: usize = 4;
 /// or lower while their setups hold one 4250² RGBA plane less. Record the
 /// measured delta and keep the absolute peak in mind.
 const BASELINE: &[(&str, usize)] = &[
-    ("new_document", 180_644_790),
-    ("add_layer", 90_313_011),
-    ("edit_fill", 15_047_480),
-    ("bucket_in_selection", 16_298_976),
-    ("bucket_whole_layer", 218_450_072),
-    ("brush_stroke", 110_827_969),
-    ("undo_redo", 264_624_776),
-    ("snapshot_restore", 482_699_518),
-    ("move_layer", 5_815_545),
-    ("free_transform", 36_187_521),
-    ("save_psd", 291_159_444),
-    ("open_psd", 521_690_071),
+    // Measured after the tiled planes (#1213), one run per scenario.
+    ("new_document", 108_381_148),
+    ("add_layer", 157_541),
+    ("edit_fill", 3_093_603),
+    ("bucket_in_selection", 1_823_460),
+    ("bucket_whole_layer", 90_558_540),
+    ("brush_stroke", 2_449_828),
+    ("undo_redo", 144_368_840),
+    ("snapshot_restore", 98_100_677),
+    ("move_layer", 2_022_008),
+    ("free_transform", 3_659_676),
+    ("save_psd", 128_664_188),
+    ("open_psd", 374_746_666),
 ];
 
-/// The scenarios whose measured step must not materialize a banded plane into
-/// one contiguous copy (#1212). The list grows as each crate's hot paths move
-/// to streaming plane access, until it holds M2–M10.
+/// The scenarios whose measured step must not materialize a tiled plane into
+/// one contiguous copy (#1212, #1213): all of M1–M12.
 const STREAMED: &[&str] = &[
+    "new_document",
     "add_layer",
     "edit_fill",
     "bucket_in_selection",
@@ -63,6 +64,8 @@ const STREAMED: &[&str] = &[
     "snapshot_restore",
     "move_layer",
     "free_transform",
+    "save_psd",
+    "open_psd",
 ];
 
 /// The peak heap `run` adds over what `setup` left, and how many banded planes
@@ -125,7 +128,7 @@ fn guard<T>(name: &str, setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut 
     if STREAMED.contains(&name) {
         assert_eq!(
             materialized, 0,
-            "{name}: materialized a banded plane into a contiguous copy"
+            "{name}: materialized a tiled plane into a contiguous copy"
         );
     }
 }
@@ -192,6 +195,90 @@ fn new_document_heap_peak() {
 #[ignore = "17000x17000 heap peak; run explicitly with --run-ignored only"]
 fn new_document_heap_peak_full() {
     report("new_document", || (), |_| drop(view(FULL_SIDE)));
+}
+
+/// The bytes the planes of the document's layers hold, each allocation once.
+fn layer_plane_bytes(view: &PictureViewRust) -> usize {
+    let doc = view.session.doc.as_ref().expect("document");
+    let mut seen = std::collections::HashSet::new();
+    doc.layers
+        .iter()
+        .flat_map(|layer| layer.channels.iter())
+        .flat_map(|channel| channel.data.allocations())
+        .filter(|(ptr, _)| seen.insert(*ptr))
+        .map(|(_, bytes)| bytes)
+        .sum()
+}
+
+/// M1's acceptance: the white Background's planes hold at most 4 MiB.
+fn background_cost(side: u32) {
+    let bytes = layer_plane_bytes(&view(side));
+    println!("background planes at {side}²: {bytes} B");
+    assert!(bytes <= 4 << 20, "the Background holds {bytes} B");
+}
+
+// [tp_background]
+#[test]
+fn background_plane_cost() {
+    background_cost(GUARD_SIDE);
+}
+
+#[test]
+#[ignore = "17000x17000 document; run explicitly with --run-ignored only"]
+fn background_plane_cost_full() {
+    background_cost(FULL_SIDE);
+}
+
+/// M2's acceptance: the new layer's planes and the history state that
+/// records it hold at most 1 MiB.
+fn new_layer_cost(side: u32) {
+    let mut view = view(side);
+    let before = layer_plane_bytes(&view) + view.session.history.retained_plane_bytes();
+    sc::add_layer(&mut view);
+    let after = layer_plane_bytes(&view) + view.session.history.retained_plane_bytes();
+    let added = after.saturating_sub(before);
+    println!("new layer at {side}²: {added} B");
+    assert!(added <= 1 << 20, "a new layer holds {added} B");
+}
+
+// [tp_new_layer]
+#[test]
+fn new_layer_plane_cost() {
+    new_layer_cost(GUARD_SIDE);
+}
+
+#[test]
+#[ignore = "17000x17000 document; run explicitly with --run-ignored only"]
+fn new_layer_plane_cost_full() {
+    new_layer_cost(FULL_SIDE);
+}
+
+/// M3's acceptance: the planes an Edit › Fill of the centre square adds hold
+/// at most 1.2 × the square rounded out to the tile grid, per channel written.
+fn fill_cost(side: u32) {
+    let mut view = with_marquee(side);
+    let before = layer_plane_bytes(&view);
+    sc::fill_background(&mut view);
+    let added = layer_plane_bytes(&view).saturating_sub(before);
+    let square = sc::square(side);
+    let tile = pictura_core::TILE as i32;
+    let rounded = |a: i32, b: i32| ((b + tile - 1) / tile - a / tile) as usize * tile as usize;
+    let area = rounded(square.left, square.right) * rounded(square.top, square.bottom);
+    let bound = area * 4 * 6 / 5;
+    println!("fill at {side}²: {added} B, bound {bound} B");
+    assert!(added <= bound, "the fill added {added} B over {bound} B");
+}
+
+// [tp_fill]
+#[test]
+fn fill_plane_cost() {
+    fill_cost(GUARD_SIDE);
+}
+
+#[test]
+#[ignore = "17000x17000 document; run explicitly with --run-ignored only"]
+fn fill_plane_cost_full() {
+    fill_cost(FULL_SIDE);
 }
 
 // M2

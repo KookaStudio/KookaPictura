@@ -1024,7 +1024,7 @@ fn a_whole_document_restore_shares_the_composite_plane() {
 }
 
 #[test]
-fn a_region_patch_forks_only_its_bands() {
+fn a_region_patch_forks_only_its_tiles() {
     let (w, h) = (300u32, 400u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
@@ -1067,15 +1067,15 @@ fn a_region_patch_forks_only_its_bands() {
     let level0 = view.level0.as_ref().expect("level 0");
     assert!(
         !level0.data.shares(&doc.composite.data),
-        "the frame owns its patched band"
+        "the frame owns its patched tile"
     );
     assert!(
-        !level0.data.shares_band(0, &doc.composite.data),
-        "band 0 forked"
+        !level0.data.shares_tile(0, &doc.composite.data),
+        "tile 0 forked"
     );
     assert!(
-        level0.data.shares_band(1, &doc.composite.data),
-        "band 1 stays shared"
+        level0.data.shares_tile(1, &doc.composite.data),
+        "tile 1 stays shared"
     );
     let row = level0.data.row(rect.top as usize, w as usize).expect("row");
     assert_eq!(

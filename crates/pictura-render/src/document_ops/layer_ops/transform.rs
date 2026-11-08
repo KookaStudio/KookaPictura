@@ -280,9 +280,8 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
     let (pw, ph) = (w + PAD * 2, h + PAD * 2);
     let mut padded = vec![0u8; pw * ph];
     for y in 0..h {
-        let src_row = src.row(y, w).expect("a source row");
         let dst = (y + PAD) * pw + PAD;
-        padded[dst..dst + w].copy_from_slice(src_row);
+        src.read_rect_into(0..w, y..y + 1, w, &mut padded[dst..dst + w]);
     }
     let (dl, dt, dr, db) = dest;
     let dw = (dr - dl) as usize;
@@ -811,11 +810,9 @@ mod tests {
         ));
         let layer = resolve_path(&doc, "0").expect("layer");
         let alpha = layer.channels.iter().find(|c| c.id == -1).expect("alpha");
-        let fractional = alpha
-            .data
-            .bands()
-            .flatten()
-            .filter(|a| **a != 0 && **a != 255)
+        let fractional = (0..alpha.data.len())
+            .filter_map(|i| alpha.data.sample(i))
+            .filter(|a| *a != 0 && *a != 255)
             .count();
         assert!(fractional > 0, "the rotated edge is not anti-aliased");
     }
@@ -850,11 +847,9 @@ mod tests {
         ));
         let layer = resolve_path(&doc, "0").expect("layer");
         let alpha = layer.channels.iter().find(|c| c.id == -1).expect("alpha");
-        let fractional = alpha
-            .data
-            .bands()
-            .flatten()
-            .filter(|a| **a != 0 && **a != 255)
+        let fractional = (0..alpha.data.len())
+            .filter_map(|i| alpha.data.sample(i))
+            .filter(|a| *a != 0 && *a != 255)
             .count();
         assert!(fractional > 0, "the quad-rotated edge is not anti-aliased");
     }
