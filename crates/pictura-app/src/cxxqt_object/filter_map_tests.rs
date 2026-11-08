@@ -3,10 +3,10 @@ use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::catalogue::GALLERY_TAIL;
 use pictura_filters::{
     BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DisplaceFit, Filter,
-    FrameOptions, GlassTexture, IrisPin, IrisShape, LightType, NoiseDistribution, PathMotion,
-    Quality, RadialMethod, ReduceNoiseParams, SharpenRemove, ShearFill, SmartBlurMode, SpinPin,
-    SpinStrobe, TextureChannel, TextureOptions, TextureSurface, TiltPin, TonalFade, WaveType,
-    WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
+    FrameOptions, GlassTexture, IrisPin, IrisShape, LightType, MorphologyPreserve,
+    NoiseDistribution, PathMotion, Quality, RadialMethod, ReduceNoiseParams, SharpenRemove,
+    ShearFill, SmartBlurMode, SpinPin, SpinStrobe, TextureChannel, TextureOptions, TextureSurface,
+    TiltPin, TonalFade, WaveType, WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
 };
 
 fn slots(kind: &str) -> usize {
@@ -51,6 +51,24 @@ fn every_kind_defaults_from_empty_and_rejects_wrong_arity() {
         }
     }
     assert!(filter_from_kind_params("bogus", &[]).is_none());
+}
+
+#[test]
+fn morphology_preserve_maps_from_the_slots() {
+    assert_eq!(
+        filter_from_kind_params("maximum", &[]),
+        Some(Filter::Maximum {
+            radius: 2,
+            preserve: MorphologyPreserve::Squareness,
+        })
+    );
+    assert_eq!(
+        filter_from_kind_params("minimum", &[4.0, 1.0]),
+        Some(Filter::Minimum {
+            radius: 4,
+            preserve: MorphologyPreserve::Roundness,
+        })
+    );
 }
 
 #[test]
