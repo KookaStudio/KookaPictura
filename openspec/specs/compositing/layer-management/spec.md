@@ -237,8 +237,12 @@ single member, that member SHALL be removed too, so a severed relationship shows
 no link and `Select Linked Layers` no longer returns it. All four SHALL be
 view/selection operations that do not change layer pixels and do not add a
 history state. Link sets SHALL be transient session state: they SHALL NOT be
-serialized, and a structural layer operation SHALL clear them (documented
-limitation; the PSD link-set representation is unsourced).
+serialized. An insertion or deletion of layers SHALL remap the path-keyed
+members so the set survives: a path at the insertion parent at or below the new
+index SHALL shift by one, a deleted member SHALL leave its set, and a set left
+with one member SHALL be dropped. Other structural layer operations (reorder,
+group, ungroup, merge, rasterize) SHALL clear link sets because their path
+changes are not remapped.
 
 #### Scenario: Select Similar matches the active layer
 
@@ -266,10 +270,20 @@ limitation; the PSD link-set representation is unsourced).
 
 #### Scenario: Link sets are session-only
 
-- **WHEN** a document with linked layers is saved and reopened, or a structural
-  layer operation runs
-- **THEN** the link sets are not persisted and are cleared by the structural
-  operation
+- **WHEN** a document with linked layers is saved and reopened
+- **THEN** the link sets are not persisted
+
+#### Scenario: Inserting or deleting a layer keeps the link [llm_link_remap]
+
+- **WHEN** a layer is inserted above or below two linked layers, or another
+  layer is deleted while the pair is linked
+- **THEN** the link set follows the shifted paths, the pair stays linked, and a
+  deleted member leaves the set
+
+#### Scenario: Other structural edits clear the link [llm_link_structural_clear]
+
+- **WHEN** a linked layer is reordered, grouped, ungrouped, merged, or rasterized
+- **THEN** the link set is cleared
 
 ### Requirement: Delete Hidden Layers and Hide Layers
 

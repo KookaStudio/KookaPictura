@@ -170,6 +170,55 @@ fn backdrop(
     )))
 }
 
+/// The layers above the moving group at `paths`, composited over transparency
+/// over `visible` at `level`, so the preview can draw them back over the moving
+/// image and keep the document's stacking order (#1250). `None` when the
+/// topmost moving layer is already the topmost layer.
+pub(super) fn above_patch(
+    doc: &Document,
+    paths: &[String],
+    level: u32,
+    visible: PsdRect,
+    gpu_compute: bool,
+) -> Option<(QImage, (i32, i32))> {
+    let rows = pictura_render::flatten_rows(doc);
+    let topmost = paths
+        .iter()
+        .filter_map(|path| rows.iter().position(|(candidate, _)| candidate == path))
+        .min()?;
+    if topmost == 0 {
+        return None;
+    }
+    // Hiding every layer at or below the topmost moving member leaves exactly
+    // the layers above the group, through their own groups and clipping runs.
+    // A hidden layer draws nothing; without its planes a reduction skips it.
+    let mut above = doc.clone();
+    for (path, _) in &rows[topmost..] {
+        if let Some(layer) = pictura_render::resolve_path_mut(&mut above, path) {
+            layer.visible = false;
+            layer.channels.clear();
+        }
+    }
+    let visible = visible.intersect(canvas(doc))?;
+    let level = level.min(MAX_LEVEL);
+    let scale = 1i32 << level;
+    let rect = align(visible, scale);
+    let (buffer, source) = if level == 0 {
+        let (buffer, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+            &above,
+            rect,
+            gpu_compute,
+        ));
+        (buffer, above)
+    } else {
+        let reduced =
+            FilterProxy::new(&above, None, rect, 1.0 / f64::from(1u32 << level))?.into_document();
+        (current_buffer(&reduced, gpu_compute), reduced)
+    };
+    let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&source, &buffer));
+    Some((image, (rect.left, rect.top)))
+}
+
 /// The layer at `path` over `region` at `level`, with no opacity applied (the
 /// preview applies it once). The region may reach past the canvas: a drag
 /// carries off-canvas pixels into view.

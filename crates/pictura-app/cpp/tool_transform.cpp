@@ -383,8 +383,10 @@ void ToolController::syncTransformControls()
     // The content scan runs only when the layer, its rect, or the history step
     // changed; a refresh or a press on an unchanged box reuses the last one.
     const QString key = want && !active.isEmpty()
-        ? QStringLiteral("%1 %2 %3").arg(active, transform_api::layerRect(*v, active).toString())
+        ? QStringLiteral("%1 %2 %3 %4")
+              .arg(active, transform_api::layerRect(*v, active).toString())
               .arg(v->history_index())
+              .arg(layer_link_key(*v, active))
         : QString();
     if (controlsIdle_ && !key.isEmpty() && key == controlsKey_) {
         return;

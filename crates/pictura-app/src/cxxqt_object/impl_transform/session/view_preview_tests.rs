@@ -151,3 +151,33 @@ fn a_layer_far_off_screen_starts_without_a_moving_image() {
     assert!(preview.layer.is_null());
     assert!(follow(&doc, "1", preview.view, -4000, 0).is_some());
 }
+
+// [lct_move_preview_stack]
+#[test]
+fn above_patch_is_the_layers_above_the_group() {
+    let mut doc = Document::new(40, 30, ColorMode::Rgb, BitDepth::Eight);
+    let mut top = pixel_layer("top", 10, 10, (255, 0, 0));
+    top.rect = rect(5, 5, 15, 15);
+    doc.layers = LayerStack::from_layers(vec![
+        pixel_layer("base", 40, 30, (30, 60, 90)),
+        pixel_layer("moving", 20, 20, (0, 0, 255)),
+        top,
+    ]);
+    let (image, origin) =
+        above_patch(&doc, &["1".to_string()], 0, rect(0, 0, 40, 30), false).expect("above");
+    assert_eq!(origin, (0, 0));
+    assert_eq!((image.width(), image.height()), (40, 30));
+    assert_eq!(rgb(&image, 10, 10), (255, 0, 0), "the top layer is drawn");
+    assert_eq!(image.pixel_color(25, 25).alpha(), 0, "nothing below it");
+}
+
+// [lct_move_preview_top]
+#[test]
+fn topmost_layer_has_no_above_patch() {
+    let mut doc = Document::new(40, 30, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![
+        pixel_layer("base", 40, 30, (30, 60, 90)),
+        pixel_layer("moving", 20, 20, (0, 0, 255)),
+    ]);
+    assert!(above_patch(&doc, &["1".to_string()], 0, rect(0, 0, 40, 30), false).is_none());
+}

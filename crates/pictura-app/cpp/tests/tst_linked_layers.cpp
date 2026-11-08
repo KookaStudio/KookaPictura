@@ -3,6 +3,8 @@
 
 #include <QtTest/QtTest>
 
+#include <cmath>
+
 #include "api/layers_api.h"
 #include "api/paint_bridge.h"
 
@@ -101,6 +103,11 @@ private slots:
     void canvasSizedBlobsDragLandsAtTheDrop();
     void dragUnlinkedLayerAlone();
     void lockedMemberStaysPut();
+    void linkedFreeTransformRotatesTheSet();
+    void hiddenLinkedMemberTransformsToo();
+    void linkedSkewTransformsTheSet();
+    void linkSurvivesAddingAndDeletingLayers();
+    void linkedControlsBoxResizesTheSet();
 
 private:
     bool newDoc(const QString& name, int layers);
@@ -526,6 +533,207 @@ void LinkedLayersTest::lockedMemberStaysPut()
              QList<int>({before0.at(0) + 3, before0.at(1) + 3, before0.at(2) + 3,
                          before0.at(3) + 3}));
     QCOMPARE(rectOf(*view_, QStringLiteral("1")), before1);
+}
+
+namespace {
+
+QPointF centreOf(const QList<int>& rect)
+{
+    return QPointF((rect.at(0) + rect.at(2)) / 2.0, (rect.at(1) + rect.at(3)) / 2.0);
+}
+
+bool nearPoint(const QPointF& actual, const QPointF& expected)
+{
+    return std::abs(actual.x() - expected.x()) <= 1.0
+        && std::abs(actual.y() - expected.y()) <= 1.0;
+}
+
+} // namespace
+
+// Two linked squares rotate as one rigid set about their union centre, and the
+// link survives the commit (#1250).
+void LinkedLayersTest::linkedFreeTransformRotatesTheSet()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("LinkedRotate"), 64, 64, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    const QString red = squareLayer(*view_, QPoint(8, 8), 20);
+    const QString blue = squareLayer(*view_, QPoint(30, 30), 20);
+    QVERIFY(!red.isEmpty() && !blue.isEmpty());
+    QCOMPARE(view_->link_layers({red, blue}, true), 2);
+    panel_->selectPaths({red, blue}, red);
+    QCoreApplication::processEvents();
+    const QList<int> beforeRed = inkOf(*view_, red);
+    const QList<int> beforeBlue = inkOf(*view_, blue);
+
+    window_->setActiveTool(pictura::ToolId::Move);
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    QVERIFY(tools->beginFreeTransform(red));
+    QVERIFY(view_->transform_session_active());
+    QVERIFY(tools->setTransformAngle(90.0));
+    tools->commitFreeTransform();
+    QVERIFY(!view_->transform_session_active());
+
+    // Union centre is (29, 29): a 90° turn maps the red centre (18, 18) to
+    // (40, 18) and the blue centre (40, 40) to (18, 40).
+    const QList<int> afterRed = inkOf(*view_, red);
+    const QList<int> afterBlue = inkOf(*view_, blue);
+    QVERIFY2(nearPoint(centreOf(afterRed), QPointF(40, 18)),
+             qPrintable(QStringLiteral("red centre %1,%2")
+                            .arg(centreOf(afterRed).x())
+                            .arg(centreOf(afterRed).y())));
+    QVERIFY2(nearPoint(centreOf(afterBlue), QPointF(18, 40)),
+             qPrintable(QStringLiteral("blue centre %1,%2")
+                            .arg(centreOf(afterBlue).x())
+                            .arg(centreOf(afterBlue).y())));
+    QCOMPARE(afterRed.at(2) - afterRed.at(0), beforeRed.at(2) - beforeRed.at(0));
+    QCOMPARE(afterBlue.at(3) - afterBlue.at(1), beforeBlue.at(3) - beforeBlue.at(1));
+    QVERIFY2(view_->linked_together({red, blue}), "the link survives the transform");
+
+    QVERIFY(view_->undo());
+    QCOMPARE(inkOf(*view_, red), beforeRed);
+    QCOMPARE(inkOf(*view_, blue), beforeBlue);
+    QVERIFY(view_->linked_together({red, blue}));
+}
+
+// A hidden linked member still receives the same transform.
+void LinkedLayersTest::hiddenLinkedMemberTransformsToo()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("HiddenLinkedRotate"), 64, 64,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    const QString red = squareLayer(*view_, QPoint(8, 8), 20);
+    const QString blue = squareLayer(*view_, QPoint(30, 30), 20);
+    QVERIFY(!red.isEmpty() && !blue.isEmpty());
+    QCOMPARE(view_->link_layers({red, blue}, true), 2);
+    QVERIFY(view_->set_layers_visible(QStringList{blue}, false) == 1);
+    panel_->selectPaths({red}, red);
+    QCoreApplication::processEvents();
+    const QList<int> beforeBlue = inkOf(*view_, blue);
+
+    window_->setActiveTool(pictura::ToolId::Move);
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    QVERIFY(tools->beginFreeTransform(red));
+    QVERIFY(tools->setTransformAngle(90.0));
+    tools->commitFreeTransform();
+
+    QVERIFY2(nearPoint(centreOf(inkOf(*view_, blue)), QPointF(18, 40)),
+             "the hidden partner rotates with the set");
+    QVERIFY(!inkOf(*view_, blue).isEmpty());
+    QVERIFY(view_->linked_together({red, blue}));
+}
+
+// Skew is a projective member map too: both linked layers shear.
+void LinkedLayersTest::linkedSkewTransformsTheSet()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("LinkedSkew"), 64, 64, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    const QString red = squareLayer(*view_, QPoint(8, 8), 20);
+    const QString blue = squareLayer(*view_, QPoint(30, 30), 20);
+    QVERIFY(!red.isEmpty() && !blue.isEmpty());
+    QCOMPARE(view_->link_layers({red, blue}, true), 2);
+    panel_->selectPaths({red, blue}, red);
+    QCoreApplication::processEvents();
+    const QList<int> beforeRed = inkOf(*view_, red);
+    const QList<int> beforeBlue = inkOf(*view_, blue);
+
+    window_->setActiveTool(pictura::ToolId::Move);
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    QVERIFY(tools->beginTransformMode(red, QStringLiteral("skew")));
+    QVERIFY(tools->setTransformSkew(25.0, 0.0));
+    tools->commitFreeTransform();
+
+    QVERIFY(inkOf(*view_, red) != beforeRed);
+    QVERIFY(inkOf(*view_, blue) != beforeBlue);
+    QVERIFY(view_->linked_together({red, blue}));
+}
+
+// Adding or deleting a layer remaps the path-keyed link set instead of
+// dropping it (#1250).
+void LinkedLayersTest::linkSurvivesAddingAndDeletingLayers()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("LinkSurvivesEdits"), 64, 64,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    const QString red = squareLayer(*view_, QPoint(8, 8), 20);
+    const QString blue = squareLayer(*view_, QPoint(30, 30), 20);
+    QVERIFY(!red.isEmpty() && !blue.isEmpty());
+    QCOMPARE(view_->link_layers({red, blue}, true), 2);
+
+    // Insert above the active layer: the blue layer's path shifts and the
+    // link must follow it, not land on the new layer.
+    const QString inserted = view_->add_layer_in(red);
+    QVERIFY(!inserted.isEmpty());
+    QStringList members = view_->select_linked(red);
+    QCOMPARE(members.size(), 2);
+    QVERIFY(members.contains(red));
+    QVERIFY2(!members.contains(inserted), "the new layer is not linked");
+
+    QCOMPARE(view_->delete_layers({inserted}), 1);
+    members = view_->select_linked(red);
+    QCOMPARE(members.size(), 2);
+    QVERIFY(members.contains(red));
+    QVERIFY2(view_->linked_together(members), "deleting a neighbour keeps the link");
+}
+
+// The Move tool's idle controls box spans the link set, so grabbing a handle
+// scales both members instead of falling through to a Move drag (#1250).
+void LinkedLayersTest::linkedControlsBoxResizesTheSet()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("LinkedControlsResize"), 64, 64,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    const QString red = squareLayer(*view_, QPoint(8, 8), 20);
+    const QString blue = squareLayer(*view_, QPoint(30, 30), 20);
+    QVERIFY(!red.isEmpty() && !blue.isEmpty());
+    QCOMPARE(view_->link_layers({red, blue}, true), 2);
+    panel_->selectPaths({red}, red);
+    QCoreApplication::processEvents();
+
+    window_->show();
+    window_->setActiveTool(pictura::ToolId::Move);
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    auto* canvas = window_->imageView();
+    QVERIFY(tools && canvas);
+    canvas->setSmartGuidesEnabled(false);
+    tools->syncTransformControls();
+    const QPolygonF box = canvas->controlsBoxForTest();
+    QVERIFY(!box.isEmpty());
+    QCOMPARE(box.boundingRect(), QRectF(8.0, 8.0, 42.0, 42.0));
+
+    const QList<int> beforeRed = inkOf(*view_, red);
+    const QList<int> beforeBlue = inkOf(*view_, blue);
+    // Grab the union's bottom-right handle and scale up about (8, 8).
+    canvas->mousePressed(QPointF(50.0, 50.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY2(view_->transform_session_active(), "a handle press starts a scale");
+    QCOMPARE(view_->transform_drag_handle(), 2);
+    canvas->mouseMoved(QPointF(60.0, 60.0));
+    canvas->mouseReleased(QPointF(60.0, 60.0));
+
+    const QList<int> afterRed = inkOf(*view_, red);
+    const QList<int> afterBlue = inkOf(*view_, blue);
+    QVERIFY2(afterRed.at(2) - afterRed.at(0) > beforeRed.at(2) - beforeRed.at(0),
+             "the red member scaled");
+    QVERIFY2(afterBlue.at(2) - afterBlue.at(0) > beforeBlue.at(2) - beforeBlue.at(0),
+             "the blue member scaled");
+    QVERIFY2(std::abs(afterRed.at(0) - beforeRed.at(0)) <= 1,
+             "the anchor corner stayed put");
+    QVERIFY2(std::abs(afterBlue.at(3) - 60) <= 1, "the dragged corner landed at 60");
+    QVERIFY(view_->linked_together({red, blue}));
 }
 
 QTEST_MAIN(LinkedLayersTest)

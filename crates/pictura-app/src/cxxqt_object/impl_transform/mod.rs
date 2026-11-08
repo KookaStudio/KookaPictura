@@ -3,6 +3,7 @@ mod convex;
 mod dispatch;
 mod distort;
 mod geometry;
+mod group;
 mod mask_move;
 mod perspective;
 mod session;

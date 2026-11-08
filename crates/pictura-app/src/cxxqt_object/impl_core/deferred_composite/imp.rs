@@ -37,10 +37,11 @@ pub(in crate::cxxqt_object) struct CompositeJob {
     pub(in crate::cxxqt_object) delay_ms: u64,
 }
 
-/// The engine call and layer extent a deferred transform needs.
+/// The engine call and layer extents a deferred transform needs.
 #[derive(Clone)]
 pub(in crate::cxxqt_object) struct TransformSpec {
-    pub(in crate::cxxqt_object) path: String,
+    /// Every layer the transform acts on (one, or a linked set).
+    pub(in crate::cxxqt_object) paths: Vec<String>,
     pub(in crate::cxxqt_object) orig_rect: PsdRect,
     pub(in crate::cxxqt_object) apply: std::sync::Arc<dyn Fn(&mut Document) -> bool + Send + Sync>,
 }
@@ -155,11 +156,11 @@ impl PictureViewRust {
         self.deferred_transform.is_some()
     }
 
-    /// Install a worker's transformed layer and report the edit to commit.
+    /// Install a worker's transformed layers and report the edit to commit.
     pub(in crate::cxxqt_object) fn land_transform(
         &mut self,
         generation: u64,
-        layer: Option<pictura_core::Layer>,
+        layers: Option<Vec<(String, pictura_core::Layer)>>,
     ) -> Option<(String, Edit)> {
         let pending = self.deferred_transform.clone()?;
         if pending.generation != generation {
@@ -167,15 +168,20 @@ impl PictureViewRust {
         }
         self.deferred_transform = None;
         self.pending_transform_job = None;
-        let layer = layer?;
-        let path = pending.spec.path.clone();
-        let dirty = {
+        let layers = layers?;
+        let mut dirty = pending.spec.orig_rect;
+        {
             let doc = self.session.doc.as_mut()?;
-            let dst = pictura_render::resolve_path_mut(doc, &path)?;
-            *dst = layer;
-            pending.spec.orig_rect.union(dst.rect)
-        };
-        Some((pending.label, transform_edit(self, &path, dirty)))
+            for (path, layer) in layers {
+                let dst = pictura_render::resolve_path_mut(doc, &path)?;
+                *dst = layer;
+                dirty = dirty.union(dst.rect);
+            }
+        }
+        Some((
+            pending.label,
+            transform_edit(self, &pending.spec.paths, dirty),
+        ))
     }
 
     /// Apply a pending transform engine on the GUI thread and report its edit.
@@ -191,14 +197,13 @@ impl PictureViewRust {
         if !applied {
             return None;
         }
-        let dirty = self
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, &spec.path))
-            .map(|layer| spec.orig_rect.union(layer.rect))
-            .unwrap_or(spec.orig_rect);
-        Some((pending.label, transform_edit(self, &spec.path, dirty)))
+        let dirty = self.session.doc.as_ref().map_or(spec.orig_rect, |doc| {
+            spec.paths.iter().fold(spec.orig_rect, |dirty, path| {
+                pictura_render::resolve_path(doc, path)
+                    .map_or(dirty, |layer| dirty.union(layer.rect))
+            })
+        });
+        Some((pending.label, transform_edit(self, &spec.paths, dirty)))
     }
 
     /// Patch the composite and fold each region into level 0, damage and the
@@ -337,16 +342,14 @@ fn rect_area(rect: &PsdRect) -> u64 {
     u64::from(rect.width().max(0) as u32) * u64::from(rect.height().max(0) as u32)
 }
 
-/// The edit a transformed layer needs: a bounded region, or the whole document
-/// when an effect can spread outside the layer's rect.
-fn transform_edit(rust: &PictureViewRust, path: &str, dirty: PsdRect) -> Edit {
-    if rust
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| pictura_render::resolve_path(doc, path))
-        .is_some_and(layer_has_effects)
-    {
+/// The edit a transformed layer set needs: a bounded region, or the whole
+/// document when a member's effects can spread outside its rect.
+fn transform_edit(rust: &PictureViewRust, paths: &[String], dirty: PsdRect) -> Edit {
+    if rust.session.doc.as_ref().is_some_and(|doc| {
+        paths
+            .iter()
+            .any(|path| pictura_render::resolve_path(doc, path).is_some_and(layer_has_effects))
+    }) {
         Edit::Full
     } else {
         Edit::regions(vec![dirty], false)
@@ -397,11 +400,18 @@ impl qobject::PictureView {
                 mut doc,
                 delay_ms,
             } = job;
-            let layer = {
+            let layers = {
                 let applied = (spec.apply)(&mut doc);
-                applied
-                    .then(|| pictura_render::resolve_path(&doc, &spec.path).cloned())
-                    .flatten()
+                applied.then(|| {
+                    spec.paths
+                        .iter()
+                        .filter_map(|path| {
+                            pictura_render::resolve_path(&doc, path)
+                                .cloned()
+                                .map(|layer| (path.clone(), layer))
+                        })
+                        .collect::<Vec<_>>()
+                })
             };
             // Before landing, so a write does not copy planes nobody reads.
             drop(doc);
@@ -411,7 +421,7 @@ impl qobject::PictureView {
             qt_thread
                 .queue(move |mut view| {
                     if let Some((label, edit)) =
-                        view.as_mut().rust_mut().land_transform(generation, layer)
+                        view.as_mut().rust_mut().land_transform(generation, layers)
                     {
                         view.as_mut().commit_transform_edit(&label, true, |_| edit);
                         if !view.rust().move_composite_pending() {

@@ -5,6 +5,7 @@ use super::super::geometry::{
     hit_test_quad, pivot_point, projective_coefficients, quad_anchors, quad_driven, rect_center,
     session_quad, set_pivot, source_corners, store_quad, MapParams,
 };
+use super::super::group::transform_group;
 use super::super::perspective::drag_angle_degrees;
 use super::super::session::can_begin_mode;
 use core::pin::Pin;
@@ -125,19 +126,50 @@ pub(super) fn move_preview_content_extents(view: &PictureView) -> Vec<i32> {
     })
 }
 
+pub(super) fn move_preview_above_origin(view: &PictureView) -> Vec<i32> {
+    view.rust()
+        .move_above_origin
+        .map_or_else(Vec::new, |(x, y)| vec![x, y])
+}
+
+pub(super) fn move_preview_above_scale(view: &PictureView) -> i32 {
+    view.rust().move_above_scale
+}
+
 pub(super) fn move_preview_follow(view: Pin<&mut PictureView>, dx: i32, dy: i32) -> bool {
     view.follow_move_preview(dx, dy)
 }
 
 pub(super) fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32> {
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| pictura_render::content_rect(doc, &path.to_string()))
-        .map_or_else(Vec::new, |rect| {
-            vec![rect.left, rect.top, rect.right, rect.bottom]
-        })
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return Vec::new();
+    };
+    let path = path.to_string();
+    let mut bounds: Option<pictura_core::PsdRect> = None;
+    for member in transform_group(rust, doc, &path) {
+        if let Some(rect) = pictura_render::content_rect(doc, &member) {
+            bounds = Some(bounds.map_or(rect, |bounds| bounds.union(rect)));
+        }
+    }
+    bounds.map_or_else(Vec::new, |rect| {
+        vec![rect.left, rect.top, rect.right, rect.bottom]
+    })
+}
+
+/// The link set containing `path` as a cache key for the controls box; empty
+/// when the layer is unlinked. Linking or unlinking changes the box's union
+/// without changing the layer rect or history, so the box key needs it.
+pub(super) fn layer_link_key(view: &PictureView, path: &QString) -> QString {
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return QString::default();
+    };
+    let members = super::super::link_members(rust, doc, &path.to_string());
+    if members.len() <= 1 {
+        return QString::default();
+    }
+    QString::from(members.join("\n"))
 }
 
 pub(super) fn controls_box_hit_test(

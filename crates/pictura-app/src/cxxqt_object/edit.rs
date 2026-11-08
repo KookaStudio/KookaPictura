@@ -232,6 +232,9 @@ impl PictureViewRust {
         bump_revision: bool,
         defer: bool,
     ) -> Presentation {
+        // A structural command may have remapped the link sets instead of
+        // invalidating them (an insertion or deletion that shifted indices).
+        let link_remap = self.link_remap.take();
         if matches!(edit, Edit::None) {
             return Presentation {
                 declaration: Some(edit),
@@ -274,7 +277,7 @@ impl PictureViewRust {
             self.refresh_for(&edit)
         };
         if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
-            self.link_sets.clear();
+            self.link_sets = link_remap.unwrap_or_default();
             self.solo_snapshot = None;
         }
         // A deferred move captures its history when its composite lands, so a

@@ -73,6 +73,7 @@ impl qobject::PictureView {
             if changed == 0 {
                 return Edit::None;
             }
+            super::super::impl_layers_select::remap_links_after_delete(rust, &deleted);
             let survivor = rust
                 .session
                 .doc

@@ -885,8 +885,7 @@ pub mod qobject {
         #[qinvokable]
         fn translate_layer(self: Pin<&mut Self>, dx: i32, dy: i32) -> bool;
 
-        /// Preview-move the topmost pixel layer by `(dx, dy)`: recomposite and emit
-        /// [`changed`] without history or dirty. `ponytail:` slow path for the self-test.
+        /// Preview-move the topmost pixel layer by `(dx, dy)` without history or dirty.
         #[qinvokable]
         fn move_preview(self: Pin<&mut Self>, dx: i32, dy: i32) -> bool;
 
@@ -903,11 +902,12 @@ pub mod qobject {
         /// Whether the last `begin_move_preview` reused the cached base instead of recomputing it.
         #[qinvokable]
         fn move_preview_cache_hit(&self) -> bool;
-
         /// The cached base image (layers with the moved layer hidden); null when not previewing.
         #[qinvokable]
         fn move_preview_base(&self) -> QImage;
-
+        /// The layers above the moving group over transparency; null when topmost.
+        #[qinvokable]
+        fn move_preview_above(&self) -> QImage;
         /// The moved layer's own image; null when not previewing or for a non-raster layer.
         #[qinvokable]
         fn move_preview_layer(&self) -> QImage;

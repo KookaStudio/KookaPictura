@@ -249,45 +249,6 @@ void ImageView::updateAntsTimer()
     }
 }
 
-void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                                 double opacity, std::optional<QPoint> basePos, int scale)
-{
-    moveBase_ = base;
-    moveBasePos_ = basePos;
-    moveLayer_ = layer;
-    moveLayerPos_ = layerPos;
-    moveDelta_ = QPointF();
-    moveOpacity_ = opacity;
-    moveScale_ = std::max(1, scale);
-    movePreviewActive_ = true;
-    update();
-}
-
-void ImageView::setMovePreviewLayer(const QImage& layer, const QPointF& layerPos)
-{
-    moveLayer_ = layer;
-    moveLayerPos_ = layerPos;
-    update();
-}
-
-void ImageView::setMovePreviewDelta(const QPointF& delta)
-{
-    moveDelta_ = delta;
-    update();
-}
-
-void ImageView::endMovePreview()
-{
-    setMoveOutline(QRectF());
-    movePreviewActive_ = false;
-    moveBase_ = QImage();
-    moveLayer_ = QImage();
-    moveDelta_ = QPointF();
-    moveOpacity_ = 1.0;
-    moveScale_ = 1;
-    update();
-}
-
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
                                       const QPointF& layerPos, double opacity,
                                       std::optional<QPoint> basePos)
@@ -302,6 +263,9 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
     moveScale_ = 1;
+    moveAbove_ = QImage();
+    moveAbovePos_.reset();
+    moveAboveScale_ = 1;
     movePreviewActive_ = true;
     transformActive_ = true;
     transformScaleX_ = 1.0;
@@ -371,6 +335,9 @@ void ImageView::clearTransformPreview()
     movePreviewActive_ = false;
     moveBase_ = QImage();
     moveLayer_ = QImage();
+    moveAbove_ = QImage();
+    moveAbovePos_.reset();
+    moveAboveScale_ = 1;
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
     moveScale_ = 1;
@@ -740,14 +707,21 @@ void ImageView::paintEvent(QPaintEvent* event)
         // Only the target's own bounds differ from the live canvas. A clear
         // patch must reveal the checkerboard, not the target still under it.
         if (!moveBase_.isNull()) {
+            // Bleed the patch one device pixel past the layer's content edge.
+            // The patch is drawn over the live canvas, which still shows the
+            // layer at its old place; without the overlap the scaled patch's
+            // anti-aliased edge blends with those pixels and leaves a seam
+            // along the old edge (#1250).
+            const qreal bleed = 1.0 / std::max(zoom_, 1e-6);
             const QRectF patch(QPointF(*moveBasePos_), QSizeF(moveBase_.size()) * moveScale_);
-            const QRectF device(offset_ + patch.topLeft() * zoom_, patch.size() * zoom_);
+            const QRectF grown = patch.adjusted(-bleed, -bleed, bleed, bleed);
+            const QRectF device(offset_ + grown.topLeft() * zoom_, grown.size() * zoom_);
             painter.save();
             painter.resetTransform();
             painter.setBrushOrigin(docDevice.topLeft());
             painter.fillRect(device, transparencyTile());
             painter.restore();
-            painter.drawImage(patch, moveBase_);
+            painter.drawImage(grown, moveBase_);
         }
         if (transformActive_) {
             paintTransformLayer(painter);
@@ -758,6 +732,23 @@ void ImageView::paintEvent(QPaintEvent* event)
                 moveLayer_);
             painter.setOpacity(1.0);
         }
+    }
+    // A layer below others: draw the layers above the moving group back over
+    // the moving image, clipped to it, so the preview keeps the stacking order
+    // (#1250). The overlay covers the presented rect; outside the moving image
+    // the live canvas already shows those layers.
+    // ponytail: clipped to the moving image's box, so a semi-transparent above
+    // layer blends twice where the moving image is itself transparent.
+    if (movePreviewActive_ && !transformActive_ && !moveAbove_.isNull()
+        && moveAbovePos_.has_value()) {
+        painter.save();
+        painter.setClipRect(QRectF(moveLayerPos_ + moveDelta_,
+                                   QSizeF(moveLayer_.size()) * moveScale_),
+                            Qt::IntersectClip);
+        painter.drawImage(
+            QRectF(QPointF(*moveAbovePos_), QSizeF(moveAbove_.size()) * moveAboveScale_),
+            moveAbove_);
+        painter.restore();
     }
     paintFilterPreview(painter);
     paintMaskOverlay(painter);

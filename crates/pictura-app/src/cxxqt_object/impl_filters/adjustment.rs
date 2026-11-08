@@ -64,6 +64,7 @@ impl qobject::PictureView {
                 // Inserting below the top shifts every later path, so the
                 // path-keyed link sets no longer name the same layers.
                 rust.link_sets.clear();
+                rust.link_remap = None;
                 rust.select_only_layer(&created);
                 if use_mask {
                     // The created mask becomes the edit target, as CS6 selects

@@ -38,6 +38,11 @@ pub mod ffi {
         /// A view preview's layer content bounds as `[left, top, right,
         /// bottom]`; empty for a full-resolution preview.
         fn move_preview_content_extents(view: &PictureView) -> Vec<i32>;
+        /// Where the above-layer image sits, as `[left, top]`; empty when there
+        /// is none.
+        fn move_preview_above_origin(view: &PictureView) -> Vec<i32>;
+        /// Document pixels per pixel of the above-layer image.
+        fn move_preview_above_scale(view: &PictureView) -> i32;
         /// Rebuild a view preview's moving image once a drag of `(dx, dy)`
         /// shows layer pixels it does not cover; true when it changed.
         fn move_preview_follow(view: Pin<&mut PictureView>, dx: i32, dy: i32) -> bool;
@@ -62,8 +67,12 @@ pub mod ffi {
         fn layer_content_bounds_extents(view: &PictureView, path: &QString) -> Vec<i32>;
         /// The rect the Move tool's controls box hugs on the layer at `path`
         /// (the content Free Transform trims to) as flat `[left, top, right,
-        /// bottom]`, changing nothing; empty when the path does not resolve.
+        /// bottom]`, changing nothing; for a linked layer the union of its
+        /// set's content. Empty when the path does not resolve.
         fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// The link set containing `path` as a cache key for the controls box;
+        /// empty when the layer is unlinked.
+        fn layer_link_key(view: &PictureView, path: &QString) -> QString;
         /// Hit-test the box `left, top, right, bottom` at document-space
         /// `(x, y)` as `transform_hit_test` does a session's: 0..=7 scale
         /// handles, 8 rotate, 9 inside, -1 none.
