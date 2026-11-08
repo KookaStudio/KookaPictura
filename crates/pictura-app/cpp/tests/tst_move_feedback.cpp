@@ -11,7 +11,9 @@
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
+#include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
+#include "api/transform_api.h"
 #include "api/transform_bridge.h"
 
 #include <memory>
@@ -19,6 +21,7 @@
 #include "qt_test_support.h"
 
 #include <QtGui/QPainter>
+#include <QtWidgets/QCheckBox>
 
 namespace {
 
@@ -60,6 +63,9 @@ private slots:
     void movedLayerStaysUnderTheLayersAbove();
     void linkedSetStaysUnderTheLayersAbove();
     void antsRepaintClearsThePreviousFrame();
+    void largeLayerUnderOthersLeavesNoResidue();
+    void rasterizedShapeLayersLeaveNoResidue();
+    void scrolledDocumentLeavesNoResidue();
 
 private:
     void showFrame();
@@ -369,6 +375,172 @@ void MoveFeedbackTest::antsRepaintClearsThePreviousFrame()
     QCOMPARE(shot.pixelColor(f.canvas->imageToWidget(QPointF(75.0, 30.0)).toPoint()),
              QColor(Qt::blue));
     f.canvas->mouseReleased(QPointF(60.0, 30.0));
+}
+
+// A large layer below smaller layers: a two-step drag leaves no strip behind.
+void MoveFeedbackTest::largeLayerUnderOthersLeavesNoResidue()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_residue"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    const auto square = [&](int above, const QRect& box, QRgb colour) {
+        const int index = f.view->add_layer(above);
+        if (index < 0) {
+            return QString();
+        }
+        const QString path = QString::number(index);
+        f.view->set_active_layer(path);
+        if (!f.view->select_rect(box.x(), box.y(), box.width(), box.height(),
+                                 QStringLiteral("new"), 0.0)
+            || !pictura::edit_fill(*f.view, colour, -1, QStringLiteral("normal"), 100, false)) {
+            return QString();
+        }
+        f.view->deselect();
+        return path;
+    };
+    const QString black = square(0, QRect(20, 20, 80, 80), qRgba(0, 0, 0, 255));
+    QVERIFY2(!black.isEmpty(), "black layer");
+    const QString red = square(black.toInt(), QRect(40, 40, 20, 20), qRgba(255, 0, 0, 255));
+    QVERIFY2(!red.isEmpty(), "red layer");
+    QVERIFY(!square(red.toInt(), QRect(40, 70, 20, 20), qRgba(0, 128, 0, 255)).isEmpty());
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    auto* box = frame.findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
+    QVERIFY(box);
+    box->setChecked(true);
+    f.view->set_active_layer(black);
+    QCoreApplication::processEvents();
+
+    // Right, then up: the previous frame's bottom strip is the residue the
+    // report shows.
+    f.canvas->mousePressed(QPointF(30.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(70.0, 30.0));
+    QImage shot = f.canvas->grab().toImage();
+    f.canvas->mouseMoved(QPointF(70.0, 10.0));
+    const QRect ants = f.canvas->antsUpdateRectForTest();
+    const QImage current = f.canvas->grab().toImage();
+    const auto at = [&](const QImage& image, double x, double y) {
+        return image.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(current, 80.0, 90.0), QColor(Qt::white));  // full paint clears it
+    QCOMPARE(at(current, 25.0, 50.0), QColor(Qt::white));
+    QPainter painter(&shot);
+    painter.setClipRect(ants);
+    painter.drawImage(QPoint(), current);
+    painter.end();
+    QCOMPARE(at(shot, 80.0, 90.0), QColor(Qt::white));     // partial repaint too
+    QCOMPARE(at(shot, 25.0, 50.0), QColor(Qt::white));
+    f.canvas->mouseReleased(QPointF(70.0, 10.0));
+}
+
+// A pixel layer under canvas-sized shape layers: the residue the report shows.
+void MoveFeedbackTest::rasterizedShapeLayersLeaveNoResidue()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_shape_above"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    // The report's layers: rectangle shapes, each a canvas-sized fill cut to a
+    // small square, so their panel thumbnails are mostly checkerboard.
+    const auto shape = [&](const QRect& box, uint32_t colour) {
+        pictura::ShapeSpec spec{};
+        spec.kind = 0;
+        spec.boxed = true;
+        spec.x0 = box.x();
+        spec.y0 = box.y();
+        spec.x1 = box.x() + box.width();
+        spec.y1 = box.y() + box.height();
+        const QString path = pictura::shape_add_layer(*f.view, spec, colour);
+        if (!path.isEmpty()) {
+            pictura::shape_rasterize(*f.view, path);
+        }
+        return path;
+    };
+    const QString black = shape(QRect(20, 20, 80, 80), 0xff000000u);
+    QVERIFY2(!black.isEmpty(), "black layer");
+    QVERIFY2(!shape(QRect(40, 40, 20, 20), 0xffff0000u).isEmpty(), "red shape");
+    QVERIFY2(!shape(QRect(40, 70, 20, 20), 0xff008000u).isEmpty(), "green shape");
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    f.view->set_active_layer(black);
+    QCoreApplication::processEvents();
+
+    f.canvas->mousePressed(QPointF(30.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(70.0, 30.0));
+    QImage shot = f.canvas->grab().toImage();
+    f.canvas->mouseMoved(QPointF(70.0, 10.0));
+    const QRect ants = f.canvas->antsUpdateRectForTest();
+    const QImage current = f.canvas->grab().toImage();
+    const auto at = [&](const QImage& image, double x, double y) {
+        return image.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(current, 80.0, 90.0), QColor(Qt::white));
+    QCOMPARE(at(current, 25.0, 50.0), QColor(Qt::white));
+    QPainter painter(&shot);
+    painter.setClipRect(ants);
+    painter.drawImage(QPoint(), current);
+    painter.end();
+    QCOMPARE(at(shot, 80.0, 90.0), QColor(Qt::white));
+    QCOMPARE(at(shot, 25.0, 50.0), QColor(Qt::white));
+    f.canvas->mouseReleased(QPointF(70.0, 10.0));
+}
+
+// The report's document: 1280x800 at 126%, larger than the canvas.
+void MoveFeedbackTest::scrolledDocumentLeavesNoResidue()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(1280, 800, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_move_scrolled"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+
+    const auto shape = [&](const QRect& box, uint32_t colour) {
+        pictura::ShapeSpec spec{};
+        spec.kind = 0;
+        spec.boxed = true;
+        spec.x0 = box.x();
+        spec.y0 = box.y();
+        spec.x1 = box.x() + box.width();
+        spec.y1 = box.y() + box.height();
+        const QString path = pictura::shape_add_layer(*f.view, spec, colour);
+        if (!path.isEmpty()) {
+            pictura::shape_rasterize(*f.view, path);
+        }
+        return path;
+    };
+    const QString black = shape(QRect(250, 150, 250, 266), 0xff000000u);
+    QVERIFY2(!black.isEmpty(), "black layer");
+    QVERIFY(!shape(QRect(300, 250, 150, 100), 0xffff0000u).isEmpty());
+    QVERIFY(!shape(QRect(300, 400, 100, 80), 0xff008000u).isEmpty());
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    f.view->set_active_layer(black);
+    f.canvas->setZoom(1.26, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    QCoreApplication::processEvents();
+
+    f.canvas->mousePressed(QPointF(300.0, 200.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    QTest::qWait(60);
+    f.canvas->mouseMoved(QPointF(412.0, 200.0));
+    QTest::qWait(200);
+    f.canvas->mouseMoved(QPointF(412.0, 129.0));
+    QTest::qWait(200);
+
+    const QImage current = f.canvas->grab().toImage();
+    const auto at = [&](const QImage& image, double x, double y) {
+        return image.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(current, 400.0, 390.0), QColor(Qt::white));  // the old bottom strip
+    f.canvas->mouseReleased(QPointF(412.0, 129.0));
 }
 
 QTEST_MAIN(MoveFeedbackTest)

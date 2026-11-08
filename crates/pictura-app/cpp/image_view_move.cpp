@@ -27,7 +27,6 @@ void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const 
     moveAbove_ = above;
     moveAbovePos_ = abovePos;
     moveAboveScale_ = std::max(1, aboveScale);
-    lastMoveRect_ = QRect();
     movePreviewActive_ = true;
     update();
 }
@@ -54,7 +53,6 @@ void ImageView::endMovePreview()
     moveAbove_ = QImage();
     moveAbovePos_.reset();
     moveAboveScale_ = 1;
-    lastMoveRect_ = QRect();
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
     moveScale_ = 1;
@@ -104,24 +102,14 @@ void ImageView::setMoveOutline(const QRectF& bounds)
     update();
 }
 
-QRect ImageView::moveImageWidgetRect() const
-{
-    if (!movePreviewActive_ || moveLayer_.isNull() || zoom_ <= 0.0) {
-        return QRect();
-    }
-    const QRectF moving(moveLayerPos_ + moveDelta_,
-                        QSizeF(moveLayer_.size()) * moveScale_);
-    const QRectF scaled(moving.x() * zoom_ + offset_.x(), moving.y() * zoom_ + offset_.y(),
-                        moving.width() * zoom_, moving.height() * zoom_);
-    return viewRotation()
-        .mapRect(scaled)
-        .adjusted(-2.0, -2.0, 2.0, 2.0)
-        .toAlignedRect()
-        .intersected(rect());
-}
-
 QRect ImageView::antsUpdateRect() const
 {
+    // A Move drag's frame moves, and its paints are coalesced while the pointer
+    // flies: a repaint limited to the current frame leaves an older one behind.
+    // Repaint the whole canvas while the preview is live (#1250).
+    if (movePreviewActive_) {
+        return rect();
+    }
     QRectF imageBounds;
     if (selectionEdgesVisible_) {
         for (const QPolygonF& loop : selectionContours_) {
@@ -132,9 +120,6 @@ QRect ImageView::antsUpdateRect() const
     for (const QPolygonF& loop : previewContours_) {
         imageBounds = imageBounds.united(loop.boundingRect());
     }
-    if (!moveOutline_.isEmpty() && movePreviewActive_) {
-        imageBounds = imageBounds.united(moveOutline_.translated(moveDelta_));
-    }
     if (imageBounds.isEmpty() || zoom_ <= 0.0) {
         return rect();
     }
@@ -144,16 +129,9 @@ QRect ImageView::antsUpdateRect() const
                         imageBounds.y() * zoom_ + offset_.y(),
                         imageBounds.width() * zoom_, imageBounds.height() * zoom_);
     const QRectF widget = viewRotation().mapRect(scaled);
-    QRect out = widget.adjusted(-2.0, -2.0, 2.0, 2.0)
-                    .toAlignedRect()
-                    .intersected(rect());
-    // The moving image can reach past the ants box (a view preview carries a
-    // margin), and the frame it just left must be cleared too: an ants-only
-    // repaint that covered only the new place would leave the old one (#1250).
-    if (movePreviewActive_) {
-        out = out.united(moveImageWidgetRect()).united(lastMoveRect_);
-    }
-    return out;
+    return widget.adjusted(-2.0, -2.0, 2.0, 2.0)
+        .toAlignedRect()
+        .intersected(rect());
 }
 
 void ImageView::paintMoveOutline(QPainter& painter)

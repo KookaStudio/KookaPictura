@@ -754,9 +754,6 @@ private:
     // The widget region covered by the animated outline(s), for a partial
     // repaint on each ants tick.
     QRect antsUpdateRect() const;
-    // The moving image's widget rectangle, for the ants repaint and the
-    // previous-frame clear.
-    QRect moveImageWidgetRect() const;
 
     struct PresentCache {
         qint64 key = -1;
@@ -875,9 +872,6 @@ private:
     QImage moveAbove_;
     std::optional<QPoint> moveAbovePos_;
     int moveAboveScale_ = 1;
-    // The moving layer's widget rectangle at the last paint, so the marching
-    // ants repaint clears the frame it leaves behind (#1250).
-    QRect lastMoveRect_;
 
     bool transformActive_ = false;
     double transformScaleX_ = 1.0;

@@ -266,7 +266,6 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     moveAbove_ = QImage();
     moveAbovePos_.reset();
     moveAboveScale_ = 1;
-    lastMoveRect_ = QRect();
     movePreviewActive_ = true;
     transformActive_ = true;
     transformScaleX_ = 1.0;
@@ -339,7 +338,6 @@ void ImageView::clearTransformPreview()
     moveAbove_ = QImage();
     moveAbovePos_.reset();
     moveAboveScale_ = 1;
-    lastMoveRect_ = QRect();
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
     moveScale_ = 1;
@@ -745,7 +743,6 @@ void ImageView::paintEvent(QPaintEvent* event)
             moveAbove_);
         painter.restore();
     }
-    lastMoveRect_ = moveImageWidgetRect();
     paintFilterPreview(painter);
     paintMaskOverlay(painter);
     // Hidden channels (two still shown): zero them with one multiply.
