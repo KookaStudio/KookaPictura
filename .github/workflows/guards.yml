@@ -30,6 +30,10 @@ jobs:
           python3 scripts/check-test-plan.py
       - name: File size
         run: bash scripts/check-file-size.sh
+      - name: CMake source fragments
+        run: |
+          python3 scripts/check-cmake-source-fragments.py --self-test
+          python3 scripts/check-cmake-source-fragments.py
       - name: Self-test budget
         run: bash scripts/check-selftest-budget.sh
       - name: Worktree hook
