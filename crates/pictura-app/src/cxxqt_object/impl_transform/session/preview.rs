@@ -1,6 +1,7 @@
 //! The images a transform previews: the moving layer and its backdrop.
 
 use super::*;
+use pictura_render::FilterProxy;
 
 /// Whether the layer's channels alone are not its whole appearance: a layer
 /// mask, vector mask, layer style, fill adjustment, or type needs the
@@ -13,6 +14,100 @@ pub(super) fn needs_rendered_appearance(layer: &pictura_core::Layer) -> bool {
         || pictura_render::is_shape_layer(layer)
         || pictura_render::decode_layer_fill(layer).is_some()
         || pictura_render::has_layer_style(layer)
+}
+
+/// The Move preview's moving image: the layer at `path` over `region`
+/// (document coordinates, which may reach past the canvas), reduced by `level`.
+/// A layer whose channels alone are not its appearance (a mask, vector mask,
+/// style, fill, or type) is composited over transparency, with its opacity and
+/// blend neutralized so the preview applies the layer opacity once itself.
+/// Otherwise its raw channels are read, which is cheaper.
+///
+/// ponytail: an unlinked mask is previewed as moving with the layer, as the
+/// transform preview does; the commit leaves the mask in place.
+pub(super) fn moving_layer_image(
+    doc: &pictura_core::Document,
+    path: &str,
+    region: PsdRect,
+    level: u32,
+    gpu_compute: bool,
+) -> Option<QImage> {
+    if region.width() <= 0 || region.height() <= 0 {
+        return None;
+    }
+    let mut layer = pictura_render::resolve_path(doc, path)?.clone();
+    let rendered = needs_rendered_appearance(&layer);
+    if rendered {
+        layer.opacity = 255;
+        layer.blend = BlendMode::Normal;
+    }
+    shift_into_region(&mut layer, -region.left, -region.top);
+    layer.visible = true;
+    let mut single = doc.clone();
+    single.width = u32::try_from(region.width()).ok()?;
+    single.height = u32::try_from(region.height()).ok()?;
+    single.layers = LayerStack::from_layers(vec![layer]);
+    let whole = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: region.height(),
+        right: region.width(),
+    };
+    if rendered {
+        // Level 0 composites the region-sized scratch document directly, so a
+        // channel-less type or fill layer keeps its rect; a deeper level needs
+        // the reduced copy.
+        let reduced;
+        let source = if level == 0 {
+            &single
+        } else {
+            reduced = FilterProxy::new(&single, None, whole, 1.0 / f64::from(1u32 << level))?
+                .into_document();
+            &reduced
+        };
+        let (buffer, _) =
+            pictura_render::composite(pictura_render::CompositeRequest::whole(source, gpu_compute));
+        Some(buffer_to_image(&pictura_codec::buffer_to_srgb(
+            source, &buffer,
+        )))
+    } else {
+        let reduced =
+            FilterProxy::new(&single, None, whole, 1.0 / f64::from(1u32 << level))?.into_document();
+        layer_image(reduced.layers.iter().next()?)
+    }
+}
+
+/// Shift everything the compositor reads in document coordinates by
+/// `(dx, dy)`, so a layer moved into a region-sized scratch document keeps its
+/// mask, vector mask, retained store, and type in place.
+fn shift_into_region(layer: &mut pictura_core::Layer, dx: i32, dy: i32) {
+    let shift = |rect: PsdRect| PsdRect {
+        top: rect.top + dy,
+        left: rect.left + dx,
+        bottom: rect.bottom + dy,
+        right: rect.right + dx,
+    };
+    layer.rect = shift(layer.rect);
+    if let Some(store) = &mut layer.source_channels {
+        store.rect = shift(store.rect);
+    }
+    if let Some(mask) = &mut layer.mask {
+        mask.rect = shift(mask.rect);
+    }
+    if let Some(vector) = &mut layer.vector_mask {
+        for point in vector.subpaths.iter_mut().flat_map(|s| &mut s.points) {
+            point[0] = point[0].saturating_add(dx.saturating_mul(256));
+            point[1] = point[1].saturating_add(dy.saturating_mul(256));
+        }
+        vector.rows = Default::default();
+    }
+    if let Some(tool) = layer.type_tool.as_mut() {
+        if let Some(path) = tool.path.as_mut() {
+            path.subpath.translate(f64::from(dx), f64::from(dy));
+        }
+        tool.transform[4] += f64::from(dx);
+        tool.transform[5] += f64::from(dy);
+    }
 }
 
 /// Render the layer alone over transparency and crop to its visible rect, so

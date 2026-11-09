@@ -1,6 +1,6 @@
 use super::*;
 use crate::cxxqt_object::tests::pixel_layer;
-use pictura_core::{BitDepth, ColorMode, Layer};
+use pictura_core::{BitDepth, ColorMode, Layer, LayerMask, LayerStack};
 
 const W: u32 = 2400;
 const H: u32 = 2000;
@@ -122,11 +122,11 @@ fn a_drag_past_the_margin_rebuilds_the_moving_image() {
         .expect("view preview")
         .view;
     assert!(
-        follow(&doc, "1", view, 100, 80).is_none(),
+        follow(&doc, "1", view, 100, 80, false).is_none(),
         "inside the margin"
     );
 
-    let (image, moved) = follow(&doc, "1", view, -500, 0).expect("rebuilt");
+    let (image, moved) = follow(&doc, "1", view, -500, 0, false).expect("rebuilt");
     let shown = rect(900, 400, 1700, 1000);
     assert!(
         contains(moved.region, shown),
@@ -136,6 +136,38 @@ fn a_drag_past_the_margin_rebuilds_the_moving_image() {
     assert_eq!(
         (image.width() * 4, image.height() * 4),
         (moved.region.width(), moved.region.height())
+    );
+}
+
+// [lct_move_preview_mask_view]
+#[test]
+fn a_view_preview_applies_the_layer_mask() {
+    let mut doc = document();
+    let (w, h) = (W as usize, H as usize);
+    let mut mask = vec![255u8; w * h];
+    for y in 0..h {
+        for x in 0..w / 2 {
+            mask[y * w + x] = 0;
+        }
+    }
+    doc.layers[1].mask = Some(LayerMask {
+        rect: rect(0, 0, W as i32, H as i32),
+        default_color: 0,
+        data: Some(mask.into()),
+        ..Default::default()
+    });
+
+    let visible = rect(400, 400, 1200, 1000);
+    let preview = view_preview(&doc, &paths(), 0, visible, false).expect("view preview");
+    assert_eq!(preview.view.region, rect(200, 250, 1400, 1150));
+
+    let hidden = preview.layer.pixel_color(100, 100);
+    assert_eq!(hidden.alpha(), 0, "the masked half is transparent");
+    assert_eq!(rgb(&preview.layer, 1100, 100), OVER);
+    assert_eq!(
+        preview.layer.pixel_color(1100, 100).alpha(),
+        255,
+        "the revealed half shows the layer"
     );
 }
 
@@ -149,7 +181,7 @@ fn a_layer_far_off_screen_starts_without_a_moving_image() {
     let preview = view_preview(&doc, &paths(), 0, visible, false).expect("view preview");
     assert!(preview.base.is_null(), "nothing of the layer is on screen");
     assert!(preview.layer.is_null());
-    assert!(follow(&doc, "1", preview.view, -4000, 0).is_some());
+    assert!(follow(&doc, "1", preview.view, -4000, 0, false).is_some());
 }
 
 // [lct_move_preview_stack]
