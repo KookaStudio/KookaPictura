@@ -34,6 +34,8 @@ mod bounds;
 
 mod polygon;
 
+pub mod geometry;
+
 mod bounded;
 pub mod quick_mask;
 mod tiled;

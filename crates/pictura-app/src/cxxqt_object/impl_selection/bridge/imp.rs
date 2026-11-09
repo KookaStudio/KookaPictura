@@ -2,6 +2,7 @@ use super::*;
 
 use core::pin::Pin;
 use cxx_qt_lib::QString;
+use pictura_select::geometry::{marquee_rect, within_radius, MarqueeStyle};
 
 pub(super) fn begin_selection_move(view: Pin<&mut PictureView>) -> bool {
     view.begin_selection_move()
@@ -60,4 +61,35 @@ pub(super) fn quick_select_commit(view: Pin<&mut PictureView>) -> bool {
 
 pub(super) fn quick_select_cancel(view: Pin<&mut PictureView>) -> bool {
     view.quick_select_cancel()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn selection_marquee_rect(
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    shift: bool,
+    mirror: bool,
+    style: i32,
+    ratio_w: f64,
+    ratio_h: f64,
+    fixed_w: i32,
+    fixed_h: i32,
+) -> Vec<i32> {
+    let style = MarqueeStyle::from_i32(style).unwrap_or(MarqueeStyle::Normal);
+    let (x, y, width, height) = marquee_rect(
+        (x0, y0),
+        (x1, y1),
+        shift,
+        mirror,
+        style,
+        (ratio_w, ratio_h),
+        (fixed_w, fixed_h),
+    );
+    vec![x, y, width, height]
+}
+
+pub(super) fn selection_within_radius(x0: f64, y0: f64, x1: f64, y1: f64, radius: f64) -> bool {
+    within_radius((x0, y0), (x1, y1), radius)
 }

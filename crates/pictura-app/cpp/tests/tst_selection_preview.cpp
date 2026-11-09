@@ -12,11 +12,13 @@
 #include "selection_geometry.h"
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QtMath>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
 #include <QtGui/QPolygonF>
+#include <QtWidgets/QApplication>
 
 #include <array>
 #include <memory>
@@ -106,6 +108,13 @@ private slots:
     void regionTracePastTheEdgeClosesAlongTheBorder();
     void liveOutlineMatchesTheCommittedOne();
     void polygonalBandStaysOpenAtTheBorder();
+    void polygonalCloseRadiusScalesWithZoom();
+    void polygonalDoubleClickRadiusScalesWithZoom();
+    void magneticCloseRadiusScalesWithZoom();
+    void fixedRatioFitsTheCursorBox();
+    void fixedSizeFollowsTheCursor();
+    void fixedSizeClipsAtTheCanvasEdge();
+    void ellipticalStyleIsIndependent();
     void combineModeShowsTheNewShape();
     void zoomMarqueeStaysUnclipped();
     void committedOutlineStaysVisibleAtBorderAcrossPanAndZoom();
@@ -115,7 +124,8 @@ private slots:
 
 private:
     static QImage seed();
-    pictura::SelectionOptions* selectOptions(Fixture& f);
+    pictura::SelectionOptions* selectOptions(
+        Fixture& f, pictura::ToolId id = pictura::ToolId::Marquee);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -136,17 +146,19 @@ QImage SelectionPreviewTest::seed()
     return image;
 }
 
-// The selection tools share one options object, so the state a previous test
-// left behind is reset here.
-pictura::SelectionOptions* SelectionPreviewTest::selectOptions(Fixture& f)
+// The marquee tools have separate options groups, so reset the group a test
+// uses to the values it expects.
+pictura::SelectionOptions* SelectionPreviewTest::selectOptions(Fixture& f, pictura::ToolId id)
 {
-    auto* options = f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee);
+    auto* options = f.tools->optionsFor<pictura::SelectionOptions>(id);
     if (!options) {
         return nullptr;
     }
     options->setCombineMode(pictura::SelectionMode::New);
     options->setMarqueeStyle(pictura::MarqueeStyle::Normal);
     options->setFeather(0.0);
+    options->setFixedRatio(1.0, 1.0);
+    options->setFixedSize(100, 100);
     options->setMagneticWidth(6);
     options->setMagneticContrast(10);
     options->setMagneticFrequency(0);
@@ -250,7 +262,7 @@ void SelectionPreviewTest::ellipticalMarqueePastTheEdgeClosesAlongTheBorder()
     Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_ellipse"));
     QVERIFY2(f.ok(), "selection fixture");
     window_->setActiveTool(pictura::ToolId::EllipticalMarquee);
-    QVERIFY(selectOptions(f) != nullptr);
+    QVERIFY(selectOptions(f, pictura::ToolId::EllipticalMarquee) != nullptr);
 
     f.canvas->mousePressed(QPointF(50, 50), Qt::LeftButton, int(Qt::NoModifier));
     f.canvas->mouseMoved(QPointF(100, 100));
@@ -368,6 +380,110 @@ void SelectionPreviewTest::polygonalBandStaysOpenAtTheBorder()
     QCOMPARE(int(loops.first().size()), 3);
     QVERIFY(hasVertex(loops.first(), QPointF(100, 100)));
     f.canvas->mouseReleased(QPointF(100, 100));
+}
+
+void SelectionPreviewTest::polygonalCloseRadiusScalesWithZoom()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_polygon_radius"));
+    QVERIFY2(f.ok(), "selection fixture");
+    window_->setActiveTool(pictura::ToolId::PolygonalLasso);
+    QVERIFY(selectOptions(f) != nullptr);
+    f.canvas->setZoom(2.0, QPointF(0, 0));
+
+    const auto click = [&f](qreal x, qreal y) {
+        f.canvas->mousePressed(QPointF(x, y), Qt::LeftButton, int(Qt::NoModifier));
+        f.canvas->mouseReleased(QPointF(x, y));
+    };
+
+    // 3 image px from the first vertex is 6 screen px at zoom 2: the close
+    // click commits the triangle. The closing click is not a vertex, so the
+    // path needs its three vertices first.
+    click(20, 20);
+    click(40, 40);
+    click(40, 20);
+    click(23, 20);
+    QVERIFY(f.view->has_selection());
+    QVERIFY(!f.canvas->hasSelectionPreviewForTest());
+
+    f.view->deselect();
+    // 4 image px is 8 screen px, outside the radius: the band stays open.
+    click(20, 20);
+    click(40, 40);
+    click(40, 20);
+    click(24, 20);
+    QVERIFY(!f.view->has_selection());
+    QVERIFY(f.canvas->selectionPreviewOpenForTest());
+}
+
+void SelectionPreviewTest::polygonalDoubleClickRadiusScalesWithZoom()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_polygon_double"));
+    QVERIFY2(f.ok(), "selection fixture");
+    window_->setActiveTool(pictura::ToolId::PolygonalLasso);
+    QVERIFY(selectOptions(f) != nullptr);
+    f.canvas->setZoom(2.0, QPointF(0, 0));
+
+    const auto click = [&f](qreal x, qreal y) {
+        f.canvas->mousePressed(QPointF(x, y), Qt::LeftButton, int(Qt::NoModifier));
+        f.canvas->mouseReleased(QPointF(x, y));
+    };
+
+    // A rapid click near the last vertex is the double-click. Widen the
+    // interval so the check cannot go flaky on a loaded machine.
+    const int savedInterval = QApplication::doubleClickInterval();
+    const auto restoreInterval = qScopeGuard(
+        [savedInterval] { QApplication::setDoubleClickInterval(savedInterval); });
+    QApplication::setDoubleClickInterval(60000);
+
+    // 3 image px from the last vertex is 6 screen px at zoom 2: the
+    // double-click closes and commits.
+    click(20, 20);
+    click(40, 40);
+    click(40, 20);
+    click(43, 20);
+    QVERIFY(f.view->has_selection());
+    QVERIFY(!f.canvas->hasSelectionPreviewForTest());
+
+    f.view->deselect();
+    // 4 image px is 8 screen px, outside the radius: the outline stays open.
+    click(20, 20);
+    click(40, 40);
+    click(40, 20);
+    click(44, 20);
+    QVERIFY(!f.view->has_selection());
+    QVERIFY(f.canvas->selectionPreviewOpenForTest());
+}
+
+void SelectionPreviewTest::magneticCloseRadiusScalesWithZoom()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_magnetic_radius"));
+    QVERIFY2(f.ok(), "selection fixture");
+    window_->setActiveTool(pictura::ToolId::MagneticLasso);
+    QVERIFY(selectOptions(f) != nullptr);
+    f.canvas->setZoom(2.0, QPointF(0, 0));
+
+    const auto click = [&f](qreal x, qreal y) {
+        f.canvas->mousePressed(QPointF(x, y), Qt::LeftButton, int(Qt::NoModifier));
+        f.canvas->mouseReleased(QPointF(x, y));
+    };
+
+    // 3 image px from the first vertex is 6 screen px at zoom 2: the close
+    // click is on the radius and commits the outline.
+    click(20, 20);
+    click(40, 40);
+    click(40, 20);
+    click(23, 20);
+    QVERIFY(f.view->has_selection());
+    QVERIFY(!f.canvas->hasSelectionPreviewForTest());
+
+    f.view->deselect();
+    // 4 image px is 8 screen px, outside the radius: the band stays open.
+    click(20, 20);
+    click(40, 40);
+    click(40, 20);
+    click(24, 20);
+    QVERIFY(!f.view->has_selection());
+    QVERIFY(f.canvas->hasSelectionPreviewForTest());
 }
 
 void SelectionPreviewTest::combineModeShowsTheNewShape()
@@ -577,6 +693,113 @@ void SelectionPreviewTest::antsTickRepaintsOnlyTheOutline()
                             f.canvas->imageToWidget(QPointF(50, 50)));
     QVERIFY(moveDirty.contains(moveWidget.normalized().toAlignedRect().adjusted(-2, -2, 2, 2)));
     f.canvas->endMovePreview();
+}
+
+
+void SelectionPreviewTest::fixedRatioFitsTheCursorBox()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_fixed_ratio"));
+    QVERIFY2(f.ok(), "selection fixture");
+    window_->setActiveTool(pictura::ToolId::Marquee);
+    auto* options = selectOptions(f);
+    QVERIFY(options != nullptr);
+    options->setMarqueeStyle(pictura::MarqueeStyle::FixedRatio);
+    options->setFixedRatio(2.0, 1.0);
+
+    f.canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(50, 20));
+    f.canvas->mouseReleased(QPointF(50, 20));
+
+    // The 40x10 drag box holds a 20x10 selection, not a 40x20 one.
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("10 10 20 10"));
+    options->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+}
+
+void SelectionPreviewTest::fixedSizeFollowsTheCursor()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_fixed_size"));
+    QVERIFY2(f.ok(), "selection fixture");
+    window_->setActiveTool(pictura::ToolId::Marquee);
+    auto* options = selectOptions(f);
+    QVERIFY(options != nullptr);
+    options->setMarqueeStyle(pictura::MarqueeStyle::FixedSize);
+    options->setFixedSize(10, 6);
+
+    f.canvas->mousePressed(QPointF(5, 5), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(15, 15));
+    f.canvas->mouseReleased(QPointF(15, 15));
+
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("15 15 10 6"));
+    options->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+}
+
+void SelectionPreviewTest::fixedSizeClipsAtTheCanvasEdge()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_fixed_clip"));
+    QVERIFY2(f.ok(), "selection fixture");
+    window_->setActiveTool(pictura::ToolId::Marquee);
+    auto* options = selectOptions(f);
+    QVERIFY(options != nullptr);
+    options->setMarqueeStyle(pictura::MarqueeStyle::FixedSize);
+    options->setFixedSize(100, 50);
+
+    f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseReleased(QPointF(20, 20));
+
+    // The 100x50 box is clipped to the 64x64 canvas.
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("20 20 44 44"));
+    options->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+}
+
+void SelectionPreviewTest::ellipticalStyleIsIndependent()
+{
+    QImage image(256, 256, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    Fixture f(*window_, image, QStringLiteral("pictura_sel_preview_style"));
+    QVERIFY2(f.ok(), "selection fixture");
+    auto* rect = selectOptions(f, pictura::ToolId::Marquee);
+    auto* ellipse = selectOptions(f, pictura::ToolId::EllipticalMarquee);
+    QVERIFY(rect && ellipse);
+    QCOMPARE(ellipse->fixedSizeWidth(), 100);
+
+    // Changing the ellipse leaves the rectangle Normal.
+    ellipse->setMarqueeStyle(pictura::MarqueeStyle::FixedRatio);
+    ellipse->setFixedRatio(2.0, 1.0);
+    QCOMPARE(int(rect->marqueeStyle()), int(pictura::MarqueeStyle::Normal));
+
+    // Changing the rectangle leaves the ellipse Fixed Ratio.
+    rect->setMarqueeStyle(pictura::MarqueeStyle::FixedSize);
+    rect->setFixedSize(10, 6);
+    QCOMPARE(int(ellipse->marqueeStyle()), int(pictura::MarqueeStyle::FixedRatio));
+    QCOMPARE(ellipse->fixedRatioWidth(), 2.0);
+
+    window_->setActiveTool(pictura::ToolId::EllipticalMarquee);
+
+    // The ellipse's own Fixed Ratio commits a 20x10 ellipse from a 40x10 drag.
+    f.canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(50, 20));
+    f.canvas->mouseReleased(QPointF(50, 20));
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("10 10 20 10"));
+
+    // The ellipse's own Fixed Size puts the entered 100x50 at the pointer; the
+    // rectangle's Fixed Size 10x6 is unchanged.
+    ellipse->setMarqueeStyle(pictura::MarqueeStyle::FixedSize);
+    ellipse->setFixedSize(100, 50);
+    QCOMPARE(int(rect->marqueeStyle()), int(pictura::MarqueeStyle::FixedSize));
+    QCOMPARE(rect->fixedSizeWidth(), 10);
+    QCOMPARE(rect->fixedSizeHeight(), 6);
+    f.view->deselect();
+    f.canvas->mousePressed(QPointF(120, 80), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseReleased(QPointF(120, 80));
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(),
+             QStringLiteral("120 80 100 50"));
+
+    // Switching the rectangle's style does not change the ellipse's.
+    rect->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+    QCOMPARE(int(ellipse->marqueeStyle()), int(pictura::MarqueeStyle::FixedSize));
+
+    ellipse->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+    rect->setMarqueeStyle(pictura::MarqueeStyle::Normal);
 }
 
 QTEST_MAIN(SelectionPreviewTest)

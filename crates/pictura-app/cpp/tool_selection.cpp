@@ -15,7 +15,7 @@
 #include <QtGui/QPolygonF>
 #include <QtWidgets/QApplication>
 
-#include <cmath>
+#include <algorithm>
 #include <memory>
 
 namespace pictura {
@@ -64,9 +64,8 @@ public:
         ctx.setDragMode(ctx.resolveSelectionMode(mods, v->has_selection()));
         dragMods_ = mods;
         const bool alt = mods.testFlag(Qt::AltModifier);
-        altArmed_ = alt;
         altWasDown_ = alt;
-        mirrorAlt_ = false;
+        mirrorAlt_ = alt && !v->has_selection();
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
         anchor_ = last_ = imagePos;
@@ -79,7 +78,7 @@ public:
         if (!ctx.dragging()) {
             return;
         }
-        trackAltEdge(ctx, mods);
+        trackAltEdge(mods);
         last_ = imagePos;
         updateOverlay(ctx, imagePos);
     }
@@ -90,7 +89,7 @@ public:
         if (!ctx.dragging()) {
             return;
         }
-        trackAltEdge(ctx, mods);
+        trackAltEdge(mods);
         updateOverlay(ctx, last_);
     }
 
@@ -124,22 +123,13 @@ public:
     bool marqueeMirror() const override { return mirrorAlt_; }
 
 private:
-    // Two-stage Alt: the first Alt (held at press, or first pressed during the
-    // drag) subtracts; a later Alt edge during the same drag mirrors the
-    // rectangle about the anchor.
-    void trackAltEdge(ToolServices& ctx, Qt::KeyboardModifiers mods)
+    // Alt at press chooses Subtract (with a selection) or from-centre (without
+    // one); any Alt edge after the drag has begun arms the pivot-mirror.
+    void trackAltEdge(Qt::KeyboardModifiers mods)
     {
         const bool altNow = mods.testFlag(Qt::AltModifier);
         if (altNow && !altWasDown_) {
-            if (altArmed_) {
-                mirrorAlt_ = true;
-            } else {
-                altArmed_ = true;
-                PictureView* v = ctx.view();
-                if (v && v->has_selection()) {
-                    ctx.setDragMode(SelectionMode::Subtract);
-                }
-            }
+            mirrorAlt_ = true;
         }
         altWasDown_ = altNow;
     }
@@ -176,7 +166,6 @@ private:
     bool elliptical_;
     std::shared_ptr<SelectionOptions> selection_;
     Qt::KeyboardModifiers dragMods_ = Qt::NoModifier;
-    bool altArmed_ = false;
     bool altWasDown_ = false;
     bool mirrorAlt_ = false;
     QPointF anchor_;
@@ -308,18 +297,15 @@ public:
             return true;
         }
         ctx_ = &ctx;
-        const double firstDist = polygonPoints_.isEmpty()
-            ? 1e9
-            : std::hypot(imagePos.x() - polygonPoints_.first().x(),
-                         imagePos.y() - polygonPoints_.first().y());
-        const double lastDist = polygonClock_.isValid()
-            ? std::hypot(imagePos.x() - lastPolygonPress_.x(),
-                         imagePos.y() - lastPolygonPress_.y())
-            : 1e9;
-        const bool closeClick = polygonInProgress_ && firstDist <= kPolygonCloseRadius;
+        const double zoom = ctx.canvas() ? std::max(ctx.canvas()->zoom(), 1e-6) : 1.0;
+        const double closeRadius = kPolygonCloseRadius / zoom;
+        const bool nearFirst = !polygonPoints_.isEmpty()
+            && within_radius(imagePos, polygonPoints_.first(), closeRadius);
+        const bool nearLast = polygonClock_.isValid()
+            && within_radius(imagePos, lastPolygonPress_, closeRadius);
+        const bool closeClick = polygonInProgress_ && nearFirst;
         const bool doubleClick = polygonInProgress_ && polygonClock_.isValid()
-            && polygonClock_.elapsed() <= QApplication::doubleClickInterval()
-            && lastDist <= kPolygonCloseRadius;
+            && polygonClock_.elapsed() <= QApplication::doubleClickInterval() && nearLast;
         if (closeClick || doubleClick) {
             close(ctx);
             return true;

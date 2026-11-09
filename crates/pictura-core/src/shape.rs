@@ -187,7 +187,7 @@ pub fn outline_in_box(options: ShapeOptions, rect: (f64, f64, f64, f64)) -> Opti
 /// height; 1 squares it) grows the box by the drag's longer reach, so it never
 /// pulls back from the pointer; Alt makes the drag a half-diagonal from the
 /// centre.
-fn drag_rect(
+pub fn drag_rect(
     from: (f64, f64),
     to: (f64, f64),
     constrain: Option<f64>,

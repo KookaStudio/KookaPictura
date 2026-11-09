@@ -6,8 +6,8 @@ class PicturaMainWindow;
 // Runs the selection-tool drag checks: tsc_ellipse (242) commits an ellipse
 // through the Elliptical Marquee drag path and proves the corners are excluded;
 // tsc_feather (243) applies a tool-time Feather and observes a partial-coverage
-// edge; tsc_fixed_size (244) honours the Fixed Size style; tsc_polygon (245)
-// commits a clicked triangle through the Polygonal Lasso press path;
+// edge; tsc_polygon (245) commits a clicked triangle through the Polygonal
+// Lasso press path;
 // tsc_polygon_cancel (246) proves Escape discards an in-progress path without a
 // selection or history change; tsc_polygon_feather (247) softens a polygon edge;
 // tsc_wand_contiguous (248) selects only the connected uniform region;
@@ -35,7 +35,7 @@ class PicturaMainWindow;
 // tsc_translate_clip (269) clips a translated selection at the document edge;
 // tsc_quick_modes (270) maps Shift/Alt/both to Add/Subtract/Intersect and keeps
 // New when nothing is selected; tsc_marquee_geometry (271) squares the drag
-// under Shift and centres it under Alt; tsc_view_preview_hooks (272) pins mouse
+// under Shift and does not mirror under Alt; tsc_view_preview_hooks (272) pins mouse
 // tracking, the solid/open preview flags, and the drag size hint round-trip;
 // tsc_polygon_cursor_band (273) shows the clicked vertices plus the live cursor
 // in an open solid rubber band; tsc_content_move (274) cuts and translates the
