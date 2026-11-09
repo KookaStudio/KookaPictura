@@ -88,6 +88,9 @@ pub(super) fn run(
     label: Option<&str>,
 ) -> bool {
     let commit = label.is_some();
+    let fade_capture = commit
+        .then(|| crate::cxxqt_object::fade::capture(view.rust()))
+        .flatten();
     let region = {
         let mut rust = view.as_mut().rust_mut();
         apply_op_active_region(
@@ -113,6 +116,9 @@ pub(super) fn run(
     match label {
         Some(label) => {
             view.as_mut().edit(label, |_| outcome);
+            if let Some(capture) = fade_capture {
+                crate::cxxqt_object::fade::record(&mut view.as_mut().rust_mut(), capture, label);
+            }
         }
         None => {
             view.as_mut().preview(|_| outcome);

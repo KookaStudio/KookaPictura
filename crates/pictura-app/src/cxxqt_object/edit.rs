@@ -241,6 +241,11 @@ impl PictureViewRust {
                 ..Presentation::none()
             };
         }
+        // Another operation intervenes: the last effect is no longer Fade's
+        // target. A selection-only or metadata change does not count.
+        if !matches!(edit, Edit::Meta | Edit::SelectionPreview) {
+            super::fade::clear(self);
+        }
         self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         let pending = self.pending_previews.any();
         let force_full = self.has_active_session() || pending || self.mask_solo.is_some();

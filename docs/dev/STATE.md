@@ -4,6 +4,25 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Edit ▸ Fade** (#491, OpenSpec change `edit-fade`). `pictura-filters::fade`
+  (`Fade { opacity, mode }`, `fade_layer`) composites the effect output over the
+  original with the W3C source-over blend: opacity 0 restores the original and
+  100 Normal returns the effect bit-exactly. `PictureViewRust.fade` keeps the
+  pre-effect, post-effect, and last committed layers plus the effect name. The
+  record is installed by filter/adjustment worker commits, synchronous filter
+  and adjustment paths, paint/erase `end_paint`, and Magic Eraser; it is cleared
+  by `apply_edit_with` (except `Meta`/`SelectionPreview`) and history restores.
+  Smart Filters, layer-mask targets, and Quick Mask create no record.
+  `Edit ▸ Fade…` opens `FadeDialog` (Opacity, Mode, Preview), prefills the last
+  values, previews without history, cancels bit-identically, and commits one
+  `Fade <effect>` state. Reopening recomputes from the effect output. Lab
+  disables Color Dodge, Color Burn, Lighten, Darken, Difference, and Exclusion.
+  Tests: `pictura-filters` fade units (8), `pictura-app` fade units (8), and
+  `tst_fade` (16). The W3C blend function moved to `pictura_core::blend`.
+  Verified: `bash scripts/verify-fast.sh` — unified report 5328 passed · 127
+  skipped · 0 failed; file-size and selftest-budget OK; guard OK with
+  `TASK_ALLOWS_DOCS=1`; `openspec validate --all --strict` 394/394. The
+  bridge-count budget rose from 69 to 70 for the new `fade` bridge.
 - **Unified command wiring** (#277, closes #830; OpenSpec change
   `unify-command-wiring`). The Rust catalogue now carries the modal id list and
   the panel-only commands (`panel.*`, `actions.*`, `character.*`,

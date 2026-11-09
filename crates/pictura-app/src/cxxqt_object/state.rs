@@ -207,6 +207,9 @@ pub struct PictureViewRust {
     /// The last committed filter's kind and slot values, for Last Filter and
     /// Last Filter Settings.
     pub(super) last_filter: Option<(String, Vec<f64>)>,
+    /// The last destructive effect's pre-effect and post-effect pixels, for
+    /// `Edit > Fade`. Cleared by any later edit or history restore.
+    pub(super) fade: Option<super::fade::FadeState>,
     /// The Smart Filter being re-edited, `(layer path, index)`: its dialog
     /// previews the chain up to it and OK replaces it in place.
     pub(super) smart_filter_edit: Option<(String, usize)>,
@@ -339,6 +342,7 @@ impl Default for PictureViewRust {
             filter_jobs: Default::default(),
             auto_blend: Default::default(),
             last_filter: None,
+            fade: None,
             smart_filter_edit: None,
             filter_error: None,
             add_copy: true,

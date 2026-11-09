@@ -26,6 +26,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/filter_param_controls.h
     crates/pictura-app/cpp/filter_preview_dialog.cpp
     crates/pictura-app/cpp/filter_preview_dialog.h
+    crates/pictura-app/cpp/fade_dialog.cpp
+    crates/pictura-app/cpp/fade_dialog.h
     crates/pictura-app/cpp/gradient_editor_dialog.cpp
     crates/pictura-app/cpp/gradient_editor_dialog.h
     crates/pictura-app/cpp/gradient_fill_dialog.cpp

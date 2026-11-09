@@ -46,7 +46,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "edit.redo", path: &["Edit", "Redo"], label: "Redo", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.stepForward", path: &["Edit", "Step Forward"], label: "Step Forward", shortcut: "Ctrl+Shift+Z", implemented: true, checkable: false },
     CommandSpec { id: "edit.stepBackward", path: &["Edit", "Step Backward"], label: "Step Backward", shortcut: "Ctrl+Alt+Z", implemented: true, checkable: false },
-    CommandSpec { id: "edit.fade", path: &["Edit", "Fade…"], label: "Fade…", shortcut: "Shift+Ctrl+F", implemented: false, checkable: false },
+    CommandSpec { id: "edit.fade", path: &["Edit", "Fade…"], label: "Fade…", shortcut: "Shift+Ctrl+F", implemented: true, checkable: false },
     CommandSpec { id: "edit.cut", path: &["Edit", "Cut"], label: "Cut", shortcut: "Ctrl+X", implemented: true, checkable: false },
     CommandSpec { id: "edit.copy", path: &["Edit", "Copy"], label: "Copy", shortcut: "Ctrl+C", implemented: true, checkable: false },
     CommandSpec { id: "edit.copyMerged", path: &["Edit", "Copy Merged"], label: "Copy Merged", shortcut: "Shift+Ctrl+C", implemented: true, checkable: false },

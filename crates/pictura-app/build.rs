@@ -170,6 +170,7 @@ fn main() {
                 "src/cxxqt_object/clipboard.rs",
                 "src/cxxqt_object/crop_group.rs",
                 "src/cxxqt_object/export.rs",
+                "src/cxxqt_object/fade.rs",
                 "src/cxxqt_object/filter_tools.rs",
                 "src/cxxqt_object/guides.rs",
                 "src/cxxqt_object/filter_tools/jobs.rs",

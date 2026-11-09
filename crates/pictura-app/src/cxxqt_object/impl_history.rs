@@ -91,6 +91,7 @@ impl PictureViewRust {
         ) -> Option<Restored>,
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
     ) -> Option<ShownRestore> {
+        self.fade = None;
         let had_live_session = self.has_active_session();
         let cancelled = self.cancel_active_sessions_report_only();
         let t = Instant::now();

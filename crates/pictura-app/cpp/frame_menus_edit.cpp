@@ -1,7 +1,10 @@
 #include "frame_includes.h"
+#include "api/filters_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/engine_bridge.h"
+
+#include "fade_dialog.h"
 
 #include "api/history_api.h"
 #include "memory_refusal.h"
@@ -252,6 +255,38 @@ void PicturaMainWindow::registerEditHandlers()
         } else if (edit_refused_for_memory()) {
             statusBar()->showMessage(fillMemoryRefusalMessage(), 6000);
         }
+    });
+
+    // Edit > Fade… changes the opacity and blend mode of the last destructive
+    // filter, adjustment, or paint/erase without re-running it. The record is
+    // dropped by the next edit, so the entry is enabled only while it exists.
+    registry_->setImplemented(command_ids::EditFade, true);
+    registry_->setHandler(command_ids::EditFade, [this]() {
+        PictureView* view = activeView();
+        if (!view || !fade_available(*view)) {
+            return;
+        }
+        FadeDialog dialog(*view, this);
+        if (runDialog(dialog, this) != QDialog::Accepted) {
+            return;
+        }
+        if (dialog.apply()) {
+            refresh();
+        } else {
+            statusBar()->showMessage(tr("Could not apply Fade."), 6000);
+        }
+    });
+    registry_->setEnabledProvider(command_ids::EditFade, [this]() {
+        PictureView* view = activeView();
+        return view && view->has_document() && fade_available(*view);
+    });
+    registry_->setLabelProvider(command_ids::EditFade, [this]() {
+        PictureView* view = activeView();
+        if (!view) {
+            return QStringLiteral("Fade…");
+        }
+        const QString name = fade_name(*view);
+        return name.isEmpty() ? QStringLiteral("Fade…") : QStringLiteral("Fade %1…").arg(name);
     });
 
     // Purge drops our copy and, if the system clipboard still holds our export,

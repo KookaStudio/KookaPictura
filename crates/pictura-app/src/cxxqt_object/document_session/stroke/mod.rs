@@ -43,6 +43,8 @@ pub(in crate::cxxqt_object) struct StrokeSession {
     /// The document before a stroke that had to change its structure to begin
     /// (the Background Eraser layering a Background); cancelling restores it.
     pub(in crate::cxxqt_object) stroke_base: Option<Document>,
+    /// The target layer before the stroke, for `Edit > Fade`.
+    pub(in crate::cxxqt_object) fade_capture: Option<crate::cxxqt_object::fade::FadeCapture>,
     /// The stroke's dirty area as document-space tiles, rebuilt per dab and
     /// decomposed into disjoint rectangles at commit.
     pub(in crate::cxxqt_object) stroke_tiles: TileSet,

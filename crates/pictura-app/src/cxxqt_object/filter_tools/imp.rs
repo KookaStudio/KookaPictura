@@ -37,6 +37,7 @@ pub(super) fn apply_filter_params(
     }
     let params_v = super::super::filter_map::commit_params(&kind_s, &params_v);
     let params_v = lens_blur_depths::commit_slots(&kind_s, view.rust(), &params_v);
+    let fade_capture = crate::cxxqt_object::fade::capture(view.rust());
     let region = {
         let mut rust = view.as_mut().rust_mut();
         apply_filter_active(&mut rust, &kind_s, &params_v, true)
@@ -55,6 +56,11 @@ pub(super) fn apply_filter_params(
         }
     };
     view.as_mut().edit("Filter", |_| outcome);
+    if let Some(capture) = fade_capture {
+        let label = super::super::filter_map::descriptor::descriptor(&kind_s)
+            .map_or_else(|| kind_s.clone(), |spec| spec.label.to_string());
+        crate::cxxqt_object::fade::record(&mut view.as_mut().rust_mut(), capture, &label);
+    }
     true
 }
 
@@ -379,6 +385,9 @@ pub(super) fn run_stack(
     if commit && filters.is_empty() {
         return false;
     }
+    let fade_capture = commit
+        .then(|| crate::cxxqt_object::fade::capture(view.rust()))
+        .flatten();
     let region = {
         let mut rust = view.as_mut().rust_mut();
         apply_op_active_region(
@@ -398,6 +407,13 @@ pub(super) fn run_stack(
     };
     if commit {
         view.as_mut().edit("Filter Gallery", |_| outcome);
+        if let Some(capture) = fade_capture {
+            crate::cxxqt_object::fade::record(
+                &mut view.as_mut().rust_mut(),
+                capture,
+                "Filter Gallery",
+            );
+        }
     } else {
         view.as_mut().preview(|_| outcome);
     }

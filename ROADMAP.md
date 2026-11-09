@@ -349,7 +349,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Lens Blur, Displace and Adaptive Wide Angle as Smart Filters (#1001)
 - [ ] Smart Filter chain rendered off the UI thread (#1002)
 - [ ] Dialog pane preview over an existing Smart Filter chain (#1003)
-- [ ] Fade disabled on a Smart Object once Fade ships (#1004)
+- [x] Fade disabled on a Smart Object (#1004): Smart Filters create no Fade record
 - [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
       Grid Size, related planes torn off at 90° with Angle, Render Grids
 - [x] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste
@@ -362,7 +362,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Embed and Read Watermark (#350, #351): an in-tree approximate
       spread-spectrum carrier (not Digimarc-compatible), with the copyright
       title indicator on detection
-- [ ] Edit ▸ Fade, the post-filter opacity and blend mode (#491)
+- [x] Edit ▸ Fade, the post-filter opacity and blend mode (#491)
 
 ## Colour and painting
 
