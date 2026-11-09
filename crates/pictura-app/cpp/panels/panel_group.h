@@ -162,7 +162,7 @@ private:
     // The frame that owns this group, whether it is docked or hosted in a
     // floating overlay (whose parent is the frame). Null for a standalone group.
     PicturaMainWindow* owningFrame() const;
-    void runPanelMenuAction(const QString& actionId);
+    void runPanelPreference(const QString& actionId);
     QToolButton* makeIconButton(const QIcon& icon, const QString& title,
                                 const QString& objectName);
     // M47: mirror `PanelColumn::updateColumnToggle` for the float header.

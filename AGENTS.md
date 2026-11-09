@@ -29,8 +29,10 @@ scripts/       verification gates + Python oracle tools
 
 The app is a Rust `staticlib` (`pictura_app`, built by Corrosion from Cargo)
 linked into the C++ `pictura` binary. cxx-qt codegen is driven by
-`crates/pictura-app/build.rs` + `src/cxxqt_object.rs`. **New `.cpp`/`.h` files
-must be added to `CMakeLists.txt` explicitly — there is no globbing.**
+`crates/pictura-app/build.rs` + `src/cxxqt_object.rs`. **New shell `.cpp` files
+must be added to the matching `cmake/sources/*.cmake` fragment explicitly — there
+is no globbing; the matching `.h` may be listed too for IDE grouping. Qt Test
+sources go to `crates/pictura-app/cpp/tests/CMakeLists.txt`.**
 
 ## Commands
 
@@ -102,8 +104,9 @@ offscreen-compatible. See `DEVELOPING.md` for the self-test token protocol.
   identity** — `ST_FAIL(code)` returns its code; codes are append-only, and
   names carry no milestone.
 - Add a check with `ST_BEGIN` / `ST_PASS` / `ST_SKIP` / `ST_FAIL` / `ST_FINISH`,
-  take the next free code, and keep each `selftest*.cpp` inside its
-  `scripts/file-size-allowlist.txt` ceiling.
+  register the file in `cmake/sources/selftest.cmake`, take the next free code,
+  and keep each `selftest*.cpp` inside its `scripts/file-size-allowlist.txt`
+  ceiling.
 - **Qt Test is the GUI growth path.** The app C++ builds as a `pictura_shell`
   static library (every app source except `main.cpp` + `selftest*`); suites in
   `crates/pictura-app/cpp/tests/tst_*.cpp` link it plus `Qt6::Test`, gated on

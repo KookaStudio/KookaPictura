@@ -328,4 +328,104 @@ bool LayersPanel::doubleClickRowCenterForTest(const QString& path)
     return true;
 }
 
+QStringList LayersPanel::rowMenuCommandIdsForPathForTest(const QString& path)
+{
+    makeRowAnchor(path);
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    QMenu menu;
+    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
+                    index.data(LayerRowShapeRole).toBool(),
+                    index.data(SmartObjectRole).toBool());
+    QStringList ids;
+    for (QAction* action : menu.actions()) {
+        const QString id = action->data().toString();
+        if (!id.isEmpty()) {
+            ids.push_back(id);
+        }
+    }
+    return ids;
+}
+
+
+QStringList LayersPanel::rowMenuSubmenuTextsForPathForTest(const QString& path,
+                                                           const QString& submenuText)
+{
+    makeRowAnchor(path);
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    QMenu menu;
+    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
+                    index.data(LayerRowShapeRole).toBool(),
+                    index.data(SmartObjectRole).toBool());
+    for (QAction* action : menu.actions()) {
+        if (action->menu() && action->text() == submenuText) {
+            QStringList texts;
+            for (QAction* item : action->menu()->actions()) {
+                if (!item->isSeparator()) {
+                    texts.push_back(item->text());
+                }
+            }
+            return texts;
+        }
+    }
+    return {};
+}
+
+bool LayersPanel::rowMenuSubmenuItemEnabledForPathForTest(const QString& path,
+                                                          const QString& submenuText,
+                                                          const QString& itemText)
+{
+    makeRowAnchor(path);
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    QMenu menu;
+    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
+                    index.data(LayerRowShapeRole).toBool(),
+                    index.data(SmartObjectRole).toBool());
+    for (QAction* action : menu.actions()) {
+        if (!action->menu() || action->text() != submenuText) {
+            continue;
+        }
+        for (QAction* item : action->menu()->actions()) {
+            if (!item->isSeparator() && item->text() == itemText) {
+                return item->isEnabled();
+            }
+        }
+    }
+    return false;
+}
+
+
+QStringList LayersPanel::rowMenuTextsForPathForTest(const QString& path)
+{
+    makeRowAnchor(path);
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    QMenu menu;
+    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
+                    index.data(LayerRowShapeRole).toBool(),
+                    index.data(SmartObjectRole).toBool());
+    QStringList texts;
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator()) {
+            texts.push_back(action->text());
+        }
+    }
+    return texts;
+}
+
+bool LayersPanel::rowMenuEnabledForPathForTest(const QString& path, const QString& text)
+{
+    makeRowAnchor(path);
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    QMenu menu;
+    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
+                    index.data(LayerRowShapeRole).toBool(),
+                    index.data(SmartObjectRole).toBool());
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator() && action->text() == text) {
+            return action->isEnabled();
+        }
+    }
+    return false;
+}
+
+
 } // namespace pictura

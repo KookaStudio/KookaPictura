@@ -39,7 +39,8 @@ QAction* panelMerge(QMenu* menu)
         return nullptr;
     }
     for (QAction* action : menu->actions()) {
-        if (action->data().toString() == QLatin1String("mergeDown")) {
+        const QString id = action->data().toString();
+        if (id == QLatin1String("mergeDown") || id == QLatin1String("layer.merge.layers")) {
             return action;
         }
     }

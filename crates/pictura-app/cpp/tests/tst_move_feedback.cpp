@@ -59,6 +59,7 @@ private slots:
     void readoutFollowsTheRulerUnit();
     void switchingToMoveBuildsNoPreview();
     void largeLayerPreviewsFromTheView();
+    void maskedLayerPreviewsMasked();
     void moveThenFillOutsideTheLayer();
     void movedLayerStaysUnderTheLayersAbove();
     void linkedSetStaysUnderTheLayersAbove();
@@ -209,6 +210,56 @@ void MoveFeedbackTest::largeLayerPreviewsFromTheView()
         pictura::transform_api::layerRect(*f.view, QStringLiteral("1"));
     QVERIFY(moved.valid);
     QCOMPARE(QPoint(moved.left, moved.top), QPoint(40, 16));
+}
+
+// [lct_move_preview_mask] a dragged layer keeps its layer mask
+void MoveFeedbackTest::maskedLayerPreviewsMasked()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_mask"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    const int index = f.view->add_layer(0);
+    QVERIFY(index > 0);
+    const QString path = QString::number(index);
+    f.view->set_active_layer(path);
+    QVERIFY(f.view->select_rect(20, 20, 40, 40, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 255, 255), -1, QStringLiteral("normal"),
+                               100, false));
+    f.view->deselect();
+
+    // Hide the square's left half in its layer mask.
+    QVERIFY(pictura::layer_mask_add(*f.view, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::mask_edit_target_set(*f.view, path));
+    QVERIFY(f.view->select_rect(20, 20, 20, 40, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    f.view->deselect();
+    QVERIFY(pictura::mask_edit_target_set(*f.view, QString()));
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    f.view->set_active_layer(path);
+    QCoreApplication::processEvents();
+
+    // Press the revealed half and drag by (40, 0). The square lands at
+    // (60, 20) - (100, 60); its left half is still masked.
+    f.canvas->mousePressed(QPointF(50.0, 30.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(90.0, 30.0));
+    const QImage shot = f.canvas->grab().toImage();
+    const auto at = [&](double x, double y) {
+        return shot.pixelColor(f.canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(70.0, 40.0), QColor(Qt::white));  // masked-out half
+    QCOMPARE(at(90.0, 40.0), QColor(Qt::blue));   // revealed half
+    QCOMPARE(at(30.0, 40.0), QColor(Qt::white));  // the old place is the backdrop
+    f.canvas->mouseReleased(QPointF(90.0, 30.0));
+
+    // The committed move agrees with the preview.
+    QCOMPARE(f.view->sample_argb(70, 40), QColor(Qt::white).rgba());
+    QCOMPARE(f.view->sample_argb(90, 40), qRgba(0, 0, 255, 255));
 }
 
 void MoveFeedbackTest::moveThenFillOutsideTheLayer()

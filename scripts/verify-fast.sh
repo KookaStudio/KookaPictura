@@ -109,6 +109,11 @@ test_plan_check() {
         python3 scripts/check-test-plan.py
 }
 
+source_fragments_check() {
+    python3 scripts/check-cmake-source-fragments.py --self-test &&
+        python3 scripts/check-cmake-source-fragments.py
+}
+
 openspec_check() {
     openspec validate --all --strict
 }
@@ -124,6 +129,7 @@ start_check archive archive_check
 start_check icon-provenance python3 scripts/check-icon-provenance.py
 start_check guard bash scripts/guard.sh
 start_check test-plan test_plan_check
+start_check source-fragments source_fragments_check
 start_check openspec openspec_check
 
 check_failed=0

@@ -44,6 +44,7 @@ class ControlModalGuardTest : public QObject {
 private slots:
     void initTestCase();
     void imageSizeIsRefused();
+    void panelModalsAreRefused();
     void dialogOutsideARequestStaysOpen();
     void everyCommandAnswers();
 
@@ -87,6 +88,24 @@ void ControlModalGuardTest::imageSizeIsRefused()
     QCoreApplication::processEvents();
     QVERIFY2(visibleDialogs().isEmpty(), qPrintable(visibleDialogs().join(u',')));
     QCOMPARE(window_->activeView()->document_width(), width);
+}
+
+void ControlModalGuardTest::panelModalsAreRefused()
+{
+    ensureDocument();
+    const char* const ids[] = {
+        pictura::command_ids::PanelHistoryNewSnapshot,
+        pictura::command_ids::PanelPropertiesSavePreset,
+        pictura::command_ids::ActionsLoad,
+        pictura::command_ids::ActionsSave,
+        pictura::command_ids::WindowWorkspaceNew,
+    };
+    for (const char* id : ids) {
+        const QJsonObject response = server_->dispatch(
+            QStringLiteral("dispatch_command"),
+            {{QStringLiteral("id"), QString::fromLatin1(id)}});
+        QCOMPARE(errorCode(response), QStringLiteral("refused"));
+    }
 }
 
 void ControlModalGuardTest::dialogOutsideARequestStaysOpen()

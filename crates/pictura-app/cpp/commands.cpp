@@ -3,6 +3,7 @@
 #include "pictura_debug_timing.h"
 
 #include "api/engine_bridge.h"
+#include "filter_commands.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QEvent>
@@ -314,6 +315,63 @@ QAction* CommandRegistry::action(const QString& id) const
     return found ? found->action : nullptr;
 }
 
+QAction* CommandRegistry::detachedAction(const QString& id, QObject* parent) const
+{
+    const Entry* found = entry(id);
+    if (!found) {
+        return nullptr;
+    }
+    auto* action = new QAction(parent);
+    action->setText(labelProviders_.contains(id) ? labelProviders_.value(id)()
+                                                 : found->spec.label);
+    bool enabled = found->spec.implemented && hasHandler(id);
+    if (enabledProviders_.contains(id)) {
+        enabled = enabled && enabledProviders_.value(id)();
+    }
+    action->setEnabled(enabled);
+    action->setCheckable(found->spec.checkable);
+    if (found->spec.checkable && checkedProviders_.contains(id)) {
+        action->setChecked(checkedProviders_.value(id)());
+    }
+    action->setData(id);
+    return action;
+}
+
+void CommandRegistry::applyState(QAction* action) const
+{
+    if (!action) {
+        return;
+    }
+    const QString id = action->data().toString();
+    if (id.isEmpty()) {
+        return;
+    }
+    const Entry* found = entry(id);
+    if (!found) {
+        return;
+    }
+    const CommandSpec& spec = found->spec;
+    bool enabled = spec.implemented && hasHandler(spec.id);
+    if (enabledProviders_.contains(spec.id)) {
+        enabled = enabled && enabledProviders_.value(spec.id)();
+    }
+    if (enabled && blockedProvider_ && blockedProvider_(spec)) {
+        enabled = false;
+    }
+    action->setEnabled(enabled);
+    if (spec.checkable && !action->isCheckable()) {
+        action->setCheckable(true);
+    }
+    // A panel row may be checkable while the command is not (Actions > Button
+    // Mode); only a provider sets the state, so the panel's own hook can still
+    // own it.
+    if (checkedProviders_.contains(spec.id)) {
+        action->setChecked(checkedProviders_.value(spec.id)());
+    }
+    action->setText(labelProviders_.contains(spec.id) ? labelProviders_.value(spec.id)()
+                                                      : spec.label);
+}
+
 QList<QKeySequence> CommandRegistry::shortcuts(const QString& id) const
 {
     const Entry* found = entry(id);
@@ -376,12 +434,30 @@ void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
     for (QMenu* menu : previous) {
         delete menu;
     }
+    for (QAction* action : shortcutActions_) {
+        delete action;
+    }
+    shortcutActions_.clear();
 
     QHash<QString, QMenu*> menus;
     for (Entry& entry : entries_) {
         entry.action = nullptr;
         const QStringList& path = entry.spec.path;
         if (path.isEmpty()) {
+            // A panel-only command still needs an action so its shortcut is
+            // live; attach it to the window, never to the menu bar.
+            QWidget* owner = menuBar->parentWidget();
+            auto* action = new QAction(owner ? static_cast<QObject*>(owner) : menuBar);
+            action->setData(entry.spec.id);
+            action->setShortcuts(entry.shortcuts);
+            action->setCheckable(entry.spec.checkable);
+            const QString id = entry.spec.id;
+            connect(action, &QAction::triggered, this, [this, id] { dispatch(id); });
+            if (owner) {
+                owner->addAction(action);
+            }
+            entry.action = action;
+            shortcutActions_.append(action);
             continue;
         }
 
@@ -482,6 +558,25 @@ bool CommandRegistry::dispatch(const QString& id)
     }
     handler.value()();
     return true;
+}
+
+bool CommandRegistry::isModal(const QString& id) const
+{
+    if (command_is_modal(id)) {
+        return true;
+    }
+    // Every parameterised filter opens its own dialog. Deriving the set from
+    // the filter table keeps a new filter from being forgotten.
+    static const QSet<QString> kFilterDialogs = [] {
+        QSet<QString> ids;
+        for (const FilterCommandSpec& spec : filterCommands()) {
+            if (!spec.params.isEmpty()) {
+                ids.insert(commandIdForPath(spec.path));
+            }
+        }
+        return ids;
+    }();
+    return kFilterDialogs.contains(id);
 }
 
 QStringList CommandRegistry::topLevelTitles() const

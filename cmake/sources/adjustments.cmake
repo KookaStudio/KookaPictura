@@ -1,0 +1,46 @@
+# adjustments sources for pictura_shell.
+# Included from the root CMakeLists.txt; keep paths explicit (no globbing).
+list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/adjustment_catalogue.cpp
+    crates/pictura-app/cpp/adjustment_catalogue.h
+    crates/pictura-app/cpp/adjustment_dialog.cpp
+    crates/pictura-app/cpp/adjustment_presets.cpp
+    crates/pictura-app/cpp/apply_image_dialog.cpp
+    crates/pictura-app/cpp/apply_image_dialog.h
+    crates/pictura-app/cpp/auto_blend_dialog.cpp
+    crates/pictura-app/cpp/auto_blend_dialog.h
+    crates/pictura-app/cpp/bitmap_mode_dialog.cpp
+    crates/pictura-app/cpp/bitmap_mode_dialog.h
+    crates/pictura-app/cpp/black_white_dialog.cpp
+    crates/pictura-app/cpp/black_white_dialog.h
+    crates/pictura-app/cpp/blend_modes.cpp
+    crates/pictura-app/cpp/blend_modes.h
+    crates/pictura-app/cpp/channel_mixer_dialog.cpp
+    crates/pictura-app/cpp/channel_mixer_dialog.h
+    crates/pictura-app/cpp/color_balance_dialog.cpp
+    crates/pictura-app/cpp/color_balance_dialog.h
+    crates/pictura-app/cpp/color_models.cpp
+    crates/pictura-app/cpp/color_models.h
+    crates/pictura-app/cpp/color_picker_dialog.cpp
+    crates/pictura-app/cpp/color_picker_dialog.h
+    crates/pictura-app/cpp/color_picker_math.cpp
+    crates/pictura-app/cpp/color_range_dialog.cpp
+    crates/pictura-app/cpp/color_settings_dialog.cpp
+    crates/pictura-app/cpp/color_settings_dialog.h
+    crates/pictura-app/cpp/curves_dialog.cpp
+    crates/pictura-app/cpp/curves_dialog.h
+    crates/pictura-app/cpp/exposure_dialog.cpp
+    crates/pictura-app/cpp/exposure_dialog.h
+    crates/pictura-app/cpp/hdr_conversion_dialog.cpp
+    crates/pictura-app/cpp/hdr_conversion_dialog.h
+    crates/pictura-app/cpp/hdr_toning_controls.cpp
+    crates/pictura-app/cpp/hdr_toning_controls.h
+    crates/pictura-app/cpp/hdr_toning_dialog.cpp
+    crates/pictura-app/cpp/hdr_toning_dialog.h
+    crates/pictura-app/cpp/hue_saturation_dialog.cpp
+    crates/pictura-app/cpp/hue_saturation_dialog.h
+    crates/pictura-app/cpp/indexed_color_dialog.cpp
+    crates/pictura-app/cpp/indexed_color_dialog.h
+    crates/pictura-app/cpp/levels_dialog.cpp
+    crates/pictura-app/cpp/levels_dialog.h
+)

@@ -1,5 +1,6 @@
 #include "memory_refusal.h"
 #include "properties_panel.h"
+#include "commands.h"
 #include "api/type_api.h"
 
 #include "adjustment_controls.h"
@@ -220,8 +221,9 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     auto* remove = footerButton(footer_, QStringLiteral("layers.delete"),
                                 QStringLiteral("Delete this adjustment layer"),
                                 QStringLiteral("propertiesDelete"));
+    remove_ = remove;
     footer->addStretch(1);
-    for (QToolButton* button : {clip_, reset, visible_, remove}) {
+    for (QToolButton* button : {clip_, reset, visible_, remove_}) {
         footer->addWidget(button);
     }
     layout->addWidget(footer_);
@@ -449,37 +451,24 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     });
 
     connect(clip_, &QToolButton::clicked, this, [this]() {
-        commit();
-        if (view_) {
-            clipping_toggle(*view_, path_);
+        if (registry_) {
+            registry_->dispatch(QString::fromLatin1(command_ids::PanelPropertiesClipToggle));
         }
-        refresh();
     });
     connect(reset, &QToolButton::clicked, this, [this]() {
-        commit();
-        // The controls stay; only their values reload.
-        if (view_ && adjustment_reset(*view_, path_)) {
-            dirty_ = true;
-            commit();
-            refresh();
+        if (registry_) {
+            registry_->dispatch(QString::fromLatin1(command_ids::PanelPropertiesReset));
         }
     });
     connect(visible_, &QToolButton::clicked, this, [this]() {
-        commit();
-        if (view_) {
-            const auto row = pictura::layers_api::rowForPath(*view_, path_);
-            if (row.path == path_) {
-                view_->set_layers_visible(QStringList{path_}, !row.visible);
-            }
+        if (registry_) {
+            registry_->dispatch(QString::fromLatin1(command_ids::PanelPropertiesToggleVisibility));
         }
-        refresh();
     });
     connect(remove, &QToolButton::clicked, this, [this]() {
-        commit();
-        if (view_) {
-            view_->delete_layers(QStringList{path_});
+        if (registry_) {
+            registry_->dispatch(QString::fromLatin1(command_ids::PanelPropertiesDeleteLayer));
         }
-        refresh();
     });
     refresh();
 }
@@ -659,6 +648,10 @@ void PropertiesPanel::refresh()
         commit();
     }
     path_ = path;
+    if (remove_) {
+        remove_->setEnabled(view_ && !path_.isEmpty()
+                            && layers_can_delete(*view_, QStringList{path_}));
+    }
     if (path_.isEmpty()) {
         showNothing();
         return;
@@ -766,6 +759,14 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
                              layerPage_));
     maskSection_->setVisible(row.hasMask);
     vectorMaskSection_->setVisible(row.hasVectorMask);
+    if (maskApply_) {
+        // Apply bakes the mask into the layer's own pixels, so it needs a
+        // pixel layer: not a smart object, group, or adjustment/fill.
+        const bool procedural = row.kind == QLatin1String("group")
+            || row.kind == QLatin1String("adjustment");
+        maskApply_->setEnabled(view_ && !procedural && !row.smartObject
+                               && !view_->layer_is_fill_content(path_));
+    }
     if (row.hasMask) {
         maskDensity_->setValue(densityPercent(layer_mask_density(*view_)));
         maskFeather_->setValue(layer_mask_feather(*view_));
@@ -876,9 +877,9 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
     const bool hasLayer = !path_.isEmpty();
     for (QAction* action : menu->actions()) {
         const QString id = action->data().toString();
-        if (id == QLatin1String("savePreset")) {
+        if (id == QLatin1String("panel.properties.savePreset")) {
             action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_));
-        } else if (id == QLatin1String("loadPreset")) {
+        } else if (id == QLatin1String("panel.properties.loadPreset")) {
             action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_)
                                && !savedPresetNames(kind_).isEmpty());
         }

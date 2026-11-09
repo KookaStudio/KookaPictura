@@ -134,13 +134,12 @@ void PicturaMainWindow::showHeaderMenu(DocWindow* window, const QPoint& globalPo
     };
     const QList<Entry> entries = {
         {tr("Duplicate…"), QString::fromLatin1(command_ids::ImageDuplicate)},
-        {tr("Image Size…"), commandIdForPath({QStringLiteral("Image"), QStringLiteral("Image Size…")})},
-        {tr("Canvas Size…"),
-         commandIdForPath({QStringLiteral("Image"), QStringLiteral("Canvas Size…")})},
+        {tr("Image Size…"), QString::fromLatin1(command_ids::ImageImageSize)},
+        {tr("Canvas Size…"), QString::fromLatin1(command_ids::ImageCanvasSize)},
         {QString(), QString()},
         {tr("File Info…"), QString::fromLatin1(command_ids::FileInfo)},
         {QString(), QString()},
-        {tr("Print…"), commandIdForPath({QStringLiteral("File"), QStringLiteral("Print…")})},
+        {tr("Print…"), QString::fromLatin1(command_ids::FilePrint)},
     };
     auto* menu = new QMenu(this);
     menu->setObjectName(QStringLiteral("documentHeaderMenu"));

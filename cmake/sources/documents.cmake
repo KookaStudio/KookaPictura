@@ -1,0 +1,45 @@
+# documents sources for pictura_shell.
+# Included from the root CMakeLists.txt; keep paths explicit (no globbing).
+list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/bmp_options_dialog.cpp
+    crates/pictura-app/cpp/bmp_options_dialog.h
+    crates/pictura-app/cpp/decode_image.cpp
+    crates/pictura-app/cpp/decode_image.h
+    crates/pictura-app/cpp/document_float_window.cpp
+    crates/pictura-app/cpp/document_float_window.h
+    crates/pictura-app/cpp/document_tile_host.cpp
+    crates/pictura-app/cpp/document_tile_host.h
+    crates/pictura-app/cpp/document_window.cpp
+    crates/pictura-app/cpp/document_window.h
+    crates/pictura-app/cpp/duplicate_image_dialog.cpp
+    crates/pictura-app/cpp/duplicate_image_dialog.h
+    crates/pictura-app/cpp/encode_image.cpp
+    crates/pictura-app/cpp/encode_image.h
+    crates/pictura-app/cpp/export_as_dialog.cpp
+    crates/pictura-app/cpp/export_as_dialog.h
+    crates/pictura-app/cpp/file_drop_router.cpp
+    crates/pictura-app/cpp/file_drop_router.h
+    crates/pictura-app/cpp/file_info_dialog.cpp
+    crates/pictura-app/cpp/file_info_dialog.h
+    crates/pictura-app/cpp/import_pdf_dialog.cpp
+    crates/pictura-app/cpp/import_pdf_dialog.h
+    crates/pictura-app/cpp/jpeg_options_dialog.cpp
+    crates/pictura-app/cpp/jpeg_options_dialog.h
+    crates/pictura-app/cpp/new_document_dialog.cpp
+    crates/pictura-app/cpp/new_document_dialog.h
+    crates/pictura-app/cpp/pdf_presets_dialog.cpp
+    crates/pictura-app/cpp/pdf_presets_dialog.h
+    crates/pictura-app/cpp/pdf_save_dialog.cpp
+    crates/pictura-app/cpp/pdf_save_dialog.h
+    crates/pictura-app/cpp/pictura_raw_dialog.cpp
+    crates/pictura-app/cpp/pictura_raw_dialog.h
+    crates/pictura-app/cpp/png_options_dialog.cpp
+    crates/pictura-app/cpp/png_options_dialog.h
+    crates/pictura-app/cpp/print_dialog.cpp
+    crates/pictura-app/cpp/save_for_web_dialog.cpp
+    crates/pictura-app/cpp/save_format_options.cpp
+    crates/pictura-app/cpp/save_format_options.h
+    crates/pictura-app/cpp/save_options_dialog.cpp
+    crates/pictura-app/cpp/tiff_options_dialog.cpp
+    crates/pictura-app/cpp/tiff_options_dialog.h
+)

@@ -897,8 +897,8 @@ void LayersPanelTest::maskRowActionsTargetTheClickedRow()
              "delete the clicked row's mask");
     panel_->refresh();
     QVERIFY2(!panel_->rowHasMaskForTest(clicked), "the row action hit the clicked row");
-    QVERIFY2(panel_->rowHasMaskForTest(active), "the active row keeps its mask");
-    QCOMPARE(view_->active_layer_path(), active);
+    QVERIFY2(panel_->rowHasMaskForTest(active), "the other row keeps its mask");
+    QCOMPARE(view_->active_layer_path(), clicked);
 
     window_->closeDocument(doc, false);
 }
