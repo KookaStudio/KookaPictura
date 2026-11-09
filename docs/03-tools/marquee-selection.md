@@ -19,7 +19,7 @@ The marquee tools create geometric selections:
 - **Elliptical Marquee** (`Shift+M` to cycle, or Alt-click the tool) — drag an ellipse; `Shift` constrains to a circle.
 - **Single Row** and **Single Column** — define a 1-pixel-wide row or column; no drag extent, just a click to place.
 
-All four share the selection-mode buttons — **New**, **Add To**, **Subtract From**, **Intersect With** — plus a **Feather** field and, for the Elliptical Marquee, an **Anti-alias** checkbox. The Rectangle and Ellipse additionally have a **Style** menu: `Normal` (proportions follow the drag), `Fixed Ratio` (height-to-width ratio, decimal values accepted), and `Fixed Size` (whole-number pixel values, with units beyond px such as inches or centimetres). Selection behavior modifiers, confirmed in the CS6 Help shortcut tables: `Shift`-drag constrains a square/circle when no other selection is active; `Alt`-drag draws from the centre; `Shift+Alt`-drag does both; `Space`-drag repositions the marquee while still dragging; `Shift`/`Alt`/`Shift+Alt`-drag adds/subtracts/intersects with any selection tool.
+All four share the selection-mode buttons — **New**, **Add To**, **Subtract From**, **Intersect With** — plus a **Feather** field and, for the Elliptical Marquee, an **Anti-alias** checkbox. The Rectangle and Ellipse additionally have a **Style** menu: `Normal` (proportions follow the drag), `Fixed Ratio` (width-to-height ratio, decimal values accepted), and `Fixed Size` (whole-number pixel values, with units beyond px such as inches or centimetres). Selection behavior modifiers: `Shift`-drag constrains a square/circle when no other selection is active; `Alt`-drag with no existing selection draws from the centre; `Alt` held at the press with a selection subtracts; an `Alt` press after the drag has begun mirrors about the press point; `Shift+Alt`-drag squares and centres when no selection exists (with a selection it intersects); `Space`-drag repositions the marquee while still dragging; `Shift`/`Alt`/`Shift+Alt`-drag adds/subtracts/intersects with any selection tool. The Rectangular and Elliptical Marquee keep independent Style, ratio, and size state.
 
 The marquee can snap to guides, grids, slices, and document bounds when `View > Snap` (or `View > Snap To`) is enabled. The marching-ants edge is toggled by `View > Show > Selection Edges` (per-selection) or `View > Extras` (globally). The `Refine Edge` button in the options bar (or `Select > Refine Edge`, `Ctrl+Alt+R`) refines the working edge, and `Select > Transform Selection` transforms the selection border geometrically.
 
@@ -80,7 +80,7 @@ Anti-aliasing and feathering are applied to the *new* primitive before combining
 
 - **Rectangle / Single Row / Single Column:** clip the rectangle to canvas bounds and set coverage 255 inside. Single Row/Column is a 1-px band; Style does not apply.
 - **Ellipse:** evaluate the normalised ellipse equation per pixel; anti-aliased mode computes approximate fractional coverage at boundary pixels. Source-over / coverage methods (e.g. analytic circle coverage or 4×4 supersampling) are implementation choices; Photoshop's exact AA filter is unspecified — mark *behavioral parity only*.
-- **Fixed Ratio / Fixed Size:** constrain the drag geometry before rasterising. Fixed Ratio keeps `W/H` at the entered ratio; Fixed Size ignores the drag extent and places the entered rectangle/ellipse centred on the mousedown (with `Alt`-draw-from-centre semantics).
+- **Fixed Ratio / Fixed Size:** constrain the drag geometry before rasterising. Fixed Ratio keeps `W/H` at the entered ratio and stays inside the non-degenerate box the cursor draws; a one-axis drag derives the other axis. Fixed Size keeps the entered size and puts its top-left corner at the current pointer, following it until release. Both ignore `Shift`/`Alt`.
 - **Feather:** blur the hard mask with a kernel whose support scales with the feather radius. Photoshop's feather is not a plain Gaussian; the exact profile is unspecified. A Gaussian with `σ ≈ feather / 2` is the conventional approximation — mark inferred. Feather is a scalar distance (px), applied isotropically.
 
 ### Marching ants
@@ -137,12 +137,12 @@ Widgets over QML for the same reasons as `ARCH-003`: tool options are dense, key
 
 - Given a 1000×1000 px document, dragging a `200×100` rectangle then releasing produces a selection whose 50%-coverage bounding box is `200×100` within 1 px.
 - Given `Shift`-drag, the resulting width and height differ by at most 1 px (square).
-- Given `Alt`-drag from point `P`, the selection is centred on `P` within 1 px.
+- Given `Alt`-drag from point `P` with no existing selection, the selection is centred on `P` within 1 px; with a selection, Alt at the press subtracts and an Alt press during the drag mirrors.
 - Given an existing selection and `Add To Selection`, the combined mask equals `max(existing, new)` per pixel.
 - Given `Subtract From Selection`, pixels in the new marquee lose coverage exactly.
 - Given `Intersect With Selection`, only the overlap remains.
-- Given Style = `Fixed Ratio` with `2 : 1`, every dragged rectangle has `W/H = 2 ± 0.01`.
-- Given Style = `Fixed Size`, the selection is exactly the entered pixel size regardless of drag length.
+- Given Style = `Fixed Ratio` with `2 : 1`, every dragged rectangle has `W/H = 2 ± 0.01` and stays inside the cursor's drag box.
+- Given Style = `Fixed Size`, the selection is exactly the entered pixel size and its top-left corner follows the pointer to the release point.
 - Given Feather = 250, the mask's outer transition spans approximately the feather distance and no pixel outside the primitive remains at 255.
 - Given the Elliptical Marquee with Anti-aliased on, boundary coverage values include values strictly between 0 and 255; with it off, all values are 0 or 255.
 - Given `View > Show > Selection Edges` off, the marching ants disappear but the mask and subsequent edits are unchanged.

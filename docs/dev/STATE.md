@@ -4,6 +4,27 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Selection marquee feedback** (#275 follow-up, OpenSpec change
+  `selection-marquee-feedback`). Fixed Ratio now stays inside the cursor's
+  drag box (one-axis drags derive the other axis); Fixed Size puts its top-left
+  at the pointer and follows it; Alt at press subtracts with a selection (or
+  draws from the centre without one) and any Alt press during the drag mirrors;
+  the Elliptical Marquee owns its whole options group, persisted as
+  `ellipticalSelection`; the Polygonal close/double-click radius is
+  `6 / max(zoom, 1e-6)`. The `tsc_fixed_size` self-test check (244) is retired;
+  `tst_selection_preview::fixedSizeFollowsTheCursor` covers it.
+- **Selection marquee geometry** (#275, OpenSpec change
+  `selection-marquee-geometry`). `pictura-select::geometry` owns the marquee
+  rect (`marquee_rect`, reusing `pictura-core::shape::drag_rect`) and the lasso
+  close-radius test (`within_radius`); the Qt shell keeps the event, modifier,
+  style, and cursor policy and calls them through
+  `cxxqt_object/impl_selection/bridge.rs`. `clipSelectionShapeToCanvas` stays in
+  C++ (even-odd boolean; follow-up #1252). Rust unit tests cover Normal, Shift,
+  mirror, Fixed Ratio in both orientations, Fixed Size top-left tracking
+  (`marquee_rect_fixed_size_follows_the_pointer`), and the close radius; the
+  Qt suites gain the Fixed Ratio box-fit, Fixed Size tracking/clipping,
+  elliptical independence, and zoom-scaled close-radius cases, while
+  `tsc_marquee_geometry` still covers the integer rects.
 - **Edit ▸ Fade** (#491, OpenSpec change `edit-fade`). `pictura-filters::fade`
   (`Fade { opacity, mode }`, `fade_layer`) composites the effect output over the
   original with the W3C source-over blend: opacity 0 restores the original and

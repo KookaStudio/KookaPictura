@@ -46,7 +46,7 @@ Layer-level entries also live under the Select menu but are **not pixel selectio
 
 While a selection tool is active on the canvas:
 
-- `Shift`-drag → add; `Alt`/`Option`-drag → subtract; `Alt+Shift`-drag → intersect (a `+`, `−`, or `x` appears next to the pointer).
+- `Shift`-drag → add; `Alt`/`Option`-drag → subtract; `Alt+Shift`-drag → intersect (a `+`, `−`, or `x` appears next to the pointer). For the Rectangular and Elliptical Marquee, with no existing selection, `Alt` at the press draws from the centre, and an `Alt` press after the drag has begun mirrors. The Rectangular and Elliptical Marquee keep independent Style, ratio, and size options.
 - `Space`-drag reposition a marquee mid-drag (marquee/lasso tools).
 - With a selection present and the Move tool (or a selection tool), dragging inside the border moves the *border* (marquee/lasso set to New), while the Move tool moves the selected *pixels*.
 - Move a selection border: drag it; constrain direction to multiples of 45° with `Shift`; nudge 1 px with arrow keys, 10 px with `Shift`+arrows.
@@ -80,7 +80,7 @@ While a selection tool is active on the canvas:
 | `Select > All Layers` | Menu | `Ctrl+Alt+A` / `Cmd+Opt+A` | Layer selection, not pixel selection |
 | `View > Extras` | Menu | — | Toggles marching ants with other extras |
 | `View > Show > Selection Edges` | Menu | — | Toggles ants for current selection |
-| Canvas | Modifier | `Shift` / `Alt` / `Alt+Shift` | Add / subtract / intersect while drawing |
+| Canvas | Modifier | `Shift` / `Alt` / `Alt+Shift` | Add / subtract / intersect while drawing; Alt during the drag mirrors |
 | Canvas | Nudge | arrows / `Shift`+arrows | 1 px / 10 px selection movement |
 
 ## Parameters & ranges
