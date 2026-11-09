@@ -811,6 +811,31 @@ mod tests {
     }
 
     #[test]
+    fn photoshop_sample_geometry_decodes() {
+        // The supplied Photoshop sample's Patt block: 24 colour slots, a
+        // 219x265 rectangle, and written slots 0, 1, 2, 25. The pixels are
+        // synthetic; the geometry and slot layout are the sample's.
+        const W: u32 = 219;
+        const H: u32 = 265;
+        let n = (W * H) as usize;
+        let mut channels = vec![
+            channel(&vec![10u8; n], W, H),
+            channel(&vec![20u8; n], W, H),
+            channel(&vec![30u8; n], W, H),
+        ];
+        channels.extend(std::iter::repeat_n(unwritten(), 21));
+        channels.push(unwritten());
+        channels.push(channel(&vec![40u8; n], W, H));
+        let entry = pattern_raw("photoshop-sample", MODE_RGB, 24, &channels, (0, 0, H, W));
+
+        let got = decode_patterns(&doc_with(tagged_patt(&list_block(&[entry]))));
+        assert_eq!(got.len(), 1);
+        assert_eq!((got[0].width, got[0].height), (W, H));
+        assert_eq!(&got[0].rgba[0..4], &[10, 20, 30, 40]);
+        assert_eq!(&got[0].rgba[got[0].rgba.len() - 4..], &[10, 20, 30, 40]);
+    }
+
+    #[test]
     fn unused_colour_slots_are_not_decoded() {
         // The middle slots may hold anything; only the mode's leading planes and
         // the alpha region are decompressed. A 16-bit plane in slot 3 would

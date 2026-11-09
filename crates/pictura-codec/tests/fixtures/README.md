@@ -286,7 +286,11 @@ planes and the trailing transparency are written), and the fill layer carries a
 painted diagonal raster mask. The pattern fill's channel list is therefore the
 layout Photoshop writes for every pattern, unlike the older `pattern_fill.psd`
 fixture's simplified `num_channels = 3` layout. It is the regression fixture for
-a loaded Photoshop pattern fill's thumbnail and mask card (#1202).
+a loaded Photoshop pattern fill's thumbnail and mask card (#1202). The supplied
+Photoshop sample used as the reference had the same 24-slot layout with a
+219x265 pattern (written slots 0, 1, 2, 25); the unit test
+`photoshop_sample_geometry_decodes` pins that geometry without committing the
+Adobe preset pixels.
 
 ```python
 # 24 colour slots + 2 alpha slots; only RGB and the trailing alpha are written.
