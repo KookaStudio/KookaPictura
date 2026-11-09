@@ -154,6 +154,9 @@ public:
     PanelColumn* columnAtGlobal(const QPoint& globalPos) const;
     // -1 = not a new-column candidate, 0 = left, 1 = right.
     int newColumnSideAt(const QPoint& globalPos) const;
+    // Like `newColumnSideAt`, but a point on the desktop never resolves a dock
+    // target; a floating Tools panel stays free unless dragged into the edge.
+    int newColumnSideAtInsideWorkspace(const QPoint& globalPos) const;
     // M44 W5: a point in a band beside an existing column (other than `exclude`)
     // resolves to a new column anchored on that side; returns the anchor.
     PanelColumn* columnEdgeAnchorAt(const QPoint& globalPos, const PanelColumn* exclude,
@@ -172,11 +175,9 @@ public:
     void beginWidgetColumnResize(PanelColumn* column, int globalX);
     void updateWidgetColumnResize(int globalX);
     void endWidgetColumnResize();
-
     // The tabless, atomic Tools column hosted in the central splitter (default
     // left, index 0). Its content is the `toolbox_` widget.
     PanelColumn* toolsColumn() const { return toolsColumn_; }
-
     // M43 Phase B test hooks. All drive the same resolve/commit drag path.
     int panelColumnCountForTest() const { return columnCount(); }
     QString panelColumnSideForTest(int index) const;
@@ -908,7 +909,6 @@ private:
     ScreenMode nextScreenMode(bool forward) const;
     void togglePanelsHidden();
     void setPanelColumnsVisible(bool visible);
-
     // The open documents, in open order; the public index API indexes them.
     QList<DocEntry*> docs_;
     // Every document window in cycle order: the tab windows in their visual

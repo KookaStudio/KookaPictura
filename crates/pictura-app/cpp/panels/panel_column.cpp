@@ -32,6 +32,7 @@
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QScrollBar>
+#include <QtWidgets/QSizePolicy>
 #include <QtWidgets/QSplitter>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QToolButton>
@@ -49,6 +50,43 @@ constexpr int kPanelMaxWidth = 400;
 
 // The invisible width-drag grip kept on a widget column's workspace edge.
 constexpr int kResizeGripWidth = 4;
+// The tools grip uses the panel group's `•••` glyph but a taller band, so the
+// dots have breathing room above and below instead of hugging the title row.
+constexpr int kToolsGripHeight = 24;
+
+// The drag handle under the Tools panel title row. It matches the `•••` grip
+// above an iconic panel group (History, Properties): the column's event filter
+// turns a press/move on it into the same whole-column move the title row uses.
+class ToolbarDragGrip : public QLabel {
+public:
+    explicit ToolbarDragGrip(QWidget* parent = nullptr)
+        : QLabel(parent)
+    {
+        setObjectName(QStringLiteral("toolsDragGrip"));
+        setAttribute(Qt::WA_StyledBackground, true);
+        setAlignment(Qt::AlignCenter);
+        setText(QStringLiteral("\u2022\u2022\u2022"));
+        setCursor(Qt::SizeAllCursor);
+        setToolTip(tr("Drag to move the Tools panel"));
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setFixedHeight(Theme::scaled(kToolsGripHeight));
+    }
+
+    void applyUiScale() { setFixedHeight(Theme::scaled(kToolsGripHeight)); }
+};
+
+// The tools content lives in a scroll host so its full grid never forces the
+// main window's minimum height. The host itself must not impose its scrollbar
+// extent as a minimum width, or the tools column is wider than the toolbar and
+// shows a grey strip beside it.
+class ToolsScrollArea : public QScrollArea {
+public:
+    explicit ToolsScrollArea(QWidget* parent = nullptr)
+        : QScrollArea(parent)
+    {
+    }
+    QSize minimumSizeHint() const override { return QSize(0, 0); }
+};
 
 } // namespace
 
@@ -73,10 +111,10 @@ PanelColumn::PanelColumn(QWidget* parent)
     header_->installEventFilter(this);
     header_->setCursor(Qt::ArrowCursor);
     header_->setToolTip(tr("Drag to move this panel column"));
-    auto* headerLayout = new QHBoxLayout(header_);
-    headerLayout->setContentsMargins(2, 1, 2, 1);
-    headerLayout->setSpacing(2);
-    headerLayout->addStretch(1);
+    headerLayout_ = new QHBoxLayout(header_);
+    headerLayout_->setContentsMargins(2, 1, 2, 1);
+    headerLayout_->setSpacing(2);
+    headerLayout_->addStretch(1);
     columnToggle_ = new QToolButton(header_);
     columnToggle_->setObjectName(QStringLiteral("panelColumnToggle"));
     columnToggle_->setAutoRaise(true);
@@ -91,8 +129,25 @@ PanelColumn::PanelColumn(QWidget* parent)
             setRailMode(!railMode_);
         }
     });
-    headerLayout->addWidget(columnToggle_);
+    headerLayout_->addWidget(columnToggle_);
+    closeButton_ = new QToolButton(header_);
+    closeButton_->setObjectName(QStringLiteral("toolsCloseButton"));
+    closeButton_->setAutoRaise(true);
+    closeButton_->setFixedSize(18, 18);
+    closeButton_->setIcon(icon(QStringLiteral("panel.close")));
+    closeButton_->setIconSize(QSize(Theme::scaled(14), Theme::scaled(14)));
+    closeButton_->setToolTip(tr("Close the Tools panel"));
+    closeButton_->setVisible(false);
+    connect(closeButton_, &QToolButton::clicked, this, [this]() { emit closeRequested(); });
+    headerLayout_->addWidget(closeButton_);
     layout->addWidget(header_);
+
+    // Built hidden; `setToolsContent` shows it below the title row for a tools
+    // column only. Widget columns keep their existing header.
+    toolsGrip_ = new ToolbarDragGrip(this);
+    toolsGrip_->setVisible(false);
+    toolsGrip_->installEventFilter(this);
+
     updateColumnToggle();
 
     scroll_ = new QScrollArea(this);
@@ -160,7 +215,8 @@ PanelColumn::PanelColumn(QWidget* parent)
 PanelColumn::~PanelColumn()
 {
     // It is parented to the frame (above the splitter) so a float cannot cover
-    // it; that outlives this column, so drop it here instead of leaking.
+    // it; that outlives this column, so drop it here instead of leaking. The
+    // QPointer is null when frame teardown already deleted it.
     delete edgeIndicator_;
     if (flyout_) {
         flyout_->onHidden = nullptr;
@@ -548,15 +604,30 @@ void PanelColumn::setToolsContent(QWidget* content, std::function<int()> columns
     // the toolbox's scaled height cannot set the frame's minimum height.
     scroll_->setVisible(false);
     iconStrip_->setVisible(false);
-    toolsScroll_ = new QScrollArea(this);
+    toolsScroll_ = new ToolsScrollArea(this);
     toolsScroll_->setObjectName(QStringLiteral("toolsScroll"));
     toolsScroll_->setWidgetResizable(true);
     toolsScroll_->setFrameShape(QFrame::NoFrame);
+    // The Tools panel never scrolls: it shows every tool in the current layout
+    // or hides through the frame's short-window rule. Ignore the scroll host's
+    // own width hint so the column hugs the tool grid instead of leaving a grey
+    // strip beside it.
+    toolsScroll_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     toolsScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    toolsScroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     toolsScroll_->setWidget(content);
     if (auto* box = qobject_cast<QBoxLayout*>(layout())) {
-        box->insertWidget(1, toolsScroll_, 1);
+        box->insertWidget(1, toolsGrip_, 0);
+        box->insertWidget(2, toolsScroll_, 1);
     }
+    toolsGrip_->setVisible(true);
+    // CS6 puts the double-arrow on the left and the close control on the right
+    // of the tools title row.
+    if (headerLayout_) {
+        headerLayout_->removeWidget(columnToggle_);
+        headerLayout_->insertWidget(0, columnToggle_);
+    }
+    closeButton_->setVisible(true);
     content->setVisible(true);
     updateMinimumWidth();
     updateColumnToggle();
@@ -592,6 +663,33 @@ void PanelColumn::refreshToolsWidth()
             }
         }
     }
+}
+
+int PanelColumn::toolsRequiredHeight() const
+{
+    if (!toolsContent_) {
+        return 0;
+    }
+    int height = header_ ? qMax(header_->height(), header_->sizeHint().height()) : 0;
+    if (toolsGrip_) {
+        height += qMax(toolsGrip_->height(), toolsGrip_->minimumHeight());
+    }
+    int contentHeight = qMax(toolsContent_->minimumSizeHint().height(),
+                             toolsContent_->sizeHint().height());
+    if (const QLayout* contentLayout = toolsContent_->layout()) {
+        contentHeight = qMax(contentHeight, contentLayout->minimumSize().height());
+    }
+    height += contentHeight;
+    if (const QLayout* columnLayout = layout()) {
+        const QMargins margins = columnLayout->contentsMargins();
+        height += margins.top() + margins.bottom();
+        height += columnLayout->spacing() * 2;
+    }
+    // The scroll host's viewport, the header border and the grip's own paint
+    // margins take a few pixels beyond the content; keep them in the requirement
+    // so a floating overlay never clips the last tool.
+    height += Theme::scaled(4);
+    return height;
 }
 
 void PanelColumn::updateMinimumWidth()
@@ -670,6 +768,14 @@ void PanelColumn::applyUiScale()
     if (columnToggle_) {
         const int side = Theme::scaled(18);
         columnToggle_->setFixedSize(side, side);
+    }
+    if (closeButton_) {
+        const int side = Theme::scaled(18);
+        closeButton_->setFixedSize(side, side);
+        closeButton_->setIconSize(QSize(Theme::scaled(14), Theme::scaled(14)));
+    }
+    if (toolsGrip_) {
+        static_cast<ToolbarDragGrip*>(toolsGrip_)->applyUiScale();
     }
     for (PanelGroup* group : groups_) {
         if (group) {

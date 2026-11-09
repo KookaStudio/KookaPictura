@@ -326,6 +326,7 @@ QSplitter#panelColumnSplitter::handle { background: ${border}; }
 QFrame#panelIconDivider { background: transparent; border: 0; }
 QWidget#panelIconGroup { background: ${surface}; border: 0; border-bottom: 1px solid ${border-subtle}; }
 QWidget#panelIconGroupGrip { background: transparent; color: ${content-disabled}; }
+QLabel#toolsDragGrip { background: transparent; color: ${content-disabled}; }
 /* M47: a collapsed group's iconic row reuses the docked strip's
    `panelIconGroup` box, so the float and the strip read alike. The header band,
    the reserved corner grip, corner container, and its `▾` button share the

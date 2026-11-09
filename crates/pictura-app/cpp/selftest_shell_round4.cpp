@@ -876,9 +876,9 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         bool sized = false;
         if (tools && primary && tabs) {
             const int wantW = qMax(tools->minimumWidth(), tools->minimumSizeHint().width());
-            // The docked column's scroll area keeps its minimum height small; a
-            // floating tools overlay still hugs the full tool grid.
-            const int wantH = qMax(tools->minimumHeight(), tools->sizeHint().height());
+            // The docked column's scroll area keeps its own height small; a
+            // floating tools overlay still hugs the full tool content.
+            const int wantH = qMax(tools->minimumHeight(), tools->toolsRequiredHeight());
             tools->beginColumnHeaderDragForTest(
                 tools->mapToGlobal(QPoint(qMax(1, tools->width() / 2), 8)));
             tools->dragColumnHeaderToForTest(tabs->mapToGlobal(tabs->rect().center()));
@@ -888,7 +888,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 QWidget* grip = floatWindow->sizeGripForTest();
                 fixed = !floatWindow->resizableForTest() && (!grip || !grip->isVisible());
                 sized = qAbs(floatWindow->width() - wantW) <= 2
-                        && floatWindow->height() <= wantH + 2;
+                        && qAbs(floatWindow->height() - wantH) <= 2;
             }
             const QRect pr(primary->mapToGlobal(QPoint(0, 0)), primary->size());
             const QPoint left(pr.left() + qMax(1, pr.width() / 4), pr.center().y());

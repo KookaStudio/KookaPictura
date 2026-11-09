@@ -620,6 +620,31 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         }
         saveSession();
     });
+    connect(toolsColumn_, &PanelColumn::closeRequested, this, [this]() {
+        if (toolsColumn_) {
+            // Closing a floating toolbar must also tear its overlay down, or an
+            // empty grey window is left behind. Re-dock it first so the Window
+            // menu restores it as a splitter pane.
+            if (toolsColumn_->isColumnFloating()) {
+                const PanelSide side = toolsColumn_->side();
+                toolsColumn_->cancelColumnFloat();
+                if (centerSplitter_ && centerSplitter_->indexOf(toolsColumn_) < 0) {
+                    centerSplitter_->insertWidget(
+                        side == PanelSide::Left ? 0 : centerSplitter_->count(), toolsColumn_);
+                    reapplyColumnStretch();
+                }
+            }
+            toolsColumn_->hide();
+            if (centerSplitter_) {
+                reapplyColumnStretch();
+                centerSplitter_->update();
+            }
+        }
+        if (registry_) {
+            registry_->refresh();
+        }
+        saveSession();
+    });
     toolbox->setColumns(toolsColumns);
     toolsColumn_->refreshToolsWidth();
     reapplyColumnStretch();

@@ -76,6 +76,7 @@ set(PICTURA_QT_TESTS
     tst_transform_warp
     tst_transform_commands
     tst_command_tree
+    tst_toolbar_shape
     tst_command_bus
     tst_merge_commands
     tst_layer_commands

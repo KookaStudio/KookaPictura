@@ -365,13 +365,10 @@ PanelFloat* PanelColumn::floatColumn(const QPoint& globalTopLeft)
     auto* floatWindow = new PanelFloat(host);
     floatWindow->setContent(this);
     if (toolsContent_) {
-        // The floating tools column is not resizable and hugs its content: the
-        // tool grid width and the minimum height the content needs. The docked
-        // scroll area otherwise pins the toolbox to the viewport height, so the
-        // overlay lets the toolbox take its own hint while it floats.
-        if (toolsScroll_) {
-            toolsScroll_->setWidgetResizable(false);
-        }
+        // The floating tools column is not resizable and hugs its content. The
+        // scroll host stays widget-resizable so it re-fits the tool grid when
+        // the 1<->2 column flip changes the overlay size; `syncToContent` sizes
+        // the overlay to the full grid, so the host never shrinks the content.
         floatWindow->setMinimumWidth(0);
         floatWindow->setResizable(false);
     } else {
@@ -421,9 +418,6 @@ void PanelColumn::destroyColumnFloat()
     }
     PanelFloat* floatWindow = columnFloat_;
     columnFloat_ = nullptr;
-    if (toolsScroll_) {
-        toolsScroll_->setWidgetResizable(true);
-    }
     floatWindow->hide();
     floatWindow->deleteLater();
 }
@@ -440,6 +434,37 @@ void PanelColumn::cancelColumnFloat()
     destroyColumnFloat();
 }
 
+bool PanelColumn::resolveColumnDragTarget(const QPoint& globalPos, PanelColumn** anchor,
+                                          int* side) const
+{
+    auto* frame = owningFrame();
+    if (!frame) {
+        return false;
+    }
+    // A popped-out Tools panel is independent: it moves freely on the desktop
+    // and only offers the workspace's own left/right edge as a re-dock target.
+    // A point outside the workspace (over the desktop, or above/below it) never
+    // docks, so dragging the panel around outside the app leaves it floating.
+    if (toolsContent_ && columnDragStartedFloating_) {
+        const int edgeSide = frame->newColumnSideAtInsideWorkspace(globalPos);
+        if (edgeSide < 0) {
+            return false;
+        }
+        if (side) {
+            *side = edgeSide;
+        }
+        if (anchor) {
+            *anchor = nullptr;
+        }
+        return true;
+    }
+    PanelColumn* target = frame->resolveColumnMoveTarget(globalPos, this, side);
+    if (anchor) {
+        *anchor = target;
+    }
+    return side ? *side >= 0 : target != nullptr;
+}
+
 void PanelColumn::updateColumnDrag(const QPoint& globalPos)
 {
     auto* frame = owningFrame();
@@ -447,8 +472,8 @@ void PanelColumn::updateColumnDrag(const QPoint& globalPos)
         return;
     }
     int side = -1;
-    PanelColumn* anchor = frame->resolveColumnMoveTarget(globalPos, this, &side);
-    const bool hasTarget = side >= 0;
+    PanelColumn* anchor = nullptr;
+    const bool hasTarget = resolveColumnDragTarget(globalPos, &anchor, &side);
     // M48: the whole column tears off into the floating overlay on the first
     // move and follows the cursor for the rest of the drag, whether or not a
     // target resolves; a resolved target still draws the edge indicator and
@@ -512,13 +537,15 @@ bool PanelColumn::finishColumnDrag(const QPoint& globalPos)
         return false;
     }
     int side = -1;
-    PanelColumn* anchor = frame->resolveColumnMoveTarget(globalPos, this, &side);
+    PanelColumn* anchor = nullptr;
+    const bool hasTarget = resolveColumnDragTarget(globalPos, &anchor, &side);
+    columnDragStartedFloating_ = false;
     if (columnDropAnchor_) {
         columnDropAnchor_->hideEdgeDropIndicator();
     }
     columnDropAnchor_ = nullptr;
     columnDropSide_ = -1;
-    if (side >= 0) {
+    if (hasTarget) {
         // A valid target re-places the column; a floating one redocks into the
         // splitter at the resolved boundary.
         return columnFloat_ ? redockColumnFloat(side, anchor)

@@ -28,10 +28,13 @@ bool PicturaMainWindow::newColumnDropForTest(const QString& panelName, const QSt
         expected = 1;
     } else if (side == QStringLiteral("tools")) {
         // D1: the Tools panel is now a column; a widget-panel drop at its outer
-        // (left) edge allocates a new sibling column on that side.
-        if (!toolsColumn_ || !toolsColumn_->isVisible()) {
+        // (left) edge allocates a new sibling column on that side. This helper
+        // needs the panel visible as an anchor.
+        if (!toolsColumn_) {
             return false;
         }
+        toolsColumn_->show();
+        QCoreApplication::processEvents();
         const QRect tr(toolsColumn_->mapToGlobal(QPoint(0, 0)), toolsColumn_->size());
         point = QPoint(tr.left() - 8, tr.center().y());
         expected = 0;
