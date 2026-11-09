@@ -438,6 +438,10 @@ QJsonObject toolOptionsToJson(const ToolController& tools)
         out.insert(QStringLiteral("selection"), write(selectionFields(*s)));
     }
     if (const SelectionOptions* s =
+            tools.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee)) {
+        out.insert(QStringLiteral("ellipticalSelection"), write(selectionFields(*s)));
+    }
+    if (const SelectionOptions* s =
             tools.optionsFor<SelectionOptions>(ToolId::QuickSelection)) {
         out.insert(QStringLiteral("quickSelection"), write(selectionFields(*s)));
     }
@@ -482,6 +486,15 @@ void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
         }
         s->apply(restored);
     }
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee)) {
+        SelectionOptions restored;
+        const QJsonValue ellipticalSelection = json.value(QStringLiteral("ellipticalSelection"));
+        if (ellipticalSelection.isObject()) {
+            applySelection(restored, read(ellipticalSelection.toObject(),
+                                          selectionFields(SelectionOptions{})));
+        }
+        s->apply(restored);
+    }
     if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection)) {
         SelectionOptions restored;
         const QJsonValue quickSelection = json.value(QStringLiteral("quickSelection"));
@@ -515,6 +528,11 @@ void patchToolOptionsJson(ToolController& tools, const QJsonObject& json)
     if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
         s && selection.isObject()) {
         applySelection(*s, read(selection.toObject(), selectionFields(*s)));
+    }
+    const QJsonValue ellipticalSelection = json.value(QStringLiteral("ellipticalSelection"));
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee);
+        s && ellipticalSelection.isObject()) {
+        applySelection(*s, read(ellipticalSelection.toObject(), selectionFields(*s)));
     }
     const QJsonValue quickSelection = json.value(QStringLiteral("quickSelection"));
     if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection);

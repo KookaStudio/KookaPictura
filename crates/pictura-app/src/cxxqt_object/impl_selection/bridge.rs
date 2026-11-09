@@ -71,5 +71,24 @@ pub mod ffi {
 
         /// Restore the selection captured at the start of the Quick Selection stroke.
         fn quick_select_cancel(view: Pin<&mut PictureView>) -> bool;
+
+        /// The integer rect a marquee drag marks out. `style` is the C++
+        /// `MarqueeStyle` value (0 Normal, 1 Fixed Ratio, 2 Fixed Size).
+        fn selection_marquee_rect(
+            x0: f64,
+            y0: f64,
+            x1: f64,
+            y1: f64,
+            shift: bool,
+            mirror: bool,
+            style: i32,
+            ratio_w: f64,
+            ratio_h: f64,
+            fixed_w: i32,
+            fixed_h: i32,
+        ) -> Vec<i32>;
+
+        /// Whether `(x1, y1)` lies within `radius` of `(x0, y0)`.
+        fn selection_within_radius(x0: f64, y0: f64, x1: f64, y1: f64, radius: f64) -> bool;
     }
 }

@@ -61,6 +61,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
 
         // tsc_feather (243): a tool-time Feather softens the committed boundary,
         // so the coverage contains values strictly between 0 and 255.
+        frame.setActiveTool(ToolId::Marquee);
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(8.0);
         ellipseView->deselect();
         const int featherBase = ellipseView->history_count();
@@ -87,25 +88,6 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         }
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
 
-        // tsc_fixed_size (244): Fixed Size ignores the drag extent and commits
-        // the configured size centred on the mousedown.
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::FixedSize);
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFixedSize(10, 6);
-        frame.setActiveTool(pictura::ToolId::Marquee);
-        ellipseView->deselect();
-        const int fixedBase = ellipseView->history_count();
-        ellipseCanvas->mousePressed(QPointF(5, 5), Qt::LeftButton, int(Qt::NoModifier));
-        ellipseCanvas->mouseMoved(QPointF(15, 15));
-        ellipseCanvas->mouseReleased(QPointF(15, 15));
-        const QString fixedBounds = selection_api::bounds(*ellipseView).toString();
-        const bool fixedDrawn = ellipseView->has_selection()
-            && ellipseView->history_count() == fixedBase + 1;
-        ST_BEGIN("tsc_fixed_size");
-        ST_PASS("tsc_fixed_size drawn=%d bounds=%s", fixedDrawn ? 1 : 0,
-                qPrintable(fixedBounds));
-        if (!fixedDrawn || fixedBounds != QStringLiteral("0 2 10 6")) {
-            return pictura::selfTest().fail(244, "fixed size marquee");
-        }
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
 
         // tsc_polygon (245): the Polygonal Lasso commits the clicked triangle
@@ -777,7 +759,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
 
         // tsc_marquee_geometry (271): a Normal marquee squares the drag under
         // Shift and mirrors about the press point only when the explicit mirror
-        // flag is set; Alt alone no longer mirrors (its first stage subtracts).
+        // flag is set; Alt alone does not mirror the geometry (the handler
+        // decides mirror from the Alt edge).
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         const QPointF geoA(10, 10);
         const QPointF geoB(30, 20);
@@ -1014,10 +997,9 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
             return pictura::selfTest().fail(368, "drag modifier retention");
         }
 
-        // lst_alt_pivot (369): Alt chooses Subtract at press only when a
-        // selection exists (never pre-toggled while only hovering); the first
-        // Alt subtracts alone and does not mirror, so the geometry is an
-        // ordinary drag. (A second Alt edge mirrors; that lives in the Qt Test.)
+        // lst_alt_pivot (369): Alt at press with no selection draws from the
+        // centre; with a selection it chooses Subtract. A mid-drag Alt edge
+        // mirrors; that lives in the Qt Test.
         frame.setActiveTool(pictura::ToolId::Marquee);
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
@@ -1042,7 +1024,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 apNoPretoggle ? 1 : 0, apModsAlt ? 1 : 0, apCommitted ? 1 : 0,
                 qPrintable(apBounds), apSubtract ? 1 : 0);
         if (!apNoPretoggle || !apModsAlt || !apCommitted
-            || apBounds != QStringLiteral("5 5 4 2") || !apSeed || !apSubtract) {
+            || apBounds != QStringLiteral("1 3 8 4") || !apSeed || !apSubtract) {
             return pictura::selfTest().fail(369, "alt pivot pre-toggle");
         }
 

@@ -12,7 +12,6 @@
 #include <QtWidgets/QApplication>
 
 #include <algorithm>
-#include <cmath>
 #include <memory>
 
 namespace pictura {
@@ -269,7 +268,7 @@ private:
     static bool near(ToolServices& ctx, const QPoint& a, const QPoint& b)
     {
         const double zoom = ctx.canvas() ? std::max(ctx.canvas()->zoom(), 1e-6) : 1.0;
-        return std::hypot(a.x() - b.x(), a.y() - b.y()) * zoom <= kPolygonCloseRadius;
+        return within_radius(QPointF(a), QPointF(b), kPolygonCloseRadius / zoom);
     }
 
     bool active_ = false;

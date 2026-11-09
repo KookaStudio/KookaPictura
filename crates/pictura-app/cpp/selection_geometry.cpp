@@ -1,59 +1,30 @@
 #include "selection_geometry.h"
 
+#include "api/selection_bridge.h"
+
 #include <QtGui/QPainterPath>
 
-#include <algorithm>
-#include <cmath>
+#include <cstdint>
+#include <rust/cxx.h>
 
 namespace pictura {
-
-QRect dragRect(const QPointF& a, const QPointF& b)
-{
-    const QRectF rect = QRectF(a, b).normalized();
-    return QRect(qRound(rect.left()), qRound(rect.top()), qRound(rect.width()),
-                 qRound(rect.height()));
-}
 
 QRect marqueeDragRect(const QPointF& a, const QPointF& b, Qt::KeyboardModifiers mods,
                       bool mirror, MarqueeStyle style, double fixedRatioW, double fixedRatioH,
                       int fixedSizeW, int fixedSizeH)
 {
-    if (style == MarqueeStyle::FixedSize) {
-        const int w = fixedSizeW;
-        const int h = fixedSizeH;
-        return QRect(qRound(a.x()) - w / 2, qRound(a.y()) - h / 2, w, h);
+    const ::rust::Vec<::std::int32_t> rect = selection_marquee_rect(
+        a.x(), a.y(), b.x(), b.y(), mods.testFlag(Qt::ShiftModifier), mirror,
+        static_cast<int>(style), fixedRatioW, fixedRatioH, fixedSizeW, fixedSizeH);
+    if (rect.size() != 4) {
+        return QRect();
     }
-    if (style == MarqueeStyle::FixedRatio) {
-        const double ratio = fixedRatioW / fixedRatioH;
-        const double dx = b.x() - a.x();
-        const double dy = b.y() - a.y();
-        double w = std::abs(dx);
-        double h = std::abs(dy);
-        if (ratio > 0.0) {
-            if (h <= 0.0 || w / ratio >= h) {
-                h = w / ratio;
-            } else {
-                w = h * ratio;
-            }
-        }
-        const int left = dx >= 0.0 ? qRound(a.x()) : qRound(a.x() - w);
-        const int top = dy >= 0.0 ? qRound(a.y()) : qRound(a.y() - h);
-        return QRect(left, top, qRound(w), qRound(h));
-    }
+    return QRect(rect[0], rect[1], rect[2], rect[3]);
+}
 
-    double dx = b.x() - a.x();
-    double dy = b.y() - a.y();
-    if (mods.testFlag(Qt::ShiftModifier)) {
-        const double m = std::max(std::abs(dx), std::abs(dy));
-        dx = std::copysign(m, dx);
-        dy = std::copysign(m, dy);
-    }
-    const QPointF end = a + QPointF(dx, dy);
-    if (mirror) {
-        return QRect(qRound(a.x() - std::abs(dx)), qRound(a.y() - std::abs(dy)),
-                     qRound(2 * std::abs(dx)), qRound(2 * std::abs(dy)));
-    }
-    return dragRect(a, end);
+bool within_radius(const QPointF& a, const QPointF& b, double radius)
+{
+    return selection_within_radius(a.x(), a.y(), b.x(), b.y(), radius);
 }
 
 QList<QPolygonF> clipSelectionShapeToCanvas(const QList<QPolygonF>& loops, const QSize& canvas)

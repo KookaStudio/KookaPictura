@@ -14,4 +14,6 @@
 # with the preset-only Warp dialog; Warp mode is covered by tst_transform_warp.
 # Lowered to 507 when the lpr_qt_text check (exit code 525, retired) went with
 # the Qt text helper; Rasterize Type now bakes the on-canvas render (#962).
-507
+# Lowered to 506 when the tsc_fixed_size check (exit code 244, retired) moved
+# to tst_selection_preview::fixedSizeFollowsTheCursor.
+506

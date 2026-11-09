@@ -153,7 +153,7 @@ ToolController::ToolController(QObject* parent)
     // family; the raw pointers below are the controller's non-owning references
     // for signal wiring and its own reads.
     auto paint = std::make_shared<PaintOptions>();
-    auto selection = std::make_shared<SelectionOptions>();
+    auto selection = std::make_shared<SelectionOptions>(), ellipticalSelection = std::make_shared<SelectionOptions>();
     // Quick Selection owns its combine mode: its New-to-Add switch must not
     // leak into the marquee and the other selection tools.
     auto quickSelection = std::make_shared<SelectionOptions>();
@@ -274,7 +274,7 @@ ToolController::ToolController(QObject* parent)
     registry_.registerTool(ToolId::Slice, makeSliceToolHandler());
     registry_.registerTool(ToolId::SliceSelect, makeSliceSelectToolHandler());
     registry_.registerTool(ToolId::Marquee, makeMarqueeToolHandler(selection));
-    registry_.registerTool(ToolId::EllipticalMarquee, makeEllipticalMarqueeToolHandler(selection));
+    registry_.registerTool(ToolId::EllipticalMarquee, makeEllipticalMarqueeToolHandler(ellipticalSelection));
     registry_.registerTool(ToolId::Lasso, makeLassoToolHandler(selection));
     registry_.registerTool(ToolId::PolygonalLasso, makePolygonalLassoToolHandler(selection));
     registry_.registerTool(ToolId::MagneticLasso, makeMagneticLassoToolHandler(selection));

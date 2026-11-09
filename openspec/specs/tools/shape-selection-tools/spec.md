@@ -13,11 +13,17 @@ be enabled in the toolbox, SHALL support New, Add, Subtract, and Intersect
 combine modes, and SHALL apply a tool-time Feather radius (0-250 px, decimal) to
 the rasterised shape before combining. The Style option SHALL constrain the drag
 geometry before rasterisation: Normal follows the drag, Fixed Ratio keeps the
-entered width-to-height ratio, and Fixed Size places the entered pixel size
-centred on the mousedown. Anti-alias SHALL be offered only for the Elliptical
-Marquee; because the engine rasteriser is binary, the control SHALL be visible
-but disabled with a reason rather than silently ignored. Fixed-ratio and
-fixed-size defaults, and non-pixel size units, are inferred and MAY be deferred.
+entered width-to-height ratio while staying inside the non-degenerate box the
+cursor draws, and Fixed Size places the entered pixel size with its top-left
+corner at the current pointer and follows the pointer until release. A one-axis
+Fixed Ratio drag SHALL still derive the other axis from the entered ratio and MAY
+extend outside the degenerate box. Fixed Ratio and Fixed Size SHALL round half
+away from zero. A Fixed Size selection partly or wholly outside the canvas SHALL
+be clipped by the rasteriser. Fixed Ratio and Fixed Size SHALL ignore Shift and
+Alt. Anti-alias SHALL be offered only for the Elliptical Marquee; because the
+engine rasteriser is binary, the control SHALL be visible but disabled with a
+reason rather than silently ignored. Fixed-ratio and fixed-size defaults, and
+non-pixel size units, are inferred and MAY be deferred.
 
 #### Scenario: Drag a rectangular selection
 - **WHEN** the Rectangular Marquee tool is dragged from one point to another
@@ -35,9 +41,41 @@ fixed-size defaults, and non-pixel size units, are inferred and MAY be deferred.
 - **WHEN** Style is Fixed Ratio with a 2:1 ratio and the tool is dragged
 - **THEN** the committed selection's width-to-height ratio is 2 within 1 px
 
+#### Scenario: Fixed ratio fits the drag box [lst_fixed_ratio_fits_drag]
+- **WHEN** Style is Fixed Ratio with a 2:1 ratio and the cursor draws a 40x10 box
+- **THEN** the selection is 20x10 inside that box, not 40x20 past the cursor
+
+#### Scenario: Fixed ratio fits the narrow axis [lst_fixed_ratio_narrow]
+- **WHEN** Style is Fixed Ratio with a 2:1 ratio and the cursor draws a 10x40 box
+- **THEN** the selection is 10x5 inside that box
+
+#### Scenario: A one-axis Fixed Ratio drag derives the other axis [lst_fixed_ratio_one_axis]
+- **WHEN** Style is Fixed Ratio with a 2:1 ratio and the cursor draws a 0x40 box
+- **THEN** the selection is 80x40 and may extend outside the degenerate box
+
+#### Scenario: Fixed ratio fits a reverse drag [lst_fixed_ratio_reverse]
+- **WHEN** Style is Fixed Ratio with a 2:1 ratio and the cursor drags from (50,50) to (10,10)
+- **THEN** the selection is (10,30,40,20)
+
 #### Scenario: Fixed size ignores the drag extent
-- **WHEN** Style is Fixed Size with a 100x50 size and the tool is dragged any distance
-- **THEN** the committed selection is 100x50 centred on the mousedown
+- **WHEN** Style is Fixed Size with a 100x50 size and the pointer is dragged from the press point
+- **THEN** only the size is fixed; the committed selection is 100x50 with its top-left corner at the release point
+
+#### Scenario: Fixed size follows the pointer on a large document [lst_fixed_size_follows]
+- **WHEN** Style is Fixed Size with a 100x50 size on a document large enough to hold it and the pointer is dragged to (120,80)
+- **THEN** the selection is 100x50 with its top-left corner at (120,80)
+
+#### Scenario: Fixed size clips at the canvas edge [lst_fixed_size_clip]
+- **WHEN** Style is Fixed Size with a 100x50 size on a 64x64 document and the release point is (20,20)
+- **THEN** the committed selection is clipped to the canvas
+
+#### Scenario: The ellipse uses its own Fixed Ratio [lst_elliptical_fixed_ratio]
+- **WHEN** the Elliptical Marquee is set to Fixed Ratio with a 2:1 ratio and the cursor draws a 40x10 box
+- **THEN** the committed ellipse is inscribed in a 20x10 rectangle
+
+#### Scenario: The ellipse uses its own Fixed Size [lst_elliptical_fixed_size]
+- **WHEN** the Elliptical Marquee is set to Fixed Size with a 100x50 size on a document large enough to hold it and the pointer is dragged to (120,80)
+- **THEN** the committed ellipse is inscribed in a 100x50 rectangle with its top-left corner at (120,80)
 
 #### Scenario: Anti-alias is honest about the ceiling
 - **WHEN** the Elliptical Marquee options are inspected
@@ -68,21 +106,24 @@ tool is dragged, as a per-point flood selection with the current tolerance.
 The system SHALL support New, Add, Subtract, and Intersect combine modes for the
 selection tools. The default SHALL be New, which replaces any existing selection.
 While a modal selection tool gestures, holding Shift SHALL mean Add, holding Alt
-SHALL mean Subtract, and holding Shift+Alt SHALL mean Intersect, but only when a
-selection already exists when the gesture starts; without an existing selection
-the modifiers SHALL NOT select Add/Subtract/Intersect (the options-bar mode
-applies). The quick mode SHALL be decided at the start of the gesture and locked
-for its whole duration until the selection commits, so releasing a modifier
-mid-gesture does not change the result. The options-bar combine buttons SHALL
-remain the default when no modifier is held. A gesture's combine mode SHALL be
-derived from two independent inputs: the **quick mode** locked at press and the
-**modifier geometry**, and the two SHALL NOT be conflated — Shift/Alt choose the
-combine operation while Alt SHALL only additionally select the from-centre
-(alt-pivot) geometry. Alt SHALL NOT pre-toggle the combine mode before a drag
-begins, and a modifier held while merely hovering SHALL NOT change the mode. The
-canvas cursor SHALL reflect the mode that a press would use: with an existing
-selection and Shift or Alt held over the canvas, the canvas SHALL show the
-combine cursor rather than the move-selection cursor.
+at the press SHALL mean Subtract, and holding Shift+Alt at the press SHALL mean
+Intersect, but only when a selection already exists when the gesture starts;
+without an existing selection the modifiers SHALL NOT select
+Add/Subtract/Intersect (the options-bar mode applies). The quick mode SHALL be
+decided at the start of the gesture and locked for its whole duration until the
+selection commits, so releasing a modifier mid-gesture does not change the
+result. The options-bar combine buttons SHALL remain the default when no
+modifier is held. A gesture's combine mode SHALL be derived from two independent
+inputs: the **quick mode** locked at press and the **modifier geometry**, and the
+two SHALL NOT be conflated — Shift/Alt choose the combine operation while Alt at
+the press with no existing selection SHALL select the from-centre (alt-pivot)
+geometry; an Alt press after the drag has begun SHALL pivot-mirror per the
+Marquee Alt press and mid-drag behavior requirement. Alt SHALL NOT pre-toggle
+the combine mode before a drag begins, and a modifier held while merely
+hovering SHALL NOT change the mode. The canvas cursor SHALL reflect the mode
+that a press would use: with an existing selection and Shift or Alt held over
+the canvas, the canvas SHALL show the combine cursor rather than the
+move-selection cursor.
 
 #### Scenario: Add extends an existing selection
 
@@ -126,7 +167,7 @@ combine cursor rather than the move-selection cursor.
 
 #### Scenario: No existing selection ignores the combine modifier
 
-- **WHEN** there is no selection and a selection tool is dragged with Alt held
+- **WHEN** there is no selection and a selection tool is dragged with Alt held at the press
 - **THEN** the modifier chooses the from-centre geometry when applicable and the committed selection is created as New, not subtracted
 
 #### Scenario: The combine cursor shows while hovering [lst_combine_cursor]
@@ -138,6 +179,11 @@ combine cursor rather than the move-selection cursor.
 
 - **WHEN** Alt is held over the canvas with a selection tool active but no drag has started
 - **THEN** the locked quick mode is unchanged and no combine operation is selected until a press captures the modifiers
+
+#### Scenario: Alt during the drag mirrors instead of subtracting [lst_alt_drag_mirror_combine]
+
+- **WHEN** a selection exists, a marquee drag starts with no Alt held, and Alt is first pressed during the drag
+- **THEN** the rectangle mirrors about the anchor, the combine mode stays the one captured at press, and the committed result is not a Subtract
 
 ### Requirement: Selection bounds overlay
 The system SHALL show a rubber-band overlay for the selection being dragged and
@@ -213,17 +259,22 @@ Intersect mode.
 ### Requirement: Marquee modifier constraints and size readout
 
 While a Rectangular or Elliptical Marquee drag is active, holding Shift SHALL
-constrain the shape to a square (rectangle) or circle (ellipse), and holding Alt
-SHALL treat the press point as the centre (a pivot), mirroring the region around
-it on every side. Holding both SHALL produce a square/circle centred on the
-press point. These constraints refine the Normal drag and SHALL combine with the
-Style option. **The modifiers that govern the gesture SHALL be captured at press
-(`dragMods_`) and used unchanged for the live preview geometry, the release
-rasterisation, and the drag cursor, so releasing Shift or Alt partway through a
-drag keeps the constrained geometry and the mode that were active at press.**
-For both tools, a floating readout of the current selection size in document
-pixels (`W × H`) SHALL follow the cursor during the drag and SHALL disappear on
-release.
+constrain the shape to a square (rectangle) or circle (ellipse). Alt held at the
+press with an existing selection SHALL choose Subtract and SHALL NOT mirror;
+with no existing selection, Alt held at the press SHALL select the from-centre
+geometry (the press point is the pivot) and commit New. The first Alt press after
+the drag has begun SHALL arm pivot-mirror immediately and SHALL NOT switch to
+Subtract. Holding Shift and Alt at the press with no existing selection SHALL
+produce a square/circle centred on the press point. These constraints refine the
+Normal drag; Fixed Ratio and Fixed Size use their own geometry and SHALL ignore
+Shift and Alt. **Shift and the combine mode SHALL be captured at press
+(`dragMods_`/`dragMode_`) and used unchanged for the live preview geometry, the
+release rasterisation, and the drag cursor, so releasing Shift or Alt partway
+through a drag keeps the constrained geometry and the mode that were active at
+press. The mid-drag Alt-pivot is the exception: it changes the live and release
+geometry to mirror; the captured combine mode and cursor stay unchanged.** For
+both tools, a floating readout of the current selection size in document pixels
+(`W × H`) SHALL follow the cursor during the drag and SHALL disappear on release.
 
 #### Scenario: Shift makes a square
 
@@ -237,18 +288,38 @@ release.
 
 #### Scenario: Alt draws from the centre
 
-- **WHEN** the Rectangular Marquee is dragged with Alt held from a press point
-- **THEN** the committed rectangle is centred on the press point and extends on all sides by the drag delta
+- **WHEN** there is no existing selection and the Rectangular Marquee is dragged with Alt held from a press point
+- **THEN** the committed rectangle is centred on the press point, extends on all sides by the drag delta, and commits New
 
 #### Scenario: Releasing a modifier mid-drag keeps the geometry [lst_marquee_dragmods]
 
-- **WHEN** a marquee drag starts with Shift (or Alt) held and the modifier is released before mouse-up
+- **WHEN** a marquee drag starts with Shift held, or with Alt held at the press with no existing selection, and the modifier is released before mouse-up
 - **THEN** the committed selection keeps the square/centre constraint captured at press and the quick mode is unchanged
 
 #### Scenario: The size readout tracks the drag
 
 - **WHEN** a Marquee or Elliptical Marquee drag is in progress
 - **THEN** a `W × H` pixel readout is shown next to the cursor and cleared when the drag ends
+
+#### Scenario: Alt at the press subtracts without mirroring [lst_alt_press_subtract]
+
+- **WHEN** a selection exists and the Rectangular Marquee is dragged with Alt held from the press
+- **THEN** the drag subtracts the ordinary drag rectangle and does not mirror it
+
+#### Scenario: Alt during the drag mirrors [lst_alt_drag_mirror]
+
+- **WHEN** a marquee drag begins with no Alt held and Alt is first pressed during the drag
+- **THEN** the live and committed rectangle mirror about the anchor and the combine mode stays the one captured at press
+
+#### Scenario: Fixed Ratio ignores Shift and Alt [lst_fixed_ratio_modifiers]
+
+- **WHEN** Style is Fixed Ratio and the drag is made with Shift or Alt held
+- **THEN** the committed selection keeps the entered ratio and is not squared, mirrored, or centred
+
+#### Scenario: Fixed Size ignores Shift and Alt [lst_fixed_size_modifiers]
+
+- **WHEN** Style is Fixed Size and the drag is made with Shift or Alt held
+- **THEN** the committed selection is the entered size with its top-left at the release point and is not squared, mirrored, or centred
 
 ### Requirement: Selection-move hover cursor
 
@@ -361,3 +432,48 @@ history unchanged. A press inside the selection keeps starting a selection move.
 
 - **WHEN** the Rectangular Marquee Shift-clicks outside the selection
 - **THEN** the selection and history are unchanged
+
+### Requirement: Marquee Style is per tool
+The Rectangular Marquee and Elliptical Marquee SHALL each own a whole selection
+options group, so Style, ratio, size, combine mode, Feather, Tolerance, and the
+magnetic-lasso detection fields are independent between the two tools. Changing
+one tool's options SHALL NOT change the other tool's options or the geometry it
+commits. A missing persisted elliptical group SHALL restore Normal Style with
+the default ratio and size.
+
+#### Scenario: Fixed Size on the rectangle leaves the ellipse Normal [lst_elliptical_style_independent]
+- **WHEN** the Rectangular Marquee is set to Fixed Size and the Elliptical Marquee is selected
+- **THEN** the Elliptical Marquee still uses Normal Style and commits an ellipse from the drag rectangle
+
+#### Scenario: Fixed Ratio on the ellipse leaves the rectangle Normal [lst_rect_style_independent]
+- **WHEN** the Elliptical Marquee is set to Fixed Ratio and the Rectangular Marquee is selected
+- **THEN** the Rectangular Marquee still uses Normal Style and commits a rectangle from the drag rectangle
+
+#### Scenario: The ellipse uses its own Fixed Ratio and Fixed Size [lst_elliptical_fixed_style]
+- **WHEN** the Elliptical Marquee is set to Fixed Ratio and then Fixed Size while the Rectangular Marquee stays Normal
+- **THEN** each elliptical drag uses the ellipse's own style and the rectangle's style is unchanged
+
+### Requirement: Polygonal Lasso close radius scales with zoom
+The Polygonal Lasso's close-click and double-click hit radius SHALL be fixed on
+screen at 6 px, so the document-space radius is `6 / max(zoom, 1e-6)`. The
+`max` guards against division by zero; the view already clamps zoom to 0.01, so
+a zero or negative zoom is not reachable in normal use. At 200% zoom a close
+click 4 document pixels from the first vertex SHALL NOT close the outline,
+while a close click 3 document pixels away SHALL close it. The outline SHALL
+already hold three placed vertices when the close click arrives.
+
+#### Scenario: A small selection is possible when zoomed in [lst_polygon_close_zoom]
+- **WHEN** the Polygonal Lasso is at 200% zoom, three vertices are placed, and the close click is 4 document pixels from the first vertex
+- **THEN** the outline stays open instead of closing
+
+#### Scenario: The close click still fires on the screen radius [lst_polygon_close_zoom_hit]
+- **WHEN** the Polygonal Lasso is at 200% zoom, three vertices are placed, and the close click is 3 document pixels from the first vertex
+- **THEN** the outline closes and commits
+
+#### Scenario: The double-click fires on the screen radius [lst_polygon_double_click_zoom]
+- **WHEN** the Polygonal Lasso is at 200% zoom, three vertices are placed, and the double-click is 3 document pixels from the last vertex
+- **THEN** the outline closes and commits
+
+#### Scenario: A double-click outside the radius stays open [lst_polygon_double_click_zoom_miss]
+- **WHEN** the Polygonal Lasso is at 200% zoom, three vertices are placed, and the double-click is 4 document pixels from the last vertex
+- **THEN** the outline stays open

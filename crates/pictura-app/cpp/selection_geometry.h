@@ -11,20 +11,20 @@
 
 namespace pictura {
 
-// Document-space radius for the Polygonal Lasso close-click and for treating a
-// second rapid press as a double-click. Document pixels, so it shrinks visually
-// when zoomed out.
+// Screen-space radius for the Polygonal and Magnetic Lasso close-click and
+// double-click tests. The document-space radius is kPolygonCloseRadius / zoom.
 constexpr double kPolygonCloseRadius = 6.0;
-
-// The normalized rectangle spanned by two image points.
-QRect dragRect(const QPointF& a, const QPointF& b);
 
 // Style constrains the drag geometry before rasterisation: Normal follows the
 // drag (Shift squares, `mirror` centres about the press point); Fixed Ratio
-// keeps the entered width:height; Fixed Size is centred on the mousedown.
+// keeps the entered width:height; Fixed Size puts its top-left at the pointer.
+// The math lives in `pictura-select`; this is the Qt adapter.
 QRect marqueeDragRect(const QPointF& a, const QPointF& b, Qt::KeyboardModifiers mods,
                       bool mirror, MarqueeStyle style, double fixedRatioW, double fixedRatioH,
                       int fixedSizeW, int fixedSizeH);
+
+// Whether `b` lies within `radius` document pixels of `a`, boundary included.
+bool within_radius(const QPointF& a, const QPointF& b, double radius);
 
 /// The closed selection shapes intersected with the canvas rectangle, closed
 /// along its border: a shape that leaves the canvas is drawn as the part of it

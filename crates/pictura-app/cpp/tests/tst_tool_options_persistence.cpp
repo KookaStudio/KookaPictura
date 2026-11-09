@@ -28,6 +28,7 @@ private slots:
     void restoreDoesNotNotify();
     void missingFieldsRestoreDefaults();
     void patchMergesAndNotifies();
+    void ellipticalOptionsRoundTrip();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -276,14 +277,18 @@ void ToolOptionsPersistenceTest::missingFieldsRestoreDefaults()
     ToolController tools;
     PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush);
     SelectionOptions* marquee = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
+    SelectionOptions* ellipse = tools.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee);
     MoveGroup* move = tools.optionsFor<MoveGroup>(ToolId::Move);
-    QVERIFY(paint && marquee && move);
+    QVERIFY(paint && marquee && ellipse && move);
 
     paint->setSize(77);
     paint->setHardness(10);
     paint->setOpacity(40);
     marquee->setTolerance(200);
     marquee->setMagneticWidth(40);
+    ellipse->setMarqueeStyle(MarqueeStyle::FixedSize);
+    ellipse->setFixedRatio(3.0, 2.0);
+    ellipse->setFixedSize(20, 10);
     MoveOptions options = move->get();
     options.autoSelectOn = true;
     move->set(options);
@@ -300,6 +305,11 @@ void ToolOptionsPersistenceTest::missingFieldsRestoreDefaults()
     QCOMPARE(paint->opacity(), PaintOptions{}.opacity());
     QCOMPARE(marquee->tolerance(), 100);
     QCOMPARE(marquee->magneticWidth(), SelectionOptions{}.magneticWidth());
+    QCOMPARE(int(ellipse->marqueeStyle()), int(MarqueeStyle::Normal));
+    QCOMPARE(ellipse->fixedRatioWidth(), SelectionOptions{}.fixedRatioWidth());
+    QCOMPARE(ellipse->fixedRatioHeight(), SelectionOptions{}.fixedRatioHeight());
+    QCOMPARE(ellipse->fixedSizeWidth(), SelectionOptions{}.fixedSizeWidth());
+    QCOMPARE(ellipse->fixedSizeHeight(), SelectionOptions{}.fixedSizeHeight());
     QVERIFY(!move->get().autoSelectOn);
     QCOMPARE(move->get().alignTo, 1);
 }
@@ -323,6 +333,33 @@ void ToolOptionsPersistenceTest::patchMergesAndNotifies()
     QCOMPARE(paint->size(), 123);
     QCOMPARE(paint->opacity(), 40);
     QCOMPARE(notified, 1);
+}
+
+
+void ToolOptionsPersistenceTest::ellipticalOptionsRoundTrip()
+{
+    using namespace pictura;
+    ToolController tools;
+    SelectionOptions* rect = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
+    SelectionOptions* ellipse = tools.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee);
+    QVERIFY(rect && ellipse);
+    rect->setMarqueeStyle(MarqueeStyle::FixedSize);
+    rect->setFixedSize(100, 50);
+    ellipse->setMarqueeStyle(MarqueeStyle::FixedRatio);
+    ellipse->setFixedRatio(2.0, 1.0);
+
+    const QJsonObject json = toolOptionsToJson(tools);
+
+    ToolController restored;
+    applyToolOptionsJson(restored, json);
+    SelectionOptions* restoredRect = restored.optionsFor<SelectionOptions>(ToolId::Marquee);
+    SelectionOptions* restoredEllipse =
+        restored.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee);
+    QVERIFY(restoredRect && restoredEllipse);
+    QCOMPARE(int(restoredRect->marqueeStyle()), int(MarqueeStyle::FixedSize));
+    QCOMPARE(restoredRect->fixedSizeWidth(), 100);
+    QCOMPARE(int(restoredEllipse->marqueeStyle()), int(MarqueeStyle::FixedRatio));
+    QCOMPARE(restoredEllipse->fixedRatioWidth(), 2.0);
 }
 
 QTEST_MAIN(ToolOptionsPersistenceTest)
