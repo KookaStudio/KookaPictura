@@ -32,6 +32,8 @@ using pictura::UpdateBanner;
 
 namespace {
 
+constexpr char kAdvertisedVersion[] = "9999.0.0";
+
 class TestReleaseServer : public QTcpServer {
 public:
     explicit TestReleaseServer(QObject* parent = nullptr)
@@ -65,9 +67,10 @@ private:
             return;
         }
         requestBuffer_.clear();
-        const QByteArray body = QByteArrayLiteral(
-            "{\"tag_name\":\"v0.4.0\",\"html_url\":\"https://example.test/release\","
-            "\"body\":\"Release notes\",\"assets\":[]}");
+        const QByteArray body = QByteArrayLiteral("{\"tag_name\":\"v")
+            + QByteArray(kAdvertisedVersion)
+            + QByteArrayLiteral("\",\"html_url\":\"https://example.test/release\","
+                                "\"body\":\"Release notes\",\"assets\":[]}");
         QByteArray response = "HTTP/1.1 200 OK\r\n";
         response += "Content-Type: application/json\r\n";
         response += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
@@ -146,7 +149,7 @@ void UpdatePreferencesTest::launchCheckShowsDialog()
     pictura::UpdateBanner* banner = nullptr;
     QTRY_VERIFY_WITH_TIMEOUT((banner = window.findChild<pictura::UpdateBanner*>()), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(banner->isVisible(), 3000);
-    QVERIFY(banner->titleText().contains(QStringLiteral("0.4.0")));
+    QVERIFY(banner->titleText().contains(QString::fromLatin1(kAdvertisedVersion)));
     QCOMPARE(banner->updateButton()->text(), QStringLiteral("Update now"));
 }
 
@@ -350,7 +353,8 @@ void UpdatePreferencesTest::checkNowChecks()
     auto* page = window->preferencesDialog()->findChild<pictura::UpdatePreferencesPage*>();
     QVERIFY(page != nullptr);
     page->checkNowButton()->click();
-    QTRY_VERIFY_WITH_TIMEOUT(page->resultText().contains(QStringLiteral("0.4.0")), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(page->resultText().contains(QString::fromLatin1(kAdvertisedVersion)),
+                             3000);
 }
 
 void UpdatePreferencesTest::dontCheckDisablesAutoChecks()
@@ -418,7 +422,7 @@ void UpdatePreferencesTest::menuEntryChecks()
     pictura::UpdateBanner* banner = nullptr;
     QTRY_VERIFY_WITH_TIMEOUT((banner = window->findChild<pictura::UpdateBanner*>()), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(banner->isVisible(), 3000);
-    QVERIFY(banner->titleText().contains(QStringLiteral("0.4.0")));
+    QVERIFY(banner->titleText().contains(QString::fromLatin1(kAdvertisedVersion)));
 }
 
 void UpdatePreferencesTest::aboutShowsVersionAndMethod()
