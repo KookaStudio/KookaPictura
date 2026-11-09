@@ -4,9 +4,10 @@
 //! canvas presents. The work follows the view, not the document.
 
 use super::super::super::helpers::layer_has_effects;
-use super::super::super::helpers_composite::{buffer_to_image, current_buffer, layer_image};
+use super::super::super::helpers_composite::{buffer_to_image, current_buffer};
+use super::preview::moving_layer_image;
 use cxx_qt_lib::QImage;
-use pictura_core::{Document, LayerStack, PsdRect};
+use pictura_core::{Document, PsdRect};
 use pictura_render::FilterProxy;
 
 /// Content above this many pixels is previewed from the view. Below it the
@@ -101,7 +102,10 @@ pub(super) fn view_preview(
     // A layer far off screen starts with no moving image; [`follow`] builds
     // one when a drag brings it into view.
     let (image, region) = match moving_region(layer.rect, visible, scale) {
-        Some(region) => (moving_image(doc, path, level, region)?, region),
+        Some(region) => (
+            moving_layer_image(doc, path, region, level, gpu_compute)?,
+            region,
+        ),
         None => (QImage::default(), EMPTY),
     };
     Some(ViewPreview {
@@ -126,6 +130,7 @@ pub(super) fn follow(
     view: MoveView,
     dx: i32,
     dy: i32,
+    gpu_compute: bool,
 ) -> Option<(QImage, MoveView)> {
     let layer = pictura_render::resolve_path(doc, path)?;
     let shown = offset(view.visible, -dx, -dy);
@@ -134,7 +139,7 @@ pub(super) fn follow(
         return None;
     }
     let region = moving_region(layer.rect, shown, view.scale())?;
-    let image = moving_image(doc, path, view.level, region)?;
+    let image = moving_layer_image(doc, path, region, view.level, gpu_compute)?;
     Some((image, MoveView { region, ..view }))
 }
 
@@ -217,28 +222,6 @@ pub(super) fn above_patch(
     };
     let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&source, &buffer));
     Some((image, (rect.left, rect.top)))
-}
-
-/// The layer at `path` over `region` at `level`, with no opacity applied (the
-/// preview applies it once). The region may reach past the canvas: a drag
-/// carries off-canvas pixels into view.
-fn moving_image(doc: &Document, path: &str, level: u32, region: PsdRect) -> Option<QImage> {
-    let mut layer = pictura_render::resolve_path(doc, path)?.clone();
-    layer.rect = offset(layer.rect, -region.left, -region.top);
-    layer.visible = true;
-    let mut single = doc.clone();
-    single.width = u32::try_from(region.width()).ok()?;
-    single.height = u32::try_from(region.height()).ok()?;
-    single.layers = LayerStack::from_layers(vec![layer]);
-    let whole = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: region.height(),
-        right: region.width(),
-    };
-    let reduced =
-        FilterProxy::new(&single, None, whole, 1.0 / f64::from(1u32 << level))?.into_document();
-    layer_image(reduced.layers.iter().next()?)
 }
 
 /// The part of `layer_rect` within a quarter view of `visible`, on the level

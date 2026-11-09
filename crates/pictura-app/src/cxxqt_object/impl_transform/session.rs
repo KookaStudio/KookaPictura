@@ -30,7 +30,10 @@ mod view_preview;
 
 #[cfg(test)]
 use preview::TransformPreview;
-use preview::{backdrop_patch, build_transform_preview, rendered_layer_image};
+use preview::{
+    backdrop_patch, build_transform_preview, moving_layer_image, needs_rendered_appearance,
+    rendered_layer_image,
+};
 pub(in crate::cxxqt_object) use preview::{rendered_transform_group, transform_preview_layer};
 use view_preview::above_patch;
 pub(in crate::cxxqt_object) use view_preview::MoveView;
@@ -776,7 +779,12 @@ impl qobject::PictureView {
                     return false;
                 }
                 offset = (rect.left - layer.rect.left, rect.top - layer.rect.top);
-                layer_image_within(layer, rect).map(|image| (image, rect.left, rect.top))
+                if needs_rendered_appearance(layer) {
+                    moving_layer_image(doc, path, rect, 0, gpu_compute)
+                        .map(|image| (image, rect.left, rect.top))
+                } else {
+                    layer_image_within(layer, rect).map(|image| (image, rect.left, rect.top))
+                }
             }
         } else {
             rendered_move_group(doc, &paths, gpu_compute)
@@ -863,7 +871,8 @@ impl qobject::PictureView {
         let Some(path) = rust.move_prepared_layer.lines().next() else {
             return false;
         };
-        let Some((image, view)) = view_preview::follow(doc, path, view, dx, dy) else {
+        let Some((image, view)) = view_preview::follow(doc, path, view, dx, dy, rust.gpu_compute)
+        else {
             return false;
         };
         rust.move_layer = Some(image);
