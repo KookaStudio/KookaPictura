@@ -527,7 +527,7 @@ void LayersPanel::refreshPatternAction()
     }
     patternView_ = view_;
     patternGeneration_ = generation;
-    const bool hasPatterns = view_ && layer_has_patterns(*view_);
+    const bool hasPatterns = view_ && patterns_available(*view_);
     patternFill_->setEnabled(hasPatterns);
     patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
 }
@@ -1031,7 +1031,7 @@ void LayersPanel::openPanelOptions()
     }
     persistOptions();
     if (patternFill_) {
-        const bool hasPatterns = view_ && layer_has_patterns(*view_);
+        const bool hasPatterns = view_ && patterns_available(*view_);
         patternFill_->setEnabled(hasPatterns);
         patternFill_->setToolTip(hasPatterns ? tr("Pattern") : tr("No patterns are loaded"));
     }

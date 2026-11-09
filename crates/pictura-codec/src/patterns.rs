@@ -8,6 +8,8 @@
 //! [`crate::smart_object`], and keeps whatever parsed when a block is malformed
 //! rather than failing the file.
 
+use std::sync::OnceLock;
+
 use pictura_core::Document;
 
 use crate::common::{is_psb_big_key, Reader};
@@ -38,6 +40,49 @@ const PHOTOSHOP_COLOR_SLOTS: usize = 24;
 /// single pattern's RGBA buffer to 64 MiB. Larger patterns are skipped and
 /// render the placeholder.
 const MAX_PATTERN_PIXELS: usize = 1 << 24;
+
+static BUILTIN_PATTERNS: OnceLock<Vec<PatternPixels>> = OnceLock::new();
+
+/// The project-authored patterns always available to the app.
+///
+/// They are deliberately small, opaque RGB tiles: enough to create a Pattern
+/// Fill on a document that carries no `Patt` resource, without bundling an
+/// Adobe preset. The app embeds the chosen one into the document when a fill
+/// references it.
+pub fn builtin_patterns() -> &'static [PatternPixels] {
+    BUILTIN_PATTERNS.get_or_init(|| {
+        vec![
+            builtin("Pictura Checkerboard", |x, y| {
+                if (x + y) % 2 == 0 {
+                    32
+                } else {
+                    224
+                }
+            }),
+            builtin(
+                "Pictura Diagonal",
+                |x, y| if (x + y) % 8 < 2 { 32 } else { 224 },
+            ),
+        ]
+    })
+}
+
+fn builtin(id: &str, value: impl Fn(usize, usize) -> u8) -> PatternPixels {
+    const SIZE: usize = 8;
+    let mut rgba = Vec::with_capacity(SIZE * SIZE * 4);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let v = value(x, y);
+            rgba.extend_from_slice(&[v, v, v, 255]);
+        }
+    }
+    PatternPixels {
+        pattern_id: id.to_string(),
+        width: SIZE as u32,
+        height: SIZE as u32,
+        rgba,
+    }
+}
 
 /// Decode every pattern in the document's `Patt`/`Pat2`/`Pat3` tagged blocks.
 ///
@@ -496,6 +541,52 @@ mod tests {
             got[0].rgba,
             vec![255, 0, 0, 10, 0, 255, 0, 20, 0, 0, 255, 30, 255, 255, 255, 40,]
         );
+    }
+
+    #[test]
+    fn builtin_patterns_are_available() {
+        let patterns = builtin_patterns();
+        assert!(!patterns.is_empty(), "the library always has a pattern");
+        let mut ids: Vec<&str> = patterns.iter().map(|p| p.pattern_id.as_str()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), patterns.len(), "ids are unique");
+        for pattern in patterns {
+            assert_eq!((pattern.width, pattern.height), (8, 8));
+            assert_eq!(pattern.rgba.len(), 8 * 8 * 4);
+            assert!(pattern.rgba.chunks(4).all(|p| p[3] == 255), "opaque");
+            let first = pattern.rgba[0];
+            assert!(
+                pattern.rgba.chunks(4).any(|p| p[0] != first),
+                "a tile is not flat"
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_patterns_encode_into_a_document() {
+        let pattern = builtin_patterns()[0].clone();
+        let record = crate::encode_rgb_pattern(
+            &pattern.pattern_id,
+            &pattern.pattern_id,
+            pattern.width,
+            pattern.height,
+            &pattern.rgba,
+        )
+        .expect("encode a built-in");
+        let mut doc = doc_with(Vec::new());
+        assert!(crate::add_document_pattern(
+            &mut doc,
+            &pattern.pattern_id,
+            &record
+        ));
+        assert!(
+            !crate::add_document_pattern(&mut doc, &pattern.pattern_id, &record),
+            "already present"
+        );
+        let decoded = decode_patterns(&doc);
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0], pattern);
     }
 
     #[test]

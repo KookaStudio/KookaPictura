@@ -47,7 +47,7 @@ PatternFillDialog::PatternFillDialog(PictureView& view, const QString& payload, 
     list_->setIconSize(QSize(32, 32));
     list_->setGridSize(QSize(72, 56));
     list_->setResizeMode(QListView::Adjust);
-    const QStringList ids = document_pattern_ids(view_);
+    const QStringList ids = available_pattern_ids(view_);
     for (const QString& id : ids) {
         const QImage thumbnail = pattern_thumbnail(view_, id, 32);
         auto* item = new QListWidgetItem(QIcon(QPixmap::fromImage(thumbnail)), id, list_);
@@ -68,9 +68,7 @@ PatternFillDialog::PatternFillDialog(PictureView& view, const QString& payload, 
 
     empty_ = ids.isEmpty();
     if (empty_) {
-        emptyLabel_ = new QLabel(tr("No patterns are loaded — this document has no pattern "
-                                    "resources."),
-                                 this);
+        emptyLabel_ = new QLabel(tr("No patterns are available."), this);
         emptyLabel_->setObjectName(QStringLiteral("fillPatternEmpty"));
         emptyLabel_->setWordWrap(true);
         outer->addWidget(emptyLabel_);

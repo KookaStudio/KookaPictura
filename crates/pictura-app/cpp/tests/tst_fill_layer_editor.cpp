@@ -20,6 +20,7 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QSet>
 #include <QtCore/QTimer>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
@@ -90,7 +91,8 @@ private slots:
     void gradientPersistence();
     void patternApply();
     void patternSnapToOrigin();
-    void patternEmpty();
+    void patternBuiltinsOnBlankDocument();
+    void patternBuiltinFillEmbedsAndRenders();
     void layerFillMenuPatternGating();
     void patternIconGating();
     void createFromLayerMenu();
@@ -155,7 +157,7 @@ bool FillLayerEditorTest::openPatternFixture()
     }
     view_ = window_->activeView();
     panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
-    return view_ && panel_ && layer_has_patterns(*view_);
+    return view_ && panel_ && patterns_available(*view_);
 }
 
 QString FillLayerEditorTest::addFill(const QString& kind, const QString& payload)
@@ -235,7 +237,7 @@ void FillLayerEditorTest::gradientPersistence()
 void FillLayerEditorTest::patternApply()
 {
     QVERIFY2(openPatternFixture(), "the pattern fixture must carry patterns");
-    const QStringList ids = document_pattern_ids(*view_);
+    const QStringList ids = available_pattern_ids(*view_);
     QVERIFY(!ids.isEmpty());
     const QString path = addFill(QStringLiteral("pattern"),
                                  ids.first() + QStringLiteral("|50|1|0|0"));
@@ -247,7 +249,7 @@ void FillLayerEditorTest::patternApply()
 void FillLayerEditorTest::patternSnapToOrigin()
 {
     QVERIFY2(openPatternFixture(), "the pattern fixture must carry patterns");
-    const QStringList ids = document_pattern_ids(*view_);
+    const QStringList ids = available_pattern_ids(*view_);
     QVERIFY(!ids.isEmpty());
     pictura::PatternFillDialog dialog(*view_, ids.first() + QStringLiteral("|50|1|3|4"));
     QVERIFY(dialog.snapForTest());
@@ -255,20 +257,56 @@ void FillLayerEditorTest::patternSnapToOrigin()
     QVERIFY(dialog.payload().endsWith(QStringLiteral("|0|0")));
 }
 
-void FillLayerEditorTest::patternEmpty()
+void FillLayerEditorTest::patternBuiltinsOnBlankDocument()
 {
     QVERIFY(newDoc(QStringLiteral("NoPatterns")));
+    const QStringList ids = available_pattern_ids(*view_);
+    QVERIFY(!ids.isEmpty());
+    QVERIFY2(ids.first().startsWith(QStringLiteral("Pictura ")),
+             qPrintable(ids.first()));
     pictura::PatternFillDialog dialog(*view_, QString());
-    QVERIFY(dialog.emptyForTest());
+    QVERIFY(!dialog.emptyForTest());
+    QCOMPARE(dialog.listForTest()->count(), ids.size());
+    QCOMPARE(dialog.listForTest()->item(0)->text(), ids.first());
+    QVERIFY(!dialog.listForTest()->item(0)->icon().isNull());
+}
+
+void FillLayerEditorTest::patternBuiltinFillEmbedsAndRenders()
+{
+    QVERIFY(newDoc(QStringLiteral("BuiltinFill")));
+    const QStringList ids = available_pattern_ids(*view_);
+    QVERIFY(!ids.isEmpty());
+    const QString id = ids.first();
+    const QString path = addFill(QStringLiteral("pattern"),
+                                 id + QStringLiteral("|100|1|0|0"));
+    QVERIFY(!path.isEmpty());
+    QVERIFY(layer_fill_pattern(*view_, path).startsWith(id + QStringLiteral("|100|1|")));
+
+    bool found = false;
+    for (const auto& row : snapshot().rows) {
+        if (row.path != path) {
+            continue;
+        }
+        found = true;
+        QVERIFY2(!row.thumbnail.isNull(), "the built-in pattern has a preview");
+        QSet<QRgb> colors;
+        for (int y = 0; y < row.thumbnail.height(); ++y) {
+            for (int x = 0; x < row.thumbnail.width(); ++x) {
+                colors.insert(row.thumbnail.pixel(x, y));
+            }
+        }
+        QVERIFY2(colors.size() > 1, "the embedded built-in tiles in the preview");
+    }
+    QVERIFY2(found, "the created pattern fill row is present");
 }
 
 void FillLayerEditorTest::layerFillMenuPatternGating()
 {
     QVERIFY(newDoc(QStringLiteral("PatternGate")));
-    QVERIFY(!window_->registry()->action(QStringLiteral("layer.new.fill.layer.pattern"))->isEnabled());
+    QVERIFY(window_->registry()->action(QStringLiteral("layer.new.fill.layer.pattern"))->isEnabled());
     QVERIFY(window_->openDocumentAtPath(patternFixture()));
     view_ = window_->activeView();
-    QVERIFY(view_ && layer_has_patterns(*view_));
+    QVERIFY(view_ && patterns_available(*view_));
     QVERIFY(window_->registry()->action(QStringLiteral("layer.new.fill.layer.pattern"))->isEnabled());
 }
 
@@ -278,10 +316,10 @@ void FillLayerEditorTest::patternIconGating()
     auto* adjustments =
         window_->findChild<pictura::AdjustmentsPanel*>(QStringLiteral("adjustmentsPanel"));
     QVERIFY(adjustments);
-    QVERIFY(!adjustments->buttonByIdForTest(QStringLiteral("pattern"))->isEnabled());
+    QVERIFY(adjustments->buttonByIdForTest(QStringLiteral("pattern"))->isEnabled());
     QVERIFY(window_->openDocumentAtPath(patternFixture()));
     view_ = window_->activeView();
-    QVERIFY(view_ && layer_has_patterns(*view_));
+    QVERIFY(view_ && patterns_available(*view_));
     adjustments->setView(view_);
     QVERIFY(adjustments->buttonByIdForTest(QStringLiteral("pattern"))->isEnabled());
 }

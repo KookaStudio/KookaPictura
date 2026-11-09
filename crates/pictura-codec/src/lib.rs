@@ -118,7 +118,7 @@ pub use metadata::{
     apply_template, export_template, read_metadata, set_file_info_fields, set_iptc_fields,
     set_xmp_fields, set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,
 };
-pub use patterns::{decode_patterns, PatternPixels};
+pub use patterns::{builtin_patterns, decode_patterns, PatternPixels};
 pub use patterns_write::{add_document_pattern, encode_rgb_pattern};
 pub use pictura_filter::{
     decode_pictura_filter, encode_pictura_filter, FilterStep, FILTER_GALLERY_NAME,

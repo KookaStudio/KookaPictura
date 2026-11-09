@@ -752,7 +752,7 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerNewFillPattern, [this]() {
         PictureView* view = activeView();
-        return view && view->has_document() && layer_has_patterns(*view);
+        return view && view->has_document();
     });
 
     // Rasterize. Fill Content and Type each need a current layer of that kind;

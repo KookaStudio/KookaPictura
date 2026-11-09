@@ -200,7 +200,7 @@ pictura::PictureView* CanvasMaskDomainTest::maskedLayer(const QString& kind,cons
     else if (kind==QStringLiteral("solid")) {path=v->add_solid_fill(0xff4080c0u);}
     else if (kind==QStringLiteral("gradient")) {path=v->add_gradient_fill();}
     else if (kind==QStringLiteral("pattern")) {
-        const auto ids=pictura::document_pattern_ids(*v);if (ids.isEmpty()) {return nullptr;}
+        const auto ids=pictura::available_pattern_ids(*v);if (ids.isEmpty()) {return nullptr;}
         path=pictura::add_fill_layer(*v,QStringLiteral("pattern"),ids.first()+QStringLiteral("|100|1|0|0"),path,QString(),0,QStringLiteral("norm"),255,false);
     } else if (kind==QStringLiteral("type")) {
         pictura::TypeSetting setting{};setting.x=5;setting.y=25;setting.xx=1;setting.yy=1;
