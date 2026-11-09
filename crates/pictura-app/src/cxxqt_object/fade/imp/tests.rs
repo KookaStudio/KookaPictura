@@ -100,6 +100,22 @@ fn a_pixel_edit_clears_the_record() {
 }
 
 #[test]
+fn a_document_replacement_clears_the_record() {
+    let mut rust = view((20, 40, 60), ColorMode::Rgb);
+    record_filter(&mut rust);
+    let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![pixel_layer("other", 2, 2, (1, 2, 3))]);
+    rust.replace_document(
+        Some(doc),
+        crate::history::History::default(),
+        LayerTarget::only("0"),
+        None,
+    );
+    assert!(rust.fade.is_none());
+    assert!(!available(&rust));
+}
+
+#[test]
 fn a_metadata_edit_keeps_the_record() {
     let mut rust = view((20, 40, 60), ColorMode::Rgb);
     record_filter(&mut rust);
