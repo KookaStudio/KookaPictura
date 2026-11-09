@@ -6,10 +6,14 @@
 
 #include "api/layers_api.h"
 
+#include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/engine_bridge.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
+#include <QtCore/QSet>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QImage>
 
@@ -40,6 +44,24 @@ QString pathOf(pictura::PictureView& view, const QString& name)
         }
     }
     return QString();
+}
+
+// The generated 24-slot pattern fill fixture with a painted layer mask.
+QString patternFillFixture()
+{
+    QString fixture = QFINDTESTDATA(
+        "../../../../crates/pictura-codec/tests/fixtures/pattern_fill_masked.psd");
+    QDir dir(QCoreApplication::applicationDirPath());
+    for (int i = 0; i < 6 && fixture.isEmpty(); ++i) {
+        const QString candidate = dir.filePath(
+            QStringLiteral("crates/pictura-codec/tests/fixtures/pattern_fill_masked.psd"));
+        if (QFileInfo::exists(candidate)) {
+            fixture = candidate;
+        } else if (!dir.cdUp()) {
+            break;
+        }
+    }
+    return fixture;
 }
 
 // Background + a pixel layer (smart object, style, Blend If, vector mask,
@@ -161,6 +183,7 @@ private slots:
     void subCanvasLayerPlacement();
     void maskThumbnailUsesOpaqueCanvasCoverage();
     void canvasAspectThumbnailRegression();
+    void patternFillThumbnailAndMask();
 };
 
 void LayersSnapshotTest::fixtureExpectations()
@@ -422,6 +445,52 @@ void LayersSnapshotTest::canvasAspectThumbnailRegression()
     for (const auto& row : pictura::layers_api::snapshot(view,24,true).rows) {
         if (row.path == fill) { QCOMPARE(row.thumbnail.size(),QSize(24,24)); }
     }
+}
+
+// A loaded pattern fill layer shows the decoded tiled pattern and keeps its
+// mask card (#1202).
+void LayersSnapshotTest::patternFillThumbnailAndMask()
+{
+    const QString fixture = patternFillFixture();
+    QVERIFY2(!fixture.isEmpty(), "pattern_fill_masked.psd fixture not found");
+    pictura::PictureView view;
+    QVERIFY(pictura::document_api::open(view, fixture));
+
+    const Snapshot snap = pictura::layers_api::snapshot(view, 24, false);
+    const LayerRow* fill = nullptr;
+    for (const LayerRow& row : snap.rows) {
+        if (row.adjustmentKind == QStringLiteral("pattern")) {
+            fill = &row;
+            break;
+        }
+    }
+    QVERIFY2(fill != nullptr, "the pattern fill row is present");
+    QVERIFY2(fill->hasMask, "the loaded fill keeps its layer mask");
+    QVERIFY2(!fill->thumbnail.isNull(), "the fill row carries a pattern preview");
+    QCOMPARE(fill->thumbnail.width(), fill->thumbnail.height());
+
+    QSet<QRgb> colors;
+    for (int y = 0; y < fill->thumbnail.height(); ++y) {
+        for (int x = 0; x < fill->thumbnail.width(); ++x) {
+            colors.insert(fill->thumbnail.pixel(x, y));
+        }
+    }
+    QVERIFY2(colors.size() > 1,
+             "the preview is the tiled pattern, not the flat grey placeholder");
+    QCOMPARE(fill->thumbnail.pixelColor(0, 0), QColor(255, 0, 0));
+    QCOMPARE(fill->thumbnail.pixelColor(3, 0), QColor(0, 255, 0));
+    QCOMPARE(fill->thumbnail.pixelColor(0, 3), QColor(0, 0, 255));
+    QCOMPARE(fill->thumbnail.pixelColor(3, 3), QColor(255, 255, 255));
+
+    QVERIFY2(!fill->maskThumbnail.isNull(), "the mask thumbnail is present");
+    for (int y = 0; y < fill->maskThumbnail.height(); ++y) {
+        for (int x = 0; x < fill->maskThumbnail.width(); ++x) {
+            QCOMPARE(fill->maskThumbnail.pixelColor(x, y).alpha(), 255);
+        }
+    }
+    QCOMPARE(fill->maskThumbnail.pixelColor(0, 0), QColor(Qt::white));
+    QCOMPARE(fill->maskThumbnail.pixelColor(0, fill->maskThumbnail.height() - 1),
+             QColor(Qt::black));
 }
 
 QTEST_MAIN(LayersSnapshotTest)

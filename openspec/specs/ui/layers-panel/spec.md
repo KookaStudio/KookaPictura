@@ -780,6 +780,7 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 
 - **WHEN** the row menu is opened for a pixel layer
 - **THEN** every implemented row action that maps to a document command carries the registry command identifier, and its enabled, checked, and label state equals the registry's
+
 ### Requirement: Layer row tooltips
 
 The system SHALL provide a tooltip for each row that includes the layer's name
@@ -1602,12 +1603,12 @@ linked and disabled states through roles populated from the bridge.
 The Layers panel's New Fill / Adjustment strip button SHALL open a menu whose
 Fill group offers Solid Color…, Gradient…, and Pattern…. Solid Color and
 Gradient SHALL create the matching fill layer through the bridge. Pattern SHALL
-be enabled when the open document contains at least one pattern resource and
-SHALL be disabled with a "No patterns are loaded" reason when it contains none.
-The Adjustment group SHALL list all sixteen CS6 adjustment kinds. Choosing an
-adjustment kind SHALL create that adjustment layer through the bridge. The Fill
-and Adjustment groups SHALL be separated as in CS6. The `Layer > New Fill Layer`
-submenu SHALL offer the same three fill types with the same Pattern gating.
+be enabled whenever a document is open, because the built-in pattern library is
+always available, and SHALL NOT carry a no-patterns reason. The Adjustment group
+SHALL list all sixteen CS6 adjustment kinds. Choosing an adjustment kind SHALL
+create that adjustment layer through the bridge. The Fill and Adjustment groups
+SHALL be separated as in CS6. The `Layer > New Fill Layer` submenu SHALL offer
+the same three fill types with the same Pattern enablement.
 
 #### Scenario: The menu lists every adjustment kind
 
@@ -1616,13 +1617,13 @@ submenu SHALL offer the same three fill types with the same Pattern gating.
 
 #### Scenario: Pattern stays disabled until authoring exists
 
-- **WHEN** the New Fill / Adjustment menu is opened on a document with no pattern resources
+- **WHEN** the New Fill / Adjustment menu is opened and no pattern is available from the document or the built-in library
 - **THEN** the Pattern… entry is present, disabled, and carries a no-patterns reason
 
 #### Scenario: Pattern follows the document's pattern resources [lpr_pattern_entry]
 
-- **WHEN** the menu is opened on a document with patterns and on one without
-- **THEN** Pattern… is enabled on the first and disabled with the no-patterns reason on the second
+- **WHEN** the menu is opened on a document with no embedded pattern resources
+- **THEN** Pattern… is enabled because the built-in library is available, and choosing it opens the Pattern Fill editor with that library
 
 #### Scenario: The Layer menu offers the fill types [lpr_layer_fill_menu]
 
@@ -1877,7 +1878,10 @@ SHALL be a neutral card bearing the icon for its decoded adjustment kind**, with
 no checkerboard; a **fill row's image thumbnail SHALL show its content preview**
 (a flat solid swatch, a gradient ramp, or a scaled pattern tile) **in a 1:1
 square card**, the preview image itself rendered square rather than at the
-document aspect so a ramp or tile is not stretched into the card. Mask and vector-mask cards on adjustment, fill, type and group rows SHALL
+document aspect so a ramp or tile is not stretched into the card. A loaded
+pattern fill layer's preview SHALL be the pattern decoded from the document's
+`Patt`/`Pat2`/`Pat3` resource rather than the grey placeholder, and its mask
+card SHALL be present when the layer carries a layer mask. Mask and vector-mask cards on adjustment, fill, type and group rows SHALL
 use the document aspect; the left content card keeps its existing geometry.
 
 #### Scenario: Mask thumbnail adjacency [uip_layers_mask_adjacency]
@@ -1905,6 +1909,11 @@ use the document aspect; the left content card keeps its existing geometry.
 
 - **WHEN** a Solid Color, Gradient, or Pattern fill layer is shown
 - **THEN** its thumbnail shows the fill's solid colour, gradient ramp, or scaled pattern tile instead of a generic checkerboard
+
+#### Scenario: A loaded pattern fill row shows its pattern and mask [lpr_thumb_pattern_fill_loaded]
+
+- **WHEN** a PSD carrying a Pattern fill layer that references a Photoshop 24-slot pattern and has a painted layer mask is opened
+- **THEN** the fill row's thumbnail shows the tiled pattern rather than the grey placeholder and the row carries a non-null mask thumbnail with the mask's light and dark coverage
 
 #### Scenario: An adjustment row's card is 1:1 [lpr_thumb_adjustment_square]
 

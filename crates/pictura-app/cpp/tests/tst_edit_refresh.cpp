@@ -452,9 +452,11 @@ void EditRefreshTest::aDocumentSwitchRebindsTheDock()
     QVERIFY(layers->patternActionEnabledForTest());
 
     window_->setActiveDocumentIndex(1);
-    QTRY_VERIFY(!pattern->isEnabled() && !layers->patternActionEnabledForTest());
-    QVERIFY(!pattern->isEnabled());
-    QVERIFY(!layers->patternActionEnabledForTest());
+    // The built-in library keeps Pattern available on the blank document too;
+    // the panels must stay bound to the active view.
+    QTRY_VERIFY(pattern->isEnabled() && layers->patternActionEnabledForTest());
+    QVERIFY(pattern->isEnabled());
+    QVERIFY(layers->patternActionEnabledForTest());
 
     // A document switch whose new view has a filter commit running defers the
     // bind until the commit lands.

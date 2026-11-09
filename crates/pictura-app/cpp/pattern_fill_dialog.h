@@ -12,9 +12,9 @@ namespace pictura {
 class NumericField;
 class PictureView;
 
-// CS6's Pattern Fill layer editor: the document's pattern picker, Scale, Snap
-// To Origin, and Link With Layer. The pattern library is the open document's
-// embedded patterns; with none the dialog is an empty state.
+// CS6's Pattern Fill layer editor: the pattern picker, Scale, Snap To Origin,
+// and Link With Layer. The pattern library is the open document's embedded
+// patterns plus the built-in library; with none the dialog is an empty state.
 class PatternFillDialog : public QDialog {
     Q_OBJECT
 

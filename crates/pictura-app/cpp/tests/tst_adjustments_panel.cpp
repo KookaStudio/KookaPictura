@@ -51,7 +51,7 @@ private slots:
     void repeatClickSelectsNewestLayer();
     void adjustmentCreateIsUndoable();
     void solidColorIconDispatchesFillCommand();
-    void patternIconIsInert();
+    void patternIconCreatesDefaultFill();
     void noDocumentDisablesGrid();
     void documentEnablesGrid();
     void narrowPanelWrapsGrid();
@@ -134,7 +134,7 @@ void AdjustmentsPanelTest::gridEntriesCarryTooltips()
     for (int i = 0; i < tips.size(); ++i) {
         QVERIFY2(!tips.at(i).isEmpty(), qPrintable(QString::number(i)));
     }
-    QVERIFY(tips.at(2).contains(QStringLiteral("No patterns are loaded")));
+    QCOMPARE(tips.at(2), QStringLiteral("Pattern"));
     QCOMPARE(tips.at(4), QStringLiteral("Levels"));
     QCOMPARE(tips.at(8), QStringLiteral("Hue/Saturation"));
 }
@@ -251,16 +251,25 @@ void AdjustmentsPanelTest::solidColorIconDispatchesFillCommand()
     QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
 }
 
-void AdjustmentsPanelTest::patternIconIsInert()
+void AdjustmentsPanelTest::patternIconCreatesDefaultFill()
 {
     QVERIFY(newDocument());
     pictura::PictureView* view = window_->activeView();
     QVERIFY(view);
     const int before = pictura::layers_api::rowCount(*view);
+    QVERIFY(panel()->buttonByIdForTest(QStringLiteral("pattern"))->isEnabled());
+    QTimer::singleShot(0, [] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (dialog && dialog->isVisible()) {
+                dialog->reject();
+                break;
+            }
+        }
+    });
     panel()->buttonByIdForTest(QStringLiteral("pattern"))->click();
     QCoreApplication::processEvents();
-    QCOMPARE(pictura::layers_api::rowCount(*view), before);
-    QVERIFY(!panel()->buttonByIdForTest(QStringLiteral("pattern"))->isEnabled());
+    QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
 }
 
 void AdjustmentsPanelTest::noDocumentDisablesGrid()
@@ -276,13 +285,7 @@ void AdjustmentsPanelTest::documentEnablesGrid()
 {
     QVERIFY(newDocument());
     for (int i = 0; i < panel()->buttonCountForTest(); ++i) {
-        if (i == 2) {
-            QVERIFY2(!panel()->buttonForTest(i)->isEnabled(),
-                     qPrintable(QString::number(i)));
-        } else {
-            QVERIFY2(panel()->buttonForTest(i)->isEnabled(),
-                     qPrintable(QString::number(i)));
-        }
+        QVERIFY2(panel()->buttonForTest(i)->isEnabled(), qPrintable(QString::number(i)));
     }
 }
 
@@ -335,9 +338,18 @@ void AdjustmentsPanelTest::tilesAndMenuFollowCatalogue()
     panel()->buttonByIdForTest(QStringLiteral("threshold"))->click();
     QCoreApplication::processEvents();
     QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
+    QTimer::singleShot(0, [] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (dialog && dialog->isVisible()) {
+                dialog->reject();
+                break;
+            }
+        }
+    });
     panel()->buttonByIdForTest(QStringLiteral("pattern"))->click();
     QCoreApplication::processEvents();
-    QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
+    QCOMPARE(pictura::layers_api::rowCount(*view), before + 2);
 }
 
 // The Layers panel's New Fill/Adjustment menu: the catalogue's fills, then its
@@ -376,7 +388,7 @@ void AdjustmentsPanelTest::layersPanelAdjustmentMenuFollowsCatalogue()
     }
     QCOMPARE(shown, expected);
     QCOMPARE(shown.size(), 19);
-    QVERIFY(pattern && !pattern->isEnabled());
+    QVERIFY(pattern && pattern->isEnabled());
     QVERIFY(levels != nullptr);
     pictura::PictureView* view = window_->activeView();
     const int before = pictura::layers_api::rowCount(*view);

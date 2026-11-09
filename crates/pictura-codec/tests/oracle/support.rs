@@ -14,6 +14,7 @@ pub const FIXTURES: &[(&str, u32, u32, ColorMode)] = &[
     ("gradient_fill.psd", 8, 8, ColorMode::Rgb),
     ("pattern_fill.psd", 8, 8, ColorMode::Rgb),
     ("pattern_fill_16bit.psd", 8, 8, ColorMode::Rgb),
+    ("pattern_fill_masked.psd", 8, 8, ColorMode::Rgb),
     ("drop_shadow.psd", 8, 8, ColorMode::Rgb),
     ("outer_glow.psd", 8, 8, ColorMode::Rgb),
     ("inner_shadow.psd", 8, 8, ColorMode::Rgb),

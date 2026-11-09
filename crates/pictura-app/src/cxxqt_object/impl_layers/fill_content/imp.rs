@@ -252,19 +252,44 @@ pub(super) fn set_layer_fill_gradient(
 }
 
 pub(super) fn set_layer_fill_pattern(
-    view: Pin<&mut PictureView>,
+    mut view: Pin<&mut PictureView>,
     path: &QString,
     payload: &QString,
 ) -> bool {
     let Some(params) = parse_pattern(&payload.to_string()) else {
         return false;
     };
-    set_fill_adjustment(
-        view,
-        path,
-        "Pattern Fill",
-        pictura_render::encode_pattern_fill(&params),
-    )
+    let data = pictura_render::encode_pattern_fill(&params);
+    let path = path.to_string();
+    let mut changed = false;
+    view.as_mut().edit("Pattern Fill", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        {
+            let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
+                return Edit::None;
+            };
+            if pictura_render::is_shape_layer(layer) || layer.adjustment.as_ref() == Some(&data) {
+                return Edit::None;
+            }
+        }
+        if !ensure_pattern(doc, &params.pattern_id) {
+            return Edit::None;
+        }
+        let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
+            return Edit::None;
+        };
+        layer.adjustment = Some(data);
+        changed = true;
+        match layer_rect(layer) {
+            // The fill preview lives in the row thumbnail, so the panel
+            // must refresh after an accepted edit.
+            Some(rect) => Edit::regions(vec![rect], true),
+            None => Edit::Full,
+        }
+    });
+    changed
 }
 
 pub(super) fn layer_is_editable_fill(view: &PictureView, path: &QString) -> bool {
@@ -278,23 +303,54 @@ pub(super) fn layer_is_editable_fill(view: &PictureView, path: &QString) -> bool
         })
 }
 
-pub(super) fn layer_has_patterns(view: &PictureView) -> bool {
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .is_some_and(|doc| !pictura_codec::decode_patterns(doc).is_empty())
+pub(super) fn patterns_available(view: &PictureView) -> bool {
+    view.rust().session.doc.is_some()
 }
 
-pub(super) fn document_pattern_ids(view: &PictureView) -> QStringList {
+pub(super) fn available_pattern_ids(view: &PictureView) -> QStringList {
     let mut ids = QStringList::default();
     let Some(doc) = view.rust().session.doc.as_ref() else {
         return ids;
     };
+    let mut seen: Vec<String> = Vec::new();
     for pattern in pictura_codec::decode_patterns(doc) {
+        seen.push(pattern.pattern_id.clone());
         ids.append(QString::from(pattern.pattern_id.as_str()));
     }
+    for pattern in pictura_codec::builtin_patterns() {
+        if !seen.iter().any(|id| id == &pattern.pattern_id) {
+            ids.append(QString::from(pattern.pattern_id.as_str()));
+        }
+    }
     ids
+}
+
+/// Ensure a fill's pattern is in the document. A document pattern is already
+/// there; a built-in is encoded and appended so the compositor, thumbnail, and
+/// saved PSD resolve it. False when the id is neither.
+fn ensure_pattern(doc: &mut Document, id: &str) -> bool {
+    if pictura_codec::decode_patterns(doc)
+        .iter()
+        .any(|pattern| pattern.pattern_id == id)
+    {
+        return true;
+    }
+    let Some(pattern) = pictura_codec::builtin_patterns()
+        .iter()
+        .find(|pattern| pattern.pattern_id == id)
+    else {
+        return false;
+    };
+    let Some(record) = pictura_codec::encode_rgb_pattern(
+        &pattern.pattern_id,
+        &pattern.pattern_id,
+        pattern.width,
+        pattern.height,
+        &pattern.rgba,
+    ) else {
+        return false;
+    };
+    pictura_codec::add_document_pattern(doc, &pattern.pattern_id, &record)
 }
 
 pub(super) fn pattern_thumbnail(view: &PictureView, id: &QString, size: i32) -> QImage {
@@ -302,8 +358,17 @@ pub(super) fn pattern_thumbnail(view: &PictureView, id: &QString, size: i32) -> 
     let Some(doc) = view.rust().session.doc.as_ref() else {
         return QImage::default();
     };
-    let patterns = pictura_codec::decode_patterns(doc);
-    let Some(pattern) = patterns.iter().find(|p| p.pattern_id == id.to_string()) else {
+    let id = id.to_string();
+    let document_patterns = pictura_codec::decode_patterns(doc);
+    let Some(pattern) = document_patterns
+        .iter()
+        .find(|p| p.pattern_id == id)
+        .or_else(|| {
+            pictura_codec::builtin_patterns()
+                .iter()
+                .find(|p| p.pattern_id == id)
+        })
+    else {
         return QImage::default();
     };
     let pixels = (pattern.width as usize).saturating_mul(pattern.height as usize);
@@ -436,6 +501,14 @@ pub(super) fn add_fill_layer(
         let Some(mut layer) = layer else {
             return Edit::None;
         };
+        if kind == "pattern" {
+            let Some(id) = payload.split('|').next() else {
+                return Edit::None;
+            };
+            if !ensure_pattern(doc, id) {
+                return Edit::None;
+            }
+        }
         if use_mask {
             layer.mask = Some(default_layer_mask(
                 doc,

@@ -1315,6 +1315,36 @@ def _fixture_pattern_16bit() -> Pattern:
     )
 
 
+def _fixture_pattern_photoshop_slots() -> Pattern:
+    """A 2x2 RGB pattern in Photoshop's fixed 24-slot layout.
+
+    Photoshop writes 24 colour slots plus two alpha slots for every pattern and
+    writes only the planes the pattern uses. The old decoder required the
+    declared slot count to equal the mode's three planes, so it skipped a real
+    Photoshop pattern and the fill rendered the grey placeholder.
+    """
+    channels = [
+        _pattern_channel([255, 0, 0, 255]),  # R: red, red
+        _pattern_channel([0, 255, 0, 255]),  # G: green, white
+        _pattern_channel([0, 0, 255, 255]),  # B: blue, white
+    ]
+    channels.extend(VirtualMemoryArray() for _ in range(24 - 3))
+    channels.append(VirtualMemoryArray())  # unwritten alpha slot
+    channels.append(_pattern_channel([255, 255, 255, 255]))  # transparency
+    return Pattern(
+        version=1,
+        image_mode=3,  # ColorMode.RGB
+        point=(2, 2),
+        name="Pictura",
+        pattern_id="pictura-pattern-photoshop",
+        data=VirtualMemoryArrayList(
+            version=3,
+            rectangle=(0, 0, 2, 2),
+            channels=channels,
+        ),
+    )
+
+
 def _pattern_fill(name: str, pattern: Pattern) -> PSDImage:
     """Base layer plus a document-sized PtFl fill referencing `pattern`.
 
@@ -1369,6 +1399,26 @@ def pattern_fill_16bit() -> PSDImage:
     The decoder skips the 16-bit pattern, so the fill renders the placeholder.
     """
     return _pattern_fill("Pattern Fill 16", _fixture_pattern_16bit())
+
+
+def pattern_fill_masked() -> PSDImage:
+    """RGB, a Base layer plus a 24-slot PtFl fill with a painted layer mask.
+
+    The diagonal mask gives the row thumbnail both light and dark coverage, so
+    the test proves the mask card is the mask rather than a blank white card.
+    """
+    psd = _pattern_fill("Pattern Fill", _fixture_pattern_photoshop_slots())
+    layer = psd[1]
+    mask = Image.new("L", (WIDTH, HEIGHT), 0)
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            mask.putpixel((x, y), 255 if x >= y else 0)
+    layer.create_mask(mask)
+    # `create_mask` appends to the layer, but the PSD record was last compiled
+    # when the fill layer's channels were stripped. Recompile it so the saved
+    # channel list carries the mask instead of the stale one.
+    psd._update_record()
+    return psd
 
 
 def drop_shadow() -> PSDImage:
@@ -2151,6 +2201,7 @@ FIXTURES = {
     "gradient_fill.psd": gradient_fill,
     "pattern_fill.psd": pattern_fill,
     "pattern_fill_16bit.psd": pattern_fill_16bit,
+    "pattern_fill_masked.psd": pattern_fill_masked,
     "drop_shadow.psd": drop_shadow,
     "outer_glow.psd": outer_glow,
     "inner_shadow.psd": inner_shadow,

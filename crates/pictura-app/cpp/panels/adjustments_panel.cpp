@@ -91,7 +91,7 @@ void AdjustmentsPanel::refresh()
     patternView_ = view_;
     patternGeneration_ = generation;
     if (QToolButton* pattern = buttonByIdForTest(QStringLiteral("pattern"))) {
-        const bool hasPatterns = view_ && layer_has_patterns(*view_);
+        const bool hasPatterns = view_ && patterns_available(*view_);
         pattern->setEnabled(hasPatterns);
         pattern->setToolTip(hasPatterns ? QStringLiteral("Pattern")
                                         : QStringLiteral("No patterns are loaded"));

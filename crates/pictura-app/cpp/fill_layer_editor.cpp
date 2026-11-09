@@ -55,10 +55,10 @@ bool createFillLayerFromDialog(PictureView& view, const QString& kind, const QCo
         && kind != QLatin1String("pattern")) {
         return false;
     }
-    if (kind == QLatin1String("pattern") && !layer_has_patterns(view)) {
+    if (kind == QLatin1String("pattern") && !patterns_available(view)) {
         return false;
     }
-    const QStringList patterns = document_pattern_ids(view);
+    const QStringList patterns = available_pattern_ids(view);
 
     QString payload;
     QString name;

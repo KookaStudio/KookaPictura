@@ -59,13 +59,15 @@ dialog SHALL apply on OK; live on-canvas gradient dragging is not provided.
 ### Requirement: Pattern Fill editor
 
 The system SHALL edit a Pattern Fill layer through a dialog listing the patterns
-decoded from the open document, with Scale, Link With Layer, and Snap To Origin.
-Accepting SHALL replace the layer's `PtFl` content in one undoable state;
-cancelling SHALL leave the layer unchanged. When the document has no patterns,
-the dialog SHALL show an empty state and both the editor and Pattern creation
-SHALL be unavailable; the Pattern row SHALL carry a no-patterns reason rather
-than `— not implemented yet`. A built-in pattern library and `Edit > Define
-Pattern` are outside this capability.
+decoded from the open document followed by the built-in pattern library, with
+Scale, Link With Layer, and Snap To Origin. Accepting SHALL replace the layer's
+`PtFl` content in one undoable state; cancelling SHALL leave the layer unchanged.
+When the document has no embedded patterns, the built-in library SHALL still
+provide entries, so the dialog SHALL show its empty state only when no pattern is
+available at all. Choosing a built-in pattern SHALL embed it in the document's
+`Patt` block in the same edit, before the layer references it, so the fill
+renders and the saved PSD carries it. A document pattern with the same id SHALL
+win over the built-in. `Edit > Define Pattern` remains outside this capability.
 
 #### Scenario: A pattern fill is edited [fle_pattern_apply]
 
@@ -77,9 +79,14 @@ Pattern` are outside this capability.
 - **WHEN** the user activates Snap To Origin and accepts
 - **THEN** the pattern's origin offset is `(0, 0)`
 
-#### Scenario: No patterns disables the editor [fle_pattern_empty]
+#### Scenario: A blank document offers the built-ins [fle_pattern_builtins]
 
 - **WHEN** the document has no pattern resources
+- **THEN** the Pattern Fill editor lists the built-in patterns rather than the empty state, and creating or editing a pattern fill with one embeds it in the document
+
+#### Scenario: No patterns disables the editor [fle_pattern_empty]
+
+- **WHEN** no document pattern and no built-in pattern are available
 - **THEN** the Pattern Fill editor reports the empty state and Pattern creation and editing are unavailable
 
 ### Requirement: Fill creation opens the type editor

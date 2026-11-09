@@ -45,13 +45,14 @@ pub mod ffi {
             path: &QString,
             payload: &QString,
         ) -> bool;
-        /// Whether the document carries any `Patt`/`Pat2`/`Pat3` pattern.
-        fn layer_has_patterns(view: &PictureView) -> bool;
+        /// Whether a document is open and pattern fills are available.
+        fn patterns_available(view: &PictureView) -> bool;
         /// Whether the layer is a fill content layer the fill editors can edit
         /// (a shape's vector fill is excluded).
         fn layer_is_editable_fill(view: &PictureView, path: &QString) -> bool;
-        /// The document's pattern ids in decode order.
-        fn document_pattern_ids(view: &PictureView) -> QStringList;
+        /// The document's pattern ids in decode order, then the built-in ids
+        /// not already present.
+        fn available_pattern_ids(view: &PictureView) -> QStringList;
         /// A `size`-bounded thumbnail for pattern `id`, or a null image.
         fn pattern_thumbnail(view: &PictureView, id: &QString, size: i32) -> QImage;
         /// Create a fill layer of `kind` from the editor payload, anchored at

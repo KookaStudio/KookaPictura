@@ -992,8 +992,8 @@ void LayersPanelTest::fillAdjustmentMenu()
         }
     }
     QVERIFY(pattern != nullptr);
-    QVERIFY2(!pattern->isEnabled(), "Pattern stays disabled without document patterns");
-    QVERIFY(pattern->toolTip().contains(QStringLiteral("No patterns are loaded")));
+    QVERIFY2(pattern->isEnabled(), "Pattern is available through the built-in library");
+    QVERIFY(!pattern->toolTip().contains(QStringLiteral("No patterns are loaded")));
 
     const int before = pictura::layers_api::rowCount(*view_);
     QAction* levels = nullptr;

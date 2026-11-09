@@ -8,6 +8,8 @@
 //! [`crate::smart_object`], and keeps whatever parsed when a block is malformed
 //! rather than failing the file.
 
+use std::sync::OnceLock;
+
 use pictura_core::Document;
 
 use crate::common::{is_psb_big_key, Reader};
@@ -25,7 +27,11 @@ pub struct PatternPixels {
 
 const MODE_GRAYSCALE: u32 = 1;
 const MODE_RGB: u32 = 3;
-const MODE_INDEXED: u32 = 7;
+
+/// Photoshop writes every pattern with 24 colour slots plus two alpha slots,
+/// regardless of the image mode, and writes pixels only into the slots the
+/// pattern uses. The decoder accepts that layout and skips a larger count.
+const PHOTOSHOP_COLOR_SLOTS: usize = 24;
 
 /// Pattern planes are small, tileable images. This caps a pattern's (and each
 /// channel's) rectangle so a crafted one cannot drive an unbounded allocation;
@@ -34,6 +40,49 @@ const MODE_INDEXED: u32 = 7;
 /// single pattern's RGBA buffer to 64 MiB. Larger patterns are skipped and
 /// render the placeholder.
 const MAX_PATTERN_PIXELS: usize = 1 << 24;
+
+static BUILTIN_PATTERNS: OnceLock<Vec<PatternPixels>> = OnceLock::new();
+
+/// The project-authored patterns always available to the app.
+///
+/// They are deliberately small, opaque RGB tiles: enough to create a Pattern
+/// Fill on a document that carries no `Patt` resource, without bundling an
+/// Adobe preset. The app embeds the chosen one into the document when a fill
+/// references it.
+pub fn builtin_patterns() -> &'static [PatternPixels] {
+    BUILTIN_PATTERNS.get_or_init(|| {
+        vec![
+            builtin("Pictura Checkerboard", |x, y| {
+                if (x + y) % 2 == 0 {
+                    32
+                } else {
+                    224
+                }
+            }),
+            builtin(
+                "Pictura Diagonal",
+                |x, y| if (x + y) % 8 < 2 { 32 } else { 224 },
+            ),
+        ]
+    })
+}
+
+fn builtin(id: &str, value: impl Fn(usize, usize) -> u8) -> PatternPixels {
+    const SIZE: usize = 8;
+    let mut rgba = Vec::with_capacity(SIZE * SIZE * 4);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let v = value(x, y);
+            rgba.extend_from_slice(&[v, v, v, 255]);
+        }
+    }
+    PatternPixels {
+        pattern_id: id.to_string(),
+        width: SIZE as u32,
+        height: SIZE as u32,
+        rgba,
+    }
+}
 
 /// Decode every pattern in the document's `Patt`/`Pat2`/`Pat3` tagged blocks.
 ///
@@ -97,9 +146,9 @@ fn parse_pattern(body: &[u8]) -> Option<PatternPixels> {
     }
     let mode = r.u32().ok()?;
     // Only Grayscale and RGB are decoded, and each mode fixes its colour-plane
-    // count. Resolve it before reading any channel so a crafted `num_channels`
-    // cannot drive a large decode (the slots actually decoded are bounded to
-    // `expected_color + 2`).
+    // count. Resolve it before reading any channel so a crafted slot count
+    // cannot drive a large decode (only the leading colour slots and the two
+    // alpha slots are decompressed).
     let expected_color = match mode {
         MODE_GRAYSCALE => 1,
         MODE_RGB => 3,
@@ -109,10 +158,6 @@ fn parse_pattern(body: &[u8]) -> Option<PatternPixels> {
     let _horizontal = r.i16().ok()?;
     let _name = read_unicode_string(&mut r).ok()?;
     let pattern_id = read_pascal_id(&mut r).ok()?;
-    if mode == MODE_INDEXED {
-        // The indexed colour table is 256 RGB triples plus 4 pad bytes.
-        r.skip(256 * 3 + 4).ok()?;
-    }
     let list = parse_channel_list(&mut r, expected_color).ok()?;
     build_pixels(mode, pattern_id, list)
 }
@@ -121,10 +166,12 @@ fn parse_pattern(body: &[u8]) -> Option<PatternPixels> {
 /// arrays. The first `num_channels` slots are colour, the last two are the
 /// alpha region (matching psd-tools' `get_pattern_color_channels`).
 struct ChannelList {
-    color_slots: usize,
     width: u32,
     height: u32,
-    channels: Vec<Option<PatternChannel>>,
+    /// The mode's leading colour slots, in order. Every one must be written.
+    color: Vec<Option<PatternChannel>>,
+    /// The last written slot of the two-slot alpha region.
+    alpha: Option<PatternChannel>,
 }
 
 /// One written channel plane with the rectangle it was decoded against.
@@ -135,9 +182,11 @@ struct PatternChannel {
 }
 
 /// Parse the channel list. `expected_color` is the pattern's colour-plane count
-/// (fixed by its image mode): the declared `num_channels` must equal it, and
-/// only `expected_color + 2` slots are decoded, so a crafted count cannot
-/// amplify the allocation.
+/// (fixed by its image mode). The declared `num_channels` is Photoshop's colour
+/// slot count: it may be 24 regardless of the mode, so only the leading
+/// `expected_color` slots and the two alpha slots are decompressed. A count
+/// below the mode's planes cannot carry its colour; a count above Photoshop's
+/// 24 is not a pattern layout this decoder understands.
 fn parse_channel_list(r: &mut Reader, expected_color: usize) -> Result<ChannelList, PsdError> {
     let version = r.u32()?;
     if version != 3 {
@@ -152,29 +201,38 @@ fn parse_channel_list(r: &mut Reader, expected_color: usize) -> Result<ChannelLi
     let left = br.u32()?;
     let bottom = br.u32()?;
     let right = br.u32()?;
-    let num_channels = br.u32()? as usize;
-    if num_channels != expected_color {
+    let color_slots = br.u32()? as usize;
+    if color_slots < expected_color || color_slots > PHOTOSHOP_COLOR_SLOTS {
         return Err(PsdError::Invalid(format!(
-            "pattern channel count {num_channels} for a {expected_color}-channel mode"
+            "pattern colour slot count {color_slots} for a {expected_color}-plane mode"
         )));
     }
-    let total = expected_color + 2;
-    let mut channels = Vec::with_capacity(total);
-    for _ in 0..total {
-        channels.push(read_channel_array(&mut br)?);
+    let mut color = Vec::with_capacity(expected_color);
+    let mut alpha = None;
+    for slot in 0..color_slots + 2 {
+        // The middle colour slots are read past without decompressing their
+        // planes; only the mode's planes and the alpha region matter.
+        let decode = slot < expected_color || slot >= color_slots;
+        let channel = read_channel_array(&mut br, decode)?;
+        if slot < expected_color {
+            color.push(channel);
+        } else if slot >= color_slots && channel.is_some() {
+            alpha = channel;
+        }
     }
     Ok(ChannelList {
-        color_slots: expected_color,
         width: right.saturating_sub(left),
         height: bottom.saturating_sub(top),
-        channels,
+        color,
+        alpha,
     })
 }
 
 /// One `VirtualMemoryArray` channel. `None` when the slot is unwritten; an
 /// error for a written channel this decoder cannot read (non-8-bit depth or an
-/// oversized rectangle), which skips the containing pattern.
-fn read_channel_array(r: &mut Reader) -> Result<Option<PatternChannel>, PsdError> {
+/// oversized rectangle), which skips the containing pattern. A slot whose
+/// plane the caller does not need is skipped without decompression.
+fn read_channel_array(r: &mut Reader, decode: bool) -> Result<Option<PatternChannel>, PsdError> {
     let is_written = r.u32()?;
     if is_written == 0 {
         return Ok(None);
@@ -190,6 +248,15 @@ fn read_channel_array(r: &mut Reader) -> Result<Option<PatternChannel>, PsdError
     let right = r.u32()?;
     let pixel_depth = r.u16()?;
     let compression = r.u8()?;
+    // depth (4) + rectangle (16) + pixel_depth (2) + compression (1) = 23 bytes
+    // precede the compressed data inside the declared length.
+    let data_len = length
+        .checked_sub(23)
+        .ok_or_else(|| PsdError::Invalid("pattern channel length".into()))?;
+    let data = r.take(data_len)?;
+    if !decode {
+        return Ok(None);
+    }
     // Only 8-bit planes are decoded; 16/32-bit ones are skipped so they render
     // the placeholder instead of garbage.
     if depth != 8 || pixel_depth != 8 {
@@ -197,12 +264,6 @@ fn read_channel_array(r: &mut Reader) -> Result<Option<PatternChannel>, PsdError
             "pattern channel depth {depth}/{pixel_depth}"
         )));
     }
-    // depth (4) + rectangle (16) + pixel_depth (2) + compression (1) = 23 bytes
-    // precede the compressed data inside the declared length.
-    let data_len = length
-        .checked_sub(23)
-        .ok_or_else(|| PsdError::Invalid("pattern channel length".into()))?;
-    let data = r.take(data_len)?;
     let w = right.saturating_sub(left) as usize;
     let h = bottom.saturating_sub(top) as usize;
     if w == 0 || h == 0 {
@@ -226,34 +287,37 @@ fn build_pixels(mode: u32, pattern_id: String, list: ChannelList) -> Option<Patt
     let width = list.width;
     let height = list.height;
     let n = (width as usize).checked_mul(height as usize)?;
-    if n == 0 || n > MAX_PATTERN_PIXELS || list.color_slots > list.channels.len() {
+    if n == 0 || n > MAX_PATTERN_PIXELS {
         return None;
     }
-    // Every written channel must have been decoded against the pattern's own
-    // rectangle. A crafted pattern-level rectangle that disagrees (1x1 channels
-    // under a huge declared rect) is skipped here, before any allocation.
-    for channel in list.channels.iter().flatten() {
+    let expected_color = if mode == MODE_GRAYSCALE { 1 } else { 3 };
+    if list.color.len() != expected_color {
+        return None;
+    }
+    // Require every leading colour plane: a pattern with a hole is skipped
+    // rather than silently filled with black.
+    let mut color = Vec::with_capacity(expected_color);
+    for slot in &list.color {
+        let channel = slot.as_ref()?;
+        // Every decoded plane must have been read against the pattern's own
+        // rectangle. A crafted pattern-level rectangle that disagrees (1x1
+        // channels under a huge declared rect) is skipped here, before any
+        // allocation.
         if channel.width != width as usize || channel.height != height as usize {
             return None;
         }
-    }
-    let color: Vec<&[u8]> = list.channels[..list.color_slots]
-        .iter()
-        .filter_map(|c| c.as_ref())
-        .map(|c| c.plane.as_slice())
-        .collect();
-    // Require every colour plane: a pattern with a hole is skipped rather than
-    // silently filled with black.
-    let expected_color = if mode == MODE_GRAYSCALE { 1 } else { 3 };
-    if color.len() != expected_color {
-        return None;
+        color.push(channel.plane.as_slice());
     }
     // psd-tools' `draw_pattern_fill` takes the trailing written plane as alpha.
-    let alpha = list.channels[list.color_slots..]
-        .iter()
-        .filter_map(|c| c.as_ref())
-        .next_back()
-        .map(|c| c.plane.as_slice());
+    let alpha = match &list.alpha {
+        Some(channel) => {
+            if channel.width != width as usize || channel.height != height as usize {
+                return None;
+            }
+            Some(channel.plane.as_slice())
+        }
+        None => None,
+    };
 
     let mut rgba = vec![0u8; n.checked_mul(4)?];
     for i in 0..n {
@@ -480,6 +544,52 @@ mod tests {
     }
 
     #[test]
+    fn builtin_patterns_are_available() {
+        let patterns = builtin_patterns();
+        assert!(!patterns.is_empty(), "the library always has a pattern");
+        let mut ids: Vec<&str> = patterns.iter().map(|p| p.pattern_id.as_str()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), patterns.len(), "ids are unique");
+        for pattern in patterns {
+            assert_eq!((pattern.width, pattern.height), (8, 8));
+            assert_eq!(pattern.rgba.len(), 8 * 8 * 4);
+            assert!(pattern.rgba.chunks(4).all(|p| p[3] == 255), "opaque");
+            let first = pattern.rgba[0];
+            assert!(
+                pattern.rgba.chunks(4).any(|p| p[0] != first),
+                "a tile is not flat"
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_patterns_encode_into_a_document() {
+        let pattern = builtin_patterns()[0].clone();
+        let record = crate::encode_rgb_pattern(
+            &pattern.pattern_id,
+            &pattern.pattern_id,
+            pattern.width,
+            pattern.height,
+            &pattern.rgba,
+        )
+        .expect("encode a built-in");
+        let mut doc = doc_with(Vec::new());
+        assert!(crate::add_document_pattern(
+            &mut doc,
+            &pattern.pattern_id,
+            &record
+        ));
+        assert!(
+            !crate::add_document_pattern(&mut doc, &pattern.pattern_id, &record),
+            "already present"
+        );
+        let decoded = decode_patterns(&doc);
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0], pattern);
+    }
+
+    #[test]
     fn grayscale_pattern_replicates_its_channel() {
         let gray = [7u8, 8, 9, 10];
         let entry = pattern("g", MODE_GRAYSCALE, &[&gray], 2, 2, None);
@@ -675,6 +785,87 @@ mod tests {
     }
 
     #[test]
+    fn photoshop_slot_layout_decodes_written_color_planes() {
+        // Photoshop writes 24 colour slots and two alpha slots for every
+        // pattern, writing only the RGB planes and the trailing alpha. Before
+        // the slot-layout fix the declared 24 was rejected against the mode's
+        // three planes, so a real Photoshop pattern rendered the grey
+        // placeholder.
+        let mut channels = vec![
+            channel(&[255, 0, 0, 255], 2, 2),
+            channel(&[0, 255, 0, 255], 2, 2),
+            channel(&[0, 0, 255, 255], 2, 2),
+        ];
+        channels.extend(std::iter::repeat_n(unwritten(), 21));
+        channels.push(unwritten());
+        channels.push(channel(&[9, 9, 9, 9], 2, 2));
+        let entry = pattern_raw("photoshop-slots", MODE_RGB, 24, &channels, (0, 0, 2, 2));
+
+        let got = decode_patterns(&doc_with(tagged_patt(&list_block(&[entry]))));
+        assert_eq!(got.len(), 1, "the 24-slot pattern decodes");
+        assert_eq!(got[0].pattern_id, "photoshop-slots");
+        assert_eq!(
+            got[0].rgba,
+            vec![255, 0, 0, 9, 0, 255, 0, 9, 0, 0, 255, 9, 255, 255, 255, 9,]
+        );
+    }
+
+    #[test]
+    fn photoshop_sample_geometry_decodes() {
+        // The supplied Photoshop sample's Patt block: 24 colour slots, a
+        // 219x265 rectangle, and written slots 0, 1, 2, 25. The pixels are
+        // synthetic; the geometry and slot layout are the sample's.
+        const W: u32 = 219;
+        const H: u32 = 265;
+        let n = (W * H) as usize;
+        let mut channels = vec![
+            channel(&vec![10u8; n], W, H),
+            channel(&vec![20u8; n], W, H),
+            channel(&vec![30u8; n], W, H),
+        ];
+        channels.extend(std::iter::repeat_n(unwritten(), 21));
+        channels.push(unwritten());
+        channels.push(channel(&vec![40u8; n], W, H));
+        let entry = pattern_raw("photoshop-sample", MODE_RGB, 24, &channels, (0, 0, H, W));
+
+        let got = decode_patterns(&doc_with(tagged_patt(&list_block(&[entry]))));
+        assert_eq!(got.len(), 1);
+        assert_eq!((got[0].width, got[0].height), (W, H));
+        assert_eq!(&got[0].rgba[0..4], &[10, 20, 30, 40]);
+        assert_eq!(&got[0].rgba[got[0].rgba.len() - 4..], &[10, 20, 30, 40]);
+    }
+
+    #[test]
+    fn unused_colour_slots_are_not_decoded() {
+        // The middle slots may hold anything; only the mode's leading planes and
+        // the alpha region are decompressed. A 16-bit plane in slot 3 would
+        // skip the pattern if the decoder read every written slot.
+        let mut channels = vec![
+            channel(&[1, 2, 3, 4], 2, 2),
+            channel(&[5, 6, 7, 8], 2, 2),
+            channel(&[9, 10, 11, 12], 2, 2),
+            channel_ex(&[0; 8], 2, 2, 16, 16),
+        ];
+        channels.extend(std::iter::repeat_n(unwritten(), 20));
+        channels.push(unwritten());
+        channels.push(channel(&[4, 4, 4, 4], 2, 2));
+        let entry = pattern_raw("middle-slot", MODE_RGB, 24, &channels, (0, 0, 2, 2));
+
+        let got = decode_patterns(&doc_with(tagged_patt(&list_block(&[entry]))));
+        assert_eq!(got.len(), 1);
+        assert_eq!(
+            got[0].rgba,
+            vec![1, 5, 9, 4, 2, 6, 10, 4, 3, 7, 11, 4, 4, 8, 12, 4,]
+        );
+    }
+
+    #[test]
+    fn a_colour_slot_count_above_photoshop_layout_is_skipped() {
+        let entry = pattern_raw("too-many", MODE_RGB, 25, &[], (0, 0, 2, 2));
+        assert!(decode_patterns(&doc_with(tagged_patt(&list_block(&[entry])))).is_empty());
+    }
+
+    #[test]
     fn rgb_pattern_with_a_missing_colour_plane_is_skipped() {
         let entry = pattern_raw(
             "hole",
@@ -693,7 +884,9 @@ mod tests {
     }
 
     #[test]
-    fn grayscale_pattern_with_two_colour_planes_is_skipped() {
+    fn grayscale_pattern_ignores_an_extra_colour_slot() {
+        // Two declared colour slots for a one-plane mode: the leading slot is
+        // the pattern's grey and the extra slot is ignored without decoding.
         let entry = pattern_raw(
             "g2",
             MODE_GRAYSCALE,
@@ -706,6 +899,11 @@ mod tests {
             ],
             (0, 0, 2, 2),
         );
-        assert!(decode_patterns(&doc_with(tagged_patt(&list_block(&[entry])))).is_empty());
+        let got = decode_patterns(&doc_with(tagged_patt(&list_block(&[entry]))));
+        assert_eq!(got.len(), 1);
+        assert_eq!(
+            got[0].rgba,
+            vec![1, 1, 1, 255, 2, 2, 2, 255, 3, 3, 3, 255, 4, 4, 4, 255,]
+        );
     }
 }
