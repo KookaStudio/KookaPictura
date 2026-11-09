@@ -17,6 +17,7 @@ pub mod blur;
 pub mod catalogue;
 pub mod digimarc;
 mod distort;
+pub mod fade;
 pub mod hdr_toning;
 pub mod kernel;
 mod luma;
@@ -57,6 +58,7 @@ pub use distort::vanishing_point::{
     DragMode as VpDragMode, VpCanvas, VpEdit, VpEditor, VpHeal, VpMarqueeOptions, VpPaintOptions,
     VpPart, VpPasteError, VpPatch, VpPlanes, VpRect, VpTexture, VpValidity, VP_DEFAULT_GRID,
 };
+pub use fade::{fade_layer, Fade};
 pub use hdr_toning::HdrToningParams;
 pub use noise::{ChannelDetail, ReduceNoiseParams};
 pub use render::{

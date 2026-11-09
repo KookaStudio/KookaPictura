@@ -554,6 +554,7 @@ pub(super) fn magic_erase_at(
     opacity: i32,
     background: u32,
 ) -> bool {
+    let fade_capture = crate::cxxqt_object::fade::capture(view.rust());
     let erased = {
         let rust = view.rust();
         let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
@@ -613,6 +614,9 @@ pub(super) fn magic_erase_at(
     };
     view.as_mut().rust_mut().session.doc = Some(doc);
     view.as_mut().edit("Magic Eraser", |_| Edit::Full);
+    if let Some(capture) = fade_capture {
+        crate::cxxqt_object::fade::record(&mut view.as_mut().rust_mut(), capture, "Magic Eraser");
+    }
     true
 }
 
@@ -843,6 +847,7 @@ pub(super) fn begin_kind(
         stroke: Some(stroke),
         stroke_label: label.to_string(),
         paint_pad,
+        fade_capture: crate::cxxqt_object::fade::capture(&rust),
         ..Default::default()
     };
     rust.session.live.set_stroke_session(session);

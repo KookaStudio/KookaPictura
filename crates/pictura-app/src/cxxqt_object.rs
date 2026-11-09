@@ -19,6 +19,7 @@ mod edit;
 mod engine_tables;
 mod export;
 mod eyedropper_sample;
+mod fade;
 mod filter_map;
 mod filter_tools;
 mod guides;
@@ -253,7 +254,6 @@ pub mod qobject {
         /// Working mode: `"rgb"` or `"grayscale"`; empty without a document.
         #[qinvokable]
         fn document_mode(&self) -> QString;
-
         /// Bit depth per channel (8/16/32/1) of the loaded document, or 0 when none.
         #[qinvokable]
         fn document_depth_bits(&self) -> i32;

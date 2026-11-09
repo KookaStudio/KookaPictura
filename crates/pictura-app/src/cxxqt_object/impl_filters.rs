@@ -47,6 +47,7 @@ impl qobject::PictureView {
                 .as_mut()
                 .apply_mask_filter_command(&path, &kind.to_string(), filter);
         }
+        let fade_capture = super::fade::capture(self.rust());
         let mask = {
             let rust = self.rust();
             let Some(doc) = rust.session.doc.as_ref() else {
@@ -87,6 +88,11 @@ impl qobject::PictureView {
                 None => Edit::Full,
             };
             self.as_mut().edit("Filter", |_| outcome);
+            if let Some(capture) = fade_capture {
+                let label = super::filter_map::descriptor::descriptor(&kind.to_string())
+                    .map_or_else(|| kind.to_string(), |spec| spec.label.to_string());
+                super::fade::record(&mut self.as_mut().rust_mut(), capture, &label);
+            }
             return true;
         }
         false

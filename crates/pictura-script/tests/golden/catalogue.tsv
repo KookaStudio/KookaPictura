@@ -41,7 +41,7 @@ edit.undo	Edit/Undo	Undo	Ctrl+Z	1	0
 edit.redo	Edit/Redo	Redo	Ctrl+Y	1	0
 edit.stepForward	Edit/Step Forward	Step Forward	Ctrl+Shift+Z	1	0
 edit.stepBackward	Edit/Step Backward	Step Backward	Ctrl+Alt+Z	1	0
-edit.fade	Edit/Fade…	Fade…	Shift+Ctrl+F	0	0
+edit.fade	Edit/Fade…	Fade…	Shift+Ctrl+F	1	0
 edit.cut	Edit/Cut	Cut	Ctrl+X	1	0
 edit.copy	Edit/Copy	Copy	Ctrl+C	1	0
 edit.copyMerged	Edit/Copy Merged	Copy Merged	Shift+Ctrl+C	1	0

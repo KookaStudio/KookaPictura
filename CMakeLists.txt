@@ -441,6 +441,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/filter_param_controls.h
     crates/pictura-app/cpp/filter_preview_dialog.cpp
     crates/pictura-app/cpp/filter_preview_dialog.h
+    crates/pictura-app/cpp/fade_dialog.cpp
+    crates/pictura-app/cpp/fade_dialog.h
     crates/pictura-app/cpp/lens_flare_dialog.cpp
     crates/pictura-app/cpp/lens_flare_dialog.h
     crates/pictura-app/cpp/picture_frame_dialog.cpp

@@ -1136,6 +1136,7 @@ impl qobject::PictureView {
         let t = Instant::now();
         let mut rust = self.as_mut().rust_mut();
         let target = rust.layer_target.clone();
+        super::fade::clear(&mut rust);
         rust.session.record(&target, label);
         paint_timing::record("record_history_capture", t.elapsed());
     }

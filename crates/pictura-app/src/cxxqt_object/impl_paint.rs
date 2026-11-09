@@ -570,6 +570,7 @@ impl PictureViewRust {
                     stroke: Some(stroke),
                     stroke_label: label.to_string(),
                     paint_pad,
+                    fade_capture: crate::cxxqt_object::fade::capture(rust),
                     ..Default::default()
                 };
                 rust.session.live.set_stroke_session(session);
@@ -1035,6 +1036,7 @@ impl qobject::PictureView {
             stroke_label,
             stroke_base,
             paint_pad,
+            fade_capture,
             mut stroke_tiles,
             ..
         } = session;
@@ -1119,6 +1121,13 @@ impl qobject::PictureView {
                         self.as_mut().edit(&stroke_label, |_| {
                             Edit::regions_hinted(regions, hint, false)
                         });
+                        if let Some(capture) = fade_capture {
+                            crate::cxxqt_object::fade::record(
+                                &mut self.as_mut().rust_mut(),
+                                capture,
+                                &stroke_label,
+                            );
+                        }
                         paint_timing::record("commit_record_history", t.elapsed());
                         true
                     }

@@ -1,5 +1,6 @@
 use super::*;
 
+use super::super::super::fade::FadeSnapshot;
 use super::super::super::filter_map::filter_from_kind_params;
 use super::super::super::helpers::{clamp_region, layer_has_effects};
 use super::super::super::helpers_composite::{current_buffer, premultiplied_display_image};
@@ -81,6 +82,8 @@ pub(super) struct Committed {
     doc: Document,
     history: History,
     outcome: Result<WorkerRefresh, String>,
+    /// The effect's pre- and post-effect layers, for `Edit > Fade`.
+    fade: Option<FadeSnapshot>,
 }
 
 pub(super) enum WorkerRefresh {
@@ -369,6 +372,7 @@ pub(super) fn commit(
     label: &str,
     gpu: bool,
 ) -> Committed {
+    let original = pictura_render::resolve_path(&doc, path).cloned();
     let filtered = match source {
         Source::Filtered(layer) => Ok(*layer),
         Source::Pending(handle) => match handle.join().ok().flatten() {
@@ -384,6 +388,7 @@ pub(super) fn commit(
                 doc,
                 history,
                 outcome: Err(error),
+                fade: None,
             }
         }
     };
@@ -395,9 +400,18 @@ pub(super) fn commit(
                 doc,
                 history,
                 outcome: Err("the active layer no longer exists".to_string()),
+                fade: None,
             }
         }
     }
+    let fade = original
+        .zip(pictura_render::resolve_path(&doc, path).cloned())
+        .map(|(original, effected)| FadeSnapshot {
+            path: path.to_string(),
+            label: label.to_string(),
+            original,
+            effected,
+        });
     // As `refresh_region` / `recomposite` do on the UI thread: a filter
     // changes only its layer's rect unless a layer effect spills past it.
     let refresh = if effects {
@@ -434,6 +448,7 @@ pub(super) fn commit(
         doc,
         history,
         outcome: Ok(refresh),
+        fade,
     }
 }
 
@@ -606,6 +621,10 @@ pub(in crate::cxxqt_object) fn commit_finish(
     if job.last_filter.is_some() {
         rust.last_filter = job.last_filter;
     }
+    super::super::super::fade::clear(rust);
+    if let Some(snapshot) = committed.fade {
+        super::super::super::fade::record_snapshot(rust, snapshot);
+    }
     Ok(Some(match refresh {
         WorkerRefresh::Region {
             x0,
@@ -649,6 +668,7 @@ pub(in crate::cxxqt_object) fn test_commit_finish(
         doc,
         history,
         outcome: Ok(WorkerRefresh::Nothing),
+        fade: None,
     });
     rust.filter_jobs.commit = Some(CommitJob {
         handle,

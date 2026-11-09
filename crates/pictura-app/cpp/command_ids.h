@@ -29,6 +29,7 @@ inline constexpr char EditPasteInPlace[] = "edit.pasteSpecial.pasteInPlace";
 inline constexpr char EditPasteInto[] = "edit.pasteSpecial.pasteInto";
 inline constexpr char EditPasteOutside[] = "edit.pasteSpecial.pasteOutside";
 inline constexpr char EditClear[] = "edit.clear";
+inline constexpr char EditFade[] = "edit.fade";
 inline constexpr char EditFill[] = "edit.fill";
 inline constexpr char EditStroke[] = "edit.stroke";
 inline constexpr char EditPurgeClipboard[] = "edit.purge.clipboard";

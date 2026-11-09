@@ -57,7 +57,6 @@ and it answers "does a spec exist?", not "is it implemented?".
 |---|---|---|---|
 | SYS-1 | Preset/library codecs + Preset Manager (`.aco/.ase/.grd/.abr/.pat/.csh/.asl/.tpl/.csf`) — no `pictura-presets` crate exists | no `crates/pictura-presets`; `swatches_panel.h:71` | #489 |
 | SYS-2 | Global bit-depth / colour-mode availability gating — every "unavailable at 16/32-bpc, Bitmap, Indexed, CMYK/Lab" rule is unenforced | `filter_tools.rs` (`filter_kind_supported`) checks arity only; no `Edition`/depth gate | #490 |
-| SYS-3 | `Edit > Fade` (post-filter opacity + blend mode) is an inert leaf | `crates/pictura-script/src/command_catalogue/entries.rs`, no handler | #491 |
 | SYS-4 | Brush dynamics option sets (texture, dual brush, colour dynamics, transfer, pose, padlocks) | `brush_panel.cpp:115-152` all disabled | #492 |
 | SYS-5 | Sampled / bristle / erodible / airbrush tips + Define Brush Preset | `tip.rs` round/elliptical only | #493 |
 

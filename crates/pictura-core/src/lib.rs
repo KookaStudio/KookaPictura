@@ -6,6 +6,7 @@
 
 mod advanced_blending;
 mod annotations;
+pub mod blend;
 pub mod blur;
 mod crs;
 mod digest;

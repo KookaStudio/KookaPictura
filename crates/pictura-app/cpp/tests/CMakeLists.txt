@@ -133,6 +133,7 @@ set(PICTURA_QT_TESTS
     tst_icon_assets
     tst_filter_menu
     tst_filter_gallery
+    tst_fade
     tst_lens_flare_dialog
     tst_picture_frame_dialog
     tst_reduce_noise_dialog

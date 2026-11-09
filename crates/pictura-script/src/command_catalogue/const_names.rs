@@ -29,6 +29,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("EditPasteInto", "edit.pasteSpecial.pasteInto"),
     ("EditPasteOutside", "edit.pasteSpecial.pasteOutside"),
     ("EditClear", "edit.clear"),
+    ("EditFade", "edit.fade"),
     ("EditFill", "edit.fill"),
     ("EditStroke", "edit.stroke"),
     ("EditPurgeClipboard", "edit.purge.clipboard"),
