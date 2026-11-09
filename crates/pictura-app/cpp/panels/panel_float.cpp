@@ -322,12 +322,16 @@ void PanelFloat::syncToContent()
         }
         content_->updateGeometry();
         // The tools column wraps its content in a scroll area for the docked
-        // frame; a floating overlay still hugs the full tool grid, so use the
-        // column's size hint rather than the scroll area's small minimum.
+        // frame; a floating overlay still hugs the full tool grid. The column's
+        // size hint comes from that scroll area and is much shorter than the
+        // grid, so use the tools requirement (title row + grip + full content)
+        // for the height instead.
         const int w = qMax(content_->minimumWidth(), content_->minimumSizeHint().width());
-        const int h = qMax(content_->minimumHeight(), content_->sizeHint().height());
+        const int h = qMax(content_->minimumHeight(), column->toolsRequiredHeight());
         setMinimumWidth(0);
-        setMinimumHeight(0);
+        // Pin the overlay's height so a later frame re-clamp cannot shrink the
+        // full tool grid back to the scroll host's small size hint.
+        setMinimumHeight(h);
         resize(qMax(1, w), qMax(1, h));
         return;
     }

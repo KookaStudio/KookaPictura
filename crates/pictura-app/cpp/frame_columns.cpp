@@ -381,6 +381,19 @@ int PicturaMainWindow::newColumnSideAt(const QPoint& globalPos) const
     return -1;
 }
 
+int PicturaMainWindow::newColumnSideAtInsideWorkspace(const QPoint& globalPos) const
+{
+    QWidget* central = centralWidget();
+    if (!central) {
+        return -1;
+    }
+    const QRect workspace(central->mapToGlobal(QPoint(0, 0)), central->size());
+    if (!workspace.contains(globalPos)) {
+        return -1;
+    }
+    return newColumnSideAt(globalPos);
+}
+
 PanelColumn* PicturaMainWindow::columnEdgeAnchorAt(const QPoint& globalPos,
                                                    const PanelColumn* exclude,
                                                    int* side) const

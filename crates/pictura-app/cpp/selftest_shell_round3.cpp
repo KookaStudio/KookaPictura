@@ -895,11 +895,15 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         bool ok = false;
         if (tools) {
             QWidget* header = tools->columnHeaderForTest();
+            QWidget* grip = tools->toolsGripForTest();
             QWidget* body = tools->toolsContentForTest();
             const int headerH = header ? header->height() : 0;
+            const int gripH = grip ? grip->height() : 0;
             const int bodyTop = body ? body->mapTo(tools, QPoint(0, 0)).y() : -1000;
-            const bool fills = body && body->height() >= tools->height() - headerH - 4;
-            const bool topAligned = body && bodyTop >= 0 && bodyTop <= headerH + 4;
+            const bool fills = body
+                && body->height() >= tools->height() - headerH - gripH - 8;
+            const bool topAligned =
+                body && bodyTop >= headerH + gripH - 2 && bodyTop <= headerH + gripH + 6;
             ok = fills && topAligned;
         }
         ST_BEGIN("lss_tools_top_align");

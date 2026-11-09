@@ -50,6 +50,11 @@ bool PanelColumn::scrollableForTest() const
     return scroll_ != nullptr;
 }
 
+int PanelColumn::toolsScrollBarPolicyForTest() const
+{
+    return toolsScroll_ ? static_cast<int>(toolsScroll_->verticalScrollBarPolicy()) : -1;
+}
+
 int PanelColumn::minimumWidthForTest() const
 {
     return minimumWidth();
@@ -668,6 +673,7 @@ bool PanelColumn::beginColumnHeaderDragForTest(const QPoint& globalPos)
 {
     columnPressPending_ = false;
     columnDragging_ = true;
+    columnDragStartedFloating_ = isColumnFloating();
     columnPressGlobal_ = globalPos;
     columnGrabOffset_ = globalPos - mapToGlobal(QPoint(0, 0));
     updateColumnDrag(globalPos);

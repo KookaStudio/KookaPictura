@@ -323,6 +323,9 @@ int main(int argc, char* argv[])
     }
 
     if (selfTest) {
+        // The checks exercise the full tool grid; give the scratch window enough
+        // height that the compact Tools layout is not clipped.
+        frame.resize(frame.width(), qMax(frame.height(), 1200));
         // The checks predate Show Transform Controls being on by default and
         // read canvas pixels with the Move tool active; run them with the box
         // off (tst_transform_controls covers it). The state dir is temporary.

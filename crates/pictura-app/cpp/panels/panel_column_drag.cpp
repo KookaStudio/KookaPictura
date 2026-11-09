@@ -68,12 +68,15 @@ bool PanelColumn::eventFilter(QObject* watched, QEvent* event)
         }
     }
     // M47: drag the whole column from its top header onto any side of another
-    // column (or a workspace edge). The toggle child is not filtered.
-    if (watched == header_) {
+    // column (or a workspace edge). The toggle child is not filtered. The CS6
+    // `|||||` grip under a tools title row drives the same drag but never opens
+    // the header menu on a click.
+    if (watched == header_ || watched == toolsGrip_) {
+        const bool fromGrip = watched == toolsGrip_;
         const QEvent::Type type = event->type();
         // M49: a right-click on the column header opens the column menu (the
         // left button belongs to the column drag / click).
-        if (type == QEvent::ContextMenu) {
+        if (!fromGrip && type == QEvent::ContextMenu) {
             auto* context = static_cast<QContextMenuEvent*>(event);
             showColumnHeaderMenu(context->globalPos());
             return true;
@@ -93,6 +96,7 @@ bool PanelColumn::eventFilter(QObject* watched, QEvent* event)
                        >= QApplication::startDragDistance()) {
                 columnPressPending_ = false;
                 columnDragging_ = true;
+                columnDragStartedFloating_ = isColumnFloating();
                 columnGrabOffset_ = columnPressGlobal_ - mapToGlobal(QPoint(0, 0));
             }
             if (columnDragging_) {
@@ -109,8 +113,8 @@ bool PanelColumn::eventFilter(QObject* watched, QEvent* event)
             }
             // A press+release under the drag threshold is a click, not a drag:
             // open the column header menu. A release past the threshold was
-            // already consumed as a drag above.
-            if (wasPending && mouse->button() == Qt::LeftButton) {
+            // already consumed as a drag above. The grip is a pure drag handle.
+            if (!fromGrip && wasPending && mouse->button() == Qt::LeftButton) {
                 showColumnHeaderMenu(mouse->globalPosition().toPoint());
                 return true;
             }

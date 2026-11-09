@@ -366,6 +366,10 @@ void UiScaleTest::windowStaysResizableAtHighScale()
     auto* scroll = window_->findChild<QScrollArea*>(QStringLiteral("toolsScroll"));
     QVERIFY(scroll != nullptr);
     QVERIFY(scroll->isVisible());
+    // At 200% the tool content is taller than the workspace; the panel stays
+    // visible and clips at the bottom instead of growing a scrollbar.
+    QCOMPARE(scroll->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
+    QVERIFY(window_->toolsColumn()->isVisible());
     const int screenHeight = QGuiApplication::primaryScreen()->availableGeometry().height();
     QVERIFY2(window_->minimumSizeHint().height() < screenHeight,
              qPrintable(QStringLiteral("minHeight=%1 screen=%2")

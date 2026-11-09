@@ -22,6 +22,7 @@
 
 class QBoxLayout;
 class QGraphicsOpacityEffect;
+class QHBoxLayout;
 class QHideEvent;
 class QLabel;
 class QMenu;
@@ -206,6 +207,9 @@ public:
     QWidget* toolsContentForTest() const { return toolsContent_; }
     // Re-fit the tools column width to its content (after a 1<->2 column flip).
     void refreshToolsWidth();
+    // The height the docked Tools column needs for its current layout: the
+    // title row, the drag grip, the tool content and the column margins.
+    int toolsRequiredHeight() const;
 
     // A widget column's invisible grip on its workspace-facing edge. Placed in
     // whichever side is adjacent to the workspace; hidden for the tools column
@@ -273,6 +277,9 @@ public:
     QString groupOfForTest(const QString& objectName) const;
     bool scrollableForTest() const;
     int minimumWidthForTest() const;
+    QWidget* toolsGripForTest() const { return toolsGrip_; }
+    QToolButton* toolsCloseButtonForTest() const { return closeButton_; }
+    int toolsScrollBarPolicyForTest() const;
     bool railModeForTest() const { return railMode_; }
     QToolButton* panelColumnToggleForTest() const { return columnToggle_; }
     bool iconStripVisibleForTest() const;
@@ -393,6 +400,8 @@ public:
 signals:
     void interfaceOptionsRequested();
     void stateChanged();
+    // The tools header's close control was activated.
+    void closeRequested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -534,6 +543,10 @@ private:
     // M47: the header-drag column move reuses the edge-drop indicator.
     void updateColumnDrag(const QPoint& globalPos);
     bool finishColumnDrag(const QPoint& globalPos);
+    // Resolve where a whole-column drag would land. A popped-out Tools panel
+    // moves freely and only offers the outer workspace edge as a re-dock target.
+    bool resolveColumnDragTarget(const QPoint& globalPos, PanelColumn** anchor,
+                                 int* side) const;
     PanelFloat* createFloat(PanelGroup* group, const QPoint& globalPos);
     void destroyFloat(PanelFloat* floatWindow);
     void closeFloat(PanelFloat* floatWindow);
@@ -558,7 +571,11 @@ private:
     QWidget* stripGroupBoxFor(PanelGroup* group) const;
 
     QWidget* header_ = nullptr;
+    QHBoxLayout* headerLayout_ = nullptr;
     QToolButton* columnToggle_ = nullptr;
+    QToolButton* closeButton_ = nullptr;
+    // The CS6 `|||||` drag grip below the tools title row.
+    QWidget* toolsGrip_ = nullptr;
     // The 4 px invisible width-drag grip on a widget column's workspace edge.
     QWidget* resizeGrip_ = nullptr;
     // D1/D2: set while this column hosts a single plain tools content widget.
@@ -616,7 +633,10 @@ private:
     // The new-column/edge mark for a drag: parented to the frame, not the
     // viewport, so an in-window floating overlay (which is raised above the
     // splitter and follows the cursor) cannot hide it.
-    QWidget* edgeIndicator_ = nullptr;
+    // Parented to the frame so it draws above following overlays. A QPointer
+    // because the frame owns it too: on frame teardown the child may already be
+    // gone when this column's destructor runs.
+    QPointer<QWidget> edgeIndicator_;
     QSet<PanelGroup*> wired_;
     QList<PanelFloat*> floats_;
 
@@ -653,6 +673,10 @@ private:
     // M47: drag the whole column from its top header.
     bool columnPressPending_ = false;
     bool columnDragging_ = false;
+    // Whether the whole-column drag began from a floating overlay. A drag that
+    // began docked may still be re-placed beside a column; a popped-out panel
+    // only offers the outer workspace edge as a re-dock target.
+    bool columnDragStartedFloating_ = false;
     QPoint columnPressGlobal_;
     // Cursor offset inside the column at drag start, so a torn-off overlay keeps
     // the header under the pointer instead of jumping to its top-left corner.
