@@ -51,6 +51,7 @@ solid fill, type, and smart object.
 | `gradient_fill.psd` | RGB | 8x8 | `Base` pixel layer + `Gradient Fill` (`GdFl`) Linear black-to-white descriptor fill layer |
 | `pattern_fill.psd` | RGB | 8x8 | `Base` pixel layer + `Pattern Fill` (`PtFl`) descriptor fill layer referencing a 2x2 RGB pattern in the `Patt` block |
 | `pattern_fill_16bit.psd` | RGB | 8x8 | same, but the `Patt` pattern planes are 16-bit (the decoder skips them) |
+| `pattern_fill_masked.psd` | RGB | 8x8 | `Base` pixel layer + `Pattern Fill` (`PtFl`) fill layer referencing a 2x2 RGB pattern in Photoshop's 24-colour-slot layout, with a painted diagonal layer mask |
 | `drop_shadow.psd` | RGB | 8x8 | `Base` pixel layer + `Shadowed` layer carrying an `lfx2` `DrSh` drop shadow |
 | `outer_glow.psd` | RGB | 8x8 | `Base` pixel layer + `Glowing` layer carrying an `lfx2` `OrGl` outer glow |
 | `inner_shadow.psd` | RGB | 8x8 | `Base` pixel layer + `Inner` layer carrying an `lfx2` `IrSh` inner shadow |
@@ -276,6 +277,28 @@ rec.tagged_blocks[Tag.PATTERN_FILL_SETTING] = TaggedBlock(
 
 psd._record.layer_and_mask_information.tagged_blocks = TaggedBlocks()
 psd.tagged_blocks.set_data(Tag.PATTERNS1, [pattern])
+```
+
+`pattern_fill_masked.psd` is authored by the `pattern_fill_masked()` builder: the
+same `Base` layer and `PtFl` descriptor, but the `Patt` pattern carries
+Photoshop's fixed **24 colour slots plus two alpha slots** (only the three RGB
+planes and the trailing transparency are written), and the fill layer carries a
+painted diagonal raster mask. The pattern fill's channel list is therefore the
+layout Photoshop writes for every pattern, unlike the older `pattern_fill.psd`
+fixture's simplified `num_channels = 3` layout. It is the regression fixture for
+a loaded Photoshop pattern fill's thumbnail and mask card (#1202).
+
+```python
+# 24 colour slots + 2 alpha slots; only RGB and the trailing alpha are written.
+channels = [channel([255, 0, 0, 255]), channel([0, 255, 0, 255]),
+            channel([0, 0, 255, 255])]
+channels += [VirtualMemoryArray() for _ in range(24 - 3)]
+channels += [VirtualMemoryArray(), channel([255, 255, 255, 255])]
+pattern = Pattern(version=1, image_mode=3, point=(2, 2), name="Pictura",
+                  pattern_id="pictura-pattern-photoshop",
+                  data=VirtualMemoryArrayList(version=3, rectangle=(0, 0, 2, 2),
+                                              channels=channels))
+# The fill layer also gets a painted diagonal `create_mask(...)`.
 ```
 
 

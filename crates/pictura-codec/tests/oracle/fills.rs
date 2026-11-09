@@ -241,6 +241,40 @@ fn pattern_fill_layer_preserves_descriptor_and_pattern() {
     );
 }
 
+/// The masked pattern fill fixture: Photoshop's 24 colour slots decode to the
+/// authored 2x2 RGB pattern, and the fill layer's painted mask is attached.
+#[test]
+fn pattern_fill_masked_fixture_decodes_pattern_and_mask() {
+    let doc = load("pattern_fill_masked.psd");
+    let fill = doc
+        .layers
+        .iter()
+        .find(|l| l.name == "Pattern Fill")
+        .expect("pattern fill layer");
+    let adj = fill.adjustment.as_ref().expect("PtFl block");
+    assert_eq!(adj.key, *b"PtFl");
+
+    let patterns = pictura_codec::decode_patterns(&doc);
+    assert_eq!(patterns.len(), 1);
+    assert_eq!(patterns[0].pattern_id, "pictura-pattern-photoshop");
+    assert_eq!((patterns[0].width, patterns[0].height), (2, 2));
+    assert_eq!(
+        patterns[0].rgba,
+        vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255],
+        "the three written colour slots and the trailing alpha"
+    );
+
+    let mask = fill.mask.as_ref().expect("layer mask");
+    assert_eq!((mask.rect.width(), mask.rect.height()), (8, 8));
+    let data = mask.data.as_ref().expect("mask data");
+    assert_eq!(data.len(), 64);
+    assert_eq!(data.sample(0), Some(255), "top-left is revealed");
+    assert_eq!(data.sample(7 * 8), Some(0), "bottom-left is hidden");
+
+    let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
+    assert_eq!(back, doc, "the pattern and mask round-trip");
+}
+
 /// The 16-bit pattern fixture: the `PtFl` block is still recognised, but the
 /// 16-bit pattern planes are skipped (not misdecoded as 8-bit pixels), and the
 /// document still round-trips.

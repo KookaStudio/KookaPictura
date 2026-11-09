@@ -1877,7 +1877,10 @@ SHALL be a neutral card bearing the icon for its decoded adjustment kind**, with
 no checkerboard; a **fill row's image thumbnail SHALL show its content preview**
 (a flat solid swatch, a gradient ramp, or a scaled pattern tile) **in a 1:1
 square card**, the preview image itself rendered square rather than at the
-document aspect so a ramp or tile is not stretched into the card. Mask and vector-mask cards on adjustment, fill, type and group rows SHALL
+document aspect so a ramp or tile is not stretched into the card. A loaded
+pattern fill layer's preview SHALL be the pattern decoded from the document's
+`Patt`/`Pat2`/`Pat3` resource rather than the grey placeholder, and its mask
+card SHALL be present when the layer carries a layer mask. Mask and vector-mask cards on adjustment, fill, type and group rows SHALL
 use the document aspect; the left content card keeps its existing geometry.
 
 #### Scenario: Mask thumbnail adjacency [uip_layers_mask_adjacency]
@@ -1905,6 +1908,11 @@ use the document aspect; the left content card keeps its existing geometry.
 
 - **WHEN** a Solid Color, Gradient, or Pattern fill layer is shown
 - **THEN** its thumbnail shows the fill's solid colour, gradient ramp, or scaled pattern tile instead of a generic checkerboard
+
+#### Scenario: A loaded pattern fill row shows its pattern and mask [lpr_thumb_pattern_fill_loaded]
+
+- **WHEN** a PSD carrying a Pattern fill layer that references a Photoshop 24-slot pattern and has a painted layer mask is opened
+- **THEN** the fill row's thumbnail shows the tiled pattern rather than the grey placeholder and the row carries a non-null mask thumbnail with the mask's light and dark coverage
 
 #### Scenario: An adjustment row's card is 1:1 [lpr_thumb_adjustment_square]
 
