@@ -84,6 +84,8 @@ public:
     bool checkboxForTest(const QString& key) const;
 
 signals:
+    void exportSettingsRequested();
+    void importSettingsRequested();
     void useShiftKeyForToolSwitchChanged(bool on);
     void openDocumentsAsTabsChanged(bool on);
     void floatingDocumentDockingChanged(bool on);

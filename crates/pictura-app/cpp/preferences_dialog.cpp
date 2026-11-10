@@ -17,6 +17,7 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStackedWidget>
@@ -144,6 +145,22 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     connect(pickerChoice_, &QComboBox::currentIndexChanged, this, [this](int index) {
         emit pickerChoiceChanged(pickerChoice_->itemData(index).toInt());
     });
+
+    auto* settingsRow = new QWidget(generalPage);
+    auto* settingsLayout = new QHBoxLayout(settingsRow);
+    settingsLayout->setContentsMargins(0, 0, 0, 0);
+    auto* exportSettings = new QPushButton(tr("Export Settings…"), settingsRow);
+    exportSettings->setObjectName(QStringLiteral("preferencesExportSettings"));
+    auto* importSettings = new QPushButton(tr("Import Settings…"), settingsRow);
+    importSettings->setObjectName(QStringLiteral("preferencesImportSettings"));
+    settingsLayout->addWidget(exportSettings);
+    settingsLayout->addWidget(importSettings);
+    settingsLayout->addStretch(1);
+    generalForm->addRow(tr("Settings"), settingsRow);
+    connect(exportSettings, &QPushButton::clicked, this,
+            &PreferencesDialog::exportSettingsRequested);
+    connect(importSettings, &QPushButton::clicked, this,
+            &PreferencesDialog::importSettingsRequested);
     stack_->addWidget(generalPage);
 
     auto* interfacePage = new QWidget(this);
