@@ -391,9 +391,12 @@ fn a_mid_stroke_named_snapshot_stores_an_exact_composite() {
         live.composite == stale,
         "the live document keeps its pre-stroke base"
     );
-    assert!(!snapshot.doc.layers[0].channels[0]
-        .data
-        .shares(&live.layers[0].channels[0].data));
+    assert!(
+        snapshot.doc.layers[0].channels[0]
+            .data
+            .shares(&live.layers[0].channels[0].data),
+        "a snapshot shares its tiles with the document instead of copying them (#1215)"
+    );
 }
 
 /// Patching a damage rectangle into a cached level-0 crop only works if the

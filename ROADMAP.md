@@ -546,6 +546,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       nothing, an edit forks only the tiles it touches, history shares untouched
       tiles, and PSD read and write stream through them (#1212, #1213).
       `crates/pictura-core/src/tiled_plane.rs`.
+- [x] **Tiled history** — undo states and named snapshots hold references to
+      tiles, so a snapshot and its restore copy no pixels, and history's budget
+      counts each tile it keeps beyond the live document once (#1215).
+      `crates/pictura-app/src/history/`, `crates/pictura-core/src/memory/census.rs`.
 - [ ] The Performance preferences pane: memory, history states, cache level and
       tile size, scratch disks and GPU, plus the Efficiency and Scratch readouts
       (#636)

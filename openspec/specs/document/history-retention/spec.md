@@ -1,8 +1,8 @@
 # document/history-retention Specification
 
 ## Purpose
-Bounded undo/redo that stores each state's changed 64×64 region tiles against
-the previous state, so retained history memory scales with the edited area
+Bounded undo/redo that stores each state's changed 256² tiles, by reference,
+against the previous state, so retained history memory scales with the edited area
 rather than the document area.
 
 ## Requirements
@@ -10,16 +10,17 @@ rather than the document area.
 ### Requirement: Region-delta undo retention
 
 The history SHALL store the oldest state as a materialized base and each later
-state as the 64×64 tiles whose bytes differ from the previous state, for the
-layer channel planes, the document composite, and the layer mask planes, plus
-the state's selection and non-pixel metadata. The retained history memory SHALL
-scale with the edited area rather than with the document area. The single
-materialized base MAY share unchanged bands with the live document; bands that
-differ SHALL be copied. Smart-object filter masks and native-depth `Samples` are
-not tracked planes and SHALL remain outside this contract. The public `History`
-API (`capture`, `undo`, `redo`, `jump`, `can_undo`/`can_redo`, the
-label/index/depth/count accessors, and the named-snapshot accessors) and the
-20-state and 10-snapshot bounds SHALL be unchanged.
+state as references to the 256² tiles whose bytes differ from the previous
+state, for the layer channel planes, the document composite, and the layer mask
+planes, plus the state's selection and non-pixel metadata. The retained history
+memory SHALL scale with the edited area rather than with the document area. The
+single materialized base MAY share unchanged tiles with the live document;
+tiles that differ SHALL be held by reference, not copied. Smart-object filter
+masks and native-depth `Samples` are not tracked planes and SHALL remain outside
+this contract. The public `History` API (`capture`, `undo`, `redo`, `jump`,
+`can_undo`/`can_redo`, the label/index/depth/count accessors, and the
+named-snapshot accessors) and the 20-state and 10-snapshot bounds SHALL be
+unchanged.
 
 #### Scenario: Small edits retain small deltas [hr_bounded_retention]
 

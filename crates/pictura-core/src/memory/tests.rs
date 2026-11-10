@@ -340,3 +340,54 @@ fn a_filled_plane_honours_the_failpoint_and_holds_nothing() {
     assert_eq!(plane.allocated_bytes(), 0);
     assert_eq!(plane.sample(64 * 64 - 1), Some(255));
 }
+
+#[test]
+fn a_census_counts_each_kept_allocation_once() {
+    let mut census = TileCensus::default();
+    census.add(Side::Kept, (0x10, 100));
+    census.add(Side::Kept, (0x10, 100));
+    census.add(Side::Kept, (0x20, 50));
+    assert_eq!(census.beyond_live(), 150, "a shared allocation counts once");
+    census.remove(Side::Kept, (0x10, 100));
+    assert_eq!(census.beyond_live(), 150, "one holder still keeps it");
+    census.remove(Side::Kept, (0x10, 100));
+    assert_eq!(census.beyond_live(), 50, "the last release frees it");
+    census.add(Side::Kept, (0x30, 0));
+    assert_eq!(
+        census.beyond_live(),
+        50,
+        "an empty allocation costs nothing"
+    );
+}
+
+#[test]
+fn a_census_does_not_count_what_the_live_document_holds() {
+    let mut census = TileCensus::default();
+    census.add(Side::Live, (0x10, 100));
+    census.add(Side::Kept, (0x10, 100));
+    assert_eq!(census.beyond_live(), 0);
+    census.remove(Side::Live, (0x10, 100));
+    assert_eq!(census.beyond_live(), 100, "the live side let go of it");
+    census.add(Side::Live, (0x10, 100));
+    assert_eq!(census.beyond_live(), 0);
+    census.remove_all(Side::Kept, [(0x10, 100)]);
+    census.remove_all(Side::Live, [(0x10, 100)]);
+    assert_eq!(census.beyond_live(), 0);
+    census.add_all(Side::Kept, [(0x40, 7), (0x50, 9)]);
+    assert_eq!(census.beyond_live(), 16);
+    census.clear();
+    assert_eq!(census.beyond_live(), 0);
+}
+
+#[test]
+fn history_may_hold_half_the_ceiling() {
+    let reading = host(16 * GIB);
+    let governor = Governor::new(HostPaths::default());
+    set_host_for_test(Some(reading));
+    let budget = governor.history_budget();
+    set_host_for_test(None);
+    assert_eq!(
+        budget,
+        ceiling_of(&reading, DEFAULT_USAGE_PERCENT).map(|c| c / HISTORY_SHARE)
+    );
+}

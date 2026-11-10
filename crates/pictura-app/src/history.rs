@@ -1,4 +1,5 @@
 use crate::layer_target::LayerTarget;
+use pictura_core::memory::{Side, TileCensus};
 use pictura_core::{Document, PsdRect};
 use pictura_paint::healing::RgbaImage;
 use pictura_paint::stamp::layer_surface;
@@ -10,12 +11,11 @@ mod budget;
 mod planes;
 mod styles;
 
-pub(crate) use budget::document_bytes;
-pub(crate) use planes::detached_copy;
+pub(crate) use budget::{document_bytes, tile_table_bytes};
 use planes::{
-    adopt_metadata, apply_tiles, composite_change, composite_unchanged, diff_into, hollow,
-    mask_rects, plane_kinds, planes_agree, shared_copy, stamp_agreed, swap_tiles, tile_planes,
-    tile_rect, PlaneDelta, PlaneKind,
+    adopt_metadata, apply_tiles, composite_change, composite_unchanged, delta_allocations,
+    diff_into, doc_allocations, hollow, mask_rects, plane_kinds, planes_agree, shared_copy,
+    stamp_agreed, swap_tiles, tile_planes, tile_rect, PlaneDelta, PlaneKind,
 };
 pub use styles::{
     create_character_style, create_paragraph_style, delete_character_style, delete_paragraph_style,
@@ -48,8 +48,8 @@ pub enum Restored {
 /// the change (see [`planes::TileDelta`]). `meta` is the new document with
 /// every tracked plane cleared.
 ///
-/// ponytail: tiles are uncompressed; RLE them if a full-layer filter's delta
-/// (one copy of the layer and composite) ever needs to shrink further.
+/// ponytail: a delta keeps whole 256² tiles, shared with the planes they came
+/// from; a one-pixel edit keeps its tile. Packing or spilling them is #1217's.
 struct Delta {
     meta: Document,
     tiles: Vec<PlaneDelta>,
@@ -121,9 +121,16 @@ type BrushCache = RefCell<Option<((u64, String), Arc<RgbaImage>)>>;
 /// comparing the two band by band. Untracked stores (native samples,
 /// smart-object payloads, preserved byte blocks, and the selection) stay shared
 /// with the live document until one side writes them. Every other state is
-/// stored as the 64×64 tiles that changed against its predecessor, so retention
-/// scales with the edited area. A geometry or structure change starts a new
-/// segment at an anchor.
+/// stored as references to the 256² tiles that changed against its
+/// predecessor, so retention scales with the edited area and no state copies a
+/// sample (#1215). A geometry or structure change starts a new segment at an
+/// anchor.
+///
+/// `census` counts every tile allocation history holds: `current`'s as the live
+/// side (a capture or restore leaves the live document sharing them), and the
+/// deltas', full anchors', named snapshots' and the pinned brush source's as
+/// kept. What is kept and not live is what history costs beyond the live
+/// document, and what its budget is checked against.
 #[derive(Default)]
 pub struct History {
     states: Vec<Entry>,
@@ -136,6 +143,7 @@ pub struct History {
     pinned_id: Option<u64>,
     brush_cache: BrushCache,
     current_target: LayerTarget,
+    census: TileCensus,
     /// The byte cap a test sets in place of the host's (see `budget`).
     #[cfg(test)]
     byte_cap: Option<usize>,
@@ -214,6 +222,15 @@ impl Damage {
     }
 }
 
+/// Every tile allocation a stored state holds; a hollow anchor holds none.
+fn stored_allocations(stored: &Stored) -> Vec<(usize, usize)> {
+    match stored {
+        Stored::Full(s) => doc_allocations(&s.doc),
+        Stored::Hollow(_) => Vec::new(),
+        Stored::Delta(d) => delta_allocations(&d.tiles),
+    }
+}
+
 /// Whether two states would display differently with the same composite.
 fn display_differs(a: &Document, b: &Document) -> bool {
     (a.width, a.height, a.mode, a.depth) != (b.width, b.height, b.mode, b.depth)
@@ -262,7 +279,7 @@ impl History {
         if matches!(self.brush_source, BrushSource::State(i) if i > self.cursor) {
             self.pin_source();
         }
-        self.states.truncate(self.cursor + 1);
+        self.truncate_states(self.cursor + 1);
         let target_before = self.current_target.clone();
         self.current_target = target.clone();
         let fresh_segment = |doc: &mut Document| {
@@ -286,10 +303,12 @@ impl History {
         let stored = match self.current.take() {
             None => {
                 let (current, stored) = fresh_segment(doc);
+                self.census
+                    .add_all(Side::Live, doc_allocations(&current.doc));
                 self.current = Some(current);
                 stored
             }
-            Some(mut cur) => match diff_into(&mut cur.doc, doc, hint) {
+            Some(mut cur) => match diff_into(&mut cur.doc, doc, hint, &mut self.census) {
                 Some(tiles) => {
                     adopt_metadata(&mut cur.doc, doc);
                     cur.selection = selection.clone();
@@ -316,6 +335,8 @@ impl History {
                         selection: selection.clone(),
                         quick_mask: None,
                     };
+                    self.census
+                        .add_all(Side::Live, doc_allocations(&current.doc));
                     let stored = Stored::Hollow(Snapshot {
                         doc: hollow(doc),
                         selection: selection.clone(),
@@ -340,7 +361,48 @@ impl History {
         while self.states.len() > MAX_DEPTH + 1 {
             self.drop_oldest_state();
         }
-        self.enforce_byte_cap(doc);
+        self.enforce_byte_cap();
+    }
+
+    /// Replace state `k`'s stored form, moving the census from the old
+    /// form's tiles to the new one's; the old form is returned.
+    fn replace_stored(&mut self, k: usize, stored: Stored) -> Stored {
+        self.census.add_all(Side::Kept, stored_allocations(&stored));
+        let old = std::mem::replace(&mut self.states[k].stored, stored);
+        self.census.remove_all(Side::Kept, stored_allocations(&old));
+        old
+    }
+
+    /// Drop the states from `len` on.
+    fn truncate_states(&mut self, len: usize) {
+        for entry in self.states.drain(len.min(self.states.len())..) {
+            self.census
+                .remove_all(Side::Kept, stored_allocations(&entry.stored));
+        }
+    }
+
+    /// Hold `pinned` as the History Brush's pinned source.
+    fn set_pinned(&mut self, pinned: Option<Snapshot>) {
+        if let Some(p) = &pinned {
+            self.census.add_all(Side::Kept, doc_allocations(&p.doc));
+        }
+        if let Some(old) = std::mem::replace(&mut self.pinned, pinned) {
+            self.census
+                .remove_all(Side::Kept, doc_allocations(&old.doc));
+        }
+    }
+
+    /// Drop every named snapshot.
+    fn clear_snapshots(&mut self) {
+        for named in self.snapshots.drain(..) {
+            self.census
+                .remove_all(Side::Kept, doc_allocations(&named.snapshot.doc));
+        }
+    }
+
+    /// The bytes history holds beyond the live document, each tile once.
+    pub(crate) fn held_bytes(&self) -> u64 {
+        self.census.beyond_live()
     }
 
     /// Drop the oldest state, pinning the History Brush's source first when
@@ -416,8 +478,8 @@ impl History {
     /// to the oldest (the kept state); no snapshot survives to point at.
     pub fn purge(&mut self) {
         self.purge_states();
-        self.snapshots.clear();
-        self.pinned = None;
+        self.clear_snapshots();
+        self.set_pinned(None);
         self.pinned_id = None;
         if let BrushSource::Snapshot(_) = self.brush_source {
             self.brush_source = BrushSource::Oldest;
@@ -430,23 +492,25 @@ impl History {
         if let Some(current) = self.current.as_ref() {
             let label = self.label(self.cursor).to_string();
             let id = self.states.get(self.cursor).map_or(0, |entry| entry.id);
+            let kept = Snapshot {
+                doc: hollow(&current.doc),
+                selection: current.selection.clone(),
+                quick_mask: current.quick_mask.clone(),
+            };
+            self.truncate_states(0);
             self.states = vec![Entry {
                 id,
                 label,
-                stored: Stored::Hollow(Snapshot {
-                    doc: hollow(&current.doc),
-                    selection: current.selection.clone(),
-                    quick_mask: current.quick_mask.clone(),
-                }),
+                stored: Stored::Hollow(kept),
                 target_before: self.current_target.clone(),
                 target_after: self.current_target.clone(),
             }];
             self.cursor = 0;
         } else {
-            self.states.clear();
+            self.truncate_states(0);
             self.cursor = 0;
         }
-        self.pinned = None;
+        self.set_pinned(None);
         self.pinned_id = None;
         if matches!(
             self.brush_source,
@@ -458,7 +522,7 @@ impl History {
 
     /// Drop the named restore points only. The undo history is untouched.
     pub fn purge_snapshots(&mut self) {
-        self.snapshots.clear();
+        self.clear_snapshots();
         if let BrushSource::Snapshot(_) = self.brush_source {
             self.brush_source = BrushSource::Oldest;
         }
@@ -506,6 +570,8 @@ impl History {
     pub fn add_snapshot(&mut self, label: &str, snapshot: Snapshot, target: LayerTarget) {
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
+        self.census
+            .add_all(Side::Kept, doc_allocations(&snapshot.doc));
         self.snapshots.push(Named {
             id,
             label: label.to_string(),
@@ -518,7 +584,9 @@ impl History {
                 BrushSource::Snapshot(i) => self.brush_source = BrushSource::Snapshot(i - 1),
                 _ => {}
             }
-            self.snapshots.remove(0);
+            let dropped = self.snapshots.remove(0);
+            self.census
+                .remove_all(Side::Kept, doc_allocations(&dropped.snapshot.doc));
         }
     }
 
@@ -731,7 +799,12 @@ impl History {
     ) {
         for k in Self::crossed(from, to) {
             if let Stored::Delta(delta) = &mut self.states[k].stored {
-                swap_tiles(&mut snap.doc, live.as_deref_mut(), &mut delta.tiles);
+                swap_tiles(
+                    &mut snap.doc,
+                    live.as_deref_mut(),
+                    &mut delta.tiles,
+                    &mut self.census,
+                );
                 damage.add(&delta.tiles);
             }
         }
@@ -749,7 +822,30 @@ impl History {
         let anchor = self.anchor_of(self.cursor);
         let mut ignored = Damage::new(&cur.doc);
         self.walk_swapping(&mut cur, self.cursor, anchor, None, &mut ignored);
-        self.states[anchor].stored = Stored::Full(cur);
+        self.census
+            .remove_all(Side::Live, doc_allocations(&cur.doc));
+        self.replace_stored(anchor, Stored::Full(cur));
+    }
+
+    /// Take full anchor `k`'s state to materialize at the cursor, leaving `k`
+    /// hollow.
+    fn take_anchor(&mut self, k: usize) -> Snapshot {
+        let placeholder = Stored::Delta(Delta {
+            meta: Document::default(),
+            tiles: Vec::new(),
+            selection: None,
+            quick_mask: None,
+        });
+        let Stored::Full(base) = self.replace_stored(k, placeholder) else {
+            unreachable!("an anchor outside the cursor's segment is full");
+        };
+        self.states[k].stored = Stored::Hollow(Snapshot {
+            doc: hollow(&base.doc),
+            selection: base.selection.clone(),
+            quick_mask: base.quick_mask.clone(),
+        });
+        self.census.add_all(Side::Live, doc_allocations(&base.doc));
+        base
     }
 
     /// Move `current` to `target`, writing the same tiles into `live` while no
@@ -784,25 +880,11 @@ impl History {
             if target < anchor {
                 // Back across this segment's anchor: it keeps the state it is,
                 // and the previous segment's full anchor turns hollow.
-                self.states[anchor].stored = Stored::Full(cur);
+                self.census
+                    .remove_all(Side::Live, doc_allocations(&cur.doc));
+                self.replace_stored(anchor, Stored::Full(cur));
                 let prev = self.anchor_of(anchor - 1);
-                let Stored::Full(base) = std::mem::replace(
-                    &mut self.states[prev].stored,
-                    Stored::Delta(Delta {
-                        meta: Document::default(),
-                        tiles: Vec::new(),
-                        selection: None,
-                        quick_mask: None,
-                    }),
-                ) else {
-                    unreachable!("an anchor outside the cursor's segment is full");
-                };
-                self.states[prev].stored = Stored::Hollow(Snapshot {
-                    doc: hollow(&base.doc),
-                    selection: base.selection.clone(),
-                    quick_mask: base.quick_mask.clone(),
-                });
-                let mut moved = base;
+                let mut moved = self.take_anchor(prev);
                 let mut ignored = Damage::new(&moved.doc);
                 self.walk_swapping(&mut moved, prev, anchor - 1, None, &mut ignored);
                 self.current = Some(moved);
@@ -812,26 +894,13 @@ impl History {
                 // the next one hands over its state and turns hollow.
                 self.cursor = stop;
                 self.fill_anchor(cur);
-                let Stored::Full(next) = std::mem::replace(
-                    &mut self.states[end].stored,
-                    Stored::Delta(Delta {
-                        meta: Document::default(),
-                        tiles: Vec::new(),
-                        selection: None,
-                        quick_mask: None,
-                    }),
-                ) else {
-                    unreachable!("an anchor outside the cursor's segment is full");
-                };
-                self.states[end].stored = Stored::Hollow(Snapshot {
-                    doc: hollow(&next.doc),
-                    selection: next.selection.clone(),
-                    quick_mask: next.quick_mask.clone(),
-                });
+                let next = self.take_anchor(end);
                 self.current = Some(next);
                 self.cursor = end;
             }
         }
+        #[cfg(test)]
+        self.check_census();
         damage
     }
 
@@ -864,9 +933,11 @@ impl History {
             _ => Some(Stored::Full(self.materialize(1))),
         };
         if let Some(stored) = promoted {
-            self.states[1].stored = stored;
+            self.replace_stored(1, stored);
         }
-        self.states.remove(0);
+        let dropped = self.states.remove(0);
+        self.census
+            .remove_all(Side::Kept, stored_allocations(&dropped.stored));
         self.cursor -= 1;
     }
 
@@ -878,10 +949,46 @@ impl History {
                 Stored::Delta(d) => Some(d),
                 _ => None,
             })
-            .flat_map(|d| d.tiles.iter())
-            .flat_map(|p| p.tiles.iter())
-            .map(|t| t.bytes.len())
+            .flat_map(|d| delta_allocations(&d.tiles))
+            .map(|(_, bytes)| bytes)
             .sum()
+    }
+
+    /// The census's figure recounted from scratch: the unique bytes of every
+    /// kept tile that `current` does not hold.
+    #[cfg(test)]
+    pub(crate) fn recount_held_bytes(&self) -> u64 {
+        use std::collections::HashSet;
+        let live: HashSet<usize> = self
+            .current
+            .iter()
+            .flat_map(|c| doc_allocations(&c.doc))
+            .map(|(ptr, _)| ptr)
+            .collect();
+        let kept = self
+            .states
+            .iter()
+            .flat_map(|e| stored_allocations(&e.stored))
+            .chain(
+                self.snapshots
+                    .iter()
+                    .flat_map(|n| doc_allocations(&n.snapshot.doc)),
+            )
+            .chain(self.pinned.iter().flat_map(|p| doc_allocations(&p.doc)));
+        let mut seen = HashSet::new();
+        kept.filter(|(ptr, bytes)| *bytes > 0 && !live.contains(ptr) && seen.insert(*ptr))
+            .map(|(_, bytes)| bytes as u64)
+            .sum()
+    }
+
+    /// Panic when the incremental census drifted from a full recount.
+    #[cfg(test)]
+    fn check_census(&self) {
+        assert_eq!(
+            self.census.beyond_live(),
+            self.recount_held_bytes(),
+            "the tile census drifted"
+        );
     }
 
     /// Bytes of the retained documents' tracked planes, counting each shared
@@ -976,7 +1083,7 @@ impl History {
         };
         if exists {
             self.brush_source = source;
-            self.pinned = None;
+            self.set_pinned(None);
             self.pinned_id = None;
         }
         exists
@@ -1029,7 +1136,7 @@ impl History {
             BrushSource::Snapshot(i) => self.snapshots.get(i).map(|s| s.snapshot.clone()),
             BrushSource::Pinned => None,
         };
-        self.pinned = snapshot;
+        self.set_pinned(snapshot);
         self.pinned_id = id;
         self.brush_source = BrushSource::Pinned;
     }

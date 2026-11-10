@@ -53,7 +53,7 @@ pub use text_render::{
     layout_lines, FontPolicy, GlyphMask, LayoutLine, LayoutParams, PlacedGlyph, RasterRequest,
     Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
 };
-pub use tiled_plane::{TileData, TileMut, TileRef, TileSample, TileState, TILE};
+pub use tiled_plane::{SharedTile, TileData, TileMut, TileRef, TileSample, TileState, TILE};
 pub use type_tool::{
     AntiAlias, CharacterAttrs, CharacterOverrides, CharacterStyle, Composer, Justify, KerningMode,
     Leading, ParagraphAttrs, ParagraphOverrides, ParagraphStyle, ResolvedStyle, StyleError,

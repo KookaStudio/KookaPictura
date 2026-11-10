@@ -167,6 +167,8 @@ SCENARIOS = {
     "M4": ("Paint Bucket in the marquee on Layer 1", [new_document, add_layer, marquee], [bucket], False),
     "M5": ("Paint Bucket on Layer 1, no selection", [new_document, add_layer], [bucket], False),
     "M6": ("Brush 300 px hard, 4000 px stroke", [new_document, add_layer], [brush_stroke], False),
+    # #1215: twenty M6 strokes, so history's budget is exercised under --memory-max.
+    "M6x20": ("Twenty M6 brush strokes", [new_document, add_layer], [brush_stroke] * 20, False),
     "M7": ("Undo x3, redo x3 after M3-M6", [m7_setup], [undo_redo], False),
     "M8": ("Named snapshot, then restore it", [new_document, add_layer, brush_stroke], [snapshot_restore], False),
     "M9": ("Move the square by 500 px", [new_document, add_layer, bucket_in_marquee, deselect], [move_layer], False),

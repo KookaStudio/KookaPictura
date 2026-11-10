@@ -167,3 +167,27 @@ fn a_whole_plane_write_flattens_a_tiled_plane() {
         "the holder keeps its bytes"
     );
 }
+
+#[test]
+fn a_swapped_tile_moves_its_allocation_and_generation() {
+    let bytes = pattern(300 * 300);
+    let mut live: Plane<u8> = bytes.clone().into();
+    live.tile(300, 300);
+    let mut held = live.shared_tile(0).expect("tile 0");
+    let (ptr, len) = held.allocation().expect("a dense tile");
+    assert_eq!(len, 256 * 256);
+    let gen = live.tile_generation(0);
+    live.write_rect_from(0..1, 0..1, 300, &[0x77]);
+    assert_ne!(live.allocations()[0].0, ptr, "the write forked the tile");
+    let written = live.tile_generation(0);
+    assert!(live.swap_tile(0, &mut held));
+    assert_eq!(live.allocations()[0].0, ptr, "the old allocation is back");
+    assert_eq!(live.tile_generation(0), gen, "with its generation");
+    assert_eq!(live.sample(0), Some(bytes[0]));
+    assert_ne!(held.allocation().map(|a| a.0), Some(ptr));
+    assert!(live.swap_tile(0, &mut held));
+    assert_eq!(live.tile_generation(0), written);
+    assert_eq!(live.sample(0), Some(0x77));
+    let mut flat: Plane<u8> = bytes.into();
+    assert!(!flat.swap_tile(0, &mut held), "a flat plane has no tiles");
+}

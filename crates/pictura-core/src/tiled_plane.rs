@@ -76,6 +76,26 @@ pub(crate) enum Tile<T> {
     Dense(Arc<[T]>),
 }
 
+/// One tile held outside its plane, with its generation: a refcount on the
+/// tile's allocation, never a copy of its samples (#1215). History keeps the
+/// tiles an edit replaced this way and swaps them back on undo.
+#[derive(Clone)]
+pub struct SharedTile<T> {
+    tile: Tile<T>,
+    gen: u64,
+}
+
+impl<T> SharedTile<T> {
+    /// The dense allocation as `(address, samples)`; `None` for an empty or
+    /// uniform tile, which holds none.
+    pub fn allocation(&self) -> Option<(usize, usize)> {
+        match &self.tile {
+            Tile::Dense(d) => Some((d.as_ptr() as usize, d.len())),
+            _ => None,
+        }
+    }
+}
+
 /// What a tile holds, for diagnostics and tests.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TileState<T> {
@@ -365,6 +385,26 @@ impl<T: TileSample> TiledPlane<T> {
         self.tiles[i] = other.tiles[i].clone();
         self.gens[i] = other.gens[i];
         self.dirty[i] = other.dirty[i];
+        true
+    }
+
+    /// Tile `i` and its generation, sharing the allocation.
+    pub(crate) fn shared_tile(&self, i: usize) -> Option<SharedTile<T>> {
+        Some(SharedTile {
+            tile: self.tiles.get(i)?.clone(),
+            gen: self.gens[i],
+        })
+    }
+
+    /// Exchange tile `i` and its generation with `held`. The tile came out of a
+    /// plane of this geometry at the same index, so its size matches.
+    pub(crate) fn swap_tile(&mut self, i: usize, held: &mut SharedTile<T>) -> bool {
+        if i >= self.tiles.len() {
+            return false;
+        }
+        std::mem::swap(&mut self.tiles[i], &mut held.tile);
+        std::mem::swap(&mut self.gens[i], &mut held.gen);
+        self.dirty[i] = false;
         true
     }
 

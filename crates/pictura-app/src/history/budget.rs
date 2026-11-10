@@ -1,14 +1,13 @@
-//! The byte cap on history (#1207, #1211). Twenty states of a large document
-//! can hold more than the host has, so after each capture the oldest states are
-//! dropped while what history holds beyond the live document exceeds half the
-//! memory governor's ceiling. One undo is always kept.
+//! The byte cap on history (#1207, #1211, #1215). Twenty states of a large
+//! document can hold more than the host has, so after each capture the oldest
+//! states are dropped while the tile bytes history holds beyond the live
+//! document exceed the governor's history budget. Those bytes come from the
+//! tile census, each tile counted once however many states share it. One undo
+//! is always kept, and named snapshots are never dropped for the budget.
 
-use super::{planes, History, Stored};
+use super::{planes, History};
 use pictura_core::Document;
 use std::collections::HashSet;
-
-/// History may hold one part in `SHARE` of the governor's ceiling.
-const SHARE: u64 = 2;
 
 /// The bytes of `doc`'s planes, each allocation counted once.
 pub(crate) fn document_bytes(doc: &Document) -> u64 {
@@ -24,78 +23,43 @@ pub(crate) fn document_bytes(doc: &Document) -> u64 {
     bytes
 }
 
+/// What a copy of `doc`'s tile tables holds: a tile handle, its generation
+/// and its settle flag for each tile of each tracked plane, sharing the tiles.
+pub(crate) fn tile_table_bytes(doc: &Document) -> u64 {
+    const PER_TILE: u64 = 64;
+    let mut tiles = 0u64;
+    planes::each_plane(doc, &mut |p, _, _, _| tiles += p.tile_count().max(1) as u64);
+    tiles * PER_TILE
+}
+
 impl History {
-    /// Drop the oldest states while the bytes history holds beyond `live`
-    /// exceed the cap, keeping the current state and one undo.
-    pub(super) fn enforce_byte_cap(&mut self, live: &Document) {
+    /// Drop the oldest states while the bytes history holds beyond the live
+    /// document exceed the budget, keeping the current state and one undo.
+    pub(super) fn enforce_byte_cap(&mut self) {
+        #[cfg(test)]
+        self.check_census();
         let Some(cap) = self.byte_cap() else {
             return;
         };
-        while self.states.len() > 2 && self.held_bytes(live) > cap {
+        while self.states.len() > 2 && self.held_bytes() > cap {
             self.drop_oldest_state();
         }
+        #[cfg(test)]
+        self.check_census();
     }
 
-    fn byte_cap(&self) -> Option<usize> {
+    fn byte_cap(&self) -> Option<u64> {
         #[cfg(test)]
         if self.byte_cap.is_some() {
-            return self.byte_cap;
+            return self.byte_cap.map(|cap| cap as u64);
         }
-        pictura_core::memory::governor()
-            .ceiling()
-            .map(|ceiling| (ceiling / SHARE) as usize)
+        pictura_core::memory::governor().history_budget()
     }
 
     /// Set the byte cap in place of the host's.
     #[cfg(test)]
     pub(crate) fn set_byte_cap(&mut self, cap: usize) {
         self.byte_cap = Some(cap);
-    }
-
-    /// The bytes history keeps alive that `live` does not share: retained
-    /// planes' allocations (each counted once) and stored delta tiles.
-    fn held_bytes(&self, live: &Document) -> usize {
-        let mut shared = HashSet::new();
-        planes::each_plane(live, &mut |p, _, _, _| {
-            shared.extend(p.allocations().into_iter().map(|(ptr, _)| ptr));
-        });
-        let mut bytes = 0;
-        let mut count = |doc: &Document| {
-            planes::each_plane(doc, &mut |p, _, _, _| {
-                for (ptr, len) in p.allocations() {
-                    if len > 0 && shared.insert(ptr) {
-                        bytes += len;
-                    }
-                }
-            });
-        };
-        for entry in &self.states {
-            match &entry.stored {
-                Stored::Full(s) | Stored::Hollow(s) => count(&s.doc),
-                Stored::Delta(d) => count(&d.meta),
-            }
-        }
-        if let Some(current) = &self.current {
-            count(&current.doc);
-        }
-        if let Some(pinned) = &self.pinned {
-            count(&pinned.doc);
-        }
-        for named in &self.snapshots {
-            count(&named.snapshot.doc);
-        }
-        let tiles: usize = self
-            .states
-            .iter()
-            .filter_map(|e| match &e.stored {
-                Stored::Delta(d) => Some(d),
-                _ => None,
-            })
-            .flat_map(|d| d.tiles.iter())
-            .flat_map(|p| p.tiles.iter())
-            .map(|t| t.bytes.len())
-            .sum();
-        bytes + tiles
     }
 }
 
@@ -105,9 +69,16 @@ mod tests {
     use crate::layer_target::LayerTarget;
     use pictura_core::{BitDepth, ColorMode};
 
+    /// Samples that differ across the plane, so its tiles stay dense.
+    fn pattern(seed: u8) -> Vec<u8> {
+        (0..64 * 256 * 3)
+            .map(|i: usize| (i as u8).wrapping_mul(7).wrapping_add(seed))
+            .collect()
+    }
+
     fn doc(seed: u8) -> Document {
         let mut doc = Document::new(64, 256, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite.data = vec![seed; 64 * 256 * 3].into();
+        doc.composite.data = pattern(seed).into();
         doc
     }
 
@@ -120,12 +91,12 @@ mod tests {
         let mut live = doc(0);
         history.capture_live(&mut live, &None, &target, "Open");
         for seed in 1..=8u8 {
-            live.composite.data.as_mut_slice().fill(seed);
+            live.composite.data = pattern(seed).into();
             history.capture_live(&mut live, &None, &target, "Edit");
             assert!(
-                history.count() <= 2 || history.held_bytes(&live) <= plane * 5 / 2,
+                history.count() <= 2 || history.held_bytes() as usize <= plane * 5 / 2,
                 "history holds {} bytes over its cap after edit {seed}",
-                history.held_bytes(&live)
+                history.held_bytes() as usize
             );
         }
         assert!(history.count() < 9, "no state was dropped");
@@ -135,7 +106,7 @@ mod tests {
         history
             .undo_live(&mut live, &mut selection, &mut restored_target)
             .expect("one undo is kept");
-        assert!(live.composite.data.iter().all(|&v| v == 7));
+        assert_eq!(live.composite.data, pattern(7));
     }
 
     #[test]
@@ -154,9 +125,9 @@ mod tests {
         let mut live = doc(0);
         history.capture_live(&mut live, &None, &target, "Open");
         for seed in 1..=8u8 {
-            live.composite.data.as_mut_slice().fill(seed);
+            live.composite.data = pattern(seed).into();
             history.capture_live(&mut live, &None, &target, "Edit");
-            assert!(history.count() <= 2 || history.held_bytes(&live) <= plane * 5 / 2);
+            assert!(history.count() <= 2 || history.held_bytes() as usize <= plane * 5 / 2);
         }
         memory::set_host_for_test(None);
         assert!(history.count() < 9, "no state was dropped");
@@ -165,7 +136,7 @@ mod tests {
         history
             .undo_live(&mut live, &mut selection, &mut restored_target)
             .expect("one undo is kept");
-        assert!(live.composite.data.iter().all(|&v| v == 7));
+        assert_eq!(live.composite.data, pattern(7));
     }
 
     #[test]
@@ -176,7 +147,7 @@ mod tests {
         let mut live = doc(0);
         history.capture_live(&mut live, &None, &target, "Open");
         for seed in 1..=5u8 {
-            live.composite.data.as_mut_slice().fill(seed);
+            live.composite.data = pattern(seed).into();
             history.capture_live(&mut live, &None, &target, "Edit");
         }
         assert_eq!(history.count(), 6);

@@ -143,14 +143,18 @@ pub(in crate::cxxqt_object) fn refresh_bytes(bounds: PsdRect) -> u64 {
     6 * area(bounds)
 }
 
-/// Adding a named snapshot (M8).
-pub(in crate::cxxqt_object) fn snapshot_bytes(doc: &Document) -> u64 {
-    crate::history::document_bytes(doc) + 4 * canvas(doc)
+/// Adding a named snapshot (M8): it shares every tile with the document, so
+/// it costs the tile tables (#1215). Mid-stroke the snapshot's composite is
+/// rendered from the painted layers too.
+pub(in crate::cxxqt_object) fn snapshot_bytes(doc: &Document, stroking: bool) -> u64 {
+    let composite = if stroking { 4 * canvas(doc) } else { 0 };
+    crate::history::tile_table_bytes(doc) + composite
 }
 
-/// Restoring a named snapshot (M8): its detached copy and a full composite.
+/// Restoring a named snapshot (M8): its tile tables, shared again, and the
+/// display rebuilt from its stored composite.
 pub(in crate::cxxqt_object) fn snapshot_restore_bytes(doc: &Document) -> u64 {
-    crate::history::document_bytes(doc) + 10 * canvas(doc)
+    crate::history::tile_table_bytes(doc) + 12 * canvas(doc)
 }
 
 /// Save (M11): the save job's copy and the encoder's buffers.

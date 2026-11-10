@@ -1,5 +1,5 @@
-use super::planes::DELTA as TILE;
 use super::*;
+use pictura_core::TILE;
 use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
 
 mod cache;
@@ -469,7 +469,8 @@ fn the_brush_source_follows_its_state_and_is_pinned_before_it_is_dropped() {
 #[test]
 fn region_deltas_retain_only_changed_tiles() {
     let mut history = History::default();
-    let mut doc = doc(256, 256, 0);
+    // Large enough that ten changed 256² tiles stay far below one state.
+    let mut doc = doc(1024, 1024, 0);
     let full_state_bytes = doc.composite.data.len();
     history.capture(
         Snapshot {
@@ -480,7 +481,7 @@ fn region_deltas_retain_only_changed_tiles() {
         "Open",
     );
 
-    // Ten edits, each touching only the first 64×64 tile.
+    // Ten edits, each touching only the first tile.
     for i in 1..=10u8 {
         doc.composite.data[0] = i;
         history.capture(
