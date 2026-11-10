@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Edit > Auto-Align Layers** (#582, OpenSpec change `auto-align-layers`).
+  All seven CS6 projections ship: Auto, Perspective, Cylindrical, Spherical,
+  Scene Collage, Reposition Only, and Lens Correction. The engine
+  (`pictura-render::document_ops::layer_ops::auto_align`) is a dependency-free
+  Harris + SIFT-lite matcher with RANSAC translation/similarity/homography,
+  cylindrical/spherical projected spaces, a locked-then-centre-most reference
+  rule, and a Lens Correction pass that reuses the installed profile matched
+  from EXIF. Matching runs on a worker; one `edit` commits the destructive
+  resample as "Auto-Align Layers". Tests: `auto_align` unit tests and
+  `tst_auto_align`. Behavioral parity only: Adobe's detector, thresholds, and
+  Auto score are unpublished, so the tests assert recovery tolerances.
 - **Settings JSON backup and restore** (#1155, OpenSpec change
   `settings-json-backup-restore`). `Edit ▸ Preferences ▸ General` gains
   **Export Settings…** and **Import Settings…**. Export writes one pretty-printed

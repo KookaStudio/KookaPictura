@@ -177,7 +177,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | LAY-1 | `blend-modes.md` | Advanced Blending toggles (Blend Clipped, Transparency Shapes, mask hides effects, channel Include; Blend Interior inert) | MISSING | `core/lib.rs:884` stored but never read | #579 |
 | LAY-2 | `layer-styles.md` | Global Light dialog, Create Layers, Rasterize Layer Style | MISSING | `frame_menus_layer_style.cpp:3`; `crates/pictura-script/src/command_catalogue/entries.rs` | #580 |
 | LAY-3 | `layer-styles.md` | Bevel Contour/Texture UI, gradient editor, channel include in the authoring dialog | MISSING | `layer_style_dialog.h:9` | #581 |
-| LAY-4 | `align-and-distribute.md` | Auto-Align Layers | MISSING | none found | #582 |
+| LAY-4 | `align-and-distribute.md` | Auto-Align Layers | SHIPPED | `crates/pictura-render/src/document_ops/layer_ops/auto_align/`; `crates/pictura-app/cpp/auto_align_dialog.cpp`; `tst_auto_align`. Behavioral parity only: the matcher and projection tolerances are our own | #582 |
 | LAY-6 | `blend-modes.md` | `Fill With (Mode)-Neutral Color` for new layers | MISSING | none found | #584 |
 | LAY-8 | `layer-management-ui.md` | Panel Options thumbnail size (Entire Document/Bounds) | PARTIAL | `session.h:25` | #586 |
 | LAY-9 | `export-formats.md` | File ▸ Scripts ▸ Export Layers To Files | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #587 |

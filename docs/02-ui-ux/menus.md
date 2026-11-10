@@ -109,7 +109,7 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
   Flip Horizontal, Flip Vertical ✓ — CS6 Help "Rotate and flip")
 - Transform Path ▸ ✓ (Again, Warp, and the transform commands)
 - Transform Points ▸ ✓ (Again)
-- Auto-Align Layers… (#582)
+- Auto-Align Layers… ✓
 - Auto-Blend Layers… ✓
 - Define Brush Preset… ✓
 - Define Pattern… ✓
