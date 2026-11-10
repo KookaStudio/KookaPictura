@@ -251,6 +251,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FilterFilterGallery", "filter.filter.gallery"),
     ("FilterDigimarcReadWatermark", "filter.digimarc.read.watermark"),
     ("FilterLensCorrection", "filter.lens.correction"),
+    ("EditAutoAlignLayers", "edit.auto.align.layers"),
     ("EditAutoBlendLayers", "edit.auto.blend.layers"),
     ("SelectColorRange", "select.color.range"),
     ("SelectRefineEdge", "select.refine.edge"),

@@ -3,6 +3,7 @@
 
 #include "frame_includes.h"
 
+#include "auto_align_dialog.h"
 #include "auto_blend_dialog.h"
 #include "busy_job.h"
 #include "dialogs.h"
@@ -81,6 +82,50 @@ void PicturaMainWindow::wireAlignMenu()
         PictureView* view = activeView();
         return view && auto_blend_can(*view, selectedPaths());
     });
+
+    const QString autoAlign = QString::fromLatin1(command_ids::EditAutoAlignLayers);
+    registry_->setImplemented(autoAlign, true);
+    registry_->setHandler(autoAlign, [this, last = AutoAlignChoice{}]() mutable {
+        AutoAlignDialog dialog(this, last);
+        if (runDialog(dialog, this) == QDialog::Accepted) {
+            last = dialog.choice();
+            runAutoAlign(*this, last.projection, last.vignette, last.geometric);
+        }
+    });
+    registry_->setEnabledProvider(autoAlign, [this, selectedPaths]() {
+        PictureView* view = activeView();
+        return view && auto_align_can(*view, selectedPaths());
+    });
+}
+
+bool runAutoAlign(PicturaMainWindow& window, int projection, bool vignette, bool geometric)
+{
+    PictureView* view = window.activeView();
+    auto* panel = window.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
+    if (!view || !panel) {
+        return false;
+    }
+    const QStringList paths = window.selectedLayerPaths();
+    QStringList moved;
+    const bool committed = runCancellableJob(
+        &window, PicturaMainWindow::tr("Auto-Align Layers"),
+        PicturaMainWindow::tr("Aligning layers…"),
+        [&] { return auto_align_start(*view, paths, projection, vignette, geometric); },
+        [&] { return auto_align_running(*view); },
+        [&] { return auto_align_progress(*view); },
+        [&] { auto_align_cancel(*view); },
+        [&] {
+            moved = auto_align_finish(*view);
+            return !moved.isEmpty();
+        });
+    if (committed) {
+        window.selectLayerPath(moved.last());
+        panel->selectPaths(moved, moved.last());
+    }
+    if (const QString notice = auto_align_notice(*view); !notice.isEmpty()) {
+        window.statusBar()->showMessage(notice, 8000);
+    }
+    return committed;
 }
 
 bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless, bool fillTransparent)

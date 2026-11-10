@@ -161,6 +161,7 @@ fn main() {
                 "src/cxxqt_object/adjustment_edit.rs",
                 "src/cxxqt_object/adjustment_presets.rs",
                 "src/cxxqt_object/align.rs",
+                "src/cxxqt_object/auto_align.rs",
                 "src/cxxqt_object/auto_blend.rs",
                 "src/cxxqt_object/annotations.rs",
                 "src/cxxqt_object/channels.rs",

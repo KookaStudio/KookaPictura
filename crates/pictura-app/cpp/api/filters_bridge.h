@@ -4,6 +4,7 @@
 
 #include "view_bridge.h"
 
+#include "pictura_app/src/cxxqt_object/auto_align.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/auto_blend.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/fade.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"

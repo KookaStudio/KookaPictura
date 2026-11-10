@@ -7,6 +7,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/adjustment_presets.cpp
     crates/pictura-app/cpp/apply_image_dialog.cpp
     crates/pictura-app/cpp/apply_image_dialog.h
+    crates/pictura-app/cpp/auto_align_dialog.cpp
+    crates/pictura-app/cpp/auto_align_dialog.h
     crates/pictura-app/cpp/auto_blend_dialog.cpp
     crates/pictura-app/cpp/auto_blend_dialog.h
     crates/pictura-app/cpp/bitmap_mode_dialog.cpp

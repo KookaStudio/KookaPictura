@@ -251,6 +251,7 @@ inline constexpr char ImageCanvasSize[] = "image.canvas.size";
 inline constexpr char FilterFilterGallery[] = "filter.filter.gallery";
 inline constexpr char FilterDigimarcReadWatermark[] = "filter.digimarc.read.watermark";
 inline constexpr char FilterLensCorrection[] = "filter.lens.correction";
+inline constexpr char EditAutoAlignLayers[] = "edit.auto.align.layers";
 inline constexpr char EditAutoBlendLayers[] = "edit.auto.blend.layers";
 inline constexpr char SelectColorRange[] = "select.color.range";
 inline constexpr char SelectRefineEdge[] = "select.refine.edge";
