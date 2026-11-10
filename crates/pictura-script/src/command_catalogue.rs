@@ -82,6 +82,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "file.exit",
         "edit.fill",
         "edit.stroke",
+        "edit.auto.align.layers",
         "edit.auto.blend.layers",
         "edit.keyboardShortcuts",
         "edit.pdfPresets",

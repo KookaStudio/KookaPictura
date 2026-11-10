@@ -204,6 +204,8 @@ pub struct PictureViewRust {
     pub(super) filter_jobs: super::filter_tools::jobs::FilterJobs,
     /// The Auto-Blend Layers worker (`auto_blend`).
     pub(super) auto_blend: super::auto_blend::AutoBlendJob,
+    /// The Auto-Align Layers worker (`auto_align`).
+    pub(super) auto_align: super::auto_align::AutoAlignJob,
     /// The last committed filter's kind and slot values, for Last Filter and
     /// Last Filter Settings.
     pub(super) last_filter: Option<(String, Vec<f64>)>,
@@ -341,6 +343,7 @@ impl Default for PictureViewRust {
             canvas_proxy: None,
             filter_jobs: Default::default(),
             auto_blend: Default::default(),
+            auto_align: Default::default(),
             last_filter: None,
             fade: None,
             smart_filter_edit: None,

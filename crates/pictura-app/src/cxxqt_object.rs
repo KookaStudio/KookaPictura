@@ -5,6 +5,7 @@ mod adjustment_edit;
 mod adjustment_presets;
 mod align;
 mod annotations;
+mod auto_align;
 mod auto_blend;
 mod channels;
 mod clipboard;
@@ -257,7 +258,6 @@ pub mod qobject {
         /// Bit depth per channel (8/16/32/1) of the loaded document, or 0 when none.
         #[qinvokable]
         fn document_depth_bits(&self) -> i32;
-
         /// The image to display: cached when clean, else rebuilt.
         #[qinvokable]
         fn image(self: Pin<&mut Self>) -> QImage;

@@ -4,6 +4,7 @@
 //! `Document::layers` (index 0 is the bottom of the stack).
 
 mod align;
+mod auto_align;
 mod auto_blend;
 mod clipboard;
 mod clipping;
@@ -55,6 +56,11 @@ mod warp_tests;
 pub use align::{
     align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds,
     layer_has_content, AlignEdge,
+};
+pub use auto_align::{
+    apply_auto_align, can_auto_align, plan_auto_align, AutoAlignCancelled, AutoAlignOptions,
+    AutoAlignPlan, AutoAlignProjection, AutoAlignProjectionKind, LayerWarp,
+    AUTO_ALIGN_PROGRESS_MAX,
 };
 pub use auto_blend::{
     apply_auto_blend, can_auto_blend, plan_auto_blend, AutoBlendOptions, AutoBlendPlan,

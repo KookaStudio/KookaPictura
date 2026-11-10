@@ -7,8 +7,8 @@ use cxx_qt_lib::{QImage, QImageFormat, QString, QStringList};
 use pictura_codec::Exif;
 use pictura_filters::{
     camera_models, catalog_makes, find_camera, find_camera_make, find_lens, lenses_for,
-    match_lens_profiles, pick_subprofile, straighten_angle, LensCorrectionParams, LensMap,
-    LensSource,
+    match_lens_profiles, pick_subprofile, straighten_angle, LensCorrectionParams, LensEdge,
+    LensMap, LensModel, LensSource,
 };
 
 use super::super::super::helpers::active_pixel_layer;
@@ -24,6 +24,52 @@ pub(in crate::cxxqt_object) const SLOTS: usize = LensCorrectionParams::SLOTS;
 /// installed.
 pub(super) fn params_of(values: &[f64]) -> Option<LensCorrectionParams> {
     LensCorrectionParams::from_slots(values)
+}
+
+/// The Auto-Align Lens Correction pass: the installed profile that matches the
+/// document's EXIF, with only the requested parts left on. `None` when the
+/// document carries no usable EXIF, no profile matches, or both checkboxes are
+/// off.
+pub(in crate::cxxqt_object) fn auto_params(
+    doc: &pictura_core::Document,
+    vignette: bool,
+    geometric: bool,
+) -> Option<LensCorrectionParams> {
+    if !vignette && !geometric {
+        return None;
+    }
+    let exif = pictura_codec::read_metadata(doc).exif;
+    let make = exif_text(&exif, &[0x010f]);
+    let model = exif_text(&exif, &[0x0110]);
+    let lens = exif_text(&exif, &[0xa434]);
+    let focal = exif_number(&exif, 0x920a);
+    let aperture = exif_number(&exif, 0x829d);
+    let distance = exif_number(&exif, 0x9206);
+    let crop = find_camera(&make, &model).map(|c| c.crop);
+    let profiles = installed();
+    let ids = match_lens_profiles(profiles, &make, &model, &lens, crop, true);
+    let profile = ids.first().and_then(|&i| profiles.get(i))?;
+    let sub = pick_subprofile(&profile.subs, focal, aperture, distance);
+    let coefficients = profile.subs.get(sub)?.resolve(crop);
+    let profile = LensModel {
+        distortion: if geometric {
+            coefficients.distortion
+        } else {
+            [0.0; 6]
+        },
+        ca: LensModel::NONE.ca,
+        vignette: if vignette {
+            coefficients.vignette
+        } else {
+            [0.0; 3]
+        },
+    };
+    (profile != LensModel::NONE).then_some(LensCorrectionParams {
+        profile: Some(profile),
+        auto_scale: true,
+        edge: LensEdge::Transparency,
+        ..Default::default()
+    })
 }
 
 /// EXIF's make, model, and lens in the catalogue's spelling where it knows

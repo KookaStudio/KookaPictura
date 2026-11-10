@@ -539,6 +539,24 @@ where
     M: PlaneMap + Sync,
     F: Fn(PsdRect) -> Option<M>,
 {
+    transform_layer_with_map(doc, path, build_map, pure_translate, interpolation)
+}
+
+/// Apply any [`PlaneMap`] to the layer at `path`. Sibling layer ops that need a
+/// map the public transform constructors cannot express (Auto-Align's
+/// cylindrical and spherical projections) reuse this path so masks, native
+/// planes, and raw-channel rules stay identical.
+pub(super) fn transform_layer_with_map<M, F>(
+    doc: &mut Document,
+    path: &str,
+    build_map: F,
+    pure_translate: bool,
+    interpolation: Interpolation,
+) -> bool
+where
+    M: PlaneMap + Sync,
+    F: Fn(PsdRect) -> Option<M>,
+{
     let Some(prepared) = prepare_layer(doc, path) else {
         return false;
     };
