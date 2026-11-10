@@ -72,7 +72,7 @@ CurvesDialog::CurvesDialog(PictureView* view, const QByteArray& block, const QRe
     layout->addWidget(previewCheck());
     layout->addSpacing(4);
 
-    layout->addLayout(bottomButtons());
+    layout->addLayout(bottomButtons({QStringLiteral("Auto")}));
 
     connect(channel_, &QComboBox::currentIndexChanged, this, &CurvesDialog::loadChannel);
     connect(curve_, &CurveWidget::curveChanged, this, [this]() {
@@ -106,6 +106,20 @@ void CurvesDialog::showSelected()
         spin->setEnabled(any);
         spin->setValue(qRound((spin == input_ ? point.x() : point.y()) * 255.0));
     }
+}
+
+void CurvesDialog::applyAuto()
+{
+    int lo = 0;
+    int hi = 0;
+    if (!autoEndpoints(channel_->currentIndex(), lo, hi)) {
+        return;
+    }
+    const QString points = QStringLiteral("%1,0 %2,255").arg(lo).arg(hi);
+    if (!setCurve(channel_->currentIndex(), points)) {
+        return;
+    }
+    loadChannel();
 }
 
 QWidget* CurvesDialog::controlForTest(const QString& key) const

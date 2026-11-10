@@ -11,8 +11,8 @@ namespace pictura {
 // them, and OK / Cancel (plus any extra buttons) down the right. Brightness/
 // Contrast and Vibrance use it. Ported from photorust's
 // BrightnessContrastDialog / VibranceDialog.
-// ponytail: Brightness/Contrast's Auto stays disabled and there is no Use
-// Legacy check (the engine decodes the modern curve only).
+// ponytail: there is no Use Legacy check (the engine decodes the modern curve
+// only).
 class SliderDialog : public AdjustmentDialog {
     Q_OBJECT
 
@@ -24,12 +24,14 @@ public:
 
     SliderDialog(PictureView* view, const QByteArray& block, const QRect& visible,
                  const QString& title, const QVector<Row>& rows,
-                 const QStringList& disabledButtons = {}, QWidget* parent = nullptr);
+                 const QStringList& extraButtons = {}, QWidget* parent = nullptr);
 
     QWidget* controlForTest(const QString& key) const override;
     void reloadFromBlock() override;
 
 private:
+    void applyAuto() override;
+
     QVector<Row> rows_;
 };
 

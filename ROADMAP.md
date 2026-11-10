@@ -262,7 +262,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] The Auto Color Correction Options dialog (#559)
 - [ ] Levels eyedroppers and the Alt-drag clipping preview (#560)
 - [ ] The Curves secondary UI: on-image, pencil and smooth, sliders and
-      eyedroppers, display options, Auto, and the CMYK and Lab graphs (#561)
+      eyedroppers, display options, and the CMYK and Lab graphs (#561)
 - [ ] The Shadows/Highlights local-surround operator and its eight controls
       (#562)
 - [ ] The Threshold histogram under the slider (#563)
@@ -293,7 +293,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       Vibrance (#576)
 - [ ] The Selective Color composite-channel-only gate, and the preset
       whitelist (#577)
-- [ ] Brightness/Contrast Auto, and the shared adjustment Auto buttons (#578)
+- [x] Brightness/Contrast Auto, and the shared adjustment Auto buttons (#578)
 
 ## Filters
 

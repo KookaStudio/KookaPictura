@@ -295,8 +295,6 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     });
     connect(channel_, &QComboBox::currentIndexChanged, this, &LevelsDialog::loadChannel);
     connect(preset_, &QComboBox::activated, this, &LevelsDialog::applyPreset);
-    connect(button(QStringLiteral("Auto")), &QPushButton::clicked, this,
-            &LevelsDialog::autoLevels);
 
     loadChannel();
 }
@@ -375,33 +373,19 @@ void LevelsDialog::applyPreset(int index)
     loadChannel();
 }
 
-void LevelsDialog::autoLevels()
+void LevelsDialog::applyAuto()
 {
-    const std::array<int, 256>& bins = histogram(channel_->currentIndex());
-    long long total = 0;
-    for (int count : bins) {
-        total += count;
-    }
-    if (total == 0) {
-        return;
-    }
-    // CS6's default clip: 0.1% of the pixels off each end.
-    const long long clip = total / 1000;
     int lo = 0;
-    for (long long seen = 0; lo < 255 && (seen += bins[lo]) <= clip;) {
-        ++lo;
-    }
-    int hi = 255;
-    for (long long seen = 0; hi > 0 && (seen += bins[hi]) <= clip;) {
-        --hi;
-    }
-    if (hi - lo < 2) {
+    int hi = 0;
+    if (!autoEndpoints(channel_->currentIndex(), lo, hi)) {
         return;
     }
     const QString key = prefix();
-    setParams({{key + QStringLiteral("inputBlack"), 0.0},
-               {key + QStringLiteral("inputWhite"), double(hi)},
-               {key + QStringLiteral("inputBlack"), double(lo)}});
+    if (!setParams({{key + QStringLiteral("inputBlack"), 0.0},
+                    {key + QStringLiteral("inputWhite"), double(hi)},
+                    {key + QStringLiteral("inputBlack"), double(lo)}})) {
+        return;
+    }
     markCustom();
     loadChannel();
 }
