@@ -128,6 +128,17 @@ public:
         ctx.setDragging(false);
     }
 
+    // The stamps' canvas menu is the options-bar Brush Preset picker; the
+    // frame owns it. All four stamp tools paint with the shared PaintOptions
+    // tip, so choosing a preset changes the active tip.
+    bool hasCanvasContextMenu() const override { return true; }
+    void onContextMenu(ToolServices& ctx, const QPointF& imagePos,
+                       const QPoint& globalPos) override
+    {
+        (void)imagePos;
+        ctx.requestBrushPicker(globalPos);
+    }
+
 protected:
     virtual bool begin(ToolServices& ctx, PictureView& v, const QPointF& imagePos) = 0;
     // A refusal the layer checks do not explain, e.g. a missing source.

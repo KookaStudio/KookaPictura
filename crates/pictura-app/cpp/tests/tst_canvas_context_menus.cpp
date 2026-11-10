@@ -86,6 +86,8 @@ private slots:
     void brushPickerIsNotACapturingPopup();
     void brushPickerKeepsBrushHover();
     void brushPickerDismissesOnOutsidePress();
+    void stampToolsOpenBrushPicker();
+    void stampPresetApplies();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -519,6 +521,46 @@ void CanvasContextMenusTest::brushPickerDismissesOnOutsidePress()
     QMouseEvent release(QEvent::MouseButtonRelease, f.canvas->mapFromGlobal(outside), outside,
                         Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     QCoreApplication::sendEvent(f.canvas, &release);
+}
+
+void CanvasContextMenusTest::stampToolsOpenBrushPicker()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ccm_stamp_open"));
+    QVERIFY2(f.ok(), "stamp fixture");
+    const pictura::ToolId stamps[] = {pictura::ToolId::CloneStamp,
+                                      pictura::ToolId::PatternStamp,
+                                      pictura::ToolId::HistoryBrush,
+                                      pictura::ToolId::ArtHistoryBrush};
+    for (pictura::ToolId id : stamps) {
+        f.frame.setActiveTool(id);
+        QSignalSpy spy(f.tools, &pictura::ToolController::brushPickerRequested);
+        QVERIFY(f.tools->routeCanvasContextMenu(f.canvas, QPointF(2, 2), QPoint(10, 10)));
+        QCOMPARE(spy.count(), 1);
+    }
+}
+
+void CanvasContextMenusTest::stampPresetApplies()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ccm_stamp_apply"));
+    QVERIFY2(f.ok(), "stamp fixture");
+    const pictura::ToolId stamps[] = {pictura::ToolId::CloneStamp,
+                                      pictura::ToolId::PatternStamp,
+                                      pictura::ToolId::HistoryBrush,
+                                      pictura::ToolId::ArtHistoryBrush};
+    for (pictura::ToolId id : stamps) {
+        f.frame.setActiveTool(id);
+        f.tools->routeCanvasContextMenu(f.canvas, QPointF(2, 2), QPoint(10, 10));
+        auto* picker = window_->findChild<pictura::BrushPresetPicker*>();
+        QVERIFY(picker != nullptr);
+        auto* paint = f.tools->optionsFor<pictura::PaintOptions>(id);
+        QVERIFY(paint != nullptr);
+        // Force a differing size so applying a preset is observable.
+        paint->setSize(paint->size() == 7 ? 8 : 7);
+        QSignalSpy sizeSpy(f.tools, &pictura::ToolController::brushSizeChanged);
+        picker->choosePresetForTest(0);
+        QVERIFY(sizeSpy.count() > 0);
+        QCOMPARE(paint->size(), 5);
+    }
 }
 
 QTEST_MAIN(CanvasContextMenusTest)
