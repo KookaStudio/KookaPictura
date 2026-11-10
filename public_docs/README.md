@@ -13,6 +13,10 @@ Photoshop background.
 - [Showing and hiding panels](panels-menu.md)
 - [Search](search.md)
 
+## Settings
+
+- [Backing up and restoring settings](settings-backup.md)
+
 ## Tools
 
 - [The toolbox](toolbox.md)

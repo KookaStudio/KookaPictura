@@ -1,4 +1,5 @@
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDebug>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QFile>
@@ -56,6 +57,7 @@
 #include "panels/panel_group.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "settings_backup.h"
 #include "theme.h"
 #include "toolbox.h"
 #include "tools.h"
@@ -275,6 +277,15 @@ int main(int argc, char* argv[])
     // Select and pin one backend before the frame's startup probe. Linux is a
     // no-op; Windows probes candidates in a child process.
     pictura::prepareGpuBackend();
+
+    // A staged settings import is applied before the frame loads the session,
+    // the workspaces, or the Actions palette. A corrupt file is quarantined by
+    // the store and the launch continues with the existing settings.
+    QString settingsImportError;
+    if (!pictura::applyPendingSettingsImport(&settingsImportError)) {
+        qWarning().noquote() << "pictura: settings import was not applied:"
+                             << settingsImportError;
+    }
 
     pictura::PicturaMainWindow frame(nullptr, !selfTest && !headless);
     // Crash recovery runs only for an interactive launch: the self-test, a

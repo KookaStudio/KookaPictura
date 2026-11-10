@@ -187,6 +187,7 @@ set(PICTURA_QT_TESTS
     tst_tool_commit
     tst_recovery
     tst_session_store
+    tst_settings_backup
     tst_rulers_guides
     tst_panels_parity
     tst_selection_alt
