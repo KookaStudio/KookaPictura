@@ -379,3 +379,265 @@ fn a_duplicated_layer_gets_unique_stable_stamps() {
         stamps
     );
 }
+
+// Tile sharing (#1215): states and snapshots hold references to tiles, and the
+// budget counts each tile history keeps beyond the live document once.
+
+const SIDE: u32 = 512;
+const TILE_BYTES: u64 = (pictura_core::TILE * pictura_core::TILE) as u64;
+
+/// A 512² document with one patterned layer: four dense 256² tiles a plane.
+fn patterned_doc() -> Document {
+    let mut doc = Document::new(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight);
+    let rgba: Vec<u8> = (0..(SIDE * SIDE * 4) as usize)
+        .map(|i| (i as u8).wrapping_mul(31).wrapping_add((i >> 11) as u8))
+        .collect();
+    let _ = pictura_render::add_raster_layer_from_rgba(&mut doc, "px", SIDE, SIDE, &rgba);
+    doc.composite = pictura_render::composite_rgba(&doc);
+    doc
+}
+
+/// Write `value` over `rect` of layer `layer`'s channel `channel`.
+fn paint(
+    doc: &mut Document,
+    layer: usize,
+    channel: usize,
+    rect: (usize, usize, usize, usize),
+    value: u8,
+) {
+    let (x, y, w, h) = rect;
+    let width = doc.layers[layer].rect.width().max(0) as usize;
+    let plane = &mut doc.layers[layer].channels[channel].data;
+    plane.write_rect_from(x..x + w, y..y + h, width, &vec![value; w * h]);
+}
+
+fn record(history: &mut History, live: &mut Document, label: &str) {
+    history.capture_live(live, &None, &LayerTarget::default(), label);
+}
+
+fn snapshot_of(live: &Document) -> Snapshot {
+    Snapshot {
+        doc: live.clone(),
+        selection: None,
+        quick_mask: None,
+    }
+}
+
+#[test]
+fn shared_tiles_counted_once() {
+    let mut live = patterned_doc();
+    let mut history = History::default();
+    record(&mut history, &mut live, "Open");
+    assert_eq!(
+        history.held_bytes(),
+        0,
+        "an opened document costs nothing more"
+    );
+
+    paint(&mut live, 0, 0, (10, 10, 4, 4), 1);
+    record(&mut history, &mut live, "A");
+    assert_eq!(
+        history.held_bytes(),
+        TILE_BYTES,
+        "A keeps the tile it replaced"
+    );
+
+    history.add_snapshot("At A", snapshot_of(&live), LayerTarget::default());
+    assert_eq!(
+        history.held_bytes(),
+        TILE_BYTES,
+        "a snapshot of the live document shares every tile with it"
+    );
+
+    paint(&mut live, 0, 0, (20, 20, 4, 4), 2);
+    record(&mut history, &mut live, "B");
+    assert_eq!(
+        history.held_bytes(),
+        2 * TILE_BYTES,
+        "B's delta and the snapshot hold one tile, counted once"
+    );
+    assert_eq!(history.held_bytes(), history.recount_held_bytes());
+
+    let (mut selection, mut target) = (None, LayerTarget::default());
+    history.undo_live(&mut live, &mut selection, &mut target);
+    assert_eq!(
+        history.held_bytes(),
+        2 * TILE_BYTES,
+        "after the undo the snapshot's tile is live again and B keeps its redo tile"
+    );
+    history.redo_live(&mut live, &mut selection, &mut target);
+    assert_eq!(history.held_bytes(), 2 * TILE_BYTES);
+}
+
+#[test]
+fn snapshot_costs_no_pixels() {
+    let mut live = patterned_doc();
+    let mut history = History::default();
+    record(&mut history, &mut live, "Open");
+    paint(&mut live, 0, 1, (300, 300, 8, 8), 9);
+    record(&mut history, &mut live, "Paint");
+    let held = history.held_bytes();
+
+    pictura_core::reset_materializations();
+    let snapshot = snapshot_of(&live);
+    history.add_snapshot("Snapshot 1", snapshot, LayerTarget::default());
+    assert_eq!(
+        history.held_bytes(),
+        held,
+        "taking a snapshot copies no tile"
+    );
+
+    paint(&mut live, 0, 2, (0, 0, 8, 8), 3);
+    record(&mut history, &mut live, "Edit");
+    let edited = history.held_bytes();
+    assert_eq!(
+        edited,
+        held + TILE_BYTES,
+        "the edit keeps the tile it replaced"
+    );
+
+    let restored = history.snapshot(0).expect("the snapshot");
+    live = restored.doc;
+    record(&mut history, &mut live, "Snapshot 1");
+    assert_eq!(
+        pictura_core::materializations(),
+        0,
+        "the snapshot and its restore materialize no plane"
+    );
+    assert_eq!(
+        history.held_bytes(),
+        edited,
+        "the restore swaps references: the edited tile moves into the delta, no tile is copied"
+    );
+    let snap = history.snapshot(0).expect("the snapshot");
+    let mut shared = true;
+    let mut theirs = Vec::new();
+    planes::each_plane(&snap.doc, &mut |p, _, _, _| theirs.push(p.clone()));
+    let mut index = 0;
+    planes::each_plane(&live, &mut |p, _, _, _| {
+        shared &= p.shares(&theirs[index]);
+        index += 1;
+    });
+    assert!(
+        shared,
+        "the restored document shares every tile with the snapshot"
+    );
+}
+
+#[test]
+fn purge_releases_history_tiles() {
+    let mut live = patterned_doc();
+    let mut history = History::default();
+    record(&mut history, &mut live, "Open");
+    paint(&mut live, 0, 0, (0, 0, 4, 4), 1);
+    record(&mut history, &mut live, "A");
+    history.add_snapshot("At A", snapshot_of(&live), LayerTarget::default());
+    paint(&mut live, 0, 0, (0, 0, 4, 4), 2);
+    record(&mut history, &mut live, "B");
+    assert_eq!(history.held_bytes(), 2 * TILE_BYTES);
+
+    history.purge_states();
+    assert!(!history.can_undo(), "a purge is not undoable");
+    assert_eq!(history.count(), 1);
+    assert_eq!(
+        history.held_bytes(),
+        TILE_BYTES,
+        "only the snapshot's tile is left"
+    );
+    history.purge_snapshots();
+    assert_eq!(history.held_bytes(), 0);
+
+    paint(&mut live, 0, 0, (0, 0, 4, 4), 3);
+    record(&mut history, &mut live, "C");
+    history.add_snapshot("At C", snapshot_of(&live), LayerTarget::default());
+    paint(&mut live, 0, 0, (0, 0, 4, 4), 4);
+    record(&mut history, &mut live, "D");
+    assert!(history.held_bytes() > 0);
+    history.purge();
+    assert_eq!(
+        history.held_bytes(),
+        0,
+        "Purge All releases every history tile"
+    );
+    assert_eq!(history.held_bytes(), history.recount_held_bytes());
+    assert!(!history.can_undo());
+    assert_eq!(history.snapshot_count(), 0);
+}
+
+/// A fixed-seed linear congruential generator.
+struct Lcg(u64);
+
+impl Lcg {
+    fn below(&mut self, bound: usize) -> usize {
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((self.0 >> 33) as usize) % bound.max(1)
+    }
+}
+
+#[test]
+fn undo_redo_identity_seeded() {
+    let mut rng = Lcg(0x1215);
+    let mut live = patterned_doc();
+    let mut history = History::default();
+    record(&mut history, &mut live, "Open");
+    let mut states = vec![live.clone()];
+    for step in 0..16 {
+        match rng.below(5) {
+            0 => {
+                let rgba = vec![rng.below(256) as u8; 64 * 64 * 4];
+                let _ = pictura_render::add_raster_layer_from_rgba(&mut live, "new", 64, 64, &rgba);
+            }
+            1 => {
+                let layer = rng.below(live.layers.len());
+                live.layers[layer].visible = !live.layers[layer].visible;
+            }
+            _ => {
+                let layer = rng.below(live.layers.len());
+                let width = live.layers[layer].rect.width().max(0) as usize;
+                let height = live.layers[layer].rect.height().max(0) as usize;
+                let (w, h) = (
+                    1 + rng.below(width.min(300)),
+                    1 + rng.below(height.min(300)),
+                );
+                let (x, y) = (rng.below(width - w + 1), rng.below(height - h + 1));
+                let channel = rng.below(live.layers[layer].channels.len());
+                paint(
+                    &mut live,
+                    layer,
+                    channel,
+                    (x, y, w, h),
+                    rng.below(256) as u8,
+                );
+            }
+        }
+        record(&mut history, &mut live, &format!("Edit {step}"));
+        states.push(live.clone());
+    }
+    let (mut selection, mut target) = (None, LayerTarget::default());
+    for expected in states.iter().rev().skip(1) {
+        history
+            .undo_live(&mut live, &mut selection, &mut target)
+            .expect("an undo");
+        assert!(live == *expected, "undo restores the captured bytes");
+        let current = &history.current.as_ref().expect("current").doc;
+        assert!(
+            planes::planes_agree(current, &live),
+            "stamps agree after undo"
+        );
+    }
+    for expected in states.iter().skip(1) {
+        history
+            .redo_live(&mut live, &mut selection, &mut target)
+            .expect("a redo");
+        assert!(live == *expected, "redo restores the captured bytes");
+        let current = &history.current.as_ref().expect("current").doc;
+        assert!(
+            planes::planes_agree(current, &live),
+            "stamps agree after redo"
+        );
+    }
+    assert_eq!(history.held_bytes(), history.recount_held_bytes());
+}

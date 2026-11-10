@@ -10,7 +10,7 @@ use crate::cxxqt_object::impl_core::save_jobs::{save_finish_rust, save_start_rus
 use crate::cxxqt_object::impl_transform::translate_move_group;
 use crate::cxxqt_object::open_jobs::{apply_opened, decode_psd, make_background};
 use crate::cxxqt_object::state::PictureViewRust;
-use crate::history::{detached_copy, History, Restored};
+use crate::history::{History, Restored};
 use crate::layer_target::LayerTarget;
 use pictura_core::mask_ops::TiledMask;
 use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
@@ -280,6 +280,13 @@ pub(super) fn undo_redo(view: &mut PictureViewRust) {
 
 /// M8, as `history_add_snapshot` then `history_restore_snapshot`.
 pub(super) fn snapshot_restore(view: &mut PictureViewRust) {
+    snapshot_restore_edit(view);
+    view.reset_pyramid();
+}
+
+/// M8 without the display rebuild (#1216): the snapshot, the restore and its
+/// recorded state, which share tiles instead of copying them (#1215).
+pub(super) fn snapshot_restore_edit(view: &mut PictureViewRust) {
     let snapshot = view.named_snapshot().expect("a snapshot");
     let target = view.layer_target.clone();
     view.session
@@ -287,10 +294,9 @@ pub(super) fn snapshot_restore(view: &mut PictureViewRust) {
         .add_snapshot("Benchmark", snapshot, target);
     let snapshot = view.session.history.snapshot(0).expect("the snapshot");
     view.cancel_active_sessions_report_only();
-    view.session.doc = Some(detached_copy(&snapshot.doc));
+    view.session.doc = Some(snapshot.doc);
     view.session.set_selection(snapshot.selection);
     record(view, "Benchmark");
-    view.composite_full();
 }
 
 /// M9, as a Move tool drag of Layer 1 by 500 px: the translate, the deferred

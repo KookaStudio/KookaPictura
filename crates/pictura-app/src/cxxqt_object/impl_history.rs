@@ -5,7 +5,7 @@ use super::helpers::{clamp_region, memory_gate, paint_timing};
 use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame};
 use super::presentation::{Dirty, Presentation, Rebuild};
 use super::{qobject, PictureViewRust};
-use crate::history::{detached_copy, History, Restored, Snapshot};
+use crate::history::{History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -56,13 +56,14 @@ impl PictureViewRust {
         Some(clipped)
     }
 
-    /// The live document for a named snapshot: planes of its own, so the next
-    /// dab does not copy a whole plane, and an exact composite. Mid-stroke the
-    /// document's composite is still the pre-stroke base, so it is composited
-    /// from the painted layers; anything that presents the snapshot can then
-    /// trust it the way a jump trusts a state's composite.
+    /// The live document for a named snapshot, sharing every tile with it: a
+    /// later write forks only the tiles it touches, so the snapshot costs the
+    /// document's metadata, not its pixels (#1215). Its composite is exact.
+    /// Mid-stroke the document's composite is still the pre-stroke base, so it
+    /// is composited from the painted layers; anything that presents the
+    /// snapshot can then trust it the way a jump trusts a state's composite.
     pub(super) fn named_snapshot(&self) -> Option<Snapshot> {
-        let mut doc = detached_copy(self.session.doc.as_ref()?);
+        let mut doc = self.session.doc.as_ref()?.clone();
         if self.session.live.stroke().is_some() {
             let rendered = current_buffer(&doc, self.gpu_compute);
             DocumentComposite::new(&mut doc).store(&rendered);
@@ -246,12 +247,13 @@ impl qobject::PictureView {
 
     pub fn history_add_snapshot(mut self: Pin<&mut Self>, label: &QString) -> bool {
         self.as_mut().settle_pending_composite();
+        let stroking = self.rust().session.live.stroke().is_some();
         let estimate = self
             .rust()
             .session
             .doc
             .as_ref()
-            .map_or(0, memory_gate::snapshot_bytes);
+            .map_or(0, |doc| memory_gate::snapshot_bytes(doc, stroking));
         if !memory_gate::admit_fresh(estimate) {
             return false;
         }
@@ -289,7 +291,7 @@ impl qobject::PictureView {
         let target = self.rust().session.history.snapshot_target(i as usize);
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions_report_only();
-        rust.session.doc = Some(detached_copy(&snapshot.doc));
+        rust.session.doc = Some(snapshot.doc);
         rust.session.set_selection(snapshot.selection);
         rust.session
             .restore_quick_mask_selection(snapshot.quick_mask);
@@ -311,7 +313,17 @@ impl qobject::PictureView {
         rust.canvas_proxy = None;
         rust.session.deselected_selection = None;
         rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
-        self.as_mut().recomposite();
+        // A named snapshot's composite is exact (see `named_snapshot`), so the
+        // restore presents it instead of compositing the layers again.
+        let exact = rust.session.doc.as_ref().is_some_and(|doc| {
+            doc.composite.width == doc.width && doc.composite.height == doc.height
+        });
+        if exact {
+            rust.reset_pyramid();
+            self.as_mut().changed();
+        } else {
+            self.as_mut().recomposite();
+        }
         self.as_mut().session_cancelled();
         true
     }

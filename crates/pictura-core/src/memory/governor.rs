@@ -20,6 +20,9 @@ pub const CANVAS_SCALE_BYTES: usize = 16 * 1024 * 1024;
 /// `preferences.md`; owner decision over a community guide's 70 %).
 pub const DEFAULT_USAGE_PERCENT: u8 = 60;
 
+/// History may hold one part in this many of the ceiling (#1207, #1215).
+pub const HISTORY_SHARE: u64 = 2;
+
 /// Why memory was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryError {
@@ -193,6 +196,12 @@ impl Governor {
 
     pub fn ceiling(&self) -> Option<u64> {
         ceiling_of(&self.reading(), self.usage_percent())
+    }
+
+    /// The bytes history may hold beyond the live document: its share of the
+    /// ceiling. `None` when the host reports no ceiling.
+    pub fn history_budget(&self) -> Option<u64> {
+        self.ceiling().map(|ceiling| ceiling / HISTORY_SHARE)
     }
 
     pub fn room(&self) -> Option<u64> {

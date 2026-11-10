@@ -58,14 +58,15 @@ fn hinted_and_unhinted_captures_match() {
 
 #[test]
 fn hinted_capture_skips_outside_tiles() {
-    let mut doc = Document::new(128, 128, ColorMode::Rgb, BitDepth::Eight);
-    let rgba = vec![128u8; 128 * 128 * 4];
-    let _ = pictura_render::add_raster_layer_from_rgba(&mut doc, "px", 128, 128, &rgba);
+    // Two 256² tiles across, so (300, 300) lies in a tile the hint misses.
+    let mut doc = Document::new(512, 512, ColorMode::Rgb, BitDepth::Eight);
+    let rgba = vec![128u8; 512 * 512 * 4];
+    let _ = pictura_render::add_raster_layer_from_rgba(&mut doc, "px", 512, 512, &rgba);
     doc.composite = pictura_render::composite_rgba(&doc);
     let initial = doc.composite.data.as_slice().to_vec();
     let mut history = History::default();
     open(&mut history, &mut doc);
-    write_composite(&mut doc, 100, 100, 240);
+    write_composite(&mut doc, 300, 300, 240);
     history.capture_live_with(
         &mut doc,
         &None,
@@ -74,8 +75,8 @@ fn hinted_capture_skips_outside_tiles() {
         Some(&[hint_rect()]),
     );
     assert_eq!(
-        captured(&history).composite.data.as_slice()[100 * 128 + 100],
-        initial[100 * 128 + 100],
+        captured(&history).composite.data.as_slice()[300 * 512 + 300],
+        initial[300 * 512 + 300],
         "a caller-violating hint skips the outside tile"
     );
     assert_ne!(

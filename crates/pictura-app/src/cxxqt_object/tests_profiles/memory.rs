@@ -46,7 +46,9 @@ const BASELINE: &[(&str, usize)] = &[
     ("bucket_whole_layer", 72_326_344),
     ("brush_stroke", 2_449_828),
     ("undo_redo", 144_368_840),
-    ("snapshot_restore", 98_100_677),
+    // Tile-shared snapshots (#1215): no plane is copied; what is left is the
+    // display rebuilt from the snapshot's composite (#1216).
+    ("snapshot_restore", 23_102_429),
     ("move_layer", 2_022_008),
     ("free_transform", 3_659_676),
     ("save_psd", 128_664_188),
@@ -420,6 +422,57 @@ fn snapshot_restore_heap_peak_full() {
     );
 }
 
+/// M8's edit at `side`, without the display rebuild: its heap peak and its time.
+fn snapshot_restore_edit_cost(side: u32) -> (usize, std::time::Duration) {
+    let mut elapsed = std::time::Duration::ZERO;
+    let (peak, materialized) = measure(
+        || with_stroke(side),
+        |view| {
+            let start = std::time::Instant::now();
+            sc::snapshot_restore_edit(view);
+            elapsed = start.elapsed();
+        },
+    );
+    assert_eq!(
+        materialized, 0,
+        "the snapshot and restore materialize no plane"
+    );
+    println!(
+        "snapshot_restore edit at {side}²: heap peak {:.2} MiB ({peak} B), {:.1} ms",
+        mib(peak),
+        elapsed.as_secs_f64() * 1e3
+    );
+    (peak, elapsed)
+}
+
+/// The snapshot and its restore cost tile tables, not pixels (#1215): at most
+/// 16 MiB at 17000², so far less at the guard size.
+#[test]
+fn snapshot_restore_edit_shares_tiles() {
+    if !alone_in_process("snapshot_restore_edit_shares_tiles") {
+        return;
+    }
+    let (peak, _) = snapshot_restore_edit_cost(GUARD_SIDE);
+    assert!(
+        peak <= 16 << 20,
+        "the snapshot and restore copied pixels: {peak} B"
+    );
+}
+
+#[test]
+#[ignore = "17000x17000 snapshot and restore; run explicitly with --run-ignored only"]
+fn snapshot_restore_edit_shares_tiles_full() {
+    let (peak, elapsed) = snapshot_restore_edit_cost(FULL_SIDE);
+    assert!(
+        peak <= 16 << 20,
+        "the snapshot and restore added {peak} B, above 16 MiB"
+    );
+    assert!(
+        elapsed <= std::time::Duration::from_millis(100),
+        "the snapshot and restore took {elapsed:?}, above 100 ms"
+    );
+}
+
 // M9
 #[test]
 fn move_layer_heap_peak() {
@@ -577,7 +630,7 @@ fn estimates_cover_the_measured_peaks() {
     );
 
     let start = doc(&with_stroke(side));
-    let estimate = gate::snapshot_bytes(&start) + gate::snapshot_restore_bytes(&start);
+    let estimate = gate::snapshot_bytes(&start, false) + gate::snapshot_restore_bytes(&start);
     drop(start);
     let peak = measure(|| with_stroke(side), sc::snapshot_restore).0;
     check("snapshot_restore", peak, estimate);

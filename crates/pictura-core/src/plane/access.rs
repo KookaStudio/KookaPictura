@@ -13,7 +13,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use super::{Plane, Store, MATERIALIZATIONS};
-use crate::tiled_plane::{TileData, TileMut, TileRef, TileSample, TileState, TILE};
+use crate::tiled_plane::{SharedTile, TileData, TileMut, TileRef, TileSample, TileState, TILE};
 
 /// Run `f` and panic if it materialized a tiled plane.
 ///
@@ -113,6 +113,26 @@ impl<T: TileSample> Plane<T> {
         self.touch();
         match &mut self.store {
             Store::Tiled(t) => t.adopt_tile(i, src),
+            Store::Flat(_) => false,
+        }
+    }
+
+    /// Tile `i` with its generation, held apart from the plane; `None` while
+    /// flat or past the last tile. No sample is copied.
+    pub fn shared_tile(&self, i: usize) -> Option<SharedTile<T>> {
+        self.tiled().and_then(|t| t.shared_tile(i))
+    }
+
+    /// Exchange tile `i` with `held`, a tile [`Plane::shared_tile`] took from
+    /// a plane of this geometry at the same index: references move, samples do
+    /// not. `false`, leaving both alone, while flat or past the last tile.
+    pub fn swap_tile(&mut self, i: usize, held: &mut SharedTile<T>) -> bool {
+        if i >= self.tile_count() {
+            return false;
+        }
+        self.touch();
+        match &mut self.store {
+            Store::Tiled(t) => t.swap_tile(i, held),
             Store::Flat(_) => false,
         }
     }

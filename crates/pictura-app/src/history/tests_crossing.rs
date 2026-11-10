@@ -3,7 +3,8 @@
 use super::*;
 use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerStack};
 
-const SIDE: u32 = 128;
+// Two 256² tiles a side, so one changed tile is a quarter of the document.
+const SIDE: u32 = 512;
 
 fn layer(side: u32) -> Layer {
     let side_i = side as i32;
@@ -44,26 +45,27 @@ fn crossing_a_segment_reports_the_changed_tile() {
     history.capture_live(&mut live, &selection, &target, "Open");
 
     resize_layer(&mut live);
-    live.composite.data[(90 * SIDE + 70) as usize] = 200;
+    live.composite.data[(300 * SIDE + 280) as usize] = 200;
     history.capture_live(&mut live, &selection, &target, "Resize");
     assert_eq!(history.anchor_count(), 2);
 
+    // The damage is the box of the samples that changed, not the whole tile.
     let tile = PsdRect {
-        top: 64,
-        left: 64,
-        bottom: 128,
-        right: 128,
+        top: 300,
+        left: 280,
+        bottom: 301,
+        right: 281,
     };
     assert_eq!(
         history.undo_live(&mut live, &mut selection, &mut target),
         Some(Restored::Region(tile))
     );
-    assert_eq!(live.composite.data[(90 * SIDE + 70) as usize], 1);
+    assert_eq!(live.composite.data[(300 * SIDE + 280) as usize], 1);
     assert_eq!(
         history.redo_live(&mut live, &mut selection, &mut target),
         Some(Restored::Region(tile))
     );
-    assert_eq!(live.composite.data[(90 * SIDE + 70) as usize], 200);
+    assert_eq!(live.composite.data[(300 * SIDE + 280) as usize], 200);
 }
 
 #[test]
@@ -86,7 +88,10 @@ fn crossing_a_segment_with_a_changed_channel_stays_bounded() {
     else {
         panic!("the restore is bounded");
     };
-    assert!(rect.right <= 64 && rect.bottom <= 64, "one tile: {rect:?}");
+    assert!(
+        rect.right <= 256 && rect.bottom <= 256,
+        "one tile: {rect:?}"
+    );
 }
 
 #[test]
