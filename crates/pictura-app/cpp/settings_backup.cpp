@@ -21,6 +21,7 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QWidget>
 
 #include <algorithm>
@@ -436,7 +437,6 @@ bool sanitizeBackup(const QJsonObject& source, QJsonObject* out, QString* error)
 {
     *out = source;
     out->insert(QStringLiteral("format"), QString::fromLatin1(kSettingsBackupFormat));
-    out->insert(QStringLiteral("formatVersion"), kSettingsBackupFormatVersion);
 
     if (out->contains(QStringLiteral("session"))) {
         if (!out->value(QStringLiteral("session")).isObject()) {
