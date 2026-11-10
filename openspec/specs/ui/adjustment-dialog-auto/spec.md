@@ -1,7 +1,8 @@
 # ui/adjustment-dialog-auto Specification
 
 ## Purpose
-TBD - created by archiving change adjustment-dialog-auto. Update Purpose after archive.
+The shared histogram Auto behind the Levels, Curves, and Brightness/Contrast
+Image > Adjustments dialogs.
 
 ## Requirements
 

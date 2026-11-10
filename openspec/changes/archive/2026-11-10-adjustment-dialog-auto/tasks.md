@@ -30,4 +30,4 @@
 - [x] `openspec validate --all --strict`
 - [x] `cargo fmt --all`
 - [x] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `bash scripts/verify-fast.sh`
+- [x] `bash scripts/verify-fast.sh`
