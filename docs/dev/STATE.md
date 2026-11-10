@@ -4,6 +4,19 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Settings JSON backup and restore** (#1155, OpenSpec change
+  `settings-json-backup-restore`). `Edit ▸ Preferences ▸ General` gains
+  **Export Settings…** and **Import Settings…**. Export writes one pretty-printed
+  `pictura.json` (`format: pictura-settings`, `formatVersion: 1`) carrying the
+  session store, `workspaces/`, adjustment presets, installed `.atn` sets, the
+  Actions palette, and PDF presets; machine caches and recovery snapshots are
+  excluded. Import validates the format, backs the current settings up under
+  `settings-backups/`, sanitizes missing recent files and off-screen geometry,
+  and stages `pending-settings.json`. `main.cpp` applies it before the frame
+  loads the session, so the running process's quit-save cannot overwrite it; the
+  prompt offers Quit Now / Later. `settings_backup.{h,cpp}` owns the stores;
+  `tst_settings_backup` covers export, staging, apply, sanitization, quarantine,
+  and the round trip.
 - **Selection marquee feedback** (#275 follow-up, OpenSpec change
   `selection-marquee-feedback`). Fixed Ratio now stays inside the cursor's
   drag box (one-axis drags derive the other axis); Fixed Size puts its top-left

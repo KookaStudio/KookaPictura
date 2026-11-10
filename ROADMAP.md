@@ -497,6 +497,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       commands. `crates/pictura-app/cpp/commands.cpp`.
 - [x] **Preferences** — General, Interface, Performance, Units and Guides.
       `crates/pictura-app/cpp/preferences_dialog.cpp`.
+- [x] **Settings backup and restore** — Preferences ▸ General exports every user
+      store to one `pictura.json` and stages an import that applies before the
+      next launch (#1155). `crates/pictura-app/cpp/settings_backup.cpp`.
 - [x] **Live UI size** — Window ▸ UI Size row (minus, readout, plus, reset) and
       an Interface ▸ UI Size control, 75–200 % in 10 % steps, applied without a
       restart and persisted. `Ctrl+Alt++`, `Ctrl+Alt+-`, and `Ctrl+Alt+0` step
