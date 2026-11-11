@@ -1,7 +1,9 @@
 # document/scratch-disk Specification
 
 ## Purpose
-TBD - created by archiving change scratch-disk-and-packed-tiles. Update Purpose after archive.
+Give the engine a checksummed scratch file to hold tile payloads that do not fit
+in RAM, so a document larger than memory stays editable. The scratch volume is
+private to the process, removed on exit, and swept of files left by a crashed run.
 
 ## Requirements
 

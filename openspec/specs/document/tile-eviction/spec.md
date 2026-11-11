@@ -1,7 +1,9 @@
 # document/tile-eviction Specification
 
 ## Purpose
-TBD - created by archiving change scratch-disk-and-packed-tiles. Update Purpose after archive.
+Keep resident tile memory under the memory governor's budget by packing cold
+tiles in RAM and spilling them to scratch disk. Eviction never changes a sample:
+every access path restores a tile before it is read or written.
 
 ## Requirements
 
