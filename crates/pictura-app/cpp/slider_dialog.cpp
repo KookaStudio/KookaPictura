@@ -9,11 +9,14 @@
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 
+#include <algorithm>
+#include <cmath>
+
 namespace pictura {
 
 SliderDialog::SliderDialog(PictureView* view, const QByteArray& block, const QRect& visible,
                            const QString& title, const QVector<Row>& rows,
-                           const QStringList& disabledButtons, QWidget* parent)
+                           const QStringList& extraButtons, QWidget* parent)
     : AdjustmentDialog(view, block, visible, title, parent)
 {
     auto* outer = new QHBoxLayout(this);
@@ -36,14 +39,42 @@ SliderDialog::SliderDialog(PictureView* view, const QByteArray& block, const QRe
     left->addWidget(previewCheck(), 0, Qt::AlignRight);
     outer->addLayout(left, 1);
 
-    QVBoxLayout* buttons = buttonColumn(disabledButtons);
-    for (const QString& text : disabledButtons) {
-        button(text)->setEnabled(false);
-    }
+    QVBoxLayout* buttons = buttonColumn(extraButtons);
     buttons->addStretch(1);
     outer->addLayout(buttons);
 
     setMinimumWidth(420);
+}
+
+void SliderDialog::applyAuto()
+{
+    bool brightnessRow = false;
+    bool contrastRow = false;
+    for (const Row& row : rows_) {
+        brightnessRow = brightnessRow || row.key == QLatin1String("brightness");
+        contrastRow = contrastRow || row.key == QLatin1String("contrast");
+    }
+    int lo = 0;
+    int hi = 0;
+    if (!brightnessRow || !contrastRow || !autoEndpoints(0, lo, hi)) {
+        return;
+    }
+    // Behavioral approximation of CS6's closed fit: the modern gamma curve
+    // centres the occupied range, then the S-curve's central slope expands it.
+    const double mid = (lo + hi) / 510.0;
+    const double gamma = std::log(mid) / std::log(0.5);
+    const double brightness = std::clamp(150.0 * std::log2(gamma), -150.0, 150.0);
+    const double effective = std::pow(2.0, brightness / 150.0);
+    const double low = std::pow(lo / 255.0, 1.0 / effective);
+    const double high = std::pow(hi / 255.0, 1.0 / effective);
+    const double half = std::max(0.5 - low, high - 0.5);
+    const double slope = half > 0.0 ? 0.5 / half : 1.0;
+    const double contrast = std::clamp(100.0 * (slope - 1.0), -50.0, 100.0);
+    if (!setParams({{QStringLiteral("brightness"), std::round(brightness)},
+                    {QStringLiteral("contrast"), std::round(contrast)}})) {
+        return;
+    }
+    reloadFromBlock();
 }
 
 void SliderDialog::reloadFromBlock()

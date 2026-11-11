@@ -119,6 +119,13 @@ protected:
     // A 256-bin histogram of the canvas as the dialog opened: 0 luminosity,
     // 1 red, 2 green, 3 blue.
     const std::array<int, 256>& histogram(int channel) const;
+    // The Auto black / white endpoints of `channel`'s histogram: 0.1% of the
+    // population discarded at each end. False (the outputs untouched) when the
+    // histogram is empty or the occupied range is narrower than two levels.
+    bool autoEndpoints(int channel, int& lo, int& hi) const;
+    // Apply the shared histogram Auto. The hand-laid pages override this; the
+    // generic pages have no Auto button.
+    virtual void applyAuto();
     QCheckBox* previewCheck();
     // CS6's right-hand column: OK (default), Cancel, then one button per
     // `extra` label, reachable through `button(label)`.
@@ -140,8 +147,9 @@ protected:
     // A colour swatch button and its fill (also kept as its "color" property).
     ColorSwatchWidget* swatch(const QString& name);
     static void paintSwatch(ColorSwatchWidget* button, const QColor& color);
-    // The newer layout's bottom row: Cancel, then OK (default), at the right.
-    QHBoxLayout* bottomButtons();
+    // The newer layout's bottom row: any `extra` buttons, then Cancel and OK
+    // (default), at the right. An `Auto` extra is wired to `applyAuto`.
+    QHBoxLayout* bottomButtons(const QStringList& extra = {});
     // The block key a stacked or ramp row named `key` edits; Hue/Saturation prefixes
     // the selected colour range.
     virtual QString paramKey(const QString& key) const { return key; }

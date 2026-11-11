@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Adjustment dialog Auto** (#578, OpenSpec change `adjustment-dialog-auto`).
+  Levels, Curves, and Brightness/Contrast share one 0.1%-clip histogram Auto
+  (`AdjustmentDialog::autoEndpoints`): Levels sets the selected channel's input
+  endpoints, Curves writes a two-point stretch, and Brightness/Contrast derives
+  a brightness/contrast pair (behavioral parity; Adobe's fit is closed). The
+  Auto Color Correction Options dialog (#559) and the Properties panel Auto
+  button remain open. Tests: four `tst_image_adjustments` cases.
 - **Edit > Auto-Align Layers** (#582, OpenSpec change `auto-align-layers`).
   All seven CS6 projections ship: Auto, Perspective, Cylindrical, Spherical,
   Scene Collage, Reposition Only, and Lens Correction. The engine

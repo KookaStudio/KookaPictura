@@ -155,7 +155,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | IMG-6 | `32-bit-hdr.md` | Merge To HDR Pro | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #558 |
 | IMG-7 | `auto-adjustments.md` | Auto Color Correction Options dialog | MISSING | `panel_group_menu.cpp:249` | #559 |
 | IMG-8 | `adjustments/levels.md` | Levels eyedroppers + Alt-drag clipping preview | MISSING | `levels_dialog.cpp` | #560 |
-| IMG-9 | `adjustments/curves.md` | Curves secondary UI (on-image, pencil/smooth, sliders+eyedroppers, display options, Auto, CMYK/Lab graphs) | MISSING | `curves_dialog.h:17`; `panel_group_menu.cpp:250-251` | #561 |
+| IMG-9 | `adjustments/curves.md` | Curves secondary UI (on-image, pencil/smooth, sliders+eyedroppers, display options, CMYK/Lab graphs) | PARTIAL | `curves_dialog.h`; `panel_group_menu.cpp` (Auto shipped in #578) | #561 |
 | IMG-10 | `adjustments/shadow-highlight.md` | Shadows/Highlights local-surround operator (8 controls) | MISSING | `tonal.rs:155-159` | #562 |
 | IMG-11 | `adjustments/threshold.md` | Threshold histogram under the slider | MISSING | `adjustment_params.rs:448-454` | #563 |
 | IMG-12 | `adjustments/vibrance.md` | Vibrance Auto + preset | MISSING | `adjustment_dialog.cpp:446-452` | #564 |
@@ -168,7 +168,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ADJ-4 | `adjustments/gradient-map.md` | Dither + CS6 print-toning presets | MISSING | `gradient_map_dialog.cpp:82-91`; `gradient.rs:295-310` | #574 |
 | ADJ-5 | `adjustments/match-color.md` | On-canvas eyedropper + live Info feedback | MISSING | `match_color_dialog.cpp` | #575 |
 | ADJ-7 | `adjustments/selective-color.md` | Composite-channel-only gate + preset whitelist | MISSING | no channel gate | #577 |
-| ADJ-8 | `adjustments/brightness-contrast.md` | Brightness/Contrast Auto + shared adjustment Auto buttons | MISSING | `adjustment_dialog.cpp:445` | #578 |
+| ADJ-8 | `adjustments/brightness-contrast.md` | Brightness/Contrast Auto + shared adjustment Auto buttons | SHIPPED | `adjustment_dialog.cpp` (`autoEndpoints`, `applyAuto`); `slider_dialog.cpp`; `curves_dialog.cpp`; `tst_image_adjustments` | #578 |
 
 ### 05-layers
 

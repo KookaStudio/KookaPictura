@@ -159,6 +159,31 @@ const std::array<int, 256>& AdjustmentDialog::histogram(int channel) const
     return histograms_[std::clamp(channel, 0, 3)];
 }
 
+bool AdjustmentDialog::autoEndpoints(int channel, int& lo, int& hi) const
+{
+    const std::array<int, 256>& bins = histogram(channel);
+    long long total = 0;
+    for (int count : bins) {
+        total += count;
+    }
+    if (total == 0) {
+        return false;
+    }
+    // CS6's default clip: 0.1% of the pixels off each end.
+    const long long clip = total / 1000;
+    lo = 0;
+    for (long long seen = 0; lo < 255 && (seen += bins[lo]) <= clip;) {
+        ++lo;
+    }
+    hi = 255;
+    for (long long seen = 0; hi > 0 && (seen += bins[hi]) <= clip;) {
+        --hi;
+    }
+    return hi - lo >= 2;
+}
+
+void AdjustmentDialog::applyAuto() {}
+
 QStringList AdjustmentDialog::page() const
 {
     return image_adjustment_page(slice(block_), cmyk_);
@@ -291,7 +316,10 @@ QVBoxLayout* AdjustmentDialog::buttonColumn(const QStringList& extra)
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(add(QStringLiteral("Cancel")), &QPushButton::clicked, this, &QDialog::reject);
     for (const QString& text : extra) {
-        add(text);
+        QPushButton* b = add(text);
+        if (text == QLatin1String("Auto")) {
+            connect(b, &QPushButton::clicked, this, [this] { applyAuto(); });
+        }
     }
     return column;
 }
@@ -370,10 +398,21 @@ void AdjustmentDialog::paintSwatch(ColorSwatchWidget* button, const QColor& colo
     button->setColor(color);
 }
 
-QHBoxLayout* AdjustmentDialog::bottomButtons()
+QHBoxLayout* AdjustmentDialog::bottomButtons(const QStringList& extra)
 {
     auto* row = new QHBoxLayout;
     row->addStretch(1);
+    for (const QString& text : extra) {
+        auto* b = new QPushButton(text, this);
+        b->setObjectName(QStringLiteral("adjustmentButton")
+                         + QString(text).remove(QLatin1Char('.')).remove(QChar(0x2026)));
+        b->setMinimumWidth(84);
+        b->setAutoDefault(false);
+        if (text == QLatin1String("Auto")) {
+            connect(b, &QPushButton::clicked, this, [this] { applyAuto(); });
+        }
+        row->addWidget(b);
+    }
     auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
     auto* ok = new QPushButton(QStringLiteral("OK"), this);
     for (QPushButton* b : {cancel, ok}) {

@@ -96,7 +96,7 @@ private:
     // Write one of the current channel's values; a refused edit reloads.
     void edit(const QString& name, double value);
     void applyPreset(int index);
-    void autoLevels();
+    void applyAuto() override;
     void markCustom();
     int gammaPosition(double gamma) const;
 

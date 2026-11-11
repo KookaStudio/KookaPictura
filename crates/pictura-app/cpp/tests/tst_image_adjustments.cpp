@@ -113,6 +113,10 @@ private slots:
     void dialogPreviewsCancelsAndApplies();
     void colorLookupPresetRebuildsTheLook();
     void brightnessContrastPreviewsAndApplies();
+    void levelsAutoStretchesTheRamp();
+    void curvesAutoStretchesTheChannel();
+    void brightnessContrastAutoRaisesContrast();
+    void autoIsANoOpOnAFlatImage();
     void levelsEditsEachChannelAndPresets();
     void exposureAndVibranceUseTheWideLayouts();
     void hueSaturationEditsEachRangeAndPresets();
@@ -137,6 +141,8 @@ private slots:
 private:
     // Open a 20x20 opaque image of `color` (it becomes the Background).
     bool openImage(const QColor& color);
+    // Open a 20x20 neutral ramp whose columns run `lo` through `hi`.
+    bool openRamp(int lo, int hi);
     QAction* leaf(const QString& name) const;
 
     pictura::test::ScopedStateHome stateHome_;
@@ -165,6 +171,25 @@ bool ImageAdjustmentsTest::openImage(const QColor& color)
     QImage image(20, 20, QImage::Format_RGB32);
     image.fill(color);
     const QString path = dir_.filePath(QStringLiteral("photo.png"));
+    if (!image.save(path) || !window_->openDocumentAtPath(path)) {
+        return false;
+    }
+    QCoreApplication::processEvents();
+    view_ = window_->activeView();
+    window_->registry()->refresh();
+    return view_ != nullptr;
+}
+
+bool ImageAdjustmentsTest::openRamp(int lo, int hi)
+{
+    QImage image(20, 20, QImage::Format_RGB32);
+    for (int x = 0; x < image.width(); ++x) {
+        const int value = lo + qRound(double(x) * (hi - lo) / (image.width() - 1));
+        for (int y = 0; y < image.height(); ++y) {
+            image.setPixel(x, y, qRgb(value, value, value));
+        }
+    }
+    const QString path = dir_.filePath(QStringLiteral("ramp.png"));
     if (!image.save(path) || !window_->openDocumentAtPath(path)) {
         return false;
     }
@@ -288,10 +313,108 @@ void ImageAdjustmentsTest::brightnessContrastPreviewsAndApplies()
     waitForPreview(*view_);
     QVERIFY(qRed(view_->composite_argb(5, 5)) > 100);
     auto* autoButton = dialog->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
-    QVERIFY(autoButton && !autoButton->isEnabled());
+    QVERIFY(autoButton && autoButton->isEnabled());
     dialog->accept();
     QCOMPARE(view_->history_count(), history + 1);
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Brightness/Contrast"));
+}
+
+// Auto uses the shared 0.1% histogram bounds: Levels writes them into the
+// selected channel's input fields, Curves turns them into a two-point stretch,
+// and Brightness/Contrast derives its two values from the composite histogram.
+void ImageAdjustmentsTest::levelsAutoStretchesTheRamp()
+{
+    QVERIFY(openRamp(40, 192));
+    pictura::LevelsDialog dialog(view_, block("levels"), QRect());
+    auto* inBlack = qobject_cast<QSpinBox*>(dialog.controlForTest(QStringLiteral("inputBlack")));
+    auto* inWhite = qobject_cast<QSpinBox*>(dialog.controlForTest(QStringLiteral("inputWhite")));
+    auto* autoButton = dialog.findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
+    QVERIFY(inBlack && inWhite && autoButton && autoButton->isEnabled());
+    autoButton->click();
+    QVERIFY2(qAbs(inBlack->value() - 40) <= 2, qPrintable(QString::number(inBlack->value())));
+    QVERIFY2(qAbs(inWhite->value() - 192) <= 2, qPrintable(QString::number(inWhite->value())));
+    dialog.reject();
+}
+
+void ImageAdjustmentsTest::curvesAutoStretchesTheChannel()
+{
+    QVERIFY(openRamp(40, 192));
+    pictura::CurvesDialog dialog(view_, block("curves"), QRect());
+    auto* curve = qobject_cast<pictura::CurveWidget*>(dialog.controlForTest(QStringLiteral("curve")));
+    auto* autoButton = dialog.findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
+    QVERIFY(curve && autoButton && autoButton->isEnabled());
+    autoButton->click();
+    const QVector<QPointF> points = curve->points();
+    QCOMPARE(points.size(), 2);
+    const int lo = qRound(points.first().x() * 255.0);
+    const int hi = qRound(points.last().x() * 255.0);
+    QVERIFY2(qAbs(lo - 40) <= 2, qPrintable(QString::number(lo)));
+    QVERIFY2(qAbs(hi - 192) <= 2, qPrintable(QString::number(hi)));
+    QCOMPARE(qRound(points.first().y() * 255.0), 0);
+    QCOMPARE(qRound(points.last().y() * 255.0), 255);
+    dialog.reject();
+}
+
+void ImageAdjustmentsTest::brightnessContrastAutoRaisesContrast()
+{
+    QVERIFY(openRamp(64, 192));
+    const int before = qRed(view_->composite_argb(19, 5)) - qRed(view_->composite_argb(0, 5));
+    const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("brightness-contrast"), view_,
+                                                      block("brightness-contrast"), QRect());
+    auto* brightness = qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("brightness")));
+    auto* contrast = qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("contrast")));
+    auto* autoButton = dialog->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
+    QVERIFY(brightness && contrast && autoButton && autoButton->isEnabled());
+    autoButton->click();
+    QVERIFY2(qAbs(brightness->value()) <= 5, qPrintable(QString::number(brightness->value())));
+    QVERIFY(contrast->value() > 0);
+    waitForPreview(*view_);
+    const int after = qRed(view_->composite_argb(19, 5)) - qRed(view_->composite_argb(0, 5));
+    QVERIFY2(after > before, qPrintable(QStringLiteral("%1 -> %2").arg(before).arg(after)));
+    dialog->reject();
+    QCOMPARE(qRed(view_->composite_argb(0, 5)), 64);
+}
+
+void ImageAdjustmentsTest::autoIsANoOpOnAFlatImage()
+{
+    QVERIFY(openImage(QColor(100, 150, 200)));
+    const int history = view_->history_count();
+    {
+        pictura::LevelsDialog dialog(view_, block("levels"), QRect());
+        auto* inBlack = qobject_cast<QSpinBox*>(dialog.controlForTest(QStringLiteral("inputBlack")));
+        auto* inWhite = qobject_cast<QSpinBox*>(dialog.controlForTest(QStringLiteral("inputWhite")));
+        auto* autoButton = dialog.findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
+        QVERIFY(inBlack && inWhite && autoButton);
+        autoButton->click();
+        QCOMPARE(inBlack->value(), 0);
+        QCOMPARE(inWhite->value(), 255);
+        dialog.reject();
+    }
+    {
+        const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("curves"), view_,
+                                                          block("curves"), QRect());
+        auto* curve = qobject_cast<pictura::CurveWidget*>(dialog->controlForTest(QStringLiteral("curve")));
+        auto* autoButton = dialog->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
+        QVERIFY(curve && autoButton);
+        autoButton->click();
+        QCOMPARE(curve->points().size(), 2);
+        QCOMPARE(qRound(curve->points().first().x() * 255.0), 0);
+        QCOMPARE(qRound(curve->points().last().x() * 255.0), 255);
+        dialog->reject();
+    }
+    {
+        const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("brightness-contrast"), view_,
+                                                          block("brightness-contrast"), QRect());
+        auto* brightness = qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("brightness")));
+        auto* contrast = qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("contrast")));
+        auto* autoButton = dialog->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
+        QVERIFY(brightness && contrast && autoButton);
+        autoButton->click();
+        QCOMPARE(brightness->value(), 0);
+        QCOMPARE(contrast->value(), 0);
+        dialog->reject();
+    }
+    QCOMPARE(view_->history_count(), history);
 }
 
 // Exposure: Preset, then label / slider / field / eyedropper rows, at least
@@ -337,6 +460,7 @@ void ImageAdjustmentsTest::exposureAndVibranceUseTheWideLayouts()
     auto* saturation = qobject_cast<QSpinBox*>(vibrance->controlForTest(QStringLiteral("saturation")));
     QVERIFY(saturation && vibrance->findChild<QSlider*>(QStringLiteral("vibranceSlider")));
     QVERIFY(vibrance->minimumWidth() >= 420);
+    QVERIFY(!vibrance->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto")));
     vibrance->reject();
 }
 
