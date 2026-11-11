@@ -604,7 +604,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] A tile cache with hit-rate accounting (#942): the viewport presents a
       256² display tile pyramid, with no stored full-resolution composite for
       layered documents (#1216)
-- [ ] Scratch paging and Efficiency accounting (#943)
+- [x] Scratch paging and Efficiency accounting (#943): cold tiles pack (LZ4)
+      and spill to checksummed scratch volumes under the memory ceiling, with
+      Scratch Sizes and Efficiency in `status` (#1217).
+      `crates/pictura-core/src/scratch.rs`, `crates/pictura-core/src/memory/eviction.rs`.
 - [ ] A tile job scheduler with cancellation (#944)
 - [ ] Per-tile filter cancellation (#945)
 - [ ] Global bit-depth and colour-mode availability gating (#490)

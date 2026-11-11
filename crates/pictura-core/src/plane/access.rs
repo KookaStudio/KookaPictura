@@ -13,7 +13,9 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use super::{Plane, Store, MATERIALIZATIONS};
-use crate::tiled_plane::{SharedTile, TileData, TileMut, TileRef, TileSample, TileState, TILE};
+use crate::tiled_plane::{
+    DenseRef, Residency, SharedTile, TileData, TileMut, TileRef, TileSample, TileState, TILE,
+};
 
 /// Run `f` and panic if it materialized a tiled plane.
 ///
@@ -120,7 +122,24 @@ impl<T: TileSample> Plane<T> {
     /// Tile `i` with its generation, held apart from the plane; `None` while
     /// flat or past the last tile. No sample is copied.
     pub fn shared_tile(&self, i: usize) -> Option<SharedTile<T>> {
-        self.tiled().and_then(|t| t.shared_tile(i))
+        self.tiled().and_then(|t| t.shared_tile(i, false))
+    }
+
+    /// [`Self::shared_tile`] for history: while the tile lives, its body
+    /// counts as history's, which eviction frees before live tiles (#1217).
+    pub fn history_tile(&self, i: usize) -> Option<SharedTile<T>> {
+        self.tiled().and_then(|t| t.shared_tile(i, true))
+    }
+
+    /// Where tile `i`'s samples are (#1217); `None` while flat or past the
+    /// last tile.
+    pub fn tile_residency(&self, i: usize) -> Option<Residency> {
+        self.tiled().and_then(|t| t.residency(i))
+    }
+
+    /// The dense tiles whose samples could not be read back from scratch.
+    pub fn unreadable_tiles(&self) -> usize {
+        self.tiled().map_or(0, |t| t.unreadable_tiles())
     }
 
     /// Exchange tile `i` with `held`, a tile [`Plane::shared_tile`] took from
@@ -163,7 +182,7 @@ impl<T: TileSample> Plane<T> {
                         w: width,
                         h,
                         stride: width,
-                        data: TileData::Dense(&data[y * width..(y + h) * width]),
+                        data: TileData::Dense(DenseRef::fixed(&data[y * width..(y + h) * width])),
                     });
                 }
             }
@@ -312,7 +331,8 @@ impl<T: TileSample> Plane<T> {
     }
 
     /// Columns `xs` of row `y`: borrowed from a flat plane, copied from a tiled
-    /// one, so a narrow region costs its own width. `None` past the last whole
+    /// one (whose tiles may be evicted, #1217), so a narrow region costs its
+    /// own width. `None` past the last whole
     /// row or when `xs` runs past the row.
     pub fn row_span(&self, y: usize, xs: Range<usize>, width: usize) -> Option<Cow<'_, [T]>> {
         match &self.store {
@@ -324,9 +344,6 @@ impl<T: TileSample> Plane<T> {
             Store::Tiled(t) => {
                 if y >= t.height * t.channels || xs.end > t.width {
                     return None;
-                }
-                if let Some(span) = t.span_in_tile(y, xs.clone()) {
-                    return Some(Cow::Borrowed(span));
                 }
                 let mut span = vec![T::default(); xs.len()];
                 t.read_rect_into(xs, y..y + 1, &mut span);

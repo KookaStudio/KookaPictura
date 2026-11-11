@@ -15,6 +15,13 @@ use pictura_paint::{HealStroke, Stroke};
 use pictura_render::gpu::GpuStroke;
 use pictura_select::{EdgeMap, Selection};
 
+std::thread_local! {
+    /// Keeps the tiles the live stroke touches out of eviction until the
+    /// stroke leaves the slot (#1217). GUI thread only, like the slot.
+    static STROKE_HOLD: std::cell::RefCell<Option<pictura_core::memory::eviction::HotHold>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 /// The kind of live session.
 ///
 /// The slot holds one session at a time. A begin of another kind is refused; a
@@ -263,6 +270,7 @@ impl ActiveSession {
 
     /// Take the live paint session out of the slot.
     pub(in crate::cxxqt_object) fn take_stroke_session(&mut self) -> Option<StrokeSession> {
+        STROKE_HOLD.with(|h| h.borrow_mut().take());
         match std::mem::replace(self, ActiveSession::Idle) {
             ActiveSession::Stroke(session) => Some(*session),
             other => {
@@ -274,6 +282,7 @@ impl ActiveSession {
 
     /// Put `session` in the slot as the live paint session.
     pub(in crate::cxxqt_object) fn set_stroke_session(&mut self, session: StrokeSession) {
+        STROKE_HOLD.with(|h| *h.borrow_mut() = Some(pictura_core::memory::eviction::hot()));
         *self = ActiveSession::Stroke(Box::new(session));
     }
 

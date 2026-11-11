@@ -791,6 +791,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
+name = "lz4_flex"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
+
+[[package]]
 name = "md-5"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -983,6 +989,7 @@ dependencies = [
  "getrandom 0.4.3",
  "image-webp",
  "libc",
+ "lz4_flex",
  "md-5",
  "pictura-color",
  "pictura-core",
@@ -1006,7 +1013,9 @@ dependencies = [
 name = "pictura-core"
 version = "0.3.0"
 dependencies = [
+ "crc32fast",
  "libc",
+ "lz4_flex",
  "rayon",
  "windows-sys",
 ]

@@ -8,6 +8,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QSpinBox>
@@ -42,6 +43,7 @@ private slots:
     void refusalsShowTheStatusMessage();
     void controlAnswersRefused();
     void statusReportsTheGovernor();
+    void statusCarriesScratchReadouts();
     void aFailedAllocationLeavesTheEditUndone();
 
 private:
@@ -249,6 +251,33 @@ void MemoryGovernorTest::statusReportsTheGovernor()
     pictura::set_memory_usage_percent(45);
     status = memory();
     QCOMPARE(status.value(QStringLiteral("usage_percent")).toInt(), 45);
+}
+
+void MemoryGovernorTest::statusCarriesScratchReadouts()
+{
+    const QString volume = files_.filePath(QStringLiteral("scratch-a"));
+    pictura::set_scratch_volumes(volume);
+    const QJsonObject memory = call(QStringLiteral("status"))
+                                   .value(QStringLiteral("result"))
+                                   .toObject()
+                                   .value(QStringLiteral("memory"))
+                                   .toObject();
+    const QJsonObject scratch = memory.value(QStringLiteral("scratch")).toObject();
+    const QJsonArray volumes = scratch.value(QStringLiteral("volumes")).toArray();
+    QCOMPARE(volumes.size(), 1);
+    QCOMPARE(volumes.at(0).toObject().value(QStringLiteral("path")).toString(), volume);
+    QVERIFY(scratch.contains(QStringLiteral("used")));
+    QVERIFY(scratch.contains(QStringLiteral("available")));
+    const double percent = memory.value(QStringLiteral("efficiency"))
+                               .toObject()
+                               .value(QStringLiteral("percent"))
+                               .toDouble(-1);
+    QVERIFY(percent >= 0 && percent <= 100);
+    const QJsonObject tiles = memory.value(QStringLiteral("tiles")).toObject();
+    for (const char* key : {"packed", "spilled", "unreadable"}) {
+        QVERIFY2(tiles.contains(QLatin1String(key)), key);
+    }
+    pictura::set_scratch_volumes(QString());
 }
 
 void MemoryGovernorTest::aFailedAllocationLeavesTheEditUndone()
