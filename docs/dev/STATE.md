@@ -4,6 +4,22 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Long-operation jobs, part 1** (#1278, OpenSpec change
+  `transform-commit-progress`, capability `document/long-operation-progress`).
+  - **Token.** `pictura_core::job::JobProgress` carries a cancel flag and a
+    0–1000 value split into equal stages. `job::run` installs it on the calling
+    thread. Engine loops read `job::current()` before they fan out, report per
+    row, and refuse before writing once cancelled.
+  - **Engine.** The transform, quad, native, and warp resamplers report per
+    output row or band.
+  - **App.** A Free Transform commit of 4 MP or more (lifted or not) runs as
+    `DeferredTransform` with the session left live. `runTransformCommit`
+    (`transform_commit.cpp`) shows it through `runCancellableJob`, which now
+    sets the wait cursor at once and cancels on Esc. Cancel resumes the
+    session; the document and history are unchanged.
+  - **Next.** Part 2 moves Image Size, Canvas Size, Rotate/Flip, mode and
+    bit-depth conversion, and Merge Down/Visible/Flatten onto the same token,
+    with per-layer progress.
 - **Viewport tile pyramid** (#1216, closes #942; OpenSpec change
   `tiled-composite`, capabilities `compositing/tile-pyramid` and
   `compositing/region-composite`).
