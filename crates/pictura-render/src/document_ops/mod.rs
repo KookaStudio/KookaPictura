@@ -109,12 +109,6 @@ pub(crate) fn valid_size(width: u32, height: u32) -> Result<(), pictura_ops::Ops
     Ok(())
 }
 
-/// Install a layer-less document's merged composite as a bottom Background.
-///
-/// A geometry operation calls this before mutating so it transforms real
-/// pixels instead of leaving the merged composite stale or blank. Does nothing
-/// when the document already has layers, or when the composite does not match
-/// the document size (there are then no reliable source pixels).
 /// Give a document that keeps no stored composite (#1216) its composite, for
 /// the mode and depth conversions that read it as their source; the converted
 /// document keeps it, because its composite is then authoritative.
@@ -126,6 +120,12 @@ pub(crate) fn materialize_composite(doc: &mut pictura_core::Document) {
     }
 }
 
+/// Install a layer-less document's merged composite as a bottom Background.
+///
+/// A geometry operation calls this before mutating so it transforms real
+/// pixels instead of leaving the merged composite stale or blank. Does nothing
+/// when the document already has layers, or when the composite does not match
+/// the document size (there are then no reliable source pixels).
 pub(crate) fn materialize_merged_composite(doc: &mut pictura_core::Document) {
     if !doc.layers.is_empty()
         || !doc.merged_composite_present

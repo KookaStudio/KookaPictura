@@ -463,3 +463,26 @@ fn save_allocates_no_whole_composite() {
         "the merged image holds its dense tiles only: {merged} of {canvas} bytes"
     );
 }
+
+/// Ending solo drops the mask tiles and the mask keys still queued for a
+/// worker, so no mask tile is built without a mask to build it from.
+#[test]
+fn ending_solo_drops_queued_mask_tiles() {
+    let mut view = soloed();
+    let key = TileKey {
+        source: TileSource::Mask,
+        level: 0,
+        tx: 1,
+        ty: 1,
+    };
+    let composite = TileKey {
+        source: TileSource::Composite,
+        ..key
+    };
+    view.tiles.wanted.get_mut().extend([key, composite]);
+    view.mask_solo = None;
+    view.drop_mask_solo_source();
+    let wanted = view.tiles.wanted.get_mut();
+    assert!(!wanted.contains(&key), "the mask key is dropped");
+    assert!(wanted.contains(&composite), "a composite key stays queued");
+}

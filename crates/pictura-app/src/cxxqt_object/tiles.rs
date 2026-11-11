@@ -389,9 +389,13 @@ impl PictureViewRust {
         );
     }
 
-    /// End mask solo's display: drop the mask tiles.
+    /// End mask solo's display: drop the mask tiles and any still queued.
     pub(crate) fn drop_mask_solo_source(&mut self) {
         self.tiles.cache.get_mut().drop_source(TileSource::Mask);
+        self.tiles
+            .wanted
+            .get_mut()
+            .retain(|key| key.source != TileSource::Mask);
     }
 
     /// The solo target changed or a restore replaced masks: present the mask
@@ -647,13 +651,16 @@ impl qobject::PictureView {
             rust.tiles.wanted.borrow_mut().clear();
             return;
         };
+        let soloed = rust.mask_solo_active();
         let (keys, ticket) = {
             let cache = rust.tiles.cache.borrow();
+            // A mask key queued before solo ended has no mask to build from.
             let keys: Vec<(TileKey, PsdRect)> = rust
                 .tiles
                 .wanted
                 .borrow_mut()
                 .drain()
+                .filter(|&key| key.source == TileSource::Composite || soloed)
                 .filter(|&key| !cache.contains(key) && (key.level as usize) < cache.level_count())
                 .map(|key| (key, cache.tile_rect(key)))
                 .collect();
@@ -691,9 +698,14 @@ impl qobject::PictureView {
             rust.fit_tiles();
             let mut landed = false;
             let mut refused = Vec::new();
+            let soloed = rust.mask_solo_active();
             {
                 let mut cache = rust.tiles.cache.borrow_mut();
-                for (key, data) in built {
+                // Mask tiles built for a solo that has since ended are dropped.
+                for (key, data) in built
+                    .into_iter()
+                    .filter(|(key, _)| key.source == TileSource::Composite || soloed)
+                {
                     if cache.install(key, ticket, data) {
                         landed = true;
                     } else if !cache.contains(key) {
