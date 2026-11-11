@@ -4,6 +4,20 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Bristle brushes** (#607, OpenSpec change `bristle-brushes`).
+  `pictura-paint::bristle` adds `BristleTip`, `BristleShape` (Round, Round Fan,
+  Round Curve, Flat, Flat Fan, Flat Curve), `BristleTrack`, and `BristleDab`.
+  `StrokeConfig::bristle` draws the union of tapered tracks through the existing
+  coverage and blend path; Stiffness bends the tracks with direction and
+  pressure, and track seeds replay from the stroke seed. `MixerBrush` keeps one
+  reservoir per bristle. `PaintTip`/`PaintOptions` carry the six fields; the
+  Brush Tip Shape page has a Bristle Tip toggle, Shape, Bristles, Length,
+  Thickness, and Stiffness (Hardness and Roundness disabled while it is on);
+  `Bristle Round 30` and `Bristle Flat 40` presets ship; the values persist in
+  the session. GPU strokes decline a bristle tip. Tests: `pictura-paint`
+  bristle/mixer units and `tst_bristle_brushes` (6 cases). Behavioral parity
+  only; the CS6 shape enumeration, defaults, `.abr` bristle keys, tilt-driven
+  projection, and the OpenGL rotatable preview remain open.
 - **Viewport tile pyramid** (#1216, closes #942; OpenSpec change
   `tiled-composite`, capabilities `compositing/tile-pyramid` and
   `compositing/region-composite`).
