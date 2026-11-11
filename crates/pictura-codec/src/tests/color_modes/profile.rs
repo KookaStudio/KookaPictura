@@ -21,6 +21,7 @@ fn profile_options(policy: Policy) -> OpenOptions {
             dither: false,
             ..ConversionOptions::default()
         },
+        skip_layered_merged: false,
     }
 }
 

@@ -601,7 +601,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Visibility toggles patch the Layers row in place instead of rebuilding
       the panel snapshot and thumbnails (#1197)
 - [ ] Frame-budget instrumentation (#941)
-- [ ] A tile cache with hit-rate accounting (#942)
+- [x] A tile cache with hit-rate accounting (#942): the viewport presents a
+      256² display tile pyramid, with no stored full-resolution composite for
+      layered documents (#1216)
 - [ ] Scratch paging and Efficiency accounting (#943)
 - [ ] A tile job scheduler with cancellation (#944)
 - [ ] Per-tile filter cancellation (#945)

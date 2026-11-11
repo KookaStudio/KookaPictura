@@ -6,7 +6,6 @@ use super::super::super::helpers::layer_has_effects;
 use super::super::super::helpers_composite::{composite_regions, RegionComposite};
 use super::super::super::qobject::PictureView;
 use super::super::super::{metrics, qobject, PictureViewRust};
-use super::super::PyramidJob;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::{CxxQtType, Threading};
@@ -63,10 +62,10 @@ pub(in crate::cxxqt_object) struct TransformJob {
     delay_ms: u64,
 }
 
-/// The blit and deferred pyramid a settle or a landing owes the shell.
+/// The blit a settle or a landing owes the shell. A blit over stale tiles
+/// makes the canvas ask for the visible ones, which land on a worker.
 pub(in crate::cxxqt_object) struct SettledMove {
     blit: Option<PsdRect>,
-    pyramid: Option<PyramidJob>,
 }
 
 impl PictureViewRust {
@@ -206,21 +205,19 @@ impl PictureViewRust {
         Some((pending.label, transform_edit(self, &spec.paths, dirty)))
     }
 
-    /// Patch the composite and fold each region into level 0, damage and the
-    /// pyramid. Returns their bounding box and, when `defer_pyramid` is set and
-    /// the region is the whole document, the pyramid job for a worker.
+    /// Patch a stored composite and fold each region into the display tiles
+    /// and the damage account, returning their bounding box. With `defer`, a
+    /// whole-document region on a large document leaves the tiles stale
+    /// instead: repairing every cached level from it would stall the GUI
+    /// thread, and only the visible tiles need rebuilding.
     fn apply_composite_regions(
         &mut self,
         regions: Vec<RegionComposite>,
-        defer_pyramid: bool,
-    ) -> (Option<PsdRect>, Option<PyramidJob>) {
-        let defer_pyramid = defer_pyramid
-            && self.coarse_level().is_some()
-            && self
-                .session
-                .doc
-                .as_ref()
-                .is_some_and(|doc| regions.iter().any(|region| region.is_whole(doc)));
+        defer: bool,
+    ) -> Option<PsdRect> {
+        let large = self.session.doc.as_ref().is_some_and(|doc| {
+            u64::from(doc.width) * u64::from(doc.height) > super::super::super::tiles::SYNC_PIXELS
+        });
         let mut union: Option<PsdRect> = None;
         for region in regions {
             let whole = self
@@ -236,22 +233,17 @@ impl PictureViewRust {
                     cache.patch(&region.raw, region.x0, region.y0);
                 }
             }
-            if defer_pyramid {
-                self.apply_refreshed_region_deferred_pyramid(
-                    region.x0,
-                    region.y0,
-                    region.clipped,
-                    region.srgb,
-                );
+            if defer && whole && large {
+                self.invalidate_tiles();
+                self.damage.mark(region.clipped);
+                self.canvas_revision = self.canvas_revision.wrapping_add(1);
+                self.sync_mask_solo_region(region.clipped);
             } else {
                 self.apply_refreshed_region(region.x0, region.y0, region.clipped, region.srgb);
             }
             union = Some(union.map_or(region.clipped, |u| u.union(region.clipped)));
         }
-        let pyramid = defer_pyramid
-            .then(|| self.defer_pyramid_from_level0())
-            .flatten();
-        (union, pyramid)
+        union
     }
 
     fn finish_move_composite(
@@ -260,7 +252,7 @@ impl PictureViewRust {
         regions: Vec<RegionComposite>,
         defer_pyramid: bool,
     ) -> SettledMove {
-        let (blit, pyramid) = self.apply_composite_regions(regions, defer_pyramid);
+        let blit = self.apply_composite_regions(regions, defer_pyramid);
         let target = pending.target;
         self.session.capture_move_without_bookkeeping(
             &target,
@@ -269,7 +261,7 @@ impl PictureViewRust {
         );
         metrics::mark_composited();
         metrics::end_edit();
-        SettledMove { blit, pyramid }
+        SettledMove { blit }
     }
 
     /// Finish a pending Move composite synchronously, before a reader or
@@ -455,9 +447,6 @@ impl qobject::PictureView {
     }
 
     fn show_settled_move(mut self: Pin<&mut Self>, settled: SettledMove) {
-        if let Some(job) = settled.pyramid {
-            self.as_mut().build_pyramid(job);
-        }
         if let Some(rect) = settled.blit {
             if rect.width() > 0 && rect.height() > 0 {
                 self.as_mut()

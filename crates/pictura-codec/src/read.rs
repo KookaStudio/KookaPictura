@@ -10,13 +10,14 @@ use crate::mask_params;
 use crate::probe::ImageBudget;
 
 mod decode;
+mod merged;
 mod tagged_layers;
 
 pub(crate) use decode::decode_channel_data;
 #[cfg(test)]
 pub(crate) use decode::decode_rle_channel;
 pub(crate) use decode::inflate;
-use decode::{plan_channel_tasks, read_rle};
+use decode::{plan_channel_tasks, read_rle, read_rle_from};
 
 /// The deepest group nesting a file may declare. CS6 nests groups ten deep;
 /// the cap keeps the recursive compositor and `Drop` off the stack limit.
@@ -33,6 +34,12 @@ pub struct OpenOptions {
     pub policy: Policy,
     pub working_cmyk: Option<Vec<u8>>,
     pub conversion: ConversionOptions,
+    /// Skip decoding the merged image of an 8-bit RGB file with layers and no
+    /// extra channels: the application keeps no composite for such a document
+    /// and composites what it shows (#1216), so decoding a canvas-sized image
+    /// only to drop it is the open's largest allocation. The document still
+    /// records that the file carried one, and its composite is empty.
+    pub skip_layered_merged: bool,
 }
 
 /// Read a PSD/PSB applying the historical **Convert** incoming-profile policy.
@@ -223,36 +230,28 @@ fn read_container(
     // "Maximize Compatibility" off: a layered file may end after the layer
     // section with no merged composite. A file with no layers at all and no
     // trailing data is still malformed and falls through to the truncation error.
-    if r.remaining() == 0 && !layers.is_empty() {
-        let doc = Document {
-            width,
-            height,
-            mode,
-            depth: BitDepth::Eight,
-            source_mode: None,
-            source_depth,
-            source_planes: None,
-            source_palette: None,
-            source_icc: None,
-            document_icc: None,
-            composite: PixelBuffer::new(width, height, color_count as u8),
-            merged_composite_present: false,
-            composite_compression: Compression::Rle,
-            layer_compression: layer_compression.unwrap_or_default(),
-            is_psb,
-            layers,
-            channels: Vec::new(),
-            color_mode_data: color_mode_data.into(),
-            image_resources: image_resources.into(),
-            global_layer_mask: global_layer_mask.into(),
-            layer_section_extra: layer_section_extra.into(),
-            slices: Vec::new(),
-            annotations: Default::default(),
-            guides: Vec::new(),
-            work_path: Default::default(),
-            saved_paths: Vec::new(),
-            text_styles: Default::default(),
-        };
+    let layered = !layers.is_empty();
+    let sections = merged::Sections {
+        width,
+        height,
+        mode,
+        source_depth,
+        layer_compression: layer_compression.unwrap_or_default(),
+        is_psb,
+        layers,
+        color_mode_data,
+        image_resources,
+        global_layer_mask,
+        layer_section_extra,
+    };
+    if r.remaining() == 0 && layered {
+        let doc = merged::without_merged_image(
+            sections,
+            PixelBuffer::new(width, height, color_count as u8),
+            false,
+            Compression::Rle,
+            Vec::new(),
+        );
         return Ok(crate::icc::apply_icc_policy_with_options(
             normalize(doc, mode, depth, palette.as_ref(), options),
             options.policy,
@@ -271,6 +270,40 @@ fn read_container(
     let stride = row_bytes(width, depth);
     if depth == 1 && matches!(compression, COMPRESSION_ZIP | COMPRESSION_ZIP_PREDICTION) {
         return Err(PsdError::Unsupported("ZIP compression at depth 1".into()));
+    }
+    if options.skip_layered_merged
+        && layered
+        && mode == ColorMode::Rgb
+        && depth == 8
+        && matches!(composite_compression, Compression::Rle | Compression::Raw)
+    {
+        // Only the extra channels (saved selections, merged transparency)
+        // are decoded; the colour planes' bytes are skipped.
+        let colour_bytes = planar_len(color_count, stride, height)?;
+        let extras = match composite_compression {
+            Compression::Rle => {
+                let rows = header_channels
+                    .checked_mul(height)
+                    .ok_or_else(|| PsdError::Invalid("image dimensions overflow".into()))?;
+                let per_row =
+                    2 * std::mem::size_of::<usize>() + std::mem::size_of::<Result<(), PsdError>>();
+                budget.charge("RLE row metadata", &[rows, per_row])?;
+                read_rle_from(&mut r, header_channels, color_count, stride, height, is_psb)?
+            }
+            _ => r.take(planar_len(header_channels, stride, height)?)?[colour_bytes..].to_vec(),
+        };
+        let doc = merged::without_merged_image(
+            sections,
+            PixelBuffer::new(0, 0, color_count as u8),
+            true,
+            composite_compression,
+            merged::extra_channels(&extras, stride * height),
+        );
+        return Ok(crate::icc::apply_icc_policy_with_options(
+            normalize(doc, mode, depth, palette.as_ref(), options),
+            options.policy,
+            options.conversion,
+        ));
     }
     let mut data = match composite_compression {
         Compression::Raw => r
@@ -326,35 +359,9 @@ fn read_container(
     let (composite, channels) =
         split_planes(data, color_count, width, height, plane, header_channels)?;
 
-    let doc = Document {
-        width: width as u32,
-        height: height as u32,
-        mode,
-        depth: BitDepth::Eight,
-        source_mode: None,
-        source_depth,
-        source_planes,
-        source_palette: None,
-        source_icc: None,
-        document_icc: None,
-        composite,
-        merged_composite_present: true,
-        composite_compression,
-        layer_compression: layer_compression.unwrap_or_default(),
-        is_psb,
-        layers,
-        channels,
-        color_mode_data: color_mode_data.into(),
-        image_resources: image_resources.into(),
-        global_layer_mask: global_layer_mask.into(),
-        layer_section_extra: layer_section_extra.into(),
-        slices: Vec::new(),
-        annotations: Default::default(),
-        guides: Vec::new(),
-        work_path: Default::default(),
-        saved_paths: Vec::new(),
-        text_styles: Default::default(),
-    };
+    let mut doc =
+        merged::without_merged_image(sections, composite, true, composite_compression, channels);
+    doc.source_planes = source_planes;
     Ok(crate::icc::apply_icc_policy_with_options(
         normalize(doc, mode, depth, palette.as_ref(), options),
         options.policy,

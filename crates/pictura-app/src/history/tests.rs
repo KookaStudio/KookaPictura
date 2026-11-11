@@ -1323,3 +1323,51 @@ fn a_segment_break_keeps_a_changed_composite() {
 }
 
 mod targets;
+
+/// A document that keeps no stored composite (#1216) has no composite tiles
+/// to bound a restore: the changed layer tiles do, at the layer's place.
+#[test]
+fn a_pixel_undo_without_a_stored_composite_reports_its_layer_tiles() {
+    let (w, h) = (600u32, 400u32);
+    let mut live = doc(w, h, 3);
+    let mut layer = model_layer("base", w - 100, h - 50, 1);
+    layer.rect = PsdRect {
+        top: 50,
+        left: 100,
+        bottom: h as i32,
+        right: w as i32,
+    };
+    live.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    live.composite = pictura_core::PixelBuffer::new(0, 0, 4);
+    let mut selection: Option<Selection> = None;
+    let mut target = LayerTarget::default();
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &target, "Open");
+    let lw = (w - 100) as usize;
+    let red = live.layers[0].channels[0].data.as_mut_slice();
+    for y in 10..20 {
+        for x in 300..310 {
+            red[y * lw + x] ^= 0xff;
+        }
+    }
+    history.capture_live(&mut live, &selection, &target, "Paint");
+
+    let Some(Restored::Region(rect)) = history.undo_live(&mut live, &mut selection, &mut target)
+    else {
+        panic!("a bounded restore");
+    };
+    let changed = PsdRect {
+        top: 50 + 10,
+        left: 100 + 300,
+        bottom: 50 + 20,
+        right: 100 + 310,
+    };
+    assert!(
+        rect.left <= changed.left
+            && rect.top <= changed.top
+            && rect.right >= changed.right
+            && rect.bottom >= changed.bottom,
+        "{rect:?} covers the changed pixels at the layer's place"
+    );
+    assert!(rect.width() < w as i32, "{rect:?} is bounded");
+}

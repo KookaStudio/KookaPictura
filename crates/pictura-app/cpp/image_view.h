@@ -120,10 +120,6 @@ public:
         // The view-pyramid level an in-progress large-brush preview patched;
         // 0 when no preview is running (the zoom picks the level as usual).
         std::function<int()> previewLevel;
-        // A zero-copy view of a stored level (premultiplied RGBA8888), or an
-        // empty image for level 0 / past the end. The image keeps the level
-        // storage alive; do not retain it past the current paint.
-        std::function<QImage(int level)> levelImage;
         // Report the level and document rect about to be presented, so a Rust
         // render session can composite a preview for exactly that frame.
         std::function<void(int level, const QRect& docRect)> reportView;

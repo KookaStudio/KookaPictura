@@ -67,6 +67,7 @@ mod selection_move;
 mod shapes;
 mod state;
 pub(crate) mod svg_export;
+mod tiles;
 mod type_tools;
 mod web_export;
 pub use state::PictureViewRust;
@@ -152,7 +153,7 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "regionBlitted"]
         fn region_blitted(self: Pin<&mut Self>, region: QImage, x: i32, y: i32);
-        /// Emitted when the exact pyramid replaced a coarse one: nothing changed, the receiver repaints.
+        /// Emitted when worker-built display tiles replaced stand-ins: nothing changed, the receiver repaints.
         #[qsignal]
         fn pyramid_settled(self: Pin<&mut Self>);
         #[qsignal]
@@ -269,9 +270,6 @@ pub mod qobject {
         /// The **canvas display source** crop at `(x, y, w, h)`: the solo mask plane while a mask is soloed, else the composite. The canvas provider uses this; other panels keep `display_image`.
         #[qinvokable]
         fn canvas_display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
-        /// A zero-copy view of stored pyramid `level` (premultiplied RGBA8888), or an empty image for level 0 or past the last level. The image keeps the level's storage alive.
-        #[qinvokable]
-        fn canvas_level_image(&self, level: i32) -> QImage;
 
         /// Extents of every view-pyramid level as flat `w,h` pairs; empty without a document.
         #[qinvokable]

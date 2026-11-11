@@ -11,7 +11,5 @@ pub(crate) fn preview_present_level(view: &PictureView) -> i32 {
     rust.session
         .live
         .preview()
-        .map(|preview| preview.level as usize)
-        .or(rust.deferred_pyramid.map(|deferred| deferred.level))
-        .map_or(0, |level| level as i32)
+        .map_or(0, |preview| preview.level as i32)
 }

@@ -11,12 +11,13 @@ fn cpu_view() -> PictureViewRust {
         pixel_layer("base", 8, 6, (200, 40, 10)),
         pixel_layer("top", 8, 6, (20, 90, 160)),
     ]);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    PictureViewRust {
+    let view = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         gpu_compute: false,
         ..Default::default()
-    }
+    };
+    crate::cxxqt_object::tests::present_all(&view);
+    view
 }
 
 /// What the New Layer handler does inside its edit closure.
@@ -168,17 +169,17 @@ fn snapshot_json_resets_on_request() {
 }
 
 #[test]
-fn new_layer_keeps_composite_exact() {
+fn new_layer_keeps_the_display_exact() {
     set_for_this_thread(false);
     let mut view = cpu_view();
     assert_eq!(new_layer(&mut view), Edit::Inserted);
     let doc = view.session.doc.as_ref().expect("document");
     assert_eq!(doc.layers.len(), 3);
-    assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+    crate::cxxqt_object::tests::assert_display_current(&view);
 }
 
 #[test]
-fn new_group_keeps_composite_exact() {
+fn new_group_keeps_the_display_exact() {
     set_for_this_thread(false);
     let mut view = cpu_view();
     let doc = view.session.doc.as_mut().expect("document");
@@ -187,6 +188,5 @@ fn new_group_keeps_composite_exact() {
     let edit = insertion_edit(doc, &created);
     assert_eq!(edit, Edit::Inserted);
     view.apply_edit("New Group", edit);
-    let doc = view.session.doc.as_ref().expect("document");
-    assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+    crate::cxxqt_object::tests::assert_display_current(&view);
 }

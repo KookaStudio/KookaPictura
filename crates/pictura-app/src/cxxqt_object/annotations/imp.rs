@@ -196,7 +196,9 @@ pub(super) fn document_size_bytes(view: &PictureView) -> Vec<f64> {
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let mut memory = doc.composite.data.len();
+    // The flattened image counts at its size whether or not the document keeps
+    // it stored (#1216).
+    let mut memory = doc.width as usize * doc.height as usize * usize::from(doc.composite.channels);
     for layer in &doc.layers {
         memory += layer_plane_bytes(layer);
     }

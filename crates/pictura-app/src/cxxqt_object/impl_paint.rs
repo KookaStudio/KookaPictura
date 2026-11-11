@@ -1,17 +1,16 @@
 use super::document_session::{PreviewSample, PreviewStroke, SessionKind, StrokeSession};
 use super::helpers::*;
-use super::helpers_composite::planes_of;
 use super::qobject;
 use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::{PixelBuffer, PsdRect};
+use pictura_core::PsdRect;
 use pictura_paint::spacing::DabPlacer;
 use pictura_paint::{spacing::SpacingMode, PaintMode, Stroke, StrokeConfig, StrokeSample};
 use pictura_render::gpu::{GpuPaintMode, GpuStroke, GpuStrokeParams};
-use pictura_render::ViewPyramid;
+use pictura_render::PyramidLevel;
 use pictura_render::{CompositeScope, DocumentComposite};
 use std::time::Instant;
 
@@ -63,53 +62,6 @@ impl PictureViewRust {
         }
     }
 
-    /// Composite `rect` of the current source (the active stroke's working
-    /// document, else the app document), patch the authoritative `doc.composite`,
-    /// and hand back the clamped origin, clipped rect and straight sRGB region.
-    /// `None` for an empty clamp, an absent source, or an empty region. Level 0,
-    /// damage and the pyramid are the caller's to fold in.
-    ///
-    /// A layer stroke's presents patch the composite as they go, so its commit
-    /// composites only what is still pending; cancelling repairs the extent
-    /// (`cancel_stroke`). A mask stroke leaves it alone: its cancel restores
-    /// the view from the untouched composite.
-    pub(super) fn refresh_region_buffer(
-        &mut self,
-        rect: PsdRect,
-    ) -> Option<(i32, i32, PsdRect, PixelBuffer)> {
-        let painting = self.session.live.mask_stroke().is_some();
-        let gpu_compute = self.gpu_compute;
-        let t = Instant::now();
-        let refreshed = {
-            let doc = self.session.doc.as_mut()?;
-            let mut cache = DocumentComposite::new(doc);
-            let out = if painting {
-                cache.render(CompositeScope::Regions(vec![rect]), gpu_compute)
-            } else {
-                cache.refresh(CompositeScope::Regions(vec![rect]), gpu_compute)
-            };
-            out.into_iter().next()?
-        };
-        paint_timing::record("rr_composite_region", t.elapsed());
-        #[cfg(test)]
-        {
-            if !painting {
-                super::impl_core::note_refresh();
-            }
-        }
-        let source = self.session.doc.as_ref()?;
-        let srgb = pictura_codec::buffer_to_srgb(source, &refreshed.buffer).into_owned();
-        if srgb.width == 0 || srgb.height == 0 {
-            return None;
-        }
-        Some((
-            refreshed.rect.left,
-            refreshed.rect.top,
-            refreshed.rect,
-            srgb,
-        ))
-    }
-
     /// Abandon the live stroke, putting back the pixels it changed (or the
     /// whole pre-stroke document when the stroke changed its structure), and
     /// return the document rectangle it had painted.
@@ -155,9 +107,9 @@ impl PictureViewRust {
             (Some(base), _) => self.session.doc = Some(base),
             (None, Some(doc)) => {
                 stroke.cancel(doc);
-                // The stroke's presents patched the composite; put the
+                // The stroke's presents patched a stored composite; put the
                 // restored pixels back into it before anything reads it.
-                if let Some(rect) = dirty {
+                if let Some(rect) = dirty.filter(|_| doc.composite_is_authoritative()) {
                     DocumentComposite::new(doc)
                         .refresh(CompositeScope::Regions(vec![rect]), gpu_compute);
                     #[cfg(test)]
@@ -167,88 +119,6 @@ impl PictureViewRust {
             (None, None) => {}
         }
         dirty
-    }
-
-    /// Composite several regions in one cache refresh and return their clamped
-    /// origins, rects, and sRGB buffers. The cache is refreshed once for the
-    /// whole list; a live mask stroke renders without writing it.
-    pub(super) fn refresh_regions_buffer(
-        &mut self,
-        rects: &[PsdRect],
-    ) -> Vec<(i32, i32, PsdRect, PixelBuffer)> {
-        let painting = self.session.live.mask_stroke().is_some();
-        let gpu_compute = self.gpu_compute;
-        let t = Instant::now();
-        let refreshed = {
-            let Some(doc) = self.session.doc.as_mut() else {
-                return Vec::new();
-            };
-            let mut cache = DocumentComposite::new(doc);
-            let scope = CompositeScope::Regions(rects.to_vec());
-            if painting {
-                cache.render(scope, gpu_compute)
-            } else {
-                cache.refresh(scope, gpu_compute)
-            }
-        };
-        paint_timing::record("rr_composite_region", t.elapsed());
-        #[cfg(test)]
-        {
-            if !painting && !refreshed.is_empty() {
-                super::impl_core::note_refresh();
-            }
-        }
-        let Some(doc) = self.session.doc.as_ref() else {
-            return Vec::new();
-        };
-        refreshed
-            .into_iter()
-            .filter_map(|refreshed| {
-                let srgb = pictura_codec::buffer_to_srgb(doc, &refreshed.buffer).into_owned();
-                (srgb.width != 0 && srgb.height != 0).then_some((
-                    refreshed.rect.left,
-                    refreshed.rect.top,
-                    refreshed.rect,
-                    srgb,
-                ))
-            })
-            .collect()
-    }
-
-    /// Fold a refreshed region into level 0, the damage account and the pyramid.
-    pub(super) fn apply_refreshed_region(
-        &mut self,
-        x0: i32,
-        y0: i32,
-        clipped: PsdRect,
-        srgb: PixelBuffer,
-    ) {
-        let t = Instant::now();
-        self.refresh_level0_region(srgb, x0, y0);
-        paint_timing::record("rr_level0_patch", t.elapsed());
-        self.damage.mark(clipped);
-        let t = Instant::now();
-        self.update_pyramid(clipped);
-        paint_timing::record("rr_update_pyramid", t.elapsed());
-        // Keep a soloed mask plane in step with the mask's new coverage.
-        self.sync_mask_solo_region(clipped);
-    }
-
-    /// As [`Self::apply_refreshed_region`] without the pyramid update, for a
-    /// landed whole-document composite whose pyramid is left to a worker.
-    pub(super) fn apply_refreshed_region_deferred_pyramid(
-        &mut self,
-        x0: i32,
-        y0: i32,
-        clipped: PsdRect,
-        srgb: PixelBuffer,
-    ) {
-        let t = Instant::now();
-        self.refresh_level0_region(srgb, x0, y0);
-        paint_timing::record("rr_level0_patch", t.elapsed());
-        self.damage.mark(clipped);
-        // Keep a soloed mask plane in step with the mask's new coverage.
-        self.sync_mask_solo_region(clipped);
     }
 }
 
@@ -297,39 +167,32 @@ pub(super) fn preview_snapshot_bytes(w: u32, h: u32, level: u32) -> usize {
 }
 
 impl PreviewStroke {
-    /// Snapshot `level` of `pyramid` as it stands before the stroke, so every
-    /// present can blend the whole extent against the pre-stroke pixels instead
-    /// of compounding on its own earlier output. `None` when the level does not
-    /// exist yet or is not the size `level0` implies.
+    /// Take `snapshot`, the whole `level` of a `width`×`height` document's
+    /// display as it stands before the stroke, so every present can blend the
+    /// whole extent against the pre-stroke pixels instead of compounding on
+    /// its own earlier output. `None` when the snapshot is not that level's
+    /// size.
     pub(super) fn new(
         level: u32,
-        pyramid: &ViewPyramid,
-        level0: &PixelBuffer,
+        snapshot: PyramidLevel,
+        (doc_w, doc_h): (u32, u32),
         cfg: StrokeConfig,
     ) -> Option<Self> {
         if level >= PREVIEW_MAX_LEVEL {
             return None;
         }
         let scale = 1u32 << level;
-        let (width, height) = (level0.width.div_ceil(scale), level0.height.div_ceil(scale));
-        if width == 0 || height == 0 || pyramid.level_size(level as usize) != (width, height) {
+        let (width, height) = (doc_w.div_ceil(scale), doc_h.div_ceil(scale));
+        if width == 0 || height == 0 || (snapshot.width(), snapshot.height()) != (width, height) {
             return None;
         }
-        let whole = PsdRect {
-            top: 0,
-            left: 0,
-            bottom: height as i32,
-            right: width as i32,
-        };
-        let planes = planes_of(level0)?;
-        let crop = pyramid.crop(planes, level as usize, whole);
-        (crop.width() == width && crop.height() == height).then(|| Self {
+        Some(Self {
             level,
             scale,
             width,
             height,
-            snapshot: crop.data().to_vec(),
-            coverage: vec![0u8; preview_snapshot_bytes(level0.width, level0.height, level) / 4],
+            snapshot: snapshot.data().to_vec(),
+            coverage: vec![0u8; preview_snapshot_bytes(doc_w, doc_h, level) / 4],
             extent: None,
             samples: Vec::new(),
             cfg,
@@ -506,7 +369,6 @@ impl PictureViewRust {
         if self.session.quick_mask.active {
             return self.begin_quick_mask_paint(cfg, label);
         }
-        self.settle_pyramid();
         let Some(doc) = self.session.doc.as_ref() else {
             return false;
         };
@@ -657,10 +519,11 @@ impl PictureViewRust {
                 // log when the stroke commits.
                 if rust.session.live.gpu_stroke().is_none() {
                     let t = Instant::now();
-                    let preview = match (level, rust.level0.as_ref()) {
-                        (Some(level), Some(level0)) => {
-                            PreviewStroke::new(level, &rust.pyramid, level0, cfg)
-                        }
+                    let size = rust.session.doc.as_ref().map(|d| (d.width, d.height));
+                    let preview = match (level, size) {
+                        (Some(level), Some(size)) => rust
+                            .level_snapshot(level)
+                            .and_then(|snapshot| PreviewStroke::new(level, snapshot, size, cfg)),
                         _ => None,
                     };
                     if let Some(preview) = preview {
@@ -858,9 +721,10 @@ impl qobject::PictureView {
             let rgba = preview_blend(preview, rect);
             (rgba, rect, preview.level, preview.scale as i32)
         };
-        // Level 0 is deliberately untouched: only the stored level changes, so
-        // the commit's region refresh repairs it when the stroke ends.
-        rust.pyramid.patch_level(level as usize, &rgba, rect);
+        // Level 0 is deliberately untouched: only the presented level's tiles
+        // change, so the commit's region refresh repairs them when the stroke
+        // ends.
+        rust.patch_display_level(level as usize, rect, &rgba);
         rust.canvas_revision = rust.canvas_revision.wrapping_add(1);
         Some(PsdRect {
             top: rect.top * scale,

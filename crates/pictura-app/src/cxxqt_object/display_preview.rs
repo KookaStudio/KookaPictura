@@ -1,7 +1,7 @@
 //! Display-only live previews.
 //!
-//! A preview patches only the display levels (level 0's visible rectangle or a
-//! stored pyramid level) and leaves `doc.composite` alone. The commit that ends
+//! A preview patches only the presented level's cached display tiles and
+//! leaves the document's composite alone. The commit that ends
 //! the gesture composites the exact frame and records one history state.
 
 use super::edit::Edit;
@@ -12,7 +12,6 @@ use super::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::{Document, Layer, PsdRect};
-use pictura_render::patch_buffer_region;
 
 /// The property a display preview is changing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,7 +107,6 @@ impl PictureViewRust {
     /// Composite and present the current preview at the level and rectangle the
     /// canvas last reported. `None` when the exact path must run instead.
     pub(super) fn present_display_preview(&mut self) -> Option<PsdRect> {
-        self.settle_pyramid();
         if self.has_active_session() || self.mask_solo.is_some() {
             return None;
         }
@@ -135,8 +133,8 @@ impl PictureViewRust {
             .preview(doc, &targets, level as u32, rect, key)?;
         let srgb = pictura_codec::buffer_to_srgb(doc, &frame).into_owned();
         if level == 0 {
-            let level0 = self.level0.as_mut()?;
-            patch_buffer_region(level0, &srgb, rect.left, rect.top);
+            let rows = pictura_render::interleave(&srgb);
+            self.patch_display_level(0, rect, &rows);
         } else {
             let rgba = display_rgba_bytes(&srgb);
             let scale = 1i32 << level;
@@ -146,7 +144,7 @@ impl PictureViewRust {
                 bottom: rect.bottom / scale,
                 right: rect.right / scale,
             };
-            self.pyramid.patch_level(level as usize, &rgba, level_rect);
+            self.patch_display_level(level as usize, level_rect, &rgba);
         }
         self.canvas_revision = self.canvas_revision.wrapping_add(1);
         self.damage.mark(rect);
@@ -265,6 +263,17 @@ mod tests {
         view
     }
 
+    /// The presented crop of `level` over `rect`, premultiplied, building
+    /// (and so caching) its tiles.
+    fn shown(view: &PictureViewRust, level: i32, rect: PsdRect) -> Vec<u8> {
+        let (crop, missing) = view.tile_crop(pictura_render::TileSource::Composite, level, rect);
+        assert!(
+            missing.is_empty(),
+            "a small document builds its tiles at once"
+        );
+        crop.data().to_vec()
+    }
+
     #[test]
     fn preview_patches_only_the_presented_level() {
         let mut view = view_of(document());
@@ -274,17 +283,24 @@ mod tests {
             bottom: 6,
             right: 6,
         };
-        let before = view.level0.as_ref().expect("level 0").clone();
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 8,
+            right: 8,
+        };
+        let before = shown(&view, 0, whole);
         let composite = view.session.doc.as_ref().expect("doc").composite.clone();
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
         view.session.doc.as_mut().expect("doc").layers[0].opacity = 128;
         let rect = view.present_display_preview().expect("preview");
         assert_eq!(rect, view.presented_rect);
-        let after = view.level0.as_ref().expect("level 0");
-        assert_eq!(after.data[0], before.data[0], "outside the rect");
-        assert_eq!(after.data[7], before.data[7], "outside the rect");
-        let inside = 3 * 64 + 2 * 8 + 2;
-        assert_ne!(after.data[inside], before.data[inside], "inside alpha");
+        let (after, _) = view.tile_crop(pictura_render::TileSource::Composite, 0, whole);
+        let after = after.data();
+        let alpha = |x: usize, y: usize| (y * 8 + x) * 4 + 3;
+        assert_eq!(after[alpha(0, 0)], before[alpha(0, 0)], "outside the rect");
+        assert_eq!(after[alpha(7, 0)], before[alpha(7, 0)], "outside the rect");
+        assert_ne!(after[alpha(2, 2)], before[alpha(2, 2)], "inside alpha");
         assert_eq!(view.session.doc.as_ref().expect("doc").composite, composite);
     }
 
@@ -306,9 +322,9 @@ mod tests {
         assert!(view.present_display_preview().is_some());
         let preview = view.display_preview.take().expect("preview");
         let edit = preview.exact_edit(view.session.doc.as_ref());
-        view.apply_edit("Opacity", edit);
-        let doc = view.session.doc.as_ref().expect("doc");
-        assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+        let presentation = view.apply_edit("Opacity", edit);
+        crate::cxxqt_object::presentation::present_core(&mut view, &presentation);
+        crate::cxxqt_object::tests::assert_display_current(&view);
         assert_eq!(view.session.history.count(), 1);
     }
 
@@ -402,23 +418,13 @@ mod tests {
             bottom: 256,
             right: 256,
         };
-        let before = {
-            let planes =
-                super::super::helpers_composite::planes_of(view.level0.as_ref().expect("level 0"))
-                    .expect("planes");
-            view.pyramid.crop(planes, 2, whole)
-        };
+        let before = shown(&view, 2, whole);
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
         view.session.doc.as_mut().expect("doc").layers[0].opacity = 128;
         let rect = view.present_display_preview().expect("preview");
         assert_eq!(rect, view.presented_rect);
-        let after = {
-            let planes =
-                super::super::helpers_composite::planes_of(view.level0.as_ref().expect("level 0"))
-                    .expect("planes");
-            view.pyramid.crop(planes, 2, whole)
-        };
-        assert_ne!(before.data(), after.data(), "stored level 2 was patched");
+        let (after, _) = view.tile_crop(pictura_render::TileSource::Composite, 2, whole);
+        assert_ne!(before, after.data(), "the level-2 tiles were patched");
     }
 
     #[test]
@@ -444,13 +450,15 @@ mod tests {
             right: 4,
         };
         view.reset_pyramid();
-        let before = view.level0.as_ref().expect("level 0").clone();
+        let whole = view.presented_rect;
+        let before = shown(&view, 0, whole);
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
         view.session.doc.as_mut().expect("doc").layers[0].opacity = 128;
         assert!(view.present_display_preview().is_some());
-        assert_ne!(view.level0.as_ref().expect("level 0"), &before);
+        let (patched, _) = view.tile_crop(pictura_render::TileSource::Composite, 0, whole);
+        assert_ne!(patched.data(), &before[..]);
         view.cancel_display_preview();
-        assert_eq!(view.level0.as_ref().expect("level 0"), &before);
+        assert_eq!(shown(&view, 0, whole), before);
         assert!(!view.display_preview_active());
     }
 }

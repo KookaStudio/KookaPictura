@@ -10,6 +10,7 @@ pub mod blend;
 pub mod blur;
 mod crs;
 mod digest;
+mod document_composite;
 mod guides;
 pub mod hdr;
 pub mod homography;
@@ -249,6 +250,22 @@ pub struct Document {
 impl Document {
     pub fn new(width: u32, height: u32, mode: ColorMode, depth: BitDepth) -> Self {
         let channels = mode.color_channels();
+        Self::with_composite(
+            width,
+            height,
+            mode,
+            depth,
+            PixelBuffer::new(width, height, channels),
+        )
+    }
+
+    pub(crate) fn with_composite(
+        width: u32,
+        height: u32,
+        mode: ColorMode,
+        depth: BitDepth,
+        composite: PixelBuffer,
+    ) -> Self {
         Self {
             width,
             height,
@@ -260,7 +277,7 @@ impl Document {
             source_palette: None,
             source_icc: None,
             document_icc: None,
-            composite: PixelBuffer::new(width, height, channels),
+            composite,
             merged_composite_present: true,
             composite_compression: Compression::Rle,
             layer_compression: Compression::Rle,

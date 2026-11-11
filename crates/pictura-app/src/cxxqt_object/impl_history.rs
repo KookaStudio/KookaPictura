@@ -58,13 +58,13 @@ impl PictureViewRust {
 
     /// The live document for a named snapshot, sharing every tile with it: a
     /// later write forks only the tiles it touches, so the snapshot costs the
-    /// document's metadata, not its pixels (#1215). Its composite is exact.
-    /// Mid-stroke the document's composite is still the pre-stroke base, so it
-    /// is composited from the painted layers; anything that presents the
-    /// snapshot can then trust it the way a jump trusts a state's composite.
+    /// document's metadata, not its pixels (#1215). A stored composite is
+    /// exact: mid-stroke the document's is still the pre-stroke base, so it is
+    /// composited from the painted layers. A document without a stored
+    /// composite has nothing to bring up to date (#1216).
     pub(super) fn named_snapshot(&self) -> Option<Snapshot> {
         let mut doc = self.session.doc.as_ref()?.clone();
-        if self.session.live.stroke().is_some() {
+        if self.session.live.stroke().is_some() && doc.composite_is_authoritative() {
             let rendered = current_buffer(&doc, self.gpu_compute);
             DocumentComposite::new(&mut doc).store(&rendered);
         }

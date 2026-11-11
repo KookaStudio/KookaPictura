@@ -293,7 +293,6 @@ fn stroke_split_profile_4000() {
 #[ignore = "4000x4000 commit refresh profile; run explicitly with --ignored --nocapture"]
 fn commit_refresh_profile_4000() {
     use super::helpers::paint_timing;
-    use super::helpers_composite::premultiplied_display_image;
     use super::PictureViewRust;
     use std::time::{Duration, Instant};
 
@@ -334,21 +333,20 @@ fn commit_refresh_profile_4000() {
                 let mut covered: Option<PsdRect> = None;
                 let mut srgb_image = Duration::ZERO;
                 for &rect in &regions {
-                    let Some((x0, y0, clipped, buf)) = rust.refresh_region_buffer(rect) else {
+                    let Some(clipped) = rust.refresh_display_rect(rect) else {
                         continue;
                     };
                     let t = Instant::now();
-                    let _new = premultiplied_display_image(&buf);
+                    let _new = rust.display_crop_keys(0, clipped);
                     if regions.len() == 1 {
                         srgb_image = t.elapsed();
                     }
-                    rust.apply_refreshed_region(x0, y0, clipped, buf);
                     covered = Some(covered.map_or(clipped, |u| u.union(clipped)));
                 }
                 let loop_time = t0.elapsed();
                 let covered = covered.expect("a dense stroke covers pixels");
                 let t = Instant::now();
-                let _old = rust.display_crop(0, covered);
+                let _old = rust.display_crop_keys(0, covered);
                 let crop = t.elapsed();
                 paint_timing::record("commit_refresh_region_old", loop_time + crop);
                 paint_timing::record("commit_refresh_region_new", loop_time + srgb_image);
@@ -500,9 +498,7 @@ fn large_document_stroke_profile() {
         if let Some(rect) = stroke.take_dirty() {
             let r = Instant::now();
             rust.session.live.mark_stroke_tile(rect);
-            if let Some((x0, y0, clipped, srgb)) = rust.refresh_region_buffer(rect) {
-                rust.apply_refreshed_region(x0, y0, clipped, srgb);
-            }
+            rust.refresh_display_rect(rect);
             refresh_ms = r.elapsed().as_secs_f64() * 1000.0;
         }
         if i == 0 {
@@ -719,9 +715,7 @@ fn large_document_filter_profile() {
         ms(label, t.elapsed());
     };
     let refresh = |rust: &mut PictureViewRust, rect: PsdRect| {
-        if let Some((x0, y0, clipped, srgb)) = rust.refresh_region_buffer(rect) {
-            rust.apply_refreshed_region(x0, y0, clipped, srgb);
-        }
+        rust.refresh_display_rect(rect);
     };
 
     let fit_scale = f64::from(VIEW.0) / f64::from(w);
@@ -797,8 +791,16 @@ fn large_document_filter_profile() {
     }
 
     timed("dialog image() (full QImage)", &mut || {
-        let level0 = rust.level0.as_ref().expect("level 0");
-        drop(premultiplied_display_image(level0));
+        let doc = rust.session.doc.as_ref().expect("document");
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        };
+        drop(premultiplied_display_image(&super::tiles::display_region(
+            doc, whole, false,
+        )));
     });
 
     let fit = PsdRect {

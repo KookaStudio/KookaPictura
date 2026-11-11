@@ -78,6 +78,29 @@ entries are evicted under the memory cap. On GPU, tiles live in a texture atlas
 or an array texture; on CPU, in row-major buffers. A generation counter is
 incremented on undo/redo so stale tiles are never displayed.
 
+**As shipped (#1216, CPU).** The canvas presents a pyramid of 256² display
+tiles keyed by (source, level, tile), where the source is the composite or a
+soloed mask. No full-resolution composite or display frame is kept for a
+layered RGB document. Only a document whose composite is its own picture
+keeps a stored one: no layers, a non-RGB mode, or a retained native-depth
+merged image.
+
+- **Equivalence.** A tile at level *k* is byte-identical to the same crop of a
+  pyramid built from the whole composite.
+- **Damage.** An edit's damage rectangle repairs the cached tiles it reaches.
+  A rectangle too large to composite at once on a large document marks them
+  stale instead.
+- **Stale tiles.** A stale tile is shown only until its worker-built
+  replacement lands, and is never read as the picture. A worker result that
+  damage overtook is refused through a per-tile damage clock.
+- **Memory.** The cache keeps to the smaller of 192 MiB and a quarter of the
+  memory ceiling, beyond the pinned tiles of the presented view. Under high
+  pressure every unpinned tile is dropped first.
+- **Readers.** Save, flatten and Sample All Layers composite the regions or
+  bands they need.
+
+GPU compositing of tiles is not used yet: the CPU tile path is the oracle.
+
 ### Industry architecture
 
 Mature editors converge on the same shape, and it is worth stating because this
@@ -316,7 +339,9 @@ host expose a GPU color buffer.
 - Precision and working-space fields live on the document model and round-trip
   through PSD/PSB and XMP; they are inputs to this pipeline (`ARCH-010`).
 - Undo/redo bumps the tile generation counter and invalidates caches; no undo
-  record stores pixels produced by the pipeline.
+  record stores pixels produced by the pipeline. As shipped (#1216), a restore
+  repairs or invalidates the display tiles its changed layer tiles, or its
+  changed layer metadata, reach.
 
 ## Edge cases
 

@@ -11,6 +11,7 @@
 #include "panels/color_panel.h"
 #include "tools.h"
 
+#include "api/layers_bridge.h"
 #include "api/view_bridge.h"
 
 #include <QtCore/QTemporaryDir>
@@ -47,6 +48,7 @@ private slots:
     void cleanup();
     void eyedropperDragSamplesContinuously();
     void pickerSwatchEyedropperSamplesTheCanvas();
+    void sampleAllLayersReadsTheComposite();
 
 private:
     bool openBandedImage();
@@ -172,6 +174,37 @@ void EyedropperTest::pickerSwatchEyedropperSamplesTheCanvas()
     QCOMPARE(dragged, blue);
     QVERIFY2(disarmed, "closing the picker disarmed the sampler");
     QCOMPARE(view_->history_count(), history);
+    window_->hide();
+}
+
+// [rc_sample_all] The Eyedropper reads the composite of every layer: a red
+// shape layer over the green band is what it picks there, though the
+// document keeps no stored composite (#1216).
+void EyedropperTest::sampleAllLayersReadsTheComposite()
+{
+    QVERIFY(openBandedImage());
+    window_->resize(900, 700);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    pictura::ShapeSpec square{};
+    square.kind = 0;
+    square.boxed = true;
+    square.x0 = 8;
+    square.y0 = 2;
+    square.x1 = 13;
+    square.y1 = 18;
+    QVERIFY(!pictura::shape_add_layer(*view_, square, 0xffff0000u).isEmpty());
+    QCOMPARE(view_->sample_argb(10, 10), 0xffff0000u);
+    QCOMPARE(view_->sample_argb(10, 19), 0xff00ff00u);
+
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    tools->setActiveTool(pictura::ToolId::Eyedropper);
+    sendMouse(QEvent::MouseButtonPress, QPointF(10, 10), Qt::LeftButton);
+    QCOMPARE(tools->foreground(), QColor(255, 0, 0));
+    sendMouse(QEvent::MouseMove, QPointF(10, 19), Qt::LeftButton);
+    QCOMPARE(tools->foreground(), QColor(0, 255, 0));
+    sendMouse(QEvent::MouseButtonRelease, QPointF(10, 19), Qt::NoButton);
     window_->hide();
 }
 

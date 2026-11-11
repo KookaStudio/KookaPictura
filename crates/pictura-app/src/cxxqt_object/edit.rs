@@ -494,21 +494,23 @@ mod tests {
     use super::*;
     use crate::cxxqt_object::impl_core::{refresh_calls, reset_refresh_calls};
     use crate::cxxqt_object::presentation::present_core;
-    use crate::cxxqt_object::tests::pixel_layer;
+    use crate::cxxqt_object::tests::{assert_display_current, pixel_layer, present_all};
     use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PsdRect};
 
     fn doc_with_layer() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = LayerStack::from_layers(vec![pixel_layer("base", 4, 4, (255, 0, 0))]);
-        doc.composite = pictura_render::composite_rgba(&doc);
         doc
     }
 
+    /// A view whose canvas has presented every tile.
     fn view(doc: Document) -> PictureViewRust {
-        PictureViewRust {
+        let view = PictureViewRust {
             session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             ..Default::default()
-        }
+        };
+        present_all(&view);
+        view
     }
 
     #[test]
@@ -521,8 +523,7 @@ mod tests {
         assert_eq!(view.session.history.count(), 1);
         assert!(view.session.dirty);
         assert_eq!(view.session.content_revision, 1);
-        let doc = view.session.doc.as_ref().expect("document");
-        assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+        assert_display_current(&view);
     }
 
     #[test]
@@ -567,13 +568,7 @@ mod tests {
     #[test]
     fn a_refused_mutation_records_nothing() {
         let mut view = view(doc_with_layer());
-        let before = view
-            .session
-            .doc
-            .as_ref()
-            .expect("document")
-            .composite
-            .clone();
+        reset_refresh_calls();
         let presentation = view.apply_edit("Refused", Edit::None);
         assert!(presentation.is_empty());
         assert_eq!(presentation.declaration, Some(Edit::None));
@@ -581,32 +576,20 @@ mod tests {
         assert_eq!(view.session.history.count(), 0);
         assert!(!view.session.dirty);
         assert_eq!(view.session.content_revision, 0);
-        assert_eq!(
-            view.session.doc.as_ref().expect("document").composite,
-            before
-        );
+        assert_eq!(refresh_calls(), 0, "nothing was composited");
     }
 
     #[test]
     fn an_unchanged_edit_records_nothing() {
         let mut view = view(doc_with_layer());
-        let before = view
-            .session
-            .doc
-            .as_ref()
-            .expect("document")
-            .composite
-            .clone();
+        reset_refresh_calls();
         let presentation = view.apply_edit("Edit", Edit::None);
         assert!(presentation.is_empty());
         present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 0);
         assert!(!view.session.dirty);
         assert_eq!(view.session.content_revision, 0);
-        assert_eq!(
-            view.session.doc.as_ref().expect("document").composite,
-            before
-        );
+        assert_eq!(refresh_calls(), 0, "nothing was composited");
     }
 
     #[test]
@@ -644,22 +627,13 @@ mod tests {
     #[test]
     fn a_metadata_outcome_notifies_without_compositing() {
         let mut view = view(doc_with_layer());
-        let before = view
-            .session
-            .doc
-            .as_ref()
-            .expect("document")
-            .composite
-            .clone();
+        reset_refresh_calls();
         let presentation = view.apply_edit("Edit", Edit::Meta);
         assert!(presentation.notify);
         present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
         assert!(view.session.dirty);
-        assert_eq!(
-            view.session.doc.as_ref().expect("document").composite,
-            before
-        );
+        assert_eq!(refresh_calls(), 0, "nothing was composited");
     }
 
     #[test]
@@ -694,8 +668,7 @@ mod tests {
         assert_eq!(presentation.rebuild, Rebuild::Sync);
         assert!(view.link_sets.is_empty());
         present_core(&mut view, &presentation);
-        let doc = view.session.doc.as_ref().expect("document");
-        assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+        assert_display_current(&view);
     }
 
     #[test]
@@ -719,21 +692,14 @@ mod tests {
         assert_eq!(presentation.regions, vec![rect]);
         assert!(view.link_sets.is_empty());
         present_core(&mut view, &presentation);
-        let doc = view.session.doc.as_ref().expect("document");
-        assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+        assert_display_current(&view);
     }
 
     #[test]
     fn an_inserted_outcome_drops_links_without_compositing() {
         let mut view = view(doc_with_layer());
         view.link_sets.insert("0".into(), 1);
-        let before = view
-            .session
-            .doc
-            .as_ref()
-            .expect("document")
-            .composite
-            .clone();
+        reset_refresh_calls();
         let frame = view.frame_revision;
         let presentation = view.apply_edit("New Layer", Edit::Inserted);
         assert!(presentation.notify);
@@ -743,11 +709,7 @@ mod tests {
         present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
         assert_eq!(view.frame_revision, frame, "no display rebuild");
-        assert_eq!(
-            view.session.doc.as_ref().expect("document").composite,
-            before,
-            "no composite ran"
-        );
+        assert_eq!(refresh_calls(), 0, "no composite ran");
     }
 
     #[test]
@@ -759,17 +721,19 @@ mod tests {
     }
 
     #[test]
-    fn a_commit_captures_the_refreshed_composite() {
+    fn a_commit_captures_no_composite_for_a_layered_document() {
         let mut view = view(doc_with_layer());
         let presentation = view.apply_edit("Edit", Edit::Full);
         assert_eq!(presentation.rebuild, Rebuild::Sync);
         let doc = view.session.doc.as_ref().expect("document");
-        assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+        assert!(!pictura_render::DocumentComposite::is_stored(doc));
         let restored = view.session.history.jump(0).expect("captured state");
-        assert_eq!(
-            restored.doc.composite, doc.composite,
-            "history must carry the refreshed composite"
+        assert!(
+            !pictura_render::DocumentComposite::is_stored(&restored.doc),
+            "history keeps no pipeline pixels (#1216)"
         );
+        present_core(&mut view, &presentation);
+        assert_display_current(&view);
     }
 
     #[test]
@@ -780,9 +744,9 @@ mod tests {
             pictura_render::resize_document(doc, 8, 8, pictura_render::Resample::Nearest)
                 .expect("resize");
         }
-        view.apply_edit("Image Size", Edit::Full);
-        let doc = view.session.doc.as_ref().expect("document");
-        assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+        let presentation = view.apply_edit("Image Size", Edit::Full);
+        present_core(&mut view, &presentation);
+        assert_display_current(&view);
     }
 
     #[test]

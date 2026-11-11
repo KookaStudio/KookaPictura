@@ -587,8 +587,15 @@ pub(super) fn composite_surface(
     view: &PictureViewRust,
     rect: PsdRect,
 ) -> pictura_paint::healing::RgbaImage {
-    let picture = super::super::picture::picture(doc, view);
-    surface_from_composite_rect(&picture, rect)
+    // Only the layer's rectangle of the picture, composited for that region.
+    let region = super::super::picture::picture_region(doc, view, rect);
+    let local = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: rect.height().max(0),
+        right: rect.width().max(0),
+    };
+    surface_from_composite_rect(&region, local)
 }
 
 /// The layer-local Sample All source for `path`; `None` when the layer is
@@ -648,10 +655,14 @@ pub(super) fn magic_erase_at(
         // The wand's flood, over the composite or straight off the layer's
         // planes, as a tiled mask (#1214).
         let flood = if sample_all {
-            let sampled = super::super::picture::picture(doc, rust);
-            pictura_select::magic_wand(&sampled, x as u32, y as u32, tolerance, contiguous)
-                .ok()
-                .map(|s| s.data)
+            // The composite a tile at a time, never whole (#1216).
+            let fetch = super::super::picture::sample_tiles(doc, rust);
+            let source = BucketSource::Tiles {
+                fetch: &fetch,
+                width: doc.width,
+                height: doc.height,
+            };
+            bucket::magic_flood(source, size, (x, y), tolerance, contiguous)
         } else {
             BucketSource::layer(doc, path)
                 .and_then(|source| bucket::magic_flood(source, size, (x, y), tolerance, contiguous))
@@ -952,6 +963,15 @@ mod tests {
             ..Default::default()
         };
         let doc = view.session.doc.as_ref().expect("document");
+        let whole = pictura_core::PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 16,
+            right: 16,
+        };
+        // The canvas has presented the document, so its tiles are cached.
+        let (_, missing) = view.tile_crop(pictura_render::TileSource::Composite, 0, whole);
+        assert!(missing.is_empty());
         let before = composites_so_far();
         let surface = composite_surface(
             doc,
@@ -963,7 +983,7 @@ mod tests {
         assert_eq!(
             composites_so_far(),
             before,
-            "a fresh document is served from its composite"
+            "a presented document is served from its tiles"
         );
         assert_eq!((surface.width, surface.height), (16, 16));
         assert_eq!(surface.data[0], [40, 80, 120, 255]);

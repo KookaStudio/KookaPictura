@@ -36,25 +36,26 @@ const THREADS: usize = 4;
 /// or lower while their setups hold one 4250² RGBA plane less. Record the
 /// measured delta and keep the absolute peak in mind.
 const BASELINE: &[(&str, usize)] = &[
-    // Measured after the tiled planes (#1213), one run per scenario.
-    ("new_document", 108_381_148),
-    ("add_layer", 157_541),
-    ("edit_fill", 3_093_603),
-    ("bucket_in_selection", 1_823_460),
-    // The tiled flood and masks (#1214): the edit itself holds under 1 MiB;
-    // the rest is the display refresh of the whole canvas (#1216).
-    ("bucket_whole_layer", 72_326_344),
-    ("brush_stroke", 2_449_828),
-    ("undo_redo", 144_368_840),
-    // Tile-shared snapshots (#1215): no plane is copied; what is left is the
-    // display rebuilt from the snapshot's composite (#1216).
-    ("snapshot_restore", 23_102_429),
-    ("move_layer", 2_022_008),
-    ("free_transform", 3_659_676),
-    ("save_psd", 128_664_188),
-    ("open_psd", 374_746_666),
-    // Measured after the tiled floods and masks (#1214).
-    ("magic_wand", 354_245),
+    // Measured after the display tile pyramid (#1216), one run per scenario:
+    // no scenario keeps a document-sized composite or display frame now.
+    ("new_document", 511_180),
+    ("add_layer", 81_245),
+    ("edit_fill", 847_250),
+    ("bucket_in_selection", 667_356),
+    ("bucket_whole_layer", 189_136),
+    ("brush_stroke", 791_775),
+    ("undo_redo", 136_590),
+    ("snapshot_restore", 102_945),
+    ("move_layer", 61_123),
+    ("free_transform", 1_059_476),
+    // The merged image is composited band by band into tiles (#1216); the
+    // peak is the save job's copy, a band's compositor canvas and the file.
+    ("save_psd", 128_845_134),
+    ("open_psd", 369_145_949),
+    // Raised by #1216: Sample All Layers composites the tiles it floods (about
+    // 1.5 MiB at once), where #1214 read a retained composite the setup held
+    // (72 MiB at 4250², outside this delta). The absolute peak fell.
+    ("magic_wand", 1_932_132),
 ];
 
 /// The scenarios whose measured step must not materialize a tiled plane into

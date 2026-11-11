@@ -391,3 +391,20 @@ fn history_may_hold_half_the_ceiling() {
         ceiling_of(&reading, DEFAULT_USAGE_PERCENT).map(|c| c / HISTORY_SHARE)
     );
 }
+
+#[test]
+fn the_display_budget_is_a_quarter_of_the_ceiling() {
+    let governor = Governor::new(HostPaths::default());
+    for total in [2 * GIB, 64 * GIB] {
+        let reading = host(total);
+        set_host_for_test(Some(reading));
+        let budget = governor.display_budget();
+        set_host_for_test(None);
+        let ceiling = ceiling_of(&reading, DEFAULT_USAGE_PERCENT).expect("a ceiling");
+        assert_eq!(budget, (ceiling / DISPLAY_SHARE).min(DISPLAY_CAP));
+    }
+    set_host_for_test(Some(host(64 * GIB)));
+    let large = governor.display_budget();
+    set_host_for_test(None);
+    assert_eq!(large, DISPLAY_CAP, "a large host is capped");
+}

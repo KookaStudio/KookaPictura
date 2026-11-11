@@ -389,6 +389,7 @@ fn mode_profile_round_trip() {
             policy: pictura_codec::Policy::Preserve,
             working_cmyk: Some(profile.to_icc()),
             conversion: options,
+            skip_layered_merged: false,
         },
     )
     .expect("reads");

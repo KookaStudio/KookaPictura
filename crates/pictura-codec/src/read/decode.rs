@@ -49,6 +49,20 @@ pub(super) fn read_rle(
     height: usize,
     is_psb: bool,
 ) -> Result<Vec<u8>, PsdError> {
+    read_rle_from(r, channels, 0, row_bytes, height, is_psb)
+}
+
+/// As [`read_rle`], decoding only channels `first..channels`: the rows of
+/// the channels before `first` are skipped, not decoded, and absent from the
+/// output (#1216: a merged image the application keeps no copy of).
+pub(super) fn read_rle_from(
+    r: &mut Reader,
+    channels: usize,
+    first: usize,
+    row_bytes: usize,
+    height: usize,
+    is_psb: bool,
+) -> Result<Vec<u8>, PsdError> {
     use rayon::prelude::*;
 
     let rows = channels
@@ -61,7 +75,8 @@ pub(super) fn read_rle(
         counts.push(read_rle_count(r, is_psb)?);
     }
 
-    let mut out = vec![0u8; planar_len(channels, row_bytes, height)?];
+    let skipped = first.min(channels) * height;
+    let mut out = vec![0u8; planar_len(channels - first.min(channels), row_bytes, height)?];
     // The image-data section is last, so the payload is the rest of the file.
     // It is not consumed up front: a later row that runs off the end must not
     // outrank an earlier row's decode error.
@@ -74,7 +89,11 @@ pub(super) fn read_rle(
     }
     let results: Vec<Result<(), PsdError>> = out
         .par_chunks_mut(row_bytes)
-        .zip(counts.par_iter().zip(offsets.par_iter()))
+        .zip(
+            counts[skipped..]
+                .par_iter()
+                .zip(offsets[skipped..].par_iter()),
+        )
         .map(|(dst, (&count, &offset))| {
             let packed = payload
                 .get(offset..)
