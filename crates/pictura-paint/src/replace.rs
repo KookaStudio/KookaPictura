@@ -341,7 +341,9 @@ pub(crate) fn reachable(
 }
 
 pub(crate) fn dab_bounds(img: &RgbaImage, cfg: &StrokeConfig, cx: f32, cy: f32) -> Option<PsdRect> {
-    let radius = cfg.diameter as f32 * 0.5;
+    let radius = cfg.bristle.map_or(cfg.diameter as f32 * 0.5, |tip| {
+        tip.reach(cfg.diameter as f32)
+    });
     let region = PsdRect {
         top: ((cy - radius).floor() as i32).max(0),
         left: ((cx - radius).floor() as i32).max(0),

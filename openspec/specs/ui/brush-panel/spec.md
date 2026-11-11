@@ -11,7 +11,10 @@ The Brush panel: presets, tip shape, and dynamics for the active brush.
 Brush Tip Shape page edits the brush shared by every painting tool: Size
 (1–5000 px), Flip X, Flip Y, Angle (−180–180°), Roundness (1–100 %),
 Hardness (0–100 %), and Spacing (1–1000 % of the size), plus a row of round
-tip presets that set Size and Hardness. The page SHALL show a tip-shape
+tip presets that set Size and Hardness. The page SHALL also offer a Bristle Tip
+toggle with Shape, Bristles (0–100 %), Length (0–100 %), Thickness (0–100 %),
+and Stiffness (0–100 %); while the toggle is on, Hardness and Roundness SHALL
+be disabled because a bristle tip has neither. The page SHALL show a tip-shape
 indicator and a stroke preview painted by the engine with the current tip, and
 SHALL follow tip changes made elsewhere.
 
@@ -47,6 +50,19 @@ changes land.
 
 - **WHEN** the Color Dynamics padlock is clicked and a brush preset is applied
 - **THEN** the lock shows on the row and the preset leaves Color Dynamics unchanged
+
+#### Scenario: Bristle controls write the model
+
+- **WHEN** the Bristle Tip toggle is checked, the Shape is set to Flat Fan, and
+  Bristles, Length, Thickness, and Stiffness are changed
+- **THEN** the controller's bristle tip reports those values and the preview
+  paints a bristle mark
+
+#### Scenario: Bristle disables hardness
+
+- **WHEN** the Bristle Tip toggle is checked
+- **THEN** Hardness and Roundness are disabled while the bristle fields are
+  enabled
 
 ### Requirement: Shared brush tip
 
