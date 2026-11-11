@@ -431,14 +431,15 @@ void LargeDocumentTest::aTransformCommitLandsOffThread()
     QVERIFY2(sawHandles, "the handles stay while the job runs");
     QVERIFY(!pictura::transform_pending(*f.view));
     QVERIFY2(!f.canvas->transformPreviewActive(), "the transform handles are gone");
-    QCOMPARE(f.view->history_count(), count + 1);
-    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));
+    // The history state is captured when the deferred composite lands.
     if (pictura::move_composite_pending(*f.view)) {
         QVERIFY2(f.canvas->movePreviewActive(), "the transform image waits for the composite");
         QVERIFY(committed.wait(30000));
     }
     QVERIFY(!pictura::move_composite_pending(*f.view));
     QVERIFY(!f.canvas->movePreviewActive());
+    QCOMPARE(f.view->history_count(), count + 1);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));
 }
 
 // [mcr_transform_cancel] [lop_cancel_unchanged]
@@ -492,8 +493,12 @@ void LargeDocumentTest::cancellingATransformResumesTheSession()
 
     // The resumed session commits as one state.
     pictura::transform_set_delay(*f.view, 0);
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
     f.tools->commitFreeTransform();
     QVERIFY(!f.view->transform_session_active());
+    if (pictura::move_composite_pending(*f.view)) {
+        QVERIFY(committed.wait(30000));
+    }
     QCOMPARE(f.view->history_count(), count + 1);
 }
 

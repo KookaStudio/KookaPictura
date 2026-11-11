@@ -10,6 +10,8 @@
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QVBoxLayout>
 
+#include <limits>
+
 namespace pictura {
 
 namespace {
@@ -74,22 +76,36 @@ bool runCancellableJob(QWidget* parent, const QString& title, const QString& lab
     dialog.setObjectName(QStringLiteral("jobProgress"));
     dialog.setWindowTitle(title);
     dialog.setWindowModality(Qt::WindowModal);
-    dialog.setMinimumDuration(static_cast<int>(kBusyWindowDelayMs));
+    // Shown below on a clock: the dialog's own estimate would show a job
+    // whose progress predicts a long run before the 250 ms have passed.
+    dialog.setMinimumDuration(std::numeric_limits<int>::max());
     dialog.setAutoClose(false);
     dialog.setAutoReset(false);
-    QObject::connect(&dialog, &QProgressDialog::canceled, &dialog, [&] { cancel(); });
+    bool stopped = false;
+    QObject::connect(&dialog, &QProgressDialog::canceled, &dialog, [&] {
+        stopped = true;
+        cancel();
+    });
     // Esc rejects the dialog; it cancels the job like the button.
-    QObject::connect(&dialog, &QDialog::rejected, &dialog, [&] { cancel(); });
+    QObject::connect(&dialog, &QDialog::rejected, &dialog, [&] {
+        stopped = true;
+        cancel();
+    });
 
     QEventLoop loop;
     QTimer poll;
     poll.setInterval(16);
+    QElapsedTimer elapsed;
+    elapsed.start();
     QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
-        if (running()) {
-            dialog.setValue(progress());
-        } else {
+        if (!running()) {
             loop.quit();
+            return;
         }
+        if (!dialog.isVisible() && !stopped && elapsed.elapsed() >= kBusyWindowDelayMs) {
+            dialog.show();
+        }
+        dialog.setValue(progress());
     });
     poll.start();
     if (running()) {
