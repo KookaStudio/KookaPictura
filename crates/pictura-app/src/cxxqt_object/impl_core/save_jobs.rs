@@ -12,7 +12,9 @@ use super::super::qobject::PictureView;
 pub(in crate::cxxqt_object) use imp::*;
 
 pub(in crate::cxxqt_object) use super::deferred_composite::{
-    move_composite_pending, move_composite_set_delay, transform_pending, transform_set_delay,
+    move_composite_pending, move_composite_set_delay, transform_commit_cancel,
+    transform_commit_finish, transform_commit_progress, transform_commit_running,
+    transform_pending, transform_set_delay,
 };
 
 #[cxx_qt::bridge]
@@ -49,8 +51,21 @@ pub mod ffi {
         /// Hold a started Move composite for `ms` milliseconds (test seam).
         fn move_composite_set_delay(view: Pin<&mut PictureView>, ms: u64);
 
-        /// Whether a transform engine is still on its worker.
+        /// Whether a transform job is in flight or waiting to land.
         fn transform_pending(view: &PictureView) -> bool;
+
+        /// Whether a large Free Transform commit's worker is still running.
+        fn transform_commit_running(view: &PictureView) -> bool;
+
+        /// The running transform commit's progress, 0 to 1000.
+        fn transform_commit_progress(view: &PictureView) -> i32;
+
+        /// Ask the running transform commit to stop; its session resumes.
+        fn transform_commit_cancel(view: Pin<&mut PictureView>);
+
+        /// Land the transform commit: true when it recorded its history state,
+        /// false after a cancel or a refusal (the session is still active).
+        fn transform_commit_finish(view: Pin<&mut PictureView>) -> bool;
 
         /// Hold a started transform engine for `ms` milliseconds (test seam).
         fn transform_set_delay(view: Pin<&mut PictureView>, ms: u64);

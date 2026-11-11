@@ -266,10 +266,21 @@ pub(super) fn warp_planes(
         }
     }
     let n = src.data.len();
+    let job = pictura_core::job::current();
     let rendered: Vec<Vec<Vec<f32>>> = bands
         .par_iter()
         .zip(bins.par_iter())
-        .map(|(&(y0, y1), tris)| render_band(src, rect, t, tris, (dl, y0, dr, y1), interp, hdr))
+        .map(|(&(y0, y1), tris)| {
+            if job.as_ref().is_some_and(|job| job.cancelled()) {
+                // The cancelled result is dropped; keep the band's shape.
+                return vec![vec![0.0; dw * (y1 - y0) as usize]; n];
+            }
+            let band = render_band(src, rect, t, tris, (dl, y0, dr, y1), interp, hdr);
+            if let Some(job) = &job {
+                job.advance((y1 - y0) as u64);
+            }
+            band
+        })
         .collect();
     let mut out: Vec<Vec<f32>> = vec![Vec::with_capacity(dw * (db - dt) as usize); n];
     for band in rendered {

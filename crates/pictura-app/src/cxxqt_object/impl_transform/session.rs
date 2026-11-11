@@ -7,8 +7,8 @@ use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
 use super::group::{
-    can_free_transform, commit_bytes, group_apply, repeatable_transform, transform_group,
-    transform_group_edit, transform_rect,
+    can_free_transform, commit_bytes, group_apply, lifted_apply, repeatable_transform,
+    transform_group, transform_group_edit, transform_rect,
 };
 use super::{
     build_move_preview_base, duplicate_move_target, link_members, movable_layer, move_group_key,
@@ -26,6 +26,7 @@ use pictura_render::Interpolation;
 const DEFERRED_TRANSFORM_PIXELS: u64 = 4_000_000;
 
 mod preview;
+mod readouts;
 mod view_preview;
 
 #[cfg(test)]
@@ -318,6 +319,53 @@ impl qobject::PictureView {
             self.as_mut().clear_transform_preview();
             return false;
         }
+        let area = u64::from(orig_rect.width().max(0) as u32)
+            * u64::from(orig_rect.height().max(0) as u32);
+        // A large engine runs as a cancellable job (#1278); the session stays
+        // live until it lands, so a cancel resumes it.
+        if area >= DEFERRED_TRANSFORM_PIXELS {
+            let lifted = self
+                .rust()
+                .session
+                .live
+                .transform()
+                .is_some_and(|s| s.lifted.is_some());
+            let (paths, apply) = if lifted {
+                let apply = lifted_apply(
+                    path.clone(),
+                    projective,
+                    quad,
+                    params,
+                    interpolation,
+                    warp,
+                    preview_quad,
+                    orig_rect,
+                );
+                (vec![path], apply)
+            } else {
+                let paths = members.iter().map(|(member, _)| member.clone()).collect();
+                let apply = group_apply(
+                    members,
+                    projective,
+                    quad,
+                    params,
+                    interpolation,
+                    warp,
+                    preview_quad,
+                    orig_rect,
+                );
+                (paths, apply)
+            };
+            let spec = super::super::impl_core::TransformSpec {
+                paths,
+                orig_rect,
+                apply,
+            };
+            return self
+                .as_mut()
+                .rust_mut()
+                .defer_transform(&history_label, spec, lifted, repeat);
+        }
         let mut session = self.as_mut().rust_mut().session.live.take_transform();
         let lifted = session.as_mut().and_then(|session| session.lifted.take());
         if let Some((_, before)) = lifted {
@@ -369,9 +417,6 @@ impl qobject::PictureView {
             return true;
         }
 
-        // The engine resamples each member's pixels; on a large set it belongs
-        // on a worker. The landing installs the transformed members and hands
-        // their composite to the same deferred edit a Move commit uses.
         let apply = group_apply(
             members.clone(),
             projective,
@@ -382,110 +427,26 @@ impl qobject::PictureView {
             preview_quad,
             orig_rect,
         );
-        let area = u64::from(orig_rect.width().max(0) as u32)
-            * u64::from(orig_rect.height().max(0) as u32);
-        if area < DEFERRED_TRANSFORM_PIXELS {
-            let changed = self
-                .as_mut()
-                .rust_mut()
-                .session
-                .doc
-                .as_mut()
-                .is_some_and(|doc| (apply)(doc));
-            if changed {
-                self.as_mut().rust_mut().last_transform = repeat;
-                let edit = self.rust().session.doc.as_ref().map_or(Edit::Full, |doc| {
-                    transform_group_edit(doc, &members, orig_rect)
-                });
-                self.as_mut()
-                    .commit_transform_edit(&history_label, true, |_| edit);
-                if !self.rust().move_composite_pending() {
-                    self.as_mut().move_committed();
-                }
-            }
-            self.as_mut().clear_transform_preview();
-            return changed;
-        }
-        let spec = super::super::impl_core::TransformSpec {
-            paths: members.iter().map(|(member, _)| member.clone()).collect(),
-            orig_rect,
-            apply,
-        };
-        self.as_mut().rust_mut().last_transform = repeat;
-        let deferred = self
+        let changed = self
             .as_mut()
             .rust_mut()
-            .defer_transform(&history_label, spec);
-        if deferred {
-            if let Some(job) = self.as_mut().rust_mut().pending_transform_job.take() {
-                self.as_mut().build_transform(job);
+            .session
+            .doc
+            .as_mut()
+            .is_some_and(|doc| (apply)(doc));
+        if changed {
+            self.as_mut().rust_mut().last_transform = repeat;
+            let edit = self.rust().session.doc.as_ref().map_or(Edit::Full, |doc| {
+                transform_group_edit(doc, &members, orig_rect)
+            });
+            self.as_mut()
+                .commit_transform_edit(&history_label, true, |_| edit);
+            if !self.rust().move_composite_pending() {
+                self.as_mut().move_committed();
             }
         }
         self.as_mut().clear_transform_preview();
-        deferred
-    }
-
-    /// Whether a Free Transform session is active.
-    pub fn transform_session_active(&self) -> bool {
-        self.rust().session.live.transform().is_some()
-    }
-
-    /// The handle the live transform drag grabbed, or -1 when no drag is live.
-    pub fn transform_drag_handle(&self) -> i32 {
-        self.rust()
-            .session
-            .live
-            .transform()
-            .filter(|session| session.dragging)
-            .map_or(-1, |session| session.handle)
-    }
-    pub fn transform_session_path(&self) -> QString {
-        self.rust()
-            .session
-            .live
-            .transform()
-            .map(|session| QString::from(session.path.as_str()))
-            .unwrap_or_default()
-    }
-
-    pub fn transform_scale_x(&self) -> f64 {
-        self.rust()
-            .session
-            .live
-            .transform()
-            .map_or(1.0, |session| session.scale_x)
-    }
-
-    pub fn transform_scale_y(&self) -> f64 {
-        self.rust()
-            .session
-            .live
-            .transform()
-            .map_or(1.0, |session| session.scale_y)
-    }
-
-    pub fn transform_angle(&self) -> f64 {
-        self.rust()
-            .session
-            .live
-            .transform()
-            .map_or(0.0, |session| session.angle)
-    }
-
-    pub fn transform_dx(&self) -> f64 {
-        self.rust()
-            .session
-            .live
-            .transform()
-            .map_or(0.0, |session| session.dx)
-    }
-
-    pub fn transform_dy(&self) -> f64 {
-        self.rust()
-            .session
-            .live
-            .transform()
-            .map_or(0.0, |session| session.dy)
+        changed
     }
 }
 

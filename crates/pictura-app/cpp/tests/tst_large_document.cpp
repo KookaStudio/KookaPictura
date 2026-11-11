@@ -6,6 +6,8 @@
 #include <QtTest/QtTest>
 
 #include <QtCore/QElapsedTimer>
+#include <QtWidgets/QProgressDialog>
+#include <QtWidgets/QPushButton>
 
 #include "commands.h"
 #include "panels/info_panel.h"
@@ -68,6 +70,7 @@ private slots:
     void aSecondPressKeepsTheViewPreview();
     void aHoverReadoutDoesNotSettleTheMove();
     void aTransformCommitLandsOffThread();
+    void cancellingATransformResumesTheSession();
     void aRotatedPixelEdgeIsAntialiased();
 
 private:
@@ -404,18 +407,94 @@ void LargeDocumentTest::aTransformCommitLandsOffThread()
     QVERIFY(f.view->transform_move(corner.x() - 200.0, corner.y() - 200.0, 1.0, false, false));
     f.view->transform_release();
 
-    pictura::transform_set_delay(*f.view, 500);
+    pictura::transform_set_delay(*f.view, 800);
     QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+    const int count = f.view->history_count();
+    bool sawWindow = false;
+    bool sawHandles = true;
+    int sawValue = 0;
+    QTimer probe;
+    probe.setInterval(20);
+    connect(&probe, &QTimer::timeout, this, [&] {
+        auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));
+        if (d && d->isVisible()) {
+            sawWindow = true;
+            sawValue = std::max(sawValue, d->value());
+            sawHandles = sawHandles && f.canvas->transformPreviewActive();
+        }
+    });
+    probe.start();
     f.tools->commitFreeTransform();
-    QVERIFY2(pictura::transform_pending(*f.view), "the transform engine is on a worker");
-    QVERIFY2(f.canvas->movePreviewActive(), "the transform image waits for the landing");
-    QVERIFY2(!f.canvas->transformPreviewActive(), "the transform handles are gone");
-
-    QVERIFY(committed.wait(30000));
+    probe.stop();
+    QVERIFY2(sawWindow, "the progress window appeared");
+    QVERIFY2(sawValue > 0, "the progress value rose");
+    QVERIFY2(sawHandles, "the handles stay while the job runs");
     QVERIFY(!pictura::transform_pending(*f.view));
+    QVERIFY2(!f.canvas->transformPreviewActive(), "the transform handles are gone");
+    QCOMPARE(f.view->history_count(), count + 1);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));
+    if (pictura::move_composite_pending(*f.view)) {
+        QVERIFY2(f.canvas->movePreviewActive(), "the transform image waits for the composite");
+        QVERIFY(committed.wait(30000));
+    }
     QVERIFY(!pictura::move_composite_pending(*f.view));
     QVERIFY(!f.canvas->movePreviewActive());
-    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Free Transform"));
+}
+
+// [mcr_transform_cancel] [lop_cancel_unchanged]
+void LargeDocumentTest::cancellingATransformResumesTheSession()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_cancelled_transform"));
+    QVERIFY2(f.ok(), "cancelled transform fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.tools->beginFreeTransform(QStringLiteral("1")));
+    const QPolygonF quad = pictura::transform_api::quad(*f.view).corners;
+    QCOMPARE(quad.size(), 4);
+    const QPointF corner = quad.at(2);
+    QVERIFY(f.view->transform_press(corner.x(), corner.y(), 1.0, false, false) >= 0);
+    QVERIFY(f.view->transform_move(corner.x() - 200.0, corner.y() - 200.0, 1.0, false, false));
+    f.view->transform_release();
+    const QPolygonF moved = pictura::transform_api::quad(*f.view).corners;
+    const int count = f.view->history_count();
+    const int index = f.view->history_index();
+    const QImage before = f.view->display_image(2, 0, 0, 1050, 1050);
+
+    pictura::transform_set_delay(*f.view, 30000);
+    bool clicked = false;
+    QTimer probe;
+    probe.setInterval(20);
+    connect(&probe, &QTimer::timeout, this, [&] {
+        auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));
+        if (!clicked && d && d->isVisible()) {
+            if (auto* cancel = d->findChild<QPushButton*>()) {
+                clicked = true;
+                cancel->click();
+            }
+        }
+    });
+    probe.start();
+    QElapsedTimer clock;
+    clock.start();
+    f.tools->commitFreeTransform();
+    probe.stop();
+    QVERIFY2(clicked, "the progress window offered Cancel");
+    QVERIFY2(clock.elapsed() < 20000, "the cancel stopped the held job");
+    QVERIFY(!pictura::transform_pending(*f.view));
+    QVERIFY2(f.view->transform_session_active(), "the session resumes");
+    QCOMPARE(pictura::transform_api::quad(*f.view).corners, moved);
+    QVERIFY2(f.canvas->transformPreviewActive(), "the handles are back");
+    QCOMPARE(f.view->history_count(), count);
+    QCOMPARE(f.view->history_index(), index);
+    QVERIFY2(f.view->display_image(2, 0, 0, 1050, 1050) == before, "the document is unchanged");
+
+    // The resumed session commits as one state.
+    pictura::transform_set_delay(*f.view, 0);
+    f.tools->commitFreeTransform();
+    QVERIFY(!f.view->transform_session_active());
+    QCOMPARE(f.view->history_count(), count + 1);
 }
 
 // [mcr_transform_antialias]

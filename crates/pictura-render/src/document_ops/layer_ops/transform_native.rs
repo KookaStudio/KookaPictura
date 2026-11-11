@@ -63,7 +63,14 @@ fn resample_typed<M: PlaneMap, T: Sample>(
     let mut out = vec![T::from_unit(0.0); dw * dh];
     let wf = w as f64;
     let hf = h as f64;
+    let job = pictura_core::job::current();
     for oy in 0..dh {
+        if let Some(job) = &job {
+            if job.cancelled() {
+                break;
+            }
+            job.advance(1);
+        }
         for ox in 0..dw {
             let qx = dl as f64 + ox as f64 + 0.5;
             let qy = dt as f64 + oy as f64 + 0.5;

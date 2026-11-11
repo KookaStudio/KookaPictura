@@ -1,4 +1,4 @@
-use super::impl_core::{DeferredComposite, DeferredTransform, TransformJob};
+use super::impl_core::{DeferredComposite, DeferredTransform};
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::PsdRect;
@@ -161,10 +161,6 @@ pub struct PictureViewRust {
     pub(super) pending_move_job: Option<super::impl_core::CompositeJob>,
     /// The transform engine running on a worker, if any.
     pub(super) deferred_transform: Option<DeferredTransform>,
-    /// The engine job the QObject spawns after the commit returns.
-    pub(super) pending_transform_job: Option<TransformJob>,
-    /// Numbers each deferred transform, so a superseded result is recognised.
-    pub(super) transform_generation: u64,
     /// Test seam: hold a started transform engine for this many milliseconds.
     pub(super) transform_delay_for_test: u64,
     /// Numbers each deferred Move composite, so a superseded result is
@@ -308,8 +304,6 @@ impl Default for PictureViewRust {
             pending_move_job: None,
             composite_generation: 0,
             deferred_transform: None,
-            pending_transform_job: None,
-            transform_generation: 0,
             transform_delay_for_test: 0,
             move_composite_delay_for_test: 0,
             link_sets: HashMap::new(),

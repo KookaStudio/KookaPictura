@@ -14,6 +14,7 @@ mod document_composite;
 mod guides;
 pub mod hdr;
 pub mod homography;
+pub mod job;
 pub mod layer_bounds;
 mod layer_stack;
 pub mod mask_ops;

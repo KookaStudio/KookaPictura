@@ -78,6 +78,8 @@ bool runCancellableJob(QWidget* parent, const QString& title, const QString& lab
     dialog.setAutoClose(false);
     dialog.setAutoReset(false);
     QObject::connect(&dialog, &QProgressDialog::canceled, &dialog, [&] { cancel(); });
+    // Esc rejects the dialog; it cancels the job like the button.
+    QObject::connect(&dialog, &QDialog::rejected, &dialog, [&] { cancel(); });
 
     QEventLoop loop;
     QTimer poll;
@@ -91,7 +93,9 @@ bool runCancellableJob(QWidget* parent, const QString& title, const QString& lab
     });
     poll.start();
     if (running()) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
         loop.exec();
+        QApplication::restoreOverrideCursor();
     }
     poll.stop();
     dialog.hide();

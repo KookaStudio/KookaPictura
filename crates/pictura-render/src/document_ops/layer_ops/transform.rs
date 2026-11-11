@@ -289,7 +289,14 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
     let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
     let mut out = vec![0u8; dw * dh];
     let (pwf, phf) = (pw as f64, ph as f64);
+    let job = pictura_core::job::current();
     out.par_chunks_mut(dw).enumerate().for_each(|(oy, row)| {
+        if job.as_ref().is_some_and(|job| job.cancelled()) {
+            return;
+        }
+        if let Some(job) = &job {
+            job.advance(1);
+        }
         for (ox, pixel) in row.iter_mut().enumerate() {
             let qx = dl as f64 + ox as f64 + 0.5;
             let qy = dt as f64 + oy as f64 + 0.5;
@@ -566,6 +573,9 @@ where
     let Some(dest) = bounding_box(&map, prepared.rect) else {
         return false;
     };
+    if let Some(job) = pictura_core::job::current() {
+        job.begin_stage(resample_rows(&prepared, dest));
+    }
     let new_channels: Vec<Channel> = prepared
         .source_channels
         .iter()
@@ -608,6 +618,9 @@ where
             )
         })
     };
+    if job_cancelled() {
+        return false;
+    }
     let out = LayerOutput {
         channels: new_channels,
         mask: new_mask,
@@ -615,6 +628,21 @@ where
         dest,
     };
     write_layer(doc, path, &prepared, out, pure_translate)
+}
+
+/// Whether the installed job was cancelled: a cancelled resample is partial
+/// and must refuse before it writes.
+pub(super) fn job_cancelled() -> bool {
+    pictura_core::job::current().is_some_and(|job| job.cancelled())
+}
+
+/// The output rows a layer resample visits, for its job stage: every channel
+/// and retained plane at the destination height, the mask counted the same.
+pub(super) fn resample_rows(prepared: &Prepared, dest: (i32, i32, i32, i32)) -> u64 {
+    let planes = prepared.source_channels.len()
+        + usize::from(prepared.mask.as_ref().is_some_and(|m| m.data.is_some()))
+        + prepared.native.as_ref().map_or(0, |n| n.planes.len());
+    (dest.3 - dest.1).max(0) as u64 * planes as u64
 }
 
 /// A shape layer's outline box: its transforms map the path about this box,
@@ -802,6 +830,74 @@ pub(crate) fn quad_corner_targets(rect: PsdRect, quad: [(f64, f64); 4]) -> Optio
 mod tests {
     use super::*;
     use pictura_core::Document;
+
+    fn rotate(doc: &mut Document) -> bool {
+        transform_layer_with(
+            doc,
+            "0",
+            LayerTransform {
+                scale_x: 1.25,
+                scale_y: 0.8,
+                angle_radians: 17f64.to_radians(),
+                dx: 3.0,
+                dy: -2.0,
+            },
+            Interpolation::Bicubic,
+        )
+    }
+
+    fn seeded(w: u32, h: u32) -> Document {
+        let rgba: Vec<u8> = (0..w * h * 4).map(|i| (i * 37 % 251) as u8).collect();
+        Document::from_rgba("seeded", w, h, &rgba)
+    }
+
+    #[test]
+    fn transform_progress_rises_to_completion() {
+        use pictura_core::job::{self, JobProgress};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        let mut doc = seeded(257, 131);
+        let job = JobProgress::new();
+        let stop = Arc::new(AtomicBool::new(false));
+        let sampler = {
+            let (job, stop) = (job.clone(), stop.clone());
+            std::thread::spawn(move || {
+                let mut seen = vec![job.permille()];
+                while !stop.load(Ordering::Relaxed) {
+                    seen.push(job.permille());
+                }
+                seen
+            })
+        };
+        assert!(job::scope(&job, || rotate(&mut doc)));
+        // Every declared row was visited: the stage is full but not finished.
+        assert_eq!(job.permille(), 999);
+        assert_eq!(job::run(&job, || ()), Ok(()));
+        stop.store(true, Ordering::Relaxed);
+        let mut seen = sampler.join().expect("sampler");
+        seen.push(job.permille());
+        assert!(seen.windows(2).all(|w| w[0] <= w[1]), "progress fell");
+        assert_eq!(*seen.last().unwrap(), 1000);
+    }
+
+    #[test]
+    fn a_cancelled_transform_leaves_the_document() {
+        use pictura_core::job::{self, Cancelled, JobProgress};
+        let original = seeded(257, 131);
+        let mut doc = original.clone();
+        let job = JobProgress::new();
+        job.cancel();
+        assert_eq!(job::run(&job, || rotate(&mut doc)), Err(Cancelled));
+        assert_eq!(job.permille(), 0, "no row was resampled");
+        let (before, after) = (
+            resolve_path(&original, "0").expect("layer"),
+            resolve_path(&doc, "0").expect("layer"),
+        );
+        assert_eq!(before.rect, after.rect);
+        for (a, b) in before.channels.iter().zip(&after.channels) {
+            assert!(a.data == b.data, "channel {}", a.id);
+        }
+    }
 
     #[test]
     fn a_rotated_edge_is_antialiased() {

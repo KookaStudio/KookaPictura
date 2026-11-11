@@ -449,6 +449,9 @@ public:
     // one "Transform Again" state.
     bool repeatTransform();
     void commitFreeTransform();
+    // The Move tool's controls box applies each gesture on release and stays
+    // on the resulting layer.
+    void commitTransformControls(PictureView& v);
     void cancelFreeTransform();
     // Clear the transform overlay and the Move controls box after a history
     // restore or document swap cancelled the session in Rust.
