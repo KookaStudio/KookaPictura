@@ -2,6 +2,8 @@ use super::*;
 
 use super::super::super::channels::mode_name;
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::impl_core::{JobBar, Outcome};
+use crate::cxxqt_object::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -147,32 +149,37 @@ pub(super) fn image_depth_available(view: &PictureView, bits: i32) -> bool {
 /// active layer is re-pointed at it (or cleared for a flat Bitmap).
 pub(super) fn commit(
     mut view: Pin<&mut PictureView>,
-    convert: impl FnOnce(&mut Document) -> bool,
+    convert: impl FnOnce(&mut Document) -> bool + Send + 'static,
 ) -> bool {
     if view.rust().modal_transform_blocks_edit() {
         return false;
     }
-    let converted = {
+    let restored = {
         let mut rust = view.as_mut().rust_mut();
-        if let Some(base) = rust.session.live.take_mode_preview() {
+        let base = rust.session.live.take_mode_preview();
+        let restored = base.is_some();
+        if let Some(base) = base {
             rust.session.doc = Some(base);
         }
-        let Some(doc) = rust.session.doc.as_mut() else {
-            return false;
-        };
-        convert(doc)
+        restored
     };
-    if !converted {
+    // The canvas leaves the preview before the conversion, which may run as a
+    // job that a cancel ends with the restored document.
+    if restored {
         view.as_mut().recomposite();
-        return false;
     }
-    refresh_active_layer(view.as_mut());
-    view.as_mut().edit(HISTORY_LABEL, |_| Edit::Full);
-    true
+    view.as_mut().document_op(
+        HISTORY_LABEL,
+        JobBar::Busy,
+        move |doc| convert(doc).then(Outcome::default),
+        |rust, _| {
+            refresh_active_layer(rust);
+            Edit::Full
+        },
+    )
 }
 
-pub(super) fn refresh_active_layer(mut view: Pin<&mut PictureView>) {
-    let mut rust = view.as_mut().rust_mut();
+pub(super) fn refresh_active_layer(rust: &mut PictureViewRust) {
     let Some(count) = rust.session.doc.as_ref().map(|doc| doc.layers.len()) else {
         return;
     };
@@ -192,14 +199,12 @@ pub(super) fn refresh_active_layer(mut view: Pin<&mut PictureView>) {
 pub(super) fn convert_image_mode(view: Pin<&mut PictureView>, mode: &QString) -> bool {
     match mode_from_name(&mode.to_string()) {
         Some(mode @ (ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Cmyk | ColorMode::Lab)) => {
-            let (profile, options) = {
+            let (icc, options) = {
                 let rust = view.rust();
-                (
-                    pictura_codec::Profile::from_icc(&rust.working_cmyk).ok(),
-                    rust.conversion_options,
-                )
+                (rust.working_cmyk.clone(), rust.conversion_options)
             };
-            commit(view, |doc| {
+            commit(view, move |doc| {
+                let profile = pictura_codec::Profile::from_icc(&icc).ok();
                 pictura_render::convert_mode_with_profiles(doc, mode, profile.as_ref(), options)
                     .is_ok()
             })
@@ -210,7 +215,7 @@ pub(super) fn convert_image_mode(view: Pin<&mut PictureView>, mode: &QString) ->
 
 pub(super) fn convert_image_depth(view: Pin<&mut PictureView>, bits: i32) -> bool {
     match depth_from_bits(bits) {
-        Some(out) => commit(view, |doc| {
+        Some(out) => commit(view, move |doc| {
             pictura_render::convert_bit_depth(doc, out).is_ok()
         }),
         None => false,
@@ -233,7 +238,7 @@ pub(super) fn convert_to_indexed(
     amount: i32,
 ) -> bool {
     let options = palette_options(palette, colors, dither, amount);
-    commit(view, |doc| {
+    commit(view, move |doc| {
         pictura_render::convert_to_indexed(doc, options).is_ok()
     })
 }
@@ -298,7 +303,7 @@ pub(super) fn cancel_mode_preview(mut view: Pin<&mut PictureView>) -> bool {
 
 pub(super) fn convert_to_bitmap(view: Pin<&mut PictureView>, method: i32) -> bool {
     let method = bitmap_method(method);
-    commit(view, |doc| {
+    commit(view, move |doc| {
         pictura_render::convert_to_bitmap(doc, method).is_ok()
     })
 }

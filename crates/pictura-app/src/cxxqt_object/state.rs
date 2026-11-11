@@ -163,6 +163,8 @@ pub struct PictureViewRust {
     pub(super) deferred_transform: Option<DeferredTransform>,
     /// Test seam: hold a started transform engine for this many milliseconds.
     pub(super) transform_delay_for_test: u64,
+    /// A whole-document command running as a job (#1278).
+    pub(super) document_jobs: super::impl_core::DocumentJobs,
     /// Numbers each deferred Move composite, so a superseded result is
     /// recognised.
     pub(super) composite_generation: u64,
@@ -305,6 +307,7 @@ impl Default for PictureViewRust {
             composite_generation: 0,
             deferred_transform: None,
             transform_delay_for_test: 0,
+            document_jobs: Default::default(),
             move_composite_delay_for_test: 0,
             link_sets: HashMap::new(),
             link_remap: None,

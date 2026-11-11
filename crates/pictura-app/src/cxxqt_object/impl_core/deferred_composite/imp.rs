@@ -316,6 +316,7 @@ impl PictureViewRust {
     pub(in crate::cxxqt_object) fn cancel_move_composite(&mut self) {
         self.pending_move_job = None;
         self.deferred_transform = None;
+        self.drop_document_job();
         if self.deferred_composite.take().is_some() {
             metrics::cancel_edit();
         }
@@ -413,6 +414,10 @@ impl qobject::PictureView {
         // A caller that never ran the job window (the API, a test) waits here.
         if self.rust().transform_pending() {
             self.as_mut().transform_commit_finish();
+            return;
+        }
+        if self.rust().document_job_pending() {
+            self.as_mut().document_job_finish();
             return;
         }
         if let Some(settled) = self.as_mut().rust_mut().settle_move_composite() {

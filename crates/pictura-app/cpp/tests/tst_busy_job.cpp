@@ -1,5 +1,6 @@
 // The cancellable job window (#1278): the wait cursor at once, the progress
-// window only after 250 ms, and Esc cancelling like the button.
+// window only after 250 ms, Esc cancelling like the button, and a busy bar for
+// a job that cannot count its work.
 
 #include <QtTest/QtTest>
 
@@ -45,6 +46,7 @@ private slots:
     void quickJobShowsOnlyTheWaitCursor();
     void slowJobShowsTheProgressWindow();
     void escCancelsTheJob();
+    void aNegativeProgressShowsABusyBar();
 };
 
 // [lop_quick_job]
@@ -135,6 +137,30 @@ void BusyJobTest::escCancelsTheJob()
     QVERIFY2(cancelled, "Esc ran the cancel callback");
     QVERIFY(!finished);
     QVERIFY2(clock.elapsed() < 10000, "the job ended on the cancel");
+}
+
+// [lop_busy_bar]
+void BusyJobTest::aNegativeProgressShowsABusyBar()
+{
+    QElapsedTimer clock;
+    bool busy = false;
+    bool counted = false;
+    pictura::runCancellableJob(
+        nullptr, QStringLiteral("Busy"), QStringLiteral("Working…"),
+        [&] {
+            clock.start();
+            return true;
+        },
+        [&] {
+            if (const QProgressDialog* d = jobWindow(); d && d->isVisible()) {
+                busy = busy || d->maximum() == 0;
+                counted = counted || d->maximum() == 1000;
+            }
+            return clock.elapsed() < 600;
+        },
+        [] { return -1; }, [] {}, [] { return true; });
+    QVERIFY2(busy, "a job that cannot count shows a busy bar");
+    QVERIFY2(!counted, "the bar never shows a percentage");
 }
 
 QTEST_MAIN(BusyJobTest)

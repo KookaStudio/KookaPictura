@@ -6,10 +6,30 @@
 use super::helpers::*;
 use super::qobject;
 use crate::cxxqt_object::edit::{structural_before, Edit};
+use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_core::ColorLabel;
+
+/// A merge scope that owns its paths, so a job can carry it to a worker.
+enum OwnedScope {
+    Down(String),
+    Selected(Vec<String>),
+    Visible(String),
+    ClippingMask(String),
+}
+
+impl OwnedScope {
+    fn scope(&self) -> pictura_render::MergeScope<'_> {
+        match self {
+            Self::Down(path) => pictura_render::MergeScope::Down(path),
+            Self::Selected(paths) => pictura_render::MergeScope::Selected(paths),
+            Self::Visible(path) => pictura_render::MergeScope::Visible(path),
+            Self::ClippingMask(path) => pictura_render::MergeScope::ClippingMask(path),
+        }
+    }
+}
 
 /// The pre-merge paths whose pixels the scope can change. `None` keeps the
 /// full recomposite (Merge Visible, an unresolvable path, or a refusal).
@@ -49,11 +69,11 @@ impl qobject::PictureView {
     /// or more (CS6 shares one command, design D4). Returns the merged node's
     /// path, empty on refusal.
     pub fn merge_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> QString {
-        let owned = list_of_strings(paths);
+        let mut owned = list_of_strings(paths);
         let (scope, label) = if owned.len() == 1 {
-            (pictura_render::MergeScope::Down(&owned[0]), "Merge Down")
+            (OwnedScope::Down(owned.remove(0)), "Merge Down")
         } else {
-            (pictura_render::MergeScope::Selected(&owned), "Merge Layers")
+            (OwnedScope::Selected(owned), "Merge Layers")
         };
         self.as_mut()
             .merge_scope_changed(scope, label)
@@ -100,9 +120,8 @@ impl qobject::PictureView {
     /// Merge every eye-visible layer, anchored on `path`. Returns the merged
     /// node's path, empty on refusal (including a hidden active layer).
     pub fn merge_visible(mut self: Pin<&mut Self>, path: &QString) -> QString {
-        let path = path.to_string();
         self.as_mut()
-            .merge_scope_changed(pictura_render::MergeScope::Visible(&path), "Merge Visible")
+            .merge_scope_changed(OwnedScope::Visible(path.to_string()), "Merge Visible")
             .map_or_else(QString::default, |outcome| {
                 QString::from(outcome.path.as_str())
             })
@@ -111,31 +130,38 @@ impl qobject::PictureView {
     /// Collapse the clipping group above `path` into its raster base. Returns
     /// the number of inputs replaced, 0 on refusal.
     pub fn merge_clipping_mask(mut self: Pin<&mut Self>, path: &QString) -> i32 {
-        let path = path.to_string();
         self.as_mut()
             .merge_scope_changed(
-                pictura_render::MergeScope::ClippingMask(&path),
+                OwnedScope::ClippingMask(path.to_string()),
                 "Merge Clipping Mask",
             )
-            .map_or(0, |outcome| outcome.replaced as i32)
+            .map_or(0, |outcome| outcome.count as i32)
     }
 
     /// Flatten the whole tree into one opaque Background layer. Returns the
     /// number of layers replaced, 0 on refusal.
     pub fn flatten_image(mut self: Pin<&mut Self>) -> i32 {
-        let mut replaced = 0;
-        self.as_mut().edit("Flatten Image", |rust| {
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return Edit::None;
-            };
-            replaced = pictura_render::flatten(doc).map_or(0, |outcome| outcome.replaced);
-            if replaced == 0 {
-                return Edit::None;
-            }
-            rust.select_only_layer("0");
-            Edit::Structural { damage: None }
-        });
-        replaced as i32
+        let applied = self.as_mut().document_op(
+            "Flatten Image",
+            JobBar::Counted,
+            |doc| {
+                let outcome = pictura_render::flatten(doc)
+                    .ok()
+                    .filter(|o| o.replaced > 0)?;
+                Some(Outcome {
+                    path: outcome.path,
+                    count: outcome.replaced,
+                })
+            },
+            |rust, _| {
+                rust.select_only_layer("0");
+                Edit::Structural { damage: None }
+            },
+        );
+        applied
+            .then(|| self.rust().last_outcome().map(|o| o.count as i32))
+            .flatten()
+            .unwrap_or(0)
     }
 
     /// `Layer from Background…`: clear the flag and unlock the layer at `path`.
@@ -215,36 +241,38 @@ impl qobject::PictureView {
         changed
     }
 
+    /// Run a merge scope as a document command; its outcome when it applied
+    /// at once, `None` for a refusal or a started job.
     fn merge_scope_changed(
         mut self: Pin<&mut Self>,
-        scope: pictura_render::MergeScope<'_>,
+        scope: OwnedScope,
         label: &str,
-    ) -> Option<pictura_render::MergeOutcome> {
-        let mut result = None;
-        self.as_mut().edit(label, |rust| {
-            let before = rust.session.doc.as_ref().and_then(|doc| {
-                let paths = merge_scope_paths(doc, &scope)?;
-                let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
-                pictura_render::damage::influence_paths(doc, &refs)
-            });
-            let outcome = {
-                let Some(doc) = rust.session.doc.as_mut() else {
-                    return Edit::None;
-                };
-                pictura_render::merge_scope(doc, scope).ok()
-            };
-            let Some(path) = outcome
-                .as_ref()
-                .filter(|outcome| outcome.replaced > 0)
-                .map(|outcome| outcome.path.clone())
-            else {
-                return Edit::None;
-            };
-            result = outcome;
-            let target = rust.merge_target(&path);
-            rust.set_layer_target(target);
-            structural_before(before)
+    ) -> Option<Outcome> {
+        let before = self.rust().session.doc.as_ref().and_then(|doc| {
+            let paths = merge_scope_paths(doc, &scope.scope())?;
+            let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+            pictura_render::damage::influence_paths(doc, &refs)
         });
-        result
+        let applied = self.as_mut().document_op(
+            label,
+            JobBar::Counted,
+            move |doc| {
+                let outcome = pictura_render::merge_scope(doc, scope.scope())
+                    .ok()
+                    .filter(|outcome| outcome.replaced > 0)?;
+                Some(Outcome {
+                    path: outcome.path,
+                    count: outcome.replaced,
+                })
+            },
+            move |rust, outcome| {
+                let target = rust.merge_target(&outcome.path);
+                rust.set_layer_target(target);
+                structural_before(before)
+            },
+        );
+        applied
+            .then(|| self.rust().last_outcome().cloned())
+            .flatten()
     }
 }

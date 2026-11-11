@@ -2,6 +2,7 @@ use super::*;
 
 use super::super::super::helpers::{parse_anchor, parse_resample};
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -50,43 +51,51 @@ pub(super) fn image_size_apply(
     }
     let bits = view.document_depth_bits();
     let wanted = Resolution { ppi, per_cm };
-    let (resized, changed) = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.session.doc.as_mut() else {
+    let (resize, needed) = {
+        let Some(doc) = view.rust().session.doc.as_ref() else {
             return false;
         };
         let resize = resample.filter(|_| (width as u32, height as u32) != (doc.width, doc.height));
-        if let Some(resample) = resize {
-            if !crate::cxxqt_object::helpers::resize_budget_allows(width, height, bits) {
-                return false;
-            }
-            if pictura_render::resize_document(doc, width as u32, height as u32, resample).is_err()
-            {
-                return false;
-            }
-        }
         let current = document_resolution(doc);
         let moved = current.is_none_or(|r| (r.ppi - ppi).abs() > 1e-6 || r.per_cm != per_cm);
         // A document with no resolution resource already reads as 72 ppi;
         // writing one only for that would be a no-op state.
         let needed = moved && !(current.is_none() && (ppi - DEFAULT_PPI).abs() < 1e-6 && !per_cm);
-        if needed {
-            set_document_resolution(doc, wanted);
-        }
-        (resize.is_some(), resize.is_some() || needed)
+        (resize, needed)
     };
-    if !changed {
+    if resize.is_some() && !crate::cxxqt_object::helpers::resize_budget_allows(width, height, bits)
+    {
         return false;
     }
-    view.as_mut().edit("Image Size", |rust| {
-        if resized {
-            rust.session.clear_geometry_selection();
-            Edit::Full
-        } else {
-            Edit::Meta
-        }
-    });
-    true
+    if resize.is_none() && !needed {
+        return false;
+    }
+    let bar = if resize.is_some() {
+        JobBar::Counted
+    } else {
+        JobBar::Busy
+    };
+    view.as_mut().document_op(
+        "Image Size",
+        bar,
+        move |doc| {
+            if let Some(resample) = resize {
+                pictura_render::resize_document(doc, width as u32, height as u32, resample).ok()?;
+            }
+            if needed {
+                set_document_resolution(doc, wanted);
+            }
+            Some(Outcome::default())
+        },
+        move |rust, _| {
+            if resize.is_some() {
+                rust.session.clear_geometry_selection();
+                Edit::Full
+            } else {
+                Edit::Meta
+            }
+        },
+    )
 }
 
 pub(super) fn canvas_size_apply(
@@ -105,21 +114,30 @@ pub(super) fn canvas_size_apply(
     if width < 1 || height < 1 {
         return false;
     }
+    if view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .is_none_or(|doc| (width as u32, height as u32) == (doc.width, doc.height))
     {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.session.doc.as_mut() else {
-            return false;
-        };
-        if (width as u32, height as u32) == (doc.width, doc.height) {
-            return false;
-        }
-        if pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor).is_err()
-        {
-            return false;
-        }
-        pictura_render::extend_background(doc, [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8]);
-        rust.session.clear_geometry_selection();
+        return false;
     }
-    view.as_mut().edit("Canvas Size", |_| Edit::Full);
-    true
+    view.as_mut().document_op(
+        "Canvas Size",
+        JobBar::Busy,
+        move |doc| {
+            pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor)
+                .ok()?;
+            pictura_render::extend_background(
+                doc,
+                [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8],
+            );
+            Some(Outcome::default())
+        },
+        |rust, _| {
+            rust.session.clear_geometry_selection();
+            Edit::Full
+        },
+    )
 }

@@ -190,6 +190,32 @@ pub(crate) fn for_each_layer(
     }
 }
 
+/// [`for_each_layer`] under the job installed on this thread (#1278): one unit
+/// of progress per layer, and no further layer once the job is cancelled,
+/// whose result is then dropped.
+pub(crate) fn for_each_layer_job(
+    layers: &mut pictura_core::LayerStack,
+    f: &mut impl FnMut(&mut pictura_core::Layer),
+) {
+    let Some(job) = pictura_core::job::current() else {
+        return for_each_layer(layers, f);
+    };
+    job.begin_stage(layer_count(layers));
+    for_each_layer(layers, &mut |layer| {
+        if !job.cancelled() {
+            f(layer);
+            job.advance(1);
+        }
+    });
+}
+
+fn layer_count(layers: &pictura_core::LayerStack) -> u64 {
+    layers
+        .iter()
+        .map(|layer| 1 + layer_count(&layer.children))
+        .sum()
+}
+
 /// Resample one planar 8-bit channel from `sw×sh` to `dw×dh`.
 ///
 /// The caller validates the sizes, so a rejected `resize` (which would mean a
@@ -209,6 +235,9 @@ pub(crate) fn resample_plane(
         .map(|b| b.data.to_vec())
         .unwrap_or_else(|_| data.to_vec())
 }
+
+#[cfg(test)]
+mod job_tests;
 
 #[cfg(test)]
 mod tests {

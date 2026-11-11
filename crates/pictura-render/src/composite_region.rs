@@ -108,8 +108,13 @@ pub(crate) fn stream_region(
             },
         )
     });
+    // A cancelled job (#1278) drops the result, so the bands left are skipped.
+    let job = pictura_core::job::current();
     let mut offset = 0;
     while offset < rh {
+        if job.as_ref().is_some_and(|job| job.cancelled()) {
+            return;
+        }
         let rows = chunk_rows.min(rh - offset);
         let chunk = match &plan {
             Some(plan) => composite_banded_with_plan(doc, x0, y0 + offset, rw, rows, plan),

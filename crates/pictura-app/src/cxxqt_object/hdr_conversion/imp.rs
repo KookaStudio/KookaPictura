@@ -1,8 +1,8 @@
 use super::*;
 
-use super::super::edit::Edit;
+use super::super::impl_core::{JobBar, Outcome};
+use super::super::impl_transform::land_hdr_conversion;
 use core::pin::Pin;
-use cxx_qt::CxxQtType;
 use pictura_render::{ExposureGamma, HdrToneMap, LocalAdaptationParams};
 
 #[allow(clippy::too_many_arguments)]
@@ -44,27 +44,14 @@ pub(crate) fn convert_depth_method(
         3 => HdrToneMap::HighlightCompression,
         _ => return false,
     };
-    let converted = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.session.doc.as_mut() else {
-            return false;
-        };
-        pictura_render::convert_depth(doc, out, tone).is_ok()
-    };
-    if converted {
-        {
-            let mut rust = view.as_mut().rust_mut();
-            rust.session.set_selection(None);
-            if rust
-                .session
-                .doc
-                .as_ref()
-                .is_some_and(|doc| !doc.layers.is_empty())
-            {
-                rust.select_only_layer("0");
-            }
-        }
-        view.as_mut().edit("HDR Conversion", |_| Edit::Full);
-    }
-    converted
+    view.as_mut().document_op(
+        "HDR Conversion",
+        JobBar::Busy,
+        move |doc| {
+            pictura_render::convert_depth(doc, out, tone)
+                .ok()
+                .map(|()| Outcome::default())
+        },
+        land_hdr_conversion,
+    )
 }

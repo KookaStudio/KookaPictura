@@ -16,7 +16,7 @@ bool runBusyJob(QWidget* parent, const QString& title, const QString& label,
                 const std::function<bool()>& finish);
 
 // Run `start` and, while `running` is true, show a progress bar fed by
-// `progress` (0 to 1000) with a Cancel button that calls `cancel`, which must
+// `progress` (0 to 1000, or negative for a busy bar) with a Cancel button that calls `cancel`, which must
 // make `running` turn false. The wait cursor appears at once and the window
 // after 250 ms; Esc cancels like the button. `finish` lands the result, or the
 // lack of one after a cancel.

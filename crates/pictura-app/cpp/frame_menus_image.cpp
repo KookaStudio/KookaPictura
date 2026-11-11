@@ -3,6 +3,7 @@
 #include "api/selection_api.h"
 #include "apply_image_dialog.h"
 #include "canvas_size_dialog.h"
+#include "document_command.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/filters_bridge.h"
@@ -87,7 +88,10 @@ void PicturaMainWindow::wireImageMenu()
                                                 centre.y() / before.height())});
             });
         }
-        if (!image_size_apply(*view, resample, width, height, ppi, perCm)) {
+        const auto apply = [view, &resample, width, height, ppi, perCm] {
+            image_size_apply(*view, resample, width, height, ppi, perCm);
+        };
+        if (!runDocumentCommand(this, *view, tr("Image Size"), apply)) {
             return false;
         }
         refresh();
@@ -209,8 +213,10 @@ void PicturaMainWindow::wireImageMenu()
         CanvasSizeDialog dialog(view, tools_->foreground(), tools_->background(), this);
         if (runDialog(dialog, this) == QDialog::Accepted) {
             const uint fill = dialog.extensionColor().rgb() & 0xffffffu;
-            if (!canvas_size_apply(*view, dialog.anchorName(), dialog.resultWidth(),
-                                   dialog.resultHeight(), fill)) {
+            if (!runDocumentCommand(this, *view, tr("Canvas Size"), [&] {
+                    canvas_size_apply(*view, dialog.anchorName(), dialog.resultWidth(),
+                                      dialog.resultHeight(), fill);
+                })) {
                 return;
             }
             CommandParams command;

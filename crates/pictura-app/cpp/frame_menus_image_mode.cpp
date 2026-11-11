@@ -3,6 +3,7 @@
 #include <QtCore/QScopeGuard>
 
 #include "bitmap_mode_dialog.h"
+#include "document_command.h"
 #include "indexed_color_dialog.h"
 #include "api/document_bridge.h"
 #include "api/filters_bridge.h"
@@ -126,6 +127,7 @@ void PicturaMainWindow::convertImageMode(const QString& mode)
     const bool layered = view->layer_count() > 1;
 
     // Bitmap and Indexed hold no layers: the conversion flattens.
+    const QString title = tr("Convert Mode");
     if (mode == QLatin1String("bitmap") || mode == QLatin1String("indexed")) {
         if (layered) {
             QMessageBox box(QMessageBox::Question, tr("Kooka Pictura"), tr("Flatten layers?"),
@@ -138,7 +140,9 @@ void PicturaMainWindow::convertImageMode(const QString& mode)
         if (mode == QLatin1String("bitmap")) {
             BitmapModeDialog dialog(this);
             if (runDialog(dialog, this) == QDialog::Accepted
-                && convert_to_bitmap(*view, dialog.method())) {
+                && runDocumentCommand(this, *view, title, [view, &dialog] {
+                       convert_to_bitmap(*view, dialog.method());
+                   })) {
                 CommandParams command;
                 command.values.insert(QStringLiteral("mode"), QStringLiteral("bitmap"));
                 command.values.insert(QStringLiteral("method"), dialog.method());
@@ -158,8 +162,11 @@ void PicturaMainWindow::convertImageMode(const QString& mode)
         connect(&dialog, &IndexedColorDialog::optionsChanged, &dialog, preview);
         preview();
         if (runDialog(dialog, this) == QDialog::Accepted) {
-            if (convert_to_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
-                                   dialog.amount())) {
+            const auto convert = [view, &dialog] {
+                convert_to_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
+                                   dialog.amount());
+            };
+            if (runDocumentCommand(this, *view, title, convert)) {
                 CommandParams command;
                 command.values.insert(QStringLiteral("mode"), QStringLiteral("indexed"));
                 command.values.insert(QStringLiteral("palette"), dialog.palette());
@@ -198,13 +205,17 @@ void PicturaMainWindow::convertImageMode(const QString& mode)
         box.setDefaultButton(flattenButton);
         runDialog(box, this);
         if (box.clickedButton() == flattenButton) {
-            view->flatten_image();
+            if (!runDocumentCommand(this, *view, tr("Flatten Image"),
+                                    [view] { view->flatten_image(); })) {
+                return;
+            }
             flatten = true;
         } else if (box.clickedButton() != keep) {
             return;
         }
     }
-    if (convert_image_mode(*view, mode)) {
+    if (runDocumentCommand(this, *view, title,
+                           [view, &mode] { convert_image_mode(*view, mode); })) {
         const char* id = mode == QLatin1String("grayscale") ? command_ids::ImageModeGrayscale
                         : mode == QLatin1String("rgb")       ? command_ids::ImageModeRgb
                         : mode == QLatin1String("cmyk")      ? command_ids::ImageModeCmyk
@@ -229,11 +240,14 @@ void PicturaMainWindow::convertImageDepth(int bits)
     // Leaving 32-bit compresses the HDR range through the tone map.
     if (image_depth_bits(*view) == 32) {
         HdrConversionSpec spec;
+        const auto convert = [view, bits, &spec] {
+            convert_depth_method(*view, bits, int(spec.method), spec.exposure_ev, spec.gamma,
+                                 spec.radius, spec.strength, spec.local_gamma, spec.local_exposure,
+                                 spec.detail, spec.shadow, spec.highlight, spec.vibrance,
+                                 spec.saturation);
+        };
         if (HdrConversionDialog::get(this, &spec)
-            && convert_depth_method(*view, bits, int(spec.method), spec.exposure_ev, spec.gamma,
-                                    spec.radius, spec.strength, spec.local_gamma,
-                                    spec.local_exposure, spec.detail, spec.shadow, spec.highlight,
-                                    spec.vibrance, spec.saturation)) {
+            && runDocumentCommand(this, *view, tr("HDR Toning"), convert)) {
             CommandParams command;
             command.values.insert(QStringLiteral("depth"), bits);
             command.values.insert(QStringLiteral("exposure"), spec.exposure_ev);
@@ -242,7 +256,8 @@ void PicturaMainWindow::convertImageDepth(int bits)
         }
         return;
     }
-    if (convert_image_depth(*view, bits)) {
+    if (runDocumentCommand(this, *view, tr("Convert Mode"),
+                           [view, bits] { convert_image_depth(*view, bits); })) {
         CommandParams command;
         command.values.insert(QStringLiteral("depth"), bits);
         registry_->recordCommand(depthCommandId(bits), command);

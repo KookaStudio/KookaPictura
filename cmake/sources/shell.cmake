@@ -9,6 +9,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/command_ids.h
     crates/pictura-app/cpp/commands.cpp
     crates/pictura-app/cpp/commands.h
+    crates/pictura-app/cpp/document_command.cpp
+    crates/pictura-app/cpp/document_command.h
     crates/pictura-app/cpp/font_combo.cpp
     crates/pictura-app/cpp/fonts.cpp
     crates/pictura-app/cpp/fonts.h

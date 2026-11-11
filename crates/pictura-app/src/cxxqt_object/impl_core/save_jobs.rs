@@ -16,6 +16,10 @@ pub(in crate::cxxqt_object) use super::deferred_composite::{
     transform_commit_finish, transform_commit_progress, transform_commit_running,
     transform_pending, transform_set_delay,
 };
+pub(in crate::cxxqt_object) use super::document_job::{
+    document_job_arm, document_job_cancel, document_job_finish, document_job_pending,
+    document_job_progress, document_job_running, document_job_set_delay, document_op_result,
+};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -69,5 +73,30 @@ pub mod ffi {
 
         /// Hold a started transform engine for `ms` milliseconds (test seam).
         fn transform_set_delay(view: Pin<&mut PictureView>, ms: u64);
+
+        /// Arm (or disarm) the view around a whole-document command the shell
+        /// shows a progress window for; arming clears the last outcome.
+        fn document_job_arm(view: Pin<&mut PictureView>, armed: bool);
+
+        /// Whether a whole-document job is running or waiting to land.
+        fn document_job_pending(view: &PictureView) -> bool;
+
+        /// Whether the whole-document job's worker is still running.
+        fn document_job_running(view: &PictureView) -> bool;
+
+        /// The job's progress, 0 to 1000, or -1 for a busy bar.
+        fn document_job_progress(view: &PictureView) -> i32;
+
+        /// Ask the whole-document job to stop; nothing changes.
+        fn document_job_cancel(view: Pin<&mut PictureView>);
+
+        /// Land the job: true when the command applied (or already had).
+        fn document_job_finish(view: Pin<&mut PictureView>) -> bool;
+
+        /// The last applied command's outcome: a merged path, a replaced count.
+        fn document_op_result(view: &PictureView) -> QString;
+
+        /// Hold a started whole-document engine for `ms` milliseconds (test seam).
+        fn document_job_set_delay(view: Pin<&mut PictureView>, ms: u64);
     }
 }

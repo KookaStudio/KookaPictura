@@ -45,12 +45,17 @@ fn rgb_store_to_gray<T: Sample>(v: &[T], plane: usize) -> Vec<T> {
     out
 }
 
-/// Visit every non-group layer in the tree, depth first.
+/// Visit every non-group layer in the tree, depth first. A cancelled job
+/// (#1278) visits no further layer; its result is dropped.
 pub(super) fn for_each_layer(
     layers: &mut pictura_core::LayerStack,
     f: &mut impl FnMut(&mut Layer),
 ) {
+    let job = pictura_core::job::current();
     for layer in layers {
+        if job.as_ref().is_some_and(|job| job.cancelled()) {
+            return;
+        }
         if layer.is_group() {
             for_each_layer(&mut layer.children, f);
         } else {
