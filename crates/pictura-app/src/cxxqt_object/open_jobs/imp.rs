@@ -1,7 +1,6 @@
 use super::*;
 
 use super::super::helpers::decode_import;
-use super::super::helpers_composite::current_buffer;
 use super::super::impl_core::format_for_path;
 use super::super::state::PictureViewRust;
 use crate::history::History;
@@ -93,11 +92,13 @@ pub(super) fn history_for(doc: &mut Document, target: &LayerTarget, label: &str)
     history
 }
 
-/// Cache the displayed composite after a decode, unless the file retained
-/// native samples and a merged composite. A retained store is the conversion
-/// source and keeps values above white; leaving the file's merged composite
-/// (the store's 8-bit narrowing) in place lets `convert_depth` see that store
-/// as current. A file without a merged composite still recomposites here.
+/// Bring the stored composite up to the layers after a decode, unless the
+/// file retained native samples and a merged composite. A retained store is
+/// the conversion source and keeps values above white; leaving the file's
+/// merged composite (the store's 8-bit narrowing) in place lets
+/// `convert_depth` see that store as current. A layered RGB document keeps no
+/// composite: the file's merged image is released and the display tiles
+/// composite what is shown (#1216).
 pub(super) fn store_opened_composite(doc: &mut Document, gpu: bool) {
     let started = std::time::Instant::now();
     if doc.source_planes.is_some() && doc.merged_composite_present {
@@ -107,8 +108,7 @@ pub(super) fn store_opened_composite(doc: &mut Document, gpu: bool) {
         );
         return;
     }
-    let rendered = current_buffer(doc, gpu);
-    DocumentComposite::new(doc).store(&rendered);
+    DocumentComposite::new(doc).refresh(pictura_render::CompositeScope::Full, gpu);
     crate::cxxqt_object::helpers::paint_timing::record("opening_composite", started.elapsed());
 }
 
@@ -119,6 +119,7 @@ pub(super) fn open_options(policy: Policy) -> pictura_codec::OpenOptions {
         policy,
         working_cmyk: Some(pictura_codec::Profile::coated_cmyk().to_icc()),
         conversion: pictura_codec::ConversionOptions::default(),
+        skip_layered_merged: true,
     }
 }
 
@@ -670,6 +671,7 @@ pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
             policy,
             working_cmyk: Some(rust.working_cmyk.clone()),
             conversion: rust.conversion_options,
+            skip_layered_merged: true,
         };
         (options, rust.gpu_compute)
     };
@@ -722,6 +724,7 @@ pub fn open_pdf_start(mut view: Pin<&mut PictureView>, path: &QString, password:
             policy: rust.color_policy,
             working_cmyk: Some(rust.working_cmyk.clone()),
             conversion: rust.conversion_options,
+            skip_layered_merged: true,
         }
     };
     let gpu = view.rust().gpu_compute;

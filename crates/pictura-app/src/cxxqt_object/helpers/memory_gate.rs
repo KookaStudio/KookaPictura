@@ -102,18 +102,36 @@ fn canvas(doc: &Document) -> u64 {
     u64::from(doc.width) * u64::from(doc.height)
 }
 
-/// New Document (M1): the rendered composite and the display and its pyramid;
-/// the base layer and the stored composite are uniform tiles (#1213).
+/// The display: the tile cache's budget, which it never exceeds beyond the
+/// presented view (#1216).
+fn display() -> u64 {
+    memory::governor().display_budget()
+}
+
+/// The stored composite a document keeps: only an authoritative one (#1216).
+fn stored_composite(doc: &Document) -> u64 {
+    if doc.composite_is_authoritative() {
+        doc.composite.data.len() as u64
+    } else {
+        0
+    }
+}
+
+/// New Document (M1): the base layer starts as uniform tiles and holds nothing
+/// (#1213), and no composite is rendered or stored (#1216): the display tiles
+/// are what remains. A document of another mode or depth keeps its composite.
 pub(in crate::cxxqt_object) fn new_document_bytes(
     width: u32,
     height: u32,
     color_channels: u8,
     depth: BitDepth,
 ) -> u64 {
-    // The base layer and the stored composite start as uniform tiles and hold
-    // nothing (#1213); the rendered composite and the display remain.
-    let per_pixel = sample_bytes(depth) * u64::from(color_channels) + 17;
-    u64::from(width) * u64::from(height) * per_pixel
+    let stored = if color_channels == 3 && depth == BitDepth::Eight {
+        0
+    } else {
+        sample_bytes(depth) * u64::from(color_channels) + 4
+    };
+    u64::from(width) * u64::from(height) * stored + display()
 }
 
 /// Add Layer (M2): an empty-rect layer stores no pixel planes, only its record
@@ -130,10 +148,10 @@ pub(in crate::cxxqt_object) fn brush_bytes(doc: &Document, path: &str) -> u64 {
     layer + 3 * canvas(doc)
 }
 
-/// Undo, Redo or a history jump (M7): the restored composite and the display
-/// (13.1 bytes a pixel at 4250²).
+/// Undo, Redo or a history jump (M7): a stored composite and the display
+/// tiles the restore rebuilds.
 pub(in crate::cxxqt_object) fn restore_bytes(doc: &Document) -> u64 {
-    doc.composite.data.len() as u64 + 12 * canvas(doc)
+    stored_composite(doc) + display()
 }
 
 /// The display refresh after a fill of `bounds` (M5): the region's composite
@@ -144,22 +162,37 @@ pub(in crate::cxxqt_object) fn refresh_bytes(bounds: PsdRect) -> u64 {
 }
 
 /// Adding a named snapshot (M8): it shares every tile with the document, so
-/// it costs the tile tables (#1215). Mid-stroke the snapshot's composite is
+/// it costs the tile tables (#1215). Mid-stroke a stored composite is
 /// rendered from the painted layers too.
 pub(in crate::cxxqt_object) fn snapshot_bytes(doc: &Document, stroking: bool) -> u64 {
-    let composite = if stroking { 4 * canvas(doc) } else { 0 };
+    let composite = if stroking && doc.composite_is_authoritative() {
+        4 * canvas(doc)
+    } else {
+        0
+    };
     crate::history::tile_table_bytes(doc) + composite
 }
 
 /// Restoring a named snapshot (M8): its tile tables, shared again, and the
-/// display rebuilt from its stored composite.
+/// display tiles the restore rebuilds.
 pub(in crate::cxxqt_object) fn snapshot_restore_bytes(doc: &Document) -> u64 {
-    crate::history::tile_table_bytes(doc) + 12 * canvas(doc)
+    crate::history::tile_table_bytes(doc) + display()
 }
 
-/// Save (M11): the save job's copy and the encoder's buffers.
+/// The merged image a save composites a band at a time: one band's
+/// compositor canvas and planes (#1216).
+const SAVE_BAND_BYTES: u64 = 160 * 1024 * 1024;
+
+/// Save (M11): the save job's copy, the merged image's dense tiles (at most
+/// the document's own), one composited band, and the encoded file.
 pub(in crate::cxxqt_object) fn save_bytes(doc: &Document) -> u64 {
-    crate::history::document_bytes(doc) + 8 * canvas(doc)
+    let document = crate::history::document_bytes(doc);
+    let merged = if doc.composite_is_authoritative() {
+        0
+    } else {
+        document.min(4 * canvas(doc))
+    };
+    2 * document + merged + SAVE_BAND_BYTES
 }
 
 /// Whether the last gated edit was refused because it did not fit the

@@ -3,7 +3,7 @@ use super::*;
 use super::super::super::document_session::{FilterPreview, PreviewBaseline, SessionKind};
 use super::super::super::filter_tools::jobs::commit_op_start;
 use super::super::super::helpers::{clamp_region, layer_has_effects};
-use super::super::super::helpers_composite::{current_buffer, selection_to_mask};
+use super::super::super::helpers_composite::selection_to_mask;
 use super::super::super::impl_filters::{cancel_filter_preview, pixel_filter_target, ActiveOp};
 use super::super::super::presentation::{Dirty, Presentation, Rebuild};
 use super::super::super::state::PictureViewRust;
@@ -113,10 +113,9 @@ pub(super) fn adjust_preview(
     .ok()?;
     let layer = layer.clone();
     let refresh = if layer_has_effects(&layer) {
-        let rendered = current_buffer(&doc, gpu);
-        DocumentComposite::new(&mut doc).store(&rendered);
+        DocumentComposite::new(&mut doc).refresh(pictura_render::CompositeScope::Full, gpu);
         WorkerAdjustRefresh::Everywhere {
-            composite: rendered,
+            composite: doc.composite.clone(),
         }
     } else {
         match clamp_region(rect, doc.width, doc.height) {

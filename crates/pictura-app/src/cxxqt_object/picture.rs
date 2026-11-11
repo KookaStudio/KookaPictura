@@ -1,20 +1,21 @@
 //! The picture as currently shown.
 //!
-//! The document session maintains `doc.composite` as the picture: the edit
-//! transaction patches it regionally or stores it whole after every
-//! pixel-changing commit and every presented preview, and history navigation
-//! restores its bytes. A read-only consumer that only needs the picture
-//! therefore does not have to run the compositor.
+//! A document whose composite is authoritative (no layers, a non-RGB mode, a
+//! retained native-depth or merged composite) keeps it stored, and the edit
+//! transaction keeps it current. Every other document keeps no composite
+//! (#1216): its picture is the display tile cache where that is current and
+//! needs no colour conversion, and a region composite anywhere else.
 //!
-//! The composite is *not* the picture in a few states, and this module is the
-//! single place that decides so:
+//! The stored or cached composite is *not* the picture in a few states, and
+//! this module is the single place that decides so:
 //!
-//! - a paint or mask stroke is live: a layer stroke's composite lags its
-//!   unpresented regions and a mask stroke never patches it;
+//! - a paint or mask stroke is live: a layer stroke's tiles lag its
+//!   unpresented regions and a mask stroke never repairs them;
 //! - a lifted transform is live: the lift rewrote the layer stack without a
-//!   recomposite;
+//!   refresh;
+//! - a display-only preview is presented: its tiles are approximate;
 //! - the working mode is not RGB, or the composite is not four channels: the
-//!   composite then keeps the document's own planes, not RGBA;
+//!   stored composite then keeps the document's own planes, not RGBA;
 //! - the document retains a native-depth composite: saving rewrites
 //!   `doc.composite` from the native samples, which is not the 8-bit composite
 //!   the consumers read;
@@ -22,49 +23,201 @@
 //! - a large Move commit's composite is still on its worker (#1157).
 //!
 //! Anything else is a bug in an edit path: it changed pixels without
-//! refreshing the composite.
+//! reporting their damage.
 //!
 //! The picture here is the composited layer stack. A soloed mask and the Layers
-//! panel's isolation are display overlays and do not change it, exactly as the
-//! old `current_buffer` consumers behaved.
+//! panel's isolation are display overlays and do not change it.
 
-use super::helpers_composite::current_buffer;
+use super::helpers_composite::crop_planar;
 use super::state::PictureViewRust;
-use pictura_core::{Document, PixelBuffer};
+use pictura_core::{Document, PixelBuffer, PsdRect};
+use pictura_render::{patch_buffer_region, TileSource};
 use std::borrow::Cow;
 
-/// The picture the canvas currently shows.
+/// The whole picture the canvas currently shows.
 ///
-/// `Cow::Borrowed` is the document's maintained composite — no allocation and
-/// no compositor run. `Cow::Owned` is a fresh composite, returned only for the
-/// states listed in the module documentation.
+/// `Cow::Borrowed` is a stored authoritative composite. Anything else is
+/// assembled by [`picture_region`] over the whole document.
 ///
-/// The returned picture borrows `doc`, so the caller cannot write the document
-/// while it holds the picture. That is deliberate: cloning the composite would
-/// make the next region patch copy the whole plane.
+/// ponytail: a whole picture is one document-sized buffer. Its callers are the
+/// readers that need every pixel at once (raster export, Copy Merged, Color
+/// Range, Refine Edge, the image operations); the region readers use
+/// [`picture_region`].
 pub(super) fn picture<'a>(doc: &'a Document, view: &PictureViewRust) -> Cow<'a, PixelBuffer> {
-    if is_current(doc, view) {
+    if stored_is_current(doc, view) {
         return Cow::Borrowed(&doc.composite);
     }
-    #[cfg(test)]
-    COMPOSITES.with(|count| count.set(count.get() + 1));
-    Cow::Owned(current_buffer(doc, view.gpu_compute))
+    let whole = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    Cow::Owned(picture_region(doc, view, whole))
 }
 
-/// Whether the maintained composite is the picture for this document state.
-fn is_current(doc: &Document, view: &PictureViewRust) -> bool {
+/// `rect` of the picture as currently shown: straight working-space RGBA,
+/// planar, transparent outside the document. Byte-identical to the same crop
+/// of a full composite. Costs a region-sized allocation; the compositor runs
+/// only for what neither the stored composite nor the current tiles hold.
+pub(super) fn picture_region(doc: &Document, view: &PictureViewRust, rect: PsdRect) -> PixelBuffer {
+    let (rw, rh) = (rect.width().max(0) as u32, rect.height().max(0) as u32);
+    let inside = PsdRect {
+        top: rect.top.max(0),
+        left: rect.left.max(0),
+        bottom: rect.bottom.min(doc.height as i32),
+        right: rect.right.min(doc.width as i32),
+    };
+    if inside.width() <= 0 || inside.height() <= 0 {
+        return PixelBuffer::new(rw, rh, 4);
+    }
+    let pixels = if stored_is_current(doc, view) {
+        crop_planar(
+            &doc.composite,
+            inside.left,
+            inside.top,
+            inside.width() as u32,
+            inside.height() as u32,
+        )
+    } else if let Some(cached) = from_tiles(doc, view, inside) {
+        cached
+    } else {
+        #[cfg(test)]
+        if !doc.layers.is_empty() {
+            COMPOSITES.with(|count| count.set(count.get() + 1));
+        }
+        pictura_render::composite_region(doc, inside)
+    };
+    if inside == rect {
+        return pixels;
+    }
+    let mut out = PixelBuffer::new(rw, rh, 4);
+    patch_buffer_region(
+        &mut out,
+        &pixels,
+        inside.left - rect.left,
+        inside.top - rect.top,
+    );
+    out
+}
+
+/// Tiles a Sample All Layers flood keeps: a flood revisits a tile's rows, and
+/// 64 tiles are 16 MiB.
+const SAMPLE_MEMO: usize = 64;
+
+/// The picture as a Sample All Layers flood reads it: `fetch(tx, ty)` returns
+/// the straight interleaved RGBA of one 256² level-0 tile, cropped from the
+/// stored composite when that is current or composited for the tile alone.
+/// The last [`SAMPLE_MEMO`] tiles are kept, so the flood never holds a whole
+/// composite (#1216).
+pub(super) fn sample_tiles<'a>(
+    doc: &'a Document,
+    view: &PictureViewRust,
+) -> impl Fn(usize, usize) -> std::sync::Arc<[u8]> + Sync + 'a {
+    let stored = stored_is_current(doc, view);
+    let memo = std::sync::Mutex::new(std::collections::VecDeque::<(
+        (usize, usize),
+        std::sync::Arc<[u8]>,
+    )>::new());
+    move |tx, ty| {
+        if let Some((_, bytes)) = memo
+            .lock()
+            .expect("the memo lock")
+            .iter()
+            .find(|(at, _)| *at == (tx, ty))
+        {
+            return std::sync::Arc::clone(bytes);
+        }
+        let side = pictura_core::TILE as i32;
+        let rect = PsdRect {
+            top: ty as i32 * side,
+            left: tx as i32 * side,
+            bottom: (ty as i32 * side + side).min(doc.height as i32),
+            right: (tx as i32 * side + side).min(doc.width as i32),
+        };
+        let pixels = if stored {
+            crop_planar(
+                &doc.composite,
+                rect.left,
+                rect.top,
+                rect.width().max(0) as u32,
+                rect.height().max(0) as u32,
+            )
+        } else {
+            pictura_render::composite_region(doc, rect)
+        };
+        let bytes: std::sync::Arc<[u8]> = pictura_render::interleave(&pixels).into();
+        let mut memo = memo.lock().expect("the memo lock");
+        if memo.len() == SAMPLE_MEMO {
+            memo.pop_front();
+        }
+        memo.push_back(((tx, ty), std::sync::Arc::clone(&bytes)));
+        bytes
+    }
+}
+
+/// `rect` from the current level-0 display tiles, when the picture is exactly
+/// what they hold: a layered RGB document with no stored composite, no colour
+/// conversion between it and the display, no state that makes them stale,
+/// and every tile under `rect` current. `None` otherwise.
+fn from_tiles(doc: &Document, view: &PictureViewRust, rect: PsdRect) -> Option<PixelBuffer> {
+    if doc.composite_is_authoritative() || doc.document_icc.is_some() || !tiles_are_current(view) {
+        return None;
+    }
+    view.fit_tiles();
+    let mut cache = view.tiles.cache.borrow_mut();
+    let keys = cache.keys_in(TileSource::Composite, 0, rect);
+    if !keys.iter().all(|&key| cache.contains(key)) {
+        return None;
+    }
+    let (rw, rh) = (rect.width() as usize, rect.height() as usize);
+    let plane = rw * rh;
+    let mut data = vec![0u8; plane * 4];
+    for key in keys {
+        let tile = cache.tile_rect(key);
+        let bytes = cache.get(key)?;
+        let tw = tile.width() as usize;
+        for y in tile.top.max(rect.top)..tile.bottom.min(rect.bottom) {
+            for x in tile.left.max(rect.left)..tile.right.min(rect.right) {
+                let s = ((y - tile.top) as usize * tw + (x - tile.left) as usize) * 4;
+                let d = (y - rect.top) as usize * rw + (x - rect.left) as usize;
+                for c in 0..4 {
+                    data[c * plane + d] = bytes[s + c];
+                }
+            }
+        }
+    }
+    Some(PixelBuffer {
+        width: rw as u32,
+        height: rh as u32,
+        channels: 4,
+        data: data.into(),
+    })
+}
+
+/// Whether nothing live makes the stored composite or the tiles lag the
+/// layer stack.
+fn tiles_are_current(view: &PictureViewRust) -> bool {
     !view.is_painting()
         && !view.has_lifted_transform()
         && !view.display_preview_presented()
         && view.deferred_composite.is_none()
+}
+
+/// Whether the stored composite is the picture for this document state. Only
+/// an authoritative composite is kept current; any other is a leftover (a
+/// document as constructed) that no edit maintains.
+fn stored_is_current(doc: &Document, view: &PictureViewRust) -> bool {
+    tiles_are_current(view)
+        && doc.composite_is_authoritative()
         && doc.source_depth.is_none()
         && pictura_render::DocumentComposite::is_shape_valid(doc)
 }
 
 #[cfg(test)]
 std::thread_local! {
-    /// Composites the accessor ran on this thread, for the tests that assert a
-    /// consumer does not reach the compositor.
+    /// Region composites the accessor ran on this thread, for the tests that
+    /// assert a consumer does not reach the compositor.
     static COMPOSITES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
@@ -81,6 +234,7 @@ mod tests {
         DocumentSession, MaskStroke, StrokeSession, TransformMode,
     };
     use crate::cxxqt_object::edit::Edit;
+    use crate::cxxqt_object::helpers_composite::current_buffer;
     use crate::cxxqt_object::tests::pixel_layer;
     use crate::history::History;
     use pictura_core::{BitDepth, ColorMode, PsdRect};
@@ -114,41 +268,82 @@ mod tests {
         picture(doc, view).into_owned()
     }
 
+    /// Present the whole document at level 0, as the canvas would, so its
+    /// tiles are cached.
+    fn present(view: &PictureViewRust) {
+        let (_, missing) = view.tile_crop(TileSource::Composite, 0, doc_rect());
+        assert!(
+            missing.is_empty(),
+            "a small document builds its tiles at once"
+        );
+    }
+
+    /// Whether the current picture is served without running the compositor,
+    /// and equals a full composite.
+    fn served_from_the_cache(view: &PictureViewRust) -> bool {
+        let doc = view.session.doc.as_ref().expect("document");
+        let before = composites_so_far();
+        let region = picture_region(doc, view, doc_rect());
+        assert_eq!(
+            region,
+            pictura_render::composite_rgba(doc),
+            "the picture is exact"
+        );
+        composites_so_far() == before
+    }
+
+    /// Restore through history and present the result the way the view does.
+    fn restore_and_present(
+        view: &mut PictureViewRust,
+        step: impl FnOnce(
+            &mut History,
+            &mut Document,
+            &mut Option<Selection>,
+            &mut crate::layer_target::LayerTarget,
+        ) -> Option<crate::history::Restored>,
+        legacy: impl FnOnce(&mut History) -> Option<crate::history::Snapshot>,
+    ) {
+        let restored = view
+            .session
+            .restore(&mut view.layer_target, step, legacy)
+            .expect("a state to restore");
+        let presentation = view.restore_presentation(restored, false);
+        crate::cxxqt_object::presentation::present_core(view, &presentation);
+    }
+
     #[test]
     fn picture_is_served_after_a_committed_edit() {
+        // A whole-document edit leaves the tiles stale; once the canvas has
+        // presented them, the picture is served from them.
         let mut view = view_of(doc_with_layer());
         view.apply_edit("Edit", Edit::Full);
-        {
-            let doc = view.session.doc.as_ref().expect("document");
-            assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
-        }
+        present(&view);
+        assert!(served_from_the_cache(&view));
 
-        // The regional path is the common one: it patches the composite too.
+        // The regional path is the common one: it repairs the presented tiles.
         let mut view = view_of(doc_with_layer());
+        present(&view);
         view.apply_edit("Edit", Edit::regions(vec![doc_rect()], true));
-        let doc = view.session.doc.as_ref().expect("document");
-        assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
+        assert!(served_from_the_cache(&view));
     }
 
     #[test]
     fn picture_is_served_after_a_preview() {
         let mut view = view_of(doc_with_layer());
         view.preview_edit(&Edit::Full);
-        {
-            let doc = view.session.doc.as_ref().expect("document");
-            assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
-        }
+        present(&view);
+        assert!(served_from_the_cache(&view));
 
         // The direct panel-preview path: mutate the layer, then refresh the
         // changed region instead of going through the transaction.
         let mut view = view_of(doc_with_layer());
+        present(&view);
         {
             let doc = view.session.doc.as_mut().expect("document");
             assert!(pictura_render::set_opacity_paths(doc, &["0"], 128) > 0);
         }
         view.refresh_regions(&[doc_rect()]);
-        let doc = view.session.doc.as_ref().expect("document");
-        assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
+        assert!(served_from_the_cache(&view));
     }
 
     #[test]
@@ -158,32 +353,21 @@ mod tests {
         view.session.record(&target, "Open");
         view.apply_edit("Edit", Edit::Full);
 
-        assert!(view
-            .session
-            .restore(&mut view.layer_target, History::undo_live, History::undo)
-            .is_some());
-        {
-            let doc = view.session.doc.as_ref().expect("document");
-            assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
-        }
-        assert!(view
-            .session
-            .restore(&mut view.layer_target, History::redo_live, History::redo)
-            .is_some());
-        {
-            let doc = view.session.doc.as_ref().expect("document");
-            assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
-        }
-        assert!(view
-            .session
-            .restore(
-                &mut view.layer_target,
-                |history, doc, selection, target| history.jump_live(0, doc, selection, target),
-                |history| history.jump(0)
-            )
-            .is_some());
-        let doc = view.session.doc.as_ref().expect("document");
-        assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
+        present(&view);
+
+        restore_and_present(&mut view, History::undo_live, History::undo);
+        present(&view);
+        assert!(served_from_the_cache(&view));
+        restore_and_present(&mut view, History::redo_live, History::redo);
+        present(&view);
+        assert!(served_from_the_cache(&view));
+        restore_and_present(
+            &mut view,
+            |history, doc, selection, target| history.jump_live(0, doc, selection, target),
+            |history| history.jump(0),
+        );
+        present(&view);
+        assert!(served_from_the_cache(&view));
     }
 
     #[test]
@@ -198,14 +382,18 @@ mod tests {
         );
         assert!(view.present_display_preview().is_some());
         let doc = view.session.doc.as_ref().expect("document");
-        assert!(matches!(picture(doc, &view), Cow::Owned(_)));
+        let before = composites_so_far();
         assert_eq!(served(doc, &view), current_buffer(doc, false));
+        assert!(
+            composites_so_far() > before,
+            "the approximate tiles are not served"
+        );
     }
 
     #[test]
     fn a_live_layer_stroke_is_composited() {
         let mut doc = doc_with_layer();
-        let before = doc.composite.clone();
+        let before = pictura_render::composite_rgba(&doc);
         let mut stroke =
             Stroke::begin_at(&doc, "0", StrokeConfig::default()).expect("a stroke begins");
         assert!(stroke.sample(
@@ -223,7 +411,11 @@ mod tests {
         });
         let doc = view.session.doc.as_ref().expect("document");
         assert!(matches!(picture(doc, &view), Cow::Owned(_)));
-        assert_ne!(served(doc, &view), before, "the served frame has the dab");
+        assert_ne!(
+            served(doc, &view).data,
+            before.data,
+            "the served frame has the dab"
+        );
         assert_eq!(served(doc, &view), current_buffer(doc, false));
     }
 
@@ -364,7 +556,10 @@ mod tests {
         });
         let doc = stroke_view.session.doc.as_ref().unwrap();
         assert_eq!(served(doc, &stroke_view), current_buffer(doc, false));
-        assert_ne!(served(doc, &stroke_view), doc.composite);
+        assert_ne!(
+            served(doc, &stroke_view),
+            pictura_render::composite_rgba(&doc_with_layer())
+        );
 
         // A lifted transform: the lift changed the composite, so the fallback
         // must be recomputed.

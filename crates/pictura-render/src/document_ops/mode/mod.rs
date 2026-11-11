@@ -124,6 +124,7 @@ pub fn convert_mode_with_profiles(
         )));
     }
     let depth = document_bit_depth(doc);
+    super::materialize_composite(doc);
     if doc.layers.is_empty() && doc.source_mode == Some(ColorMode::Bitmap) {
         planes::background_from_composite(doc);
     }
@@ -175,31 +176,49 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
         doc.source_depth = None;
         return Ok(());
     }
+    super::materialize_composite(doc);
     planes::ensure_stores(doc);
     planes::restore_depth(doc, out);
     doc.source_depth = Some(out);
     Ok(())
 }
 
-/// `doc` as the PSD writer expects it. The app keeps an RGB composite as RGBA
-/// for display, but a document carrying a source mode (CMYK, Lab, Indexed,
-/// Bitmap, ...) is written from three color planes, so the display alpha plane
-/// is dropped; any other document is borrowed unchanged.
+/// `doc` as the PSD writer expects it.
+///
+/// A document that keeps no stored composite (#1216) gets its merged image
+/// composited band by band into tiled planes, so a uniform area costs nothing
+/// and no canvas-sized buffer is built for it. The app keeps an RGB composite
+/// as RGBA for display, but a document carrying a source mode (CMYK, Lab,
+/// Indexed, Bitmap, ...) is written from three color planes, so the display
+/// alpha plane is dropped; any other document is borrowed unchanged.
 pub fn save_view(doc: &Document) -> Cow<'_, Document> {
+    let doc: Cow<'_, Document> = if doc.merged_composite_present
+        && !doc.composite_is_authoritative()
+        && !crate::DocumentComposite::is_stored(doc)
+    {
+        let mut merged = doc.clone();
+        merged.composite = crate::composite_tiled(doc);
+        Cow::Owned(merged)
+    } else {
+        Cow::Borrowed(doc)
+    };
     let plane = doc.width as usize * doc.height as usize;
     if doc.source_mode.is_none()
         || doc.mode != ColorMode::Rgb
         || doc.composite.channels != 4
         || doc.composite.data.len() < 3 * plane
     {
-        return Cow::Borrowed(doc);
+        return doc;
     }
-    let mut trimmed = doc.clone();
+    let mut trimmed = doc.into_owned();
+    // ponytail: the three colour planes are copied flat; only documents read
+    // from another mode take this path.
+    let rgb = trimmed.composite.data.as_ref()[..3 * plane].to_vec();
     trimmed.composite = PixelBuffer {
-        width: doc.width,
-        height: doc.height,
+        width: trimmed.width,
+        height: trimmed.height,
         channels: 3,
-        data: doc.composite.data[..3 * plane].to_vec().into(),
+        data: rgb.into(),
     };
     Cow::Owned(trimmed)
 }

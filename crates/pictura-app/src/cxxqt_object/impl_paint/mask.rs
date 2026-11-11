@@ -38,7 +38,8 @@ fn mask_preview(rust: &PictureViewRust, path: &str, cfg: StrokeConfig) -> Option
     let doc = rust.session.doc.as_ref()?;
     let level = preview_level(cfg.diameter as i32, doc.width, doc.height)?;
     let t = Instant::now();
-    let mut preview = PreviewStroke::new(level, &rust.pyramid, rust.level0.as_ref()?, cfg)?;
+    let snapshot = rust.level_snapshot(level)?;
+    let mut preview = PreviewStroke::new(level, snapshot, (doc.width, doc.height), cfg)?;
     let whole = PsdRect {
         top: 0,
         left: 0,
@@ -152,7 +153,6 @@ impl PictureViewRust {
         if !self.slot_allows(SessionKind::MaskPaint) {
             return false;
         }
-        self.settle_pyramid();
         let built = {
             let rust = &*self;
             if rust.session.live.stroke().is_some() || rust.session.live.mask_stroke().is_some() {
@@ -385,8 +385,7 @@ impl qobject::PictureView {
             let rust = &mut *rust;
             if let Some(extent) = preview.extent {
                 let restore = snapshot_region(&preview, extent);
-                rust.pyramid
-                    .patch_level(preview.level as usize, &restore, extent);
+                rust.patch_display_level(preview.level as usize, extent, &restore);
                 rust.canvas_revision = rust.canvas_revision.wrapping_add(1);
             }
             for entry in preview.samples {

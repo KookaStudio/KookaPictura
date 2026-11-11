@@ -5,7 +5,7 @@
 
 use super::super::edit::Edit;
 use super::super::helpers::combine_mode_from;
-use super::super::picture::picture;
+use super::super::picture::sample_tiles;
 use super::super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -107,7 +107,21 @@ impl qobject::PictureView {
             return None;
         }
         let tolerance = tolerance.clamp(0, 255) as u8;
-        pictura_select::magic_wand(&picture(doc, rust), x as u32, y as u32, tolerance, true).ok()
+        // The composite a tile at a time, never whole (#1216).
+        let fetch = sample_tiles(doc, rust);
+        let source = pictura_paint::bucket::BucketSource::Tiles {
+            fetch: &fetch,
+            width: doc.width,
+            height: doc.height,
+        };
+        let size = (doc.width, doc.height);
+        pictura_paint::bucket::magic_flood(source, size, (x, y), tolerance, true).map(|data| {
+            Selection {
+                width: doc.width,
+                height: doc.height,
+                data,
+            }
+        })
     }
 
     pub fn quick_select(

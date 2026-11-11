@@ -56,7 +56,7 @@ private slots:
     void initTestCase();
     void boundedUndoKeepsTheFrame();
     void aNeutralLayerUndoKeepsTheFrame();
-    void aLargeGeometryUndoLandsTheExactPyramid();
+    void aLargeGeometryUndoLandsTheExactTiles();
     void undoDuringAStrokeCancelsIt();
     void moveDoesNotWarmTheBackground();
     void layerPropertiesRepaintOnlyTheLayer();
@@ -126,22 +126,26 @@ void LargeDocumentTest::aNeutralLayerUndoKeepsTheFrame()
     QCOMPARE(quint64(pictura::frame_revision(*f.view)), frame);
 }
 
-void LargeDocumentTest::aLargeGeometryUndoLandsTheExactPyramid()
+// A whole-document restore on a large document leaves its tiles stale; the
+// canvas presents stand-ins at once and the exact visible tiles land from a
+// worker (#1216).
+void LargeDocumentTest::aLargeGeometryUndoLandsTheExactTiles()
 {
     QImage seed(4200, 4200, QImage::Format_RGB32);
     seed.fill(Qt::white);
-    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_pyramid"));
-    QVERIFY2(f.ok(), "deferred pyramid fixture");
+    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_tiles"));
+    QVERIFY2(f.ok(), "deferred tiles fixture");
 
     QVERIFY(f.view->resize_image(QStringLiteral("nearest"), 2100, 2100));
-    QCOMPARE(pictura::preview_present_level(*f.view), 0);
     QSignalSpy settled(f.view, &pictura::PictureView::pyramid_settled);
     QVERIFY(window_->registry()->dispatch(QStringLiteral("edit.undo")));
     QCOMPARE(f.view->document_width(), 4200);
-    QVERIFY(pictura::preview_present_level(*f.view) > 0);
 
-    QVERIFY(settled.wait(30000));
+    // The canvas asks for its visible tiles when it paints.
+    f.canvas->repaint();
+    QVERIFY(settled.count() > 0 || settled.wait(30000));
     QCOMPARE(pictura::preview_present_level(*f.view), 0);
+    QCOMPARE(f.view->composite_argb(2100, 2100), kWhite);
 }
 
 void LargeDocumentTest::undoDuringAStrokeCancelsIt()

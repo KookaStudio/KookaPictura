@@ -4,7 +4,6 @@ use super::super::super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, paint_mode_from, rgba_from_argb,
 };
 use super::super::super::helpers_composite::{crop_plane, crop_selection};
-use super::super::super::picture::picture;
 use super::super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate as budget;
@@ -134,12 +133,18 @@ pub(super) fn bucket_fill_at(
         let (ox, oy) = t.origin;
         let seed = (x - ox, y - oy);
         let flood = {
-            // All Layers samples the composite of the layer's own document; a
-            // mask has no composite, so it always floods its own coverage.
-            let composite = (all_layers && !t.is_mask).then(|| picture(doc, rust));
-            let source = match &composite {
-                Some(composite) => BucketSource::Composite(composite),
-                None => BucketSource::layer(doc, path)?,
+            // All Layers samples the composite of the layer's own document, a
+            // tile at a time (#1216); a mask has no composite, so it always
+            // floods its own coverage.
+            let fetch = super::super::super::picture::sample_tiles(doc, rust);
+            let source = if all_layers && !t.is_mask {
+                BucketSource::Tiles {
+                    fetch: &fetch,
+                    width: doc.width,
+                    height: doc.height,
+                }
+            } else {
+                BucketSource::layer(doc, path)?
             };
             let size = (doc.width, doc.height);
             bucket::flood(

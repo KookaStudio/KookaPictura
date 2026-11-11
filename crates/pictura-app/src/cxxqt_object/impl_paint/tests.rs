@@ -293,22 +293,30 @@ fn a_mask_present_leaves_the_composite_unchanged() {
         bottom: 2,
         right: 2,
     };
-    let refreshed = view.refresh_region_buffer(region).expect("a region");
-    assert_eq!(refreshed.2, region);
+    crate::cxxqt_object::tests::present_all(&view);
+    assert_eq!(view.refresh_display_rect(region), Some(region));
     assert_eq!(
         view.session.doc.as_ref().expect("document").composite.data,
-        before.data
+        before.data,
+        "a mask stroke renders without writing the composite"
     );
-    // The returned region follows the layer stack, not the seeded cache.
+    // The presented tiles follow the layer stack, not the seeded composite.
+    let (crop, missing) = view.tile_crop(pictura_render::TileSource::Composite, 0, region);
+    assert!(missing.is_empty());
     let plane = (4 * 4) as usize;
-    let rplane = (2 * 2) as usize;
-    for y in 0..2 {
-        for x in 0..2 {
-            let ri = (y * 2 + x) as usize;
-            let fi = (y * 4 + x) as usize;
-            for c in 0..4 {
-                assert_eq!(refreshed.3.data[c * rplane + ri], full.data[c * plane + fi]);
-            }
+    for y in 0..2usize {
+        for x in 0..2usize {
+            let fi = y * 4 + x;
+            let o = (y * 2 + x) * 4;
+            let a = full.data[3 * plane + fi];
+            let premul = |c: usize| {
+                ((u32::from(full.data[c * plane + fi]) * u32::from(a) + 127) / 255) as u8
+            };
+            assert_eq!(
+                &crop.data()[o..o + 4],
+                &[premul(0), premul(1), premul(2), a],
+                "pixel ({x}, {y})"
+            );
         }
     }
 }

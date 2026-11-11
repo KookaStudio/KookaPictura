@@ -1,5 +1,5 @@
-// The document present path: a stored level is drawn from a zero-copy view, a
-// level-0 crop is cached and patched from a damage rectangle, and a document
+// The document present path: every level is drawn from a crop of the tile
+// pyramid (#1216), a level-0 crop is cached and patched from a damage rectangle, and a document
 // region refresh crosses the bridge as a rectangle rather than pixels (#968).
 
 #include <QtTest/QtTest>
@@ -56,8 +56,8 @@ private slots:
     void nonDocumentCanvasBlitsPixels();
     void documentRefreshMatchesFullRecomposite();
     void presentDoesNotBuildTheFullImage();
-    void storedLevelIsDrawnFromALevelView();
-    void storedLevelViewMatchesTheCropDraw();
+    void reducedLevelPresentsADab();
+    void cachedLevelCropMatchesTheUncachedDraw();
     void level0CropIsReusedAcrossPaints();
     void zoomChangeSelectsTheNewLevel();
     void level0PresentMatchesTheTransformDraw();
@@ -186,13 +186,12 @@ void PresentCacheTest::presentDoesNotBuildTheFullImage()
     QCOMPARE(canvas_->presentLevelForTest(), 1);
 }
 
-void PresentCacheTest::storedLevelIsDrawnFromALevelView()
+void PresentCacheTest::reducedLevelPresentsADab()
 {
     QVERIFY2(newDoc(600, 400), "document fixture");
     setZoom(0.4);
     const QImage before = renderCanvas(*canvas_);
     QCOMPARE(canvas_->presentLevelForTest(), 1);
-    const int builds = canvas_->presentCacheRebuildCount();
     QVERIFY(canvas_->presentCacheImageSize().width() <= 300);
     QVERIFY(canvas_->presentCacheImageSize().height() <= 200);
 
@@ -202,13 +201,12 @@ void PresentCacheTest::storedLevelIsDrawnFromALevelView()
     view_->flush_present();
     QCoreApplication::processEvents();
     const QImage after = renderCanvas(*canvas_);
-    QVERIFY2(!samePixels(before, after), "the stored-level present shows the dab");
+    QVERIFY2(!samePixels(before, after), "the reduced-level present shows the dab");
     QCOMPARE(canvas_->presentLevelForTest(), 1);
-    QCOMPARE(canvas_->presentCacheRebuildCount(), builds);
     QVERIFY(view_->end_paint());
 }
 
-void PresentCacheTest::storedLevelViewMatchesTheCropDraw()
+void PresentCacheTest::cachedLevelCropMatchesTheUncachedDraw()
 {
     QVERIFY2(newDoc(1200, 800), "document fixture");
     const double zooms[] = {0.4, 0.25};
@@ -216,13 +214,13 @@ void PresentCacheTest::storedLevelViewMatchesTheCropDraw()
         setZoom(zoom);
         QVERIFY2(canvas_->presentLevelForTest() > 0, "the zoom must select a stored level");
         const QImage view = renderCanvas(*canvas_);
-        // Without the cache the same paint falls back to a crop of the level,
-        // so this compares the zero-copy draw with the crop draw.
+        // Without the cache the same paint crops the level afresh, so this
+        // compares the cached crop with a fresh one.
         canvas_->setPresentCacheEnabledForTest(false);
         const QImage crop = renderCanvas(*canvas_);
         canvas_->setPresentCacheEnabledForTest(true);
         QVERIFY2(samePixels(view, crop),
-                 qPrintable(QStringLiteral("the stored-level view differs from the crop at %1")
+                 qPrintable(QStringLiteral("the cached crop differs from a fresh one at %1")
                                 .arg(zoom)));
     }
 
@@ -234,7 +232,7 @@ void PresentCacheTest::storedLevelViewMatchesTheCropDraw()
     const QImage pannedCrop = renderCanvas(*canvas_);
     canvas_->setPresentCacheEnabledForTest(true);
     QVERIFY2(samePixels(panned, pannedCrop),
-             "the stored-level view differs from the crop after a pan");
+             "the cached crop differs from a fresh one after a pan");
 }
 
 void PresentCacheTest::level0CropIsReusedAcrossPaints()
@@ -287,7 +285,13 @@ void PresentCacheTest::largeDocumentPresentsThroughALevel()
     const QImage shot = renderCanvas(*canvas_);
     QCOMPARE(canvas_->presentLevelForTest(), 2);
     QVERIFY(!canvas_->holdsImageForTest());
-    QVERIFY(canvas_->presentCacheRebuildCount() == 0);
+    // A crop of the level's tiles, never larger than the level, and reused by
+    // the next paint (#1216).
+    const int builds = canvas_->presentCacheRebuildCount();
+    renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentCacheRebuildCount(), builds);
+    QVERIFY(canvas_->presentCacheImageSize().width() <= 1000);
+    QVERIFY(canvas_->presentCacheImageSize().height() <= 750);
     QVERIFY(!shot.isNull());
 }
 

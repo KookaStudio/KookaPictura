@@ -605,21 +605,7 @@ void ImageView::paintEvent(QPaintEvent* event)
         if (haveRect && levelProvider_.reportView) {
             levelProvider_.reportView(level, cropDoc);
         }
-        // A stored level is drawn from a zero-copy view for this paint only: a
-        // view retained across paints would force a level copy on the next
-        // update. Without a view (single-channel, or an old provider) the crop
-        // cache serves any level.
-        QImage levelView;
-        if (haveRect && level > 0 && singleChannel() < 0 && presentCacheEnabledForTest_
-            && levelProvider_.levelImage) {
-            levelView = levelProvider_.levelImage(level);
-        }
-        const QImage* crop = nullptr;
-        if (levelView.isNull() && haveRect) {
-            crop = presentCrop(level, cropDoc, sourceRect);
-        } else if (!levelView.isNull()) {
-            dropPresentCache();
-        }
+        const QImage* crop = haveRect ? presentCrop(level, cropDoc, sourceRect) : nullptr;
         painter.save();
         painter.setTransform(rotation);
         painter.setRenderHint(QPainter::SmoothPixmapTransform,
@@ -655,11 +641,6 @@ void ImageView::paintEvent(QPaintEvent* event)
                                      offset_.y() + visible.y() * zoom_, visible.width() * zoom_,
                                      visible.height() * zoom_),
                               channelImage(image_, image_.cacheKey()), visible);
-        } else if (!levelView.isNull()) {
-            const QRectF target(offset_.x() + cropDoc.x() * zoom_,
-                                offset_.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
-                                cropDoc.height() * zoom_);
-            painter.drawImage(target, levelView, QRectF(sourceRect));
         } else if (crop) {
             const QRectF target(offset_.x() + cropDoc.x() * zoom_,
                                 offset_.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
@@ -692,10 +673,7 @@ void ImageView::paintEvent(QPaintEvent* event)
         presentCacheRebuiltLastPaint_ = rebuilt;
         presentedLevel_ = level;
         presentedDocRect_ = cropDoc;
-        if (!levelView.isNull()) {
-            presentedImageSize_ = sourceRect.size();
-            presentedImageKey_ = levelView.cacheKey();
-        } else if (crop) {
+        if (crop) {
             presentedImageSize_ = crop->size();
             presentedImageKey_ = crop->cacheKey();
         } else {

@@ -8,14 +8,16 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 mod budget;
+mod damage;
 mod planes;
 mod styles;
 
 pub(crate) use budget::{document_bytes, tile_table_bytes};
+use damage::{display_differs, meta_damage, Damage};
 use planes::{
     adopt_metadata, apply_tiles, composite_change, composite_unchanged, delta_allocations,
-    diff_into, doc_allocations, hollow, mask_rects, plane_kinds, planes_agree, shared_copy,
-    stamp_agreed, swap_tiles, tile_planes, tile_rect, PlaneDelta, PlaneKind,
+    diff_into, doc_allocations, hollow, mask_rects, planes_agree, shared_copy, stamp_agreed,
+    swap_tiles, tile_planes, PlaneDelta,
 };
 pub use styles::{
     create_character_style, create_paragraph_style, delete_character_style, delete_paragraph_style,
@@ -152,76 +154,6 @@ pub struct History {
 const MAX_DEPTH: usize = 20;
 const MAX_SNAPSHOTS: usize = 10;
 
-/// The picture change a walk through the states accumulates.
-struct Damage {
-    kinds: Vec<PlaneKind>,
-    height: usize,
-    rect: Option<PsdRect>,
-    everywhere: bool,
-    /// The walk left a segment, so its tiles no longer tell the whole change.
-    crossed: bool,
-}
-
-impl Damage {
-    fn new(doc: &Document) -> Self {
-        Self {
-            kinds: plane_kinds(doc),
-            height: doc.height as usize,
-            rect: None,
-            everywhere: false,
-            crossed: false,
-        }
-    }
-
-    /// The document rows a composite tile covers. The composite stacks its
-    /// channels in one plane, so a tile row is a document row modulo the
-    /// height, and a tile straddling two channels covers the whole height.
-    fn rows(&self, tile: &planes::TileDelta) -> (i32, i32) {
-        let h = self.height.max(1);
-        let (first, last) = (tile.y / h, (tile.y + tile.h - 1) / h);
-        if first == last {
-            ((tile.y % h) as i32, ((tile.y + tile.h - 1) % h + 1) as i32)
-        } else {
-            (0, h as i32)
-        }
-    }
-
-    fn union(&mut self, r: PsdRect) {
-        self.rect = Some(self.rect.map_or(r, |u| u.union(r)));
-    }
-
-    fn add(&mut self, deltas: &[PlaneDelta]) {
-        for delta in deltas {
-            match self.kinds.get(delta.index).copied() {
-                Some(PlaneKind::Composite) => {
-                    for tile in &delta.tiles {
-                        let (top, bottom) = self.rows(tile);
-                        self.union(PsdRect {
-                            top,
-                            bottom,
-                            ..tile_rect(tile)
-                        });
-                    }
-                }
-                Some(PlaneKind::Mask(mask)) => {
-                    for tile in &delta.tiles {
-                        let r = tile_rect(tile);
-                        self.union(PsdRect {
-                            top: r.top + mask.top,
-                            left: r.left + mask.left,
-                            bottom: r.bottom + mask.top,
-                            right: r.right + mask.left,
-                        });
-                    }
-                }
-                // No canvas view draws these planes directly.
-                Some(PlaneKind::LayerChannel | PlaneKind::DocumentChannel) => {}
-                _ => self.everywhere = true,
-            }
-        }
-    }
-}
-
 /// Every tile allocation a stored state holds; a hollow anchor holds none.
 fn stored_allocations(stored: &Stored) -> Vec<(usize, usize)> {
     match stored {
@@ -229,12 +161,6 @@ fn stored_allocations(stored: &Stored) -> Vec<(usize, usize)> {
         Stored::Hollow(_) => Vec::new(),
         Stored::Delta(d) => delta_allocations(&d.tiles),
     }
-}
-
-/// Whether two states would display differently with the same composite.
-fn display_differs(a: &Document, b: &Document) -> bool {
-    (a.width, a.height, a.mode, a.depth) != (b.width, b.height, b.mode, b.depth)
-        || a.document_icc != b.document_icc
 }
 
 impl History {
@@ -712,8 +638,17 @@ impl History {
             layer_target.retain_resolving(doc);
         }
         self.current_target = layer_target.clone();
-        if before.is_none_or(|b| display_differs(&b, &cur.doc)) {
-            damage.everywhere = true;
+        match before.as_ref() {
+            Some(b) if !display_differs(b, &cur.doc) => {
+                if !pictura_render::DocumentComposite::is_stored(&cur.doc) {
+                    match meta_damage(b, &hollow(&cur.doc)) {
+                        Some(Some(rect)) => damage.union(rect),
+                        Some(None) => {}
+                        None => damage.everywhere = true,
+                    }
+                }
+            }
+            _ => damage.everywhere = true,
         }
         let rect = damage.rect.unwrap_or(PsdRect {
             top: 0,

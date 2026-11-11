@@ -154,8 +154,7 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
     scratch_layers.extend(doc.layers.iter().cloned());
     scratch.layers = pictura_core::LayerStack::from_layers(scratch_layers);
 
-    let buffer = crate::composite_rgba(&scratch);
-    let channels = bake(&buffer, rect);
+    let channels = bake(&scratch, rect);
     let mut result = pixel_result(
         "Background".to_string(),
         rect,
@@ -441,8 +440,6 @@ fn bake_inputs(
 ) -> Result<MergeOutcome, MergeError> {
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
     scratch.layers = pictura_core::LayerStack::from_layers(inputs.to_vec());
-    let buffer = crate::composite_rgba(&scratch);
-
     let union = inputs
         .iter()
         .filter_map(content_rect)
@@ -450,7 +447,7 @@ fn bake_inputs(
     let rect = union
         .and_then(|r| r.clip_to(doc.width, doc.height))
         .unwrap_or_default();
-    let channels = bake(&buffer, rect);
+    let channels = bake(&scratch, rect);
     let node = pixel_result(name, rect, blend, opacity, clipping, channels);
 
     let path = splice_result(doc, remove, anchor, node).ok_or(MergeError::InvalidTarget)?;
@@ -525,28 +522,15 @@ fn content_rect(layer: &Layer) -> Option<PsdRect> {
 }
 
 /// Crop the full-document planar RGBA `buffer` to `rect` as `0/1/2/-1` channels.
-fn bake(buffer: &PixelBuffer, rect: PsdRect) -> Vec<Channel> {
-    let w = rect.width().max(0) as usize;
-    let h = rect.height().max(0) as usize;
-    let n = w * h;
-    let plane = buffer.width as usize * buffer.height as usize;
-    let mut channels = Vec::with_capacity(4);
-    for (id, plane_index) in [(0i16, 0usize), (1, 1), (2, 2), (-1, 3)] {
-        let mut data = vec![0u8; n];
-        for y in 0..h {
-            for x in 0..w {
-                let sx = rect.left as usize + x;
-                let sy = rect.top as usize + y;
-                let source = sy * buffer.width as usize + sx;
-                data[y * w + x] = buffer.data[plane_index * plane + source];
-            }
-        }
-        channels.push(Channel {
-            id,
-            data: data.into(),
-        });
-    }
-    channels
+/// The composite of `scratch` over `rect` as a layer's red, green, blue and
+/// transparency channels, composited band by band into tiled planes so no
+/// canvas-sized buffer is held beside them (#1216).
+fn bake(scratch: &Document, rect: PsdRect) -> Vec<Channel> {
+    let [r, g, b, a] = crate::composite_channels(scratch, rect);
+    [(0i16, r), (1, g), (2, b), (-1, a)]
+        .into_iter()
+        .map(|(id, data)| Channel { id, data })
+        .collect()
 }
 
 fn pixel_result(
@@ -578,8 +562,8 @@ fn pixel_result(
 }
 
 fn opaque_white_layer(width: u32, height: u32) -> Layer {
-    let n = width as usize * height as usize;
-    let white = vec![255u8; n];
+    // Uniform tiles: the backdrop costs no canvas-sized allocation (#1216).
+    let white = || pictura_core::Plane::filled(width as usize, height as usize, 1, 255u8);
     let rect = PsdRect {
         top: 0,
         left: 0,
@@ -601,19 +585,19 @@ fn opaque_white_layer(width: u32, height: u32) -> Layer {
         channels: vec![
             Channel {
                 id: 0,
-                data: white.clone().into(),
+                data: white(),
             },
             Channel {
                 id: 1,
-                data: white.clone().into(),
+                data: white(),
             },
             Channel {
                 id: 2,
-                data: white.clone().into(),
+                data: white(),
             },
             Channel {
                 id: -1,
-                data: white.into(),
+                data: white(),
             },
         ],
         children: pictura_core::LayerStack::default(),

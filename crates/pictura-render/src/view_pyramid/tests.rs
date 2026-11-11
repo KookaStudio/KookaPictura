@@ -273,7 +273,7 @@ fn a_tiled_level0_builds_the_same_levels() {
     assert_eq!(from_bands.level_count(), exact.level_count());
     for level in 1..exact.level_count() {
         assert!(
-            from_bands.level_view(level).unwrap().data() == exact.level_view(level).unwrap().data(),
+            from_bands.levels[level - 1].data() == exact.levels[level - 1].data(),
             "level {level} differs"
         );
     }
@@ -330,8 +330,7 @@ fn a_tiled_level0_updates_and_crops() {
     banded_pyramid.update(Planes::planar(w, h, &plane).expect("planar"), damage);
     for level in 1..flat_pyramid.level_count() {
         assert!(
-            banded_pyramid.level_view(level).unwrap().data()
-                == flat_pyramid.level_view(level).unwrap().data(),
+            banded_pyramid.levels[level - 1].data() == flat_pyramid.levels[level - 1].data(),
             "level {level} differs after the update"
         );
     }

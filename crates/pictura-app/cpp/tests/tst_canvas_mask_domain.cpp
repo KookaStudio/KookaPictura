@@ -138,6 +138,7 @@ private slots:
     void importedMaskReadOnlyViews();
     void dataLessImportFirstEditPreservesViews();
     void canvasMaskEditUndoRedo();
+    void soloMaskRestoreShowsTheMask();
     void canvasMaskCancelAndNoop();
     void canvasMaskRefusalIsAtomic();
     void wholeMaskMoveBlackPreview();
@@ -573,6 +574,31 @@ void CanvasMaskDomainTest::dataLessImportFirstEditPreservesViews()
     QCOMPARE(coverage(*v), QByteArray(96, char(255)));
     QVERIFY(v->redo());
     QCOMPARE(quint8(coverage(*v)[81]), quint8(0));
+}
+
+// [tp_solo_restore] A soloed mask is presented from mask tiles: undo, redo and
+// a history jump while soloed show the restored coverage, and leaving solo
+// shows the document again (#1216).
+void CanvasMaskDomainTest::soloMaskRestoreShowsTheMask()
+{
+    auto* v = imported(false, 0, 255); QVERIFY(v);
+    const auto shown = [v]() { return v->canvas_display_image(0, 9, 6, 1, 1).pixelColor(0, 0); };
+    const int history = v->history_index();
+    const quint8 before = quint8(coverage(*v)[81]);
+    QVERIFY(pictura::mask_solo_set(*v, QStringLiteral("0")));
+    QCOMPARE(shown().red(), int(before));
+    QVERIFY(dab(*v, 0xff000000u));
+    QCOMPARE(quint8(coverage(*v)[81]), quint8(0));
+    QCOMPARE(shown().red(), 0);
+    QVERIFY(v->undo());
+    QCOMPARE(shown().red(), int(before));
+    QVERIFY(v->redo());
+    QCOMPARE(shown().red(), 0);
+    QVERIFY(v->history_jump(history));
+    QCOMPARE(shown().red(), int(before));
+    QCOMPARE(pictura::mask_solo_get(*v), QStringLiteral("0"));
+    QVERIFY(pictura::mask_solo_set(*v, QString()));
+    QCOMPARE(v->canvas_display_image(0, 9, 6, 1, 1).pixel(0, 0), QRgb(v->sample_argb(9, 6)));
 }
 
 void CanvasMaskDomainTest::canvasMaskEditUndoRedo()

@@ -67,6 +67,7 @@ class CanvasPanTest : public QObject {
 private slots:
     void initTestCase();
     void panHidesTheBrushRing();
+    void panShowsTheDocumentPixels();
     void toolSwitchKeepsZoomAndPosition();
     void resizeKeepsAdjustedViewCentred();
     void offsetRangeConstrainsFittingAxes();
@@ -131,6 +132,39 @@ void CanvasPanTest::panHidesTheBrushRing()
              "the canvas shows the document, not the ring");
 
     f.canvas->setSpacePan(false);
+}
+
+// [tp_sync_small] A pan presents the document's pixels from the display tiles
+// at once: a small document builds every visible tile synchronously (#1216).
+void CanvasPanTest::panShowsTheDocumentPixels()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(600, 400, QImage::Format_RGB32);
+    for (int y = 0; y < seed.height(); ++y) {
+        for (int x = 0; x < seed.width(); ++x) {
+            seed.setPixel(x, y, x < 300 ? qRgb(255, 0, 0) : qRgb(0, 0, 255));
+        }
+    }
+    Fixture f(frame, seed, QStringLiteral("pictura_canvas_pan_pixels"));
+    QVERIFY2(f.ok(), "canvas-pan fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QCoreApplication::processEvents();
+
+    f.canvas->setZoom(1.0, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    for (const QPointF delta : {QPointF(-120.0, 0.0), QPointF(240.0, -30.0)}) {
+        f.canvas->panBy(delta);
+        QCoreApplication::processEvents();
+        const QImage shown = f.canvas->grab().toImage();
+        for (const QPointF doc : {QPointF(150, 200), QPointF(450, 200)}) {
+            const QPoint at = f.canvas->imageToWidget(doc).toPoint();
+            if (!shown.rect().contains(at)) {
+                continue;
+            }
+            const QColor expected = doc.x() < 300 ? QColor(255, 0, 0) : QColor(0, 0, 255);
+            QCOMPARE(shown.pixelColor(at), expected);
+        }
+    }
 }
 
 void CanvasPanTest::toolSwitchKeepsZoomAndPosition()

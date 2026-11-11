@@ -3,10 +3,11 @@
 
 use super::super::document_session::DocumentSession;
 use super::super::edit::Edit;
-use super::super::helpers_composite::{level0_buffer, planes_of};
+use super::super::helpers_composite::planes_of;
 use super::{ms, pixel_layer, LayerTarget, PictureViewRust};
 use crate::history::Restored;
 use pictura_core::{BitDepth, Channel, ColorMode, Document, LayerMask, LayerStack, PsdRect};
+use pictura_render::TileSource;
 use std::time::Instant;
 
 const WIDTH: u32 = 16507;
@@ -22,15 +23,37 @@ fn view() -> PictureViewRust {
         id: 0,
         data: vec![0u8; WIDTH as usize * HEIGHT as usize].into(),
     });
-    doc.composite = pictura_render::composite_rgba(&doc);
     let mut view = PictureViewRust {
         session: DocumentSession::with_document(doc),
         gpu_compute: false,
         ..Default::default()
     };
+    view.composite_into_doc();
     view.reset_pyramid();
     view.apply_edit("Open", Edit::Record);
     view
+}
+
+/// The viewport the #1216 budget is set for.
+const VIEWPORT: (u32, u32) = (1920, 1080);
+
+/// Present the fit view of `source` as the canvas does after a restore: the
+/// GUI thread's crop (stand-ins for what is missing), then the worker's build
+/// of the exact visible tiles, timed apart.
+fn present_fit(label: &str, view: &PictureViewRust, source: TileSource) {
+    let t = Instant::now();
+    let (level, fit) = view.fit_view(VIEWPORT.0, VIEWPORT.1);
+    let (_, missing) = view.tile_crop(source, level, fit);
+    ms(
+        &format!("{label} visible presentation (GUI thread)"),
+        t.elapsed(),
+    );
+    let t = Instant::now();
+    let built = view.run_tile_job(&missing);
+    ms(
+        &format!("{label} visible tiles ({built} at level {level}, worker)"),
+        t.elapsed(),
+    );
 }
 
 /// Undo, then present it the way `show_restored` does, timing each half.
@@ -93,10 +116,11 @@ fn structural_restore_profile() {
         ..LayerMask::default()
     });
     solo.mask_solo = Some("0".into());
+    solo.rebuild_mask_solo_source();
     let t = Instant::now();
-    let job = solo.reset_pyramid_deferred();
-    ms("solo mask deferred display", t.elapsed());
-    assert!(job.is_some(), "a large document defers");
+    solo.reset_pyramid();
+    ms("solo mask restore display (GUI thread)", t.elapsed());
+    present_fit("solo mask", &solo, TileSource::Mask);
     drop(solo);
 
     let mut resize = view();
@@ -111,13 +135,7 @@ fn structural_restore_profile() {
     resize.apply_edit("Image Size", Edit::Full);
     undo_and_show("resize", &mut resize);
 
-    let t = Instant::now();
-    let level0 = level0_buffer(resize.session.doc.as_mut().expect("document"));
-    ms("full size level 0", t.elapsed());
-    let t = Instant::now();
-    let pyramid = pictura_render::ViewPyramid::rebuild(planes_of(&level0).expect("rgba"));
-    ms("full size pyramid", t.elapsed());
-    drop((level0, pyramid));
+    present_fit("full size", &resize, TileSource::Composite);
 
     let session = &mut resize.session;
     let doc = session.doc.as_mut().expect("document");
@@ -138,9 +156,9 @@ fn structural_restore_profile() {
         .jump_live(0, doc, &mut session.selection, &mut LayerTarget::default())
         .expect("a state to jump to");
     let t = Instant::now();
-    let job = resize.reset_pyramid_deferred();
+    resize.reset_pyramid();
     ms("deferred display", t.elapsed());
-    assert!(job.is_some(), "a large document defers");
+    present_fit("restored", &resize, TileSource::Composite);
 }
 
 /// A soloed mask's display plane on an 8000² document: the same fill on one
@@ -151,7 +169,6 @@ fn solo_mask_profile() {
     const SIDE: u32 = 8000;
     let mut doc = Document::new(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("under", SIDE, SIDE, (120, 170, 220))]);
-    doc.composite = pictura_render::composite_rgba(&doc);
     doc.layers[0].mask = Some(LayerMask {
         rect: PsdRect {
             top: 0,
@@ -179,6 +196,20 @@ fn solo_mask_profile() {
     ms("solo mask plane (all cores)", t.elapsed());
     let t = Instant::now();
     let pyramid = pictura_render::ViewPyramid::rebuild(planes_of(&plane).expect("rgba"));
-    ms("solo mask pyramid", t.elapsed());
-    drop(pyramid);
+    ms("solo mask whole pyramid (the old display)", t.elapsed());
+    drop((pyramid, plane));
+
+    // The tile display: no document-sized plane, only the visible tiles.
+    let mut view = PictureViewRust {
+        session: DocumentSession::with_document(doc.clone()),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.composite_into_doc();
+    view.mask_solo = Some("0".into());
+    view.rebuild_mask_solo_source();
+    let t = Instant::now();
+    view.reset_pyramid();
+    ms("solo mask restore display (GUI thread)", t.elapsed());
+    present_fit("solo mask", &view, TileSource::Mask);
 }

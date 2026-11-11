@@ -8,7 +8,7 @@ use crate::cxxqt_object::edit::{
 use crate::cxxqt_object::impl_layers::{changed_property_region, move_edit};
 use crate::cxxqt_object::metrics::{set_for_this_thread, with};
 use crate::cxxqt_object::presentation::Rebuild;
-use crate::cxxqt_object::tests::pixel_layer;
+use crate::cxxqt_object::tests::{assert_display_current, pixel_layer, present_all};
 use crate::cxxqt_object::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use pictura_core::{
@@ -20,12 +20,13 @@ use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 fn view(layers: Vec<Layer>) -> PictureViewRust {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(layers);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    PictureViewRust {
+    let view = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         gpu_compute: false,
         ..Default::default()
-    }
+    };
+    present_all(&view);
+    view
 }
 
 fn full_composites() -> u32 {
@@ -159,12 +160,13 @@ fn bounded_view() -> PictureViewRust {
         placed("a", 1, 1, (20, 0, 0)),
         placed("b", 2, 2, (0, 20, 0)),
     ]);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    PictureViewRust {
+    let view = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         gpu_compute: false,
         ..Default::default()
-    }
+    };
+    present_all(&view);
+    view
 }
 
 fn assert_bounded(label: &str, apply: fn(&mut PictureViewRust) -> Edit) {
@@ -175,8 +177,7 @@ fn assert_bounded(label: &str, apply: fn(&mut PictureViewRust) -> Edit) {
     let applied = view.apply_edit(label, edit);
     assert_eq!(full_composites(), before, "{label} used a full composite");
     assert!(!applied.regions.is_empty(), "{label} did not use a region");
-    let doc = view.session.doc.as_ref().expect("document");
-    assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+    assert_display_current(&view);
 }
 
 fn delete_edit(view: &mut PictureViewRust) -> Edit {
@@ -292,8 +293,7 @@ fn bounded_group_and_ungroup_refresh_only_their_region() {
     let applied = view.apply_edit("Ungroup", edit);
     assert_eq!(full_composites(), before);
     assert!(!applied.regions.is_empty());
-    let doc = view.session.doc.as_ref().expect("document");
-    assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+    assert_display_current(&view);
 }
 
 #[test]
@@ -588,8 +588,9 @@ fn shrinking_feather_equals_full_recomposite() {
 fn assert_pending_preview_forces_full_capture(mask_refine: bool) {
     let mut view = view(vec![pixel_layer("base", 8, 8, (0, 0, 0))]);
     view.session.record(&LayerTarget::default(), "Open");
+    // A pixel outside the edit's region: only a full capture records it.
     if let Some(doc) = view.session.doc.as_mut() {
-        doc.composite.data.as_mut_slice()[45] = 200;
+        doc.layers[0].channels[0].data.as_mut_slice()[45] = 200;
     }
     if mask_refine {
         view.pending_previews.mask_refine = Some("Mask Feather");
@@ -597,12 +598,7 @@ fn assert_pending_preview_forces_full_capture(mask_refine: bool) {
         view.pending_previews.opacity_changed = true;
     }
     view.apply_edit("Opacity", Edit::regions(vec![tiny()], true));
-    let live = view
-        .session
-        .doc
-        .as_ref()
-        .expect("document")
-        .composite
+    let live = view.session.doc.as_ref().expect("document").layers[0].channels[0]
         .data
         .as_slice()
         .to_vec();
@@ -612,7 +608,8 @@ fn assert_pending_preview_forces_full_capture(mask_refine: bool) {
         .current_snapshot()
         .expect("state")
         .doc
-        .composite
+        .layers[0]
+        .channels[0]
         .data
         .as_slice()
         .to_vec();
@@ -635,12 +632,13 @@ fn mask_refine_commit_after_preview_passes_no_hint() {
 fn view_sized(w: u32, h: u32, layers: Vec<Layer>) -> PictureViewRust {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(layers);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    PictureViewRust {
+    let view = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         gpu_compute: false,
         ..Default::default()
-    }
+    };
+    present_all(&view);
+    view
 }
 
 fn styled_layer_at(at: PsdRect, effects: &[(&str, f64)]) -> Layer {
@@ -676,13 +674,7 @@ fn commit_region_equals_full(mut view: PictureViewRust, dab: PsdRect, pad: i32) 
     write_layer_dab(view.session.doc.as_mut().expect("doc"), "1", dab);
     let grown = dab.grow(pad);
     view.apply_edit("Paint", Edit::regions(vec![grown], false));
-    let doc = view.session.doc.as_ref().expect("doc");
-    let full = pictura_render::composite_rgba(doc);
-    assert_eq!(
-        doc.composite.data.as_ref(),
-        full.data.as_ref(),
-        "the grown commit region must equal a full recomposite"
-    );
+    assert_display_current(&view);
 }
 
 #[test]
@@ -796,9 +788,7 @@ fn feathered_mask_dab_commit_equals_full_recomposite() {
     }
     let grown = dab.grow(pad);
     view.apply_edit("Paint", Edit::regions(vec![grown], false));
-    let doc = view.session.doc.as_ref().expect("doc");
-    let full = pictura_render::composite_rgba(doc);
-    assert_eq!(doc.composite.data.as_ref(), full.data.as_ref());
+    assert_display_current(&view);
 }
 
 #[test]
@@ -832,16 +822,15 @@ fn cancel_styled_stroke_restores_the_halo() {
     ));
     let dirty = stroke.dirty().expect("dirty");
     let grown = dirty.grow(pad);
-    let _ = view.refresh_region_buffer(grown);
+    let _ = view.refresh_display_rect(grown);
     let session = StrokeSession {
         stroke: Some(stroke),
         paint_pad: pad,
         ..Default::default()
     };
-    let _restored = view.cancel_stroke_session(session).expect("restored");
-    let doc = view.session.doc.as_ref().expect("doc");
-    let full = pictura_render::composite_rgba(doc);
-    assert_eq!(doc.composite.data.as_ref(), full.data.as_ref());
+    let restored = view.cancel_stroke_session(session).expect("restored");
+    view.refresh_regions(&[restored]);
+    assert_display_current(&view);
 }
 
 #[test]

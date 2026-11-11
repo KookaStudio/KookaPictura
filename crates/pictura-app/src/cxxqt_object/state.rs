@@ -1,8 +1,8 @@
-use super::impl_core::{DeferredComposite, DeferredPyramid, DeferredTransform, TransformJob};
+use super::impl_core::{DeferredComposite, DeferredTransform, TransformJob};
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
-use pictura_core::{PixelBuffer, PsdRect};
-use pictura_render::{CanvasDamage, ViewPyramid};
+use pictura_core::PsdRect;
+use pictura_render::CanvasDamage;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
@@ -152,28 +152,9 @@ pub struct PictureViewRust {
     /// Bumped by every committed edit, undo/redo, and non-display preview, so
     /// the session drops a reduced document the gesture no longer matches.
     pub(super) non_preview_revision: u64,
-    /// The halved-level view of the composite, fed by `recomposite` and
-    /// `refresh_region`.
-    pub(super) pyramid: ViewPyramid,
-    /// The 4-plane straight **sRGB** level-0 frame the display image, pyramid,
-    /// and canvas crops all share, so every path shows the working-space
-    /// conversion rather than the raw composite. The display `QImage` is built
-    /// from this frame on demand (`PictureView::image`) rather than cached, so
-    /// only one full-resolution frame is held.
-    pub(super) level0: Option<PixelBuffer>,
-    /// The solo mask's document-sized grayscale plane and its view pyramid,
-    /// built while `mask_solo` is set and dropped when it clears. The canvas
-    /// presents these instead of the composite (`impl_core/display.rs`); no
-    /// other display consumer reads them.
-    pub(super) mask_level0: Option<PixelBuffer>,
-    pub(super) mask_pyramid: ViewPyramid,
-    /// The worker build `pyramid` stands in for, while it is coarse.
-    pub(super) deferred_pyramid: Option<DeferredPyramid>,
-    /// The deferred pyramid a presentation asked for, waiting for the Qt
-    /// presenter to start it.
-    pub(super) pending_pyramid_job: Option<super::impl_core::PyramidJob>,
-    /// Numbers each deferred build, so a superseded result is recognised.
-    pub(super) pyramid_generation: u64,
+    /// The canvas display as a tile pyramid: the composite's tiles and, while
+    /// a mask is soloed, the mask's (#1216). No full-resolution frame is kept.
+    pub(super) tiles: super::tiles::DisplayTiles,
     /// The Move commit's composite waiting for its worker (#1157).
     pub(super) deferred_composite: Option<DeferredComposite>,
     /// The job the QObject spawns after the transaction returns.
@@ -322,13 +303,7 @@ impl Default for PictureViewRust {
                 right: 0,
             },
             non_preview_revision: 0,
-            pyramid: ViewPyramid::default(),
-            level0: None,
-            mask_level0: None,
-            mask_pyramid: ViewPyramid::default(),
-            deferred_pyramid: None,
-            pending_pyramid_job: None,
-            pyramid_generation: 0,
+            tiles: Default::default(),
             deferred_composite: None,
             pending_move_job: None,
             composite_generation: 0,

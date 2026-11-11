@@ -4,7 +4,7 @@
 
 use pictura_codec::{quantize, PaletteOptions};
 use pictura_core::{
-    BitDepth, ColorMode, Document, PixelBuffer, Samples, SourceChannels, SourcePlanes,
+    BitDepth, ColorMode, Document, PixelBuffer, PsdRect, Samples, SourceChannels, SourcePlanes,
 };
 use pictura_ops::OpsError;
 
@@ -111,6 +111,33 @@ pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result
 /// Whether the visible image has at most 256 distinct colors, so the Indexed
 /// Color dialog can offer the Exact palette.
 pub fn indexed_exact_available(doc: &Document) -> bool {
+    if !doc.layers.is_empty() && !crate::DocumentComposite::is_stored(doc) {
+        // No stored composite (#1216): count the colours band by band.
+        let mut seen = std::collections::HashSet::new();
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        };
+        crate::stream_composite(doc, whole, 256, |_, band| {
+            if seen.len() > 256 {
+                return;
+            }
+            let n = band.width as usize * band.height as usize;
+            let mut planes = [vec![0u8; n], vec![0u8; n], vec![0u8; n]];
+            for (c, plane) in planes.iter_mut().enumerate() {
+                band.data.read_into(c * n, plane);
+            }
+            let [r, g, b] = &planes;
+            for ((&r, &g), &b) in r.iter().zip(g).zip(b) {
+                if seen.insert([r, g, b]) && seen.len() > 256 {
+                    return;
+                }
+            }
+        });
+        return seen.len() <= 256;
+    }
     let plane = doc.width as usize * doc.height as usize;
     let data = &doc.composite.data;
     let colors = doc.composite.channels.min(3) as usize;

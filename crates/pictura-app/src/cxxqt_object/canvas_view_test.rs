@@ -1,7 +1,8 @@
 use super::helpers_composite::*;
+use super::tiles::display_region;
 use super::PictureViewRust;
 use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect};
-use pictura_render::{rgba_frame, CanvasDamage, DocumentComposite, ViewPyramid};
+use pictura_render::{patch_buffer_region, CanvasDamage, TileKey, TileSource, ViewPyramid};
 
 /// A 4-plane RGBA buffer with variation in every channel, so a level mismatch
 /// cannot hide behind uniform pixels.
@@ -73,16 +74,79 @@ fn whole_level(pyramid: &ViewPyramid, level: usize) -> PsdRect {
     }
 }
 
-fn assert_pyramids_equal(a: &ViewPyramid, b: &ViewPyramid, source: &PixelBuffer) {
-    assert_eq!(a.level_count(), b.level_count(), "level count");
-    let planes = planes_of(source).expect("RGBA source");
-    for level in 0..a.level_count() {
-        let rect = whole_level(a, level);
+fn whole(w: u32, h: u32) -> PsdRect {
+    PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    }
+}
+
+fn view_of(doc: Document) -> PictureViewRust {
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    // As an open or a New Document does: a layered RGB document drops the
+    // composite it was constructed with.
+    rust.composite_into_doc();
+    rust.reset_pyramid();
+    rust
+}
+
+/// The whole of `level` as the canvas shows it, built (and so cached) from
+/// tiles; a small document builds every missing tile at once.
+fn shown(rust: &PictureViewRust, level: i32) -> Vec<u8> {
+    let (w, h) = rust.display_level_size(level).expect("the level exists");
+    let (crop, missing) = rust.tile_crop(TileSource::Composite, level, whole(w, h));
+    assert!(
+        missing.is_empty(),
+        "a small document builds its tiles at once"
+    );
+    crop.data().to_vec()
+}
+
+/// The whole display composite of the view's document, the R5 reference:
+/// whole buffers only at test sizes.
+fn reference(rust: &PictureViewRust) -> PixelBuffer {
+    let doc = rust.session.doc.as_ref().expect("document");
+    display_region(
+        doc,
+        whole(doc.width, doc.height),
+        rust.session.live.stroke().is_some(),
+    )
+}
+
+/// Every level the view presents equals the same level of a pyramid rebuilt
+/// from the whole display composite.
+fn assert_tiles_match_a_rebuild(rust: &PictureViewRust) {
+    let source = reference(rust);
+    let planes = planes_of(&source).expect("RGBA source");
+    let pyramid = ViewPyramid::rebuild(planes);
+    assert_eq!(
+        rust.display_level_count() as usize,
+        pyramid.level_count(),
+        "level count"
+    );
+    for level in 0..pyramid.level_count() {
         assert_eq!(
-            a.crop(planes, level, rect).data(),
-            b.crop(planes, level, rect).data(),
+            shown(rust, level as i32),
+            pyramid
+                .crop(planes, level, whole_level(&pyramid, level))
+                .data(),
             "level {level}"
         );
+    }
+}
+
+fn key(level: u8, tx: u32, ty: u32) -> TileKey {
+    TileKey {
+        source: TileSource::Composite,
+        level,
+        tx,
+        ty,
     }
 }
 
@@ -114,24 +178,14 @@ fn display_conversion_premultiplies_and_straight_helpers_do_not() {
 }
 
 #[test]
-fn level0_region_update_matches_a_rebuild() {
+fn a_region_repair_matches_a_rebuild() {
     let mut doc = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(600, 400, 0);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc.clone()),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
+    let mut rust = view_of(doc.clone());
+    assert_tiles_match_a_rebuild(&rust);
 
-    let reference = {
-        let level0 = rust.level0.as_ref().expect("sRGB level-0 frame");
-        ViewPyramid::rebuild(planes_of(level0).unwrap())
-    };
-    let level0 = rust.level0.as_ref().expect("sRGB level-0 frame");
-    assert_pyramids_equal(&rust.pyramid, &reference, level0);
-
-    // A described region change, applied to the app's own composite and folded
-    // into the cached level-0 frame the way `refresh_region` does.
+    // A described region change, applied to the stored composite and folded
+    // into the cached tiles the way `refresh_region` does.
     let rect = PsdRect {
         top: 100,
         left: 120,
@@ -140,60 +194,46 @@ fn level0_region_update_matches_a_rebuild() {
     };
     let changed = varied_rgba(600, 400, 77);
     blit_region(&mut doc.composite, &changed, rect);
-    rust.session.doc = Some(doc.clone());
-    rust.refresh_level0_region(crop_buffer(&changed, rect), rect.left, rect.top);
-    rust.update_pyramid(rect);
-
-    let level0 = rust.level0.as_ref().expect("sRGB level-0 frame");
-    let reference = ViewPyramid::rebuild(planes_of(level0).unwrap());
-    assert_pyramids_equal(&rust.pyramid, &reference, level0);
+    rust.session.doc = Some(doc);
+    rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
+    assert_tiles_match_a_rebuild(&rust);
 }
 
 #[test]
-fn level0_carries_the_document_profile_conversion() {
+fn the_display_carries_the_document_profile_conversion() {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(16, 16, 4);
     pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
 
-    let expected = level0_buffer(&mut doc);
-    let raw = rgba_frame(&doc.composite);
+    let converted = display_region(&doc, whole(16, 16), false);
+    let raw = pictura_render::rgba_frame(&doc.composite);
     assert_ne!(
-        expected.data, raw.data,
+        converted.data, raw.data,
         "a non-identity profile must convert the frame"
     );
-
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
-    let level0 = rust.level0.as_ref().expect("sRGB level-0 frame");
+    let rust = view_of(doc);
     assert_eq!(
-        level0.data, expected.data,
-        "the crop source is color managed"
-    );
-    let doc = rust.session.doc.as_ref().expect("document");
-    assert!(
-        !level0.data.shares(&doc.composite.data),
-        "a converted frame owns its plane"
+        shown(&rust, 0),
+        pictura_render::premultiply_planar(&converted),
+        "the tiles are color managed"
     );
 }
 
 #[test]
-fn region_refresh_reuses_the_level0_frame_when_it_matches() {
+fn a_region_repair_writes_the_cached_tile_in_place() {
     let mut doc = Document::new(400, 300, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(400, 300, 0);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc.clone()),
-        ..Default::default()
+    let mut rust = view_of(doc.clone());
+    shown(&rust, 0);
+    let before = {
+        let tile = rust
+            .tiles
+            .cache
+            .borrow_mut()
+            .get(key(0, 0, 0))
+            .expect("cached");
+        tile.as_ptr()
     };
-    rust.reset_pyramid();
-    let before = rust
-        .level0
-        .as_ref()
-        .expect("sRGB level-0 frame")
-        .data
-        .as_ptr();
 
     let rect = PsdRect {
         top: 20,
@@ -203,35 +243,28 @@ fn region_refresh_reuses_the_level0_frame_when_it_matches() {
     };
     let changed = varied_rgba(400, 300, 9);
     blit_region(&mut doc.composite, &changed, rect);
-    rust.session.doc = Some(doc.clone());
-    rust.refresh_level0_region(crop_buffer(&changed, rect), rect.left, rect.top);
+    rust.session.doc = Some(doc);
+    rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
 
-    let level0 = rust.level0.as_ref().expect("sRGB level-0 frame");
-    assert_eq!(
-        level0.data.as_ptr(),
-        before,
-        "the frame is patched in place"
-    );
-    assert_eq!(
-        level0.data,
-        level0_buffer(&mut doc).data,
-        "and stays in sync"
-    );
+    let after = rust
+        .tiles
+        .cache
+        .borrow_mut()
+        .get(key(0, 0, 0))
+        .expect("cached");
+    assert_eq!(after.as_ptr(), before, "the tile is patched in place");
+    drop(after);
+    assert_tiles_match_a_rebuild(&rust);
 }
 
 #[test]
-fn image_after_region_refresh_matches_a_full_recomposite() {
+fn the_display_after_a_region_refresh_matches_a_full_recomposite() {
     let mut doc = Document::new(64, 48, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(64, 48, 1);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc.clone()),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
+    let mut rust = view_of(doc.clone());
+    shown(&rust, 0);
     let revision = rust.canvas_revision;
 
-    // Replay `refresh_region`'s non-painting body, with no paint or `take`
-    // between the refresh and the dirty rebuild `image()` performs.
     let rect = PsdRect {
         top: 8,
         left: 8,
@@ -240,10 +273,8 @@ fn image_after_region_refresh_matches_a_full_recomposite() {
     };
     let changed = varied_rgba(64, 48, 21);
     blit_region(&mut doc.composite, &changed, rect);
-    rust.session.doc = Some(doc.clone());
-    rust.refresh_level0_region(crop_buffer(&changed, rect), rect.left, rect.top);
-    rust.damage.mark(rect);
-    rust.update_pyramid(rect);
+    rust.session.doc = Some(doc);
+    rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
 
     assert!(
         rust.canvas_revision > revision,
@@ -252,13 +283,13 @@ fn image_after_region_refresh_matches_a_full_recomposite() {
     assert_eq!(
         rust.display_rect_damage(),
         Some(rect),
-        "damage survives for image()"
+        "damage survives for the canvas"
     );
-
-    let rebuilt =
-        rebuild_display(&rust.session.doc, rust.session.live.stroke(), false).expect("document");
-    let full = premultiplied_display_image(&level0_buffer(&mut doc));
-    assert_eq!(rebuilt, full, "image() equals a full recomposite");
+    assert_eq!(
+        shown(&rust, 0),
+        pictura_render::premultiply_planar(&reference(&rust)),
+        "the display equals a full recomposite"
+    );
 }
 
 #[test]
@@ -269,11 +300,7 @@ fn histogram_source_level_is_bounded_and_size_independent() {
     for (w, h) in [(513u32, 513u32), (4000, 3000), (8000, 100)] {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         doc.composite = varied_rgba(w, h, 3);
-        let mut rust = PictureViewRust {
-            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-            ..Default::default()
-        };
-        rust.reset_pyramid();
+        let rust = view_of(doc);
 
         let levels = rust.display_level_count();
         assert!(levels >= 1, "{w}x{h} has at least one level");
@@ -285,22 +312,15 @@ fn histogram_source_level_is_bounded_and_size_independent() {
             "coarsest level {lw}x{lh} for a {w}x{h} document"
         );
 
-        let crop = rust.display_crop(
-            levels - 1,
-            PsdRect {
-                top: 0,
-                left: 0,
-                bottom: lh as i32,
-                right: lw as i32,
-            },
-        );
+        let (crop, missing) = rust.display_crop_keys(levels - 1, whole(lw, lh));
+        assert!(missing.is_empty());
         assert!(!crop.is_null(), "the level crop is servable");
         assert_eq!((crop.width(), crop.height()), (lw as i32, lh as i32));
     }
 }
 
 #[test]
-fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
+fn mid_stroke_tiles_match_a_full_recomposite_of_the_working_document() {
     use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 
     let rgba = vec![40u8; 128 * 128 * 4];
@@ -322,43 +342,27 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
     };
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        gpu_compute: false,
         ..Default::default()
     };
     rust.session.live.set_stroke_session(session);
-    // A full rebuild while a stroke is live must use the painted document's
-    // composited layers, not its stale cached `composite`.
+    // A full rebuild while a stroke is live must show the painted document's
+    // composited layers.
     rust.reset_pyramid();
-    {
-        let working = rust.session.doc.as_ref().unwrap();
-        let reference_level0 = level0_composited(working, false);
-        let reference = ViewPyramid::rebuild(planes_of(&reference_level0).unwrap());
-        assert_pyramids_equal(&rust.pyramid, &reference, &reference_level0);
-    }
+    assert_tiles_match_a_rebuild(&rust);
 
-    // A mid-stroke region refresh keeps the pyramid equal to a full rebuild, so
-    // the present path can crop it instead of resampling the full image.
-    let working = rust.session.doc.as_ref().unwrap();
-    let region = pictura_render::composite(pictura_render::CompositeRequest::region(
-        working, rect, false,
-    ))
-    .0;
-    let level0 = level0_from_buffer(working, &region);
-    rust.refresh_level0_region(level0, rect.left, rect.top);
-    rust.update_pyramid(rect);
-    let working = rust.session.doc.as_ref().unwrap();
-    let reference_level0 = level0_composited(working, false);
-    let reference = ViewPyramid::rebuild(planes_of(&reference_level0).unwrap());
-    assert_pyramids_equal(&rust.pyramid, &reference, &reference_level0);
+    // A mid-stroke region refresh keeps every level equal to a full rebuild.
+    assert!(rust.refresh_display_rect(rect).is_some());
+    assert_tiles_match_a_rebuild(&rust);
 }
 
 #[test]
-fn a_mid_stroke_named_snapshot_stores_an_exact_composite() {
+fn a_mid_stroke_named_snapshot_shares_the_painted_tiles() {
     use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 
     let rgba = vec![40u8; 128 * 128 * 4];
     let mut doc = Document::from_rgba("paint", 128, 128, &rgba);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    let stale = doc.composite.clone();
+    let before = pictura_render::composite_rgba(&doc);
     let mut stroke = Stroke::begin_at(&doc, "0", StrokeConfig::default()).expect("begin stroke");
     assert!(stroke.sample(
         &mut doc,
@@ -381,15 +385,12 @@ fn a_mid_stroke_named_snapshot_stores_an_exact_composite() {
         });
 
     let snapshot = rust.named_snapshot().expect("a snapshot");
-    assert!(snapshot.doc.composite == pictura_render::composite_rgba(&snapshot.doc));
-    assert!(
-        snapshot.doc.composite != stale,
-        "the dab is in the stored composite"
-    );
+    let painted = pictura_render::composite_rgba(&snapshot.doc);
+    assert!(painted != before, "the dab is in the snapshot");
     let live = rust.session.doc.as_ref().expect("document");
     assert!(
-        live.composite == stale,
-        "the live document keeps its pre-stroke base"
+        snapshot.doc.composite.data.shares(&live.composite.data),
+        "a layered RGB snapshot composites nothing (#1216)"
     );
     assert!(
         snapshot.doc.layers[0].channels[0]
@@ -399,19 +400,11 @@ fn a_mid_stroke_named_snapshot_stores_an_exact_composite() {
     );
 }
 
-/// Patching a damage rectangle into a cached level-0 crop only works if the
-/// damage-rect crop is the same pixels as that rectangle of the cached crop.
-/// The Qt test proves the in-place patch; this proves its positional premise.
 #[test]
 fn a_level_zero_damage_crop_matches_the_cached_crop_rect() {
-    let rgba = vec![30u8; 200 * 160 * 4];
-    let mut doc = Document::from_rgba("paint", 200, 160, &rgba);
+    let mut doc = Document::new(200, 160, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(200, 160, 9);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
+    let rust = view_of(doc);
     let cached = PsdRect {
         top: 18,
         left: 28,
@@ -425,9 +418,9 @@ fn a_level_zero_damage_crop_matches_the_cached_crop_rect() {
         right: 110,
     };
 
-    let cache_crop = rust.display_crop(0, cached);
-    let damage_crop = rust.display_crop(0, damage);
-    let fresh = rust.display_crop(0, cached);
+    let cache_crop = rust.display_crop_keys(0, cached).0;
+    let damage_crop = rust.display_crop_keys(0, damage).0;
+    let fresh = rust.display_crop_keys(0, cached).0;
     assert!(!cache_crop.is_null() && !damage_crop.is_null());
     let ox = damage.left - cached.left;
     let oy = damage.top - cached.top;
@@ -444,45 +437,39 @@ fn a_level_zero_damage_crop_matches_the_cached_crop_rect() {
 }
 
 #[test]
-fn sample_argb_after_a_region_refresh_reads_the_composite() {
+fn a_picture_region_after_a_refresh_reads_the_current_composite() {
     let mut layer = vec![0u8; 64 * 32 * 4];
     for px in layer.as_chunks_mut::<4>().0 {
         px.copy_from_slice(&[255, 0, 0, 255]);
     }
-    let mut doc = Document::from_rgba("paint", 64, 32, &layer);
-    doc.composite = varied_rgba(64, 32, 3);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
-    let outside_before = sample_planar_argb(&rust.session.doc.as_ref().unwrap().composite, 1, 1);
+    let doc = Document::from_rgba("paint", 64, 32, &layer);
+    let mut rust = view_of(doc);
     let rect = PsdRect {
         top: 8,
         left: 10,
         bottom: 24,
         right: 40,
     };
-
-    let (x0, y0, clipped, srgb) = rust
-        .refresh_region_buffer(rect)
-        .expect("the region composites pixels");
-    rust.apply_refreshed_region(x0, y0, clipped, srgb);
+    let paint = rust.session.doc.as_mut().expect("document");
+    paint.layers[0].channels[1].data.as_mut_slice().fill(200);
+    assert!(rust.refresh_display_rect(rect).is_some());
 
     let doc = rust.session.doc.as_ref().expect("the document survives");
     let fresh = pictura_render::composite_rgba(doc);
-    for &(x, y) in &[(20, 12), (39, 23)] {
+    for &(x, y) in &[(20, 12), (39, 23), (1, 1)] {
+        let one = PsdRect {
+            top: y,
+            left: x,
+            bottom: y + 1,
+            right: x + 1,
+        };
+        let sampled = super::picture::picture_region(doc, &rust, one);
         assert_eq!(
-            sample_planar_argb(&doc.composite, x, y),
+            sample_planar_argb(&sampled, 0, 0),
             sample_planar_argb(&fresh, x, y),
-            "sample at {x},{y} must come from the refreshed composite"
+            "the picture at {x},{y} is the current composite"
         );
     }
-    assert_eq!(
-        sample_planar_argb(&doc.composite, 1, 1),
-        outside_before,
-        "a pixel outside the region keeps its value"
-    );
 }
 
 #[test]
@@ -492,6 +479,7 @@ fn a_multi_rect_stroke_commit_equals_a_full_recomposite() {
 
     let rgba = vec![30u8; 512 * 512 * 4];
     let mut doc = Document::from_rgba("paint", 512, 512, &rgba);
+    let mut committed = pictura_render::composite_rgba(&doc);
     let cfg = StrokeConfig {
         diameter: 6,
         ..StrokeConfig::default()
@@ -516,14 +504,14 @@ fn a_multi_rect_stroke_commit_equals_a_full_recomposite() {
     let regions = tiles.regions(dirty);
     assert!(regions.len() > 1, "a diagonal decomposes into tiles");
 
-    // Replay `end_paint`'s per-rect commit against the committed bytes.
-    let mut committed = doc.clone();
+    // Replay `end_paint`'s per-rect commit over the pre-stroke picture.
     for region in &regions {
         let buffer = pictura_render::composite(pictura_render::CompositeRequest::region(
-            &committed, *region, false,
+            &doc, *region, false,
         ))
         .0;
-        DocumentComposite::new(&mut committed).patch(
+        patch_buffer_region(
+            &mut committed,
             &buffer,
             region.left.max(0),
             region.top.max(0),
@@ -531,7 +519,7 @@ fn a_multi_rect_stroke_commit_equals_a_full_recomposite() {
     }
     let full = current_buffer(&doc, false);
     assert_eq!(
-        committed.composite.data, full.data,
+        committed.data, full.data,
         "the per-rect commit equals a full recomposite"
     );
 }
@@ -543,6 +531,7 @@ fn layer_opacity_region_refresh_equals_a_full_recomposite() {
     let top: Vec<u8> = (0..32 * 32 * 4).map(|i| (i % 200) as u8).collect();
     let path = pictura_render::add_raster_layer_from_rgba(&mut doc, "top", 32, 32, &top);
     assert!(!path.is_empty(), "the top layer is appended");
+    let mut picture = current_buffer(&doc, false);
 
     // Change the top layer's opacity, then refresh only its bounded rect the
     // way `mutate_layer` does.
@@ -550,11 +539,11 @@ fn layer_opacity_region_refresh_equals_a_full_recomposite() {
     let rect = doc.layers.last().unwrap().rect;
     let buffer =
         pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false)).0;
-    DocumentComposite::new(&mut doc).patch(&buffer, rect.left, rect.top);
+    patch_buffer_region(&mut picture, &buffer, rect.left, rect.top);
 
     let full = current_buffer(&doc, false);
     assert_eq!(
-        doc.composite.data, full.data,
+        picture.data, full.data,
         "an opacity region refresh equals a full recomposite"
     );
 }
@@ -569,9 +558,10 @@ fn rect_selection(w: u32, h: u32, x0: u32, y0: u32, x1: u32, y1: u32) -> pictura
     selection
 }
 
-/// Commit a content move through the regional path, returning the document, the
-/// composite before the move, and the refreshed dirty rectangle.
-fn content_move_region_fixture() -> (Document, PixelBuffer, PsdRect) {
+/// Commit a content move through the regional path, returning the document,
+/// the picture patched by the region, the picture before the move, and the
+/// refreshed dirty rectangle.
+fn content_move_region_fixture() -> (Document, PixelBuffer, PixelBuffer, PsdRect) {
     let base: Vec<u8> = (0..64 * 64 * 4)
         .map(|i| if i % 4 == 3 { 255 } else { (i % 251) as u8 })
         .collect();
@@ -581,8 +571,8 @@ fn content_move_region_fixture() -> (Document, PixelBuffer, PsdRect) {
         .collect();
     let path = pictura_render::add_raster_layer_from_rgba(&mut doc, "top", 64, 64, &top);
     assert!(!path.is_empty());
-    doc.composite = current_buffer(&doc, false);
-    let before = doc.composite.clone();
+    let before = current_buffer(&doc, false);
+    let mut picture = before.clone();
 
     let selection = rect_selection(64, 64, 12, 10, 40, 36);
     let mask = selection_to_mask(&selection, &doc);
@@ -593,16 +583,16 @@ fn content_move_region_fixture() -> (Document, PixelBuffer, PsdRect) {
     let dirty = super::impl_selection::move_dirty_rect(&selection, dx, dy).expect("dirty rect");
     let buffer =
         pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, false)).0;
-    DocumentComposite::new(&mut doc).patch(&buffer, dirty.left, dirty.top);
-    (doc, before, dirty)
+    patch_buffer_region(&mut picture, &buffer, dirty.left, dirty.top);
+    (doc, picture, before, dirty)
 }
 
 #[test]
 fn content_move_region_equals_a_full_recomposite() {
-    let (doc, _, dirty) = content_move_region_fixture();
+    let (doc, picture, _, dirty) = content_move_region_fixture();
     let full = current_buffer(&doc, false);
     assert_eq!(
-        doc.composite.data, full.data,
+        picture.data, full.data,
         "a content move region refresh equals a full recomposite"
     );
     assert!(dirty.right > dirty.left && dirty.bottom > dirty.top);
@@ -610,8 +600,8 @@ fn content_move_region_equals_a_full_recomposite() {
 
 #[test]
 fn content_move_region_keeps_outside_pixels() {
-    let (doc, before, dirty) = content_move_region_fixture();
-    let plane = doc.composite.pixel_count();
+    let (doc, picture, before, dirty) = content_move_region_fixture();
+    let plane = picture.pixel_count();
     for y in 0..doc.height {
         for x in 0..doc.width {
             if (x as i32) >= dirty.left
@@ -624,7 +614,7 @@ fn content_move_region_keeps_outside_pixels() {
             let i = y as usize * doc.width as usize + x as usize;
             for c in 0..4 {
                 assert_eq!(
-                    doc.composite.data[c * plane + i],
+                    picture.data[c * plane + i],
                     before.data[c * plane + i],
                     "pixel ({x}, {y}) channel {c} outside the move changed"
                 );
@@ -642,6 +632,7 @@ fn layer_move_region_refresh_equals_a_full_recomposite() {
     assert!(!path.is_empty());
     let index = doc.layers.len() - 1;
 
+    let mut picture = current_buffer(&doc, false);
     let before = doc.layers[index].rect;
     assert!(pictura_render::translate_layer_index(
         &mut doc, index, 10, 6
@@ -650,11 +641,11 @@ fn layer_move_region_refresh_equals_a_full_recomposite() {
     let dirty = before.union(after);
     let buffer =
         pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, false)).0;
-    DocumentComposite::new(&mut doc).patch(&buffer, dirty.left, dirty.top);
+    patch_buffer_region(&mut picture, &buffer, dirty.left, dirty.top);
 
     let full = current_buffer(&doc, false);
     assert_eq!(
-        doc.composite.data, full.data,
+        picture.data, full.data,
         "a move region refresh equals a full recomposite"
     );
 }
@@ -663,11 +654,7 @@ fn layer_move_region_refresh_equals_a_full_recomposite() {
 fn a_level0_crop_outside_the_level_is_null_and_a_partial_one_is_not() {
     let mut doc = Document::new(100, 100, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(100, 100, 2);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
+    let rust = view_of(doc);
 
     let outside = PsdRect {
         top: 2000,
@@ -675,14 +662,14 @@ fn a_level0_crop_outside_the_level_is_null_and_a_partial_one_is_not() {
         bottom: 2010,
         right: 2010,
     };
-    assert!(rust.display_crop(0, outside).is_null());
+    assert!(rust.display_crop_keys(0, outside).0.is_null());
     let partial = PsdRect {
         top: 90,
         left: 90,
         bottom: 110,
         right: 110,
     };
-    let crop = rust.display_crop(0, partial);
+    let crop = rust.display_crop_keys(0, partial).0;
     assert!(!crop.is_null());
     assert_eq!((crop.width(), crop.height()), (20, 20));
 }
@@ -691,20 +678,11 @@ fn a_level0_crop_outside_the_level_is_null_and_a_partial_one_is_not() {
 fn reset_pyramid_rebuilds_and_clears_damage() {
     // `recomposite`, `undo`, `redo`, `history_jump`, `history_restore_snapshot`,
     // and the move-preview path all route through `reset_pyramid`.
-    let first = varied_rgba(600, 400, 0);
     let mut doc = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = first.clone();
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
+    doc.composite = varied_rgba(600, 400, 0);
+    let mut rust = view_of(doc);
     assert_eq!(rust.damage, CanvasDamage::default());
-    assert_pyramids_equal(
-        &rust.pyramid,
-        &ViewPyramid::rebuild(planes_of(&first).unwrap()),
-        &first,
-    );
+    assert_tiles_match_a_rebuild(&rust);
 
     rust.damage.mark(PsdRect {
         top: 1,
@@ -712,28 +690,19 @@ fn reset_pyramid_rebuilds_and_clears_damage() {
         bottom: 5,
         right: 5,
     });
-    let second = varied_rgba(600, 400, 31);
     let mut restored = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
-    restored.composite = second.clone();
+    restored.composite = varied_rgba(600, 400, 31);
     rust.session.doc = Some(restored);
     rust.reset_pyramid();
     assert_eq!(rust.damage, CanvasDamage::default(), "reset clears damage");
-    assert_pyramids_equal(
-        &rust.pyramid,
-        &ViewPyramid::rebuild(planes_of(&second).unwrap()),
-        &second,
-    );
+    assert_tiles_match_a_rebuild(&rust);
 }
 
 #[test]
 fn display_accessors_report_levels_and_damage() {
     let mut doc = Document::new(1500, 700, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(1500, 700, 5);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
+    let mut rust = view_of(doc);
 
     assert_eq!(rust.display_level_count(), 3);
     assert_eq!(rust.display_level_size(0), Some((1500, 700)));
@@ -744,30 +713,22 @@ fn display_accessors_report_levels_and_damage() {
 
     // A level crop carries that level's size; out-of-range and empty rects are
     // null, not a panic.
-    let crop = rust.display_crop(
-        1,
-        PsdRect {
-            top: 10,
-            left: 10,
-            bottom: 26,
-            right: 42,
-        },
-    );
+    let crop = rust
+        .display_crop_keys(
+            1,
+            PsdRect {
+                top: 10,
+                left: 10,
+                bottom: 26,
+                right: 42,
+            },
+        )
+        .0;
     assert_eq!((crop.width(), crop.height()), (32, 16));
     assert!(!crop.is_null());
-    assert!(rust
-        .display_crop(3, whole_level(&rust.pyramid, 0))
-        .is_null());
-    assert!(rust
-        .display_crop(-1, whole_level(&rust.pyramid, 0))
-        .is_null());
-    let empty = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: 0,
-        right: 0,
-    };
-    assert!(rust.display_crop(0, empty).is_null());
+    assert!(rust.display_crop_keys(3, whole(1500, 700)).0.is_null());
+    assert!(rust.display_crop_keys(-1, whole(1500, 700)).0.is_null());
+    assert!(rust.display_crop_keys(0, whole(0, 0)).0.is_null());
 
     assert_eq!(rust.display_rect_damage(), None);
     let dirty = PsdRect {
@@ -826,11 +787,8 @@ fn present_accumulates_until_flush_and_the_stroke_lifecycle_supersedes_it() {
     );
 }
 
-/// The preview snapshots the stored view-pyramid level rather than the
-/// document: the bytes are that level's, taken before the stroke, and for the
-/// document sizes the threshold targets they stay small enough to be free.
 #[test]
-fn the_preview_snapshots_the_stored_level_and_stays_small() {
+fn the_preview_snapshots_the_presented_level_and_stays_small() {
     use super::document_session::PreviewStroke;
     use super::impl_paint::preview_snapshot_bytes;
 
@@ -847,24 +805,23 @@ fn the_preview_snapshots_the_stored_level_and_stays_small() {
         "a 16000 square preview must stay under 8 MB"
     );
 
-    let level0 = varied_rgba(900, 600, 3);
-    let planes = planes_of(&level0).expect("RGBA level 0");
-    let pyramid = ViewPyramid::rebuild(planes);
-    let whole = whole_level(&pyramid, 1);
+    let mut doc = Document::new(900, 600, ColorMode::Rgb, BitDepth::Eight);
+    doc.composite = varied_rgba(900, 600, 3);
+    let rust = view_of(doc);
+    let snapshot = rust.level_snapshot(1).expect("level 1 exists");
+    assert_eq!(snapshot.data(), &shown(&rust, 1)[..], "the level's bytes");
 
-    let preview = PreviewStroke::new(1, &pyramid, &level0, pictura_paint::StrokeConfig::default())
-        .expect("the level exists");
-    assert_eq!(
-        preview.snapshot,
-        pyramid.crop(planes, 1, whole).data(),
-        "the snapshot is the level's bytes, taken before anything is painted"
-    );
+    let preview = PreviewStroke::new(
+        1,
+        snapshot.clone(),
+        (900, 600),
+        pictura_paint::StrokeConfig::default(),
+    )
+    .expect("the level exists");
+    assert_eq!(preview.snapshot, snapshot.data());
     assert_eq!(preview.level, 1);
     assert_eq!(preview.scale, 2);
-    assert_eq!(
-        preview_snapshot_bytes(level0.width, level0.height, 1),
-        preview.snapshot.len()
-    );
+    assert_eq!(preview_snapshot_bytes(900, 600, 1), preview.snapshot.len());
     assert_eq!(
         preview.coverage.len(),
         (preview.width * preview.height) as usize,
@@ -873,37 +830,33 @@ fn the_preview_snapshots_the_stored_level_and_stays_small() {
     assert!(preview.extent.is_none(), "nothing presented yet");
     assert!(preview.samples.is_empty(), "nothing recorded yet");
 
-    // A level the pyramid does not store is refused rather than snapshotted
-    // as zeros.
+    // A level past the pyramid, or a snapshot of the wrong size, is refused
+    // rather than snapshotted as zeros.
+    assert!(rust.level_snapshot(99).is_none());
     assert!(PreviewStroke::new(
-        99,
-        &pyramid,
-        &level0,
+        2,
+        snapshot,
+        (900, 600),
         pictura_paint::StrokeConfig::default()
     )
     .is_none());
 }
 
-/// A full rebuild is the one path that writes every level from `level0`; it must
-/// also drop a live preview so a stale snapshot cannot resurrect over it.
 #[test]
 fn reset_pyramid_drops_a_live_preview() {
     use super::document_session::{PreviewStroke, StrokeSession};
 
     let mut doc = Document::new(600, 600, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(600, 600, 1);
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        ..Default::default()
-    };
-    rust.reset_pyramid();
-    let level0 = rust.level0.as_ref().expect("level-0 frame");
-    let preview = PreviewStroke::new(
-        1,
-        &rust.pyramid,
-        level0,
-        pictura_paint::StrokeConfig::default(),
-    );
+    let mut rust = view_of(doc);
+    let preview = rust.level_snapshot(1).and_then(|snapshot| {
+        PreviewStroke::new(
+            1,
+            snapshot,
+            (600, 600),
+            pictura_paint::StrokeConfig::default(),
+        )
+    });
     let session = StrokeSession {
         preview,
         ..Default::default()
@@ -957,7 +910,7 @@ fn selection_contour_cache_clears_without_a_selection() {
 }
 
 #[test]
-fn a_whole_document_region_refresh_installs_its_frames() {
+fn a_whole_document_region_refresh_repairs_the_cached_tiles() {
     let (w, h) = (300u32, 200u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
@@ -966,42 +919,26 @@ fn a_whole_document_region_refresh_installs_its_frames() {
         h,
         (10, 20, 30),
     )]);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    let mut view = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        gpu_compute: false,
-        ..Default::default()
-    };
-    view.reset_pyramid();
+    let mut view = view_of(doc);
+    assert_tiles_match_a_rebuild(&view);
     let frame = view.frame_revision;
 
     let doc = view.session.doc.as_mut().expect("document");
     doc.layers[0].channels[0].data.as_mut_slice().fill(200);
-    let whole = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: h as i32,
-        right: w as i32,
-    };
-    assert_eq!(view.refresh_regions(&[whole]), Some(whole));
+    assert_eq!(view.refresh_regions(&[whole(w, h)]), Some(whole(w, h)));
 
-    let expected = level0_buffer(view.session.doc.as_mut().expect("document"));
     let doc = view.session.doc.as_ref().expect("document");
-    assert!(doc.composite == pictura_render::composite_rgba(doc));
-    let level0 = view.level0.as_ref().expect("level 0");
-    assert!(*level0 == expected);
     assert!(
-        level0.data.shares(&doc.composite.data),
-        "the whole frame shares the composite's plane"
+        !pictura_render::DocumentComposite::is_stored(doc),
+        "a layered RGB document keeps no composite (#1216)"
     );
-    assert_eq!(view.frame_revision, frame, "the frame is reused");
-    let rebuilt = ViewPyramid::rebuild(planes_of(level0).expect("planes"));
-    assert_pyramids_equal(&view.pyramid, &rebuilt, level0);
+    assert_eq!(view.frame_revision, frame, "the frame is not rebuilt");
+    assert_tiles_match_a_rebuild(&view);
 }
 
 #[test]
-fn a_whole_document_restore_shares_the_composite_plane() {
-    let (w, h) = (300u32, 200u32);
+fn no_full_resolution_frame_is_kept() {
+    let (w, h) = (2048u32, 1536u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
         "px",
@@ -1009,52 +946,42 @@ fn a_whole_document_restore_shares_the_composite_plane() {
         h,
         (10, 20, 30),
     )]);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    let mut view = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        gpu_compute: false,
-        ..Default::default()
+    let mut view = view_of(doc);
+    view.presented_level = 0;
+    view.presented_rect = PsdRect {
+        top: 600,
+        left: 800,
+        bottom: 900,
+        right: 1200,
     };
-    view.reset_pyramid();
+    view.pin_presented_view();
+    let (crop, missing) = view.tile_crop(TileSource::Composite, 0, view.presented_rect);
+    assert!(missing.is_empty());
+    assert_eq!((crop.width(), crop.height()), (400, 300));
 
     let doc = view.session.doc.as_ref().expect("document");
-    let level0 = view.level0.as_ref().expect("level 0");
+    assert!(!pictura_render::DocumentComposite::is_stored(doc));
+    let resident = view.tile_stats().resident_bytes;
+    let frame = u64::from(w) * u64::from(h) * 4;
     assert!(
-        level0.data.shares(&doc.composite.data),
-        "the frame shares the restored composite's plane"
+        resident * 8 < frame,
+        "only the visible tiles are resident: {resident} of a {frame}-byte frame"
     );
-    assert!(*level0 == doc.composite, "the frame equals the composite");
 }
 
 #[test]
-fn a_region_patch_forks_only_its_tiles() {
+fn a_region_repair_writes_only_its_tiles() {
     let (w, h) = (300u32, 400u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![super::tests::pixel_layer(
-        "px",
-        w,
-        h,
-        (10, 20, 30),
-    )]);
-    doc.composite = pictura_render::composite_rgba(&doc);
-    let mut view = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
-        gpu_compute: false,
-        ..Default::default()
-    };
-    view.reset_pyramid();
-    let before = view
-        .session
-        .doc
-        .as_ref()
-        .expect("document")
-        .composite
-        .data
-        .clone();
-    assert!(
-        view.level0.as_ref().expect("level 0").data.shares(&before),
-        "level 0 starts shared with the composite"
-    );
+    doc.composite = varied_rgba(w, h, 0);
+    let mut view = view_of(doc.clone());
+    shown(&view, 0);
+    let below = view
+        .tiles
+        .cache
+        .borrow_mut()
+        .get(key(0, 0, 1))
+        .expect("cached");
 
     let rect = PsdRect {
         top: 10,
@@ -1063,26 +990,33 @@ fn a_region_patch_forks_only_its_tiles() {
         right: 60,
     };
     let patch = varied_rgba(30, 50, 5);
-    view.refresh_level0_region(patch.clone(), rect.left, rect.top);
+    blit_region(&mut doc.composite, &crop_into(&patch, rect, w, h), rect);
+    view.session.doc = Some(doc);
+    view.apply_refreshed_region(rect.left, rect.top, rect, patch.clone());
 
-    let doc = view.session.doc.as_ref().expect("document");
-    assert!(doc.composite.data == before, "the composite is untouched");
-    let level0 = view.level0.as_ref().expect("level 0");
+    let after = view
+        .tiles
+        .cache
+        .borrow_mut()
+        .get(key(0, 0, 1))
+        .expect("cached");
     assert!(
-        !level0.data.shares(&doc.composite.data),
-        "the frame owns its patched tile"
+        std::sync::Arc::ptr_eq(&below, &after),
+        "a tile the repair does not reach keeps its allocation"
     );
-    assert!(
-        !level0.data.shares_tile(0, &doc.composite.data),
-        "tile 0 forked"
-    );
-    assert!(
-        level0.data.shares_tile(1, &doc.composite.data),
-        "tile 1 stays shared"
-    );
-    let row = level0.data.row(rect.top as usize, w as usize).expect("row");
-    assert_eq!(
-        row[rect.left as usize], patch.data[0],
-        "the frame shows the patched pixels"
-    );
+    let top = view
+        .tiles
+        .cache
+        .borrow_mut()
+        .get(key(0, 0, 0))
+        .expect("cached");
+    let at = ((rect.top as usize) * 256 + rect.left as usize) * 4;
+    assert_eq!(top[at], patch.data[0], "the tile shows the patched pixels");
+}
+
+/// `patch`, sized to `rect`, placed into a `w`×`h` buffer at `rect`.
+fn crop_into(patch: &PixelBuffer, rect: PsdRect, w: u32, h: u32) -> PixelBuffer {
+    let mut out = PixelBuffer::new(w, h, 4);
+    patch_buffer_region(&mut out, patch, rect.left, rect.top);
+    out
 }

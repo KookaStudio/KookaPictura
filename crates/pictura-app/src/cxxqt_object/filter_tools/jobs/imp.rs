@@ -3,7 +3,7 @@ use super::*;
 use super::super::super::fade::FadeSnapshot;
 use super::super::super::filter_map::filter_from_kind_params;
 use super::super::super::helpers::{clamp_region, layer_has_effects};
-use super::super::super::helpers_composite::{current_buffer, premultiplied_display_image};
+use super::super::super::helpers_composite::premultiplied_display_image;
 use super::super::super::impl_filters::{
     apply_op_active_region, cancel_filter_preview, pixel_filter_target, ActiveOp,
 };
@@ -415,8 +415,7 @@ pub(super) fn commit(
     // As `refresh_region` / `recomposite` do on the UI thread: a filter
     // changes only its layer's rect unless a layer effect spills past it.
     let refresh = if effects {
-        let rendered = current_buffer(&doc, gpu);
-        DocumentComposite::new(&mut doc).store(&rendered);
+        DocumentComposite::new(&mut doc).refresh(pictura_render::CompositeScope::Full, gpu);
         WorkerRefresh::Everywhere
     } else {
         match clamp_region(rect, doc.width, doc.height) {

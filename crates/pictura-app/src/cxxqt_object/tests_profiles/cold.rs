@@ -248,7 +248,9 @@ fn first_full_edit_follows_production_open() {
     let input = dir.join("input.psd");
     write_input(&input, 96, 64);
     let (view, _) = open_and_edit(&input, false, false);
-    assert!(!view.session.doc.as_ref().unwrap().composite.data.is_empty());
+    let doc = view.session.doc.as_ref().unwrap();
+    let shown = crate::cxxqt_object::picture::picture(doc, &view).into_owned();
+    assert!(shown.data == pictura_render::composite_rgba(doc).data);
     std::fs::remove_dir_all(dir).ok();
 }
 
@@ -364,7 +366,13 @@ fn first_full_edit_child() {
         .unwrap()
         .opacity;
     let alternate = if original == 255 { 128 } else { 255 };
-    let before = view.session.doc.as_ref().unwrap().composite.data.to_vec();
+    let shown = |view: &PictureViewRust| {
+        let doc = view.session.doc.as_ref().unwrap();
+        crate::cxxqt_object::picture::picture(doc, view)
+            .data
+            .to_vec()
+    };
+    let before = shown(&view);
     reset_refresh_calls();
     reset_last_backend();
     metrics::set_for_this_thread(metrics_on);
@@ -375,7 +383,7 @@ fn first_full_edit_child() {
     let first_edit = started.elapsed().as_nanos() as u64;
     let first_edit_composite = metrics::phase_ns("recomposite_full_composite");
     assert_eq!(refresh_calls(), 1);
-    let after = view.session.doc.as_ref().unwrap().composite.data.to_vec();
+    let after = shown(&view);
     assert_ne!(before, after, "the first edit changes pixels");
 
     let mut repeated = Vec::new();
@@ -442,8 +450,11 @@ fn profile_save_child() {
     );
     let metrics_on = std::env::var("PICTURA_METRICS").as_deref() == Ok("1");
     let (view, _) = open_and_edit(&input, false, metrics_on);
-    let composite = view.session.doc.as_ref().unwrap().composite.data.to_vec();
-    let saved = pictura_codec::write_psd(view.session.doc.as_ref().unwrap()).expect("save");
+    let doc = view.session.doc.as_ref().unwrap();
+    let composite = crate::cxxqt_object::picture::picture(doc, &view)
+        .data
+        .to_vec();
+    let saved = pictura_codec::write_psd(&pictura_render::save_view(doc)).expect("save");
     std::fs::write(output.join("composite.bin"), composite).expect("write composite");
     std::fs::write(output.join("saved.psd"), saved).expect("write saved");
 }

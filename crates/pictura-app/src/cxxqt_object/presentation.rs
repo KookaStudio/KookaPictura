@@ -123,8 +123,7 @@ pub(super) fn plan(presentation: &Presentation) -> Vec<PresentStep> {
 }
 
 /// Apply the bookkeeping and rebuild halves of `presentation`, returning the
-/// order the Qt layer must replay for the signal half. The deferred pyramid
-/// job is parked on the view for `PictureView::present` to start.
+/// order the Qt layer must replay for the signal half.
 pub(super) fn present_core(
     rust: &mut PictureViewRust,
     presentation: &Presentation,
@@ -143,12 +142,9 @@ pub(super) fn present_core(
             PresentStep::Blit(_) => {}
             PresentStep::Rebuild => match presentation.rebuild {
                 Rebuild::None => {}
-                Rebuild::Sync => rust.reset_pyramid(),
-                Rebuild::Deferred => {
-                    if let Some(job) = rust.reset_pyramid_deferred() {
-                        rust.pending_pyramid_job = Some(job);
-                    }
-                }
+                // The tiles rebuild on request either way; a large document
+                // builds the visible ones on a worker (#1216).
+                Rebuild::Sync | Rebuild::Deferred => rust.reset_pyramid(),
             },
             PresentStep::Notify => {}
         }
@@ -162,15 +158,6 @@ impl qobject::PictureView {
         let steps = {
             let mut rust = self.as_mut().rust_mut();
             present_core(&mut rust, &presentation)
-        };
-        let mut pyramid_job = {
-            let mut rust = self.as_mut().rust_mut();
-            if presentation.rebuild == Rebuild::Deferred {
-                rust.pending_pyramid_job.take()
-            } else {
-                rust.pending_pyramid_job = None;
-                None
-            }
         };
         for step in steps {
             match step {
@@ -186,11 +173,7 @@ impl qobject::PictureView {
                         );
                     }
                 }
-                PresentStep::Rebuild => {
-                    if let Some(job) = pyramid_job.take() {
-                        self.as_mut().build_pyramid(job);
-                    }
-                }
+                PresentStep::Rebuild => {}
             }
         }
     }

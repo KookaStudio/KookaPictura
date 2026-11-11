@@ -42,11 +42,6 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
         [levelView]() { return levelView ? levelView->canvas_revision() : quint64(0); },
         [levelView]() { return levelView && levelView->is_painting(); },
         [levelView]() { return levelView ? pictura::preview_present_level(*levelView) : 0; },
-        [levelView](int level) {
-            // A zero-copy view of a stored level; the canvas drops it after the
-            // paint so the next update can write the level in place.
-            return levelView ? levelView->canvas_level_image(level) : QImage();
-        },
         [levelView](int level, const QRect& docRect) {
             if (levelView) {
                 levelView->set_presented_view(level, docRect.x(), docRect.y(),
