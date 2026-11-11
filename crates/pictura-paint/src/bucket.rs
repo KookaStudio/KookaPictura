@@ -41,6 +41,15 @@ pub enum BucketSource<'a> {
     Layer(&'a Layer),
     /// A planar RGBA composite the size of the document.
     Composite(&'a PixelBuffer),
+    /// A `width`×`height` composite read one [`TILE`]² tile at a time:
+    /// `fetch(tx, ty)` returns that tile's straight interleaved RGBA, clipped
+    /// at the canvas edge. Sample All Layers floods through this, so no
+    /// whole composite is built (#1216).
+    Tiles {
+        fetch: &'a (dyn Fn(usize, usize) -> std::sync::Arc<[u8]> + Sync),
+        width: u32,
+        height: u32,
+    },
 }
 
 impl<'a> BucketSource<'a> {
@@ -113,6 +122,34 @@ impl<'a> BucketSource<'a> {
                     *px = [r[i], g[i], b[i], a[i]];
                 }
             }
+            Self::Tiles {
+                fetch,
+                width,
+                height,
+            } => {
+                if y < 0 || y >= height as i32 {
+                    return;
+                }
+                let x0 = left.max(0);
+                let x1 = (left + out.len() as i32).min(width as i32);
+                let (ty, ly) = (y as usize / TILE, y as usize % TILE);
+                let mut x = x0;
+                while x < x1 {
+                    let tx = x as usize / TILE;
+                    let tile_left = (tx * TILE) as i32;
+                    let tile_width = (width as usize - tx * TILE).min(TILE);
+                    let end = (tile_left + tile_width as i32).min(x1);
+                    let bytes = fetch(tx, ty);
+                    for (k, px) in out[(x - left) as usize..(end - left) as usize]
+                        .iter_mut()
+                        .enumerate()
+                    {
+                        let o = (ly * tile_width + (x - tile_left) as usize + k) * 4;
+                        *px = [bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]];
+                    }
+                    x = end;
+                }
+            }
         }
     }
 
@@ -156,6 +193,8 @@ impl<'a> BucketSource<'a> {
                 }
                 Some(px)
             }
+            // A composited tile carries no uniform state: read it.
+            Self::Tiles { .. } => None,
         }
     }
 }

@@ -180,7 +180,10 @@ fn convert_buffer_with_options(
     };
     let n = buf.pixel_count();
     if n == 0 {
-        return None;
+        // An empty composite (a layered document that keeps none, #1216):
+        // whether the transform can run is decided on one probe pixel.
+        let probe = vec![vec![0u8]; color];
+        return convert_planes_with_options(&probe, src, dst, options).map(|_| buf.clone());
     }
     let planes: Vec<Vec<u8>> = (0..color)
         .map(|ch| buf.data[ch * n..(ch + 1) * n].to_vec())

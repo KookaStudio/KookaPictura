@@ -3,7 +3,7 @@ use crate::cxxqt_object::document_session::DocumentSession;
 use crate::cxxqt_object::helpers_composite::{composite_regions, RegionComposite};
 use crate::cxxqt_object::impl_transform::translate_move_group;
 use crate::cxxqt_object::picture::picture;
-use crate::cxxqt_object::tests::pixel_layer;
+use crate::cxxqt_object::tests::{assert_display_current, pixel_layer, present_all};
 use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
 use std::borrow::Cow;
 
@@ -20,6 +20,7 @@ fn view(side: u32) -> PictureViewRust {
         ..Default::default()
     };
     view.reset_pyramid();
+    present_all(&view);
     view.layer_target = LayerTarget::only("1");
     view.apply_edit("Open", Edit::Record);
     view
@@ -56,10 +57,7 @@ fn a_landed_move_composite_matches_a_full_composite() {
 
     assert!(settled.blit.is_some());
     assert!(!view.move_composite_pending());
-    assert_eq!(
-        view.session.doc.as_ref().expect("document").composite,
-        full_composite(&view)
-    );
+    assert_display_current(&view);
     assert_eq!(view.session.history.count(), 2);
     assert_eq!(view.session.history.label(1), "Move Layer");
 }
@@ -72,10 +70,7 @@ fn a_settled_composite_matches_a_full_composite() {
 
     assert!(settled.blit.is_some());
     assert!(!view.move_composite_pending());
-    assert_eq!(
-        view.session.doc.as_ref().expect("document").composite,
-        full_composite(&view)
-    );
+    assert_display_current(&view);
     assert_eq!(view.session.history.count(), 2);
     assert_eq!(view.session.history.label(1), "Move Layer");
 }
@@ -85,19 +80,14 @@ fn a_superseded_move_composite_is_dropped() {
     let mut view = view(64);
     let (job, regions) = move_and_defer(&mut view, 3, 4);
     view.settle_move_composite().expect("settles");
-    let settled = view
-        .session
-        .doc
-        .as_ref()
-        .expect("document")
-        .composite
-        .clone();
+    let revision = view.canvas_revision;
 
     assert!(view.land_move_composite(job.generation, regions).is_none());
     assert_eq!(
-        view.session.doc.as_ref().expect("document").composite,
-        settled
+        view.canvas_revision, revision,
+        "the late result changes no tile"
     );
+    assert_display_current(&view);
     assert_eq!(
         view.session.history.count(),
         2,
@@ -115,11 +105,16 @@ fn a_replaced_document_drops_the_move_composite() {
     let replacement = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     let composite = replacement.composite.clone();
     view.session.doc = Some(replacement);
+    let revision = view.canvas_revision;
 
     assert!(view.land_move_composite(job.generation, regions).is_none());
     assert_eq!(
         view.session.doc.as_ref().expect("document").composite,
         composite
+    );
+    assert_eq!(
+        view.canvas_revision, revision,
+        "the late result changes no tile"
     );
 }
 
@@ -162,8 +157,15 @@ fn a_pending_composite_is_not_current() {
     assert_eq!(served.into_owned(), expected);
 
     view.settle_move_composite().expect("settles");
+    present_all(&view);
     let doc = view.session.doc.as_ref().expect("document");
-    assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
+    let before = crate::cxxqt_object::picture::composites_so_far();
+    assert_eq!(picture(doc, &view).into_owned(), full_composite(&view));
+    assert_eq!(
+        crate::cxxqt_object::picture::composites_so_far(),
+        before,
+        "a settled composite is served from the tiles"
+    );
 }
 
 #[test]

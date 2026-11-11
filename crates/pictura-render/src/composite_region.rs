@@ -82,6 +82,44 @@ pub(crate) fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u3
     composite_banded_with_plan(doc, x0, y0, rw, rh, &plan)
 }
 
+/// Composite `[x0, x0+rw) × [y0, y0+rh)` in successive chunks of `chunk_rows`
+/// rows (the last may be shorter), handing each to `f` with its first row's
+/// offset from `y0` before the next is composited. A bandable stack builds its
+/// plan once for the whole region; any other stack composites each chunk as
+/// its own region, which is exact either way (#1180).
+pub(crate) fn stream_region(
+    doc: &Document,
+    (x0, y0, rw, rh): (u32, u32, u32, u32),
+    chunk_rows: u32,
+    mut f: impl FnMut(u32, PixelBuffer),
+) {
+    if rw == 0 || rh == 0 {
+        return;
+    }
+    let chunk_rows = chunk_rows.max(1);
+    let plan = banded(doc, rh).then(|| {
+        CompositePlan::build_banded(
+            doc,
+            PsdRect {
+                top: y0 as i32,
+                left: x0 as i32,
+                bottom: (y0 + rh) as i32,
+                right: (x0 + rw) as i32,
+            },
+        )
+    });
+    let mut offset = 0;
+    while offset < rh {
+        let rows = chunk_rows.min(rh - offset);
+        let chunk = match &plan {
+            Some(plan) => composite_banded_with_plan(doc, x0, y0 + offset, rw, rows, plan),
+            None => composite_rgba_region(doc, x0, y0 + offset, rw, rows),
+        };
+        f(offset, chunk);
+        offset += rows;
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn composite_banded_for_test(
     doc: &Document,

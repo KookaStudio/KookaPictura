@@ -8,10 +8,9 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
-    PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PsdRect,
 };
-use pictura_render::{patch_buffer_region, CompositeScope, DocumentComposite};
+use pictura_render::{CompositeScope, DocumentComposite};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -48,12 +47,10 @@ pub(super) fn reset_refresh_calls() {
 pub(super) use deferred_composite::{
     CompositeJob, DeferredComposite, DeferredTransform, TransformJob, TransformSpec,
 };
-pub(super) use deferred_pyramid::{DeferredPyramid, PyramidJob};
 
 mod deferred_composite;
-mod deferred_pyramid;
 mod display;
-pub(in crate::cxxqt_object) use display::mask_display_plane;
+pub(in crate::cxxqt_object) use display::{mask_display_plane, mask_region_plane};
 mod recovery;
 mod save;
 pub(in crate::cxxqt_object) mod save_jobs;
@@ -244,9 +241,7 @@ impl qobject::PictureView {
             };
             channels.push(Channel { id, data });
         }
-        let mut doc = Document::new(w, h, mode, BitDepth::Eight);
-        let stacked = usize::from(doc.composite.channels);
-        doc.composite.data = pictura_core::Plane::filled(wu, hu, stacked, fill);
+        let mut doc = Document::with_uniform_composite(w, h, mode, BitDepth::Eight, fill);
         {
             let _ = doc.layers.push(Layer {
                 name: "Layer 0".to_string(),
@@ -273,8 +268,7 @@ impl qobject::PictureView {
             });
         };
         let gpu_compute = self.rust().gpu_compute;
-        let rendered = current_buffer(&doc, gpu_compute);
-        DocumentComposite::new(&mut doc).store(&rendered);
+        DocumentComposite::new(&mut doc).refresh(CompositeScope::Full, gpu_compute);
         {
             let mut view = self.as_mut().rust_mut();
             view.replace_document(Some(doc), History::default(), Default::default(), None);
@@ -637,13 +631,23 @@ impl qobject::PictureView {
     }
 
     pub fn image(self: Pin<&mut Self>) -> QImage {
-        // Built on demand from the cached level-0 frame, so no full-resolution
-        // `QImage` is held between calls; the frame is kept current by
-        // `reset_pyramid` and `refresh_level0_region`.
-        match self.rust().level0.as_ref() {
-            Some(level0) => premultiplied_display_image(level0),
-            None => test_image(),
-        }
+        // Composited on demand, not through the tile cache (which it would
+        // flush), so no full-resolution `QImage` is held between calls.
+        // ponytail: the image is one document-sized allocation for as long as
+        // the caller holds it; its callers are the capture command,
+        // small-document dialogs and tests.
+        let rust = self.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return test_image();
+        };
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        };
+        let painting = rust.session.live.stroke().is_some();
+        premultiplied_display_image(&super::tiles::display_region(doc, whole, painting))
     }
 
     pub fn has_document(&self) -> bool {
@@ -662,7 +666,9 @@ impl qobject::PictureView {
             bottom: y + h,
             right: x + w,
         };
-        self.rust().display_crop(level, rect)
+        let (image, missing) = self.rust().display_crop_keys(level, rect);
+        self.request_tiles(missing);
+        image
     }
 
     /// Extents of every view-pyramid level as flat `w,h` pairs (empty without a document).
@@ -717,6 +723,7 @@ impl qobject::PictureView {
             bottom: y + h,
             right: x + w,
         };
+        rust.pin_presented_view();
     }
 
     /// Identity of the loaded document; bumped when the view loads or replaces it.
@@ -744,21 +751,24 @@ impl qobject::PictureView {
 
     pub fn sample_argb(mut self: Pin<&mut Self>, x: i32, y: i32) -> u32 {
         self.as_mut().settle_pending_composite();
-        let rust = self.rust();
-        let Some(doc) = rust.session.doc.as_ref() else {
-            return 0;
-        };
-        // Read the authoritative planar composite directly; never build a full
-        // image for one pixel.
-        sample_planar_argb(&doc.composite, x, y)
+        self.as_ref().get_ref().composite_argb(x, y)
     }
 
+    /// The picture's pixel at `(x, y)`: read from a stored composite or the
+    /// current display tiles, or composited for that one pixel; never a full
+    /// image for one pixel.
     pub fn composite_argb(&self, x: i32, y: i32) -> u32 {
         let rust = self.rust();
         let Some(doc) = rust.session.doc.as_ref() else {
             return 0;
         };
-        sample_planar_argb(&doc.composite, x, y)
+        let one = PsdRect {
+            top: y,
+            left: x,
+            bottom: y + 1,
+            right: x + 1,
+        };
+        sample_planar_argb(&super::picture::picture_region(doc, rust, one), 0, 0)
     }
 
     /// M0.5 GPU smoke probe: offscreen-render the demo gradient and report
@@ -958,10 +968,11 @@ impl super::PictureViewRust {
         }
     }
 
-    /// Rebuild the document composite from the current layer stack without
-    /// touching the display. A presentation asks the presenter to reset the
-    /// display, so producers leave the composite exact here. Returns whether a
-    /// composite was stored.
+    /// Bring the document's stored composite up to the layer stack without
+    /// touching the display. Only a document whose composite is authoritative
+    /// keeps one, so only it is composited here; any other drops a stale
+    /// stored composite and leaves the pixels to the display tiles (#1216).
+    /// Returns whether there is a document.
     pub(super) fn composite_into_doc(&mut self) -> bool {
         let t = Instant::now();
         let gpu_compute = self.gpu_compute;
@@ -969,6 +980,14 @@ impl super::PictureViewRust {
             let Some(doc) = self.session.doc.as_mut() else {
                 return false;
             };
+            if !doc.composite_is_authoritative() {
+                DocumentComposite::new(doc).refresh(CompositeScope::Full, gpu_compute);
+                // The full path was taken, though nothing was composited.
+                #[cfg(test)]
+                note_refresh();
+                paint_timing::record("recomposite_full_composite", t.elapsed());
+                return true;
+            }
             DocumentComposite::new(doc).render(CompositeScope::Full, gpu_compute)
         };
         #[cfg(test)]
@@ -986,18 +1005,13 @@ impl super::PictureViewRust {
         true
     }
 
-    /// Rebuild the cached sRGB level-0 frame and the matching premultiplied
-    /// display image from the current source, rebuild the pyramid, clear the
-    /// damage account, and bump the canvas revision. Every full-display path
-    /// (`recomposite`, `undo`, `redo`, `history_jump`, `history_restore_snapshot`,
-    /// the move-preview commit, and a fresh open) routes through this.
+    /// The whole display changed: every tile goes stale (shown only until its
+    /// rebuild), live previews end, the damage account clears, and the canvas
+    /// and frame revisions move. Every full-display path (`recomposite`,
+    /// `undo`, `redo`, `history_jump`, `history_restore_snapshot`, the
+    /// move-preview commit, and a fresh open) routes through this. It
+    /// composites nothing: the presented tiles are rebuilt on request.
     pub(super) fn reset_pyramid(&mut self) {
-        self.reset_display(false);
-    }
-
-    /// As [`Self::reset_pyramid`], leaving a large pyramid coarse when `defer`.
-    fn reset_display(&mut self, defer: bool) {
-        self.deferred_pyramid = None;
         self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
         self.clear_display_preview();
         self.damage = pictura_render::CanvasDamage::default();
@@ -1008,94 +1022,11 @@ impl super::PictureViewRust {
         self.session.live.set_pending_present(None);
         self.session.live.set_present_flush_due(false);
         self.session.live.clear_stroke_tiles();
-        // While a stroke is live the document's `composite` is stale (paint
-        // writes the layer channels in place), so composite it rather than
-        // reading the cached frame; otherwise the level-0 frame is the
-        // document's own composite. Keeps a stray mid-stroke full rebuild correct.
-        let gpu_compute = self.gpu_compute;
-        let t = Instant::now();
-        let level0 = match self.session.live.stroke() {
-            Some(_) => self
-                .session
-                .doc
-                .as_ref()
-                .map(|doc| level0_composited(doc, gpu_compute)),
-            None => self.session.doc.as_mut().map(level0_buffer),
-        };
-        self.level0 = level0;
-        paint_timing::record("reset_pyramid_level0", t.elapsed());
-        let t = Instant::now();
-        let coarse = defer.then(|| self.coarse_level()).flatten();
-        self.pyramid = match self.level0.as_ref().and_then(planes_of) {
-            Some(planes) => match coarse {
-                Some(level) => pictura_render::ViewPyramid::coarse(planes, level),
-                None => pictura_render::ViewPyramid::rebuild(planes),
-            },
-            None => pictura_render::ViewPyramid::default(),
-        };
-        if let Some(level) = coarse {
-            self.pyramid_generation = self.pyramid_generation.wrapping_add(1);
-            self.deferred_pyramid = Some(DeferredPyramid {
-                generation: self.pyramid_generation,
-                level,
-            });
-        }
-        paint_timing::record("reset_pyramid_rebuild", t.elapsed());
-        // A recomposite keeps a solo mask view current; a no-op otherwise.
-        let t = Instant::now();
+        self.invalidate_tiles();
+        // A solo target whose mask is gone ends the mode.
         self.rebuild_mask_solo_source();
-        paint_timing::record("reset_pyramid_mask_solo", t.elapsed());
         self.canvas_revision = self.canvas_revision.wrapping_add(1);
         self.frame_revision = self.frame_revision.wrapping_add(1);
-    }
-
-    /// Repair the pyramid for `rect` of the already-patched level-0 frame and
-    /// bump the canvas revision, leaving the damage account for `image`.
-    pub(super) fn update_pyramid(&mut self, rect: PsdRect) {
-        self.settle_pyramid();
-        if let Some(planes) = self.level0.as_ref().and_then(planes_of) {
-            self.pyramid.update(planes, rect);
-        }
-        self.canvas_revision = self.canvas_revision.wrapping_add(1);
-    }
-
-    /// Fold a straight-sRGB `region` into the cached level-0 frame at `(x0, y0)`,
-    /// rebuilding the whole frame only when it is absent or a different size.
-    pub(super) fn refresh_level0_region(&mut self, region: PixelBuffer, x0: i32, y0: i32) {
-        let region = into_rgba_frame(region);
-        let dims = self.session.doc.as_ref().map(|doc| (doc.width, doc.height));
-        let matches = matches!(
-            (self.level0.as_ref(), dims),
-            (Some(level0), Some((w, h))) if level0.width == w && level0.height == h
-        );
-        let whole = dims == Some((region.width, region.height)) && (x0, y0) == (0, 0);
-        if matches && whole {
-            // The whole frame replaces level 0 rather than being copied into
-            // it row by row (#1145). It may share the composite's plane (a
-            // layerless document's embedded composite); tiling both keeps the
-            // first write to the tiles it touches (#1152, #1213).
-            let mut frame = region;
-            if let Some(doc) = self.session.doc.as_mut() {
-                // Tiling copies a flat plane, so a frame that is the composite's
-                // own allocation takes the composite's tiles instead of a copy.
-                let same = doc.composite.data.shares(&frame.data);
-                doc.composite
-                    .data
-                    .tile(doc.width as usize, doc.height as usize);
-                if same {
-                    frame.data = doc.composite.data.clone();
-                }
-            }
-            frame.data.tile(frame.width as usize, frame.height as usize);
-            self.level0 = Some(frame);
-        } else if matches {
-            if let Some(level0) = self.level0.as_mut() {
-                patch_buffer_region(level0, &region, x0, y0);
-            }
-        } else {
-            self.level0 = self.session.doc.as_mut().map(level0_buffer);
-            self.frame_revision = self.frame_revision.wrapping_add(1);
-        }
     }
 
     /// Take the outstanding canvas damage, clipped to the canvas.
@@ -1108,22 +1039,6 @@ impl super::PictureViewRust {
     pub(super) fn display_rect_damage(&mut self) -> Option<PsdRect> {
         let rect = self.take_damage();
         (rect.width() > 0 && rect.height() > 0).then_some(rect)
-    }
-
-    /// Fold each commit rectangle into level 0, the damage account and the
-    /// pyramid, and return their union as the one damaged document rectangle the
-    /// shell needs, or `None` when nothing landed.
-    ///
-    /// A paint commit uses it so a tiled stroke composites only its tiles yet
-    /// the shell's region handler — and the command registry it refreshes —
-    /// runs once.
-    pub(super) fn refresh_regions(&mut self, rects: &[PsdRect]) -> Option<PsdRect> {
-        let mut union: Option<PsdRect> = None;
-        for (x0, y0, clipped, srgb) in self.refresh_regions_buffer(rects) {
-            self.apply_refreshed_region(x0, y0, clipped, srgb);
-            union = Some(union.map_or(clipped, |u| u.union(clipped)));
-        }
-        union
     }
 }
 
@@ -1141,22 +1056,14 @@ impl qobject::PictureView {
         paint_timing::record("record_history_capture", t.elapsed());
     }
 
-    /// Composite only `rect`, patch the authoritative `doc.composite` and the
-    /// cached sRGB level-0 frame, and emit [`regionDamaged`] with the changed
-    /// document rectangle.
-    ///
-    /// The source is the active stroke's working document while painting, else
-    /// the app document. While painting `doc.composite` is the pre-stroke base
-    /// and is left alone (refreshed by `end_paint`'s full recomposite). An empty
-    /// clamped rect is a no-op; the region path emits no `changed` and never
-    /// rebuilds the full image.
+    /// Refresh `rect` of the display (see
+    /// [`PictureViewRust::refresh_display_rect`]) and emit [`regionDamaged`]
+    /// with the changed document rectangle. An empty clamped rect is a no-op;
+    /// the region path emits no `changed` and never rebuilds the full image.
     pub(super) fn refresh_region(mut self: Pin<&mut Self>, rect: PsdRect) {
         let t_rr = Instant::now();
-        let prepared = self.as_mut().rust_mut().refresh_region_buffer(rect);
-        if let Some((x0, y0, clipped, srgb)) = prepared {
-            self.as_mut()
-                .rust_mut()
-                .apply_refreshed_region(x0, y0, clipped, srgb);
+        let refreshed = self.as_mut().rust_mut().refresh_display_rect(rect);
+        if let Some(clipped) = refreshed {
             let t = Instant::now();
             self.region_damaged(clipped.left, clipped.top, clipped.width(), clipped.height());
             paint_timing::record("rr_blit_emit(C++)", t.elapsed());

@@ -4,6 +4,34 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Viewport tile pyramid** (#1216, closes #942; OpenSpec change
+  `tiled-composite`, capabilities `compositing/tile-pyramid` and
+  `compositing/region-composite`).
+  - **Display.** The canvas presents 256² display tiles per (source, level,
+    tile) from `pictura_render::TilePyramid`. The app keeps them in
+    `cxxqt_object/tiles.rs`. No full-resolution display frame, stored pyramid
+    level, or solo-mask plane is kept.
+  - **Composite.** A layered RGB 8-bit document keeps no stored composite
+    (`Document::composite_is_authoritative`, `DocumentComposite::store/patch`
+    drop it).
+  - **Readers.** They use `composite_region` and `composite_region_level`
+    (byte-identical to the whole composite and to a whole `ViewPyramid`
+    rebuild), `picture_region` and `sample_tiles` (Sample All Layers floods
+    through `BucketSource::Tiles`), and `composite_tiled`/`composite_channels`
+    (save's merged image and flatten, band by band).
+  - **Damage.** It repairs cached tiles. A large region on a document over
+    16 M pixels marks them stale (shown until a worker rebuilds the visible
+    ones, one tile at a time).
+  - **History.** It places changed layer tiles and bounds layer-metadata
+    restores by influence (`history/damage.rs`).
+  - **Open.** It skips decoding a layered RGB file's merged colour planes
+    (`OpenOptions::skip_layered_merged`).
+  - **Measured.** At 17000²: M1 93 MiB, M5 89, M7 104, M8 48, M11 77.
+    Solo-mask restore at 16507×16196 takes 0.02 ms on the GUI thread
+    (704 ms before). M12 at 12000² still peaks at 2800 MiB in the PSD decode (#1273).
+  - **Shortcuts left (`ponytail:`).** Raster export, mode and depth
+    conversions, the Move preview base, and `image()` take a whole composite
+    (#1274).
 - **Adjustment dialog Auto** (#578, OpenSpec change `adjustment-dialog-auto`).
   Levels, Curves, and Brightness/Contrast share one 0.1%-clip histogram Auto
   (`AdjustmentDialog::autoEndpoints`): Levels sets the selected channel's input

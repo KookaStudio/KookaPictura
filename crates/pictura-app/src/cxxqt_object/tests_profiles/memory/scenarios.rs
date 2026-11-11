@@ -5,7 +5,7 @@
 
 use crate::cxxqt_object::document_session::{DocumentSession, TransformMode};
 use crate::cxxqt_object::edit::{insertion_edit, Edit};
-use crate::cxxqt_object::helpers_composite::{composite_regions, current_buffer};
+use crate::cxxqt_object::helpers_composite::composite_regions;
 use crate::cxxqt_object::impl_core::save_jobs::{save_finish_rust, save_start_rust};
 use crate::cxxqt_object::impl_transform::translate_move_group;
 use crate::cxxqt_object::open_jobs::{apply_opened, decode_psd, make_background};
@@ -65,14 +65,13 @@ impl Drop for TempFile {
     }
 }
 
-/// M1, as `new_document` + `create_document`: a white locked Background, its
-/// composite, the view and the "New" state.
+/// M1, as `new_document` + `create_document`: a white locked Background, the
+/// view and the "New" state. No composite is rendered or kept (#1216).
 pub(super) fn new_document(side: u32) -> PictureViewRust {
     // As the bridge builds it: uniform white tiles that hold nothing (#1213).
-    let mut doc = Document::new(side, side, ColorMode::Rgb, BitDepth::Eight);
+    let mut doc =
+        Document::with_uniform_composite(side, side, ColorMode::Rgb, BitDepth::Eight, 255);
     let n = side as usize;
-    let stacked = usize::from(doc.composite.channels);
-    doc.composite.data = pictura_core::Plane::filled(n, n, stacked, 255);
     let channels = (0..4)
         .map(|id| Channel {
             id: if id == 3 { -1 } else { id },
@@ -91,8 +90,7 @@ pub(super) fn new_document(side: u32) -> PictureViewRust {
         })
         .expect("the layer is added");
     make_background(doc.layers.first_mut().expect("the layer"));
-    let rendered = current_buffer(&doc, false);
-    DocumentComposite::new(&mut doc).store(&rendered);
+    DocumentComposite::new(&mut doc).refresh(pictura_render::CompositeScope::Full, false);
     let mut view = PictureViewRust {
         gpu_compute: false,
         ..Default::default()
@@ -430,20 +428,43 @@ pub(super) fn opened(path: &str) -> PictureViewRust {
 }
 
 /// The Magic Wand on the first disc the middle row of the M12 fixture meets
-/// (tolerance 32, contiguous), as `magic_wand` runs it on the composite.
+/// (tolerance 32, contiguous), as Sample All Layers runs it: over the
+/// composite a tile at a time (#1216).
 pub(super) fn magic_wand(view: &mut PictureViewRust) {
     let doc = view.session.doc.as_ref().expect("document");
-    let picture = crate::cxxqt_object::picture::picture(doc, view);
     let side = doc.width as usize;
-    let y = side / 2;
-    let mut row = vec![0u8; side];
-    picture.data.read_row_into(y, side, &mut row);
-    let x = row
+    let y = side as i32 / 2;
+    let row = crate::cxxqt_object::picture::picture_region(
+        doc,
+        view,
+        PsdRect {
+            top: y,
+            left: 0,
+            bottom: y + 1,
+            right: side as i32,
+        },
+    );
+    let mut red = vec![0u8; side];
+    row.data.read_into(0, &mut red);
+    let x = red
         .iter()
         .position(|&v| v != 255)
         .expect("a disc on the middle row");
-    let selection =
-        pictura_select::magic_wand(&picture, x as u32, y as u32, 32, true).expect("a flood");
-    drop(picture);
+    let selection = {
+        let fetch = crate::cxxqt_object::picture::sample_tiles(doc, view);
+        let source = pictura_paint::bucket::BucketSource::Tiles {
+            fetch: &fetch,
+            width: doc.width,
+            height: doc.height,
+        };
+        let size = (doc.width, doc.height);
+        let data = pictura_paint::bucket::magic_flood(source, size, (x as i32, y), 32, true)
+            .expect("a flood");
+        pictura_select::Selection {
+            width: doc.width,
+            height: doc.height,
+            data,
+        }
+    };
     view.session.set_selection(Some(selection));
 }

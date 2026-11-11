@@ -56,11 +56,13 @@ pub(super) fn delta_allocations(deltas: &[PlaneDelta]) -> Vec<(usize, usize)> {
 pub(super) enum PlaneKind {
     /// The document composite: its tiles are the picture's change.
     Composite,
-    /// A layer's color or alpha channel: shown only through the composite.
-    LayerChannel,
+    /// A layer's color or alpha channel at this document rectangle: shown
+    /// through the composite, and reaching `reach` pixels past a changed tile
+    /// (the layer's and its groups' effects and mask feather).
+    LayerChannel { rect: PsdRect, reach: i32 },
     /// A layer mask at this document rectangle: a solo mask view shows it
-    /// directly, so its tiles are damage too.
-    Mask(PsdRect),
+    /// directly, so its tiles are damage too. `reach` as for a channel.
+    Mask(PsdRect, i32),
     /// A document channel, shown only as its panel thumbnail.
     DocumentChannel,
 }
@@ -81,19 +83,28 @@ pub(super) enum PlanePlacement {
 
 /// The kind of every tracked plane, in traversal order.
 pub(super) fn plane_kinds(doc: &Document) -> Vec<PlaneKind> {
-    fn visit(layer: &Layer, out: &mut Vec<PlaneKind>) {
-        out.extend(layer.channels.iter().map(|_| PlaneKind::LayerChannel));
+    fn visit(layer: &Layer, inherited: i32, out: &mut Vec<PlaneKind>) {
+        let reach = inherited
+            + pictura_render::paint_reach(layer)
+            + layer
+                .mask
+                .as_ref()
+                .map_or(0, pictura_render::mask_feather_reach);
+        out.extend(layer.channels.iter().map(|_| PlaneKind::LayerChannel {
+            rect: layer.rect,
+            reach,
+        }));
         if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
-            out.push(PlaneKind::Mask(mask.rect));
+            out.push(PlaneKind::Mask(mask.rect, reach));
         }
         for child in &layer.children {
-            visit(child, out);
+            visit(child, reach, out);
         }
     }
     let mut out = vec![PlaneKind::Composite];
     out.extend(doc.channels.iter().map(|_| PlaneKind::DocumentChannel));
     for l in &doc.layers {
-        visit(l, &mut out);
+        visit(l, 0, &mut out);
     }
     out
 }
@@ -104,7 +115,7 @@ pub(super) fn mask_rects(doc: &Document) -> Vec<PsdRect> {
     plane_kinds(doc)
         .into_iter()
         .filter_map(|kind| match kind {
-            PlaneKind::Mask(rect) => Some(rect),
+            PlaneKind::Mask(rect, _) => Some(rect),
             _ => None,
         })
         .collect()
@@ -292,7 +303,7 @@ pub(super) fn composite_change(
             .map(|(plane, _)| plane)
             .collect::<Vec<_>>()
     };
-    let is_mask = |kind: PlaneKind| matches!(kind, PlaneKind::Mask(_));
+    let is_mask = |kind: PlaneKind| matches!(kind, PlaneKind::Mask(..));
     let (before, after) = (shown(live, is_mask), shown(restored, is_mask));
     let masks_differ = before.len() != after.len()
         || before.iter().zip(&after).any(|(a, b)| {

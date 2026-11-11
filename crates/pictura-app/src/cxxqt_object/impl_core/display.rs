@@ -1,23 +1,23 @@
-//! The canvas display source. The composite pyramid crops live here (moved out
-//! of `impl_core.rs` to keep it under its size cap) and stay composite-only, so
-//! Channels, Histogram, Navigator, and the filter/adjustment previews never see
-//! the solo mask. The solo mask is served by [`canvas_present_image`], which
-//! only the canvas provider and the present/region paths read.
+//! The canvas display source. The canvas crops come from the tile pyramid
+//! (`cxxqt_object/tiles.rs`) and stay composite-only for every other reader,
+//! so Channels, Histogram, Navigator, and the filter/adjustment previews never
+//! see the solo mask. The solo mask is served by [`canvas_present_image`],
+//! which only the canvas provider reads.
 
-use super::super::helpers_composite::{level_display_image, planes_of};
+use super::super::helpers_composite::level_display_image;
 use crate::cxxqt_object::qobject;
 use crate::cxxqt_object::state::PictureViewRust;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{c_void, QImage, QImageFormat};
+use cxx_qt_lib::QImage;
 use pictura_core::{LayerMask, PixelBuffer, PsdRect};
-use pictura_render::patch_buffer_region;
-use pictura_render::{LevelView, ViewPyramid};
+use pictura_render::TileKey;
 
 impl qobject::PictureView {
     /// A premultiplied crop of the **canvas display source** at `level` over
-    /// `(x, y, w, h)`: the solo mask plane when a mask is soloed, else the
-    /// document composite. The canvas provider calls this; every other panel and
-    /// dialog keeps calling `display_image` so they never see the mask.
+    /// `(x, y, w, h)`: the solo mask while a mask is soloed, else the document
+    /// composite. Tiles a large document still lacks are stood in for and
+    /// built on a worker. The canvas provider calls this; every other panel
+    /// and dialog keeps calling `display_image` so they never see the mask.
     pub fn canvas_display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage {
         if w <= 0 || h <= 0 {
             return QImage::default();
@@ -28,183 +28,28 @@ impl qobject::PictureView {
             bottom: y + h,
             right: x + w,
         };
-        self.rust().canvas_present_image(level, rect)
+        let (image, missing) = self.rust().canvas_present_image(level, rect);
+        self.request_tiles(missing);
+        image
     }
-
-    /// A zero-copy display image of stored pyramid `level` (premultiplied
-    /// RGBA8888), or an empty image for level 0 or past the last level. The
-    /// handle behind the image is dropped with the image.
-    pub fn canvas_level_image(&self, level: i32) -> QImage {
-        if level <= 0 || self.rust().session.quick_mask.active {
-            return QImage::default();
-        }
-        let rust = self.rust();
-        let handle = if rust.mask_solo_active() {
-            rust.mask_pyramid.level_view(level as usize)
-        } else {
-            rust.pyramid.level_view(level as usize)
-        };
-        handle.map_or_else(QImage::default, level_view_image)
-    }
-}
-
-/// Wrap a shared level handle as a `QImage`; the cleanup drops the handle.
-fn level_view_image(view: LevelView) -> QImage {
-    let width = view.width() as i32;
-    let height = view.height() as i32;
-    let expected = width as usize * height as usize * 4;
-    debug_assert_eq!(view.data().len(), expected, "a stored level is packed");
-    debug_assert_eq!(
-        view.data().as_ptr() as usize % 4,
-        0,
-        "an external QImage needs 4-byte alignment"
-    );
-    let data = view.data().as_ptr();
-    let info = Box::into_raw(Box::new(view)).cast::<c_void>();
-    // SAFETY: the handle is alive until `release_level_view` drops it, and the
-    // level's storage is packed premultiplied RGBA8888.
-    unsafe {
-        QImage::from_raw_parts(
-            data,
-            width,
-            height,
-            QImageFormat::Format_RGBA8888_Premultiplied,
-            release_level_view,
-            info,
-        )
-    }
-}
-
-extern "C" fn release_level_view(info: *mut c_void) {
-    // SAFETY: `info` is the `Box<LevelView>` made in `level_view_image`.
-    unsafe { drop(Box::from_raw(info.cast::<LevelView>())) }
 }
 
 impl PictureViewRust {
-    /// A premultiplied crop of `pyramid` `level` at `rect` from `level0`, or an
-    /// empty image for an out-of-range level, a non-intersecting rectangle, or
-    /// an absent source. A partial overlap is transparent where it falls
-    /// outside.
-    fn crop_source(
-        pyramid: &ViewPyramid,
-        level0: Option<&PixelBuffer>,
-        level: i32,
-        rect: PsdRect,
-    ) -> QImage {
-        if level < 0 {
-            return QImage::default();
-        }
-        let level = level as usize;
-        if level >= pyramid.level_count() {
-            return QImage::default();
-        }
-        let (lw, lh) = pyramid.level_size(level);
-        if rect.right <= 0 || rect.bottom <= 0 || rect.left >= lw as i32 || rect.top >= lh as i32 {
-            return QImage::default();
-        }
-        let Some(planes) = level0.and_then(planes_of) else {
-            return QImage::default();
-        };
-        let crop = pyramid.crop(planes, level, rect);
-        if crop.width() == 0 || crop.height() == 0 {
-            return QImage::default();
-        }
-        level_display_image(&crop)
-    }
-
-    pub(crate) fn display_crop(&self, level: i32, rect: PsdRect) -> QImage {
-        Self::crop_source(&self.pyramid, self.level0.as_ref(), level, rect)
-    }
-
-    pub(crate) fn display_level_count(&self) -> i32 {
-        self.pyramid.level_count() as i32
-    }
-
-    pub(crate) fn display_level_size(&self, level: i32) -> Option<(u32, u32)> {
-        if level < 0 || level as usize >= self.pyramid.level_count() {
-            return None;
-        }
-        Some(self.pyramid.level_size(level as usize))
-    }
-
-    /// Whether the canvas is currently presenting the solo mask plane.
-    pub(crate) fn mask_solo_active(&self) -> bool {
-        self.mask_solo.is_some() && self.mask_level0.is_some()
-    }
-
-    /// The canvas present image at `level` over `rect`: the solo mask crop when
-    /// soloing, else the document composite. Nothing but the canvas calls this.
-    /// Falls back to the composite if the soloed mask's source is absent (e.g.
-    /// the mask was just deleted), so the canvas never goes blank.
-    pub(crate) fn canvas_present_image(&self, level: i32, rect: PsdRect) -> QImage {
+    /// The canvas present image at `level` over `rect` (document pixels at
+    /// that level): Quick Mask's overlay, the solo mask, or the composite,
+    /// and the tiles left to a worker. Nothing but the canvas calls this.
+    pub(crate) fn canvas_present_image(&self, level: i32, rect: PsdRect) -> (QImage, Vec<TileKey>) {
         if self.session.quick_mask.active {
             return self.quick_mask_crop(level, rect);
         }
-        match (self.mask_solo.as_ref(), self.mask_level0.as_ref()) {
-            (Some(_), Some(level0)) => {
-                Self::crop_source(&self.mask_pyramid, Some(level0), level, rect)
-            }
-            _ => self.display_crop(level, rect),
+        if !self.level_meets(level, rect) {
+            return (QImage::default(), Vec::new());
         }
-    }
-
-    /// (Re)build the solo mask plane and its pyramid from the current document,
-    /// or drop them when there is no soloable mask. A no-op source change.
-    pub(crate) fn rebuild_mask_solo_source(&mut self) {
-        let path = self.mask_solo.clone();
-        let built = path.and_then(|path| {
-            let doc = self.session.doc.as_ref()?;
-            let mask = pictura_render::resolve_path(doc, &path)?.mask.as_ref()?;
-            Some(mask_display_plane(mask, doc.width, doc.height))
-        });
-        match built {
-            Some(plane) => {
-                self.mask_pyramid = planes_of(&plane)
-                    .map(ViewPyramid::rebuild)
-                    .unwrap_or_default();
-                self.mask_level0 = Some(plane);
-            }
-            None => {
-                // The solo target is gone (mask or layer removed, or no
-                // document): end the mode, not just the source.
-                self.mask_solo = None;
-                self.drop_mask_solo_source();
-            }
+        let (crop, missing) = self.tile_crop(self.canvas_source(), level, rect);
+        if crop.width() == 0 || crop.height() == 0 {
+            return (QImage::default(), missing);
         }
-    }
-
-    /// Drop the solo mask plane and pyramid, leaving the composite untouched.
-    pub(crate) fn drop_mask_solo_source(&mut self) {
-        self.mask_level0 = None;
-        self.mask_pyramid = ViewPyramid::default();
-    }
-
-    /// Repair the solo mask plane and pyramid over `clipped` after a region
-    /// commit patched the composite, so painting the soloed mask shows live
-    /// coverage. A no-op when not soloed.
-    pub(crate) fn sync_mask_solo_region(&mut self, clipped: PsdRect) {
-        if self.mask_solo.is_none() {
-            return;
-        }
-        if self.mask_level0.is_none() {
-            self.rebuild_mask_solo_source();
-            return;
-        }
-        let region = self.session.doc.as_ref().and_then(|doc| {
-            let path = self.mask_solo.as_ref()?;
-            let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
-            Some(mask_region_plane(mask, clipped))
-        });
-        let Some(region) = region else {
-            self.drop_mask_solo_source();
-            return;
-        };
-        if let Some(dst) = self.mask_level0.as_mut() {
-            patch_buffer_region(dst, &region, clipped.left, clipped.top);
-        }
-        if let Some(planes) = self.mask_level0.as_ref().and_then(planes_of) {
-            self.mask_pyramid.update(planes, clipped);
-        }
+        (level_display_image(&crop), missing)
     }
 
     /// A `max_side`-bounded grayscale thumbnail of the active layer's raster mask
@@ -325,26 +170,34 @@ pub(in crate::cxxqt_object) fn mask_display_plane(
 }
 
 /// The same grayscale plane over `clipped` only, sized and originated at the
-/// rectangle for [`patch_buffer_region`].
-fn mask_region_plane(mask: &LayerMask, clipped: PsdRect) -> PixelBuffer {
+/// rectangle: the level-0 source of the solo mask's display tiles, filled one
+/// row per task so a large tile footprint is cheap.
+pub(in crate::cxxqt_object) fn mask_region_plane(
+    mask: &LayerMask,
+    clipped: PsdRect,
+) -> PixelBuffer {
+    use rayon::prelude::*;
     let rw = clipped.width().max(0) as u32;
     let rh = clipped.height().max(0) as u32;
-    let mut buffer = PixelBuffer::new(rw, rh, 4);
-    if rw == 0 || rh == 0 {
+    let mut buffer = PixelBuffer::zeroed(rw, rh, 4);
+    let plane = buffer.pixel_count();
+    if plane == 0 {
         return buffer;
     }
-    let plane = buffer.pixel_count();
-    for oy in 0..rh as i32 {
-        let y = clipped.top + oy;
-        for ox in 0..rw as i32 {
-            let v = mask_sample(mask, clipped.left + ox, y);
-            let i = oy as usize * rw as usize + ox as usize;
-            buffer.data[i] = v;
-            buffer.data[plane + i] = v;
-            buffer.data[2 * plane + i] = v;
-            buffer.data[3 * plane + i] = 255;
-        }
-    }
+    let data = buffer.data.as_mut_slice();
+    let (gray, rest) = data.split_at_mut(plane);
+    gray.par_chunks_mut(rw as usize)
+        .enumerate()
+        .for_each(|(oy, row)| {
+            let y = clipped.top + oy as i32;
+            for (ox, sample) in row.iter_mut().enumerate() {
+                *sample = mask_sample(mask, clipped.left + ox as i32, y);
+            }
+        });
+    let (green_blue, alpha) = rest.split_at_mut(2 * plane);
+    green_blue[..plane].copy_from_slice(gray);
+    green_blue[plane..].copy_from_slice(gray);
+    alpha.fill(255);
     buffer
 }
 

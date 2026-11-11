@@ -23,6 +23,11 @@ pub const DEFAULT_USAGE_PERCENT: u8 = 60;
 /// History may hold one part in this many of the ceiling (#1207, #1215).
 pub const HISTORY_SHARE: u64 = 2;
 
+/// The display tile cache's cap (#1216): recomputable memory, dropped first.
+pub const DISPLAY_CAP: u64 = 192 * MIB;
+/// The display tile cache may hold one part in this many of the ceiling.
+pub const DISPLAY_SHARE: u64 = 4;
+
 /// Why memory was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryError {
@@ -202,6 +207,15 @@ impl Governor {
     /// ceiling. `None` when the host reports no ceiling.
     pub fn history_budget(&self) -> Option<u64> {
         self.ceiling().map(|ceiling| ceiling / HISTORY_SHARE)
+    }
+
+    /// The bytes the display tile cache may hold: the smaller of
+    /// [`DISPLAY_CAP`] and its share of the ceiling, or the cap when the host
+    /// reports no ceiling.
+    pub fn display_budget(&self) -> u64 {
+        self.ceiling().map_or(DISPLAY_CAP, |ceiling| {
+            (ceiling / DISPLAY_SHARE).min(DISPLAY_CAP)
+        })
     }
 
     pub fn room(&self) -> Option<u64> {

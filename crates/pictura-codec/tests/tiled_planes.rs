@@ -88,3 +88,103 @@ fn reading_fills_tiles() {
     assert_eq!(red.sample(10 * w as usize + 10), Some(200));
     assert!(matches!(red.tile_state(0), Some(TileState::Dense(_))));
 }
+
+/// The merged image a document without a stored composite is saved with
+/// (#1216): band-written tiled planes whose uniform tiles hold no allocation.
+/// Every compression writes the same bytes as the flat composite.
+// [rc_save]
+#[test]
+fn streamed_merged_image_is_byte_identical() {
+    let (w, h) = (W as usize, H as usize);
+    let mut flat = Document::from_rgba("merged", W, H, &vec![255u8; w * h * 4]);
+    // A painted square over white: most tiles stay uniform.
+    let mut rgba = vec![255u8; w * h * 4];
+    for y in 40..170 {
+        for x in 30..260 {
+            let i = (y * w + x) * 4;
+            rgba[i..i + 4].copy_from_slice(&[(x % 251) as u8, (y % 241) as u8, 9, 255]);
+        }
+    }
+    let planar: Vec<u8> = (0..4)
+        .flat_map(|c| (0..w * h).map(move |i| (c, i)))
+        .map(|(c, i)| rgba[i * 4 + c])
+        .collect();
+    flat.composite.data = planar.clone().into();
+
+    let mut banded = Plane::filled(w, h, 4, 0u8);
+    for band in (0..h).step_by(256) {
+        let rows = (h - band).min(256);
+        for c in 0..4 {
+            let start = c * w * h + band * w;
+            banded.write_rect_from(
+                0..w,
+                c * h + band..c * h + band + rows,
+                w,
+                &planar[start..start + rows * w],
+            );
+        }
+        banded.settle();
+    }
+    assert!(
+        banded.allocated_bytes() < w * h * 4,
+        "uniform tiles hold no allocation"
+    );
+    for compression in [
+        pictura_core::Compression::Rle,
+        pictura_core::Compression::Raw,
+        pictura_core::Compression::Zip,
+    ] {
+        flat.composite_compression = compression;
+        let mut streamed = flat.clone();
+        streamed.composite.data = banded.clone();
+        let written = assert_no_materialization(|| write_psd(&streamed).expect("tiled write"));
+        assert!(
+            written == write_psd(&flat).expect("flat write"),
+            "{compression:?}: the band-written merged image writes the same bytes"
+        );
+    }
+}
+
+/// An application open of a layered 8-bit RGB file skips the merged image's
+/// colour planes, which it would only drop (#1216); the layers and the extra
+/// channels are read as without the option.
+#[test]
+fn a_layered_merged_image_is_skipped_on_request() {
+    let mut doc = layered();
+    doc.channels.push(pictura_core::Channel {
+        id: 0,
+        data: (0..W * H)
+            .map(|i| (i % 253) as u8)
+            .collect::<Vec<u8>>()
+            .into(),
+    });
+    for compression in [
+        pictura_core::Compression::Rle,
+        pictura_core::Compression::Raw,
+    ] {
+        doc.composite_compression = compression;
+        let bytes = write_psd(&doc).expect("write");
+        let full = read_psd(&bytes).expect("read");
+        let skipped = pictura_codec::read_psd_with_options(
+            &bytes,
+            &pictura_codec::OpenOptions {
+                skip_layered_merged: true,
+                ..pictura_codec::OpenOptions::default()
+            },
+        )
+        .expect("read skipping the merged image");
+        assert!(skipped.merged_composite_present, "{compression:?}");
+        assert!(
+            skipped.composite.data.is_empty(),
+            "{compression:?}: no merged planes"
+        );
+        assert!(
+            skipped.layers == full.layers,
+            "{compression:?}: the same layers"
+        );
+        assert!(
+            skipped.channels == full.channels,
+            "{compression:?}: the same extra channels"
+        );
+    }
+}

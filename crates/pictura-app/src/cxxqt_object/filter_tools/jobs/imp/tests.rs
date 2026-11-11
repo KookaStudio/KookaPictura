@@ -1,4 +1,5 @@
 use super::*;
+use crate::cxxqt_object::helpers_composite::current_buffer;
 use crate::cxxqt_object::impl_filters::apply_filter_active;
 use crate::cxxqt_object::presentation::Presentation;
 use crate::cxxqt_object::tests::pixel_layer;
@@ -84,11 +85,16 @@ fn a_background_commit_matches_the_synchronous_one_and_records_its_label() {
     assert_eq!(red(&rust), red(&sync));
     assert_eq!(rust.session.history.count(), 2);
     assert_eq!(rust.session.history.label(1), "Filter: Gaussian Blur");
-    // The composite the commit patched is the one a recomposite stores.
+    // The picture after the commit is the one a recomposite produces.
     let doc = rust.session.doc.as_ref().unwrap();
-    let mut recomposited = doc.clone();
-    DocumentComposite::new(&mut recomposited).store(&current_buffer(doc, false));
-    assert_eq!(doc.composite.data, recomposited.composite.data);
+    let whole = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    let served = crate::cxxqt_object::picture::picture_region(doc, &rust, whole);
+    assert_eq!(served.data, current_buffer(doc, false).data);
 }
 
 #[test]
@@ -190,7 +196,7 @@ fn apply_filter_active_region_section(rust: &mut PictureViewRust, section: PsdRe
 }
 
 #[test]
-fn job_writers_store_and_patch_through_the_cache() {
+fn job_writers_keep_no_composite_for_a_layered_document() {
     let rust = striped();
     let doc = rust.session.doc.as_ref().expect("document");
     let filtered_layer = filter_layer(doc, "0", &[blur()], None, false).expect("filter the layer");
@@ -198,12 +204,13 @@ fn job_writers_store_and_patch_through_the_cache() {
     *pictura_render::resolve_path_mut(&mut filtered, "0").expect("layer") = filtered_layer;
     let full = pictura_render::composite_rgba(&filtered);
 
-    // A pre-rendered job buffer reaches the live composite through `store`.
+    // A pre-rendered job buffer is not kept: the display tiles hold what is
+    // shown (#1216).
     let mut live = doc.clone();
     DocumentComposite::new(&mut live).store(&full);
-    assert_eq!(live.composite.data, full.data);
+    assert!(!DocumentComposite::is_stored(&live));
 
-    // A job region reaches the live composite through `patch`.
+    // A job region is exact and is not kept either.
     let region = PsdRect {
         top: 0,
         left: 0,
@@ -216,10 +223,15 @@ fn job_writers_store_and_patch_through_the_cache() {
     .0;
     let mut patched = doc.clone();
     DocumentComposite::new(&mut patched).patch(&buffer, 0, 0);
+    assert!(!DocumentComposite::is_stored(&patched));
+    let plane = 40 * 48;
     for y in 0..40 {
         for x in 0..48 {
-            let i = (y * 96 + x) as usize;
-            assert_eq!(patched.composite.data[i], full.data[i]);
+            assert_eq!(buffer.data[y * 48 + x], full.data[y * 96 + x]);
+            assert_eq!(
+                buffer.data[plane + y * 48 + x],
+                full.data[96 * 80 + y * 96 + x]
+            );
         }
     }
 }

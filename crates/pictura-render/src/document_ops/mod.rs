@@ -109,6 +109,17 @@ pub(crate) fn valid_size(width: u32, height: u32) -> Result<(), pictura_ops::Ops
     Ok(())
 }
 
+/// Give a document that keeps no stored composite (#1216) its composite, for
+/// the mode and depth conversions that read it as their source; the converted
+/// document keeps it, because its composite is then authoritative.
+/// ponytail: the composite is canvas-sized (uniform tiles excepted) for the
+/// conversion; a conversion that streamed its source would not need it.
+pub(crate) fn materialize_composite(doc: &mut pictura_core::Document) {
+    if !doc.layers.is_empty() && !crate::DocumentComposite::is_stored(doc) {
+        doc.composite = crate::composite_tiled(doc);
+    }
+}
+
 /// Install a layer-less document's merged composite as a bottom Background.
 ///
 /// A geometry operation calls this before mutating so it transforms real

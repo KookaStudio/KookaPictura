@@ -394,20 +394,24 @@ impl PictureViewRust {
         self.invalidate_quick_mask();
         changed
     }
-    pub(in crate::cxxqt_object) fn quick_mask_crop(&self, level: i32, rect: PsdRect) -> QImage {
-        use crate::cxxqt_object::helpers_composite::planes_of;
-        if level < 0 || level as usize >= self.pyramid.level_count() {
-            return QImage::default();
+    /// The composite crop of `level` over `rect` with Quick Mask's overlay,
+    /// and the composite tiles left to a worker.
+    pub(in crate::cxxqt_object) fn quick_mask_crop(
+        &self,
+        level: i32,
+        rect: PsdRect,
+    ) -> (QImage, Vec<pictura_render::TileKey>) {
+        if !self.level_meets(level, rect) {
+            return (QImage::default(), Vec::new());
         }
-        let Some(planes) = self.level0.as_ref().and_then(planes_of) else {
-            return QImage::default();
-        };
-        let base = self.pyramid.crop(planes, level as usize, rect);
+        let (base, missing) = self.tile_crop(pictura_render::TileSource::Composite, level, rect);
         let q = &self.session.quick_mask;
         let scale = 1i64.checked_shl(level as u32).unwrap_or(i64::MAX);
-        let doc = self.session.doc.as_ref().unwrap();
+        let Some(doc) = self.session.doc.as_ref() else {
+            return (QImage::default(), missing);
+        };
         if base.width() == 0 || base.height() == 0 {
-            return QImage::default();
+            return (QImage::default(), missing);
         }
         let coverage = self
             .session
@@ -442,7 +446,10 @@ impl PictureViewRust {
                 *pixel = color;
             }
         }
-        rgba_image(bytes, base.width() as i32, base.height() as i32)
+        (
+            rgba_image(bytes, base.width() as i32, base.height() as i32),
+            missing,
+        )
     }
 }
 #[path = "filter.rs"]

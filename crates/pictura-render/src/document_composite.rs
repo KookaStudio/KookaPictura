@@ -48,13 +48,30 @@ impl<'a> DocumentComposite<'a> {
             && doc.composite.height == doc.height
     }
 
+    /// Whether the document holds a stored composite of its own size, in
+    /// whatever colour planes its mode keeps.
+    pub fn is_stored(doc: &Document) -> bool {
+        doc.composite.width == doc.width
+            && doc.composite.height == doc.height
+            && !doc.composite.data.is_empty()
+    }
+
     /// Store a rendered full-frame composite.
+    ///
+    /// Only a document whose composite is authoritative
+    /// ([`Document::composite_is_authoritative`]) keeps one; any other drops
+    /// its stored composite, which the display and the readers compute on
+    /// demand (#1216).
     ///
     /// An RGB document takes the rendered 4-plane RGBA frame. A non-RGB mode
     /// keeps its existing composite colour-plane count and copies
     /// `min(rendered, composite)` planes, so a 1-plane grayscale composite stays
     /// 1-plane. A composite whose dimensions no longer match is replaced.
     pub fn store(&mut self, rendered: &PixelBuffer) {
+        if !self.doc.composite_is_authoritative() {
+            self.drop_stored();
+            return;
+        }
         if rendered.width != self.doc.width || rendered.height != self.doc.height {
             return;
         }
@@ -84,12 +101,23 @@ impl<'a> DocumentComposite<'a> {
     /// Copy a region of a 4-plane rendered buffer into the maintained composite
     /// at `(x0, y0)`, writing the composite's own colour-plane count.
     pub fn patch(&mut self, region: &PixelBuffer, x0: i32, y0: i32) {
+        if !self.doc.composite_is_authoritative() {
+            self.drop_stored();
+            return;
+        }
         if self.doc.composite.width != self.doc.width
             || self.doc.composite.height != self.doc.height
         {
             return;
         }
         patch_buffer_region(&mut self.doc.composite, region, x0, y0);
+    }
+
+    /// Release a stored composite the document no longer keeps.
+    fn drop_stored(&mut self) {
+        if !self.doc.composite.data.is_empty() {
+            self.doc.composite = PixelBuffer::new(0, 0, 4);
+        }
     }
 
     /// Composite `scope` and write the cache.
@@ -126,6 +154,11 @@ impl<'a> DocumentComposite<'a> {
                         rect: full,
                         backend: Backend::Cpu,
                     }];
+                }
+                if write && !self.doc.composite_is_authoritative() {
+                    // Nothing to keep: the readers composite on demand.
+                    self.drop_stored();
+                    return Vec::new();
                 }
                 let (buffer, backend) =
                     crate::composite(crate::CompositeRequest::whole(self.doc, gpu));
@@ -336,63 +369,68 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_full_refresh_stores_the_composite() {
-        let mut d = doc(8, 8, rgb_layers());
-        let expected = crate::composite_rgba(&d);
-        let out = DocumentComposite::new(&mut d).refresh(CompositeScope::Full, false);
-        assert_eq!(out.len(), 1);
-        assert_eq!(d.composite.width, 8);
-        assert_eq!(d.composite.height, 8);
-        assert_eq!(d.composite.data, expected.data);
-    }
-
-    #[test]
-    fn a_region_refresh_patches_the_composite() {
-        let mut d = doc(8, 8, rgb_layers());
-        let full = crate::composite_rgba(&d);
-        let seed_marker = marker(&d, 3);
-        DocumentComposite::new(&mut d).store(&seed_marker);
-        let before = d.composite.clone();
-        let region = rect(2, 2, 6, 6);
-        let out =
-            DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
+    /// The buffer a region refresh of `region` returns, after checking it
+    /// left no composite stored: a layered RGB document keeps none (#1216).
+    fn region_buffer(d: &mut Document, region: PsdRect) -> PixelBuffer {
+        let out = DocumentComposite::new(d).refresh(CompositeScope::Regions(vec![region]), false);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].rect, region);
-        for y in 0..8 {
-            for x in 0..8 {
-                let inside = (2..6).contains(&x) && (2..6).contains(&y);
-                if inside {
-                    assert_eq!(px(&d.composite, x, y), px(&full, x, y));
-                } else {
-                    assert_eq!(px(&d.composite, x, y), px(&before, x, y));
-                }
+        assert!(
+            d.composite.data.is_empty(),
+            "a layered RGB document stores no composite"
+        );
+        out.into_iter().next().expect("one region").buffer
+    }
+
+    fn assert_region_matches(buffer: &PixelBuffer, full: &PixelBuffer, region: PsdRect) {
+        for y in region.top..region.bottom {
+            for x in region.left..region.right {
+                assert_eq!(
+                    px(buffer, (x - region.left) as u32, (y - region.top) as u32),
+                    px(full, x as u32, y as u32),
+                    "pixel ({x}, {y})"
+                );
             }
         }
     }
 
+    fn gray_doc(w: u32, h: u32, value: u8) -> Document {
+        let mut d = Document::new(w, h, ColorMode::Grayscale, BitDepth::Eight);
+        d.layers = LayerStack::from_layers(vec![gray_layer(w, h, value)]);
+        d
+    }
+
     #[test]
-    fn an_rgb_region_patch_matches_the_full_slice() {
+    fn a_layered_rgb_full_refresh_stores_nothing() {
         let mut d = doc(8, 8, rgb_layers());
-        let seed_marker = marker(&d, 3);
-        DocumentComposite::new(&mut d).store(&seed_marker);
-        let seed = d.composite.clone();
+        let out = DocumentComposite::new(&mut d).refresh(CompositeScope::Full, false);
+        assert!(
+            out.is_empty(),
+            "nothing is composited for a cache that is not kept"
+        );
+        assert!(d.composite.data.is_empty());
+        assert!(!DocumentComposite::is_stored(&d));
+    }
+
+    #[test]
+    fn a_region_refresh_returns_the_exact_region() {
+        let mut d = doc(8, 8, rgb_layers());
+        let full = crate::composite_rgba(&d);
+        let region = rect(2, 2, 6, 6);
+        let buffer = region_buffer(&mut d, region);
+        assert_region_matches(&buffer, &full, region);
+    }
+
+    #[test]
+    fn an_rgb_region_matches_the_full_slice() {
+        let mut d = doc(8, 8, rgb_layers());
         // The visibility change the deleted app oracle covered: the region
-        // composite must follow the layer stack, not the seeded cache.
+        // composite must follow the layer stack.
         assert_eq!(crate::set_visible_paths(&mut d, &["1"], false), 1);
         let full = crate::composite_rgba(&d);
         let region = rect(1, 1, 7, 7);
-        DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
-        for y in 0..8 {
-            for x in 0..8 {
-                let inside = (1..7).contains(&x) && (1..7).contains(&y);
-                if inside {
-                    assert_eq!(px(&d.composite, x, y), px(&full, x, y));
-                } else {
-                    assert_eq!(px(&d.composite, x, y), px(&seed, x, y));
-                }
-            }
-        }
+        let buffer = region_buffer(&mut d, region);
+        assert_region_matches(&buffer, &full, region);
     }
 
     #[test]
@@ -427,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn a_banded_composite_is_the_patch_reference() {
+    fn a_banded_composite_is_the_region_reference() {
         let mut d = doc(
             32,
             160,
@@ -456,59 +494,28 @@ mod tests {
             banded_before.data, whole_before.data,
             "banded equals single canvas"
         );
-        let seed_marker = marker(&d, 3);
-        DocumentComposite::new(&mut d).store(&seed_marker);
-        let seed = d.composite.clone();
         assert_eq!(crate::set_visible_paths(&mut d, &["1"], false), 1);
         let banded = crate::composite_rgba(&d);
         let whole = crate::composite::composite_whole(&d);
         assert_eq!(banded.data, whole.data, "banded equals single canvas");
         let region = rect(40, 0, 120, 32);
-        DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
-        for y in 0..160 {
-            for x in 0..32 {
-                let inside = (40..120).contains(&y);
-                if inside {
-                    assert_eq!(px(&d.composite, x, y), px(&banded, x, y));
-                } else {
-                    assert_eq!(px(&d.composite, x, y), px(&seed, x, y));
-                }
-            }
-        }
+        let buffer = region_buffer(&mut d, region);
+        assert_region_matches(&buffer, &banded, region);
     }
 
     #[test]
-    fn a_whole_document_region_replaces_the_composite() {
+    fn a_whole_document_region_is_the_whole_composite() {
         let mut d = doc(8, 8, rgb_layers());
-        let seed_marker = marker(&d, 3);
-        DocumentComposite::new(&mut d).store(&seed_marker);
-        let seed = d.composite.clone();
         assert_eq!(crate::set_visible_paths(&mut d, &["1"], false), 1);
         let whole = crate::composite_rgba(&d);
-        let out = DocumentComposite::new(&mut d)
-            .refresh(CompositeScope::Regions(vec![full(8, 8)]), false);
-        assert_eq!(out.len(), 1);
-        assert_eq!(d.composite.data, whole.data);
-        assert_eq!(
-            seed.data, seed_marker.data,
-            "the seeded bytes are not mutated"
-        );
+        let buffer = region_buffer(&mut d, full(8, 8));
+        assert_eq!(buffer.data, whole.data);
     }
 
     #[test]
     fn a_region_patch_preserves_a_shared_banded_plane() {
-        let mut d = doc(
-            32,
-            160,
-            vec![solid(
-                "base",
-                full(32, 160),
-                (30, 60, 90),
-                255,
-                BlendMode::Normal,
-                255,
-            )],
-        );
+        let mut d = gray_doc(32, 160, 90);
+        let plane = 32 * 160;
         let full_before = crate::composite_rgba(&d);
         DocumentComposite::new(&mut d).store(&full_before);
         let snapshot = d.composite.clone();
@@ -518,16 +525,17 @@ mod tests {
         let region = rect(0, 0, 64, 32);
         DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
         assert_eq!(
-            snapshot.data, full_before.data,
+            &snapshot.data.as_ref()[..plane],
+            &full_before.data.as_ref()[..plane],
             "the snapshot bytes are unchanged"
         );
         for y in 0..160 {
             for x in 0..32 {
                 let inside = (0..64).contains(&y);
                 if inside {
-                    assert_eq!(px(&d.composite, x, y), px(&full, x, y));
+                    assert_eq!(gray_at(&d.composite, x, y), gray_at(&full, x, y));
                 } else {
-                    assert_eq!(px(&d.composite, x, y), px(&snapshot, x, y));
+                    assert_eq!(gray_at(&d.composite, x, y), gray_at(&snapshot, x, y));
                 }
             }
         }
@@ -535,7 +543,7 @@ mod tests {
 
     #[test]
     fn a_rendered_buffer_is_stored_without_recompositing() {
-        let mut d = doc(8, 8, rgb_layers());
+        let mut d = gray_doc(8, 8, 120);
         let stored_marker = PixelBuffer {
             width: 8,
             height: 8,
@@ -543,17 +551,27 @@ mod tests {
             data: vec![7u8; 8 * 8 * 4].into(),
         };
         DocumentComposite::new(&mut d).store(&stored_marker);
-        assert_eq!(d.composite.data, stored_marker.data);
+        assert_eq!(
+            d.composite.data.as_ref(),
+            &stored_marker.data.as_ref()[..64]
+        );
         assert_ne!(
-            d.composite.data,
-            crate::composite_rgba(&d).data,
+            d.composite.data.as_ref(),
+            &crate::composite_rgba(&d).data.as_ref()[..64],
             "a recomposite would not match the marker"
+        );
+
+        let mut rgb = doc(8, 8, rgb_layers());
+        DocumentComposite::new(&mut rgb).store(&stored_marker);
+        assert!(
+            rgb.composite.data.is_empty(),
+            "a layered RGB document keeps no composite"
         );
     }
 
     #[test]
     fn render_does_not_write_the_cache() {
-        let mut d = doc(8, 8, rgb_layers());
+        let mut d = gray_doc(8, 8, 120);
         let seed_marker = marker(&d, 3);
         DocumentComposite::new(&mut d).store(&seed_marker);
         let before = d.composite.clone();
@@ -561,16 +579,11 @@ mod tests {
         let out = DocumentComposite::new(&mut d)
             .render(CompositeScope::Regions(vec![rect(2, 2, 6, 6)]), false);
         assert_eq!(out.len(), 1);
-        assert_eq!(d.composite.data, before.data);
         assert_eq!(
-            d.composite.data, seed_marker.data,
+            d.composite.data, before.data,
             "render must not write the cache"
         );
-        for y in 2..6 {
-            for x in 2..6 {
-                assert_eq!(px(&out[0].buffer, x - 2, y - 2), px(&full, x, y));
-            }
-        }
+        assert_region_matches(&out[0].buffer, &full, rect(2, 2, 6, 6));
     }
 
     #[test]
@@ -673,7 +686,7 @@ mod tests {
     }
 
     #[test]
-    fn a_clipping_region_patch_matches_the_full_slice() {
+    fn a_clipping_region_matches_the_full_slice() {
         let mut top = solid(
             "top",
             rect(2, 2, 6, 6),
@@ -698,22 +711,10 @@ mod tests {
                 top,
             ],
         );
-        let seed_marker = marker(&d, 3);
-        DocumentComposite::new(&mut d).store(&seed_marker);
-        let seed = d.composite.clone();
         d.layers[0].channels[0].data.fill(200);
         let full = crate::composite_rgba(&d);
         let region = rect(2, 2, 6, 6);
-        DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
-        for y in 0..8 {
-            for x in 0..8 {
-                let inside = (2..6).contains(&x) && (2..6).contains(&y);
-                if inside {
-                    assert_eq!(px(&d.composite, x, y), px(&full, x, y));
-                } else {
-                    assert_eq!(px(&d.composite, x, y), px(&seed, x, y));
-                }
-            }
-        }
+        let buffer = region_buffer(&mut d, region);
+        assert_region_matches(&buffer, &full, region);
     }
 }

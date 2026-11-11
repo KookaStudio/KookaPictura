@@ -606,6 +606,75 @@ fn a_composite_source_reads_its_planes() {
 }
 
 #[test]
+fn a_tiled_source_floods_like_the_composite() {
+    // Wider and taller than one tile, so the flood crosses tile edges.
+    let (w, h) = (TILE as u32 + 77, TILE as u32 + 31);
+    let d = noise(w as i32, h as i32, (0, 0), false);
+    let surface = layer_surface(&d, "0").unwrap();
+    let mut buf = PixelBuffer::new(w, h, 4);
+    let n = (w * h) as usize;
+    for (i, px) in surface.data.iter().enumerate() {
+        for (k, &v) in px.iter().enumerate() {
+            buf.data[k * n + i] = v;
+        }
+    }
+    let fetch = |tx: usize, ty: usize| -> std::sync::Arc<[u8]> {
+        let (x0, y0) = (tx * TILE, ty * TILE);
+        let tw = (w as usize - x0).min(TILE);
+        let th = (h as usize - y0).min(TILE);
+        let mut out = vec![0u8; tw * th * 4];
+        for y in 0..th {
+            for x in 0..tw {
+                let px = surface.data[(y0 + y) * w as usize + x0 + x];
+                out[(y * tw + x) * 4..(y * tw + x) * 4 + 4].copy_from_slice(&px);
+            }
+        }
+        out.into()
+    };
+    let tiles = BucketSource::Tiles {
+        fetch: &fetch,
+        width: w,
+        height: h,
+    };
+    let all = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    };
+    for (seed, tolerance, contiguous) in [
+        ((5, 6), 40, true),
+        ((300, 270), 90, true),
+        ((7, 9), 30, false),
+    ] {
+        assert_eq!(
+            flood(tiles, (w, h), all, None, seed, tolerance, contiguous),
+            flood(
+                BucketSource::Composite(&buf),
+                (w, h),
+                all,
+                None,
+                seed,
+                tolerance,
+                contiguous
+            ),
+            "flood from {seed:?}"
+        );
+        assert_eq!(
+            magic_flood(tiles, (w, h), seed, tolerance, contiguous),
+            magic_flood(
+                BucketSource::Composite(&buf),
+                (w, h),
+                seed,
+                tolerance,
+                contiguous
+            ),
+            "magic flood from {seed:?}"
+        );
+    }
+}
+
+#[test]
 fn the_selection_is_a_wall_for_the_contiguous_flood() {
     // Two selected rooms on one white layer: white connects them outside the
     // selection, but the flood may not leave it.

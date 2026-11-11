@@ -3,9 +3,7 @@ use cxx_qt_lib::{QImage, QImageFormat};
 use pictura_codec::buffer_to_srgb;
 use pictura_core::{BlendMode, Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 use pictura_paint::stamp::{layer_surface, sample_scope, surface_from_composite, CloneSampling};
-#[cfg(test)]
-use pictura_paint::Stroke;
-use pictura_render::{Planes, PyramidLevel};
+use pictura_render::PyramidLevel;
 use pictura_select::Selection;
 use std::time::Instant;
 /// The pure half of a region refresh: the clamped origin, the working-space
@@ -206,27 +204,6 @@ pub(super) fn current_buffer(doc: &Document, gpu_compute: bool) -> PixelBuffer {
 pub(super) fn document_to_image(doc: &Document, gpu_compute: bool) -> QImage {
     let buffer = current_buffer(doc, gpu_compute);
     buffer_to_image(&buffer_to_srgb(doc, &buffer))
-}
-/// The full display image for the current state, or `None` without a document.
-///
-/// While a stroke is active the source is the stroke's working document, so a
-/// live (uncommitted) stroke is not lost; otherwise it is the authoritative
-/// planar `doc.composite`, which M34 keeps byte-identical to a full composite.
-/// The pixels are premultiplied for Qt; the straight-alpha export/thumbnail
-/// helpers are unchanged. Test-only now that `PictureView::image` is built on
-/// demand from the level-0 frame.
-#[cfg(test)]
-pub(super) fn rebuild_display(
-    doc: &Option<Document>,
-    stroke: Option<&Stroke>,
-    gpu_compute: bool,
-) -> Option<QImage> {
-    if let (Some(_), Some(doc)) = (stroke, doc.as_ref()) {
-        let rendered = current_buffer(doc, gpu_compute);
-        return Some(premultiplied_display_image(&buffer_to_srgb(doc, &rendered)));
-    }
-    doc.as_ref()
-        .map(|doc| premultiplied_display_image(&buffer_to_srgb(doc, &doc.composite)))
 }
 /// The 4-byte PSD blend key as a `String` (e.g. `"mul "`).
 pub(super) fn blend_key(mode: BlendMode) -> String {
@@ -851,12 +828,14 @@ pub(super) fn level_display_image(level: &PyramidLevel) -> QImage {
         )
     }
 }
-/// A borrowed 4-plane view of `buffer`, or `None` unless it is exactly RGBA.
-pub(super) fn planes_of(buffer: &PixelBuffer) -> Option<Planes<'_>> {
+/// A borrowed 4-plane view of `buffer`, or `None` unless it is exactly RGBA:
+/// the whole-rebuild reference the display tests compare tiles with.
+#[cfg(test)]
+pub(super) fn planes_of(buffer: &PixelBuffer) -> Option<pictura_render::Planes<'_>> {
     if buffer.channels != 4 {
         return None;
     }
-    Planes::planar(buffer.width, buffer.height, &buffer.data)
+    pictura_render::Planes::planar(buffer.width, buffer.height, &buffer.data)
 }
 /// Expand an owned rendered buffer to a 4-plane RGBA frame, taking it over
 /// without a copy when it is already RGBA.
@@ -866,35 +845,6 @@ pub(super) fn into_rgba_frame(rendered: PixelBuffer) -> PixelBuffer {
     } else {
         pictura_render::rgba_frame(&rendered)
     }
-}
-/// The 4-plane straight **sRGB** level-0 frame for `source`: the color-managed
-/// composite the display image, pyramid, and canvas crops all share.
-///
-/// The frame shares the composite's copy-on-write tiles when the document needs
-/// no display conversion, so a whole-document restore installs it without
-/// copying. Both planes are tiled first, so the first write to either forks
-/// only the tiles it touches.
-pub(super) fn level0_buffer(source: &mut Document) -> PixelBuffer {
-    let (w, h) = (source.width as usize, source.height as usize);
-    source.composite.data.tile(w, h);
-    level0_from_buffer(source, &source.composite)
-}
-
-/// The level-0 frame for an already-rendered `buffer` of `source`.
-///
-/// Level 0 is patched on its own (mid-stroke it runs ahead of the document's
-/// composite), so its plane is tiled: a write then forks only the tiles it
-/// touches instead of copying the whole frame.
-pub(super) fn level0_from_buffer(source: &Document, buffer: &PixelBuffer) -> PixelBuffer {
-    let mut frame = into_rgba_frame(buffer_to_srgb(source, buffer).into_owned());
-    frame.data.tile(frame.width as usize, frame.height as usize);
-    frame
-}
-
-/// The level-0 frame for `source`, compositing its layers first. Used when
-/// `source`'s cached `composite` is stale — a live stroke's working document.
-pub(super) fn level0_composited(source: &Document, gpu_compute: bool) -> PixelBuffer {
-    level0_from_buffer(source, &current_buffer(source, gpu_compute))
 }
 /// Deterministic gradient so the window always has something to show.
 pub(super) fn test_image() -> QImage {

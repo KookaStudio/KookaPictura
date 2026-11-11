@@ -12,6 +12,57 @@ use pictura_core::{
 use pictura_render::{composite, patch_buffer_region, CompositeRequest, DocumentComposite};
 use pictura_select::Selection;
 
+/// Cache every display tile at every level, as a canvas that has shown the
+/// whole document at each zoom would: an edit must then repair or invalidate
+/// what it changed.
+pub(super) fn present_all(view: &super::PictureViewRust) {
+    for level in 0..view.display_level_count() {
+        let (w, h) = view.display_level_size(level).expect("the level");
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h as i32,
+            right: w as i32,
+        };
+        let (_, missing) = view.tile_crop(pictura_render::TileSource::Composite, level, whole);
+        assert!(
+            missing.is_empty(),
+            "a test document builds its tiles at once"
+        );
+    }
+}
+
+/// Every level the canvas shows equals a pyramid rebuilt from a full
+/// composite of the current state: the edit reported all the damage it did.
+/// The tiles' old role was the stored composite's (#1216).
+pub(super) fn assert_display_current(view: &super::PictureViewRust) {
+    let doc = view.session.doc.as_ref().expect("document");
+    let full = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    let painting = view.session.live.stroke().is_some();
+    let source = super::tiles::display_region(doc, full, painting);
+    let planes = planes_of(&source).expect("RGBA");
+    let pyramid = pictura_render::ViewPyramid::rebuild(planes);
+    for level in 0..pyramid.level_count() {
+        let (w, h) = pyramid.level_size(level);
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h as i32,
+            right: w as i32,
+        };
+        let (crop, _) = view.tile_crop(pictura_render::TileSource::Composite, level as i32, whole);
+        assert!(
+            crop.data() == pyramid.crop(planes, level, whole).data(),
+            "display level {level} lags the document"
+        );
+    }
+}
+
 pub(super) fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Layer {
     let n = (w * h) as usize;
     Layer {
@@ -278,9 +329,8 @@ fn move_preview_base_equals_full_composite_with_layer_hidden() {
         (0, 0, 32, 32)
     );
 
-    // The authoritative composite holds the layer visible, as M34 keeps it.
+    // The picture holds the layer visible.
     let rendered = current_buffer(&doc, false);
-    DocumentComposite::new(&mut doc).store(&rendered);
 
     // (a) Full composite with the topmost layer hidden.
     doc.layers[index].visible = false;
@@ -291,8 +341,8 @@ fn move_preview_base_equals_full_composite_with_layer_hidden() {
     let (x0, y0, w, h) = clamp_region(rect, doc.width, doc.height).expect("in-bounds");
     assert_eq!((buffer.width, buffer.height), (w, h));
 
-    // Patch that region into a planar clone of the composite: the bridge path.
-    let mut base_buffer = doc.composite.clone();
+    // Patch that region into a planar clone of the picture: the bridge path.
+    let mut base_buffer = rendered.clone();
     patch_buffer_region(&mut base_buffer, &buffer, x0, y0);
     let base = buffer_to_image(&base_buffer);
 
@@ -703,7 +753,7 @@ fn test_image_is_not_null() {
 }
 
 #[test]
-fn undo_display_from_snapshot_composite_equals_full_recomposite() {
+fn undo_display_of_a_restored_state_equals_full_recomposite() {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 16, 16, (30, 60, 90)),
@@ -751,11 +801,19 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
         "Move Layer",
     );
 
-    // Walk the undo stack; every restored display must be the snapshot
-    // composite and equal a full recomposite of the restored document.
+    // Walk the undo stack; no restored state carries a stored composite
+    // (history keeps no pipeline pixels, #1216), and the display composited
+    // from it equals a full recomposite of the restored document.
     let mut undone = 0;
     while let Some(snapshot) = history.undo() {
-        let display = buffer_to_image(&snapshot.doc.composite);
+        assert!(!DocumentComposite::is_stored(&snapshot.doc));
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: snapshot.doc.height as i32,
+            right: snapshot.doc.width as i32,
+        };
+        let display = buffer_to_image(&super::tiles::display_region(&snapshot.doc, whole, false));
         let full = document_to_image(&snapshot.doc, false);
         assert_eq!(
             display, full,
@@ -767,7 +825,14 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     // And back up the redo stack.
     let mut redone = 0;
     while let Some(snapshot) = history.redo() {
-        let display = buffer_to_image(&snapshot.doc.composite);
+        assert!(!DocumentComposite::is_stored(&snapshot.doc));
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: snapshot.doc.height as i32,
+            right: snapshot.doc.width as i32,
+        };
+        let display = buffer_to_image(&super::tiles::display_region(&snapshot.doc, whole, false));
         let full = document_to_image(&snapshot.doc, false);
         assert_eq!(
             display, full,
@@ -778,18 +843,16 @@ fn undo_display_from_snapshot_composite_equals_full_recomposite() {
     assert_eq!(redone, 2);
 }
 
-/// The region path patches `doc.composite` in place (no FFI) and the image
-/// rebuilt from it equals a full recomposite, across several refreshes.
+/// The region path patches the picture in place and the image rebuilt from
+/// it equals a full recomposite, across several refreshes.
 #[test]
-fn region_refresh_keeps_composite_and_rebuilt_image_equal_to_full() {
+fn region_refresh_keeps_the_picture_and_rebuilt_image_equal_to_full() {
     let mut doc = Document::new(32, 32, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data.fill(255);
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 32, 32, (30, 60, 90)),
         pixel_layer("top", 8, 8, (200, 100, 50)),
     ]);
-    let rendered = current_buffer(&doc, false);
-    DocumentComposite::new(&mut doc).store(&rendered);
+    let mut picture = current_buffer(&doc, false);
 
     // Replay `refresh_region`'s non-painting body for a sequence of moves:
     // patch the composite, then rebuild the display image from it as
@@ -802,8 +865,8 @@ fn region_refresh_keeps_composite_and_rebuilt_image_equal_to_full() {
         let (x0, y0, w, h) = clamp_region(dirty, doc.width, doc.height).expect("in-bounds");
         let (buffer, _) = composite(CompositeRequest::region(&doc, dirty, false));
         assert_eq!((buffer.width, buffer.height), (w, h));
-        DocumentComposite::new(&mut doc).patch(&buffer, x0, y0);
-        let image = buffer_to_image(&doc.composite);
+        patch_buffer_region(&mut picture, &buffer, x0, y0);
+        let image = buffer_to_image(&picture);
         let full = document_to_image(&doc, false);
         assert_eq!(
             image, full,
@@ -921,26 +984,24 @@ fn save_after_edit_serializes_the_current_composite() {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 8, 8, (40, 40, 40))]);
-    let rendered = current_buffer(&doc, false);
-    DocumentComposite::new(&mut doc).store(&rendered);
     let plane = 64usize;
-    let before = doc.composite.data[..3 * plane].to_vec();
+    let before = current_buffer(&doc, false).data.as_ref()[..3 * plane].to_vec();
 
-    // Edit every colour channel, then make the composite current (the app's
-    // `recomposite`). The pre-edit merged image is no longer the composite.
+    // Edit every colour channel, then refresh as the app's `recomposite` does:
+    // a layered RGB document keeps no composite (#1216), so the save
+    // composites its merged image from the edited layers.
     let layer = doc.layers.last_mut().unwrap();
     for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
         for byte in ch.data.iter_mut() {
             *byte = byte.wrapping_add(100);
         }
     }
-    let rendered = current_buffer(&doc, false);
-    DocumentComposite::new(&mut doc).store(&rendered);
-    assert_eq!(doc.composite.channels, 4);
-    let edited = doc.composite.data[..3 * plane].to_vec();
+    DocumentComposite::new(&mut doc).refresh(pictura_render::CompositeScope::Full, false);
+    assert!(!DocumentComposite::is_stored(&doc));
+    let edited = current_buffer(&doc, false).data.as_ref()[..3 * plane].to_vec();
     assert_ne!(edited, before, "the edit must change the composite");
 
-    let bytes = pictura_codec::write_psd(&doc).expect("write psd");
+    let bytes = pictura_codec::write_psd(&pictura_render::save_view(&doc)).expect("write psd");
     let back = pictura_codec::read_psd(&bytes).expect("read psd");
     assert_eq!(
         back.composite.channels, 3,
