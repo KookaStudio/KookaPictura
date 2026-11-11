@@ -617,6 +617,12 @@ impl<T: TileSample> TiledPlane<T> {
         for (&i, &(_, _, w, h)) in wanted.iter().zip(&rects) {
             self.gens[i] = gen;
             self.dirty[i] = true;
+            // ponytail: this check-then-act is sound only while tile bodies
+            // are cloned on the GUI thread (save, tile jobs and history
+            // capture clone before they spawn; the evictor holds only `Weak`).
+            // A worker-side clone landing between the check and the write
+            // would mutate a body another holder shares, breaking the
+            // copy-on-write history relies on.
             let unique = match &self.tiles[i] {
                 Tile::Dense(d) => Arc::strong_count(d) == 1,
                 _ => false,
@@ -827,6 +833,7 @@ fn fork_tile<T: TileSample>(tile: &mut Tile<T>, n: usize) {
         Tile::Empty => *tile = Tile::Dense(Body::filled(n, T::default())),
         Tile::Uniform(v) => *tile = Tile::Dense(Body::filled(n, *v)),
         Tile::Dense(d) => {
+            // Sound under the GUI-thread clone rule of `tiles_mut_at`.
             if Arc::strong_count(d) > 1 {
                 let copy = Body::new(Box::from(&*d.pin()));
                 *d = copy;

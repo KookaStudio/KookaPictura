@@ -221,10 +221,22 @@ fn sweep_leftovers(dir: &Path) {
         let Some(pid) = rest.split('-').next().and_then(|p| p.parse::<u32>().ok()) else {
             continue;
         };
-        if pid != std::process::id() && !Path::new(&format!("/proc/{pid}")).exists() {
+        if pid != std::process::id() && !process_alive(pid) {
             let _ = std::fs::remove_file(entry.path());
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn process_alive(pid: u32) -> bool {
+    Path::new(&format!("/proc/{pid}")).exists()
+}
+
+/// Without `/proc` a live process can't be told from a dead one, so another
+/// instance's scratch file is left alone.
+#[cfg(not(target_os = "linux"))]
+fn process_alive(_pid: u32) -> bool {
+    true
 }
 
 #[cfg(unix)]
