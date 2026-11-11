@@ -240,6 +240,16 @@ pub struct Stroke {
     /// The last sample's pressure, so a held dab keeps the pressure it was
     /// pressed with when the pressure overrides are on.
     last_pressure: f32,
+    /// The last sample's full device input and the path tangents, so a held
+    /// dab repeats the pose it was pressed with and Direction has a tangent.
+    last_input: crate::dynamics::DynamicsInput,
+    last_tangent: f32,
+    initial_tangent: f32,
+    last_sample: Option<(f32, f32)>,
+    /// The dab index and the color chosen once for a per-stroke Color
+    /// Dynamics setting.
+    dab_index: u32,
+    stroke_color: Option<Rgba>,
     per_dab: Option<PerDab>,
     source: Option<StampSource>,
     /// Raster every dab on one thread: the reference the banded raster is
@@ -321,6 +331,12 @@ impl Stroke {
             started: false,
             painted: false,
             last_pressure: 1.0,
+            last_input: crate::dynamics::DynamicsInput::default(),
+            last_tangent: 0.0,
+            initial_tangent: 0.0,
+            last_sample: None,
+            dab_index: 0,
+            stroke_color: None,
             per_dab,
             source: None,
             serial: false,
@@ -469,6 +485,21 @@ impl Stroke {
     /// Feed one sample, painting `doc` (the document the stroke began on) in
     /// place. Returns `true` when any pixel's accumulated coverage changed.
     pub fn sample(&mut self, doc: &mut Document, s: StrokeSample) -> bool {
+        self.sample_with(
+            doc,
+            s,
+            crate::dynamics::DynamicsInput::from_pressure(s.pressure),
+        )
+    }
+
+    /// Feed one sample with the full tablet input (pressure, tilt, rotation,
+    /// wheel). [`Stroke::sample`] supplies pressure only.
+    pub fn sample_with(
+        &mut self,
+        doc: &mut Document,
+        s: StrokeSample,
+        input: crate::dynamics::DynamicsInput,
+    ) -> bool {
         let cfg = self.cfg;
         if !self.ensure_rect_for_sample(doc, s.x, s.y) {
             return false;
@@ -486,14 +517,33 @@ impl Stroke {
             }
         }
 
+        let tangent = match self.last_sample {
+            Some((lx, ly)) => {
+                let dx = sx - lx;
+                let dy = sy - ly;
+                if dx.abs() + dy.abs() > f32::EPSILON {
+                    dy.atan2(dx).to_degrees()
+                } else {
+                    self.last_tangent
+                }
+            }
+            None => 0.0,
+        };
+        if self.last_sample.is_none() {
+            self.initial_tangent = tangent;
+        }
+        self.last_tangent = tangent;
+        self.last_sample = Some((sx, sy));
+
         let mut dabs = Vec::new();
         self.placer.feed(sx, sy, &mut dabs);
         self.last_pressure = s.pressure.clamp(0.0, 1.0);
+        self.last_input = input;
         // ponytail: the placer keeps the stroke's spacing; CS6 scales spacing
         // with the live pressure-sized tip, so a very light stroke can space
         // its dabs for the full diameter.
         let sample_cfg = self.cfg.pressure_scaled(self.last_pressure);
-        self.paint_dabs(doc, dabs, sample_cfg)
+        self.paint_dabs(doc, dabs, sample_cfg, tangent)
     }
 
     /// Dab again at the last sample: the Airbrush's time-driven build-up for a
@@ -502,28 +552,45 @@ impl Stroke {
         let mut dabs = Vec::new();
         self.placer.repeat_last(&mut dabs);
         let sample_cfg = self.cfg.pressure_scaled(self.last_pressure);
-        !dabs.is_empty() && self.paint_dabs(doc, dabs, sample_cfg)
+        let tangent = self.last_tangent;
+        !dabs.is_empty() && self.paint_dabs(doc, dabs, sample_cfg, tangent)
     }
 
-    fn paint_dabs(&mut self, doc: &mut Document, dabs: Vec<(f32, f32)>, cfg: StrokeConfig) -> bool {
+    fn paint_dabs(
+        &mut self,
+        doc: &mut Document,
+        dabs: Vec<(f32, f32)>,
+        cfg: StrokeConfig,
+        tangent: f32,
+    ) -> bool {
         if self.per_dab.is_some() {
             return self.apply_per_dab(doc, &dabs);
         }
 
         let (w, h) = (self.rect.width() as usize, self.rect.height() as usize);
-        let flow = cfg.flow as f32 / 100.0;
         let mut changed = false;
         // Dissolve draws one random roll per painted pixel in raster order, so
         // its dabs stay on one thread; every other pixel depends on nothing but
         // its own inputs, so the bands give the serial raster's bytes.
         let serial = self.serial || cfg.mode == PaintMode::Dissolve;
 
+        let dynamics = cfg.dynamics;
+        let input = dynamics.effective_input(self.last_input);
+        // Color Dynamics draws once per stroke unless Apply Per Tip is on.
+        if dynamics.color.enabled && !dynamics.color.apply_per_tip && self.stroke_color.is_none() {
+            let base = self.paint;
+            let background = cfg.background;
+            let dab = self.dab_index;
+            self.stroke_color = Some(dynamics.color(base, background, input, dab, &mut self.rng));
+        }
+
         // Place and jitter every dab of this step first, so the raster below can
         // split `self` and read the base layer while writing the working one.
-        let mut placed: Vec<(f32, f32, Option<StrokeConfig>)> = Vec::new();
+        let mut placed: Vec<PlacedDab> = Vec::new();
         for (dab_x, dab_y) in dabs {
-            for _ in 0..cfg.count.max(1) {
-                placed.push(self.jittered(cfg, dab_x, dab_y));
+            let count = dynamics.count(cfg.count, input, self.dab_index, &mut self.rng);
+            for _ in 0..count.max(1) {
+                placed.push(self.placed_dab(cfg, input, tangent, dab_x, dab_y));
             }
         }
 
@@ -537,7 +604,6 @@ impl Stroke {
             scratch,
             applied,
             tip,
-            paint,
             rng,
             dirty,
             dab_dirty,
@@ -555,15 +621,15 @@ impl Stroke {
         };
         // Every pixel a dab writes lies in its bounding box, so saving the
         // boxes first leaves the stencil only saved pixels to read.
-        for &(dab_x, dab_y, jittered) in &placed {
-            let radius = jittered.map_or(cfg.diameter, |t| t.diameter) as f32 * 0.5;
+        for dab in &placed {
+            let radius = dab.tip.map_or(cfg.diameter, |t| t.diameter) as f32 * 0.5;
             saved.save(
                 work_layer,
                 *ch,
-                (dab_x - radius).floor() as i32 - 1,
-                (dab_y - radius).floor() as i32 - 1,
-                (dab_x + radius).ceil() as i32 + 1,
-                (dab_y + radius).ceil() as i32 + 1,
+                (dab.x - radius).floor() as i32 - 1,
+                (dab.y - radius).floor() as i32 - 1,
+                (dab.x + radius).ceil() as i32 + 1,
+                (dab.y + radius).ceil() as i32 + 1,
             );
         }
         let stencil = Stencil {
@@ -572,7 +638,6 @@ impl Stroke {
             base: saved.planes(),
             locked: *locked,
             cfg,
-            paint: *paint,
             source: source.as_ref(),
             rect: *rect,
         };
@@ -584,28 +649,30 @@ impl Stroke {
             *tip
         };
 
-        for (dab_x, dab_y, jittered) in placed {
+        for dab in placed {
             // The hoisted profile is exact when the dynamics left the tip
             // alone; a jittered dab rebuilds it from its own tip.
-            let (params, radius) = match jittered {
+            let (params, radius) = match dab.tip {
                 None => (sample_tip, cfg.diameter as f32 * 0.5),
                 Some(tip_cfg) => (TipParams::new(&tip_cfg), tip_cfg.diameter as f32 * 0.5),
             };
-            let y0 = ((dab_y - radius).floor() as i32).max(0);
-            let y1 = ((dab_y + radius).ceil() as i32).min(h as i32 - 1);
+            let y0 = ((dab.y - radius).floor() as i32).max(0);
+            let y1 = ((dab.y + radius).ceil() as i32).min(h as i32 - 1);
             if y1 < y0 {
                 continue;
             }
-            let x0 = ((dab_x - radius).floor() as i32).max(0);
-            let x1 = ((dab_x + radius).ceil() as i32).min(w as i32 - 1);
+            let x0 = ((dab.x - radius).floor() as i32).max(0);
+            let x1 = ((dab.x + radius).ceil() as i32).min(w as i32 - 1);
             if x1 < x0 {
                 continue;
             }
-            let dab = DabRaster {
+            let raster = DabRaster {
                 params: &params,
-                dab_x,
-                dab_y,
-                flow,
+                dab_x: dab.x,
+                dab_y: dab.y,
+                flow: dab.flow,
+                opacity: dab.opacity,
+                paint: dab.paint,
                 width: w,
                 stencil: &stencil,
             };
@@ -620,7 +687,7 @@ impl Stroke {
                 applied,
             );
             let ys = y0 as usize..(y1 + 1) as usize;
-            let bbox = dab.raster(cells, ys, serial.then_some(&mut *rng));
+            let bbox = raster.raster(cells, ys, serial.then_some(&mut *rng));
             if let Some(bbox) = bbox {
                 Self::grow_dirty(dirty, dab_dirty, bbox.left, bbox.top);
                 Self::grow_dirty(dirty, dab_dirty, bbox.right - 1, bbox.bottom - 1);
@@ -629,35 +696,6 @@ impl Stroke {
             }
         }
         changed
-    }
-
-    /// One dab of a step, scattered and jittered per the dynamics; `None` when
-    /// the dynamics left the tip alone, `Some(tip)` when they altered it.
-    fn jittered(&mut self, cfg: StrokeConfig, x: f32, y: f32) -> (f32, f32, Option<StrokeConfig>) {
-        let (mut x, mut y) = (x, y);
-        if cfg.scatter > 0 {
-            let reach = cfg.diameter as f32 * cfg.scatter as f32 / 100.0;
-            x += (Self::next_f32(&mut self.rng) * 2.0 - 1.0) * reach;
-            y += (Self::next_f32(&mut self.rng) * 2.0 - 1.0) * reach;
-        }
-        let mut tip: Option<StrokeConfig> = None;
-        if cfg.size_jitter > 0 {
-            // Jitter only ever shrinks, as CS6's does.
-            let shrink =
-                (1.0 - cfg.size_jitter as f32 / 100.0 * Self::next_f32(&mut self.rng)).max(0.05);
-            tip.get_or_insert(cfg).diameter =
-                ((cfg.diameter as f32 * shrink).round() as u32).max(1);
-        }
-        if cfg.angle_jitter > 0 {
-            let turn = (Self::next_f32(&mut self.rng) * 2.0 - 1.0) * cfg.angle_jitter as f32;
-            tip.get_or_insert(cfg).angle_deg = (cfg.angle_deg as f32 + turn).round() as i32;
-        }
-        if cfg.roundness_jitter > 0 {
-            let flatten = cfg.roundness_jitter as f32 * Self::next_f32(&mut self.rng);
-            tip.get_or_insert(cfg).roundness =
-                (cfg.roundness as f32 - flatten).clamp(5.0, 100.0) as u8;
-        }
-        (x, y, tip)
     }
 
     /// The stroke-constant tip state, so a host that rasters dabs on the GPU
@@ -1117,7 +1155,9 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
 }
 
 mod blend;
+mod dynamics;
 mod stencil;
+use dynamics::PlacedDab;
 use stencil::Stencil;
 mod grow;
 #[cfg(test)]

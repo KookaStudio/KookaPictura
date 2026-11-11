@@ -981,12 +981,15 @@ void ImageView::tabletEvent(QTabletEvent* event)
     case QEvent::TabletPress:
         tabletActive_ = true;
         emit pointerPressure(event->pressure());
+        emit pointerPose(event->xTilt(), event->yTilt(), event->rotation(), 0.0);
         break;
     case QEvent::TabletMove:
         emit pointerPressure(event->pressure());
+        emit pointerPose(event->xTilt(), event->yTilt(), event->rotation(), 0.0);
         break;
     case QEvent::TabletRelease:
         emit pointerPressure(event->pressure());
+        emit pointerPose(event->xTilt(), event->yTilt(), event->rotation(), 0.0);
         tabletActive_ = false;
         break;
     default:

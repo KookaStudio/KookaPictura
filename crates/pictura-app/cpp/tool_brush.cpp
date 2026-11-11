@@ -86,7 +86,8 @@ public:
         ctx.setDragCommitted(false);
         {
             pictura::ScopedTimer t("cxx_paint_dab (call)");
-            stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
+            stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure(), ctx.tiltX(), ctx.tiltY(),
+                         ctx.pointerRotation(), ctx.stylusWheel());
         }
         // The Pencil has no Airbrush option even though it shares PaintOptions.
         if (!aliased_ && paint_->airbrush()) {
@@ -101,7 +102,8 @@ public:
             return;
         }
         pictura::ScopedTimer t("cxx_paint_dab (call)");
-        stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure());
+        stroke_->dab(imagePos.x(), imagePos.y(), ctx.pressure(), ctx.tiltX(), ctx.tiltY(),
+                         ctx.pointerRotation(), ctx.stylusWheel());
     }
 
     void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override

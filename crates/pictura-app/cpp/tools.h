@@ -280,8 +280,14 @@ public:
     QColor background() const override;
     void setBackground(const QColor& color);
     double pressure() const override { return pressure_; }
+    double tiltX() const override { return tiltX_; }
+    double tiltY() const override { return tiltY_; }
+    double pointerRotation() const override { return rotation_; }
+    double stylusWheel() const override { return wheel_; }
     // A tablet event's pressure, or 1.0 from a mouse press.
     void setPressure(double pressure);
+    // A tablet event's tilt and rotation; a mouse reports zeros.
+    void setPointerPose(double tiltX, double tiltY, double rotation, double wheel);
     // Whether the current FG/BG pair belongs to a mask target. The canvas
     // backdrop and other document chrome keep the image pair while a mask is
     // edited, even though paint and fill use the mask pair.
@@ -649,6 +655,10 @@ private:
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
     double pressure_ = 1.0;
+    double tiltX_ = 0.0;
+    double tiltY_ = 0.0;
+    double rotation_ = 0.0;
+    double wheel_ = 0.0;
     bool maskActive_ = false;
 
     bool dragging_ = false;

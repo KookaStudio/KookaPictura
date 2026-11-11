@@ -11,10 +11,14 @@ use crate::history::BrushSource;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use ffi::PaintTip;
+use ffi::{PaintDynamics, PaintTip};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
 use pictura_paint::art_history::{ArtHistoryOptions, ArtStyle, STYLE_NAMES};
 use pictura_paint::bucket::{self, BucketSource};
+use pictura_paint::dynamics::{
+    ColorDynamics, Control, Dynamics, PoseDynamics, ScatterDynamics, ShapeDynamics,
+    TransferDynamics,
+};
 use pictura_paint::eraser::{
     begin_erase, ensure_alpha, magic_erase, BackgroundEraseOptions, EraserMode,
 };
@@ -104,6 +108,60 @@ pub(super) fn mixer_reservoir(view: &PictureView) -> u32 {
         })
 }
 
+fn control(index: i32, fade: i32) -> Control {
+    Control::from_index(index, fade.clamp(1, 9999) as u16)
+}
+
+fn dynamics_of(d: &PaintDynamics) -> Dynamics {
+    Dynamics {
+        shape: ShapeDynamics {
+            enabled: d.shape_enabled,
+            size_control: control(d.size_control, d.size_fade),
+            min_diameter: d.min_diameter.clamp(0, 100) as u8,
+            angle_control: control(d.angle_control, d.angle_fade),
+            min_roundness: d.min_roundness.clamp(0, 100) as u8,
+            roundness_control: control(d.roundness_control, d.roundness_fade),
+            tilt_scale: d.tilt_scale.clamp(0, 100) as u8,
+            brush_projection: d.brush_projection,
+        },
+        scatter: ScatterDynamics {
+            enabled: d.scatter_enabled,
+            control: control(d.scatter_control, d.scatter_fade),
+            both_axes: d.both_axes,
+            count_control: control(d.count_control, d.count_fade),
+            count_jitter: d.count_jitter.clamp(0, 100) as u8,
+        },
+        color: ColorDynamics {
+            enabled: d.color_enabled,
+            apply_per_tip: d.apply_per_tip,
+            fg_bg_jitter: d.fg_bg_jitter.clamp(0, 100) as u8,
+            fg_bg_control: control(d.fg_bg_control, d.fg_bg_fade),
+            hue_jitter: d.hue_jitter.clamp(0, 100) as u8,
+            saturation_jitter: d.saturation_jitter.clamp(0, 100) as u8,
+            brightness_jitter: d.brightness_jitter.clamp(0, 100) as u8,
+            purity: d.purity.clamp(-100, 100) as i8,
+        },
+        transfer: TransferDynamics {
+            enabled: d.transfer_enabled,
+            opacity_jitter: d.opacity_jitter.clamp(0, 100) as u8,
+            opacity_control: control(d.opacity_control, d.opacity_fade),
+            flow_jitter: d.flow_jitter.clamp(0, 100) as u8,
+            flow_control: control(d.flow_control, d.flow_fade),
+        },
+        pose: PoseDynamics {
+            enabled: d.pose_enabled,
+            tilt_x: d.pose_tilt_x.clamp(-90, 90) as i16,
+            tilt_y: d.pose_tilt_y.clamp(-90, 90) as i16,
+            rotation: d.pose_rotation.rem_euclid(360) as i16,
+            pressure: d.pose_pressure.clamp(0, 100) as u8,
+            override_tilt_x: d.override_tilt_x,
+            override_tilt_y: d.override_tilt_y,
+            override_rotation: d.override_rotation,
+            override_pressure: d.override_pressure,
+        },
+    }
+}
+
 pub(super) fn tip_config(tip: &PaintTip) -> StrokeConfig {
     StrokeConfig {
         diameter: tip.diameter.max(0) as u32,
@@ -118,9 +176,23 @@ pub(super) fn tip_config(tip: &PaintTip) -> StrokeConfig {
         roundness_jitter: tip.roundness_jitter.clamp(0, 100) as u8,
         grain: tip.grain.clamp(0, 100) as u8,
         wet_edges: tip.wet_edges,
+        dynamics: dynamics_of(&tip.dynamics),
         ..StrokeConfig::default()
     }
     .sanitized()
+}
+
+pub(super) fn paint_dab_pose(
+    view: Pin<&mut PictureView>,
+    x: f64,
+    y: f64,
+    pressure: f64,
+    tilt_x: f64,
+    tilt_y: f64,
+    rotation: f64,
+    wheel: f64,
+) -> bool {
+    view.paint_dab_pose(x, y, pressure, tilt_x, tilt_y, rotation, wheel)
 }
 
 pub(super) fn begin_brush(

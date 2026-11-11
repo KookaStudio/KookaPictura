@@ -2,6 +2,7 @@
 
 pub mod art_history;
 pub mod bucket;
+pub mod dynamics;
 pub mod eraser;
 mod fill;
 mod fill_native;
@@ -85,6 +86,8 @@ pub struct StrokeConfig {
     /// Scale each dab's flow and opacity cap by the sample pressure (the
     /// options bar's "Always use Pressure for Opacity").
     pub pressure_opacity: bool,
+    /// Shape Dynamics, Scattering, Color Dynamics, Transfer, and Brush Pose.
+    pub dynamics: dynamics::Dynamics,
 }
 
 impl StrokeConfig {
@@ -104,6 +107,7 @@ impl StrokeConfig {
             angle_jitter: self.angle_jitter.min(180),
             roundness_jitter: self.roundness_jitter.min(100),
             grain: self.grain.min(100),
+            dynamics: self.dynamics.sanitized(),
             ..*self
         }
     }
@@ -162,6 +166,7 @@ impl Default for StrokeConfig {
             auto_erase: false,
             pressure_size: false,
             pressure_opacity: false,
+            dynamics: dynamics::Dynamics::default(),
         }
     }
 }
