@@ -32,6 +32,22 @@ Snapshot for resuming after a context break. Update after each milestone.
   - **Shortcuts left (`ponytail:`).** Raster export, mode and depth
     conversions, the Move preview base, and `image()` take a whole composite
     (#1274).
+- **Brush dynamics option sets, phase 1** (#492, OpenSpec change
+  `brush-dynamics-option-sets`). `pictura-paint::dynamics` adds the Control
+  model (Off, Fade, Pen Pressure/Tilt, Stylus Wheel, Rotation, Initial
+  Direction, Direction), Shape Dynamics (minimum diameter/roundness, tilt
+  scale, Brush Projection), Scattering (Both Axes, count jitter), Color
+  Dynamics (Apply Per Tip, FG/BG, hue/saturation/brightness, purity), Transfer
+  (opacity/flow), and Brush Pose overrides. `Stroke::sample_with` takes tablet
+  tilt/rotation; `paint_dab_pose` routes them from `QTabletEvent`. The Brush
+  panel enables the five pages with enable checkboxes and per-set padlocks;
+  `BrushDynamics` persists every field and the preset picker preserves locked
+  sets. Texture and Dual Brush remain disabled for the next changes. Tests:
+  `pictura-paint` dynamics units, `tst_brush_dynamics` (8 cases), and the
+  headless self-test 470/0/0. Behavioral parity only; Adobe's jitter×control
+  curves are unpublished. `ponytail:` recorded actions replay the legacy
+  jitter only, not the new dynamics blocks.
+
 - **Adjustment dialog Auto** (#578, OpenSpec change `adjustment-dialog-auto`).
   Levels, Curves, and Brightness/Contrast share one 0.1%-clip histogram Auto
   (`AdjustmentDialog::autoEndpoints`): Levels sets the selected channel's input

@@ -30,7 +30,8 @@ public:
     Stroke& operator=(Stroke&& other) noexcept;
 
     bool open() const { return open_; }
-    bool dab(double x, double y, double pressure = 1.0);
+    bool dab(double x, double y, double pressure = 1.0, double tiltX = 0.0,
+             double tiltY = 0.0, double rotation = 0.0, double wheel = 0.0);
     bool hold();
     bool present();
     bool finish();

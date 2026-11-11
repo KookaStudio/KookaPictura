@@ -42,12 +42,13 @@ Stroke& Stroke::operator=(Stroke&& other) noexcept
     return *this;
 }
 
-bool Stroke::dab(double x, double y, double pressure)
+bool Stroke::dab(double x, double y, double pressure, double tiltX, double tiltY,
+                 double rotation, double wheel)
 {
     if (!open_ || !view_) {
         return false;
     }
-    return view_->paint_dab(x, y, pressure);
+    return paint_dab_pose(*view_, x, y, pressure, tiltX, tiltY, rotation, wheel);
 }
 
 bool Stroke::hold()

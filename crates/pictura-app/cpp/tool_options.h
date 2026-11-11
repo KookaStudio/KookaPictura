@@ -68,16 +68,142 @@ struct StampOptions {
     bool historyAirbrush = false;
 };
 
-// The brush tip's dynamics (Scattering and Shape Dynamics), set by the brush
-// preset picker: `count` dabs per step (1-16), each offset up to `scatter` % of
-// the diameter, shrunk by up to `sizeJitter` %, turned by up to ±`angleJitter`°,
-// and flattened by up to `roundnessJitter` %.
+// The brush tip's dynamics. The five legacy fields are Scattering and Shape
+// Dynamics: `count` dabs per step (1-16), each offset up to `scatter` % of the
+// diameter, shrunk by up to `sizeJitter` %, turned by up to ±`angleJitter`°,
+// and flattened by up to `roundnessJitter` %. The rest are the Control model
+// and the Color Dynamics, Transfer, and Brush Pose sets. Controls are 0 Off,
+// 1 Fade, 2 Pen Pressure, 3 Pen Tilt, 4 Stylus Wheel, 5 Rotation,
+// 6 Initial Direction, 7 Direction; each `*Fade` is the Fade step count.
 struct BrushDynamics {
     int scatter = 0;
     int count = 1;
     int sizeJitter = 0;
     int angleJitter = 0;
     int roundnessJitter = 0;
+
+    bool shapeEnabled = false;
+    int sizeControl = 0;
+    int sizeFade = 25;
+    int minDiameter = 0;
+    int angleControl = 0;
+    int angleFade = 25;
+    int roundnessControl = 0;
+    int roundnessFade = 25;
+    int minRoundness = 0;
+    int tiltScale = 100;
+    bool brushProjection = false;
+
+    bool scatterEnabled = true;
+    int scatterControl = 0;
+    int scatterFade = 25;
+    bool bothAxes = true;
+    int countControl = 0;
+    int countFade = 25;
+    int countJitter = 0;
+
+    bool colorEnabled = false;
+    bool applyPerTip = false;
+    int fgBgJitter = 0;
+    int fgBgControl = 0;
+    int fgBgFade = 25;
+    int hueJitter = 0;
+    int saturationJitter = 0;
+    int brightnessJitter = 0;
+    int purity = 0;
+
+    bool transferEnabled = false;
+    int opacityJitter = 0;
+    int opacityControl = 0;
+    int opacityFade = 25;
+    int flowJitter = 0;
+    int flowControl = 0;
+    int flowFade = 25;
+
+    bool poseEnabled = false;
+    int poseTiltX = 0;
+    int poseTiltY = 0;
+    int poseRotation = 0;
+    int posePressure = 100;
+    bool overrideTiltX = false;
+    bool overrideTiltY = false;
+    bool overrideRotation = false;
+    bool overridePressure = false;
+
+    bool lockShape = false;
+    bool lockScatter = false;
+    bool lockColor = false;
+    bool lockTransfer = false;
+    bool lockPose = false;
+    bool lockTexture = false;
+    bool lockDual = false;
+
+    bool operator==(const BrushDynamics& o) const
+    {
+        return scatter == o.scatter && count == o.count && sizeJitter == o.sizeJitter
+            && angleJitter == o.angleJitter && roundnessJitter == o.roundnessJitter
+            && shapeEnabled == o.shapeEnabled && sizeControl == o.sizeControl
+            && sizeFade == o.sizeFade && minDiameter == o.minDiameter
+            && angleControl == o.angleControl && angleFade == o.angleFade
+            && roundnessControl == o.roundnessControl && roundnessFade == o.roundnessFade
+            && minRoundness == o.minRoundness && tiltScale == o.tiltScale
+            && brushProjection == o.brushProjection && scatterEnabled == o.scatterEnabled
+            && scatterControl == o.scatterControl && scatterFade == o.scatterFade
+            && bothAxes == o.bothAxes && countControl == o.countControl
+            && countFade == o.countFade && countJitter == o.countJitter
+            && colorEnabled == o.colorEnabled && applyPerTip == o.applyPerTip
+            && fgBgJitter == o.fgBgJitter && fgBgControl == o.fgBgControl
+            && fgBgFade == o.fgBgFade && hueJitter == o.hueJitter
+            && saturationJitter == o.saturationJitter
+            && brightnessJitter == o.brightnessJitter && purity == o.purity
+            && transferEnabled == o.transferEnabled && opacityJitter == o.opacityJitter
+            && opacityControl == o.opacityControl && opacityFade == o.opacityFade
+            && flowJitter == o.flowJitter && flowControl == o.flowControl
+            && flowFade == o.flowFade && poseEnabled == o.poseEnabled
+            && poseTiltX == o.poseTiltX && poseTiltY == o.poseTiltY
+            && poseRotation == o.poseRotation && posePressure == o.posePressure
+            && overrideTiltX == o.overrideTiltX && overrideTiltY == o.overrideTiltY
+            && overrideRotation == o.overrideRotation
+            && overridePressure == o.overridePressure && lockShape == o.lockShape
+            && lockScatter == o.lockScatter && lockColor == o.lockColor
+            && lockTransfer == o.lockTransfer && lockPose == o.lockPose
+            && lockTexture == o.lockTexture && lockDual == o.lockDual;
+    }
+    bool operator!=(const BrushDynamics& o) const { return !(*this == o); }
+
+    BrushDynamics clamped() const
+    {
+        BrushDynamics d = *this;
+        d.scatter = std::clamp(d.scatter, 0, 1000);
+        d.count = std::clamp(d.count, 1, 16);
+        d.sizeJitter = std::clamp(d.sizeJitter, 0, 100);
+        d.angleJitter = std::clamp(d.angleJitter, 0, 180);
+        d.roundnessJitter = std::clamp(d.roundnessJitter, 0, 100);
+        d.sizeFade = std::clamp(d.sizeFade, 1, 9999);
+        d.minDiameter = std::clamp(d.minDiameter, 0, 100);
+        d.angleFade = std::clamp(d.angleFade, 1, 9999);
+        d.roundnessFade = std::clamp(d.roundnessFade, 1, 9999);
+        d.minRoundness = std::clamp(d.minRoundness, 0, 100);
+        d.tiltScale = std::clamp(d.tiltScale, 0, 100);
+        d.scatterFade = std::clamp(d.scatterFade, 1, 9999);
+        d.countFade = std::clamp(d.countFade, 1, 9999);
+        d.countJitter = std::clamp(d.countJitter, 0, 100);
+        d.fgBgJitter = std::clamp(d.fgBgJitter, 0, 100);
+        d.fgBgFade = std::clamp(d.fgBgFade, 1, 9999);
+        d.hueJitter = std::clamp(d.hueJitter, 0, 100);
+        d.saturationJitter = std::clamp(d.saturationJitter, 0, 100);
+        d.brightnessJitter = std::clamp(d.brightnessJitter, 0, 100);
+        d.purity = std::clamp(d.purity, -100, 100);
+        d.opacityJitter = std::clamp(d.opacityJitter, 0, 100);
+        d.opacityFade = std::clamp(d.opacityFade, 1, 9999);
+        d.flowJitter = std::clamp(d.flowJitter, 0, 100);
+        d.flowFade = std::clamp(d.flowFade, 1, 9999);
+        d.poseTiltX = std::clamp(d.poseTiltX, -90, 90);
+        d.poseTiltY = std::clamp(d.poseTiltY, -90, 90);
+        d.poseRotation = ((d.poseRotation % 360) + 360) % 360;
+        d.posePressure = std::clamp(d.posePressure, 0, 100);
+        return d;
+    }
 };
 
 // The Eraser options bar: Mode 0 Brush / 1 Pencil / 2 Block, and Erase To
@@ -656,14 +782,8 @@ public:
     const BrushDynamics& dynamics() const { return dynamics_; }
     void setDynamics(const BrushDynamics& dynamics)
     {
-        const BrushDynamics clamped{
-            std::clamp(dynamics.scatter, 0, 1000), std::clamp(dynamics.count, 1, 16),
-            std::clamp(dynamics.sizeJitter, 0, 100), std::clamp(dynamics.angleJitter, 0, 180),
-            std::clamp(dynamics.roundnessJitter, 0, 100)};
-        const BrushDynamics& old = dynamics_;
-        if (clamped.scatter != old.scatter || clamped.count != old.count
-            || clamped.sizeJitter != old.sizeJitter || clamped.angleJitter != old.angleJitter
-            || clamped.roundnessJitter != old.roundnessJitter) {
+        const BrushDynamics clamped = dynamics.clamped();
+        if (clamped != dynamics_) {
             dynamics_ = clamped;
             if (tipChanged) {
                 tipChanged();
@@ -693,12 +813,7 @@ public:
         spacing_ = std::clamp(other.spacing_, 1, 1000);
         flipX_ = other.flipX_;
         flipY_ = other.flipY_;
-        dynamics_ = {
-            std::clamp(other.dynamics_.scatter, 0, 1000),
-            std::clamp(other.dynamics_.count, 1, 16),
-            std::clamp(other.dynamics_.sizeJitter, 0, 100),
-            std::clamp(other.dynamics_.angleJitter, 0, 180),
-            std::clamp(other.dynamics_.roundnessJitter, 0, 100)};
+        dynamics_ = other.dynamics_.clamped();
     }
 
     std::function<void(int)> sizeChanged;

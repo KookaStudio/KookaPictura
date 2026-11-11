@@ -108,6 +108,9 @@ impl ToolStrokeStep {
             auto_erase: boolean("auto_erase").unwrap_or(default.auto_erase),
             pressure_size: boolean("pressure_size").unwrap_or(default.pressure_size),
             pressure_opacity: boolean("pressure_opacity").unwrap_or(default.pressure_opacity),
+            // ponytail: recorded actions carry the legacy jitter only; the
+            // Control, Color, Transfer, and Pose blocks replay at defaults.
+            dynamics: default.dynamics,
         }
         .sanitized();
         Ok(Self {

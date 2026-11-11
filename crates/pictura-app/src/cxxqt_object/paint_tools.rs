@@ -22,6 +22,64 @@ use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
+    /// The Brush panel's dynamics: one block per option set. Controls are the
+    /// index `Control::to_index` uses (0 Off, 1 Fade, 2 Pen Pressure, 3 Pen
+    /// Tilt, 4 Stylus Wheel, 5 Rotation, 6 Initial Direction, 7 Direction),
+    /// and each `*_fade` is the Fade step count beside it.
+    #[namespace = "pictura"]
+    struct PaintDynamics {
+        shape_enabled: bool,
+        size_control: i32,
+        size_fade: i32,
+        min_diameter: i32,
+        angle_control: i32,
+        angle_fade: i32,
+        roundness_control: i32,
+        roundness_fade: i32,
+        min_roundness: i32,
+        tilt_scale: i32,
+        brush_projection: bool,
+        scatter_enabled: bool,
+        scatter_control: i32,
+        scatter_fade: i32,
+        both_axes: bool,
+        count_control: i32,
+        count_fade: i32,
+        count_jitter: i32,
+        color_enabled: bool,
+        apply_per_tip: bool,
+        fg_bg_jitter: i32,
+        fg_bg_control: i32,
+        fg_bg_fade: i32,
+        hue_jitter: i32,
+        saturation_jitter: i32,
+        brightness_jitter: i32,
+        purity: i32,
+        transfer_enabled: bool,
+        opacity_jitter: i32,
+        opacity_control: i32,
+        opacity_fade: i32,
+        flow_jitter: i32,
+        flow_control: i32,
+        flow_fade: i32,
+        pose_enabled: bool,
+        pose_tilt_x: i32,
+        pose_tilt_y: i32,
+        pose_rotation: i32,
+        pose_pressure: i32,
+        override_tilt_x: bool,
+        override_tilt_y: bool,
+        override_rotation: bool,
+        override_pressure: bool,
+        lock_shape: bool,
+        lock_scatter: bool,
+        lock_color: bool,
+        lock_transfer: bool,
+        lock_pose: bool,
+        lock_texture: bool,
+        lock_dual: bool,
+    }
+
     /// The brush tip every paint tool here shares: the Brush panel's Brush Tip
     /// Shape. `diameter` 1–5000 px, `hardness` and `roundness` 0–100 %,
     /// `angle` −180–180°, `spacing` a percentage of the diameter. The
@@ -42,6 +100,7 @@ pub mod ffi {
         roundness_jitter: i32,
         grain: i32,
         wet_edges: bool,
+        dynamics: PaintDynamics,
     }
 
     unsafe extern "C++" {
@@ -145,6 +204,20 @@ pub mod ffi {
             opacity: i32,
             flow: i32,
             mode: &QString,
+        ) -> bool;
+
+        /// Add a pointer sample to the active stroke with tablet tilt
+        /// (degrees), rotation (degrees), and stylus wheel (0–1). `paint_dab`
+        /// is this with zero pose.
+        fn paint_dab_pose(
+            view: Pin<&mut PictureView>,
+            x: f64,
+            y: f64,
+            pressure: f64,
+            tilt_x: f64,
+            tilt_y: f64,
+            rotation: f64,
+            wheel: f64,
         ) -> bool;
 
         /// Dab again at the active stroke's last sample, for a button held

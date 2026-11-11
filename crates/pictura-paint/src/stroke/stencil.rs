@@ -8,7 +8,6 @@ pub(super) struct Stencil<'a> {
     pub(super) inverse_grayscale: bool,
     pub(super) coverage_clip: Option<&'a pictura_core::Plane>,
     pub(super) cfg: StrokeConfig,
-    pub(super) paint: Rgba,
     /// Clone Stamp / Pattern Stamp / History Brush: the colour at each pixel
     /// comes from the source instead of `paint`.
     pub(super) source: Option<&'a StampSource>,
@@ -19,6 +18,7 @@ impl Stencil<'_> {
     /// Lay the paint at `coverage` over the saved pixel `i` (layer-local) and
     /// write it to `planes` at `at`, the same pixel's index in the band the
     /// planes were cut to. `rng` is the stroke's Dissolve state.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn composite(
         &self,
         planes: &mut CellPlanes<'_>,
@@ -26,13 +26,15 @@ impl Stencil<'_> {
         i: usize,
         rng: Option<&mut u64>,
         coverage: u8,
+        paint: Rgba,
+        opacity: f32,
     ) -> bool {
         let clip = self.coverage_clip.map_or(255, |p| p.sample(i).unwrap_or(0));
         let cov = coverage as f32 / 255.0 * clip as f32 / 255.0;
         if clip == 0 {
             return false;
         }
-        let a = (cov * self.cfg.opacity as f32 / 100.0).clamp(0.0, 1.0);
+        let a = (cov * opacity).clamp(0.0, 1.0);
         let plane = |k: usize, missing: u8| {
             self.base[k]
                 .and_then(|d| d.get(i))
@@ -46,7 +48,7 @@ impl Stencil<'_> {
         // A layer without an alpha channel (a Background) is opaque.
         let da = plane(3, 255);
         let s = match self.source {
-            None => self.paint,
+            None => paint,
             Some(source) => {
                 let w = self.rect.width() as usize;
                 let (x, y) = ((i % w) as i32, (i / w) as i32);

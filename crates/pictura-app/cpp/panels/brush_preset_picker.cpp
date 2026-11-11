@@ -168,7 +168,7 @@ PaintTip tipOf(const Preset& p)
 {
     return PaintTip{p.size,    p.hardness, p.roundness,  p.angle,       p.spacing,
                     p.scatter, p.count,    p.sizeJitter, p.angleJitter, p.roundnessJitter,
-                    p.grain,   p.wetEdges};
+                    p.grain,   p.wetEdges, paintDynamics(BrushDynamics{})};
 }
 
 } // namespace
@@ -337,8 +337,44 @@ void BrushPresetPicker::applyPreset(int index)
     paint_->setTipAngle(p.angle);
     paint_->setSpacing(p.spacing);
     paint_->setFlip(false, false);
-    paint_->setDynamics(
-        BrushDynamics{p.scatter, p.count, p.sizeJitter, p.angleJitter, p.roundnessJitter});
+    BrushDynamics dynamics = paint_->dynamics();
+    if (!dynamics.lockScatter) {
+        dynamics.scatter = p.scatter;
+        dynamics.count = p.count;
+        dynamics.scatterEnabled = p.scatter > 0 || p.count > 1;
+    }
+    if (!dynamics.lockShape) {
+        dynamics.sizeJitter = p.sizeJitter;
+        dynamics.angleJitter = p.angleJitter;
+        dynamics.roundnessJitter = p.roundnessJitter;
+        dynamics.shapeEnabled =
+            p.sizeJitter > 0 || p.angleJitter > 0 || p.roundnessJitter > 0;
+    }
+    if (!dynamics.lockColor) {
+        dynamics.colorEnabled = false;
+        dynamics.applyPerTip = false;
+        dynamics.fgBgJitter = 0;
+        dynamics.fgBgControl = 0;
+        dynamics.hueJitter = 0;
+        dynamics.saturationJitter = 0;
+        dynamics.brightnessJitter = 0;
+        dynamics.purity = 0;
+    }
+    if (!dynamics.lockTransfer) {
+        dynamics.transferEnabled = false;
+        dynamics.opacityJitter = 0;
+        dynamics.opacityControl = 0;
+        dynamics.flowJitter = 0;
+        dynamics.flowControl = 0;
+    }
+    if (!dynamics.lockPose) {
+        dynamics.poseEnabled = false;
+        dynamics.overrideTiltX = false;
+        dynamics.overrideTiltY = false;
+        dynamics.overrideRotation = false;
+        dynamics.overridePressure = false;
+    }
+    paint_->setDynamics(dynamics);
     paint_->setGrain(p.grain);
     paint_->setWetEdges(p.wetEdges);
     paint_->setPenTip(p.penTip);

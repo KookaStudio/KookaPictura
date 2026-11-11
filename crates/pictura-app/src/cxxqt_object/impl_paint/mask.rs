@@ -189,7 +189,11 @@ impl PictureViewRust {
             match (
                 preview_level(cfg.diameter as i32, mw, mh),
                 gpu_paint_mode(cfg.mode).filter(|_| {
-                    cfg.grain == 0 && !cfg.wet_edges && !cfg.pressure_size && !cfg.pressure_opacity
+                    cfg.grain == 0
+                        && !cfg.wet_edges
+                        && !cfg.pressure_size
+                        && !cfg.pressure_opacity
+                        && cfg.dynamics.is_default()
                 }),
                 self.gpu_compute,
             ) {

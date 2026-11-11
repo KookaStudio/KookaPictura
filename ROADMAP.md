@@ -388,8 +388,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Pattern Overlay Snap To Origin, and the style Texture sub-options (#606)
 - [ ] Bristle brushes (#607)
 - [ ] `.abr` libraries, the Brush Presets panel, and ABR v10 reading (#608)
-- [ ] The brush dynamics option sets: texture, dual brush, colour dynamics,
-      transfer, pose and padlocks (#492)
+- [ ] Brush Texture and Dual Brush; the Control model, Shape Dynamics,
+      Scattering, Color Dynamics, Transfer, Brush Pose, and per-set padlocks
+      ship (#492)
 - [ ] Sampled, bristle, erodible and airbrush tips, and Define Brush Preset
       (#493)
 

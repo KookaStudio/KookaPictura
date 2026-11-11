@@ -33,6 +33,8 @@ pub(super) struct DabRaster<'a> {
     pub(super) dab_x: f32,
     pub(super) dab_y: f32,
     pub(super) flow: f32,
+    pub(super) opacity: f32,
+    pub(super) paint: crate::Rgba,
     pub(super) width: usize,
     pub(super) stencil: &'a Stencil<'a>,
 }
@@ -130,10 +132,15 @@ impl DabRaster<'_> {
             }
             cell.applied[at] = v;
             let i = ly * w + lx as usize;
-            if !self
-                .stencil
-                .composite(&mut cell.planes, at, i, rng.as_deref_mut(), v)
-            {
+            if !self.stencil.composite(
+                &mut cell.planes,
+                at,
+                i,
+                rng.as_deref_mut(),
+                v,
+                self.paint,
+                self.opacity,
+            ) {
                 continue;
             }
             first.get_or_insert(lx);

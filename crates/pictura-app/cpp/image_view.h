@@ -646,6 +646,9 @@ signals:
     // A tablet event's pressure (0..1), before Qt's synthesized mouse event
     // drives the stroke. A mouse press reports 1.0.
     void pointerPressure(double pressure);
+    // A tablet event's tilt (degrees) and rotation (degrees); a mouse reports
+    // zero.
+    void pointerPose(double tiltX, double tiltY, double rotation, double wheel);
     // A modifier key (Alt/Shift/Ctrl/Meta) was pressed or released, so a tool
     // observes the edge even without pointer movement.
     void modifierKeyChanged(int modifiers);
