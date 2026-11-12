@@ -789,3 +789,168 @@ fn crossed_quad_fills_an_hourglass() {
     assert_eq!(at(5, 50), 0);
     assert_eq!(at(95, 50), 0);
 }
+
+/// A whole-pixel shift, exact in both directions.
+struct Shift(f64, f64);
+
+impl super::transform::PlaneMap for Shift {
+    fn forward(&self, x: f64, y: f64) -> Option<(f64, f64)> {
+        Some((x + self.0, y + self.1))
+    }
+    fn inverse(&self, qx: f64, qy: f64) -> Option<(f64, f64)> {
+        Some((qx - self.0, qy - self.1))
+    }
+    fn for_rect(&self, _rect: PsdRect) -> Self {
+        Shift(self.0, self.1)
+    }
+}
+
+/// A tiled 300 × 200 layer with a seeded mask over an offset rect.
+fn tiled_masked_doc() -> Document {
+    let mut layer = pixel_layer(300, 200);
+    for c in &mut layer.channels {
+        assert!(c.data.tile(300, 200));
+    }
+    layer.mask = Some(LayerMask {
+        rect: PsdRect {
+            top: 10,
+            left: 20,
+            bottom: 110,
+            right: 140,
+        },
+        default_color: 255,
+        data: Some(plane(120, 100, 5).into()),
+        ..Default::default()
+    });
+    doc_with(layer)
+}
+
+fn moved(dx: f64, dy: f64) -> LayerTransform {
+    transform(1.0, 1.0, 0.0, dx, dy)
+}
+
+#[test]
+fn an_integer_move_shares_the_source_planes() {
+    let original = tiled_masked_doc();
+    let mut doc = original.clone();
+    assert!(transform_layer_with(
+        &mut doc,
+        "0",
+        moved(37.0, -21.0),
+        Interpolation::Bilinear
+    ));
+    let before = resolve_path(&original, "0").expect("layer");
+    let after = resolve_path(&doc, "0").expect("layer");
+    let shifted = |r: PsdRect| PsdRect {
+        top: r.top - 21,
+        left: r.left + 37,
+        bottom: r.bottom - 21,
+        right: r.right + 37,
+    };
+    assert_eq!(after.rect, shifted(before.rect));
+    for (a, b) in before.channels.iter().zip(&after.channels) {
+        assert_eq!(a.id, b.id);
+        assert!(b.data.shares(&a.data), "channel {} was copied", a.id);
+        assert!(a.data == b.data, "channel {}", a.id);
+    }
+    let (mask_before, mask_after) = (before.mask.as_ref().unwrap(), after.mask.as_ref().unwrap());
+    assert_eq!(mask_after.rect, shifted(mask_before.rect));
+    assert!(mask_before.data == mask_after.data);
+}
+
+#[test]
+fn an_integer_move_matches_the_resampled_result() {
+    for interpolation in [
+        Interpolation::Nearest,
+        Interpolation::Bilinear,
+        Interpolation::Bicubic,
+        Interpolation::BicubicSharper,
+        Interpolation::BicubicAutomatic,
+    ] {
+        let run = |pure: bool| {
+            let mut doc = tiled_masked_doc();
+            assert!(super::transform::transform_layer_with_map(
+                &mut doc,
+                "0",
+                |_| Some(Shift(-13.0, 8.0)),
+                pure,
+                interpolation,
+            ));
+            doc
+        };
+        let (fast, resampled) = (run(true), run(false));
+        let (a, b) = (
+            resolve_path(&fast, "0").expect("layer"),
+            resolve_path(&resampled, "0").expect("layer"),
+        );
+        assert_eq!(a.rect, b.rect, "{interpolation:?}");
+        for (x, y) in a.channels.iter().zip(&b.channels) {
+            assert!(x.data == y.data, "{interpolation:?} channel {}", x.id);
+        }
+        let (ma, mb) = (a.mask.as_ref().unwrap(), b.mask.as_ref().unwrap());
+        assert_eq!(ma.rect, mb.rect, "{interpolation:?}");
+        assert!(ma.data == mb.data, "{interpolation:?} mask");
+    }
+}
+
+#[test]
+fn a_smoother_move_still_resamples() {
+    let original = tiled_masked_doc();
+    let mut doc = original.clone();
+    assert!(transform_layer_with(
+        &mut doc,
+        "0",
+        moved(4.0, 9.0),
+        Interpolation::BicubicSmoother
+    ));
+    let before = resolve_path(&original, "0").expect("layer");
+    let after = resolve_path(&doc, "0").expect("layer");
+    for (a, b) in before.channels.iter().zip(&after.channels) {
+        assert!(!b.data.shares(&a.data), "channel {} kept its plane", a.id);
+    }
+}
+
+#[test]
+fn a_failed_resample_allocation_refuses_the_transform() {
+    use pictura_core::memory;
+    let original = tiled_masked_doc();
+    let mut doc = original.clone();
+    memory::clear_refusal();
+    memory::fail_next_plane_for_test();
+    assert!(!transform_layer_with(
+        &mut doc,
+        "0",
+        transform(1.0, 1.0, 10f64.to_radians(), 0.0, 0.0),
+        Interpolation::Bilinear
+    ));
+    assert!(memory::last_refusal().is_some(), "no refusal recorded");
+    memory::clear_refusal();
+    let (a, b) = (
+        resolve_path(&original, "0").expect("layer"),
+        resolve_path(&doc, "0").expect("layer"),
+    );
+    assert_eq!(a.rect, b.rect);
+    for (x, y) in a.channels.iter().zip(&b.channels) {
+        assert!(x.data == y.data, "channel {}", x.id);
+    }
+    assert!(a.mask == b.mask);
+}
+
+#[test]
+fn an_integer_move_allocates_no_resample_buffer() {
+    use pictura_core::memory;
+    let mut doc = tiled_masked_doc();
+    memory::clear_refusal();
+    memory::fail_next_plane_for_test();
+    assert!(transform_layer_with(
+        &mut doc,
+        "0",
+        moved(3.0, 3.0),
+        Interpolation::Bilinear
+    ));
+    assert!(
+        memory::try_plane(1, 0, "probe").is_err(),
+        "the move consumed the failpoint"
+    );
+    memory::clear_refusal();
+}

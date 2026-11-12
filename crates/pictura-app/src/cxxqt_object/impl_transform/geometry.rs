@@ -170,10 +170,16 @@ pub(super) fn apply_session_transform(
     let (cx, cy) = rect_center(orig_rect);
     let a = params.linear();
     let (px, py) = params.pivot;
-    let t = (
-        params.dx + (px - cx) - (a[0][0] * (px - cx) + a[0][1] * (py - cy)),
-        params.dy + (py - cy) - (a[1][0] * (px - cx) + a[1][1] * (py - cy)),
-    );
+    // Without a linear part the reference point cancels out; taking the offset
+    // as-is keeps a whole-pixel move exact, so it moves the planes (#1290).
+    let t = if a == [[1.0, 0.0], [0.0, 1.0]] {
+        (params.dx, params.dy)
+    } else {
+        (
+            params.dx + (px - cx) - (a[0][0] * (px - cx) + a[0][1] * (py - cy)),
+            params.dy + (py - cy) - (a[1][0] * (px - cx) + a[1][1] * (py - cy)),
+        )
+    };
     pictura_render::transform_layer_with(
         doc,
         path,

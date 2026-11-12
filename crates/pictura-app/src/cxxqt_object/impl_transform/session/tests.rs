@@ -1,5 +1,7 @@
 use super::super::super::document_session::{TransformMode, TransformSession};
-use super::super::geometry::{pivot_point, rect_center, set_pivot, source_corners};
+use super::super::geometry::{
+    apply_session_transform, pivot_point, rect_center, set_pivot, source_corners, MapParams,
+};
 use super::super::group::commit_bytes;
 use super::*;
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
@@ -178,4 +180,52 @@ fn a_transform_commit_charges_its_box_and_the_composite_around_it() {
     // A fractional corner rounds the box outward.
     let quad = [(0.5, 0.5), (10.2, 0.5), (10.2, 9.7), (0.5, 9.7)];
     assert_eq!(commit_bytes(&quad, orig), 4 * 110 + 12 * 110);
+}
+
+#[test]
+fn commit_bytes_charges_a_move_only_for_the_composite() {
+    let orig = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 10,
+        right: 10,
+    };
+    let shifted = |dx: f64| [(dx, 0.0), (10.0 + dx, 0.0), (10.0 + dx, 10.0), (dx, 10.0)];
+    assert_eq!(commit_bytes(&shifted(5.0), orig), 12 * 150);
+    assert_eq!(commit_bytes(&shifted(5.5), orig), 4 * 110 + 12 * 160);
+}
+
+#[test]
+fn a_move_about_an_off_centre_pivot_keeps_the_planes() {
+    let rgba: Vec<u8> = (0..40 * 30 * 4).map(|i| (i * 31 % 253) as u8).collect();
+    let original = Document::from_rgba("move", 40, 30, &rgba);
+    let mut doc = original.clone();
+    let orig_rect = pictura_render::resolve_path(&doc, "0").expect("layer").rect;
+    let params = MapParams {
+        scale_x: 1.0,
+        scale_y: 1.0,
+        angle: 0.0,
+        dx: 7.0,
+        dy: -3.0,
+        pivot: (0.1, 29.3),
+        skew_x: 0.0,
+        skew_y: 0.0,
+    };
+    let quad = params.map_quad(orig_rect);
+    assert!(apply_session_transform(
+        &mut doc,
+        "0",
+        false,
+        quad,
+        params,
+        orig_rect,
+        Interpolation::Bilinear,
+    ));
+    let before = pictura_render::resolve_path(&original, "0").expect("layer");
+    let after = pictura_render::resolve_path(&doc, "0").expect("layer");
+    assert_eq!(after.rect.left, before.rect.left + 7);
+    assert_eq!(after.rect.top, before.rect.top - 3);
+    for (a, b) in before.channels.iter().zip(&after.channels) {
+        assert!(b.data.shares(&a.data), "channel {} was resampled", a.id);
+    }
 }
