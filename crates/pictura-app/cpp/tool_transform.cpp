@@ -3,6 +3,7 @@
 #include "api/transform_api.h"
 #include "icons.h"
 #include "image_view.h"
+#include "transform_commit.h"
 
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
@@ -316,13 +317,41 @@ void ToolController::commitFreeTransform()
     if (!v || !v->transform_session_active()) {
         return;
     }
+    const bool controls = transformControls_;
     transformControls_ = false;
-    const bool committed = v->commit_transform();
+    const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, *v);
+    if (!committed && v->transform_session_active()) {
+        // Cancelled from the progress window: the session resumes.
+        transformControls_ = controls;
+        return;
+    }
     transformGuideSnap_ = false;
     resetTransformUi(committed);
     if (edit_refused_for_memory()) {
         refused(transformMemoryRefusalMessage());
     }
+}
+
+void ToolController::commitTransformControls(PictureView& v)
+{
+    transformControls_ = false;
+    const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, v);
+    if (!committed && v.transform_session_active()) {
+        // Cancelled from the progress window: the box stays.
+        transformControls_ = true;
+        return;
+    }
+    if (canvas_) {
+        if (committed) {
+            canvas_->endTransformOverlay();
+        } else {
+            canvas_->clearTransformPreview();
+        }
+    }
+    if (edit_refused_for_memory()) {
+        refused(transformMemoryRefusalMessage());
+    }
+    syncTransformControls();
 }
 
 void ToolController::cancelFreeTransform()

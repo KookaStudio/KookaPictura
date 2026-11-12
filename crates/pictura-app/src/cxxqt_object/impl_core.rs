@@ -45,7 +45,7 @@ pub(super) fn reset_refresh_calls() {
 }
 
 pub(super) use deferred_composite::{
-    CompositeJob, DeferredComposite, DeferredTransform, TransformJob, TransformSpec,
+    CompositeJob, DeferredComposite, DeferredTransform, TransformSpec,
 };
 
 mod deferred_composite;

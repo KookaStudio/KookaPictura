@@ -40,6 +40,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/tool_slice.cpp
     crates/pictura-app/cpp/tool_stamps.cpp
     crates/pictura-app/cpp/tool_transform.cpp
+    crates/pictura-app/cpp/transform_commit.cpp
+    crates/pictura-app/cpp/transform_commit.h
     crates/pictura-app/cpp/tool_type.cpp
     crates/pictura-app/cpp/tool_wand.cpp
     crates/pictura-app/cpp/toolbox.cpp

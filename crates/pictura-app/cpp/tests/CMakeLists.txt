@@ -171,6 +171,7 @@ set(PICTURA_QT_TESTS
     tst_apply_image
     tst_match_color
     tst_auto_align
+    tst_busy_job
     tst_auto_blend
     tst_print
     tst_save_pdf

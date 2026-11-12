@@ -250,6 +250,13 @@ pub fn transform_layer_warp(
     };
     let (sw, sh) = (prepared.w as usize, prepared.h as usize);
     let (dl, dt, dr, db) = t.dest;
+    if let Some(job) = pictura_core::job::current() {
+        // One pass of `warp_planes` per layer, mask, and retained store.
+        let passes = 1
+            + u64::from(prepared.mask.is_some())
+            + u64::from(prepared.native.is_some()) * (1 + u64::from(prepared.mask.is_some()));
+        job.begin_stage((db - dt).max(0) as u64 * passes);
+    }
     let interp = interpolation.resolve((sw * sh) as u64, ((dr - dl) as u64) * ((db - dt) as u64));
     let alpha = prepared.source_channels.iter().position(|c| c.id == -1);
     let planes = prepared
@@ -292,6 +299,9 @@ pub fn transform_layer_warp(
             .map(|(m, (_, mt))| (m, mt));
         warp_store(store, prepared.rect, &t, mask_info, interp)
     });
+    if super::transform::job_cancelled() {
+        return false;
+    }
     let out = LayerOutput {
         channels,
         mask: mask.map(|(m, _)| m),

@@ -155,6 +155,42 @@ fn apply_transform_member(
     apply_session_transform(doc, path, false, preview_quad, params, rect, interpolation)
 }
 
+/// Build the engine call for a lifted selection's commit: the transform, then
+/// the lifted pixels merged back into their layer.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn lifted_apply(
+    path: String,
+    projective: bool,
+    quad: [(f64, f64); 4],
+    params: MapParams,
+    interpolation: Interpolation,
+    warp: Option<pictura_core::warp::Warp>,
+    preview_quad: [(f64, f64); 4],
+    orig_rect: PsdRect,
+) -> Arc<dyn Fn(&mut Document) -> bool + Send + Sync> {
+    Arc::new(move |doc: &mut Document| {
+        let changed = match &warp {
+            Some(warp) => pictura_render::transform_layer_warp(
+                doc,
+                &path,
+                warp,
+                Some(preview_quad),
+                interpolation,
+            ),
+            None => apply_session_transform(
+                doc,
+                &path,
+                projective,
+                quad,
+                params,
+                orig_rect,
+                interpolation,
+            ),
+        };
+        changed && pictura_render::merge_lifted(doc, &path)
+    })
+}
+
 /// Build the engine call for a commit: every member under the same map, run on
 /// a clone so a refused member cannot leave the set half-transformed.
 #[allow(clippy::too_many_arguments)]

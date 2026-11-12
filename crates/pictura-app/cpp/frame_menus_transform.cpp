@@ -4,6 +4,7 @@
 // size budget.
 
 #include "frame_includes.h"
+#include "transform_commit.h"
 
 #include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
@@ -161,7 +162,11 @@ void PicturaMainWindow::wireTransformMenu()
                 return false;
             }
             transform_set_history_label(*view, label);
-            const bool applied = view->commit_transform();
+            const bool applied = runTransformCommit(this, *view);
+            if (!applied && view->transform_session_active()) {
+                // Cancelled: this one-shot command opened the session itself.
+                view->cancel_transform();
+            }
             if (ImageView* canvas = imageView()) {
                 if (applied) {
                     canvas->endTransformOverlay();

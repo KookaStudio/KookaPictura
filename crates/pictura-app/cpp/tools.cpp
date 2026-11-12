@@ -1058,21 +1058,7 @@ void ToolController::handleReleased(const QPointF& imagePos)
                 }
             }
             if (transformControls_) {
-                // The controls box applies each gesture on release and stays
-                // on the resulting layer.
-                transformControls_ = false;
-                const bool committed = v->commit_transform();
-                if (canvas_) {
-                    if (committed) {
-                        canvas_->endTransformOverlay();
-                    } else {
-                        canvas_->clearTransformPreview();
-                    }
-                }
-                if (edit_refused_for_memory()) {
-                    refused(transformMemoryRefusalMessage());
-                }
-                syncTransformControls();
+                commitTransformControls(*v);
             }
         }
         return;
