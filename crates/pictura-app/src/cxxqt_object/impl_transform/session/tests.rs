@@ -2,7 +2,7 @@ use super::super::super::document_session::{TransformMode, TransformSession};
 use super::super::geometry::{
     apply_session_transform, pivot_point, rect_center, set_pivot, source_corners, MapParams,
 };
-use super::super::group::commit_cost;
+use super::super::group::{commit_cost, move_commit_cost};
 use super::*;
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags, PsdRect};
@@ -287,6 +287,23 @@ fn full_scratch_disks_refuse_the_transform() {
     assert!(!gate(&huge_resize(), 2048 * MIB, 0));
     assert!(memory_gate::edit_refused_for_scratch_full());
     assert!(memory_gate::edit_refused_for_memory());
+}
+
+// [oct_move_gate_spills]
+#[test]
+fn a_large_layer_move_spills_its_composite() {
+    use crate::cxxqt_object::helpers::memory_gate;
+    let dirty = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 17_005,
+        right: 17_005,
+    };
+    // 2 GiB available leaves 1.75 GiB of room, far under 12 bytes a pixel.
+    let room = (2048 - 256) * MIB as u64;
+    assert!(12 * memory_gate::area(dirty) > room);
+    assert!(gate(&move_commit_cost(dirty), 2048 * MIB, 64 * 1024 * MIB));
+    assert!(!memory_gate::edit_refused_for_memory());
 }
 
 #[test]

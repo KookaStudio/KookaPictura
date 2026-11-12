@@ -7,8 +7,8 @@ use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
 use super::group::{
-    can_free_transform, commit_cost, group_apply, lifted_apply, repeatable_transform,
-    transform_group, transform_group_edit, transform_rect,
+    can_free_transform, commit_cost, group_apply, lifted_apply, move_commit_cost,
+    repeatable_transform, transform_group, transform_group_edit, transform_rect,
 };
 use super::{
     build_move_preview_base, duplicate_move_target, link_members, movable_layer, move_group_key,
@@ -899,8 +899,8 @@ impl qobject::PictureView {
             };
             let original = doc.clone();
             let dirty = translate_move_group(doc, &paths, dx, dy);
-            // The damage's composite, its sRGB copy, and the display patch.
-            if dirty.is_some_and(|rect| !memory_gate::admit(12 * memory_gate::area(rect))) {
+            let cost = dirty.map(move_commit_cost);
+            if cost.is_some_and(|c| !memory_gate::admit_spilling(c.working, c.spillable)) {
                 *doc = original;
                 return false;
             }
