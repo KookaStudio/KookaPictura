@@ -314,6 +314,7 @@ fn filesystem_available(_: &Path) -> Option<u64> {
     None
 }
 
+#[cfg(unix)]
 fn existing_ancestor(dir: &Path) -> Option<&Path> {
     dir.ancestors().find(|p| p.exists())
 }
