@@ -151,6 +151,7 @@ impl qobject::PictureView {
                 Some(Outcome {
                     path: outcome.path,
                     count: outcome.replaced,
+                    rect: None,
                 })
             },
             |rust, _| {
@@ -263,6 +264,7 @@ impl qobject::PictureView {
                 Some(Outcome {
                     path: outcome.path,
                     count: outcome.replaced,
+                    rect: None,
                 })
             },
             move |rust, outcome| {

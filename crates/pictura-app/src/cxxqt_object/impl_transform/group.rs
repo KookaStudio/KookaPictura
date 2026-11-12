@@ -42,15 +42,11 @@ pub(super) fn repeatable_transform(session: &TransformSession) -> Option<RepeatT
 /// as 8 MiB because an 8-bit layer's windows dominate).
 const WINDOW_BYTES: u64 = 8 << 20;
 
-/// What a transform commit holds (#1290): `working` stays resident (the
-/// resample strips, the composite's strip and group buffers, and one source
-/// window per worker thread); `spillable` is written as tiles the evictor may
-/// pack or spill (the new layer tiles and the region composite). A whole-pixel
-/// move keeps the layer's planes, so it adds no layer tiles.
-pub(super) struct CommitCost {
-    pub(super) working: u64,
-    pub(super) spillable: u64,
-}
+/// What a transform commit holds (#1290): `working` is the resample strips,
+/// the composite's strip and group buffers, and one source window per worker
+/// thread; `spillable` is the new layer tiles and the region composite. A
+/// whole-pixel move keeps the layer's planes, so it adds no layer tiles.
+pub(super) use memory_gate::CommitCost;
 
 pub(super) fn commit_cost(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> CommitCost {
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);

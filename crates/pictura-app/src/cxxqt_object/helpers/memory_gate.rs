@@ -230,6 +230,48 @@ pub(in crate::cxxqt_object) fn refresh_bytes(bounds: PsdRect) -> u64 {
     6 * area(bounds)
 }
 
+/// What a commit holds (#1290): `working` stays resident; `spillable` is
+/// written as tiles the evictor may pack or spill as they are written.
+pub(in crate::cxxqt_object) struct CommitCost {
+    pub(in crate::cxxqt_object) working: u64,
+    pub(in crate::cxxqt_object) spillable: u64,
+}
+
+/// The refresh of `bounds` that stays resident (#1300): [`refresh_bytes`]
+/// where the refresh composites the region densely, as `refresh_display_rect`
+/// does for an authoritative composite, a synchronous document, or a small
+/// region; elsewhere it only marks the region's display tiles stale.
+///
+/// ponytail: a small region with no current tile under it is only marked
+/// stale too, but it is still charged.
+pub(in crate::cxxqt_object) fn refresh_working(doc: &Document, bounds: PsdRect) -> u64 {
+    use crate::cxxqt_object::tiles::{REPAIR_PIXELS, SYNC_PIXELS};
+    let dense = doc.composite_is_authoritative()
+        || canvas(doc) <= SYNC_PIXELS
+        || area(bounds) <= REPAIR_PIXELS;
+    if dense {
+        refresh_bytes(bounds)
+    } else {
+        0
+    }
+}
+
+/// What a fill of `bounds` into the layer at `path` holds (#1300): its own
+/// `resident` buffers (a flood's masks) and the resident refresh in RAM, and
+/// the tiles it forks from history, written tile by tile into planes the
+/// evictor may spill.
+pub(in crate::cxxqt_object) fn fill_cost(
+    doc: &Document,
+    path: &str,
+    bounds: PsdRect,
+    resident: u64,
+) -> CommitCost {
+    CommitCost {
+        working: resident + refresh_working(doc, bounds),
+        spillable: fork_bytes(doc, path, bounds),
+    }
+}
+
 /// Adding a named snapshot (M8): it shares every tile with the document, so
 /// it costs the tile tables (#1215). Mid-stroke a stored composite is
 /// rendered from the painted layers too.
@@ -341,6 +383,67 @@ mod tests {
     }
 
     // [tp_gate]
+    /// An RGB/8 document of `side`² whose one layer covers the canvas, sized
+    /// without its planes: the cost reads only the rect and the channel ids.
+    fn full_canvas(side: u32) -> Document {
+        let mut doc = Document::new(1, 1, pictura_core::ColorMode::Rgb, BitDepth::Eight);
+        let mut layer = crate::cxxqt_object::tests::pixel_layer("layer", 1, 1, (0, 0, 0));
+        layer.rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: side as i32,
+            right: side as i32,
+        };
+        doc.width = side;
+        doc.height = side;
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        doc
+    }
+
+    fn whole(side: u32) -> PsdRect {
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: side as i32,
+            right: side as i32,
+        }
+    }
+
+    // [ocf_gate_spills]
+    #[test]
+    fn a_large_fill_spills_its_tiles() {
+        let doc = full_canvas(17_000);
+        let bounds = whole(17_000);
+        let cost = fill_cost(&doc, "0", bounds, 0);
+        // 2 GiB available leaves 1.75 GiB of room, under the old RAM charge.
+        let room = (2048 - 256) * MIB as u64;
+        assert!(fork_bytes(&doc, "0", bounds) + refresh_bytes(bounds) > room);
+        assert_eq!(cost.working, 0);
+        set_available_memory_for_test(2048 * MIB);
+        set_scratch_available_for_test(64 * 1024 * MIB);
+        clear();
+        let admitted = admit_spilling(cost.working, cost.spillable);
+        let refused = edit_refused_for_memory();
+        set_available_memory_for_test(-1);
+        set_scratch_available_for_test(-1);
+        assert!(admitted);
+        assert!(!refused);
+    }
+
+    // [ocf_small_refresh]
+    #[test]
+    fn a_small_document_fill_charges_its_refresh() {
+        let doc = full_canvas(2000);
+        let bounds = whole(2000);
+        let cost = fill_cost(&doc, "0", bounds, 0);
+        assert_eq!(cost.working, refresh_bytes(bounds));
+        assert_eq!(cost.spillable, fork_bytes(&doc, "0", bounds));
+        // A large document's small region is composited densely too.
+        let doc = full_canvas(17_000);
+        let small = whole(1000);
+        assert_eq!(refresh_working(&doc, small), refresh_bytes(small));
+    }
+
     #[test]
     fn fork_bytes_counts_tiles() {
         for (depth, bytes) in [

@@ -7,6 +7,7 @@
 #include "fade_dialog.h"
 
 #include "api/history_api.h"
+#include "document_command.h"
 #include "memory_refusal.h"
 #include "text_input.h"
 
@@ -199,8 +200,12 @@ void PicturaMainWindow::registerEditHandlers()
         const QColor color = dialog.fillColor();
         const int patternIndex = pattern ? dialog.selectedPatternIndex() : -1;
         const int argb = pattern ? 0 : int(color.rgba());
-        if (edit_fill(*view, uint32_t(argb), patternIndex, dialog.blendMode(),
-                      dialog.opacity(), dialog.preserveTransparency())) {
+        // A large document's fill runs as a job behind a progress window (#1300).
+        const bool filled = runDocumentCommand(this, *view, tr("Fill"), [&] {
+            edit_fill(*view, uint32_t(argb), patternIndex, dialog.blendMode(), dialog.opacity(),
+                      dialog.preserveTransparency());
+        });
+        if (filled) {
             refresh();
             CommandParams command;
             command.values.insert(QStringLiteral("contents"),
@@ -249,8 +254,11 @@ void PicturaMainWindow::registerEditHandlers()
             return;
         }
         const int argb = int(dialog.strokeColor().rgba());
-        if (edit_stroke(*view, uint32_t(argb), dialog.strokeWidth(), dialog.location(),
-                        dialog.blendMode(), dialog.opacity())) {
+        const bool stroked = runDocumentCommand(this, *view, tr("Stroke"), [&] {
+            edit_stroke(*view, uint32_t(argb), dialog.strokeWidth(), dialog.location(),
+                        dialog.blendMode(), dialog.opacity());
+        });
+        if (stroked) {
             refresh();
         } else if (edit_refused_for_memory()) {
             statusBar()->showMessage(fillMemoryRefusalMessage(), 6000);

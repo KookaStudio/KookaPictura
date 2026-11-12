@@ -39,7 +39,7 @@ pub(super) const SYNC_PIXELS: u64 = 16_000_000;
 
 /// The most level-0 pixels a region refresh composites at once on a large
 /// document; above it the tiles go stale and only the visible ones rebuild.
-const REPAIR_PIXELS: u64 = 4_000_000;
+pub(super) const REPAIR_PIXELS: u64 = 4_000_000;
 
 /// The view's tile cache and its worker queue. The cache sits in a `RefCell`
 /// because the canvas and the panels read crops through `&self`; everything

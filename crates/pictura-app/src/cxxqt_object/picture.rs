@@ -114,7 +114,15 @@ pub(super) fn sample_tiles<'a>(
     doc: &'a Document,
     view: &PictureViewRust,
 ) -> impl Fn(usize, usize) -> std::sync::Arc<[u8]> + Sync + 'a {
-    let stored = stored_is_current(doc, view);
+    sample_tiles_from(doc, stored_is_current(doc, view))
+}
+
+/// [`sample_tiles`] given whether the stored composite is current, read
+/// beforehand, so the flood can run off the GUI thread (#1300).
+pub(super) fn sample_tiles_from(
+    doc: &Document,
+    stored: bool,
+) -> impl Fn(usize, usize) -> std::sync::Arc<[u8]> + Sync + '_ {
     let memo = std::sync::Mutex::new(std::collections::VecDeque::<(
         (usize, usize),
         std::sync::Arc<[u8]>,
@@ -207,7 +215,7 @@ fn tiles_are_current(view: &PictureViewRust) -> bool {
 /// Whether the stored composite is the picture for this document state. Only
 /// an authoritative composite is kept current; any other is a leftover (a
 /// document as constructed) that no edit maintains.
-fn stored_is_current(doc: &Document, view: &PictureViewRust) -> bool {
+pub(super) fn stored_is_current(doc: &Document, view: &PictureViewRust) -> bool {
     tiles_are_current(view)
         && doc.composite_is_authoritative()
         && doc.source_depth.is_none()

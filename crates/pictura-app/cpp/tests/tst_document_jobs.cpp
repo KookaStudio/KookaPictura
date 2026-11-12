@@ -1,7 +1,8 @@
 // Whole-document commands as cancellable jobs (#1278): on a large document
 // Rotate, Flatten and a depth conversion run on a worker behind the progress
 // window, Cancel leaves the document and history unchanged, and a small
-// document's command still applies at once.
+// document's command still applies at once. The fills run the same way
+// (#1300).
 
 #include <QtTest/QtTest>
 
@@ -11,8 +12,10 @@
 #include <QtWidgets/QPushButton>
 
 #include <algorithm>
+#include <functional>
 
 #include "commands.h"
+#include "fill_dialog.h"
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
@@ -52,12 +55,18 @@ private slots:
     void cancellingAFlattenChangesNothing();
     void aDepthConversionShowsABusyBar();
     void aSmallDocumentAppliesAtOnce();
+    void aLargeGradientRunsAsAJob();
+    void cancellingAFillChangesNothing();
+    void aSmallGradientFillsAtOnce();
 
 private:
     bool dispatch(const char* id);
     // Run command `id`, watching the job window; with `cancel`, press its
     // Cancel button as soon as it shows.
     Seen run(const char* id, bool cancel = false);
+    // Run `action`, watching the job window as `run` does. A Fill dialog it
+    // opens is accepted as it is.
+    Seen watch(const std::function<void()>& action, bool cancel = false);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -77,10 +86,20 @@ bool DocumentJobsTest::dispatch(const char* id)
 
 Seen DocumentJobsTest::run(const char* id, bool cancel)
 {
+    return watch([this, id] { dispatch(id); }, cancel);
+}
+
+Seen DocumentJobsTest::watch(const std::function<void()>& action, bool cancel)
+{
     Seen seen;
     QTimer probe;
     probe.setInterval(20);
     connect(&probe, &QTimer::timeout, this, [&] {
+        if (auto* fill = window_->findChild<pictura::FillDialog*>();
+            fill && fill->isVisible()) {
+            fill->accept();
+            return;
+        }
         auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));
         if (!d || !d->isVisible()) {
             return;
@@ -96,7 +115,7 @@ Seen DocumentJobsTest::run(const char* id, bool cancel)
         }
     });
     probe.start();
-    dispatch(id);
+    action();
     probe.stop();
     return seen;
 }
@@ -176,6 +195,61 @@ void DocumentJobsTest::aSmallDocumentAppliesAtOnce()
     QVERIFY2(clock.elapsed() < 800, "the delay seam is never reached");
     QCOMPARE(f.view->document_width(), 48);
     QCOMPARE(f.view->history_count(), count + 1);
+}
+
+// [ocf_fill_job]
+void DocumentJobsTest::aLargeGradientRunsAsAJob()
+{
+    Fixture f(*window_, seed(kWide, kTall), QStringLiteral("pictura_gradient_job"));
+    QVERIFY2(f.ok(), "gradient fixture");
+    window_->setActiveTool(pictura::ToolId::Gradient);
+    const int base = f.view->history_index();
+    const QRgb before = f.view->sample_argb(0, kTall / 2);
+    pictura::document_job_set_delay(*f.view, 800);
+    const Seen seen = watch([&] { f.drag({QPointF(0, kTall / 2), QPointF(kWide - 1, kTall / 2)}); });
+    QVERIFY2(seen.window, "the progress window appeared");
+    QVERIFY2(seen.busy, "a fill that cannot count shows a busy bar");
+    QVERIFY(!pictura::document_job_pending(*f.view));
+    QVERIFY(f.committedOnce(base, "Gradient"));
+    QVERIFY2(f.view->sample_argb(0, kTall / 2) != before, "the gradient landed");
+}
+
+// [ocf_fill_cancel]
+void DocumentJobsTest::cancellingAFillChangesNothing()
+{
+    Fixture f(*window_, seed(kWide, kTall), QStringLiteral("pictura_fill_job"));
+    QVERIFY2(f.ok(), "fill fixture");
+    const int count = f.view->history_count();
+    const int index = f.view->history_index();
+    const QImage before = f.view->display_image(2, 0, 0, 1200, 900);
+
+    pictura::document_job_set_delay(*f.view, 30000);
+    QElapsedTimer clock;
+    clock.start();
+    const Seen seen = run(pictura::command_ids::EditFill, true);
+    QVERIFY2(seen.window, "the progress window offered Cancel");
+    QVERIFY2(clock.elapsed() < 20000, "the cancel ended the held job");
+    QVERIFY(!pictura::document_job_pending(*f.view));
+    QCOMPARE(f.view->history_count(), count);
+    QCOMPARE(f.view->history_index(), index);
+    QVERIFY2(f.view->display_image(2, 0, 0, 1200, 900) == before, "the document is unchanged");
+}
+
+// [ocf_fill_small_sync]
+void DocumentJobsTest::aSmallGradientFillsAtOnce()
+{
+    Fixture f(*window_, seed(64, 48), QStringLiteral("pictura_small_gradient"));
+    QVERIFY2(f.ok(), "small fixture");
+    window_->setActiveTool(pictura::ToolId::Gradient);
+    const int base = f.view->history_index();
+    pictura::document_job_set_delay(*f.view, 800);
+    QElapsedTimer clock;
+    clock.start();
+    const Seen seen = watch([&] { f.drag({QPointF(0, 24), QPointF(63, 24)}); });
+    QVERIFY2(!seen.window, "no progress window");
+    QVERIFY2(clock.elapsed() < 800, "the delay seam is never reached");
+    QVERIFY(!pictura::document_job_pending(*f.view));
+    QVERIFY(f.committedOnce(base, "Gradient"));
 }
 
 QTEST_MAIN(DocumentJobsTest)

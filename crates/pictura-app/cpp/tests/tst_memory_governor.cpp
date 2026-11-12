@@ -16,6 +16,8 @@
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 
+#include <functional>
+
 #include "commands.h"
 #include "command_ids.h"
 #include "control_server.h"
@@ -51,6 +53,8 @@ private slots:
     void transformRefusalNamesFullScratchDisks();
     void moveChargesOnlyTheTiledComposite();
     void moveRefusalNamesFullScratchDisks();
+    void fillsSpillToScratch();
+    void fillRefusalNamesFullScratchDisks();
 
 private:
     // A white 40×40 document, made active.
@@ -64,6 +68,12 @@ private:
     // Commit a (5, 5) move with `roomMiB` of governor room (256 MiB of
     // headroom is kept under the pinned available memory) and no scratch.
     static bool commitMoveWithRoom(pictura::PictureView* view, qint64 roomMiB);
+    // A white 4100² document: over 16 Mpx, so a whole-canvas fill's refresh
+    // only marks display tiles stale, and its Background forks about 50 MB of
+    // tiles.
+    pictura::PictureView* largeFillDocument();
+    // Pin `roomMiB` of governor room and `scratchMiB` of free scratch.
+    static void pinRoom(qint64 roomMiB, qint64 scratchMiB);
 
     pictura::test::ScopedStateHome stateHome_;
     QTemporaryDir files_;
@@ -394,6 +404,83 @@ void MemoryGovernorTest::moveRefusalNamesFullScratchDisks()
     QVERIFY(pictura::edit_refused_for_scratch_full());
     QCOMPARE(view->history_count(), count);
     const QString message = pictura::moveMemoryRefusalMessage();
+    QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
+}
+
+pictura::PictureView* MemoryGovernorTest::largeFillDocument()
+{
+    if (!window_->newDocument(QStringLiteral("Fill"), 4100, 4100, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white"))) {
+        return nullptr;
+    }
+    return window_->activeView();
+}
+
+void MemoryGovernorTest::pinRoom(qint64 roomMiB, qint64 scratchMiB)
+{
+    const qint64 mib = 1024 * 1024;
+    // The governor keeps 256 MiB of headroom under the pinned available memory.
+    pictura::set_available_memory_for_test((256 + roomMiB) * mib);
+    pictura::set_scratch_available_for_test(scratchMiB * mib);
+}
+
+// [ocf_fills_commit]
+void MemoryGovernorTest::fillsSpillToScratch()
+{
+    pictura::PictureView* view = largeFillDocument();
+    QVERIFY(view);
+    const QString normal = QStringLiteral("normal");
+    // 96 MiB holds a flood's three masks (about 71 MiB across the canvas) but
+    // not any fill's old charge: its forked tiles plus 6 bytes a pixel of
+    // refresh (over 150 MB).
+    const auto run = [&](const char* label, const std::function<bool()>& fill) {
+        const int count = view->history_count();
+        pinRoom(96, 4096);
+        const bool applied = fill();
+        const bool refused = pictura::edit_refused_for_memory();
+        pictura::set_scratch_available_for_test(-1);
+        unpin();
+        QVERIFY2(applied, label);
+        QVERIFY2(!refused, label);
+        QCOMPARE(view->history_count(), count + 1);
+        QCOMPARE(view->history_label(view->history_index()), QString::fromLatin1(label));
+    };
+    run("Gradient", [&] {
+        return pictura::draw_gradient(*view, 0, 0xFF000000u, 0xFFFFFFFFu, 0, normal, 100, false,
+                                      false, false, 0.0, 0.0, 4099.0, 4099.0);
+    });
+    run("Paint Bucket", [&] {
+        return pictura::bucket_fill_at(*view, 4099, 4099, 0xFF204080u, -1, normal, 100, 0, false,
+                                       true, false);
+    });
+    run("Fill", [&] {
+        return pictura::edit_fill(*view, 0xFF808080u, -1, normal, 100, false);
+    });
+    QVERIFY(view->select_rect(8, 8, 4084, 4084, QStringLiteral("new"), 0.0));
+    run("Stroke", [&] {
+        return pictura::edit_stroke(*view, 0xFFFF0000u, 4, 1, normal, 100);
+    });
+}
+
+// [ocf_scratch_full]
+void MemoryGovernorTest::fillRefusalNamesFullScratchDisks()
+{
+    pictura::PictureView* view = largeFillDocument();
+    QVERIFY(view);
+    const int count = view->history_count();
+    // The gradient holds nothing resident here, but its 50 MB of forked tiles
+    // do not fit 16 MiB of room with no scratch.
+    pinRoom(16, 0);
+    const bool drawn =
+        pictura::draw_gradient(*view, 0, 0xFF000000u, 0xFFFFFFFFu, 0, QStringLiteral("normal"),
+                               100, false, false, false, 0.0, 0.0, 4099.0, 4099.0);
+    const bool full = pictura::edit_refused_for_scratch_full();
+    const QString message = pictura::fillMemoryRefusalMessage();
+    pictura::set_scratch_available_for_test(-1);
+    unpin();
+    QVERIFY(!drawn);
+    QVERIFY(full);
+    QCOMPARE(view->history_count(), count);
     QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
 }
 
