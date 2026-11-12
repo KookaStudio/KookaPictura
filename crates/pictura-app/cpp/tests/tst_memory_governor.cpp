@@ -53,6 +53,7 @@ private slots:
     void transformRefusalNamesFullScratchDisks();
     void moveChargesOnlyTheTiledComposite();
     void moveRefusalNamesFullScratchDisks();
+    void transformBeginRefusedBeyondTheRoom();
     void fillsSpillToScratch();
     void fillRefusalNamesFullScratchDisks();
 
@@ -367,9 +368,7 @@ pictura::PictureView* MemoryGovernorTest::largeMoveDocument()
 
 bool MemoryGovernorTest::commitMoveWithRoom(pictura::PictureView* view, qint64 roomMiB)
 {
-    const qint64 mib = 1024 * 1024;
-    pictura::set_available_memory_for_test((256 + roomMiB) * mib);
-    pictura::set_scratch_available_for_test(0);
+    pinRoom(roomMiB, 0);
     const bool moved = view->commit_move(5, 5);
     pictura::set_scratch_available_for_test(-1);
     unpin();
@@ -405,6 +404,32 @@ void MemoryGovernorTest::moveRefusalNamesFullScratchDisks()
     QCOMPARE(view->history_count(), count);
     const QString message = pictura::moveMemoryRefusalMessage();
     QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
+}
+
+// [tpm_gate]
+void MemoryGovernorTest::transformBeginRefusedBeyondTheRoom()
+{
+    pictura::PictureView* view = newDocument();
+    QVERIFY(view);
+    QCOMPARE(view->duplicate_layer(0), 1);
+    view->set_active_layer(QStringLiteral("1"));
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    const int count = view->history_count();
+    QStatusBar* bar = window_->statusBar();
+    bar->clearMessage();
+
+    pinNoRoom();
+    QVERIFY(!tools->beginFreeTransform(QStringLiteral("1")));
+    QVERIFY(pictura::edit_refused_for_memory());
+    QVERIFY(!view->transform_session_active());
+    QCOMPARE(view->history_count(), count);
+    QCOMPARE(bar->currentMessage(), pictura::transformMemoryRefusalMessage());
+
+    unpin();
+    QVERIFY(tools->beginFreeTransform(QStringLiteral("1")));
+    QVERIFY(!pictura::edit_refused_for_memory());
+    tools->cancelFreeTransform();
 }
 
 pictura::PictureView* MemoryGovernorTest::largeFillDocument()

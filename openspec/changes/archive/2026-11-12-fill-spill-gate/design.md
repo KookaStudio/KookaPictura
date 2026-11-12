@@ -22,8 +22,14 @@ ones within the display budget, which the governor already holds back.
 The constants stay in `tiles.rs`. The gate reads them through
 `pub(in crate::cxxqt_object)` re-exports, so the two cannot drift apart.
 
-ponytail: a refresh that finds no current tile under a small region also only
-damages it. That case is still charged as dense, which is conservative.
+The gate reads only the document and the region. `refresh_display_rect` also
+reads the view: a forced-async or painting view (`tiles_sync`), and whether a
+current tile lies under the region. The gate ignores both, so it can only
+over-charge, never under-charge.
+
+ponytail: a refresh that finds no current tile under a small region, or runs
+on a forced-async small document, also only damages it. Those cases are still
+charged as dense, which is conservative.
 
 ## D2. Gate on the GUI thread, engine on the worker
 

@@ -58,6 +58,8 @@ private slots:
     void scaleScalesWithoutRotating();
     void rotateRotatesWithoutScaling();
     void choosingAModeMidSessionKeepsTheBox();
+    void choosingSkewMidSessionKeepsTheTransform();
+    void distortMidSessionCommitsThePendingScale();
     void rotate90ClockwiseSwapsTheBox();
     void exactRotationsAndFlipsMoveTheContent();
     void selectionTransformsOnlyItsPixels();
@@ -319,6 +321,61 @@ void TransformCommandsTest::choosingAModeMidSessionKeepsTheBox()
         QVERIFY(std::abs(after.at(i).y() - before.at(i).y()) < kTolerance);
     }
     tools->cancelFreeTransform();
+}
+
+// [pms_keep]
+void TransformCommandsTest::choosingSkewMidSessionKeepsTheTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame, {QRect(10, 8, 12, 10)});
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+
+    QVERIFY(tools->beginFreeTransform(layer));
+    QVERIFY(tools->setTransformWidth(150.0, true));
+    QVERIFY(tools->setTransformAngle(30.0));
+    const QPolygonF before = pictura::transform_api::quad(*view).corners;
+    const QPointF pivot(pictura::transform_pivot_x(*view), pictura::transform_pivot_y(*view));
+    frame.registry()->refresh();
+    QVERIFY(action(pictura::command_ids::EditTransformSkew)->isEnabled());
+    QVERIFY(frame.registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::EditTransformSkew)));
+    QVERIFY(view->transform_session_active());
+    QCOMPARE(pictura::transform_session_mode(*view), QStringLiteral("skew"));
+    const QPolygonF after = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(after.size(), before.size());
+    for (int i = 0; i < after.size(); ++i) {
+        QVERIFY(samePoint(after.at(i), before.at(i)));
+    }
+    QVERIFY(samePoint(
+        QPointF(pictura::transform_pivot_x(*view), pictura::transform_pivot_y(*view)), pivot));
+    tools->cancelFreeTransform();
+}
+
+// [pms_commit]
+void TransformCommandsTest::distortMidSessionCommitsThePendingScale()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame, {QRect(10, 8, 12, 10)});
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+    const int count = view->history_count();
+
+    QVERIFY(tools->beginFreeTransform(layer));
+    QVERIFY(tools->setTransformWidth(150.0, false));
+    QVERIFY(frame.registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::EditTransformDistort)));
+    QCOMPARE(pictura::transform_session_mode(*view), QStringLiteral("distort"));
+    tools->commitFreeTransform();
+    QVERIFY(!view->transform_session_active());
+    QCOMPARE(view->history_count(), count + 1);
+    const QRect rect = layerRectOf(view, layer);
+    QCOMPARE(rect.width(), 18);
+    QCOMPARE(rect.height(), 10);
 }
 
 void TransformCommandsTest::rotate90ClockwiseSwapsTheBox()

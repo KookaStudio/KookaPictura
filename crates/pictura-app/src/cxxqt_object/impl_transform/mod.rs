@@ -5,6 +5,7 @@ mod distort;
 mod geometry;
 mod group;
 mod mask_move;
+mod mode_switch;
 mod perspective;
 mod session;
 mod skew;

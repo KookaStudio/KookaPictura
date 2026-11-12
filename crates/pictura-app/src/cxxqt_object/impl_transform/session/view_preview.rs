@@ -15,7 +15,7 @@ use pictura_render::FilterProxy;
 pub(in crate::cxxqt_object) const VIEW_PREVIEW_PIXELS: i64 = 4_000_000;
 
 /// The deepest level a view preview is built at; deeper levels do not exist.
-const MAX_LEVEL: u32 = 16;
+pub(super) const MAX_LEVEL: u32 = 16;
 
 const EMPTY: PsdRect = PsdRect {
     top: 0,
@@ -146,7 +146,7 @@ pub(super) fn follow(
 /// The document without the layer at `path`, composited over `patch` at
 /// `level`. Level 0 composites the patch exactly; a deeper level composites a
 /// reduced copy of it.
-fn backdrop(
+pub(super) fn backdrop(
     doc: &Document,
     path: &str,
     level: u32,
@@ -234,22 +234,26 @@ fn moving_region(layer_rect: PsdRect, visible: PsdRect, scale: i32) -> Option<Ps
         bottom: visible.bottom.saturating_add(my),
         right: visible.right.saturating_add(mx),
     };
-    // Aligned inside the layer, so each preview pixel is a whole footprint.
+    align(grown.intersect(layer_rect)?, scale).intersect(inner_aligned(layer_rect, scale))
+}
+
+/// `layer_rect` aligned inside itself to the level grid, so each preview pixel
+/// is a whole footprint; the rect itself when that leaves nothing.
+pub(super) fn inner_aligned(layer_rect: PsdRect, scale: i32) -> PsdRect {
     let inner = PsdRect {
         top: ceil_to(layer_rect.top, scale),
         left: ceil_to(layer_rect.left, scale),
         bottom: floor_to(layer_rect.bottom, scale),
         right: floor_to(layer_rect.right, scale),
     };
-    let inner = if inner.width() > 0 && inner.height() > 0 {
+    if inner.width() > 0 && inner.height() > 0 {
         inner
     } else {
         layer_rect
-    };
-    align(grown.intersect(layer_rect)?, scale).intersect(inner)
+    }
 }
 
-fn align(rect: PsdRect, scale: i32) -> PsdRect {
+pub(super) fn align(rect: PsdRect, scale: i32) -> PsdRect {
     PsdRect {
         top: floor_to(rect.top, scale),
         left: floor_to(rect.left, scale),
@@ -266,7 +270,7 @@ fn ceil_to(v: i32, scale: i32) -> i32 {
     -(-v).div_euclid(scale) * scale
 }
 
-fn canvas(doc: &Document) -> PsdRect {
+pub(super) fn canvas(doc: &Document) -> PsdRect {
     PsdRect {
         top: 0,
         left: 0,
@@ -275,7 +279,7 @@ fn canvas(doc: &Document) -> PsdRect {
     }
 }
 
-fn area(rect: PsdRect) -> i64 {
+pub(super) fn area(rect: PsdRect) -> i64 {
     i64::from(rect.width().max(0)) * i64::from(rect.height().max(0))
 }
 

@@ -16,6 +16,8 @@
 #include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
 
+#include <cstdlib>
+
 #include "qt_test_support.h"
 
 #include <QtWidgets/QComboBox>
@@ -79,6 +81,7 @@ private slots:
     void pressOnAPresetMakesItCustom();
     void escapeRestoresAWarpedSession();
     void identityWarpCommitsNothing();
+    void warpPreviewKeepsTheReducedLevel();
 
 private:
     // A new document with one filled raster layer selected; returns its path.
@@ -99,6 +102,7 @@ void TransformWarpTest::initTestCase()
 
 void TransformWarpTest::cleanup()
 {
+    pictura::set_transform_preview_pixels_for_test(-1);
     while (window_ && window_->activeDocumentIndex() >= 0) {
         window_->closeDocument(window_->activeDocumentIndex(), false);
     }
@@ -668,6 +672,40 @@ void TransformWarpTest::perspectiveBoxWarpPreviews()
     }
     QVERIFY(!view->move_preview_layer().isNull());
     tools->cancelFreeTransform();
+}
+
+// [tpm_warp_level]
+void TransformWarpTest::warpPreviewKeepsTheReducedLevel()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QSize sizes[2];
+    int scales[2] = {0, 0};
+    // The 108-px mark at the default threshold, then over a 50-px one.
+    const qint64 thresholds[2] = {-1, 50};
+    for (int i = 0; i < 2; ++i) {
+        const QString layer = beginLayer(frame);
+        QVERIFY(!layer.isEmpty());
+        pictura::PictureView* view = frame.activeView();
+        auto* tools = frame.findChild<pictura::ToolController*>();
+        QVERIFY(view && tools);
+        pictura::set_transform_preview_pixels_for_test(thresholds[i]);
+        QVERIFY(tools->beginWarp(layer));
+        QVERIFY(tools->setTransformWarpStyle(QStringLiteral("arc")));
+        scales[i] = pictura::transform_preview_scale(*view);
+        sizes[i] = view->move_preview_layer().size();
+        tools->cancelFreeTransform();
+        cleanup();
+    }
+    QCOMPARE(scales[0], 1);
+    QCOMPARE(scales[1], 2);
+    // Half the warped box, less what the inner 2-px alignment trims.
+    QVERIFY2(std::abs(sizes[1].width() * 2 - sizes[0].width()) <= 2
+                 && std::abs(sizes[1].height() * 2 - sizes[0].height()) <= 2,
+             qPrintable(QStringLiteral("%1x%2 vs %3x%4")
+                            .arg(sizes[1].width())
+                            .arg(sizes[1].height())
+                            .arg(sizes[0].width())
+                            .arg(sizes[0].height())));
 }
 
 QTEST_MAIN(TransformWarpTest)

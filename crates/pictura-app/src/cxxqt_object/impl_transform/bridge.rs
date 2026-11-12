@@ -35,6 +35,12 @@ pub mod ffi {
         /// Document pixels per pixel of the Move preview's images: 1 for a
         /// full-resolution preview, `2^level` for one built from the view.
         fn move_preview_scale(view: &PictureView) -> i32;
+        /// Document pixels per pixel of an open transform session's preview
+        /// images: `2^level` for a large plain layer (#1297), else 1.
+        fn transform_preview_scale(view: &PictureView) -> i32;
+        /// Pin the threshold above which a transform preview is reduced to
+        /// `pixels`; a negative value restores the default (16 Mpx).
+        fn set_transform_preview_pixels_for_test(pixels: i64);
         /// A view preview's layer content bounds as `[left, top, right,
         /// bottom]`; empty for a full-resolution preview.
         fn move_preview_content_extents(view: &PictureView) -> Vec<i32>;
@@ -138,12 +144,16 @@ pub mod ffi {
         /// `"rotate90cw"`, `"rotate90ccw"`, `"flipHorizontal"`, or
         /// `"flipVertical"`. False without a session or for an unknown op.
         fn transform_apply(view: Pin<&mut PictureView>, op: &QString) -> bool;
-        /// Restrict an open similarity session to Scale or Rotate gestures.
-        /// False without a session, in a projective mode, or in Warp mode.
+        /// Switch the open session's mode, keeping its box: a similarity
+        /// session to Scale or Rotate, or any session to Skew, Distort, or
+        /// Perspective, whose quad then carries the pending transform (#1297).
+        /// False without a session, out of a projective mode into another
+        /// kind, in Warp mode or with a stored warp, or into Distort or
+        /// Perspective on editable type.
         fn transform_set_mode(view: Pin<&mut PictureView>, mode: &QString) -> bool;
         /// Whether [`transform_set_mode`] would accept `mode` right now; the
-        /// menu uses it so a Scale/Rotate item is disabled where the switch
-        /// cannot act.
+        /// menu uses it so an Edit > Transform mode item is disabled where the
+        /// switch cannot act.
         fn transform_can_set_mode(view: &PictureView, mode: &QString) -> bool;
         /// Apply the last committed similarity transform to the open session.
         /// False without a session or a repeatable last transform.

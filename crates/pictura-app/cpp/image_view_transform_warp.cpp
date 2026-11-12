@@ -175,11 +175,12 @@ struct Hourglass {
 WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF& sourceOrigin,
                                             const std::array<double, 9>& coefficients,
                                             const QRectF& sourceRect,
-                                            const QRectF& visibleDocument, double scale)
+                                            const QRectF& visibleDocument, double scale,
+                                            double sourceScale)
 {
     WarpedTransformPreview out;
     if (source.isNull() || sourceRect.isEmpty() || visibleDocument.isEmpty()
-        || !(scale > 0.0)) {
+        || !(scale > 0.0) || !(sourceScale > 0.0)) {
         return out;
     }
     std::array<double, 9> inverse{};
@@ -284,10 +285,12 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
                 || sourcePoint.y() < sourceRect.top()
                 || sourcePoint.y() >= sourceRect.bottom()
                 || sourcePoint.x() < 0.0 || sourcePoint.y() < 0.0
-                || sourcePoint.x() >= src.width() || sourcePoint.y() >= src.height()) {
+                || sourcePoint.x() >= src.width() * sourceScale
+                || sourcePoint.y() >= src.height() * sourceScale) {
                 continue;
             }
-            const QRgb pixel = bilinear(src, sourcePoint.x(), sourcePoint.y());
+            const QRgb pixel =
+                bilinear(src, sourcePoint.x() / sourceScale, sourcePoint.y() / sourceScale);
             if (qAlpha(pixel) == 0) {
                 continue;
             }
@@ -322,11 +325,13 @@ void ImageView::paintTransformLayer(QPainter& painter)
                               transformWarped_.image);
         } else if (!transformWarped_.crossed) {
             painter.setTransform(transformProjective_, true);
+            painter.scale(moveScale_, moveScale_);
             painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
         }
     } else {
         painter.setTransform(transformPreviewMatrix(), true);
-        painter.drawImage(moveLayerPos_, moveLayer_);
+        painter.drawImage(QRectF(moveLayerPos_, QSizeF(moveLayer_.size()) * moveScale_),
+                          moveLayer_);
     }
     painter.restore();
     painter.setOpacity(1.0);
@@ -357,11 +362,15 @@ void ImageView::refreshTransformWarp()
         return;
     }
     const QRectF sourceRect = transformProjectiveSource_.isEmpty()
-        ? QRectF(QPointF(0.0, 0.0), QSizeF(moveLayer_.size()))
+        ? QRectF(QPointF(0.0, 0.0), QSizeF(moveLayer_.size()) * moveScale_)
         : transformProjectiveSource_;
-    transformWarped_ = warpTransformPreview(moveLayer_, moveLayerPos_,
+    if (transformWarpSource_.isNull() || transformWarpSourceKey_ != moveLayer_.cacheKey()) {
+        transformWarpSource_ = moveLayer_.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        transformWarpSourceKey_ = moveLayer_.cacheKey();
+    }
+    transformWarped_ = warpTransformPreview(transformWarpSource_, moveLayerPos_,
                                             transformProjectiveCoefficients_, sourceRect,
-                                            visible, scale);
+                                            visible, scale, moveScale_);
     transformWarpedVisible_ = visible;
     transformWarpedScale_ = scale;
     transformWarpedStale_ = false;

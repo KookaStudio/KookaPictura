@@ -105,6 +105,8 @@ private slots:
     void distortCommandDisabledForGroup();
     void projectivePreviewClipsAtTheHorizon();
     void projectivePreviewSamplesAtTheViewScale();
+    void projectivePreviewSamplesAReducedImage();
+    void distortCommandDisabledMidSessionOnType();
     void projectivePreviewFollowsTheViewport();
     void warpPresetPreviewKeepsContentOutsideTheBox();
 
@@ -699,6 +701,55 @@ void TransformDistortTest::projectivePreviewSamplesAtTheViewScale()
     const QRectF extent(warped.origin, QSizeF(warped.image.size()) / warped.scale);
     QVERIFY(extent.contains(QRectF(0.5, 0.5, 999.0, 999.0)));
     QCOMPARE(qAlpha(warped.image.pixel(50, 50)), 255);
+}
+
+// [tpm_warp_scaled]
+void TransformDistortTest::projectivePreviewSamplesAReducedImage()
+{
+    // A 40² red square and its 20² half drawn at two document pixels a pixel
+    // warp through one Distort map to the same image.
+    QImage full(40, 40, QImage::Format_ARGB32_Premultiplied);
+    full.fill(Qt::red);
+    QImage half(20, 20, QImage::Format_ARGB32_Premultiplied);
+    half.fill(Qt::red);
+    // A Distort-like projective map (QTransform constructor order): the right
+    // side stretches and its top lifts.
+    const std::array<double, 9> c{1.2, -0.1, 0.004, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    const QRectF source(0.0, 0.0, 40.0, 40.0);
+    const QRectF visible(-10.0, -10.0, 80.0, 70.0);
+    const pictura::WarpedTransformPreview fromFull =
+        pictura::warpTransformPreview(full, QPointF(0.0, 0.0), c, source, visible, 1.0);
+    const pictura::WarpedTransformPreview fromHalf =
+        pictura::warpTransformPreview(half, QPointF(0.0, 0.0), c, source, visible, 1.0, 2.0);
+    QVERIFY(!fromFull.image.isNull());
+    QCOMPARE(fromHalf.origin, fromFull.origin);
+    QCOMPARE(fromHalf.image.size(), fromFull.image.size());
+    QCOMPARE(fromHalf.image, fromFull.image);
+    // The stretched right side is covered, not cut at the half image's width.
+    const QPointF right = QTransform(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8])
+                              .map(QPointF(39.0, 20.0));
+    QCOMPARE(qAlpha(fromHalf.image.pixel((right - fromFull.origin).toPoint())), 255);
+}
+
+// [pms_type]
+void TransformDistortTest::distortCommandDisabledMidSessionOnType()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_distort_type_switch"));
+    QVERIFY(f.ok());
+    const QString path = beginTypeLayer(f);
+    QVERIFY(!path.isEmpty());
+    frame.selectLayerPath(path);
+    QVERIFY(f.tools->beginFreeTransform(path));
+    frame.registry()->refresh();
+    QAction* distort = action(frame, pictura::command_ids::EditTransformDistort);
+    QAction* skew = action(frame, pictura::command_ids::EditTransformSkew);
+    QVERIFY(distort && !distort->isEnabled());
+    QVERIFY(skew && skew->isEnabled());
+    distort->trigger();
+    QVERIFY(f.view->transform_session_active());
+    QCOMPARE(pictura::transform_session_mode(*f.view), QStringLiteral("free"));
+    f.tools->cancelFreeTransform();
 }
 
 void TransformDistortTest::projectivePreviewFollowsTheViewport()

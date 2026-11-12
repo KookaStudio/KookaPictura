@@ -44,13 +44,24 @@ void PicturaMainWindow::wireTransformMenu()
     for (const auto& entry : kProjectiveModes) {
         const QString id = QString::fromLatin1(entry.id);
         const QString mode = QString::fromLatin1(entry.mode);
+        // An open session switches mode and keeps its pending transform, as
+        // CS6 does (#1297), instead of starting over.
         registry_->setHandler(id, [this, mode, transformTarget]() {
+            if (tools_ && tools_->transformSessionActive() && !tools_->transformControlsSession()) {
+                if (tools_->setTransformMode(mode)) {
+                    refresh();
+                }
+                return;
+            }
             if (beginTransformMode(transformTarget(), mode)) {
                 refresh();
             }
         });
-        registry_->setEnabledProvider(id, [this, mode, transformTarget]() {
+        registry_->setEnabledProvider(id, [this, mode, transformTarget, modalSession]() {
             PictureView* view = activeView();
+            if (view && modalSession()) {
+                return transform_can_set_mode(*view, mode);
+            }
             const QString path = transformTarget();
             return view && view->has_document() && !path.isEmpty()
                 && layer_can_transform_mode(*view, path, mode);

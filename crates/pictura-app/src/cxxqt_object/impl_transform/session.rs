@@ -33,9 +33,11 @@ mod view_preview;
 use preview::TransformPreview;
 use preview::{
     backdrop_patch, build_transform_preview, moving_layer_image, needs_rendered_appearance,
-    rendered_layer_image,
+    rendered_layer_image, transform_preview_bytes,
 };
-pub(in crate::cxxqt_object) use preview::{rendered_transform_group, transform_preview_layer};
+pub(in crate::cxxqt_object) use preview::{
+    rendered_transform_group, set_transform_preview_pixels_for_test, transform_preview_layer_at,
+};
 use view_preview::above_patch;
 pub(in crate::cxxqt_object) use view_preview::MoveView;
 
@@ -132,6 +134,7 @@ impl qobject::PictureView {
         path: &QString,
         mode: TransformMode,
     ) -> bool {
+        memory_gate::clear();
         self.as_mut().settle_pending_composite();
         if !self
             .rust()
@@ -203,6 +206,16 @@ impl qobject::PictureView {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
+        // The preview is built before the session opens; one that does not
+        // fit is refused rather than left to the OOM killer (#1297).
+        let fits = rust.session.doc.as_ref().is_some_and(|doc| {
+            memory_gate::admit_fresh(transform_preview_bytes(
+                doc, path, members, orig_rect, bounded,
+            ))
+        });
+        if !fits {
+            return false;
+        }
         let prepared = rust.session.doc.as_ref().and_then(|doc| {
             build_transform_preview(doc, path, members, orig_rect, gpu_compute, bounded)
         });
@@ -213,6 +226,7 @@ impl qobject::PictureView {
         rust.move_base_origin = preview.base_origin;
         rust.move_view = None;
         rust.move_layer = Some(preview.image);
+        rust.transform_preview_level = preview.level;
         rust.move_x = preview.x;
         rust.move_y = preview.y;
         rust.move_above = None;
@@ -863,6 +877,7 @@ impl qobject::PictureView {
         rust.move_base_origin = None;
         rust.move_view = None;
         rust.move_layer = None;
+        rust.transform_preview_level = 0;
         rust.move_x = 0;
         rust.move_y = 0;
         rust.move_above = None;

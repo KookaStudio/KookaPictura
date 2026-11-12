@@ -53,6 +53,7 @@ private slots:
 
     void controlsBoxDrawsPastTheDocumentEdge();
     void freeTransformClearsTheBrushRing();
+    void reducedPreviewDrawsAtDocumentSize();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -68,7 +69,12 @@ void TransformOverlayTest::initTestCase()
 
 void TransformOverlayTest::cleanup()
 {
+    pictura::set_transform_preview_pixels_for_test(-1);
     if (window_) {
+        if (pictura::PictureView* view = window_->activeView();
+            view && view->transform_session_active()) {
+            view->cancel_transform();
+        }
         if (auto* box = window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"))) {
             box->setChecked(false);
         }
@@ -174,6 +180,56 @@ void TransformOverlayTest::freeTransformClearsTheBrushRing()
     canvas->mouseMoved(QPointF(80.0, 80.0));
     QCoreApplication::processEvents();
     QVERIFY2(canvas->hasBrushOutline(), "the ring returns on the next hover");
+}
+
+// [tpm_draw_scaled]
+void TransformOverlayTest::reducedPreviewDrawsAtDocumentSize()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Reduced"), 40, 30, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    const int added = view->add_layer(0);
+    QVERIFY(added > 0);
+    const QString layer = QString::number(added);
+    frame.selectLayerPath(layer);
+    QVERIFY(view->select_rect(10, 6, 20, 20, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    // At 800 % the box's handles and reference point cover about a document
+    // pixel each, clear of the samples below.
+    canvas->setZoom(8.0, canvas->imageToWidget(QPointF(20.0, 15.0)));
+
+    const auto pixelAt = [canvas](const QImage& shot, double x, double y) {
+        return QColor(shot.pixel(canvas->imageToWidget(QPointF(x, y)).toPoint()));
+    };
+    // The 400-px box is over a 300-px threshold: a half-size preview.
+    for (const qint64 threshold : {qint64(300), qint64(-1)}) {
+        pictura::set_transform_preview_pixels_for_test(threshold);
+        QVERIFY(tools->beginFreeTransform(layer));
+        const int scale = threshold > 0 ? 2 : 1;
+        QCOMPARE(pictura::transform_preview_scale(*view), scale);
+        QCOMPARE(canvas->transformPreviewLayerForTest().size(), QSize(20, 20) / scale);
+        QCoreApplication::processEvents();
+        const QImage shot = canvas->grab().toImage();
+        // The mark's far corner is black only when the image is drawn at its
+        // document size; around the mark the canvas stays white.
+        for (const QPointF& inside : {QPointF(13.5, 9.5), QPointF(25.5, 21.5), QPointF(26.5, 11.5)}) {
+            QVERIFY2(qGray(pixelAt(shot, inside.x(), inside.y()).rgb()) < 64,
+                     qPrintable(QStringLiteral("scale %1 at %2,%3").arg(scale).arg(inside.x()).arg(inside.y())));
+        }
+        for (const QPointF& outside : {QPointF(5.5, 3.5), QPointF(35.5, 16.5), QPointF(20.5, 28.5)}) {
+            QVERIFY2(qGray(pixelAt(shot, outside.x(), outside.y()).rgb()) > 200,
+                     qPrintable(QStringLiteral("scale %1 at %2,%3").arg(scale).arg(outside.x()).arg(outside.y())));
+        }
+        tools->cancelFreeTransform();
+    }
 }
 
 QTEST_MAIN(TransformOverlayTest)
