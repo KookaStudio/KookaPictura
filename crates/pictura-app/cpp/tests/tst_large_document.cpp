@@ -314,12 +314,10 @@ void LargeDocumentTest::aSecondPressReusesTheFullPreview()
     QVERIFY(f.view->commit_move(4, 4));
     QVERIFY(pictura::move_composite_pending(*f.view));
 
-    QElapsedTimer timer;
-    timer.start();
     QVERIFY(f.view->begin_move_preview());
-    const qint64 elapsed = timer.elapsed();
     QVERIFY2(f.view->move_preview_cache_hit(), "the second press reuses the cached base");
-    QVERIFY2(elapsed < 1000, "the second press must not settle the whole composite");
+    QVERIFY2(pictura::move_composite_pending(*f.view),
+             "the second press must not settle the whole composite");
     f.view->end_move_preview();
 }
 
@@ -343,12 +341,10 @@ void LargeDocumentTest::aSecondPressKeepsTheViewPreview()
     QVERIFY(pictura::move_composite_pending(*f.view));
 
     QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
-    QElapsedTimer timer;
-    timer.start();
     QVERIFY(f.view->begin_move_preview());
-    const qint64 elapsed = timer.elapsed();
     QVERIFY2(pictura::move_preview_scale(*f.view) > 1, "the second press is a view preview");
-    QVERIFY2(elapsed < 1000, "the second press must not settle the whole composite");
+    QVERIFY2(pictura::move_composite_pending(*f.view),
+             "the second press must not settle the whole composite");
     f.canvas->beginMovePreview(f.view->move_preview_base(), f.view->move_preview_layer(),
                                QPointF(f.view->move_preview_x(), f.view->move_preview_y()),
                                f.view->move_preview_opacity() / 255.0);
@@ -378,11 +374,9 @@ void LargeDocumentTest::aHoverReadoutDoesNotSettleTheMove()
     auto* panel = window_->findChild<pictura::InfoPanel*>(QStringLiteral("infoPanel"));
     QVERIFY(panel != nullptr);
     panel->setCursorPosition(QPointF(40, 104));
-    QElapsedTimer timer;
-    timer.start();
     panel->refresh();
-    QVERIFY2(timer.elapsed() < 1000, "the hover readout must not settle the composite");
-    QVERIFY(pictura::move_composite_pending(*f.view));
+    QVERIFY2(pictura::move_composite_pending(*f.view),
+             "the hover readout must not settle the composite");
 
     QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
     QVERIFY(committed.wait(30000));
