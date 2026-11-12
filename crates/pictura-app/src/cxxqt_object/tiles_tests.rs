@@ -507,3 +507,83 @@ fn ending_solo_drops_queued_mask_tiles() {
     assert!(!wanted.contains(&key), "the mask key is dropped");
     assert!(wanted.contains(&composite), "a composite key stays queued");
 }
+
+/// A tiled plane of runs, which packs.
+fn cold_runs(side: usize) -> pictura_core::Plane<u8> {
+    let data: Vec<u8> = (0..side * side).map(|i| ((i % side) / 16) as u8).collect();
+    let mut plane = pictura_core::Plane::from(data);
+    assert!(plane.tile(side, side));
+    plane
+}
+
+/// Single-body passes until `done`, at most `limit`; whether `done` held.
+fn pass_until(limit: usize, done: impl Fn() -> bool) -> bool {
+    for _ in 0..limit {
+        if done() {
+            return true;
+        }
+        pictura_core::memory::eviction::run_pass(1);
+    }
+    done()
+}
+
+// [te_view_hold]
+#[test]
+fn the_view_holds_only_the_tiles_it_built() {
+    use pictura_core::memory::eviction::Residency;
+    let (w, h) = (4096u32, 2048u32);
+    let mut doc = layered(w, h);
+    for channel in &mut doc.layers.first_mut().expect("base").channels {
+        assert!(channel.data.tile(w as usize, h as usize));
+    }
+    let mut view = view_of(doc);
+    view.presented_level = 0;
+    view.presented_rect = rect(1000, 600, 1800, 1200);
+    view.pin_presented_view();
+    let (_, missing) = view.tile_crop(TileSource::Composite, 0, view.presented_rect);
+    assert!(missing.is_empty());
+    assert!(
+        !view.tiles.view_holds.borrow().is_empty(),
+        "the build kept a hold"
+    );
+
+    // A plane read after the build, as a commit reads and writes: cold.
+    let other = cold_runs(1024);
+    for i in 0..other.tile_count() {
+        drop(other.tile_at(i));
+    }
+    let gone = |p: &pictura_core::Plane<u8>| {
+        (0..p.tile_count()).all(|i| p.tile_residency(i) != Some(Residency::Resident))
+    };
+    assert!(
+        pass_until(4096, || gone(&other)),
+        "the other plane is evicted"
+    );
+    let base = |view: &PictureViewRust| {
+        let doc = view.session.doc.as_ref().expect("document");
+        doc.layers.as_slice()[0].channels[0].data.clone()
+    };
+    let plane = base(&view);
+    let under = plane.tiles_in(1000..1800, 600..1200);
+    assert!(!under.is_empty());
+    for &i in &under {
+        assert_eq!(
+            plane.tile_residency(i),
+            Some(Residency::Resident),
+            "view tile {i}"
+        );
+    }
+
+    // Another view releases the holds: those tiles go before a newer cold plane.
+    view.presented_rect = rect(3000, 1500, 3200, 1700);
+    view.pin_presented_view();
+    assert!(view.tiles.view_holds.borrow().is_empty());
+    let later = cold_runs(1024);
+    let first = under[0];
+    assert!(pass_until(4096, || plane.tile_residency(first)
+        != Some(Residency::Resident)));
+    assert!(
+        !gone(&later),
+        "the released view tile went before the newer cold plane"
+    );
+}

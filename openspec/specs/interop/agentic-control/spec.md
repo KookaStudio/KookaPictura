@@ -716,6 +716,13 @@ dialog a person opens outside a request SHALL NOT be affected.
 - **WHEN** a dialog is shown while no request is running
 - **THEN** it stays open
 
+#### Scenario: A job's progress window runs to the end [ac_guard_job_progress]
+
+- **WHEN** a client's `layer_op` `free_transform` starts a commit job that runs
+  long enough for its cancellable progress window to show
+- **THEN** the window is not cancelled, the job lands, the response is `ok`, and
+  history gains one "Free Transform" state
+
 ### Requirement: Saving never reaches a dialog
 
 `document save` SHALL refuse with `refused`, and SHALL NOT open a dialog, when the

@@ -24,6 +24,7 @@ use super::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QImage;
+use pictura_core::memory::eviction::{self, HotHold};
 use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
 use pictura_render::{
     build_tile, patch_buffer_region, CompositeScope, DocumentComposite, PyramidLevel, Ticket,
@@ -55,10 +56,10 @@ pub(in crate::cxxqt_object) struct DisplayTiles {
     /// The eviction pass the cache last dropped for (#1217): a newer one
     /// drops the unpinned tiles, the first memory R2 frees.
     drop_epoch: Cell<u64>,
-    /// Keeps the layer tiles read for the presented view resident until the
-    /// view changes (#1217).
-    view_hold: RefCell<Option<pictura_core::memory::eviction::HotHold>>,
-    /// The view the hold was taken for.
+    /// Closed holds over the layer tiles read to build the presented view's
+    /// tiles, newest last, kept until the view changes (#1217, #1290).
+    view_holds: RefCell<Vec<HotHold>>,
+    /// The view the holds were taken for.
     view_key: Cell<(i32, PsdRect)>,
 }
 
@@ -70,7 +71,7 @@ impl Default for DisplayTiles {
             in_flight: Cell::new(false),
             force_async: Cell::new(false),
             drop_epoch: Cell::new(pictura_core::memory::eviction::display_drop_epoch()),
-            view_hold: RefCell::new(None),
+            view_holds: RefCell::new(Vec::new()),
             view_key: Cell::new((-1, PsdRect::default())),
         }
     }
@@ -283,6 +284,7 @@ impl PictureViewRust {
         let mut keys = keys.to_vec();
         // Finer levels first, so a coarser tile can fold its cached children.
         keys.sort_by_key(|key| key.level);
+        let mut hold = eviction::hot();
         for key in keys {
             let built = {
                 let cache = self.tiles.cache.borrow();
@@ -291,6 +293,8 @@ impl PictureViewRust {
             };
             self.tiles.cache.borrow_mut().insert(key, built);
         }
+        hold.close();
+        self.keep_view_hold(self.tiles.view_key.get(), hold);
         paint_timing::record("tiles_build_sync", t.elapsed());
     }
 
@@ -349,9 +353,23 @@ impl PictureViewRust {
             cache.drop_unpinned();
         }
         if self.tiles.view_key.replace((self.presented_level, r)) != (self.presented_level, r) {
-            let mut hold = self.tiles.view_hold.borrow_mut();
-            let next = pictura_core::memory::eviction::hot();
-            *hold = Some(next);
+            self.tiles.view_holds.borrow_mut().clear();
+        }
+    }
+
+    /// Keep the closed `hold` of a tile build for view `key` while that view
+    /// is still the presented one.
+    fn keep_view_hold(&self, key: (i32, PsdRect), hold: HotHold) {
+        if key != self.tiles.view_key.get() {
+            return;
+        }
+        let mut holds = self.tiles.view_holds.borrow_mut();
+        holds.push(hold);
+        // ponytail: the 8 newest builds; a tile rebuilt after an edit is
+        // stamped again by the newer hold, so older intervals cover tiles
+        // the view has since re-read.
+        if holds.len() > 8 {
+            drop(holds.remove(0));
         }
     }
 
@@ -688,6 +706,7 @@ impl qobject::PictureView {
         if keys.is_empty() {
             return;
         }
+        let view_key = rust.tiles.view_key.get();
         let job = TileJob {
             doc: doc.clone(),
             mask: rust.solo_mask().cloned(),
@@ -698,22 +717,33 @@ impl qobject::PictureView {
         rust.tiles.in_flight.set(true);
         let qt_thread = self.qt_thread();
         std::thread::spawn(move || {
+            // Open only while this job reads the layers, so a commit running
+            // beside the view does not make its own tiles the view's (#1290).
+            let mut hold = eviction::hot();
             let built = job.build();
+            hold.close();
             let ticket = job.ticket;
             // Before landing, so a write does not fork tiles nobody reads.
             drop(job);
             qt_thread
-                .queue(move |view| view.land_tiles(ticket, built))
+                .queue(move |view| view.land_tiles(ticket, built, view_key, hold))
                 .ok();
         });
     }
 
     /// Install a worker's tiles; a refused one (damage overtook it) is asked
     /// for again. The canvas repaints when anything landed.
-    fn land_tiles(mut self: Pin<&mut Self>, ticket: Ticket, built: Vec<(TileKey, Arc<[u8]>)>) {
+    fn land_tiles(
+        mut self: Pin<&mut Self>,
+        ticket: Ticket,
+        built: Vec<(TileKey, Arc<[u8]>)>,
+        view_key: (i32, PsdRect),
+        hold: HotHold,
+    ) {
         let landed = {
             let mut rust = self.as_mut().rust_mut();
             rust.tiles.in_flight.set(false);
+            rust.keep_view_hold(view_key, hold);
             rust.fit_tiles();
             let mut landed = false;
             let mut refused = Vec::new();
@@ -769,7 +799,10 @@ impl PictureViewRust {
                     .collect(),
             }
         };
+        let mut hold = eviction::hot();
         let built = job.build();
+        hold.close();
+        self.keep_view_hold(self.tiles.view_key.get(), hold);
         let mut cache = self.tiles.cache.borrow_mut();
         built
             .into_iter()

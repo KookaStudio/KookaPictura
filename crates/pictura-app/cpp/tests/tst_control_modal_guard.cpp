@@ -6,11 +6,13 @@
 #include <QtCore/QJsonObject>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
+#include <QtWidgets/QProgressDialog>
 
 #include "commands.h"
 #include "control_server.h"
 #include "dialogs.h"
 #include "frame.h"
+#include "api/document_bridge.h"
 #include "api/view_bridge.h"
 
 #include "qt_test_support.h"
@@ -47,6 +49,7 @@ private slots:
     void panelModalsAreRefused();
     void dialogOutsideARequestStaysOpen();
     void everyCommandAnswers();
+    void aJobProgressWindowRunsToTheEnd();
 
 private:
     void ensureDocument();
@@ -141,6 +144,40 @@ void ControlModalGuardTest::everyCommandAnswers()
         }
     }
     QVERIFY2(left.isEmpty(), qPrintable(left.join(u',')));
+}
+
+// [ac_guard_job_progress] A commit job a request starts shows its cancellable
+// window; the guard leaves it to land (#1290).
+void ControlModalGuardTest::aJobProgressWindowRunsToTheEnd()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Job"), 4200, 4200, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    QCOMPARE(view->duplicate_layer(0), 1);
+    pictura::transform_set_delay(*view, 800);
+    const int states = view->history_count();
+    bool sawWindow = false;
+    QTimer probe;
+    probe.setInterval(20);
+    connect(&probe, &QTimer::timeout, this, [&] {
+        auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));
+        sawWindow = sawWindow || (d && d->isVisible());
+    });
+    probe.start();
+    const QJsonObject response = server_->dispatch(
+        QStringLiteral("layer_op"), {{QStringLiteral("op"), QStringLiteral("free_transform")},
+                                     {QStringLiteral("index"), 1},
+                                     {QStringLiteral("scale"), 50.0}});
+    probe.stop();
+    pictura::transform_set_delay(*view, 0);
+    QVERIFY2(response.value(QStringLiteral("ok")).toBool(),
+             qPrintable(errorCode(response)));
+    QVERIFY2(sawWindow, "the progress window showed");
+    // The state lands with the deferred composite, after the job.
+    QTRY_COMPARE_WITH_TIMEOUT(view->history_count(), states + 1, 15000);
+    QCOMPARE(view->history_label(states), QStringLiteral("Free Transform"));
+    QVERIFY(window_->closeActiveDocument(false));
 }
 
 QTEST_MAIN(ControlModalGuardTest)

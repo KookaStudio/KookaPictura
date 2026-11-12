@@ -29,9 +29,12 @@ bool ControlScope::eventFilter(QObject* watched, QEvent* event)
     }
     auto* dialog = qobject_cast<QDialog*>(watched);
     auto* menu = qobject_cast<QMenu*>(watched);
-    // `jobBusy` is runBusyJob's progress window: it closes itself when the job
-    // lands, and cancelling it would not cancel the job.
-    if ((!dialog && !menu) || watched->objectName() == QStringLiteral("jobBusy")) {
+    // A background job's progress window closes itself when the job lands:
+    // `jobBusy` (runBusyJob) and `jobProgress` (runCancellableJob), whose
+    // rejection would cancel the job the request started (#1290).
+    const QString name = watched->objectName();
+    if ((!dialog && !menu) || name == QStringLiteral("jobBusy")
+        || name == QStringLiteral("jobProgress")) {
         return QObject::eventFilter(watched, event);
     }
     auto* widget = static_cast<QWidget*>(watched);

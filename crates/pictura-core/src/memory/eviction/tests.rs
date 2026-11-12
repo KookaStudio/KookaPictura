@@ -244,33 +244,185 @@ fn eviction_starts_above_the_ceiling_and_stops_at_ninety() {
     );
 }
 
+fn resident<T: TileSample>(plane: &Plane<T>, i: usize) -> bool {
+    plane.tile_residency(i) == Some(Residency::Resident)
+}
+
+/// Single-body passes until `done`, at most 256; whether `done` held.
+fn pass_until(done: impl Fn() -> bool) -> bool {
+    for _ in 0..256 {
+        if done() {
+            return true;
+        }
+        run_pass(1);
+    }
+    done()
+}
+
+// [te_clock_hot] Single-body passes with cold filler to spare. The registry
+// is sharded by thread, so the order a pass meets bodies in is not fixed.
 #[test]
 fn second_chance_and_hot_holds() {
     let _f = fixture("clock");
     let plane = plane_u8(1024, 256, 1, 7);
+    let filler = plane_u8(4096, 256, 1, 8);
     let tiles = dense_tiles(&plane);
     let (a, b) = (tiles[0], tiles[1]);
     drop(plane.tile_at(a));
     let hold = hot();
     drop(plane.tile_at(b));
-    run_pass(u64::MAX);
-    assert_eq!(
-        plane.tile_residency(a),
-        Some(Residency::Resident),
-        "second chance"
+    run_pass(1);
+    assert!(resident(&plane, a), "second chance");
+    assert!(
+        pass_until(|| !resident(&plane, a)),
+        "a goes once its bit is spent"
     );
-    assert_eq!(plane.tile_residency(b), Some(Residency::Resident), "hot");
+    assert!(resident(&plane, b), "hot while cold tiles remain");
+    drop(hold);
+    // Make the filler hot: b, now cold, must go before any of it.
+    let warm = hot();
+    let rest: Vec<usize> = dense_tiles(&filler)
+        .into_iter()
+        .filter(|&i| resident(&filler, i))
+        .collect();
+    for &i in &rest {
+        drop(filler.tile_at(i));
+    }
+    assert!(
+        pass_until(|| !resident(&plane, b)),
+        "b goes once the hold drops"
+    );
+    assert!(
+        rest.iter().all(|&i| resident(&filler, i)),
+        "before the hot filler"
+    );
+    drop(warm);
+}
+
+// [te_hot_last]
+#[test]
+fn hot_tiles_are_evicted_last() {
+    let _f = fixture("hot-last");
+    let plane = plane_u8(1024, 256, 1, 10);
+    let tiles = dense_tiles(&plane);
+    let hold = hot();
+    for &i in &tiles {
+        drop(plane.tile_at(i));
+    }
+    let borrowed = plane.tile_at(tiles[3]).unwrap();
     run_pass(u64::MAX);
-    assert_ne!(plane.tile_residency(a), Some(Residency::Resident));
-    assert_eq!(
-        plane.tile_residency(b),
-        Some(Residency::Resident),
-        "still hot"
+    for &i in &tiles[..3] {
+        assert!(
+            !resident(&plane, i),
+            "hot tile {i} went when nothing colder was left"
+        );
+    }
+    assert!(resident(&plane, tiles[3]), "a pinned tile stays");
+    drop(borrowed);
+    drop(hold);
+}
+
+// [te_hold_closed]
+#[test]
+fn a_closed_hold_keeps_only_what_it_saw() {
+    let _f = fixture("hold-closed");
+    let plane = plane_u8(1024, 256, 1, 11);
+    let _filler = plane_u8(4096, 256, 1, 12);
+    let tiles = dense_tiles(&plane);
+    let (a, b) = (tiles[0], tiles[1]);
+    let mut hold = hot();
+    drop(plane.tile_at(a));
+    hold.close();
+    assert_eq!(hot_epoch(), None, "a closed hold stamps nothing");
+    drop(plane.tile_at(b));
+    assert!(
+        pass_until(|| !resident(&plane, b)),
+        "read after the close: cold"
+    );
+    assert!(
+        resident(&plane, a),
+        "seen while open: hot while cold tiles remain"
     );
     drop(hold);
-    run_pass(u64::MAX);
-    run_pass(u64::MAX);
-    assert_ne!(plane.tile_residency(b), Some(Residency::Resident));
+}
+
+/// A compressible 2048² cold plane, tiled.
+fn cold_plane() -> Plane<u8> {
+    let data: Vec<u8> = (0..2048 * 2048).map(|i| ((i % 2048) / 16) as u8).collect();
+    let mut cold = Plane::from(data);
+    assert!(cold.tile(2048, 2048));
+    cold
+}
+
+/// Write `side`² new dense tiles, as a commit's output does, one at a time
+/// on this thread: the pinned host reading is this thread's.
+fn allocate(side: usize) -> Plane<u8> {
+    let mut fresh = Plane::filled(side, side, 1, 0u8);
+    fresh.tile(side, side);
+    assert!(
+        fresh.tile_count() > 0,
+        "tiled, so each write allocates a body"
+    );
+    for i in 0..fresh.tile_count() {
+        for mut t in fresh.tiles_mut_at(&[i]) {
+            t.row_mut(0)[0] = 1;
+        }
+    }
+    fresh.settle();
+    fresh
+}
+
+fn evicted() -> u64 {
+    counts().packed + counts().spilled
+}
+
+// [te_urgent_hard]
+#[test]
+fn a_hard_limit_evicts_at_the_ceiling() {
+    let _f = fixture("hard-limit");
+    let cold = cold_plane();
+    set_enabled(true);
+    // RAM only, no cgroup: 110 % of the ceiling is under the 125 % threshold.
+    let total = 8192 * MIB;
+    let reading = HostReading {
+        total: Some(total),
+        ..HostReading::default()
+    };
+    let ceiling = ceiling_of(&reading, governor().usage_percent()).expect("a ceiling");
+    set_host_for_test(Some(HostReading {
+        rss: Some(ceiling / 100 * 110),
+        ..reading
+    }));
+    refresh_urgency();
+    let before = evicted();
+    drop(allocate(512));
+    assert_eq!(evicted(), before, "no hard limit: 110 % does not evict");
+    pin_host_at(101);
+    refresh_urgency();
+    drop(allocate(512));
+    assert!(evicted() > before, "a hard limit evicts above the ceiling");
+    assert!(dense_tiles(&cold).iter().any(|&i| !resident(&cold, i)));
+}
+
+// [te_alloc_estimate]
+#[test]
+fn an_allocation_burst_is_caught_between_passes() {
+    let _f = fixture("estimate");
+    let cold = cold_plane();
+    set_enabled(true);
+    pin_host_at(95);
+    refresh_urgency();
+    // The host grows to 101 % with no background step to see it.
+    pin_host_at(101);
+    let before = evicted();
+    // 7168² is 49 MiB of new tiles: more than the 38 MiB left at 95 %.
+    let fresh = allocate(7168);
+    assert!(
+        evicted() > before,
+        "the allocating thread re-read and evicted"
+    );
+    assert!(dense_tiles(&cold).iter().any(|&i| !resident(&cold, i)));
+    drop(fresh);
 }
 
 #[test]
