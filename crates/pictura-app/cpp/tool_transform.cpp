@@ -321,13 +321,11 @@ void ToolController::commitFreeTransform()
     if (!v || !v->transform_session_active()) {
         return;
     }
-    const bool controls = transformControls_;
     transformControls_ = false;
     const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, *v);
     if (!committed && v->transform_session_active()) {
-        // Cancelled from the progress window: the session resumes.
-        transformControls_ = controls;
-        return;
+        // Cancelled from the progress window: the transform ends, as Esc ends it.
+        v->cancel_transform();
     }
     transformGuideSnap_ = false;
     resetTransformUi(committed);
@@ -341,9 +339,8 @@ void ToolController::commitTransformControls(PictureView& v)
     transformControls_ = false;
     const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, v);
     if (!committed && v.transform_session_active()) {
-        // Cancelled from the progress window: the box stays.
-        transformControls_ = true;
-        return;
+        // Cancelled from the progress window: the gesture's transform ends.
+        v.cancel_transform();
     }
     if (canvas_) {
         if (committed) {
