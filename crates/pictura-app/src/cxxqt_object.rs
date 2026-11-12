@@ -63,6 +63,7 @@ mod picture;
 mod presentation;
 mod quick_mask;
 mod save_format;
+mod scratch_rollback;
 mod selection_move;
 mod shapes;
 mod state;

@@ -25,6 +25,7 @@ mod pixel_buffer;
 mod plane;
 mod raw_settings;
 mod samples;
+pub mod scratch;
 pub mod shape;
 mod text_render;
 pub mod tiled_plane;
@@ -55,7 +56,9 @@ pub use text_render::{
     layout_lines, FontPolicy, GlyphMask, LayoutLine, LayoutParams, PlacedGlyph, RasterRequest,
     Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
 };
-pub use tiled_plane::{SharedTile, TileData, TileMut, TileRef, TileSample, TileState, TILE};
+pub use tiled_plane::{
+    DenseRef, Residency, SharedTile, TileData, TileMut, TileRef, TileSample, TileState, TILE,
+};
 pub use type_tool::{
     AntiAlias, CharacterAttrs, CharacterOverrides, CharacterStyle, Composer, Justify, KerningMode,
     Leading, ParagraphAttrs, ParagraphOverrides, ParagraphStyle, ResolvedStyle, StyleError,

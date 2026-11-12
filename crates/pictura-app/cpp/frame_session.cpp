@@ -230,6 +230,7 @@ void PicturaMainWindow::saveSession()
     state.uiScalePercent = uiScalePercent_;
     state.gpuCompute = gpuCompute_;
     state.memoryUsagePercent = memory_usage_percent();
+    state.scratchVolumes = scratch_volumes().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     state.colorPolicy = colorPolicy_;
     state.cmykPolicy = cmykPolicy_;
     state.workingCmyk = workingCmyk_;

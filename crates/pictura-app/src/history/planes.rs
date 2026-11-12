@@ -186,7 +186,7 @@ pub(super) fn diff_into(
             .collect();
         let mut tiles = Vec::new();
         for (i, changed) in compared {
-            let Some(before) = plane.shared_tile(i) else {
+            let Some(before) = plane.history_tile(i) else {
                 continue;
             };
             let old = allocation(&before);
@@ -343,7 +343,7 @@ pub(super) fn composite_change(
                 y,
                 w,
                 h,
-                tile: other.shared_tile(i)?,
+                tile: other.history_tile(i)?,
             })
         })
         .collect();

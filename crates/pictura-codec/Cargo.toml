@@ -36,5 +36,7 @@ getrandom = "0.4"
 libc = "0.2"
 
 [dev-dependencies]
+# The R7 packing benchmark (#1217); pictura-core already depends on it.
+lz4_flex = { version = "0.11", default-features = false, features = ["std", "safe-encode", "safe-decode", "checked-decode"] }
 pictura-render = { path = "../pictura-render" }
 pictura-testkit = { path = "../pictura-testkit" }
