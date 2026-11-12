@@ -22,6 +22,9 @@ pub fn resize_document(
     let sx = width as f64 / old_w as f64;
     let sy = height as f64 / old_h as f64;
     materialize_merged_composite(doc);
+    if let Some(job) = pictura_core::job::current() {
+        job.begin_stage(resampled_rows(doc, sx, sy, height));
+    }
 
     for_each_layer(&mut doc.layers, &mut |layer| {
         resize_layer(layer, sx, sy, resample);
@@ -48,6 +51,25 @@ pub fn resize_document(
     doc.width = width;
     doc.height = height;
     Ok(())
+}
+
+/// The output rows [`resize_document`] resamples through `pictura_ops::resize`,
+/// which reports one unit of a job's progress per row.
+fn resampled_rows(doc: &mut pictura_core::Document, sx: f64, sy: f64, height: u32) -> u64 {
+    let mut rows = doc.channels.len() as u64 * u64::from(height);
+    let mut count = |rect: pictura_core::PsdRect, planes: u64| {
+        let (w, h) = (rect.width(), rect.height());
+        if w > 0 && h > 0 {
+            rows += planes * u64::from(scaled_dims(w, h, sx, sy).1);
+        }
+    };
+    for_each_layer(&mut doc.layers, &mut |layer| {
+        count(layer.rect, layer.channels.len() as u64);
+        if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
+            count(mask.rect, 1);
+        }
+    });
+    rows
 }
 
 /// New dimensions for an old `w×h` rect under scale factors, floored at 1.

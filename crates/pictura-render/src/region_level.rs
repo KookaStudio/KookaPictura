@@ -80,6 +80,11 @@ pub fn composite_channels(doc: &Document, rect: PsdRect) -> [Plane<u8>; 4] {
         return planes;
     }
     let rows = band_rows(w);
+    // A merge run as a job (#1278) counts composited rows.
+    let job = pictura_core::job::current();
+    if let Some(job) = &job {
+        job.begin_stage(h as u64);
+    }
     stream_composite(doc, rect, rows, |offset, band| {
         let n = band.width as usize * band.height as usize;
         let ys = offset as usize..offset as usize + band.height as usize;
@@ -88,6 +93,9 @@ pub fn composite_channels(doc: &Document, rect: PsdRect) -> [Plane<u8>; 4] {
             band.data.read_into(c * n, &mut samples);
             plane.write_rect_from(0..w, ys.clone(), w, &samples);
             plane.settle();
+        }
+        if let Some(job) = &job {
+            job.advance(u64::from(band.height));
         }
     });
     planes

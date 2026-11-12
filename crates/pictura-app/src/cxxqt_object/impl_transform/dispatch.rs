@@ -11,6 +11,7 @@ use super::skew::{gesture_free_skew, gesture_skew};
 use super::translate_move_group;
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -316,18 +317,19 @@ impl qobject::PictureView {
         ) {
             return false;
         }
-        let resized = {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return false;
-            };
-            pictura_render::resize_document(doc, width as u32, height as u32, resample).is_ok()
-        };
-        if resized {
-            self.as_mut().rust_mut().session.clear_geometry_selection();
-            self.as_mut().edit("Image Size", |_| Edit::Full);
-        }
-        resized
+        self.as_mut().document_op(
+            "Image Size",
+            JobBar::Counted,
+            move |doc| {
+                pictura_render::resize_document(doc, width as u32, height as u32, resample)
+                    .ok()
+                    .map(|()| Outcome::default())
+            },
+            |rust, _| {
+                rust.session.clear_geometry_selection();
+                Edit::Full
+            },
+        )
     }
 
     pub fn resize_canvas(
@@ -345,18 +347,19 @@ impl qobject::PictureView {
         if width < 1 || height < 1 {
             return false;
         }
-        let resized = {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return false;
-            };
-            pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor).is_ok()
-        };
-        if resized {
-            self.as_mut().rust_mut().session.clear_geometry_selection();
-            self.as_mut().edit("Canvas Size", |_| Edit::Full);
-        }
-        resized
+        self.as_mut().document_op(
+            "Canvas Size",
+            JobBar::Busy,
+            move |doc| {
+                pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor)
+                    .ok()
+                    .map(|()| Outcome::default())
+            },
+            |rust, _| {
+                rust.session.clear_geometry_selection();
+                Edit::Full
+            },
+        )
     }
 
     pub fn rotate_doc(mut self: Pin<&mut Self>, quarter_turns: i32) -> bool {
@@ -366,34 +369,40 @@ impl qobject::PictureView {
         if !(1..=3).contains(&quarter_turns) {
             return false;
         }
-        let rotated = {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return false;
-            };
-            pictura_render::rotate_document(doc, quarter_turns as u8).is_ok()
-        };
-        if rotated {
-            self.as_mut().rust_mut().session.clear_geometry_selection();
-            self.as_mut().edit("Rotate", |_| Edit::Full);
-        }
-        rotated
+        self.as_mut().document_op(
+            "Rotate",
+            JobBar::Counted,
+            move |doc| {
+                pictura_render::rotate_document(doc, quarter_turns as u8)
+                    .ok()
+                    .map(|()| Outcome::default())
+            },
+            |rust, _| {
+                rust.session.clear_geometry_selection();
+                Edit::Full
+            },
+        )
     }
 
     pub fn flip_doc(mut self: Pin<&mut Self>, horizontal: bool) -> bool {
         if self.rust().modal_transform_blocks_edit() {
             return false;
         }
-        {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return false;
-            };
-            pictura_render::flip_document(doc, horizontal);
-            rust.session.clear_geometry_selection();
+        if self.rust().session.doc.is_none() {
+            return false;
         }
-        self.as_mut().edit("Flip", |_| Edit::Full);
-        true
+        self.as_mut().document_op(
+            "Flip",
+            JobBar::Counted,
+            move |doc| {
+                pictura_render::flip_document(doc, horizontal);
+                Some(Outcome::default())
+            },
+            |rust, _| {
+                rust.session.clear_geometry_selection();
+                Edit::Full
+            },
+        )
     }
 
     /// Convert a 32-bit document to `bits` (16 or 8) through the CS6 HDR
@@ -414,33 +423,33 @@ impl qobject::PictureView {
             8 => pictura_core::BitDepth::Eight,
             _ => return false,
         };
-        let converted = {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return false;
-            };
-            pictura_render::convert_depth_exposure_gamma(
-                doc,
-                out,
-                pictura_render::ExposureGamma { exposure_ev, gamma },
-            )
-            .is_ok()
-        };
-        if converted {
-            {
-                let mut rust = self.as_mut().rust_mut();
-                rust.session.set_selection(None);
-                if rust
-                    .session
-                    .doc
-                    .as_ref()
-                    .is_some_and(|doc| !doc.layers.is_empty())
-                {
-                    rust.select_only_layer("0");
-                }
-            }
-            self.as_mut().edit("HDR Conversion", |_| Edit::Full);
-        }
-        converted
+        let tone = pictura_render::ExposureGamma { exposure_ev, gamma };
+        self.as_mut().document_op(
+            "HDR Conversion",
+            JobBar::Busy,
+            move |doc| {
+                pictura_render::convert_depth_exposure_gamma(doc, out, tone)
+                    .ok()
+                    .map(|()| Outcome::default())
+            },
+            land_hdr_conversion,
+        )
     }
+}
+
+/// An HDR conversion drops the selection and points at the flattened layer.
+pub(in crate::cxxqt_object) fn land_hdr_conversion(
+    rust: &mut crate::cxxqt_object::PictureViewRust,
+    _: &Outcome,
+) -> Edit {
+    rust.session.set_selection(None);
+    if rust
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| !doc.layers.is_empty())
+    {
+        rust.select_only_layer("0");
+    }
+    Edit::Full
 }

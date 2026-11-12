@@ -114,7 +114,16 @@ pub fn resize(
     let dst_plane = width as usize * height as usize;
 
     let mut out = PixelBuffer::new(width, height, buf.channels);
+    // A document job (#1278) counts output rows; a cancelled one stops here
+    // and drops the result.
+    let job = pictura_core::job::current();
     for y in 0..height {
+        if let Some(job) = &job {
+            if job.cancelled() {
+                break;
+            }
+            job.advance(1);
+        }
         let sy = (y as f64 + 0.5) * yscale - 0.5;
         for x in 0..width {
             let sx = (x as f64 + 0.5) * xscale - 0.5;

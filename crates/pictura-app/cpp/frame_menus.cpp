@@ -1,6 +1,7 @@
 #include "memory_refusal.h"
 #include "frame_includes.h"
 
+#include "document_command.h"
 #include "fill_layer_editor.h"
 #include "frame_update.h"
 #include "gpu_probe.h"
@@ -262,62 +263,50 @@ void PicturaMainWindow::registerHandlers()
 
     wireTransformMenu();
 
-    const auto recordRotation = [this](const char* id, int angle) {
-        CommandParams command;
-        command.values.insert(QStringLiteral("angle"), angle);
-        registry_->recordCommand(QLatin1String(id), command);
+    // Rotate and Flip run as a document job; a recorded step names its angle
+    // or axis.
+    const auto orientHandler = [this](const char* id, int turns, const char* key,
+                                      const QJsonValue& value) {
+        registry_->setHandler(id, [this, id, turns, key, value]() {
+            PictureView* view = activeView();
+            const bool flip = turns < 0;
+            const auto orient = [view, turns, flip] {
+                if (flip) {
+                    view->flip_doc(turns == -1);
+                } else {
+                    view->rotate_doc(turns);
+                }
+            };
+            if (view && view->has_document()
+                && runDocumentCommand(this, *view, flip ? tr("Flip Canvas") : tr("Rotate Canvas"),
+                                      orient)) {
+                CommandParams command;
+                command.values.insert(QString::fromLatin1(key), value);
+                registry_->recordCommand(QLatin1String(id), command);
+            }
+        });
     };
-    const auto recordFlip = [this](const char* id, const char* axis) {
-        CommandParams command;
-        command.values.insert(QStringLiteral("axis"), QString::fromLatin1(axis));
-        registry_->recordCommand(QLatin1String(id), command);
-    };
+    orientHandler(command_ids::ImageRotate90Cw, 1, "angle", 90);
+    orientHandler(command_ids::ImageRotate90Ccw, 3, "angle", -90);
+    orientHandler(command_ids::ImageRotate180, 2, "angle", 180);
+    orientHandler(command_ids::ImageFlipHorizontal, -1, "axis", QStringLiteral("horizontal"));
+    orientHandler(command_ids::ImageFlipVertical, -2, "axis", QStringLiteral("vertical"));
 
-    registry_->setHandler(command_ids::ImageRotate90Cw, [this, recordRotation]() {
-        PictureView* view = activeView();
-        if (view && view->has_document() && view->rotate_doc(1)) {
-            recordRotation(command_ids::ImageRotate90Cw, 90);
-        }
-    });
     registry_->setExecutor(command_ids::ImageRotate90Cw, [this](const CommandParams&) {
         PictureView* view = activeView();
         return view && view->has_document() && view->rotate_doc(1);
-    });
-    registry_->setHandler(command_ids::ImageRotate90Ccw, [this, recordRotation]() {
-        PictureView* view = activeView();
-        if (view && view->has_document() && view->rotate_doc(3)) {
-            recordRotation(command_ids::ImageRotate90Ccw, -90);
-        }
     });
     registry_->setExecutor(command_ids::ImageRotate90Ccw, [this](const CommandParams&) {
         PictureView* view = activeView();
         return view && view->has_document() && view->rotate_doc(3);
     });
-    registry_->setHandler(command_ids::ImageRotate180, [this, recordRotation]() {
-        PictureView* view = activeView();
-        if (view && view->has_document() && view->rotate_doc(2)) {
-            recordRotation(command_ids::ImageRotate180, 180);
-        }
-    });
     registry_->setExecutor(command_ids::ImageRotate180, [this](const CommandParams&) {
         PictureView* view = activeView();
         return view && view->has_document() && view->rotate_doc(2);
     });
-    registry_->setHandler(command_ids::ImageFlipHorizontal, [this, recordFlip]() {
-        PictureView* view = activeView();
-        if (view && view->has_document() && view->flip_doc(true)) {
-            recordFlip(command_ids::ImageFlipHorizontal, "horizontal");
-        }
-    });
     registry_->setExecutor(command_ids::ImageFlipHorizontal, [this](const CommandParams&) {
         PictureView* view = activeView();
         return view && view->has_document() && view->flip_doc(true);
-    });
-    registry_->setHandler(command_ids::ImageFlipVertical, [this, recordFlip]() {
-        PictureView* view = activeView();
-        if (view && view->has_document() && view->flip_doc(false)) {
-            recordFlip(command_ids::ImageFlipVertical, "vertical");
-        }
     });
     registry_->setExecutor(command_ids::ImageFlipVertical, [this](const CommandParams&) {
         PictureView* view = activeView();
@@ -422,8 +411,8 @@ void PicturaMainWindow::registerHandlers()
         if (!view || paths.isEmpty()) {
             return;
         }
-        const QString merged = view->merge_layers(paths);
-        if (!merged.isEmpty()) {
+        if (runDocumentCommand(this, *view, tr("Merge Layers"),
+                               [view, &paths] { view->merge_layers(paths); })) {
             layersPanel_->refresh();
             refresh();
         }
@@ -450,8 +439,8 @@ void PicturaMainWindow::registerHandlers()
         if (!view || path.isEmpty()) {
             return;
         }
-        const QString merged = view->merge_visible(path);
-        if (!merged.isEmpty()) {
+        if (runDocumentCommand(this, *view, tr("Merge Visible"),
+                               [view, &path] { view->merge_visible(path); })) {
             layersPanel_->refresh();
             refresh();
         }
@@ -495,7 +484,8 @@ void PicturaMainWindow::registerHandlers()
         PictureView* view = activeView();
         const QString path = layerAnchor();
         if (view && !path.isEmpty()) {
-            view->merge_clipping_mask(path);
+            runDocumentCommand(this, *view, tr("Merge Clipping Mask"),
+                               [view, &path] { view->merge_clipping_mask(path); });
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMergeClippingMask, [this]() {

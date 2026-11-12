@@ -1,6 +1,7 @@
 #include "memory_refusal.h"
 #include "layers_panel.h"
 #include "commands.h"
+#include "document_command.h"
 
 #include "export_as_dialog.h"
 #include "layer_style_dialog.h"
@@ -1001,25 +1002,31 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
         if (view_) {
             const QStringList paths = targetPaths();
             const QString path = view_ ? layer_selection_anchor(*view_) : QString();
-            QString merged;
+            PictureView* view = view_;
+            bool merged = false;
             if (actionId == QLatin1String("mergeDown")) {
                 if (!paths.isEmpty()) {
-                    merged = view_->merge_layers(paths);
+                    merged = runDocumentCommand(window(), *view, tr("Merge Layers"),
+                                                [view, &paths] { view->merge_layers(paths); });
                 }
             } else if (actionId == QLatin1String("mergeVisible")) {
                 if (!path.isEmpty()) {
-                    merged = view_->merge_visible(path);
+                    merged = runDocumentCommand(window(), *view, tr("Merge Visible"),
+                                                [view, &path] { view->merge_visible(path); });
                 }
             } else if (!path.isEmpty()) {
-                view_->merge_clipping_mask(path);
+                runDocumentCommand(window(), *view, tr("Merge Clipping Mask"),
+                                   [view, &path] { view->merge_clipping_mask(path); });
             }
-            if (!merged.isEmpty()) {
+            if (merged) {
                 refresh();
             }
         }
     } else if (actionId == QLatin1String("flatten")) {
         if (view_) {
-            view_->flatten_image();
+            PictureView* view = view_;
+            runDocumentCommand(window(), *view, tr("Flatten Image"),
+                               [view] { view->flatten_image(); });
         }
     } else if (actionId == QLatin1String("addMaskByDefault")) {
         setAddMaskByDefault(!addMaskByDefault_);

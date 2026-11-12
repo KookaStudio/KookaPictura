@@ -1,6 +1,7 @@
 #include "memory_refusal.h"
 #include "properties_panel.h"
 #include "commands.h"
+#include "document_command.h"
 #include "api/type_api.h"
 
 #include "adjustment_controls.h"
@@ -555,7 +556,9 @@ void PropertiesPanel::applyCanvasSize()
     if (w == view_->document_width() && h == view_->document_height()) {
         return;
     }
-    view_->resize_canvas(QStringLiteral("center"), w, h);
+    PictureView* view = view_;
+    runDocumentCommand(window(), *view, tr("Canvas Size"),
+                       [view, w, h] { view->resize_canvas(QStringLiteral("center"), w, h); });
     refresh();
 }
 

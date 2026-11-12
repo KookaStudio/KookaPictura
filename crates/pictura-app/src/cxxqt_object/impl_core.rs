@@ -50,7 +50,9 @@ pub(super) use deferred_composite::{
 
 mod deferred_composite;
 mod display;
+mod document_job;
 pub(in crate::cxxqt_object) use display::{mask_display_plane, mask_region_plane};
+pub(super) use document_job::{DocumentJobs, JobBar, Outcome};
 mod recovery;
 mod save;
 pub(in crate::cxxqt_object) mod save_jobs;

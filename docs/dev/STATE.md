@@ -17,6 +17,20 @@ Snapshot for resuming after a context break. Update after each milestone.
     (`transform_commit.cpp`) shows it through `runCancellableJob`, which now
     sets the wait cursor at once and cancels on Esc. Cancel resumes the
     session; the document and history are unchanged.
+- **Long-operation jobs, part 2** (#1278, OpenSpec change
+  `whole-image-op-progress`).
+  - **Runner.** `PictureView::document_op` (`impl_core/document_job.rs`) runs
+    one engine closure on a clone of the document and lands it in one `edit`
+    with a `land` closure. It runs as a job only when the shell armed the view
+    and the document has 4 MP or more; otherwise it applies at once.
+  - **Commands.** Image Size, Canvas Size, Rotate/Flip, mode, depth, HDR,
+    Indexed, Bitmap, Merge and Flatten go through it. `runDocumentCommand`
+    (`document_command.cpp`) arms the view from the menu and panel handlers;
+    executors and the API stay synchronous.
+  - **Progress.** Image Size counts resampled rows (`pictura_ops::resize`),
+    Rotate and Flip count layers (`for_each_layer_job`), and Merge and Flatten
+    count composited rows (`composite_channels`). Canvas Size and the
+    conversions report -1, and `runCancellableJob` shows a busy bar for it.
   - **Next.** Part 2 moves Image Size, Canvas Size, Rotate/Flip, mode and
     bit-depth conversion, and Merge Down/Visible/Flatten onto the same token,
     with per-layer progress.

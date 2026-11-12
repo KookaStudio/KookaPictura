@@ -8,7 +8,7 @@
 use pictura_core::{Document, PixelBuffer, PsdRect, SourceChannels};
 use pictura_ops::OpsError;
 
-use super::{for_each_layer, native_store};
+use super::{for_each_layer_job, native_store};
 
 /// The five exact orientation remaps.
 #[derive(Clone, Copy)]
@@ -120,7 +120,7 @@ fn transform_document(doc: &mut Document, kind: Kind) {
     let (w, h) = (doc.width as i32, doc.height as i32);
     let op = kind.plane();
 
-    for_each_layer(&mut doc.layers, &mut |layer| {
+    for_each_layer_job(&mut doc.layers, &mut |layer| {
         let old_rect = layer.rect;
         let lw = old_rect.width().max(0) as u32;
         let lh = old_rect.height().max(0) as u32;

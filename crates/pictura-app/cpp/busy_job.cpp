@@ -105,7 +105,14 @@ bool runCancellableJob(QWidget* parent, const QString& title, const QString& lab
         if (!dialog.isVisible() && !stopped && elapsed.elapsed() >= kBusyWindowDelayMs) {
             dialog.show();
         }
-        dialog.setValue(progress());
+        // A negative value is a job that cannot count its work: a busy bar.
+        const int value = progress();
+        if (value < 0) {
+            dialog.setRange(0, 0);
+        } else {
+            dialog.setRange(0, 1000);
+            dialog.setValue(value);
+        }
     });
     poll.start();
     if (running()) {

@@ -1,6 +1,7 @@
 #include "frame_includes.h"
 
 #include "commands.h"
+#include "document_command.h"
 
 #include "api/layers_api.h"
 #include "api/layers_bridge.h"
@@ -43,7 +44,9 @@ void PicturaMainWindow::wirePanelMenuCommands()
 
     registry_->setHandler(command_ids::LayerFlattenImage, [this]() {
         PictureView* view = activeView();
-        if (view && view->has_document() && view->flatten_image() > 0) {
+        if (view && view->has_document()
+            && runDocumentCommand(this, *view, tr("Flatten Image"),
+                                  [view] { view->flatten_image(); })) {
             registry_->recordCommand(command_ids::LayerFlattenImage, CommandParams{});
         }
     });
