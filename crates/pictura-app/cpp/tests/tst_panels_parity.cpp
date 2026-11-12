@@ -114,10 +114,14 @@ private slots:
     void layerHoverCursor();
     void lockBadgeClickUnlocks();
     void lockBadgeShrunk();
+    void badgeSizesShrunk();
     void kindBadgesHidpi();
     void maskingBackgroundConvertsIt();
     void thumbnailAdjacencyAndActiveThumb();
     void emptyGroupShowsChevron();
+    void hiddenLayerShowsFadedEye();
+    void eyeGutterIsFlatAndLighter();
+    void selectedRowUsesFlatHighlight();
     void visibilityToggleIsResponsive();
     void channelHoverAndCtrlOverlay();
     void channelRowsUseLayerSurfaces();
@@ -243,9 +247,27 @@ void PanelsParityTest::lockBadgeShrunk()
     QVERIFY(delegate != nullptr);
     QTreeView* tree = panel_->findChild<QTreeView*>();
     const QModelIndex index = indexForPath(tree->model(), path);
-    const int expected = qMax(10, delegate->thumbnailSize() * 2 / 3);
+    const int expected = qMax(8, qRound(delegate->thumbnailSize() * (2.0 / 3.0) * 0.8));
     QCOMPARE(delegate->lockRect(tree->visualRect(index)).width(), expected);
-    QVERIFY(expected < delegate->thumbnailSize());
+    QVERIFY(expected < delegate->thumbnailSize() * 2 / 3);
+    window_->closeDocument(doc, false);
+}
+
+// The fx badge and clipping-mask glyph shrink with the lock badge (20% off the
+// old thumbnail-derived sides), documented in the layers-panel spec.
+void PanelsParityTest::badgeSizesShrunk()
+{
+    QVERIFY2(setupLayers(), "badge size fixture");
+    const int doc = window_->activeDocumentIndex();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(delegate != nullptr);
+    const int thumb = delegate->thumbnailSize();
+    QVERIFY(thumb > 0);
+    QCOMPARE(delegate->fxBadgeSide(), qMax(10, qRound(qMax(12, thumb) * 0.8)));
+    const int oldClip = qMax(10, thumb - 8);
+    QCOMPARE(delegate->clipGlyphSide(), qMax(8, qRound(oldClip * 0.8)));
+    QVERIFY(delegate->fxBadgeSide() < thumb);
+    QVERIFY(delegate->clipGlyphSide() < oldClip);
     window_->closeDocument(doc, false);
 }
 
@@ -641,6 +663,107 @@ void PanelsParityTest::compactFlyoutClosesWhenTabEmptiesIt()
     redockAllFloats(column);
     column->setRailMode(false);
     QCoreApplication::processEvents();
+}
+
+void PanelsParityTest::selectedRowUsesFlatHighlight()
+{
+    QVERIFY2(setupLayers(), "selection highlight fixture");
+    const int doc = window_->activeDocumentIndex();
+    const QString path = view_->add_layer_in(QString());
+    QVERIFY(!path.isEmpty());
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(0);
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    QVERIFY(panel_->clickRowForTest(path));
+    QCoreApplication::processEvents();
+    const QModelIndex index = indexForPath(tree->model(), path);
+    QVERIFY(index.isValid());
+    const auto sampleAt = [&]() {
+        const QRect vr = tree->visualRect(index);
+        return QPoint(vr.left() + vr.width() * 3 / 4, vr.center().y());
+    };
+    // The focus frame, when drawn, sits on the row edge; sample it too so a
+    // border-only focus indicator cannot slip past the interior check.
+    const auto borderAt = [&]() {
+        const QRect vr = tree->visualRect(index);
+        return QPoint(vr.left(), vr.center().y());
+    };
+    QEvent leave(QEvent::Leave);
+    QCoreApplication::sendEvent(tree->viewport(), &leave);
+    tree->setFocus();
+    QTest::qWait(50); // let the focused selection repaint
+    const QImage focusedImage = tree->viewport()->grab().toImage();
+    const QColor focused = focusedImage.pixelColor(sampleAt());
+    const QColor focusedBorder = focusedImage.pixelColor(borderAt());
+    tree->clearFocus();
+    QTest::qWait(50); // let the unfocused selection repaint
+    const QImage unfocusedImage = tree->viewport()->grab().toImage();
+    const QColor unfocused = unfocusedImage.pixelColor(sampleAt());
+    const QColor unfocusedBorder = unfocusedImage.pixelColor(borderAt());
+    QCOMPARE(focused, unfocused);
+    QCOMPARE(focusedBorder, unfocusedBorder);
+    QVERIFY2(focused.red() == focused.green() && focused.green() == focused.blue(),
+             "the selected row uses a neutral grey, not the blue focus tint");
+    window_->closeDocument(doc, false);
+}
+
+void PanelsParityTest::eyeGutterIsFlatAndLighter()
+{
+    QVERIFY2(setupLayers(), "eye gutter fixture");
+    const int doc = window_->activeDocumentIndex();
+    const QString path = view_->add_layer_in(QString());
+    QVERIFY(!path.isEmpty());
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(0);
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    tree->selectionModel()->clearSelection();
+    tree->setCurrentIndex(QModelIndex());
+    const QImage image = panel_->rowImageForTest(path);
+    QVERIFY(!image.isNull());
+    const int y = 1;
+    const QColor left = image.pixelColor(2, y);
+    const QColor middle = image.pixelColor(10, y);
+    const QColor right = image.pixelColor(pictura::LayerRowDelegate::kEyeColumn - 3, y);
+    QCOMPARE(left, middle);
+    QCOMPARE(middle, right);
+    const QColor row = image.pixelColor(pictura::LayerRowDelegate::kEyeColumn + 4, y);
+    QVERIFY2(left.lightness() > row.lightness(), "the eye cell is lighter than the row");
+    QCOMPARE(image.pixelColor(10, image.height() - 2), middle);
+    window_->closeDocument(doc, false);
+}
+
+void PanelsParityTest::hiddenLayerShowsFadedEye()
+{
+    QVERIFY2(setupLayers(), "hidden eye fixture");
+    const int doc = window_->activeDocumentIndex();
+    const QString path = view_->add_layer_in(QString());
+    QVERIFY(!path.isEmpty());
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(0);
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    const QModelIndex index = indexForPath(tree->model(), path);
+    QVERIFY(index.isValid());
+    const QRect vr = tree->visualRect(index);
+    const QRect eye = delegate->eyeRect(QRect(0, 0, vr.width(), vr.height()), index);
+    const QImage visible = panel_->rowImageForTest(path);
+    view_->set_layers_visible(QStringList{path}, false);
+    panel_->refresh();
+    const QImage hidden = panel_->rowImageForTest(path);
+    QVERIFY(!visible.isNull() && !hidden.isNull());
+    const QColor shown = visible.pixelColor(eye.center());
+    const QColor faded = hidden.pixelColor(eye.center());
+    QVERIFY2(faded != hidden.pixelColor(pictura::LayerRowDelegate::kEyeColumn - 3, eye.center().y()),
+             "the hidden row paints the eye-off glyph");
+    QVERIFY2(faded != shown, "the hidden glyph is faded");
+    QVERIFY2(faded.lightness() > shown.lightness(), "the 50% glyph blends toward the gutter");
+    window_->closeDocument(doc, false);
 }
 
 QTEST_MAIN(PanelsParityTest)

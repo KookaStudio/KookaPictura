@@ -240,7 +240,7 @@ void LayersPanel::showContextMenu(const QPoint& pos)
     if (!resolvePendingTransform()) {
         return;
     }
-    if (delegate_->eyeColumnContains(tree_->visualRect(index), pos)) {
+    if (delegate_->eyeColumnContains(tree_->visualRect(index), index, pos)) {
         showEyeMenu(pos, index);
         return;
     }

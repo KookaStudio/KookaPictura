@@ -8,3 +8,5 @@ crates/pictura-app/cpp/selftest.cpp 6449
 crates/pictura-app/src/cxxqt_object.rs 1204
 crates/pictura-app/src/cxxqt_object/tests_impl.rs 1206
 crates/pictura-codec/src/tests.rs 1429
+crates/pictura-app/cpp/panels/layers_panel.cpp 1262
+crates/pictura-app/cpp/tests/tst_layers_panel.cpp 1408

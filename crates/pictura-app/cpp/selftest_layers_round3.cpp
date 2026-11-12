@@ -204,8 +204,9 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // the Qt Test suite (`tst_layers_panel::layerSurfaceCompleteness`), which
     // asserts the full visibility-column fill and no chip.
 
-    // lpr_highlight_clip (358): the selection highlight changes the content but
-    // not the eye column, which is repainted with the base colour.
+    // lpr_highlight_clip (358): the selection highlight changes the content and
+    // the eye cell follows it; an unselected eye cell stays one shade lighter
+    // than its row.
     {
         const bool created = frame.newDocument(QStringLiteral("HighlightClip"), 8, 8,
                                                QStringLiteral("rgb"), 8,
@@ -234,13 +235,16 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
                 }
             }
         }
-        const bool eyeSame =
-            selected.pixel(eye.left() + 2, eye.top() + 1)
-            == unselected.pixel(eye.left() + 2, eye.top() + 1);
+        const QColor selectedEye = selected.pixelColor(eye.left() + 2, eye.top() + 1);
+        const QColor selectedRow = selected.pixelColor(selected.width() - 4, 1);
+        const QColor unselectedEye = unselected.pixelColor(eye.left() + 2, eye.top() + 1);
+        const QColor unselectedRow = unselected.pixelColor(unselected.width() - 4, 1);
+        const bool eyeSelected = selectedEye == selectedRow;
+        const bool eyeLighter = unselectedEye.lightness() > unselectedRow.lightness();
         ST_BEGIN("lpr_highlight_clip");
-        ST_PASS("lpr_highlight_clip contentDiffers=%d eyeSame=%d", contentDiffers ? 1 : 0,
-                eyeSame ? 1 : 0);
-        if (!contentDiffers || !eyeSame) {
+        ST_PASS("lpr_highlight_clip contentDiffers=%d eyeSelected=%d eyeLighter=%d",
+                contentDiffers ? 1 : 0, eyeSelected ? 1 : 0, eyeLighter ? 1 : 0);
+        if (!contentDiffers || !eyeSelected || !eyeLighter) {
             return pictura::selfTest().fail(358, "selected-row eye clip");
         }
         frame.closeDocument(doc, false);

@@ -117,6 +117,7 @@ private slots:
     void panelChrome();
     void rowWidgets();
     void layerRowSurface();
+    void eyeGutterIsCentredAndSeparated();
     void gutterClickTogglesWithoutSelecting();
     void dragReorder();
     void dropAnywhereOnLayerRowReorders();
@@ -270,8 +271,7 @@ void LayersPanelTest::layerRowSurface()
     window_->show();
     panel_->setView(view_);
     panel_->refresh();
-    panel_->expandForTest(group_);
-    QTest::qWait(0);
+    window_->show(); QTest::qWait(0);
 
     // The paint helper seeds the palette with a fixed neutral grey, so the
     // exact surfaces are deterministic without depending on the live palette.
@@ -295,8 +295,8 @@ void LayersPanelTest::layerRowSurface()
                               + pictura::LayerRowDelegate::kNameGap);
 
     // The paint helper seeds Highlight with blue; the delegate must paint the
-    // neutral grey list-selection fill instead, and keep the eye gutter on the
-    // row surface so a selected row's gutter matches an unselected one.
+    // neutral grey list-selection fill instead. An unselected gutter is one
+    // shade lighter than its row; a selected gutter takes the selection fill.
     panel_->selectPaths({a_}, a_);
     const QImage selected = panel_->rowImageForTest(a_);
     const QColor expectedSelection = pictura::Theme::shade(canvasBase, 3);
@@ -306,8 +306,9 @@ void LayersPanelTest::layerRowSurface()
     QVERIFY2(selPixel.red() == selPixel.green() && selPixel.green() == selPixel.blue(),
              "selection uses grey, not the palette blue");
     const QRect eye = panel_->rowEyeRectForTest(a_);
-    QCOMPARE(selected.pixel(eye.left() + 2, eye.top() + 1),
-             unselected.pixel(eye.left() + 2, eye.top() + 1));
+    const QColor gutterBase = pictura::Theme::shade(canvasBase, 2);
+    QCOMPARE(unselected.pixel(eye.left() + 2, eye.top() + 1), gutterBase.rgba());
+    QCOMPARE(selected.pixel(eye.left() + 2, eye.top() + 1), expectedSelection.rgba());
 
     window_->closeDocument(doc, false);
 }
@@ -321,7 +322,6 @@ void LayersPanelTest::gutterClickTogglesWithoutSelecting()
     panel_->expandForTest(group_);
     window_->show();
     QTest::qWait(0);
-
     QTreeView* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
     QWidget* viewport = tree->viewport();
@@ -1392,5 +1392,17 @@ void LayersPanelTest::isolationMode()
     window_->closeDocument(doc, false);
 }
 
+void LayersPanelTest::eyeGutterIsCentredAndSeparated()
+{
+    QVERIFY2(setupNest(), "gutter fixture");
+    const int doc = window_->activeDocumentIndex();
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(0);
+    QVERIFY2(panel_->eyeGutterCentredForTest(a_), "the eye is centred in its gutter");
+    QVERIFY2(panel_->eyeSeparatorPresentForTest(a_), "the gutter has a separator");
+    window_->closeDocument(doc, false);
+}
 QTEST_MAIN(LayersPanelTest)
 #include "tst_layers_panel.moc"

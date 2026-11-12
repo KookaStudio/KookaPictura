@@ -204,7 +204,6 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     fill_->setToolTip(tr("Fill"));
     locks->addWidget(fill_);
     layout->addLayout(locks);
-
     model_ = new LayersModel(this);
     proxy_ = new LayersFilterProxyModel(model_, this);
 
@@ -222,7 +221,8 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     // The viewport filter starts a rename only inside the name rect; Qt's own
     // DoubleClicked trigger would edit the whole row, so it is disabled.
     tree_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    tree_->setAllColumnsShowFocus(true);
+    // Suppress the focus frame without a proxy style that could dangle.
+    tree_->setAllColumnsShowFocus(false);
     tree_->setSelectionBehavior(QAbstractItemView::SelectRows);
     tree_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // Folder rows are shorter than layer rows, so per-row heights differ.
@@ -481,6 +481,10 @@ void LayersPanel::setView(PictureView* view)
         endMaskSoloView();
         activeThumbByPath_.clear();
         isolatedPaths_.clear();
+        listsExpanded_.clear();
+        filteredPathsSeen_.clear();
+        styledPathsSeen_.clear();
+        styledGeneration_ = 0;
         const LayerFilter defaultFilter{true};
         if (filterBar_) {
             filterBar_->setFilter(defaultFilter);
@@ -563,6 +567,8 @@ void LayersPanel::refresh()
         styledGeneration_ = view_->document_generation();
         if (newDocument) {
             styledPathsSeen_.clear();
+            listsExpanded_.clear();
+            filteredPathsSeen_.clear();
         }
         // One crossing per rebuild: the bridge fills every row field in one
         // pass, including the shape-aware thumbnails and the effect names.
@@ -602,6 +608,8 @@ void LayersPanel::refresh()
             row.hasStyle = source.hasStyle;
             row.hasBlendIf = source.hasBlendIf;
             row.styleEffects = source.styleEffects;
+            row.effectsListOpen = listsExpanded_.contains(row.path)
+                && !row.styleEffects.isEmpty();
             // The raster mask target is authoritative for the active thumbnail;
             // a stale raster target on a non-target row falls back to the image.
             int activeThumb = activeThumbByPath_.value(row.path, 0);
@@ -622,26 +630,39 @@ void LayersPanel::refresh()
             row.vectorMaskDisabled = source.vectorMaskDisabled;
             rows.push_back(std::move(row));
         }
+        // A first-seen smart filter opens the combined list before the effects
+        // rows are built, so a layer with both lists shows both groups.
+        for (LayerRowNode& row : rows) {
+            row.hasSmartFilters = !row.path.isEmpty()
+                && layer_has_smart_filters(*view_, row.path);
+            if (row.hasSmartFilters && !filteredPathsSeen_.contains(row.path)) {
+                filteredPathsSeen_.insert(row.path);
+                listsExpanded_.insert(row.path);
+            }
+        }
+        QVector<LayerRowNode> effectRows =
+            appendEffectRows(snap, autoExpandEffects, newDocument);
         // Display-only Smart Filters rows: a group header (count, group eye)
         // under each filtered smart object, then one row per filter, newest on
         // top as CS6 stacks them; a row's path keeps its chain index.
         QVector<LayerRowNode> synthetic;
         for (int k = 0; k < rows.size(); ++k) {
             LayerRowNode& row = rows[k];
-            if (row.path.isEmpty() || !layer_has_smart_filters(*view_, row.path)) {
+            if (!row.hasSmartFilters) {
+                continue;
+            }
+            row.filtersListOpen = listsExpanded_.contains(row.path);
+            if (!row.filtersListOpen) {
                 continue;
             }
             const int count = layer_smart_filter_count(*view_, row.path);
-            // The smart object row gains a disclosure so the filter group can be
-            // revealed, as CS6 nests "Smart Filters" under the layer.
-            row.expandable = true;
             LayerRowNode group;
             group.path = row.path + QStringLiteral("/@sf");
             group.depth = row.depth + 1;
             group.name = QStringLiteral("Smart Filters");
             group.kind = QStringLiteral("smart-filters");
             group.visible = layer_smart_filters_enabled(*view_, row.path);
-            group.expandable = true;
+            group.expandable = false;
             group.childCount = count;
             group.synthetic = true;
             synthetic.push_back(std::move(group));
@@ -656,14 +677,43 @@ void LayersPanel::refresh()
                 synthetic.push_back(std::move(child));
             }
         }
-        // Display-only layer-effects rows: an "Effects" group under each styled
-        // layer plus one row per effect it carries, each with an eye.
-        for (LayerRowNode& row : appendEffectRows(snap, autoExpandEffects, newDocument)) {
+        for (LayerRowNode& row : effectRows) {
             synthetic.push_back(std::move(row));
         }
-        for (LayerRowNode& row : synthetic) {
-            rows.push_back(std::move(row));
+        for (LayerRowNode& row : rows) {
+            const bool listOpen = listsExpanded_.contains(row.path)
+                && (!row.styleEffects.isEmpty() || row.hasSmartFilters);
+            row.effectsListOpen = listOpen;
+            row.filtersListOpen = listOpen;
         }
+        // Insert each synthetic group (and its children) directly after its
+        // owning layer, so the layer + list reads as one block before any
+        // nested real layers.
+        QHash<QString, QVector<LayerRowNode>> pending;
+        for (LayerRowNode& row : synthetic) {
+            const int at = row.path.indexOf(QLatin1String("/@"));
+            const QString layer = at >= 0 ? row.path.left(at) : row.path;
+            pending[layer].push_back(std::move(row));
+        }
+        QVector<LayerRowNode> ordered;
+        ordered.reserve(rows.size() + synthetic.size());
+        for (LayerRowNode& row : rows) {
+            const QString path = row.path;
+            ordered.push_back(std::move(row));
+            auto it = pending.find(path);
+            if (it != pending.end()) {
+                for (LayerRowNode& s : it.value()) {
+                    ordered.push_back(std::move(s));
+                }
+                pending.erase(it);
+            }
+        }
+        for (auto it = pending.begin(); it != pending.end(); ++it) {
+            for (LayerRowNode& s : it.value()) {
+                ordered.push_back(std::move(s));
+            }
+        }
+        rows = std::move(ordered);
     }
     // Capture each expanded group's name chain before the model reset, so a
     // group whose index path shifts is re-found by name and kept expanded.
@@ -696,6 +746,22 @@ void LayersPanel::refresh()
         }
     }
     setExpandedPaths(live);
+    // An open effects/filters list keeps its group expanded. A layer without a
+    // nested-layers chevron (a pixel or smart object) also expands its own row;
+    // a group's left chevron stays the user's control.
+    for (const QString& path : listsExpanded_) {
+        const QModelIndex layerIndex = proxyIndexForPath(path);
+        if (layerIndex.isValid() && !layerIndex.data(ExpandableRole).toBool()) {
+            tree_->expand(layerIndex);
+        }
+        for (const QString& groupPath :
+             {path + QStringLiteral("/@fx"), path + QStringLiteral("/@sf")}) {
+            const QModelIndex groupIndex = proxyIndexForPath(groupPath);
+            if (groupIndex.isValid()) {
+                tree_->expand(groupIndex);
+            }
+        }
+    }
     // A layer that first gained a style this refresh expands its effects group
     // and the group's effect rows, once, when `Expand New Effects` is on.
     for (const QString& path : autoExpandEffects) {

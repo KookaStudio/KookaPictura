@@ -612,7 +612,7 @@ int LayersPanel::eyeLeftForTest(const QString& path) const
     if (!index.isValid() || !delegate_ || !tree_) {
         return -1;
     }
-    return delegate_->eyeRect(tree_->visualRect(index)).left();
+    return delegate_->eyeRect(tree_->visualRect(index), index).left();
 }
 
 bool LayersPanel::chevronClickExpandsForTest(const QString& path)
@@ -837,7 +837,7 @@ bool LayersPanel::doubleClickAtForTest(const QString& path, bool atName)
     }
     const QRect vr = tree_->visualRect(index);
     const QPoint pos = atName ? delegate_->nameRect(vr, index).center()
-                              : delegate_->eyeRect(vr).center();
+                              : delegate_->eyeRect(vr, index).center();
     QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, tree_->viewport()->mapToGlobal(pos),
                     Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree_->viewport(), &dbl);
@@ -1215,7 +1215,7 @@ bool LayersPanel::clickSmartFilterEyeForTest(const QString& path)
         return false;
     }
     const QRect vr = tree_->visualRect(index);
-    const QRect eye = delegate_->eyeRect(QRect(0, 0, vr.width(), vr.height()));
+    const QRect eye = delegate_->eyeRect(QRect(0, 0, vr.width(), vr.height()), index);
     const QPointF at(vr.left() + eye.center().x(), vr.center().y());
     QMouseEvent press(QEvent::MouseButtonPress, at, tree_->viewport()->mapToGlobal(at),
                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
@@ -1272,7 +1272,7 @@ QRect LayersPanel::rowEyeRectForTest(const QString& path) const
         return {};
     }
     const QRect vr = tree_->visualRect(index);
-    return delegate_->eyeRect(QRect(0, 0, vr.width(), vr.height()));
+    return delegate_->eyeRect(QRect(0, 0, vr.width(), vr.height()), index);
 }
 
 QRect LayersPanel::rowNameRectForTest(const QString& path) const

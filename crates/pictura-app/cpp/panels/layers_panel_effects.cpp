@@ -25,7 +25,11 @@ QVector<LayerRowNode> LayersPanel::appendEffectRows(const layers_api::Snapshot& 
         const bool firstSeen = !styledPathsSeen_.contains(source.path);
         styledNow.insert(source.path);
         if (firstSeen && expandNewEffects_ && !newDocument) {
+            listsExpanded_.insert(source.path);
             autoExpand.push_back(source.path);
+        }
+        if (!listsExpanded_.contains(source.path)) {
+            continue;
         }
         LayerRowNode group;
         group.path = source.path + QStringLiteral("/@fx");
@@ -33,7 +37,7 @@ QVector<LayerRowNode> LayersPanel::appendEffectRows(const layers_api::Snapshot& 
         group.name = QStringLiteral("Effects");
         group.kind = QStringLiteral("layer-effects");
         group.visible = source.styleVisible;
-        group.expandable = true;
+        group.expandable = false;
         group.childCount = source.styleEffects.size();
         group.synthetic = true;
         synthetic.push_back(std::move(group));
@@ -50,6 +54,33 @@ QVector<LayerRowNode> LayersPanel::appendEffectRows(const layers_api::Snapshot& 
     }
     styledPathsSeen_ = styledNow;
     return synthetic;
+}
+
+void LayersPanel::toggleLists(const QString& path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+    const bool open = !listsExpanded_.contains(path);
+    if (open) {
+        listsExpanded_.insert(path);
+    } else {
+        listsExpanded_.remove(path);
+    }
+    refresh();
+    if (open) {
+        const QModelIndex layer = proxyIndexForPath(path);
+        if (layer.isValid()) {
+            tree_->expand(layer);
+        }
+        for (const QString& groupPath :
+             {path + QStringLiteral("/@fx"), path + QStringLiteral("/@sf")}) {
+            const QModelIndex group = proxyIndexForPath(groupPath);
+            if (group.isValid()) {
+                tree_->expand(group);
+            }
+        }
+    }
 }
 
 } // namespace pictura
