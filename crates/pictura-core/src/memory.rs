@@ -11,9 +11,9 @@ pub mod system;
 pub use census::{Side, TileCensus};
 pub use governor::{
     ceiling_of, clear_refusal, fail_next_plane_for_test, governor, last_refusal, less_headroom,
-    pressure_of, room_of, set_host_for_test, try_filled_plane, try_plane, used_of, Governor,
-    MemoryError, MemoryStatus, Pressure, Reservation, CANVAS_SCALE_BYTES, DEFAULT_USAGE_PERCENT,
-    DISPLAY_CAP, DISPLAY_SHARE, HISTORY_SHARE,
+    pressure_of, record_refusal, room_of, set_host_for_test, try_buffer, try_filled_plane,
+    try_plane, used_of, Governor, MemoryError, MemoryStatus, Pressure, Reservation,
+    CANVAS_SCALE_BYTES, DEFAULT_USAGE_PERCENT, DISPLAY_CAP, DISPLAY_SHARE, HISTORY_SHARE,
 };
 pub use system::{available_memory, total_memory, HostPaths, HostReading};
 

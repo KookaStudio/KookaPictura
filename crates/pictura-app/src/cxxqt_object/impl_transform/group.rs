@@ -11,7 +11,7 @@ use super::link_members;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
 use crate::cxxqt_object::state::PictureViewRust;
-use pictura_core::{Document, Homography, LockFlags, PsdRect};
+use pictura_core::{Document, Homography, LockFlags, PsdRect, TILE};
 use pictura_render::Interpolation;
 use std::sync::Arc;
 
@@ -37,11 +37,22 @@ pub(super) fn repeatable_transform(session: &TransformSession) -> Option<RepeatT
     })
 }
 
-/// What a transform commit holds at its peak: the transformed layer's four
-/// planes over the quad's box, and the composite of the box before and after
-/// with its sRGB copy and display patch. A whole-pixel move keeps the layer's
-/// planes (#1290), so it is charged for the composite alone.
-pub(super) fn commit_bytes(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> u64 {
+/// The bytes one worker thread's source window and block coordinates hold in
+/// the tiled resampler at most (4 Mpx of up to 32-bit samples is 16 MiB, kept
+/// as 8 MiB because an 8-bit layer's windows dominate).
+const WINDOW_BYTES: u64 = 8 << 20;
+
+/// What a transform commit holds (#1290): `working` stays resident (the
+/// resample strips, the composite's strip and group buffers, and one source
+/// window per worker thread); `spillable` is written as tiles the evictor may
+/// pack or spill (the new layer tiles and the region composite). A whole-pixel
+/// move keeps the layer's planes, so it adds no layer tiles.
+pub(super) struct CommitCost {
+    pub(super) working: u64,
+    pub(super) spillable: u64,
+}
+
+pub(super) fn commit_cost(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> CommitCost {
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
     for &(x, y) in quad {
         (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
@@ -53,11 +64,18 @@ pub(super) fn commit_bytes(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> u64 {
         bottom: clamp(y1.ceil()),
         right: clamp(x1.ceil()),
     };
-    let composite = 12 * memory_gate::area(out.union(orig_rect));
-    if whole_pixel_move(quad, orig_rect) {
-        return composite;
+    let union = out.union(orig_rect);
+    let layer = if whole_pixel_move(quad, orig_rect) {
+        0
+    } else {
+        4 * memory_gate::area(out)
+    };
+    let widest = out.width().max(union.width()).max(0) as u64;
+    let threads = rayon::current_num_threads() as u64;
+    CommitCost {
+        working: 3 * 4 * TILE as u64 * widest + threads * WINDOW_BYTES,
+        spillable: layer + 4 * memory_gate::area(union),
     }
-    4 * memory_gate::area(out) + composite
 }
 
 /// Whether `quad` is `rect` moved by one whole-pixel offset.

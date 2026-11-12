@@ -1,7 +1,7 @@
 //! The document's maintained composite cache: store, patch, refresh, and shape
 //! validity.
 
-use pictura_core::{ColorMode, Document, PixelBuffer, PsdRect};
+use pictura_core::{ColorMode, Document, PixelBuffer, PsdRect, TILE};
 
 use crate::gpu::Backend;
 
@@ -290,6 +290,25 @@ pub fn patch_buffer_region(dst: &mut PixelBuffer, region: &PixelBuffer, x0: i32,
     // patches the same tiles on every move, and the history capture settles
     // the composite when the edit commits.
     dst.data.tile(fw, fh);
+    if region.data.is_tiled() {
+        // A tiled region (#1290) is copied a strip at a time through its
+        // tiles, never materialized.
+        let mut strip = vec![0u8; rw * TILE.min(rh)];
+        for c in 0..planes {
+            let mut top = 0;
+            while top < rh {
+                let rows = TILE.min(rh - top);
+                let out = &mut strip[..rw * rows];
+                region
+                    .data
+                    .read_rect_into(0..rw, c * rh + top..c * rh + top + rows, rw, out);
+                let ys = c * fh + y0 + top..c * fh + y0 + top + rows;
+                dst.data.write_rect_from(x0..x0 + rw, ys, fw, out);
+                top += rows;
+            }
+        }
+        return;
+    }
     for c in 0..planes {
         let ys = c * fh + y0..c * fh + y0 + rh;
         let src = &region.data[c * rplane..(c + 1) * rplane];

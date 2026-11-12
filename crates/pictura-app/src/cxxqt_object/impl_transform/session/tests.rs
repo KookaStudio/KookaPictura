@@ -2,7 +2,7 @@ use super::super::super::document_session::{TransformMode, TransformSession};
 use super::super::geometry::{
     apply_session_transform, pivot_point, rect_center, set_pivot, source_corners, MapParams,
 };
-use super::super::group::commit_bytes;
+use super::super::group::commit_cost;
 use super::*;
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags, PsdRect};
@@ -167,7 +167,7 @@ fn a_shape_layer_is_a_transform_target_unless_position_locked() {
 }
 
 #[test]
-fn a_transform_commit_charges_its_box_and_the_composite_around_it() {
+fn a_transform_commit_spills_its_box_and_the_composite_around_it() {
     let orig = PsdRect {
         top: 0,
         left: 0,
@@ -176,14 +176,14 @@ fn a_transform_commit_charges_its_box_and_the_composite_around_it() {
     };
     // Scaled to twice its size from its top-left corner: a 20×20 box.
     let quad = [(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)];
-    assert_eq!(commit_bytes(&quad, orig), 4 * 400 + 12 * 400);
+    assert_eq!(commit_cost(&quad, orig).spillable, 4 * 400 + 4 * 400);
     // A fractional corner rounds the box outward.
     let quad = [(0.5, 0.5), (10.2, 0.5), (10.2, 9.7), (0.5, 9.7)];
-    assert_eq!(commit_bytes(&quad, orig), 4 * 110 + 12 * 110);
+    assert_eq!(commit_cost(&quad, orig).spillable, 4 * 110 + 4 * 110);
 }
 
 #[test]
-fn commit_bytes_charges_a_move_only_for_the_composite() {
+fn a_whole_pixel_move_spills_only_the_composite() {
     let orig = PsdRect {
         top: 0,
         left: 0,
@@ -191,8 +191,11 @@ fn commit_bytes_charges_a_move_only_for_the_composite() {
         right: 10,
     };
     let shifted = |dx: f64| [(dx, 0.0), (10.0 + dx, 0.0), (10.0 + dx, 10.0), (dx, 10.0)];
-    assert_eq!(commit_bytes(&shifted(5.0), orig), 12 * 150);
-    assert_eq!(commit_bytes(&shifted(5.5), orig), 4 * 110 + 12 * 160);
+    assert_eq!(commit_cost(&shifted(5.0), orig).spillable, 4 * 150);
+    assert_eq!(
+        commit_cost(&shifted(5.5), orig).spillable,
+        4 * 110 + 4 * 160
+    );
 }
 
 #[test]
@@ -228,4 +231,71 @@ fn a_move_about_an_off_centre_pivot_keeps_the_planes() {
     for (a, b) in before.channels.iter().zip(&after.channels) {
         assert!(b.data.shares(&a.data), "channel {} was resampled", a.id);
     }
+}
+
+/// A 17000² full-canvas layer scaled 1.5 about its centre.
+fn huge_resize() -> super::super::group::CommitCost {
+    let side = 17000;
+    let orig = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: side,
+        right: side,
+    };
+    let (c, half) = (f64::from(side) / 2.0, f64::from(side) * 0.75);
+    let quad = [
+        (c - half, c - half),
+        (c + half, c - half),
+        (c + half, c + half),
+        (c - half, c + half),
+    ];
+    commit_cost(&quad, orig)
+}
+
+const MIB: i64 = 1024 * 1024;
+
+/// Gate `cost` with `available` bytes of host memory (the room is that less
+/// 256 MiB of headroom) and `scratch` bytes free on the scratch disks.
+fn gate(cost: &super::super::group::CommitCost, available: i64, scratch: i64) -> bool {
+    use crate::cxxqt_object::helpers::memory_gate;
+    memory_gate::set_available_memory_for_test(available);
+    memory_gate::set_scratch_available_for_test(scratch);
+    memory_gate::clear();
+    let admitted = memory_gate::admit_spilling(cost.working, cost.spillable);
+    memory_gate::set_available_memory_for_test(-1);
+    memory_gate::set_scratch_available_for_test(-1);
+    admitted
+}
+
+#[test]
+fn a_large_resize_is_admitted_when_scratch_holds_it() {
+    use crate::cxxqt_object::helpers::memory_gate;
+    let cost = huge_resize();
+    assert!(
+        cost.spillable > 4 * 1024 * MIB as u64,
+        "the output is gigabytes"
+    );
+    // 2 GiB available leaves 1.75 GiB of room: enough for the working set even
+    // with one window per thread on a many-core runner.
+    assert!(gate(&cost, 2048 * MIB, 64 * 1024 * MIB));
+    assert!(!memory_gate::edit_refused_for_memory());
+}
+
+#[test]
+fn full_scratch_disks_refuse_the_transform() {
+    use crate::cxxqt_object::helpers::memory_gate;
+    assert!(!gate(&huge_resize(), 2048 * MIB, 0));
+    assert!(memory_gate::edit_refused_for_scratch_full());
+    assert!(memory_gate::edit_refused_for_memory());
+}
+
+#[test]
+fn a_working_set_beyond_ram_is_a_memory_refusal() {
+    use crate::cxxqt_object::helpers::memory_gate;
+    // 300 MiB available leaves 44 MiB of room, under the working set.
+    let cost = huge_resize();
+    assert!(cost.working > 44 * MIB as u64);
+    assert!(!gate(&cost, 300 * MIB, 64 * 1024 * MIB));
+    assert!(memory_gate::edit_refused_for_memory());
+    assert!(!memory_gate::edit_refused_for_scratch_full());
 }

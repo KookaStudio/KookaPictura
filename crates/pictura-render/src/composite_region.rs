@@ -11,6 +11,15 @@ use crate::composite_plan::{Body, CompositePlan, PlanNode};
 /// tens of megabytes on a 16k-wide document.
 pub(crate) const BAND: u32 = 64;
 
+/// A banded region of at least this many pixels is written into tiles a strip
+/// at a time, so its result can be packed or spilled (#1290); a smaller one
+/// keeps one flat buffer.
+#[cfg(not(test))]
+pub(crate) const TILED_REGION_PIXELS: usize = 16 << 20;
+/// Small in tests, so the banded fixtures composite through both paths.
+#[cfg(test)]
+pub(crate) const TILED_REGION_PIXELS: usize = 30_000;
+
 /// Composite only the document-space region `[x0, x0+rw) × [y0, y0+rh)`.
 ///
 /// Byte-identical to the same slice of [`crate::composite_rgba`] for every
@@ -199,6 +208,14 @@ fn composite_banded_with_plan(
             a[i] = crate::composite::to_u8(p.a);
         }
     };
+    if plane >= TILED_REGION_PIXELS {
+        return PixelBuffer {
+            width: rw,
+            height: rh,
+            channels: 4,
+            data: tiled_bands(w, rh as usize, &band_into),
+        };
+    }
     let data = pictura_core::Plane::build(plane * 4, |out| {
         let (r, rest) = out.split_at_mut(plane);
         let (g, rest) = rest.split_at_mut(plane);
@@ -223,6 +240,53 @@ fn composite_banded_with_plan(
         channels: 4,
         data,
     }
+}
+
+/// Composites band `n` of a region into its red, green, blue and alpha rows.
+type BandInto<'a> = dyn Fn(usize, &mut [u8], &mut [u8], &mut [u8], &mut [u8]) + Sync + 'a;
+
+/// A `w × h` four-plane region composited `TILE` rows at a time (its bands in
+/// parallel) into a tiled plane, each strip settled before the next.
+fn tiled_bands(w: usize, h: usize, band_into: &BandInto<'_>) -> pictura_core::Plane<u8> {
+    use pictura_core::TILE;
+    use rayon::prelude::*;
+    let mut tiled = pictura_core::Plane::filled(w, h, 4, 0u8);
+    let mut group = vec![0u8; 4 * w * TILE];
+    let mut top = 0;
+    while top < h {
+        let rows = TILE.min(h - top);
+        let run = rows * w;
+        let (r, rest) = group[..4 * run].split_at_mut(run);
+        let (g, rest) = rest.split_at_mut(run);
+        let (b, a) = rest.split_at_mut(run);
+        let band = BAND as usize * w;
+        let mut first = top / BAND as usize;
+        let (mut r, mut g, mut b, mut a) = (r, g, b, a);
+        if top == 0 {
+            // As the flat path: band 0 alone first, so the plan's lazily built
+            // artifacts exist before the bands run in parallel.
+            let n = band.min(run);
+            let (r0, rr) = r.split_at_mut(n);
+            let (g0, gg) = g.split_at_mut(n);
+            let (b0, bb) = b.split_at_mut(n);
+            let (a0, aa) = a.split_at_mut(n);
+            band_into(0, r0, g0, b0, a0);
+            (r, g, b, a, first) = (rr, gg, bb, aa, 1);
+        }
+        r.par_chunks_mut(band)
+            .zip(g.par_chunks_mut(band))
+            .zip(b.par_chunks_mut(band))
+            .zip(a.par_chunks_mut(band))
+            .enumerate()
+            .for_each(|(i, (((r, g), b), a))| band_into(first + i, r, g, b, a));
+        for c in 0..4 {
+            let ys = c * h + top..c * h + top + rows;
+            tiled.write_rect_from(0..w, ys, w, &group[c * run..(c + 1) * run]);
+        }
+        tiled.settle();
+        top += rows;
+    }
+    tiled
 }
 
 /// The first root a band of `region` composites, and whether that root is

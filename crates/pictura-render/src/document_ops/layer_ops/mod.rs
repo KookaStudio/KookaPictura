@@ -45,7 +45,12 @@ mod transfer;
 mod transform;
 mod transform_native;
 #[cfg(test)]
+mod transform_oracle;
+#[cfg(test)]
 mod transform_tests;
+mod transform_tiled;
+#[cfg(test)]
+mod transform_tiled_tests;
 mod vector_masks;
 mod via;
 mod warp;

@@ -7,7 +7,7 @@ use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
 use super::group::{
-    can_free_transform, commit_bytes, group_apply, lifted_apply, repeatable_transform,
+    can_free_transform, commit_cost, group_apply, lifted_apply, repeatable_transform,
     transform_group, transform_group_edit, transform_rect,
 };
 use super::{
@@ -314,7 +314,8 @@ impl qobject::PictureView {
             None if projective => unmoved(),
             None => params.is_identity(),
         };
-        if identity || !memory_gate::admit(commit_bytes(&preview_quad, orig_rect)) {
+        let cost = commit_cost(&preview_quad, orig_rect);
+        if identity || !memory_gate::admit_spilling(cost.working, cost.spillable) {
             self.as_mut().drop_transform_session();
             self.as_mut().clear_transform_preview();
             return false;

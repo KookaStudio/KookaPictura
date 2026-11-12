@@ -107,17 +107,36 @@ impl<T: TileSample> TiledPlane<T> {
         channels: usize,
         mut rows: impl FnMut(usize, &mut [T]) -> Result<(), E>,
     ) -> Result<Self, E> {
-        let mut plane = Self::filled(width, height, channels, T::default());
         let mut strip = vec![T::default(); width * TILE.min(height.max(1))];
+        Self::build_strips(width, height, channels, &mut strip, |y0, out| {
+            for (k, row) in out.chunks_mut(width.max(1)).enumerate() {
+                rows(y0 + k, row)?;
+            }
+            Ok(())
+        })
+    }
+
+    /// A plane whose strips `fill(first_row, strip)` fills, up to `TILE` global
+    /// rows at a time through the caller's `strip` buffer (at least
+    /// `width × TILE` samples); each strip is written and settled before the
+    /// next, so its uniform tiles hold no allocation.
+    pub(crate) fn build_strips<E>(
+        width: usize,
+        height: usize,
+        channels: usize,
+        strip: &mut [T],
+        mut fill: impl FnMut(usize, &mut [T]) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        let mut plane = Self::filled(width, height, channels, T::default());
         for c in 0..channels {
             let mut ly = 0;
             while ly < height {
                 let h = TILE.min(height - ly);
                 let y0 = c * height + ly;
-                for (k, row) in strip.chunks_mut(width.max(1)).take(h).enumerate() {
-                    rows(y0 + k, row)?;
-                }
-                plane.write_rect_from(0..width, y0..y0 + h, &strip[..width * h]);
+                let out = &mut strip[..width * h];
+                out.fill(T::default());
+                fill(y0, out)?;
+                plane.write_rect_from(0..width, y0..y0 + h, out);
                 plane.settle();
                 ly += h;
             }

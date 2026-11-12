@@ -310,6 +310,67 @@ fn banded_compositing_equals_one_canvas() {
 }
 
 #[test]
+fn a_tiled_region_equals_the_flat_region() {
+    let d = banded_doc();
+    let whole = crate::composite::composite_whole(&d);
+    // 101 × 333 is over the test tiling threshold; 90 × 290 is under it.
+    let tiled = composite_rgba_region(&d, 0, 0, d.width, d.height);
+    assert!(tiled.data.is_tiled(), "a large region is tiled");
+    let mut every = vec![0u8; tiled.data.len()];
+    tiled.data.read_into(0, &mut every);
+    assert!(
+        every.as_slice() == whole.data.as_slice(),
+        "the tiled region differs"
+    );
+    let flat = composite_rgba_region(&d, 3, 17, 90, 290);
+    assert!(!flat.data.is_tiled(), "a small region stays flat");
+}
+
+#[test]
+fn patching_a_tiled_region_does_not_materialize() {
+    use pictura_core::{PixelBuffer, Plane};
+    let (w, h) = (512usize, 512usize);
+    let data: Vec<u8> = (0..w * h * 4).map(|i| (i * 13 % 251) as u8).collect();
+    let mut region = PixelBuffer {
+        width: w as u32,
+        height: h as u32,
+        channels: 4,
+        data: Plane::from(data.clone()),
+    };
+    assert!(region.data.tile(w, h));
+    let mut composite = PixelBuffer {
+        width: 1000,
+        height: 900,
+        channels: 4,
+        data: Plane::filled(1000, 900, 4, 0u8),
+    };
+    pictura_core::reset_materializations();
+    let before = pictura_core::materializations();
+    crate::document_composite::patch_buffer_region(&mut composite, &region, 300, 200);
+    assert_eq!(
+        pictura_core::materializations(),
+        before,
+        "the region was materialized"
+    );
+    for c in 0..4 {
+        for y in [0usize, 255, 256, 511] {
+            let mut row = vec![0u8; w];
+            composite.data.read_rect_into(
+                300..300 + w,
+                c * 900 + 200 + y..c * 900 + 201 + y,
+                1000,
+                &mut row,
+            );
+            assert_eq!(
+                row,
+                data[c * w * h + y * w..c * w * h + (y + 1) * w],
+                "plane {c} row {y}"
+            );
+        }
+    }
+}
+
+#[test]
 fn banding_with_a_short_type_layer_equals_one_canvas() {
     let mut d = banded_doc();
     let mut spec = pictura_core::TypeSpec::new("Band", "Liberation Sans", 40.0);
