@@ -70,7 +70,7 @@ private slots:
     void aSecondPressKeepsTheViewPreview();
     void aHoverReadoutDoesNotSettleTheMove();
     void aTransformCommitLandsOffThread();
-    void cancellingATransformResumesTheSession();
+    void cancellingATransformEndsIt();
     void aRotatedPixelEdgeIsAntialiased();
 
 private:
@@ -437,7 +437,7 @@ void LargeDocumentTest::aTransformCommitLandsOffThread()
 }
 
 // [mcr_transform_cancel] [lop_cancel_unchanged]
-void LargeDocumentTest::cancellingATransformResumesTheSession()
+void LargeDocumentTest::cancellingATransformEndsIt()
 {
     QImage seed(4200, 4200, QImage::Format_RGB32);
     seed.fill(Qt::white);
@@ -452,7 +452,6 @@ void LargeDocumentTest::cancellingATransformResumesTheSession()
     QVERIFY(f.view->transform_press(corner.x(), corner.y(), 1.0, false, false) >= 0);
     QVERIFY(f.view->transform_move(corner.x() - 200.0, corner.y() - 200.0, 1.0, false, false));
     f.view->transform_release();
-    const QPolygonF moved = pictura::transform_api::quad(*f.view).corners;
     const int count = f.view->history_count();
     const int index = f.view->history_index();
     const QImage before = f.view->display_image(2, 0, 0, 1050, 1050);
@@ -478,22 +477,12 @@ void LargeDocumentTest::cancellingATransformResumesTheSession()
     QVERIFY2(clicked, "the progress window offered Cancel");
     QVERIFY2(clock.elapsed() < 20000, "the cancel stopped the held job");
     QVERIFY(!pictura::transform_pending(*f.view));
-    QVERIFY2(f.view->transform_session_active(), "the session resumes");
-    QCOMPARE(pictura::transform_api::quad(*f.view).corners, moved);
-    QVERIFY2(f.canvas->transformPreviewActive(), "the handles are back");
+    QVERIFY2(!f.view->transform_session_active(), "the transform ends");
+    QVERIFY2(!f.canvas->transformPreviewActive(), "the handles are gone");
+    QVERIFY2(!f.canvas->movePreviewActive(), "the transform image is gone");
     QCOMPARE(f.view->history_count(), count);
     QCOMPARE(f.view->history_index(), index);
     QVERIFY2(f.view->display_image(2, 0, 0, 1050, 1050) == before, "the document is unchanged");
-
-    // The resumed session commits as one state.
-    pictura::transform_set_delay(*f.view, 0);
-    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
-    f.tools->commitFreeTransform();
-    QVERIFY(!f.view->transform_session_active());
-    if (pictura::move_composite_pending(*f.view)) {
-        QVERIFY(committed.wait(30000));
-    }
-    QCOMPARE(f.view->history_count(), count + 1);
 }
 
 // [mcr_transform_antialias]

@@ -72,6 +72,15 @@ pub(in crate::cxxqt_object) fn admit_spilling(working: u64, spillable: u64) -> b
     false
 }
 
+/// Whether a commit [`admit_spilling`] admitted can only fit by packing or
+/// spilling tiles: its working and spillable bytes together exceed the room
+/// (#1290). Such a commit runs as a cancellable job.
+pub(in crate::cxxqt_object) fn expects_spill(cost: &CommitCost) -> bool {
+    memory::governor()
+        .room()
+        .is_some_and(|room| cost.working.saturating_add(cost.spillable) > room)
+}
+
 /// The free bytes on the usable scratch volumes.
 fn scratch_available() -> u64 {
     SCRATCH_AVAILABLE
@@ -428,6 +437,28 @@ mod tests {
         set_scratch_available_for_test(-1);
         assert!(admitted);
         assert!(!refused);
+    }
+
+    // [mcr_transform_spill_job] [mcr_transform_fits_sync]
+    #[test]
+    fn a_commit_beyond_the_room_expects_to_spill() {
+        let cost = CommitCost {
+            working: 100 * MIB as u64,
+            spillable: 200 * MIB as u64,
+        };
+        // 256 MiB of headroom is kept under the pinned available memory.
+        set_available_memory_for_test((256 + 200) * MIB);
+        set_scratch_available_for_test(64 * 1024 * MIB);
+        clear();
+        let admitted = admit_spilling(cost.working, cost.spillable);
+        let spills = expects_spill(&cost);
+        set_available_memory_for_test((256 + 300) * MIB);
+        let fits = expects_spill(&cost);
+        set_available_memory_for_test(-1);
+        set_scratch_available_for_test(-1);
+        assert!(admitted, "the scratch disks hold the rest");
+        assert!(spills, "300 MiB over 200 MiB of room");
+        assert!(!fits, "the room holds all of it");
     }
 
     // [ocf_small_refresh]

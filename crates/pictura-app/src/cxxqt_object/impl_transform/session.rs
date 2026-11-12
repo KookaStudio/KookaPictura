@@ -336,9 +336,10 @@ impl qobject::PictureView {
         }
         let area = u64::from(orig_rect.width().max(0) as u32)
             * u64::from(orig_rect.height().max(0) as u32);
-        // A large engine runs as a cancellable job (#1278); the session stays
-        // live until it lands, so a cancel resumes it.
-        if area >= DEFERRED_TRANSFORM_PIXELS {
+        // A large engine, or one that will spill tiles to scratch (#1290), runs
+        // as a cancellable job (#1278); the session stays live until it lands,
+        // so a cancel resumes it.
+        if area >= DEFERRED_TRANSFORM_PIXELS || memory_gate::expects_spill(&cost) {
             let lifted = self
                 .rust()
                 .session

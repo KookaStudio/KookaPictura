@@ -12,6 +12,9 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QThread>
+#include <QtCore/QTimer>
+#include <QtWidgets/QProgressDialog>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
@@ -51,6 +54,7 @@ private slots:
     void statusCarriesScratchReadouts();
     void aFailedAllocationLeavesTheEditUndone();
     void transformRefusalNamesFullScratchDisks();
+    void aSpillingTransformRunsAsAJob();
     void moveChargesOnlyTheTiledComposite();
     void moveRefusalNamesFullScratchDisks();
     void transformBeginRefusedBeyondTheRoom();
@@ -350,6 +354,91 @@ void MemoryGovernorTest::transformRefusalNamesFullScratchDisks()
     const QString message = window_->statusBar()->currentMessage();
     QCOMPARE(message, pictura::transformMemoryRefusalMessage());
     QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
+}
+
+// [mcr_transform_spill_job] [mcr_transform_fits_sync]
+void MemoryGovernorTest::aSpillingTransformRunsAsAJob()
+{
+    // 1 Mpx: under the 4 Mpx size that sends any commit to the job.
+    QVERIFY(window_->newDocument(QStringLiteral("Spill"), 1000, 1000, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+    QCOMPARE(view->duplicate_layer(0), 1);
+    view->set_active_layer(QStringLiteral("1"));
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    // Drag the corner out to about 3000²: about 69 MiB of output and composite
+    // tiles.
+    const auto scaleUp = [&] {
+        if (!tools->beginFreeTransform(QStringLiteral("1"))) {
+            return false;
+        }
+        const QPolygonF quad = pictura::transform_api::quad(*view).corners;
+        if (quad.size() != 4) {
+            return false;
+        }
+        const QPointF corner = quad.at(2);
+        if (view->transform_press(corner.x(), corner.y(), 1.0, false, false) < 0 ||
+            !view->transform_move(corner.x() + 2000.0, corner.y() + 2000.0, 1.0, false, false)) {
+            return false;
+        }
+        view->transform_release();
+        return true;
+    };
+    QVERIFY(scaleUp());
+    const int count = view->history_count();
+    const int index = view->history_index();
+    const QImage before = view->display_image(0, 0, 0, 1000, 1000);
+
+    // Room for the working set (one 8 MiB window a thread, plus the strips)
+    // but not the output, which the scratch disks hold.
+    bool sawWindow = false;
+    bool clicked = false;
+    QTimer probe;
+    probe.setInterval(20);
+    connect(&probe, &QTimer::timeout, this, [&] {
+        auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));
+        if (!d || !d->isVisible()) {
+            return;
+        }
+        sawWindow = true;
+        if (!clicked) {
+            if (auto* cancel = d->findChild<QPushButton*>()) {
+                clicked = true;
+                unpin();
+                cancel->click();
+            }
+        }
+    });
+    pinRoom(QThread::idealThreadCount() * 8 + 32, 64 * 1024);
+    pictura::transform_set_delay(*view, 30000);
+    probe.start();
+    tools->commitFreeTransform();
+    probe.stop();
+    unpin();
+    pictura::set_scratch_available_for_test(-1);
+    QVERIFY(!pictura::edit_refused_for_memory());
+    QVERIFY2(sawWindow, "a commit expected to spill shows the progress window");
+    QVERIFY2(clicked, "the progress window offered Cancel");
+    QVERIFY(!pictura::transform_pending(*view));
+    QVERIFY2(!view->transform_session_active(), "Cancel ends the transform");
+    QCOMPARE(view->history_count(), count);
+    QCOMPARE(view->history_index(), index);
+    QVERIFY2(view->display_image(0, 0, 0, 1000, 1000) == before, "the document is unchanged");
+
+    // With room for all of it, the same transform lands synchronously: a job
+    // would be held long enough to show its window.
+    QVERIFY(scaleUp());
+    sawWindow = false;
+    pictura::transform_set_delay(*view, 600);
+    probe.start();
+    tools->commitFreeTransform();
+    probe.stop();
+    pictura::transform_set_delay(*view, 0);
+    QVERIFY2(!sawWindow, "a commit that fits shows no progress window");
+    QVERIFY(!view->transform_session_active());
+    QCOMPARE(view->history_count(), count + 1);
 }
 
 pictura::PictureView* MemoryGovernorTest::largeMoveDocument()
