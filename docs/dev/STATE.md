@@ -4,6 +4,21 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Transform commit peak memory, phases 1–2** (#1290, OpenSpec change
+  `transform-commit-peak-memory`, capability `document/transform-commit-memory`).
+  - **Integer moves.** `transform_layer_with_map` moves the planes instead of
+    resampling when the transform is a whole-pixel translation (`move_layer`).
+    Bicubic Smoother is excluded because its B-spline blurs at whole-pixel
+    offsets. `apply_session_transform` passes the offset through unchanged when
+    the linear part is the identity, so the reference point can't break it.
+  - **Fallible resample.** `resample_plane` uses `memory::try_plane`; the
+    native-depth path uses `try_reserve_exact`. A failure refuses the
+    transform and leaves the document unchanged. On a deferred commit's worker
+    the GUI shows a generic failure (`ponytail:`).
+  - **Gate.** `commit_bytes` charges a whole-pixel move for the composite only.
+  - **Next.** Phase 3: tile-streamed resampling into a tiled destination.
+    Phase 4: banded composite and a scratch-aware gate. Phase 5: progress for
+    spilling commits. The plan is on #1290.
 - **Long-operation jobs, part 1** (#1278, OpenSpec change
   `transform-commit-progress`, capability `document/long-operation-progress`).
   - **Token.** `pictura_core::job::JobProgress` carries a cancel flag and a
