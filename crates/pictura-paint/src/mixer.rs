@@ -25,6 +25,7 @@
 //! Ported from photorust's `core/src/mixer.rs`
 //! (<https://github.com/perfecto25/photorust>).
 
+use crate::bristle::{BristleDab, BristleTip};
 use crate::healing::RgbaImage;
 use crate::replace::{dab_bounds, grow};
 use crate::spacing::SpacingMode;
@@ -77,6 +78,12 @@ pub(crate) struct MixerBrush {
     // ponytail: a snapshot taken at the press, so earlier dabs of the same
     // stroke do not show in the pickup; Sample All Layers off reads them live.
     pub(crate) sampled: Option<RgbaImage>,
+    /// One paint reservoir per bristle when the tip is a bristle tip.
+    bristle_reservoirs: Vec<[u8; 4]>,
+    /// The bristle tip the reservoirs were seeded for.
+    bristle_tip: Option<BristleTip>,
+    /// Stable seed input for a bristle dab's tracks.
+    bristle_dab_index: u64,
 }
 
 impl MixerBrush {
@@ -87,6 +94,9 @@ impl MixerBrush {
             paint: options.load.clamp(0.0, 1.0),
             preserve_alpha,
             sampled: None,
+            bristle_reservoirs: Vec::new(),
+            bristle_tip: None,
+            bristle_dab_index: 0,
         }
     }
 
@@ -104,7 +114,33 @@ impl MixerBrush {
 
     /// Apply one dab centred at layer-local `(cx, cy)`. Returns the layer-local
     /// rectangle changed.
+    #[cfg(test)]
     pub(crate) fn dab(
+        &mut self,
+        img: &mut RgbaImage,
+        cfg: &StrokeConfig,
+        cx: f32,
+        cy: f32,
+    ) -> Option<PsdRect> {
+        self.dab_tangent(img, cfg, cx, cy, cfg.angle_deg as f32)
+    }
+
+    /// Apply one dab whose stroke direction is `tangent` degrees.
+    pub(crate) fn dab_tangent(
+        &mut self,
+        img: &mut RgbaImage,
+        cfg: &StrokeConfig,
+        cx: f32,
+        cy: f32,
+        tangent: f32,
+    ) -> Option<PsdRect> {
+        match cfg.bristle {
+            Some(tip) => self.bristle_dab(img, cfg, cx, cy, tangent, tip),
+            None => self.plain_dab(img, cfg, cx, cy),
+        }
+    }
+
+    fn plain_dab(
         &mut self,
         img: &mut RgbaImage,
         cfg: &StrokeConfig,
@@ -196,6 +232,117 @@ impl MixerBrush {
         }
         dirty
     }
+
+    fn bristle_dab(
+        &mut self,
+        img: &mut RgbaImage,
+        cfg: &StrokeConfig,
+        cx: f32,
+        cy: f32,
+        tangent: f32,
+        tip: BristleTip,
+    ) -> Option<PsdRect> {
+        let region = dab_bounds(img, cfg, cx, cy)?;
+        let wet = self.options.wet.clamp(0.0, 1.0);
+        let mix = self.options.mix.clamp(0.0, 1.0);
+        let flow = self.options.flow.clamp(0.0, 1.0);
+        if flow <= 0.0 || (wet <= 0.0 && self.paint <= 0.0) {
+            return None;
+        }
+        let seed = self.bristle_dab_index.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            ^ (cx.to_bits() as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9)
+            ^ (cy.to_bits() as u64);
+        self.bristle_dab_index = self.bristle_dab_index.wrapping_add(1);
+        let dab = BristleDab::new(
+            tip,
+            cfg.diameter as f32,
+            tangent + cfg.angle_deg as f32,
+            1.0,
+            seed,
+        );
+        let count = dab.track_count();
+        if self.bristle_tip != Some(tip) || self.bristle_reservoirs.len() != count {
+            self.bristle_reservoirs = vec![self.reservoir; count];
+            self.bristle_tip = Some(tip);
+        }
+
+        let pickup = average_under(self.sampled.as_ref().unwrap_or(img), region, |x, y| {
+            dab.coverage(x as f32 + 0.5 - cx, y as f32 + 0.5 - cy)
+        });
+        let canvas_share = if wet <= 0.0 {
+            0.0
+        } else {
+            mix + (1.0 - mix) * (1.0 - self.paint.min(1.0))
+        };
+        let deposit_alpha = flow * (1.0 - wet * 0.5);
+        let opacity = cfg.opacity as f32 / 100.0;
+        let mut dirty = None;
+        for y in region.top..region.bottom {
+            for x in region.left..region.right {
+                let (cover, index) = dab.best_track(x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+                if cover <= 0.0 {
+                    continue;
+                }
+                let reservoir = self.bristle_reservoirs[index];
+                let deposit =
+                    pickup.map_or(reservoir, |found| lerp(reservoir, found, canvas_share));
+                let source = Rgba {
+                    r: deposit[0],
+                    g: deposit[1],
+                    b: deposit[2],
+                    a: deposit[3],
+                };
+                let weight = (cover * deposit_alpha * opacity).clamp(0.0, 1.0);
+                let existing = img.get(x, y);
+                if weight <= 0.0 || (self.preserve_alpha && existing[3] == 0) {
+                    continue;
+                }
+                let roll = if cfg.mode == crate::PaintMode::Dissolve {
+                    let hash =
+                        (x as u32).wrapping_mul(73_856_093) ^ (y as u32).wrapping_mul(19_349_663);
+                    hash as f32 / u32::MAX as f32
+                } else {
+                    0.0
+                };
+                let Some((r, g, b, a)) = crate::stroke::blend_pixel(
+                    cfg.mode,
+                    (existing[0], existing[1], existing[2], existing[3]),
+                    &source,
+                    weight,
+                    roll,
+                ) else {
+                    continue;
+                };
+                let mut mixed = [r, g, b, a];
+                if self.preserve_alpha {
+                    mixed[3] = existing[3];
+                }
+                if mixed == existing {
+                    continue;
+                }
+                img.set(x, y, mixed);
+                dirty = Some(grow(dirty, x, y));
+            }
+        }
+
+        if wet > 0.0 {
+            if let Some(found) = pickup {
+                for (i, reservoir) in self.bristle_reservoirs.iter_mut().enumerate() {
+                    let factor = 0.5
+                        + 0.5 * unit_seed(seed ^ (i as u64).wrapping_mul(0x94D0_49BB_1331_11EB));
+                    *reservoir = lerp(*reservoir, found, wet * mix * PICKUP_RATE * factor);
+                }
+            }
+            let spacing = match cfg.spacing {
+                SpacingMode::Fixed(percent) => percent as f32 / 100.0,
+                SpacingMode::VelocityDriven => REFERENCE_SPACING,
+            };
+            let travel = (spacing.max(0.01) / REFERENCE_SPACING).clamp(0.05, 4.0);
+            self.paint = (self.paint - wet * DAB_CONSUMPTION * travel).max(0.0);
+        }
+        self.reservoir = mean_reservoir(&self.bristle_reservoirs);
+        dirty
+    }
 }
 
 /// The tip-weighted average colour under a dab, or `None` over nothing but
@@ -232,6 +379,23 @@ fn average_under(
         to_u8(sum[2] / alpha),
         to_u8(alpha / total * 255.0),
     ])
+}
+
+fn mean_reservoir(reservoirs: &[[u8; 4]]) -> [u8; 4] {
+    if reservoirs.is_empty() {
+        return [0, 0, 0, 0];
+    }
+    std::array::from_fn(|c| {
+        (reservoirs.iter().map(|r| r[c] as u32).sum::<u32>() / reservoirs.len() as u32) as u8
+    })
+}
+
+fn unit_seed(mut x: u64) -> f32 {
+    x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    (x >> 40) as f32 / 16_777_216.0
 }
 
 /// Straight-alpha interpolation from `from` toward `to`.
@@ -406,6 +570,61 @@ mod tests {
             wet[2] as u32 + 2 >= wet[0] as u32,
             "Very Wet kept the brush's red: {wet:?}"
         );
+    }
+
+    fn bristle_cfg() -> StrokeConfig {
+        StrokeConfig {
+            diameter: 40,
+            spacing: SpacingMode::Fixed(25),
+            bristle: Some(crate::bristle::BristleTip {
+                shape: crate::bristle::BristleShape::Round,
+                bristles: 35,
+                length: 60,
+                thickness: 30,
+                stiffness: 50,
+            }),
+            ..StrokeConfig::default()
+        }
+    }
+
+    #[test]
+    fn wet_bristle_stroke_varies_across_the_tip() {
+        let band = |x: i32, _| if x < 32 { [20, 20, 220, 255] } else { WHITE };
+        let mut img = image(64, 32, band);
+        let mut m = MixerBrush::new(opts(1.0, 1.0, 1.0), rgba([220, 20, 20, 255]), false);
+        for x in 10..50 {
+            m.dab(&mut img, &bristle_cfg(), x as f32, 16.0);
+        }
+        let mut colors = std::collections::HashSet::new();
+        for y in 0..32 {
+            let px = img.get(40, y);
+            if px != [20, 20, 220, 255] && px != WHITE {
+                colors.insert(px);
+            }
+        }
+        assert!(
+            colors.len() > 1,
+            "the wet bristle tip deposited one colour: {colors:?}"
+        );
+    }
+
+    #[test]
+    fn dry_bristle_stroke_stays_crisp() {
+        let band = |x: i32, _| if x < 32 { [20, 20, 220, 255] } else { WHITE };
+        let mut img = image(64, 32, band);
+        let mut m = MixerBrush::new(opts(0.0, 1.0, 0.0), rgba([220, 20, 20, 255]), false);
+        for x in 10..50 {
+            m.dab(&mut img, &bristle_cfg(), x as f32, 16.0);
+        }
+        for y in 0..32 {
+            let px = img.get(40, y);
+            if px != [20, 20, 220, 255] && px != WHITE {
+                assert!(
+                    px[0] > px[2],
+                    "a dry bristle dragged canvas blue into the deposit: {px:?}"
+                );
+            }
+        }
     }
 
     #[test]

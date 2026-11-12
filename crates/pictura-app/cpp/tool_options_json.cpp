@@ -269,6 +269,8 @@ struct PaintFields {
     bool autoErase, airbrush, pressureSize, pressureOpacity, flipX, flipY, penTip, aliased,
         wetEdges;
     BrushDynamics dynamics;
+    bool bristleEnabled;
+    int bristleShape, bristleDensity, bristleLength, bristleThickness, bristleStiffness;
 };
 
 template <typename F> void fields(PaintFields& o, F&& f)
@@ -346,6 +348,12 @@ template <typename F> void fields(PaintFields& o, F&& f)
     f("lockPose", o.dynamics.lockPose);
     f("lockTexture", o.dynamics.lockTexture);
     f("lockDual", o.dynamics.lockDual);
+    f("bristleEnabled", o.bristleEnabled);
+    f("bristleShape", o.bristleShape);
+    f("bristleDensity", o.bristleDensity);
+    f("bristleLength", o.bristleLength);
+    f("bristleThickness", o.bristleThickness);
+    f("bristleStiffness", o.bristleStiffness);
 }
 
 PaintFields paintFields(const PaintOptions& p)
@@ -354,7 +362,9 @@ PaintFields paintFields(const PaintOptions& p)
             p.roundness(),    p.tipAngle(), p.spacing(),     p.grain(),
             p.mode(),         p.autoErase(), p.airbrush(),   p.pressureSize(),
             p.pressureOpacity(), p.flipX(),  p.flipY(),       p.penTip(),
-            p.aliased(),      p.wetEdges(), p.dynamics()};
+            p.aliased(),      p.wetEdges(), p.dynamics(),    p.bristleEnabled(),
+            p.bristleShape(), p.bristleDensity(), p.bristleLength(),
+            p.bristleThickness(), p.bristleStiffness()};
 }
 
 void applyPaint(PaintOptions& p, const PaintFields& v)
@@ -377,6 +387,12 @@ void applyPaint(PaintOptions& p, const PaintFields& v)
     p.setAliased(v.aliased);
     p.setWetEdges(v.wetEdges);
     p.setDynamics(v.dynamics);
+    p.setBristleEnabled(v.bristleEnabled);
+    p.setBristleShape(v.bristleShape);
+    p.setBristleDensity(v.bristleDensity);
+    p.setBristleLength(v.bristleLength);
+    p.setBristleThickness(v.bristleThickness);
+    p.setBristleStiffness(v.bristleStiffness);
 }
 
 // The selection family's options-bar fields.

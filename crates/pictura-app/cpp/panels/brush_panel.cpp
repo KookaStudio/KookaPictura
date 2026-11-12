@@ -163,6 +163,7 @@ BrushPanel::BrushPanel(QWidget* parent)
     presets->setToolTip(tr("Brush Presets: not implemented yet"));
 
     auto* body = new QHBoxLayout();
+    body->setObjectName(QStringLiteral("brushPanelBody"));
     sets_ = new QListWidget(this);
     sets_->setObjectName(QStringLiteral("brushOptionSets"));
     // Narrow enough that the docked panel never widens the column it shares.
@@ -231,7 +232,14 @@ BrushPanel::BrushPanel(QWidget* parent)
                 pages_->setCurrentIndex(sets_->row(current));
                 refreshDynamics();
             });
-    body->addWidget(sets_);
+    // Clicking the already-current row still shows its page: a row can keep
+    // the current flag while the stack was left on another page.
+    connect(sets_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+        if (pages_ && item) {
+            pages_->setCurrentIndex(sets_->row(item));
+            refreshDynamics();
+        }
+    });
 
     auto* page = new QWidget(this);
     auto* pageLayout = new QVBoxLayout(page);
@@ -264,7 +272,7 @@ BrushPanel::BrushPanel(QWidget* parent)
 
     auto* shapeRow = new QHBoxLayout();
     auto* shapeFields = new QVBoxLayout();
-    auto* flips = new QHBoxLayout();
+    auto* flips = new QVBoxLayout();
     flipX_ = new QCheckBox(tr("Flip X"), page);
     flipX_->setObjectName(QStringLiteral("brushPanelFlipX"));
     flipY_ = new QCheckBox(tr("Flip Y"), page);
@@ -289,8 +297,45 @@ BrushPanel::BrushPanel(QWidget* parent)
         tr("Hardness"), field(0, 100, QStringLiteral("%"), QStringLiteral("brushPanelHardness")),
         page);
     pageLayout->addWidget(hardness_);
+
+    auto* bristleLine = new QFrame(page);
+    bristleLine->setFrameShape(QFrame::HLine);
+    bristleLine->setFrameShadow(QFrame::Sunken);
+    pageLayout->addWidget(bristleLine);
+    bristleEnabled_ = new QCheckBox(tr("Bristle Tip"), page);
+    bristleEnabled_->setObjectName(QStringLiteral("brushBristleEnabled"));
+    bristleEnabled_->setToolTip(tr("Draw the dab as a bundle of individual bristle tracks"));
+    pageLayout->addWidget(bristleEnabled_);
+
+    auto* bristleShapeRow = new QHBoxLayout();
+    bristleShapeRow->addWidget(new QLabel(tr("Shape:"), page));
+    bristleShape_ = new QComboBox(page);
+    bristleShape_->setObjectName(QStringLiteral("brushBristleShape"));
+    bristleShape_->addItems({tr("Round"), tr("Round Fan"), tr("Round Curve"), tr("Flat"),
+                             tr("Flat Fan"), tr("Flat Curve")});
+    bristleShapeRow->addWidget(bristleShape_, 1);
+    pageLayout->addLayout(bristleShapeRow);
+
+    bristleDensity_ = new NumericField(
+        tr("Bristles"), field(0, 100, QStringLiteral("%"), QStringLiteral("brushBristleDensity")),
+        page);
+    pageLayout->addWidget(bristleDensity_);
+    bristleLength_ = new NumericField(
+        tr("Length"), field(0, 100, QStringLiteral("%"), QStringLiteral("brushBristleLength")),
+        page);
+    pageLayout->addWidget(bristleLength_);
+    bristleThickness_ = new NumericField(
+        tr("Thickness"),
+        field(0, 100, QStringLiteral("%"), QStringLiteral("brushBristleThickness")), page);
+    pageLayout->addWidget(bristleThickness_);
+    bristleStiffness_ = new NumericField(
+        tr("Stiffness"),
+        field(0, 100, QStringLiteral("%"), QStringLiteral("brushBristleStiffness")), page);
+    pageLayout->addWidget(bristleStiffness_);
+
     auto* spacingRow = new QHBoxLayout();
     auto* spacingOn = new QCheckBox(tr("Spacing"), page);
+    spacingOn->setObjectName(QStringLiteral("brushPanelSpacingOn"));
     spacingOn->setChecked(true);
     spacingOn->setEnabled(false);
     spacingOn->setToolTip(tr("Spacing off (spacing by drag speed): not implemented yet"));
@@ -306,7 +351,6 @@ BrushPanel::BrushPanel(QWidget* parent)
     pages_->setObjectName(QStringLiteral("brushDynamicsPages"));
     pages_->addWidget(page);
     buildDynamicsPages();
-    body->addWidget(pages_, 1);
 
     lockButton_ = new QToolButton(this);
     lockButton_->setObjectName(QStringLiteral("brushSetLock"));
@@ -319,6 +363,7 @@ BrushPanel::BrushPanel(QWidget* parent)
     setColumn->addWidget(sets_);
     setColumn->addWidget(lockButton_, 0, Qt::AlignLeft);
     body->addLayout(setColumn);
+    body->addWidget(pages_, 1);
 
     preview_ = new QLabel(this);
     preview_->setObjectName(QStringLiteral("brushPanelPreview"));
@@ -340,6 +385,37 @@ BrushPanel::BrushPanel(QWidget* parent)
     connect(hardness_, &NumericField::valueChanged, this, [this](double v) {
         if (paint_) {
             paint_->setHardness(qRound(v));
+        }
+    });
+    connect(bristleEnabled_, &QCheckBox::toggled, this, [this](bool on) {
+        if (paint_) {
+            paint_->setBristleEnabled(on);
+        }
+    });
+    connect(bristleShape_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int index) {
+                if (paint_) {
+                    paint_->setBristleShape(index);
+                }
+            });
+    connect(bristleDensity_, &NumericField::valueChanged, this, [this](double v) {
+        if (paint_) {
+            paint_->setBristleDensity(qRound(v));
+        }
+    });
+    connect(bristleLength_, &NumericField::valueChanged, this, [this](double v) {
+        if (paint_) {
+            paint_->setBristleLength(qRound(v));
+        }
+    });
+    connect(bristleThickness_, &NumericField::valueChanged, this, [this](double v) {
+        if (paint_) {
+            paint_->setBristleThickness(qRound(v));
+        }
+    });
+    connect(bristleStiffness_, &NumericField::valueChanged, this, [this](double v) {
+        if (paint_) {
+            paint_->setBristleStiffness(qRound(v));
         }
     });
     connect(angle_, &NumericField::valueChanged, this, [this](double v) {
@@ -673,6 +749,28 @@ void BrushPanel::refresh()
     angle_->setValue(paint_->tipAngle());
     roundness_->setValue(paint_->roundness());
     spacing_->setValue(paint_->spacing());
+    {
+        const QSignalBlocker be(bristleEnabled_);
+        const QSignalBlocker bs(bristleShape_);
+        const QSignalBlocker bd(bristleDensity_);
+        const QSignalBlocker bl(bristleLength_);
+        const QSignalBlocker bt(bristleThickness_);
+        const QSignalBlocker bk(bristleStiffness_);
+        bristleEnabled_->setChecked(paint_->bristleEnabled());
+        bristleShape_->setCurrentIndex(paint_->bristleShape());
+        bristleDensity_->setValue(paint_->bristleDensity());
+        bristleLength_->setValue(paint_->bristleLength());
+        bristleThickness_->setValue(paint_->bristleThickness());
+        bristleStiffness_->setValue(paint_->bristleStiffness());
+    }
+    const bool bristle = paint_->bristleEnabled();
+    bristleShape_->setEnabled(bristle);
+    bristleDensity_->setEnabled(bristle);
+    bristleLength_->setEnabled(bristle);
+    bristleThickness_->setEnabled(bristle);
+    bristleStiffness_->setEnabled(bristle);
+    hardness_->setEnabled(!bristle);
+    roundness_->setEnabled(!bristle);
     {
         const QSignalBlocker bx(flipX_);
         const QSignalBlocker by(flipY_);

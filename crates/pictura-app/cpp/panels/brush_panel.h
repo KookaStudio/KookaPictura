@@ -10,6 +10,7 @@
 #include <vector>
 
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
@@ -29,9 +30,9 @@ class TipShapeView;
 // engine's stroke preview underneath. Each dynamics set has an enable checkbox
 // and a padlock. The Build-up row is the Brush's Airbrush flag, shared with the
 // options bar.
-// ponytail: round tips only (no sampled, bristle, or erodible tips), no Brush
-// Presets panel, Spacing is always on (no velocity spacing), and Texture and
-// Dual Brush are the next changes.
+// ponytail: no sampled or erodible tips, no Brush Presets panel, Spacing is
+// always on (no velocity spacing), and Texture and Dual Brush are the next
+// changes.
 class BrushPanel : public QWidget {
     Q_OBJECT
 
@@ -62,6 +63,12 @@ private:
     NumericField* spacing_ = nullptr;
     QCheckBox* flipX_ = nullptr;
     QCheckBox* flipY_ = nullptr;
+    QCheckBox* bristleEnabled_ = nullptr;
+    QComboBox* bristleShape_ = nullptr;
+    NumericField* bristleDensity_ = nullptr;
+    NumericField* bristleLength_ = nullptr;
+    NumericField* bristleThickness_ = nullptr;
+    NumericField* bristleStiffness_ = nullptr;
     TipShapeView* shape_ = nullptr;
     QLabel* preview_ = nullptr;
     QListWidgetItem* buildUp_ = nullptr;
