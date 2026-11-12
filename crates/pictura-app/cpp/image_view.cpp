@@ -251,7 +251,7 @@ void ImageView::updateAntsTimer()
 
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
                                       const QPointF& layerPos, double opacity,
-                                      std::optional<QPoint> basePos)
+                                      std::optional<QPoint> basePos, int scale)
 {
     // A transform session is modal: the paint hover that owns the ring is
     // suspended, so the ring must go with the first transform frame.
@@ -262,7 +262,7 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     moveLayerPos_ = layerPos;
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
-    moveScale_ = 1;
+    moveScale_ = std::max(1, scale);
     moveAbove_ = QImage();
     moveAbovePos_.reset();
     moveAboveScale_ = 1;
@@ -321,6 +321,8 @@ void ImageView::endTransformOverlay()
     transformProjectiveCoefficients_ = {};
     transformProjectiveSource_ = QRectF();
     transformWarped_ = WarpedTransformPreview();
+    transformWarpSource_ = QImage();
+    transformWarpSourceKey_ = 0;
     transformWarpedStale_ = true;
     transformProjectiveActive_ = false;
     transformQuad_.clear();

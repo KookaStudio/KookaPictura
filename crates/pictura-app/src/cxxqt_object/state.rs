@@ -78,6 +78,9 @@ pub struct PictureViewRust {
     /// preview. Its images are then at the view's level, not 1:1.
     pub(super) move_view: Option<super::impl_transform::MoveView>,
     pub(super) move_layer: Option<QImage>,
+    /// The level a transform session's preview images were built at:
+    /// `2^level` document pixels a preview pixel (#1297).
+    pub(super) transform_preview_level: u32,
     pub(super) move_x: i32,
     pub(super) move_y: i32,
     /// The layers above a moving group over transparency, drawn back over the
@@ -260,6 +263,7 @@ impl Default for PictureViewRust {
             move_view: None,
             move_base_origin: None,
             move_layer: None,
+            transform_preview_level: 0,
             move_x: 0,
             move_y: 0,
             move_above: None,

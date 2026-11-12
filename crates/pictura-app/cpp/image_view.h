@@ -305,9 +305,11 @@ public:
     // layer is drawn under a live similarity transform (scale/rotate/translate
     // about the layer centre) and the quad with its eight handles is overlaid.
     // In both previews, a `basePos` makes `base` a patch at that document position,
-    // drawn over the live canvas in place of a whole-document base.
+    // drawn over the live canvas in place of a whole-document base. `scale` is
+    // document pixels per pixel of `base` and `layer` (a reduced preview).
     void beginTransformPreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
-                               double opacity, std::optional<QPoint> basePos = std::nullopt);
+                               double opacity, std::optional<QPoint> basePos = std::nullopt,
+                               int scale = 1);
     void setTransformPreview(double scaleX, double scaleY, double angleRadians, double dx,
                              double dy);
     // Projective layer preview: nine space-separated coefficients in
@@ -884,6 +886,10 @@ private:
     // The warp covers only the visible region at the view scale, so paint
     // rebuilds it when either changes.
     WarpedTransformPreview transformWarped_;
+    // `moveLayer_` as premultiplied ARGB, converted once per image rather than
+    // on every warp refresh (#1297).
+    QImage transformWarpSource_;
+    qint64 transformWarpSourceKey_ = 0;
     QRectF transformWarpedVisible_;
     double transformWarpedScale_ = 0.0;
     bool transformWarpedStale_ = true;
@@ -925,10 +931,12 @@ private:
 /// Warp `source` (whose document origin is `sourceOrigin`) by `coefficients`
 /// (source-local to destination-local, `QTransform` order), keeping only the
 /// part inside `visibleDocument`, sampled at `scale` output pixels per document
-/// pixel. Empty when nothing is visible.
+/// pixel. `sourceScale` is document pixels per `source` pixel (a reduced
+/// preview, #1297). Empty when nothing is visible.
 WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF& sourceOrigin,
                                             const std::array<double, 9>& coefficients,
                                             const QRectF& sourceRect,
-                                            const QRectF& visibleDocument, double scale);
+                                            const QRectF& visibleDocument, double scale,
+                                            double sourceScale = 1.0);
 
 } // namespace pictura

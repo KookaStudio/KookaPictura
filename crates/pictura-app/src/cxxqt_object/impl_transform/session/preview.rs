@@ -1,7 +1,152 @@
 //! The images a transform previews: the moving layer and its backdrop.
 
+use super::view_preview::{self, align, inner_aligned, MAX_LEVEL};
 use super::*;
 use pictura_render::FilterProxy;
+use std::cell::Cell;
+
+/// A plain layer whose box is over this many pixels previews its transform at
+/// a reduced level (#1297): 64 MB of RGBA a preview image at most.
+const TRANSFORM_PREVIEW_PIXELS: u64 = 16_000_000;
+
+/// What building a transform preview holds at its peak, a preview pixel: the
+/// moving image and its sRGB copy, and the backdrop patch's composite, sRGB
+/// copy, and image (15 measured, 19 at the peak, #1297).
+const PREVIEW_BYTES_PER_PIXEL: u64 = 20;
+
+/// A whole-document backdrop, a canvas pixel: its composite, sRGB copy, and
+/// image.
+const WHOLE_BACKDROP_BYTES_PER_PIXEL: u64 = 12;
+
+std::thread_local! {
+    /// [`TRANSFORM_PREVIEW_PIXELS`] as a test pins it.
+    static PREVIEW_PIXELS_FOR_TEST: Cell<Option<u64>> = const { Cell::new(None) };
+}
+
+/// Pin this thread's transform preview threshold to `pixels`; a negative value
+/// restores [`TRANSFORM_PREVIEW_PIXELS`].
+pub(in crate::cxxqt_object) fn set_transform_preview_pixels_for_test(pixels: i64) {
+    PREVIEW_PIXELS_FOR_TEST.set(u64::try_from(pixels).ok());
+}
+
+/// The level a transform preview of `path` is built at (#1297): 0 (full
+/// resolution) unless the target is one plain pixel layer, not lifted, whose
+/// box is over the threshold; then the shallowest level that brings it under.
+/// "Plain" is the Move view preview's condition: the channels are the whole
+/// appearance and the document reduces faithfully.
+pub(super) fn transform_preview_level(
+    doc: &pictura_core::Document,
+    path: &str,
+    members: &[String],
+    bounded: bool,
+) -> u32 {
+    if members.len() > 1 || !bounded {
+        return 0;
+    }
+    let Some(layer) = pictura_render::resolve_path(doc, path) else {
+        return 0;
+    };
+    if needs_rendered_appearance(layer)
+        || layer.smart_object.is_some()
+        || !layer.channels.iter().any(|c| c.id == 0)
+        || layer_has_effects(layer)
+        || layer.is_group
+        || clipping_group(doc, path).len() > 1
+        || layer.rect.intersect(view_preview::canvas(doc)).is_none()
+        || !FilterProxy::reduces_faithfully(doc)
+    {
+        return 0;
+    }
+    let area = view_preview::area(layer.rect).max(0) as u64;
+    let threshold = PREVIEW_PIXELS_FOR_TEST
+        .get()
+        .unwrap_or(TRANSFORM_PREVIEW_PIXELS)
+        .max(1);
+    let mut level = 0;
+    while level < MAX_LEVEL && area >> (2 * level) > threshold {
+        level += 1;
+    }
+    level
+}
+
+/// The bytes building the transform preview of `path` (or the linked
+/// `members`) over `orig_rect` holds at its peak, for the begin gate (#1297):
+/// the box at its preview level, plus the whole document when the backdrop or
+/// a linked set's image is rendered whole.
+pub(super) fn transform_preview_bytes(
+    doc: &pictura_core::Document,
+    path: &str,
+    members: &[String],
+    orig_rect: PsdRect,
+    bounded: bool,
+) -> u64 {
+    let level = transform_preview_level(doc, path, members, bounded);
+    let preview = memory_gate::area(orig_rect) >> (2 * level);
+    let linked = members.len() > 1;
+    let hide = if linked {
+        members.to_vec()
+    } else {
+        clipping_group(doc, path)
+    };
+    // A reduced preview's patch is its layer's box; only a full one reads the
+    // content bounds.
+    let whole = linked || !bounded || (level == 0 && backdrop_patch_rect(doc, &hide).is_none());
+    let canvas = if whole {
+        u64::from(doc.width) * u64::from(doc.height)
+    } else {
+        0
+    };
+    PREVIEW_BYTES_PER_PIXEL * preview + WHOLE_BACKDROP_BYTES_PER_PIXEL * canvas
+}
+
+/// The transform preview of the plain layer at `path` at `level` (#1297): the
+/// moving image over the layer's rect aligned inside it to the level grid, and
+/// the backdrop patch at the same level.
+///
+/// ponytail: built once at begin, so a view zoomed past the level shows the
+/// coarser image; up to `2^level − 1` edge pixels of the layer are left out.
+fn reduced_transform_preview(
+    doc: &pictura_core::Document,
+    path: &str,
+    level: u32,
+    gpu_compute: bool,
+    opacity: i32,
+) -> Option<TransformPreview> {
+    let layer = pictura_render::resolve_path(doc, path)?;
+    let scale = 1i32 << level;
+    let region = inner_aligned(layer.rect, scale);
+    let image = moving_layer_image(doc, path, region, level, gpu_compute)?;
+    // The session trimmed the layer to its content, so its rect is the patch
+    // `backdrop_patch_rect` would scan the planes for.
+    let patch = align(layer.rect, scale).intersect(view_preview::canvas(doc))?;
+    let base = view_preview::backdrop(doc, path, level, patch, gpu_compute)?;
+    Some(TransformPreview {
+        base,
+        base_origin: Some((patch.left, patch.top)),
+        image,
+        x: region.left,
+        y: region.top,
+        opacity,
+        level,
+    })
+}
+
+/// The transform preview's moving image of `path` at `level`, and its
+/// document-space origin: [`transform_preview_layer`] at level 0.
+pub(in crate::cxxqt_object) fn transform_preview_layer_at(
+    doc: &pictura_core::Document,
+    path: &str,
+    level: u32,
+    gpu_compute: bool,
+) -> Option<(QImage, i32, i32)> {
+    if level == 0 {
+        return transform_preview_layer(doc, path, gpu_compute);
+    }
+    let layer = pictura_render::resolve_path(doc, path)?;
+    let region = inner_aligned(layer.rect, 1i32 << level);
+    let image = moving_layer_image(doc, path, region, level, gpu_compute)?;
+    Some((image, region.left, region.top))
+}
 
 /// Whether the layer's channels alone are not its whole appearance: a layer
 /// mask, vector mask, layer style, fill adjustment, or type needs the
@@ -278,6 +423,8 @@ pub(super) struct TransformPreview {
     pub(super) x: i32,
     pub(super) y: i32,
     pub(super) opacity: i32,
+    /// The images' level: `2^level` document pixels a preview pixel.
+    pub(super) level: u32,
 }
 
 /// Build the transform overlay images for `path` (or, for a linked set, every
@@ -300,6 +447,10 @@ pub(super) fn build_transform_preview(
     } else {
         pictura_render::resolve_path(doc, path)?.opacity as i32
     };
+    let level = transform_preview_level(doc, path, members, bounded);
+    if level > 0 {
+        return reduced_transform_preview(doc, path, level, gpu_compute, opacity);
+    }
     let (image, x, y) = if linked {
         rendered_transform_group(doc, members, orig_rect, gpu_compute)?
     } else {
@@ -319,6 +470,7 @@ pub(super) fn build_transform_preview(
             x,
             y,
             opacity,
+            level: 0,
         });
     }
     let rendered = current_buffer(&hidden(doc, &hide), gpu_compute);
@@ -329,6 +481,7 @@ pub(super) fn build_transform_preview(
         x,
         y,
         opacity,
+        level: 0,
     })
 }
 

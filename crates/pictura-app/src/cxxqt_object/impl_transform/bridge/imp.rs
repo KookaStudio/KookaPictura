@@ -6,6 +6,7 @@ use super::super::geometry::{
     session_quad, set_pivot, source_corners, store_quad, MapParams,
 };
 use super::super::group::transform_group;
+use super::super::mode_switch::{can_set_mode, switch_mode};
 use super::super::perspective::drag_angle_degrees;
 use super::super::session::can_begin_mode;
 use core::pin::Pin;
@@ -117,6 +118,19 @@ pub(super) fn move_preview_base_origin(view: &PictureView) -> Vec<i32> {
 
 pub(super) fn move_preview_scale(view: &PictureView) -> i32 {
     view.rust().move_view.map_or(1, |view| view.scale())
+}
+
+pub(super) fn transform_preview_scale(view: &PictureView) -> i32 {
+    let rust = view.rust();
+    if rust.session.live.transform().is_some() {
+        1 << rust.transform_preview_level
+    } else {
+        1
+    }
+}
+
+pub(super) fn set_transform_preview_pixels_for_test(pixels: i64) {
+    super::super::session::set_transform_preview_pixels_for_test(pixels);
 }
 
 pub(super) fn move_preview_content_extents(view: &PictureView) -> Vec<i32> {
@@ -714,23 +728,15 @@ pub(super) fn transform_apply(mut view: Pin<&mut PictureView>, op: &QString) -> 
     }
 }
 
-pub(super) fn can_set_mode(session: &TransformSession, mode: TransformMode) -> bool {
-    !session.warp_editing && !session.mode.is_projective() && !mode.is_projective()
-}
-
 pub(super) fn transform_set_mode(mut view: Pin<&mut PictureView>, mode: &QString) -> bool {
     let Some(mode) = TransformMode::parse(&mode.to_string()) else {
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.session.live.transform_mut() else {
-        return false;
-    };
-    if !can_set_mode(session, mode) {
-        return false;
-    }
-    session.mode = mode;
-    true
+    rust.session
+        .live
+        .transform_mut()
+        .is_some_and(|session| switch_mode(session, mode))
 }
 
 pub(super) fn transform_can_set_mode(view: &PictureView, mode: &QString) -> bool {
