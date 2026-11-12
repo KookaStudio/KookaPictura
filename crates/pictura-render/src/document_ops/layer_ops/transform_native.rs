@@ -4,6 +4,7 @@
 //!
 //! Split from `transform.rs` for the file-size cap.
 
+use pictura_core::memory::MemoryError;
 use pictura_core::{PsdRect, Sample, Samples, SourceChannels};
 
 use super::kernel::{self, Interpolation};
@@ -33,18 +34,18 @@ pub(super) fn resample_native<M: PlaneMap + Sync>(
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
     interpolation: Interpolation,
-) -> Samples {
-    match samples {
+) -> Result<Samples, MemoryError> {
+    Ok(match samples {
         Samples::U8(v) => {
-            Samples::U8(resample_plane(v, w, h, map, rect, dest, interpolation).into())
+            Samples::U8(resample_plane(v, w, h, map, rect, dest, interpolation)?.into())
         }
         Samples::U16(v) => {
-            Samples::U16(resample_typed(v, w, h, map, rect, dest, interpolation).into())
+            Samples::U16(resample_typed(v, w, h, map, rect, dest, interpolation)?.into())
         }
         Samples::F32(v) => {
-            Samples::F32(resample_typed(v, w, h, map, rect, dest, interpolation).into())
+            Samples::F32(resample_typed(v, w, h, map, rect, dest, interpolation)?.into())
         }
-    }
+    })
 }
 
 fn resample_typed<M: PlaneMap, T: Sample>(
@@ -55,12 +56,18 @@ fn resample_typed<M: PlaneMap, T: Sample>(
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
     interpolation: Interpolation,
-) -> Vec<T> {
+) -> Result<Vec<T>, MemoryError> {
     let (dl, dt, dr, db) = dest;
     let dw = (dr - dl) as usize;
     let dh = (db - dt) as usize;
     let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
-    let mut out = vec![T::from_unit(0.0); dw * dh];
+    let mut out = Vec::new();
+    out.try_reserve_exact(dw * dh)
+        .map_err(|_| MemoryError::Insufficient {
+            purpose: "a transform",
+            bytes: (dw * dh * std::mem::size_of::<T>()) as u64,
+        })?;
+    out.resize(dw * dh, T::from_unit(0.0));
     let wf = w as f64;
     let hf = h as f64;
     let job = pictura_core::job::current();
@@ -85,7 +92,7 @@ fn resample_typed<M: PlaneMap, T: Sample>(
             out[oy * dw + ox] = kernel::sample(src, w, h, lx, ly, resolved);
         }
     }
-    out
+    Ok(out)
 }
 
 /// Resample a layer's retained store through `map`; the `-2` mask plane uses the
@@ -100,7 +107,7 @@ pub(super) fn resample_store<M: PlaneMap + Sync>(
     dest: (i32, i32, i32, i32),
     mask: Option<(PsdRect, (i32, i32, i32, i32))>,
     interpolation: Interpolation,
-) -> SourceChannels {
+) -> Result<SourceChannels, MemoryError> {
     let planes = store
         .planes
         .iter()
@@ -113,7 +120,7 @@ pub(super) fn resample_store<M: PlaneMap + Sync>(
                         let mh = mrect.height().max(0) as usize;
                         resample_native(samples, mw, mh, &mmap, mrect, mdest, interpolation)
                     }
-                    None => samples.clone(),
+                    None => Ok(samples.clone()),
                 }
             } else {
                 resample_native(
@@ -126,8 +133,8 @@ pub(super) fn resample_store<M: PlaneMap + Sync>(
                     interpolation,
                 )
             };
-            (*id, resampled)
+            Ok((*id, resampled?))
         })
-        .collect();
-    SourceChannels::new(store.depth, rect_of(dest), planes)
+        .collect::<Result<_, MemoryError>>()?;
+    Ok(SourceChannels::new(store.depth, rect_of(dest), planes))
 }

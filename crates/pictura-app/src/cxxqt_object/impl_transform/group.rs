@@ -39,7 +39,8 @@ pub(super) fn repeatable_transform(session: &TransformSession) -> Option<RepeatT
 
 /// What a transform commit holds at its peak: the transformed layer's four
 /// planes over the quad's box, and the composite of the box before and after
-/// with its sRGB copy and display patch.
+/// with its sRGB copy and display patch. A whole-pixel move keeps the layer's
+/// planes (#1290), so it is charged for the composite alone.
 pub(super) fn commit_bytes(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> u64 {
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
     for &(x, y) in quad {
@@ -52,7 +53,23 @@ pub(super) fn commit_bytes(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> u64 {
         bottom: clamp(y1.ceil()),
         right: clamp(x1.ceil()),
     };
-    4 * memory_gate::area(out) + 12 * memory_gate::area(out.union(orig_rect))
+    let composite = 12 * memory_gate::area(out.union(orig_rect));
+    if whole_pixel_move(quad, orig_rect) {
+        return composite;
+    }
+    4 * memory_gate::area(out) + composite
+}
+
+/// Whether `quad` is `rect` moved by one whole-pixel offset.
+fn whole_pixel_move(quad: &[(f64, f64); 4], rect: PsdRect) -> bool {
+    let corners = source_corners(rect);
+    let (dx, dy) = (quad[0].0 - corners[0].0, quad[0].1 - corners[0].1);
+    dx.fract() == 0.0
+        && dy.fract() == 0.0
+        && quad
+            .iter()
+            .zip(corners)
+            .all(|(q, c)| q.0 - c.0 == dx && q.1 - c.1 == dy)
 }
 
 /// Whether `path` is a transform target. `require_visible` is true for the

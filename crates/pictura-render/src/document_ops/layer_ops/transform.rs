@@ -8,6 +8,7 @@
 //! composite refresh.
 
 use pictura_core::homography::HOMOGRAPHY_EPSILON;
+use pictura_core::memory::{self, MemoryError};
 use pictura_core::{
     Channel, Document, Homography, LayerMask, LockFlags, Plane, PsdRect, SourceChannels,
 };
@@ -262,7 +263,12 @@ fn bounding_box<M: PlaneMap>(map: &M, rect: PsdRect) -> Option<(i32, i32, i32, i
     integer_bbox(&points)
 }
 
-/// Resample one `w×h` plane into the destination rect; out-of-source → 0.
+/// Resample one `w×h` plane into the destination rect; out-of-source → 0. Its
+/// buffers are allocated fallibly, so a refusal is an error, never an abort.
+///
+/// ponytail: the refusal is recorded on the calling thread, so a deferred
+/// commit's worker reports a generic failure, not the memory message, until
+/// the out-of-core commit replaces this path (#1290).
 pub(super) fn resample_plane<M: PlaneMap + Sync>(
     src: &Plane<u8>,
     w: usize,
@@ -271,14 +277,14 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
     interpolation: Interpolation,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, MemoryError> {
     // A layer's opaque pixels can run right up to its rect edge. Clamping the
     // kernel there keeps the alpha at 255, so a rotated filled layer gets a
     // hard, stair-stepped edge. Pad with transparent pixels instead: the taps
     // that fall outside the source read 0 and the edge anti-aliases.
     const PAD: usize = 2;
     let (pw, ph) = (w + PAD * 2, h + PAD * 2);
-    let mut padded = vec![0u8; pw * ph];
+    let mut padded = memory::try_plane(pw * ph, 0, "a transform")?;
     for y in 0..h {
         let dst = (y + PAD) * pw + PAD;
         src.read_rect_into(0..w, y..y + 1, w, &mut padded[dst..dst + w]);
@@ -287,7 +293,7 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
     let dw = (dr - dl) as usize;
     let dh = (db - dt) as usize;
     let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
-    let mut out = vec![0u8; dw * dh];
+    let mut out = memory::try_plane(dw * dh, 0, "a transform")?;
     let (pwf, phf) = (pw as f64, ph as f64);
     let job = pictura_core::job::current();
     out.par_chunks_mut(dw).enumerate().for_each(|(oy, row)| {
@@ -311,7 +317,7 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
             *pixel = kernel::sample(&padded, pw, ph, lx, ly, resolved);
         }
     });
-    out
+    Ok(out)
 }
 
 /// Whether `t`'s parameters are finite and non-degenerate.
@@ -352,21 +358,23 @@ fn materialized_channels(doc: &Document, layer: &Layer) -> Option<Vec<Channel>> 
 /// Resample `mask` by the same warp as the layer. A mask without plane data still
 /// has its `rect` transformed (and keeps `data` `None`) so the rect follows the
 /// layer; a similarity map re-centres on the mask's own rect, a projective map
-/// is global.
+/// is global. `Ok(None)` keeps the old mask; `Err` refuses the transform.
 fn transform_mask<M: PlaneMap + Sync>(
     mask: &LayerMask,
     layer_map: &M,
     interpolation: Interpolation,
-) -> Option<LayerMask> {
+) -> Result<Option<LayerMask>, MemoryError> {
     let rect = mask.rect;
     let map = layer_map.for_rect(rect);
-    let dest = bounding_box(&map, rect)?;
+    let Some(dest) = bounding_box(&map, rect) else {
+        return Ok(None);
+    };
     let data = match mask.data.as_ref() {
         Some(data) => {
             let w = rect.width();
             let h = rect.height();
             if w <= 0 || h <= 0 || data.len() != (w as usize) * (h as usize) {
-                return None;
+                return Ok(None);
             }
             Some(resample_plane(
                 data,
@@ -376,11 +384,11 @@ fn transform_mask<M: PlaneMap + Sync>(
                 rect,
                 dest,
                 interpolation,
-            ))
+            )?)
         }
         None => None,
     };
-    Some(LayerMask {
+    Ok(Some(LayerMask {
         rect: PsdRect {
             top: dest.1,
             left: dest.0,
@@ -388,6 +396,42 @@ fn transform_mask<M: PlaneMap + Sync>(
             right: dest.2,
         },
         data: data.map(Into::into),
+        ..mask.clone()
+    }))
+}
+
+/// `mask` moved by whole pixels: what [`transform_mask`] returns for a pure
+/// integer translation, without resampling.
+fn shift_mask(mask: &LayerMask, dx: i32, dy: i32) -> Option<LayerMask> {
+    let rect = mask.rect;
+    let (w, h) = (rect.width(), rect.height());
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    if mask
+        .data
+        .as_ref()
+        .is_some_and(|data| data.len() != (w as usize) * (h as usize))
+    {
+        return None;
+    }
+    let dest = integer_bbox(&[
+        (
+            f64::from(rect.left) + f64::from(dx),
+            f64::from(rect.top) + f64::from(dy),
+        ),
+        (
+            f64::from(rect.right) + f64::from(dx),
+            f64::from(rect.bottom) + f64::from(dy),
+        ),
+    ])?;
+    Some(LayerMask {
+        rect: PsdRect {
+            top: dest.1,
+            left: dest.0,
+            bottom: dest.3,
+            right: dest.2,
+        },
         ..mask.clone()
     })
 }
@@ -564,7 +608,7 @@ where
     M: PlaneMap + Sync,
     F: Fn(PsdRect) -> Option<M>,
 {
-    let Some(prepared) = prepare_layer(doc, path) else {
+    let Some(mut prepared) = prepare_layer(doc, path) else {
         return false;
     };
     let Some(map) = build_map(prepared.rect) else {
@@ -573,15 +617,20 @@ where
     let Some(dest) = bounding_box(&map, prepared.rect) else {
         return false;
     };
+    // At whole-pixel offsets every kernel but the B-spline returns its source
+    // sample, so the planes move instead of being resampled (#1290).
+    let exact = interpolation.resolve(1, 1) != Interpolation::BicubicSmoother;
+    if pure_translate && exact {
+        return move_layer(doc, path, &mut prepared, dest);
+    }
     if let Some(job) = pictura_core::job::current() {
         job.begin_stage(resample_rows(&prepared, dest));
     }
-    let new_channels: Vec<Channel> = prepared
+    let resampled: Result<Vec<Channel>, MemoryError> = prepared
         .source_channels
         .iter()
-        .map(|c| Channel {
-            id: c.id,
-            data: resample_plane(
+        .map(|c| {
+            let data = resample_plane(
                 &c.data,
                 prepared.w as usize,
                 prepared.h as usize,
@@ -589,18 +638,27 @@ where
                 prepared.rect,
                 dest,
                 interpolation,
-            )
-            .into(),
+            )?;
+            Ok(Channel {
+                id: c.id,
+                data: data.into(),
+            })
         })
         .collect();
-    let new_mask = prepared
-        .mask
-        .as_ref()
-        .and_then(|m| transform_mask(m, &map, interpolation));
+    let Ok(new_channels) = resampled else {
+        return false;
+    };
+    let new_mask = match prepared.mask.as_ref() {
+        Some(m) => match transform_mask(m, &map, interpolation) {
+            Ok(mask) => mask,
+            Err(_) => return false,
+        },
+        None => None,
+    };
     let native = if pure_translate {
         None
     } else {
-        prepared.native.as_ref().map(|store| {
+        let resampled = prepared.native.as_ref().map(|store| {
             let mask_info = prepared
                 .mask
                 .as_ref()
@@ -616,7 +674,11 @@ where
                 mask_info,
                 interpolation,
             )
-        })
+        });
+        match resampled.transpose() {
+            Ok(native) => native,
+            Err(_) => return false,
+        }
     };
     if job_cancelled() {
         return false;
@@ -628,6 +690,33 @@ where
         dest,
     };
     write_layer(doc, path, &prepared, out, pure_translate)
+}
+
+/// A pure integer move: the planes keep their tiles under the rect shifted to
+/// `dest`, which is what an exact resample would produce. The job stage is one
+/// unit, so a multi-layer job's stages still add up.
+fn move_layer(
+    doc: &mut Document,
+    path: &str,
+    prepared: &mut Prepared,
+    dest: (i32, i32, i32, i32),
+) -> bool {
+    if let Some(job) = pictura_core::job::current() {
+        job.begin_stage(1);
+        job.advance(1);
+    }
+    if job_cancelled() {
+        return false;
+    }
+    let (dx, dy) = (dest.0 - prepared.rect.left, dest.1 - prepared.rect.top);
+    let mask = prepared.mask.as_ref().and_then(|m| shift_mask(m, dx, dy));
+    let out = LayerOutput {
+        channels: std::mem::take(&mut prepared.source_channels),
+        mask,
+        native: None,
+        dest,
+    };
+    write_layer(doc, path, prepared, out, true)
 }
 
 /// Whether the installed job was cancelled: a cancelled resample is partial
