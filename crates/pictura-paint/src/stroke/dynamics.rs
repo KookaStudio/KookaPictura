@@ -11,6 +11,10 @@ pub(super) struct PlacedDab {
     pub(super) paint: Rgba,
     pub(super) opacity: f32,
     pub(super) flow: f32,
+    /// The sample pressure, so a bristle tip bends with it.
+    pub(super) pressure: f32,
+    /// Stable per-dab seed for a bristle tip's track randomness.
+    pub(super) bristle_seed: u64,
 }
 
 impl Stroke {
@@ -85,6 +89,8 @@ impl Stroke {
             paint,
             opacity: (cfg.opacity as f32 / 100.0 * opacity).clamp(0.0, 1.0),
             flow: (cfg.flow as f32 / 100.0 * flow).clamp(0.0, 1.0),
+            pressure: self.last_pressure,
+            bristle_seed: STROKE_SEED ^ (dab as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15),
         }
     }
 }

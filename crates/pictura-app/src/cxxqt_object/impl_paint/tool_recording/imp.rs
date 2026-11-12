@@ -6,6 +6,7 @@ use super::super::super::edit::Edit;
 use super::super::super::presentation::present_core;
 use super::super::PictureViewRust;
 use cxx_qt_lib::QString;
+use pictura_paint::bristle::{BristleShape, BristleTip};
 use pictura_paint::spacing::SpacingMode;
 use pictura_paint::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_script::action::{ToolSample, ToolStroke};
@@ -111,6 +112,15 @@ impl ToolStrokeStep {
             // ponytail: recorded actions carry the legacy jitter only; the
             // Control, Color, Transfer, and Pose blocks replay at defaults.
             dynamics: default.dynamics,
+            bristle: boolean("bristle_enabled")
+                .unwrap_or(false)
+                .then(|| BristleTip {
+                    shape: BristleShape::from_index(integer("bristle_shape").unwrap_or(0) as i32),
+                    bristles: byte("bristle_density").unwrap_or(50),
+                    length: byte("bristle_length").unwrap_or(50),
+                    thickness: byte("bristle_thickness").unwrap_or(50),
+                    stiffness: byte("bristle_stiffness").unwrap_or(50),
+                }),
         }
         .sanitized();
         Ok(Self {
@@ -159,6 +169,14 @@ impl ToolStrokeStep {
         settings.set("flip_y", self.settings.flip_y);
         settings.set("pressure_size", self.settings.pressure_size);
         settings.set("pressure_opacity", self.settings.pressure_opacity);
+        settings.set("bristle_enabled", self.settings.bristle.is_some());
+        if let Some(tip) = self.settings.bristle {
+            settings.set("bristle_shape", tip.shape.to_index());
+            settings.set("bristle_density", tip.bristles);
+            settings.set("bristle_length", tip.length);
+            settings.set("bristle_thickness", tip.thickness);
+            settings.set("bristle_stiffness", tip.stiffness);
+        }
         match self.settings.spacing {
             SpacingMode::Fixed(percent) => {
                 settings.set("spacing_mode", "fixed");

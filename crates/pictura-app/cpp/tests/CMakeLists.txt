@@ -88,6 +88,7 @@ set(PICTURA_QT_TESTS
     tst_stamp_hold
     tst_brush_airbrush
     tst_brush_dynamics
+    tst_bristle_brushes
     tst_pen_tools
     tst_path_selection_tools
     tst_shape_tools
