@@ -354,6 +354,10 @@ std::unique_ptr<ToolHandler> makeMoveToolHandler(std::shared_ptr<MoveGroup> move
 
 QString moveMemoryRefusalMessage()
 {
+    if (edit_refused_for_scratch_full()) {
+        return QObject::tr("Could not move: the scratch disks are full. Free space on the "
+                           "scratch disks, then try again.");
+    }
     return QObject::tr("Could not move: not enough memory. Close other documents or free "
                        "memory and try again.");
 }

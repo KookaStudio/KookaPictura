@@ -70,12 +70,26 @@ pub(super) fn commit_cost(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> CommitC
     } else {
         4 * memory_gate::area(out)
     };
-    let widest = out.width().max(union.width()).max(0) as u64;
     let threads = rayon::current_num_threads() as u64;
     CommitCost {
-        working: 3 * 4 * TILE as u64 * widest + threads * WINDOW_BYTES,
+        working: composite_strip_bytes(out.width().max(union.width())) + threads * WINDOW_BYTES,
         spillable: layer + 4 * memory_gate::area(union),
     }
+}
+
+/// What a Move tool commit of the changed region `dirty` holds (#1290): a
+/// translation keeps the layers' planes and resamples nothing, so it is the
+/// composite alone, as for a whole-pixel transform.
+pub(super) fn move_commit_cost(dirty: PsdRect) -> CommitCost {
+    CommitCost {
+        working: composite_strip_bytes(dirty.width()),
+        spillable: 4 * memory_gate::area(dirty),
+    }
+}
+
+/// The composite's strip and group buffers across `width` columns.
+fn composite_strip_bytes(width: i32) -> u64 {
+    3 * 4 * TILE as u64 * width.max(0) as u64
 }
 
 /// Whether `quad` is `rect` moved by one whole-pixel offset.

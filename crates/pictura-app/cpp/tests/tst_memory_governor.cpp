@@ -49,6 +49,8 @@ private slots:
     void statusCarriesScratchReadouts();
     void aFailedAllocationLeavesTheEditUndone();
     void transformRefusalNamesFullScratchDisks();
+    void moveChargesOnlyTheTiledComposite();
+    void moveRefusalNamesFullScratchDisks();
 
 private:
     // A white 40×40 document, made active.
@@ -56,6 +58,12 @@ private:
     QJsonObject call(const QString& method, const QJsonObject& params = {});
     static void pinNoRoom() { pictura::set_available_memory_for_test(0); }
     static void unpin() { pictura::set_available_memory_for_test(-1); }
+    // A 4100² document whose top layer covers the canvas; a (5, 5) move changes
+    // about 67 MB of composite at 4 bytes a pixel, 202 MB at 12.
+    pictura::PictureView* largeMoveDocument();
+    // Commit a (5, 5) move with `roomMiB` of governor room (256 MiB of
+    // headroom is kept under the pinned available memory) and no scratch.
+    static bool commitMoveWithRoom(pictura::PictureView* view, qint64 roomMiB);
 
     pictura::test::ScopedStateHome stateHome_;
     QTemporaryDir files_;
@@ -330,6 +338,62 @@ void MemoryGovernorTest::transformRefusalNamesFullScratchDisks()
     QCOMPARE(view->history_count(), count);
     const QString message = window_->statusBar()->currentMessage();
     QCOMPARE(message, pictura::transformMemoryRefusalMessage());
+    QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
+}
+
+pictura::PictureView* MemoryGovernorTest::largeMoveDocument()
+{
+    if (!window_->newDocument(QStringLiteral("Move"), 4100, 4100, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white"))) {
+        return nullptr;
+    }
+    pictura::PictureView* view = window_->activeView();
+    if (!view || view->duplicate_layer(0) != 1) {
+        return nullptr;
+    }
+    view->set_active_layer(QStringLiteral("1"));
+    return view;
+}
+
+bool MemoryGovernorTest::commitMoveWithRoom(pictura::PictureView* view, qint64 roomMiB)
+{
+    const qint64 mib = 1024 * 1024;
+    pictura::set_available_memory_for_test((256 + roomMiB) * mib);
+    pictura::set_scratch_available_for_test(0);
+    const bool moved = view->commit_move(5, 5);
+    pictura::set_scratch_available_for_test(-1);
+    unpin();
+    return moved;
+}
+
+// [oct_move_commits]
+void MemoryGovernorTest::moveChargesOnlyTheTiledComposite()
+{
+    pictura::PictureView* view = largeMoveDocument();
+    QVERIFY(view);
+    const int count = view->history_count();
+    QSignalSpy committed(view, &pictura::PictureView::moveCommitted);
+    // 128 MiB holds the 4-byte composite but not the old 12-byte charge.
+    QVERIFY(commitMoveWithRoom(view, 128));
+    QVERIFY(!pictura::edit_refused_for_memory());
+    // A commit this large lands its composite, and its history state, from a
+    // worker.
+    QVERIFY(committed.count() > 0 || committed.wait(30000));
+    QCOMPARE(view->history_count(), count + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [oct_move_scratch_full]
+void MemoryGovernorTest::moveRefusalNamesFullScratchDisks()
+{
+    pictura::PictureView* view = largeMoveDocument();
+    QVERIFY(view);
+    const int count = view->history_count();
+    // 32 MiB holds the composite's strips (about 12 MiB) but not its tiles.
+    QVERIFY(!commitMoveWithRoom(view, 32));
+    QVERIFY(pictura::edit_refused_for_scratch_full());
+    QCOMPARE(view->history_count(), count);
+    const QString message = pictura::moveMemoryRefusalMessage();
     QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
 }
 
