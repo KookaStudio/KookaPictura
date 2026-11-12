@@ -52,6 +52,14 @@ pub(in crate::cxxqt_object) struct DisplayTiles {
     in_flight: Cell<bool>,
     /// Test seam: build large-document tiles on workers even when small.
     pub(in crate::cxxqt_object) force_async: Cell<bool>,
+    /// The eviction pass the cache last dropped for (#1217): a newer one
+    /// drops the unpinned tiles, the first memory R2 frees.
+    drop_epoch: Cell<u64>,
+    /// Keeps the layer tiles read for the presented view resident until the
+    /// view changes (#1217).
+    view_hold: RefCell<Option<pictura_core::memory::eviction::HotHold>>,
+    /// The view the hold was taken for.
+    view_key: Cell<(i32, PsdRect)>,
 }
 
 impl Default for DisplayTiles {
@@ -61,6 +69,9 @@ impl Default for DisplayTiles {
             wanted: RefCell::new(HashSet::new()),
             in_flight: Cell::new(false),
             force_async: Cell::new(false),
+            drop_epoch: Cell::new(pictura_core::memory::eviction::display_drop_epoch()),
+            view_hold: RefCell::new(None),
+            view_key: Cell::new((-1, PsdRect::default())),
         }
     }
 }
@@ -329,10 +340,18 @@ impl PictureViewRust {
             },
         ));
         cache.pin(keys);
-        if pictura_core::memory::governor().status().pressure
-            == pictura_core::memory::Pressure::Critical
+        let epoch = pictura_core::memory::eviction::display_drop_epoch();
+        let asked = epoch != self.tiles.drop_epoch.replace(epoch);
+        if asked
+            || pictura_core::memory::governor().status().pressure
+                == pictura_core::memory::Pressure::Critical
         {
             cache.drop_unpinned();
+        }
+        if self.tiles.view_key.replace((self.presented_level, r)) != (self.presented_level, r) {
+            let mut hold = self.tiles.view_hold.borrow_mut();
+            let next = pictura_core::memory::eviction::hot();
+            *hold = Some(next);
         }
     }
 

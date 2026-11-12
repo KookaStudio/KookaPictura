@@ -41,6 +41,11 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
     let Some(doc_ref) = session.doc.as_ref() else {
         return false;
     };
+    // A document missing tiles lost from scratch is never written (#1217).
+    if crate::history::unreadable_tiles(doc_ref) > 0 {
+        super::super::super::helpers::memory_gate::refuse_for_scratch();
+        return false;
+    }
     // Held by the worker until its write lands, so other edits see the room
     // the save is using.
     let Ok(reservation) = pictura_core::memory::governor().reserve(
@@ -66,6 +71,8 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
     let job_path = path.to_string();
     let handle = std::thread::spawn(move || {
         let _reservation = reservation;
+        let _efficiency = pictura_core::scratch::operation();
+        let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
         let mut doc = doc;
         if dirty {
             pictura_render::refresh_native_composite(&mut doc);
@@ -85,6 +92,12 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
         let Ok(bytes) = written else {
             return false;
         };
+        // A tile lost while encoding wrote defaults in its place.
+        if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
+            && crate::history::unreadable_tiles(&doc) > 0
+        {
+            return false;
+        }
         if delay > 0 {
             std::thread::sleep(Duration::from_millis(delay));
         }
@@ -193,6 +206,19 @@ mod tests {
         assert!(!rust.session.dirty);
         assert!(std::path::Path::new(&path).is_file());
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn save_refuses_unreadable_tiles() {
+        use crate::cxxqt_object::scratch_rollback::tests::{dense_doc, lose_tiles};
+        let mut rust = PictureViewRust::default();
+        rust.session.doc = Some(dense_doc());
+        rust.session.dirty = true;
+        lose_tiles(rust.session.doc.as_ref().unwrap());
+        let path = path("unreadable.psd");
+        assert!(!save_start_rust(&mut rust, &path));
+        assert!(crate::cxxqt_object::helpers::memory_gate::edit_refused_for_scratch());
+        assert!(!std::path::Path::new(&path).exists(), "nothing was written");
     }
 
     #[test]

@@ -10,10 +10,15 @@ doctest = false
 
 [dependencies]
 rayon = "1"
+# Scratch extent checksums (#1217); already in Cargo.lock through flate2.
+crc32fast = "1"
+# Packed tiles (#1217 R7): chosen over flate2 by the benchmark in the
+# scratch-disk-and-packed-tiles design. Pure Rust, MIT.
+lz4_flex = { version = "0.11", default-features = false, features = ["std", "safe-encode", "safe-decode", "checked-decode"] }
 
-# The host memory queries of `memory::system` (#1211), moved here from
-# pictura-codec with them; both already in Cargo.lock.
-[target.'cfg(target_os = "macos")'.dependencies]
+# The host memory queries of `memory::system` (#1211) and the scratch file's
+# fallocate/statvfs/O_TMPFILE (#1217); already in Cargo.lock.
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]

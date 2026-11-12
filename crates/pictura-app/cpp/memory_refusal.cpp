@@ -17,6 +17,15 @@ QString memoryRefusalMessage(const QString& action)
         .arg(action);
 }
 
+QString scratchRefusalMessage(const QString& action)
+{
+    return QCoreApplication::translate("pictura",
+                                       "Could not %1: image data could not be read back from "
+                                       "the scratch disk. Check the scratch disks, then try "
+                                       "again.")
+        .arg(action);
+}
+
 namespace {
 
 QMainWindow* mainWindowOf(QWidget* within)
@@ -36,11 +45,13 @@ QMainWindow* mainWindowOf(QWidget* within)
 
 bool reportMemoryRefusal(QWidget* within, const QString& action)
 {
-    if (!edit_refused_for_memory()) {
+    const bool scratch = edit_refused_for_scratch();
+    if (!scratch && !edit_refused_for_memory()) {
         return false;
     }
     if (QMainWindow* main = mainWindowOf(within)) {
-        main->statusBar()->showMessage(memoryRefusalMessage(action), 6000);
+        main->statusBar()->showMessage(
+            scratch ? scratchRefusalMessage(action) : memoryRefusalMessage(action), 6000);
     }
     return true;
 }

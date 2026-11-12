@@ -34,6 +34,9 @@ pub struct HostReading {
     pub cgroup_high: Option<u64>,
     /// The process cgroup's `memory.current`.
     pub cgroup_current: Option<u64>,
+    /// The `file` line of the process cgroup's `memory.stat`: page cache the
+    /// kernel reclaims before an OOM kill, scratch writes included (#1217).
+    pub cgroup_file: Option<u64>,
     /// `some avg10` of `/proc/pressure/memory`, in percent.
     pub psi_some_avg10: Option<f64>,
 }
@@ -55,7 +58,7 @@ pub fn read(paths: &HostPaths) -> HostReading {
     }
     let rss = text(proc.join("self/status")).and_then(|s| meminfo_bytes(&s, "VmRSS:"));
     let leaf = text(proc.join("self/cgroup")).and_then(|s| cgroup_path(&s).map(str::to_string));
-    let (cgroup_max, cgroup_high, cgroup_current) = match leaf {
+    let (cgroup_max, cgroup_high, cgroup_current, cgroup_file) = match leaf {
         Some(leaf) => {
             let dirs = cgroup_dirs(&paths.cgroup_root, &leaf);
             let smallest = |file: &str| {
@@ -67,9 +70,18 @@ pub fn read(paths: &HostPaths) -> HostReading {
                 .first()
                 .and_then(|dir| text(dir.join("memory.current")))
                 .and_then(|t| t.trim().parse().ok());
-            (smallest("memory.max"), smallest("memory.high"), current)
+            let file = dirs
+                .first()
+                .and_then(|dir| text(dir.join("memory.stat")))
+                .and_then(|t| memory_stat_file(&t));
+            (
+                smallest("memory.max"),
+                smallest("memory.high"),
+                current,
+                file,
+            )
         }
-        None => (None, None, None),
+        None => (None, None, None, None),
     };
     let psi_some_avg10 = text(proc.join("pressure/memory")).and_then(|t| psi_some_avg10(&t));
     HostReading {
@@ -79,8 +91,16 @@ pub fn read(paths: &HostPaths) -> HostReading {
         cgroup_max,
         cgroup_high,
         cgroup_current,
+        cgroup_file,
         psi_some_avg10,
     }
+}
+
+/// The `file` line of a cgroup `memory.stat` text, in bytes.
+pub fn memory_stat_file(text: &str) -> Option<u64> {
+    text.lines()
+        .find_map(|line| line.strip_prefix("file "))
+        .and_then(|v| v.trim().parse().ok())
 }
 
 /// The process's cgroup directory and each ancestor up to the mount root,

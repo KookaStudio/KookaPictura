@@ -14,6 +14,31 @@ use pictura_core::{BitDepth, Document, PsdRect, TILE};
 /// Forget the last refusal; every gated edit starts here.
 pub(in crate::cxxqt_object) fn clear() {
     memory::clear_refusal();
+    SCRATCH_REFUSED.set(false);
+}
+
+std::thread_local! {
+    /// The last gated edit or save was refused because it needed tiles lost
+    /// from the scratch disk (#1217).
+    static SCRATCH_REFUSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// `unreadable_reads()` when the last edit committed.
+    static UNREADABLE_SEEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Record a refusal for unreadable scratch tiles.
+pub(in crate::cxxqt_object) fn refuse_for_scratch() {
+    SCRATCH_REFUSED.set(true);
+}
+
+/// Whether the last gated edit or save was refused for unreadable tiles.
+pub(in crate::cxxqt_object) fn edit_refused_for_scratch() -> bool {
+    SCRATCH_REFUSED.get()
+}
+
+/// Whether unreadable tiles were read since the last commit; marks them seen.
+pub(in crate::cxxqt_object) fn take_unreadable_reads() -> bool {
+    let now = memory::eviction::unreadable_reads();
+    UNREADABLE_SEEN.replace(now) != now
 }
 
 /// Whether `bytes` more fit the governor's room now. A refusal is remembered

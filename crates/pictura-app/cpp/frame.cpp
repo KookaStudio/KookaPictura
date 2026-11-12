@@ -113,6 +113,8 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     setFileDialogRecentPaths(recent_);
     gpuCompute_ = state.gpuCompute;
     set_memory_usage_percent(state.memoryUsagePercent);
+    set_scratch_volumes(state.scratchVolumes.join(QLatin1Char('\n')));
+    start_memory_eviction();
     colorPolicy_ = state.colorPolicy;
     cmykPolicy_ = state.cmykPolicy;
     workingCmyk_ = state.workingCmyk;

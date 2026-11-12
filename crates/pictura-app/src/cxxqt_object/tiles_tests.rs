@@ -161,6 +161,27 @@ fn only_visible_tiles_are_built() {
     assert!(visible <= 16);
 }
 
+// [te_display_drop]
+#[test]
+fn the_display_cache_drops_on_request() {
+    let mut view = view_of(layered(4096, 2048));
+    view.presented_level = 0;
+    view.presented_rect = rect(0, 0, 4096, 2048);
+    view.pin_presented_view();
+    let _ = view.tile_crop(TileSource::Composite, 0, view.presented_rect);
+    let all = view.tile_stats().tiles;
+    view.presented_rect = rect(1000, 600, 1200, 800);
+    view.pin_presented_view();
+    assert_eq!(view.tile_stats().tiles, all, "no request, nothing dropped");
+    // An eviction pass asks first; it frees nothing else here.
+    pictura_core::memory::eviction::run_pass(0);
+    view.pin_presented_view();
+    assert!(
+        view.tile_stats().tiles < all,
+        "the unpinned tiles were dropped on request"
+    );
+}
+
 // [tp_damage]
 #[test]
 fn an_edit_repairs_the_visible_tiles() {

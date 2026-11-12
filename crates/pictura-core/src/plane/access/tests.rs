@@ -227,14 +227,13 @@ fn assert_no_materialization_catches_a_whole_plane_copy() {
 }
 
 #[test]
-fn a_span_inside_one_dense_tile_is_borrowed() {
+fn a_span_inside_one_dense_tile_is_copied() {
+    // A tile's samples may be evicted once its pin drops (#1217), so a span
+    // is copied rather than borrowed past the call.
     let (plane, _sharer, expected) = diverged();
     let y = TILE + 3;
     let span = plane.row_span(y, 10..40, WIDTH).expect("a span");
-    assert!(
-        matches!(span, std::borrow::Cow::Borrowed(_)),
-        "read in place"
-    );
+    assert!(matches!(span, std::borrow::Cow::Owned(_)));
     assert_eq!(&span[..], &expected[y * WIDTH + 10..y * WIDTH + 40]);
     let across = plane
         .row_span(y, 250..262, WIDTH)
