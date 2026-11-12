@@ -4,6 +4,25 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Eviction during large commits** (#1290, OpenSpec change
+  `commit-spill-eviction`, capabilities `document/tile-eviction` and
+  `interop/agentic-control`). The 17000² `MemoryMax=2G` runs OOM-killed the
+  ×1.5 and ×1.0 + 15° commits with nothing spilled. Two causes, both fixed:
+  - **Hot holds.** The view's hold stayed open until the view changed, so
+    every tile any thread pinned was hot. Holds can now close
+    (`HotHold::close`): the view takes one around each tile build (worker or
+    synchronous) and keeps up to 8 closed ones per view. Hot tiles are now the
+    last eviction class instead of never evicted; pinned tiles stay.
+  - **Threshold.** Under a cgroup `memory.max` the allocating thread evicts
+    above the ceiling (was 125 %, past the hard limit). `on_allocate` counts
+    the bytes allocated since the last reading and re-reads the host once they
+    would cross it, at most once per 4 MiB.
+  - `ControlScope` leaves `jobProgress` windows alone, as the spec already
+    said, so a control request can drive a long commit.
+  - After the fix, at 17000² under 2G: ×1.5 (39 s, about 15.8k tiles
+    spilled), ×1.0 + 15°, ×0.5 and a Move drag all land. The `MemoryMax=4G`
+    runs, Perspective/Distort and the scratch-full refusal are still open on
+    #1290.
 - **Progress for spilling transform commits, phase 5** (#1290, OpenSpec change
   `transform-spill-progress`, capability `tools/move-commit-responsiveness`).
   `commit_transform` sends a commit to the cancellable job when its source rect
