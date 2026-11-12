@@ -8,17 +8,17 @@
 //! composite refresh.
 
 use pictura_core::homography::HOMOGRAPHY_EPSILON;
-use pictura_core::memory::{self, MemoryError};
+use pictura_core::memory::MemoryError;
 use pictura_core::{
     Channel, Document, Homography, LayerMask, LockFlags, Plane, PsdRect, SourceChannels,
 };
-use rayon::prelude::*;
 
 use super::crossed_quad;
-use super::kernel::{self, Interpolation};
+use super::kernel::Interpolation;
 use super::paths::{resolve_path, resolve_path_mut};
 use super::shape_layer::{is_shape_layer, map_shape_layer, shape_layer_rect};
 use super::transform_native;
+use super::transform_tiled;
 
 pub(super) use super::kernel::bilinear;
 
@@ -263,12 +263,18 @@ fn bounding_box<M: PlaneMap>(map: &M, rect: PsdRect) -> Option<(i32, i32, i32, i
     integer_bbox(&points)
 }
 
-/// Resample one `w×h` plane into the destination rect; out-of-source → 0. Its
-/// buffers are allocated fallibly, so a refusal is an error, never an abort.
+/// A layer's opaque pixels can run right up to its rect edge. Clamping the
+/// kernel there keeps the alpha at 255, so a rotated filled layer gets a hard,
+/// stair-stepped edge. Sampling as if padded with transparent pixels instead
+/// makes the taps outside the source read 0, so the edge anti-aliases.
+const PAD: usize = 2;
+
+/// Resample one `w×h` plane into the destination rect, out-of-source → 0, as a
+/// tiled plane built a strip at a time (#1290). Its strip buffer is allocated
+/// fallibly, so a refusal is an error, never an abort.
 ///
 /// ponytail: the refusal is recorded on the calling thread, so a deferred
-/// commit's worker reports a generic failure, not the memory message, until
-/// the out-of-core commit replaces this path (#1290).
+/// commit's worker reports a generic failure, not the memory message.
 pub(super) fn resample_plane<M: PlaneMap + Sync>(
     src: &Plane<u8>,
     w: usize,
@@ -277,47 +283,15 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
     interpolation: Interpolation,
-) -> Result<Vec<u8>, MemoryError> {
-    // A layer's opaque pixels can run right up to its rect edge. Clamping the
-    // kernel there keeps the alpha at 255, so a rotated filled layer gets a
-    // hard, stair-stepped edge. Pad with transparent pixels instead: the taps
-    // that fall outside the source read 0 and the edge anti-aliases.
-    const PAD: usize = 2;
-    let (pw, ph) = (w + PAD * 2, h + PAD * 2);
-    let mut padded = memory::try_plane(pw * ph, 0, "a transform")?;
-    for y in 0..h {
-        let dst = (y + PAD) * pw + PAD;
-        src.read_rect_into(0..w, y..y + 1, w, &mut padded[dst..dst + w]);
-    }
-    let (dl, dt, dr, db) = dest;
-    let dw = (dr - dl) as usize;
-    let dh = (db - dt) as usize;
-    let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
-    let mut out = memory::try_plane(dw * dh, 0, "a transform")?;
-    let (pwf, phf) = (pw as f64, ph as f64);
-    let job = pictura_core::job::current();
-    out.par_chunks_mut(dw).enumerate().for_each(|(oy, row)| {
-        if job.as_ref().is_some_and(|job| job.cancelled()) {
-            return;
-        }
-        if let Some(job) = &job {
-            job.advance(1);
-        }
-        for (ox, pixel) in row.iter_mut().enumerate() {
-            let qx = dl as f64 + ox as f64 + 0.5;
-            let qy = dt as f64 + oy as f64 + 0.5;
-            let Some((sx, sy)) = map.inverse(qx, qy) else {
-                continue;
-            };
-            let lx = sx - rect.left as f64 + PAD as f64;
-            let ly = sy - rect.top as f64 + PAD as f64;
-            if lx < 0.0 || ly < 0.0 || lx >= pwf || ly >= phf {
-                continue;
-            }
-            *pixel = kernel::sample(&padded, pw, ph, lx, ly, resolved);
-        }
-    });
-    Ok(out)
+) -> Result<Plane<u8>, MemoryError> {
+    let source = transform_tiled::Source {
+        plane: src,
+        w,
+        h,
+        pad: PAD,
+        rect,
+    };
+    transform_tiled::resample(&source, map, dest, interpolation)
 }
 
 /// Whether `t`'s parameters are finite and non-degenerate.
@@ -395,7 +369,7 @@ fn transform_mask<M: PlaneMap + Sync>(
             bottom: dest.3,
             right: dest.2,
         },
-        data: data.map(Into::into),
+        data,
         ..mask.clone()
     }))
 }
@@ -639,10 +613,7 @@ where
                 dest,
                 interpolation,
             )?;
-            Ok(Channel {
-                id: c.id,
-                data: data.into(),
-            })
+            Ok(Channel { id: c.id, data })
         })
         .collect();
     let Ok(new_channels) = resampled else {

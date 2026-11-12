@@ -630,6 +630,10 @@ bool ToolController::setTransformWarpVertical(bool vertical)
 
 QString transformMemoryRefusalMessage()
 {
+    if (edit_refused_for_scratch_full()) {
+        return QObject::tr("Could not transform: the scratch disks are full. Free space on the "
+                           "scratch disks, then try again.");
+    }
     return QObject::tr("Could not transform: not enough memory. Make the result smaller, close "
                        "other documents, or free memory and try again.");
 }

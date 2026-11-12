@@ -314,6 +314,24 @@ impl<T: TileSample> Plane<T> {
         TiledPlane::build(width, height, channels, rows).map(|t| Self::with_store(Store::Tiled(t)))
     }
 
+    /// As [`Plane::build_tiled`], a strip at a time: `fill(first_row, strip)`
+    /// gets up to 256 global rows (zeroed) in the caller's `strip` buffer,
+    /// which must hold at least `width × 256` samples, so the caller can fill a
+    /// strip in parallel.
+    pub fn build_tiled_strips<E>(
+        width: usize,
+        height: usize,
+        channels: usize,
+        strip: &mut [T],
+        fill: impl FnMut(usize, &mut [T]) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        if width == 0 || height == 0 || channels == 0 {
+            return Ok(Self::default());
+        }
+        TiledPlane::build_strips(width, height, channels, strip, fill)
+            .map(|t| Self::with_store(Store::Tiled(t)))
+    }
+
     /// Tile the plane as stacked `width × height` channels.
     ///
     /// A flat plane is copied into tiles once (uniform tiles hold nothing). A

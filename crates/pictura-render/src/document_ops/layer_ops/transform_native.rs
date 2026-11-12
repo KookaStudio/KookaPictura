@@ -5,10 +5,11 @@
 //! Split from `transform.rs` for the file-size cap.
 
 use pictura_core::memory::MemoryError;
-use pictura_core::{PsdRect, Sample, Samples, SourceChannels};
+use pictura_core::{Plane, PsdRect, Sample, Samples, SourceChannels, TileSample};
 
-use super::kernel::{self, Interpolation};
+use super::kernel::Interpolation;
 use super::transform::{resample_plane, PlaneMap};
+use super::transform_tiled::{self, Source};
 
 /// The `(left, top, right, bottom)` tuple of a rect.
 pub(super) fn dest_tuple(rect: PsdRect) -> (i32, i32, i32, i32) {
@@ -36,63 +37,30 @@ pub(super) fn resample_native<M: PlaneMap + Sync>(
     interpolation: Interpolation,
 ) -> Result<Samples, MemoryError> {
     Ok(match samples {
-        Samples::U8(v) => {
-            Samples::U8(resample_plane(v, w, h, map, rect, dest, interpolation)?.into())
-        }
-        Samples::U16(v) => {
-            Samples::U16(resample_typed(v, w, h, map, rect, dest, interpolation)?.into())
-        }
-        Samples::F32(v) => {
-            Samples::F32(resample_typed(v, w, h, map, rect, dest, interpolation)?.into())
-        }
+        Samples::U8(v) => Samples::U8(resample_plane(v, w, h, map, rect, dest, interpolation)?),
+        Samples::U16(v) => Samples::U16(resample_typed(v, w, h, map, rect, dest, interpolation)?),
+        Samples::F32(v) => Samples::F32(resample_typed(v, w, h, map, rect, dest, interpolation)?),
     })
 }
 
-fn resample_typed<M: PlaneMap, T: Sample>(
-    src: &[T],
+/// A deep plane through the tiled resampler, clamped to its edge (no padding).
+fn resample_typed<M: PlaneMap + Sync, T: Sample + TileSample>(
+    src: &Plane<T>,
     w: usize,
     h: usize,
     map: &M,
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
     interpolation: Interpolation,
-) -> Result<Vec<T>, MemoryError> {
-    let (dl, dt, dr, db) = dest;
-    let dw = (dr - dl) as usize;
-    let dh = (db - dt) as usize;
-    let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
-    let mut out = Vec::new();
-    out.try_reserve_exact(dw * dh)
-        .map_err(|_| MemoryError::Insufficient {
-            purpose: "a transform",
-            bytes: (dw * dh * std::mem::size_of::<T>()) as u64,
-        })?;
-    out.resize(dw * dh, T::from_unit(0.0));
-    let wf = w as f64;
-    let hf = h as f64;
-    let job = pictura_core::job::current();
-    for oy in 0..dh {
-        if let Some(job) = &job {
-            if job.cancelled() {
-                break;
-            }
-            job.advance(1);
-        }
-        for ox in 0..dw {
-            let qx = dl as f64 + ox as f64 + 0.5;
-            let qy = dt as f64 + oy as f64 + 0.5;
-            let Some((sx, sy)) = map.inverse(qx, qy) else {
-                continue;
-            };
-            let lx = sx - rect.left as f64;
-            let ly = sy - rect.top as f64;
-            if lx < 0.0 || ly < 0.0 || lx >= wf || ly >= hf {
-                continue;
-            }
-            out[oy * dw + ox] = kernel::sample(src, w, h, lx, ly, resolved);
-        }
-    }
-    Ok(out)
+) -> Result<Plane<T>, MemoryError> {
+    let source = Source {
+        plane: src,
+        w,
+        h,
+        pad: 0,
+        rect,
+    };
+    transform_tiled::resample(&source, map, dest, interpolation)
 }
 
 /// Resample a layer's retained store through `map`; the `-2` mask plane uses the

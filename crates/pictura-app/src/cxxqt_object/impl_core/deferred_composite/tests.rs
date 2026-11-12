@@ -217,3 +217,47 @@ fn a_busy_display_does_not_defer() {
     view.mask_solo = Some("0".to_string());
     assert!(!view.should_defer_move(&whole));
 }
+
+#[test]
+fn a_deferred_whole_landing_skips_the_display_conversion() {
+    use crate::cxxqt_object::helpers_composite::DISPLAY_COPIES;
+    // Over the synchronous tile limit (16 MP), with a profile whose display
+    // conversion is not the identity. Its tiles are not presented at once:
+    // the test helpers only do that for small documents.
+    let side = 4100;
+    let mut doc = Document::new(side, side, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![
+        pixel_layer("under", side, side, (120, 170, 220)),
+        pixel_layer("over", side, side, (220, 90, 40)),
+    ]);
+    doc.document_icc = Some(pictura_color::Profile::adobe_rgb().to_icc().into());
+    doc.composite = pictura_render::composite_rgba(&doc);
+    let mut view = PictureViewRust {
+        session: DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.layer_target = LayerTarget::only("1");
+    view.apply_edit("Open", Edit::Record);
+    let copies = DISPLAY_COPIES.get();
+    let (job, regions) = move_and_defer(&mut view, 5, 7);
+    assert_eq!(regions.len(), 1);
+    assert!(regions[0].srgb.is_none(), "the whole region was converted");
+    // The landed region is the moved document's composite.
+    let full = pictura_render::composite_rgba(&job.doc);
+    let probe = |buf: &pictura_core::PixelBuffer| {
+        let plane = (buf.width * buf.height) as usize;
+        (0..4)
+            .map(|c| buf.data.sample(c * plane + 2000 * side as usize + 2000))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(probe(&regions[0].raw), probe(&full), "the region is stale");
+    let revision = view.canvas_revision;
+    view.land_move_composite(job.generation, regions)
+        .expect("the current job lands");
+    assert_eq!(DISPLAY_COPIES.get(), copies, "a display copy was made");
+    assert_ne!(
+        view.canvas_revision, revision,
+        "the display was not invalidated"
+    );
+}

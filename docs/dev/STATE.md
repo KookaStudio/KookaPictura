@@ -4,6 +4,27 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Transform commit out of core, phases 3–4** (#1290, OpenSpec change
+  `transform-commit-out-of-core`, capabilities `document/out-of-core-transform`
+  and `compositing/tiled-region-composite`).
+  - **Resample.** `transform_tiled.rs` resamples one 256-row strip at a time
+    into a tiled plane (`Plane::build_tiled_strips`). Each 16-row task reads,
+    per 256-column block, only the source window its kernel taps reach, and the
+    block splits until the window is at most 4 Mpx. The output is
+    byte-identical to the old dense resampler, which is kept as the test oracle
+    in `transform_oracle.rs`. 8-bit, deep and mask planes all go through it.
+  - **Composite.** A banded region of 16 Mpx or more is written into tiles a
+    strip at a time. `patch_buffer_region` reads tiled regions without
+    materializing them. `RegionComposite::srgb` is skipped for a whole
+    document over 16 MP and converted on demand.
+  - **Gate.** `commit_cost` gives `working` (strips plus one 8 MiB window per
+    thread) and `spillable` (new layer tiles plus the 4-byte composite).
+    `memory_gate::admit_spilling` admits `working` against RAM, and `spillable`
+    against room plus `scratch::sizes().available`. A scratch-full refusal sets
+    its own message.
+  - **Split out.** Warp #1292, Image Size #1293, Canvas Size and Rotate Canvas
+    #1294. Phase 5 (progress for spilling commits under 4 MP) is still open on
+    #1290.
 - **Transform commit peak memory, phases 1–2** (#1290, OpenSpec change
   `transform-commit-peak-memory`, capability `document/transform-commit-memory`).
   - **Integer moves.** `transform_layer_with_map` moves the planes instead of

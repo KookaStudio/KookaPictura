@@ -15,12 +15,18 @@ use pictura_core::{BitDepth, Document, PsdRect, TILE};
 pub(in crate::cxxqt_object) fn clear() {
     memory::clear_refusal();
     SCRATCH_REFUSED.set(false);
+    SCRATCH_FULL.set(false);
 }
 
 std::thread_local! {
     /// The last gated edit or save was refused because it needed tiles lost
     /// from the scratch disk (#1217).
     static SCRATCH_REFUSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The last gated edit was refused because its spillable output did not
+    /// fit the room plus the scratch disks' free space (#1290).
+    static SCRATCH_FULL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The scratch disks' free bytes as a test pins them; `None` reads them.
+    static SCRATCH_AVAILABLE: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
     /// `unreadable_reads()` when the last edit committed.
     static UNREADABLE_SEEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
@@ -45,6 +51,44 @@ pub(in crate::cxxqt_object) fn take_unreadable_reads() -> bool {
 /// for [`edit_refused_for_memory`].
 pub(in crate::cxxqt_object) fn admit(bytes: u64) -> bool {
     memory::governor().admit(bytes, "an edit")
+}
+
+/// Whether a commit fits: its `working` bytes must fit the governor's room
+/// (a memory refusal), and its `spillable` bytes, which the evictor may pack
+/// or spill as they are written, the room plus the scratch disks' free space
+/// (a scratch-full refusal, which also counts as a memory refusal) (#1290).
+pub(in crate::cxxqt_object) fn admit_spilling(working: u64, spillable: u64) -> bool {
+    if !admit(working) {
+        return false;
+    }
+    let Some(room) = memory::governor().room() else {
+        return true;
+    };
+    if spillable <= room.saturating_add(scratch_available()) {
+        return true;
+    }
+    SCRATCH_FULL.set(true);
+    memory::record_refusal("an edit", spillable);
+    false
+}
+
+/// The free bytes on the usable scratch volumes.
+fn scratch_available() -> u64 {
+    SCRATCH_AVAILABLE
+        .get()
+        .unwrap_or_else(|| pictura_core::scratch::sizes().available)
+}
+
+/// Whether the last gated edit was refused because the scratch disks could not
+/// hold its spillable output.
+pub(in crate::cxxqt_object) fn edit_refused_for_scratch_full() -> bool {
+    SCRATCH_FULL.get()
+}
+
+/// Pin this thread's scratch disks to `bytes` free; a negative value reads
+/// them again.
+pub(in crate::cxxqt_object) fn set_scratch_available_for_test(bytes: i64) {
+    SCRATCH_AVAILABLE.set(u64::try_from(bytes).ok());
 }
 
 /// [`clear`], then [`admit`]: the gate of a path that runs no other gate.

@@ -13,7 +13,10 @@ pub(super) struct RegionComposite {
     pub(super) y0: i32,
     pub(super) clipped: PsdRect,
     pub(super) raw: PixelBuffer,
-    pub(super) srgb: PixelBuffer,
+    /// The display copy; `None` for a whole-document region of a large
+    /// document, whose deferred landing never reads it (#1290), so the caller
+    /// converts on demand ([`RegionComposite::take_srgb`]).
+    pub(super) srgb: Option<PixelBuffer>,
 }
 
 impl RegionComposite {
@@ -25,6 +28,26 @@ impl RegionComposite {
             && self.clipped.width() == doc.width as i32
             && self.clipped.height() == doc.height as i32
     }
+
+    /// The display copy, converted now if it was skipped.
+    pub(super) fn take_srgb(&mut self, doc: &Document) -> PixelBuffer {
+        self.srgb
+            .take()
+            .unwrap_or_else(|| display_copy(doc, &self.raw))
+    }
+}
+
+/// The straight-sRGB display copy of a composited buffer.
+fn display_copy(doc: &Document, raw: &PixelBuffer) -> PixelBuffer {
+    #[cfg(test)]
+    DISPLAY_COPIES.set(DISPLAY_COPIES.get() + 1);
+    buffer_to_srgb(doc, raw).into_owned()
+}
+
+#[cfg(test)]
+std::thread_local! {
+    /// Display copies made on this thread, for the lazy-copy test.
+    pub(super) static DISPLAY_COPIES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// Composite each rectangle of `doc` without touching the view's composite
@@ -47,8 +70,14 @@ pub(super) fn composite_regions(
     let out = refreshed
         .into_iter()
         .filter_map(|refreshed| {
-            let srgb = buffer_to_srgb(doc, &refreshed.buffer).into_owned();
-            (srgb.width > 0 && srgb.height > 0).then_some(RegionComposite {
+            let (w, h) = (refreshed.buffer.width, refreshed.buffer.height);
+            if w == 0 || h == 0 {
+                return None;
+            }
+            let large = u64::from(w) * u64::from(h) > super::tiles::SYNC_PIXELS;
+            let whole = (w, h) == (doc.width, doc.height);
+            let srgb = (!(whole && large)).then(|| display_copy(doc, &refreshed.buffer));
+            Some(RegionComposite {
                 x0: refreshed.rect.left,
                 y0: refreshed.rect.top,
                 clipped: refreshed.rect,

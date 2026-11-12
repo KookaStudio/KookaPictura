@@ -11,6 +11,7 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QThread>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
@@ -22,11 +23,13 @@
 #include "memory_refusal.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "tools.h"
 
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/history_api.h"
 #include "api/paint_bridge.h"
+#include "api/transform_api.h"
 
 #include "qt_test_support.h"
 
@@ -45,6 +48,7 @@ private slots:
     void statusReportsTheGovernor();
     void statusCarriesScratchReadouts();
     void aFailedAllocationLeavesTheEditUndone();
+    void transformRefusalNamesFullScratchDisks();
 
 private:
     // A white 40×40 document, made active.
@@ -290,6 +294,43 @@ void MemoryGovernorTest::aFailedAllocationLeavesTheEditUndone()
     QCOMPARE(window_->documentCount(), documents);
     // The Paint Bucket was the other edit with a canvas-sized allocation to
     // fail; its flood is tiled since #1214 and allocates none.
+}
+
+// [oct_gate_scratch_full]
+void MemoryGovernorTest::transformRefusalNamesFullScratchDisks()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Scratch"), 2000, 2000, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+    QCOMPARE(view->duplicate_layer(0), 1);
+    view->set_active_layer(QStringLiteral("1"));
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    QVERIFY(tools->beginFreeTransform(QStringLiteral("1")));
+    const QPolygonF quad = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(quad.size(), 4);
+    // Drag the corner out to about 14000²: over a gigabyte of output tiles.
+    const QPointF corner = quad.at(2);
+    QVERIFY(view->transform_press(corner.x(), corner.y(), 1.0, false, false) >= 0);
+    QVERIFY(view->transform_move(corner.x() + 12000.0, corner.y() + 12000.0, 1.0, false, false));
+    view->transform_release();
+
+    // Room for the working set (one 8 MiB window a thread, plus the strips)
+    // but not for the output, with nothing free on the scratch disks.
+    const qint64 mib = 1024 * 1024;
+    pictura::set_available_memory_for_test(256 * mib + QThread::idealThreadCount() * 8 * mib +
+                                           128 * mib);
+    pictura::set_scratch_available_for_test(0);
+    const int count = view->history_count();
+    tools->commitFreeTransform();
+    pictura::set_scratch_available_for_test(-1);
+
+    QVERIFY(pictura::edit_refused_for_scratch_full());
+    QCOMPARE(view->history_count(), count);
+    const QString message = window_->statusBar()->currentMessage();
+    QCOMPARE(message, pictura::transformMemoryRefusalMessage());
+    QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
 }
 
 QTEST_MAIN(MemoryGovernorTest)

@@ -232,7 +232,7 @@ impl PictureViewRust {
             u64::from(doc.width) * u64::from(doc.height) > super::super::super::tiles::SYNC_PIXELS
         });
         let mut union: Option<PsdRect> = None;
-        for region in regions {
+        for mut region in regions {
             let whole = self
                 .session
                 .doc
@@ -251,8 +251,8 @@ impl PictureViewRust {
                 self.damage.mark(region.clipped);
                 self.canvas_revision = self.canvas_revision.wrapping_add(1);
                 self.sync_mask_solo_region(region.clipped);
-            } else {
-                self.apply_refreshed_region(region.x0, region.y0, region.clipped, region.srgb);
+            } else if let Some(srgb) = self.session.doc.as_ref().map(|doc| region.take_srgb(doc)) {
+                self.apply_refreshed_region(region.x0, region.y0, region.clipped, srgb);
             }
             union = Some(union.map_or(region.clipped, |u| u.union(region.clipped)));
         }

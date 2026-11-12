@@ -329,6 +329,12 @@ fn refuse(purpose: &'static str, bytes: u64) -> MemoryError {
     error
 }
 
+/// Record a refusal of `bytes` for `purpose` on this thread, for a gate that
+/// decides beyond the governor's room (the scratch disks, #1290).
+pub fn record_refusal(purpose: &'static str, bytes: u64) -> MemoryError {
+    refuse(purpose, bytes)
+}
+
 /// The last refusal recorded on this thread.
 pub fn last_refusal() -> Option<MemoryError> {
     REFUSAL.get()
@@ -371,13 +377,22 @@ pub fn try_filled_plane(
 /// fallible, so an allocator failure is [`MemoryError::Insufficient`] (recorded
 /// like any refusal), never an abort.
 pub fn try_plane(len: usize, value: u8, purpose: &'static str) -> Result<Vec<u8>, MemoryError> {
-    let bytes = len as u64;
+    try_buffer(len, value, purpose)
+}
+
+/// [`try_plane`] for samples of any width: `len` samples of `value`.
+pub fn try_buffer<T: Clone>(
+    len: usize,
+    value: T,
+    purpose: &'static str,
+) -> Result<Vec<T>, MemoryError> {
+    let bytes = (len * std::mem::size_of::<T>()) as u64;
     if FAIL_NEXT_PLANE.replace(false) {
         return Err(refuse(purpose, bytes));
     }
     // Held across the allocation and its fill, so a concurrent reservation
     // sees these bytes until the reading counts them as resident.
-    let _held = if len >= CANVAS_SCALE_BYTES {
+    let _held = if bytes as usize >= CANVAS_SCALE_BYTES {
         Some(governor().reserve(bytes, purpose)?)
     } else {
         None

@@ -9,7 +9,8 @@
 mod imp;
 
 use super::super::helpers::memory_gate::{
-    edit_refused_for_memory, edit_refused_for_scratch, set_available_memory_for_test,
+    edit_refused_for_memory, edit_refused_for_scratch, edit_refused_for_scratch_full,
+    set_available_memory_for_test, set_scratch_available_for_test,
 };
 use super::super::helpers::memory_report::{
     fail_next_plane_for_test, inject_scratch_fault_for_test, memory_status_json,
@@ -161,6 +162,14 @@ pub mod ffi {
         /// Whether the last gated edit or save was refused because it needed
         /// tiles that could not be read back from the scratch disk (#1217).
         fn edit_refused_for_scratch() -> bool;
+
+        /// Whether the last gated edit was refused because the scratch disks'
+        /// free space could not hold its spillable output (#1290).
+        fn edit_refused_for_scratch_full() -> bool;
+
+        /// Test hook: pin this thread's scratch disks to `bytes` free; a
+        /// negative value reads them again.
+        fn set_scratch_available_for_test(bytes: i64);
 
         /// Turn tile eviction on and start its thread (#1217).
         fn start_memory_eviction();
