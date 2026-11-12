@@ -73,6 +73,7 @@ fn merge_down(view: &mut PictureViewRust) -> bool {
             Some(Outcome {
                 path: merged.path,
                 count: merged.replaced,
+                rect: None,
             })
         },
         Box::new(|rust, outcome| {

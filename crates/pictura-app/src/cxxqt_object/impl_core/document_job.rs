@@ -32,11 +32,13 @@ pub(in crate::cxxqt_object) enum JobBar {
 }
 
 /// What an applied command reports back: a merged layer's path and the count
-/// of layers it replaced; empty for the other commands.
+/// of layers it replaced, or a fill's changed rect (#1300); empty for the
+/// other commands.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(in crate::cxxqt_object) struct Outcome {
     pub(in crate::cxxqt_object) path: String,
     pub(in crate::cxxqt_object) count: usize,
+    pub(in crate::cxxqt_object) rect: Option<pictura_core::PsdRect>,
 }
 
 /// What lands a finished engine: its outcome in, the history edit out.
@@ -72,7 +74,8 @@ pub(in crate::cxxqt_object) struct DocumentJobs {
 }
 
 impl PictureViewRust {
-    fn document_job_wanted(&self) -> bool {
+    /// Whether an armed command on this document should run as a job.
+    pub(in crate::cxxqt_object) fn document_job_wanted(&self) -> bool {
         self.document_jobs.armed
             && self.session.doc.as_ref().is_some_and(|doc| {
                 u64::from(doc.width) * u64::from(doc.height) >= DOCUMENT_JOB_PIXELS
@@ -217,7 +220,9 @@ impl PictureViewRust {
         })
     }
 
-    fn note_document_op(&mut self, outcome: Option<Outcome>) -> bool {
+    /// Record whether a command applied, for the shell's job window; returns
+    /// it.
+    pub(in crate::cxxqt_object) fn note_document_op(&mut self, outcome: Option<Outcome>) -> bool {
         let jobs = &mut self.document_jobs;
         jobs.applied = outcome.is_some();
         jobs.result = outcome.unwrap_or_default();

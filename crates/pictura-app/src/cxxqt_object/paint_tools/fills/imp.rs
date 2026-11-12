@@ -7,6 +7,7 @@ use super::super::super::helpers_composite::{crop_plane, crop_selection};
 use super::super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate as budget;
+use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -80,19 +81,28 @@ pub(super) fn draw_gradient(
         transparency,
     };
     let (start, end) = ((x0 as f32, y0 as f32), (x1 as f32, y1 as f32));
-    apply(view, "Gradient", |doc, path, _rust, t, selection| {
-        if !budget::admit(budget::fork_bytes(doc, path, t.bounds) + budget::refresh_bytes(t.bounds))
-        {
-            return None;
-        }
-        // The drag is in document space; a mask's document sits at its own
-        // rectangle, so its points move by the target's origin.
-        let (ox, oy) = (t.origin.0 as f32, t.origin.1 as f32);
-        let start = (start.0 - ox, start.1 - oy);
-        let end = (end.0 - ox, end.1 - oy);
-        let within = selection.map(|_| t.bounds);
-        gradient::draw(doc, path, &ramp, &options, start, end, selection, within)
-    })
+    apply_job(
+        view,
+        "Gradient",
+        |doc, path, t| spill_gate(doc, path, t.bounds, 0),
+        move |doc, path, t, selection| {
+            // The drag is in document space; a mask's document sits at its own
+            // rectangle, so its points move by the target's origin.
+            let (ox, oy) = (t.origin.0 as f32, t.origin.1 as f32);
+            let start = (start.0 - ox, start.1 - oy);
+            let end = (end.0 - ox, end.1 - oy);
+            let within = selection.map(|_| t.bounds);
+            gradient::draw(doc, path, &ramp, &options, start, end, selection, within)
+        },
+    )
+}
+
+/// The fills' memory gate (#1300): `resident` bytes of the fill's own buffers
+/// and the refresh it composites densely must fit the room; the tiles it
+/// forks may spill to scratch.
+fn spill_gate(doc: &Document, path: &str, bounds: PsdRect, resident: u64) -> bool {
+    let cost = budget::fill_cost(doc, path, bounds, resident);
+    budget::admit_spilling(cost.working, cost.spillable)
 }
 
 pub(super) fn bucket_fill_at(
@@ -115,59 +125,70 @@ pub(super) fn bucket_fill_at(
         },
         Err(_) => None,
     };
-    let paint = match &tile {
-        Some(tile) => BucketPaint::Pattern(tile),
-        None => BucketPaint::Foreground(rgba_from_argb(foreground)),
-    };
+    let foreground = rgba_from_argb(foreground);
     let mode = paint_mode_from(&mode.to_string());
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
     let tolerance = tolerance.clamp(0, 255) as u8;
-    apply(view, "Paint Bucket", |doc, path, rust, t, selection| {
-        // The flood's visited bits and its mask, then the anti-aliased copy
-        // beside the mask, then the mask beside the tiles the fill forks.
-        let mask_bytes = budget::flood_bytes(t.bounds);
-        let fork = budget::fork_bytes(doc, path, t.bounds);
-        if !budget::admit(2 * mask_bytes + fork.max(mask_bytes) + budget::refresh_bytes(t.bounds)) {
-            return None;
-        }
-        let (ox, oy) = t.origin;
-        let seed = (x - ox, y - oy);
-        let flood = {
-            // All Layers samples the composite of the layer's own document, a
-            // tile at a time (#1216); a mask has no composite, so it always
-            // floods its own coverage.
-            let fetch = super::super::super::picture::sample_tiles(doc, rust);
-            let source = if all_layers && !t.is_mask {
-                BucketSource::Tiles {
-                    fetch: &fetch,
-                    width: doc.width,
-                    height: doc.height,
-                }
-            } else {
-                BucketSource::layer(doc, path)?
+    // Read on the GUI thread: the engine may run on a worker (#1300).
+    let stored = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| super::super::super::picture::stored_is_current(doc, view.rust()));
+    // The flood's visited bits and its mask, then the anti-aliased copy beside
+    // the mask, then the mask beside the tiles the fill forks.
+    let gate = |doc: &Document, path: &str, t: &FillTarget| {
+        spill_gate(doc, path, t.bounds, 3 * budget::flood_bytes(t.bounds))
+    };
+    apply_job(
+        view,
+        "Paint Bucket",
+        gate,
+        move |doc, path, t, selection| {
+            let paint = match &tile {
+                Some(tile) => BucketPaint::Pattern(tile),
+                None => BucketPaint::Foreground(foreground),
             };
-            let size = (doc.width, doc.height);
-            bucket::flood(
-                source, size, t.bounds, selection, seed, tolerance, contiguous,
-            )?
-        };
-        let mask = if antialias {
-            bucket::antialias(flood, (doc.width, doc.height), t.bounds, selection)
-        } else {
-            flood
-        };
-        bucket::fill_tiled(
-            doc,
-            path,
-            t.bounds,
-            &mask,
-            paint,
-            mode,
-            opacity,
-            selection,
-            Alpha::Blend,
-        )
-    })
+            let (ox, oy) = t.origin;
+            let seed = (x - ox, y - oy);
+            let flood = {
+                // All Layers samples the composite of the layer's own document, a
+                // tile at a time (#1216); a mask has no composite, so it always
+                // floods its own coverage.
+                let fetch = super::super::super::picture::sample_tiles_from(doc, stored);
+                let source = if all_layers && !t.is_mask {
+                    BucketSource::Tiles {
+                        fetch: &fetch,
+                        width: doc.width,
+                        height: doc.height,
+                    }
+                } else {
+                    BucketSource::layer(doc, path)?
+                };
+                let size = (doc.width, doc.height);
+                bucket::flood(
+                    source, size, t.bounds, selection, seed, tolerance, contiguous,
+                )?
+            };
+            let mask = if antialias {
+                bucket::antialias(flood, (doc.width, doc.height), t.bounds, selection)
+            } else {
+                flood
+            };
+            bucket::fill_tiled(
+                doc,
+                path,
+                t.bounds,
+                &mask,
+                paint,
+                mode,
+                opacity,
+                selection,
+                Alpha::Blend,
+            )
+        },
+    )
 }
 
 pub(super) fn edit_fill(
@@ -188,12 +209,9 @@ pub(super) fn edit_fill(
         },
         Err(_) => None,
     };
+    let foreground = rgba_from_argb(foreground);
     let mode = paint_mode_from(&mode.to_string());
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
-    let paint = match &tile {
-        Some(tile) => BucketPaint::Pattern(tile),
-        None => BucketPaint::Foreground(rgba_from_argb(foreground)),
-    };
     // Preserve Transparency is the engine's own policy: it keeps every filled
     // pixel's alpha and leaves the layer's empty pixels alone. A mask's
     // transparency lock already does that, so the policy is a no-op on a mask.
@@ -202,15 +220,20 @@ pub(super) fn edit_fill(
     } else {
         Alpha::Blend
     };
-    apply(view, "Fill", |doc, path, _rust, t, selection| {
-        if !budget::admit(budget::fork_bytes(doc, path, t.bounds) + budget::refresh_bytes(t.bounds))
-        {
-            return None;
-        }
-        bucket::fill_within(
-            doc, path, t.bounds, None, paint, mode, opacity, selection, alpha,
-        )
-    })
+    apply_job(
+        view,
+        "Fill",
+        |doc, path, t| spill_gate(doc, path, t.bounds, 0),
+        move |doc, path, t, selection| {
+            let paint = match &tile {
+                Some(tile) => BucketPaint::Pattern(tile),
+                None => BucketPaint::Foreground(foreground),
+            };
+            bucket::fill_within(
+                doc, path, t.bounds, None, paint, mode, opacity, selection, alpha,
+            )
+        },
+    )
 }
 
 pub(super) fn edit_stroke(
@@ -233,26 +256,19 @@ pub(super) fn edit_stroke(
         _ => bucket::StrokeAlign::Center,
     };
     let width = width.clamp(0, 250) as u32;
-    apply(view, "Stroke", |doc, path, _rust, t, selection| {
-        let selection = selection?;
+    let color = rgba_from_argb(color);
+    let mode = paint_mode_from(&mode.to_string());
+    let opacity = opacity.clamp(0, 100) as f32 / 100.0;
+    // The dilation, erosion and band of the window's edge tiles, beside the
+    // tiles the band's fill forks.
+    let gate = move |doc: &Document, path: &str, t: &FillTarget| {
         let canvas = (doc.width as i32, doc.height as i32);
-        let window = bucket::stroke_window(t.bounds, width as i32 + 1, canvas)?;
-        // The dilation, erosion and band of the window's edge tiles, beside
-        // the tiles the band's fill forks.
-        let fork = budget::fork_bytes(doc, path, window);
-        if !budget::admit(3 * budget::flood_bytes(window) + fork + budget::refresh_bytes(window)) {
-            return None;
-        }
+        bucket::stroke_window(t.bounds, width as i32 + 1, canvas)
+            .is_some_and(|window| spill_gate(doc, path, window, 3 * budget::flood_bytes(window)))
+    };
+    apply_job(view, "Stroke", gate, move |doc, path, t, selection| {
         bucket::stroke_selection(
-            doc,
-            path,
-            selection,
-            t.bounds,
-            rgba_from_argb(color),
-            width,
-            align,
-            paint_mode_from(&mode.to_string()),
-            opacity.clamp(0, 100) as f32 / 100.0,
+            doc, path, selection?, t.bounds, color, width, align, mode, opacity,
         )
     })
 }
@@ -302,16 +318,10 @@ impl FillTarget {
 pub(crate) fn apply(
     mut view: Pin<&mut PictureView>,
     label: &str,
-    edit: impl FnOnce(
-        &mut Document,
-        &str,
-        &PictureViewRust,
-        &FillTarget,
-        Option<&TiledMask>,
-    ) -> Option<PsdRect>,
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&TiledMask>) -> Option<PsdRect>,
 ) -> bool {
     budget::clear();
-    if view.rust().session.live.stroke().is_some() || view.rust().modal_transform_blocks_edit() {
+    if blocked(view.rust()) {
         return false;
     }
     if view.rust().session.quick_mask.active {
@@ -337,15 +347,7 @@ pub(crate) fn apply(
             is_mask: true,
             bounds,
         };
-        if edit(
-            &mut document,
-            "0",
-            view.rust(),
-            &target,
-            clip.map(|s| &s.data),
-        )
-        .is_none()
-        {
+        if edit(&mut document, "0", &target, clip.map(|s| &s.data)).is_none() {
             return false;
         }
         let changed = view
@@ -362,40 +364,13 @@ pub(crate) fn apply(
     }
     let edited = {
         let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
+        let (Some(doc), Some((path, target))) = (rust.session.doc.as_ref(), layer_fill(rust))
         else {
             return false;
         };
-        if active_pixel_layer(doc, Some(path)).is_none() || !active_layer_visible(doc, Some(path)) {
-            return false;
-        }
-        let canvas = PsdRect {
-            top: 0,
-            left: 0,
-            bottom: doc.height as i32,
-            right: doc.width as i32,
-        };
         let selection = rust.session.selection.as_ref().map(|s| &s.data);
-        // A selection that covers nothing leaves nothing to change.
-        let bounds = match selection {
-            Some(_) => match rust
-                .selection_mask_bounds()
-                .and_then(|b| b.intersect(canvas))
-            {
-                Some(bounds) => bounds,
-                None => return false,
-            },
-            None => canvas,
-        };
-        let target = FillTarget {
-            origin: (0, 0),
-            document_size: (doc.width, doc.height),
-            rect: canvas,
-            is_mask: false,
-            bounds,
-        };
         let mut edited = doc.clone();
-        edit(&mut edited, path, rust, &target, selection).map(|rect| (edited, rect))
+        edit(&mut edited, &path, &target, selection).map(|rect| (edited, rect))
     };
     let Some((doc, rect)) = edited else {
         return false;
@@ -406,6 +381,121 @@ pub(crate) fn apply(
     true
 }
 
+/// Whether no fill may run now: mid-stroke, or under a modal transform.
+fn blocked(rust: &PictureViewRust) -> bool {
+    rust.session.live.stroke().is_some() || rust.modal_transform_blocks_edit()
+}
+
+/// The visible lone active pixel layer a fill writes, and its target: the
+/// whole canvas, or the selection's box on it. `None` without such a layer or
+/// for a selection that covers nothing.
+fn layer_fill(rust: &PictureViewRust) -> Option<(String, FillTarget)> {
+    let doc = rust.session.doc.as_ref()?;
+    let path = rust.layer_target.single()?;
+    if active_pixel_layer(doc, Some(path)).is_none() || !active_layer_visible(doc, Some(path)) {
+        return None;
+    }
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    let bounds = match rust.session.selection {
+        Some(_) => rust
+            .selection_mask_bounds()
+            .and_then(|b| b.intersect(canvas))?,
+        None => canvas,
+    };
+    let target = FillTarget {
+        origin: (0, 0),
+        document_size: (doc.width, doc.height),
+        rect: canvas,
+        is_mask: false,
+        bounds,
+    };
+    Some((path.to_string(), target))
+}
+
+/// [`apply`] for a fill the shell can run as a job (#1300). `gate` runs on the
+/// GUI thread before anything changes, where the memory gate records its
+/// refusal. On an armed view and a large document, a pixel-layer fill then
+/// runs `edit` on a worker as a document job that lands as one `label` state;
+/// a mask or Quick Mask target, and any other call, runs at once through
+/// [`apply`]. Either way the outcome is noted for the shell's job window.
+pub(super) fn apply_job(
+    mut view: Pin<&mut PictureView>,
+    label: &str,
+    gate: impl FnOnce(&Document, &str, &FillTarget) -> bool,
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&TiledMask>) -> Option<PsdRect>
+        + Send
+        + 'static,
+) -> bool {
+    let job = {
+        let rust = view.rust();
+        rust.document_job_wanted()
+            && !blocked(rust)
+            && !rust.session.quick_mask.active
+            && active_mask_target(rust).is_none()
+    };
+    if !job {
+        let applied = apply(view.as_mut(), label, |doc, path, t, selection| {
+            if !gate(doc, path, t) {
+                return None;
+            }
+            edit(doc, path, t, selection)
+        });
+        let outcome = applied.then(Outcome::default);
+        return view.as_mut().rust_mut().note_document_op(outcome);
+    }
+    budget::clear();
+    let prepared = {
+        let rust = view.rust();
+        layer_fill(rust).filter(|(path, target)| {
+            rust.session
+                .doc
+                .as_ref()
+                .is_some_and(|doc| gate(doc, path, target))
+        })
+    };
+    let Some((path, target)) = prepared else {
+        return view.as_mut().rust_mut().note_document_op(None);
+    };
+    // A plane clone shares its tiles: the worker reads the selection as it is.
+    let selection = view
+        .rust()
+        .session
+        .selection
+        .as_ref()
+        .map(|s| s.data.clone());
+    view.document_op(
+        label,
+        JobBar::Busy,
+        move |doc| {
+            let rect = edit(doc, &path, &target, selection.as_ref())?;
+            Some(Outcome {
+                rect: Some(rect),
+                ..Outcome::default()
+            })
+        },
+        |rust, outcome| fill_edit(rust, outcome.rect),
+    )
+}
+
+/// The edit a landed fill job records: its rect, or the whole document when a
+/// layer style could carry the change past it, as [`refresh_edit`] decides.
+fn fill_edit(rust: &mut PictureViewRust, rect: Option<PsdRect>) -> Edit {
+    let styled = rust
+        .session
+        .doc
+        .as_ref()
+        .is_none_or(|doc| styled_except(&doc.layers, "", ""));
+    match rect {
+        Some(rect) if !styled => Edit::regions(vec![rect], true),
+        _ => Edit::Full,
+    }
+}
+
 /// [`apply`] against the mask at `path`: the fill runs on the mask's coverage
 /// and is written back to the real mask, recorded as one `label` state. A fill
 /// colour and a ramp are reduced to their luma by the grayscale document.
@@ -413,13 +503,7 @@ pub(super) fn apply_mask(
     mut view: Pin<&mut PictureView>,
     label: &str,
     path: &str,
-    edit: impl FnOnce(
-        &mut Document,
-        &str,
-        &PictureViewRust,
-        &FillTarget,
-        Option<&TiledMask>,
-    ) -> Option<PsdRect>,
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&TiledMask>) -> Option<PsdRect>,
 ) -> bool {
     let outcome = view.as_mut().edit(label, |rust| {
         let Some(doc) = rust.session.doc.as_ref() else {
@@ -457,7 +541,7 @@ pub(super) fn apply_mask(
             .as_ref()
             .map(|s| TiledMask::from(crop_plane(&s.data, s.width, s.height, mask.rect)));
         let mut document = mask.document;
-        let Some(dirty) = edit(&mut document, "0", rust, &target, selection.as_ref()) else {
+        let Some(dirty) = edit(&mut document, "0", &target, selection.as_ref()) else {
             return Edit::None;
         };
         let Some(real) = rust.session.doc.as_mut() else {

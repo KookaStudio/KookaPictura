@@ -6,6 +6,7 @@
 
 #include "tool_handler.h"
 
+#include "document_command.h"
 #include "image_view.h"
 #include "tools.h"
 
@@ -21,6 +22,12 @@
 namespace pictura {
 
 namespace {
+
+// The window a fill's job progress is shown over.
+QWidget* jobParent(ToolServices& ctx)
+{
+    return ctx.canvas() ? ctx.canvas()->window() : nullptr;
+}
 
 void reportRefusal(ToolServices& ctx, PictureView* v)
 {
@@ -77,9 +84,16 @@ public:
         }
         const QPointF end = constrained(imagePos, mods);
         const GradientOptions o = gradient_->get();
-        if (!draw_gradient(*v, o.preset, ctx.foreground().rgba(), ctx.background().rgba(), o.style,
-                           o.mode, o.opacity, o.reverse, o.dither, o.transparency, start_.x(),
-                           start_.y(), end.x(), end.y())) {
+        const QRgb foreground = ctx.foreground().rgba();
+        const QRgb background = ctx.background().rgba();
+        // A large document's gradient runs as a job behind a progress window
+        // (#1300).
+        const bool drawn = runDocumentCommand(jobParent(ctx), *v, QObject::tr("Gradient"), [&] {
+            draw_gradient(*v, o.preset, foreground, background, o.style, o.mode, o.opacity,
+                          o.reverse, o.dither, o.transparency, start_.x(), start_.y(), end.x(),
+                          end.y());
+        });
+        if (!drawn) {
             reportRefusal(ctx, v);
         }
     }
@@ -140,9 +154,13 @@ public:
             return true;
         }
         const BucketOptions o = bucket_->get();
-        if (!bucket_fill_at(*v, qFloor(imagePos.x()), qFloor(imagePos.y()),
-                            ctx.foreground().rgba(), o.fill == 1 ? o.pattern : -1, o.mode,
-                            o.opacity, o.tolerance, o.antialias, o.contiguous, o.allLayers)) {
+        const QRgb foreground = ctx.foreground().rgba();
+        const bool filled = runDocumentCommand(jobParent(ctx), *v, QObject::tr("Paint Bucket"), [&] {
+            bucket_fill_at(*v, qFloor(imagePos.x()), qFloor(imagePos.y()), foreground,
+                           o.fill == 1 ? o.pattern : -1, o.mode, o.opacity, o.tolerance,
+                           o.antialias, o.contiguous, o.allLayers);
+        });
+        if (!filled) {
             reportRefusal(ctx, v);
         }
         return true;
@@ -156,6 +174,10 @@ private:
 
 QString fillMemoryRefusalMessage()
 {
+    if (edit_refused_for_scratch_full()) {
+        return QObject::tr("Could not fill: the scratch disks are full. Free space on the "
+                           "scratch disks, then try again.");
+    }
     return QObject::tr("Could not fill: not enough memory. Make a smaller selection, close "
                        "other documents, or free memory and try again.");
 }

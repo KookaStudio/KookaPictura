@@ -244,7 +244,7 @@ pub(super) fn shape_fill_pixels(
     };
     let paint = BucketPaint::Foreground(rgba_from_argb(foreground));
     paint_timing::start("Shape pixels");
-    let applied = apply(view, &label(kind), |doc, path, _rust, t, selection| {
+    let applied = apply(view, &label(kind), |doc, path, t, selection| {
         let t0 = std::time::Instant::now();
         if !t.is_mask {
             // A layer target is the document: rasterize and fill the shape's
