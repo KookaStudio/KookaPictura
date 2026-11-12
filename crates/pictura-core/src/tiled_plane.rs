@@ -8,7 +8,11 @@
 use std::ops::Range;
 use std::sync::Arc;
 
+mod body;
 mod rows;
+
+pub use crate::memory::eviction::Residency;
+use body::{Body, Pin};
 
 /// Tile side in samples, for every sample depth (64 KiB per tile at 8-bit,
 /// 128 KiB at 16-bit, 256 KiB at 32-bit).
@@ -28,6 +32,24 @@ pub trait TileSample: Copy + Default + PartialEq + Send + Sync + 'static {
     fn all_same(s: &[Self], v: Self) -> bool {
         s.iter().all(|x| x.same(v))
     }
+
+    /// The samples' bytes in memory order, for packing (#1217).
+    fn bytes(s: &[Self]) -> &[u8];
+
+    /// [`TileSample::bytes`], writable, for unpacking.
+    fn bytes_mut(s: &mut [Self]) -> &mut [u8];
+}
+
+/// The bytes of a slice of plain numbers.
+fn pod_bytes<T: Copy>(s: &[T]) -> &[u8] {
+    // SAFETY: called only for u16 and f32, which have no padding and no
+    // invalid bit patterns; the length covers exactly the slice.
+    unsafe { std::slice::from_raw_parts(s.as_ptr().cast::<u8>(), std::mem::size_of_val(s)) }
+}
+
+fn pod_bytes_mut<T: Copy>(s: &mut [T]) -> &mut [u8] {
+    // SAFETY: as `pod_bytes`; any byte pattern is a valid u16 or f32.
+    unsafe { std::slice::from_raw_parts_mut(s.as_mut_ptr().cast::<u8>(), std::mem::size_of_val(s)) }
 }
 
 /// Integer samples compare bitwise with `==`, so a block of them against a
@@ -46,6 +68,14 @@ impl TileSample for u8 {
     fn all_same(s: &[Self], v: Self) -> bool {
         blocks_eq(s, v)
     }
+
+    fn bytes(s: &[Self]) -> &[u8] {
+        s
+    }
+
+    fn bytes_mut(s: &mut [Self]) -> &mut [u8] {
+        s
+    }
 }
 
 impl TileSample for u16 {
@@ -57,6 +87,14 @@ impl TileSample for u16 {
     fn all_same(s: &[Self], v: Self) -> bool {
         blocks_eq(s, v)
     }
+
+    fn bytes(s: &[Self]) -> &[u8] {
+        pod_bytes(s)
+    }
+
+    fn bytes_mut(s: &mut [Self]) -> &mut [u8] {
+        pod_bytes_mut(s)
+    }
 }
 
 impl TileSample for f32 {
@@ -64,35 +102,85 @@ impl TileSample for f32 {
     fn same(self, other: Self) -> bool {
         self.to_bits() == other.to_bits()
     }
+
+    fn bytes(s: &[Self]) -> &[u8] {
+        pod_bytes(s)
+    }
+
+    fn bytes_mut(s: &mut [Self]) -> &mut [u8] {
+        pod_bytes_mut(s)
+    }
 }
 
-#[derive(Clone)]
 pub(crate) enum Tile<T> {
     /// Reads as `T::default()` and holds no allocation.
     Empty,
     /// Every sample reads as the value; no allocation.
     Uniform(T),
-    /// A shared allocation of the clipped tile, copied on first write.
-    Dense(Arc<[T]>),
+    /// A shared body of the clipped tile, copied on first write; its samples
+    /// may be packed or spilled (#1217).
+    Dense(Arc<Body<T>>),
+}
+
+impl<T: Clone> Clone for Tile<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Tile::Empty => Tile::Empty,
+            Tile::Uniform(v) => Tile::Uniform(v.clone()),
+            Tile::Dense(d) => Tile::Dense(Arc::clone(d)),
+        }
+    }
 }
 
 /// One tile held outside its plane, with its generation: a refcount on the
-/// tile's allocation, never a copy of its samples (#1215). History keeps the
-/// tiles an edit replaced this way and swaps them back on undo.
-#[derive(Clone)]
+/// tile's body, never a copy of its samples (#1215). History keeps the tiles
+/// an edit replaced this way and swaps them back on undo; a tile taken with
+/// [`crate::Plane::history_tile`] marks its body as history's, which the
+/// evictor frees before live tiles (#1217).
 pub struct SharedTile<T> {
     tile: Tile<T>,
     gen: u64,
+    history: bool,
 }
 
 impl<T> SharedTile<T> {
-    /// The dense allocation as `(address, samples)`; `None` for an empty or
+    /// The dense body as `(address, samples)`; `None` for an empty or
     /// uniform tile, which holds none.
     pub fn allocation(&self) -> Option<(usize, usize)> {
         match &self.tile {
-            Tile::Dense(d) => Some((d.as_ptr() as usize, d.len())),
+            Tile::Dense(d) => Some((d.address(), d.len())),
             _ => None,
         }
+    }
+
+    fn hold(&self) {
+        if let (true, Tile::Dense(d)) = (self.history, &self.tile) {
+            d.hold_history();
+        }
+    }
+
+    fn release(&self) {
+        if let (true, Tile::Dense(d)) = (self.history, &self.tile) {
+            d.release_history();
+        }
+    }
+}
+
+impl<T: Clone> Clone for SharedTile<T> {
+    fn clone(&self) -> Self {
+        let copy = Self {
+            tile: self.tile.clone(),
+            gen: self.gen,
+            history: self.history,
+        };
+        copy.hold();
+        copy
+    }
+}
+
+impl<T> Drop for SharedTile<T> {
+    fn drop(&mut self) {
+        self.release();
     }
 }
 
@@ -106,12 +194,46 @@ pub enum TileState<T> {
 }
 
 /// A tile's samples as a reader sees them.
-#[derive(Clone, Copy)]
 pub enum TileData<'a, T> {
     /// Every sample is this value (an `Empty` tile reads as the default).
     Uniform(T),
     /// The samples, `stride` per row.
-    Dense(&'a [T]),
+    Dense(DenseRef<'a, T>),
+}
+
+/// A dense tile's samples, held resident while this lives (#1217).
+pub struct DenseRef<'a, T> {
+    samples: &'a [T],
+    _pin: Option<Pin<'a, T>>,
+}
+
+impl<'a, T> DenseRef<'a, T> {
+    /// Samples that cannot be evicted (a flat plane's).
+    pub(crate) fn fixed(samples: &'a [T]) -> Self {
+        Self {
+            samples,
+            _pin: None,
+        }
+    }
+
+    fn pinned(pin: Pin<'a, T>) -> Self {
+        // SAFETY: the samples stay resident and in place while the pin
+        // lives, and the pin lives exactly as long as this reference, which
+        // hands them out only for its own borrow.
+        let samples = unsafe { std::slice::from_raw_parts(pin.as_ptr(), pin.len()) };
+        Self {
+            samples,
+            _pin: Some(pin),
+        }
+    }
+}
+
+impl<T> std::ops::Deref for DenseRef<'_, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        self.samples
+    }
 }
 
 /// One tile, read in place. `x` and `y` are the tile's first column and
@@ -128,23 +250,23 @@ pub struct TileRef<'a, T> {
 impl<T: Copy> TileRef<'_, T> {
     /// The sample at tile-local `(dx, dy)`.
     pub fn get(&self, dx: usize, dy: usize) -> T {
-        match self.data {
-            TileData::Uniform(v) => v,
+        match &self.data {
+            TileData::Uniform(v) => *v,
             TileData::Dense(d) => d[dy * self.stride + dx],
         }
     }
 
     /// The value every sample holds, when the tile is uniform.
     pub fn uniform(&self) -> Option<T> {
-        match self.data {
-            TileData::Uniform(v) => Some(v),
+        match &self.data {
+            TileData::Uniform(v) => Some(*v),
             TileData::Dense(_) => None,
         }
     }
 
     /// Row `dy`'s samples, when the tile is dense.
     pub fn row(&self, dy: usize) -> Option<&[T]> {
-        match self.data {
+        match &self.data {
             TileData::Uniform(_) => None,
             TileData::Dense(d) => Some(&d[dy * self.stride..dy * self.stride + self.w]),
         }
@@ -152,8 +274,8 @@ impl<T: Copy> TileRef<'_, T> {
 
     /// Copy tile-local columns `xs` of row `dy` into `out`.
     pub fn copy_row(&self, dy: usize, xs: Range<usize>, out: &mut [T]) {
-        match self.data {
-            TileData::Uniform(v) => out[..xs.len()].fill(v),
+        match &self.data {
+            TileData::Uniform(v) => out[..xs.len()].fill(*v),
             TileData::Dense(d) => {
                 let at = dy * self.stride;
                 out[..xs.len()].copy_from_slice(&d[at + xs.start..at + xs.end]);
@@ -183,16 +305,59 @@ impl<T> TileMut<'_, T> {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct TiledPlane<T> {
     pub(crate) width: usize,
     pub(crate) height: usize,
     pub(crate) channels: usize,
-    cols: usize,
-    rows: usize,
+    // u32 with the pin list boxed keeps a plane (and every `PixelBuffer`)
+    // the size it was before #1217.
+    cols: u32,
+    rows: u32,
     tiles: Vec<Tile<T>>,
     gens: Vec<u64>,
     dirty: Vec<bool>,
+    /// Tiles whose samples a `&mut` borrow handed out, pinned until the next
+    /// mutable call (when no such slice can be alive) or the plane drops.
+    pinned: Option<Box<[usize]>>,
+}
+
+impl<T: Clone> Clone for TiledPlane<T> {
+    fn clone(&self) -> Self {
+        self.with_tiles(self.tiles.clone(), self.gens.clone(), self.dirty.clone())
+    }
+}
+
+impl<T> Drop for TiledPlane<T> {
+    fn drop(&mut self) {
+        self.release_pins();
+    }
+}
+
+impl<T> TiledPlane<T> {
+    /// Unpin what the last mutable borrow pinned. Every `&mut self` method
+    /// that can replace or hand out a tile calls this first.
+    fn release_pins(&mut self) {
+        for &i in self.pinned.take().iter().flatten() {
+            if let Tile::Dense(d) = &self.tiles[i] {
+                d.unpin();
+            }
+        }
+    }
+
+    /// A plane of this geometry holding `tiles`, with no pins.
+    fn with_tiles(&self, tiles: Vec<Tile<T>>, gens: Vec<u64>, dirty: Vec<bool>) -> Self {
+        Self {
+            width: self.width,
+            height: self.height,
+            channels: self.channels,
+            cols: self.cols,
+            rows: self.rows,
+            tiles,
+            gens,
+            dirty,
+            pinned: None,
+        }
+    }
 }
 
 impl<T: TileSample> TiledPlane<T> {
@@ -211,11 +376,12 @@ impl<T: TileSample> TiledPlane<T> {
             width,
             height,
             channels,
-            cols,
-            rows,
+            cols: cols as u32,
+            rows: rows as u32,
             tiles: vec![tile; n],
             gens: vec![crate::fresh_stamp(); n],
             dirty: vec![false; n],
+            pinned: None,
         }
     }
 
@@ -239,12 +405,11 @@ impl<T: TileSample> TiledPlane<T> {
                         Tile::Uniform(first)
                     };
                 }
-                let mut dense = filled_tile(w * h, first);
-                let out = Arc::get_mut(&mut dense).expect("a fresh tile is unique");
-                for (r, dst) in out.chunks_mut(w).enumerate() {
+                let mut samples = vec![first; w * h].into_boxed_slice();
+                for (r, dst) in samples.chunks_mut(w).enumerate() {
                     dst.copy_from_slice(row(r));
                 }
-                Tile::Dense(dense)
+                Tile::Dense(Body::new(samples))
             })
             .collect();
         plane.tiles = tiles;
@@ -265,9 +430,10 @@ impl<T: TileSample> TiledPlane<T> {
 
     /// Tile `i`'s first column, first global row, width and height.
     pub(crate) fn tile_rect(&self, i: usize) -> (usize, usize, usize, usize) {
-        let tx = i % self.cols;
-        let ty = (i / self.cols) % self.rows;
-        let c = i / (self.cols * self.rows);
+        let (cols, rows) = (self.cols as usize, self.rows as usize);
+        let tx = i % cols;
+        let ty = (i / cols) % rows;
+        let c = i / (cols * rows);
         let x = tx * TILE;
         let local = ty * TILE;
         (
@@ -283,7 +449,7 @@ impl<T: TileSample> TiledPlane<T> {
     fn locate(&self, x: usize, y: usize) -> (usize, usize) {
         let (c, ly) = (y / self.height, y % self.height);
         let (tx, ty) = (x / TILE, ly / TILE);
-        let i = (c * self.rows + ty) * self.cols + tx;
+        let i = (c * self.rows as usize + ty) * self.cols as usize + tx;
         let w = TILE.min(self.width - tx * TILE);
         (i, (ly % TILE) * w + x % TILE)
     }
@@ -293,21 +459,27 @@ impl<T: TileSample> TiledPlane<T> {
         match &self.tiles[i] {
             Tile::Empty => T::default(),
             Tile::Uniform(v) => *v,
-            Tile::Dense(d) => d[off],
+            Tile::Dense(d) => d.pin()[off],
         }
     }
 
-    /// Columns `xs` of global row `y` borrowed in place, when they lie in one
-    /// dense tile.
-    pub(crate) fn span_in_tile(&self, y: usize, xs: Range<usize>) -> Option<&[T]> {
-        if xs.is_empty() || xs.end > self.width || (xs.end - 1) / TILE != xs.start / TILE {
-            return None;
+    /// Where tile `i`'s samples are; `None` past the last tile.
+    pub(crate) fn residency(&self, i: usize) -> Option<Residency> {
+        self.tiles.get(i).map(|t| match t {
+            Tile::Dense(d) => crate::memory::eviction::residency_of(&**d),
+            _ => Residency::Resident,
+        })
+    }
+
+    /// Dense tiles whose samples were lost from scratch.
+    pub(crate) fn unreadable_tiles(&self) -> usize {
+        if crate::memory::eviction::unreadable_count() == 0 {
+            return 0;
         }
-        let (i, off) = self.locate(xs.start, y);
-        match &self.tiles[i] {
-            Tile::Dense(d) => Some(&d[off..off + xs.len()]),
-            _ => None,
-        }
+        self.tiles
+            .iter()
+            .filter(|t| matches!(t, Tile::Dense(d) if d.is_unreadable()))
+            .count()
     }
 
     pub(crate) fn state(&self, i: usize) -> Option<TileState<T>> {
@@ -323,7 +495,7 @@ impl<T: TileSample> TiledPlane<T> {
         let data = match &self.tiles[i] {
             Tile::Empty => TileData::Uniform(T::default()),
             Tile::Uniform(v) => TileData::Uniform(*v),
-            Tile::Dense(d) => TileData::Dense(d),
+            Tile::Dense(d) => TileData::Dense(DenseRef::pinned(d.pin())),
         };
         TileRef {
             x,
@@ -362,7 +534,7 @@ impl<T: TileSample> TiledPlane<T> {
             let (c, ly) = (y / self.height, y % self.height);
             let ty = ly / TILE;
             for tx in tx0..tx1 {
-                f((c * self.rows + ty) * self.cols + tx);
+                f((c * self.rows as usize + ty) * self.cols as usize + tx);
             }
             let next_local = ((ty + 1) * TILE).min(self.height);
             y += next_local - ly;
@@ -382,18 +554,23 @@ impl<T: TileSample> TiledPlane<T> {
         if !self.same_geometry(other) || i >= self.tiles.len() {
             return false;
         }
+        self.release_pins();
         self.tiles[i] = other.tiles[i].clone();
         self.gens[i] = other.gens[i];
         self.dirty[i] = other.dirty[i];
         true
     }
 
-    /// Tile `i` and its generation, sharing the allocation.
-    pub(crate) fn shared_tile(&self, i: usize) -> Option<SharedTile<T>> {
-        Some(SharedTile {
+    /// Tile `i` and its generation, sharing the allocation; `history` marks
+    /// the body as held by history while the tile lives.
+    pub(crate) fn shared_tile(&self, i: usize, history: bool) -> Option<SharedTile<T>> {
+        let tile = SharedTile {
             tile: self.tiles.get(i)?.clone(),
             gen: self.gens[i],
-        })
+            history,
+        };
+        tile.hold();
+        Some(tile)
     }
 
     /// Exchange tile `i` and its generation with `held`. The tile came out of a
@@ -402,7 +579,10 @@ impl<T: TileSample> TiledPlane<T> {
         if i >= self.tiles.len() {
             return false;
         }
+        self.release_pins();
+        held.release();
         std::mem::swap(&mut self.tiles[i], &mut held.tile);
+        held.hold();
         std::mem::swap(&mut self.gens[i], &mut held.gen);
         self.dirty[i] = false;
         true
@@ -411,6 +591,7 @@ impl<T: TileSample> TiledPlane<T> {
     /// Make tile `i` a uniquely held dense tile with a new generation, marked
     /// for the next settle.
     fn fork(&mut self, i: usize, gen: u64) {
+        self.release_pins();
         let (_, _, w, h) = self.tile_rect(i);
         fork_tile(&mut self.tiles[i], w * h);
         self.gens[i] = gen;
@@ -429,14 +610,21 @@ impl<T: TileSample> TiledPlane<T> {
     /// writable, in that order.
     pub(crate) fn tiles_mut_at(&mut self, wanted: &[usize]) -> Vec<TileMut<'_, T>> {
         use rayon::prelude::*;
+        self.release_pins();
         let gen = crate::fresh_stamp();
         let rects: Vec<_> = wanted.iter().map(|&i| self.tile_rect(i)).collect();
         let mut fresh = Vec::new();
         for (&i, &(_, _, w, h)) in wanted.iter().zip(&rects) {
             self.gens[i] = gen;
             self.dirty[i] = true;
-            let unique = match &mut self.tiles[i] {
-                Tile::Dense(d) => Arc::get_mut(d).is_some(),
+            // ponytail: this check-then-act is sound only while tile bodies
+            // are cloned on the GUI thread (save, tile jobs and history
+            // capture clone before they spawn; the evictor holds only `Weak`).
+            // A worker-side clone landing between the check and the write
+            // would mutate a body another holder shares, breaking the
+            // copy-on-write history relies on.
+            let unique = match &self.tiles[i] {
+                Tile::Dense(d) => Arc::strong_count(d) == 1,
                 _ => false,
             };
             if !unique {
@@ -462,33 +650,37 @@ impl<T: TileSample> TiledPlane<T> {
             }
         }
         let mut out = Vec::with_capacity(wanted.len());
-        let mut next = wanted.iter().zip(rects).peekable();
-        for (i, tile) in self.tiles.iter_mut().enumerate() {
-            let Some(&(&want, (x, y, w, h))) = next.peek() else {
-                break;
-            };
-            if i != want {
+        let mut pinned = Vec::with_capacity(wanted.len());
+        for (&i, (x, y, w, h)) in wanted.iter().zip(rects) {
+            let Tile::Dense(d) = &self.tiles[i] else {
                 continue;
-            }
-            next.next();
-            if let Tile::Dense(d) = tile {
-                let data = Arc::get_mut(d).expect("a forked tile is unique");
-                out.push(TileMut {
-                    x,
-                    y,
-                    w,
-                    h,
-                    stride: w,
-                    data,
-                });
-            }
+            };
+            d.pin_raw();
+            d.dirty();
+            pinned.push(i);
+            // SAFETY: pinned until the next `&mut self` call, which needs this
+            // borrow to have ended; forked above, so this plane holds the
+            // body's only strong reference; `wanted` is strictly ascending,
+            // so no two slices alias.
+            let data = unsafe { d.samples_mut() };
+            let data = unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr(), data.len()) };
+            out.push(TileMut {
+                x,
+                y,
+                w,
+                h,
+                stride: w,
+                data,
+            });
         }
+        self.pinned = (!pinned.is_empty()).then(|| pinned.into_boxed_slice());
         out
     }
 
     /// Make tile `i` hold `value` everywhere, without an allocation, under a
     /// new generation.
     pub(crate) fn set_uniform(&mut self, i: usize, value: T) {
+        self.release_pins();
         self.tiles[i] = if value.same(T::default()) {
             Tile::Empty
         } else {
@@ -537,29 +729,15 @@ impl<T: TileSample> TiledPlane<T> {
             .tiles
             .par_iter()
             .map(|t| match t {
-                Tile::Dense(d) => Tile::Dense(Arc::from(&d[..])),
+                Tile::Dense(d) => Tile::Dense(Body::new(Box::from(&*d.pin()))),
                 other => other.clone(),
             })
             .collect();
-        Self {
+        self.with_tiles(
             tiles,
-            gens: vec![crate::fresh_stamp(); self.gens.len()],
-            dirty: self.dirty.clone(),
-            ..self.clone_shape()
-        }
-    }
-
-    fn clone_shape(&self) -> Self {
-        Self {
-            width: self.width,
-            height: self.height,
-            channels: self.channels,
-            cols: self.cols,
-            rows: self.rows,
-            tiles: Vec::new(),
-            gens: Vec::new(),
-            dirty: Vec::new(),
-        }
+            vec![crate::fresh_stamp(); self.gens.len()],
+            self.dirty.clone(),
+        )
     }
 
     /// Collapse every written tile whose samples are all one value into
@@ -567,6 +745,7 @@ impl<T: TileSample> TiledPlane<T> {
     /// changes.
     pub(crate) fn settle(&mut self) {
         use rayon::prelude::*;
+        self.release_pins();
         if !self.dirty.contains(&true) {
             return;
         }
@@ -580,8 +759,11 @@ impl<T: TileSample> TiledPlane<T> {
                 let Tile::Dense(d) = tile else {
                     return;
                 };
-                let first = d[0];
-                if all_same(d, first) {
+                let samples = d.pin();
+                let first = samples[0];
+                let uniform = all_same(&samples, first);
+                drop(samples);
+                if uniform {
                     *tile = if first.same(T::default()) {
                         Tile::Empty
                     } else {
@@ -596,14 +778,14 @@ impl<T: TileSample> TiledPlane<T> {
         self.tiles.iter().all(|t| match t {
             Tile::Empty => T::default() == value,
             Tile::Uniform(v) => *v == value,
-            Tile::Dense(d) => d.iter().all(|s| *s == value),
+            Tile::Dense(d) => d.pin().iter().all(|s| *s == value),
         })
     }
 
     /// Each dense allocation as `(address, samples)`.
     pub(crate) fn allocations(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         self.tiles.iter().filter_map(|t| match t {
-            Tile::Dense(d) => Some((d.as_ptr() as usize, d.len())),
+            Tile::Dense(d) => Some((d.address(), d.len())),
             _ => None,
         })
     }
@@ -615,11 +797,17 @@ impl<T: TileSample> TiledPlane<T> {
         out
     }
 
-    fn dense_mut(&mut self, i: usize) -> &mut [T] {
-        match &mut self.tiles[i] {
-            Tile::Dense(d) => Arc::get_mut(d).expect("a forked tile is unique"),
-            _ => unreachable!("the tile was forked"),
-        }
+    /// Write `f` into forked tile `i`'s samples, pinned for the call.
+    fn with_dense_mut(&mut self, i: usize, f: impl FnOnce(&mut [T])) {
+        let Tile::Dense(d) = &self.tiles[i] else {
+            unreachable!("the tile was forked");
+        };
+        let pin = d.pin();
+        d.dirty();
+        // SAFETY: pinned for the call; forked, so this plane (borrowed
+        // mutably) holds the only strong reference.
+        f(unsafe { d.samples_mut() });
+        drop(pin);
     }
 
     /// Whether every sample of `src` already equals tile `i`'s uniform value,
@@ -639,19 +827,16 @@ pub(crate) fn all_same<T: TileSample>(s: &[T], v: T) -> bool {
     T::all_same(s, v)
 }
 
-/// A new tile allocation of `n` copies of `v`, built in place.
-fn filled_tile<T: TileSample>(n: usize, v: T) -> Arc<[T]> {
-    std::iter::repeat_n(v, n).collect()
-}
-
 /// Make `tile` (of `n` samples) a uniquely held dense tile.
 fn fork_tile<T: TileSample>(tile: &mut Tile<T>, n: usize) {
     match tile {
-        Tile::Empty => *tile = Tile::Dense(filled_tile(n, T::default())),
-        Tile::Uniform(v) => *tile = Tile::Dense(filled_tile(n, *v)),
+        Tile::Empty => *tile = Tile::Dense(Body::filled(n, T::default())),
+        Tile::Uniform(v) => *tile = Tile::Dense(Body::filled(n, *v)),
         Tile::Dense(d) => {
-            if Arc::get_mut(d).is_none() {
-                *d = Arc::from(&d[..]);
+            // Sound under the GUI-thread clone rule of `tiles_mut_at`.
+            if Arc::strong_count(d) > 1 {
+                let copy = Body::new(Box::from(&*d.pin()));
+                *d = copy;
             }
         }
     }

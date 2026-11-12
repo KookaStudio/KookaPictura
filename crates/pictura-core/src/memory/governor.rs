@@ -94,10 +94,14 @@ pub fn ceiling_of(reading: &HostReading, percent: u8) -> Option<u64> {
 }
 
 /// The memory counted against the ceiling: the cgroup's when a cgroup limit is
-/// present (what its OOM decision counts), else the process's resident set.
+/// present (what its OOM decision counts, less the page cache it reclaims
+/// first), else the process's resident set.
 pub fn used_of(reading: &HostReading) -> Option<u64> {
     if reading.cgroup_max.is_some() || reading.cgroup_high.is_some() {
-        reading.cgroup_current.or(reading.rss)
+        reading
+            .cgroup_current
+            .map(|current| current.saturating_sub(reading.cgroup_file.unwrap_or(0)))
+            .or(reading.rss)
     } else {
         reading.rss
     }
@@ -185,6 +189,17 @@ impl Governor {
         }
     }
 
+    /// The host now, without the cache (the evictor's view, #1217); a pinned
+    /// reading still wins.
+    pub fn reading_fresh(&self) -> HostReading {
+        if let Some(pinned) = PINNED.get() {
+            return pinned;
+        }
+        let reading = system::read(&self.paths);
+        *self.cache.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), reading));
+        reading
+    }
+
     pub fn usage_percent(&self) -> u8 {
         self.usage_percent.load(Ordering::Relaxed)
     }
@@ -244,20 +259,40 @@ impl Governor {
         purpose: &'static str,
     ) -> Result<Reservation<'_>, MemoryError> {
         let reading = self.reading();
+        if self.try_reserve(&reading, bytes, 0) {
+            return Ok(self.reservation(bytes));
+        }
+        // Over the room: evict reclaimable tiles first, and refuse only what
+        // eviction cannot make room for (#1217). Freed bytes count as room
+        // until the next reading shows them gone.
+        let short = room_of(&reading, self.usage_percent(), self.reserved())
+            .map_or(bytes, |room| bytes.saturating_sub(room));
+        let freed = super::eviction::reclaim(short);
+        if freed > 0 && self.try_reserve(&self.reading_fresh(), bytes, freed) {
+            return Ok(self.reservation(bytes));
+        }
+        Err(refuse(purpose, bytes))
+    }
+
+    /// Add `bytes` to the reservations if they fit `reading`'s room plus
+    /// `extra`; checked and added in one step, so two threads (a Save worker
+    /// and a GUI gate) cannot both pass against the same room.
+    fn try_reserve(&self, reading: &HostReading, bytes: u64, extra: u64) -> bool {
         let percent = self.usage_percent();
-        // Check and add in one step, so two threads (a Save worker and a GUI
-        // gate) cannot both pass against the same room.
         self.reserved
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |reserved| {
-                let room = room_of(&reading, percent, reserved);
-                room.is_none_or(|room| bytes <= room)
+                let room = room_of(reading, percent, reserved);
+                room.is_none_or(|room| bytes <= room.saturating_add(extra))
                     .then(|| reserved.saturating_add(bytes))
             })
-            .map_err(|_| refuse(purpose, bytes))?;
-        Ok(Reservation {
+            .is_ok()
+    }
+
+    fn reservation(&self, bytes: u64) -> Reservation<'_> {
+        Reservation {
             governor: self,
             bytes,
-        })
+        }
     }
 
     /// Whether `bytes` fit the room now; a refusal is recorded. For work that

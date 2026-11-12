@@ -1,8 +1,10 @@
 //! Memory accounting (#1211, `docs/10-workflow-io/scratch-disks-and-memory.md`,
-//! Memory accounting model): the host reader, the process-wide governor, and
-//! the tile census history's budget is checked against (#1215).
+//! Memory accounting model): the host reader, the process-wide governor, the
+//! tile census history's budget is checked against (#1215), and tile eviction
+//! to packed RAM and the scratch disk (#1217).
 
 mod census;
+pub mod eviction;
 mod governor;
 pub mod system;
 

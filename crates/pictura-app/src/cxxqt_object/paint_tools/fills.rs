@@ -8,10 +8,13 @@
 
 mod imp;
 
-use super::super::helpers::memory_gate::{edit_refused_for_memory, set_available_memory_for_test};
+use super::super::helpers::memory_gate::{
+    edit_refused_for_memory, edit_refused_for_scratch, set_available_memory_for_test,
+};
 use super::super::helpers::memory_report::{
-    fail_next_plane_for_test, memory_status_json, memory_usage_percent, open_refused_for_memory,
-    set_memory_cgroup_for_test, set_memory_usage_percent,
+    fail_next_plane_for_test, inject_scratch_fault_for_test, memory_status_json,
+    memory_usage_percent, open_refused_for_memory, scratch_volumes, set_memory_cgroup_for_test,
+    set_memory_usage_percent, set_scratch_volumes, start_memory_eviction,
 };
 use super::super::qobject::PictureView;
 pub(crate) use imp::*;
@@ -154,5 +157,24 @@ pub mod ffi {
 
         /// Test hook: fail the next fallible plane allocation on this thread.
         fn fail_next_plane_for_test();
+
+        /// Whether the last gated edit or save was refused because it needed
+        /// tiles that could not be read back from the scratch disk (#1217).
+        fn edit_refused_for_scratch() -> bool;
+
+        /// Turn tile eviction on and start its thread (#1217).
+        fn start_memory_eviction();
+
+        /// The scratch volumes the user configured, one path a line; empty
+        /// while the default is in use.
+        fn scratch_volumes() -> QString;
+
+        /// Use the scratch volumes in `paths` (one a line, at most four); an
+        /// empty list restores `$XDG_CACHE_HOME/kooka-pictura/scratch`.
+        fn set_scratch_volumes(paths: &QString);
+
+        /// Test hook: arm a scratch fault (0 full, 1 read error, 2 corrupt,
+        /// 3 removed volume, at `volume`); any other kind clears them.
+        fn inject_scratch_fault_for_test(kind: i32, volume: i32);
     }
 }

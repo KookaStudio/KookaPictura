@@ -1,6 +1,7 @@
 //! Brush engine primitives: stroke configuration, dab spacing, and tip coverage.
 
 pub mod art_history;
+pub mod bristle;
 pub mod bucket;
 pub mod dynamics;
 pub mod eraser;
@@ -88,6 +89,9 @@ pub struct StrokeConfig {
     pub pressure_opacity: bool,
     /// Shape Dynamics, Scattering, Color Dynamics, Transfer, and Brush Pose.
     pub dynamics: dynamics::Dynamics,
+    /// A bristle tip: the dab is the union of individual bristle tracks instead
+    /// of one smooth profile. `None` is the smooth tip every other brush uses.
+    pub bristle: Option<bristle::BristleTip>,
 }
 
 impl StrokeConfig {
@@ -108,6 +112,7 @@ impl StrokeConfig {
             roundness_jitter: self.roundness_jitter.min(100),
             grain: self.grain.min(100),
             dynamics: self.dynamics.sanitized(),
+            bristle: self.bristle.map(bristle::BristleTip::sanitized),
             ..*self
         }
     }
@@ -167,10 +172,12 @@ impl Default for StrokeConfig {
             pressure_size: false,
             pressure_opacity: false,
             dynamics: dynamics::Dynamics::default(),
+            bristle: None,
         }
     }
 }
 
+pub use bristle::{BristleDab, BristleShape, BristleTip};
 pub use fill::Alpha;
 pub use healing::HealStroke;
 pub use stroke::{paint_stroke, PaintError, Stroke, StrokeKind, StrokeOutcome};

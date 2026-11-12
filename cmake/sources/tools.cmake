@@ -19,6 +19,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/tool_magneticlasso.cpp
     crates/pictura-app/cpp/tool_mixerbrush.cpp
     crates/pictura-app/cpp/tool_move.cpp
+    crates/pictura-app/cpp/paint_options.h
     crates/pictura-app/cpp/tool_options.h
     crates/pictura-app/cpp/tool_options_json.cpp
     crates/pictura-app/cpp/tool_patch.cpp

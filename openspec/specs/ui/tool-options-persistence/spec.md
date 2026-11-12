@@ -9,13 +9,14 @@ Every tool's options-bar settings saved in the session store and restored at lau
 
 Every tool's options-bar settings SHALL be saved in the session store and
 restored at the next launch: the Move, Type, Shape, Pen, brush (size, hardness,
-opacity, flow, mode, tip, dynamics), selection, eraser, stamp, healing, patch,
-retouch and toning (each tool its own), gradient, bucket, eyedropper, mixer,
-color replacement, art history, and red eye options. They SHALL be saved on
-close, on quit, and on a tool switch. A missing group or field SHALL restore the
-group's default, and a restored value SHALL be clamped as the options bar clamps
-it. Restoring SHALL NOT notify any change listener. Clone Source points and
-values that mirror the open document SHALL NOT be saved.
+opacity, flow, mode, tip, dynamics, and the bristle toggle with its Shape,
+Bristles, Length, Thickness, and Stiffness), selection, eraser, stamp, healing,
+patch, retouch and toning (each tool its own), gradient, bucket, eyedropper,
+mixer, color replacement, art history, and red eye options. They SHALL be saved
+on close, on quit, and on a tool switch. A missing group or field SHALL restore
+the group's default, and a restored value SHALL be clamped as the options bar
+clamps it. Restoring SHALL NOT notify any change listener. Clone Source points
+and values that mirror the open document SHALL NOT be saved.
 
 #### Scenario: Options survive a restart [top_round_trip]
 
@@ -36,6 +37,19 @@ values that mirror the open document SHALL NOT be saved.
 
 - **WHEN** `tst_tool_options_persistence::missingFieldsRestoreDefaults` applies a stored group that omits fields the group held before
 - **THEN** each omitted field reads its default, not the previous value
+
+#### Scenario: Bristle fields survive a restart
+
+- **WHEN** the brush is set to a bristle tip with a non-default Shape,
+  Bristles, Length, Thickness, and Stiffness, the session is saved, and a new
+  window opens
+- **THEN** the new window reports every bristle value
+
+#### Scenario: Old settings keep a smooth tip
+
+- **WHEN** a stored brush group has no bristle fields
+- **THEN** the brush restores with the bristle toggle off and the default
+  bristle values
 
 ### Requirement: Marquee options persist independently
 

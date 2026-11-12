@@ -34,7 +34,9 @@ inline PaintTip paintTip(const PaintOptions& paint)
     const BrushDynamics& d = paint.dynamics();
     return PaintTip{paint.size(), paint.hardness(), paint.roundness(), paint.angle(),
                     paint.spacing(), d.scatter, d.count, d.sizeJitter, d.angleJitter,
-                    d.roundnessJitter, paint.grain(), paint.wetEdges(), paintDynamics(d)};
+                    d.roundnessJitter, paint.grain(), paint.wetEdges(), paintDynamics(d),
+                    paint.bristleEnabled(), paint.bristleShape(), paint.bristleDensity(),
+                    paint.bristleLength(), paint.bristleThickness(), paint.bristleStiffness()};
 }
 
 } // namespace pictura

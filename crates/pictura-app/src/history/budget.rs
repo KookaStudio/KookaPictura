@@ -23,6 +23,17 @@ pub(crate) fn document_bytes(doc: &Document) -> u64 {
     bytes
 }
 
+/// The dense tiles of `doc`'s planes whose samples could not be read back
+/// from the scratch disk (#1217); zero at no cost when none exist anywhere.
+pub(crate) fn unreadable_tiles(doc: &Document) -> usize {
+    if pictura_core::memory::eviction::unreadable_count() == 0 {
+        return 0;
+    }
+    let mut n = 0;
+    planes::each_plane(doc, &mut |p, _, _, _| n += p.unreadable_tiles());
+    n
+}
+
 /// What a copy of `doc`'s tile tables holds: a tile handle, its generation
 /// and its settle flag for each tile of each tracked plane, sharing the tiles.
 pub(crate) fn tile_table_bytes(doc: &Document) -> u64 {

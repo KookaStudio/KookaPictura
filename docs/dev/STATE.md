@@ -31,6 +31,47 @@ Snapshot for resuming after a context break. Update after each milestone.
     Rotate and Flip count layers (`for_each_layer_job`), and Merge and Flatten
     count composited rows (`composite_channels`). Canvas Size and the
     conversions report -1, and `runCancellableJob` shows a busy bar for it.
+  - **Next.** Part 2 moves Image Size, Canvas Size, Rotate/Flip, mode and
+    bit-depth conversion, and Merge Down/Visible/Flatten onto the same token,
+    with per-layer progress.
+- **Packed tiles and scratch-disk spill** (#1217, closes #943; OpenSpec
+  change `scratch-disk-and-packed-tiles`, capabilities `document/scratch-disk`
+  and `document/tile-eviction`).
+  - **Tiles.** A dense tile is an `Arc<Body<T>>` (`tiled_plane/body.rs`). Its
+    samples are resident, LZ4-packed in RAM, spilled to a CRC-32-checked
+    extent, or unreadable. Every access pins the body and restores it on first
+    touch.
+  - **Scratch.** `pictura-core::scratch` keeps up to four volumes (default
+    `$XDG_CACHE_HOME/kooka-pictura/scratch`). Each holds an unnamed file
+    (`O_TMPFILE`) accessed with `pread`/`pwrite`. A full volume falls through
+    to the next one, and `ScratchFull` comes back with backoff. Fault
+    injection is `scratch::inject`.
+  - **Eviction.** `memory::eviction` runs a clock thread from above 100 % of
+    the ceiling down to 90 %, in order: display drop, history-held tiles, then
+    live tiles. Above 125 % the allocating thread also evicts.
+    `Governor::reserve` reclaims before it refuses. Hot holds cover the live
+    stroke and the presented view. In a cgroup, `used` excludes the page cache.
+  - **Unreadable tiles.** An edit that read one rolls back to the current
+    history state (`scratch_rollback.rs`), and save refuses the document.
+  - **Readouts.** `status.memory` carries `scratch`, `efficiency`, and
+    `tiles`. The session saves `scratchVolumes`, which has no UI yet (#636).
+  - **Measured.** M1–M11 and M13 at 17000² complete under `MemoryMax=2G`.
+    M12 at 12000² is still refused at the open (the PSD decode, #1273). The R7
+    and R8 benchmarks are in the change's `design.md`.
+- **Bristle brushes** (#607, OpenSpec change `bristle-brushes`).
+  `pictura-paint::bristle` adds `BristleTip`, `BristleShape` (Round, Round Fan,
+  Round Curve, Flat, Flat Fan, Flat Curve), `BristleTrack`, and `BristleDab`.
+  `StrokeConfig::bristle` draws the union of tapered tracks through the existing
+  coverage and blend path; Stiffness bends the tracks with direction and
+  pressure, and track seeds replay from the stroke seed. `MixerBrush` keeps one
+  reservoir per bristle. `PaintTip`/`PaintOptions` carry the six fields; the
+  Brush Tip Shape page has a Bristle Tip toggle, Shape, Bristles, Length,
+  Thickness, and Stiffness (Hardness and Roundness disabled while it is on);
+  `Bristle Round 30` and `Bristle Flat 40` presets ship; the values persist in
+  the session. GPU strokes decline a bristle tip. Tests: `pictura-paint`
+  bristle/mixer units and `tst_bristle_brushes` (6 cases). Behavioral parity
+  only; the CS6 shape enumeration, defaults, `.abr` bristle keys, tilt-driven
+  projection, and the OpenGL rotatable preview remain open.
 - **Viewport tile pyramid** (#1216, closes #942; OpenSpec change
   `tiled-composite`, capabilities `compositing/tile-pyramid` and
   `compositing/region-composite`).

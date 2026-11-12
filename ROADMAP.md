@@ -386,12 +386,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] The 16/32-bit picker fields (#604)
 - [ ] `.aco` and `.ase` swatch libraries, rename, and display modes (#605)
 - [ ] Pattern Overlay Snap To Origin, and the style Texture sub-options (#606)
-- [ ] Bristle brushes (#607)
+- [x] Bristle brushes (#607)
 - [ ] `.abr` libraries, the Brush Presets panel, and ABR v10 reading (#608)
 - [ ] Brush Texture and Dual Brush; the Control model, Shape Dynamics,
       Scattering, Color Dynamics, Transfer, Brush Pose, and per-set padlocks
       ship (#492)
-- [ ] Sampled, bristle, erodible and airbrush tips, and Define Brush Preset
+- [ ] Sampled, erodible and airbrush tips, and Define Brush Preset
       (#493)
 
 ## Camera raw
@@ -604,7 +604,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] A tile cache with hit-rate accounting (#942): the viewport presents a
       256² display tile pyramid, with no stored full-resolution composite for
       layered documents (#1216)
-- [ ] Scratch paging and Efficiency accounting (#943)
+- [x] Scratch paging and Efficiency accounting (#943): cold tiles pack (LZ4)
+      and spill to checksummed scratch volumes under the memory ceiling, with
+      Scratch Sizes and Efficiency in `status` (#1217).
+      `crates/pictura-core/src/scratch.rs`, `crates/pictura-core/src/memory/eviction.rs`.
 - [ ] A tile job scheduler with cancellation (#944)
 - [ ] Per-tile filter cancellation (#945)
 - [ ] Global bit-depth and colour-mode availability gating (#490)

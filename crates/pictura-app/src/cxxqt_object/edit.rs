@@ -241,6 +241,10 @@ impl PictureViewRust {
                 ..Presentation::none()
             };
         }
+        let _efficiency = pictura_core::scratch::operation();
+        if let Some(rolled_back) = self.roll_back_unreadable() {
+            return rolled_back;
+        }
         // Another operation intervenes: the last effect is no longer Fade's
         // target. A selection-only or metadata change does not count.
         if !matches!(edit, Edit::Meta | Edit::SelectionPreview) {

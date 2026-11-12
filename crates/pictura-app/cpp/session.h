@@ -26,6 +26,7 @@ struct SessionState {
     int quickMaskOpacity = 50;
     bool gpuCompute = true;          // GPU compositing preference
     int memoryUsagePercent = 60;     // Memory Usage, % of the host's memory (#1211)
+    QStringList scratchVolumes;      // scratch disks in order, at most 4; empty = default (#1217)
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
     int cmykPolicy = 0;              // incoming CMYK profile policy (0 Preserve)
     int workingCmyk = 0;             // 0 = bundled Photocraft Coated CMYK
