@@ -331,8 +331,8 @@ impl<T: TileSample> Evictable for Body<T> {
         self.referenced.swap(false, Ordering::Relaxed)
     }
 
-    fn hot_since(&self, oldest: u64) -> bool {
-        self.hot.load(Ordering::Relaxed) >= oldest
+    fn hot_stamp(&self) -> u64 {
+        self.hot.load(Ordering::Relaxed)
     }
 
     fn history_held(&self) -> bool {
