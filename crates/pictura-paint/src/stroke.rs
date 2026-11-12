@@ -1,6 +1,7 @@
 //! Stroke engine: dab coverage accumulation and per-pixel compositing.
 
 use crate::art_history::{layer_local, ArtHistoryBrush, ArtHistoryOptions};
+use crate::bristle::BristleDab;
 use crate::eraser::{BackgroundEraseOptions, BackgroundEraser};
 use crate::focus::{FocusBrush, FocusOptions};
 use crate::healing::RgbaImage;
@@ -564,7 +565,7 @@ impl Stroke {
         tangent: f32,
     ) -> bool {
         if self.per_dab.is_some() {
-            return self.apply_per_dab(doc, &dabs);
+            return self.apply_per_dab(doc, &dabs, tangent);
         }
 
         let (w, h) = (self.rect.width() as usize, self.rect.height() as usize);
@@ -622,7 +623,7 @@ impl Stroke {
         // Every pixel a dab writes lies in its bounding box, so saving the
         // boxes first leaves the stencil only saved pixels to read.
         for dab in &placed {
-            let radius = dab.tip.map_or(cfg.diameter, |t| t.diameter) as f32 * 0.5;
+            let radius = dab_reach(dab.tip.as_ref().unwrap_or(&cfg));
             saved.save(
                 work_layer,
                 *ch,
@@ -652,10 +653,22 @@ impl Stroke {
         for dab in placed {
             // The hoisted profile is exact when the dynamics left the tip
             // alone; a jittered dab rebuilds it from its own tip.
-            let (params, radius) = match dab.tip {
-                None => (sample_tip, cfg.diameter as f32 * 0.5),
-                Some(tip_cfg) => (TipParams::new(&tip_cfg), tip_cfg.diameter as f32 * 0.5),
+            let eff_cfg = dab.tip.unwrap_or(cfg);
+            let params = if dab.tip.is_some() {
+                TipParams::new(&eff_cfg)
+            } else {
+                sample_tip
             };
+            let radius = dab_reach(&eff_cfg);
+            let bristle_dab = eff_cfg.bristle.map(|tip| {
+                BristleDab::new(
+                    tip,
+                    eff_cfg.diameter as f32,
+                    tangent + eff_cfg.angle_deg as f32,
+                    dab.pressure,
+                    dab.bristle_seed,
+                )
+            });
             let y0 = ((dab.y - radius).floor() as i32).max(0);
             let y1 = ((dab.y + radius).ceil() as i32).min(h as i32 - 1);
             if y1 < y0 {
@@ -668,6 +681,7 @@ impl Stroke {
             }
             let raster = DabRaster {
                 params: &params,
+                bristle: bristle_dab.as_ref(),
                 dab_x: dab.x,
                 dab_y: dab.y,
                 flow: dab.flow,
@@ -873,7 +887,7 @@ impl Stroke {
         }
     }
 
-    fn apply_per_dab(&mut self, doc: &mut Document, dabs: &[(f32, f32)]) -> bool {
+    fn apply_per_dab(&mut self, doc: &mut Document, dabs: &[(f32, f32)], tangent: f32) -> bool {
         let cfg = self.cfg;
         // The composite engines keep their own alpha, but a layer without an
         // alpha plane cannot store Clear: match the regular raster's no-op.
@@ -900,7 +914,7 @@ impl Stroke {
                 DabEngine::Replace(replacer) => {
                     replacer.dab(&mut per.pixels, &cfg, x, y, cfg.color)
                 }
-                DabEngine::Mixer(mixer) => mixer.dab(&mut per.pixels, &cfg, x, y),
+                DabEngine::Mixer(mixer) => mixer.dab_tangent(&mut per.pixels, &cfg, x, y, tangent),
                 DabEngine::ArtHistory(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
                 DabEngine::BackgroundErase(eraser) => {
                     eraser.dab(&mut per.pixels, &cfg, x, y, cfg.color)
@@ -1060,6 +1074,15 @@ impl Stroke {
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^= z >> 31;
         (z >> 40) as f32 / 16_777_216.0
+    }
+}
+
+/// The farthest a dab reaches from its centre: a bristle tip's tracks reach
+/// beyond the nominal diameter.
+fn dab_reach(cfg: &StrokeConfig) -> f32 {
+    match cfg.bristle {
+        Some(tip) => tip.reach(cfg.diameter as f32),
+        None => cfg.diameter as f32 * 0.5,
     }
 }
 

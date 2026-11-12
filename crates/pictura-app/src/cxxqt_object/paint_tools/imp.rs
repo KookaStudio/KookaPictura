@@ -14,6 +14,7 @@ use cxx_qt_lib::QString;
 use ffi::{PaintDynamics, PaintTip};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
 use pictura_paint::art_history::{ArtHistoryOptions, ArtStyle, STYLE_NAMES};
+use pictura_paint::bristle::{BristleShape, BristleTip};
 use pictura_paint::bucket::{self, BucketSource};
 use pictura_paint::dynamics::{
     ColorDynamics, Control, Dynamics, PoseDynamics, ScatterDynamics, ShapeDynamics,
@@ -177,6 +178,13 @@ pub(super) fn tip_config(tip: &PaintTip) -> StrokeConfig {
         grain: tip.grain.clamp(0, 100) as u8,
         wet_edges: tip.wet_edges,
         dynamics: dynamics_of(&tip.dynamics),
+        bristle: tip.bristle_enabled.then(|| BristleTip {
+            shape: BristleShape::from_index(tip.bristle_shape),
+            bristles: tip.bristle_density.clamp(0, 100) as u8,
+            length: tip.bristle_length.clamp(0, 100) as u8,
+            thickness: tip.bristle_thickness.clamp(0, 100) as u8,
+            stiffness: tip.bristle_stiffness.clamp(0, 100) as u8,
+        }),
         ..StrokeConfig::default()
     }
     .sanitized()

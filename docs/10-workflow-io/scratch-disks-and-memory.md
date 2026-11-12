@@ -195,7 +195,7 @@ if E < 95% (sustained): prefer eviction / spill / suggest RAM or scratch change
 | CS6 concept | Linux proposal |
 |---|---|
 | Scratch disk(s) | Configurable list of directories; default `$XDG_CACHE_HOME/kooka-pictura/scratch/`; user may add any local ext4/xfs/btrfs mount; never network/FUSE if avoidable. |
-| Scratch file | Preallocated file (`fallocate`) opened `O_RDWR`; optionally unnamed (`O_TMPFILE`) so it vanishes on crash; `mmap` (e.g. `memmap2`) for zero-copy tile access, with `msync` at checkpoints. |
+| Scratch file | Preallocated file (`fallocate`) opened `O_RDWR`, unnamed (`O_TMPFILE`, or created and unlinked at once) so it vanishes on crash; tiles move with `pread`/`pwrite` into checksummed extents, not `mmap`: a failed read is an error, not a `SIGBUS` (#1217). |
 | Spill when scratch full | Move to next configured directory; if all full, typed `ScratchFull` error and abort the operation without corrupting state. |
 | Scratch speed / "fast scratch" | Recommend NVMe/SSD; document RAID 0 as CS6 does. |
 | `/tmp` | Do **not** default scratch to `/tmp` (often tmpfs = RAM, no swap); allow it only with a warning. |
@@ -219,8 +219,8 @@ Proposals; overlaps `ARCH-003`, `ARCH-006`, `ARCH-009`.
 - `pictura-core::scratch` — `ScratchStore` over an ordered `Vec<ScratchVolume>`;
   `alloc(tile_id, version)`, `read`, `write`, `spill`, `flush`, `free`;
   typed `ScratchError::Full | Unavailable | Io`.
-- `pictura-core::scratch::file` — preallocate + `mmap` backend; unnamed-file
-  mode; `msync` checkpoints.
+- `pictura-core::scratch` volumes — preallocate + `pread`/`pwrite`; unnamed-file
+  mode; a CRC-32 per extent (#1217).
 - `pictura-core::cache::TileCache` — sized from the global budget; LRU
   eviction to scratch.
 - `pictura-core::efficiency` — monotonic compute vs scratch-I/O accounting and
@@ -385,9 +385,11 @@ counters published by the Rust core; scratch I/O never runs on the GUI thread.
 - **`MachinePrefs.psp` contents and scope.** The modern reference lists GPU and
   cache tile size; the CS6-era split may differ. *Resolves with:* a CS6 Settings
   folder inspection.
-- **zram/mmap strategy validation.** Whether `mmap`-backed scratch plus zram
-  meets the `ARCH-003` latency budgets better than plain buffered I/O on the
-  reference hardware is untested. *Resolves with:* a scratch-I/O benchmark.
+- **zram/mmap strategy validation.** *Resolved (#1217):* on the reference
+  NVMe machine, `pread`/`pwrite` of 64 KiB extents writes at 1231 MiB/s and
+  reads (warm, checksummed) at 6669 MiB/s, against 882 and 7028 MiB/s for a
+  shared `mmap`. Buffered `pread`/`pwrite` is kept, and evicted tiles are
+  LZ4-packed in RAM before they spill. zram stays an OS-level choice.
 - **cgroup/container behavior.** How to present scratch configuration under
   Flatpak portals (no arbitrary volume access without permission) is open.
   *Resolves with:* `01-architecture/build-and-packaging.md` and

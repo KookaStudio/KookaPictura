@@ -69,11 +69,12 @@ impl<T: TileSample> TiledPlane<T> {
                 continue;
             }
             self.fork(i, gen);
-            let dst = self.dense_mut(i);
-            for y in cy {
-                let d = (y - ty) * tw + (cx.start - tx);
-                dst[d..d + cx.len()].copy_from_slice(&src[at(y)..at(y) + cx.len()]);
-            }
+            self.with_dense_mut(i, |dst| {
+                for y in cy {
+                    let d = (y - ty) * tw + (cx.start - tx);
+                    dst[d..d + cx.len()].copy_from_slice(&src[at(y)..at(y) + cx.len()]);
+                }
+            });
         }
     }
 

@@ -101,6 +101,12 @@ pub mod ffi {
         grain: i32,
         wet_edges: bool,
         dynamics: PaintDynamics,
+        bristle_enabled: bool,
+        bristle_shape: i32,
+        bristle_density: i32,
+        bristle_length: i32,
+        bristle_thickness: i32,
+        bristle_stiffness: i32,
     }
 
     unsafe extern "C++" {

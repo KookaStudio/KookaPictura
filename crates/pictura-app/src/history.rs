@@ -12,7 +12,7 @@ mod damage;
 mod planes;
 mod styles;
 
-pub(crate) use budget::{document_bytes, tile_table_bytes};
+pub(crate) use budget::{document_bytes, tile_table_bytes, unreadable_tiles};
 use damage::{display_differs, meta_damage, Damage};
 use planes::{
     adopt_metadata, apply_tiles, composite_change, composite_unchanged, delta_allocations,

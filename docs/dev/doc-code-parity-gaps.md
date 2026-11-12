@@ -58,7 +58,7 @@ and it answers "does a spec exist?", not "is it implemented?".
 | SYS-1 | Preset/library codecs + Preset Manager (`.aco/.ase/.grd/.abr/.pat/.csh/.asl/.tpl/.csf`) — no `pictura-presets` crate exists | no `crates/pictura-presets`; `swatches_panel.h:71` | #489 |
 | SYS-2 | Global bit-depth / colour-mode availability gating — every "unavailable at 16/32-bpc, Bitmap, Indexed, CMYK/Lab" rule is unenforced | `filter_tools.rs` (`filter_kind_supported`) checks arity only; no `Edition`/depth gate | #490 |
 | SYS-4 | Brush dynamics: Texture and Dual Brush remain; the Control model, Shape Dynamics, Scattering, Color Dynamics, Transfer, Brush Pose, and per-set padlocks ship | `brush_panel.cpp` leaves Texture and Dual Brush disabled | #492 |
-| SYS-5 | Sampled / bristle / erodible / airbrush tips + Define Brush Preset | `tip.rs` round/elliptical only | #493 |
+| SYS-5 | Sampled / erodible / airbrush tips + Define Brush Preset (bristle tips now ship) | `tip.rs` round/elliptical only; `bristle.rs` | #493 |
 
 **Provenance note.** All five were landed as behavioural `photorust` ports, not
 CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
@@ -217,7 +217,7 @@ Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
 | CLR-7 | `color-models.md` | Out-of-gamut triangle, 16/32-bit picker fields (CMYK now goes through the working profile in `pictura_color::model`) | PARTIAL | `color_picker_dialog.cpp:714` | #604 |
 | CLR-8 | `swatches-and-libraries.md` | `.aco`/`.ase` libraries, rename, display modes | MISSING | `swatches_panel.h:74` | #605 |
 | CLR-9 | `pattern-presets.md` | Pattern Overlay Snap To Origin + style Texture sub-options | PARTIAL | `layer_style_pages.cpp:297-315` | #606 |
-| CLR-10 | `bristle-brushes.md` | Bristle brushes | MISSING | `paint/tip.rs` | #607 |
+| CLR-10 | `bristle-brushes.md` | Bristle tip engine, tracks, rasterizer, per-bristle Mixer reservoir, Brush panel controls, and presets ship; OpenGL rotatable preview, `.abr` bristle keys, and tilt-driven projection remain | PARTIAL | `crates/pictura-paint/src/bristle.rs`; `panels/brush_panel.cpp` | #607 |
 | CLR-11 | `brush-presets.md` | `.abr` libraries, Brush Presets panel, ABR v10 read | MISSING | `brush_panel.cpp:137-139` | #608 |
 
 ### 08-selection
