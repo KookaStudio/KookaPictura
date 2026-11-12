@@ -4,6 +4,26 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Transform preview memory and the projective mode switch** (#1297, OpenSpec
+  change `transform-preview-memory`, capabilities
+  `document/transform-preview-memory` and `tools/projective-mode-switch`).
+  - **Reduced preview.** `transform_preview_level` picks the shallowest level
+    that brings a single plain pixel layer's box under 16 Mpx (the Move view
+    preview's conditions, not lifted). `build_transform_preview` then builds the
+    moving image (`moving_layer_image` over the box aligned inside itself) and
+    the backdrop patch (`view_preview::backdrop`) at that level. The canvas
+    takes `transform_preview_scale` into `moveScale_` and scales the affine,
+    projective, and CPU-warp draws. The Warp preview rebuilds at the session's
+    level (`transform_preview_layer_at`). The CPU warp converts its source to
+    premultiplied once per image.
+  - **Gate.** `compute_transform_preview` admits `transform_preview_bytes`
+    (20 bytes a preview pixel, plus 12 a canvas pixel for a whole backdrop)
+    before building; the C++ begin shows the transform memory message.
+    Measured: Skew on a 144 Mpx object at 17000² added 69 MiB, down from ≈2.2 GB.
+  - **Mode switch.** `mode_switch.rs`: Skew, Distort, and Perspective switch an
+    open session, its similarity becoming the quad. Leaving a projective mode
+    is still refused.
+  - **Open.** The Move tool's drag of a 144 Mpx layer still peaks near 2.5 GB.
 - **Transform commit out of core, phases 3–4** (#1290, OpenSpec change
   `transform-commit-out-of-core`, capabilities `document/out-of-core-transform`
   and `compositing/tiled-region-composite`).

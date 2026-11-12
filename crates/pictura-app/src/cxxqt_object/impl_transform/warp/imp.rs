@@ -4,7 +4,7 @@ use super::super::super::document_session::{TransformSession, WarpDrag};
 use super::super::geometry::{
     projective_coefficients, session_quad, source_corners, store_quad, unmap_quad, MapParams,
 };
-use super::super::session::{rendered_transform_group, transform_preview_layer};
+use super::super::session::{rendered_transform_group, transform_preview_layer_at};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -341,6 +341,9 @@ pub(in crate::cxxqt_object::impl_transform) fn refresh_warp_preview(
     let gpu_compute = view.rust().gpu_compute;
     let prepared = (|| {
         let rust = view.rust();
+        // The warped image keeps the level the session's base was built at,
+        // so base and layer share one scale (#1297).
+        let level = rust.transform_preview_level;
         let doc = rust.session.doc.as_ref()?;
         let session = rust.session.live.transform()?;
         let warp = session.warp.as_ref()?;
@@ -371,7 +374,7 @@ pub(in crate::cxxqt_object::impl_transform) fn refresh_warp_preview(
                 .reduce(pictura_core::PsdRect::union)?;
             rendered_transform_group(&clone, &members, rect, gpu_compute)
         } else {
-            transform_preview_layer(&clone, &session.path, gpu_compute)
+            transform_preview_layer_at(&clone, &session.path, level, gpu_compute)
         }
     })();
     let Some((image, x, y)) = prepared else {
@@ -431,6 +434,8 @@ pub(super) fn transform_enter_warp(mut view: Pin<&mut PictureView>) -> bool {
 pub(super) fn transform_leave_warp(mut view: Pin<&mut PictureView>) -> bool {
     let preview = {
         let rust = view.rust();
+        // A reduced preview's image covers `2^level` document pixels a pixel.
+        let scale = f64::from(1u32 << rust.transform_preview_level);
         match (rust.move_layer.as_ref(), rust.session.live.transform()) {
             (Some(layer), Some(session))
                 if session.warp.is_some() && layer.width() > 0 && layer.height() > 0 =>
@@ -438,8 +443,8 @@ pub(super) fn transform_leave_warp(mut view: Pin<&mut PictureView>) -> bool {
                 Some((
                     f64::from(rust.move_x),
                     f64::from(rust.move_y),
-                    f64::from(layer.width()),
-                    f64::from(layer.height()),
+                    f64::from(layer.width()) * scale,
+                    f64::from(layer.height()) * scale,
                 ))
             }
             _ => None,

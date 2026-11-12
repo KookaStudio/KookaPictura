@@ -101,6 +101,9 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     const bool ok = mode.isEmpty() ? v->begin_free_transform(path)
                                    : v->begin_transform_mode(path, mode);
     if (!ok) {
+        if (edit_refused_for_memory()) {
+            refused(transformMemoryRefusalMessage());
+        }
         return false;
     }
     transform_set_controls(*v, controls);
@@ -110,7 +113,8 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
         canvas_->beginTransformPreview(v->move_preview_base(), v->move_preview_layer(),
                                       QPointF(v->move_preview_x(), v->move_preview_y()),
                                       v->move_preview_opacity() / 255.0,
-                                      transform_api::previewBaseOrigin(*v));
+                                      transform_api::previewBaseOrigin(*v),
+                                      transform_preview_scale(*v));
         updateTransformOverlay(v);
         // A transform session is modal: drop any transient Space pan so its
         // pan-disable is not swallowed by the override's pan guard.

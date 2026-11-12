@@ -122,3 +122,103 @@ fn sample_planar_argb_reads_a_diverged_composite_without_materializing() {
     assert_eq!(pictura_core::materializations(), before);
     drop(held);
 }
+
+/// A 100² document with a plain 60 × 40 layer at (3, 5) over its base.
+fn large_layer_document(top: Layer) -> Document {
+    let mut doc = Document::new(100, 100, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![pixel_layer("base", 100, 100, (30, 60, 90)), top]);
+    doc
+}
+
+const LARGE: PsdRect = PsdRect {
+    top: 5,
+    left: 3,
+    bottom: 45,
+    right: 63,
+};
+
+fn large_layer() -> Layer {
+    let mut layer = pixel_layer("top", 60, 40, (200, 100, 50));
+    layer.rect = LARGE;
+    layer
+}
+
+fn path() -> Vec<String> {
+    vec!["1".to_string()]
+}
+
+// [tpm_reduced]
+#[test]
+fn a_large_plain_layer_previews_at_a_reduced_level() {
+    set_transform_preview_pixels_for_test(1000);
+    let doc = large_layer_document(large_layer());
+    let preview = build_transform_preview(&doc, "1", &path(), LARGE, false, true).expect("preview");
+    set_transform_preview_pixels_for_test(-1);
+    assert_eq!(preview.level, 1);
+    // The layer aligned inside itself to the 2-px grid: 58 × 38 at (4, 6).
+    assert_eq!((preview.x, preview.y), (4, 6));
+    assert_eq!((preview.image.width(), preview.image.height()), (29, 19));
+    assert_eq!(
+        pixels(&preview.image, 14, 9, 1, 1),
+        vec![(200, 100, 50, 255)]
+    );
+    // The backdrop patch aligned outward: 62 × 42 at (2, 4).
+    assert_eq!(preview.base_origin, Some((2, 4)));
+    assert_eq!((preview.base.width(), preview.base.height()), (31, 21));
+    assert_eq!(pixels(&preview.base, 15, 10, 1, 1), vec![(30, 60, 90, 255)]);
+}
+
+// [tpm_small_exact]
+#[test]
+fn a_small_or_styled_layer_previews_at_full_size() {
+    set_transform_preview_pixels_for_test(2400);
+    let doc = large_layer_document(large_layer());
+    let at = build_transform_preview(&doc, "1", &path(), LARGE, false, true).expect("preview");
+    assert_eq!(at.level, 0);
+    assert_eq!((at.x, at.y), (3, 5));
+    assert_eq!((at.image.width(), at.image.height()), (60, 40));
+
+    set_transform_preview_pixels_for_test(1000);
+    let mut masked = large_layer();
+    masked.mask = Some(LayerMask {
+        rect: LARGE,
+        default_color: 0,
+        data: Some(vec![128; 60 * 40].into()),
+        ..Default::default()
+    });
+    let doc = large_layer_document(masked);
+    let styled = build_transform_preview(&doc, "1", &path(), LARGE, false, true).expect("preview");
+    set_transform_preview_pixels_for_test(-1);
+    assert_eq!(styled.level, 0);
+    assert_eq!((styled.image.width(), styled.image.height()), (60, 40));
+}
+
+// [tpm_bytes]
+#[test]
+fn preview_bytes_follow_the_level() {
+    set_transform_preview_pixels_for_test(1000);
+    let doc = large_layer_document(large_layer());
+    assert_eq!(
+        super::preview::transform_preview_bytes(&doc, "1", &path(), LARGE, true),
+        20 * 600
+    );
+    let mut square = pixel_layer("top", 30, 30, (200, 100, 50));
+    square.rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 30,
+        right: 30,
+    };
+    let rect = square.rect;
+    let doc_square = large_layer_document(square);
+    assert_eq!(
+        super::preview::transform_preview_bytes(&doc_square, "1", &path(), rect, true),
+        20 * 900
+    );
+    // A lifted selection previews at full size over the whole backdrop.
+    assert_eq!(
+        super::preview::transform_preview_bytes(&doc, "1", &path(), LARGE, false),
+        20 * 2400 + 12 * 100 * 100
+    );
+    set_transform_preview_pixels_for_test(-1);
+}
