@@ -853,9 +853,9 @@ fn an_integer_move_shares_the_source_planes() {
         assert!(b.data.shares(&a.data), "channel {} was copied", a.id);
         assert!(a.data == b.data, "channel {}", a.id);
     }
-    let (m0, m1) = (before.mask.as_ref().unwrap(), after.mask.as_ref().unwrap());
-    assert_eq!(m1.rect, shifted(m0.rect));
-    assert!(m0.data == m1.data);
+    let (mask_before, mask_after) = (before.mask.as_ref().unwrap(), after.mask.as_ref().unwrap());
+    assert_eq!(mask_after.rect, shifted(mask_before.rect));
+    assert!(mask_before.data == mask_after.data);
 }
 
 #[test]
