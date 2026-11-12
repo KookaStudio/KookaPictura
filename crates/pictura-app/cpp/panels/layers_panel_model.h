@@ -33,12 +33,15 @@
 #include <QtGui/QRegion>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QStyle>
+#include <QtCore/QItemSelectionModel>
 #include <QtCore/QMimeData>
 #include <QtGui/QDrag>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDragLeaveEvent>
+#include <QtGui/QMouseEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QPaintEvent>
+#include <QtGui/QPainter>
 #include <QtWidgets/QStyledItemDelegate>
 #include <QtWidgets/QStyleOptionViewItem>
 #include <QtWidgets/QTreeView>
@@ -106,6 +109,15 @@ struct LayerRowNode {
     bool hasStyle = false;
     QStringList styleEffects;
     bool hasBlendIf = false;
+    /// The layer's effects list is open; the layer row draws its right-edge
+    /// toggle and the synthetic Effects group is included in the tree.
+    bool effectsListOpen = false;
+    /// The layer carries smart filters; the layer row draws the right-edge
+    /// filter-list toggle.
+    bool hasSmartFilters = false;
+    /// The layer's smart-filters list is open; the synthetic Smart Filters group
+    /// is included in the tree.
+    bool filtersListOpen = false;
     QImage thumbnail;
     QImage maskThumbnail;
     QImage vectorMaskThumbnail;
@@ -174,6 +186,9 @@ enum LayerRole {
     HasLayerStyleRole,
     StyleEffectsRole,
     HasBlendIfRole,
+    EffectsListOpenRole,
+    HasSmartFiltersRole,
+    FiltersListOpenRole,
     ActiveThumbRole,
     // The row's padlock: its lock bits less the Transparency and Image locks
     // a type or shape layer is forced to carry, which CS6 shows only in the
@@ -365,6 +380,12 @@ public:
             return row.styleEffects;
         case HasBlendIfRole:
             return row.hasBlendIf;
+        case EffectsListOpenRole:
+            return row.effectsListOpen;
+        case HasSmartFiltersRole:
+            return row.hasSmartFilters;
+        case FiltersListOpenRole:
+            return row.filtersListOpen;
         case ActiveThumbRole:
             return row.activeThumb;
         default:
@@ -383,13 +404,14 @@ public:
         if (node && node->row.synthetic) {
             // A Smart Filter row drags and accepts a drop within its own list
             // (the panel's validator keeps it there); every other synthetic
-            // row (the Smart Filters group, layer effects) selects and expands
-            // but neither renames, drags, nor accepts a drop.
+            // row (the Smart Filters group, layer effects) is display-only and
+            // is neither selectable nor renamable, so a click or keyboard move
+            // resolves to the owning layer instead of highlighting the row.
             if (node->row.kind == QLatin1String("smart-filter")) {
                 return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled
                     | Qt::ItemIsDropEnabled;
             }
-            return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+            return Qt::ItemIsEnabled;
         }
         return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable
             | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
@@ -650,6 +672,9 @@ public:
     }
     void leaveDragCursor() { viewport()->setCursor(dragCursor_); }
     int cursorShapeForTest() const { return static_cast<int>(viewport()->cursor().shape()); }
+    // Self-test hook: the paths startDrag() would carry, without executing a
+    // blocking QDrag. Empty for a synthetic row that must not drag.
+    QStringList dragPathsForTest() const { return dragPathsForStart(); }
 
     // Self-test hooks: state() is protected on QAbstractItemView, and a model
     // reset can leave the view in EditingState with no live editor, which wedges
@@ -697,13 +722,47 @@ protected:
         }
     }
 
-    void startDrag(Qt::DropActions) override
+    void mousePressEvent(QMouseEvent* event) override
     {
-        if (!dragPaths_) {
+        const QModelIndex index = indexAt(event->position().toPoint());
+        pressedSyntheticPath_.clear();
+        if (event->button() == Qt::LeftButton && index.isValid()
+            && index.data(SyntheticRole).toBool() && pathForIndex_) {
+            pressedSyntheticPath_ = pathForIndex_(index);
+        }
+        QTreeView::mousePressEvent(event);
+        if (event->button() != Qt::LeftButton || !index.isValid()
+            || !index.data(SyntheticRole).toBool()) {
             return;
         }
-        const QStringList paths = dragPaths_();
+        QModelIndex layer = index.parent();
+        while (layer.isValid() && layer.data(SyntheticRole).toBool()) {
+            layer = layer.parent();
+        }
+        if (layer.isValid()) {
+            // Set current before selecting: the panel's writeTarget() ignores a
+            // selection change while the current row is still synthetic, and a
+            // second select on the already-selected layer emits nothing.
+            // A synthetic row is display-only, so the press makes its owning
+            // layer the single selection; modifiers are not propagated.
+            selectionModel()->setCurrentIndex(
+                layer, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        }
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        QTreeView::mouseReleaseEvent(event);
+        if (event->button() == Qt::LeftButton) {
+            pressedSyntheticPath_.clear();
+        }
+    }
+
+    void startDrag(Qt::DropActions) override
+    {
+        QStringList paths = dragPathsForStart();
         if (paths.isEmpty()) {
+            pressedSyntheticPath_.clear();
             return;
         }
         auto* drag = new QDrag(this);
@@ -712,6 +771,7 @@ protected:
         // Copy is offered for a drop on another document's tab or canvas.
         drag->exec(Qt::MoveAction | Qt::CopyAction, Qt::MoveAction);
         leaveDragCursor();
+        pressedSyntheticPath_.clear();
     }
 
     void dragEnterEvent(QDragEnterEvent* event) override
@@ -797,6 +857,20 @@ protected:
     }
 
 private:
+    // The paths a drag would carry. Only a filter row (a /@sf/ child) drags;
+    // every other synthetic row is a non-draggable header or effect row, so it
+    // returns empty instead of dragging the redirected owning layer.
+    QStringList dragPathsForStart() const
+    {
+        if (!pressedSyntheticPath_.isEmpty()) {
+            if (!pressedSyntheticPath_.contains(QStringLiteral("/@sf/"))) {
+                return {};
+            }
+            return QStringList{pressedSyntheticPath_};
+        }
+        return dragPaths_ ? dragPaths_() : QStringList{};
+    }
+
     // Resolve the drop row under `pos` to a target path plus mode (0 above,
     // 1 below, 2 into an item); an invalid index is the empty-root target.
     QString dropTargetFor(const QPoint& pos, int* mode) const
@@ -842,6 +916,7 @@ private:
 
     std::function<QStringList()> dragPaths_;
     std::function<QString(const QModelIndex&)> pathForIndex_;
+    QString pressedSyntheticPath_;
     std::function<bool(const QString&, const QString&, int)> dropHandler_;
     std::function<bool(const QString&, const QString&, int)> dropValidator_;
     const void* dragSource_ = nullptr;

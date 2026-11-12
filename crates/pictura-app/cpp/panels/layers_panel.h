@@ -172,6 +172,9 @@ public:
     bool filterToggleHasIconForTest() const;
     int eyeLeftForTest(const QString& path) const;
     bool chevronClickExpandsForTest(const QString& path);
+    bool clickListToggleForTest(const QString& path);
+    // The paths a drag started on `path` would carry, without running QDrag.
+    QStringList dragPathsForSyntheticForTest(const QString& path);
     QString opacityLabelTextForTest() const;
     bool opacitySuffixPresentForTest() const;
     bool opacitySuffixInsideEditForTest() const;
@@ -511,6 +514,9 @@ private:
     // The effects rows' eye: the master switch on the group, the effect's own
     // enabled bit on an effect row, as one undoable state.
     void toggleEffectVisibility(const QModelIndex& index, const QString& kind);
+    // The layer row's right-edge list toggle: open or close every synthetic
+    // list the layer owns (effects, smart filters, or both).
+    void toggleLists(const QString& path);
     // CS6's type-only rows (orientation, anti-aliasing, text kind, warp).
     void addTypeRows(QMenu& menu, const QString& path, bool& emitted);
     void showEyeMenu(const QPoint& pos, const QModelIndex& index);
@@ -591,6 +597,12 @@ private:
     // here expands once, so a later user collapse is not overridden. Reset when
     // the document changes, so an opened document's effects stay collapsed.
     QSet<QString> styledPathsSeen_;
+    // Layers whose combined effects/smart-filters list is open. A synthetic
+    // group is included in the tree only while its layer is in this set.
+    QSet<QString> listsExpanded_;
+    // Filtered smart objects seen once, so a first sight opens its list without
+    // overriding a later user close.
+    QSet<QString> filteredPathsSeen_;
     quint64 styledGeneration_ = 0;
     bool addCopyOnDuplicate_ = true;
     bool useDefaultMasksOnFill_ = true;

@@ -28,15 +28,79 @@ public:
     // The gap either side of a chain glyph between two thumbnails.
     static constexpr int kThumbLinkGap = 2;
 
-    /// True when `pos` (row-local) lands in the non-selectable visibility
-    /// gutter at the row's left edge.
-    bool eyeColumnContains(const QRect& itemRect, const QPoint& pos) const
+    /// True when `index` is a synthetic Smart Filters/effects row.
+    static bool isSyntheticRow(const QModelIndex& index)
     {
-        return pos.x() >= itemRect.left() && pos.x() < itemRect.left() + kEyeColumn;
+        const QString kind = index.data(KindRole).toString();
+        return kind.startsWith(QLatin1String("smart-filter"))
+            || kind.startsWith(QLatin1String("layer-effect"));
     }
 
-    /// The eye's hit-target inside a row's content rect (as painted): a square
-    /// glyph centred in the fixed gutter with equal left/right padding.
+    /// The nearest non-synthetic ancestor (the owning layer) of a synthetic row.
+    QModelIndex owningLayer(const QModelIndex& index) const
+    {
+        QModelIndex parent = index.parent();
+        while (parent.isValid() && isSyntheticRow(parent)) {
+            parent = parent.parent();
+        }
+        return parent;
+    }
+
+    /// The narrow synthetic eye column: glyph width plus a small pad.
+    int syntheticEyeColumnWidth(int rowHeight) const
+    {
+        return qBound(12, rowHeight, 16) + 2;
+    }
+
+    /// The synthetic row's depth below its group header.
+    int nestedLevel(const QModelIndex& index) const
+    {
+        const QModelIndex layer = owningLayer(index);
+        if (!layer.isValid()) {
+            return 0;
+        }
+        return qMax(0, index.data(DepthRole).toInt() - layer.data(DepthRole).toInt() - 1);
+    }
+
+    /// The nested eye column: image-thumbnail right edge plus one step per child.
+    QRect nestedEyeColumn(const QRect& itemRect, const QModelIndex& index) const
+    {
+        const QModelIndex layer = owningLayer(index);
+        if (!layer.isValid()) {
+            return QRect(itemRect.left(), itemRect.top(), syntheticEyeColumnWidth(itemRect.height()),
+                         itemRect.height());
+        }
+        const int left = imageSlotRight(itemRect, layer) + nestedLevel(index) * kIndent;
+        return QRect(left, itemRect.top(), syntheticEyeColumnWidth(itemRect.height()),
+                     itemRect.height());
+    }
+
+    /// The fixed gutter for a layer row; the nested column for a synthetic row.
+    QRect eyeColumnRect(const QRect& itemRect, const QModelIndex& index) const
+    {
+        if (isSyntheticRow(index)) {
+            return nestedEyeColumn(itemRect, index);
+        }
+        return QRect(itemRect.left(), itemRect.top(), kEyeColumn, itemRect.height());
+    }
+
+    /// True when `pos` (row-local) lands in `index`'s visibility-toggle column.
+    bool eyeColumnContains(const QRect& itemRect, const QModelIndex& index,
+                           const QPoint& pos) const
+    {
+        return eyeColumnRect(itemRect, index).contains(pos);
+    }
+
+    /// The eye glyph's hit-target, centred in the index's visibility column.
+    QRect eyeRect(const QRect& itemRect, const QModelIndex& index) const
+    {
+        const QRect column = eyeColumnRect(itemRect, index);
+        const int width = qBound(12, itemRect.height(), 16);
+        return QRect(column.left() + (column.width() - width) / 2, itemRect.top(), width,
+                     itemRect.height());
+    }
+
+    /// The eye's fixed-gutter rect for a layer row (test/hook use).
     QRect eyeRect(const QRect& itemRect) const
     {
         const int width = qBound(12, itemRect.height(), 16);
@@ -55,12 +119,26 @@ public:
         return qGray(label.rgb()) >= 85 ? QColor(20, 20, 20) : QColor(240, 240, 240);
     }
 
-    /// Side of the (shrunken) lock badge: about two thirds of the thumbnail, so
-    /// it reads as a badge rather than a second thumbnail.
+    /// Side of the lock badge: 80% of the old two-thirds-thumbnail side, so it
+    /// reads as a badge rather than a second thumbnail.
     int lockBadgeSide() const
     {
         const int thumb = qMax(0, thumbnailSize_);
-        return qMax(10, thumb > 0 ? (thumb * 2) / 3 : 11);
+        return qMax(8, qRound(thumb * (2.0 / 3.0) * 0.8));
+    }
+
+    /// The fx badge's side: 20% smaller than the row thumbnail's badge.
+    int fxBadgeSide() const
+    {
+        const int base = qMax(12, thumbSize() > 0 ? thumbSize() : 16);
+        return qMax(10, qRound(base * 0.8));
+    }
+
+    /// The clipping-mask glyph's side: 20% smaller than the old thumb-8 glyph.
+    int clipGlyphSide() const
+    {
+        const int base = thumbSize() > 0 ? thumbSize() - 8 : 12;
+        return qMax(8, qRound(base * 0.8));
     }
 
     /// The lock badge's rect at a row's right edge (as painted).
@@ -97,10 +175,9 @@ public:
     {
         int x = contentLeft(itemRect, index);
         if (index.data(ClippingRole).toBool()) {
-            const int thumb = thumbSize();
-            const int side = qMax(10, thumb > 0 ? thumb - 8 : 12);
+            const int side = clipGlyphSide();
             if (!pictura::icon(QStringLiteral("layers.clipMask")).pixmap(side, side).isNull()) {
-                x += side + 2;
+                x += side + kClipGap;
             }
         }
         return thumbSlot(itemRect, x);
@@ -131,20 +208,74 @@ public:
         if (!showsFx(index)) {
             return {};
         }
-        const int thumb = qMax(0, thumbnailSize_);
-        const int badge = qMax(12, thumb > 0 ? thumb : 16);
+        const int badge = fxBadgeSide();
         if (pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
             return {};
         }
         int right = itemRect.right() - 3;
-        if (index.data(LockBadgeRole).toInt() != 0
-            && !pictura::icon(QStringLiteral("layers.lockAll"))
-                    .pixmap(lockBadgeSide(), lockBadgeSide())
-                    .isNull()) {
+        if (showsLockBadge(index)) {
             right -= lockBadgeSide() + 3;
         }
+        right -= listToggleAdvance(index);
         return QRect(right - badge, itemRect.top() + (itemRect.height() - badge) / 2, badge,
                      badge);
+    }
+
+    /// Whether the row draws a lock badge.
+    bool showsLockBadge(const QModelIndex& index) const
+    {
+        return index.data(LockBadgeRole).toInt() != 0
+            && !pictura::icon(QStringLiteral("layers.lockAll"))
+                    .pixmap(lockBadgeSide(), lockBadgeSide())
+                    .isNull();
+    }
+
+    /// The effects-list toggle: independent of showsFx(), so shape rows keep it.
+    bool hasEffectsToggle(const QModelIndex& index) const
+    {
+        return !isSyntheticRow(index) && index.data(HasLayerStyleRole).toBool()
+            && !index.data(StyleEffectsRole).toStringList().isEmpty();
+    }
+
+    /// Whether `index` draws the smart-filters list toggle.
+    bool hasFiltersToggle(const QModelIndex& index) const
+    {
+        return !isSyntheticRow(index) && index.data(HasSmartFiltersRole).toBool();
+    }
+
+    /// Whether `index` draws the single combined list toggle.
+    bool hasListToggle(const QModelIndex& index) const
+    {
+        return !isSyntheticRow(index)
+            && (hasEffectsToggle(index) || hasFiltersToggle(index));
+    }
+
+    /// The horizontal space the combined list toggle consumes.
+    int listToggleAdvance(const QModelIndex& index) const
+    {
+        return hasListToggle(index) ? kChevronWidth + 3 : 0;
+    }
+
+    /// The single list toggle at the row's right edge, immediately left of the
+    /// lock badge and right of the fx badge.
+    QRect listToggleRect(const QRect& itemRect, const QModelIndex& index) const
+    {
+        if (!hasListToggle(index)) {
+            return {};
+        }
+        const int side = qMin(kChevronWidth, itemRect.height());
+        int right = itemRect.right() - 3;
+        if (showsLockBadge(index)) {
+            right -= lockBadgeSide() + 3;
+        }
+        return QRect(right - side, itemRect.top() + (itemRect.height() - side) / 2, side, side);
+    }
+
+    /// Whether the combined list is open for `index`.
+    static bool listOpen(const QModelIndex& index)
+    {
+        return index.data(EffectsListOpenRole).toBool()
+            || index.data(FiltersListOpenRole).toBool();
     }
 
     /// Whether a row is a member of a link set (and so paints the chain badge).
@@ -181,15 +312,12 @@ public:
             return {};
         }
         const int side = linkBadgeSide();
-        const int thumb = qMax(0, thumbnailSize_);
-        const int badge = qMax(12, thumb > 0 ? thumb : 16);
+        const int badge = fxBadgeSide();
         int right = itemRect.right() - 3;
-        if (index.data(LockBadgeRole).toInt() != 0
-            && !pictura::icon(QStringLiteral("layers.lockAll"))
-                    .pixmap(lockBadgeSide(), lockBadgeSide())
-                    .isNull()) {
+        if (showsLockBadge(index)) {
             right -= lockBadgeSide() + 3;
         }
+        right -= listToggleAdvance(index);
         if (showsFx(index)
             && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
             right -= badge + 3;
@@ -242,6 +370,9 @@ public:
     /// thumbRect, nameRect, and paint() so the three never disagree.
     int contentLeft(const QRect& itemRect, const QModelIndex& index) const
     {
+        if (isSyntheticRow(index)) {
+            return eyeColumnRect(itemRect, index).right() + 1;
+        }
         const int depth = index.data(DepthRole).toInt();
         // A folder row uses half the content pad, so its name column starts
         // closer to the gutter; child-layer visibility controls are untouched.
@@ -348,7 +479,7 @@ public:
     /// fill card). Empty when thumbnails are off.
     QRect thumbRect(const QRect& itemRect, const QModelIndex& index) const
     {
-        if (thumbSize() <= 0) {
+        if (thumbSize() <= 0 || isSyntheticRow(index)) {
             return {};
         }
         return thumbnailCard(imageThumbBox(itemRect, index), index);
@@ -372,15 +503,12 @@ public:
     /// mirroring paint()'s walk so the mask and link rects agree with it.
     int badgesRight(const QRect& itemRect, const QModelIndex& index) const
     {
-        const int thumb = qMax(0, thumbnailSize_);
-        const int badge = qMax(12, thumb > 0 ? thumb : 16);
+        const int badge = fxBadgeSide();
         int right = itemRect.right() - 3;
-        if (index.data(LockBadgeRole).toInt() != 0
-            && !pictura::icon(QStringLiteral("layers.lockAll"))
-                    .pixmap(lockBadgeSide(), lockBadgeSide())
-                    .isNull()) {
+        if (showsLockBadge(index)) {
             right -= lockBadgeSide() + 3;
         }
+        right -= listToggleAdvance(index);
         if (showsFx(index)
             && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
             right -= badge + 3;
@@ -462,6 +590,9 @@ public:
     /// The x just past the last thumbnail slot (image, mask, or vector).
     int thumbsRight(const QRect& itemRect, const QModelIndex& index) const
     {
+        if (isSyntheticRow(index)) {
+            return eyeColumnRect(itemRect, index).right() + 1;
+        }
         const int thumb = thumbSize();
         if (thumb > 0 && !index.data(VectorMaskThumbnailRole).value<QImage>().isNull()) {
             return maskSlotRight(itemRect, index) + kThumbLinkGap + linkSide(thumb)
@@ -476,16 +607,14 @@ public:
     /// click in an empty label area still resolves to the name.
     QRect nameRect(const QRect& itemRect, const QModelIndex& index) const
     {
-        const int thumb = thumbSize();
-        int x = thumbsRight(itemRect, index) + kNameGap;
+        const int gap = isSyntheticRow(index) ? kNameGap / 2 : kNameGap;
+        int x = thumbsRight(itemRect, index) + gap;
         int right = itemRect.right() - 3;
-        const int badge = qMax(12, thumb > 0 ? thumb : 16);
-        if (index.data(LockBadgeRole).toInt() != 0
-            && !pictura::icon(QStringLiteral("layers.lockAll"))
-                    .pixmap(lockBadgeSide(), lockBadgeSide())
-                    .isNull()) {
+        const int badge = fxBadgeSide();
+        if (showsLockBadge(index)) {
             right -= lockBadgeSide() + 3;
         }
+        right -= listToggleAdvance(index);
         if (showsFx(index)
             && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
             right -= badge + 3;
@@ -501,6 +630,12 @@ public:
     /// Medium (24 px) thumbnail row lands at 36 px. A folder row is shorter.
     static constexpr int kRowHeightFloor = 32;
     static constexpr int kGroupRowShrink = 6;
+    // A synthetic list row is sized by its text plus this padding, not by the
+    // layer thumbnail, so the compact effect/filter list keeps breathing room.
+    static constexpr int kSyntheticRowPad = 4;
+    static constexpr int kSyntheticRowMin = 24;
+    // The clipping glyph's gap before the thumbnail.
+    static constexpr int kClipGap = 4;
     int rowHeight() const { return qMax(kRowHeightFloor, thumbnailSize_ + 12); }
 
     /// The row name's font: Background italic, linked/placed (and clip-base)
@@ -522,7 +657,10 @@ public:
 
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
-        Q_UNUSED(option);
+        if (isSyntheticRow(index)) {
+            const int fontHeight = QFontMetrics(nameFont(option.font, index)).height();
+            return QSize(200, qMax(kSyntheticRowMin, fontHeight + 2 * kSyntheticRowPad));
+        }
         const int shrink =
             index.data(KindRole).toString() == QLatin1String("group") ? kGroupRowShrink : 0;
         return QSize(200, qMax(kRowHeightFloor - kGroupRowShrink, rowHeight() - shrink));
@@ -579,9 +717,11 @@ public:
             && !index.data(PathRole).toString().isEmpty();
         const QColor selectionSurface = quickMask?Theme::tokenColor(QStringLiteral("quick-mask-active"))
             : Theme::shade(option.palette.color(QPalette::Window), 3);
-        const QColor gutterSurface = Theme::shade(option.palette.color(QPalette::Window), 0);
+        const QColor gutterSurface = selected
+            ? selectionSurface
+            : Theme::shade(option.palette.color(QPalette::Window), 2);
         painter->fillRect(rect, selected ? selectionSurface : rowSurface);
-        const QRect eye = eyeRect(rect);
+        const QRect eye = eyeRect(rect, index);
         // The visibility gutter never takes the selection highlight.
         painter->fillRect(QRect(rect.left(), rect.top(), kEyeColumn, height), gutterSurface);
         // A non-None color label fills the whole visibility column behind the
@@ -590,22 +730,41 @@ public:
         if (label.isValid()) {
             painter->fillRect(QRect(rect.left(), rect.top(), kEyeColumn, height), label);
         }
-        // 1 px bottom rule per row.
-        painter->fillRect(QRect(rect.left(), rect.bottom(), rect.width(), 1),
-                          option.palette.color(QPalette::Base).darker(115));
+        // A 1 px bottom rule closes a block; an open list's rows continue it.
+        if (!continuesBlock(index, option.widget)) {
+            painter->fillRect(QRect(rect.left(), rect.bottom(), rect.width(), 1),
+                              option.palette.color(QPalette::Base).darker(115));
+        }
 
         painter->save();
         const QPalette& palette = option.palette;
         // Eye icon, anchored at the panel's left edge for every depth.
         const QColor glyphTint = labelGlyphTint(label);
-        paintAsset(painter, eye,
-                   index.data(VisibleRole).toBool() ? QStringLiteral("layers.eyeOn")
-                                                    : QStringLiteral("layers.eyeOff"),
-                   glyphTint);
+        if (index.data(VisibleRole).toBool()) {
+            paintAsset(painter, eye, QStringLiteral("layers.eyeOn"), glyphTint);
+        } else {
+            painter->save();
+            painter->setOpacity(0.5);
+            paintAsset(painter, eye, QStringLiteral("layers.eyeOff"), glyphTint);
+            painter->restore();
+        }
         // 1 px darker-grey separator at the gutter's right edge, between the
-        // eye and the row content.
+        // eye and the row content. It runs through the layer + list block.
         const QColor separator = palette.color(QPalette::Base).darker(115);
         painter->fillRect(QRect(rect.left() + kEyeColumn - 1, rect.top(), 1, height), separator);
+
+        if (isSyntheticRow(index)) {
+            const QRect nr = nameRect(rect, index);
+            painter->setFont(nameFont(option.font, index));
+            painter->setPen(selected ? palette.color(QPalette::HighlightedText)
+                                     : palette.color(QPalette::Text));
+            const QString elided =
+                painter->fontMetrics().elidedText(index.data(Qt::DisplayRole).toString(),
+                                                  Qt::ElideRight, nr.width());
+            painter->drawText(nr, Qt::AlignVCenter | Qt::AlignLeft, elided);
+            painter->restore();
+            return;
+        }
 
         // Content (disclosure, clipping glyph, thumbnail, name) starts after the
         // gutter; the chevron slot is reserved only for expandable rows.
@@ -620,13 +779,13 @@ public:
                                 : QStringLiteral("layers.disclosureRight"));
         }
         if (index.data(ClippingRole).toBool()) {
-            const int side = qMax(10, thumb > 0 ? thumb - 8 : 12);
+            const int side = clipGlyphSide();
             const QPixmap clip =
                 pictura::icon(QStringLiteral("layers.clipMask")).pixmap(side, side);
             if (!clip.isNull()) {
                 painter->drawPixmap(
                     QRect(x, rect.top() + (height - side) / 2, side, side), clip);
-                x += side + 2;
+                x += side + kClipGap;
             }
         }
         if (thumb > 0) {
@@ -805,7 +964,12 @@ public:
                 right -= lockSide + 3;
             }
         }
-        const int badge = qMax(12, thumb > 0 ? thumb : 16);
+        const QRect listToggle = listToggleRect(rect, index);
+        if (!listToggle.isEmpty()) {
+            paintListToggle(painter, listToggle, listOpen(index));
+            right -= kChevronWidth + 3;
+        }
+        const int badge = fxBadgeSide();
         if (showsFx(index) && !fxIcon.isNull()) {
             const QPixmap badgePix = fxIcon.pixmap(badge, badge);
             if (!badgePix.isNull()) {
@@ -926,6 +1090,48 @@ private:
         return tile;
     }
 
+    /// Suppress a row's bottom rule while the next visible row continues the
+    /// block. A layer row also requires its first synthetic row to be visible,
+    /// so a filter that hides the list does not leave a missing boundary.
+    bool continuesBlock(const QModelIndex& index, const QWidget* widget) const
+    {
+        const auto* view = qobject_cast<const QTreeView*>(widget);
+        if (isSyntheticRow(index)) {
+            if (!view) {
+                return true;
+            }
+            const QModelIndex next = view->indexBelow(index);
+            return next.isValid() && isSyntheticRow(next);
+        }
+        if (!listOpen(index) || !view) {
+            return false;
+        }
+        const QModelIndex next = view->indexBelow(index);
+        return next.isValid() && isSyntheticRow(next);
+    }
+
+    static void paintListToggle(QPainter* painter, const QRect& rect, bool open)
+    {
+        const int side = qMin(rect.width(), rect.height());
+        if (side <= 0) {
+            return;
+        }
+        const qreal dpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+        QPixmap pixmap = pictura::icon(QStringLiteral("layers.disclosureDown"))
+                             .pixmap(QSize(side, side), dpr);
+        if (pixmap.isNull()) {
+            return;
+        }
+        if (open) {
+            QImage image = pixmap.toImage();
+            pixmap = QPixmap::fromImage(image.flipped(Qt::Vertical));
+            pixmap.setDevicePixelRatio(dpr);
+        }
+        painter->drawPixmap(QRect(rect.left() + (rect.width() - side) / 2,
+                                  rect.top() + (rect.height() - side) / 2, side, side),
+                            pixmap);
+    }
+
     static void paintAsset(QPainter* painter, const QRect& rect, const QString& assetId,
                            const QColor& tint = QColor())
     {
@@ -989,6 +1195,5 @@ private:
 
     int thumbnailSize_ = 24;
 };
-
 
 } // namespace pictura

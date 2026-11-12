@@ -79,14 +79,15 @@ bool LayersPanel::rowControlAt(const QModelIndex& index, const QPoint& pos) cons
     if (vr.isEmpty()) {
         return false;
     }
-    return delegate_->eyeColumnContains(vr, pos)
+    return delegate_->eyeColumnContains(vr, index, pos)
         || delegate_->thumbRect(vr, index).contains(pos)
         || delegate_->maskThumbRect(vr, index).contains(pos)
         || delegate_->linkGlyphRect(vr, index).contains(pos)
         || delegate_->vectorMaskThumbRect(vr, index).contains(pos)
         || delegate_->vectorLinkGlyphRect(vr, index).contains(pos)
         || delegate_->lockRect(vr).contains(pos)
-        || delegate_->fxRect(vr, index).contains(pos);
+        || delegate_->fxRect(vr, index).contains(pos)
+        || delegate_->listToggleRect(vr, index).contains(pos);
 }
 
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
@@ -164,12 +165,20 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
             }
+            if (index.isValid()) {
+                const QRect vr = tree_->visualRect(index);
+                const QRect listToggle = delegate_->listToggleRect(vr, index);
+                if (!listToggle.isEmpty() && listToggle.contains(pos)) {
+                    toggleLists(pathForProxyIndex(index));
+                    return true;
+                }
+            }
             // A layer-effects group or effect row owns only its eye; a click
             // elsewhere selects the row and reaches no layer control.
             const QString rowKind = index.data(KindRole).toString();
             if (rowKind == QLatin1String("layer-effects")
                 || rowKind == QLatin1String("layer-effect")) {
-                if (delegate_->eyeColumnContains(tree_->visualRect(index), pos)) {
+                if (delegate_->eyeColumnContains(tree_->visualRect(index), index, pos)) {
                     toggleEffectVisibility(index, rowKind);
                     return true;
                 }
@@ -181,7 +190,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 && !(mouse->modifiers() & Qt::AltModifier)) {
                 const QRect fx = delegate_->fxRect(tree_->visualRect(index), index);
                 if (!fx.isEmpty() && fx.contains(pos)) {
-                    tree_->setExpanded(index, !tree_->isExpanded(index));
+                    toggleLists(pathForProxyIndex(index));
                     return true;
                 }
             }
@@ -319,7 +328,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             // Alt-click on the line between two rows (outside the eye column)
             // clips the upper layer to the lower, or releases it, as CS6 does.
             if (index.isValid() && (mouse->modifiers() & Qt::AltModifier)
-                && !delegate_->eyeColumnContains(tree_->visualRect(index), pos)) {
+                && !delegate_->eyeColumnContains(tree_->visualRect(index), index, pos)) {
                 const QRect row = tree_->visualRect(index);
                 QModelIndex upper;
                 if (pos.y() >= row.bottom() - kClipLineGrab) {
@@ -353,7 +362,8 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                                        QStringLiteral("all"), false);
                 return true;
             }
-            if (index.isValid() && delegate_->eyeColumnContains(tree_->visualRect(index), pos)) {
+            if (index.isValid()
+                && delegate_->eyeColumnContains(tree_->visualRect(index), index, pos)) {
                 const QString path = pathForProxyIndex(index);
                 const QString kind = index.data(KindRole).toString();
                 if (view_ && kind.startsWith(QLatin1String("smart-filter"))) {
@@ -460,7 +470,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     // A control keeps its own action; any other content-band
                     // double-click converts the Background through the dialog.
                     const QRect vr = tree_->visualRect(index);
-                    const bool control = delegate_->eyeColumnContains(vr, pos)
+                    const bool control = delegate_->eyeColumnContains(vr, index, pos)
                         || delegate_->thumbRect(vr, index).contains(pos);
                     if (!control) {
                         openBackgroundConversion(path);
@@ -471,9 +481,11 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                            && delegate_->fxRect(tree_->visualRect(index), index).contains(pos)) {
                     // A double-click on the fx badge opens Blending Options.
                     openLayerStyle(path);
-                } else if (!delegate_->eyeColumnContains(tree_->visualRect(index), pos)
+                } else if (!delegate_->eyeColumnContains(tree_->visualRect(index), index, pos)
                            && !delegate_->lockRect(tree_->visualRect(index)).contains(pos)
                            && !delegate_->fxRect(tree_->visualRect(index), index).contains(pos)
+                           && !delegate_->listToggleRect(tree_->visualRect(index), index)
+                                   .contains(pos)
                            && !delegate_->chevronRect(tree_->visualRect(index), index)
                                    .contains(pos)) {
                     openLayerStyle(path);

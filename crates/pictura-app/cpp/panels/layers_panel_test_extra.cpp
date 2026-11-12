@@ -218,6 +218,42 @@ bool LayersPanel::rowExpandedForTest(const QString& path) const
     return index.isValid() && tree_ && tree_->isExpanded(index);
 }
 
+bool LayersPanel::clickListToggleForTest(const QString& path)
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid() || !tree_ || !delegate_) {
+        return false;
+    }
+    const QRect vr = tree_->visualRect(index);
+    const QRect toggle = delegate_->listToggleRect(vr, index);
+    if (toggle.isEmpty()) {
+        return false;
+    }
+    const QPoint at = toggle.center();
+    QMouseEvent press(QEvent::MouseButtonPress, at, tree_->viewport()->mapToGlobal(at),
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree_->viewport(), &press);
+    return true;
+}
+
+QStringList LayersPanel::dragPathsForSyntheticForTest(const QString& path)
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid() || !tree_ || !delegate_) {
+        return {};
+    }
+    const QRect vr = tree_->visualRect(index);
+    const QPoint at = delegate_->nameRect(vr, index).center();
+    QMouseEvent press(QEvent::MouseButtonPress, at, tree_->viewport()->mapToGlobal(at),
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree_->viewport(), &press);
+    const QStringList paths = tree_->dragPathsForTest();
+    QMouseEvent release(QEvent::MouseButtonRelease, at, tree_->viewport()->mapToGlobal(at),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree_->viewport(), &release);
+    return paths;
+}
+
 bool LayersPanel::clickRowEyeForTest(const QString& path)
 {
     const QModelIndex index = proxyIndexForPath(path);
@@ -225,7 +261,7 @@ bool LayersPanel::clickRowEyeForTest(const QString& path)
         return false;
     }
     const QRect vr = tree_->visualRect(index);
-    const QRect eye = delegate_->eyeRect(QRect(0, 0, vr.width(), vr.height()));
+    const QRect eye = delegate_->eyeRect(QRect(0, 0, vr.width(), vr.height()), index);
     const QPointF at(vr.left() + eye.center().x(), vr.center().y());
     QMouseEvent press(QEvent::MouseButtonPress, at, tree_->viewport()->mapToGlobal(at),
                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);

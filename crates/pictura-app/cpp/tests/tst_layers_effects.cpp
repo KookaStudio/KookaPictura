@@ -7,16 +7,41 @@
 #include "frame.h"
 #include "layer_style_dialog.h"
 #include "panels/layers_panel.h"
+#include "panels/layers_panel_internal.h"
 #include "api/layers_bridge.h"
 
+#include <QtCore/QAbstractItemModel>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
+#include <QtGui/QMouseEvent>
 #include <QtWidgets/QDialog>
+#include <QtWidgets/QTreeView>
 
 #include <functional>
 
 #include "qt_test_support.h"
+
+namespace {
+QModelIndex indexForPath(QAbstractItemModel* model, const QString& path,
+                         const QModelIndex& parent = QModelIndex())
+{
+    if (!model) {
+        return {};
+    }
+    for (int row = 0; row < model->rowCount(parent); ++row) {
+        const QModelIndex index = model->index(row, 0, parent);
+        if (index.data(pictura::PathRole).toString() == path) {
+            return index;
+        }
+        const QModelIndex child = indexForPath(model, path, index);
+        if (child.isValid()) {
+            return child;
+        }
+    }
+    return {};
+}
+} // namespace
 
 class LayersEffectsTest : public QObject {
     Q_OBJECT
@@ -35,7 +60,17 @@ private slots:
     void disableLayerEffectsIsOneState();
     void effectOrderingMatchesTheDialog();
     void adjustmentRowsShowNoFxBadge();
-    void effectsRowHasNoOutline();
+    void effectsListToggleSitsOnTheLayerRow();
+    void closingTheListHidesTheGroup();
+    void nestedRowsFormOneCell();
+    void syntheticRowsHaveNoThumbnail();
+    void nestedEyeAlignsWithImageThumb();
+    void clickingEffectRowSelectsLayer();
+    void hiddenEffectShowsFadedEye();
+    void groupKeepsNestedLayersChevron();
+    void shapeLayerWithEffectsShowsTheListToggle();
+    void syntheticRowsAreNotSelectable();
+    void syntheticRowsDoNotDrag();
 
 private:
     // A 10x10 white square lifted onto layer "1" over a white Background.
@@ -295,30 +330,274 @@ void LayersEffectsTest::adjustmentRowsShowNoFxBadge()
 
 // The Effects group row's card is a square (1:1) with no black outline on a
 // non-square document (#982).
-void LayersEffectsTest::effectsRowHasNoOutline()
+void LayersEffectsTest::effectsListToggleSitsOnTheLayerRow()
 {
-    QVERIFY(window_->newDocument(QStringLiteral("EffectsSquare"), 40, 80, QStringLiteral("rgb"), 8,
+    setupSquare();
+    addDropShadow();
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    const QModelIndex layer = indexForPath(tree->model(), QStringLiteral("1"));
+    const QModelIndex group = indexForPath(tree->model(), QStringLiteral("1/@fx"));
+    QVERIFY(layer.isValid() && group.isValid());
+    QVERIFY2(layer.data(pictura::EffectsListOpenRole).toBool(), "a new style opens the list");
+    QVERIFY2(!group.data(pictura::ExpandableRole).toBool(), "the group header has no chevron");
+    const QRect toggle = delegate->listToggleRect(tree->visualRect(layer), layer);
+    QVERIFY2(!toggle.isEmpty(), "the layer row draws the list toggle");
+    QVERIFY2(toggle.left() > tree->visualRect(layer).center().x(), "the toggle is right-aligned");
+
+    const QImage open = panel_->rowImageForTest(QStringLiteral("1"));
+    QVERIFY(panel_->clickListToggleForTest(QStringLiteral("1")));
+    QCoreApplication::processEvents();
+    const QImage closed = panel_->rowImageForTest(QStringLiteral("1"));
+    QVERIFY(!open.isNull() && !closed.isNull());
+    bool flipped = false;
+    for (int y = toggle.top(); y <= toggle.bottom() && !flipped; ++y) {
+        for (int x = toggle.left(); x <= toggle.right(); ++x) {
+            if (open.pixelColor(x, y) != closed.pixelColor(x, y)) {
+                flipped = true;
+                break;
+            }
+        }
+    }
+    QVERIFY2(flipped, "the list toggle points down when closed and up when open");
+}
+
+void LayersEffectsTest::closingTheListHidesTheGroup()
+{
+    setupSquare();
+    addDropShadow();
+    QVERIFY(panel_->rowExistsForTest(QStringLiteral("1/@fx")));
+    QVERIFY(panel_->clickListToggleForTest(QStringLiteral("1")));
+    QCoreApplication::processEvents();
+    QVERIFY2(!panel_->rowExistsForTest(QStringLiteral("1/@fx")), "closing hides the header");
+    QVERIFY2(!panel_->rowExistsForTest(QStringLiteral("1/@fx/dropShadow")), "closing hides the rows");
+}
+
+void LayersEffectsTest::nestedRowsFormOneCell()
+{
+    setupSquare();
+    addDropShadow();
+    const QImage group = panel_->rowImageForTest(QStringLiteral("1/@fx"));
+    const QImage last = panel_->rowImageForTest(QStringLiteral("1/@fx/dropShadow"));
+    QVERIFY(!group.isNull() && !last.isNull());
+    QVERIFY2(group.height() >= 24, "a synthetic row keeps its minimum vertical padding");
+    const QColor groupBottom =
+        group.pixelColor(group.width() / 2, group.height() - 1);
+    const QColor lastBottom = last.pixelColor(last.width() / 2, last.height() - 1);
+    QVERIFY2(groupBottom != lastBottom, "the open list has no rule between its rows");
+    QVERIFY2(groupBottom == group.pixelColor(group.width() / 2, group.height() - 2),
+             "the group header does not draw a bottom rule");
+    QVERIFY2(lastBottom.lightness() < groupBottom.lightness(),
+             "the block closes after the last row");
+    const int border = pictura::LayerRowDelegate::kEyeColumn - 1;
+    QCOMPARE(group.pixelColor(border, group.height() / 2),
+             last.pixelColor(border, last.height() / 2));
+}
+
+void LayersEffectsTest::syntheticRowsHaveNoThumbnail()
+{
+    setupSquare();
+    addDropShadow();
+    QVERIFY2(panel_->rowThumbRectForTest(QStringLiteral("1/@fx")).isEmpty(),
+             "the Effects header draws no thumbnail");
+    QVERIFY2(panel_->rowThumbRectForTest(QStringLiteral("1/@fx/dropShadow")).isEmpty(),
+             "an effect row draws no thumbnail");
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    const QModelIndex layer = indexForPath(tree->model(), QStringLiteral("1"));
+    const QModelIndex group = indexForPath(tree->model(), QStringLiteral("1/@fx"));
+    QVERIFY(layer.isValid() && group.isValid());
+    const QRect gr = tree->visualRect(group);
+    const QRect slot =
+        delegate->imageThumbBox(QRect(0, 0, gr.width(), gr.height()), layer);
+    QVERIFY(!slot.isEmpty());
+    const QImage groupImage = panel_->rowImageForTest(QStringLiteral("1/@fx"));
+    const QImage childImage = panel_->rowImageForTest(QStringLiteral("1/@fx/dropShadow"));
+    QVERIFY(!groupImage.isNull() && !childImage.isNull());
+    const QColor surface = groupImage.pixelColor(groupImage.width() - 4, 1);
+    QCOMPARE(groupImage.pixelColor(slot.center()), surface);
+    QCOMPARE(childImage.pixelColor(slot.center()), surface);
+}
+
+void LayersEffectsTest::nestedEyeAlignsWithImageThumb()
+{
+    setupSquare();
+    addDropShadow();
+    QVERIFY2(pictura::layer_mask_add(*view_, QStringLiteral("reveal-all")), "add mask");
+    panel_->refresh();
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    const QModelIndex layer = indexForPath(tree->model(), QStringLiteral("1"));
+    const QModelIndex group = indexForPath(tree->model(), QStringLiteral("1/@fx"));
+    const QModelIndex child = indexForPath(tree->model(), QStringLiteral("1/@fx/dropShadow"));
+    QVERIFY(layer.isValid() && group.isValid() && child.isValid());
+    const QRect gr = tree->visualRect(group);
+    const QRect cr = tree->visualRect(child);
+    const QRect ge = delegate->eyeRect(gr, group);
+    const QRect ce = delegate->eyeRect(cr, child);
+    QCOMPARE(ce.left(), ge.left() + pictura::LayerRowDelegate::kIndent);
+    QCOMPARE(delegate->eyeColumnRect(gr, group).left(),
+             delegate->imageSlotRight(gr, layer));
+    QVERIFY(delegate->eyeColumnRect(gr, group).left() < delegate->thumbsRight(gr, layer));
+    const QRect name = delegate->nameRect(gr, group);
+    QVERIFY2(name.left() - ge.right() <= 7, "the eye-to-name spacing is halved");
+}
+
+void LayersEffectsTest::clickingEffectRowSelectsLayer()
+{
+    setupSquare();
+    addDropShadow();
+    // Start on a different layer so the click has to move the document target,
+    // not merely re-affirm an existing selection.
+    panel_->selectPaths({QStringLiteral("0")}, QStringLiteral("0"));
+    QCOMPARE(panel_->targetLayerPaths(), QStringList{QStringLiteral("0")});
+    for (const QString& path :
+         {QStringLiteral("1/@fx"), QStringLiteral("1/@fx/dropShadow")}) {
+        panel_->selectPaths({QStringLiteral("0")}, QStringLiteral("0"));
+        QVERIFY2(panel_->clickRowForTest(path), "click the synthetic row");
+        QCoreApplication::processEvents();
+        QCOMPARE(panel_->currentPath(), QStringLiteral("1"));
+        const QStringList selected = panel_->selectedPaths();
+        QCOMPARE(selected, QStringList{QStringLiteral("1")});
+        QCOMPARE(panel_->targetLayerPaths(), QStringList{QStringLiteral("1")});
+    }
+}
+
+void LayersEffectsTest::hiddenEffectShowsFadedEye()
+{
+    setupSquare();
+    addDropShadow();
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    const QModelIndex child = indexForPath(tree->model(), QStringLiteral("1/@fx/dropShadow"));
+    QVERIFY(child.isValid());
+    const QRect vr = tree->visualRect(child);
+    const QRect eye = delegate->eyeRect(QRect(0, 0, vr.width(), vr.height()), child);
+    const QImage visible = panel_->rowImageForTest(QStringLiteral("1/@fx/dropShadow"));
+    QVERIFY(!visible.isNull());
+    QVERIFY(panel_->clickRowEyeForTest(QStringLiteral("1/@fx/dropShadow")));
+    QCoreApplication::processEvents();
+    const QImage hidden = panel_->rowImageForTest(QStringLiteral("1/@fx/dropShadow"));
+    QVERIFY(!hidden.isNull());
+    const QColor visibleEye = visible.pixelColor(eye.center());
+    const QColor hiddenEye = hidden.pixelColor(eye.center());
+    const QColor surface = hidden.pixelColor(hidden.width() - 4, 1);
+    QVERIFY2(hiddenEye != surface, "the hidden row paints the eye-off glyph");
+    QVERIFY2(hiddenEye != visibleEye, "the hidden glyph is faded");
+    QVERIFY2(hiddenEye.lightness() > visibleEye.lightness(),
+             "the 50% glyph blends toward the row surface");
+
+    // The eye slot stays the toggle target: a second click re-enables the row.
+    QVERIFY(panel_->clickRowEyeForTest(QStringLiteral("1/@fx/dropShadow")));
+    QCoreApplication::processEvents();
+    QVERIFY2(panel_->rowVisibleForTest(QStringLiteral("1/@fx/dropShadow")),
+             "the second click switches the effect back on");
+}
+
+void LayersEffectsTest::groupKeepsNestedLayersChevron()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("EffectsGroup"), 40, 40, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
     view_ = window_->activeView();
     panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY(view_ && panel_);
-    view_->select_rect(10, 10, 10, 10, QStringLiteral("new"), 0.0);
-    QVERIFY(!view_->layer_via_copy(QStringLiteral("0")).isEmpty());
-    view_->deselect();
-    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
-                                     QStringLiteral("dropShadow.on"), 1.0));
+    const QString group = view_->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    const QString child = view_->add_layer_in(group);
+    QVERIFY(!child.isEmpty());
+    QVERIFY(pictura::layer_style_set(*view_, child, QStringLiteral("dropShadow.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    panel_->setView(view_);
+    panel_->refresh();
+    QCoreApplication::processEvents();
+    QVERIFY(panel_->rowExpandableForTest(group));
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    const QModelIndex groupIndex = indexForPath(tree->model(), group);
+    const QModelIndex childIndex = indexForPath(tree->model(), child);
+    QVERIFY(groupIndex.isValid() && childIndex.isValid());
+    QVERIFY2(delegate->listToggleRect(tree->visualRect(groupIndex), groupIndex).isEmpty(),
+             "the group row has no list toggle");
+    QVERIFY2(!delegate->listToggleRect(tree->visualRect(childIndex), childIndex).isEmpty(),
+             "the styled child draws the list toggle");
+}
+
+void LayersEffectsTest::shapeLayerWithEffectsShowsTheListToggle()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ShapeEffects"), 40, 40, QStringLiteral("rgb"),
+                                 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    panel_->refresh();
+    QCoreApplication::processEvents();
+
+    pictura::ShapeSpec square{};
+    square.kind = 0;
+    square.boxed = true;
+    square.x0 = 5;
+    square.y0 = 5;
+    square.x1 = 20;
+    square.y1 = 20;
+    const QString path = pictura::shape_add_layer(*view_, square, 0xffff0000u);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.on"), 1.0));
     pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
     panel_->refresh();
     QCoreApplication::processEvents();
 
-    const QRect thumb = panel_->rowThumbRectForTest(QStringLiteral("1/@fx"));
-    QVERIFY2(!thumb.isEmpty(), "effects row thumbnail laid out");
-    QCOMPARE(thumb.width(), thumb.height());
-    const QImage image = panel_->rowImageForTest(QStringLiteral("1/@fx"));
-    QVERIFY(!image.isNull());
-    const QColor border = image.pixelColor(thumb.left(), thumb.top());
-    QVERIFY2(border.red() > 100 && border.green() > 100 && border.blue() > 100,
-             "an effects row card has no black outline");
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    const QModelIndex layer = indexForPath(tree->model(), path);
+    QVERIFY(layer.isValid());
+    QVERIFY2(layer.data(pictura::LayerRowShapeRole).toBool(), "a shape row");
+    const QRect vr = tree->visualRect(layer);
+    QVERIFY2(delegate->fxRect(vr, layer).isEmpty(), "a shape row keeps the fx badge hidden");
+    QVERIFY2(!delegate->listToggleRect(vr, layer).isEmpty(),
+             "a shape layer with effects still exposes the list toggle");
+    QVERIFY(panel_->rowExistsForTest(path + QStringLiteral("/@fx")));
+    QVERIFY(panel_->clickListToggleForTest(path));
+    QCoreApplication::processEvents();
+    QVERIFY2(!panel_->rowExistsForTest(path + QStringLiteral("/@fx")),
+             "the toggle closes the shape layer's Effects list");
+    QVERIFY(panel_->clickListToggleForTest(path));
+    QCoreApplication::processEvents();
+    QVERIFY2(panel_->rowExistsForTest(path + QStringLiteral("/@fx")),
+             "the toggle reopens the shape layer's Effects list");
+}
+
+void LayersEffectsTest::syntheticRowsAreNotSelectable()
+{
+    setupSquare();
+    addDropShadow();
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree);
+    const QModelIndex layer = indexForPath(tree->model(), QStringLiteral("1"));
+    const QModelIndex group = indexForPath(tree->model(), QStringLiteral("1/@fx"));
+    const QModelIndex child = indexForPath(tree->model(), QStringLiteral("1/@fx/dropShadow"));
+    QVERIFY(layer.isValid() && group.isValid() && child.isValid());
+    QVERIFY2(!(group.flags() & Qt::ItemIsSelectable), "the Effects header is not selectable");
+    QVERIFY2(!(child.flags() & Qt::ItemIsSelectable), "an effect row is not selectable");
+    QVERIFY2(layer.flags() & Qt::ItemIsSelectable, "the owning layer stays selectable");
+}
+
+void LayersEffectsTest::syntheticRowsDoNotDrag()
+{
+    setupSquare();
+    addDropShadow();
+    QVERIFY2(panel_->dragPathsForSyntheticForTest(QStringLiteral("1/@fx")).isEmpty(),
+             "the Effects header does not drag");
+    QVERIFY2(panel_->dragPathsForSyntheticForTest(QStringLiteral("1/@fx/dropShadow")).isEmpty(),
+             "an effect row does not drag");
+    QCOMPARE(panel_->dragPathsForSyntheticForTest(QStringLiteral("1")),
+             QStringList{QStringLiteral("1")});
 }
 
 QTEST_MAIN(LayersEffectsTest)
