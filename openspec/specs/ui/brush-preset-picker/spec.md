@@ -23,7 +23,8 @@ The picker SHALL offer Size (1–5000 px) and Hardness (0–100 %), each as a nu
 box and a slider, over the controller every paint tool reads. The Size slider's
 first half SHALL cover 1–100 px evenly and its second half SHALL climb
 geometrically from 100 to 5000 px. A preset SHALL set the whole tip: size,
-hardness, roundness, angle, spacing, and dab dynamics.
+hardness, roundness, angle, spacing, dab dynamics, and the bristle toggle and
+its Shape, Bristles, Length, Thickness, and Stiffness.
 
 #### Scenario: The slider midpoint is 100 px
 
@@ -131,3 +132,24 @@ the settings are approximated from the owner's reference and marked non-parity.
 - **WHEN** the Brush paints a straight stroke with `Non-Photo Blue Pencil`
 - **THEN** each cross-section covers 2.5–4.5 px, integrates to 1.5–2.1 px of
   full coverage, and peaks at 0.64–0.84 on average
+
+### Requirement: Bristle presets
+
+The default brush set SHALL include `Bristle Round 30` and `Bristle Flat 40`
+before the four issue-#731 presets. Both SHALL be bristle tips; `Bristle Round
+30` SHALL use the Round shape and `Bristle Flat 40` the Flat shape, with
+project-default Bristles, Length, Thickness, and Stiffness. The exact Photoshop
+bristle preset data is unavailable, so these presets are approximations and are
+marked non-parity. Selecting a preset that is not a bristle preset SHALL turn
+the bristle toggle off.
+
+#### Scenario: Bristle presets are listed and applied
+
+- **WHEN** `Bristle Flat 40` is chosen
+- **THEN** the controller reports a bristle tip, the Flat shape, 40 px, and
+  the preset's Bristles, Length, Thickness, and Stiffness
+
+#### Scenario: A round preset clears the bristle tip
+
+- **WHEN** a bristle preset is chosen and then `Soft Round 5` is chosen
+- **THEN** the controller reports a smooth tip

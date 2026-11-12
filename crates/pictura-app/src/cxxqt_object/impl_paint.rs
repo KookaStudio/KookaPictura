@@ -7,6 +7,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::PsdRect;
+use pictura_paint::bristle::BristleDab;
 use pictura_paint::spacing::DabPlacer;
 use pictura_paint::{spacing::SpacingMode, PaintMode, Stroke, StrokeConfig, StrokeSample};
 use pictura_render::gpu::{GpuPaintMode, GpuStroke, GpuStrokeParams};
@@ -229,7 +230,21 @@ fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool 
     let radius = cfg.diameter as f32 * 0.5;
     let flow = cfg.flow as f32 / 100.0;
     let (cx, cy) = (sample.x / scale, sample.y / scale);
-    let r = radius / scale;
+    let reach = cfg
+        .bristle
+        .map_or(radius, |tip| tip.reach(cfg.diameter as f32));
+    let r = reach / scale;
+    let bristle = cfg.bristle.map(|tip| {
+        let seed =
+            (cx.to_bits() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (cy.to_bits() as u64);
+        BristleDab::new(
+            tip,
+            cfg.diameter as f32,
+            cfg.angle_deg as f32,
+            sample.pressure,
+            seed,
+        )
+    });
     let (w, h) = (preview.width as i32, preview.height as i32);
     if w <= 0 || h <= 0 {
         return false;
@@ -243,7 +258,10 @@ fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool 
         for lx in x0..=x1 {
             let dx = (lx as f32 + 0.5 - cx) * scale;
             let dy = (ly as f32 + 0.5 - cy) * scale;
-            let tip = pictura_paint::tip_coverage(&cfg, dx, dy);
+            let tip = match &bristle {
+                Some(bristle) => bristle.coverage(dx, dy),
+                None => pictura_paint::tip_coverage(&cfg, dx, dy),
+            };
             if tip <= 0.0 {
                 continue;
             }
@@ -463,6 +481,7 @@ impl PictureViewRust {
                         && !cfg.pressure_size
                         && !cfg.pressure_opacity
                         && cfg.dynamics.is_default()
+                        && cfg.bristle.is_none()
                 });
                 if level.is_some() && rust.gpu_compute {
                     let seeded = match (

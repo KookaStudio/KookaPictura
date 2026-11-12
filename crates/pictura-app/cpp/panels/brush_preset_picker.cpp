@@ -86,6 +86,12 @@ struct Preset {
     int opacity = -1;
     int flow = -1;
     bool wetEdges = false;
+    bool bristle = false;
+    int bristleShape = 0;
+    int bristleDensity = 50;
+    int bristleLength = 50;
+    int bristleThickness = 50;
+    int bristleStiffness = 50;
 };
 
 // CS6's default brush set in its order, one family per run. The numbers under
@@ -136,6 +142,12 @@ const Preset kPresets[] = {
     {"Hard Round 100", 100, 100, 100, 0, 0, 1, 0, 0, 0, 25},
     {"Soft Round 200", 200, 0, 100, 0, 0, 1, 0, 0, 0, 25},
     {"Soft Round 300", 300, 0, 100, 0, 0, 1, 0, 0, 0, 25},
+    // Bristle tips: no Photoshop preset data is available, so these are
+    // approximations of the round and flat families (non-parity).
+    {"Bristle Round 30", 30, 100, 100, 0, 0, 1, 0, 0, 0, 20, false, 0, false, nullptr,
+     nullptr, -1, -1, false, true, 0, 55, 60, 40, 35},
+    {"Bristle Flat 40", 40, 100, 100, 0, 0, 1, 0, 0, 0, 20, false, 0, false, nullptr,
+     nullptr, -1, -1, false, true, 3, 60, 50, 45, 55},
     // Issue #731's four brushes. There is no Photoshop tip data to port, so
     // these are approximated from the owner's strokes (non-parity). Unlike the
     // CS6 set, each carries the default foreground, Mode, Opacity, and Flow
@@ -168,7 +180,9 @@ PaintTip tipOf(const Preset& p)
 {
     return PaintTip{p.size,    p.hardness, p.roundness,  p.angle,       p.spacing,
                     p.scatter, p.count,    p.sizeJitter, p.angleJitter, p.roundnessJitter,
-                    p.grain,   p.wetEdges, paintDynamics(BrushDynamics{})};
+                    p.grain,   p.wetEdges, paintDynamics(BrushDynamics{}), p.bristle,
+                    p.bristleShape, p.bristleDensity, p.bristleLength, p.bristleThickness,
+                    p.bristleStiffness};
 }
 
 } // namespace
@@ -244,7 +258,7 @@ BrushPresetPicker::BrushPresetPicker(ToolController* controller, QWidget* parent
     grid_->setIconSize(QSize(kCell, kCell));
     grid_->setGridSize(QSize(kCell + 6, kCell + 6));
     grid_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    grid_->setFixedHeight(7 * (kCell + 6) + 8);
+    grid_->setFixedHeight(8 * (kCell + 6) + 8);
     grid_->setMinimumWidth(7 * (kCell + 6) + 24);
     buildGrid();
     outer->addWidget(grid_);
@@ -379,6 +393,12 @@ void BrushPresetPicker::applyPreset(int index)
     paint_->setWetEdges(p.wetEdges);
     paint_->setPenTip(p.penTip);
     paint_->setAliased(p.aliased);
+    paint_->setBristleEnabled(p.bristle);
+    paint_->setBristleShape(p.bristleShape);
+    paint_->setBristleDensity(p.bristleDensity);
+    paint_->setBristleLength(p.bristleLength);
+    paint_->setBristleThickness(p.bristleThickness);
+    paint_->setBristleStiffness(p.bristleStiffness);
     if (controller_ && p.color) {
         controller_->setForeground(QColor(QString::fromLatin1(p.color)));
     }

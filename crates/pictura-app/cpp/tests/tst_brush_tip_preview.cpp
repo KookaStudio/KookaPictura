@@ -153,8 +153,8 @@ void BrushTipPreviewTest::fourAdditionalPresets()
     QVERIFY(picker);
     auto* grid = picker->findChild<QListWidget*>(QStringLiteral("brushPickerGrid"));
     QVERIFY(grid);
-    QCOMPARE(picker->presetCount(), 48);
-    QCOMPARE(grid->count(), 48);
+    QCOMPARE(picker->presetCount(), 50);
+    QCOMPARE(grid->count(), 50);
 
     const QStringList names{
         QStringLiteral("2B Pencil"),
