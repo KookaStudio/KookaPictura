@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Progress for spilling transform commits, phase 5** (#1290, OpenSpec change
+  `transform-spill-progress`, capability `tools/move-commit-responsiveness`).
+  `commit_transform` sends a commit to the cancellable job when its source rect
+  reaches 4 MP or when `memory_gate::expects_spill` holds: its `working` plus
+  `spillable` bytes exceed the governor's room. Progress counts resampled rows,
+  advanced after each 256-row strip is written into tiles. Cancel from the
+  progress window now ends the Free Transform as Esc does (change
+  `transform-cancel-ends-session`); the engine still leaves the session live
+  and `commitFreeTransform` / `commitTransformControls` call
+  `cancel_transform`. Move tool commits are not covered. #1290 still needs the 17000² `MemoryMax` runs; warp, Image Size
+  and Canvas Size are #1292–#1294.
 - **Transform preview memory and the projective mode switch** (#1297, OpenSpec
   change `transform-preview-memory`, capabilities
   `document/transform-preview-memory` and `tools/projective-mode-switch`).
