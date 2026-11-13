@@ -316,6 +316,26 @@ fn positioned_thumbnail_follows_document_aspect() {
 }
 
 #[test]
+fn extreme_document_thumbnail_aspect_is_clamped() {
+    let wide = layer_thumbnail_positioned(&pixel_layer("wide", 200, 20, (255, 0, 0)), 200, 20, 24)
+        .expect("wide document");
+    assert_eq!((wide.width(), wide.height()), (24, 8));
+    assert_eq!(wide.pixel_color(23, 4).alpha(), 255);
+    let tall = layer_thumbnail_positioned(&pixel_layer("tall", 20, 200, (0, 255, 0)), 20, 200, 24)
+        .expect("tall document");
+    assert_eq!((tall.width(), tall.height()), (8, 24));
+    assert_eq!(tall.pixel_color(4, 23).alpha(), 255);
+    let small =
+        layer_thumbnail_positioned(&pixel_layer("small", 160, 16, (0, 0, 255)), 160, 16, 16)
+            .expect("small thumbnail");
+    assert_eq!((small.width(), small.height()), (16, 6));
+    let near =
+        layer_thumbnail_positioned(&pixel_layer("near", 300, 100, (0, 128, 0)), 300, 100, 16)
+            .expect("near-bound thumbnail");
+    assert_eq!((near.width(), near.height()), (16, 6));
+}
+
+#[test]
 fn move_preview_base_equals_full_composite_with_layer_hidden() {
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![

@@ -516,15 +516,23 @@ pub(super) fn layers_under_point(
 }
 
 /// The `size`-bounded extent (long edge `size`, short edge proportional) that
-/// preserves `width`:`height`, rounded like the delegate's `letterboxedThumb` so
-/// the emitted thumbnail shares the rect it is drawn into.
+/// preserves `width`:`height` and is never more extreme than 3:1: round the
+/// proportional short edge, then raise it if it is below one third of the long
+/// edge, matching the delegate's `letterboxedThumb`.
 pub(super) fn aspect_thumbnail_extent(width: u32, height: u32, size: u32) -> (u32, u32) {
     let short =
         |edge: u32, long: u32| ((edge as f64 * size as f64 / long as f64).round() as u32).max(1);
-    if width >= height {
+    let (tw, th) = if width >= height {
         (size, short(height, width))
     } else {
         (short(width, height), size)
+    };
+    if tw > th.saturating_mul(3) {
+        (tw, tw.div_ceil(3))
+    } else if th > tw.saturating_mul(3) {
+        (th.div_ceil(3), th)
+    } else {
+        (tw, th)
     }
 }
 /// Panel Options "Entire Document": render a pixel layer over the document's
