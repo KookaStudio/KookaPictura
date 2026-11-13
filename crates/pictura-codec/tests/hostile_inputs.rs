@@ -275,6 +275,7 @@ fn a_composite_over_the_document_total_is_refused() {
     };
     let budget = ImageBudget {
         max_document_bytes: 16 << 30,
+        max_tiled_bytes: 16 << 30,
         ..ImageBudget::default()
     };
     let bytes = psd(&header, &[], Some(&[0, 1]));
@@ -296,6 +297,7 @@ fn a_document_over_its_limit_is_refused_and_the_default_keeps_a_plane() {
     let bytes = psd(&header, &raw_layers(0, 1), Some(&[0, 1]));
     let tight = ImageBudget {
         max_document_bytes: 8 * MIB as u64,
+        max_tiled_bytes: 8 * MIB as u64,
         ..ImageBudget::default()
     };
     assert!(read_psd_within(&bytes, Policy::Convert, tight).is_err());
@@ -386,6 +388,7 @@ fn layer_planes_count_against_the_document_total() {
         max_dimension: 30_000,
         max_alloc_bytes: 64 * 1024,
         max_document_bytes: 8 * 64 * 1024,
+        max_tiled_bytes: 8 * 64 * 1024,
     };
     let over = psd(&Header::rgb(4, 4), &raw_layers(8, 200), None);
     assert!(read_psd_within(&over, Policy::Convert, budget).is_err());
@@ -414,6 +417,7 @@ fn over_budget_channel_is_refused_before_decoding() {
         max_dimension: 1000,
         max_alloc_bytes: 1024,
         max_document_bytes: 1 << 20,
+        max_tiled_bytes: 1 << 20,
     };
     let bytes = psd(&Header::rgb(4, 4), &[layer], None);
     let error = read_psd_within(&bytes, Policy::Convert, budget).expect_err("over budget");
@@ -574,6 +578,7 @@ fn mutated_psds_never_panic_or_overallocate() {
         max_dimension: 30_000,
         max_alloc_bytes: MIB as u64,
         max_document_bytes: 8 * MIB as u64,
+        max_tiled_bytes: 8 * MIB as u64,
     };
     fuzz("psd", &psd_seeds(), 3000, 64 * MIB, |bytes| {
         let _ = read_psd_within(bytes, Policy::Convert, budget);
@@ -603,6 +608,7 @@ fn mutated_pdfs_never_panic_or_overallocate() {
         max_dimension: 30_000,
         max_alloc_bytes: MIB as u64,
         max_document_bytes: 8 * MIB as u64,
+        max_tiled_bytes: 8 * MIB as u64,
     };
     fuzz("pdf", &seeds, 1500, 64 * MIB, |bytes| {
         if let EditingPsd::Psd(psd) = editing_psd(bytes, "pw") {

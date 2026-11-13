@@ -1119,6 +1119,7 @@ mod budget_tests {
             max_dimension: 30_000,
             max_alloc_bytes: 2 * 1024 * 1024 * 1024,
             max_document_bytes: document,
+            max_tiled_bytes: document,
         }
     }
 

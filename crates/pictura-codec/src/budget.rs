@@ -44,6 +44,8 @@ pub fn total_memory() -> Option<u64> {
 pub(crate) struct DecodeBudget {
     per_allocation: u64,
     remaining: u64,
+    /// What the planes decoded into tiles may still claim.
+    tiled_remaining: u64,
 }
 
 impl DecodeBudget {
@@ -51,6 +53,7 @@ impl DecodeBudget {
         Self {
             per_allocation: budget.max_alloc_bytes,
             remaining: budget.max_document_bytes,
+            tiled_remaining: budget.max_tiled_bytes,
         }
     }
 
@@ -58,14 +61,38 @@ impl DecodeBudget {
     /// size. Overflow, an allocation over the per-allocation cap, or one that
     /// would exceed what the document has left are refused.
     pub(crate) fn charge(&mut self, what: &str, factors: &[usize]) -> Result<usize, PsdError> {
+        Self::take(self.per_allocation, &mut self.remaining, what, factors)
+    }
+
+    /// As [`Self::charge`], for a plane decoded into tiles: the same
+    /// per-allocation cap, against the tile total instead of the document's.
+    pub(crate) fn charge_tiled(
+        &mut self,
+        what: &str,
+        factors: &[usize],
+    ) -> Result<usize, PsdError> {
+        Self::take(
+            self.per_allocation,
+            &mut self.tiled_remaining,
+            what,
+            factors,
+        )
+    }
+
+    fn take(
+        per_allocation: u64,
+        remaining: &mut u64,
+        what: &str,
+        factors: &[usize],
+    ) -> Result<usize, PsdError> {
         let bytes = factors
             .iter()
             .try_fold(1u64, |n, &f| n.checked_mul(f as u64))
-            .filter(|&n| n <= self.per_allocation && n <= self.remaining)
+            .filter(|&n| n <= per_allocation && n <= *remaining)
             .ok_or_else(|| {
                 PsdError::Unsupported(format!("{what} {factors:?} exceeds the decode budget"))
             })?;
-        self.remaining -= bytes;
+        *remaining -= bytes;
         usize::try_from(bytes).map_err(|_| PsdError::Unsupported(format!("{what} too large")))
     }
 }
@@ -101,6 +128,7 @@ mod tests {
             max_dimension: 1000,
             max_alloc_bytes: 100,
             max_document_bytes: 400,
+            max_tiled_bytes: 400,
         })
     }
 
