@@ -2,9 +2,9 @@ use super::helpers_composite::{aspect_thumbnail_extent, rgba_image};
 use cxx_qt_lib::QImage;
 use pictura_core::{LayerMask, PsdRect, VectorMask};
 
-/// Downsample a vector mask's coverage into a `size`-bounded square (long edge
-/// `size`, aspect kept), replicating the value across RGB with the
-/// white-shows / black-hides convention. An absent,
+/// Downsample a vector mask's coverage into a `size`-bounded extent (long edge
+/// `size`, document aspect clamped to 3:1), replicating the value across RGB
+/// with the white-shows / black-hides convention. An absent,
 /// disabled, or all-open mask is fully white (permissive), matching the
 /// compositor. `ponytail:` CS6 strokes the path outline; this fills coverage.
 pub(super) fn vector_mask_thumbnail_image(
@@ -16,17 +16,7 @@ pub(super) fn vector_mask_thumbnail_image(
     if doc_width == 0 || doc_height == 0 || size == 0 {
         return None;
     }
-    let (tw, th) = if doc_width >= doc_height {
-        (
-            size,
-            ((doc_height as u64 * size as u64) / doc_width as u64).max(1) as u32,
-        )
-    } else {
-        (
-            ((doc_width as u64 * size as u64) / doc_height as u64).max(1) as u32,
-            size,
-        )
-    };
+    let (tw, th) = aspect_thumbnail_extent(doc_width, doc_height, size);
     let clip = PsdRect {
         top: 0,
         left: 0,
@@ -215,5 +205,33 @@ mod tests {
                 .red(),
             255
         );
+    }
+
+    #[test]
+    fn extreme_document_mask_thumbnail_aspect_is_clamped() {
+        let layer = mask(
+            PsdRect {
+                top: 25,
+                left: 50,
+                bottom: 75,
+                right: 100,
+            },
+            255,
+        );
+        let image = mask_thumbnail_positioned(&layer, 400, 100, 24).expect("clamped mask");
+        assert_eq!((image.width(), image.height()), (24, 8));
+        assert_eq!(image.pixel_color(0, 0).red(), 0);
+        assert_eq!(image.pixel_color(3, 2).red(), 255);
+    }
+
+    #[test]
+    fn extreme_document_vector_mask_thumbnail_aspect_is_clamped() {
+        let mask = VectorMask::default();
+        let wide = vector_mask_thumbnail_image(&mask, 200, 20, 24).expect("wide vector mask");
+        assert_eq!((wide.width(), wide.height()), (24, 8));
+        let tall = vector_mask_thumbnail_image(&mask, 20, 200, 24).expect("tall vector mask");
+        assert_eq!((tall.width(), tall.height()), (8, 24));
+        let hd = vector_mask_thumbnail_image(&mask, 1600, 900, 24).expect("16:9 vector mask");
+        assert_eq!((hd.width(), hd.height()), (24, 14));
     }
 }

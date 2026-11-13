@@ -398,9 +398,7 @@ public:
         return QRect(left, itemRect.top() + (itemRect.height() - side) / 2, side, side);
     }
 
-    /// Letterbox a square thumbnail `box` to the document's aspect ratio, so a
-    /// wide or tall document is not stretched. A zero-size document keeps
-    /// the original box.
+    /// Letterbox a thumbnail slot `box` to the document aspect, never more extreme than 3:1.
     QRect letterboxedThumb(const QRect& box, const QModelIndex& index) const
     {
         if (box.isEmpty()) {
@@ -418,10 +416,12 @@ public:
             // The document is wider than the box: fit by width.
             height = qMax(1, qRound(static_cast<double>(box.width()) * documentHeight
                                     / documentWidth));
+            height = qMax(height, (width + 2) / 3);
         } else {
             // The document is taller than the box: fit by height.
             width = qMax(1, qRound(static_cast<double>(box.height()) * documentWidth
                                    / documentHeight));
+            width = qMax(width, (height + 2) / 3);
         }
         return QRect(box.left() + (box.width() - width) / 2,
                      box.top() + (box.height() - height) / 2, width, height);

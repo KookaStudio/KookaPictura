@@ -1348,9 +1348,9 @@ void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspectOnSquareRows()
     }
 }
 
-// A layer-sized mask on a non-square document keeps the document aspect in
-// Entire Document mode, sits at its document position, and shows the checker in
-// the uncovered margin (#1102).
+// A layer-sized mask on a non-square document keeps the clamped document aspect
+// in Entire Document mode, sits at its document position, and shows the checker
+// in the uncovered margin (#1102, #1287).
 void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspect()
 {
     const bool created = window_->newDocument(QStringLiteral("MaskThumbAspect"), 400, 100,
@@ -1376,14 +1376,14 @@ void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspect()
     QVERIFY2(index.isValid(), "pasted row");
     const QRect rowRect(0, 0, tree->visualRect(index).width(), tree->visualRect(index).height());
     const QImage mask = index.data(pictura::MaskThumbnailRole).value<QImage>();
-    QCOMPARE(index.data(pictura::ThumbnailRole).value<QImage>().size(), QSize(24, 6));
-    QCOMPARE(mask.size(), QSize(24, 6));
+    QCOMPARE(index.data(pictura::ThumbnailRole).value<QImage>().size(), QSize(24, 8));
+    QCOMPARE(mask.size(), QSize(24, 8));
     QCOMPARE(mask.pixelColor(0, 0), QColor(Qt::black));
-    QCOMPARE(mask.pixelColor(3, 2).alpha(), 255);
+    QCOMPARE(mask.pixelColor(3, 2), QColor(Qt::white));
     const QRect imageCard = delegate->thumbRect(rowRect, index);
     const QRect maskCard = delegate->maskThumbRect(rowRect, index);
-    QCOMPARE(imageCard.size(), QSize(24, 6));
-    QCOMPARE(maskCard.size(), QSize(24, 6));
+    QCOMPARE(imageCard.size(), QSize(24, 8));
+    QCOMPARE(maskCard.size(), QSize(24, 8));
     const QImage painted = panel_->rowImageForTest(pasted);
     QCOMPARE(qGray(painted.pixelColor(imageCard.left() + 1, imageCard.top() + 1).rgb()), 255);
     QCOMPARE(qGray(painted.pixelColor(maskCard.left() + 1, maskCard.top() + 1).rgb()), 0);

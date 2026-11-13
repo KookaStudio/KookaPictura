@@ -535,3 +535,33 @@ pub(super) fn shape_rasterize(mut view: Pin<&mut PictureView>, path: &QString) -
     });
     changed
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pictura_core::shape::outline_in_box;
+    use pictura_core::{BitDepth, ColorMode, Document};
+
+    #[test]
+    fn extreme_document_shape_thumbnail_aspect_is_clamped() {
+        for (width, height, expected) in [(200u32, 20u32, (24, 8)), (20, 200, (8, 24))] {
+            let mut doc = Document::new(width, height, ColorMode::Rgb, BitDepth::Eight);
+            let outline = outline_in_box(
+                ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
+                (4.0, 4.0, width as f64 - 8.0, height as f64 - 8.0),
+            )
+            .expect("outline");
+            let path = pictura_render::add_shape_layer(
+                &mut doc,
+                "",
+                [0, 0, 0, 255],
+                "Shape",
+                &outline,
+                None,
+            );
+            let layer = pictura_render::resolve_path(&doc, &path).expect("shape layer");
+            let image = shape_thumbnail(layer, &doc, 24);
+            assert_eq!((image.width(), image.height()), expected);
+        }
+    }
+}

@@ -121,6 +121,7 @@ private slots:
     void init();
     void cleanup();
     void allMaskCardsFollowDocumentAspect();
+    void extremeAspectThumbnailIsClamped();
     void layerRowClickDefaultsToContent();
     void adjustmentCreationActivatesMask();
     void importedPortraitMaskCardIsOpaque();
@@ -220,6 +221,7 @@ void CanvasMaskDomainTest::allMaskCardsFollowDocumentAspect()
 {
     window_->resize(1800,1000);window_->show();
     for (const QSize canvas : {QSize(120,400),QSize(400,120)}) {
+        const QSize clamped(qMin(canvas.width(),canvas.height()*3),qMin(canvas.height(),canvas.width()*3));
         for (const QString& kind : {QStringLiteral("pixel"),QStringLiteral("group"),QStringLiteral("adjustment"),QStringLiteral("solid"),QStringLiteral("gradient"),QStringLiteral("pattern"),QStringLiteral("type")}) {
             auto* v=maskedLayer(kind,canvas);QVERIFY2(v,qPrintable(kind));
             const QString path=v->active_layer_path();
@@ -231,7 +233,7 @@ void CanvasMaskDomainTest::allMaskCardsFollowDocumentAspect()
             QCOMPARE(cards[2].isEmpty(),fill);
             for (int i=1;i<=(fill?1:2);++i) {
                 const QRect card=cards[i];QVERIFY2(!card.isEmpty(),qPrintable(kind));
-                QVERIFY2(qAbs(card.width()*canvas.height()-card.height()*canvas.width())<=qMax(canvas.width(),canvas.height())/2,qPrintable(kind));
+                QVERIFY2(qAbs(card.width()*clamped.height()-card.height()*clamped.width())<=qMax(clamped.width(),clamped.height())/2,qPrintable(kind));
             }
             if (!fill) {QCOMPARE(cards[1].size(),cards[2].size());QVERIFY(cards[2].left()>cards[1].right());}
             QVERIFY(cards[1].left()>cards[0].right());
@@ -244,6 +246,75 @@ void CanvasMaskDomainTest::allMaskCardsFollowDocumentAspect()
             QCOMPARE(pictura::mask_edit_target_get(*v),path);
         }
     }
+}
+
+void CanvasMaskDomainTest::extremeAspectThumbnailIsClamped()
+{
+    window_->resize(1800,1000);window_->show();
+    auto* panel=window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));QVERIFY(panel);
+    auto* delegate=static_cast<pictura::LayerRowDelegate*>(panel->itemDelegateForTest());QVERIFY(delegate);
+    const int originalSize=delegate->thumbnailSize();
+    const auto resetSize=qScopeGuard([&] {delegate->setThumbnailSize(originalSize);panel->refresh();});
+    delegate->setThumbnailSize(24);
+    for (const QSize canvas : {QSize(200,20),QSize(20,200)}) {
+        auto* v=maskedLayer(QStringLiteral("pixel"),canvas);QVERIFY(v);
+        const QString path=v->active_layer_path();
+        panel->setView(v);panel->refresh();QCoreApplication::processEvents();
+        QImage image,maskImage,vectorImage;
+        const auto snap=pictura::layers_api::snapshot(*v,24,true);
+        for (const auto& row : snap.rows) {
+            if (row.path==path) {image=row.thumbnail;maskImage=row.maskThumbnail;vectorImage=row.vectorMaskThumbnail;break;}
+        }
+        const auto cards=thumbCards(*panel,path);
+        QVERIFY2(!cards[0].isEmpty(),qPrintable(path));
+        const bool wide=canvas.width()>canvas.height();
+        const QSize expected=wide?QSize(24,8):QSize(8,24);
+        QCOMPARE(image.size(),expected);
+        QCOMPARE(maskImage.size(),expected);
+        QCOMPARE(vectorImage.size(),expected);
+        QCOMPARE(cards[0].size(),wide?QSize(24,8):QSize(11,32));
+        QCOMPARE(cards[1].size(),cards[0].size());
+        QCOMPARE(cards[2].size(),cards[0].size());
+        QVERIFY(cards[0].width()<=cards[0].height()*3);
+        QVERIFY(cards[0].height()<=cards[0].width()*3);
+    }
+    auto* fillView=maskedLayer(QStringLiteral("solid"),QSize(200,20));QVERIFY(fillView);
+    const QString fillPath=fillView->active_layer_path();
+    panel->setView(fillView);panel->refresh();QCoreApplication::processEvents();
+    const auto fillCards=thumbCards(*panel,fillPath);
+    QVERIFY(!fillCards[0].isEmpty());
+    QCOMPARE(fillCards[0].width(),fillCards[0].height());
+
+    auto* adjustmentView=maskedLayer(QStringLiteral("adjustment"),QSize(200,20));QVERIFY(adjustmentView);
+    const QString adjustmentPath=adjustmentView->active_layer_path();
+    panel->setView(adjustmentView);panel->refresh();QCoreApplication::processEvents();
+    const auto adjustmentCards=thumbCards(*panel,adjustmentPath);
+    QVERIFY(!adjustmentCards[0].isEmpty());
+    QCOMPARE(adjustmentCards[0].width(),adjustmentCards[0].height());
+
+    delegate->setThumbnailSize(16);
+    auto* nearView=maskedLayer(QStringLiteral("pixel"),QSize(300,100));QVERIFY(nearView);
+    const QString nearPath=nearView->active_layer_path();
+    panel->setView(nearView);panel->refresh();QCoreApplication::processEvents();
+    const auto nearCards=thumbCards(*panel,nearPath);
+    QVERIFY(!nearCards[0].isEmpty());
+    QCOMPARE(nearCards[0].size(),QSize(16,6));
+    delegate->setThumbnailSize(24);
+
+    auto* maskView=maskedLayer(QStringLiteral("pixel"),QSize(400,100));QVERIFY(maskView);
+    const QString maskPath=maskView->active_layer_path();
+    panel->setView(maskView);panel->refresh();QCoreApplication::processEvents();
+    QImage entireMask,boundsMask;
+    const auto entire=pictura::layers_api::snapshot(*maskView,24,true);
+    for (const auto& row : entire.rows) {
+        if (row.path==maskPath) {entireMask=row.maskThumbnail;break;}
+    }
+    const auto bounds=pictura::layers_api::snapshot(*maskView,24,false);
+    for (const auto& row : bounds.rows) {
+        if (row.path==maskPath) {boundsMask=row.maskThumbnail;break;}
+    }
+    QCOMPARE(entireMask.size(),QSize(24,8));
+    QCOMPARE(boundsMask.size(),QSize(24,8));
 }
 
 void CanvasMaskDomainTest::layerRowClickDefaultsToContent()
