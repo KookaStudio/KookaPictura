@@ -2,6 +2,7 @@
 
 #include "api/document_api.h"
 #include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 #include "dialogs.h"
 
 #include <QtCore/QSignalBlocker>
@@ -198,11 +199,18 @@ double bytesPerPixel(PictureView* view)
 
 bool imageSizeFitsBudget(PictureView& view, int width, int height)
 {
-    return document_resize_budget_allows(width, height, document_api::documentDepthBits(view));
+    return image_size_fits_budget(view, width, height);
 }
 
 QString imageSizeBudgetMessage(int width, int height)
 {
+    if (edit_refused_for_scratch_full()) {
+        return ImageSizeDialog::tr(
+                   "Could not resize to %1 × %2 pixels: the scratch disks are full. Free "
+                   "space on the scratch disks, then try again.")
+            .arg(width)
+            .arg(height);
+    }
     return ImageSizeDialog::tr(
                "Not enough memory to resize to %1 × %2 pixels. Close other documents "
                "or free memory and try again.")

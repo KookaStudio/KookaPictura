@@ -9,6 +9,7 @@
 #include <QtWidgets/QDialog>
 
 #include "api/history_api.h"
+#include "api/paint_bridge.h"
 #include "api/transform_api.h"
 #include "control_server.h"
 #include "control_test_client.h"
@@ -196,6 +197,20 @@ void ControlEditingTest::unlistedKeyIsRefused()
 
 void ControlEditingTest::oversizedResizeIsRefused()
 {
+    // Image Size spills to the scratch disks (#1293), so the refusal is pinned
+    // to a host with 260 MiB available and no scratch space.
+    struct Pin {
+        Pin()
+        {
+            pictura::set_available_memory_for_test(260LL * 1024 * 1024);
+            pictura::set_scratch_available_for_test(0);
+        }
+        ~Pin()
+        {
+            pictura::set_available_memory_for_test(-1);
+            pictura::set_scratch_available_for_test(-1);
+        }
+    } pin;
     const int width = view().document_width();
     for (const char* id : {"image.image.size", "image.canvas.size"}) {
         QCOMPARE(errorCode(call(QStringLiteral("run_command"),

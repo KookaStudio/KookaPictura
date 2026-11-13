@@ -1,4 +1,4 @@
-"""The memory benchmark's scenarios M1-M14 (issue #1210), for profile-tools.py.
+"""The memory benchmark's scenarios M1-M15 (issue #1210), for profile-tools.py.
 
 Every later bounded-memory issue (#1209) names its savings by these IDs. Each
 scenario is a setup (prerequisites, run before the peak reset and not measured)
@@ -131,6 +131,12 @@ def warp_layer(c):
     c.call("layer_op", op="free_transform", index=int(c.layer_path("Layer 1")), warp="arc", bend=50.0)
 
 
+def image_size(c):
+    # #1293: Image Size of the whole document to 150 %, resampled through tiles.
+    c.call("run_command", id="image.image.size",
+           params={"width": round(c.w * 1.5), "height": round(c.h * 1.5), "resample": "bicubic"})
+
+
 def save_psd(c):
     c.call("document", op="save_as", path=f"{c.tmp}/benchmark-save.psd")
 
@@ -194,4 +200,6 @@ SCENARIOS = {
     "M13": ("Fit, 100 %, pan across, fit", [new_document], [pan_zoom], False),
     "M14": ("Warp a full-layer gradient, arc 50 %", [new_document, add_layer, gradient_layer],
             [warp_layer], False),
+    "M15": ("Image Size of a full-layer gradient to 150 %", [new_document, add_layer, gradient_layer],
+            [image_size], False),
 }

@@ -24,6 +24,8 @@ pub enum OpsError {
     Unsupported(String),
     #[error("invalid parameters: {0}")]
     InvalidParams(String),
+    #[error(transparent)]
+    Memory(#[from] pictura_core::memory::MemoryError),
 }
 
 pub(crate) fn validate(buf: &PixelBuffer) -> Result<usize, OpsError> {

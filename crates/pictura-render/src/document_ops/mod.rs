@@ -12,6 +12,9 @@ mod native_store;
 mod orient;
 mod pictura_raw;
 mod resize;
+mod resize_tiled;
+#[cfg(test)]
+mod resize_tiled_tests;
 mod rotate_in;
 mod slices;
 mod smart_filter_apply;
@@ -90,7 +93,7 @@ pub use pictura_raw::{
     apply_pictura_raw, apply_pictura_raw_destructive, can_apply_pictura_raw_destructive,
     preview_pictura_raw,
 };
-pub use resize::resize_document;
+pub use resize::{resize_document, resized_plane_bytes};
 pub use rotate_in::{rotate_document_in, rotate_document_in_offset};
 pub use slices::{add_slice, remove_slice, resolve_slices, set_slice, Slice};
 pub use smart_filter_apply::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
@@ -216,10 +219,12 @@ fn layer_count(layers: &pictura_core::LayerStack) -> u64 {
         .sum()
 }
 
-/// Resample one planar 8-bit channel from `sw×sh` to `dw×dh`.
+/// Resample one planar 8-bit channel from `sw×sh` to `dw×dh`: the dense
+/// Image Size resampler, kept as `resize_tiled`'s oracle.
 ///
 /// The caller validates the sizes, so a rejected `resize` (which would mean a
 /// malformed plane) falls back to passing the input through untouched.
+#[cfg(test)]
 pub(crate) fn resample_plane(
     data: &[u8],
     sw: u32,

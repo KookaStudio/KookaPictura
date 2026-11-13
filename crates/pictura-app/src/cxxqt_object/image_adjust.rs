@@ -13,6 +13,7 @@ mod gradient_map;
 mod image_mode;
 mod image_ops;
 mod image_size;
+pub(in crate::cxxqt_object) use image_size::image_size_fits_budget;
 mod imp;
 pub(in crate::cxxqt_object) mod jobs;
 mod new_document;
