@@ -679,6 +679,44 @@ fn clip(rect: PsdRect, width: u32, height: u32) -> Option<PsdRect> {
 }
 
 impl qobject::PictureView {
+    /// The presented level and its rect in that level's pixels. The view state
+    /// keeps the document rect, while the tile cache keys by level pixels.
+    fn presented_level_rect(&self) -> Option<(usize, PsdRect)> {
+        let level = self.rust().presented_level;
+        let rect = self.rust().presented_rect;
+        if level < 0 || rect.width() <= 0 || rect.height() <= 0 {
+            return None;
+        }
+        let level = level as usize;
+        let scale = 1i32 << level.min(16);
+        Some((
+            level,
+            PsdRect {
+                top: rect.top.div_euclid(scale),
+                left: rect.left.div_euclid(scale),
+                bottom: rect.bottom.div_euclid(scale),
+                right: rect.right.div_euclid(scale),
+            },
+        ))
+    }
+
+    /// The presented tiles that are missing or stale, and so must be built
+    /// before the canvas can drop the Move preview.
+    fn presented_tiles_to_build(&self) -> Vec<TileKey> {
+        let Some((level, rect)) = self.presented_level_rect() else {
+            return Vec::new();
+        };
+        let cache = self.rust().tiles.cache.borrow();
+        if level >= cache.level_count() {
+            return Vec::new();
+        }
+        cache
+            .keys_in(TileSource::Composite, level, rect)
+            .into_iter()
+            .filter(|&key| !cache.contains(key))
+            .collect()
+    }
+
     /// A layered RGB Move left its tiles stale: build the tiles the canvas
     /// presents now, so the drag preview can stay until they land. Without a
     /// presented view there is nothing to wait for.
@@ -686,16 +724,15 @@ impl qobject::PictureView {
         if !self.rust().lazy_move_pending {
             return;
         }
-        let (level, rect) = (self.rust().presented_level, self.rust().presented_rect);
-        if level < 0 || rect.width() <= 0 || rect.height() <= 0 {
+        if self.presented_level_rect().is_none() {
             self.as_mut().finish_lazy_move();
             return;
         }
-        let (_, missing) = self.rust().tile_crop(TileSource::Composite, level, rect);
-        if missing.is_empty() {
+        let pending = self.presented_tiles_to_build();
+        if pending.is_empty() {
             self.as_mut().finish_lazy_move();
         } else {
-            self.request_tiles(missing);
+            self.request_tiles(pending);
         }
     }
 
@@ -707,13 +744,7 @@ impl qobject::PictureView {
         {
             return;
         }
-        let (level, rect) = (self.rust().presented_level, self.rust().presented_rect);
-        if level < 0 || rect.width() <= 0 || rect.height() <= 0 {
-            self.as_mut().finish_lazy_move();
-            return;
-        }
-        let (_, missing) = self.rust().tile_crop(TileSource::Composite, level, rect);
-        if missing.is_empty() {
+        if self.presented_tiles_to_build().is_empty() {
             self.as_mut().finish_lazy_move();
         }
     }
