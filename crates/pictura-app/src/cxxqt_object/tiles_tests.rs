@@ -579,6 +579,9 @@ fn the_view_holds_only_the_tiles_it_built() {
     view.pin_presented_view();
     assert!(view.tiles.view_holds.borrow().is_empty());
     let later = cold_runs(1024);
+    for i in 0..later.tile_count() {
+        drop(later.tile_at(i));
+    }
     let first = under[0];
     assert!(pass_until(4096, || plane.tile_residency(first)
         != Some(Residency::Resident)));

@@ -371,7 +371,10 @@ pub fn run_pass(need: u64) -> PassReport {
         return report;
     }
     let hot_set = HotSet::now();
-    let all = bodies();
+    let mut all = bodies();
+    // A tile released from a view hold (nonzero stamp) goes before a
+    // never-held tile (0), regardless of the registry's shard order.
+    all.sort_by_key(|weak| std::cmp::Reverse(weak.upgrade().map_or(0, |body| body.hot_stamp())));
     for (hot, history) in [(false, true), (false, false), (true, true), (true, false)] {
         let in_class = |body: &dyn Evictable| {
             body.history_held() == history && hot_set.contains(body.hot_stamp()) == hot

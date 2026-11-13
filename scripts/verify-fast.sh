@@ -15,7 +15,14 @@
 # to the full gate.
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+if [ -z "${PICTURA_CPU_BUDGET_APPLIED:-}" ]; then
+    exec python3 "$script_dir/cpu-budget.py" exec -- \
+        bash "$script_dir/$(basename "$0")" "$@"
+fi
+: "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the gate through scripts/cpu-budget.py}"
+cd "$script_dir/.."
 
 # shellcheck source=scripts/build-lock.sh
 . scripts/build-lock.sh
@@ -85,13 +92,25 @@ checks_dir="$(mktemp -d "${TMPDIR:-/tmp}/pictura-verify.XXXXXX")"
 trap 'rm -rf "$checks_dir"; build_lock_release' EXIT
 
 check_names=()
-check_pids=()
+batch_pids=()
+
+drain_batch() {
+    local pid
+    for pid in ${batch_pids[@]+"${batch_pids[@]}"}; do
+        wait "$pid" || true
+    done
+    batch_pids=()
+}
 
 start_check() { # <name> <command...>
     local name="$1"; shift
+    if [ "${#batch_pids[@]}" -ge "$PICTURA_JOBS" ]; then
+        drain_batch
+    fi
+    printf 'start %s\n' "$name"
     check_names+=("$name")
     ( set +e; "$@" >"$checks_dir/$name.log" 2>&1; printf '%s' "$?" >"$checks_dir/$name.rc" ) &
-    check_pids+=("$!")
+    batch_pids+=("$!")
 }
 
 flatpak_check() {
@@ -130,12 +149,11 @@ start_check icon-provenance python3 scripts/check-icon-provenance.py
 start_check guard bash scripts/guard.sh
 start_check test-plan test_plan_check
 start_check source-fragments source_fragments_check
+start_check cpu-budget python3 scripts/cpu-budget.py --self-check
 start_check openspec openspec_check
 
+drain_batch
 check_failed=0
-for pid in "${check_pids[@]}"; do
-    wait "$pid" || true
-done
 for name in "${check_names[@]}"; do
     rc=$(cat "$checks_dir/$name.rc" 2>/dev/null || printf 1)
     if [ "$rc" -eq 0 ]; then
