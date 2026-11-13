@@ -193,6 +193,34 @@ fn only_a_large_area_defers() {
 }
 
 #[test]
+fn a_layered_large_move_marks_tiles_instead_of_deferring() {
+    let mut view = PictureViewRust::default();
+    let side = 4200;
+    let mut doc = Document::new(side, side, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![pixel_layer("under", side, side, (120, 170, 220))]);
+    view.session.doc = Some(doc);
+    let whole = Edit::regions(
+        vec![PsdRect {
+            top: 0,
+            left: 0,
+            bottom: side as i32,
+            right: side as i32,
+        }],
+        false,
+    );
+
+    assert!(
+        !view.should_defer_move(&whole),
+        "a layered RGB document composites its display tiles lazily"
+    );
+    view.move_composite_delay_for_test = 1;
+    assert!(
+        view.should_defer_move(&whole),
+        "the test delay still forces the deferred path"
+    );
+}
+
+#[test]
 fn a_busy_display_does_not_defer() {
     let mut view = PictureViewRust::default();
     view.session.doc = Some(Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight));

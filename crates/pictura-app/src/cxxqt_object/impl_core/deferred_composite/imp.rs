@@ -96,6 +96,13 @@ impl PictureViewRust {
             Edit::Full | Edit::Structural { damage: None } => canvas,
             _ => return false,
         };
+        // A layered RGB document keeps no stored composite: the display tiles
+        // can be marked stale and rebuilt for the view, so compositing the
+        // whole dirty area would only duplicate work. A test delay forces the
+        // deferred path so its pending-state behaviour stays covered.
+        if !doc.composite_is_authoritative() && self.move_composite_delay_for_test == 0 {
+            return false;
+        }
         canvas >= DEFERRED_MOVE_PIXELS && area >= DEFERRED_MOVE_PIXELS
     }
 

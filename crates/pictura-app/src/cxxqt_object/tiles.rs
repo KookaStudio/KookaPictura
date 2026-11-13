@@ -489,6 +489,14 @@ impl PictureViewRust {
                 .cache
                 .get_mut()
                 .damage(TileSource::Composite, aligned);
+            // A layered RGB document keeps no stored composite. Drop any
+            // frame from an earlier state so a history capture does not treat
+            // it as the current picture; the visible tiles rebuild instead.
+            if !authoritative {
+                if let Some(doc) = self.session.doc.as_mut() {
+                    doc.composite = PixelBuffer::new(0, 0, 4);
+                }
+            }
             self.damage.mark(clipped);
             self.canvas_revision = self.canvas_revision.wrapping_add(1);
             self.sync_mask_solo_region(clipped);

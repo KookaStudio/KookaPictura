@@ -65,6 +65,7 @@ private slots:
     void layerPropertiesRepaintOnlyTheLayer();
     void aDocumentCanvasHoldsNoImage();
     void aLargeMoveCommitLandsOffThread();
+    void aLargeMoveCommitLeavesTheTilesStale();
     void aLargeShapeMoveCommitLandsOffThread();
     void aSmallMoveCommitIsSynchronous();
     void aReadSettlesThePendingMove();
@@ -242,6 +243,10 @@ void LargeDocumentTest::aLargeMoveCommitLandsOffThread()
     seed.fill(Qt::white);
     Fixture f(*window_, seed, QStringLiteral("pictura_deferred_move"));
     QVERIFY2(f.ok(), "deferred move fixture");
+    // A non-RGB document keeps an authoritative composite, so its large move
+    // still takes the worker path; a layered RGB document marks its tiles
+    // stale instead ([mcr_layered_lazy]).
+    QVERIFY(pictura::convert_image_mode(*f.view, QStringLiteral("grayscale")));
     QCOMPARE(f.view->duplicate_layer(0), 1);
     f.view->set_active_layer(QStringLiteral("1"));
     pictura::move_composite_set_delay(*f.view, 400);
@@ -261,6 +266,24 @@ void LargeDocumentTest::aLargeMoveCommitLandsOffThread()
     QVERIFY2(!f.canvas->movePreviewActive(), "the signal drops the preview");
     QVERIFY2(settled.wait(30000), "the landing defers the exact pyramid");
     QCOMPARE(pictura::preview_present_level(*f.view), 0);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [mcr_layered_lazy]
+void LargeDocumentTest::aLargeMoveCommitLeavesTheTilesStale()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_lazy_move"));
+    QVERIFY2(f.ok(), "lazy move fixture");
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY2(!pictura::move_composite_pending(*f.view),
+             "a layered RGB move rebuilds its visible tiles instead of compositing");
+    QCOMPARE(committed.count(), 1);
     QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
 }
 
