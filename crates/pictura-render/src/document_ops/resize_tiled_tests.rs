@@ -273,6 +273,7 @@ fn a_solid_document_resizes_into_uniform_tiles() {
 // [ocr_output_spills]
 #[test]
 fn resized_tiles_spill_and_read_back() {
+    let _scratch = crate::test_support::scratch_guard();
     let dir = pictura_core::scratch::default_volume()
         .with_file_name("test-scratch")
         .join(format!("render-resize-{}", std::process::id()));

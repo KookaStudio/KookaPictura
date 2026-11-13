@@ -461,6 +461,7 @@ fn retained_stores_rotate_through_tiles() {
 // [ocg_output_spills]
 #[test]
 fn rotated_tiles_spill_and_read_back() {
+    let _scratch = crate::test_support::scratch_guard();
     let dir = pictura_core::scratch::default_volume()
         .with_file_name("test-scratch")
         .join(format!("render-rotate-{}", std::process::id()));

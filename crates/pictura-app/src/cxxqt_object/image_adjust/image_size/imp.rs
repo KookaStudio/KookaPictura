@@ -153,6 +153,10 @@ pub(super) fn canvas_size_apply(
             // Both steps run on a copy that shares the planes, so a refused
             // Background extension (#1294) leaves the document as it was.
             let mut next = doc.clone();
+            // The shift and the Background extension each open a stage.
+            if let Some(job) = pictura_core::job::current() {
+                job.set_stages(2);
+            }
             pictura_render::resize_canvas_document(&mut next, width as u32, height as u32, anchor)
                 .ok()?;
             pictura_render::extend_background(

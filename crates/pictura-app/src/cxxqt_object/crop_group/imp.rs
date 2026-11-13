@@ -92,21 +92,23 @@ pub(super) fn apply_crop(
 ) -> bool {
     let grows = x < 0 || y < 0 || x + width > doc.width as i32 || y + height > doc.height as i32;
     if grows {
-        if !pictura_render::crop_document_grow(doc, x, y, width as u32, height as u32) {
+        // Grow and fill a copy that shares the planes, so a refused Background
+        // extension (#1294) refuses the crop instead of leaving it transparent.
+        let mut next = doc.clone();
+        if !pictura_render::crop_document_grow(&mut next, x, y, width as u32, height as u32) {
             return false;
         }
         if fill_rgb >= 0 {
-            // ponytail: the canvas has already grown, so a refused extension
-            // (#1294) leaves the Background at its old rect, transparent around it.
-            let _ = pictura_render::extend_background(
-                doc,
-                [
-                    (fill_rgb >> 16) as u8,
-                    (fill_rgb >> 8) as u8,
-                    fill_rgb as u8,
-                ],
-            );
+            let fill = [
+                (fill_rgb >> 16) as u8,
+                (fill_rgb >> 8) as u8,
+                fill_rgb as u8,
+            ];
+            if pictura_render::extend_background(&mut next, fill).is_err() {
+                return false;
+            }
         }
+        *doc = next;
     } else if !pictura_render::crop_document(doc, x, y, width as u32, height as u32) {
         return false;
     }
@@ -143,14 +145,17 @@ pub(super) fn straighten_crop(
         else {
             return false;
         };
-        if !pictura_render::rotate_document_in(doc, angle, pivot) {
+        // On a copy, so a refused crop does not leave the document rotated.
+        let mut next = doc.clone();
+        if !pictura_render::rotate_document_in(&mut next, angle, pivot) {
             return false;
         }
         let nx = (x as f64 + ox).round() as i32;
         let ny = (y as f64 + oy).round() as i32;
-        if !apply_crop(doc, nx, ny, width, height, delete_cropped, fill_rgb) {
+        if !apply_crop(&mut next, nx, ny, width, height, delete_cropped, fill_rgb) {
             return false;
         }
+        *doc = next;
         // Canvas dimensions changed, so the old selection no longer maps.
         rust.session.clear_geometry_selection();
         true
@@ -279,4 +284,43 @@ pub(super) fn remove_user_slice(mut view: Pin<&mut PictureView>, index: i32) -> 
         view.as_mut().edit("Delete Slice", |_| Edit::Meta);
     }
     removed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_crop;
+    use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PsdRect};
+
+    fn background_doc() -> Document {
+        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        let mut layer = crate::cxxqt_object::tests::pixel_layer("Background", 4, 4, (9, 9, 9));
+        layer.background = true;
+        doc.layers = LayerStack::from_layers(vec![layer]);
+        doc
+    }
+
+    #[test]
+    fn a_growing_crop_fills_the_background() {
+        let mut doc = background_doc();
+        assert!(apply_crop(&mut doc, -1, -1, 6, 6, false, 0xff0000));
+        assert_eq!((doc.width, doc.height), (6, 6));
+        let rect = doc.layers[0].rect;
+        assert_eq!((rect.width(), rect.height()), (6, 6));
+    }
+
+    #[test]
+    fn a_refused_background_fill_refuses_the_crop() {
+        let mut doc = background_doc();
+        pictura_core::memory::fail_next_plane_for_test();
+        assert!(!apply_crop(&mut doc, -1, -1, 6, 6, false, 0xff0000));
+        pictura_core::memory::clear_refusal();
+        assert_eq!((doc.width, doc.height), (4, 4));
+        let full = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 4,
+            right: 4,
+        };
+        assert_eq!(doc.layers[0].rect, full);
+    }
 }

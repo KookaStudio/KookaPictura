@@ -195,6 +195,7 @@ fn a_solid_layer_scales_into_uniform_tiles() {
 
 #[test]
 fn transformed_tiles_spill_and_read_back() {
+    let _scratch = crate::test_support::scratch_guard();
     let dir = pictura_core::scratch::default_volume()
         .with_file_name("test-scratch")
         .join(format!("render-{}", std::process::id()));
