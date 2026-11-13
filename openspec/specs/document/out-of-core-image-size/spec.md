@@ -1,7 +1,7 @@
 # document/out-of-core-image-size Specification
 
 ## Purpose
-TBD - created by archiving change image-size-out-of-core. Update Purpose after archive.
+Image Size resamples every plane into spillable tiles a strip at a time, reading only the source windows its taps reach, and is gated on RAM for its working set and on RAM plus free scratch-disk space for its resampled planes.
 
 ## Requirements
 
