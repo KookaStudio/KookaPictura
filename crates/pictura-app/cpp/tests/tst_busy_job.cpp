@@ -53,15 +53,21 @@ private slots:
 void BusyJobTest::quickJobShowsOnlyTheWaitCursor()
 {
     QElapsedTimer clock;
+    QObject probeContext;
+    bool started = false;
     bool sawWait = false;
     bool sawWindow = false;
     const bool finished = pictura::runCancellableJob(
-        nullptr, QStringLiteral("Quick"), QStringLiteral("Working…"),
+        nullptr, QStringLiteral("Quick"), QStringLiteral("Working…"), [] { return true; },
         [&] {
-            clock.start();
-            return true;
-        },
-        [&] {
+            if (!started) {
+                started = true;
+                // The dialog exists by the first poll, so timing the job from
+                // here keeps dialog setup out of the 60 ms window.
+                clock.start();
+                QTimer::singleShot(0, &probeContext,
+                                   [&] { sawWait = sawWait || waitCursorSet(); });
+            }
             sawWait = sawWait || waitCursorSet();
             sawWindow = sawWindow || jobWindowVisible();
             return clock.elapsed() < 60;
