@@ -316,7 +316,7 @@ void LayersPanel::showMaskThumbMenu(const QPoint& pos, const QModelIndex& index)
     // it; selecting the row activates its layer (the target only routes strokes
     // while its layer is active).
     makeRowAnchor(path);
-    setActiveThumb(path, 1);
+    setActiveThumb(path, ActiveThumbMask);
     mask_edit_target_set(*view_, path);
     syncEditTarget();
     QMenu menu(tree_);

@@ -150,6 +150,10 @@ private slots:
     void selectedMaskMoveHistory();
     void propertiesMaskRefinementUndo();
     void propertiesInvertPreservesOffcanvasCoverage();
+    void maskThumbCompanions();
+    void vectorOnlyMaskThumbCompanion();
+    void inactiveLayerThumbClicks();
+    void otherLayerClearsThumbSelection();
 private:
     pictura::PictureView* imported(bool missing = false, int outside = 0, quint8 exterior = 128, int width = 12, int height = 8, bool uniformMask = false);
     pictura::PictureView* maskedLayer(const QString& kind,const QSize& canvas);
@@ -240,7 +244,7 @@ void CanvasMaskDomainTest::allMaskCardsFollowDocumentAspect()
             const QImage painted=panel->rowImageForTest(path);
             QCOMPARE(painted.pixelColor(cards[1].right(),cards[1].center().y()),QColor(Qt::black));
             if (fill || kind==QStringLiteral("adjustment")) {QCOMPARE(painted.pixelColor(cards[1].right()-2,cards[1].center().y()),QColor(Qt::white));}
-            QVERIFY(panel->clickMaskThumbnailForTest(path));QCOMPARE(panel->rowActiveThumbForTest(path),1);
+            QVERIFY(panel->clickMaskThumbnailForTest(path));QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);
             QCOMPARE(pictura::mask_edit_target_get(*v),path);
         }
     }
@@ -257,17 +261,18 @@ void CanvasMaskDomainTest::layerRowClickDefaultsToContent()
         QVERIFY(panel->altClickMaskThumbnailForTest(path));QCOMPARE(pictura::mask_solo_get(*v),path);
         int history=v->history_index();
         QVERIFY(panel->clickRowForTest(path));QCoreApplication::processEvents();
-        QCOMPARE(panel->rowActiveThumbForTest(path),0);
+        QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbContent);
         QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());QVERIFY(pictura::mask_solo_get(*v).isEmpty());QCOMPARE(v->history_index(),history);
-        QVERIFY(panel->clickMaskThumbnailForTest(path));QCOMPARE(panel->rowActiveThumbForTest(path),1);QCOMPARE(pictura::mask_edit_target_get(*v),path);
+        QVERIFY(panel->clickMaskThumbnailForTest(path));QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);QCOMPARE(pictura::mask_edit_target_get(*v),path);
         const auto cards=thumbCards(*panel,path);auto* tree=panel->findChild<QTreeView*>();QVERIFY(tree);
         if (!cards[2].isEmpty()) {
             QTest::mouseClick(tree->viewport(),Qt::LeftButton,Qt::NoModifier,panel->rowViewportRectForTest(path).topLeft()+cards[2].center());
-            QCOMPARE(panel->rowActiveThumbForTest(path),2);
+            QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask|pictura::ActiveThumbVector);
+            QCOMPARE(pictura::mask_edit_target_get(*v),path);
         }
         const QString other=v->add_layer_in(QString());QVERIFY(!other.isEmpty());panel->refresh();QCoreApplication::processEvents();
         history=v->history_index();QVERIFY(panel->clickRowForTest(path));QCoreApplication::processEvents();
-        QCOMPARE(v->active_layer_path(),path);QCOMPARE(panel->rowActiveThumbForTest(path),0);QCOMPARE(v->history_index(),history);
+        QCOMPARE(v->active_layer_path(),path);QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbContent);QCOMPARE(v->history_index(),history);
     }
 }
 
@@ -280,8 +285,8 @@ void CanvasMaskDomainTest::adjustmentCreationActivatesMask()
     for (const QString& kind : {QStringLiteral("invert"),QStringLiteral("levels")}) {
         const int history=v->history_index();QVERIFY(v->add_adjustment(kind));
         const QString path=v->active_layer_path();QVERIFY(!path.isEmpty());panel->refresh();QCoreApplication::processEvents();
-        QCOMPARE(panel->selectedPaths(),QStringList{path});QCOMPARE(pictura::mask_edit_target_get(*v),path);QCOMPARE(panel->rowActiveThumbForTest(path),1);QCOMPARE(v->history_index(),history+1);
-        QVERIFY(panel->clickRowForTest(path));QCoreApplication::processEvents();QCOMPARE(panel->rowActiveThumbForTest(path),0);QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());QCOMPARE(v->history_index(),history+1);
+        QCOMPARE(panel->selectedPaths(),QStringList{path});QCOMPARE(pictura::mask_edit_target_get(*v),path);QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);QCOMPARE(v->history_index(),history+1);
+        QVERIFY(panel->clickRowForTest(path));QCoreApplication::processEvents();QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbContent);QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());QCOMPARE(v->history_index(),history+1);
     }
 }
 
@@ -334,7 +339,7 @@ void CanvasMaskDomainTest::maskThumbnailUsesOnlyBrackets()
         const int history = v->history_index();
         QVERIFY(panel->clickMaskThumbnailForTest(path));
         QCOMPARE(pictura::mask_edit_target_get(*v),path);
-        QCOMPARE(panel->rowActiveThumbForTest(path),1);
+        QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);
         const auto cards = thumbCards(*panel,path);
         const QRect card = cards[1]; QVERIFY(!card.isEmpty());
         const QImage row = panel->rowImageForTest(path);
@@ -359,7 +364,7 @@ void CanvasMaskDomainTest::maskBracketsFollowRasterAndLayerClicks()
     QVERIFY(panel->clickLayerThumbnailForTest(QStringLiteral("0")));
     QCoreApplication::processEvents();
     QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());
-    QCOMPARE(panel->rowActiveThumbForTest(QStringLiteral("0")),0);
+    QCOMPARE(panel->rowActiveThumbForTest(QStringLiteral("0")),pictura::ActiveThumbContent);
     auto cards = thumbCards(*panel,QStringLiteral("0"));
     QImage row = panel->rowImageForTest(QStringLiteral("0"));
     QCOMPARE(row.pixelColor(cards[1].center().x(),cards[1].top()),QColor(Qt::black));
@@ -383,26 +388,174 @@ void CanvasMaskDomainTest::maskModifierIndicatorsRemain()
     auto* panel=window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));QVERIFY(panel);
     window_->show();panel->refresh();QCoreApplication::processEvents();
     const QString path=QStringLiteral("0");
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);
     QVERIFY(panel->rowMaskLinkedForTest(path));
     QVERIFY(!panel->rowLinkGlyphRectForTest(path).isEmpty());
     int history=v->history_index();
     QVERIFY(panel->clickLinkGlyphForTest(path));QTRY_VERIFY(!panel->rowMaskLinkedForTest(path));QCOMPARE(v->history_index(),history+1);
     history=v->history_index();
     QVERIFY(panel->shiftClickMaskThumbnailForTest(path));QTRY_VERIFY(panel->rowMaskDisabledForTest(path));QCOMPARE(v->history_index(),history+1);
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);
     auto card=thumbCards(*panel,path)[1];auto row=panel->rowImageForTest(path);
     QVERIFY(row.pixelColor(card.center()).red()>row.pixelColor(card.center()).green()+80);
     history=v->history_index();
     QVERIFY(panel->altClickMaskThumbnailForTest(path));QCOMPARE(pictura::mask_solo_get(*v),path);QCOMPARE(v->history_index(),history);
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);QCOMPARE(pictura::mask_edit_target_get(*v),path);
     QVERIFY(panel->shiftClickMaskThumbnailForTest(path));QTRY_VERIFY(!panel->rowMaskDisabledForTest(path));QCOMPARE(pictura::mask_solo_get(*v),path);
     QVERIFY(panel->altClickMaskThumbnailForTest(path));QVERIFY(pictura::mask_solo_get(*v).isEmpty());
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);QCOMPARE(pictura::mask_edit_target_get(*v),path);
     const bool disabled=panel->rowMaskDisabledForTest(path);
     QVERIFY(panel->altShiftClickMaskThumbnailForTest(path));QVERIFY(pictura::mask_solo_get(*v).isEmpty());QCOMPARE(panel->rowMaskDisabledForTest(path),disabled);
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);QCOMPARE(pictura::mask_edit_target_get(*v),path);
+    QVERIFY(panel->ctrlClickMaskThumbnailForTest(path));QCoreApplication::processEvents();
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);QCOMPARE(pictura::mask_edit_target_get(*v),path);
     QVERIFY(pictura::vector_mask_add(*v,QStringLiteral("reveal-all")));panel->refresh();
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);
     QVERIFY(panel->rowVectorMaskLinkedForTest(path));
     card=thumbCards(*panel,path)[2];QVERIFY(!card.isEmpty());
     history=v->history_index();QVERIFY(panel->clickVectorLinkGlyphForTest(path));QTRY_VERIFY(!panel->rowVectorMaskLinkedForTest(path));QCOMPARE(v->history_index(),history+1);
     history=v->history_index();QVERIFY(panel->shiftClickVectorMaskThumbnailForTest(path));QTRY_VERIFY(panel->rowVectorMaskDisabledForTest(path));QCOMPARE(v->history_index(),history+1);
+    QCOMPARE(panel->rowActiveThumbForTest(path),pictura::ActiveThumbMask);
     row=panel->rowImageForTest(path);QVERIFY(row.pixelColor(card.center()).red()>row.pixelColor(card.center()).green()+80);
+}
+
+void CanvasMaskDomainTest::maskThumbCompanions()
+{
+    auto* v = maskedLayer(QStringLiteral("pixel"), QSize(120, 400)); QVERIFY(v);
+    const QString path = v->active_layer_path();
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel")); QVERIFY(panel);
+    window_->show(); panel->setView(v); panel->refresh(); QCoreApplication::processEvents();
+    auto* tree = panel->findChild<QTreeView*>(); QVERIFY(tree);
+    const auto vectorClick = [&] {
+        const auto cards = thumbCards(*panel, path); QVERIFY(!cards[2].isEmpty());
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          panel->rowViewportRectForTest(path).topLeft() + cards[2].center());
+        QCoreApplication::processEvents();
+    };
+    QVERIFY(panel->clickLayerThumbnailForTest(path));
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbContent);
+    QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());
+    QVERIFY(panel->clickMaskThumbnailForTest(path));
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbMask);
+    QCOMPARE(pictura::mask_edit_target_get(*v), path);
+    vectorClick();
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbMask | pictura::ActiveThumbVector);
+    QCOMPARE(pictura::mask_edit_target_get(*v), path);
+    auto cards = thumbCards(*panel, path); auto row = panel->rowImageForTest(path);
+    QCOMPARE(row.pixelColor(cards[1].left() - 1, cards[1].top() - 1), QColor(Qt::white));
+    QCOMPARE(row.pixelColor(cards[2].left() - 1, cards[2].top() - 1), QColor(Qt::white));
+    QVERIFY(row.pixelColor(cards[0].left() - 1, cards[0].top() - 1) != QColor(Qt::white));
+    vectorClick();
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbMask);
+    QCOMPARE(pictura::mask_edit_target_get(*v), path);
+    cards = thumbCards(*panel, path); row = panel->rowImageForTest(path);
+    QCOMPARE(row.pixelColor(cards[1].left() - 1, cards[1].top() - 1), QColor(Qt::white));
+    QVERIFY(row.pixelColor(cards[2].left() - 1, cards[2].top() - 1) != QColor(Qt::white));
+    QVERIFY(panel->clickMaskThumbnailForTest(path));
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbMask);
+    vectorClick();
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbMask | pictura::ActiveThumbVector);
+    QVERIFY(panel->clickMaskThumbnailForTest(path));
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbMask | pictura::ActiveThumbVector);
+    QVERIFY(panel->clickLayerThumbnailForTest(path));
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbContent | pictura::ActiveThumbVector);
+    QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());
+    QVERIFY(panel->clickMaskThumbnailForTest(path));
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbMask | pictura::ActiveThumbVector);
+    QCOMPARE(pictura::mask_edit_target_get(*v), path);
+}
+
+void CanvasMaskDomainTest::vectorOnlyMaskThumbCompanion()
+{
+    while (window_->documentCount()) { QVERIFY(window_->closeDocument(0, false)); }
+    QVERIFY(window_->newDocument(QStringLiteral("VectorOnly"), 16, 16,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    auto* v = window_->activeView(); QVERIFY(v);
+    const QString path = v->add_layer_in(QString()); QVERIFY(!path.isEmpty());
+    v->set_active_layer(path);
+    QVERIFY(pictura::vector_mask_add(*v, QStringLiteral("reveal-all")));
+    QVERIFY(!pictura::layer_mask_present(*v));
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel")); QVERIFY(panel);
+    window_->show(); panel->setView(v); panel->refresh(); QCoreApplication::processEvents();
+    auto* tree = panel->findChild<QTreeView*>(); QVERIFY(tree);
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbContent);
+    const auto cards = thumbCards(*panel, path); QVERIFY(!cards[2].isEmpty());
+    const QPoint at = panel->rowViewportRectForTest(path).topLeft() + cards[2].center();
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCoreApplication::processEvents();
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbContent | pictura::ActiveThumbVector);
+    QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCoreApplication::processEvents();
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbContent);
+}
+
+void CanvasMaskDomainTest::inactiveLayerThumbClicks()
+{
+    auto* v = maskedLayer(QStringLiteral("pixel"), QSize(120, 400)); QVERIFY(v);
+    const QString path = v->active_layer_path();
+    const QString other = v->add_layer_in(QString()); QVERIFY(!other.isEmpty());
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel")); QVERIFY(panel);
+    window_->show(); panel->setView(v); panel->refresh(); QCoreApplication::processEvents();
+    auto* tree = panel->findChild<QTreeView*>(); QVERIFY(tree);
+    const auto activateOther = [&] {
+        QVERIFY(panel->clickRowForTest(other));
+        QCoreApplication::processEvents();
+        QCOMPARE(v->active_layer_path(), other);
+    };
+    const auto clickThumb = [&](int i) {
+        const auto cards = thumbCards(*panel, path); QVERIFY(!cards[i].isEmpty());
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          panel->rowViewportRectForTest(path).topLeft() + cards[i].center());
+        QCoreApplication::processEvents();
+    };
+    activateOther();
+    clickThumb(0);
+    QCOMPARE(v->active_layer_path(), path);
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbContent);
+    QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());
+    activateOther();
+    clickThumb(1);
+    QCOMPARE(v->active_layer_path(), path);
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbMask);
+    QCOMPARE(pictura::mask_edit_target_get(*v), path);
+    activateOther();
+    clickThumb(2);
+    QCOMPARE(v->active_layer_path(), path);
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbContent | pictura::ActiveThumbVector);
+    QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());
+}
+
+void CanvasMaskDomainTest::otherLayerClearsThumbSelection()
+{
+    auto* v = maskedLayer(QStringLiteral("pixel"), QSize(120, 400)); QVERIFY(v);
+    const QString path = v->active_layer_path();
+    const QString other = v->add_layer_in(QString()); QVERIFY(!other.isEmpty());
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel")); QVERIFY(panel);
+    window_->show(); panel->setView(v); panel->refresh(); QCoreApplication::processEvents();
+    auto* tree = panel->findChild<QTreeView*>(); QVERIFY(tree);
+    QVERIFY(panel->clickMaskThumbnailForTest(path));
+    const auto cards = thumbCards(*panel, path); QVERIFY(!cards[2].isEmpty());
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      panel->rowViewportRectForTest(path).topLeft() + cards[2].center());
+    QCoreApplication::processEvents();
+    QCOMPARE(panel->rowActiveThumbForTest(path),
+             pictura::ActiveThumbMask | pictura::ActiveThumbVector);
+    window_->selectLayerPath(other);
+    panel->refresh(); QCoreApplication::processEvents();
+    QCOMPARE(v->active_layer_path(), other);
+    QVERIFY((panel->rowActiveThumbForTest(path)
+             & (pictura::ActiveThumbMask | pictura::ActiveThumbVector)) == 0);
+    QVERIFY(panel->clickRowForTest(path)); QCoreApplication::processEvents();
+    QCOMPARE(panel->rowActiveThumbForTest(path), pictura::ActiveThumbContent);
+    QVERIFY(pictura::mask_edit_target_get(*v).isEmpty());
 }
 
 void CanvasMaskDomainTest::createdMaskBecomesTarget()

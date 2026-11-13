@@ -1023,20 +1023,17 @@ public:
         painter->drawText(QRect(nameLeft, rect.top(), nameRight - nameLeft, height),
                           Qt::AlignVCenter | Qt::AlignLeft, elided);
 
-        // White 1 px corner brackets one pixel outside the outline, on the
-        // active edit target's thumbnail only; never around a group's icon.
+        // White 1 px corner brackets one pixel outside each selected mask or
+        // content thumbnail; never around a group's icon.
         const int active = index.data(ActiveThumbRole).toInt();
-        if (thumb > 0 && singularActive(selected, option.widget, index)
-            && (index.data(KindRole).toString() != QLatin1String("group")
-                || (active == 1 && !maskRect.isEmpty())
-                || (active == 2 && !vectorRect.isEmpty()))) {
-            QRect target = imageRect;
-            if (active == 2 && !vectorRect.isEmpty()) {
-                target = vectorRect;
-            } else if (active == 1 && !maskRect.isEmpty()) {
-                target = maskRect;
-            }
-            paintBrackets(painter, target.adjusted(-1, -1, 1, 1));
+        const bool masked = (active & ActiveThumbMask) != 0 && !maskRect.isEmpty();
+        const bool vectored = (active & ActiveThumbVector) != 0 && !vectorRect.isEmpty();
+        if (thumb > 0 && singularActive(selected, option.widget, index)) {
+            if (masked) paintBrackets(painter, maskRect.adjusted(-1, -1, 1, 1));
+            if (vectored) paintBrackets(painter, vectorRect.adjusted(-1, -1, 1, 1));
+            if ((active & ActiveThumbContent) != 0
+                && index.data(KindRole).toString() != QLatin1String("group"))
+                paintBrackets(painter, imageRect.adjusted(-1, -1, 1, 1));
         }
         painter->restore();
     }

@@ -126,8 +126,8 @@ struct LayerRowNode {
     /// A display-only row (the Smart Filters group and its children) with no
     /// real layer behind its path: not editable, draggable, or a drop target.
     bool synthetic = false;
-    /// The active edit target within the row: 0 image, 1 raster mask, 2 vector
-    /// mask. Panel-local; only the delegate's brackets read it.
+    /// Panel-local thumbnail selection bits (ActiveThumbBit): one companion,
+    /// content or raster mask, plus an optional vector mask.
     int activeThumb = 0;
 };
 
@@ -194,6 +194,14 @@ enum LayerRole {
     // a type or shape layer is forced to carry, which CS6 shows only in the
     // Lock strip (LockRole), never as a row badge.
     LockBadgeRole,
+};
+
+// ActiveThumbRole bits: the content or raster-mask companion, plus an optional
+// vector mask. The panel never stores both companions at once.
+enum ActiveThumbBit : int {
+    ActiveThumbContent = 1,
+    ActiveThumbMask = 2,
+    ActiveThumbVector = 4,
 };
 
 struct Node {

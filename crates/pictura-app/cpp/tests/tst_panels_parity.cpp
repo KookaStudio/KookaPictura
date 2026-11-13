@@ -433,7 +433,8 @@ void PanelsParityTest::thumbnailAdjacencyAndActiveThumb()
     const QColor imageBg(20, 90, 200);
     clickMouse(viewport, delegate->thumbRect(tree->visualRect(index), index).center(),
                Qt::NoModifier);
-    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 0);
+    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(),
+             pictura::ActiveThumbContent);
     colors->setForeground(imageFg);
     colors->setBackground(imageBg);
 
@@ -441,7 +442,8 @@ void PanelsParityTest::thumbnailAdjacencyAndActiveThumb()
     clickMouse(viewport,
                delegate->maskThumbRect(tree->visualRect(beforeMask), beforeMask).center(),
                Qt::NoModifier);
-    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 1);
+    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(),
+             pictura::ActiveThumbMask);
     toolbox->resetForegroundBackground();
     QCOMPARE(colors->foreground(), QColor(Qt::white));
     QCOMPARE(colors->background(), QColor(Qt::black));
@@ -449,15 +451,17 @@ void PanelsParityTest::thumbnailAdjacencyAndActiveThumb()
     const QModelIndex afterMask = indexForPath(tree->model(), path);
     clickMouse(viewport, delegate->vectorMaskThumbRect(tree->visualRect(afterMask), afterMask).center(),
                Qt::NoModifier);
-    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 2);
-    // Leaving the raster target restores the image pair, including reset.
-    QCOMPARE(colors->foreground(), imageFg);
-    QCOMPARE(colors->background(), imageBg);
+    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(),
+             pictura::ActiveThumbMask | pictura::ActiveThumbVector);
+    // The vector click keeps the raster target and its mask colour pair.
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
 
     const QModelIndex afterVector = indexForPath(tree->model(), path);
     clickMouse(viewport, delegate->thumbRect(tree->visualRect(afterVector), afterVector).center(),
                Qt::NoModifier);
-    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 0);
+    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(),
+             pictura::ActiveThumbContent | pictura::ActiveThumbVector);
     QCOMPARE(colors->foreground(), imageFg);
     QCOMPARE(colors->background(), imageBg);
     window_->closeDocument(doc, false);
