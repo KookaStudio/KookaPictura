@@ -4,6 +4,36 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Image Size out of core** (#1293, OpenSpec change `image-size-out-of-core`,
+  capability `document/out-of-core-image-size`).
+  - **Resampler.** `resize_tiled::resize` builds a strip of 256 rows at a time
+    into a tiled plane, in parallel tasks of 16 rows, each walking blocks of 256
+    columns. The resample is separable, so a block reads the sorted set of
+    source rows its row taps name, by the column span of its column taps, and
+    splits while that window exceeds 1 Mpx. The taps are
+    `pictura_ops::resize::axis_taps` and `weigh`, which the dense resampler now
+    uses too, so the output is byte-identical (`resize_tiled_tests.rs`, with
+    the dense `resample_plane` and `native_store::resize_samples` kept as
+    test-only oracles). Layer channels, masks, alpha channels, retained layer
+    stores and the document store all go through it. `resize_document` works
+    on a clone that shares the planes, so a strip refusal (`OpsError::Memory`)
+    leaves the document unchanged.
+  - **Fix.** A retained `-2` store plane was resampled from the already
+    rescaled mask rect; it now uses the old rect.
+  - **Gate.** `memory_gate::image_size_cost`: `working` is 4 MiB a worker
+    thread, one 32-bit strip of the widest plane, and the dense composite when
+    it is authoritative; `spillable` is every resampled plane
+    (`pictura_render::resized_plane_bytes`). `image_size_admits` keeps only
+    `ImageBudget`'s side limit and then calls `admit_spilling`. The dialog, the
+    replay, `resize_image` and the control server's `image.image.size` use it
+    through the `image_size_fits_budget` bridge; a scratch-full refusal has its
+    own message. Canvas Size keeps `document_resize_budget_allows` (#1294).
+  - **M15.** Image Size of a 17000² full-layer gradient to 150 %:
+    at 17000² with `--force` (this host had about 2.8 GB available), under
+    `MemoryMax=2G` it ran ok in 35 s, peaking at 1992 MiB (527 MiB above the
+    reset), and under `MemoryMax=4G` ok in 39 s, peaking at 3429 MiB (1929 MiB
+    above). Before, the gate refused any target over the governor's room.
+
 - **Warp commit out of core** (#1292, OpenSpec change `warp-commit-out-of-core`,
   capability `document/out-of-core-warp`).
   - **Rasterizer.** `warp_raster::warp_tiled` builds a strip of 256 rows at a
