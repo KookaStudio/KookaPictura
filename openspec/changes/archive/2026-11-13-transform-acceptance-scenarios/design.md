@@ -80,8 +80,12 @@ unified-memory GPU all of that is process memory: more than 5 GB for a 17000²
 region, so `MemoryMax=2G` killed the app. The scale commits survived only because
 their 25500² result made the GPU decline with `TooLarge`.
 
-The kernel now reserves that estimate with `Governor::reserve_if_room` before any
-device work and holds it until the readback is copied out. It does not evict to
+The kernel now reserves that estimate with `Governor::reserve_if_room` after
+`Gpu::new` has checked the device limits (so an oversized region stays
+`TooLarge`) and before any region-sized buffer, and holds it until the readback
+is copied out. The estimate walks the plan: a source and a mask for each layer
+and effect pass, an inner canvas for each isolated or clipping group, summed
+because a dropped buffer may live until the queue drains. It does not evict to
 make room and does not record a refusal (a declined accelerator is not a failed
 edit). When the bytes do not fit, it returns `GpuError::Memory`, counted as the
 `memory` decline, and `composite` falls back to the CPU, which bands a large

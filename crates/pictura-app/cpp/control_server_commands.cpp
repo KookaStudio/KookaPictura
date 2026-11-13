@@ -2,6 +2,7 @@
 // filters, adjustments and commands, layer paths, export, and history.
 
 #include "control_server.h"
+
 #include "control_server_support.h"
 
 #include "api/document_api.h"
@@ -11,6 +12,7 @@
 #include <QtCore/QJsonArray>
 
 #include <cmath>
+#include <cstddef>
 
 #include "commands.h"
 #include "filter_commands.h"
@@ -349,10 +351,16 @@ QJsonObject ControlServer::methodLayerDigest(const QJsonObject& params)
         return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
     }
     const QString path = params.value(QStringLiteral("path")).toString();
+    // `layer_pixel_digest` (layer_target_bridge.rs): empty for no such layer,
+    // else [digest, left, top, right, bottom].
+    constexpr std::size_t kDigestFields = 5;
     const auto digest = layer_pixel_digest(*view, path);
-    if (digest.size() != 5) {
+    if (digest.empty()) {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("no layer at path: %1").arg(path));
+    }
+    if (digest.size() != kDigestFields) {
+        return error(QStringLiteral("internal"), QStringLiteral("unexpected layer digest shape"));
     }
     QJsonObject result;
     result.insert(QStringLiteral("digest"),

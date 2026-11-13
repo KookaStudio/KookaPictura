@@ -227,15 +227,17 @@ fn composite_gpu_region_raw(
     if rw == 0 || rh == 0 {
         return Ok(PixelBuffer::new(rw, rh, 4));
     }
+    // `Gpu::new` checks the device limits first, so an oversized region stays
+    // `TooLarge`; it allocates nothing region-sized.
+    let gpu = Gpu::new(x0, y0, rw, rh)?;
     // Held until the readback is copied out. On a unified-memory GPU every
     // buffer is host memory, so a 17000² region would take gigabytes the CPU's
     // banded path never needs.
     let Some(_held) =
-        pictura_core::memory::governor().reserve_if_room(region_host_bytes(plans.len(), rw, rh))
+        pictura_core::memory::governor().reserve_if_room(region_host_bytes(plans, rw, rh))
     else {
         return Err(GpuError::Memory);
     };
-    let gpu = Gpu::new(x0, y0, rw, rh)?;
     let canvas = gpu.zero_canvas();
     for layer_plan in plans {
         gpu.composite_plan(&canvas, layer_plan, doc);
@@ -244,12 +246,41 @@ fn composite_gpu_region_raw(
     Ok(pixels)
 }
 
-/// The host bytes a region composite holds at once: 4 a pixel each for the
-/// canvas, the planar readback, its staging buffer and the output, plus a
-/// 4-channel source upload a layer.
-fn region_host_bytes(layers: usize, rw: u32, rh: u32) -> u64 {
+/// The host bytes a region composite may hold at once: 4 a pixel each for the
+/// canvas, the planar readback, its staging buffer and the output, plus what
+/// every plan uploads ([`plan_bytes_per_pixel`]).
+fn region_host_bytes(plans: &[plan::LayerPlan<'_>], rw: u32, rh: u32) -> u64 {
     let n = u64::from(rw) * u64::from(rh);
-    n.saturating_mul(16 + 4 * layers as u64)
+    let per_pixel: u64 = plans.iter().map(plan_bytes_per_pixel).sum();
+    n.saturating_mul(16 + per_pixel)
+}
+
+/// The region-sized bytes per pixel `plan` uploads or allocates: a 4-plane
+/// source and a mask for each layer and each effect pass, and an inner canvas
+/// (plus its mask) for each isolated or clipping group. Summed, not maxed: a
+/// dropped buffer may live until the queue drains.
+fn plan_bytes_per_pixel(plan: &plan::LayerPlan<'_>) -> u64 {
+    const SOURCE_AND_MASK: u64 = 4 + 1;
+    const INNER_CANVAS: u64 = 4;
+    let passes = plan
+        .effects
+        .as_ref()
+        .map_or(0, |p| (p.below.len() + p.above.len()) as u64);
+    let body = match &plan.body {
+        plan::Body::Decline(_) => 0,
+        plan::Body::Group {
+            pass_through,
+            children,
+        } => {
+            let own = if *pass_through { 0 } else { INNER_CANVAS + 1 };
+            own + children.iter().map(plan_bytes_per_pixel).sum::<u64>()
+        }
+        plan::Body::ClipGroup { clipped, .. } => {
+            INNER_CANVAS + SOURCE_AND_MASK * (1 + clipped.len() as u64)
+        }
+        _ => SOURCE_AND_MASK,
+    };
+    SOURCE_AND_MASK * passes + body
 }
 
 /// Whether a usable adapter/device exists on the selected backend and its
