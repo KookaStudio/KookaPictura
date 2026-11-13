@@ -95,6 +95,9 @@ pub enum GpuError {
     TooLarge,
     /// The GPU output could not be mapped back to the host.
     Readback,
+    /// The region's host-side buffers do not fit the memory governor's room;
+    /// the CPU composites it in bands instead (#1290).
+    Memory,
     /// A mode with no GPU implementation is present in the stack.
     UnsupportedMode(BlendMode),
     /// An adjustment layer with no GPU implementation is present in the stack.
@@ -126,6 +129,7 @@ impl fmt::Display for GpuError {
             }
             GpuError::TooLarge => write!(f, "document exceeds GPU buffer limits"),
             GpuError::Readback => write!(f, "GPU readback failed"),
+            GpuError::Memory => write!(f, "region buffers exceed the memory room"),
             GpuError::UnsupportedMode(m) => write!(f, "blend mode {m:?} is CPU-only"),
             GpuError::UnsupportedAdjustment => write!(f, "adjustment kind is CPU-only"),
             GpuError::UnsupportedSmartObject => {
@@ -223,6 +227,14 @@ fn composite_gpu_region_raw(
     if rw == 0 || rh == 0 {
         return Ok(PixelBuffer::new(rw, rh, 4));
     }
+    // Held until the readback is copied out. On a unified-memory GPU every
+    // buffer is host memory, so a 17000² region would take gigabytes the CPU's
+    // banded path never needs.
+    let Some(_held) =
+        pictura_core::memory::governor().reserve_if_room(region_host_bytes(plans.len(), rw, rh))
+    else {
+        return Err(GpuError::Memory);
+    };
     let gpu = Gpu::new(x0, y0, rw, rh)?;
     let canvas = gpu.zero_canvas();
     for layer_plan in plans {
@@ -230,6 +242,14 @@ fn composite_gpu_region_raw(
     }
     let pixels = gpu.read_canvas(&canvas)?;
     Ok(pixels)
+}
+
+/// The host bytes a region composite holds at once: 4 a pixel each for the
+/// canvas, the planar readback, its staging buffer and the output, plus a
+/// 4-channel source upload a layer.
+fn region_host_bytes(layers: usize, rw: u32, rh: u32) -> u64 {
+    let n = u64::from(rw) * u64::from(rh);
+    n.saturating_mul(16 + 4 * layers as u64)
 }
 
 /// Whether a usable adapter/device exists on the selected backend and its

@@ -3,9 +3,11 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+mod digest;
 mod imp;
 
 use super::qobject::PictureView;
+use digest::layer_pixel_digest;
 use imp::*;
 
 #[cxx_qt::bridge]
@@ -58,5 +60,10 @@ pub mod ffi {
 
         /// This document's expanded group paths.
         fn expansion_paths(view: &PictureView) -> QStringList;
+
+        /// `[digest, left, top, right, bottom]` of the layer at `path`, read
+        /// tile by tile (#1290); empty when there is no document or no such
+        /// layer.
+        fn layer_pixel_digest(view: &PictureView, path: &QString) -> Vec<i64>;
     }
 }

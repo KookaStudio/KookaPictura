@@ -342,6 +342,27 @@ QJsonObject ControlServer::methodLayerTree(const QJsonObject&)
     return ok(result);
 }
 
+QJsonObject ControlServer::methodLayerDigest(const QJsonObject& params)
+{
+    PictureView* view = frame_->activeView();
+    if (!view || !view->has_document()) {
+        return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
+    }
+    const QString path = params.value(QStringLiteral("path")).toString();
+    const auto digest = layer_pixel_digest(*view, path);
+    if (digest.size() != 5) {
+        return error(QStringLiteral("invalid_param"),
+                     QStringLiteral("no layer at path: %1").arg(path));
+    }
+    QJsonObject result;
+    result.insert(QStringLiteral("digest"),
+                  QStringLiteral("%1").arg(static_cast<quint64>(digest[0]), 16, 16, QLatin1Char('0')));
+    result.insert(QStringLiteral("rect"),
+                  QJsonArray({double(digest[1]), double(digest[2]), double(digest[3]),
+                              double(digest[4])}));
+    return ok(result);
+}
+
 QJsonObject ControlServer::methodSetActiveLayer(const QJsonObject& params)
 {
     PictureView* view = frame_->activeView();

@@ -131,3 +131,27 @@ fn document_past_2d_product_limit_returns_too_large() {
     };
     assert!(matches!(composite_gpu(&doc), Err(GpuError::TooLarge)));
 }
+
+/// #1290: a region whose host buffers exceed the governor's room declines
+/// before any device work, so the CPU composites it in bands; nothing is
+/// recorded as a refusal.
+#[test]
+fn a_region_over_the_memory_room_declines_to_the_cpu() {
+    use pictura_core::memory::{self, HostReading};
+    let doc = scene(BlendMode::Normal);
+    let plans = plan::plan_stack(&doc, None).expect("plannable");
+    assert_eq!(
+        region_host_bytes(plans.len(), SIZE, SIZE),
+        64 * (16 + 4 * 2)
+    );
+    memory::set_host_for_test(Some(HostReading {
+        available: Some(0),
+        ..HostReading::default()
+    }));
+    memory::clear_refusal();
+    let result = composite_gpu_region_raw(&doc, &plans, 0, 0, SIZE, SIZE);
+    let refusal = memory::last_refusal();
+    memory::set_host_for_test(None);
+    assert!(matches!(result, Err(GpuError::Memory)), "{result:?}");
+    assert_eq!(refusal, None);
+}

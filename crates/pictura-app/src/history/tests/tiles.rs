@@ -227,3 +227,49 @@ fn a_stroke_path_materializes_no_plane_and_scans_only_touched_tiles() {
         .flat_map(|d| d.tiles.iter())
         .all(|t| t.y < TILE));
 }
+
+/// #1290: a tile away from RAM on either side is recorded as wholly changed,
+/// and the capture does not read it back.
+#[test]
+fn an_away_tile_is_wholly_changed_without_a_restore() {
+    use pictura_core::memory::eviction::run_pass;
+    use pictura_core::{scratch, Plane, Residency};
+    let (w, h) = (300usize, 300usize);
+    let mut s = 0x2545_f491_4f6c_dd1du64;
+    let noise: Vec<u8> = (0..w * h)
+        .map(|_| {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s as u8
+        })
+        .collect();
+    let mut before = Plane::from(noise);
+    assert!(before.tile(w, h));
+    let mut after = before.clone();
+    let v = after.sample(7 * w + 5).expect("in the plane");
+    after.write_rect_from(5..6, 7..8, w, &[v ^ 1]);
+    assert_eq!(
+        planes::changed_or_away(&before, &after, 0),
+        Some((5, 7, 1, 1))
+    );
+
+    let dir = scratch::default_volume()
+        .with_file_name("test-scratch")
+        .join(format!("history-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    scratch::set_volumes(&[dir]);
+    for _ in 0..4 {
+        run_pass(u64::MAX);
+    }
+    let away = |p: &Plane<u8>| p.tile_residency(0) != Some(Residency::Resident);
+    assert!(away(&before) && away(&after), "both tiles evicted");
+    assert_eq!(
+        planes::changed_or_away(&before, &after, 0),
+        before.tile_rect(0)
+    );
+    assert!(
+        away(&before) && away(&after),
+        "the capture read neither back"
+    );
+}

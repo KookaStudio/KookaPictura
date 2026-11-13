@@ -316,6 +316,30 @@ fn a_plane_is_built_or_refused() {
 }
 
 #[test]
+fn reserve_if_room_neither_evicts_nor_records() {
+    set_host_for_test(Some(HostReading {
+        available: Some(64 * GIB),
+        ..HostReading::default()
+    }));
+    clear_refusal();
+    let held = governor().reserve_if_room(GIB).expect("fits");
+    assert_eq!(held.bytes(), GIB);
+    assert!(governor().reserved() >= GIB);
+    drop(held);
+    set_host_for_test(Some(HostReading {
+        available: Some(0),
+        ..HostReading::default()
+    }));
+    assert!(governor().reserve_if_room(GIB).is_none());
+    assert_eq!(
+        last_refusal(),
+        None,
+        "a declined accelerator is not a refusal"
+    );
+    set_host_for_test(None);
+}
+
+#[test]
 fn meminfo_available_is_parsed_in_bytes() {
     let text = "MemTotal:       32000000 kB\nMemFree: 1 kB\nMemAvailable:   22298680 kB\n";
     assert_eq!(mem_available(text), Some(22_298_680 * 1024));

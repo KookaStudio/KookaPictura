@@ -6,6 +6,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QTemporaryDir>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 
 #include "api/history_api.h"
@@ -14,6 +15,7 @@
 #include "control_server.h"
 #include "control_test_client.h"
 #include "frame.h"
+#include "image_view.h"
 #include "tools.h"
 #include "api/view_bridge.h"
 
@@ -42,6 +44,7 @@ private slots:
     void oversizedResizeIsRefused();
     void orientationRunsById();
     void layerTreeReportsPaths();
+    void layerDigestSeesEveryPixel();
     void activeLayerIsSetByPath();
     void exportLeavesTheDocumentAlone();
     void exportIsGatedLikeASave();
@@ -53,6 +56,7 @@ private slots:
     void lassoIsOneCall();
     void freeTransformScalesAndRotates();
     void freeTransformIsRefusedDuringASession();
+    void keyReachesTheCanvasOfAnInactiveWindow();
     void freeTransformWarpsTheLayer();
     void newDocumentCanHaveABackgroundLayer();
 
@@ -262,6 +266,45 @@ void ControlEditingTest::layerTreeReportsPaths()
                 .contains(QStringLiteral("active")));
 }
 
+// [ce_layer_digest]
+void ControlEditingTest::layerDigestSeesEveryPixel()
+{
+    paintCentreSquare();
+    const QString path = view().active_layer_path();
+    const auto digest = [this](const QString& at) {
+        return call(QStringLiteral("layer_digest"), {{QStringLiteral("path"), at}});
+    };
+    const QJsonObject first = digest(path);
+    QVERIFY(succeeded(first));
+    const QJsonObject result = first.value(QStringLiteral("result")).toObject();
+    const QString value = result.value(QStringLiteral("digest")).toString();
+    QCOMPARE(value.size(), 16);
+    const auto rect = pictura::transform_api::layerRect(view(), path);
+    QVERIFY(rect.valid);
+    const QJsonArray reported = result.value(QStringLiteral("rect")).toArray();
+    QCOMPARE(reported.size(), 4);
+    QCOMPARE(reported.at(0).toInt(), rect.left);
+    QCOMPARE(reported.at(1).toInt(), rect.top);
+    QCOMPARE(reported.at(2).toInt(), rect.right);
+    QCOMPARE(reported.at(3).toInt(), rect.bottom);
+    QCOMPARE(digest(path).value(QStringLiteral("result")).toObject()
+                 .value(QStringLiteral("digest")).toString(),
+             value);
+
+    QVERIFY(succeeded(call(QStringLiteral("selection"),
+                           {{QStringLiteral("op"), QStringLiteral("rect")},
+                            {QStringLiteral("x"), 12}, {QStringLiteral("y"), 12},
+                            {QStringLiteral("w"), 1}, {QStringLiteral("h"), 1}})));
+    QVERIFY(succeeded(call(QStringLiteral("run_command"),
+                           {{QStringLiteral("id"), QStringLiteral("edit.fill")},
+                            {QStringLiteral("params"),
+                             QJsonObject{{QStringLiteral("color"), double(0xFFFF0000u)}}}})));
+    QVERIFY(digest(path).value(QStringLiteral("result")).toObject()
+                .value(QStringLiteral("digest")).toString()
+            != value);
+    QCOMPARE(errorCode(digest(QStringLiteral("99"))), QStringLiteral("invalid_param"));
+}
+
 void ControlEditingTest::activeLayerIsSetByPath()
 {
     const QJsonArray layers = call(QStringLiteral("layer_tree"))
@@ -454,6 +497,31 @@ void ControlEditingTest::freeTransformIsRefusedDuringASession()
     QVERIFY(tools->transformSessionActive());
     QCOMPARE(history_api::count(view()), before);
     tools->cancelFreeTransform();
+}
+
+// [ce_key_inactive_window] #1290: a 17000² transform's Return was lost when no
+// window was active, because the key went to the main window, not the canvas.
+void ControlEditingTest::keyReachesTheCanvasOfAnInactiveWindow()
+{
+    paintCentreSquare();
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    QVERIFY(tools->beginFreeTransform(view().active_layer_path()));
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    window_->imageView()->setFocus();
+    QWidget other;
+    other.show();
+    other.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&other));
+    QCOMPARE(QApplication::focusWidget(), nullptr);
+    QVERIFY(succeeded(call(QStringLiteral("key"), {{QStringLiteral("sequence"), QStringLiteral("Escape")}})));
+    const bool ended = !tools->transformSessionActive();
+    if (!ended) {
+        tools->cancelFreeTransform();
+    }
+    window_->hide();
+    QVERIFY(ended);
 }
 
 void ControlEditingTest::freeTransformWarpsTheLayer()
