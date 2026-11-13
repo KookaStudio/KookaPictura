@@ -4,6 +4,32 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Transform acceptance at 17000² — #1290 complete** (OpenSpec change
+  `transform-acceptance-scenarios`; capabilities `compositing/gpu-region-memory`
+  and `document/history-away-tiles`; additions to `interop/agentic-control`,
+  `document/out-of-core-transform`, `verification/memory-benchmarks`).
+  - **Harness.** M19–M23 in `memory_scenarios.py`: a full-layer gradient
+    transformed ×0.5, ×1.0 + 15°, ×1.5 (`layer_op free_transform`), then
+    Perspective and Distort through `dispatch_command`, a corner drag and
+    `key Return` (polling history for the deferred landing).
+    `profile-tools.py --digest` records each layer's `layer_digest` (a
+    Read-tier control method: FNV-1a over channel and mask rows, read tile by
+    tile), and `--compare` adds a `pixels` same/differs column.
+  - **Three fixes the runs found.** (1) `key` with no active window (offscreen,
+    after a long step) went to the main window, losing Return; it now tries the
+    main window's focus child first. (2) The deferred composite after a commit
+    took the GPU, whose canvas, readback and source buffers are host memory on
+    a unified-memory GPU (over 5 GB at 17000²); `composite_gpu_region_raw` now
+    reserves them with `Governor::reserve_if_room` (no eviction, no refusal) or
+    declines with the new `memory` reason to the banded CPU path. (3) History's
+    tile-by-tile compare (a layer whose rect is unchanged) restored every packed
+    tile of both sides; `changed_or_away` counts an away tile as wholly changed.
+  - **Results** (17000², `--digest`, scratch on disk). Under `MemoryMax=2G` all
+    of M19–M23 land: peaks 1899, 1908, 1953, 1954, 1944 MiB (uncapped 2065,
+    3276, 4373, 2940, 3152), pixels the same as uncapped. Under 4G all land,
+    pixels the same. M21 with a nearly full 200 MB tmpfs as the only scratch
+    volume is refused. A render test checks progress climbs while tiles spill.
+
 - **Streamed PSD open and memory-aware recovery** (#1299, #1273, OpenSpec
   change `streamed-open-and-recovery`; capabilities
   `codec/streamed-layer-decode` and `document/out-of-core-open`; modified
