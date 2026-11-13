@@ -15,17 +15,19 @@ not edit by hand; change the JSON and regenerate.
   vendored files carry no baked colour. Internal shading uses alpha
   gradients / `stroke-opacity`.
 
-## Summary (214 icons)
+## Summary (238 icons)
 
-- Lucide-derived: **128**
-- Custom (Lucide-style): **73**
+- Lucide-derived: **143**
+- Custom (Lucide-style): **80**
 - Note / deferred: **3**
 - Out of scope (3D tools, file unchanged): **10**
+- Brand marks (simple-icons): **2**
 
 ## Rename map
 
 `source` is `lucide:<slug>` for vendored icons, `custom` for
-hand-authored assets, or the note for deferred entries.
+hand-authored assets, `simple-icons:<slug>` for brand marks, or the note for
+deferred entries.
 
 | Pictura id | source | match | notes |
 |---|---|---|---|
@@ -248,3 +250,27 @@ issue covers moving it to a Lucide-style or CC0 cursor set.
 | `adjustments.threshold` | lucide:square-split-horizontal | good |  |
 | `adjustments.gradient-map` | custom (base: tool.gradient) | custom | gradient rectangle, mirrored horizontally |
 | `adjustments.selective-color` | lucide:pipette | good |  |
+| `actions.delete` | lucide:trash | exact |  |
+| `actions.modalOff` | custom (base: panel-top) | custom | dialog box with a diagonal slash for the off state |
+| `actions.modalOn` | lucide:panel-top | good |  |
+| `actions.modalPartial` | custom (base: panel-top) | custom | dialog box with a filled centre block for the partial state |
+| `actions.newAction` | lucide:square-plus | exact |  |
+| `actions.newSet` | lucide:folder-plus | exact |  |
+| `actions.play` | lucide:play | exact |  |
+| `actions.record` | lucide:circle-dot | exact |  |
+| `actions.stop` | lucide:square | exact |  |
+| `chevron.down` | lucide:chevron-down | exact |  |
+| `chevron.up` | lucide:chevron-up | exact |  |
+| `crop.straighten` | custom | custom | spirit level: a bar with a centred bubble vial, the Crop Straighten toggle |
+| `link.discord` | simple-icons:discord | brand | simple-icons v15, CC0-1.0; a filled brand mark |
+| `link.github` | simple-icons:github | brand | simple-icons v15, CC0-1.0; a filled brand mark |
+| `options.warpText` | custom | custom | Type tools' Warp Text button; a T standing on an arc, drawn on the 24x24 Lucide grid |
+| `options.airbrush` | lucide:spray-can | good |  |
+| `options.pressureOpacity` | custom | custom | brush tip over a circle with a partial inner arc, for pressure controlling opacity |
+| `options.pressureSize` | custom | custom | brush tip over concentric circles, for pressure controlling size |
+| `panel.rightClose` | lucide:panel-right-close | exact |  |
+| `panel.rightOpen` | lucide:panel-right-open | exact |  |
+| `theme.moon` | lucide:moon | good |  |
+| `theme.sun` | lucide:sun | good |  |
+| `tool.createplane` | custom | custom | a perspective plane: a trapezoid ruled with one line each way (Vanishing Point Create Plane) |
+| `window.panels.characterStyles` | lucide:a-large-small | approximate |  |
