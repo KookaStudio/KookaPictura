@@ -82,7 +82,7 @@ pub(in crate::cxxqt_object) fn expects_spill(cost: &CommitCost) -> bool {
 }
 
 /// The free bytes on the usable scratch volumes.
-fn scratch_available() -> u64 {
+pub(in crate::cxxqt_object) fn scratch_available() -> u64 {
     SCRATCH_AVAILABLE
         .get()
         .unwrap_or_else(|| pictura_core::scratch::sizes().available)

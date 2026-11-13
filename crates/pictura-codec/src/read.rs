@@ -11,6 +11,7 @@ use crate::probe::ImageBudget;
 
 mod decode;
 mod merged;
+mod stream;
 mod tagged_layers;
 
 pub(crate) use decode::decode_channel_data;
@@ -192,17 +193,20 @@ fn read_container(
             ))
         || (depth == 1 && mode == ColorMode::Bitmap);
     let source_depth = depth_bits(depth);
-    // The composite's planes (or the blank one a layered file without a merged
-    // image gets) are charged before any section is read.
-    for _ in 0..channels {
-        charge_plane(
-            budget,
-            "composite plane",
-            width as usize,
-            height as usize,
-            depth,
-        )?;
-    }
+    // The composite's planes are charged once the layer section says which are
+    // allocated, and always before they are (#1273): a skipped merged image
+    // allocates only its extra channels, and a missing one a tiled blank.
+    let charge_composite = |budget: &mut DecodeBudget, planes: usize| {
+        (0..planes).try_for_each(|_| {
+            charge_plane(
+                budget,
+                "composite plane",
+                width as usize,
+                height as usize,
+                depth,
+            )
+        })
+    };
 
     // Color mode data section: 4-byte length + opaque bytes, kept verbatim.
     // An Indexed palette is interpreted and consumed (see `normalize`).
@@ -245,13 +249,15 @@ fn read_container(
         layer_section_extra,
     };
     if r.remaining() == 0 && layered {
-        let doc = merged::without_merged_image(
-            sections,
-            PixelBuffer::new(width, height, color_count as u8),
-            false,
-            Compression::Rle,
-            Vec::new(),
-        );
+        // The blank stand-in is tiled zeros, which hold no allocation.
+        let blank = PixelBuffer {
+            width,
+            height,
+            channels: color_count as u8,
+            data: Plane::filled(width as usize, height as usize, color_count, 0u8),
+        };
+        let doc =
+            merged::without_merged_image(sections, blank, false, Compression::Rle, Vec::new());
         return Ok(crate::icc::apply_icc_policy_with_options(
             normalize(doc, mode, depth, palette.as_ref(), options),
             options.policy,
@@ -279,6 +285,7 @@ fn read_container(
     {
         // Only the extra channels (saved selections, merged transparency)
         // are decoded; the colour planes' bytes are skipped.
+        charge_composite(budget, header_channels.saturating_sub(color_count))?;
         let colour_bytes = planar_len(color_count, stride, height)?;
         let extras = match composite_compression {
             Compression::Rle => {
@@ -305,6 +312,7 @@ fn read_container(
             options.conversion,
         ));
     }
+    charge_composite(budget, header_channels)?;
     let mut data = match composite_compression {
         Compression::Raw => r
             .take(planar_len(header_channels, stride, height)?)?
@@ -546,17 +554,6 @@ fn convert_pixels(
     }
 }
 
-/// A decoded 8-bit channel of `rect`, tiled so its uniform regions hold
-/// nothing; a plane whose length does not match `rect` stays flat.
-///
-/// ponytail: the channel is decoded whole and then tiled, so one channel's
-/// contiguous bytes are held at a time; a row-sink decoder would not need them.
-fn tiled(data: Vec<u8>, rect: PsdRect) -> Plane<u8> {
-    let mut plane = Plane::from(data);
-    plane.tile(rect.width().max(0) as usize, rect.height().max(0) as usize);
-    plane
-}
-
 /// Split the planar image-data section into the mode's color planes (the
 /// composite) and the trailing extra channels (saved selections / alpha).
 /// `plane` is one channel's byte length (depth-aware). `color_channels` is the
@@ -744,10 +741,12 @@ fn read_layer_info(
             });
         }
     }
-    let (tasks, total) = plan_channel_tasks(&planned, color_channels, depth, budget)?;
+    let (tasks, total) = plan_channel_tasks(&planned, color_channels, depth, retain, budget)?;
 
-    // Phase B (parallel): decode every channel from its own slice.
-    let mut results = decode::decode_channel_tasks(r.data, base, &tasks, is_psb, depth).into_iter();
+    // Phase B (parallel): decode every channel from its own slice, a row at a
+    // time into tiles.
+    let mut results =
+        decode::decode_channel_tasks(r.data, base, &tasks, is_psb, depth, retain).into_iter();
 
     // Phase C (serial): reassemble in record order; the first error in that
     // order is the one returned.
@@ -776,12 +775,9 @@ fn read_layer_info(
                     let mut stream = Vec::with_capacity(2 + data.len());
                     stream.extend_from_slice(&COMPRESSION_RAW.to_be_bytes());
                     stream.extend_from_slice(&data);
-                    stream
+                    stream.into()
                 };
-                raw_channels.push(RawChannel {
-                    id,
-                    data: data.into(),
-                });
+                raw_channels.push(RawChannel { id, data });
                 continue;
             }
             // Section dividers and folder records carry placeholder channels that
@@ -791,10 +787,7 @@ fn read_layer_info(
             }
             match id {
                 -2 => mask_data = Some(data),
-                _ => channels.push(Channel {
-                    id,
-                    data: tiled(data, raw.layer.rect),
-                }),
+                _ => channels.push(Channel { id, data }),
             }
         }
         // `build_tree` drops folder/divider records; an `lsct=0` layer is kept.
@@ -812,14 +805,14 @@ fn read_layer_info(
         raw.layer.raw_channels = raw_channels;
         if let Some(data) = mask_data {
             match raw.layer.mask.as_mut() {
-                Some(mask) => mask.data = Some(tiled(data, mask.rect)),
+                Some(mask) => mask.data = Some(data),
                 None => {
                     raw.layer.mask = Some(LayerMask {
                         rect: raw.layer.rect,
                         default_color: 0,
                         disabled: false,
                         flags: 0,
-                        data: Some(data.into()),
+                        data: Some(data.to_vec().into()),
                         ..Default::default()
                     });
                 }
@@ -855,21 +848,6 @@ fn charge_plane(
         _ => 0,
     };
     budget.charge(what, &[width, height])?;
-    Ok(())
-}
-
-/// Charge one layer channel's decoded plane before it is allocated. An empty
-/// channel (`declared_len == 0`) decodes to nothing and costs nothing.
-fn charge_channel(
-    budget: &mut DecodeBudget,
-    declared_len: usize,
-    width: usize,
-    height: usize,
-    depth: u16,
-) -> Result<(), PsdError> {
-    if declared_len != 0 {
-        charge_plane(budget, "layer channel", width, height, depth)?;
-    }
     Ok(())
 }
 

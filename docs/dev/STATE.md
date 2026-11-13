@@ -4,6 +4,31 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Streamed PSD open and memory-aware recovery** (#1299, #1273, OpenSpec
+  change `streamed-open-and-recovery`; capabilities
+  `codec/streamed-layer-decode` and `document/out-of-core-open`; modified
+  `document/crash-recovery`).
+  - **Decode.** `read/stream.rs` decodes 8-, 16- and 32-bit layer and mask
+    channels a row at a time (raw, RLE, ZIP, ZIP with prediction) into tiled
+    planes through a `TiledSink`. 16/32-bit build the native and narrowed planes
+    in one pass. The output and errors match the dense decoders, which stay as
+    test oracles. Depth 1 and the merged image's extra channels stay dense
+    (`ponytail:`). A layered file with no merged image gets a tiled blank
+    composite.
+  - **Budget.** `ImageBudget::max_tiled_bytes` (default `max_document_bytes`)
+    takes the tile charges, and each worker's strip is charged as contiguous.
+    Composite planes are charged only for what is allocated. `open_budget`
+    gives contiguous memory ⅔ of the room, and tiles ⅔ of the room plus scratch
+    free space. Opens read the file through `pictura_codec::MappedFile`.
+  - **Recovery.** A snapshot refused for memory stays in its orphaned session,
+    which is kept, and is offered at the next launch. Unreadable snapshots are
+    still quarantined. Failures are listed in a non-blocking
+    `recoveryFailures` dialog that replaces the status-bar message.
+  - **M12.** At 12000², unconstrained: peak +1027 MiB (was +2800), settling at
+    1180 MiB, within layer tiles + 256 MiB. At 17000² under `MemoryMax=2G`: ok
+    in 9.3 s, peak 1585 MiB (was refused). The `open_psd` heap guard at 4250²
+    fell from 352 to 246 MiB, and its baseline was lowered.
+
 - **Canvas Size and Rotate Canvas out of core** (#1294, OpenSpec change
   `canvas-geometry-out-of-core`, capability
   `document/out-of-core-canvas-geometry`).

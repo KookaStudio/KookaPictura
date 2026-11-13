@@ -141,20 +141,23 @@ pub(in crate::cxxqt_object) fn open_refused_for_memory() -> bool {
     OPEN_REFUSED_FOR_MEMORY.load(Ordering::Relaxed)
 }
 
-/// The decode budget of an open, read on the calling (GUI) thread: the default,
-/// with its document limit bounded by two thirds of the governor's room (the
-/// rest is the composite, history and display the open builds after the
-/// decode, #1211), and whether the room bounded it.
+/// The decode budget of an open, read on the calling (GUI) thread, and
+/// whether the governor's room bounded it. Contiguous allocations get two
+/// thirds of the room (the rest is the composite, history and display the open
+/// builds after the decode, #1211). The layer tiles get that plus the scratch
+/// disks' free space, since the evictor can pack and spill them (#1273).
 pub(in crate::cxxqt_object) fn open_budget() -> (pictura_codec::ImageBudget, bool) {
     let default = pictura_codec::ImageBudget::default();
-    let room = pictura_core::memory::governor()
+    let Some(room) = pictura_core::memory::governor()
         .room()
-        .map(|room| room / 3 * 2);
-    let budget = super::super::helpers::bounded_budget(default, room);
-    (
-        budget,
-        budget.max_document_bytes < default.max_document_bytes,
-    )
+        .map(|room| room / 3 * 2)
+    else {
+        return (default, false);
+    };
+    let mut budget = super::super::helpers::bounded_budget(default, Some(room));
+    budget.max_tiled_bytes =
+        room.saturating_add(super::super::helpers::memory_gate::scratch_available());
+    (budget, true)
 }
 
 pub(super) fn decode_psd_with(
@@ -166,7 +169,7 @@ pub(super) fn decode_psd_with(
 ) -> Option<OpenedDocument> {
     OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
     progress(5, "Reading file");
-    let bytes = std::fs::read(path).ok()?;
+    let bytes = pictura_codec::MappedFile::open(path).ok()?;
     progress(25, "Decoding");
     let mut doc = match pictura_codec::read_psd_within_options(&bytes, &options, budget) {
         Ok(doc) => doc,

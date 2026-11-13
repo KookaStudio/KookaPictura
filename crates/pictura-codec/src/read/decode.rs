@@ -2,12 +2,12 @@
 //! sample depth. Split from `read.rs` for the file-size cap.
 
 use flate2::read::{DeflateDecoder, ZlibDecoder};
-use pictura_core::Samples;
+use pictura_core::{Plane, Samples};
 use std::io::Read;
 
 use crate::budget::DecodeBudget;
 use crate::common::*;
-use crate::depth::{depth_bits, planar_len, row_bytes, undo_prediction};
+use crate::depth::{planar_len, row_bytes, undo_prediction};
 use crate::error::PsdError;
 
 /// Inflate a ZIP channel payload. The reference writes a zlib-framed stream; some
@@ -145,15 +145,32 @@ pub(super) fn plan_channel_tasks(
     channels: &[PlannedChannel],
     color_channels: usize,
     depth: u16,
+    keep_native: bool,
     budget: &mut DecodeBudget,
 ) -> Result<(Vec<ChannelTask>, usize), PsdError> {
     let mut tasks = Vec::with_capacity(channels.len());
     let mut offset = 0usize;
+    let mut strips = Vec::new();
     for channel in channels {
         let is_color = channel.id >= 0 && (channel.id as usize) < color_channels;
         let modeled = channel.id == -2 || channel.id == -1 || is_color;
         let task = if modeled || depth != 8 {
-            super::charge_channel(budget, channel.len, channel.width, channel.height, depth)?;
+            if channel.len != 0 {
+                if depth == 1 {
+                    super::charge_plane(budget, "layer channel", channel.width, channel.height, 1)?;
+                } else {
+                    charge_streamed(budget, channel.width, channel.height, depth, keep_native)?;
+                    strips.push(
+                        super::stream::strip_bytes(
+                            channel.width,
+                            channel.height,
+                            depth,
+                            keep_native,
+                        )
+                        .unwrap_or(usize::MAX),
+                    );
+                }
+            }
             ChannelTask::Decode {
                 offset,
                 len: channel.len,
@@ -169,7 +186,29 @@ pub(super) fn plan_channel_tasks(
         tasks.push(task);
         offset = offset.saturating_add(channel.len);
     }
+    // At most one channel per worker holds its strips at once; each strip is
+    // its own allocation.
+    strips.sort_unstable_by(|a, b| b.cmp(a));
+    for &bytes in strips.iter().take(rayon::current_num_threads()) {
+        budget.charge("layer channel strip", &[bytes])?;
+    }
     Ok((tasks, offset))
+}
+
+/// Charge the tiles one streamed channel decodes into: its 8-bit plane and,
+/// when kept, its native 16/32-bit samples.
+fn charge_streamed(
+    budget: &mut DecodeBudget,
+    width: usize,
+    height: usize,
+    depth: u16,
+    keep_native: bool,
+) -> Result<(), PsdError> {
+    if keep_native && depth >= 16 {
+        budget.charge_tiled("layer channel", &[width, height, depth as usize / 8])?;
+    }
+    budget.charge_tiled("layer channel", &[width, height])?;
+    Ok(())
 }
 
 /// Phase B: decode every channel from its own slice, preserving task order.
@@ -182,6 +221,7 @@ pub(super) fn decode_channel_tasks(
     tasks: &[ChannelTask],
     is_psb: bool,
     depth: u16,
+    keep_native: bool,
 ) -> Vec<Result<ChannelRead, PsdError>> {
     use rayon::prelude::*;
 
@@ -193,17 +233,19 @@ pub(super) fn decode_channel_tasks(
                     .unwrap_or(&[]),
             );
             match task {
-                ChannelTask::Raw { len, .. } => Ok((r.take(*len)?.to_vec(), COMPRESSION_RAW, None)),
+                ChannelTask::Raw { len, .. } => {
+                    Ok((r.take(*len)?.to_vec().into(), COMPRESSION_RAW, None))
+                }
                 ChannelTask::Decode {
                     len, width, height, ..
-                } => read_channel_data(&mut r, *len, *width, *height, is_psb, depth),
+                } => read_channel_data(&mut r, *len, *width, *height, is_psb, depth, keep_native),
             }
         })
         .collect()
 }
 
 /// Decode one PackBits scanline into `dst` (exactly `dst.len()` bytes).
-fn decode_packbits(src: &[u8], dst: &mut [u8]) -> Result<(), PsdError> {
+pub(super) fn decode_packbits(src: &[u8], dst: &mut [u8]) -> Result<(), PsdError> {
     let mut si = 0usize;
     let mut di = 0usize;
     while di < dst.len() {
@@ -237,7 +279,7 @@ fn decode_packbits(src: &[u8], dst: &mut [u8]) -> Result<(), PsdError> {
 }
 
 /// One scanline byte-count entry's width: `u32` in a PSB, `u16` otherwise.
-fn count_bytes(is_psb: bool) -> usize {
+pub(super) fn count_bytes(is_psb: bool) -> usize {
     if is_psb {
         4
     } else {
@@ -245,7 +287,7 @@ fn count_bytes(is_psb: bool) -> usize {
     }
 }
 
-fn read_rle_count(r: &mut Reader, is_psb: bool) -> Result<usize, PsdError> {
+pub(super) fn read_rle_count(r: &mut Reader, is_psb: bool) -> Result<usize, PsdError> {
     Ok(if is_psb {
         r.u32()? as usize
     } else {
@@ -254,13 +296,14 @@ fn read_rle_count(r: &mut Reader, is_psb: bool) -> Result<usize, PsdError> {
 }
 
 /// A decoded layer channel: 8-bit plane, compression word, optional native samples.
-pub(super) type ChannelRead = (Vec<u8>, u16, Option<Samples>);
+pub(super) type ChannelRead = (Plane<u8>, u16, Option<Samples>);
 
 /// Read one layer channel's image data. `declared_len` includes the 2-byte
 /// compression header. A depth-1 channel is bit-packed and expanded to an 8-bit
-/// plane; a 16/32-bit channel is decoded at the document depth and narrowed, so
-/// the layer path matches the composite. Returns the 8-bit plane, the
-/// compression word, and at 16/32 the pre-narrow native plane for retention.
+/// plane; an 8/16/32-bit channel streams into tiles (`stream.rs`), a 16/32-bit
+/// one narrowed so the layer path matches the composite. Returns the 8-bit
+/// plane, the compression word, and at 16/32 when `keep_native` the pre-narrow
+/// native plane for retention.
 pub(super) fn read_channel_data(
     r: &mut Reader,
     declared_len: usize,
@@ -268,9 +311,10 @@ pub(super) fn read_channel_data(
     height: usize,
     is_psb: bool,
     depth: u16,
+    keep_native: bool,
 ) -> Result<ChannelRead, PsdError> {
     if declared_len == 0 {
-        return Ok((Vec::new(), COMPRESSION_RAW, None));
+        return Ok((Vec::new().into(), COMPRESSION_RAW, None));
     }
     if declared_len < 2 {
         return Err(PsdError::Invalid(format!(
@@ -281,32 +325,38 @@ pub(super) fn read_channel_data(
     let payload = r.take(declared_len - 2)?;
     // An empty layer record has no scanlines to decode (#1208).
     if width == 0 || height == 0 {
-        return Ok((Vec::new(), compression, None));
+        return Ok((Vec::new().into(), compression, None));
     }
-    match depth {
-        1 => Ok((
-            decode_bitmap_channel(compression, payload, width, height, is_psb)?,
+    if depth == 1 {
+        // ponytail: depth 1 decodes whole and then tiles, holding one
+        // expanded channel; Bitmap documents are one channel.
+        let mut plane = Plane::from(decode_bitmap_channel(
             compression,
-            None,
-        )),
-        8 => Ok((
-            decode_channel_data(compression, payload, width, height, is_psb)?,
-            compression,
-            None,
-        )),
-        _ => {
-            let (data, native) =
-                decode_depth_channel(compression, payload, width, height, is_psb, depth)?;
-            Ok((data, compression, Some(native)))
-        }
+            payload,
+            width,
+            height,
+            is_psb,
+        )?);
+        plane.tile(width, height);
+        return Ok((plane, compression, None));
     }
+    let (plane, native) = super::stream::stream_channel(
+        compression,
+        payload,
+        width,
+        height,
+        is_psb,
+        depth,
+        keep_native,
+    )?;
+    Ok((plane, compression, native))
 }
 
-/// Decode a 16/32-bit layer channel: it is decoded at the document depth (raw,
-/// RLE, or ZIP/ZIP-with-prediction) and returned both narrowed to an 8-bit
-/// `width * height` plane and as its native pre-narrow samples, mirroring the
-/// composite path so layer and composite agree.
-fn decode_depth_channel(
+/// Decode a 16/32-bit layer channel whole: narrowed to an 8-bit
+/// `width * height` plane and as its native samples. The oracle for the
+/// streamed decode.
+#[cfg(test)]
+pub(super) fn decode_depth_channel(
     compression: u16,
     payload: &[u8],
     width: usize,
@@ -335,7 +385,10 @@ fn decode_depth_channel(
         }
         c => return Err(PsdError::Unsupported(format!("channel compression {c}"))),
     };
-    let samples = Samples::from_bytes(&raw, depth_bits(depth).expect("16/32-bit channel"));
+    let samples = Samples::from_bytes(
+        &raw,
+        crate::depth::depth_bits(depth).expect("16/32-bit channel"),
+    );
     let narrowed = samples.narrow_to_u8();
     Ok((narrowed, samples))
 }

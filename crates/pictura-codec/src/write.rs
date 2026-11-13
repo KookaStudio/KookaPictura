@@ -140,7 +140,7 @@ fn reframe_document_extra(bytes: &[u8], src_psb: bool, dst_psb: bool) -> Vec<u8>
 /// bytes become a repeat packet (control `1 - n`, then the byte); all other
 /// bytes become literal packets of up to 128. The split is fixed, so repeated
 /// writes are byte-identical.
-fn encode_packbits_row(row: &[u8], out: &mut Vec<u8>) {
+pub(crate) fn encode_packbits_row(row: &[u8], out: &mut Vec<u8>) {
     let mut i = 0;
     while i < row.len() {
         let mut run = 1;

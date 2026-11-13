@@ -378,3 +378,88 @@ fn raster_import_policy_malformed_profile() {
     assert!(doc.document_icc.is_none());
     assert!(doc.source_icc.is_none());
 }
+
+const MIB: u64 = 1024 * 1024;
+const GIB: u64 = 1024 * MIB;
+
+/// Pin this thread's host reading to `available` bytes and the scratch disks
+/// to `scratch` bytes, returning the governor's room.
+fn pin(available: Option<u64>, scratch: i64) -> Option<u64> {
+    pictura_core::memory::set_host_for_test(Some(pictura_core::memory::HostReading {
+        available,
+        ..Default::default()
+    }));
+    super::super::super::helpers::memory_gate::set_scratch_available_for_test(scratch);
+    pictura_core::memory::governor().room()
+}
+
+fn unpin() {
+    pictura_core::memory::set_host_for_test(None);
+    super::super::super::helpers::memory_gate::set_scratch_available_for_test(-1);
+}
+
+// [oo_budget]
+#[test]
+fn open_budget_adds_scratch_to_the_tile_allowance() {
+    let default = pictura_codec::ImageBudget::default();
+    for scratch in [10 * GIB, 0] {
+        let room = pin(Some(3 * GIB + 256 * MIB), scratch as i64).expect("a room");
+        let (budget, bounded) = open_budget();
+        assert!(bounded);
+        let contiguous = room / 3 * 2;
+        assert_eq!(
+            budget.max_document_bytes,
+            default.max_document_bytes.min(contiguous)
+        );
+        assert_eq!(
+            budget.max_tiled_bytes,
+            contiguous + scratch,
+            "scratch {scratch}"
+        );
+    }
+    assert_eq!(pin(None, 10 * GIB as i64), None, "no reading, no room");
+    let (budget, bounded) = open_budget();
+    assert!(!bounded);
+    assert_eq!(budget.max_tiled_bytes, budget.max_document_bytes);
+    unpin();
+}
+
+// [oo_admits]
+#[test]
+fn an_open_larger_than_the_room_is_admitted_with_scratch() {
+    // 1024² of noise in four channels: 4 MiB of tiles, while a channel's
+    // strip is about a quarter of a MiB.
+    let side = 1024usize;
+    let rgba: Vec<u8> = (0..side * side * 4)
+        .map(|i| (i as u32).wrapping_mul(2_654_435_761).rotate_right(13) as u8)
+        .collect();
+    let doc = Document::from_rgba("Noise", side as u32, side as u32, &rgba);
+    let path = temp_path("psd");
+    std::fs::write(&path, pictura_codec::write_psd(&doc).expect("write")).expect("fixture");
+    let path_str = path.to_str().unwrap();
+
+    // Find an available amount whose room is 4.5 MiB: two thirds of it
+    // (3 MiB) hold the strips, the merged transparency plane and the RLE row
+    // table, but not the 4 MiB of tiles.
+    let mut available = 4 * MIB;
+    while pin(Some(available), 0).unwrap_or(0) < 9 * MIB / 2 {
+        available += MIB / 4;
+    }
+    let tiles = 4 * side as u64 * side as u64;
+    assert!(open_budget().0.max_tiled_bytes < tiles);
+
+    pin(Some(available), (64 * GIB) as i64);
+    let opened = decode_psd(path_str, Policy::Preserve, false, &|_, _| {});
+    assert!(opened.is_some(), "scratch holds the tiles");
+    assert!(!open_refused_for_memory());
+    assert_eq!(
+        opened.unwrap().doc.layers[0].channels,
+        doc.layers[0].channels
+    );
+
+    pin(Some(available), 0);
+    assert!(decode_psd(path_str, Policy::Preserve, false, &|_, _| {}).is_none());
+    assert!(open_refused_for_memory(), "the refusal is for memory");
+    unpin();
+    std::fs::remove_file(path).ok();
+}

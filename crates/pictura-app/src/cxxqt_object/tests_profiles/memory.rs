@@ -51,7 +51,9 @@ const BASELINE: &[(&str, usize)] = &[
     // The merged image is composited band by band into tiles (#1216); the
     // peak is the save job's copy, a band's compositor canvas and the file.
     ("save_psd", 128_845_134),
-    ("open_psd", 369_145_949),
+    // Layer channels decode a row at a time into tiles and the file is mapped
+    // (#1273); the peak is the opened document's tiles.
+    ("open_psd", 257_815_559),
     // Raised by #1216: Sample All Layers composites the tiles it floods (about
     // 1.5 MiB at once), where #1214 read a retained composite the setup held
     // (72 MiB at 4250², outside this delta). The absolute peak fell.

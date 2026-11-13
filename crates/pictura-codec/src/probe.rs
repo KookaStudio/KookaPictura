@@ -42,11 +42,17 @@ pub struct ImageBudget {
     /// default is three quarters of the memory available when it is read,
     /// never less than one `max_alloc_bytes` allocation (#844).
     pub max_document_bytes: u64,
+    /// Maximum bytes the layer channels a PSD decodes into tiles may claim in
+    /// all, charged apart from `max_document_bytes` because tiles can be
+    /// packed and spilled (#1273). The default is `max_document_bytes`.
+    pub max_tiled_bytes: u64,
 }
 
 impl Default for ImageBudget {
     fn default() -> Self {
         const MAX_ALLOC_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+        let max_document_bytes =
+            crate::budget::document_bytes(crate::budget::available_memory(), MAX_ALLOC_BYTES);
         Self {
             max_dimension: 30_000,
             // 2 GiB admits a 16000²-class RGBA import (the canvas target):
@@ -55,10 +61,8 @@ impl Default for ImageBudget {
             // raises QImageReader's separate 256 MB allocation limit to match
             // (see crates/pictura-app/cpp/decode_image.cpp).
             max_alloc_bytes: MAX_ALLOC_BYTES,
-            max_document_bytes: crate::budget::document_bytes(
-                crate::budget::available_memory(),
-                MAX_ALLOC_BYTES,
-            ),
+            max_document_bytes,
+            max_tiled_bytes: max_document_bytes,
         }
     }
 }

@@ -421,8 +421,9 @@ fn layer_channel_tasks_record_their_own_offsets() {
         max_dimension: 100,
         max_alloc_bytes: 1 << 20,
         max_document_bytes: 1 << 20,
+        max_tiled_bytes: 1 << 20,
     });
-    let (tasks, total) = plan_channel_tasks(&channels, 3, 8, &mut budget).expect("plan");
+    let (tasks, total) = plan_channel_tasks(&channels, 3, 8, true, &mut budget).expect("plan");
     assert_eq!(
         tasks.iter().map(ChannelTask::offset).collect::<Vec<_>>(),
         vec![0, 5, 14, 18]
@@ -452,9 +453,9 @@ fn decode_channel_tasks_reads_each_channel_from_its_own_slice() {
             height: 1,
         },
     ];
-    let planes: Vec<Vec<u8>> = decode_channel_tasks(&data, 0, &tasks, false, 8)
+    let planes: Vec<Vec<u8>> = decode_channel_tasks(&data, 0, &tasks, false, 8, true)
         .into_iter()
-        .map(|result| result.expect("decode").0)
+        .map(|result| result.expect("decode").0.to_vec())
         .collect();
     assert_eq!(planes, vec![vec![2, 3, 4], vec![9, 9]]);
 }
@@ -712,4 +713,85 @@ fn profile_isolated_prediction(width: usize, rows: usize, depth: u16) {
         "prediction rows only: parallel {parallel:?}, one-thread {serial:?}, {:.1}x",
         serial.as_secs_f64() / parallel.as_secs_f64()
     );
+}
+
+/// A one-layer `width × height` 8-bit RGB document with a user mask.
+fn masked_layer_document(width: usize, height: usize, rgba: &[u8]) -> Document {
+    let mut doc = Document::from_rgba("Layer", width as u32, height as u32, rgba);
+    let mut layer = doc.layers.get(0).expect("layer").clone();
+    layer.mask = Some(LayerMask {
+        rect: layer.rect,
+        data: Some(vec![200u8; width * height].into()),
+        ..Default::default()
+    });
+    doc.layers = LayerStack::from_layers(vec![layer]);
+    doc
+}
+
+#[test]
+fn decoded_layer_channels_are_tiled() {
+    let side = 1024;
+    let solid: Vec<u8> = [10u8, 20, 30, 255].repeat(side * side);
+    let bytes = write_psd(&masked_layer_document(side, side, &solid)).expect("write");
+    let back = read_psd(&bytes).expect("read");
+    let layer = back.layers.get(0).expect("layer");
+    assert!(!layer.channels.is_empty());
+    for channel in &layer.channels {
+        assert!(channel.data.is_tiled(), "channel {} is tiled", channel.id);
+        assert!(
+            channel.data.allocated_bytes() < side * side / 4,
+            "solid channel {} holds {} bytes",
+            channel.id,
+            channel.data.allocated_bytes()
+        );
+    }
+    let mask = layer
+        .mask
+        .as_ref()
+        .and_then(|m| m.data.as_ref())
+        .expect("mask");
+    assert!(mask.is_tiled(), "the mask is tiled");
+}
+
+#[test]
+fn tiled_channels_charge_the_tile_budget() {
+    // Four tall, narrow masked layers: twenty planes, while a channel's
+    // 256-row strip is a quarter of its plane, and the skipped merged image
+    // still charges four planes and its row table.
+    let (w, h) = (64usize, 1024usize);
+    let rgba: Vec<u8> = (0..w * h * 4).map(|i| (i * 31 % 251) as u8).collect();
+    let mut doc = masked_layer_document(w, h, &rgba);
+    let layer = doc.layers.get(0).expect("layer").clone();
+    doc.layers = LayerStack::from_layers(
+        (0..4)
+            .map(|i| {
+                let mut copy = layer.clone();
+                copy.name = format!("Layer {i}");
+                copy
+            })
+            .collect(),
+    );
+    let bytes = write_psd(&doc).expect("write");
+    let options = OpenOptions {
+        skip_layered_merged: true,
+        ..OpenOptions::default()
+    };
+    let planes = 20 * w * h;
+    let contiguous = 900_000;
+    let budget = |tiled: usize| ImageBudget {
+        max_dimension: 30_000,
+        max_alloc_bytes: 1 << 30,
+        max_document_bytes: contiguous as u64,
+        max_tiled_bytes: tiled as u64,
+    };
+    assert!(
+        contiguous < planes,
+        "the layer planes exceed the document limit"
+    );
+    let opened = read_psd_within_options(&bytes, &options, budget(planes + 1024)).expect("opens");
+    let reference =
+        read_psd_within_options(&bytes, &options, ImageBudget::default()).expect("reference");
+    assert_eq!(opened, reference);
+    let err = read_psd_within_options(&bytes, &options, budget(planes - w * h)).unwrap_err();
+    assert!(err.to_string().contains("decode budget"), "{err}");
 }

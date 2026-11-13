@@ -9,7 +9,10 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QLockFile>
 #include <QtCore/QTemporaryDir>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
 
 #include "commands.h"
 #include "frame.h"
@@ -19,6 +22,7 @@
 
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -60,6 +64,20 @@ QString fakeCrashedSession(const QString& from)
     return dir;
 }
 
+// The informative text of `window`'s recovery failure dialog, closing it; an
+// empty string when none is shown.
+QString takeFailureDialog(pictura::PicturaMainWindow& window)
+{
+    auto* box = window.findChild<QMessageBox*>(QStringLiteral("recoveryFailures"));
+    if (!box) {
+        return QString();
+    }
+    const QString text = box->informativeText();
+    box->close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    return text;
+}
+
 } // namespace
 
 class RecoveryTest : public QObject {
@@ -73,6 +91,7 @@ private slots:
     void liveSessionsAreNotOrphans();
     void recoverReopensAnOrphanedDocument();
     void partialRecoveryQuarantinesFailedDocument();
+    void memoryRefusedRecoveryIsOfferedAgain();
     void fileHandlingPreferenceTogglesAutosave();
 };
 
@@ -220,6 +239,7 @@ void RecoveryTest::recoverReopensAnOrphanedDocument()
              "undo back to the recovered start cannot make it clean");
     QVERIFY2(!QFileInfo::exists(crashed), "the orphaned session is discarded");
     QCOMPARE(snapshots(after->recoverySessionDirForTest()).size(), 1);
+    QVERIFY2(takeFailureDialog(*after).isEmpty(), "a full recovery shows no failure dialog");
     after->shutdownRecovery();
 }
 
@@ -271,6 +291,93 @@ void RecoveryTest::partialRecoveryQuarantinesFailedDocument()
              "the quarantine directory is not an orphan session");
     QVERIFY2(QFileInfo::exists(snapshotDest), "a later scan does not delete the quarantine");
     QCOMPARE(snapshots(after->recoverySessionDirForTest()).size(), 1);
+    const QString failure = takeFailureDialog(*after);
+    QVERIFY2(failure.contains(QStringLiteral("Untitled-2")), qPrintable(failure));
+    QVERIFY2(failure.contains(QDir::toNativeSeparators(quarantine)), qPrintable(failure));
+    after->shutdownRecovery();
+}
+
+// [cr_memory_refused] A snapshot this machine cannot open for lack of memory
+// stays in its session for a later launch instead of being quarantined.
+void RecoveryTest::memoryRefusedRecoveryIsOfferedAgain()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    QString crashed;
+    {
+        auto before = pictura::test::makeMainWindow();
+        before->enableRecovery();
+        for (const int side : {64, 2048}) {
+            QVERIFY(before->newDocument(QString(), side, side * 3 / 4, QStringLiteral("rgb"), 8,
+                                        QStringLiteral("white")));
+            drawTriangle(*before->activeView());
+        }
+        before->autosaveRecovery();
+        waitForWrites(*before);
+        crashed = fakeCrashedSession(before->recoverySessionDirForTest());
+    }
+    const QList<pictura::OrphanSession> orphans = pictura::RecoveryStore::orphans(QString());
+    QCOMPARE(orphans.size(), 1);
+    QCOMPARE(orphans.first().documents.size(), 2);
+    const pictura::RecoverableDocument small = orphans.first().documents.at(0);
+    const pictura::RecoverableDocument large = orphans.first().documents.at(1);
+    QCOMPARE(large.name, QStringLiteral("Untitled-2"));
+    const QString largeManifest = crashed + QLatin1Char('/')
+                                  + QFileInfo(large.snapshot).completeBaseName()
+                                  + QStringLiteral(".json");
+
+    auto after = pictura::test::makeMainWindow();
+    after->enableRecovery();
+    // About 4 MiB of room and no scratch: the 64×48 snapshot decodes, the
+    // 2048×1536 one (12 MiB of tiles) is refused for memory.
+    pictura::set_available_memory_for_test(260LL * 1024 * 1024);
+    pictura::set_scratch_available_for_test(0);
+    const int recovered = after->recoverOrphans();
+    pictura::set_available_memory_for_test(-1);
+    pictura::set_scratch_available_for_test(-1);
+    QCOMPARE(recovered, 1);
+    QCOMPARE(after->documentCount(), 1);
+    QCOMPARE(after->documentName(0), QStringLiteral("Untitled-1-Recovered"));
+
+    QVERIFY2(!QFileInfo::exists(small.snapshot), "the recovered snapshot leaves the session");
+    QVERIFY2(QFileInfo::exists(large.snapshot), "the refused snapshot stays");
+    QVERIFY2(QFileInfo::exists(largeManifest), "with its manifest");
+    QVERIFY2(QFileInfo::exists(crashed), "the session is kept");
+    QVERIFY2(!QFileInfo::exists(pictura::RecoveryStore::quarantineRoot() + QLatin1Char('/')
+                                + QFileInfo(crashed).fileName()),
+             "nothing is quarantined");
+    const QString failure = takeFailureDialog(*after);
+    QVERIFY2(failure.contains(QStringLiteral("Untitled-2")), qPrintable(failure));
+    QVERIFY2(failure.contains(QStringLiteral("memory")), qPrintable(failure));
+    QVERIFY2(failure.contains(QDir::toNativeSeparators(large.snapshot)), qPrintable(failure));
+    QVERIFY2(!failure.contains(QStringLiteral("Untitled-1")), qPrintable(failure));
+
+    // With room again, the next offer lists only the refused document, and
+    // Recover opens it.
+    QString offered;
+    bool clicked = false;
+    QTimer::singleShot(0, [&offered, &clicked] {
+        auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (!box) {
+            return;
+        }
+        offered = box->informativeText();
+        for (QAbstractButton* button : box->buttons()) {
+            if (button->text() == QStringLiteral("Recover")) {
+                button->click();
+                clicked = true;
+            }
+        }
+    });
+    after->offerRecovery();
+    QVERIFY2(clicked, "the next launch offers the refused document");
+    QVERIFY2(offered.contains(QStringLiteral("Untitled-2")), qPrintable(offered));
+    QVERIFY2(!offered.contains(QStringLiteral("Untitled-1")), qPrintable(offered));
+    QCOMPARE(after->documentCount(), 2);
+    QCOMPARE(after->documentName(1), QStringLiteral("Untitled-2-Recovered"));
+    QCOMPARE(after->activeView()->document_width(), 2048);
+    QVERIFY2(!QFileInfo::exists(crashed), "the session goes once it is recovered");
+    QVERIFY2(takeFailureDialog(*after).isEmpty(), "and nothing failed");
     after->shutdownRecovery();
 }
 

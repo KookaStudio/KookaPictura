@@ -42,6 +42,7 @@ mod image_resources;
 mod iptc;
 mod lens_correction;
 mod live_shape;
+mod mapped;
 mod mask_params;
 mod metadata;
 mod path_resources;
@@ -135,6 +136,7 @@ pub use live_shape::{
     decode_live_shape, encode_live_shape, LiveShape, ORIGIN_ELLIPSE, ORIGIN_RECTANGLE,
     ORIGIN_ROUNDED_RECTANGLE,
 };
+pub use mapped::MappedFile;
 pub use pictura_color::{ConversionOptions, Intent, Policy, Profile};
 pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};
