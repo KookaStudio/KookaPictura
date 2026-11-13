@@ -582,6 +582,11 @@
       "match": "custom",
       "note": "Type tools' Warp Text button; a T standing on an arc, drawn on the 24x24 Lucide grid"
     },
+    "options.airbrush": {
+      "kind": "lucide",
+      "slug": "spray-can",
+      "match": "good"
+    },
     "options.pressureOpacity": {
       "kind": "custom",
       "match": "custom",

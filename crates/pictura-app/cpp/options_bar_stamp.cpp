@@ -46,6 +46,9 @@ QToolButton* OptionsBar::addAirbrushToggle(QHBoxLayout* layout, QWidget* page,
     auto* button = new QToolButton(page);
     button->setObjectName(name);
     button->setText(QStringLiteral("Airbrush"));
+    button->setIcon(icon(QStringLiteral("options.airbrush")));
+    button->setIconSize(QSize(20, 20));
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
     button->setToolTip(QStringLiteral("Build up paint while the mouse button is held"));
     button->setCheckable(true);
     button->setChecked(on);

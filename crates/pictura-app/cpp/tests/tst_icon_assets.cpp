@@ -39,6 +39,7 @@ private slots:
     void infoGlyphsResolve();
     void adjustmentsGlyphsResolve();
     void actionsGlyphsResolve();
+    void optionsGlyphsResolve();
     void characterStylesGlyphResolves();
     void unknownIdIsNull();
     void cursorIsBuiltOnce();
@@ -146,6 +147,24 @@ void IconAssetsTest::adjustmentsGlyphsResolve()
         QVERIFY2(!icon.isNull(), qPrintable(id + QStringLiteral(" resolves")));
         QVERIFY2(!icon.pixmap(16, 16).isNull(),
                  qPrintable(id + QStringLiteral(" renders at 16px")));
+    }
+}
+
+void IconAssetsTest::optionsGlyphsResolve()
+{
+    pictura::Theme::apply(pictura::Theme::kDefaultLevel);
+    const QStringList ids = {
+        QStringLiteral("options.airbrush"),
+        QStringLiteral("options.pressureOpacity"),
+        QStringLiteral("options.pressureSize"),
+    };
+    for (const QString& id : ids) {
+        const QIcon icon = pictura::icon(id);
+        QVERIFY2(!icon.isNull(), qPrintable(id + QStringLiteral(" resolves")));
+        const QImage rendered = icon.pixmap(16, 16).toImage();
+        QVERIFY2(!rendered.isNull(), qPrintable(id + QStringLiteral(" renders at 16px")));
+        QVERIFY2(qAlpha(strongestPixel(rendered)) > 0,
+                 qPrintable(id + QStringLiteral(" rendered fully transparent")));
     }
 }
 

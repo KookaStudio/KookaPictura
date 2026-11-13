@@ -6,13 +6,14 @@ here.
 
 ## Vector artwork (`assets/icons`, `assets/cursors`)
 
-- 315 SVG icons and cursors (233 under `assets/icons`, 82 under `assets/cursors`).
+- 321 SVG icons and cursors (238 under `assets/icons`, 83 under `assets/cursors`).
 - Except where noted below, generated with an AI model (DeepSeek v4.1 Flash)
   and released by the project under **CC0-1.0 / MIT** (reuse under either).
 - The `actions.record`, `actions.play`, `actions.stop`, `actions.newSet`,
-  `actions.newAction`, `actions.delete`, and `actions.modalOn` glyphs are from
-  **lucide-static v1.50.0** (**ISC**) under their Lucide slugs (`circle-dot`,
-  `play`, `square`, `folder-plus`, `square-plus`, `trash`, and `panel-top`).
+  `actions.newAction`, `actions.delete`, `actions.modalOn`, and
+  `options.airbrush` glyphs are from **lucide-static v1.50.0** (**ISC**) under
+  their Lucide slugs (`circle-dot`, `play`, `square`, `folder-plus`,
+  `square-plus`, `trash`, `panel-top`, and `spray-can`).
   `actions.modalOff` and `actions.modalPartial` are original project artwork
   based on the Lucide `panel-top` dialog-box shape, released under
   **CC0-1.0 / MIT**.
