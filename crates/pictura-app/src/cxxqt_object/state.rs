@@ -77,6 +77,8 @@ pub struct PictureViewRust {
     /// The view a Move preview was built from; `None` for a full-resolution
     /// preview. Its images are then at the view's level, not 1:1.
     pub(super) move_view: Option<super::impl_transform::MoveView>,
+    /// The view preview's images as pixels, for a lazy commit's stand-in tiles.
+    pub(super) move_view_pixels: super::impl_transform::MoveViewPixels,
     pub(super) move_layer: Option<QImage>,
     /// The level a transform session's preview images were built at:
     /// `2^level` document pixels a preview pixel (#1297).
@@ -110,6 +112,9 @@ pub struct PictureViewRust {
     pub(super) move_preview_cache_hit: bool,
     /// A Move drag is down. A landing composite must not clear its preview.
     pub(super) move_drag_active: bool,
+    /// A layered RGB Move left its display tiles stale: the drag preview stays
+    /// until the presented tiles rebuild from the moved layers.
+    pub(super) lazy_move_pending: bool,
     pub(super) mask_move_baseline: Option<(String, pictura_core::Layer)>,
     /// The last committed similarity transform, for `Edit > Transform > Again`.
     /// Projective and Warp commits clear it (they are not repeatable this way).
@@ -261,6 +266,7 @@ impl Default for PictureViewRust {
             expanded_groups: Vec::new(),
             move_base: None,
             move_view: None,
+            move_view_pixels: Default::default(),
             move_base_origin: None,
             move_layer: None,
             transform_preview_level: 0,
@@ -277,6 +283,7 @@ impl Default for PictureViewRust {
             move_prepared_union: None,
             move_preview_cache_hit: false,
             move_drag_active: false,
+            lazy_move_pending: false,
             mask_move_baseline: None,
             last_transform: None,
             transform_controls: false,

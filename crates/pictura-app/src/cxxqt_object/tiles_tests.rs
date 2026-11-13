@@ -590,3 +590,99 @@ fn the_view_holds_only_the_tiles_it_built() {
         "the released view tile went before the newer cold plane"
     );
 }
+
+// [mcr_lazy_chain]
+#[test]
+fn a_lazy_move_paints_its_preview_into_the_stale_tiles() {
+    use crate::cxxqt_object::impl_transform::translate_move_group;
+    const UNDER: (u8, u8, u8) = (30, 60, 90);
+    const OVER: (u8, u8, u8) = (200, 100, 50);
+    let (w, h) = (4096u32, 2048u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![
+        super::super::tests::pixel_layer("under", w, h, UNDER),
+        super::super::tests::pixel_layer("over", 2400, 2000, OVER),
+    ]);
+    let mut view = view_of(doc);
+    view.presented_level = 1;
+    view.presented_rect = whole(w, h);
+    view.pin_presented_view();
+    let level_rect = rect(0, 0, 2048, 1024);
+    let (_, missing) = view.tile_crop(TileSource::Composite, 1, level_rect);
+    assert!(missing.is_empty());
+    let paths = vec!["1".to_string()];
+    assert!(view.compute_view_move_preview(&paths), "a view preview");
+
+    let doc = view.session.doc.as_mut().expect("document");
+    let dirty = translate_move_group(doc, &paths, 1000, 0).expect("moved");
+    view.tiles
+        .cache
+        .get_mut()
+        .damage(TileSource::Composite, dirty);
+    view.bake_move_stand_in(1000, 0);
+
+    // Read the cache as the canvas does, without building what is missing.
+    let (crop, missing) = view
+        .tiles
+        .cache
+        .borrow_mut()
+        .crop(TileSource::Composite, 1, level_rect);
+    assert!(!missing.is_empty(), "the tiles stay stale for the worker");
+    let rgb = |x: usize, y: usize| {
+        let i = (y * 2048 + x) * 4;
+        (crop.data()[i], crop.data()[i + 1], crop.data()[i + 2])
+    };
+    // Document (200, 200) was under the layer and now shows the backdrop;
+    // (3200, 200) is inside the moved layer (1000..3400).
+    assert_eq!(rgb(100, 100), UNDER, "the old place shows the backdrop");
+    assert_eq!(rgb(1600, 100), OVER, "the new place shows the layer");
+}
+
+// [mcr_transform_lazy]
+#[test]
+fn a_reduced_stand_in_shows_the_document_in_the_stale_tiles() {
+    const UNDER: (u8, u8, u8) = (30, 60, 90);
+    const OVER: (u8, u8, u8) = (200, 100, 50);
+    let (w, h) = (4096u32, 2048u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![
+        super::super::tests::pixel_layer("under", w, h, UNDER),
+        super::super::tests::pixel_layer("over", 2400, 2000, OVER),
+    ]);
+    let mut view = view_of(doc);
+    view.presented_level = 1;
+    view.presented_rect = whole(w, h);
+    view.pin_presented_view();
+    let level_rect = rect(0, 0, 2048, 1024);
+    let (_, missing) = view.tile_crop(TileSource::Composite, 1, level_rect);
+    assert!(missing.is_empty());
+
+    // The layer shrinks to its top-left quarter, as a scale-down would.
+    let doc = view.session.doc.as_mut().expect("document");
+    let layer = &mut doc.layers[1];
+    let shrunk = super::super::tests::pixel_layer("over", 1200, 1000, OVER);
+    *layer = shrunk;
+    let dirty = rect(0, 0, 2400, 2000);
+    view.tiles
+        .cache
+        .get_mut()
+        .damage(TileSource::Composite, dirty);
+    view.paint_reduced_stand_in(&[dirty]);
+
+    let (crop, missing) = view
+        .tiles
+        .cache
+        .borrow_mut()
+        .crop(TileSource::Composite, 1, level_rect);
+    assert!(!missing.is_empty(), "the tiles stay stale for the worker");
+    let rgb = |x: usize, y: usize| {
+        let i = (y * 2048 + x) * 4;
+        (crop.data()[i], crop.data()[i + 1], crop.data()[i + 2])
+    };
+    assert_eq!(rgb(300, 250), OVER, "the shrunk layer");
+    assert_eq!(
+        rgb(1000, 800),
+        UNDER,
+        "where the layer was before the transform"
+    );
+}

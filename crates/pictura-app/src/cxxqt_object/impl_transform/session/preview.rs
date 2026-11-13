@@ -2,6 +2,7 @@
 
 use super::view_preview::{self, align, inner_aligned, MAX_LEVEL};
 use super::*;
+use pictura_core::PixelBuffer;
 use pictura_render::FilterProxy;
 use std::cell::Cell;
 
@@ -177,6 +178,19 @@ pub(super) fn moving_layer_image(
     level: u32,
     gpu_compute: bool,
 ) -> Option<QImage> {
+    moving_layer_pixels(doc, path, region, level, gpu_compute)
+        .map(|pixels| buffer_to_image(&pixels))
+}
+
+/// [`moving_layer_image`]'s straight sRGB pixels, which a lazy Move commit
+/// also paints into the stale display tiles.
+pub(super) fn moving_layer_pixels(
+    doc: &pictura_core::Document,
+    path: &str,
+    region: PsdRect,
+    level: u32,
+    gpu_compute: bool,
+) -> Option<PixelBuffer> {
     if region.width() <= 0 || region.height() <= 0 {
         return None;
     }
@@ -199,6 +213,17 @@ pub(super) fn moving_layer_image(
         right: region.width(),
     };
     if rendered {
+        // A shape's fill and vector mask reduce with the document, but its
+        // layer-effect sizes do not; scale them into the proxy's pixels so a
+        // stroke keeps its document width. The descriptor rounds integer pixel
+        // fields, so the preview is approximate; the commit stays exact.
+        if level > 0 && pictura_render::is_shape_layer(&single.layers[0]) {
+            pictura_render::scale_layer_effects(
+                &mut single,
+                &["0"],
+                100.0 / f64::from(1u32 << level),
+            );
+        }
         // Level 0 composites the region-sized scratch document directly, so a
         // channel-less type or fill layer keeps its rect; a deeper level needs
         // the reduced copy.
@@ -212,13 +237,11 @@ pub(super) fn moving_layer_image(
         };
         let (buffer, _) =
             pictura_render::composite(pictura_render::CompositeRequest::whole(source, gpu_compute));
-        Some(buffer_to_image(&pictura_codec::buffer_to_srgb(
-            source, &buffer,
-        )))
+        Some(pictura_codec::buffer_to_srgb(source, &buffer).into_owned())
     } else {
         let reduced =
             FilterProxy::new(&single, None, whole, 1.0 / f64::from(1u32 << level))?.into_document();
-        layer_image(reduced.layers.iter().next()?)
+        layer_buffer(reduced.layers.iter().next()?)
     }
 }
 

@@ -93,11 +93,16 @@ impl FilterProxy {
     }
 
     /// Whether a proxy of `doc` draws what the document draws, only smaller:
-    /// no layer carries layer effects, live type, a smart-object source or
-    /// smart filters, a fill layer, or an undecoded vector fill, which keep
+    /// no visible layer carries layer effects, live type, a smart-object source
+    /// or smart filters, a fill layer, or an undecoded vector fill, which keep
     /// their document-scale sizes inside the proxy (see the module note).
     pub fn reduces_faithfully(doc: &Document) -> bool {
         fn faithful(layer: &Layer) -> bool {
+            // A hidden layer draws nothing, so its content cannot make the
+            // reduced copy differ from the document.
+            if !layer.visible {
+                return true;
+            }
             let effects = crate::document_ops::has_layer_style(layer);
             let route = match content_route(layer) {
                 ContentRoute::PassThroughGroup
@@ -488,6 +493,11 @@ mod tests {
                 data: vec![0u8; 4].into(),
             });
         assert!(!FilterProxy::reduces_faithfully(&styled));
+        styled.layers[0].visible = false;
+        assert!(
+            FilterProxy::reduces_faithfully(&styled),
+            "a hidden styled layer draws nothing"
+        );
 
         let group = pictura_core::Layer {
             is_group: true,

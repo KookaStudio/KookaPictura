@@ -1,6 +1,8 @@
 use super::*;
 use crate::cxxqt_object::tests::pixel_layer;
+use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{BitDepth, ColorMode, Layer, LayerMask, LayerStack};
+use pictura_render::{ShapeStroke, StrokePosition};
 
 const W: u32 = 2400;
 const H: u32 = 2000;
@@ -28,6 +30,25 @@ fn document() -> Document {
 
 fn paths() -> Vec<String> {
     vec!["1".to_string()]
+}
+
+/// A background under a large rectangle shape. Its reach is about 4.4 MP, over
+/// the view-preview threshold.
+fn shape_document(stroke: Option<ShapeStroke>) -> (Document, String) {
+    let mut doc = Document::new(W, H, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = LayerStack::from_layers(vec![pixel_layer("under", W, H, UNDER)]);
+    let outline = outline_in_box(
+        ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
+        (50.0, 50.0, 2350.0, 1950.0),
+    )
+    .expect("outline");
+    let path =
+        pictura_render::add_shape_layer(&mut doc, "", [200, 100, 50, 255], "Shape", &outline, None);
+    if let Some(stroke) = stroke {
+        let layer = pictura_render::resolve_path_mut(&mut doc, &path).expect("shape");
+        assert!(pictura_render::set_shape_stroke(layer, Some(&stroke)));
+    }
+    (doc, path)
 }
 
 fn rgb(image: &QImage, x: i32, y: i32) -> (u8, u8, u8) {
@@ -66,6 +87,83 @@ fn level_zero_composites_the_backdrop_exactly() {
     assert_eq!((preview.base.width(), preview.base.height()), (320, 240));
     assert_eq!(rgb(&preview.base, 0, 0), UNDER);
     assert_eq!(preview.view.region, rect(0, 0, 410, 320));
+}
+
+// [mvp_shape_view]
+#[test]
+fn a_large_shape_previews_from_the_view_at_its_level() {
+    let (doc, path) = shape_document(None);
+    let visible = rect(400, 400, 1200, 1000);
+    let preview = view_preview(&doc, std::slice::from_ref(&path), 2, visible, false)
+        .expect("shape view preview");
+    assert_eq!(preview.view.level, 2);
+    let reach = pictura_render::damage::content_influence(&doc, &path).expect("a bounded shape");
+    assert_eq!(preview.view.content, reach);
+
+    // The backdrop is the background over the on-screen part, a quarter size.
+    assert_eq!(preview.base_origin, (400, 400));
+    assert_eq!((preview.base.width(), preview.base.height()), (200, 150));
+    assert_eq!(rgb(&preview.base, 100, 75), UNDER, "the shape is hidden");
+
+    // The moving image is the shape alone over the view's region at level 2.
+    assert_eq!(preview.view.region, rect(200, 248, 1400, 1152));
+    assert_eq!((preview.layer.width(), preview.layer.height()), (300, 226));
+    assert_eq!(rgb(&preview.layer, 25, 13), OVER);
+}
+
+// [mvp_shape_stroke]
+#[test]
+fn a_stroked_shape_preview_scales_its_effect() {
+    let stroke = ShapeStroke {
+        color: [0, 255, 0],
+        width: 20,
+        position: StrokePosition::Inside,
+    };
+    let (doc, path) = shape_document(Some(stroke));
+    let visible = rect(0, 0, 800, 600);
+    let preview =
+        view_preview(&doc, &[path], 2, visible, false).expect("stroked shape view preview");
+    assert_eq!(preview.view.level, 2);
+
+    // The 20 px stroke is inside the top edge at document y = 50..70. At level
+    // 2 it occupies about five image rows, not the full twenty.
+    let column = (500 - preview.view.region.left) / 4;
+    let green = (0..preview.layer.height())
+        .filter(|&y| {
+            let (r, g, _) = rgb(&preview.layer, column, y);
+            r < 50 && g > 200
+        })
+        .count();
+    assert!(
+        (2..=8).contains(&green),
+        "the stroke should be scaled to the level, got {green} rows"
+    );
+}
+
+// [mvp_shape_follow]
+#[test]
+fn a_shape_drag_past_the_margin_rebuilds_the_moving_image() {
+    let (doc, path) = shape_document(None);
+    let visible = rect(400, 400, 1200, 1000);
+    let view = view_preview(&doc, std::slice::from_ref(&path), 2, visible, false)
+        .expect("shape view preview")
+        .view;
+    assert!(
+        follow(&doc, &path, view, 100, 80, false).is_none(),
+        "inside the margin"
+    );
+
+    let (image, moved) = follow(&doc, &path, view, -1000, 0, false).expect("rebuilt");
+    let shown = rect(1400, 400, 2200, 1000);
+    assert!(
+        contains(moved.region, shown),
+        "covers the shape's reach now on screen"
+    );
+    assert_eq!(moved.level, view.level);
+    assert_eq!(
+        (image.width as i32 * 4, image.height as i32 * 4),
+        (moved.region.width(), moved.region.height())
+    );
 }
 
 // [mvp_exact_fallback]
@@ -134,7 +232,7 @@ fn a_drag_past_the_margin_rebuilds_the_moving_image() {
     );
     assert_eq!(moved.level, view.level);
     assert_eq!(
-        (image.width() * 4, image.height() * 4),
+        (image.width as i32 * 4, image.height as i32 * 4),
         (moved.region.width(), moved.region.height())
     );
 }

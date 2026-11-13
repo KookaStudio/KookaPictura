@@ -318,3 +318,65 @@ fn level_count_matches_the_view_pyramid() {
         }
     }
 }
+
+// [mcr_lazy_chain]
+#[test]
+fn a_stand_in_paints_only_stale_tiles() {
+    let mut cache = TilePyramid::new(1024, 512, u64::MAX);
+    let side = TILE_SIDE as usize;
+    let gray = |v: u8| -> Arc<[u8]> { vec![v; side * side * 4].into() };
+    let key = |level: u8, tx: u32| TileKey {
+        source: TileSource::Composite,
+        level,
+        tx,
+        ty: 0,
+    };
+    // Level 1 is premultiplied; an opaque gray is the same either way.
+    cache.insert(key(1, 0), gray(200));
+    cache.insert(key(1, 1), gray(200));
+    cache.damage(
+        TileSource::Composite,
+        PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2 * TILE_SIDE as i32,
+            right: 2 * TILE_SIDE as i32,
+        },
+    );
+    assert!(!cache.contains(key(1, 0)) && cache.contains(key(1, 1)));
+
+    // A 2x1 region straddling the tiles: opaque red replaces, then half-opaque
+    // blue goes over it.
+    let edge = TILE_SIDE as i32 - 1;
+    let rect = PsdRect {
+        top: 0,
+        left: edge,
+        bottom: 1,
+        right: edge + 2,
+    };
+    let red = PixelBuffer {
+        width: 2,
+        height: 1,
+        channels: 4,
+        data: vec![255, 255, 0, 0, 0, 0, 255, 255].into(),
+    };
+    cache.paint_stand_in(TileSource::Composite, 1, rect, &red, 255, false);
+    let blue = PixelBuffer {
+        width: 2,
+        height: 1,
+        channels: 4,
+        data: vec![0, 0, 0, 0, 255, 255, 255, 255].into(),
+    };
+    cache.paint_stand_in(TileSource::Composite, 1, rect, &blue, 128, true);
+
+    let stale = &cache.tiles[&key(1, 0)];
+    assert!(stale.stale, "a stand-in leaves the tile stale");
+    let at = (edge as usize) * 4;
+    assert_eq!(&stale.data[at..at + 4], &[127, 0, 128, 255]);
+    let current = &cache.tiles[&key(1, 1)];
+    assert_eq!(
+        &current.data[0..4],
+        &[200, 200, 200, 200],
+        "a current tile is untouched"
+    );
+}

@@ -5,9 +5,9 @@
 
 use super::super::super::helpers::layer_has_effects;
 use super::super::super::helpers_composite::{buffer_to_image, current_buffer};
-use super::preview::moving_layer_image;
+use super::preview::moving_layer_pixels;
 use cxx_qt_lib::QImage;
-use pictura_core::{Document, PsdRect};
+use pictura_core::{Document, PixelBuffer, PsdRect};
 use pictura_render::FilterProxy;
 
 /// Content above this many pixels is previewed from the view. Below it the
@@ -52,13 +52,23 @@ pub(super) struct ViewPreview {
     /// The layer over the view's region; null when the region is empty.
     pub(super) layer: QImage,
     pub(super) view: MoveView,
+    /// The straight sRGB pixels of `base` and `layer`.
+    pub(super) pixels: MoveViewPixels,
+}
+
+/// A view preview's images as straight sRGB pixels at its level, which a lazy
+/// Move commit paints into the stale display tiles as their stand-in.
+#[derive(Clone, Debug, Default)]
+pub(in crate::cxxqt_object) struct MoveViewPixels {
+    pub(in crate::cxxqt_object) base: Option<PixelBuffer>,
+    pub(in crate::cxxqt_object) layer: Option<PixelBuffer>,
 }
 
 /// The view preview of `paths` with the canvas presenting `level` over
 /// `visible`, or `None` when the whole-content preview should run: more than
-/// one layer, a layer that is not plain pixels or has content under
-/// [`VIEW_PREVIEW_PIXELS`], no presented view, or (above level 0) a document a
-/// reduced copy would not draw faithfully.
+/// one layer, a layer that is not plain pixels or a supported shape layer, or
+/// has content under [`VIEW_PREVIEW_PIXELS`], no presented view, or (above level
+/// 0) a document whose visible layers a reduced copy would not draw faithfully.
 pub(super) fn view_preview(
     doc: &Document,
     paths: &[String],
@@ -70,16 +80,22 @@ pub(super) fn view_preview(
         return None;
     };
     let layer = pictura_render::resolve_path(doc, path)?;
-    if pictura_render::is_shape_layer(layer)
-        || layer_has_effects(layer)
-        || layer.is_group
-        || layer.adjustment.is_some()
+    let shape = pictura_render::is_shape_layer(layer);
+    if layer.is_group
         || layer.is_type()
         || layer.smart_object.is_some()
+        || (!shape && (layer_has_effects(layer) || layer.adjustment.is_some()))
     {
         return None;
     }
-    let content = pictura_render::content_rect(doc, path)?;
+    // A shape's own rect is the canvas; its reach is what it actually draws.
+    let content = if shape {
+        pictura_render::damage::content_influence(doc, path)
+            .or_else(|| pictura_render::layer_paint_bounds(doc, path))
+            .or_else(|| pictura_render::content_rect(doc, path))?
+    } else {
+        pictura_render::content_rect(doc, path)?
+    };
     if area(content) <= VIEW_PREVIEW_PIXELS {
         return None;
     }
@@ -87,31 +103,37 @@ pub(super) fn view_preview(
         .ok()
         .filter(|&level| level <= MAX_LEVEL)?;
     let visible = visible.intersect(canvas(doc))?;
-    if level > 0 && !FilterProxy::reduces_faithfully(doc) {
+    if level > 0 && !reduces_faithfully_without(doc, path, shape) {
         return None;
     }
     let scale = 1i32 << level;
     let (base, base_origin) = match content.intersect(visible) {
         Some(patch) => {
             let patch = align(patch, scale).intersect(canvas(doc))?;
-            let base = backdrop(doc, path, level, patch, gpu_compute)?;
-            (base, (patch.left, patch.top))
+            let base = backdrop_pixels(doc, path, level, patch, gpu_compute)?;
+            (Some(base), (patch.left, patch.top))
         }
-        None => (QImage::default(), (0, 0)),
+        None => (None, (0, 0)),
     };
     // A layer far off screen starts with no moving image; [`follow`] builds
     // one when a drag brings it into view.
-    let (image, region) = match moving_region(layer.rect, visible, scale) {
+    let (layer, region) = match moving_region(content, visible, scale) {
         Some(region) => (
-            moving_layer_image(doc, path, region, level, gpu_compute)?,
+            Some(moving_layer_pixels(doc, path, region, level, gpu_compute)?),
             region,
         ),
-        None => (QImage::default(), EMPTY),
+        None => (None, EMPTY),
+    };
+    let image = |pixels: &Option<PixelBuffer>| {
+        pixels
+            .as_ref()
+            .map_or_else(QImage::default, buffer_to_image)
     };
     Some(ViewPreview {
-        base,
+        base: image(&base),
         base_origin,
-        layer: image,
+        layer: image(&layer),
+        pixels: MoveViewPixels { base, layer },
         view: MoveView {
             level,
             visible,
@@ -121,7 +143,22 @@ pub(super) fn view_preview(
     })
 }
 
-/// The moving image again for a drag that has carried the view `(dx, dy)`
+/// Whether the backdrop's visible layers reduce faithfully. A shape's own
+/// appearance is reduced separately, so it is hidden for the check; every
+/// other layer is checked as it stands.
+fn reduces_faithfully_without(doc: &Document, path: &str, shape: bool) -> bool {
+    if !shape {
+        return FilterProxy::reduces_faithfully(doc);
+    }
+    let mut hidden = doc.clone();
+    let Some(layer) = pictura_render::resolve_path_mut(&mut hidden, path) else {
+        return false;
+    };
+    layer.visible = false;
+    FilterProxy::reduces_faithfully(&hidden)
+}
+
+/// The moving image's pixels again for a drag that has carried the view `(dx, dy)`
 /// across the layer, when the part of the layer now on screen leaves the
 /// region it covers; `None` while the current image still covers it.
 pub(super) fn follow(
@@ -131,16 +168,17 @@ pub(super) fn follow(
     dx: i32,
     dy: i32,
     gpu_compute: bool,
-) -> Option<(QImage, MoveView)> {
-    let layer = pictura_render::resolve_path(doc, path)?;
+) -> Option<(PixelBuffer, MoveView)> {
     let shown = offset(view.visible, -dx, -dy);
-    let needed = shown.intersect(layer.rect)?;
+    // The moving image covers the layer's content, not its canvas-sized rect:
+    // a shape's rect would always contain the view and never rebuild.
+    let needed = shown.intersect(view.content)?;
     if contains(view.region, needed) {
         return None;
     }
-    let region = moving_region(layer.rect, shown, view.scale())?;
-    let image = moving_layer_image(doc, path, region, view.level, gpu_compute)?;
-    Some((image, MoveView { region, ..view }))
+    let region = moving_region(view.content, shown, view.scale())?;
+    let pixels = moving_layer_pixels(doc, path, region, view.level, gpu_compute)?;
+    Some((pixels, MoveView { region, ..view }))
 }
 
 /// The document without the layer at `path`, composited over `patch` at
@@ -153,6 +191,17 @@ pub(super) fn backdrop(
     patch: PsdRect,
     gpu_compute: bool,
 ) -> Option<QImage> {
+    backdrop_pixels(doc, path, level, patch, gpu_compute).map(|pixels| buffer_to_image(&pixels))
+}
+
+/// [`backdrop`]'s straight sRGB pixels.
+fn backdrop_pixels(
+    doc: &Document,
+    path: &str,
+    level: u32,
+    patch: PsdRect,
+    gpu_compute: bool,
+) -> Option<PixelBuffer> {
     let mut hidden = doc.clone();
     let target = pictura_render::resolve_path_mut(&mut hidden, path)?;
     target.visible = false;
@@ -170,9 +219,7 @@ pub(super) fn backdrop(
             FilterProxy::new(&hidden, None, patch, 1.0 / f64::from(1u32 << level))?.into_document();
         (current_buffer(&reduced, gpu_compute), reduced)
     };
-    Some(buffer_to_image(&pictura_codec::buffer_to_srgb(
-        &source, &buffer,
-    )))
+    Some(pictura_codec::buffer_to_srgb(&source, &buffer).into_owned())
 }
 
 /// The layers above the moving group at `paths`, composited over transparency

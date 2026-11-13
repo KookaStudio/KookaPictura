@@ -17,7 +17,7 @@
 //! tiles stale instead, and only the visible ones are rebuilt.
 
 use super::helpers::paint_timing;
-use super::helpers_composite::{crop_planar, into_rgba_frame, level_display_image};
+use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame, level_display_image};
 use super::impl_core::mask_region_plane;
 use super::qobject;
 use super::state::PictureViewRust;
@@ -27,8 +27,8 @@ use cxx_qt_lib::QImage;
 use pictura_core::memory::eviction::{self, HotHold};
 use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
 use pictura_render::{
-    build_tile, patch_buffer_region, CompositeScope, DocumentComposite, PyramidLevel, Ticket,
-    TileKey, TilePyramid, TileSource, TILE_SIDE,
+    build_tile, patch_buffer_region, CompositeScope, DocumentComposite, FilterProxy, PyramidLevel,
+    Ticket, TileKey, TilePyramid, TileSource, TILE_SIDE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -489,6 +489,14 @@ impl PictureViewRust {
                 .cache
                 .get_mut()
                 .damage(TileSource::Composite, aligned);
+            // A layered RGB document keeps no stored composite. Drop any
+            // frame from an earlier state so a history capture does not treat
+            // it as the current picture; the visible tiles rebuild instead.
+            if !authoritative {
+                if let Some(doc) = self.session.doc.as_mut() {
+                    doc.composite = PixelBuffer::new(0, 0, 4);
+                }
+            }
             self.damage.mark(clipped);
             self.canvas_revision = self.canvas_revision.wrapping_add(1);
             self.sync_mask_solo_region(clipped);
@@ -671,6 +679,48 @@ fn clip(rect: PsdRect, width: u32, height: u32) -> Option<PsdRect> {
 }
 
 impl qobject::PictureView {
+    /// A layered RGB Move may have left its tiles stale: build the tiles the
+    /// canvas presents now, so the drag preview can stay until they land.
+    /// Without a presented view, or with every presented tile still current,
+    /// there is nothing to wait for; the flag clears quietly and the committing
+    /// caller reports the Move itself.
+    pub(in crate::cxxqt_object) fn request_lazy_move_tiles(mut self: Pin<&mut Self>) {
+        if !self.rust().lazy_move_pending {
+            return;
+        }
+        let pending = if self.rust().presented_level_rect().is_some() {
+            self.rust().presented_tiles_to_build()
+        } else {
+            Vec::new()
+        };
+        if pending.is_empty() {
+            self.as_mut().rust_mut().lazy_move_pending = false;
+        } else {
+            self.request_tiles(pending);
+        }
+    }
+
+    /// End a lazy Move once the presented tiles are current.
+    fn finish_lazy_move_if_ready(mut self: Pin<&mut Self>) {
+        if !self.rust().lazy_move_pending
+            || !self.rust().tiles.wanted.borrow().is_empty()
+            || self.rust().tiles.in_flight.get()
+        {
+            return;
+        }
+        if self.rust().presented_tiles_to_build().is_empty() {
+            self.as_mut().finish_lazy_move();
+        }
+    }
+
+    pub(in crate::cxxqt_object) fn finish_lazy_move(mut self: Pin<&mut Self>) {
+        if !self.rust().lazy_move_pending {
+            return;
+        }
+        self.as_mut().rust_mut().lazy_move_pending = false;
+        self.as_mut().move_committed();
+    }
+
     /// Queue `keys` for a worker build, starting one if none is running.
     pub(in crate::cxxqt_object) fn request_tiles(&self, keys: Vec<TileKey>) {
         if keys.is_empty() {
@@ -774,6 +824,167 @@ impl qobject::PictureView {
         if !self.rust().tiles.wanted.borrow().is_empty() {
             self.as_ref().get_ref().start_tile_job();
         }
+        self.as_mut().finish_lazy_move_if_ready();
+    }
+}
+
+impl PictureViewRust {
+    /// Paint a view-preview Move's result into the presented level's stale
+    /// tiles as their stand-in: the backdrop over the layer's old place, then
+    /// the moving image at its new place. The tiles stay stale for the worker
+    /// to rebuild exactly; until then nothing drawn over them (another drag, a
+    /// transform) shows the layer where it was. Nothing happens without a view
+    /// preview or once the view left its level.
+    // ponytail: layers above the moved one are not drawn back over the stand-in,
+    // and the moving image keeps Normal blending; the rebuild corrects both.
+    pub(in crate::cxxqt_object) fn bake_move_stand_in(&mut self, dx: i32, dy: i32) {
+        let Some(view) = self.move_view else {
+            return;
+        };
+        if self.presented_level != view.level as i32
+            || self.canvas_source() != TileSource::Composite
+        {
+            return;
+        }
+        self.fit_tiles();
+        let level = view.level as usize;
+        let scale = view.scale();
+        let at = |x: i32, y: i32, pixels: &PixelBuffer| PsdRect {
+            left: x,
+            top: y,
+            right: x + pixels.width as i32,
+            bottom: y + pixels.height as i32,
+        };
+        let cache = self.tiles.cache.get_mut();
+        if let (Some(base), Some((bx, by))) = (&self.move_view_pixels.base, self.move_base_origin) {
+            let rect = at(bx.div_euclid(scale), by.div_euclid(scale), base);
+            cache.paint_stand_in(TileSource::Composite, level, rect, base, 255, false);
+        }
+        if let Some(layer) = &self.move_view_pixels.layer {
+            let place = |origin: i32, delta: i32| {
+                ((origin + delta) as f64 / f64::from(scale)).round() as i32
+            };
+            let rect = at(
+                place(view.region.left, dx),
+                place(view.region.top, dy),
+                layer,
+            );
+            let opacity = self.move_opacity.clamp(0, 255) as u8;
+            cache.paint_stand_in(TileSource::Composite, level, rect, layer, opacity, true);
+        }
+        self.canvas_revision = self.canvas_revision.wrapping_add(1);
+    }
+
+    /// Paint the document over `rects` (document pixels), reduced to the
+    /// presented level, into that level's stale tiles as their stand-in. A
+    /// commit without a view preview to reuse (a transform, a small Move)
+    /// calls this so a later preview drawn over those tiles does not show the
+    /// picture from before it. It composites a reduced copy, as the reduced
+    /// previews do, so it is skipped when that copy would not be faithful; the
+    /// tiles stay stale for the exact rebuild either way.
+    pub(in crate::cxxqt_object) fn paint_reduced_stand_in(&mut self, rects: &[PsdRect]) -> bool {
+        let Some((level, _)) = self.presented_level_rect() else {
+            return false;
+        };
+        if self.canvas_source() != TileSource::Composite {
+            return false;
+        }
+        let Some(doc) = self.session.doc.as_ref() else {
+            return false;
+        };
+        if level > 0 && !FilterProxy::reduces_faithfully(doc) {
+            return false;
+        }
+        let scale = 1i32 << level.min(16);
+        let canvas = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        };
+        let presented = self.presented_rect;
+        let gpu_compute = self.gpu_compute;
+        let mut parts = Vec::new();
+        for rect in rects {
+            let Some(shown) = rect.intersect(presented) else {
+                continue;
+            };
+            let grown = PsdRect {
+                top: shown.top.div_euclid(scale) * scale,
+                left: shown.left.div_euclid(scale) * scale,
+                bottom: (shown.bottom + scale - 1).div_euclid(scale) * scale,
+                right: (shown.right + scale - 1).div_euclid(scale) * scale,
+            };
+            let Some(aligned) = grown.intersect(canvas) else {
+                continue;
+            };
+            let pixels = if level == 0 {
+                display_region(doc, aligned, false)
+            } else {
+                let Some(proxy) = FilterProxy::new(doc, None, aligned, 1.0 / f64::from(scale))
+                else {
+                    return false;
+                };
+                let reduced = proxy.into_document();
+                let buffer = current_buffer(&reduced, gpu_compute);
+                pictura_codec::buffer_to_srgb(&reduced, &buffer).into_owned()
+            };
+            let at = PsdRect {
+                top: aligned.top / scale,
+                left: aligned.left / scale,
+                bottom: aligned.top / scale + pixels.height as i32,
+                right: aligned.left / scale + pixels.width as i32,
+            };
+            parts.push((at, pixels));
+        }
+        if parts.is_empty() {
+            return true;
+        }
+        self.fit_tiles();
+        let cache = self.tiles.cache.get_mut();
+        for (at, pixels) in &parts {
+            cache.paint_stand_in(TileSource::Composite, level, *at, pixels, 255, false);
+        }
+        self.canvas_revision = self.canvas_revision.wrapping_add(1);
+        true
+    }
+
+    /// The presented level and its rect in that level's pixels. The view state
+    /// keeps the document rect, while the tile cache keys by level pixels.
+    pub(in crate::cxxqt_object) fn presented_level_rect(&self) -> Option<(usize, PsdRect)> {
+        let level = self.presented_level;
+        let rect = self.presented_rect;
+        if level < 0 || rect.width() <= 0 || rect.height() <= 0 {
+            return None;
+        }
+        let level = level as usize;
+        let scale = 1i32 << level.min(16);
+        Some((
+            level,
+            PsdRect {
+                top: rect.top.div_euclid(scale),
+                left: rect.left.div_euclid(scale),
+                bottom: rect.bottom.div_euclid(scale),
+                right: rect.right.div_euclid(scale),
+            },
+        ))
+    }
+
+    /// The presented tiles that are missing or stale, and so must be built
+    /// before the canvas can drop the Move preview.
+    pub(in crate::cxxqt_object) fn presented_tiles_to_build(&self) -> Vec<TileKey> {
+        let Some((level, rect)) = self.presented_level_rect() else {
+            return Vec::new();
+        };
+        let cache = self.tiles.cache.borrow();
+        if level >= cache.level_count() {
+            return Vec::new();
+        }
+        cache
+            .keys_in(TileSource::Composite, level, rect)
+            .into_iter()
+            .filter(|&key| !cache.contains(key))
+            .collect()
     }
 }
 
