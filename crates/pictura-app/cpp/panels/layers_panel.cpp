@@ -563,9 +563,11 @@ void LayersPanel::refresh()
     // `Expand New Effects` is on; an opened document's effects stay collapsed.
     QStringList autoExpandEffects;
     if (view_) {
+        pruneThumbSelection();
         const bool newDocument = view_->document_generation() != styledGeneration_;
         styledGeneration_ = view_->document_generation();
         if (newDocument) {
+            activeThumbByPath_.clear();
             styledPathsSeen_.clear();
             listsExpanded_.clear();
             filteredPathsSeen_.clear();
@@ -610,15 +612,11 @@ void LayersPanel::refresh()
             row.styleEffects = source.styleEffects;
             row.effectsListOpen = listsExpanded_.contains(row.path)
                 && !row.styleEffects.isEmpty();
-            // The raster mask target is authoritative for the active thumbnail;
-            // a stale raster target on a non-target row falls back to the image.
-            int activeThumb = activeThumbByPath_.value(row.path, 0);
-            if (row.path == maskTargetPath) {
-                activeThumb = 1;
-            } else if (activeThumb == 1) {
-                activeThumb = 0;
-            }
-            row.activeThumb = activeThumb;
+            // The bridge target names the companion; the vector bit survives a
+            // rebuild, and the panel keeps only the active row's selection.
+            const int vector = activeThumbByPath_.value(row.path, 0) & ActiveThumbVector;
+            row.activeThumb = vector | (row.path == maskTargetPath ? ActiveThumbMask
+                                                                   : ActiveThumbContent);
             row.thumbnail = source.thumbnail;
             row.maskThumbnail = source.maskThumbnail;
             row.maskLinked = source.maskLinked;

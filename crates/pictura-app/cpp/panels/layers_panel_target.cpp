@@ -153,6 +153,22 @@ void LayersPanel::applyTargetSelection()
     applyingTarget_ = wasApplying;
 }
 
+void LayersPanel::pruneThumbSelection()
+{
+    if (!view_) {
+        activeThumbByPath_.clear();
+        return;
+    }
+    const QString anchor = layer_selection_anchor(*view_);
+    for (auto it = activeThumbByPath_.begin(); it != activeThumbByPath_.end();) {
+        if (it.key() == anchor) {
+            ++it;
+        } else {
+            it = activeThumbByPath_.erase(it);
+        }
+    }
+}
+
 void LayersPanel::rememberTarget()
 {
     if (!view_) {

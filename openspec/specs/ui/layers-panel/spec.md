@@ -1532,23 +1532,47 @@ disabled. Clicking a mask's link glyph SHALL toggle that mask's linked state,
 and `Shift`-clicking a mask thumbnail SHALL toggle that mask's enabled state,
 through the matching bridge; a `Shift`-click SHALL NOT end a mask solo view on
 that mask (the solo keeps showing the mask's stored coverage); those clicks SHALL
-be consumed so they do not start a rename, select another row, or begin a drag. A plain click on a layer mask
-thumbnail SHALL make that mask the view's mask edit target through the bridge,
-and a plain click on the layer thumbnail SHALL clear the target, so the mask
-thumbnail of the targeted row SHALL use the existing white corner brackets as
-its only white selection indicator. Raster mask cards SHALL have the normal
-black thumbnail outline and SHALL NOT gain a white rectangular focus outline.
-The brackets SHALL follow the selected thumbnail and SHALL clear from the mask
-when its layer thumbnail or another layer is selected. An `Alt`/`Option`-click
-on a layer mask thumbnail SHALL toggle the mask solo view (see
-`ui/mask-solo-view`): it SHALL select the clicked row (activating its layer),
-make that mask the mask edit target so the brackets stay on it, and toggle
-the solo display, recording no history state. It SHALL be consumed so it starts
-no rename, selects no *other* row, and begins no drag. `Alt`+`Shift`-clicking a
-mask thumbnail SHALL be consumed without toggling the mask's enabled state or
-the solo view: that combination is reserved for the rubylith overlay, which is
-not implemented here. The model SHALL expose the per-row mask and vector-mask
-linked and disabled states through roles populated from the bridge.
+be consumed so they do not start a rename, select another row, or begin a drag.
+
+A layer row's thumbnail selection SHALL consist of an optional vector-mask
+selection and exactly one companion, either the content thumbnail or the
+raster-mask thumbnail. A plain click on the content thumbnail SHALL select the
+content companion and SHALL preserve an active vector-mask selection. A plain
+click on the raster-mask thumbnail SHALL select the raster-mask companion and
+SHALL preserve an active vector-mask selection. While the raster mask is the
+companion it SHALL be the view's mask edit target through the bridge; the
+content companion SHALL clear the target. A plain click on the vector-mask
+thumbnail SHALL toggle its selection while keeping the current companion. A
+layer whose only mask is a vector mask SHALL use the content thumbnail as its
+companion. A thumb click on a layer that is not the active layer SHALL activate
+that layer first and SHALL start its selection from the content companion: its
+content thumbnail SHALL select content only, its raster-mask thumbnail SHALL
+select the raster mask only, and its vector-mask thumbnail SHALL select content
+and the vector mask. Selecting another layer SHALL clear the previous layer's
+mask and vector selection. A plain click on the row body SHALL remain governed
+by the plain-row-click requirement. A `Shift`-click on either mask thumbnail, a
+`Ctrl`-click on the raster-mask thumbnail, and an `Alt`+`Shift`-click on the
+raster-mask thumbnail SHALL perform only their existing enabled-state,
+mask-coverage-selection, or rubylith effect and SHALL NOT change the companion
+or vector-mask selection; activating an inactive row MAY still default it to the
+content companion, and an `Alt`-click on the raster-mask thumbnail SHALL still
+select the raster mask as the companion and edit target.
+
+Each selected thumbnail other than a group row's content icon SHALL use the
+existing white corner brackets as its only white selection indicator; a row MAY
+draw the content and vector brackets together, or the raster-mask and vector
+brackets together, and a group row SHALL NOT draw brackets around its icon.
+Raster mask cards SHALL have the normal black thumbnail outline and SHALL NOT
+gain a white rectangular focus outline. An `Alt`/`Option`-click on a layer mask
+thumbnail SHALL toggle the mask solo view (see `ui/mask-solo-view`): it SHALL
+select the clicked row (activating its layer), make that mask the mask edit
+target so the brackets stay on it, and toggle the solo display, recording no
+history state. It SHALL be consumed so it starts no rename, selects no *other*
+row, and begins no drag. `Alt`+`Shift`-clicking a mask thumbnail SHALL be
+consumed without toggling the mask's enabled state or the solo view: that
+combination is reserved for the rubylith overlay, which is not implemented here.
+The model SHALL expose the per-row mask and vector-mask linked and disabled
+states through roles populated from the bridge.
 
 #### Scenario: A linked mask shows the link glyph [lmk_row_link]
 
@@ -1592,7 +1616,8 @@ linked and disabled states through roles populated from the bridge.
 
 - **WHEN** a mask is the edit target and the user clicks that row's layer
   thumbnail
-- **THEN** the mask edit target is cleared and the mask brackets disappear and the image brackets become active
+- **THEN** the mask edit target is cleared, the mask brackets disappear, the
+  content brackets become active, and an active vector mask stays selected
 
 #### Scenario: Alt-clicking the mask thumbnail toggles solo [lmk_row_alt_solo]
 
@@ -1609,6 +1634,15 @@ linked and disabled states through roles populated from the bridge.
 
 - **WHEN** the user `Alt`+`Shift`-clicks a mask thumbnail
 - **THEN** neither the solo view nor the enabled-state toggle takes effect
+
+#### Scenario: Modifier clicks keep the thumbnail selection [lmk_row_modifiers_keep_selection]
+
+- **WHEN** the user `Shift`-clicks either mask thumbnail, `Ctrl`-clicks the
+  raster-mask thumbnail, or `Alt`+`Shift`-clicks the raster-mask thumbnail
+- **THEN** only that mask's enabled state, the mask-coverage selection, or the
+  rubylith overlay changes, and the row's companion and vector-mask selection
+  stay unchanged, except that activating an inactive row MAY default it to the
+  content companion
 
 #### Scenario: A vector mask shows its own indicator [vmk_row_vector]
 
@@ -1640,6 +1674,71 @@ linked and disabled states through roles populated from the bridge.
 
 - **WHEN** a mask thumbnail is selected and the user clicks another layer's raster thumbnail
 - **THEN** only the newly active raster thumbnail has white brackets and the old mask retains only its black outline
+
+#### Scenario: A vector click selects both masks [vmk_row_vector_selects_both]
+
+- **WHEN** the active layer has a raster mask and a vector mask, the raster mask
+  is the companion, and the user clicks the vector-mask thumbnail
+- **THEN** the vector mask is selected, the raster mask stays selected, and the
+  raster mask remains the edit target; both mask thumbnails draw white brackets
+
+#### Scenario: A second vector click deselects only the vector [vmk_row_vector_toggle_off]
+
+- **WHEN** the user clicks the selected vector-mask thumbnail again
+- **THEN** the vector mask is deselected, the raster mask stays selected, and it
+  remains the edit target
+
+#### Scenario: A raster-mask click preserves the vector state [lmk_row_raster_keeps_vector_state]
+
+- **WHEN** the user clicks the raster-mask thumbnail while the vector mask is
+  selected, and again while it is not selected
+- **THEN** the raster mask becomes the edit target and the vector selection is
+  unchanged in both cases
+
+#### Scenario: A content click keeps the vector companion [vmk_row_vector_companion_content]
+
+- **WHEN** the vector mask is selected and the user clicks the content thumbnail
+- **THEN** the content thumbnail becomes the companion, the vector mask stays
+  selected, the mask edit target is cleared, and both thumbnails draw brackets
+
+#### Scenario: A raster-mask click switches the companion [vmk_row_vector_companion_mask]
+
+- **WHEN** the vector mask is selected alongside the content thumbnail and the
+  user clicks the raster-mask thumbnail
+- **THEN** the raster mask becomes the companion and the edit target, the vector
+  mask stays selected, and the content brackets clear
+
+#### Scenario: A vector-only row uses the content companion [vmk_row_vector_only_companion]
+
+- **WHEN** a layer has a vector mask and no raster mask and its vector-mask
+  thumbnail is clicked
+- **THEN** the vector mask and the content thumbnail are selected and the mask
+  edit target stays clear
+
+#### Scenario: An inactive row's content thumb selects content [vmk_row_inactive_content]
+
+- **WHEN** the user clicks the content thumbnail of a layer that is not active
+- **THEN** that layer becomes active with only its content thumbnail selected
+  and no mask edit target
+
+#### Scenario: An inactive row's mask thumb selects the mask [vmk_row_inactive_mask]
+
+- **WHEN** the user clicks the raster-mask thumbnail of a layer that is not active
+- **THEN** that layer becomes active with only its raster mask selected, the
+  raster mask is the edit target, and the vector mask is not selected
+
+#### Scenario: An inactive row's vector thumb selects content and vector [vmk_row_inactive_vector]
+
+- **WHEN** the user clicks the vector-mask thumbnail of a layer that is not active
+- **THEN** that layer becomes active with its content thumbnail and vector mask
+  selected, and the mask edit target is clear
+
+#### Scenario: Selecting another layer clears the previous selection [vmk_row_other_layer_clears]
+
+- **WHEN** a row has mask or vector thumbnails selected and the user selects
+  another layer
+- **THEN** the previous row's mask and vector selections are cleared, and
+  returning through its row body selects only the content thumbnail
 
 ### Requirement: Fill / Adjustment creation menu
 
@@ -1913,9 +2012,11 @@ thumbnails SHALL follow the document aspect independently of the image
 thumbnail and owning layer kind. The chain
 glyph SHALL be drawn two pixels larger than its slot and rotated a quarter turn
 so it reads vertically between the side-by-side thumbnails, in both the linked
-and unlinked states. A row's active edit target SHALL be marked with brackets
-around that thumbnail, and clicking a thumbnail SHALL make it the active target;
-Alt+clicking a thumbnail SHALL also activate it in the composite. A group row
+and unlinked states. The content and raster-mask thumbnails SHALL be the row's
+active edit target: clicking either SHALL make it the edit target and mark it
+with brackets. The vector-mask thumbnail SHALL add a bracketed selection without
+becoming the edit target; clicking it SHALL toggle that selection. `Alt`-clicking
+a thumbnail SHALL also activate it in the composite. A group row
 SHALL NOT draw brackets around its icon. An **adjustment row's image thumbnail
 SHALL be a neutral card bearing the icon for its decoded adjustment kind**, with
 no checkerboard; a **fill row's image thumbnail SHALL show its content preview**

@@ -551,6 +551,8 @@ private:
     void clearSolo();
     void endMaskSoloView();
     void setActiveThumb(const QString& path, int thumb);
+    // Drop the panel-local selection of every row that is not the active one.
+    void pruneThumbSelection();
     // Synthesize a left-click with `mods` on `path`'s mask thumbnail.
     bool clickMaskThumbWithModifiersForTest(const QString& path, Qt::KeyboardModifiers mods);
 
@@ -582,7 +584,8 @@ private:
     QStringList rememberedTarget_;
     QString rememberedAnchor_;
     quint64 rememberedGeneration_ = 0;
-    // Panel-local active edit target per row path: 0 image, 1 mask, 2 vector.
+    // Panel-local thumbnail selection per row path (ActiveThumbBit): one
+    // content/raster-mask companion plus an optional vector mask.
     QHash<QString, int> activeThumbByPath_;
     // Whether the view's mask edit target was set at the last sync.
     bool maskEditing_ = false;

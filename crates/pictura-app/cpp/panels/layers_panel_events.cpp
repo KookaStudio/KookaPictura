@@ -146,6 +146,10 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
         if (mouse->button() == Qt::LeftButton) {
             const QPoint pos = mouse->position().toPoint();
             const QModelIndex index = tree_->indexAt(pos);
+            const QString rowPath = index.isValid() ? pathForProxyIndex(index) : QString();
+            const bool onControl = index.isValid() && rowControlAt(index, pos);
+            const bool wasActive =
+                view_ && index.isValid() && rowPath == layer_selection_anchor(*view_);
             if (index.isValid() && index.data(ExpandableRole).toBool()) {
                 const QRect chevron =
                     delegate_->chevronRect(tree_->visualRect(index), index);
@@ -159,8 +163,8 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             // the active layer and the transform alone. A plain click on the
             // already-active row asks nothing.
             if (index.isValid() && view_) {
-                const bool mutates = rowControlAt(index, pos)
-                    || pathForProxyIndex(index) != layer_selection_anchor(*view_);
+                const bool mutates = onControl
+                    || rowPath != layer_selection_anchor(*view_);
                 if (mutates && !resolvePendingTransform()) {
                     return true;
                 }
@@ -211,7 +215,6 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             // link glyph toggles its linkage. All are consumed so they never
             // rename, select, or start a drag.
             if (index.isValid() && view_) {
-                const QString rowPath = pathForProxyIndex(index);
                 const QRect vr = tree_->visualRect(index);
                 // A plain layer-thumbnail click returns to editing the layer's
                 // pixels; the click still selects the row or starts a drag.
@@ -252,7 +255,8 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)) {
-                    setActiveThumb(rowPath, 1);
+                    const int start = wasActive ? index.data(ActiveThumbRole).toInt()
+                                                : ActiveThumbContent;
                     const bool alt = mouse->modifiers().testFlag(Qt::AltModifier);
                     const bool shift = mouse->modifiers().testFlag(Qt::ShiftModifier);
                     selectRow();
@@ -264,6 +268,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                                                     index.data(MaskDisabledRole).toBool());
                         return true;
                     }
+                    setActiveThumb(rowPath, (start & ActiveThumbVector) | ActiveThumbMask);
                     mask_edit_target_set(*view_, rowPath);
                     if (alt) {
                         // Alt toggles the mask solo view on this thumbnail; a
@@ -287,16 +292,23 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 // The vector mask's own controls, mirroring the layer mask.
                 const QRect vectorThumb = delegate_->vectorMaskThumbRect(vr, index);
                 if (!vectorThumb.isEmpty() && vectorThumb.contains(pos)) {
-                    // The vector mask becomes the target; drop any raster target.
+                    const bool shift = mouse->modifiers().testFlag(Qt::ShiftModifier);
+                    const int start = wasActive ? index.data(ActiveThumbRole).toInt()
+                                                : ActiveThumbContent;
                     selectRow();
-                    mask_edit_target_set(*view_, QString());
-                    mask_solo_set(*view_, QString());
-                    syncEditTarget();
-                    setActiveThumb(rowPath, 2);
-                    if (mouse->modifiers() & Qt::ShiftModifier) {
+                    if (shift) {
                         vector_mask_set_enabled_path(
                             *view_, rowPath, index.data(VectorMaskDisabledRole).toBool());
+                        return true;
                     }
+                    const int next = (start & ActiveThumbVector)
+                        ? ((start & ~ActiveThumbVector) ? (start & ~ActiveThumbVector)
+                                                        : ActiveThumbContent)
+                        : (start | ActiveThumbVector);
+                    setActiveThumb(rowPath, next);
+                    mask_edit_target_set(*view_, (next & ActiveThumbMask) ? rowPath : QString());
+                    mask_solo_set(*view_, QString());
+                    syncEditTarget();
                     return true;
                 }
                 const QRect vectorLink = delegate_->vectorLinkGlyphRect(vr, index);
@@ -310,8 +322,11 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 const QRect imageThumb = delegate_->thumbRect(vr, index);
                 if (!imageThumb.isEmpty() && imageThumb.contains(pos)
                     && !(mouse->modifiers() & Qt::ControlModifier)) {
+                    const int start = wasActive ? index.data(ActiveThumbRole).toInt()
+                                                : ActiveThumbContent;
                     mask_solo_set(*view_, QString());
-                    setActiveThumb(rowPath, 0);
+                    setActiveThumb(rowPath,
+                                   (start & ActiveThumbVector) | ActiveThumbContent);
                     return false;
                 }
             }
@@ -397,10 +412,10 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 return true;
             }
             if (index.isValid() && view_ && mouse->modifiers() == Qt::NoModifier
-                && !index.data(SyntheticRole).toBool()) {
+                && !index.data(SyntheticRole).toBool() && !onControl) {
                 mask_edit_target_set(*view_, QString());
                 mask_solo_set(*view_, QString());
-                setActiveThumb(pathForProxyIndex(index), 0);
+                setActiveThumb(rowPath, ActiveThumbContent);
                 syncEditTarget();
             }
         }
