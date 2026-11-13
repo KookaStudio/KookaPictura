@@ -8,6 +8,7 @@
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QTimer>
+#include <QtWidgets/QInputDialog>
 #include <QtWidgets/QProgressDialog>
 #include <QtWidgets/QPushButton>
 
@@ -52,6 +53,7 @@ class DocumentJobsTest : public QObject {
 private slots:
     void initTestCase();
     void aRotateRunsAsAJob();
+    void anArbitraryRotateRunsAsAJob();
     void cancellingAFlattenChangesNothing();
     void aDepthConversionShowsABusyBar();
     void aSmallDocumentAppliesAtOnce();
@@ -65,7 +67,7 @@ private:
     // Cancel button as soon as it shows.
     Seen run(const char* id, bool cancel = false);
     // Run `action`, watching the job window as `run` does. A Fill dialog it
-    // opens is accepted as it is.
+    // opens is accepted as it is, and an angle prompt answered with 15°.
     Seen watch(const std::function<void()>& action, bool cancel = false);
 
     pictura::test::ScopedStateHome stateHome_;
@@ -98,6 +100,11 @@ Seen DocumentJobsTest::watch(const std::function<void()>& action, bool cancel)
         if (auto* fill = window_->findChild<pictura::FillDialog*>();
             fill && fill->isVisible()) {
             fill->accept();
+            return;
+        }
+        if (auto* prompt = window_->findChild<QInputDialog*>(); prompt && prompt->isVisible()) {
+            prompt->setDoubleValue(15.0);
+            prompt->accept();
             return;
         }
         auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));
@@ -138,6 +145,35 @@ void DocumentJobsTest::aRotateRunsAsAJob()
 }
 
 // [lop_whole_image_cancel]
+// [lop_arbitrary_rotate_job]
+void DocumentJobsTest::anArbitraryRotateRunsAsAJob()
+{
+    Fixture f(*window_, seed(kWide, kTall), QStringLiteral("pictura_arbitrary_job"));
+    QVERIFY2(f.ok(), "rotate fixture");
+    const int count = f.view->history_count();
+    pictura::document_job_set_delay(*f.view, 800);
+    QSize held;
+    QTimer during;
+    during.setInterval(20);
+    connect(&during, &QTimer::timeout, this, [&] {
+        auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));
+        if (d && d->isVisible()) {
+            held = QSize(f.view->document_width(), f.view->document_height());
+        }
+    });
+    during.start();
+    const Seen seen = run(pictura::command_ids::ImageRotateArbitrary);
+    during.stop();
+    QVERIFY2(seen.window, "the progress window appeared");
+    QCOMPARE(held, QSize(kWide, kTall));
+    QVERIFY(!pictura::document_job_pending(*f.view));
+    // 15° grows the canvas to the rotated bounds.
+    QVERIFY(f.view->document_width() > kWide);
+    QVERIFY(f.view->document_height() > kTall);
+    QCOMPARE(f.view->history_count(), count + 1);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Rotate"));
+}
+
 void DocumentJobsTest::cancellingAFlattenChangesNothing()
 {
     Fixture f(*window_, seed(kWide, kTall), QStringLiteral("pictura_flatten_job"));

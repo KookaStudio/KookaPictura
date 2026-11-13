@@ -1,4 +1,4 @@
-"""The memory benchmark's scenarios M1-M15 (issue #1210), for profile-tools.py.
+"""The memory benchmark's scenarios M1-M18 (issue #1210), for profile-tools.py.
 
 Every later bounded-memory issue (#1209) names its savings by these IDs. Each
 scenario is a setup (prerequisites, run before the peak reset and not measured)
@@ -137,6 +137,24 @@ def image_size(c):
            params={"width": round(c.w * 1.5), "height": round(c.h * 1.5), "resample": "bicubic"})
 
 
+def canvas_size(c):
+    # #1294: Canvas Size to 150 %, centred, with a white extension; the layers
+    # move, and the Background is extended through tiles.
+    c.call("run_command", id="image.canvas.size",
+           params={"width": round(c.w * 1.5), "height": round(c.h * 1.5), "anchor": "center",
+                   "color": 0xFFFFFF})
+
+
+def rotate_quarter(c):
+    # #1294: Rotate 90° CW, every plane remapped through tiles.
+    c.call("run_command", id="image.rotate90cw")
+
+
+def rotate_arbitrary(c):
+    # #1294: Rotate 15°, every plane resampled through tiles.
+    c.call("run_command", id="image.rotate.arbitrary", params={"angle": 15})
+
+
 def save_psd(c):
     c.call("document", op="save_as", path=f"{c.tmp}/benchmark-save.psd")
 
@@ -202,4 +220,10 @@ SCENARIOS = {
             [warp_layer], False),
     "M15": ("Image Size of a full-layer gradient to 150 %", [new_document, add_layer, gradient_layer],
             [image_size], False),
+    "M16": ("Canvas Size of a full-layer gradient to 150 %", [new_document, add_layer, gradient_layer],
+            [canvas_size], False),
+    "M17": ("Rotate a full-layer gradient 90° CW", [new_document, add_layer, gradient_layer],
+            [rotate_quarter], False),
+    "M18": ("Rotate a full-layer gradient 15°", [new_document, add_layer, gradient_layer],
+            [rotate_arbitrary], False),
 }

@@ -96,7 +96,9 @@ pub(super) fn apply_crop(
             return false;
         }
         if fill_rgb >= 0 {
-            pictura_render::extend_background(
+            // ponytail: the canvas has already grown, so a refused extension
+            // (#1294) leaves the Background at its old rect, transparent around it.
+            let _ = pictura_render::extend_background(
                 doc,
                 [
                     (fill_rgb >> 16) as u8,

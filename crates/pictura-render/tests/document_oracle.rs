@@ -265,7 +265,7 @@ fn rotate_document_preserves_structure_and_composite() {
 fn flip_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
     let before = doc.composite.clone();
-    flip_document(&mut doc, true);
+    flip_document(&mut doc, true).expect("flips");
     assert_structural_oracle(&mut doc, "flip_document", &before);
 }
 
@@ -323,8 +323,8 @@ fn flip_twice_is_identity() {
     for horizontal in [true, false] {
         let before = sample_doc();
         let mut doc = before.clone();
-        flip_document(&mut doc, horizontal);
-        flip_document(&mut doc, horizontal);
+        flip_document(&mut doc, horizontal).expect("flips");
+        flip_document(&mut doc, horizontal).expect("flips");
         assert_eq!(doc, before, "horizontal={horizontal}");
     }
 }

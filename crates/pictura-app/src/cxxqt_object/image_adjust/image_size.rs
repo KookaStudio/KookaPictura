@@ -7,7 +7,7 @@
 mod imp;
 
 use super::super::qobject::PictureView;
-use super::new_document::{create_document, document_budget_allows, document_resize_budget_allows};
+use super::new_document::{create_document, document_budget_allows};
 pub(in crate::cxxqt_object) use imp::image_size_fits_budget;
 use imp::*;
 
@@ -52,6 +52,18 @@ pub mod ffi {
         /// `edit_refused_for_scratch_full` tells the two apart.
         fn image_size_fits_budget(view: &PictureView, width: i32, height: i32) -> bool;
 
+        /// Whether Canvas Size can place the document on a `width` × `height`
+        /// canvas at `anchor`: each side within the image budget, and the
+        /// command's working set within memory and the planes it writes within
+        /// memory plus the scratch disks (#1294). A refusal is recorded, so
+        /// `edit_refused_for_scratch_full` tells the two apart.
+        fn canvas_size_fits_budget(
+            view: &PictureView,
+            anchor: &QString,
+            width: i32,
+            height: i32,
+        ) -> bool;
+
         /// Image ▸ Canvas Size: place the document on a `width` × `height`
         /// canvas at `anchor` (`"top-left"` … `"bottom-right"`), filling the
         /// Background layer's new area with `fill` (`0xRRGGBB`). One
@@ -88,9 +100,5 @@ pub mod ffi {
         /// `ImageBudget`, so a caller can refuse before allocating: an
         /// allocation failure aborts the process.
         fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool;
-
-        /// Whether an immediate resize to `width` × `height` at `bits` per
-        /// channel fits the memory available now (the resize gate, #1156).
-        fn document_resize_budget_allows(width: i32, height: i32, bits: i32) -> bool;
     }
 }

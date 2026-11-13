@@ -1,7 +1,7 @@
-#include "memory_refusal.h"
 #include "frame_includes.h"
 
 #include "document_command.h"
+#include "memory_refusal.h"
 #include "fill_layer_editor.h"
 #include "frame_update.h"
 #include "gpu_probe.h"
@@ -277,12 +277,16 @@ void PicturaMainWindow::registerHandlers()
                     view->rotate_doc(turns);
                 }
             };
-            if (view && view->has_document()
-                && runDocumentCommand(this, *view, flip ? tr("Flip Canvas") : tr("Rotate Canvas"),
-                                      orient)) {
+            if (!view || !view->has_document()) {
+                return;
+            }
+            if (runDocumentCommand(this, *view, flip ? tr("Flip Canvas") : tr("Rotate Canvas"),
+                                   orient)) {
                 CommandParams command;
                 command.values.insert(QString::fromLatin1(key), value);
                 registry_->recordCommand(QLatin1String(id), command);
+            } else {
+                reportCommitRefusal(this, flip ? tr("flip the canvas") : tr("rotate the canvas"));
             }
         });
     };

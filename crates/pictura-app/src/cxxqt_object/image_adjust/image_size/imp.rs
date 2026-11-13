@@ -36,6 +36,22 @@ pub(crate) fn image_size_fits_budget(view: &PictureView, width: i32, height: i32
         .is_some_and(|doc| crate::cxxqt_object::helpers::image_size_admits(doc, width, height))
 }
 
+/// Whether a Canvas Size of the document to `width` × `height` at `anchor`
+/// passes its gate (#1294); a refusal is recorded for the handler's message.
+pub(super) fn canvas_size_fits_budget(
+    view: &PictureView,
+    anchor: &QString,
+    width: i32,
+    height: i32,
+) -> bool {
+    let Some(anchor) = parse_anchor(&anchor.to_string()) else {
+        return false;
+    };
+    view.rust().session.doc.as_ref().is_some_and(|doc| {
+        crate::cxxqt_object::helpers::canvas_size_admits(doc, width, height, anchor)
+    })
+}
+
 pub(super) fn image_size_apply(
     mut view: Pin<&mut PictureView>,
     resample: &QString,
@@ -113,6 +129,7 @@ pub(super) fn canvas_size_apply(
     height: i32,
     fill: u32,
 ) -> bool {
+    crate::cxxqt_object::helpers::memory_gate::clear();
     if view.rust().modal_transform_blocks_edit() {
         return false;
     }
@@ -122,25 +139,28 @@ pub(super) fn canvas_size_apply(
     if width < 1 || height < 1 {
         return false;
     }
-    if view
-        .rust()
-        .session
-        .doc
-        .as_ref()
-        .is_none_or(|doc| (width as u32, height as u32) == (doc.width, doc.height))
-    {
+    let admitted = view.rust().session.doc.as_ref().is_some_and(|doc| {
+        (width as u32, height as u32) != (doc.width, doc.height)
+            && crate::cxxqt_object::helpers::canvas_size_admits(doc, width, height, anchor)
+    });
+    if !admitted {
         return false;
     }
     view.as_mut().document_op(
         "Canvas Size",
         JobBar::Busy,
         move |doc| {
-            pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor)
+            // Both steps run on a copy that shares the planes, so a refused
+            // Background extension (#1294) leaves the document as it was.
+            let mut next = doc.clone();
+            pictura_render::resize_canvas_document(&mut next, width as u32, height as u32, anchor)
                 .ok()?;
             pictura_render::extend_background(
-                doc,
+                &mut next,
                 [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8],
-            );
+            )
+            .ok()?;
+            *doc = next;
             Some(Outcome::default())
         },
         |rust, _| {

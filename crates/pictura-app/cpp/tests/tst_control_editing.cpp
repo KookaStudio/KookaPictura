@@ -40,6 +40,7 @@ private slots:
     void unlistedCommandIsRefused();
     void unlistedKeyIsRefused();
     void oversizedResizeIsRefused();
+    void orientationRunsById();
     void layerTreeReportsPaths();
     void activeLayerIsSetByPath();
     void exportLeavesTheDocumentAlone();
@@ -221,6 +222,27 @@ void ControlEditingTest::oversizedResizeIsRefused()
                  QStringLiteral("invalid_param"));
     }
     QCOMPARE(view().document_width(), width);
+}
+
+// [ce_run_orient] [ce_run_orient_key]
+void ControlEditingTest::orientationRunsById()
+{
+    QVERIFY(succeeded(call(QStringLiteral("run_command"),
+                           {{QStringLiteral("id"), QStringLiteral("image.image.size")},
+                            {QStringLiteral("params"),
+                             QJsonObject{{QStringLiteral("width"), 60},
+                                         {QStringLiteral("height"), 40},
+                                         {QStringLiteral("constrainProportions"), false}}}})));
+    QVERIFY(succeeded(call(QStringLiteral("run_command"),
+                           {{QStringLiteral("id"), QStringLiteral("image.rotate90cw")}})));
+    QCOMPARE(view().document_width(), 40);
+    QCOMPARE(view().document_height(), 60);
+    QCOMPARE(errorCode(call(QStringLiteral("run_command"),
+                            {{QStringLiteral("id"), QStringLiteral("image.flipHorizontal")},
+                             {QStringLiteral("params"),
+                              QJsonObject{{QStringLiteral("angle"), 90}}}})),
+             QStringLiteral("invalid_param"));
+    QCOMPARE(view().document_width(), 40);
 }
 
 void ControlEditingTest::layerTreeReportsPaths()

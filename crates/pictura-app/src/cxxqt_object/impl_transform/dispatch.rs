@@ -12,6 +12,7 @@ use super::translate_move_group;
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::impl_core::{JobBar, Outcome};
+use crate::cxxqt_object::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -299,6 +300,18 @@ impl qobject::PictureView {
     }
 }
 
+impl PictureViewRust {
+    /// Whether a turn by `quarter_turns`, or a flip at 0, passes its gate
+    /// (#1294); false without a document. A refusal is recorded.
+    fn orient_admits(&self, quarter_turns: u8) -> bool {
+        crate::cxxqt_object::helpers::memory_gate::clear();
+        self.session
+            .doc
+            .as_ref()
+            .is_some_and(|doc| crate::cxxqt_object::helpers::orient_admits(doc, quarter_turns))
+    }
+}
+
 impl qobject::PictureView {
     pub fn resize_image(mut self: Pin<&mut Self>, kind: &QString, width: i32, height: i32) -> bool {
         if self.rust().modal_transform_blocks_edit() {
@@ -343,6 +356,12 @@ impl qobject::PictureView {
         if width < 1 || height < 1 {
             return false;
         }
+        let admitted = self.rust().session.doc.as_ref().is_some_and(|doc| {
+            crate::cxxqt_object::helpers::canvas_size_admits(doc, width, height, anchor)
+        });
+        if !admitted {
+            return false;
+        }
         self.as_mut().document_op(
             "Canvas Size",
             JobBar::Busy,
@@ -365,6 +384,9 @@ impl qobject::PictureView {
         if !(1..=3).contains(&quarter_turns) {
             return false;
         }
+        if !self.rust().orient_admits(quarter_turns as u8) {
+            return false;
+        }
         self.as_mut().document_op(
             "Rotate",
             JobBar::Counted,
@@ -384,15 +406,16 @@ impl qobject::PictureView {
         if self.rust().modal_transform_blocks_edit() {
             return false;
         }
-        if self.rust().session.doc.is_none() {
+        if !self.rust().orient_admits(0) {
             return false;
         }
         self.as_mut().document_op(
             "Flip",
             JobBar::Counted,
             move |doc| {
-                pictura_render::flip_document(doc, horizontal);
-                Some(Outcome::default())
+                pictura_render::flip_document(doc, horizontal)
+                    .ok()
+                    .map(|()| Outcome::default())
             },
             |rust, _| {
                 rust.session.clear_geometry_selection();

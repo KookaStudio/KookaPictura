@@ -18,8 +18,19 @@ pub(super) enum Remap {
 }
 
 impl Remap {
-    fn swaps_axes(self) -> bool {
+    pub(super) fn swaps_axes(self) -> bool {
         matches!(self, Remap::Rot90 | Remap::Rot270)
+    }
+
+    /// The source sample of destination `(x, y)` in a `w×h` source plane.
+    pub(super) fn source(self, x: usize, y: usize, w: usize, h: usize) -> (usize, usize) {
+        match self {
+            Remap::Rot90 => (y, h - 1 - x),
+            Remap::Rot180 => (w - 1 - x, h - 1 - y),
+            Remap::Rot270 => (w - 1 - y, x),
+            Remap::FlipH => (w - 1 - x, y),
+            Remap::FlipV => (x, h - 1 - y),
+        }
     }
 }
 
@@ -212,7 +223,9 @@ fn sample_plane<T: Sample>(
     }
 }
 
-/// Remap every `w×h` plane of `samples`; 90°/270° swap the plane axes.
+/// Remap every `w×h` plane of `samples`; 90°/270° swap the plane axes: the
+/// dense remap, kept as `geometry_tiled::orient`'s oracle for retained stores.
+#[cfg(test)]
 pub(super) fn remap_samples(samples: &Samples, w: usize, h: usize, kind: Remap) -> Samples {
     let plane = w * h;
     match samples {
@@ -226,18 +239,13 @@ pub(super) fn remap_samples(samples: &Samples, w: usize, h: usize, kind: Remap) 
     }
 }
 
+#[cfg(test)]
 fn remap_plane<T: Copy>(data: &[T], w: usize, h: usize, kind: Remap) -> Vec<T> {
     let (nw, nh) = if kind.swaps_axes() { (h, w) } else { (w, h) };
     let mut out = Vec::with_capacity(nw * nh);
     for y in 0..nh {
         for x in 0..nw {
-            let (sx, sy) = match kind {
-                Remap::Rot90 => (y, h - 1 - x),
-                Remap::Rot180 => (w - 1 - x, h - 1 - y),
-                Remap::Rot270 => (w - 1 - y, x),
-                Remap::FlipH => (w - 1 - x, y),
-                Remap::FlipV => (x, h - 1 - y),
-            };
+            let (sx, sy) = kind.source(x, y, w, h);
             out.push(data[sy * w + sx]);
         }
     }
