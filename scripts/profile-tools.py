@@ -30,7 +30,7 @@ No dependency beyond python3's standard library.
 
 Memory (#1210): --peak resets the app's peak resident size before each scenario
 (5 -> /proc/<pid>/clear_refs) and reports peak_mb (VmHWM), peak_added_mb and
-rss_mb. The memory scenarios M1-M13 (scripts/memory_scenarios.py; --scenarios
+rss_mb. The memory scenarios M1-M14 (scripts/memory_scenarios.py; --scenarios
 memory for all) default to 17000x17000 and run each in a fresh app, with their
 prerequisites run before the reset. --memory-max 4G runs the app under
 `systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0`; a SIGKILL is the

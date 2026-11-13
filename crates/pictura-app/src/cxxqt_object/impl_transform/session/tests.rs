@@ -2,7 +2,7 @@ use super::super::super::document_session::{TransformMode, TransformSession};
 use super::super::geometry::{
     apply_session_transform, pivot_point, rect_center, set_pivot, source_corners, MapParams,
 };
-use super::super::group::{commit_cost, move_commit_cost};
+use super::super::group::{commit_cost, move_commit_cost, warp_strip_bytes};
 use super::*;
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags, PsdRect};
@@ -287,6 +287,30 @@ fn full_scratch_disks_refuse_the_transform() {
     assert!(!gate(&huge_resize(), 2048 * MIB, 0));
     assert!(memory_gate::edit_refused_for_scratch_full());
     assert!(memory_gate::edit_refused_for_memory());
+}
+
+// [ocw_gate_spills]
+#[test]
+fn a_large_warp_is_admitted_when_scratch_holds_it() {
+    use crate::cxxqt_object::helpers::memory_gate;
+    let side = 17_000i32;
+    let orig = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: side,
+        right: side,
+    };
+    let s = f64::from(side);
+    // An arc's preview quad: the top rises and spreads past the box.
+    let quad = [(-900.0, -1500.0), (s + 900.0, -1500.0), (s, s), (0.0, s)];
+    let mut cost = commit_cost(&quad, orig);
+    let plain = cost.working;
+    cost.working += warp_strip_bytes(&quad);
+    assert_eq!(cost.working - plain, 5 * 4 * 256 * (17_000 + 1800));
+    // 2 GiB available leaves 1.75 GiB of room, far under the dense warp's
+    // planes, yet enough for the strips and windows.
+    assert!(gate(&cost, 2048 * MIB, 64 * 1024 * MIB));
+    assert!(!memory_gate::edit_refused_for_memory());
 }
 
 // [oct_move_gate_spills]

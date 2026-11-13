@@ -54,9 +54,13 @@ mod transform_tiled_tests;
 mod vector_masks;
 mod via;
 mod warp;
+#[cfg(test)]
+mod warp_oracle;
 mod warp_raster;
 #[cfg(test)]
 mod warp_tests;
+#[cfg(test)]
+mod warp_tiled_tests;
 
 pub use align::{
     align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds,

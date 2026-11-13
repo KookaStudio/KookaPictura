@@ -1,4 +1,4 @@
-"""The memory benchmark's scenarios M1-M13 (issue #1210), for profile-tools.py.
+"""The memory benchmark's scenarios M1-M14 (issue #1210), for profile-tools.py.
 
 Every later bounded-memory issue (#1209) names its savings by these IDs. Each
 scenario is a setup (prerequisites, run before the peak reset and not measured)
@@ -116,6 +116,21 @@ def free_transform(c):
     c.call("layer_op", op="free_transform", index=int(c.layer_path("Layer 1")), scale=150.0, angle=15.0)
 
 
+def gradient_layer(c):
+    """A black-to-white Gradient corner to corner across Layer 1, so no tile of
+    it is uniform."""
+    activate(c, "Layer 1")
+    c.call("set_tool", tool="gradient")
+    c.call("pointer", op="down", space="image", x=0, y=0)
+    c.call("pointer", op="move", space="image", x=c.w / 2, y=c.h / 2)
+    c.call("pointer", op="up", space="image", x=c.w, y=c.h)
+
+
+def warp_layer(c):
+    # #1292: an arc warp of the whole layer, committed through tiles.
+    c.call("layer_op", op="free_transform", index=int(c.layer_path("Layer 1")), warp="arc", bend=50.0)
+
+
 def save_psd(c):
     c.call("document", op="save_as", path=f"{c.tmp}/benchmark-save.psd")
 
@@ -177,4 +192,6 @@ SCENARIOS = {
     "M11": ("Save as PSD", [new_document, add_layer, bucket_in_marquee], [save_psd], False),
     "M12": ("Open the generated 4-layer PSD", [], [open_fixture], True),
     "M13": ("Fit, 100 %, pan across, fit", [new_document], [pan_zoom], False),
+    "M14": ("Warp a full-layer gradient, arc 50 %", [new_document, add_layer, gradient_layer],
+            [warp_layer], False),
 }

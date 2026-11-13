@@ -4,6 +4,29 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Warp commit out of core** (#1292, OpenSpec change `warp-commit-out-of-core`,
+  capability `document/out-of-core-warp`).
+  - **Rasterizer.** `warp_raster::warp_tiled` builds a strip of 256 rows at a
+    time into tiled `Samples` (`Plane::filled` and then `write_rect_from`, then
+    `settle`). A strip's blocks (64 rows by 256 columns) render in parallel.
+    Each block keeps its row bin's triangles whose padded columns reach it, in
+    depth order. It reads only the source window its taps and shrink footprints
+    reach (`tap_box`), converted and premultiplied per window, and splits while
+    the window exceeds 8 MiB of unit planes. `Planes::tap` keeps source-local
+    coordinates and shifts only the index, so the output is byte-identical to
+    the dense rasterizer (`warp_oracle.rs`, test-only). The layer, its mask
+    (`warp_gray` flattens in `post`) and the retained 16/32-bit store all go
+    through it.
+  - **Gate.** A warp commit adds `warp_strip_bytes` (5 planes × 4 bytes × 256
+    rows × width) to `working`.
+  - **Control and M14.** `layer_op free_transform` takes `warp` and `bend`. M14
+    warps a full-layer corner-to-corner gradient by arc 50. At 17000² under
+    `MemoryMax=4G` (with `--force`, since this host had only 2.4 GB available) it
+    ran ok in 64 s, peaking at 3954 MiB, 2492 MiB above the reset. The dense path
+    needed about 9 GB of `f32` planes.
+  - **Ceiling.** `write_layer` still narrows a retained 16/32-bit store into
+    dense 8-bit channels, as it does for the similarity path.
+
 - **Eviction during large commits** (#1290, OpenSpec change
   `commit-spill-eviction`, capabilities `document/tile-eviction` and
   `interop/agentic-control`). The 17000² `MemoryMax=2G` runs OOM-killed the

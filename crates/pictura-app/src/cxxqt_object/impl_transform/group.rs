@@ -73,6 +73,16 @@ pub(super) fn commit_cost(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> CommitC
     }
 }
 
+/// A warp commit's output strips (#1292): up to five planes of 32-bit samples,
+/// 256 rows across the result's width, held while a strip's blocks are written.
+pub(super) fn warp_strip_bytes(quad: &[(f64, f64); 4]) -> u64 {
+    let (x0, x1) = quad.iter().fold((f64::MAX, f64::MIN), |(lo, hi), &(x, _)| {
+        (lo.min(x), hi.max(x))
+    });
+    let width = (x1.ceil() - x0.floor()).clamp(0.0, f64::from(i32::MAX)) as u64;
+    5 * 4 * TILE as u64 * width
+}
+
 /// What a Move tool commit of the changed region `dirty` holds (#1290): a
 /// translation keeps the layers' planes and resamples nothing, so it is the
 /// composite alone, as for a whole-pixel transform.

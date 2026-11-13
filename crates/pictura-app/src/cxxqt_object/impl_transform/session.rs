@@ -8,7 +8,7 @@ use super::geometry::{
 };
 use super::group::{
     can_free_transform, commit_cost, group_apply, lifted_apply, move_commit_cost,
-    repeatable_transform, transform_group, transform_group_edit, transform_rect,
+    repeatable_transform, transform_group, transform_group_edit, transform_rect, warp_strip_bytes,
 };
 use super::{
     build_move_preview_base, duplicate_move_target, link_members, movable_layer, move_group_key,
@@ -328,7 +328,10 @@ impl qobject::PictureView {
             None if projective => unmoved(),
             None => params.is_identity(),
         };
-        let cost = commit_cost(&preview_quad, orig_rect);
+        let mut cost = commit_cost(&preview_quad, orig_rect);
+        if warp.is_some() {
+            cost.working += warp_strip_bytes(&preview_quad);
+        }
         if identity || !memory_gate::admit_spilling(cost.working, cost.spillable) {
             self.as_mut().drop_transform_session();
             self.as_mut().clear_transform_preview();
