@@ -679,6 +679,53 @@ fn clip(rect: PsdRect, width: u32, height: u32) -> Option<PsdRect> {
 }
 
 impl qobject::PictureView {
+    /// A layered RGB Move left its tiles stale: build the tiles the canvas
+    /// presents now, so the drag preview can stay until they land. Without a
+    /// presented view there is nothing to wait for.
+    pub(in crate::cxxqt_object) fn request_lazy_move_tiles(mut self: Pin<&mut Self>) {
+        if !self.rust().lazy_move_pending {
+            return;
+        }
+        let (level, rect) = (self.rust().presented_level, self.rust().presented_rect);
+        if level < 0 || rect.width() <= 0 || rect.height() <= 0 {
+            self.as_mut().finish_lazy_move();
+            return;
+        }
+        let (_, missing) = self.rust().tile_crop(TileSource::Composite, level, rect);
+        if missing.is_empty() {
+            self.as_mut().finish_lazy_move();
+        } else {
+            self.request_tiles(missing);
+        }
+    }
+
+    /// End a lazy Move once the presented tiles are current.
+    fn finish_lazy_move_if_ready(mut self: Pin<&mut Self>) {
+        if !self.rust().lazy_move_pending
+            || !self.rust().tiles.wanted.borrow().is_empty()
+            || self.rust().tiles.in_flight.get()
+        {
+            return;
+        }
+        let (level, rect) = (self.rust().presented_level, self.rust().presented_rect);
+        if level < 0 || rect.width() <= 0 || rect.height() <= 0 {
+            self.as_mut().finish_lazy_move();
+            return;
+        }
+        let (_, missing) = self.rust().tile_crop(TileSource::Composite, level, rect);
+        if missing.is_empty() {
+            self.as_mut().finish_lazy_move();
+        }
+    }
+
+    pub(in crate::cxxqt_object) fn finish_lazy_move(mut self: Pin<&mut Self>) {
+        if !self.rust().lazy_move_pending {
+            return;
+        }
+        self.as_mut().rust_mut().lazy_move_pending = false;
+        self.as_mut().move_committed();
+    }
+
     /// Queue `keys` for a worker build, starting one if none is running.
     pub(in crate::cxxqt_object) fn request_tiles(&self, keys: Vec<TileKey>) {
         if keys.is_empty() {
@@ -782,6 +829,7 @@ impl qobject::PictureView {
         if !self.rust().tiles.wanted.borrow().is_empty() {
             self.as_ref().get_ref().start_tile_job();
         }
+        self.as_mut().finish_lazy_move_if_ready();
     }
 }
 

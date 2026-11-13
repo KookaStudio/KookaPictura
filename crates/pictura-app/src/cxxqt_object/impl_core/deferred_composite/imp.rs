@@ -82,28 +82,41 @@ pub(in crate::cxxqt_object) struct SettledMove {
 }
 
 impl PictureViewRust {
-    /// Whether a Move commit's composite should leave the GUI thread.
-    pub(in crate::cxxqt_object) fn should_defer_move(&self, edit: &Edit) -> bool {
-        let Some(doc) = self.session.doc.as_ref() else {
-            return false;
-        };
+    /// The document and dirty areas of a large Move commit, or `None` when the
+    /// display is busy or the edit is not a bounded or full Move.
+    fn large_move_area(&self, edit: &Edit) -> Option<(u64, u64)> {
+        let doc = self.session.doc.as_ref()?;
         if self.has_active_session() || self.pending_previews.any() || self.mask_solo.is_some() {
-            return false;
+            return None;
         }
         let canvas = u64::from(doc.width) * u64::from(doc.height);
         let area = match edit {
             Edit::Regions { rects, .. } => rects.iter().map(rect_area).sum(),
             Edit::Full | Edit::Structural { damage: None } => canvas,
-            _ => return false,
+            _ => return None,
         };
-        // A layered RGB document keeps no stored composite: the display tiles
-        // can be marked stale and rebuilt for the view, so compositing the
-        // whole dirty area would only duplicate work. A test delay forces the
-        // deferred path so its pending-state behaviour stays covered.
-        if !doc.composite_is_authoritative() && self.move_composite_delay_for_test == 0 {
+        (canvas >= DEFERRED_MOVE_PIXELS && area >= DEFERRED_MOVE_PIXELS).then_some((canvas, area))
+    }
+
+    /// Whether a Move commit leaves its display tiles stale instead of
+    /// compositing: a layered RGB document keeps no stored composite, so the
+    /// visible tiles rebuild from the moved layers. A test delay forces the
+    /// deferred path so its pending-state behaviour stays covered.
+    pub(in crate::cxxqt_object) fn should_leave_tiles(&self, edit: &Edit) -> bool {
+        let Some(doc) = self.session.doc.as_ref() else {
+            return false;
+        };
+        self.large_move_area(edit).is_some()
+            && !doc.composite_is_authoritative()
+            && self.move_composite_delay_for_test == 0
+    }
+
+    /// Whether a Move commit's composite should leave the GUI thread.
+    pub(in crate::cxxqt_object) fn should_defer_move(&self, edit: &Edit) -> bool {
+        if self.should_leave_tiles(edit) {
             return false;
         }
-        canvas >= DEFERRED_MOVE_PIXELS && area >= DEFERRED_MOVE_PIXELS
+        self.large_move_area(edit).is_some()
     }
 
     /// Leave the already-translated layer's composite to a worker. The job is
@@ -324,14 +337,16 @@ impl PictureViewRust {
         self.pending_move_job = None;
         self.deferred_transform = None;
         self.drop_document_job();
+        self.lazy_move_pending = false;
         if self.deferred_composite.take().is_some() {
             metrics::cancel_edit();
         }
     }
 
-    /// Whether a Move composite is still on its worker.
+    /// Whether a Move preview is still waiting for its composite or display
+    /// tiles.
     pub(in crate::cxxqt_object) fn move_composite_pending(&self) -> bool {
-        self.deferred_composite.is_some()
+        self.deferred_composite.is_some() || self.lazy_move_pending
     }
 
     /// A pending move is an undoable state even though its history entry has
@@ -418,6 +433,9 @@ impl qobject::PictureView {
     /// Finish a pending transform or Move composite before a reader or writer
     /// runs.
     pub(in crate::cxxqt_object) fn settle_pending_composite(mut self: Pin<&mut Self>) {
+        if self.rust().lazy_move_pending {
+            self.as_mut().finish_lazy_move();
+        }
         // A caller that never ran the job window (the API, a test) waits here.
         if self.rust().transform_pending() {
             self.as_mut().transform_commit_finish();

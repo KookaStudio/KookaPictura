@@ -278,6 +278,7 @@ impl PictureViewRust {
             edit.history_hint().map(|rects| rects.to_vec())
         };
         metrics::begin_edit(label);
+        let leave_tiles = defer && self.should_leave_tiles(&edit);
         let deferred =
             defer && self.should_defer_move(&edit) && self.defer_move_composite(label, &edit);
         let blit = if deferred {
@@ -285,6 +286,9 @@ impl PictureViewRust {
         } else {
             self.refresh_for(&edit)
         };
+        if leave_tiles {
+            self.lazy_move_pending = true;
+        }
         if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
             self.link_sets = link_remap.unwrap_or_default();
             self.solo_snapshot = None;
@@ -437,6 +441,7 @@ impl qobject::PictureView {
         if let Some(job) = self.as_mut().rust_mut().pending_move_job.take() {
             self.as_mut().build_move_composite(job);
         }
+        self.as_mut().request_lazy_move_tiles();
         let outcome = presentation.declaration.clone().unwrap_or(edit);
         self.as_mut().present(presentation);
         outcome
@@ -469,6 +474,7 @@ impl qobject::PictureView {
         if let Some(job) = self.as_mut().rust_mut().pending_move_job.take() {
             self.as_mut().build_move_composite(job);
         }
+        self.as_mut().request_lazy_move_tiles();
         let outcome = presentation.declaration.clone().unwrap_or(edit);
         self.as_mut().present(presentation);
         outcome

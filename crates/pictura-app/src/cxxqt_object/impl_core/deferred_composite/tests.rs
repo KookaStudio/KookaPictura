@@ -210,9 +210,10 @@ fn a_layered_large_move_marks_tiles_instead_of_deferring() {
     );
 
     assert!(
-        !view.should_defer_move(&whole),
-        "a layered RGB document composites its display tiles lazily"
+        view.should_leave_tiles(&whole),
+        "a layered RGB document rebuilds its display tiles lazily"
     );
+    assert!(!view.should_defer_move(&whole));
     view.move_composite_delay_for_test = 1;
     assert!(
         view.should_defer_move(&whole),

@@ -276,14 +276,23 @@ void LargeDocumentTest::aLargeMoveCommitLeavesTheTilesStale()
     seed.fill(Qt::white);
     Fixture f(*window_, seed, QStringLiteral("pictura_lazy_move"));
     QVERIFY2(f.ok(), "lazy move fixture");
+    showFrame();
     QCOMPARE(f.view->duplicate_layer(0), 1);
     f.view->set_active_layer(QStringLiteral("1"));
+    f.canvas->setZoom(0.125, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    f.canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0);
     QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
 
     QVERIFY(f.view->commit_move(4, 4));
-    QVERIFY2(!pictura::move_composite_pending(*f.view),
-             "a layered RGB move rebuilds its visible tiles instead of compositing");
-    QCOMPARE(committed.count(), 1);
+    QVERIFY2(pictura::move_composite_pending(*f.view),
+             "the preview waits for the presented tiles, not a whole composite");
+    QVERIFY2(f.canvas->movePreviewActive(), "the moved layer stays presented");
+    QCOMPARE(committed.count(), 0);
+
+    QVERIFY(committed.wait(30000));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY2(!f.canvas->movePreviewActive(), "the preview drops when the tiles land");
     QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
 }
 
