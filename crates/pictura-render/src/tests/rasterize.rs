@@ -364,6 +364,44 @@ fn rasterize_shape_bakes_fill_and_drops_the_shape() {
 }
 
 #[test]
+fn rasterize_shape_clears_the_pixel_data_irrelevant_flag() {
+    use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
+    let mut d = doc(20, 20, Vec::new());
+    let square = outline_in_box(
+        ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
+        (5.0, 5.0, 10.0, 10.0),
+    )
+    .unwrap();
+    let path = add_shape_layer(&mut d, "", [0, 0, 255, 255], "Rectangle", &square, None);
+    assert!(resolve_path(&d, &path).unwrap().pixel_data_irrelevant);
+
+    assert!(rasterize_shape(&mut d, &path));
+    assert!(
+        !resolve_path(&d, &path).unwrap().pixel_data_irrelevant,
+        "the baked layer no longer claims its pixels are irrelevant"
+    );
+}
+
+#[test]
+fn rasterize_fill_content_clears_the_pixel_data_irrelevant_flag() {
+    use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
+    let mut d = doc(20, 20, Vec::new());
+    let square = outline_in_box(
+        ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
+        (5.0, 5.0, 10.0, 10.0),
+    )
+    .unwrap();
+    let path = add_shape_layer(&mut d, "", [0, 0, 255, 255], "Rectangle", &square, None);
+    assert!(resolve_path(&d, &path).unwrap().pixel_data_irrelevant);
+
+    assert!(rasterize_fill_content(&mut d, &path));
+    assert!(
+        !resolve_path(&d, &path).unwrap().pixel_data_irrelevant,
+        "the baked fill layer no longer claims its pixels are irrelevant"
+    );
+}
+
+#[test]
 fn rasterize_shape_keeps_an_outside_stroke_past_a_tight_rect() {
     use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
     let mut d = doc(20, 20, Vec::new());

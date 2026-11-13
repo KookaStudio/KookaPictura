@@ -581,6 +581,10 @@ fn write_record(
             if layer.lock.contains(LockFlags::TRANSPARENCY) {
                 record_flags |= 0x01;
             }
+            if layer.pixel_data_irrelevant {
+                // Bit 3 ("flags valid") tells Photoshop that bit 4 is meaningful.
+                record_flags |= 0x08 | 0x10;
+            }
             out.push(record_flags);
             out.push(0); // filler
 

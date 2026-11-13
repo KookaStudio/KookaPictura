@@ -66,8 +66,12 @@ fn psd_tools_available() -> bool {
 
 /// One `|`-separated row per vector-mask layer, as `SCRIPT` prints them.
 fn read_with_psd_tools(path: &std::path::Path) -> (String, Vec<Vec<String>>) {
+    run_psd_tools(SCRIPT, path)
+}
+
+fn run_psd_tools(script: &str, path: &std::path::Path) -> (String, Vec<Vec<String>>) {
     let out = Command::new("python3")
-        .args(["-c", SCRIPT, path.to_str().expect("utf-8 path")])
+        .args(["-c", script, path.to_str().expect("utf-8 path")])
         .output()
         .expect("run python3");
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
@@ -115,6 +119,24 @@ fn psd_tools_reads_vector_mask_fixture() {
     );
 }
 
+const AUTHORED_SCRIPT: &str = r#"
+import sys
+from psd_tools import PSDImage
+
+psd = PSDImage.open(sys.argv[1], lazy=False)
+for layer in psd:
+    f = layer._record.flags
+    raw = ((f.transparency_protected * 1)
+           | ((not f.visible) * 2)
+           | (f.obsolete * 4)
+           | (f.photoshop_v5_later * 8)
+           | (f.pixel_data_irrelevant * 16)
+           | (f.undocumented_1 * 32)
+           | (f.undocumented_2 * 64)
+           | (f.undocumented_3 * 128))
+    print("|".join([layer.name, layer.kind, "%02x" % raw]))
+"#;
+
 #[test]
 fn psd_tools_reads_an_authored_shape_layer() {
     if !psd_tools_available() {
@@ -132,6 +154,7 @@ fn psd_tools_reads_an_authored_shape_layer() {
     let path = std::env::temp_dir().join(format!("pictura-shape-{}.psd", std::process::id()));
     std::fs::write(&path, bytes).expect("write temp PSD");
     let (stdout, lines) = read_with_psd_tools(&path);
+    let (kind_stdout, kind_lines) = run_psd_tools(AUTHORED_SCRIPT, &path);
     let _ = std::fs::remove_file(&path);
 
     assert_eq!(
@@ -147,6 +170,16 @@ fn psd_tools_reads_an_authored_shape_layer() {
         ]],
         "one 4x5 rectangle at (1,2): {stdout}"
     );
+    let shape = kind_lines
+        .iter()
+        .find(|fields| {
+            fields
+                .first()
+                .is_some_and(|name| name.as_str() == "Rectangle 1")
+        })
+        .unwrap_or_else(|| panic!("no authored shape row in:\n{kind_stdout}"));
+    assert_eq!(shape[1], "shape");
+    assert_eq!(shape[2], "18", "flags 0x18: {kind_stdout}");
 }
 
 const VOGK_SCRIPT: &str = r#"

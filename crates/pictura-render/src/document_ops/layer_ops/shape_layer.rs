@@ -31,6 +31,7 @@ pub fn add_shape_layer(
     let created = add_solid_fill(doc, selection_path, rgba);
     if let Some(layer) = resolve_path_mut(doc, &created) {
         layer.name = name;
+        layer.pixel_data_irrelevant = true;
         set_layer_shape_paths(layer, std::slice::from_ref(outline), width, height);
         set_layer_live_shape(layer, live);
     }

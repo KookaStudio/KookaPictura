@@ -45,6 +45,7 @@ pub fn rasterize_fill_content(doc: &mut Document, path: &str) -> bool {
         _ => return false,
     }
     layer.adjustment = None;
+    layer.pixel_data_irrelevant = false;
     true
 }
 
@@ -106,6 +107,7 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     bake_from_composite(layer, &rendered);
     layer.adjustment = None;
     layer.vector_mask = None;
+    layer.pixel_data_irrelevant = false;
     layer.extra_blocks.retain(|block| {
         let key = block.key.as_slice();
         key != b"vmsk" && key != b"vogk" && key != b"lfx2" && key != b"lrFX"
