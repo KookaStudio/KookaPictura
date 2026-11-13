@@ -8,8 +8,11 @@
 
 #include "api/document_api.h"
 #include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QLocale>
 #include <QtWidgets/QMessageBox>
 
@@ -132,7 +135,7 @@ int PicturaMainWindow::recoverOrphans()
 {
     const QString own = recovery_ ? recovery_->sessionDir() : QString();
     int recovered = 0;
-    QStringList failed;
+    QStringList failures;
     struct RecoveredDocument {
         QString session;
         QString snapshot;
@@ -140,18 +143,38 @@ int PicturaMainWindow::recoverOrphans()
         PictureView* view = nullptr;
     };
     QList<RecoveredDocument> orphanCopies;
+    // Sessions left exactly as they are: a failed snapshot could not be moved
+    // out, or a recovered copy has no new snapshot yet.
     QSet<QString> keep;
+    // Sessions whose directory stays for a document refused for memory; the
+    // recovered documents' files still go.
+    QSet<QString> retained;
     const QList<OrphanSession> orphans = RecoveryStore::orphans(own);
     for (const OrphanSession& session : orphans) {
-        bool quarantineFailed = false;
         for (const RecoverableDocument& doc : session.documents) {
             auto* view = new PictureView(this);
             applyColorSettings(view);
             if (!recovery_open(*view, doc.snapshot)) {
                 delete view;
-                failed.append(doc.name);
-                if (!RecoveryStore::quarantine(session.dir, doc)) {
-                    quarantineFailed = true;
+                if (open_refused_for_memory()) {
+                    // Memory may be free next time: keep it to be offered again.
+                    retained.insert(session.dir);
+                    failures.append(tr("%1: not enough memory to open it. Its snapshot is kept "
+                                       "at %2 and will be offered again at the next launch.")
+                                        .arg(doc.name, QDir::toNativeSeparators(doc.snapshot)));
+                    continue;
+                }
+                const QString quarantined = RecoveryStore::quarantineRoot() + QLatin1Char('/')
+                                            + QFileInfo(session.dir).fileName();
+                if (RecoveryStore::quarantine(session.dir, doc)) {
+                    failures.append(tr("%1: the snapshot could not be read. It was moved to %2.")
+                                        .arg(doc.name, QDir::toNativeSeparators(quarantined)));
+                } else {
+                    // The failed snapshot could not be moved out; keep the whole
+                    // session so neither it nor the recovered copies are lost.
+                    keep.insert(session.dir);
+                    failures.append(tr("%1: the snapshot could not be read. It is kept at %2.")
+                                        .arg(doc.name, QDir::toNativeSeparators(doc.snapshot)));
                 }
                 continue;
             }
@@ -166,11 +189,6 @@ int PicturaMainWindow::recoverOrphans()
                  session.dir + QLatin1Char('/')
                      + QFileInfo(doc.snapshot).completeBaseName() + QStringLiteral(".json"),
                  view});
-        }
-        if (quarantineFailed) {
-            // The failed snapshot could not be moved out; keep the whole session
-            // so neither it nor the recovered copies are lost.
-            keep.insert(session.dir);
         }
     }
     // Snapshot the recovered documents into this session before the orphaned
@@ -189,21 +207,28 @@ int PicturaMainWindow::recoverOrphans()
             keep.insert(doc.session);
         }
     }
-    const auto kept = [&keep](const QString& dir) { return keep.contains(dir); };
     for (const RecoveredDocument& doc : orphanCopies) {
-        if (kept(doc.session)) {
+        if (keep.contains(doc.session)) {
             continue;
         }
         QFile::remove(doc.snapshot);
         QFile::remove(doc.manifest);
     }
     for (const OrphanSession& session : orphans) {
-        if (!kept(session.dir)) {
+        if (!keep.contains(session.dir) && !retained.contains(session.dir)) {
             RecoveryStore::discard(session.dir);
         }
     }
-    if (!failed.isEmpty()) {
-        statusBar()->showMessage(tr("Could not recover: %1").arg(failed.join(QStringLiteral(", "))));
+    if (!failures.isEmpty()) {
+        // Window-modal without a nested event loop, so it neither blocks the
+        // caller nor outlives the window.
+        auto* box = new QMessageBox(QMessageBox::Warning, tr("Recover Documents"),
+                                    tr("Some documents could not be recovered."),
+                                    QMessageBox::Ok, this);
+        box->setObjectName(QStringLiteral("recoveryFailures"));
+        box->setAttribute(Qt::WA_DeleteOnClose);
+        box->setInformativeText(failures.join(QLatin1Char('\n')));
+        box->open();
     }
     return recovered;
 }

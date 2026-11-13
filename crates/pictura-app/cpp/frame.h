@@ -281,7 +281,9 @@ public:
     // them, discard them, or keep them for the next launch.
     void offerRecovery();
     // Reopen every orphaned document as an unsaved "-Recovered" tab and discard
-    // the orphaned sessions; returns how many reopened.
+    // the orphaned sessions. A document refused for memory stays in its session
+    // for the next launch, an unreadable one is quarantined, and either opens
+    // the "recoveryFailures" dialog; returns how many reopened.
     int recoverOrphans();
     // The autosave tick: snapshot each document with unsaved changes made since
     // its last snapshot, and drop the snapshot of each document now saved.
