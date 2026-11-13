@@ -44,7 +44,9 @@ pub mod ffi {
         /// `Image ▸ Image Rotation ▸ Arbitrary`: rotate the document about its
         /// centre by `angle_deg` degrees clockwise, recomposite, and record one
         /// "Rotate" state. False for a non-finite or zero angle, an out-of-range
-        /// angle, or without a document.
+        /// angle, without a document, or when its memory gate refuses it
+        /// (#1294). Armed by `document_job_arm`, a large document's rotation
+        /// runs as a cancellable job.
         fn rotate_document_arbitrary(view: Pin<&mut PictureView>, angle_deg: f64) -> bool;
     }
 }

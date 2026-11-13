@@ -26,6 +26,17 @@ QString scratchRefusalMessage(const QString& action)
         .arg(action);
 }
 
+QString commitRefusalMessage(const QString& action)
+{
+    if (edit_refused_for_scratch_full()) {
+        return QCoreApplication::translate("pictura",
+                                           "Could not %1: the scratch disks are full. Free space "
+                                           "on the scratch disks, then try again.")
+            .arg(action);
+    }
+    return memoryRefusalMessage(action);
+}
+
 namespace {
 
 QMainWindow* mainWindowOf(QWidget* within)
@@ -52,6 +63,17 @@ bool reportMemoryRefusal(QWidget* within, const QString& action)
     if (QMainWindow* main = mainWindowOf(within)) {
         main->statusBar()->showMessage(
             scratch ? scratchRefusalMessage(action) : memoryRefusalMessage(action), 6000);
+    }
+    return true;
+}
+
+bool reportCommitRefusal(QWidget* within, const QString& action)
+{
+    if (!edit_refused_for_memory()) {
+        return false;
+    }
+    if (QMainWindow* main = mainWindowOf(within)) {
+        main->statusBar()->showMessage(commitRefusalMessage(action), 6000);
     }
     return true;
 }

@@ -124,6 +124,11 @@ const QHash<QString, QStringList>& runnableCommands()
          {QStringLiteral("width"), QStringLiteral("height"), QStringLiteral("anchor"),
           QStringLiteral("color")}},
         {QStringLiteral("image.rotate.arbitrary"), {QStringLiteral("angle")}},
+        {QStringLiteral("image.rotate90cw"), {}},
+        {QStringLiteral("image.rotate90ccw"), {}},
+        {QStringLiteral("image.rotate180"), {}},
+        {QStringLiteral("image.flipHorizontal"), {}},
+        {QStringLiteral("image.flipVertical"), {}},
         {QStringLiteral("edit.fill"),
          {QStringLiteral("color"), QStringLiteral("mode"), QStringLiteral("opacity"),
           QStringLiteral("preserveTransparency")}},
@@ -138,8 +143,8 @@ const QHash<QString, QStringList>& runnableCommands()
 }
 
 // The size `image.image.size` or `image.canvas.size` would make, mirroring the
-// Image Size executor's constrained side, within ImageBudget. Image Size is
-// gated as a spilling commit (#1293); Canvas Size still allocates densely.
+// Image Size executor's constrained side, within ImageBudget. Both are gated as
+// spilling commits (#1293, #1294).
 bool resizeFitsBudget(PictureView& view, const QString& id, const QJsonObject& values)
 {
     int width = values.value(QStringLiteral("width")).toInt();
@@ -152,7 +157,9 @@ bool resizeFitsBudget(PictureView& view, const QString& id, const QJsonObject& v
     if (id == QStringLiteral("image.image.size")) {
         return image_size_fits_budget(view, width, height);
     }
-    return document_resize_budget_allows(width, height, document_api::documentDepthBits(view));
+    return canvas_size_fits_budget(
+        view, values.value(QStringLiteral("anchor")).toString(QStringLiteral("center")), width,
+        height);
 }
 
 } // namespace

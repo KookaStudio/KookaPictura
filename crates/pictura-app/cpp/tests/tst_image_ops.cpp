@@ -4,6 +4,7 @@
 #include <QtTest/QtTest>
 
 #include "canvas_size_dialog.h"
+#include "memory_refusal.h"
 #include "commands.h"
 #include "frame.h"
 #include "image_size_dialog.h"
@@ -19,10 +20,12 @@
 
 #include <QtCore/QStringList>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QTimer>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 
 class ImageOpsTest : public QObject {
@@ -44,6 +47,9 @@ private slots:
     void imageSizeRefusesASideOverTheLimit();
     void imageSizeNamesFullScratchDisks();
     void canvasSizeGrowsAroundTheAnchor();
+    void canvasSizeRefusalNamesMemory();
+    void canvasSizeNamesFullScratchDisks();
+    void canvasSizeRefusesASideOverTheLimit();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -423,6 +429,110 @@ void ImageOpsTest::canvasSizeGrowsAroundTheAnchor()
 
 // Image Size refuses a target that does not fit the document budget, and a
 // resolution-only change is still allowed (#1156).
+namespace {
+
+// Open a `width` × `height` opaque white PNG from `dir`, so it has a
+// Background as an opened image does; the view, or null.
+pictura::PictureView* openOpaque(pictura::PicturaMainWindow& frame, const QTemporaryDir& dir,
+                                 int width, int height)
+{
+    QImage image(width, height, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    const QString path = dir.filePath(QStringLiteral("opaque.png"));
+    if (!image.save(path) || !frame.openDocumentAtPath(path)) {
+        return nullptr;
+    }
+    QCoreApplication::processEvents();
+    return frame.activeView();
+}
+
+} // namespace
+
+// [ocg_canvas_refused] Canvas Size spills to the scratch disks (#1294), so a
+// 30000² target is refused only on a host with 4 MiB of room, under one
+// 30000-wide strip, and no scratch space.
+void ImageOpsTest::canvasSizeRefusalNamesMemory()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Canvas"), 40, 20, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const int history = view->history_count();
+    pinHost(260 * kMiB, 0);
+
+    QTimer answer;
+    answer.setInterval(20);
+    connect(&answer, &QTimer::timeout, this, [&] {
+        auto* dialog = frame.findChild<pictura::CanvasSizeDialog*>();
+        if (!dialog || !dialog->isVisible()) {
+            return;
+        }
+        auto* relative = qobject_cast<QCheckBox*>(
+            dialog->controlForTest(QStringLiteral("canvasSizeRelative")));
+        auto* width = qobject_cast<QDoubleSpinBox*>(
+            dialog->controlForTest(QStringLiteral("canvasSizeWidth")));
+        auto* height = qobject_cast<QDoubleSpinBox*>(
+            dialog->controlForTest(QStringLiteral("canvasSizeHeight")));
+        if (relative && width && height) {
+            relative->setChecked(false);
+            width->setValue(30000);
+            height->setValue(30000);
+        }
+        dialog->accept();
+    });
+    answer.start();
+    QVERIFY(frame.registry()->dispatch(QStringLiteral("image.canvas.size")));
+    answer.stop();
+
+    QCOMPARE(view->document_width(), 40);
+    QCOMPARE(view->document_height(), 20);
+    QCOMPARE(view->history_count(), history);
+    const QString message = frame.statusBar()->currentMessage();
+    QVERIFY2(message.contains(QStringLiteral("resize the canvas")), qPrintable(message));
+    QVERIFY2(message.contains(QStringLiteral("memory"), Qt::CaseInsensitive), qPrintable(message));
+    frame.closeDocument(doc, false);
+}
+
+// [ocg_scratch_message] The working set fits 1.75 GiB of room; the extended
+// Background's 30000² planes do not, with no scratch space.
+void ImageOpsTest::canvasSizeNamesFullScratchDisks()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::PictureView* view = openOpaque(frame, dir, 40, 20);
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    pinHost(2048 * kMiB, 0);
+
+    QVERIFY(!pictura::canvas_size_fits_budget(*view, QStringLiteral("center"), 30000, 30000));
+    QVERIFY(pictura::edit_refused_for_scratch_full());
+    const QString message = pictura::commitRefusalMessage(QStringLiteral("resize the canvas"));
+    QVERIFY(message.contains(QStringLiteral("resize the canvas")));
+    QVERIFY(message.contains(QStringLiteral("scratch disks"), Qt::CaseInsensitive));
+    frame.closeDocument(doc, false);
+}
+
+// [rs_canvas_side_limit]
+void ImageOpsTest::canvasSizeRefusesASideOverTheLimit()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("CanvasSide"), 40, 20, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    pinHost(64 * 1024 * kMiB, 64 * 1024 * kMiB);
+
+    const QString center = QStringLiteral("center");
+    QVERIFY(pictura::canvas_size_fits_budget(*view, center, 30000, 10));
+    QVERIFY(!pictura::canvas_size_fits_budget(*view, center, 30001, 10));
+    QVERIFY(!pictura::canvas_size_fits_budget(*view, center, 10, 30001));
+    frame.closeDocument(doc, false);
+}
+
 void ImageOpsTest::imageSizeRefusesAnOverBudgetTarget()
 {
     pictura::PicturaMainWindow& frame = *window_;

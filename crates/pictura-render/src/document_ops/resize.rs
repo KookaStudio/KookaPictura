@@ -177,12 +177,27 @@ fn resampled_rows(doc: &mut pictura_core::Document, sx: f64, sy: f64, to: (u32, 
 pub fn resized_plane_bytes(doc: &pictura_core::Document, width: u32, height: u32) -> (u64, u64) {
     let sx = width as f64 / f64::from(doc.width.max(1));
     let sy = height as f64 / f64::from(doc.height.max(1));
+    mapped_plane_bytes(doc, (width, height), |r| {
+        (r.width() > 0 && r.height() > 0).then(|| scaled_dims(r.width(), r.height(), sx, sy))
+    })
+}
+
+/// The bytes a whole-document geometry command writes (#1293, #1294): every
+/// alpha channel and retained document-store plane at `canvas`, and every
+/// layer channel, mask and layer-store plane at `layer_dims` of its rect
+/// (`None` when it is not rewritten), each at its sample width; and the widest
+/// plane in samples.
+pub(crate) fn mapped_plane_bytes(
+    doc: &pictura_core::Document,
+    canvas: (u32, u32),
+    layer_dims: impl Fn(pictura_core::PsdRect) -> Option<(u32, u32)>,
+) -> (u64, u64) {
     let (mut bytes, mut widest) = (0u64, 0u64);
     let mut add = |(w, h): (u32, u32), planes: usize, sample: u64| {
         bytes += planes as u64 * u64::from(w) * u64::from(h) * sample;
         widest = widest.max(u64::from(w));
     };
-    add((width, height), doc.channels.len(), 1);
+    add(canvas, doc.channels.len(), 1);
     if let Some(store) = doc
         .source_planes
         .as_ref()
@@ -190,17 +205,14 @@ pub fn resized_plane_bytes(doc: &pictura_core::Document, width: u32, height: u32
     {
         let plane = doc.width as usize * doc.height as usize;
         let planes = store.samples.len() / plane.max(1);
-        add((width, height), planes, sample_bytes(&store.samples));
+        add(canvas, planes, sample_bytes(&store.samples));
     }
-    let scaled = |r: pictura_core::PsdRect| {
-        (r.width() > 0 && r.height() > 0).then(|| scaled_dims(r.width(), r.height(), sx, sy))
-    };
     walk(&doc.layers, &mut |layer| {
-        if let Some(to) = scaled(layer.rect) {
+        if let Some(to) = layer_dims(layer.rect) {
             add(to, layer.channels.len(), 1);
         }
         let mask = layer.mask.as_ref().filter(|m| m.data.is_some());
-        if let Some(to) = mask.and_then(|m| scaled(m.rect)) {
+        if let Some(to) = mask.and_then(|m| layer_dims(m.rect)) {
             add(to, 1, 1);
         }
         let stores = layer.source_channels.iter().flat_map(|s| &s.planes);
@@ -209,9 +221,9 @@ pub fn resized_plane_bytes(doc: &pictura_core::Document, width: u32, height: u32
                 (Some(mask), -2) => mask.rect,
                 _ => layer.rect,
             };
-            if let Some(to) = scaled(rect) {
-                let area = (rect.width() * rect.height()) as usize;
-                add(to, samples.len() / area, sample_bytes(samples));
+            if let Some(to) = layer_dims(rect) {
+                let area = (rect.width().max(0) * rect.height().max(0)) as usize;
+                add(to, samples.len() / area.max(1), sample_bytes(samples));
             }
         }
     });

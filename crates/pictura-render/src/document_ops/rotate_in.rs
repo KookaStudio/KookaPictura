@@ -7,10 +7,13 @@
 //! document is translated so the box's top-left is the origin. Sampling is the
 //! same bilinear inverse map and clamp-to-edge rule as
 //! `pictura_ops::rotate_in`, over the shared [`pictura_core::Sample`] domain.
+//! Every plane is resampled into spillable tiles a strip at a time (#1294); the
+//! dense inverse map stays as the tiled one's oracle.
 
-use pictura_core::{Document, PsdRect, Sample, Samples, SourceChannels, SourcePlanes};
+use pictura_core::memory::MemoryError;
+use pictura_core::{Document, Plane, PsdRect, Sample, Samples, SourceChannels, TileSample};
 
-use super::{for_each_layer, materialize_merged_composite, sync_vector_mask_block};
+use super::{for_each_layer, geometry_tiled, materialize_merged_composite, sync_vector_mask_block};
 
 /// The largest accepted magnitude, matching `pictura_ops::rotate_in`.
 const MAX_ANGLE: f64 = 359.99;
@@ -87,9 +90,17 @@ fn rotated_rect(rect: PsdRect, rot: &Rotation) -> PsdRect {
     }
 }
 
-/// Bilinear sample of one plane at plane-local `(x, y)` (pixel centres at
-/// `+0.5`); outside the source rectangle the sample is the zero of the domain.
-fn sample_plane<T: Sample + Copy>(src: &[T], sw: usize, sh: usize, x: f64, y: f64) -> T {
+/// Bilinear sample of a `sw×sh` plane at plane-local `(x, y)` (pixel centres
+/// at `+0.5`), reading each tap's unit value through `at(px, py)`; outside the
+/// source rectangle the sample is the zero of the domain. The dense and the
+/// tiled resamplers differ only in `at`, so their output is byte-identical.
+fn sample_with<T: Sample>(
+    sw: usize,
+    sh: usize,
+    x: f64,
+    y: f64,
+    at: impl Fn(usize, usize) -> f64,
+) -> T {
     if x < 0.0 || y < 0.0 || x > sw as f64 || y > sh as f64 {
         return T::from_unit(0.0);
     }
@@ -105,13 +116,14 @@ fn sample_plane<T: Sample + Copy>(src: &[T], sw: usize, sh: usize, x: f64, y: f6
     let y0 = y0f.clamp(0.0, max_y) as usize;
     let x1 = (x0f + 1.0).clamp(0.0, max_x) as usize;
     let y1 = (y0f + 1.0).clamp(0.0, max_y) as usize;
-    let at = |px: usize, py: usize| src[py * sw + px].to_unit();
     let top = at(x0, y0) * (1.0 - fx) + at(x1, y0) * fx;
     let bottom = at(x0, y1) * (1.0 - fx) + at(x1, y1) * fx;
     T::from_unit(top * (1.0 - fy) + bottom * fy)
 }
 
-/// Resample a native-plane slice (`sw×sh` at source `rect`) into `dest`.
+/// The dense inverse map of one plane (`sw×sh` at source `rect`) into `dest`,
+/// kept as [`rotate_tiled`]'s oracle.
+#[cfg(test)]
 fn resample_samples<T: Sample + Copy>(
     src: &[T],
     sw: usize,
@@ -128,27 +140,102 @@ fn resample_samples<T: Sample + Copy>(
             let qx = dest.left as f64 + xx as f64 + 0.5;
             let qy = dest.top as f64 + yy as f64 + 0.5;
             let (px, py) = rot.inverse(qx, qy);
-            out.push(sample_plane(
-                src,
+            out.push(sample_with(
                 sw,
                 sh,
                 px - src_rect.left as f64,
                 py - src_rect.top as f64,
+                |ix, iy| src[iy * sw + ix].to_unit(),
             ));
         }
     }
     out
 }
 
-fn resample_plane_u8(data: &[u8], src_rect: PsdRect, dest: PsdRect, rot: &Rotation) -> Vec<u8> {
-    resample_samples(
-        data,
-        src_rect.width().max(0) as usize,
-        src_rect.height().max(0) as usize,
-        src_rect,
-        dest,
-        rot,
-    )
+/// The inverse map of `channels` stacked planes covering `src_rect` into
+/// `dest`, built into spillable tiles (#1294). A block reads the box its four
+/// corner pixels map back to, padded so rounding at interior pixels stays
+/// inside it, and clamped to the source.
+fn rotate_tiled<T: TileSample + Sample>(
+    src: &Plane<T>,
+    src_rect: PsdRect,
+    dest: PsdRect,
+    channels: usize,
+    rot: &Rotation,
+) -> Result<Plane<T>, MemoryError> {
+    let (sw, sh) = dims(src_rect);
+    let (dw, dh) = dims(dest);
+    if sw == 0 || sh == 0 {
+        return Ok(if dw * dh == 0 {
+            Plane::default()
+        } else {
+            Plane::filled(dw, dh, channels, T::from_unit(0.0))
+        });
+    }
+    let src = geometry_tiled::whole(src, sw * sh * channels, T::default());
+    let src = src.as_ref();
+    let (left, top) = (src_rect.left as f64, src_rect.top as f64);
+    let source = |xx: usize, yy: usize| {
+        let qx = dest.left as f64 + xx as f64 + 0.5;
+        let qy = dest.top as f64 + yy as f64 + 0.5;
+        let (px, py) = rot.inverse(qx, qy);
+        (px - left, py - top)
+    };
+    geometry_tiled::build((dw, dh), channels, |channel, b, out, stride, window| {
+        let (mut lo_x, mut lo_y) = (f64::INFINITY, f64::INFINITY);
+        let (mut hi_x, mut hi_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for (xx, yy) in [
+            (b.x, b.y),
+            (b.x + b.w - 1, b.y),
+            (b.x, b.y + b.h - 1),
+            (b.x + b.w - 1, b.y + b.h - 1),
+        ] {
+            let (x, y) = source(xx, yy);
+            (lo_x, hi_x) = (lo_x.min(x), hi_x.max(x));
+            (lo_y, hi_y) = (lo_y.min(y), hi_y.max(y));
+        }
+        // Taps sit at floor(c − 0.5) and one past it; two more each side
+        // absorb the corners' rounding against an interior pixel's.
+        let span = |lo: f64, hi: f64, n: usize| {
+            let max = (n - 1) as f64;
+            let first = ((lo - 0.5).floor() - 2.0).clamp(0.0, max) as usize;
+            let last = ((hi - 0.5).floor() + 3.0).clamp(0.0, max) as usize;
+            first..last.max(first) + 1
+        };
+        let xs = span(lo_x, hi_x, sw);
+        let ys = span(lo_y, hi_y, sh);
+        let (x0, y0) = (xs.start, ys.start);
+        let ww = geometry_tiled::read_window(src, (sw, sh), channel, xs, ys, window);
+        for r in 0..b.h {
+            for (c, o) in out[r * stride..][..b.w].iter_mut().enumerate() {
+                let (x, y) = source(b.x + c, b.y + r);
+                *o = sample_with(sw, sh, x, y, |ix, iy| {
+                    window[(iy - y0) * ww + ix - x0].to_unit()
+                });
+            }
+        }
+    })
+}
+
+fn dims(rect: PsdRect) -> (usize, usize) {
+    (rect.width().max(0) as usize, rect.height().max(0) as usize)
+}
+
+/// Every stacked plane of a native store covering `src_rect` through
+/// [`rotate_tiled`]; a trailing partial plane is dropped.
+fn rotate_samples(
+    samples: &Samples,
+    src_rect: PsdRect,
+    dest: PsdRect,
+    rot: &Rotation,
+) -> Result<Samples, MemoryError> {
+    let (sw, sh) = dims(src_rect);
+    let channels = samples.len() / (sw * sh).max(1);
+    Ok(match samples {
+        Samples::U8(p) => Samples::U8(rotate_tiled(p, src_rect, dest, channels, rot)?),
+        Samples::U16(p) => Samples::U16(rotate_tiled(p, src_rect, dest, channels, rot)?),
+        Samples::F32(p) => Samples::F32(rotate_tiled(p, src_rect, dest, channels, rot)?),
+    })
 }
 
 /// Resample each plane of a native store that covers `layer_rect` (mask `-2`
@@ -160,33 +247,20 @@ fn resample_store(
     mask_rect: Option<PsdRect>,
     mask_dest: Option<PsdRect>,
     rot: &Rotation,
-) -> SourceChannels {
-    let planes = store
-        .planes
-        .iter()
-        .filter_map(|(id, samples)| {
-            let (src_rect, dest) = if *id == -2 {
-                (mask_rect?, mask_dest?)
-            } else {
-                (layer_rect, layer_dest)
-            };
-            let sw = src_rect.width().max(0) as usize;
-            let sh = src_rect.height().max(0) as usize;
-            let out = match samples {
-                Samples::U8(v) => {
-                    Samples::U8(resample_samples(v, sw, sh, src_rect, dest, rot).into())
-                }
-                Samples::U16(v) => {
-                    Samples::U16(resample_samples(v, sw, sh, src_rect, dest, rot).into())
-                }
-                Samples::F32(v) => {
-                    Samples::F32(resample_samples(v, sw, sh, src_rect, dest, rot).into())
-                }
-            };
-            Some((*id, out))
-        })
-        .collect();
-    SourceChannels::new(store.depth, layer_dest, planes)
+) -> Result<SourceChannels, MemoryError> {
+    let mut planes = Vec::with_capacity(store.planes.len());
+    for (id, samples) in &store.planes {
+        let (src_rect, dest) = if *id == -2 {
+            match (mask_rect, mask_dest) {
+                (Some(src), Some(dest)) => (src, dest),
+                _ => continue,
+            }
+        } else {
+            (layer_rect, layer_dest)
+        };
+        planes.push((*id, rotate_samples(samples, src_rect, dest, rot)?));
+    }
+    Ok(SourceChannels::new(store.depth, layer_dest, planes))
 }
 
 /// Rotate every subpath vertex about the pivot, in the new frame.
@@ -305,7 +379,11 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
         }
     }
 
-    materialize_merged_composite(doc);
+    rotate_frame(doc, angle_deg, pivot).is_ok()
+}
+
+/// The document's rotation and its new canvas.
+fn rotation(width: u32, height: u32, angle_deg: f64, pivot: (f64, f64)) -> (Rotation, u32, u32) {
     let Frame {
         sin,
         cos,
@@ -313,7 +391,7 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
         oy,
         new_w,
         new_h,
-    } = frame_geometry(w, h, angle_deg, pivot);
+    } = frame_geometry(width as f64, height as f64, angle_deg, pivot);
     let rot = Rotation {
         pivot_x: pivot.0,
         pivot_y: pivot.1,
@@ -322,122 +400,165 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
         ox,
         oy,
     };
-
-    for_each_layer(&mut doc.layers, &mut |layer| {
-        let old_rect = layer.rect;
-        let new_rect = rotated_rect(old_rect, &rot);
-        let (mask_src, mask_dest) = match &layer.mask {
-            Some(mask) => (Some(mask.rect), Some(rotated_rect(mask.rect, &rot))),
-            None => (None, None),
-        };
-
-        for channel in &mut layer.channels {
-            let out = resample_plane_u8(&channel.data, old_rect, new_rect, &rot);
-            channel.data = out.into();
-        }
-        if let Some(store) = layer.source_channels.take() {
-            layer.source_channels = Some(resample_store(
-                &store, old_rect, new_rect, mask_src, mask_dest, &rot,
-            ));
-        }
-        layer.rect = new_rect;
-        // ponytail: an unmodeled raw on-disk stream cannot be resampled, so it
-        // drops (matching the exact orientation remap).
-        layer.raw_channels.clear();
-
-        if let Some(mask) = &mut layer.mask {
-            let dest = rotated_rect(mask.rect, &rot);
-            if let Some(data) = &mut mask.data {
-                *data = resample_plane_u8(data, mask.rect, dest, &rot).into();
-            }
-            mask.rect = dest;
-        }
-        if let Some(vector) = &mut layer.vector_mask {
-            rotate_vector_mask(vector, &rot);
-        }
-        // Keep the authoritative `vmsk` block in sync with the rotated view so
-        // a save does not re-emit the pre-rotation outline.
-        sync_vector_mask_block(layer, new_w, new_h);
-    });
-
-    for channel in &mut doc.channels {
-        let src = PsdRect {
-            top: 0,
-            left: 0,
-            bottom: doc.height as i32,
-            right: doc.width as i32,
-        };
-        let dest = PsdRect {
-            top: 0,
-            left: 0,
-            bottom: new_h as i32,
-            right: new_w as i32,
-        };
-        channel.data = resample_plane_u8(&channel.data, src, dest, &rot).into();
-    }
-    if let Some(store) = &doc.source_planes {
-        doc.source_planes = Some(resample_doc_store(
-            store, doc.width, doc.height, new_w, new_h, &rot,
-        ));
-    }
-
-    doc.width = new_w;
-    doc.height = new_h;
-    true
+    (rot, new_w, new_h)
 }
 
-fn resample_doc_store(
-    store: &SourcePlanes,
-    old_w: u32,
-    old_h: u32,
+/// Resample every plane into spillable tiles (#1294) on a copy that shares the
+/// document's planes, so a refused strip leaves the document unchanged.
+fn rotate_frame(doc: &mut Document, angle_deg: f64, pivot: (f64, f64)) -> Result<(), MemoryError> {
+    let mut next = doc.clone();
+    materialize_merged_composite(&mut next);
+    let (rot, new_w, new_h) = rotation(next.width, next.height, angle_deg, pivot);
+    if let Some(job) = pictura_core::job::current() {
+        job.begin_stage(rotated_rows(&mut next, &rot, new_h));
+    }
+
+    let mut refused = None;
+    for_each_layer(&mut next.layers, &mut |layer| {
+        if refused.is_none() {
+            refused = rotate_layer(layer, &rot, new_w, new_h).err();
+        }
+    });
+    if let Some(err) = refused {
+        return Err(err);
+    }
+
+    let src = canvas_rect(next.width, next.height);
+    let dest = canvas_rect(new_w, new_h);
+    for channel in &mut next.channels {
+        channel.data = rotate_tiled(&channel.data, src, dest, 1, &rot)?;
+    }
+    if let Some(store) = &mut next.source_planes {
+        // The depth-1 store is a packed plane, not a `width * height` one; it is
+        // only re-emitted for an unchanged flat Bitmap, so leave it stale.
+        if store.depth != pictura_core::BitDepth::One {
+            store.samples = rotate_samples(&store.samples, src, dest, &rot)?;
+            store.width = new_w;
+            store.height = new_h;
+        }
+    }
+
+    next.width = new_w;
+    next.height = new_h;
+    *doc = next;
+    Ok(())
+}
+
+fn rotate_layer(
+    layer: &mut pictura_core::Layer,
+    rot: &Rotation,
     new_w: u32,
     new_h: u32,
-    rot: &Rotation,
-) -> SourcePlanes {
-    let (sw, sh) = (old_w as usize, old_h as usize);
-    let plane = sw * sh;
-    let src_rect = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: old_h as i32,
-        right: old_w as i32,
+) -> Result<(), MemoryError> {
+    let old_rect = layer.rect;
+    let new_rect = rotated_rect(old_rect, rot);
+    let (mask_src, mask_dest) = match &layer.mask {
+        Some(mask) => (Some(mask.rect), Some(rotated_rect(mask.rect, rot))),
+        None => (None, None),
     };
-    let dest = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: new_h as i32,
-        right: new_w as i32,
-    };
-    // The store is a flat multi-plane buffer; resample each `sw*sh` plane.
-    let samples = match &store.samples {
-        Samples::U8(v) => {
-            let mut out = Vec::with_capacity(plane * (v.len() / plane.max(1)));
-            for chunk in v.chunks(plane.max(1)) {
-                out.extend(resample_samples(chunk, sw, sh, src_rect, dest, rot));
-            }
-            Samples::U8(out.into())
-        }
-        Samples::U16(v) => {
-            let mut out = Vec::with_capacity(plane * (v.len() / plane.max(1)));
-            for chunk in v.chunks(plane.max(1)) {
-                out.extend(resample_samples(chunk, sw, sh, src_rect, dest, rot));
-            }
-            Samples::U16(out.into())
-        }
-        Samples::F32(v) => {
-            let mut out = Vec::with_capacity(plane * (v.len() / plane.max(1)));
-            for chunk in v.chunks(plane.max(1)) {
-                out.extend(resample_samples(chunk, sw, sh, src_rect, dest, rot));
-            }
-            Samples::F32(out.into())
-        }
-    };
-    SourcePlanes {
-        depth: store.depth,
-        width: new_w,
-        height: new_h,
-        samples,
+
+    for channel in &mut layer.channels {
+        channel.data = rotate_tiled(&channel.data, old_rect, new_rect, 1, rot)?;
     }
+    if let Some(store) = layer.source_channels.take() {
+        layer.source_channels = Some(resample_store(
+            &store, old_rect, new_rect, mask_src, mask_dest, rot,
+        )?);
+    }
+    layer.rect = new_rect;
+    // ponytail: an unmodeled raw on-disk stream cannot be resampled, so it
+    // drops (matching the exact orientation remap).
+    layer.raw_channels.clear();
+
+    if let Some(mask) = &mut layer.mask {
+        let dest = rotated_rect(mask.rect, rot);
+        if let Some(data) = &mut mask.data {
+            *data = rotate_tiled(data, mask.rect, dest, 1, rot)?;
+        }
+        mask.rect = dest;
+    }
+    if let Some(vector) = &mut layer.vector_mask {
+        rotate_vector_mask(vector, rot);
+    }
+    // Keep the authoritative `vmsk` block in sync with the rotated view so
+    // a save does not re-emit the pre-rotation outline.
+    sync_vector_mask_block(layer, new_w, new_h);
+    Ok(())
+}
+
+fn canvas_rect(width: u32, height: u32) -> PsdRect {
+    PsdRect {
+        top: 0,
+        left: 0,
+        bottom: height as i32,
+        right: width as i32,
+    }
+}
+
+/// The output rows [`rotate_frame`] writes, which the tiled resampler reports
+/// as a job's progress.
+fn rotated_rows(doc: &mut Document, rot: &Rotation, new_h: u32) -> u64 {
+    let area = (doc.width as usize * doc.height as usize).max(1);
+    let store = doc
+        .source_planes
+        .as_ref()
+        .filter(|s| s.depth != pictura_core::BitDepth::One)
+        .map_or(0, |s| s.samples.len() / area);
+    let mut rows = (doc.channels.len() + store) as u64 * u64::from(new_h);
+    let mut count = |rect: PsdRect, planes: usize| {
+        let (w, h) = dims(rect);
+        if w * h > 0 {
+            rows += planes as u64 * dims(rotated_rect(rect, rot)).1 as u64;
+        }
+    };
+    for_each_layer(&mut doc.layers, &mut |layer| {
+        count(layer.rect, layer.channels.len());
+        if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
+            count(mask.rect, 1);
+        }
+        for (id, samples) in layer.source_channels.iter().flat_map(|s| &s.planes) {
+            let rect = match (&layer.mask, *id) {
+                (Some(mask), -2) => mask.rect,
+                (None, -2) => continue,
+                _ => layer.rect,
+            };
+            count(rect, samples.len() / (dims(rect).0 * dims(rect).1).max(1));
+        }
+    });
+    rows
+}
+
+/// What [`rotate_document_in`] about the canvas centre by `angle_deg` writes
+/// (#1294, the app's memory gate): every rotated plane's bytes, the widest of
+/// them in samples, and the new canvas. An exact quarter turn is an orientation.
+pub fn rotated_plane_bytes(doc: &Document, angle_deg: f64) -> (u64, u64, (u32, u32)) {
+    let pivot = (doc.width as f64 / 2.0, doc.height as f64 / 2.0);
+    let (rot, new_w, new_h) = rotation(doc.width, doc.height, angle_deg, pivot);
+    let canvas = (new_w, new_h);
+    let (bytes, widest) = super::resize::mapped_plane_bytes(doc, canvas, |rect| {
+        let (w, h) = dims(rect);
+        (w * h > 0).then(|| {
+            let (nw, nh) = dims(rotated_rect(rect, &rot));
+            (nw as u32, nh as u32)
+        })
+    });
+    (bytes, widest, canvas)
+}
+
+/// The dense inverse map of one plane of a `canvas` document rotated by
+/// `angle_deg` about `pivot`: `rotate_tiled`'s oracle.
+#[cfg(test)]
+pub(super) fn rotate_plane_dense<T: Sample + Copy>(
+    src: &[T],
+    src_rect: PsdRect,
+    dest: PsdRect,
+    canvas: (u32, u32),
+    angle_deg: f64,
+    pivot: (f64, f64),
+) -> Vec<T> {
+    let (rot, _, _) = rotation(canvas.0, canvas.1, angle_deg, pivot);
+    let (sw, sh) = dims(src_rect);
+    resample_samples(src, sw, sh, src_rect, dest, &rot)
 }
 
 #[cfg(test)]

@@ -5,44 +5,19 @@ use pictura_core::{
 use pictura_paint::{PaintMode, Rgba};
 use pictura_select::CombineMode;
 
+mod geometry_admit;
 pub(super) mod memory_gate;
 pub(super) mod memory_report;
 pub(super) mod safe_io;
+
+pub(in crate::cxxqt_object) use geometry_admit::{
+    canvas_size_admits, image_size_admits, orient_admits, rotate_admits,
+};
 
 /// Whether a `width` × `height` document at `bits` per channel fits the default
 /// [`pictura_codec::ImageBudget`].
 pub(in crate::cxxqt_object) fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool {
     document_fits(width, height, bits, &pictura_codec::ImageBudget::default())
-}
-
-/// Whether a resize to `width` × `height` at `bits` fits the memory available
-/// now. The default document budget never drops below one maximum allocation,
-/// so it cannot see a low-memory host; a resize allocates the target
-/// immediately and also respects the memory governor's room.
-pub(in crate::cxxqt_object) fn resize_budget_allows(width: i32, height: i32, bits: i32) -> bool {
-    document_fits(
-        width,
-        height,
-        bits,
-        &bounded_budget(
-            pictura_codec::ImageBudget::default(),
-            pictura_core::memory::governor().room(),
-        ),
-    )
-}
-
-/// Whether an Image Size of `doc` to `width` × `height` passes its gate
-/// (#1293): each side within `ImageBudget`'s limit, then its commit cost
-/// through [`memory_gate::admit_spilling`], which records a refusal. No plane
-/// is allocated whole, so the per-allocation cap does not apply.
-pub(in crate::cxxqt_object) fn image_size_admits(doc: &Document, width: i32, height: i32) -> bool {
-    memory_gate::clear();
-    let max = i64::from(pictura_codec::ImageBudget::default().max_dimension);
-    if width < 1 || height < 1 || i64::from(width) > max || i64::from(height) > max {
-        return false;
-    }
-    let cost = memory_gate::image_size_cost(doc, width as u32, height as u32);
-    memory_gate::admit_spilling(cost.working, cost.spillable)
 }
 
 /// `budget` with its document limit bounded by `room`, or unchanged without

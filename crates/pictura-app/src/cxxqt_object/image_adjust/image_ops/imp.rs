@@ -3,6 +3,7 @@ use super::*;
 use super::super::super::helpers_composite::buffer_to_rgba_bytes;
 use super::super::super::picture::picture;
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -109,25 +110,35 @@ pub(super) fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) -> bool {
+    crate::cxxqt_object::helpers::memory_gate::clear();
     if view.rust().modal_transform_blocks_edit() {
         return false;
     }
     if !angle_deg.is_finite() || angle_deg == 0.0 || !(-359.99..=359.99).contains(&angle_deg) {
         return false;
     }
-    let rotated = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.session.doc.as_mut() else {
-            return false;
-        };
-        let pivot = (doc.width as f64 / 2.0, doc.height as f64 / 2.0);
-        pictura_render::rotate_document_in(doc, angle_deg, pivot)
-    };
-    if rotated {
-        view.as_mut().rust_mut().session.clear_geometry_selection();
-        view.as_mut().edit("Rotate", |_| Edit::Full);
+    let admitted = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| crate::cxxqt_object::helpers::rotate_admits(doc, angle_deg));
+    if !admitted {
+        return false;
     }
-    rotated
+    // A large document's rotation runs as a cancellable job (#1294).
+    view.as_mut().document_op(
+        "Rotate",
+        JobBar::Counted,
+        move |doc| {
+            let pivot = (doc.width as f64 / 2.0, doc.height as f64 / 2.0);
+            pictura_render::rotate_document_in(doc, angle_deg, pivot).then(Outcome::default)
+        },
+        |rust, _| {
+            rust.session.clear_geometry_selection();
+            Edit::Full
+        },
+    )
 }
 
 pub(super) fn duplicate_name(view: &PictureView) -> QString {

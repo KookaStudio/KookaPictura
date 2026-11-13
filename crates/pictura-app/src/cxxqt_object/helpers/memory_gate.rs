@@ -246,21 +246,22 @@ pub(in crate::cxxqt_object) struct CommitCost {
     pub(in crate::cxxqt_object) spillable: u64,
 }
 
-/// The most one worker thread's source window holds in Image Size's tiled
-/// resampler: 1 Mpx of up to 32-bit samples (#1293).
-const RESIZE_WINDOW_BYTES: u64 = 4 << 20;
+/// The most one worker thread's source window holds in the tiled geometry
+/// commands: 1 Mpx of up to 32-bit samples in Image Size's resampler (#1293),
+/// more than a turn's or a rotation's block window (#1294).
+const WINDOW_BYTES: u64 = 4 << 20;
 
-/// What an Image Size to `width × height` holds (#1293): `working` is one
-/// source window per worker thread, one output strip of the widest plane at
-/// 32 bits, and the dense composite that a document whose composite is
-/// authoritative renders at the new size; `spillable` is every resampled
-/// plane, written as tiles the evictor may pack or spill.
-pub(in crate::cxxqt_object) fn image_size_cost(
+/// What a whole-document geometry command holds (#1293, #1294) given the
+/// `(bytes, widest)` of the planes it writes and its new `canvas`: `working` is
+/// one source window per worker thread, one output strip of the widest plane at
+/// 32 bits, and the dense composite of the new canvas when the document's
+/// composite is authoritative; `spillable` is every written plane, as tiles the
+/// evictor may pack or spill.
+pub(in crate::cxxqt_object) fn geometry_cost(
     doc: &Document,
-    width: u32,
-    height: u32,
+    (planes, widest): (u64, u64),
+    (width, height): (u32, u32),
 ) -> CommitCost {
-    let (planes, widest) = pictura_render::resized_plane_bytes(doc, width, height);
     let threads = rayon::current_num_threads() as u64;
     let composite = if doc.composite_is_authoritative() {
         refresh_bytes(PsdRect {
@@ -273,9 +274,52 @@ pub(in crate::cxxqt_object) fn image_size_cost(
         0
     };
     CommitCost {
-        working: threads * RESIZE_WINDOW_BYTES + 4 * TILE as u64 * widest + composite,
+        working: threads * WINDOW_BYTES + 4 * TILE as u64 * widest + composite,
         spillable: planes,
     }
+}
+
+/// What an Image Size to `width × height` holds (#1293): every resampled plane.
+pub(in crate::cxxqt_object) fn image_size_cost(
+    doc: &Document,
+    width: u32,
+    height: u32,
+) -> CommitCost {
+    let planes = pictura_render::resized_plane_bytes(doc, width, height);
+    geometry_cost(doc, planes, (width, height))
+}
+
+/// What a Canvas Size to `width × height` at `anchor` holds (#1294): the
+/// shifted alpha channels and document store, and the extended Background.
+pub(in crate::cxxqt_object) fn canvas_size_cost(
+    doc: &Document,
+    width: u32,
+    height: u32,
+    anchor: pictura_ops::Anchor,
+) -> CommitCost {
+    let planes = pictura_render::canvas_plane_bytes(doc, width, height, anchor);
+    geometry_cost(doc, planes, (width, height))
+}
+
+/// What a turn by `quarter_turns`, or a flip at 0, holds (#1294): every plane.
+pub(in crate::cxxqt_object) fn orient_cost(doc: &Document, quarter_turns: u8) -> CommitCost {
+    let planes = pictura_render::oriented_plane_bytes(doc, quarter_turns);
+    let canvas = if quarter_turns % 2 == 1 {
+        (doc.height, doc.width)
+    } else {
+        (doc.width, doc.height)
+    };
+    geometry_cost(doc, planes, canvas)
+}
+
+/// What an arbitrary Rotate by `angle_deg` about the canvas centre holds
+/// (#1294): every rotated plane, and its new canvas.
+pub(in crate::cxxqt_object) fn rotate_cost(
+    doc: &Document,
+    angle_deg: f64,
+) -> (CommitCost, (u32, u32)) {
+    let (bytes, widest, canvas) = pictura_render::rotated_plane_bytes(doc, angle_deg);
+    (geometry_cost(doc, (bytes, widest), canvas), canvas)
 }
 
 /// The refresh of `bounds` that stays resident (#1300): [`refresh_bytes`]
@@ -486,6 +530,79 @@ mod tests {
         set_available_memory_for_test(-1);
         set_scratch_available_for_test(-1);
         (admitted, spills, scratch_full)
+    }
+
+    /// A 17000² document with a Background and one full-canvas layer.
+    fn background_and_layer(side: u32) -> Document {
+        let mut doc = full_canvas(side);
+        let layer = doc.layers[0].clone();
+        let mut background = layer.clone();
+        background.background = true;
+        doc.layers = pictura_core::LayerStack::from_layers(vec![background, layer]);
+        doc
+    }
+
+    /// Gate each of the three canvas commands at 1.75 GiB of room and
+    /// `scratch` bytes of scratch: (admitted, expected to spill, scratch-full).
+    fn gate_large_canvas_commands(scratch: i64) -> Vec<(bool, bool, bool)> {
+        let doc = background_and_layer(17_000);
+        let costs = [
+            canvas_size_cost(&doc, 25_500, 25_500, pictura_ops::Anchor::Center),
+            orient_cost(&doc, 1),
+            rotate_cost(&doc, 15.0).0,
+        ];
+        set_available_memory_for_test(2048 * MIB);
+        set_scratch_available_for_test(scratch);
+        let gated = costs
+            .iter()
+            .map(|cost| {
+                clear();
+                let admitted = admit_spilling(cost.working, cost.spillable);
+                (
+                    admitted,
+                    expects_spill(cost),
+                    edit_refused_for_scratch_full(),
+                )
+            })
+            .collect();
+        set_available_memory_for_test(-1);
+        set_scratch_available_for_test(-1);
+        gated
+    }
+
+    // [ocg_gate_spills]
+    #[test]
+    fn large_canvas_commands_are_admitted_when_scratch_holds_them() {
+        let doc = background_and_layer(17_000);
+        let planes = doc.layers[0].channels.len() as u64;
+        let canvas = canvas_size_cost(&doc, 25_500, 25_500, pictura_ops::Anchor::Center);
+        assert_eq!(
+            canvas.spillable,
+            planes * 25_500 * 25_500,
+            "only the Background is rewritten"
+        );
+        assert_eq!(orient_cost(&doc, 1).spillable, 2 * planes * 17_000 * 17_000);
+        let (rotate, (w, h)) = rotate_cost(&doc, 15.0);
+        assert!(w > 17_000 && h > 17_000, "the canvas grows: {w}×{h}");
+        assert_eq!(rotate.spillable, 2 * planes * u64::from(w) * u64::from(h));
+        for (i, (admitted, spills, _)) in gate_large_canvas_commands(64 * 1024 * MIB)
+            .into_iter()
+            .enumerate()
+        {
+            assert!(admitted, "command {i}");
+            assert!(spills, "command {i}: the planes exceed the room");
+        }
+    }
+
+    // [ocg_gate_scratch_full]
+    #[test]
+    fn full_scratch_disks_refuse_large_canvas_commands() {
+        for (i, (admitted, _, scratch_full)) in
+            gate_large_canvas_commands(0).into_iter().enumerate()
+        {
+            assert!(!admitted, "command {i}");
+            assert!(scratch_full, "command {i}");
+        }
     }
 
     // [ocr_gate_spills]

@@ -45,7 +45,7 @@ fn image_size_counts_every_resampled_row() {
 #[test]
 fn rotate_and_flip_count_layers() {
     assert_eq!(progress_of(|doc| rotate_document(doc, 1).unwrap()), 999);
-    assert_eq!(progress_of(|doc| flip_document(doc, true)), 999);
+    assert_eq!(progress_of(|doc| flip_document(doc, true).unwrap()), 999);
 }
 
 // [lop_counted_progress]
@@ -86,7 +86,7 @@ fn a_cancelled_engine_stops_and_reports_cancelled() {
 #[test]
 fn engines_without_a_job_are_unchanged() {
     let mut doc = layered(48);
-    flip_document(&mut doc, false);
+    flip_document(&mut doc, false).unwrap();
     assert!(pictura_core::job::current().is_none());
     assert_eq!(doc.layers.len(), 3);
 }

@@ -402,6 +402,7 @@ fn a_solid_layer_warps_into_uniform_tiles() {
 // [ocw_output_spills]
 #[test]
 fn warped_tiles_spill_and_read_back() {
+    let _scratch = crate::test_support::scratch_guard();
     let dir = pictura_core::scratch::default_volume()
         .with_file_name("test-scratch")
         .join(format!("render-warp-{}", std::process::id()));

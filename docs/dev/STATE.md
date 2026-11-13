@@ -4,6 +4,40 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Canvas Size and Rotate Canvas out of core** (#1294, OpenSpec change
+  `canvas-geometry-out-of-core`, capability
+  `document/out-of-core-canvas-geometry`).
+  - **Driver.** `geometry_tiled::build` builds each output plane a strip of 256
+    rows at a time into a tiled plane (`Plane::build_tiled_strips`), in
+    parallel tasks of 64 rows walking blocks of 256 columns. Three kernels:
+    shift (Canvas Size's alpha channels and document store, and
+    `extend_background`), orient (the five exact turns and flips, layer
+    channels, masks and retained stores), and rotate (arbitrary angle; reads
+    the bounding box of the block's inverse-mapped corners through
+    `rotate_in::sample_with`, which the dense path shares). Output is
+    byte-identical to the dense paths, kept as `#[cfg(test)]` oracles
+    (`geometry_tiled_tests.rs`). Uniform tiles hold no allocation. Each
+    command works on a clone sharing the planes, so a strip refusal leaves the
+    document unchanged; `flip_document` and `extend_background` return
+    `Result`. Canvas Size still only moves layer rects.
+  - **Gate.** `memory_gate::geometry_cost` is shared by Image Size, Canvas
+    Size, the turns/flips and Rotate: `working` is 4 MiB a worker thread, one
+    32-bit strip of the widest plane, and the dense composite when
+    authoritative; `spillable` comes from `canvas_plane_bytes`,
+    `oriented_plane_bytes` and `rotated_plane_bytes`. `canvas_size_admits`,
+    `orient_admits`, `rotate_admits` gate the menus, replay and the control
+    server's `image.canvas.size` (through `canvas_size_fits_budget`). C++
+    `commitRefusalMessage` names memory or the scratch disks in the status bar.
+  - **Jobs and control.** Arbitrary Rotate is a counted `document_op` job
+    (progress in rows, cancellable). `run_command` accepts the five
+    orientation ids with no parameters.
+  - **M16–M18.** At 17000² with `--force` (this host had about 3 GB
+    available), all ok. Under `MemoryMax=2G`: Canvas Size 150 % 4.1 s, peak
+    1557 MiB (+75); Rotate 90° CW 4.5 s, 2033 MiB (+561); Rotate 15° 32.9 s,
+    2010 MiB (+513). Under `MemoryMax=4G`: 6.7 s, 1583 MiB (+116); 4.3 s,
+    2341 MiB (+903); 29.2 s, 2488 MiB (+1018). Before, none of the three was
+    gated and the turns could not complete under either limit.
+
 - **Image Size out of core** (#1293, OpenSpec change `image-size-out-of-core`,
   capability `document/out-of-core-image-size`).
   - **Resampler.** `resize_tiled::resize` builds a strip of 256 rows at a time
@@ -27,7 +61,7 @@ Snapshot for resuming after a context break. Update after each milestone.
     `ImageBudget`'s side limit and then calls `admit_spilling`. The dialog, the
     replay, `resize_image` and the control server's `image.image.size` use it
     through the `image_size_fits_budget` bridge; a scratch-full refusal has its
-    own message. Canvas Size keeps `document_resize_budget_allows` (#1294).
+    own message. Canvas Size now shares the cost (#1294, below).
   - **M15.** Image Size of a 17000² full-layer gradient to 150 %:
     at 17000² with `--force` (this host had about 2.8 GB available), under
     `MemoryMax=2G` it ran ok in 35 s, peaking at 1992 MiB (527 MiB above the

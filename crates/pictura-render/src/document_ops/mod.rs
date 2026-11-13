@@ -4,6 +4,7 @@
 mod canvas;
 mod crop;
 mod depth;
+mod geometry_tiled;
 mod layer_ops;
 mod lens_correction;
 mod matting;
@@ -20,7 +21,7 @@ mod slices;
 mod smart_filter_apply;
 mod smart_filters;
 
-pub use canvas::{extend_background, resize_canvas_document};
+pub use canvas::{canvas_plane_bytes, extend_background, resize_canvas_document};
 pub use crop::{
     crop_document, crop_document_grow, delete_cropped_pixels, translate_layer,
     translate_layer_active, translate_layer_index, translate_layer_path, translate_layer_rect,
@@ -88,13 +89,13 @@ pub use mode::{
     convert_mode_with_profiles, convert_to_bitmap, convert_to_indexed, document_bit_depth,
     document_color_mode, indexed_exact_available, save_view, BitmapMethod,
 };
-pub use orient::{flip_document, rotate_document};
+pub use orient::{flip_document, oriented_plane_bytes, rotate_document};
 pub use pictura_raw::{
     apply_pictura_raw, apply_pictura_raw_destructive, can_apply_pictura_raw_destructive,
     preview_pictura_raw,
 };
 pub use resize::{resize_document, resized_plane_bytes};
-pub use rotate_in::{rotate_document_in, rotate_document_in_offset};
+pub use rotate_in::{rotate_document_in, rotate_document_in_offset, rotated_plane_bytes};
 pub use slices::{add_slice, remove_slice, resolve_slices, set_slice, Slice};
 pub use smart_filter_apply::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
 pub use smart_filters::{
@@ -193,32 +194,6 @@ pub(crate) fn for_each_layer(
     }
 }
 
-/// [`for_each_layer`] under the job installed on this thread (#1278): one unit
-/// of progress per layer, and no further layer once the job is cancelled,
-/// whose result is then dropped.
-pub(crate) fn for_each_layer_job(
-    layers: &mut pictura_core::LayerStack,
-    f: &mut impl FnMut(&mut pictura_core::Layer),
-) {
-    let Some(job) = pictura_core::job::current() else {
-        return for_each_layer(layers, f);
-    };
-    job.begin_stage(layer_count(layers));
-    for_each_layer(layers, &mut |layer| {
-        if !job.cancelled() {
-            f(layer);
-            job.advance(1);
-        }
-    });
-}
-
-fn layer_count(layers: &pictura_core::LayerStack) -> u64 {
-    layers
-        .iter()
-        .map(|layer| 1 + layer_count(&layer.children))
-        .sum()
-}
-
 /// Resample one planar 8-bit channel from `sw×sh` to `dw×dh`: the dense
 /// Image Size resampler, kept as `resize_tiled`'s oracle.
 ///
@@ -314,7 +289,7 @@ mod tests {
                 }),
             ),
             ("rotate", Box::new(|d| rotate_document(d, 1).unwrap())),
-            ("flip", Box::new(|d| flip_document(d, true))),
+            ("flip", Box::new(|d| flip_document(d, true).unwrap())),
             ("translate", Box::new(|d| assert!(translate_layer(d, 1, 1)))),
             (
                 "rotate-in",

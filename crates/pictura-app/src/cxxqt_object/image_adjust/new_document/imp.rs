@@ -16,10 +16,6 @@ pub(crate) fn document_budget_allows(width: i32, height: i32, bits: i32) -> bool
     crate::cxxqt_object::helpers::document_budget_allows(width, height, bits)
 }
 
-pub(crate) fn document_resize_budget_allows(width: i32, height: i32, bits: i32) -> bool {
-    crate::cxxqt_object::helpers::resize_budget_allows(width, height, bits)
-}
-
 /// The finishing steps for `mode` at `bits` on an 8-bit base, or `None` when
 /// the pair is refused. Bitmap is 1-bit only, and the 1-bit depth is
 /// Bitmap's alone.

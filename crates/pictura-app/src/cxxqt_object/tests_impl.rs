@@ -726,7 +726,7 @@ fn document_ops_wire_parsed_values_and_reject_invalid_params() {
             data: vec![255, 255].into(),
         },
     ];
-    pictura_render::flip_document(&mut doc, true);
+    pictura_render::flip_document(&mut doc, true).expect("flips");
     doc.composite = pictura_render::composite_rgba(&doc);
     let plane = 2usize;
     assert_eq!(

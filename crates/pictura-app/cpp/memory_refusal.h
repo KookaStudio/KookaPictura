@@ -15,6 +15,15 @@ QString memoryRefusalMessage(const QString& action);
 // disk. …" (#1217)
 QString scratchRefusalMessage(const QString& action);
 
+// "Could not <action>: the scratch disks are full. …" after a scratch-full
+// refusal of a spilling commit (#1294), memoryRefusalMessage(action) otherwise.
+QString commitRefusalMessage(const QString& action);
+
+// Show commitRefusalMessage(action) on the status bar of the main window that
+// holds `within` when the last gated edit was refused for memory; returns
+// whether it was.
+bool reportCommitRefusal(QWidget* within, const QString& action);
+
 // Show memoryRefusalMessage(action), or scratchRefusalMessage(action), on the
 // status bar of the main window that holds `within` (a panel may float in a
 // window of its own) when the last gated edit was refused for memory or for

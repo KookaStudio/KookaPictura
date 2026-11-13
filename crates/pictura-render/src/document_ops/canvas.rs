@@ -1,10 +1,17 @@
 //! `Image > Canvas Size` at document scope (`IMG-002`).
 
-use super::{for_each_layer, materialize_merged_composite, valid_size};
+use pictura_core::memory::MemoryError;
+
+use super::{for_each_layer, geometry_tiled, materialize_merged_composite, valid_size};
 
 // ponytail: the added canvas is transparent (fill 0) — the layer-stack model has
 // no background layer, so the reference's background/extension-color options are out
 // of scope for M12.
+/// Move every layer, mask and store rect by the anchor offset (no layer plane
+/// is copied) and shift the alpha channels and the retained document store
+/// into spillable tiles (#1294). The change is made on a copy that shares the
+/// document's planes, so a refused strip (`OpsError::Memory`) leaves the
+/// document unchanged.
 pub fn resize_canvas_document(
     doc: &mut pictura_core::Document,
     width: u32,
@@ -21,9 +28,19 @@ pub fn resize_canvas_document(
     }
 
     let (dx, dy) = anchor_offset(anchor, old_w, old_h, width, height);
-    materialize_merged_composite(doc);
+    let mut next = doc.clone();
+    materialize_merged_composite(&mut next);
+    let store = next
+        .source_planes
+        .as_ref()
+        .filter(|s| s.depth != pictura_core::BitDepth::One);
+    let planes = next.channels.len()
+        + store.map_or(0, |s| s.samples.len() / (old_w as usize * old_h as usize));
+    if let Some(job) = pictura_core::job::current() {
+        job.begin_stage(planes as u64 * u64::from(height));
+    }
 
-    for_each_layer(&mut doc.layers, &mut |layer| {
+    for_each_layer(&mut next.layers, &mut |layer| {
         layer.rect = offset_rect(layer.rect, dx, dy);
         if let Some(store) = &mut layer.source_channels {
             store.rect = offset_rect(store.rect, dx, dy);
@@ -33,22 +50,136 @@ pub fn resize_canvas_document(
         }
     });
 
-    for channel in &mut doc.channels {
-        channel.data = extend_channel(&channel.data, old_w, old_h, width, height, dx, dy).into();
+    let (from, to) = (
+        (old_w as usize, old_h as usize),
+        (width as usize, height as usize),
+    );
+    let offset = (i64::from(dx), i64::from(dy));
+    for channel in &mut next.channels {
+        channel.data = geometry_tiled::shift(&channel.data, from, 1, to, offset, 0)?;
     }
-    rebase_source_planes(doc, old_w, old_h, width, height, dx, dy);
+    if let Some(store) = &mut next.source_planes {
+        // The depth-1 store is a packed plane, not a `width * height` one; it is
+        // only re-emitted for an unchanged flat Bitmap, so leave it stale.
+        if store.depth != pictura_core::BitDepth::One {
+            store.samples = shift_samples(&store.samples, from, to, offset)?;
+            store.width = width;
+            store.height = height;
+        }
+    }
 
-    doc.width = width;
-    doc.height = height;
+    next.width = width;
+    next.height = height;
+    *doc = next;
     Ok(())
 }
 
+/// What [`resize_canvas_document`] to `width × height` at `anchor` and
+/// [`extend_background`] write (#1294, the app's memory gate): the alpha
+/// channels and the retained document store at the new canvas, and the
+/// Background's channels when it no longer covers the canvas; and the widest
+/// plane in samples. No layer plane is copied.
+pub fn canvas_plane_bytes(
+    doc: &pictura_core::Document,
+    width: u32,
+    height: u32,
+    anchor: pictura_ops::Anchor,
+) -> (u64, u64) {
+    let (mut bytes, widest) = super::resize::mapped_plane_bytes(doc, (width, height), |_| None);
+    let (dx, dy) = anchor_offset(anchor, doc.width, doc.height, width, height);
+    let canvas = pictura_core::PsdRect {
+        top: 0,
+        left: 0,
+        bottom: height as i32,
+        right: width as i32,
+    };
+    let background = doc.layers.iter().find(|l| l.background && !l.is_group);
+    if let Some(layer) = background.filter(|l| offset_rect(l.rect, dx, dy) != canvas) {
+        bytes += layer.channels.len() as u64 * u64::from(width) * u64::from(height);
+    }
+    (bytes, widest)
+}
+
+/// Every stacked `from` plane of a retained store shifted into `to`; a
+/// trailing partial plane is dropped, as `extend_samples` drops it.
+fn shift_samples(
+    samples: &pictura_core::Samples,
+    from: (usize, usize),
+    to: (usize, usize),
+    offset: (i64, i64),
+) -> Result<pictura_core::Samples, MemoryError> {
+    use pictura_core::Samples;
+    let channels = samples.len() / (from.0 * from.1).max(1);
+    Ok(match samples {
+        Samples::U8(p) => Samples::U8(geometry_tiled::shift(p, from, channels, to, offset, 0)?),
+        Samples::U16(p) => Samples::U16(geometry_tiled::shift(p, from, channels, to, offset, 0)?),
+        Samples::F32(p) => Samples::F32(geometry_tiled::shift(p, from, channels, to, offset, 0.0)?),
+    })
+}
+
 /// Grow the Background layer to cover the whole canvas, filling what it did
-/// not cover with `color` (Canvas Size's extension colour). False when there
-/// is no Background or it already covers the canvas.
+/// not cover with `color` (Canvas Size's extension colour), into spillable
+/// tiles (#1294). False when there is no Background or it already covers the
+/// canvas; a refused strip leaves the Background unchanged.
 /// ponytail: the extended Background drops any retained 16/32-bit or Lab
 /// source samples, so it re-saves from its 8-bit pixels.
-pub fn extend_background(doc: &mut pictura_core::Document, color: [u8; 3]) -> bool {
+pub fn extend_background(
+    doc: &mut pictura_core::Document,
+    color: [u8; 3],
+) -> Result<bool, pictura_ops::OpsError> {
+    let canvas = pictura_core::PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    let gray = doc.mode == pictura_core::ColorMode::Grayscale;
+    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group) else {
+        return Ok(false);
+    };
+    if layer.rect == canvas {
+        return Ok(false);
+    }
+    let old = layer.rect;
+    let to = (canvas.width() as usize, canvas.height() as usize);
+    let from = (old.width().max(0) as usize, old.height().max(0) as usize);
+    let offset = (i64::from(old.left), i64::from(old.top));
+    if let Some(job) = pictura_core::job::current() {
+        job.begin_stage(layer.channels.len() as u64 * to.1 as u64);
+    }
+    let planes = layer
+        .channels
+        .iter()
+        .map(|channel| {
+            let fill = background_fill(channel.id, color, gray);
+            geometry_tiled::shift(&channel.data, from, 1, to, offset, fill)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for (channel, plane) in layer.channels.iter_mut().zip(planes) {
+        channel.data = plane;
+    }
+    layer.rect = canvas;
+    layer.source_channels = None;
+    Ok(true)
+}
+
+/// What the extended Background holds where it did not reach: the colour, its
+/// luma on Gray, opaque alpha, and zero in any other channel.
+fn background_fill(id: i16, color: [u8; 3], gray: bool) -> u8 {
+    match id {
+        0 if gray => {
+            let [r, g, b] = color.map(f64::from);
+            (0.299 * r + 0.587 * g + 0.114 * b).round() as u8
+        }
+        id @ 0..=2 => color[id as usize],
+        -1 => 255,
+        _ => 0,
+    }
+}
+
+/// The dense Background extension, kept as the tiled one's oracle.
+#[cfg(test)]
+pub(super) fn extend_background_dense(doc: &mut pictura_core::Document, color: [u8; 3]) -> bool {
     let canvas = pictura_core::PsdRect {
         top: 0,
         left: 0,
@@ -66,15 +197,7 @@ pub fn extend_background(doc: &mut pictura_core::Document, color: [u8; 3]) -> bo
     let (width, height) = (canvas.width() as u32, canvas.height() as u32);
     let old_w = old.width().max(0) as usize;
     for channel in &mut layer.channels {
-        let fill = match channel.id {
-            0 if gray => {
-                let [r, g, b] = color.map(f64::from);
-                (0.299 * r + 0.587 * g + 0.114 * b).round() as u8
-            }
-            id @ 0..=2 => color[id as usize],
-            -1 => 255,
-            _ => 0,
-        };
+        let fill = background_fill(channel.id, color, gray);
         let mut plane = vec![fill; width as usize * height as usize];
         let x0 = old.left.max(0);
         let x1 = old.right.min(width as i32);
@@ -127,7 +250,7 @@ pub(super) fn rebase_source_planes(
 }
 
 /// Top-left of the old canvas within the new one, per anchor.
-fn anchor_offset(
+pub(super) fn anchor_offset(
     anchor: pictura_ops::Anchor,
     old_w: u32,
     old_h: u32,
@@ -267,7 +390,7 @@ mod tests {
         let mut doc = sample_doc();
         doc.layers[0].background = true;
         resize_canvas_document(&mut doc, 6, 4, Anchor::TopLeft).unwrap();
-        assert!(extend_background(&mut doc, [200, 100, 50]));
+        assert!(extend_background(&mut doc, [200, 100, 50]).unwrap());
         let layer = &doc.layers[0];
         assert_eq!(layer.rect, full(6, 4));
         let at = |id: i16, i: usize| layer.channels.iter().find(|c| c.id == id).unwrap().data[i];
@@ -281,12 +404,15 @@ mod tests {
             (200, 100, 50, 255)
         );
         assert!(
-            !extend_background(&mut doc, [0; 3]),
+            !extend_background(&mut doc, [0; 3]).unwrap(),
             "already covers the canvas"
         );
         let mut plain = sample_doc();
         resize_canvas_document(&mut plain, 6, 4, Anchor::TopLeft).unwrap();
-        assert!(!extend_background(&mut plain, [0; 3]), "no Background");
+        assert!(
+            !extend_background(&mut plain, [0; 3]).unwrap(),
+            "no Background"
+        );
     }
 
     #[test]

@@ -3,6 +3,7 @@
 #include "api/selection_api.h"
 #include "apply_image_dialog.h"
 #include "canvas_size_dialog.h"
+#include "memory_refusal.h"
 #include "document_command.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
@@ -217,6 +218,7 @@ void PicturaMainWindow::wireImageMenu()
                     canvas_size_apply(*view, dialog.anchorName(), dialog.resultWidth(),
                                       dialog.resultHeight(), fill);
                 })) {
+                reportCommitRefusal(this, tr("resize the canvas"));
                 return;
             }
             CommandParams command;
@@ -254,10 +256,17 @@ void PicturaMainWindow::wireImageMenu()
         const double angle = QInputDialog::getDouble(this, tr("Rotate Image"),
                                                      tr("Angle (degrees):"), 0.0, -359.99, 359.99, 2,
                                                      &ok);
-        if (ok && angle != 0.0 && rotate_document_arbitrary(*view, angle)) {
+        if (!ok || angle == 0.0) {
+            return;
+        }
+        // A large document's rotation runs as a job behind a progress window (#1294).
+        if (runDocumentCommand(this, *view, tr("Rotate Canvas"),
+                               [&] { rotate_document_arbitrary(*view, angle); })) {
             CommandParams command;
             command.values.insert(QStringLiteral("angle"), angle);
             registry_->recordCommand(command_ids::ImageRotateArbitrary, command);
+        } else {
+            reportCommitRefusal(this, tr("rotate the canvas"));
         }
     });
     registry_->setEnabledProvider(command_ids::ImageRotateArbitrary, imageEnabled);

@@ -1,14 +1,18 @@
 //! `Image > Image Rotation` and flips at document scope (`IMG-003`).
 //!
 //! Exact 90/270/180 index remaps of every layer rect and channel plane. The
-//! engine leaves `doc.composite` untouched; the app materializes it. The
-//! per-plane remap reuses the M10
-//! `pictura_ops` pixel-buffer functions.
+//! engine leaves `doc.composite` untouched; the app materializes it. Every
+//! plane is remapped into spillable tiles a strip at a time (#1294,
+//! `geometry_tiled::orient`); the M10 `pictura_ops` pixel-buffer remaps stay
+//! as its oracle.
 
-use pictura_core::{Document, PixelBuffer, PsdRect, SourceChannels};
+use pictura_core::memory::MemoryError;
+#[cfg(test)]
+use pictura_core::PixelBuffer;
+use pictura_core::{Document, Layer, PsdRect, Samples, SourceChannels};
 use pictura_ops::OpsError;
 
-use super::{for_each_layer_job, native_store};
+use super::{for_each_layer, geometry_tiled, native_store};
 
 /// The five exact orientation remaps.
 #[derive(Clone, Copy)]
@@ -21,16 +25,6 @@ enum Kind {
 }
 
 impl Kind {
-    fn plane(self) -> fn(&PixelBuffer) -> PixelBuffer {
-        match self {
-            Kind::Rot90 => pictura_ops::rotate90_cw,
-            Kind::Rot180 => pictura_ops::rotate180,
-            Kind::Rot270 => pictura_ops::rotate90_ccw,
-            Kind::FlipH => pictura_ops::flip_horizontal,
-            Kind::FlipV => pictura_ops::flip_vertical,
-        }
-    }
-
     /// 90°/270° swap the two canvas axes.
     fn swaps_axes(self) -> bool {
         matches!(self, Kind::Rot90 | Kind::Rot270)
@@ -60,19 +54,24 @@ pub fn rotate_document(doc: &mut Document, quarter_turns: u8) -> Result<(), OpsE
             ))
         }
     };
-    transform_document(doc, kind);
-    Ok(())
+    transform_document(doc, kind)
 }
 
 /// Mirror the whole document along the vertical axis (`horizontal`) or the
-/// horizontal axis.
-pub fn flip_document(doc: &mut Document, horizontal: bool) {
-    transform_document(doc, if horizontal { Kind::FlipH } else { Kind::FlipV });
+/// horizontal axis. A refused strip (`OpsError::Memory`) leaves it unchanged.
+pub fn flip_document(doc: &mut Document, horizontal: bool) -> Result<(), OpsError> {
+    transform_document(doc, if horizontal { Kind::FlipH } else { Kind::FlipV })
 }
 
 /// Remap a raw planar channel through the same pixel-buffer function used for
-/// the M10 per-image ops.
-fn remap_plane(data: &[u8], lw: u32, lh: u32, op: fn(&PixelBuffer) -> PixelBuffer) -> Vec<u8> {
+/// the M10 per-image ops: the dense remap, kept as the tiled remap's oracle.
+#[cfg(test)]
+pub(super) fn remap_plane(
+    data: &[u8],
+    lw: u32,
+    lh: u32,
+    op: fn(&PixelBuffer) -> PixelBuffer,
+) -> Vec<u8> {
     let mut plane = PixelBuffer::new(lw, lh, 1);
     let n = plane.data.len().min(data.len());
     plane.data[..n].copy_from_slice(&data[..n]);
@@ -115,44 +114,45 @@ fn transform_rect(r: PsdRect, w: i32, h: i32, kind: Kind) -> PsdRect {
     }
 }
 
-fn transform_document(doc: &mut Document, kind: Kind) {
-    super::materialize_merged_composite(doc);
-    let (w, h) = (doc.width as i32, doc.height as i32);
-    let op = kind.plane();
+/// What [`rotate_document`] by `quarter_turns` (or a flip, at 0) writes
+/// (#1294, the app's memory gate): every plane at its remapped size and sample
+/// width, and the widest plane in samples.
+pub fn oriented_plane_bytes(doc: &Document, quarter_turns: u8) -> (u64, u64) {
+    let swap = quarter_turns % 2 == 1;
+    let turn = |(w, h): (u32, u32)| if swap { (h, w) } else { (w, h) };
+    super::resize::mapped_plane_bytes(doc, turn((doc.width, doc.height)), |rect| {
+        let (w, h) = dims(rect);
+        (w * h > 0).then(|| turn((w as u32, h as u32)))
+    })
+}
 
-    for_each_layer_job(&mut doc.layers, &mut |layer| {
-        let old_rect = layer.rect;
-        let lw = old_rect.width().max(0) as u32;
-        let lh = old_rect.height().max(0) as u32;
-        for channel in &mut layer.channels {
-            channel.data = remap_plane(&channel.data, lw, lh, op).into();
-        }
-        if let Some(store) = layer.source_channels.take() {
-            let mask_rect = layer.mask.as_ref().map(|m| m.rect);
-            layer.source_channels = Some(remap_store(&store, old_rect, mask_rect, w, h, kind));
-        }
-        layer.rect = transform_rect(old_rect, w, h, kind);
-        // ponytail: the exact remap keeps the native store, but an unmodeled raw
-        // on-disk stream still has no resampler and drops.
-        layer.raw_channels.clear();
+/// Remap every plane on a copy that shares the document's planes, so a strip
+/// refusal leaves the document unchanged (#1294).
+fn transform_document(doc: &mut Document, kind: Kind) -> Result<(), OpsError> {
+    let mut next = doc.clone();
+    super::materialize_merged_composite(&mut next);
+    let (w, h) = (next.width as i32, next.height as i32);
+    if let Some(job) = pictura_core::job::current() {
+        job.begin_stage(orient_rows(&mut next, kind));
+    }
 
-        if let Some(mask) = &mut layer.mask {
-            let mw = mask.rect.width().max(0) as u32;
-            let mh = mask.rect.height().max(0) as u32;
-            if let Some(data) = &mut mask.data {
-                *data = remap_plane(data, mw, mh, op).into();
-            }
-            mask.rect = transform_rect(mask.rect, w, h, kind);
+    let mut refused = None;
+    for_each_layer(&mut next.layers, &mut |layer| {
+        if refused.is_none() {
+            refused = orient_layer(layer, w, h, kind).err();
         }
     });
-
-    for channel in &mut doc.channels {
-        channel.data = remap_plane(&channel.data, doc.width, doc.height, op).into();
+    if let Some(err) = refused {
+        return Err(err.into());
     }
-    if let Some(store) = &mut doc.source_planes {
+
+    let canvas = (w as usize, h as usize);
+    for channel in &mut next.channels {
+        channel.data = geometry_tiled::orient(&channel.data, canvas, 1, kind.remap())?;
+    }
+    if let Some(store) = &mut next.source_planes {
         if store.depth != pictura_core::BitDepth::One {
-            store.samples =
-                native_store::remap_samples(&store.samples, w as usize, h as usize, kind.remap());
+            store.samples = orient_samples(&store.samples, canvas, kind.remap())?;
             if kind.swaps_axes() {
                 std::mem::swap(&mut store.width, &mut store.height);
             }
@@ -160,8 +160,98 @@ fn transform_document(doc: &mut Document, kind: Kind) {
     }
 
     if kind.swaps_axes() {
-        std::mem::swap(&mut doc.width, &mut doc.height);
+        std::mem::swap(&mut next.width, &mut next.height);
     }
+    *doc = next;
+    Ok(())
+}
+
+fn orient_layer(layer: &mut Layer, w: i32, h: i32, kind: Kind) -> Result<(), MemoryError> {
+    let old_rect = layer.rect;
+    for channel in &mut layer.channels {
+        channel.data = geometry_tiled::orient(&channel.data, dims(old_rect), 1, kind.remap())?;
+    }
+    if let Some(store) = layer.source_channels.take() {
+        let mask_rect = layer.mask.as_ref().map(|m| m.rect);
+        layer.source_channels = Some(remap_store(&store, old_rect, mask_rect, w, h, kind)?);
+    }
+    layer.rect = transform_rect(old_rect, w, h, kind);
+    // ponytail: the exact remap keeps the native store, but an unmodeled raw
+    // on-disk stream still has no resampler and drops.
+    layer.raw_channels.clear();
+
+    if let Some(mask) = &mut layer.mask {
+        if let Some(data) = &mut mask.data {
+            *data = geometry_tiled::orient(data, dims(mask.rect), 1, kind.remap())?;
+        }
+        mask.rect = transform_rect(mask.rect, w, h, kind);
+    }
+    Ok(())
+}
+
+fn dims(rect: PsdRect) -> (usize, usize) {
+    (rect.width().max(0) as usize, rect.height().max(0) as usize)
+}
+
+/// Every stacked `w×h` plane of a retained store through the tiled remap; a
+/// trailing partial plane is dropped, as the dense remap drops it.
+fn orient_samples(
+    samples: &Samples,
+    (w, h): (usize, usize),
+    kind: native_store::Remap,
+) -> Result<Samples, MemoryError> {
+    let channels = samples.len() / (w * h).max(1);
+    Ok(match samples {
+        Samples::U8(p) => Samples::U8(geometry_tiled::orient(p, (w, h), channels, kind)?),
+        Samples::U16(p) => Samples::U16(geometry_tiled::orient(p, (w, h), channels, kind)?),
+        Samples::F32(p) => Samples::F32(geometry_tiled::orient(p, (w, h), channels, kind)?),
+    })
+}
+
+/// The output rows [`transform_document`] writes, which the tiled remap
+/// reports as a job's progress.
+fn orient_rows(doc: &mut Document, kind: Kind) -> u64 {
+    let rows = |rect: PsdRect, planes: usize| {
+        let (w, h) = dims(rect);
+        let out = if kind.swaps_axes() { w } else { h };
+        if w * h == 0 {
+            0
+        } else {
+            planes as u64 * out as u64
+        }
+    };
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    let mut total = rows(canvas, doc.channels.len());
+    if let Some(store) = doc
+        .source_planes
+        .as_ref()
+        .filter(|s| s.depth != pictura_core::BitDepth::One)
+    {
+        let area = (doc.width as usize * doc.height as usize).max(1);
+        total += rows(canvas, store.samples.len() / area);
+    }
+    for_each_layer(&mut doc.layers, &mut |layer| {
+        total += rows(layer.rect, layer.channels.len());
+        if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
+            total += rows(mask.rect, 1);
+        }
+        if let Some(store) = &layer.source_channels {
+            for (id, samples) in &store.planes {
+                let rect = match (&layer.mask, *id) {
+                    (Some(mask), -2) => mask.rect,
+                    _ => layer.rect,
+                };
+                let area = dims(rect).0 * dims(rect).1;
+                total += rows(rect, samples.len() / area.max(1));
+            }
+        }
+    });
+    total
 }
 
 /// Remap a layer's retained native store with the same exact index map; the
@@ -173,7 +263,7 @@ fn remap_store(
     w: i32,
     h: i32,
     kind: Kind,
-) -> SourceChannels {
+) -> Result<SourceChannels, MemoryError> {
     let planes = store
         .planes
         .iter()
@@ -183,15 +273,14 @@ fn remap_store(
             } else {
                 layer_rect
             };
-            let pw = rect.width().max(0) as usize;
-            let ph = rect.height().max(0) as usize;
-            (
-                *id,
-                native_store::remap_samples(samples, pw, ph, kind.remap()),
-            )
+            Ok((*id, orient_samples(samples, dims(rect), kind.remap())?))
         })
-        .collect();
-    SourceChannels::new(store.depth, transform_rect(layer_rect, w, h, kind), planes)
+        .collect::<Result<_, MemoryError>>()?;
+    Ok(SourceChannels::new(
+        store.depth,
+        transform_rect(layer_rect, w, h, kind),
+        planes,
+    ))
 }
 
 #[cfg(test)]
@@ -354,7 +443,7 @@ mod tests {
         let mut doc = sample_doc();
         assert_eq!(doc.layers[0].channels[0].data, plane(0, 15));
 
-        flip_document(&mut doc, true);
+        flip_document(&mut doc, true).unwrap();
 
         let want: Vec<u8> = vec![4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 14, 13, 12, 11, 10];
         assert_eq!(doc.layers[0].channels[0].data, want);
@@ -367,8 +456,8 @@ mod tests {
         for horizontal in [true, false] {
             let mut doc = sample_doc();
             let before = doc.clone();
-            flip_document(&mut doc, horizontal);
-            flip_document(&mut doc, horizontal);
+            flip_document(&mut doc, horizontal).unwrap();
+            flip_document(&mut doc, horizontal).unwrap();
             assert_eq!(doc, before, "horizontal={horizontal}");
         }
     }
@@ -383,7 +472,7 @@ mod tests {
         assert_consistent(&mut doc);
 
         let mut doc = sample_doc();
-        flip_document(&mut doc, true);
+        flip_document(&mut doc, true).unwrap();
         let mask = doc.layers[1].mask.as_ref().unwrap();
         assert_eq!(mask.rect, rect(0, 0, 1, 3));
         assert_eq!(mask.data.as_ref().unwrap().len(), 3);
