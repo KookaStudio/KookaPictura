@@ -34,9 +34,9 @@ namespace pictura {
 class ImageView;
 class PictureView;
 
-// The 71-tool CS6 catalogue in frozen table order. The 10 implemented tools
-// keep their M19 names; the enum order matches the engine tool catalogue
-// (`pictura_script::tool_catalogue`), which a Qt Test checks.
+// The 71-tool CS6 catalogue in frozen table order; the enum order matches the
+// engine tool catalogue (`pictura_script::tool_catalogue`), which a Qt Test
+// checks.
 enum class ToolId {
     Move,
     Marquee,

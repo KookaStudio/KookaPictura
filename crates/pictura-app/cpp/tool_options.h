@@ -302,14 +302,6 @@ struct ZoomOptions {
     bool zoomAll = false;
 };
 
-// The magnetic lasso's detection settings: Width 1-256 px, Contrast 1-100 %,
-// Frequency 0-100; CS6 defaults 10 / 10 / 57.
-struct MagneticOptions {
-    int width = 10;
-    int contrast = 10;
-    int frequency = 57;
-};
-
 // The clamping every `ToolOption<T>::set` applies. The generic template is the
 // identity; the overloads below are the families whose fields have ranges.
 template <typename T> T clampOptions(T value) { return value; }
