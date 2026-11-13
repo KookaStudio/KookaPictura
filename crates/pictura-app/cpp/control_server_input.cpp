@@ -364,7 +364,12 @@ QJsonObject ControlServer::methodKey(const QJsonObject& params)
                      QStringLiteral("unknown key: %1").arg(keyName));
     }
 
+    // With no active window (offscreen, after a progress window closed) the
+    // key goes where it would once the window is activated: its focus child.
     QWidget* target = QApplication::focusWidget();
+    if (!target) {
+        target = frame_->focusWidget();
+    }
     if (!target) {
         target = frame_;
     }

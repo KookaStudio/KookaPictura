@@ -546,6 +546,7 @@ const QList<ControlServer::MethodRow>& ControlServer::methodTable()
         {"list_filters", &ControlServer::methodListFilters, ControlTier::Read},
         {"list_adjustments", &ControlServer::methodListAdjustments, ControlTier::Read},
         {"layer_tree", &ControlServer::methodLayerTree, ControlTier::Read},
+        {"layer_digest", &ControlServer::methodLayerDigest, ControlTier::Read},
         {"adjust_apply", &ControlServer::methodAdjustApply, ControlTier::Edit},
         {"run_command", &ControlServer::methodRunCommand, ControlTier::Edit},
         {"set_active_layer", &ControlServer::methodSetActiveLayer, ControlTier::Edit},

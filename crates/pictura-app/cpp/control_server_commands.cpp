@@ -2,6 +2,7 @@
 // filters, adjustments and commands, layer paths, export, and history.
 
 #include "control_server.h"
+
 #include "control_server_support.h"
 
 #include "api/document_api.h"
@@ -11,6 +12,7 @@
 #include <QtCore/QJsonArray>
 
 #include <cmath>
+#include <cstddef>
 
 #include "commands.h"
 #include "filter_commands.h"
@@ -339,6 +341,33 @@ QJsonObject ControlServer::methodLayerTree(const QJsonObject&)
     QJsonObject result;
     result.insert(QStringLiteral("layers"), layers);
     result.insert(QStringLiteral("active"), view->active_layer_path());
+    return ok(result);
+}
+
+QJsonObject ControlServer::methodLayerDigest(const QJsonObject& params)
+{
+    PictureView* view = frame_->activeView();
+    if (!view || !view->has_document()) {
+        return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
+    }
+    const QString path = params.value(QStringLiteral("path")).toString();
+    // `layer_pixel_digest` (layer_target_bridge.rs): empty for no such layer,
+    // else [digest, left, top, right, bottom].
+    constexpr std::size_t kDigestFields = 5;
+    const auto digest = layer_pixel_digest(*view, path);
+    if (digest.empty()) {
+        return error(QStringLiteral("invalid_param"),
+                     QStringLiteral("no layer at path: %1").arg(path));
+    }
+    if (digest.size() != kDigestFields) {
+        return error(QStringLiteral("internal"), QStringLiteral("unexpected layer digest shape"));
+    }
+    QJsonObject result;
+    result.insert(QStringLiteral("digest"),
+                  QStringLiteral("%1").arg(static_cast<quint64>(digest[0]), 16, 16, QLatin1Char('0')));
+    result.insert(QStringLiteral("rect"),
+                  QJsonArray({double(digest[1]), double(digest[2]), double(digest[3]),
+                              double(digest[4])}));
     return ok(result);
 }
 

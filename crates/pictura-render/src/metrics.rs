@@ -123,7 +123,7 @@ pub fn reset_phases() {
 }
 
 /// The decline reasons, in the order [`Counters::declines`] reports them.
-pub const DECLINE_REASONS: [&str; 11] = [
+pub const DECLINE_REASONS: [&str; 12] = [
     "unavailable",
     "too_large",
     "readback",
@@ -135,6 +135,7 @@ pub const DECLINE_REASONS: [&str; 11] = [
     "unsupported_advanced_blending",
     "unsupported_depth",
     "unsupported_smart_filter",
+    "memory",
 ];
 
 fn reason_index(err: &GpuError) -> usize {
@@ -150,11 +151,12 @@ fn reason_index(err: &GpuError) -> usize {
         GpuError::UnsupportedAdvancedBlending => 8,
         GpuError::UnsupportedDepth => 9,
         GpuError::UnsupportedSmartFilter => 10,
+        GpuError::Memory => 11,
     }
 }
 
-static DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 11];
-static LAYER_DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 11];
+static DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 12];
+static LAYER_DECLINES: [AtomicU64; DECLINE_REASONS.len()] = [const { AtomicU64::new(0) }; 12];
 static RESIDENT_HITS: AtomicU64 = AtomicU64::new(0);
 static RESIDENT_MISSES: AtomicU64 = AtomicU64::new(0);
 static RESIDENT_ENTRIES: AtomicU64 = AtomicU64::new(0);

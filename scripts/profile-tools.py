@@ -30,7 +30,7 @@ No dependency beyond python3's standard library.
 
 Memory (#1210): --peak resets the app's peak resident size before each scenario
 (5 -> /proc/<pid>/clear_refs) and reports peak_mb (VmHWM), peak_added_mb and
-rss_mb. The memory scenarios M1-M18 (scripts/memory_scenarios.py; --scenarios
+rss_mb. The memory scenarios M1-M23 (scripts/memory_scenarios.py; --scenarios
 memory for all) default to 17000x17000 and run each in a fresh app, with their
 prerequisites run before the reset. --memory-max 4G runs the app under
 `systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0`; a SIGKILL is the
@@ -41,6 +41,13 @@ without --memory-max run under that default limit; --force lifts both.
 
     python3 scripts/profile-tools.py --scenarios memory --memory-max 4G --save /tmp/4g.json
     python3 scripts/profile-tools.py --scenarios M5 --compare docs/dev/benchmarks/memory-baseline.json --compare-run 4G
+
+--digest (#1290) adds every layer's pixel digest to each memory row, read after
+the peak on the CPU path, and --compare then says whether the pixels are the same,
+so a run under a limit can be checked against the same run in RAM:
+
+    python3 scripts/profile-tools.py --scenarios M19,M20 --digest --save /tmp/ram.json
+    python3 scripts/profile-tools.py --scenarios M19,M20 --digest --memory-max 2G --compare /tmp/ram.json
 
 --self-check runs the harness's own checks and every M scenario at 512x512.
 """
@@ -588,8 +595,16 @@ def settle(client, pid):
     settle_workers(pid)
 
 
-def run_memory_scenario(binary, sid, w, h, memory_max, fixture_dir, timeout, env):
-    """Run one M scenario in a fresh app; return its row."""
+def layer_digests(client):
+    """Every layer's `layer_digest`, by name (#1290)."""
+    tree = client.call("layer_tree")[0]
+    return {layer["name"]: client.call("layer_digest", path=layer["path"])[0]["digest"]
+            for layer in tree["layers"]}
+
+
+def run_memory_scenario(binary, sid, w, h, memory_max, fixture_dir, timeout, env, digest=False):
+    """Run one M scenario in a fresh app; return its row. With `digest`, the
+    row carries every layer's pixel digest, read after the peak."""
     gesture, setup, measured, needs_fixture = memory_scenarios.SCENARIOS[sid]
     row = {"gesture": gesture}
     tmp = tempfile.mkdtemp(prefix="pictura-memory-")
@@ -603,8 +618,12 @@ def run_memory_scenario(binary, sid, w, h, memory_max, fixture_dir, timeout, env
         client = Client(sock, timeout)
         ctx = memory_scenarios.Ctx(client, w, h, tmp, fixture)
         phase = "setup"
-        for step in setup:
+        for i, step in enumerate(setup):
             step(ctx)
+            if digest and i == 0:
+                # Golden comparisons run on the CPU; the first step makes the
+                # document the switch needs.
+                client.call("set_gpu_compute", on=False)
         settle(client, app.pid)
         rss_before = status_kib(app.pid, "VmRSS")
         reset_peak(app.pid)
@@ -617,6 +636,9 @@ def run_memory_scenario(binary, sid, w, h, memory_max, fixture_dir, timeout, env
         row.update(outcome="ok", total_ms=ms(time.perf_counter() - start),
                    rss_before_mb=rss_before // 1024, peak_mb=peak // 1024,
                    peak_added_mb=(peak - rss_before) // 1024, rss_mb=rss_mb(app.pid))
+        if digest:
+            phase = "digest"
+            row["digest"] = layer_digests(client)
     except (RuntimeError, OSError, ValueError) as err:
         returncode = None
         if app is not None:
@@ -664,9 +686,18 @@ def print_memory_table(results):
     print("(MiB; peak_added is the peak above the resident size at the reset; total is milliseconds)")
 
 
+def pixels_verdict(base, row):
+    """`same` or `differs` when both rows carry digests; else empty."""
+    a, b = base.get("digest"), row.get("digest")
+    if not a or not b:
+        return ""
+    return "same" if a == b else "differs"
+
+
 def memory_compare_lines(before, after):
-    """Per scenario: peak and outcome before -> after."""
-    lines = [f"{'scenario':<9}{'outcome':>16}{'peak_mb':>26}{'peak_added_mb':>26}"]
+    """Per scenario: peak and outcome before -> after, and whether the pixels
+    match when both runs carry digests."""
+    lines = [f"{'scenario':<9}{'outcome':>16}{'peak_mb':>26}{'peak_added_mb':>26}{'pixels':>10}"]
     for name, row in after.items():
         base = before.get(name)
         if base is None:
@@ -679,7 +710,7 @@ def memory_compare_lines(before, after):
                 continue
             ratio = f"{b / a:.1f}x" if a > 0 else "-"
             cells.append(f"{b} -> {a} ({ratio})")
-        lines.append(f"{name:<9}{cells[0]:>16}{cells[1]:>26}{cells[2]:>26}")
+        lines.append(f"{name:<9}{cells[0]:>16}{cells[1]:>26}{cells[2]:>26}{pixels_verdict(base, row):>10}")
     lines.append("(before -> after, MiB; the ratio is the saving)")
     return lines
 
@@ -740,6 +771,34 @@ def check_compare():
     assert "ok -> oom" in lines[2], lines
 
 
+def check_digest_compare():
+    before = {"M19": {"outcome": "ok", "digest": {"Layer 1": "a"}},
+              "M20": {"outcome": "ok", "digest": {"Layer 1": "b"}},
+              "M21": {"outcome": "ok"}}
+    after = {"M19": {"outcome": "ok", "digest": {"Layer 1": "a"}},
+             "M20": {"outcome": "ok", "digest": {"Layer 1": "c"}},
+             "M21": {"outcome": "ok", "digest": {"Layer 1": "a"}}}
+    lines = memory_compare_lines(before, after)
+    assert lines[1].rstrip().endswith("same"), lines
+    assert lines[2].rstrip().endswith("differs"), lines
+    assert not lines[3].rstrip().endswith(("same", "differs")), lines
+
+
+def self_check_digest(binary, side=512):
+    tmp = tempfile.mkdtemp(prefix="pictura-memory-digest-")
+    env = dict(os.environ)
+    env.pop("PICTURA_METRICS", None)
+    try:
+        row = run_memory_scenario(binary, "M19", side, side, None, tmp, 120.0, env, digest=True)
+        check_peak_row("M19", row)
+        digests = row.get("digest") or {}
+        assert set(digests) == {"Background", "Layer 1"}, row
+        assert all(len(d) == 16 for d in digests.values()), row
+        print("profile-tools: self-check digest ok")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def self_check_catalogue(binary, side=512):
     tmp = tempfile.mkdtemp(prefix="pictura-memory-check-")
     env = dict(os.environ)
@@ -763,11 +822,13 @@ def self_check(binary):
     check_limit_guard()
     check_outcomes()
     check_compare()
+    check_digest_compare()
     print("profile-tools: self-check helpers ok")
     if not os.access(binary, os.X_OK):
         print(f"profile-tools: SKIP catalogue (no app at {binary})")
         return
     self_check_catalogue(binary)
+    self_check_digest(binary)
     print("profile-tools: self-check OK")
 
 
@@ -824,6 +885,8 @@ def main():
                         help="run the app with PICTURA_METRICS=1 and print each scenario's phases")
     parser.add_argument("--peak", action="store_true",
                         help="reset the peak resident size before each scenario and report it (always on for M scenarios)")
+    parser.add_argument("--digest", action="store_true",
+                        help="memory rows carry every layer's pixel digest; --compare says whether they match")
     parser.add_argument("--memory-max", help="run the app under a systemd MemoryMax (e.g. 4G), swap off")
     parser.add_argument("--force", action="store_true",
                         help="allow a --memory-max above the memory available now less 1.5 GiB")
@@ -878,7 +941,7 @@ def main():
         results = {}
         for name in memory:
             results[name] = run_memory_scenario(os.path.abspath(args.bin), name, w, h, args.memory_max,
-                                                args.fixture_dir, args.timeout, env)
+                                                args.fixture_dir, args.timeout, env, args.digest)
             print(f"profile-tools: {name} {results[name].get('outcome')}", flush=True)
         print_memory_table(results)
         finish(args, meta, results)

@@ -131,3 +131,51 @@ fn document_past_2d_product_limit_returns_too_large() {
     };
     assert!(matches!(composite_gpu(&doc), Err(GpuError::TooLarge)));
 }
+
+/// #1290: the region estimate counts the fixed buffers and each layer's source
+/// and mask, and an isolated group's inner canvas.
+#[test]
+fn the_region_estimate_counts_every_upload() {
+    let doc = scene(BlendMode::Normal);
+    let plans = plan::plan_stack(&doc, None).expect("plannable");
+    assert_eq!(region_host_bytes(&plans, SIZE, SIZE), 64 * (16 + 2 * 5));
+    let mut grouped = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
+    grouped.layers = LayerStack::from_layers(vec![Layer {
+        name: "group".into(),
+        is_group: true,
+        visible: true,
+        opacity: 255,
+        fill: 255,
+        blend: BlendMode::Normal,
+        children: LayerStack::from_layers(vec![
+            layer("a", BlendMode::Normal),
+            layer("b", BlendMode::Normal),
+        ]),
+        ..Default::default()
+    }]);
+    let plans = plan::plan_stack(&grouped, None).expect("plannable");
+    let per_pixel = region_host_bytes(&plans, 1, 1) - 16;
+    assert!(per_pixel >= 2 * 5, "both children counted: {per_pixel}");
+}
+
+/// #1290: a region whose host buffers exceed the governor's room declines
+/// after the device limits are checked and before any region-sized buffer,
+/// so the CPU composites it in bands; nothing is recorded as a refusal.
+#[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+fn a_region_over_the_memory_room_declines_to_the_cpu() {
+    use pictura_core::memory::{self, HostReading};
+    require_gpu();
+    let doc = scene(BlendMode::Normal);
+    let plans = plan::plan_stack(&doc, None).expect("plannable");
+    memory::set_host_for_test(Some(HostReading {
+        available: Some(0),
+        ..HostReading::default()
+    }));
+    memory::clear_refusal();
+    let result = composite_gpu_region_raw(&doc, &plans, 0, 0, SIZE, SIZE);
+    let refusal = memory::last_refusal();
+    memory::set_host_for_test(None);
+    assert!(matches!(result, Err(GpuError::Memory)), "{result:?}");
+    assert_eq!(refusal, None);
+}

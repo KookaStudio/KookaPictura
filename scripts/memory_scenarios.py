@@ -1,4 +1,4 @@
-"""The memory benchmark's scenarios M1-M18 (issue #1210), for profile-tools.py.
+"""The memory benchmark's scenarios M1-M23 (issue #1210), for profile-tools.py.
 
 Every later bounded-memory issue (#1209) names its savings by these IDs. Each
 scenario is a setup (prerequisites, run before the peak reset and not measured)
@@ -9,7 +9,10 @@ Owner decisions: M3 fills the Background, so Layer 1 stays empty for M4-M6; M9
 and M10 act on M4's square on Layer 1 with no selection.
 """
 
+import time
+
 REFERENCE_SIDE = 17000
+COMMIT_TIMEOUT_S = 900
 
 
 class Ctx:
@@ -131,6 +134,56 @@ def warp_layer(c):
     c.call("layer_op", op="free_transform", index=int(c.layer_path("Layer 1")), warp="arc", bend=50.0)
 
 
+def scaled_transform(scale, angle=0.0):
+    """#1290: Free Transform of the whole layer through the tool's session."""
+    def step(c):
+        c.call("layer_op", op="free_transform", index=int(c.layer_path("Layer 1")), scale=scale, angle=angle)
+    step.__name__ = f"free_transform_{scale:g}_{angle:g}"
+    return step
+
+
+WHITE = 0xFFFFFFFF
+
+
+def corner_transform(command, to, white, kept):
+    """#1290: Edit > Transform > `command`, the top-left handle dragged to
+    `to(c)` in image space, then Return. The `white` points must show the
+    Background and the `kept` points must not, so a drag that missed the handle
+    (and moved the layer) fails instead of committing the wrong transform."""
+    def step(c):
+        activate(c, "Layer 1")
+        before = c.call("history", op="list")["index"]
+        c.call("dispatch_command", id=command)
+        x2, y2 = to(c)
+        c.call("pointer", op="drag", space="image", x=0, y=0, x2=x2, y2=y2, steps=16)
+        c.call("key", sequence="Return")
+        # A large commit runs as a background job: Return answers at once and
+        # the state lands when the job does.
+        deadline = time.monotonic() + COMMIT_TIMEOUT_S
+        after = c.call("history", op="list")["index"]
+        while after == before and time.monotonic() < deadline:
+            time.sleep(0.25)
+            after = c.call("history", op="list")["index"]
+        if after != before + 1:
+            raise RuntimeError(f"{command}: history went {before} -> {after}, not one state")
+        for points, want_white in ((white, True), (kept, False)):
+            for x, y in points(c):
+                argb = int(c.call("get_pixel", x=x, y=y)["argb"], 16)
+                if (argb == WHITE) != want_white:
+                    raise RuntimeError(f"{command}: pixel ({x}, {y}) is {argb:#010x}")
+    step.__name__ = command.rsplit(".", 1)[-1]
+    return step
+
+
+# The gradient is black at the top left, mid-grey along the top right.
+perspective_layer = corner_transform(
+    "edit.transform.perspective", lambda c: (c.w / 4, 0),
+    white=lambda c: [(1, 1), (c.w - 2, 1)], kept=lambda c: [(c.w // 2, c.h // 2)])
+distort_layer = corner_transform(
+    "edit.transform.distort", lambda c: (c.w / 8, c.h / 8),
+    white=lambda c: [(1, 1)], kept=lambda c: [(c.w - 2, 1), (c.w // 2, c.h // 2)])
+
+
 def image_size(c):
     # #1293: Image Size of the whole document to 150 %, resampled through tiles.
     c.call("run_command", id="image.image.size",
@@ -226,4 +279,15 @@ SCENARIOS = {
             [rotate_quarter], False),
     "M18": ("Rotate a full-layer gradient 15°", [new_document, add_layer, gradient_layer],
             [rotate_arbitrary], False),
+    # #1290: the transform commit's acceptance cases, out of core under a limit.
+    "M19": ("Free Transform a full-layer gradient to 50 %", [new_document, add_layer, gradient_layer],
+            [scaled_transform(50.0)], False),
+    "M20": ("Free Transform a full-layer gradient 100 %, 15°", [new_document, add_layer, gradient_layer],
+            [scaled_transform(100.0, 15.0)], False),
+    "M21": ("Free Transform a full-layer gradient to 150 %", [new_document, add_layer, gradient_layer],
+            [scaled_transform(150.0)], False),
+    "M22": ("Perspective a full-layer gradient, top corners in by 25 %", [new_document, add_layer, gradient_layer],
+            [perspective_layer], False),
+    "M23": ("Distort a full-layer gradient, top-left corner in by 12.5 %", [new_document, add_layer, gradient_layer],
+            [distort_layer], False),
 }

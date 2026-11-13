@@ -2,6 +2,7 @@
 //! the history keeps at its cursor.
 
 use pictura_core::memory::{Side, TileCensus};
+use pictura_core::Residency;
 use pictura_core::{fresh_stamp, Document, Layer, Plane, PsdRect, SharedTile, TileRef};
 use rayon::prelude::*;
 
@@ -182,7 +183,7 @@ pub(super) fn diff_into(
                     .tile_rect(i)
                     .is_some_and(|(x, y, w, h)| tile_hits(hint, placement, doc_height, x, y, w, h))
             })
-            .map(|i| (i, changed_in(plane, after, i)))
+            .map(|i| (i, changed_or_away(plane, after, i)))
             .collect();
         let mut tiles = Vec::new();
         for (i, changed) in compared {
@@ -228,7 +229,20 @@ fn unshared(before: &Plane<u8>, after: &Plane<u8>) -> Vec<usize> {
 }
 
 /// A box `(x, y, w, h)` in plane coordinates.
-type Changed = (usize, usize, usize, usize);
+pub(super) type Changed = (usize, usize, usize, usize);
+
+/// [`changed_in`], except that a tile packed or spilled on either side counts
+/// as wholly changed instead of being read back (#1290). A whole-layer edit
+/// would otherwise restore every tile of both sides at once, faster than
+/// eviction can pack them again under a memory limit. The delta keeps the old
+/// tile by reference either way; only identical tiles go unshared.
+pub(super) fn changed_or_away(a: &Plane<u8>, b: &Plane<u8>, i: usize) -> Option<Changed> {
+    let resident = |p: &Plane<u8>| p.tile_residency(i).is_none_or(|r| r == Residency::Resident);
+    if resident(a) && resident(b) {
+        return changed_in(a, b, i);
+    }
+    a.tile_rect(i)
+}
 
 /// The box of the samples that differ in tile `i` of `a` and `b`, tiled
 /// alike, in plane coordinates; `None` when the tiles hold the same samples.

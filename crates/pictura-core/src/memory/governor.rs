@@ -295,6 +295,13 @@ impl Governor {
         }
     }
 
+    /// Hold `bytes` when they fit the room now, without evicting or recording
+    /// a refusal: for an accelerator whose fallback needs no room (#1290).
+    pub fn reserve_if_room(&self, bytes: u64) -> Option<Reservation<'_>> {
+        self.try_reserve(&self.reading(), bytes, 0)
+            .then(|| self.reservation(bytes))
+    }
+
     /// Whether `bytes` fit the room now; a refusal is recorded. For work that
     /// allocates right after the check.
     pub fn admit(&self, bytes: u64, purpose: &'static str) -> bool {

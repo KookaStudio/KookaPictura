@@ -222,3 +222,93 @@ fn transformed_tiles_spill_and_read_back() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A map that records the job's progress each time a strip samples it, and
+/// runs an eviction pass at the start of each strip.
+struct Recording {
+    inner: QuadMap,
+    job: std::sync::Arc<pictura_core::job::JobProgress>,
+    last: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    seen: std::sync::Arc<std::sync::Mutex<Vec<u32>>>,
+    spilled: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl PlaneMap for Recording {
+    fn forward(&self, x: f64, y: f64) -> Option<(f64, f64)> {
+        self.inner.forward(x, y)
+    }
+
+    fn inverse(&self, qx: f64, qy: f64) -> Option<(f64, f64)> {
+        // Progress moves only between strips, when no task is sampling, so one
+        // task per strip sees the change.
+        let now = self.job.permille();
+        if self.last.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
+            self.seen.lock().expect("seen").push(now);
+            for _ in 0..2 {
+                let report = run_pass(u64::MAX);
+                self.spilled
+                    .fetch_add(report.spilled, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+        self.inner.inverse(qx, qy)
+    }
+
+    fn for_rect(&self, rect: PsdRect) -> Self {
+        Self {
+            inner: self.inner.for_rect(rect),
+            job: self.job.clone(),
+            last: self.last.clone(),
+            seen: self.seen.clone(),
+            spilled: self.spilled.clone(),
+        }
+    }
+}
+
+// [oct_progress_spill]
+#[test]
+fn progress_climbs_while_tiles_spill() {
+    let _scratch = crate::test_support::scratch_guard();
+    let dir = pictura_core::scratch::default_volume()
+        .with_file_name("test-scratch")
+        .join(format!("render-progress-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    pictura_core::scratch::set_volumes(std::slice::from_ref(&dir));
+    let (w, h) = (1024, 2304);
+    let r = rect(w as i32, h as i32);
+    let src = seeded_u8(w, h);
+    let inner = solve_homography(corners(r), similar(r, 1.0, 10.0)).expect("map");
+    let dest = dest_of(&inner, r);
+    let job = pictura_core::job::JobProgress::new();
+    job.begin_stage((dest.3 - dest.1) as u64);
+    let map = Recording {
+        inner,
+        job: job.clone(),
+        last: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(u32::MAX)),
+        seen: Default::default(),
+        spilled: Default::default(),
+    };
+    let tiled = pictura_core::job::scope(&job, || {
+        resample_plane(&src, w, h, &map, r, dest, Interpolation::Bilinear)
+    })
+    .expect("tiled");
+    let seen = map.seen.lock().expect("seen").clone();
+    let inside: Vec<u32> = seen
+        .iter()
+        .copied()
+        .filter(|&p| p > 0 && p < 1000)
+        .collect();
+    assert!(inside.len() >= 4, "progress seen: {seen:?}");
+    assert!(
+        seen.windows(2).all(|p| p[0] < p[1]),
+        "progress fell: {seen:?}"
+    );
+    assert!(
+        map.spilled.load(std::sync::atomic::Ordering::Relaxed) > 0,
+        "nothing spilled during the resample: {:?}",
+        eviction::counts()
+    );
+    let dense = dense_resample_plane(&src, w, h, &map.inner, r, dest, Interpolation::Bilinear)
+        .expect("dense");
+    assert!(every(&tiled) == dense, "the spilling resample differs");
+    let _ = std::fs::remove_dir_all(dir);
+}
