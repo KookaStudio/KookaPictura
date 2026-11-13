@@ -6,7 +6,14 @@
 # Slow; run verify-fast.sh during the edit loop.
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+if [ -z "${PICTURA_CPU_BUDGET_APPLIED:-}" ]; then
+    exec python3 "$script_dir/cpu-budget.py" exec -- \
+        bash "$script_dir/$(basename "$0")" "$@"
+fi
+: "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the gate through scripts/cpu-budget.py}"
+cd "$script_dir/.."
 
 # shellcheck source=scripts/build-lock.sh
 . scripts/build-lock.sh
@@ -26,7 +33,7 @@ if [ -f build/CMakeCache.txt ]; then
 else
   cmake -S . -B build -G Ninja -U CMAKE_EXE_LINKER_FLAGS -U CMAKE_SHARED_LINKER_FLAGS
 fi
-cmake --build build --parallel
+cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$PICTURA_JOBS}"
 echo "cmake_build=ok"
 
 echo "== build tree =="

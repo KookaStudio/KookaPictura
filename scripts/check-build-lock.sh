@@ -241,6 +241,15 @@ grep -q 'build_lock_install_traps' "$full" || fail "verify-full does not install
 grep -q 'PICTURA_VERIFY_LOCK_HELD=1' "$full" || fail "verify-full does not export the nesting marker"
 grep -q '_build_lock_owned' "$full" || fail "verify-full does not gate the marker on ownership"
 
+# bl_budget_order: the CPU budget re-exec precedes the lock source in both gates.
+for gate in "$fast" "$full"; do
+    budget_line=$(grep -n 'cpu-budget.py' "$gate" | cut -d: -f1 | head -1)
+    lock_line=$(grep -n '^\. scripts/build-lock.sh' "$gate" | cut -d: -f1 | head -1)
+    [ -n "$budget_line" ] || fail "$gate does not invoke cpu-budget.py"
+    [ -n "$lock_line" ] || fail "$gate does not source build-lock.sh"
+    [ "$budget_line" -lt "$lock_line" ] || fail "$gate invokes cpu-budget.py after sourcing the lock"
+done
+
 # bl_timeout: a bounded wait exits non-zero, names the holder, and leaves no lock.
 export PICTURA_VERIFY_LOCK=1 PICTURA_VERIFY_LOCK_TIMEOUT=1
 hold_async 2
@@ -396,5 +405,111 @@ for sig in TERM INT; do
     fi
 done
 unset PICTURA_VERIFY_LOCK
+
+# bl_wrap_*: the wrapper for direct heavy commands.
+wrapper="$PWD/scripts/with-build-lock.sh"
+[ -x "$wrapper" ] || fail "missing or non-executable $wrapper"
+
+export PICTURA_VERIFY_LOCK=1
+
+# bl_wrap_queue: a second wrapper waits for the holder and proceeds.
+hold_async 2
+holder=$HOLDER_PID
+wait_for_lock || fail "wrapper queue holder did not acquire the lock"
+wrap_log="$sandbox/wrap-queue.log"
+wrap_start=$(date +%s)
+( cd "$sandbox" && "$wrapper" -- true ) 2>"$wrap_log" || fail "wrapper queue run failed"
+wrap_elapsed=$(( $(date +%s) - wrap_start ))
+[ "$wrap_elapsed" -ge 1 ] || fail "wrapper did not wait for the holder"
+grep -q '^  worktree=' "$wrap_log" || fail "wrapper waiting message does not name the holder"
+wait "$holder" || fail "wrapper queue holder failed"
+assert_absent
+
+# bl_wrap_failure: the command's exit code is propagated and no lock remains.
+set +e
+( cd "$sandbox" && "$wrapper" -- bash -c 'exit 7' )
+wrap_rc=$?
+set -e
+[ "$wrap_rc" -eq 7 ] || fail "wrapper exit code $wrap_rc, want 7"
+assert_absent
+
+# bl_wrap_nested: a gate that sources the helper sees the held marker and does
+# not acquire or release.
+nested_gate="$sandbox/nested-gate.sh"
+cat >"$nested_gate" <<'NESTED'
+#!/usr/bin/env bash
+set -euo pipefail
+. "$1"
+[ "${PICTURA_VERIFY_LOCK_HELD:-}" = "1" ] || exit 3
+build_lock_acquire || exit 4
+[ -d "$(build_lock_dir_path)" ] || exit 5
+exit 0
+NESTED
+chmod +x "$nested_gate"
+( cd "$sandbox" && "$wrapper" -- bash "$nested_gate" "$helper" ) \
+    || fail "nested wrapper run failed"
+assert_absent
+
+# bl_wrap_disabled: unset and 0 both run the command without a lock.
+unset PICTURA_VERIFY_LOCK
+set +e
+( cd "$sandbox" && "$wrapper" -- bash -c 'exit 5' )
+wrap_rc=$?
+set -e
+[ "$wrap_rc" -eq 5 ] || fail "disabled wrapper exit code $wrap_rc, want 5"
+assert_absent
+export PICTURA_VERIFY_LOCK=0
+( cd "$sandbox" && "$wrapper" -- true ) || fail "PICTURA_VERIFY_LOCK=0 wrapper run failed"
+assert_absent
+export PICTURA_VERIFY_LOCK=1
+
+# bl_wrap_dashdash: the documented form strips the leading --; the bare form works.
+( cd "$sandbox" && "$wrapper" -- true ) || fail "wrapper -- form failed"
+( cd "$sandbox" && "$wrapper" true ) || fail "wrapper bare form failed"
+assert_absent
+
+# bl_wrap_cwd: the wrapper keeps the caller's working directory.
+mkdir -p "$sandbox/subdir"
+( cd "$sandbox/subdir" && "$wrapper" -- pwd ) >"$sandbox/wrap-cwd.log" \
+    || fail "wrapper cwd run failed"
+grep -qx "$sandbox/subdir" "$sandbox/wrap-cwd.log" || fail "wrapper changed the working directory"
+assert_absent
+
+# bl_wrap_signal: TERM and INT release the wrapper's lock and stop its child.
+for sig in TERM INT; do
+    python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' \
+        "$wrapper" -- sleep 30 &
+    wrap_pid=$!
+    wait_for_lock || fail "$sig wrapper did not acquire the lock"
+    wrap_child=""
+    for _ in {1..100}; do
+        wrap_child=$(child_of "$wrap_pid")
+        [ -n "$wrap_child" ] && break
+        sleep 0.05
+    done
+    [ -n "$wrap_child" ] || fail "$sig wrapper did not start a child"
+    kill -"$sig" "$wrap_pid"
+    for _ in {1..60}; do
+        kill -0 "$wrap_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    if kill -0 "$wrap_pid" 2>/dev/null; then
+        kill -KILL "$wrap_pid" 2>/dev/null || true
+        wait "$wrap_pid" 2>/dev/null || true
+        fail "$sig wrapper did not exit"
+    fi
+    wait "$wrap_pid" 2>/dev/null || true
+    sleep 0.2
+    assert_absent
+    if kill -0 "$wrap_child" 2>/dev/null; then
+        kill -KILL "$wrap_child" 2>/dev/null || true
+        fail "wrapped child survived $sig"
+    fi
+done
+unset PICTURA_VERIFY_LOCK
+
+# bl_wrap_docs: the wrapper is documented for direct heavy commands.
+grep -q 'with-build-lock.sh' AGENTS.md || fail "AGENTS.md does not name the wrapper"
+grep -q 'with-build-lock.sh' DEVELOPING.md || fail "DEVELOPING.md does not name the wrapper"
 
 echo "check-build-lock: OK"

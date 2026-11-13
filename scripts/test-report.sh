@@ -10,7 +10,14 @@
 # Usage: scripts/test-report.sh [auto|always|never]   (colour mode, default auto)
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+if [ -z "${PICTURA_CPU_BUDGET_APPLIED:-}" ]; then
+    exec python3 "$script_dir/cpu-budget.py" exec -- \
+        bash "$script_dir/$(basename "$0")" "$@"
+fi
+: "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the gate through scripts/cpu-budget.py}"
+cd "$script_dir/.."
 
 color="${1:-auto}"
 
@@ -52,11 +59,9 @@ fi
 # executables are missing has to be reported as a failure, not skipped.
 qt_args=()
 qt_rc=0
-# Default to 80% of the CPUs (at least one), the share AGENTS.md allows the
-# build, leaving room for the self-test runs that go alongside the layer.
-qt_default_parallel=$(( $(nproc) * 8 / 10 ))
-[ "$qt_default_parallel" -ge 1 ] || qt_default_parallel=1
-qt_parallel="${CTEST_PARALLEL_LEVEL:-$qt_default_parallel}"
+# The budget helper exports the 80% slice and CTEST_PARALLEL_LEVEL; an explicit
+# level wins.
+qt_parallel="${CTEST_PARALLEL_LEVEL:-$PICTURA_JOBS}"
 ctest_json="$tmp/ctest.json"
 if ctest --test-dir build --show-only=json-v1 >"$ctest_json" 2>/dev/null; then
   echo "== qt tests (ctest -j ${qt_parallel}) =="

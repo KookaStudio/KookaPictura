@@ -17,10 +17,11 @@ the Qt Test layer through `ctest --test-dir build -R '^tst_' --output-on-failure
 `build/crates/pictura-app/cpp/tests/` and passes
 `-o <CMAKE_BINARY_DIR>/qt-test-results/<name>.xml,junitxml`, so each emits a
 per-executable JUnit report), capture each layer's output, and invoke
-`scripts/report_tests.py`. The CTest parallel level SHALL default to 80% of the
-CPUs available to the run, rounded down and at least one, and SHALL be
-overridable through `CTEST_PARALLEL_LEVEL`, so the suites use the machine
-without launching every offscreen process at once. The CI Qt Test job, which
+`scripts/report_tests.py`. The CTest parallel level SHALL default to the local
+CPU budget (`PICTURA_JOBS`, itself 80% of the allowed CPUs by default, at least
+one), and SHALL be overridable through `CTEST_PARALLEL_LEVEL`, so the suites use
+the machine without launching every offscreen process at once and without
+taking 80% of an already-reduced slice. The CI Qt Test job, which
 has its runner to itself, SHALL default to the runner's CPU count, keeping the
 same override. The script SHALL
 clear `build/qt-test-results/*.xml` before the CTest run so a removed, renamed,

@@ -281,8 +281,9 @@ sharded when its per-function reset (`init()` and `cleanup()`) makes every
 function independent; a suite whose functions build on each other's state
 keeps one entry.
 `CTEST_PARALLEL_LEVEL` overrides the level, which `scripts/test-report.sh`
-sets to 80% of the CPUs (at least one) and CI to every CPU; plain `ctest` runs
-serially unless given `-j`.
+takes from the local CPU budget (`PICTURA_JOBS`, 80% of the allowed CPUs by
+default) and CI sets to every CPU; plain `ctest` runs serially unless given
+`-j`.
 
 ## Headless
 
@@ -402,6 +403,16 @@ waits without a limit). A docs-only `verify-fast.sh` run never takes the lock.
 The lock lives under `XDG_RUNTIME_DIR` (or `TMPDIR`), so runs that use different
 runtime directories do not serialize against each other.
 
+Direct heavy commands can take the same lock without going through a gate:
+
+```bash
+PICTURA_VERIFY_LOCK=1 scripts/with-build-lock.sh -- cmake --build build --parallel
+PICTURA_VERIFY_LOCK=1 scripts/with-build-lock.sh -- cargo nextest run --workspace
+```
+
+The wrapper keeps the caller's working directory and propagates the command's
+exit code.
+
 A new worktree benefits from `sccache` (see
 [Speeding up local builds](#speeding-up-local-builds)) and needs a one-time
 `serena project index` if you use Serena there. Remove a finished worktree with:
@@ -436,8 +447,11 @@ packaging configure (`-DBUILD_TESTING=OFF`). The header can hide a missing
 `#include`; configure a throwaway tree with
 `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` to check, as CI does.
 
-`scripts/test-report.sh` runs the CTest suites on 80% of the CPUs; set
-`CTEST_PARALLEL_LEVEL` to override it. The
+The local gates run under a CPU budget of 80% of the allowed CPUs: the budget
+helper applies an affinity slice shared by concurrent worktrees and exports the
+job counts. Override the share with `PICTURA_CPU_BUDGET_PERCENT` (1-100; `100`
+uses every CPU). `scripts/test-report.sh` takes its CTest level from that
+budget; set `CTEST_PARALLEL_LEVEL` to override it. The
 local build-caching check reuses a user-level FetchContent checkout cache under
 `${XDG_CACHE_HOME:-$HOME/.cache}/kooka-pictura/fetchcontent`, so repeated
 configures do not re-clone cxx-qt-cmake or Corrosion. In its default mode the
