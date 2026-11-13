@@ -422,6 +422,7 @@ impl qobject::PictureView {
         label: &str,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().take_over_lazy_move();
         self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
@@ -455,6 +456,7 @@ impl qobject::PictureView {
         defer: bool,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
+        self.as_mut().take_over_lazy_move();
         self.as_mut().settle_pending_composite();
         let edit = {
             let mut rust = self.as_mut().rust_mut();
@@ -475,9 +477,33 @@ impl qobject::PictureView {
             self.as_mut().build_move_composite(job);
         }
         self.as_mut().request_lazy_move_tiles();
+        if self.rust().lazy_move_pending {
+            let presented = self.rust().presented_rect;
+            let rects = match &edit {
+                Edit::Regions { rects, .. } => rects.clone(),
+                Edit::Structural {
+                    damage: Some(rects),
+                } => rects.clone(),
+                _ => vec![presented],
+            };
+            // The canvas keeps the transform's untransformed image as its
+            // preview until the commit reports; once the stale tiles show the
+            // result, that preview only hides it.
+            if self.as_mut().rust_mut().paint_reduced_stand_in(&rects) {
+                self.as_mut().rust_mut().lazy_move_pending = false;
+            }
+        }
         let outcome = presentation.declaration.clone().unwrap_or(edit);
         self.as_mut().present(presentation);
         outcome
+    }
+
+    /// A new Move commit inherits an earlier lazy Move's wait instead of
+    /// reporting it: `moveCommitted` would drop the canvas preview of the drag
+    /// just released, exposing tiles that are still stale. The new commit's
+    /// own request covers every stale presented tile.
+    fn take_over_lazy_move(mut self: Pin<&mut Self>) {
+        self.as_mut().rust_mut().lazy_move_pending = false;
     }
 
     /// Present a live edit without capturing history and return its outcome.

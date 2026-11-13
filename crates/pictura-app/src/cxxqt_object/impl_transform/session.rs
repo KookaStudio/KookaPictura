@@ -39,7 +39,7 @@ pub(in crate::cxxqt_object) use preview::{
     rendered_transform_group, set_transform_preview_pixels_for_test, transform_preview_layer_at,
 };
 use view_preview::above_patch;
-pub(in crate::cxxqt_object) use view_preview::MoveView;
+pub(in crate::cxxqt_object) use view_preview::{MoveView, MoveViewPixels};
 
 /// The selection's coverage when it is document-sized and not empty: Free
 /// Transform then lifts the selected pixels instead of moving the whole layer.
@@ -225,6 +225,7 @@ impl qobject::PictureView {
         rust.move_base = Some(preview.base);
         rust.move_base_origin = preview.base_origin;
         rust.move_view = None;
+        rust.move_view_pixels = Default::default();
         rust.move_layer = Some(preview.image);
         rust.transform_preview_level = preview.level;
         rust.move_x = preview.x;
@@ -786,6 +787,7 @@ impl qobject::PictureView {
         rust.move_base = Some(base);
         rust.move_base_origin = origin;
         rust.move_view = None;
+        rust.move_view_pixels = Default::default();
         rust.move_layer = Some(layer_image);
         rust.move_x = x;
         rust.move_y = y;
@@ -851,11 +853,12 @@ impl qobject::PictureView {
         let Some(path) = rust.move_prepared_layer.lines().next() else {
             return false;
         };
-        let Some((image, view)) = view_preview::follow(doc, path, view, dx, dy, rust.gpu_compute)
+        let Some((pixels, view)) = view_preview::follow(doc, path, view, dx, dy, rust.gpu_compute)
         else {
             return false;
         };
-        rust.move_layer = Some(image);
+        rust.move_layer = Some(buffer_to_image(&pixels));
+        rust.move_view_pixels.layer = Some(pixels);
         rust.move_x = view.region.left;
         rust.move_y = view.region.top;
         rust.move_view = Some(view);
@@ -880,6 +883,7 @@ impl qobject::PictureView {
         rust.move_base = None;
         rust.move_base_origin = None;
         rust.move_view = None;
+        rust.move_view_pixels = Default::default();
         rust.move_layer = None;
         rust.transform_preview_level = 0;
         rust.move_x = 0;
@@ -935,6 +939,14 @@ impl qobject::PictureView {
         };
         self.as_mut()
             .commit_move_edit("Move Layer", |_| Edit::regions(vec![dirty], false));
+        if self.rust().lazy_move_pending {
+            let mut rust = self.as_mut().rust_mut();
+            if rust.move_view.is_some() {
+                rust.bake_move_stand_in(dx, dy);
+            } else {
+                rust.paint_reduced_stand_in(&[dirty]);
+            }
+        }
         // A deferred commit reports when its composite lands; a synchronous one
         // reports now so the canvas drops the drag preview either way.
         if !self.rust().move_composite_pending() {
@@ -989,6 +1001,7 @@ impl PictureViewRust {
         self.move_y = preview.view.region.top;
         self.move_opacity = opacity;
         self.move_view = Some(preview.view);
+        self.move_view_pixels = preview.pixels;
         let (above_image, above_origin) = match above {
             Some((image, origin)) => (Some(image), Some(origin)),
             None => (None, None),

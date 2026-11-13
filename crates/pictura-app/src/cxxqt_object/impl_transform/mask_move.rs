@@ -85,6 +85,7 @@ impl qobject::PictureView {
         state.move_base = Some(base);
         state.move_base_origin = None;
         state.move_view = None;
+        state.move_view_pixels = Default::default();
         state.move_layer = Some(image);
         state.move_x = origin_x;
         state.move_y = origin_y;

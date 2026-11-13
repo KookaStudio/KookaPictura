@@ -504,6 +504,7 @@ impl PictureViewRust {
         self.expanded_groups.clear();
         self.move_base = None;
         self.move_view = None;
+        self.move_view_pixels = Default::default();
         self.move_layer = None;
         self.move_x = 0;
         self.move_y = 0;
@@ -544,6 +545,7 @@ impl PictureViewRust {
     fn cancel_transform_session(&mut self, session: TransformSession) -> bool {
         self.move_base = None;
         self.move_view = None;
+        self.move_view_pixels = Default::default();
         self.move_layer = None;
         self.move_x = 0;
         self.move_y = 0;

@@ -337,6 +337,60 @@ impl TilePyramid {
         self.patch_level(source, level, rect, rows);
     }
 
+    /// Paint `region` (straight planar RGBA covering `rect`, in `level`
+    /// pixels) into the stale cached tiles of `source` at `level` as their
+    /// stand-in. The tiles stay stale, so a worker still rebuilds them; until
+    /// then the canvas shows this instead of what they held before an edit.
+    /// `over` composites it at `opacity` over the stand-in, otherwise it
+    /// replaces it. Current and absent tiles are left alone.
+    pub fn paint_stand_in(
+        &mut self,
+        source: TileSource,
+        level: usize,
+        rect: PsdRect,
+        region: &PixelBuffer,
+        opacity: u8,
+        over: bool,
+    ) {
+        let (rw, rh) = (region.width as usize, region.height as usize);
+        if region.channels != 4
+            || level >= self.levels
+            || rect.width() != rw as i32
+            || rect.height() != rh as i32
+            || rw == 0
+            || rh == 0
+        {
+            return;
+        }
+        let planes: &[u8] = &region.data;
+        let plane = rw * rh;
+        // Level 0 stores straight alpha; every coarser level premultiplied.
+        let straight = level == 0;
+        for key in self.keys_in(source, level, rect) {
+            let tile = self.tile_rect(key);
+            let Some(entry) = self.tiles.get_mut(&key).filter(|e| e.stale) else {
+                continue;
+            };
+            let tw = tile.width() as usize;
+            let data = unique(&mut entry.data);
+            for y in tile.top.max(rect.top)..tile.bottom.min(rect.bottom) {
+                for x in tile.left.max(rect.left)..tile.right.min(rect.right) {
+                    let s = (y - rect.top) as usize * rw + (x - rect.left) as usize;
+                    let d = ((y - tile.top) as usize * tw + (x - tile.left) as usize) * 4;
+                    let src = [0, 1, 2, 3].map(|c| planes[c * plane + s]);
+                    let px: &mut [u8; 4] = (&mut data[d..d + 4]).try_into().expect("four bytes");
+                    *px = if over {
+                        over_pixel(src, opacity, *px, straight)
+                    } else if straight {
+                        src
+                    } else {
+                        premultiplied(src)
+                    };
+                }
+            }
+        }
+    }
+
     /// `rect` grown to the alignment [`Self::repair`] needs: every level's
     /// 2×2 blocks under it whole, so each level of the region halves exactly.
     pub fn repair_rect(&self, rect: PsdRect) -> PsdRect {
@@ -595,6 +649,36 @@ pub fn interleave(buffer: &PixelBuffer) -> Vec<u8> {
 
 /// The tile's own bytes for writing, copied first when a crop or a worker
 /// still holds them.
+fn mul255(a: u32, b: u32) -> u32 {
+    (a * b + 127) / 255
+}
+
+fn premultiplied([r, g, b, a]: [u8; 4]) -> [u8; 4] {
+    let a32 = u32::from(a);
+    let p = |c: u8| mul255(u32::from(c), a32) as u8;
+    [p(r), p(g), p(b), a]
+}
+
+/// Straight `src` at `opacity` over `dst`, which is stored straight when
+/// `straight` and premultiplied otherwise; the result keeps `dst`'s storage.
+fn over_pixel(src: [u8; 4], opacity: u8, dst: [u8; 4], straight: bool) -> [u8; 4] {
+    let sa = mul255(u32::from(src[3]), u32::from(opacity));
+    let dst = if straight { premultiplied(dst) } else { dst };
+    let keep = 255 - sa;
+    let mut out = [0u8; 4];
+    for c in 0..3 {
+        out[c] = (mul255(u32::from(src[c]), sa) + mul255(u32::from(dst[c]), keep)).min(255) as u8;
+    }
+    let oa = (sa + mul255(u32::from(dst[3]), keep)).min(255);
+    out[3] = oa as u8;
+    if straight && oa > 0 {
+        for c in out.iter_mut().take(3) {
+            *c = ((u32::from(*c) * 255 + oa / 2) / oa).min(255) as u8;
+        }
+    }
+    out
+}
+
 fn unique(data: &mut Arc<[u8]>) -> &mut [u8] {
     if Arc::get_mut(data).is_none() {
         *data = Arc::from(&data[..]);

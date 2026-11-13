@@ -316,6 +316,7 @@ impl qobject::PictureView {
         rust.move_base = Some(base);
         rust.move_base_origin = None;
         rust.move_view = None;
+        rust.move_view_pixels = Default::default();
         rust.move_layer = Some(layer);
         rust.move_x = 0;
         rust.move_y = 0;

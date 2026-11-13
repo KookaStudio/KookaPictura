@@ -161,7 +161,7 @@ fn a_shape_drag_past_the_margin_rebuilds_the_moving_image() {
     );
     assert_eq!(moved.level, view.level);
     assert_eq!(
-        (image.width() * 4, image.height() * 4),
+        (image.width as i32 * 4, image.height as i32 * 4),
         (moved.region.width(), moved.region.height())
     );
 }
@@ -232,7 +232,7 @@ fn a_drag_past_the_margin_rebuilds_the_moving_image() {
     );
     assert_eq!(moved.level, view.level);
     assert_eq!(
-        (image.width() * 4, image.height() * 4),
+        (image.width as i32 * 4, image.height as i32 * 4),
         (moved.region.width(), moved.region.height())
     );
 }

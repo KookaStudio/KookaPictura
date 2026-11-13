@@ -82,9 +82,9 @@ pub(in crate::cxxqt_object) struct SettledMove {
 }
 
 impl PictureViewRust {
-    /// The document and dirty areas of a large Move commit, or `None` when the
+    /// The dirty area of a Move commit on a large document, or `None` when the
     /// display is busy or the edit is not a bounded or full Move.
-    fn large_move_area(&self, edit: &Edit) -> Option<(u64, u64)> {
+    fn large_move_area(&self, edit: &Edit) -> Option<u64> {
         let doc = self.session.doc.as_ref()?;
         if self.has_active_session() || self.pending_previews.any() || self.mask_solo.is_some() {
             return None;
@@ -95,13 +95,16 @@ impl PictureViewRust {
             Edit::Full | Edit::Structural { damage: None } => canvas,
             _ => return None,
         };
-        (canvas >= DEFERRED_MOVE_PIXELS && area >= DEFERRED_MOVE_PIXELS).then_some((canvas, area))
+        (canvas >= DEFERRED_MOVE_PIXELS && area > 0).then_some(area)
     }
 
-    /// Whether a Move commit leaves its display tiles stale instead of
+    /// Whether a Move commit may leave its display tiles stale instead of
     /// compositing: a layered RGB document keeps no stored composite, so the
-    /// visible tiles rebuild from the moved layers. A test delay forces the
-    /// deferred path so its pending-state behaviour stays covered.
+    /// visible tiles rebuild from the moved layers. Any area counts, because
+    /// the display refresh leaves a region over its repair budget stale well
+    /// below the deferred-composite threshold; a commit whose tiles stay
+    /// current ends the wait at once. A test delay forces the deferred path so
+    /// its pending-state behaviour stays covered.
     pub(in crate::cxxqt_object) fn should_leave_tiles(&self, edit: &Edit) -> bool {
         let Some(doc) = self.session.doc.as_ref() else {
             return false;
@@ -116,7 +119,8 @@ impl PictureViewRust {
         if self.should_leave_tiles(edit) {
             return false;
         }
-        self.large_move_area(edit).is_some()
+        self.large_move_area(edit)
+            .is_some_and(|area| area >= DEFERRED_MOVE_PIXELS)
     }
 
     /// Leave the already-translated layer's composite to a worker. The job is

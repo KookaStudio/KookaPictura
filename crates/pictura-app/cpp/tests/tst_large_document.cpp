@@ -66,6 +66,9 @@ private slots:
     void aDocumentCanvasHoldsNoImage();
     void aLargeMoveCommitLandsOffThread();
     void aLargeMoveCommitLeavesTheTilesStale();
+    void aMidSizedMoveCommitWaitsForTheTiles();
+    void aSecondMoveInheritsThePendingWait();
+    void aLayeredTransformShowsItsResultAtOnce();
     void aLargeShapeMoveCommitLandsOffThread();
     void aSmallMoveCommitIsSynchronous();
     void aReadSettlesThePendingMove();
@@ -294,6 +297,100 @@ void LargeDocumentTest::aLargeMoveCommitLeavesTheTilesStale()
     QVERIFY(!pictura::move_composite_pending(*f.view));
     QVERIFY2(!f.canvas->movePreviewActive(), "the preview drops when the tiles land");
     QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [mcr_layered_mid]
+void LargeDocumentTest::aMidSizedMoveCommitWaitsForTheTiles()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_mid_lazy_move"));
+    QVERIFY2(f.ok(), "mid-sized lazy move fixture");
+    showFrame();
+    // A 2400 px square: its moved union is about 5.8 MP, over the display's
+    // 4 MP repair budget but under the 16 MP deferred-composite threshold.
+    QVERIFY(f.view->select_rect(100, 100, 2400, 2400, QStringLiteral("new"), 0.0));
+    const QString top = f.view->layer_via_copy(QStringLiteral("0"));
+    QVERIFY(!top.isEmpty());
+    f.view->deselect();
+    f.view->set_active_layer(top);
+    f.canvas->setZoom(0.125, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    f.canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0);
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY2(pictura::move_composite_pending(*f.view),
+             "a move that leaves its presented tiles stale keeps the preview");
+    QVERIFY2(f.canvas->movePreviewActive(), "the stale tiles are not exposed");
+    QCOMPARE(committed.count(), 0);
+
+    QVERIFY(committed.wait(30000));
+    QCOMPARE(committed.count(), 1);
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY2(!f.canvas->movePreviewActive(), "the preview drops when the tiles land");
+}
+
+// [mcr_lazy_chain]
+void LargeDocumentTest::aSecondMoveInheritsThePendingWait()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_chained_lazy_move"));
+    QVERIFY2(f.ok(), "chained lazy move fixture");
+    showFrame();
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    f.canvas->setZoom(0.125, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    f.canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0);
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY(pictura::move_composite_pending(*f.view));
+
+    // The second drag is released before the first move's tiles land, with no
+    // event loop in between, so the first wait is still open.
+    f.canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0);
+    QVERIFY(f.view->commit_move(4, 4));
+    QCOMPARE(committed.count(), 0);
+    QVERIFY2(pictura::move_composite_pending(*f.view), "the second move inherits the wait");
+    QVERIFY2(f.canvas->movePreviewActive(), "the second drag's preview stays presented");
+
+    QVERIFY(committed.wait(30000));
+    QCOMPARE(committed.count(), 1);
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY2(!f.canvas->movePreviewActive(), "the preview drops when the tiles land");
+}
+
+// [mcr_transform_lazy]
+void LargeDocumentTest::aLayeredTransformShowsItsResultAtOnce()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_lazy_transform"));
+    QVERIFY2(f.ok(), "lazy transform fixture");
+    showFrame();
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    f.canvas->setZoom(0.125, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    QVERIFY(f.tools->beginFreeTransform(QStringLiteral("1")));
+    const QPolygonF quad = pictura::transform_api::quad(*f.view).corners;
+    QCOMPARE(quad.size(), 4);
+    const QPointF corner = quad.at(2);
+    QVERIFY(f.view->transform_press(corner.x(), corner.y(), 1.0, false, false) >= 0);
+    QVERIFY(f.view->transform_move(corner.x() - 2000.0, corner.y() - 2000.0, 1.0, false, false));
+    f.view->transform_release();
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    f.tools->commitFreeTransform();
+    // The stale tiles already show the transformed layer, so the canvas drops
+    // the untransformed preview at once instead of waiting for the rebuild.
+    QCOMPARE(committed.count(), 1);
+    QVERIFY(!pictura::move_composite_pending(*f.view));
+    QVERIFY2(!f.canvas->movePreviewActive(), "no untransformed image is left presented");
+    QVERIFY(!f.canvas->transformPreviewActive());
 }
 
 // [mcr_shape_deferred]
