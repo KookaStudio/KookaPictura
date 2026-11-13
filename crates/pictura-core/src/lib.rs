@@ -1070,6 +1070,11 @@ pub struct Layer {
     pub color: ColorLabel,
     pub clipping: bool,
     pub visible: bool,
+    /// PSD record flag bit 4: the layer's pixel data is irrelevant to the
+    /// document's appearance. Set on shape layers and preserved on save so a
+    /// re-saved shape layer stays a shape. The writer emits bit 3 (`0x08`,
+    /// "flags valid") with it.
+    pub pixel_data_irrelevant: bool,
     pub mask: Option<LayerMask>,
     pub adjustment: Option<AdjustmentData>,
     pub channels: Vec<Channel>,
@@ -1135,6 +1140,7 @@ impl Default for Layer {
             color: ColorLabel::None,
             clipping: false,
             visible: true,
+            pixel_data_irrelevant: false,
             mask: None,
             adjustment: None,
             channels: Vec::new(),

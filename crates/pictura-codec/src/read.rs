@@ -1064,6 +1064,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
             color,
             clipping,
             visible: flags & 0x02 == 0,
+            pixel_data_irrelevant: flags & 0x10 != 0,
             mask,
             adjustment,
             channels: Vec::new(),
