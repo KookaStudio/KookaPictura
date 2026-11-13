@@ -112,7 +112,10 @@ so Pictura's own writers never do this.
 ## D5. Open budget
 
 `open_budget()` returns `max_document_bytes = min(default, ⅔ room)` and
-`max_tiled_bytes = min(default tiled, ⅔ room + scratch available)`. The flag is
+`max_tiled_bytes = ⅔ room + scratch available`. The tile allowance is
+deliberately not clamped to the codec default: that default is three quarters
+of available RAM, so clamping would undo the spill. A hostile file is still
+bounded by the per-allocation cap and by this finite total. The flag is
 true when either one is bounded. `bounded_budget` takes the scratch bytes.
 With no governor reading, the budget keeps the defaults.
 

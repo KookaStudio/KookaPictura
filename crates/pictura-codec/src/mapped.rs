@@ -6,25 +6,50 @@
 //! next read past the new end. Pictura's own saves land by atomic rename,
 //! which never truncates the file an open has mapped.
 
-use std::fs::File;
-use std::os::fd::AsRawFd;
 use std::path::Path;
 
 /// A file mapped read-only; it dereferences to the file's bytes.
+///
+/// ponytail: off Unix the file is read into the heap, as before #1273.
 pub struct MappedFile {
+    #[cfg(unix)]
     ptr: *mut libc::c_void,
+    #[cfg(unix)]
     len: usize,
+    #[cfg(not(unix))]
+    bytes: Vec<u8>,
 }
 
 // SAFETY: the mapping is read-only and owned; nothing aliases it mutably.
+#[cfg(unix)]
 unsafe impl Send for MappedFile {}
 // SAFETY: as above; shared reads of immutable memory are sound.
+#[cfg(unix)]
 unsafe impl Sync for MappedFile {}
 
+#[cfg(not(unix))]
+impl MappedFile {
+    /// Read `path` whole.
+    pub fn open(path: impl AsRef<Path>) -> std::io::Result<Self> {
+        std::fs::read(path).map(|bytes| Self { bytes })
+    }
+}
+
+#[cfg(not(unix))]
+impl std::ops::Deref for MappedFile {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+#[cfg(unix)]
 impl MappedFile {
     /// Map `path`. An empty file maps nothing and reads as an empty slice.
     pub fn open(path: impl AsRef<Path>) -> std::io::Result<Self> {
-        let file = File::open(path)?;
+        use std::os::fd::AsRawFd;
+        let file = std::fs::File::open(path)?;
         let len = usize::try_from(file.metadata()?.len())
             .map_err(|_| std::io::Error::other("file too large to map"))?;
         if len == 0 {
@@ -56,6 +81,7 @@ impl MappedFile {
     }
 }
 
+#[cfg(unix)]
 impl std::ops::Deref for MappedFile {
     type Target = [u8];
 
@@ -68,6 +94,7 @@ impl std::ops::Deref for MappedFile {
     }
 }
 
+#[cfg(unix)]
 impl Drop for MappedFile {
     fn drop(&mut self) {
         if self.len != 0 {
