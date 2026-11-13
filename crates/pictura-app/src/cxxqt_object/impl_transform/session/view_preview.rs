@@ -56,9 +56,9 @@ pub(super) struct ViewPreview {
 
 /// The view preview of `paths` with the canvas presenting `level` over
 /// `visible`, or `None` when the whole-content preview should run: more than
-/// one layer, a layer that is not plain pixels or has content under
-/// [`VIEW_PREVIEW_PIXELS`], no presented view, or (above level 0) a document a
-/// reduced copy would not draw faithfully.
+/// one layer, a layer that is not plain pixels or a supported shape layer, or
+/// has content under [`VIEW_PREVIEW_PIXELS`], no presented view, or (above level
+/// 0) a document whose visible layers a reduced copy would not draw faithfully.
 pub(super) fn view_preview(
     doc: &Document,
     paths: &[String],
@@ -70,16 +70,22 @@ pub(super) fn view_preview(
         return None;
     };
     let layer = pictura_render::resolve_path(doc, path)?;
-    if pictura_render::is_shape_layer(layer)
-        || layer_has_effects(layer)
-        || layer.is_group
-        || layer.adjustment.is_some()
+    let shape = pictura_render::is_shape_layer(layer);
+    if layer.is_group
         || layer.is_type()
         || layer.smart_object.is_some()
+        || (!shape && (layer_has_effects(layer) || layer.adjustment.is_some()))
     {
         return None;
     }
-    let content = pictura_render::content_rect(doc, path)?;
+    // A shape's own rect is the canvas; its reach is what it actually draws.
+    let content = if shape {
+        pictura_render::damage::content_influence(doc, path)
+            .or_else(|| pictura_render::layer_paint_bounds(doc, path))
+            .or_else(|| pictura_render::content_rect(doc, path))?
+    } else {
+        pictura_render::content_rect(doc, path)?
+    };
     if area(content) <= VIEW_PREVIEW_PIXELS {
         return None;
     }
@@ -87,7 +93,7 @@ pub(super) fn view_preview(
         .ok()
         .filter(|&level| level <= MAX_LEVEL)?;
     let visible = visible.intersect(canvas(doc))?;
-    if level > 0 && !FilterProxy::reduces_faithfully(doc) {
+    if level > 0 && !reduces_faithfully_without(doc, path, shape) {
         return None;
     }
     let scale = 1i32 << level;
@@ -101,7 +107,7 @@ pub(super) fn view_preview(
     };
     // A layer far off screen starts with no moving image; [`follow`] builds
     // one when a drag brings it into view.
-    let (image, region) = match moving_region(layer.rect, visible, scale) {
+    let (image, region) = match moving_region(content, visible, scale) {
         Some(region) => (
             moving_layer_image(doc, path, region, level, gpu_compute)?,
             region,
@@ -121,6 +127,21 @@ pub(super) fn view_preview(
     })
 }
 
+/// Whether the backdrop's visible layers reduce faithfully. A shape's own
+/// appearance is reduced separately, so it is hidden for the check; every
+/// other layer is checked as it stands.
+fn reduces_faithfully_without(doc: &Document, path: &str, shape: bool) -> bool {
+    if !shape {
+        return FilterProxy::reduces_faithfully(doc);
+    }
+    let mut hidden = doc.clone();
+    let Some(layer) = pictura_render::resolve_path_mut(&mut hidden, path) else {
+        return false;
+    };
+    layer.visible = false;
+    FilterProxy::reduces_faithfully(&hidden)
+}
+
 /// The moving image again for a drag that has carried the view `(dx, dy)`
 /// across the layer, when the part of the layer now on screen leaves the
 /// region it covers; `None` while the current image still covers it.
@@ -132,13 +153,14 @@ pub(super) fn follow(
     dy: i32,
     gpu_compute: bool,
 ) -> Option<(QImage, MoveView)> {
-    let layer = pictura_render::resolve_path(doc, path)?;
     let shown = offset(view.visible, -dx, -dy);
-    let needed = shown.intersect(layer.rect)?;
+    // The moving image covers the layer's content, not its canvas-sized rect:
+    // a shape's rect would always contain the view and never rebuild.
+    let needed = shown.intersect(view.content)?;
     if contains(view.region, needed) {
         return None;
     }
-    let region = moving_region(layer.rect, shown, view.scale())?;
+    let region = moving_region(view.content, shown, view.scale())?;
     let image = moving_layer_image(doc, path, region, view.level, gpu_compute)?;
     Some((image, MoveView { region, ..view }))
 }

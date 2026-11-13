@@ -59,6 +59,7 @@ private slots:
     void readoutFollowsTheRulerUnit();
     void switchingToMoveBuildsNoPreview();
     void largeLayerPreviewsFromTheView();
+    void largeShapePreviewsFromTheView();
     void maskedLayerPreviewsMasked();
     void moveThenFillOutsideTheLayer();
     void movedLayerStaysUnderTheLayersAbove();
@@ -210,6 +211,57 @@ void MoveFeedbackTest::largeLayerPreviewsFromTheView()
         pictura::transform_api::layerRect(*f.view, QStringLiteral("1"));
     QVERIFY(moved.valid);
     QCOMPARE(QPoint(moved.left, moved.top), QPoint(40, 16));
+}
+
+// [mvp_shape_view] a shape too large to bake whole previews from the view
+void MoveFeedbackTest::largeShapePreviewsFromTheView()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage big(2400, 2000, QImage::Format_RGB32);
+    big.fill(Qt::white);
+    Fixture f(frame, big, QStringLiteral("pictura_move_shape_view"));
+    QVERIFY2(f.ok(), "large shape move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    pictura::ShapeSpec spec{};
+    spec.kind = 0;
+    spec.boxed = true;
+    spec.x0 = 50;
+    spec.y0 = 50;
+    spec.x1 = 2350;
+    spec.y1 = 1950;
+    const QString shape = pictura::shape_add_layer(*f.view, spec, 0xffff0000u);
+    QVERIFY2(!shape.isEmpty(), "shape layer");
+    f.view->set_active_layer(shape);
+    frame.setActiveTool(pictura::ToolId::Move);
+    QVERIFY2(f.view->move_preview_base().isNull(), "switching to the tool builds nothing");
+
+    // At 1/8 zoom the canvas presents level 3; a paint reports it.
+    f.canvas->setZoom(0.125, QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
+    f.canvas->repaint();
+    f.canvas->mousePressed(QPointF(1200, 1000), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    QCOMPARE(pictura::move_preview_scale(*f.view), 8);
+    const QImage layer = f.view->move_preview_layer();
+    QVERIFY2(!layer.isNull() && layer.width() <= 2400 / 8 && layer.height() <= 2000 / 8,
+             "the shape's moving image is at the presented level");
+
+    // The ants box the shape's reach, not its canvas-sized layer rect.
+    const ::rust::Vec<int32_t> content = pictura::move_preview_content_extents(*f.view);
+    QCOMPARE(int(content.size()), 4);
+    QCOMPARE(content[0], 50);
+    QCOMPARE(content[1], 50);
+    QVERIFY2(content[2] >= 2350 && content[2] <= 2351, "the reach's right edge");
+    QVERIFY2(content[3] >= 1950 && content[3] <= 1951, "the reach's bottom edge");
+
+    f.canvas->mouseMoved(QPointF(1240, 1016));
+    QCOMPARE(f.canvas->moveOutlineForTest().topLeft(), QPointF(90, 66));
+    f.canvas->mouseReleased(QPointF(1240, 1016));
+    QVERIFY(!f.canvas->movePreviewActive());
+    const ::rust::Vec<int32_t> moved = pictura::controls_box_extents(*f.view, shape);
+    QCOMPARE(int(moved.size()), 4);
+    QCOMPARE(QPoint(moved[0], moved[1]), QPoint(90, 66));
 }
 
 // [lct_move_preview_mask] a dragged layer keeps its layer mask

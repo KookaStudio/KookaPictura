@@ -199,6 +199,17 @@ pub(super) fn moving_layer_image(
         right: region.width(),
     };
     if rendered {
+        // A shape's fill and vector mask reduce with the document, but its
+        // layer-effect sizes do not; scale them into the proxy's pixels so a
+        // stroke keeps its document width. The descriptor rounds integer pixel
+        // fields, so the preview is approximate; the commit stays exact.
+        if level > 0 && pictura_render::is_shape_layer(&single.layers[0]) {
+            pictura_render::scale_layer_effects(
+                &mut single,
+                &["0"],
+                100.0 / f64::from(1u32 << level),
+            );
+        }
         // Level 0 composites the region-sized scratch document directly, so a
         // channel-less type or fill layer keeps its rect; a deeper level needs
         // the reduced copy.

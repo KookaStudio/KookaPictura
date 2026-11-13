@@ -14,6 +14,7 @@
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
+#include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
 
@@ -64,6 +65,7 @@ private slots:
     void layerPropertiesRepaintOnlyTheLayer();
     void aDocumentCanvasHoldsNoImage();
     void aLargeMoveCommitLandsOffThread();
+    void aLargeShapeMoveCommitLandsOffThread();
     void aSmallMoveCommitIsSynchronous();
     void aReadSettlesThePendingMove();
     void aSecondPressReusesTheFullPreview();
@@ -259,6 +261,36 @@ void LargeDocumentTest::aLargeMoveCommitLandsOffThread()
     QVERIFY2(!f.canvas->movePreviewActive(), "the signal drops the preview");
     QVERIFY2(settled.wait(30000), "the landing defers the exact pyramid");
     QCOMPARE(pictura::preview_present_level(*f.view), 0);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
+}
+
+// [mcr_shape_deferred]
+void LargeDocumentTest::aLargeShapeMoveCommitLandsOffThread()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_deferred_shape_move"));
+    QVERIFY2(f.ok(), "deferred shape move fixture");
+
+    pictura::ShapeSpec spec{};
+    spec.kind = 0;
+    spec.boxed = true;
+    spec.x0 = 50;
+    spec.y0 = 50;
+    spec.x1 = 4150;
+    spec.y1 = 4150;
+    const QString shape = pictura::shape_add_layer(*f.view, spec, kRed);
+    QVERIFY2(!shape.isEmpty(), "shape layer");
+    f.view->set_active_layer(shape);
+    pictura::move_composite_set_delay(*f.view, 400);
+    QSignalSpy committed(f.view, &pictura::PictureView::moveCommitted);
+
+    QVERIFY(f.view->commit_move(4, 4));
+    QVERIFY2(pictura::move_composite_pending(*f.view), "a large shape commit defers");
+    QCOMPARE(committed.count(), 0);
+
+    QVERIFY(committed.wait(30000));
+    QVERIFY(!pictura::move_composite_pending(*f.view));
     QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Move Layer"));
 }
 
