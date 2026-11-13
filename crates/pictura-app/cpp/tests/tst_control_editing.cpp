@@ -9,6 +9,7 @@
 #include <QtWidgets/QDialog>
 
 #include "api/history_api.h"
+#include "api/transform_api.h"
 #include "control_server.h"
 #include "control_test_client.h"
 #include "frame.h"
@@ -50,6 +51,7 @@ private slots:
     void lassoIsOneCall();
     void freeTransformScalesAndRotates();
     void freeTransformIsRefusedDuringASession();
+    void freeTransformWarpsTheLayer();
     void newDocumentCanHaveABackgroundLayer();
 
 private:
@@ -415,6 +417,42 @@ void ControlEditingTest::freeTransformIsRefusedDuringASession()
     QVERIFY(tools->transformSessionActive());
     QCOMPARE(history_api::count(view()), before);
     tools->cancelFreeTransform();
+}
+
+void ControlEditingTest::freeTransformWarpsTheLayer()
+{
+    paintCentreSquare();
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    const QString path = view().active_layer_path();
+    const int index = path.toInt();
+    const auto before = pictura::transform_api::layerRect(view(), path);
+    QVERIFY(before.valid);
+    const int states = history_api::count(view());
+    QCOMPARE(errorCode(call(QStringLiteral("layer_op"),
+                            {{QStringLiteral("op"), QStringLiteral("free_transform")},
+                             {QStringLiteral("index"), index},
+                             {QStringLiteral("warp"), QStringLiteral("arc")},
+                             {QStringLiteral("bend"), 150.0}})),
+             QStringLiteral("invalid_param"));
+    QCOMPARE(errorCode(call(QStringLiteral("layer_op"),
+                            {{QStringLiteral("op"), QStringLiteral("free_transform")},
+                             {QStringLiteral("index"), index},
+                             {QStringLiteral("warp"), QStringLiteral("nope")}})),
+             QStringLiteral("refused"));
+    QVERIFY(!tools->transformSessionActive());
+    QCOMPARE(history_api::count(view()), states);
+    QVERIFY(succeeded(call(QStringLiteral("layer_op"),
+                           {{QStringLiteral("op"), QStringLiteral("free_transform")},
+                            {QStringLiteral("index"), index},
+                            {QStringLiteral("warp"), QStringLiteral("arc")},
+                            {QStringLiteral("bend"), 50.0}})));
+    QVERIFY(succeeded(call(QStringLiteral("status"))));
+    QVERIFY(!tools->transformSessionActive());
+    QCOMPARE(history_api::count(view()), states + 1);
+    const auto after = pictura::transform_api::layerRect(view(), path);
+    QVERIFY2(after.top < before.top,
+             qPrintable(before.toString() + QStringLiteral(" -> ") + after.toString()));
 }
 
 void ControlEditingTest::newDocumentCanHaveABackgroundLayer()

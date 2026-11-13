@@ -7,7 +7,8 @@ use super::paths::resolve_path;
 use super::transform::solve_homography;
 use super::transform::PlaneMap;
 use super::transform_layer_warp;
-use super::warp_raster::{triangulate, warp_planes, Planes};
+use super::warp_oracle::{dense_warp_planes as warp_planes, Planes};
+use super::warp_raster::triangulate;
 use pictura_core::warp::{BezierMesh, Warp, WarpStyle};
 use pictura_core::{
     BitDepth, Channel, ColorMode, Document, Layer, LayerMask, PsdRect, Samples, SourceChannels,

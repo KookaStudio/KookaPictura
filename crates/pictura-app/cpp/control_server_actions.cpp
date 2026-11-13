@@ -372,6 +372,12 @@ QJsonObject ControlServer::methodLayerOp(const QJsonObject& params)
         if (!(scale > 0.0 && scale <= 10000.0) || !std::isfinite(angle)) {
             return invalid(QStringLiteral("scale must be in (0, 10000] and angle finite"));
         }
+        // An optional Warp preset (#1292), set as the Warp options bar sets it.
+        const QString warp = params.value(QStringLiteral("warp")).toString();
+        const double bend = params.value(QStringLiteral("bend")).toDouble(50.0);
+        if (!(bend >= -100.0 && bend <= 100.0)) {
+            return invalid(QStringLiteral("bend must be in [-100, 100]"));
+        }
         if (!tools->beginFreeTransform(QString::number(index))) {
             return refused(QStringLiteral("the layer cannot be transformed"));
         }
@@ -379,6 +385,12 @@ QJsonObject ControlServer::methodLayerOp(const QJsonObject& params)
             || !tools->setTransformAngle(angle)) {
             tools->cancelFreeTransform();
             return refused(QStringLiteral("free_transform values refused"));
+        }
+        if (!warp.isEmpty()
+            && (!tools->enterTransformWarp() || !tools->setTransformWarpStyle(warp)
+                || !tools->setTransformWarpValues(bend, 0.0, 0.0))) {
+            tools->cancelFreeTransform();
+            return refused(QStringLiteral("warp refused"));
         }
         tools->commitFreeTransform();
         if (tools->transformSessionActive() || edit_refused_for_memory()) {

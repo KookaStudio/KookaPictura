@@ -5,7 +5,8 @@
 //! by the session box's projective map (a Distort or Perspective made before
 //! Warp stays exact, as Photoshop keeps `Trnf` apart from `warp`); pixels, the
 //! layer mask and a retained 16/32-bit store all go through the same
-//! triangulation (`warp_raster`), so they stay in register. The mask's outside
+//! triangulation (`warp_raster`), so they stay in register. Each is rasterized
+//! a strip at a time into tiled planes the evictor can spill (#1292). The mask's outside
 //! reads as its default colour, as photocraft's `warp_mesh_gray` has it.
 //! Ported from photocraft's `engine::warp_cmds` (see `NOTICE.md`); the preset
 //! shapes are measured approximations, not verified parity.
@@ -15,14 +16,14 @@
 //! similarity and projective ops.
 
 use pictura_core::warp::{Warp, WarpStyle};
-use pictura_core::{Channel, Document, LayerMask, PsdRect, Sample, Samples, SourceChannels};
+use pictura_core::{Channel, Document, LayerMask, Plane, PsdRect, Sample, Samples, SourceChannels};
 
 use super::kernel::Interpolation;
 use super::shape_layer::map_shape_layer;
 use super::transform::{
     prepare_layer, shape_rect, solve_homography, write_layer, LayerOutput, PlaneMap,
 };
-use super::warp_raster::{triangulate, warp_planes, Planes, Triangles};
+use super::warp_raster::{triangulate, warp_tiled, Kind, Source, SrcPlane, Triangles};
 
 fn rect_of(d: (i32, i32, i32, i32)) -> PsdRect {
     PsdRect {
@@ -67,61 +68,41 @@ fn map_beyond_box(warp: &Warp, x: f64, y: f64) -> (f64, f64) {
     (mx + x - cx, my + y - cy)
 }
 
-/// Planes of one sample type to unit `f32`: 8/16-bit through [`Sample`], 32-bit
-/// as stored (unclamped, NaN to zero).
-fn unit_planes(planes: &[&Samples]) -> Vec<Vec<f32>> {
-    planes
-        .iter()
-        .map(|s| match s {
-            Samples::U8(v) => v.iter().map(|x| x.to_unit() as f32).collect(),
-            Samples::U16(v) => v.iter().map(|x| x.to_unit() as f32).collect(),
-            Samples::F32(v) => v
-                .iter()
-                .map(|x| if x.is_nan() { 0.0 } else { *x })
-                .collect(),
-        })
-        .collect()
-}
-
-/// Unit `f32` back to the sample type of `like`.
-fn to_samples(like: &Samples, plane: Vec<f32>) -> Samples {
-    match like {
-        Samples::U8(_) => Samples::U8(
-            plane
-                .into_iter()
-                .map(|v| u8::from_unit(f64::from(v)))
-                .collect(),
-        ),
-        Samples::U16(_) => Samples::U16(
-            plane
-                .into_iter()
-                .map(|v| u16::from_unit(f64::from(v)))
-                .collect(),
-        ),
-        Samples::F32(_) => Samples::F32(plane.into()),
+/// An 8-bit output plane of [`warp_tiled`].
+fn into_u8(samples: Samples) -> Plane<u8> {
+    match samples {
+        Samples::U8(p) => p,
+        _ => unreachable!("warped as Kind::U8"),
     }
 }
 
 /// Warp a gray plane over `rect` whose outside reads as `default` (a layer
-/// mask): the content is warped with full coverage and flattened back onto the
-/// default.
-fn warp_gray(
-    plane: Vec<f32>,
+/// mask) into a plane of `kind`: the content is warped with full coverage and
+/// flattened back onto the default.
+pub(super) fn warp_gray(
+    plane: SrcPlane<'_>,
+    kind: Kind,
     rect: PsdRect,
     default: f32,
     t: &Triangles,
     interp: Interpolation,
-) -> Vec<f32> {
-    let (w, h) = (rect.width() as usize, rect.height() as usize);
-    let ones = vec![1.0f32; plane.len()];
-    let src = Planes::new(vec![plane, ones], w, h, Some(1));
-    let mut out = warp_planes(&src, rect, t, interp, false);
-    let alpha = out.pop().unwrap_or_default();
-    let mut gray = out.pop().unwrap_or_default();
-    gray.iter_mut()
-        .zip(&alpha)
-        .for_each(|(g, a)| *g = *g * a + default * (1.0 - a));
-    gray
+) -> Samples {
+    let src = Source {
+        planes: vec![plane, SrcPlane::Ones],
+        rect,
+        alpha: Some(1),
+    };
+    let flatten = |planes: &mut Vec<Vec<f32>>| {
+        let alpha = planes.pop().unwrap_or_default();
+        if let Some(gray) = planes.last_mut() {
+            gray.iter_mut()
+                .zip(&alpha)
+                .for_each(|(g, a)| *g = *g * a + default * (1.0 - a));
+        }
+    };
+    warp_tiled(&src, t, interp, false, &[kind], &flatten)
+        .pop()
+        .expect("one output plane")
 }
 
 /// The warped layer mask, its triangulation (`None` when the mask has no area
@@ -143,15 +124,9 @@ fn warp_mask(
             if data.len() != (rect.width() as usize) * (rect.height() as usize) {
                 return None;
             }
-            let plane = data.iter().map(|v| v.to_unit() as f32).collect();
             let default = mask.default_color.to_unit() as f32;
-            let gray = warp_gray(plane, rect, default, &t, interp);
-            Some(
-                gray.into_iter()
-                    .map(|v| u8::from_unit(f64::from(v)))
-                    .collect::<Vec<u8>>()
-                    .into(),
-            )
+            let gray = warp_gray(SrcPlane::U8(data), Kind::U8, rect, default, &t, interp);
+            Some(into_u8(gray))
         }
         None => None,
     };
@@ -172,24 +147,26 @@ fn warp_store(
     mask: Option<(&LayerMask, &Triangles)>,
     interp: Interpolation,
 ) -> SourceChannels {
-    let (w, h) = (rect.width() as usize, rect.height() as usize);
     let layer: Vec<&(i16, Samples)> = store.planes.iter().filter(|(id, _)| *id != -2).collect();
     let hdr = layer.iter().any(|(_, s)| matches!(s, Samples::F32(_)));
-    let alpha = layer.iter().position(|(id, _)| *id == -1);
-    let samples: Vec<&Samples> = layer.iter().map(|(_, s)| s).collect();
-    let src = Planes::new(unit_planes(&samples), w, h, alpha);
-    let warped = warp_planes(&src, rect, t, interp, hdr);
+    let src = Source {
+        planes: layer.iter().map(|(_, s)| SrcPlane::of(s)).collect(),
+        rect,
+        alpha: layer.iter().position(|(id, _)| *id == -1),
+    };
+    let kinds: Vec<Kind> = layer.iter().map(|(_, s)| Kind::of(s)).collect();
+    let warped = warp_tiled(&src, t, interp, hdr, &kinds, &|_| {});
     let mut planes: Vec<(i16, Samples)> = layer
         .iter()
         .zip(warped)
-        .map(|((id, like), plane)| (*id, to_samples(like, plane)))
+        .map(|((id, _), plane)| (*id, plane))
         .collect();
     if let Some((id, like)) = store.planes.iter().find(|(id, _)| *id == -2) {
         let warped = match mask {
             Some((m, mt)) if like.len() == (m.rect.width() * m.rect.height()) as usize => {
-                let plane = unit_planes(&[like]).pop().unwrap_or_default();
                 let default = m.default_color.to_unit() as f32;
-                to_samples(like, warp_gray(plane, m.rect, default, mt, interp))
+                let plane = SrcPlane::of(like);
+                warp_gray(plane, Kind::of(like), m.rect, default, mt, interp)
             }
             _ => like.clone(),
         };
@@ -251,32 +228,31 @@ pub fn transform_layer_warp(
     let (sw, sh) = (prepared.w as usize, prepared.h as usize);
     let (dl, dt, dr, db) = t.dest;
     if let Some(job) = pictura_core::job::current() {
-        // One pass of `warp_planes` per layer, mask, and retained store.
+        // One pass of `warp_tiled` per layer, mask, and retained store.
         let passes = 1
             + u64::from(prepared.mask.is_some())
             + u64::from(prepared.native.is_some()) * (1 + u64::from(prepared.mask.is_some()));
         job.begin_stage((db - dt).max(0) as u64 * passes);
     }
     let interp = interpolation.resolve((sw * sh) as u64, ((dr - dl) as u64) * ((db - dt) as u64));
-    let alpha = prepared.source_channels.iter().position(|c| c.id == -1);
-    let planes = prepared
-        .source_channels
-        .iter()
-        .map(|c| c.data.iter().map(|v| v.to_unit() as f32).collect())
-        .collect();
-    let src = Planes::new(planes, sw, sh, alpha);
-    let warped = warp_planes(&src, prepared.rect, &t, interp, false);
+    let src = Source {
+        planes: prepared
+            .source_channels
+            .iter()
+            .map(|c| SrcPlane::U8(&c.data))
+            .collect(),
+        rect: prepared.rect,
+        alpha: prepared.source_channels.iter().position(|c| c.id == -1),
+    };
+    let kinds = vec![Kind::U8; prepared.source_channels.len()];
+    let warped = warp_tiled(&src, &t, interp, false, &kinds, &|_| {});
     let channels: Vec<Channel> = prepared
         .source_channels
         .iter()
         .zip(warped)
         .map(|(c, plane)| Channel {
             id: c.id,
-            data: plane
-                .into_iter()
-                .map(|v| u8::from_unit(f64::from(v)))
-                .collect::<Vec<u8>>()
-                .into(),
+            data: into_u8(plane),
         })
         .collect();
     let fm = |x: f64, y: f64| project(map_beyond_box(warp, x, y));
