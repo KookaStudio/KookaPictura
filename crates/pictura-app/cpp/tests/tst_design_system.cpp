@@ -112,6 +112,7 @@ private slots:
     void stylesheetDeclaresPrimitives();
     void menuPopupChrome();
     void loadingBannerRuleIsGone();
+    void brushPressureTogglesAreFlatAtRest();
     void primitivesCarryTheirContract();
     void paletteMatchesTokens();
     void swatchPaintsDataColour();
@@ -302,6 +303,16 @@ void DesignSystemTest::loadingBannerRuleIsGone()
 {
     const QString qss = Theme::styleSheet(Theme::kDefaultLevel);
     QVERIFY(!qss.contains(QStringLiteral("documentOpenBanner")));
+}
+
+// An object-scoped fill would paint an unchecked pressure toggle like a pressed
+// one; both belong to the shared icon-button states instead.
+void DesignSystemTest::brushPressureTogglesAreFlatAtRest()
+{
+    const QString qss = Theme::styleSheet(Theme::kDefaultLevel);
+    for (const char* name : {"optionsBrushPressureOpacity", "optionsBrushPressureSize"}) {
+        QVERIFY2(!qss.contains(QStringLiteral("QToolButton#%1").arg(QLatin1String(name))), name);
+    }
 }
 
 void DesignSystemTest::primitivesCarryTheirContract()

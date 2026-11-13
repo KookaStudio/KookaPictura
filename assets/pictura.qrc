@@ -220,6 +220,7 @@
     <file>icons/view.actualPixels.svg</file>
     <file>icons/view.fitOnScreen.svg</file>
     <file>icons/view.options.svg</file>
+    <file>icons/options.airbrush.svg</file>
     <file>icons/options.pressureOpacity.svg</file>
     <file>icons/options.pressureSize.svg</file>
     <file>icons/options.warp.svg</file>

@@ -225,6 +225,7 @@ void BrushAirbrushTest::optionsBarAndPanelShareTheFlag()
     auto* button = airbrushButton(*window_, "optionsBrushAirbrush");
     auto* item = buildUpItem(*window_);
     QVERIFY(paint && button && item);
+    QVERIFY(!button->icon().isNull());
     QVERIFY(item->flags().testFlag(Qt::ItemIsUserCheckable));
     QVERIFY(!paint->airbrush());
     QCOMPARE(item->checkState(), Qt::Unchecked);
