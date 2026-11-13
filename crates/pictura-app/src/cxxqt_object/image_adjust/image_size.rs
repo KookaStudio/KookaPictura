@@ -8,6 +8,7 @@ mod imp;
 
 use super::super::qobject::PictureView;
 use super::new_document::{create_document, document_budget_allows, document_resize_budget_allows};
+pub(in crate::cxxqt_object) use imp::image_size_fits_budget;
 use imp::*;
 
 #[cxx_qt::bridge]
@@ -43,6 +44,13 @@ pub mod ffi {
             ppi: f64,
             per_cm: bool,
         ) -> bool;
+
+        /// Whether Image Size can resample the document to `width` ×
+        /// `height`: each side within the image budget, and the resize's
+        /// working set within memory and its planes within memory plus the
+        /// scratch disks (#1293). A refusal is recorded, so
+        /// `edit_refused_for_scratch_full` tells the two apart.
+        fn image_size_fits_budget(view: &PictureView, width: i32, height: i32) -> bool;
 
         /// Image ▸ Canvas Size: place the document on a `width` × `height`
         /// canvas at `anchor` (`"top-left"` … `"bottom-right"`), filling the

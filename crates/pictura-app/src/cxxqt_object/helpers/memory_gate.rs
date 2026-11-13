@@ -246,6 +246,38 @@ pub(in crate::cxxqt_object) struct CommitCost {
     pub(in crate::cxxqt_object) spillable: u64,
 }
 
+/// The most one worker thread's source window holds in Image Size's tiled
+/// resampler: 1 Mpx of up to 32-bit samples (#1293).
+const RESIZE_WINDOW_BYTES: u64 = 4 << 20;
+
+/// What an Image Size to `width × height` holds (#1293): `working` is one
+/// source window per worker thread, one output strip of the widest plane at
+/// 32 bits, and the dense composite that a document whose composite is
+/// authoritative renders at the new size; `spillable` is every resampled
+/// plane, written as tiles the evictor may pack or spill.
+pub(in crate::cxxqt_object) fn image_size_cost(
+    doc: &Document,
+    width: u32,
+    height: u32,
+) -> CommitCost {
+    let (planes, widest) = pictura_render::resized_plane_bytes(doc, width, height);
+    let threads = rayon::current_num_threads() as u64;
+    let composite = if doc.composite_is_authoritative() {
+        refresh_bytes(PsdRect {
+            top: 0,
+            left: 0,
+            bottom: height as i32,
+            right: width as i32,
+        })
+    } else {
+        0
+    };
+    CommitCost {
+        working: threads * RESIZE_WINDOW_BYTES + 4 * TILE as u64 * widest + composite,
+        spillable: planes,
+    }
+}
+
 /// The refresh of `bounds` that stays resident (#1300): [`refresh_bytes`]
 /// where the refresh composites the region densely, as `refresh_display_rect`
 /// does for an authoritative composite, a synchronous document, or a small
@@ -437,6 +469,47 @@ mod tests {
         set_scratch_available_for_test(-1);
         assert!(admitted);
         assert!(!refused);
+    }
+
+    /// Gate an Image Size of a 17000² full-canvas layer to 150 % on a host with
+    /// 1.75 GiB of room and `scratch` bytes free: whether it was admitted,
+    /// whether it expects to spill, and whether a refusal was scratch-full.
+    fn gate_large_image_size(scratch: i64) -> (bool, bool, bool) {
+        let doc = full_canvas(17_000);
+        let cost = image_size_cost(&doc, 25_500, 25_500);
+        set_available_memory_for_test(2048 * MIB);
+        set_scratch_available_for_test(scratch);
+        clear();
+        let admitted = admit_spilling(cost.working, cost.spillable);
+        let spills = expects_spill(&cost);
+        let scratch_full = edit_refused_for_scratch_full();
+        set_available_memory_for_test(-1);
+        set_scratch_available_for_test(-1);
+        (admitted, spills, scratch_full)
+    }
+
+    // [ocr_gate_spills]
+    #[test]
+    fn a_large_image_size_is_admitted_when_scratch_holds_it() {
+        let doc = full_canvas(17_000);
+        let cost = image_size_cost(&doc, 25_500, 25_500);
+        let planes = doc.layers[0].channels.len() as u64;
+        assert_eq!(cost.spillable, planes * 25_500 * 25_500);
+        assert!(
+            cost.working >= 4 * TILE as u64 * 25_500,
+            "one strip is charged"
+        );
+        let (admitted, spills, _) = gate_large_image_size(64 * 1024 * MIB);
+        assert!(admitted);
+        assert!(spills, "the planes exceed the room");
+    }
+
+    // [ocr_gate_scratch_full]
+    #[test]
+    fn full_scratch_disks_refuse_a_large_image_size() {
+        let (admitted, _, scratch_full) = gate_large_image_size(0);
+        assert!(!admitted);
+        assert!(scratch_full);
     }
 
     // [mcr_transform_spill_job] [mcr_transform_fits_sync]

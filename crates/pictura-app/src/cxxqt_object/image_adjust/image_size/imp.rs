@@ -26,6 +26,16 @@ pub(super) fn document_ppi_per_cm(view: &PictureView) -> bool {
     resolution(view).is_some_and(|r| r.per_cm)
 }
 
+/// Whether a resample of the document to `width` × `height` passes the Image
+/// Size gate (#1293); a refusal is recorded for the handler's message.
+pub(crate) fn image_size_fits_budget(view: &PictureView, width: i32, height: i32) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| crate::cxxqt_object::helpers::image_size_admits(doc, width, height))
+}
+
 pub(super) fn image_size_apply(
     mut view: Pin<&mut PictureView>,
     resample: &QString,
@@ -49,7 +59,6 @@ pub(super) fn image_size_apply(
     if width < 1 || height < 1 || !ppi.is_finite() || ppi <= 0.0 {
         return false;
     }
-    let bits = view.document_depth_bits();
     let wanted = Resolution { ppi, per_cm };
     let (resize, needed) = {
         let Some(doc) = view.rust().session.doc.as_ref() else {
@@ -63,8 +72,7 @@ pub(super) fn image_size_apply(
         let needed = moved && !(current.is_none() && (ppi - DEFAULT_PPI).abs() < 1e-6 && !per_cm);
         (resize, needed)
     };
-    if resize.is_some() && !crate::cxxqt_object::helpers::resize_budget_allows(width, height, bits)
-    {
+    if resize.is_some() && !image_size_fits_budget(&view, width, height) {
         return false;
     }
     if resize.is_none() && !needed {

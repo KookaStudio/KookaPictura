@@ -310,11 +310,7 @@ impl qobject::PictureView {
         if width < 1 || height < 1 {
             return false;
         }
-        if !crate::cxxqt_object::helpers::resize_budget_allows(
-            width,
-            height,
-            self.as_ref().document_depth_bits(),
-        ) {
+        if !crate::cxxqt_object::image_adjust::image_size_fits_budget(&self, width, height) {
             return false;
         }
         self.as_mut().document_op(

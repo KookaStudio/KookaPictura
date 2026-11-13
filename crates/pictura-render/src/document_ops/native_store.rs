@@ -3,7 +3,9 @@
 //! `Image > Image Size` resamples them, and orientation remaps them exactly.
 //! Every helper maps whole planes, so callers pass the plane dimensions.
 
-use pictura_core::{Sample, Samples};
+#[cfg(test)]
+use pictura_core::Sample;
+use pictura_core::Samples;
 
 /// The five exact orientation index remaps, mirroring `pictura_ops`.
 #[derive(Clone, Copy)]
@@ -79,7 +81,9 @@ fn extend_plane<T: Copy + Default>(
 }
 
 /// Resample every `sw×sh` plane of `samples` to `dw×dh`, mirroring
-/// `pictura_ops::resize`'s kernels at native precision.
+/// `pictura_ops::resize`'s kernels at native precision: the dense resampler,
+/// kept as `resize_tiled`'s oracle for retained stores.
+#[cfg(test)]
 pub(super) fn resize_samples(
     samples: &Samples,
     sw: usize,
@@ -105,6 +109,7 @@ pub(super) fn resize_samples(
     }
 }
 
+#[cfg(test)]
 fn resize_plane<T: Sample>(
     data: &[T],
     sw: usize,
@@ -126,11 +131,13 @@ fn resize_plane<T: Sample>(
     out
 }
 
+#[cfg(test)]
 /// Clamp an out-of-bounds sample axis to `0..n-1`.
 fn idx(i: i64, n: usize) -> usize {
     i.clamp(0, n as i64 - 1) as usize
 }
 
+#[cfg(test)]
 /// 2×2 tent weights for one axis at source coordinate `s`.
 fn bilevel(s: f64, n: usize) -> ([usize; 2], [f64; 2]) {
     let x0 = s.floor();
@@ -139,6 +146,7 @@ fn bilevel(s: f64, n: usize) -> ([usize; 2], [f64; 2]) {
     ([idx(x0, n), idx(x0 + 1, n)], [1.0 - f, f])
 }
 
+#[cfg(test)]
 /// Keys cubic kernel `a = -0.75` (Mitchell–Netravali `cubic(0, 0.75)`).
 fn cubic(t: f64) -> f64 {
     let a = -0.75;
@@ -152,6 +160,7 @@ fn cubic(t: f64) -> f64 {
     }
 }
 
+#[cfg(test)]
 /// 4×4 cubic weights for one axis at source coordinate `s`.
 fn cubics(s: f64, n: usize) -> ([usize; 4], [f64; 4]) {
     let x0 = s.floor() as i64;
@@ -161,6 +170,7 @@ fn cubics(s: f64, n: usize) -> ([usize; 4], [f64; 4]) {
     (i, w)
 }
 
+#[cfg(test)]
 fn sample_plane<T: Sample>(
     plane: &[T],
     w: usize,

@@ -41,6 +41,8 @@ private slots:
     void imageSizeRefusesAnOverBudgetTarget();
     void resizeImageRefusesAnOverBudgetTarget();
     void imageSizeShowsTheBudgetWarning();
+    void imageSizeRefusesASideOverTheLimit();
+    void imageSizeNamesFullScratchDisks();
     void canvasSizeGrowsAroundTheAnchor();
 
 private:
@@ -58,7 +60,23 @@ void ImageOpsTest::initTestCase()
 void ImageOpsTest::cleanup()
 {
     pictura::setImageSizeDialogDriverForTest({});
+    pictura::set_available_memory_for_test(-1);
+    pictura::set_scratch_available_for_test(-1);
 }
+
+namespace {
+
+constexpr qint64 kMiB = 1024 * 1024;
+
+// Pin the Image Size gate's host (#1293): `available` bytes of memory and
+// `scratch` bytes free on the scratch disks. `cleanup()` reads the host again.
+void pinHost(qint64 available, qint64 scratch)
+{
+    pictura::set_available_memory_for_test(available);
+    pictura::set_scratch_available_for_test(scratch);
+}
+
+} // namespace
 
 void ImageOpsTest::duplicateDocument()
 {
@@ -412,6 +430,8 @@ void ImageOpsTest::imageSizeRefusesAnOverBudgetTarget()
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
     QVERIFY(view);
+    // 4 MiB of room, under one 30000-wide output strip: a memory refusal.
+    pinHost(260 * kMiB, 0);
     const int doc = frame.activeDocumentIndex();
     const int history = view->history_count();
 
@@ -441,6 +461,8 @@ void ImageOpsTest::resizeImageRefusesAnOverBudgetTarget()
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
     QVERIFY(view);
+    // 4 MiB of room, under one 30000-wide output strip: a memory refusal.
+    pinHost(260 * kMiB, 0);
     const int doc = frame.activeDocumentIndex();
     const int history = view->history_count();
 
@@ -449,6 +471,7 @@ void ImageOpsTest::resizeImageRefusesAnOverBudgetTarget()
     QCOMPARE(view->document_height(), 20);
     QCOMPARE(view->history_count(), history);
 
+    pinHost(-1, -1);
     QVERIFY(view->resize_image(QStringLiteral("nearest"), 20, 10));
     QCOMPARE(view->document_width(), 20);
     QCOMPARE(view->document_height(), 10);
@@ -464,6 +487,8 @@ void ImageOpsTest::imageSizeShowsTheBudgetWarning()
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
     QVERIFY(view);
+    // 4 MiB of room, under one 30000-wide output strip: a memory refusal.
+    pinHost(260 * kMiB, 0);
     const int doc = frame.activeDocumentIndex();
     const int history = view->history_count();
 
@@ -501,6 +526,46 @@ void ImageOpsTest::imageSizeShowsTheBudgetWarning()
     QVERIFY(text.contains(QStringLiteral("memory"), Qt::CaseInsensitive));
     QCOMPARE(view->document_width(), 40);
     QCOMPARE(view->document_height(), 20);
+    QCOMPARE(view->history_count(), history);
+    frame.closeDocument(doc, false);
+}
+
+// A side over the image budget is refused however much memory there is.
+void ImageOpsTest::imageSizeRefusesASideOverTheLimit()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Side"), 40, 20, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    pinHost(64 * 1024 * kMiB, 64 * 1024 * kMiB);
+
+    QVERIFY(pictura::imageSizeFitsBudget(*view, 30000, 10));
+    QVERIFY(!pictura::imageSizeFitsBudget(*view, 30001, 10));
+    QVERIFY(!pictura::imageSizeFitsBudget(*view, 10, 30001));
+    frame.closeDocument(doc, false);
+}
+
+// A resize whose working set fits but whose planes do not fit the room plus
+// the scratch disks names the scratch disks.
+void ImageOpsTest::imageSizeNamesFullScratchDisks()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Scratch"), 40, 20, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const int history = view->history_count();
+    // 1.5 GiB of room: the strips and windows fit, the 30000² planes do not.
+    pinHost(1792 * kMiB, 0);
+
+    QVERIFY(!pictura::imageSizeFitsBudget(*view, 30000, 30000));
+    QVERIFY(pictura::edit_refused_for_scratch_full());
+    const QString message = pictura::imageSizeBudgetMessage(30000, 30000);
+    QVERIFY(message.contains(QStringLiteral("30000")));
+    QVERIFY(message.contains(QStringLiteral("scratch disks"), Qt::CaseInsensitive));
     QCOMPARE(view->history_count(), history);
     frame.closeDocument(doc, false);
 }

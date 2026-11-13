@@ -31,6 +31,20 @@ pub(in crate::cxxqt_object) fn resize_budget_allows(width: i32, height: i32, bit
     )
 }
 
+/// Whether an Image Size of `doc` to `width` × `height` passes its gate
+/// (#1293): each side within `ImageBudget`'s limit, then its commit cost
+/// through [`memory_gate::admit_spilling`], which records a refusal. No plane
+/// is allocated whole, so the per-allocation cap does not apply.
+pub(in crate::cxxqt_object) fn image_size_admits(doc: &Document, width: i32, height: i32) -> bool {
+    memory_gate::clear();
+    let max = i64::from(pictura_codec::ImageBudget::default().max_dimension);
+    if width < 1 || height < 1 || i64::from(width) > max || i64::from(height) > max {
+        return false;
+    }
+    let cost = memory_gate::image_size_cost(doc, width as u32, height as u32);
+    memory_gate::admit_spilling(cost.working, cost.spillable)
+}
+
 /// `budget` with its document limit bounded by `room`, or unchanged without
 /// one.
 pub(in crate::cxxqt_object) fn bounded_budget(

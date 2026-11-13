@@ -1,10 +1,17 @@
-//! `Image > Image Size` at document scope (`IMG-001`).
+//! `Image > Image Size` at document scope (`IMG-001`). Every plane is
+//! resampled into spillable tiles a strip at a time (#1293, `resize_tiled`).
 
-use super::{for_each_layer, materialize_merged_composite, resample_plane, valid_size};
+use pictura_core::memory::MemoryError;
+use pictura_core::{Plane, Samples};
+
+use super::resize_tiled::{self, Kernel};
+use super::{for_each_layer, materialize_merged_composite, valid_size};
 
 /// Scale every layer rect, resample its channel planes and mask from the old
 /// rect size to the new. The engine leaves `doc.composite` untouched; the
-/// app edit transaction materializes it from the resampled tree.
+/// app edit transaction materializes it from the resampled tree. The resize
+/// runs on a copy that shares the document's planes, so a refusal leaves the
+/// document unchanged.
 pub fn resize_document(
     doc: &mut pictura_core::Document,
     width: u32,
@@ -21,55 +28,209 @@ pub fn resize_document(
     }
     let sx = width as f64 / old_w as f64;
     let sy = height as f64 / old_h as f64;
-    materialize_merged_composite(doc);
+    let mut next = doc.clone();
+    materialize_merged_composite(&mut next);
     if let Some(job) = pictura_core::job::current() {
-        job.begin_stage(resampled_rows(doc, sx, sy, height));
+        job.begin_stage(resampled_rows(&mut next, sx, sy, (width, height)));
     }
 
-    for_each_layer(&mut doc.layers, &mut |layer| {
-        resize_layer(layer, sx, sy, resample);
+    let mut refused = None;
+    for_each_layer(&mut next.layers, &mut |layer| {
+        if refused.is_none() {
+            refused = resize_layer(layer, sx, sy, resample).err();
+        }
     });
-
-    for channel in &mut doc.channels {
-        channel.data = resample_plane(&channel.data, old_w, old_h, width, height, resample).into();
+    if let Some(err) = refused {
+        return Err(err.into());
     }
-    if let Some(store) = &mut doc.source_planes {
+
+    let (from, to) = (
+        (old_w as usize, old_h as usize),
+        (width as usize, height as usize),
+    );
+    for channel in &mut next.channels {
+        channel.data = resize_bytes(&channel.data, from, to, resample)?;
+    }
+    if let Some(store) = &mut next.source_planes {
         if store.depth != pictura_core::BitDepth::One {
-            store.samples = super::native_store::resize_samples(
-                &store.samples,
-                old_w as usize,
-                old_h as usize,
-                width as usize,
-                height as usize,
-                resample,
-            );
+            store.samples = resize_native(&store.samples, from, to, resample)?;
             store.width = width;
             store.height = height;
         }
     }
 
-    doc.width = width;
-    doc.height = height;
+    next.width = width;
+    next.height = height;
+    *doc = next;
     Ok(())
 }
 
-/// The output rows [`resize_document`] resamples through `pictura_ops::resize`,
-/// which reports one unit of a job's progress per row.
-fn resampled_rows(doc: &mut pictura_core::Document, sx: f64, sy: f64, height: u32) -> u64 {
-    let mut rows = doc.channels.len() as u64 * u64::from(height);
+/// An 8-bit plane through the tiled resampler with `pictura_ops::resize`'s
+/// rounding.
+fn resize_bytes(
+    plane: &Plane<u8>,
+    from: (usize, usize),
+    to: (usize, usize),
+    resample: pictura_ops::Resample,
+) -> Result<Plane<u8>, MemoryError> {
+    resize_tiled::resize(plane, from, 1, to, Kernel::bytes(resample))
+}
+
+/// Every stacked `from`-sized plane of a retained store through the tiled
+/// resampler at native precision; a trailing partial plane is dropped, as the
+/// dense resampler drops it.
+fn resize_native(
+    samples: &Samples,
+    from: (usize, usize),
+    to: (usize, usize),
+    resample: pictura_ops::Resample,
+) -> Result<Samples, MemoryError> {
+    let area = from.0 * from.1;
+    if area == 0 && from != to {
+        return Ok(match samples {
+            Samples::U8(_) => Samples::U8(Plane::default()),
+            Samples::U16(_) => Samples::U16(Plane::default()),
+            Samples::F32(_) => Samples::F32(Plane::default()),
+        });
+    }
+    let channels = samples.len() / area.max(1);
+    Ok(match samples {
+        Samples::U8(p) => Samples::U8(resize_tiled::resize(
+            p,
+            from,
+            channels,
+            to,
+            Kernel::unit(resample),
+        )?),
+        Samples::U16(p) => Samples::U16(resize_tiled::resize(
+            p,
+            from,
+            channels,
+            to,
+            Kernel::unit(resample),
+        )?),
+        Samples::F32(p) => Samples::F32(resize_tiled::resize(
+            p,
+            from,
+            channels,
+            to,
+            Kernel::unit(resample),
+        )?),
+    })
+}
+
+/// The output rows [`resize_document`] resamples, which the tiled resampler
+/// reports as a job's progress: every plane whose size changes.
+fn resampled_rows(doc: &mut pictura_core::Document, sx: f64, sy: f64, to: (u32, u32)) -> u64 {
+    let resized = (doc.width, doc.height) != to;
+    let mut rows = 0;
+    if resized {
+        rows += doc.channels.len() as u64 * u64::from(to.1);
+        if let Some(store) = doc
+            .source_planes
+            .as_ref()
+            .filter(|s| s.depth != pictura_core::BitDepth::One)
+        {
+            let plane = doc.width as usize * doc.height as usize;
+            rows += (store.samples.len() / plane.max(1)) as u64 * u64::from(to.1);
+        }
+    }
     let mut count = |rect: pictura_core::PsdRect, planes: u64| {
         let (w, h) = (rect.width(), rect.height());
         if w > 0 && h > 0 {
-            rows += planes * u64::from(scaled_dims(w, h, sx, sy).1);
+            let (nw, nh) = scaled_dims(w, h, sx, sy);
+            if (nw, nh) != (w as u32, h as u32) {
+                rows += planes * u64::from(nh);
+            }
         }
     };
     for_each_layer(&mut doc.layers, &mut |layer| {
         count(layer.rect, layer.channels.len() as u64);
-        if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
-            count(mask.rect, 1);
+        let mask = layer
+            .mask
+            .as_ref()
+            .filter(|m| m.data.is_some())
+            .map(|m| m.rect);
+        if let Some(rect) = mask {
+            count(rect, 1);
+        }
+        if sx != 1.0 || sy != 1.0 {
+            if let Some(store) = &layer.source_channels {
+                for (id, samples) in &store.planes {
+                    let rect = if *id == -2 {
+                        layer.mask.as_ref().map_or(layer.rect, |m| m.rect)
+                    } else {
+                        layer.rect
+                    };
+                    let area = (rect.width().max(0) * rect.height().max(0)) as usize;
+                    count(rect, (samples.len() / area.max(1)) as u64);
+                }
+            }
         }
     });
     rows
+}
+
+/// What [`resize_document`] to `width × height` writes (#1293, the app's
+/// memory gate): the bytes of every plane it resamples, at its new size and
+/// sample width, and the widest of those planes in samples.
+pub fn resized_plane_bytes(doc: &pictura_core::Document, width: u32, height: u32) -> (u64, u64) {
+    let sx = width as f64 / f64::from(doc.width.max(1));
+    let sy = height as f64 / f64::from(doc.height.max(1));
+    let (mut bytes, mut widest) = (0u64, 0u64);
+    let mut add = |(w, h): (u32, u32), planes: usize, sample: u64| {
+        bytes += planes as u64 * u64::from(w) * u64::from(h) * sample;
+        widest = widest.max(u64::from(w));
+    };
+    add((width, height), doc.channels.len(), 1);
+    if let Some(store) = doc
+        .source_planes
+        .as_ref()
+        .filter(|s| s.depth != pictura_core::BitDepth::One)
+    {
+        let plane = doc.width as usize * doc.height as usize;
+        let planes = store.samples.len() / plane.max(1);
+        add((width, height), planes, sample_bytes(&store.samples));
+    }
+    let scaled = |r: pictura_core::PsdRect| {
+        (r.width() > 0 && r.height() > 0).then(|| scaled_dims(r.width(), r.height(), sx, sy))
+    };
+    walk(&doc.layers, &mut |layer| {
+        if let Some(to) = scaled(layer.rect) {
+            add(to, layer.channels.len(), 1);
+        }
+        let mask = layer.mask.as_ref().filter(|m| m.data.is_some());
+        if let Some(to) = mask.and_then(|m| scaled(m.rect)) {
+            add(to, 1, 1);
+        }
+        let stores = layer.source_channels.iter().flat_map(|s| &s.planes);
+        for (id, samples) in stores {
+            let rect = match (&layer.mask, *id) {
+                (Some(mask), -2) => mask.rect,
+                _ => layer.rect,
+            };
+            if let Some(to) = scaled(rect) {
+                let area = (rect.width() * rect.height()) as usize;
+                add(to, samples.len() / area, sample_bytes(samples));
+            }
+        }
+    });
+    (bytes, widest)
+}
+
+fn walk(layers: &pictura_core::LayerStack, f: &mut dyn FnMut(&pictura_core::Layer)) {
+    for layer in layers.iter() {
+        f(layer);
+        walk(&layer.children, f);
+    }
+}
+
+fn sample_bytes(samples: &Samples) -> u64 {
+    match samples {
+        Samples::U8(_) => 1,
+        Samples::U16(_) => 2,
+        Samples::F32(_) => 4,
+    }
 }
 
 /// New dimensions for an old `w×h` rect under scale factors, floored at 1.
@@ -102,15 +263,16 @@ fn resize_layer(
     sx: f64,
     sy: f64,
     resample: pictura_ops::Resample,
-) {
+) -> Result<(), MemoryError> {
     let old_rect = layer.rect;
+    let old_mask = layer.mask.as_ref().map(|m| m.rect);
     let lw = old_rect.width();
     let lh = old_rect.height();
     if lw > 0 && lh > 0 {
         let (nw, nh) = scaled_dims(lw, lh, sx, sy);
+        let (from, to) = ((lw as usize, lh as usize), (nw as usize, nh as usize));
         for channel in &mut layer.channels {
-            channel.data =
-                resample_plane(&channel.data, lw as u32, lh as u32, nw, nh, resample).into();
+            channel.data = resize_bytes(&channel.data, from, to, resample)?;
         }
         layer.rect = scaled_rect(old_rect, nw, nh, sx, sy);
     }
@@ -120,7 +282,8 @@ fn resize_layer(
         if mw > 0 && mh > 0 {
             if let Some(data) = &mut mask.data {
                 let (nw, nh) = scaled_dims(mw, mh, sx, sy);
-                *data = resample_plane(data, mw as u32, mh as u32, nw, nh, resample).into();
+                let (from, to) = ((mw as usize, mh as usize), (nw as usize, nh as usize));
+                *data = resize_bytes(data, from, to, resample)?;
                 mask.rect = scaled_rect(mask.rect, nw, nh, sx, sy);
             }
         }
@@ -128,16 +291,16 @@ fn resize_layer(
     if sx != 1.0 || sy != 1.0 {
         // ponytail: an unmodeled raw on-disk stream still has no resampler.
         layer.raw_channels.clear();
-        let mask_rect = layer.mask.as_ref().map(|m| m.rect);
         if let Some(store) = layer.source_channels.take() {
             layer.source_channels =
-                Some(resize_store(store, old_rect, mask_rect, sx, sy, resample));
+                Some(resize_store(store, old_rect, old_mask, sx, sy, resample)?);
         }
     }
+    Ok(())
 }
 
 /// Resample a layer's retained native store to the scaled bounds; the `-2`
-/// mask plane follows the scaled mask rect.
+/// mask plane follows the mask's rect, `mask_rect` before the resize.
 fn resize_store(
     store: pictura_core::SourceChannels,
     old_rect: pictura_core::PsdRect,
@@ -145,7 +308,7 @@ fn resize_store(
     sx: f64,
     sy: f64,
     resample: pictura_ops::Resample,
-) -> pictura_core::SourceChannels {
+) -> Result<pictura_core::SourceChannels, MemoryError> {
     let (lw, lh) = (old_rect.width(), old_rect.height());
     let (nw, nh) = if lw > 0 && lh > 0 {
         scaled_dims(lw, lh, sx, sy)
@@ -172,20 +335,16 @@ fn resize_store(
             } else {
                 (lw, lh, nw, nh)
             };
-            (
-                *id,
-                super::native_store::resize_samples(
-                    samples,
-                    ow.max(0) as usize,
-                    oh.max(0) as usize,
-                    dw as usize,
-                    dh as usize,
-                    resample,
-                ),
-            )
+            let from = (ow.max(0) as usize, oh.max(0) as usize);
+            let resized = resize_native(samples, from, (dw as usize, dh as usize), resample)?;
+            Ok((*id, resized))
         })
-        .collect();
-    pictura_core::SourceChannels::new(store.depth, scaled_rect(old_rect, nw, nh, sx, sy), planes)
+        .collect::<Result<_, MemoryError>>()?;
+    Ok(pictura_core::SourceChannels::new(
+        store.depth,
+        scaled_rect(old_rect, nw, nh, sx, sy),
+        planes,
+    ))
 }
 
 #[cfg(test)]

@@ -138,8 +138,9 @@ const QHash<QString, QStringList>& runnableCommands()
 }
 
 // The size `image.image.size` or `image.canvas.size` would make, mirroring the
-// Image Size executor's constrained side, within ImageBudget.
-bool resizeFitsBudget(PictureView& view, const QJsonObject& values)
+// Image Size executor's constrained side, within ImageBudget. Image Size is
+// gated as a spilling commit (#1293); Canvas Size still allocates densely.
+bool resizeFitsBudget(PictureView& view, const QString& id, const QJsonObject& values)
 {
     int width = values.value(QStringLiteral("width")).toInt();
     int height = values.value(QStringLiteral("height")).toInt();
@@ -147,6 +148,9 @@ bool resizeFitsBudget(PictureView& view, const QJsonObject& values)
         width = qRound(double(view.document_width()) * height / view.document_height());
     } else if (height <= 0 && width > 0) {
         height = qRound(double(view.document_height()) * width / view.document_width());
+    }
+    if (id == QStringLiteral("image.image.size")) {
+        return image_size_fits_budget(view, width, height);
     }
     return document_resize_budget_allows(width, height, document_api::documentDepthBits(view));
 }
@@ -288,7 +292,7 @@ QJsonObject ControlServer::methodRunCommand(const QJsonObject& params)
     }
     const bool resizes = id == QStringLiteral("image.image.size")
         || id == QStringLiteral("image.canvas.size");
-    if (resizes && !resizeFitsBudget(*view, values)) {
+    if (resizes && !resizeFitsBudget(*view, id, values)) {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("that size exceeds the image budget"));
     }

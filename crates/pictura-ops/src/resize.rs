@@ -17,17 +17,52 @@ pub enum Resample {
     Bicubic,
 }
 
-/// Clamp an out-of-bounds sample axis to `0..n-1`.
-fn idx(i: i64, n: u32) -> usize {
-    i.clamp(0, n as i64 - 1) as usize
+/// One axis's taps for a sample at a source coordinate: up to four indices,
+/// clamped to the edge, and their weights. Image Size's dense and tiled
+/// resamplers (#1293) share them, so both weigh the same samples alike.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Taps {
+    pub idx: [usize; 4],
+    pub weight: [f64; 4],
+    pub len: usize,
 }
 
-/// 2×2 tent weights for one axis at source coordinate `s`.
-fn bilevel(s: f64, n: u32) -> ([usize; 2], [f64; 2]) {
-    let x0 = s.floor();
-    let f = s - x0;
-    let x0 = x0 as i64;
-    ([idx(x0, n), idx(x0 + 1, n)], [1.0 - f, f])
+/// The source coordinate destination index `i` samples at `scale`, the
+/// source extent over the destination extent.
+pub fn source_coord(i: usize, scale: f64) -> f64 {
+    (i as f64 + 0.5) * scale - 0.5
+}
+
+/// The taps of source coordinate `s` on an axis of `n` samples: one for
+/// Nearest, a 2-tap tent for Bilinear, four Keys taps for Bicubic.
+pub fn axis_taps(s: f64, n: usize, resample: Resample) -> Taps {
+    let idx = |i: i64| i.clamp(0, n as i64 - 1) as usize;
+    let mut taps = Taps::default();
+    match resample {
+        Resample::Nearest => {
+            taps.idx[0] = idx(s.round() as i64);
+            taps.weight[0] = 1.0;
+            taps.len = 1;
+        }
+        Resample::Bilinear => {
+            let x0 = s.floor();
+            let f = s - x0;
+            let x0 = x0 as i64;
+            taps.idx[..2].copy_from_slice(&[idx(x0), idx(x0 + 1)]);
+            taps.weight[..2].copy_from_slice(&[1.0 - f, f]);
+            taps.len = 2;
+        }
+        Resample::Bicubic => {
+            let x0 = s.floor() as i64;
+            for k in 0..4 {
+                let at = x0 + k as i64 - 1;
+                taps.idx[k] = idx(at);
+                taps.weight[k] = cubic(s - at as f64);
+            }
+            taps.len = 4;
+        }
+    }
+    taps
 }
 
 /// Keys cubic kernel `a = -0.75`, i.e. Mitchell–Netravali `cubic(0, 0.75)`, the
@@ -44,50 +79,26 @@ fn cubic(t: f64) -> f64 {
     }
 }
 
-/// 4×4 cubic weights for one axis at source coordinate `s`.
-fn cubics(s: f64, n: u32) -> ([usize; 4], [f64; 4]) {
-    let x0 = s.floor() as i64;
-    let at = |k: i64| x0 + k - 1;
-    let i: [usize; 4] = std::array::from_fn(|k| idx(at(k as i64), n));
-    let w: [f64; 4] = std::array::from_fn(|k| cubic(s - at(k as i64) as f64));
-    (i, w)
+/// Weigh the samples `at(column, row)` reads at the taps, `x` taps outer and
+/// `y` inner, normalized by the weight sum so clamped edge duplicates do not
+/// bias the result.
+pub fn weigh(xt: &Taps, yt: &Taps, mut at: impl FnMut(usize, usize) -> f64) -> f64 {
+    let (mut acc, mut ws) = (0.0, 0.0);
+    for (&i, &wx) in xt.idx[..xt.len].iter().zip(&xt.weight[..xt.len]) {
+        for (&j, &wy) in yt.idx[..yt.len].iter().zip(&yt.weight[..yt.len]) {
+            acc += wx * wy * at(i, j);
+            ws += wx * wy;
+        }
+    }
+    acc / ws
 }
 
 /// Sample one planar channel at source coordinate (`sx`, `sy`).
 fn sample(plane: &[u8], w: u32, h: u32, sx: f64, sy: f64, resample: Resample) -> f64 {
     let stride = w as usize;
-    match resample {
-        Resample::Nearest => {
-            let x = idx(sx.round() as i64, w);
-            let y = idx(sy.round() as i64, h);
-            plane[y * stride + x] as f64
-        }
-        Resample::Bilinear => {
-            let (xi, xw) = bilevel(sx, w);
-            let (yi, yw) = bilevel(sy, h);
-            let (mut acc, mut ws) = (0.0, 0.0);
-            for (i, wx) in xi.iter().zip(xw) {
-                for (j, wy) in yi.iter().zip(yw) {
-                    acc += wx * wy * plane[j * stride + i] as f64;
-                    ws += wx * wy;
-                }
-            }
-            acc / ws
-        }
-        Resample::Bicubic => {
-            let (xi, xw) = cubics(sx, w);
-            let (yi, yw) = cubics(sy, h);
-            let (mut acc, mut ws) = (0.0, 0.0);
-            for (i, wx) in xi.iter().zip(xw) {
-                for (j, wy) in yi.iter().zip(yw) {
-                    acc += wx * wy * plane[j * stride + i] as f64;
-                    ws += wx * wy;
-                }
-            }
-            // Normalize so clamped edge duplicates do not bias the result.
-            acc / ws
-        }
-    }
+    let xt = axis_taps(sx, w as usize, resample);
+    let yt = axis_taps(sy, h as usize, resample);
+    weigh(&xt, &yt, |i, j| plane[j * stride + i] as f64)
 }
 
 pub fn resize(
@@ -124,9 +135,9 @@ pub fn resize(
             }
             job.advance(1);
         }
-        let sy = (y as f64 + 0.5) * yscale - 0.5;
+        let sy = source_coord(y as usize, yscale);
         for x in 0..width {
-            let sx = (x as f64 + 0.5) * xscale - 0.5;
+            let sx = source_coord(x as usize, xscale);
             let d = y as usize * width as usize + x as usize;
             for c in 0..channels {
                 let plane = &buf.data[c * planes..(c + 1) * planes];
