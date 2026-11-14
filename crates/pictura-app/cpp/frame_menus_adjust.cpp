@@ -54,11 +54,15 @@ void PicturaMainWindow::wireImageAdjustments()
         registry_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
         registry_->setHandler(id, [this, kind]() {
             PictureView* view = activeView();
-            if (view && filter_target_ready(*view)
-                && runAdjustmentDialog(this, view, kind, tools_, imageView())) {
-                refresh();
-            } else if (view) {
+            if (!view) {
+                return;
+            }
+            if (!filter_target_ready(*view)) {
                 reportFilterRefusal(view);
+                return;
+            }
+            if (runAdjustmentDialog(this, view, kind, tools_, imageView())) {
+                refresh();
             }
         });
     }
@@ -73,13 +77,17 @@ void PicturaMainWindow::wireImageAdjustments()
         registry_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
         registry_->setHandler(id, [this]() {
             PictureView* view = activeView();
+            if (!view) {
+                return;
+            }
+            if (!filter_target_ready(*view)) {
+                reportFilterRefusal(view);
+                return;
+            }
             ImageView* canvas = imageView();
             const QRect visible = canvas ? canvas->visibleDocumentRect().toAlignedRect() : QRect();
-            if (view && filter_target_ready(*view)
-                && HdrToningDialog::get(this, view, visible)) {
+            if (HdrToningDialog::get(this, view, visible)) {
                 refresh();
-            } else if (view) {
-                reportFilterRefusal(view);
             }
         });
         registry_->setEnabledProvider(id, ready);
