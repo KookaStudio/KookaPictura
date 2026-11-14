@@ -434,6 +434,25 @@ fn laplace_fill(rgba: &[[f32; 4]], hole: &[bool], w: usize, h: usize) -> Vec<[f3
     out
 }
 
+/// A raw pointer shared with a Rayon closure. Keeping the pointer (rather than
+/// an integer address) preserves its provenance; the red-black pass only reads
+/// the colour it is not writing, so the shared reads never alias a write.
+#[derive(Clone, Copy)]
+struct SharedPtr(*const [f32; 4]);
+
+// SAFETY: `relax` reads through the pointer only from cells of the other
+// colour, which that pass never writes.
+unsafe impl Send for SharedPtr {}
+unsafe impl Sync for SharedPtr {}
+
+impl SharedPtr {
+    /// # Safety
+    /// `i` must be in bounds and its cell must not be written concurrently.
+    unsafe fn read(self, i: usize) -> [f32; 4] {
+        *self.0.add(i)
+    }
+}
+
 /// Red-black successive over-relaxation. Cells of one colour have only the
 /// other colour as 4-neighbours, so a colour's rows update in parallel without
 /// reading a cell another thread writes. `src` is the Poisson source (the
@@ -462,7 +481,7 @@ fn relax(
     for _ in 0..sweeps {
         let mut sweep_change = 0.0f32;
         for parity in 0..2 {
-            let base = out.as_mut_ptr() as usize;
+            let base = SharedPtr(out.as_ptr());
             let changed = out
                 .par_chunks_mut(w)
                 .enumerate()
@@ -480,7 +499,7 @@ fn relax(
                             // SAFETY: a same-colour cell's 4-neighbours are all
                             // the other colour, which this pass never writes, so
                             // no other thread can touch `j` while it is read.
-                            let neighbour = unsafe { *(base as *const [f32; 4]).add(j) };
+                            let neighbour = unsafe { base.read(j) };
                             for c in 0..4 {
                                 acc[c] += match src {
                                     Some(src) => neighbour[c] + (src[i][c] - src[j][c]),
