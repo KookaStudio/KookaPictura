@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include <QtCore/QAbstractItemModel>
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
 #include <QtCore/QMetaMethod>
@@ -12,6 +13,8 @@
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QTest>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QCompleter>
+#include <QtWidgets/QFontComboBox>
 
 #include "frame.h"
 
@@ -59,6 +62,40 @@ private:
 inline std::unique_ptr<PicturaMainWindow> makeMainWindow(QWidget* parent = nullptr)
 {
     return std::make_unique<PicturaMainWindow>(parent, false);
+}
+
+// Whether `combo`'s current completion set offers `family`, ignoring case.
+inline bool completionOffers(QFontComboBox* combo, const QString& family)
+{
+    const QCompleter* completer = combo ? combo->completer() : nullptr;
+    const QAbstractItemModel* model = completer ? completer->completionModel() : nullptr;
+    if (!model) {
+        return false;
+    }
+    for (int row = 0; row < model->rowCount(); ++row) {
+        if (model->index(row, 0).data().toString().compare(family, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Pick an installed family by its exact name, as the popup does.
+inline void selectFamily(QFontComboBox* combo, const QString& family)
+{
+    const int index = combo->findText(family, Qt::MatchFixedString);
+    QVERIFY2(index >= 0, qPrintable(family));
+    combo->setCurrentIndex(index);
+    QCoreApplication::processEvents();
+    QCOMPARE(combo->currentText(), family);
+}
+
+// Type into a family field as the user does, then let the completion run.
+inline void typeFamily(QFontComboBox* combo, const QString& text)
+{
+    combo->setFocus();
+    QTest::keyClicks(combo, text);
+    QCoreApplication::processEvents();
 }
 
 // The test functions of a suite, in the order QTest finds them.

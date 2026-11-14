@@ -6,6 +6,7 @@
 
 #include <QtCore/QTimer>
 #include <QtGui/QAction>
+#include <QtGui/QInputMethodEvent>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFontComboBox>
@@ -49,10 +50,20 @@ void resetTypeOptions(Fixture& f)
     pictura::TypeOptions o = group->get();
     o.size = 30.0;
     o.justification = 0;
+    o.family = pictura::TypeOptions{}.family;
     group->set(o);
 }
 
 void commit(Fixture& f) { QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier); }
+
+// Show `panelName` in the frame's panel column.
+void showPanel(pictura::PicturaMainWindow& frame, const QString& panelName)
+{
+    auto* column = frame.columnForPanel(panelName);
+    QVERIFY(column);
+    column->showPanel(panelName, true);
+    QCoreApplication::processEvents();
+}
 
 void typeSize(pictura::CharacterPanel* panel, const QString& text)
 {
@@ -64,6 +75,15 @@ void setFirstLineIndent(pictura::ParagraphPanel* panel, double value)
 {
     panel->firstLineIndentFieldForTest()->setValue(value);
     emit panel->firstLineIndentFieldForTest()->editingFinished();
+}
+
+// Enter the field as a fresh search, whatever a previous test left behind.
+void focusFamily(QFontComboBox* family)
+{
+    family->clearFocus();
+    QCoreApplication::processEvents();
+    family->setFocus();
+    QCoreApplication::processEvents();
 }
 
 // The first type layer other than `except`, or empty.
@@ -121,6 +141,13 @@ private slots:
     void menuActionsEditSession();
     void openTypeMenuToggles();
     void optionsBarEditSurvivesPanelEdit();
+    void fontFamilyTypeAheadReplacesShownFamily();
+    void fontFamilyExactSelectionUnchanged();
+    void fontFamilyTypeAheadDuringSession();
+    void fontFamilyNavigationKeepsShownText();
+    void fontFamilyModifierKeyKeepsSearchFresh();
+    void fontFamilyInputMethodCommitReplacesShownFamily();
+    void fontFamilyEditingFinishedRearms();
 
 private:
     QString makeTypeLayer(Fixture& f);
@@ -464,6 +491,176 @@ void TypeSessionPanelsTest::optionsBarEditSurvivesPanelEdit()
     QVERIFY(after.character.faux_bold);
     QCOMPARE(int(after.paragraph.justify), 1);
     QCOMPARE(after.paragraph.first_line_indent, 20.0);
+}
+
+void TypeSessionPanelsTest::fontFamilyTypeAheadReplacesShownFamily()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_font_typeahead"));
+    QVERIFY2(f.ok(), "type fixture");
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    showPanel(*window_, QStringLiteral("characterPanel"));
+    character_->refresh();
+
+    auto* family = character_->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    QCOMPARE(family->currentText(), QStringLiteral("Liberation Sans"));
+
+    pictura::test::typeFamily(family, QStringLiteral("noto"));
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("noto"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
+    QVERIFY2(!family->currentText().contains(QStringLiteral("Liberation Sans")),
+             "typing starts a new search");
+    QVERIFY2(pictura::test::completionOffers(family, QStringLiteral("Noto Sans")),
+             "Noto Sans is offered");
+
+    QTest::keyClicks(family, QStringLiteral(" s"));
+    QCoreApplication::processEvents();
+    QCOMPARE(family->currentText().compare(QStringLiteral("Noto Sans"), Qt::CaseInsensitive), 0);
+}
+
+void TypeSessionPanelsTest::fontFamilyExactSelectionUnchanged()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_font_exact_family"));
+    QVERIFY2(f.ok(), "type fixture");
+    const QString path = makeTypeLayer(f);
+    QVERIFY(!path.isEmpty());
+    showPanel(*window_, QStringLiteral("characterPanel"));
+    character_->refresh();
+
+    auto* family = character_->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Noto Sans"));
+    QCOMPARE(family->currentText(), QStringLiteral("Noto Sans"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.font, QStringLiteral("Noto Sans"));
+}
+
+void TypeSessionPanelsTest::fontFamilyTypeAheadDuringSession()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_font_typeahead_session"));
+    QVERIFY2(f.ok(), "type fixture");
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    reopen(f);
+    showPanel(*window_, QStringLiteral("characterPanel"));
+    character_->refresh();
+    QVERIFY(character_->editingEnabledForTest());
+
+    auto* family = character_->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    QCOMPARE(family->currentText(), QStringLiteral("Liberation Sans"));
+
+    pictura::test::typeFamily(family, QStringLiteral("noto"));
+    QVERIFY2(pictura::test::completionOffers(family, QStringLiteral("Noto Sans")),
+             "Noto Sans is offered before the refresh");
+
+    character_->refresh();
+    QCoreApplication::processEvents();
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("noto"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
+    QVERIFY2(pictura::test::completionOffers(family, QStringLiteral("Noto Sans")),
+             "the refresh keeps the completion set");
+
+    QTest::keyClicks(family, QStringLiteral(" s"));
+    QCoreApplication::processEvents();
+    QCOMPARE(family->currentText().compare(QStringLiteral("Noto Sans"), Qt::CaseInsensitive), 0);
+}
+
+void TypeSessionPanelsTest::fontFamilyNavigationKeepsShownText()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_font_family_nav"));
+    QVERIFY2(f.ok(), "type fixture");
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    showPanel(*window_, QStringLiteral("characterPanel"));
+    character_->refresh();
+
+    auto* family = character_->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    family->setFocus();
+    QTest::keyClick(family, Qt::Key_End);
+    QTest::keyClicks(family, QStringLiteral(" x"));
+    QCoreApplication::processEvents();
+    QCOMPARE(family->currentText(), QStringLiteral("Liberation Sans x"));
+
+    family->setCurrentText(QStringLiteral("Liberation Sans"));
+    QTest::keyClick(family, Qt::Key_Backspace);
+    QTest::keyClicks(family, QStringLiteral(" x"));
+    QCoreApplication::processEvents();
+    QCOMPARE(family->currentText(), QStringLiteral("Liberation San x"));
+}
+
+void TypeSessionPanelsTest::fontFamilyModifierKeyKeepsSearchFresh()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_font_modifier_fresh"));
+    QVERIFY2(f.ok(), "type fixture");
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    showPanel(*window_, QStringLiteral("characterPanel"));
+    character_->refresh();
+
+    auto* family = character_->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    focusFamily(family);
+    QTest::keyClick(family, Qt::Key_Control);
+    pictura::test::typeFamily(family, QStringLiteral("noto"));
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("noto"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
+    QVERIFY2(!family->currentText().contains(QStringLiteral("Liberation Sans")),
+             "a modifier key keeps the fresh search");
+    QVERIFY2(pictura::test::completionOffers(family, QStringLiteral("Noto Sans")),
+             "Noto Sans is offered");
+}
+
+void TypeSessionPanelsTest::fontFamilyInputMethodCommitReplacesShownFamily()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_font_input_method"));
+    QVERIFY2(f.ok(), "type fixture");
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    showPanel(*window_, QStringLiteral("characterPanel"));
+    character_->refresh();
+
+    auto* family = character_->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    focusFamily(family);
+
+    QInputMethodEvent commit;
+    commit.setCommitString(QStringLiteral("noto"));
+    QCoreApplication::sendEvent(family->lineEdit(), &commit);
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("noto"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
+    QVERIFY2(!family->currentText().contains(QStringLiteral("Liberation Sans")),
+             "an input-method commit starts a new search");
+
+    QTest::keyClicks(family, QStringLiteral(" s"));
+    QCoreApplication::processEvents();
+    QCOMPARE(family->currentText().compare(QStringLiteral("Noto Sans"), Qt::CaseInsensitive), 0);
+}
+
+void TypeSessionPanelsTest::fontFamilyEditingFinishedRearms()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_font_editing_finished"));
+    QVERIFY2(f.ok(), "type fixture");
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    showPanel(*window_, QStringLiteral("characterPanel"));
+    character_->refresh();
+
+    auto* family = character_->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    focusFamily(family);
+    pictura::test::typeFamily(family, QStringLiteral("noto"));
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("noto"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
+
+    emit family->lineEdit()->editingFinished();
+    QTest::keyClicks(family, QStringLiteral("aria"));
+    QCoreApplication::processEvents();
+    QVERIFY2(!family->currentText().contains(QStringLiteral("noto"), Qt::CaseInsensitive),
+             "editingFinished re-arms the replacement");
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("aria"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
 }
 
 QTEST_MAIN(TypeSessionPanelsTest)

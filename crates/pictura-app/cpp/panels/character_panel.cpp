@@ -827,7 +827,10 @@ void CharacterPanel::refresh()
 
     if (!family.isEmpty()) {
         const QSignalBlocker block(family_);
-        family_->setCurrentFont(QFont(family));
+        // A deferred refresh must not replace the family the user is typing.
+        if (family_->currentText() != family) {
+            family_->setCurrentFont(QFont(family));
+        }
         const QSignalBlocker blockStyle(style_);
         style_->clear();
         style_->addItems(QFontDatabase::styles(family));

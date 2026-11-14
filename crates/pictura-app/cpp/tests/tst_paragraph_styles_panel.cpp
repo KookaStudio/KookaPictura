@@ -7,6 +7,7 @@
 #include "commands.h"
 #include "font_combo.h"
 #include "frame.h"
+#include "options_bar.h"
 #include "panels/paragraph_styles_panel.h"
 #include "paragraph_style_dialog.h"
 #include "selftest_paint_fixture.h"
@@ -29,6 +30,7 @@
 #include <QtWidgets/QFontComboBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QToolButton>
 
 #include "qt_test_support.h"
@@ -78,6 +80,8 @@ private slots:
     void dialogRoundTripsAttributes();
     void dialogPreviewAppliesAndCancelRestores();
     void dialogFontFamilyPopup();
+    void optionsTypeFamilyTypeAhead();
+    void paragraphStyleFamilyTypeAhead();
     void fontRowsNameFamiliesInTheUiFont();
     void fontPopupPaintsPromptlyAcrossTheList();
     void doubleClickOpensDialog();
@@ -418,6 +422,85 @@ void ParagraphStylesPanelTest::dialogFontFamilyPopup()
 // A family's name is drawn in the UI font, as in CS6's font menu: in the open
 // popup, the lightest installed face (a Thin or ExtraLight weight) still reads
 // at full contrast.
+void ParagraphStylesPanelTest::optionsTypeFamilyTypeAhead()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_options_typeahead"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+
+    auto* bar = frame.findChild<pictura::OptionsBar*>();
+    QVERIFY(bar);
+    auto* stack = bar->findChild<QStackedWidget*>();
+    QVERIFY(stack);
+    QWidget* page = stack->currentWidget();
+    QVERIFY(page);
+    QCOMPARE(stack->indexOf(page), int(pictura::ToolId::HorizontalType));
+    auto* family = page->findChild<QFontComboBox*>(QStringLiteral("optionsTypeFamily"));
+    QVERIFY(family);
+    QVERIFY2(family->parentWidget() == page, "the combo belongs to the active options page");
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    QCOMPARE(family->currentText(), QStringLiteral("Liberation Sans"));
+
+    pictura::test::typeFamily(family, QStringLiteral("noto"));
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("noto"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
+    QVERIFY2(pictura::test::completionOffers(family, QStringLiteral("Noto Sans")),
+             "Noto Sans is offered");
+
+    QTest::keyClicks(family, QStringLiteral(" s"));
+    QCoreApplication::processEvents();
+    QCOMPARE(family->currentText().compare(QStringLiteral("Noto Sans"), Qt::CaseInsensitive), 0);
+}
+
+void ParagraphStylesPanelTest::paragraphStyleFamilyTypeAhead()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_style_typeahead"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+
+    auto* panel = frame.findChild<pictura::ParagraphStylesPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+
+    const pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Heading"), QString(), c,
+                                                    p));
+    panel->refresh();
+
+    bool started = false;
+    bool offered = false;
+    // The dialog runs its own event loop; poll for it, then type in its field.
+    QTimer poll;
+    poll.setInterval(10);
+    QObject::connect(&poll, &QTimer::timeout, [&] {
+        auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
+        if (!dialog) {
+            return;
+        }
+        poll.stop();
+        auto* family =
+            dialog->findChild<QFontComboBox*>(QStringLiteral("paragraphStyleFamily"));
+        if (family) {
+            family->setEditText(QStringLiteral("Liberation Sans"));
+            pictura::test::typeFamily(family, QStringLiteral("noto"));
+            started = family->currentText().startsWith(QStringLiteral("noto"),
+                                                       Qt::CaseInsensitive)
+                && !family->currentText().contains(QStringLiteral("Liberation Sans"));
+            offered = pictura::test::completionOffers(family, QStringLiteral("Noto Sans"));
+        }
+        dialog->reject();
+    });
+    poll.start();
+    QVERIFY(!panel->editStyle(1));
+    poll.stop();
+    QVERIFY2(started, "typing starts a new search");
+    QVERIFY2(offered, "Noto Sans is offered");
+}
+
 void ParagraphStylesPanelTest::fontRowsNameFamiliesInTheUiFont()
 {
     showFrame();
