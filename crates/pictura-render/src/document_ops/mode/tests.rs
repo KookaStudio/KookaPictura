@@ -2,7 +2,7 @@ use super::*;
 use pictura_codec::{
     read_psd, web_safe_palette, write_psd, ColorReduction, Dither, PaletteOptions,
 };
-use pictura_core::{Layer, Samples};
+use pictura_core::{Channel, Layer, Samples};
 
 /// A one-layer RGB document whose layer and (RGBA) composite hold `pixels`,
 /// as the app keeps it.
@@ -320,13 +320,154 @@ fn the_matrix_dims_unsupported_targets_and_refusals_do_not_mutate() {
 }
 
 #[test]
-fn save_view_trims_the_display_alpha_only_for_a_source_mode() {
+fn save_view_trims_the_display_alpha_for_a_source_mode_or_extra_channels() {
     let doc = ramp(2, 2);
     assert!(matches!(save_view(&doc), Cow::Borrowed(_)));
     let mut cmyk = doc.clone();
     convert_mode(&mut cmyk, ColorMode::Cmyk).unwrap();
     assert_eq!(cmyk.composite.channels, 4);
     assert_eq!(save_view(&cmyk).composite.channels, 3);
+    let mut extra = doc.clone();
+    extra.channels.push(Channel {
+        id: 0,
+        data: vec![0u8; 4].into(),
+    });
+    assert_eq!(save_view(&extra).composite.channels, 3);
+    let mut short = extra.clone();
+    short.composite = PixelBuffer {
+        width: 2,
+        height: 2,
+        channels: 4,
+        data: vec![0u8; 3 * 4].into(),
+    };
+    assert!(matches!(save_view(&short), Cow::Borrowed(_)));
+}
+
+#[test]
+fn an_extra_channel_saves_without_a_duplicate_alpha_plane() {
+    let mut doc = ramp(2, 2);
+    doc.composite = PixelBuffer::new(0, 0, 4);
+    let alpha = [255u8, 0, 128, 200];
+    doc.channels = vec![Channel {
+        id: 0,
+        data: alpha.to_vec().into(),
+    }];
+    let view = save_view(&doc);
+    assert_eq!(view.composite.channels, 3);
+    let plane = 4;
+    let mut expected = vec![0u8; 3 * plane];
+    view.composite.data.read_into(0, &mut expected);
+    let bytes = write_psd(view.as_ref()).expect("writes");
+    assert_eq!(
+        u16::from_be_bytes(bytes[12..14].try_into().unwrap()),
+        4,
+        "three color channels plus the extra"
+    );
+    let back = read_psd(&bytes).expect("reads");
+    assert_eq!(back.composite.channels, 3);
+    assert_eq!(back.composite.data.to_vec(), expected);
+    assert_eq!(back.channels.len(), 1);
+    assert_eq!(back.channels[0].data.to_vec(), alpha);
+}
+
+#[test]
+fn an_rgba_document_without_extra_channels_keeps_its_alpha_plane() {
+    let rgba = [10u8, 20, 30, 255, 40, 50, 60, 0];
+    let doc = Document::from_rgba("Layer 1", 2, 1, &rgba);
+    let bytes = write_psd(&save_view(&doc)).expect("writes");
+    assert_eq!(
+        u16::from_be_bytes(bytes[12..14].try_into().unwrap()),
+        4,
+        "an RGBA composite without extras keeps four channels"
+    );
+    let back = read_psd(&bytes).expect("reads");
+    assert_eq!(back.composite.channels, 3);
+    assert_eq!(back.channels.len(), 1);
+    assert_eq!(back.channels[0].data.to_vec(), vec![255, 0]);
+}
+
+#[test]
+fn a_depth16_extra_channel_saves_without_a_duplicate_alpha_plane() {
+    let mut doc = ramp(2, 2);
+    doc.source_depth = Some(BitDepth::Sixteen);
+    let plane = 4;
+    let mut samples = Vec::with_capacity(4 * plane);
+    for c in 0..3u16 {
+        for i in 0..plane {
+            samples.push((c * 40 + i as u16) * 257);
+        }
+    }
+    let extra = [7u8, 8, 9, 10];
+    samples.extend(extra.iter().map(|v| u16::from(*v) * 257));
+    doc.source_planes = Some(pictura_core::SourcePlanes {
+        depth: BitDepth::Sixteen,
+        width: 2,
+        height: 2,
+        samples: Samples::U16(samples.into()),
+    });
+    doc.channels = vec![Channel {
+        id: 0,
+        data: extra.to_vec().into(),
+    }];
+    let view = save_view(&doc);
+    let mut expected = vec![0u8; 3 * plane];
+    view.composite.data.read_into(0, &mut expected);
+    let bytes = write_psd(view.as_ref()).expect("writes");
+    assert_eq!(
+        u16::from_be_bytes(bytes[12..14].try_into().unwrap()),
+        4,
+        "three color channels plus the extra"
+    );
+    assert_eq!(
+        u16::from_be_bytes(bytes[22..24].try_into().unwrap()),
+        16,
+        "the retained depth is written"
+    );
+    let back = read_psd(&bytes).expect("reads");
+    assert_eq!(back.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(back.composite.data.to_vec(), expected);
+    assert_eq!(back.channels.len(), 1);
+    assert_eq!(back.channels[0].data.to_vec(), extra);
+}
+
+#[test]
+fn a_depth32_extra_channel_saves_without_a_duplicate_alpha_plane() {
+    let mut doc = ramp(2, 2);
+    doc.source_depth = Some(BitDepth::ThirtyTwo);
+    let plane = 4;
+    let color = [3u8, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36];
+    let extra = [7u8, 8, 9, 10];
+    let mut bytes = color.to_vec();
+    bytes.extend_from_slice(&extra);
+    doc.source_planes = Some(pictura_core::SourcePlanes {
+        depth: BitDepth::ThirtyTwo,
+        width: 2,
+        height: 2,
+        samples: Samples::widen_from_u8(&bytes, BitDepth::ThirtyTwo),
+    });
+    doc.channels = vec![Channel {
+        id: 0,
+        data: extra.to_vec().into(),
+    }];
+    let view = save_view(&doc);
+    let mut expected = vec![0u8; 3 * plane];
+    view.composite.data.read_into(0, &mut expected);
+    let bytes = write_psd(view.as_ref()).expect("writes");
+    assert_eq!(
+        u16::from_be_bytes(bytes[12..14].try_into().unwrap()),
+        4,
+        "three color channels plus the extra"
+    );
+    assert_eq!(
+        u16::from_be_bytes(bytes[22..24].try_into().unwrap()),
+        32,
+        "the retained depth is written"
+    );
+    let back = read_psd(&bytes).expect("reads");
+    assert_eq!(back.source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(back.composite.data.to_vec(), expected);
+    assert_eq!(back.channels.len(), 1);
+    assert_eq!(back.channels[0].data.to_vec(), extra);
 }
 
 #[test]
