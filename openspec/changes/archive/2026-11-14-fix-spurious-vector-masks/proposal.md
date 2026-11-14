@@ -7,11 +7,10 @@ rendered into a raster layer mask. The mask record then carries the
 `user_mask_from_render` flag (bit 3, `0x08`), and Photoshop shows only the
 raster mask. Pictura imports the leftover `vmsk` as a live vector mask, so the
 Layers panel and Properties panel show a second mask Photoshop does not have
-(#1286). The reference file
-`reference-fixtures/OpenTS_logo2.1_Hyper-V1.psd` reproduces it on its `Triangle`
-and `Chevron` pixel layers. The Solid Color adjustment layer named in the issue
-is not present in that file; layers whose record bit 4 is set stay out of scope
-(see `design.md`).
+(#1286). The issue was reproduced on two pixel layers of a layered reference
+PSD. The Solid Color adjustment layer named in the issue was not present in
+that file; layers whose record bit 4 is set stay out of scope (see
+`design.md`).
 
 ## What Changes
 

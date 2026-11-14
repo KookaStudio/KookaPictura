@@ -16,12 +16,11 @@ See `proposal.md` — Why. The relevant current state:
 - `crates/pictura-render/src/document_ops/layer_ops/shape_layer.rs` identifies
   a shape layer from the `vmsk` block plus a decoded fill content; the fill
   compositor needs `Layer.vector_mask` to clip shape fills.
-- `OpenTS_logo2.1_Hyper-V1.psd` has `Triangle` and `Chevron` as pixel layers
-  (record bit 4 clear) with a `vmsk` whose bounds equal the `-2` mask rect and
-  a mask flags byte with bit 3 (`user_mask_from_render`) set. A headless control
-  query confirms Pictura currently reports a vector mask for both. These two
-  layers are the verified reproducer; the Solid Color adjustment layer named in
-  the issue is not present in that file.
+- The verified reproducer is a layered reference PSD with two pixel layers
+  (record bit 4 clear) whose `vmsk` bounds equal the `-2` mask rect and whose
+  mask flags have bit 3 (`user_mask_from_render`) set. A headless control query
+  confirmed Pictura reported a vector mask for both. The Solid Color adjustment
+  layer named in the issue was not present in that file.
 - Shape layers that carry the same derived `-2` mask, such as `basic01.psd`'s
   `SoCo` shapes, have record bit 4 set because their appearance comes from the
   vector fill, not from pixels.

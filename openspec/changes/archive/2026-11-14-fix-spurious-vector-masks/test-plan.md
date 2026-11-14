@@ -34,10 +34,10 @@ oracle convention; CI's oracle job runs them.
   `pictura-render` asserts the density lift outside the mask. The saved record
   normalizes the vector parameters, checked by re-running the psd-tools script
   on a written copy.
-- The verified scope is OpenTS's `Triangle`/`Chevron` pixel layers. Layers
-  whose record bit 4 is set (fill, adjustment, type, smart object, or shape)
-  keep their derived view by design; the issue's Solid Color adjustment layer
-  is not in that file and is out of scope.
+- The verified scope is the two pixel layers of the reference PSD. Layers whose
+  record bit 4 is set (fill, adjustment, type, smart object, or shape) keep
+  their derived view by design; the issue's Solid Color adjustment layer was
+  not in that file and is out of scope.
 - Finish all source and test edits before building; follow the repository's
   compile-last rule and the 80% CPU budget.
 - After the build, run the named tests and the repository gates, then archive

@@ -2,7 +2,7 @@
 
 ## Why
 
-Saving an RGB PSD that carries an alpha channel writes one channel too many: the app's display composite is RGBA, `save_view` trims that display alpha only for a recorded source mode, and the writer then counts all four display planes as color channels. In the reported file the fourth and fifth planes are byte-identical; in general the fourth is the recomposited display alpha (opaque 255 for a layerless document) and the fifth is the real extra channel, so a later read reports two extra channels instead of one. This corrupts the channel layout for every RGB document that has document-level extra channels and is saved after the composite is recomposited (found saving `OpenTS_logo2.1_Hyper-V1.psd`, issue #1115).
+Saving an RGB PSD that carries an alpha channel writes one channel too many: the app's display composite is RGBA, `save_view` trims that display alpha only for a recorded source mode, and the writer then counts all four display planes as color channels. In the reported file the fourth and fifth planes are byte-identical; in general the fourth is the recomposited display alpha (opaque 255 for a layerless document) and the fifth is the real extra channel, so a later read reports two extra channels instead of one. This corrupts the channel layout for every RGB document that has document-level extra channels and is saved after the composite is recomposited (found while saving an affected RGB PSD, issue #1115).
 
 ## What Changes
 

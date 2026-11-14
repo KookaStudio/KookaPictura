@@ -4,12 +4,12 @@
 
 On a non-square document a pixel layer's raster mask thumbnail is sized from the
 mask's own rect instead of the document, so it does not share the aspect ratio
-that the layer, shape, and vector-mask thumbnails use. On the reference PSD
-(`OpenTS_logo2.1_Hyper-V1.psd`, 4934x1500) `Triangle`'s mask is 6395x1257, which
-yields a 24x4 mask thumbnail inside a 24x7 document-aspect card, while its layer
-and vector-mask thumbnails are 24x7. The issue's layer-image claim does not
-reproduce: `layer_thumbnail_positioned` already emits the document aspect. The
-remaining defect is the raster mask thumbnail.
+that the layer, shape, and vector-mask thumbnails use. On the reference PSD the
+affected layer's mask is wider than the canvas, which yields a 24x4 mask
+thumbnail inside a 24x7 document-aspect card, while its layer and vector-mask
+thumbnails are 24x7. The issue's layer-image claim does not reproduce:
+`layer_thumbnail_positioned` already emits the document aspect. The remaining
+defect is the raster mask thumbnail.
 
 ## What Changes
 
