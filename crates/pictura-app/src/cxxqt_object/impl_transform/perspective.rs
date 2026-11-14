@@ -262,7 +262,7 @@ pub(super) fn drag_angle_degrees(session: &TransformSession) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::document_session::{TransformMode, TransformSession};
+    use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
     use super::super::geometry::{
         pivot_point, projective_coefficients, session_quad, source_corners,
     };
@@ -281,6 +281,7 @@ mod tests {
     fn session(mode: TransformMode) -> TransformSession {
         let corners = source_corners(rect100());
         TransformSession {
+            target: TransformTarget::Layer,
             path: "0".to_string(),
             members: vec![("0".to_string(), rect100())],
             orig_rect: rect100(),

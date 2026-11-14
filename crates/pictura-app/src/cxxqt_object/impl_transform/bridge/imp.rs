@@ -1,6 +1,7 @@
 use super::*;
 
-use super::super::super::document_session::{TransformMode, TransformSession};
+use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
+use super::super::super::helpers::memory_gate;
 use super::super::geometry::{
     hit_test_quad, pivot_point, projective_coefficients, quad_anchors, quad_driven, rect_center,
     session_quad, set_pivot, source_corners, store_quad, MapParams,
@@ -801,4 +802,31 @@ pub(super) fn reflect_quad_about(
         }
     }
     store_quad(session, out)
+}
+
+pub(super) fn transform_session_is_selection(view: &PictureView) -> bool {
+    view.rust().selection_transform_live()
+}
+
+/// Begin a Transform Selection session on the live selection border.
+pub(super) fn begin_transform_selection(mut view: Pin<&mut PictureView>) -> bool {
+    memory_gate::clear();
+    view.as_mut().settle_pending_composite();
+    let begun = view.as_mut().rust_mut().begin_selection_transform();
+    if begun {
+        view.as_mut().clear_transform_preview();
+    }
+    begun
+}
+
+pub(super) fn transform_selection_contour_extents(view: &PictureView) -> Vec<f64> {
+    view.rust().selection_transform_contour()
+}
+
+pub(super) fn transform_last_target(view: &PictureView) -> QString {
+    match view.rust().last_transform.as_ref() {
+        Some(repeat) if repeat.target == TransformTarget::Selection => QString::from("selection"),
+        Some(_) => QString::from("layer"),
+        None => QString::default(),
+    }
 }

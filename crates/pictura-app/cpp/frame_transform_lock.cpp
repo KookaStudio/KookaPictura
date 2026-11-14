@@ -43,7 +43,16 @@ void PicturaMainWindow::installTransformLock()
         return;
     }
     registry_->setBlockedProvider([this](const CommandSpec& spec) {
-        return transformLocked_ && locksDocumentEdit(spec);
+        if (!transformLocked_) {
+            return false;
+        }
+        if (locksDocumentEdit(spec)) {
+            return true;
+        }
+        // A pending selection-border transform owns the mask: nothing in the
+        // Select menu may rewrite it under the session.
+        return tools_ && tools_->transformSelectionTarget() && !spec.path.isEmpty()
+            && spec.path.first() == QLatin1String("Select");
     });
     tools_->setTransformDecisionPrompt([this]() { return askApplyTransform(this); });
     tools_->setCropDecisionPrompt([this]() { return askCropImage(this); });

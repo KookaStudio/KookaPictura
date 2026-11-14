@@ -1,4 +1,4 @@
-use super::super::super::document_session::{TransformMode, TransformSession};
+use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
 use super::super::geometry::{
     apply_session_transform, pivot_point, rect_center, set_pivot, source_corners, MapParams,
 };
@@ -37,6 +37,7 @@ fn the_selection_test_agrees_with_the_lift_coverage() {
 
 fn transform_session(rect: PsdRect) -> TransformSession {
     TransformSession {
+        target: TransformTarget::Layer,
         path: "0".to_string(),
         members: vec![("0".to_string(), rect)],
         orig_rect: rect,

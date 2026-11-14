@@ -360,7 +360,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "select.modify.feather", path: &["Select", "Modify", "Feather…"], label: "Feather…", shortcut: "Shift+F6", implemented: true, checkable: false },
     CommandSpec { id: "select.grow", path: &["Select", "Grow"], label: "Grow", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "select.similar", path: &["Select", "Similar"], label: "Similar", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "select.transform.selection", path: &["Select", "Transform Selection"], label: "Transform Selection", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "select.transform.selection", path: &["Select", "Transform Selection"], label: "Transform Selection", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "select.save", path: &["Select", "Save Selection…"], label: "Save Selection…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "select.load", path: &["Select", "Load Selection…"], label: "Load Selection…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.last", path: &["Filter", "Last Filter"], label: "Last Filter", shortcut: "Ctrl+F", implemented: true, checkable: false },

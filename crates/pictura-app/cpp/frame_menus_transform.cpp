@@ -27,6 +27,12 @@ void PicturaMainWindow::wireTransformMenu()
     };
 
     registry_->setHandler(command_ids::EditFreeTransform, [this, transformTarget]() {
+        // A pending border transform is not silently replaced: Apply / Don't
+        // Apply / Cancel decides, and Cancel keeps the session.
+        if (tools_ && tools_->transformPending() && tools_->transformSelectionTarget()
+            && !tools_->resolvePendingTransform()) {
+            return;
+        }
         if (beginFreeTransform(transformTarget())) {
             refresh();
         }
@@ -73,7 +79,12 @@ void PicturaMainWindow::wireTransformMenu()
             refresh();
         }
     });
-    registry_->setEnabledProvider(command_ids::EditTransformWarp, transformTargetable);
+    registry_->setEnabledProvider(
+        command_ids::EditTransformWarp,
+        [transformTargetable, modalSession]() {
+            // An open session keeps its own target and enters Warp in place.
+            return modalSession() || transformTargetable();
+        });
 
     const struct {
         const char* id;
@@ -199,7 +210,12 @@ void PicturaMainWindow::wireTransformMenu()
         if (!view || !transform_has_repeat(*view)) {
             return;
         }
-        if (!beginTransformMode(transformTarget(), QString())) {
+        if (transform_last_target(*view) == QLatin1String("selection")) {
+            // Repeat on the current selection border, not on a layer.
+            if (!view->has_selection() || !tools_ || !tools_->beginTransformSelection()) {
+                return;
+            }
+        } else if (!beginTransformMode(transformTarget(), QString())) {
             return;
         }
         if (!tools_ || !tools_->repeatTransform()) {
@@ -210,12 +226,18 @@ void PicturaMainWindow::wireTransformMenu()
         }
         refresh();
     });
-    registry_->setEnabledProvider(command_ids::EditTransformAgain,
-                                  [this, transformTargetable, modalSession]() {
-                                      PictureView* view = activeView();
-                                      return view && !modalSession() && transform_has_repeat(*view)
-                                          && transformTargetable();
-                                  });
+    registry_->setEnabledProvider(
+        command_ids::EditTransformAgain,
+        [this, transformTargetable, modalSession]() {
+            PictureView* view = activeView();
+            if (!view || modalSession() || !transform_has_repeat(*view)) {
+                return false;
+            }
+            if (transform_last_target(*view) == QLatin1String("selection")) {
+                return view->selection_count() > 0;
+            }
+            return transformTargetable();
+        });
 }
 
 } // namespace pictura

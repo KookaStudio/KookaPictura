@@ -95,6 +95,7 @@ inline constexpr char SelectModifyContract[] = "select.modify.contract";
 inline constexpr char SelectModifyFeather[] = "select.modify.feather";
 inline constexpr char SelectGrow[] = "select.grow";
 inline constexpr char SelectSimilar[] = "select.similar";
+inline constexpr char SelectTransformSelection[] = "select.transform.selection";
 inline constexpr char SelectSave[] = "select.save";
 inline constexpr char SelectLoad[] = "select.load";
 inline constexpr char SelectAllLayers[] = "select.allLayers";

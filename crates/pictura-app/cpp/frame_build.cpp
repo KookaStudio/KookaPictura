@@ -1025,7 +1025,14 @@ void PicturaMainWindow::buildStatusBar()
         }
     });
     if (tools_) {
-        connect(tools_, &ToolController::transformChanged, this, [this]() { updateStatus(); });
+        connect(tools_, &ToolController::transformChanged, this, [this]() {
+            updateStatus();
+            // A border transform hides the committed ants; restore them when
+            // its session ends (commit or cancel).
+            if (!tools_->transformSessionActive()) {
+                refreshSelectionOverlay();
+            }
+        });
         installTransformLock();
     }
     // Qt hides the normal readouts while a temporary message shows, but a later

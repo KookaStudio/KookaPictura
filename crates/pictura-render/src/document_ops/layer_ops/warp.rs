@@ -36,7 +36,7 @@ fn rect_of(d: (i32, i32, i32, i32)) -> PsdRect {
 
 /// Whether `warp` can be evaluated: finite parameters and, for a custom warp, a
 /// well-formed finite mesh.
-fn warp_is_valid(warp: &Warp) -> bool {
+pub(super) fn warp_is_valid(warp: &Warp) -> bool {
     let finite = [warp.bend, warp.h_distort, warp.v_distort]
         .iter()
         .chain(&warp.bounds)

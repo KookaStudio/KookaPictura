@@ -1,6 +1,6 @@
 use super::*;
 
-use super::super::super::document_session::{TransformSession, WarpDrag};
+use super::super::super::document_session::{TransformSession, TransformTarget, WarpDrag};
 use super::super::geometry::{
     projective_coefficients, session_quad, source_corners, store_quad, unmap_quad, MapParams,
 };
@@ -9,7 +9,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::warp::{BezierMesh, Warp, WarpStyle};
-use pictura_core::Homography;
+use pictura_core::{Homography, PsdRect};
 
 /// A press on a custom warp's anchor or handle.
 pub(in crate::cxxqt_object::impl_transform) const WARP_POINT_HANDLE: i32 = 11;
@@ -19,6 +19,16 @@ pub(in crate::cxxqt_object::impl_transform) const WARP_SURFACE_HANDLE: i32 = 12;
 pub(super) const HANDLE_PX: f64 = 12.0;
 /// Points per drawn grid curve.
 pub(super) const CURVE_POINTS: usize = 41;
+
+/// The four corners of `rect` in TL, TR, BR, BL order.
+fn quad_of(rect: PsdRect) -> [(f64, f64); 4] {
+    [
+        (f64::from(rect.left), f64::from(rect.top)),
+        (f64::from(rect.right), f64::from(rect.top)),
+        (f64::from(rect.right), f64::from(rect.bottom)),
+        (f64::from(rect.left), f64::from(rect.bottom)),
+    ]
+}
 
 pub(super) fn rect_bounds(rect: pictura_core::PsdRect) -> [f64; 4] {
     [
@@ -69,6 +79,27 @@ impl Frame {
         let q = apply(&self.inv, p);
         (q[0].is_finite() && q[1].is_finite()).then_some(q)
     }
+}
+
+/// A source point through the session's warp and then its effective frame.
+pub(in crate::cxxqt_object::impl_transform) fn map_source_point(
+    session: &TransformSession,
+    x: f64,
+    y: f64,
+) -> Option<[f64; 2]> {
+    if session.warp.is_none() {
+        let point = pictura_render::selection_transform_point(
+            session.orig_rect,
+            session_quad(session),
+            x,
+            y,
+        )?;
+        return (point.0.is_finite() && point.1.is_finite()).then_some([point.0, point.1]);
+    }
+    let frame = effective_frame(session)?;
+    let (x, y) = session.warp.as_ref().map_or((x, y), |warp| warp.map(x, y));
+    let point = frame.to_doc([x, y]);
+    (point[0].is_finite() && point[1].is_finite()).then_some(point)
 }
 
 /// The frame after the warp's post-frame: what the preview actually samples.
@@ -338,6 +369,17 @@ pub(in crate::cxxqt_object::impl_transform) fn warp_move(
 pub(in crate::cxxqt_object::impl_transform) fn refresh_warp_preview(
     mut view: Pin<&mut PictureView>,
 ) -> bool {
+    // A selection border has no moving image: its preview is the mapped
+    // contour, refreshed by the C++ overlay.
+    if view
+        .rust()
+        .session
+        .live
+        .transform()
+        .is_some_and(|session| session.target == TransformTarget::Selection)
+    {
+        return true;
+    }
     let gpu_compute = view.rust().gpu_compute;
     let prepared = (|| {
         let rust = view.rust();
@@ -450,48 +492,74 @@ pub(super) fn transform_leave_warp(mut view: Pin<&mut PictureView>) -> bool {
             _ => None,
         }
     };
+    // A border session has no moving image; its new box is the analytic
+    // warped bounds.
+    // ponytail: the box hugs the warped bounds bbox, not a tight content bbox;
+    // a tight box would rasterise the mask on leave. Upgrade by tracing the
+    // warped coverage and using its bounds.
+    let selection_rect = {
+        let rust = view.rust();
+        rust.session
+            .live
+            .transform()
+            .filter(|session| session.target == TransformTarget::Selection)
+            .and_then(|session| {
+                let warp = session.warp.as_ref()?;
+                pictura_render::warp_dest_rect(session.orig_rect, warp, warp_preview_quad(session))
+            })
+    };
     let mut rust = view.as_mut().rust_mut();
     let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     if let Some((x, y, w, h)) = preview {
-        let new_quad = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
-        if let (Some(old), Some(new)) = (
-            Frame::of(session),
-            Frame::new(source_corners(session.orig_rect), new_quad),
-        ) {
-            let old_effective = match session.warp_post {
-                Some(post) => old.with_post(&post),
-                None => Some(old),
-            };
-            if let Some(old_effective) = old_effective {
-                // The new frame's inverse after the old effective frame keeps
-                // every warp pixel where it was while the box takes the
-                // preview's bounds.
-                if let Some(post) = compose(&new.inv, &old_effective.h) {
-                    let box_set = if session.mode.is_projective() {
-                        store_quad(session, new_quad)
-                    } else {
-                        match unmap_quad(&MapParams::of(session), &new_quad) {
-                            Some(base) => {
-                                session.base_quad = Some(base);
-                                true
-                            }
-                            None => false,
-                        }
-                    };
-                    if box_set {
-                        session.warp_post = Some(post);
-                    }
-                }
-            }
-        }
+        retarget_box(session, [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]);
+    }
+    if let Some(rect) = selection_rect {
+        retarget_box(session, quad_of(rect));
     }
     session.warp_editing = false;
     session.warp_drag = None;
     session.dragging = false;
     session.handle = -1;
     true
+}
+
+/// Move the session's box onto `new_quad` while keeping the rendered warp
+/// where it is: the new frame's inverse after the old effective frame becomes
+/// `warp_post`. False when a frame is singular.
+fn retarget_box(session: &mut TransformSession, new_quad: [(f64, f64); 4]) -> bool {
+    let (Some(old), Some(new)) = (
+        Frame::of(session),
+        Frame::new(source_corners(session.orig_rect), new_quad),
+    ) else {
+        return false;
+    };
+    let old_effective = match session.warp_post {
+        Some(post) => old.with_post(&post),
+        None => Some(old),
+    };
+    let Some(old_effective) = old_effective else {
+        return false;
+    };
+    let Some(post) = compose(&new.inv, &old_effective.h) else {
+        return false;
+    };
+    let box_set = if session.mode.is_projective() {
+        store_quad(session, new_quad)
+    } else {
+        match unmap_quad(&MapParams::of(session), &new_quad) {
+            Some(base) => {
+                session.base_quad = Some(base);
+                true
+            }
+            None => false,
+        }
+    };
+    if box_set {
+        session.warp_post = Some(post);
+    }
+    box_set
 }
 
 pub(super) fn transform_warp_active(view: &PictureView) -> bool {
@@ -721,6 +789,7 @@ mod tests {
         };
         let center = (45.0, 30.0);
         TransformSession {
+            target: TransformTarget::Layer,
             path: "0".to_string(),
             members: vec![("0".to_string(), rect)],
             orig_rect: rect,

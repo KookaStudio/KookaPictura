@@ -310,6 +310,9 @@ public:
     void beginTransformPreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
                                double opacity, std::optional<QPoint> basePos = std::nullopt,
                                int scale = 1);
+    // Begin a transform overlay with no moving image: the box, handles, pivot,
+    // and a caller-fed selection preview (Transform Selection).
+    void beginTransformOverlay();
     void setTransformPreview(double scaleX, double scaleY, double angleRadians, double dx,
                              double dy);
     // Projective layer preview: nine space-separated coefficients in

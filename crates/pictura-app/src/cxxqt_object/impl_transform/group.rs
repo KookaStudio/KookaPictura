@@ -24,6 +24,7 @@ pub(super) fn repeatable_transform(session: &TransformSession) -> Option<RepeatT
     }
     let (cx, cy) = rect_center(session.orig_rect);
     Some(RepeatTransform {
+        target: session.target,
         scale_x: session.scale_x,
         scale_y: session.scale_y,
         angle: session.angle,

@@ -1,4 +1,4 @@
-use super::super::document_session::{TransformMode, TransformSession};
+use super::super::document_session::{TransformMode, TransformSession, TransformTarget};
 use super::super::helpers::*;
 use super::super::helpers_composite::*;
 use super::super::qobject;
@@ -274,6 +274,9 @@ impl qobject::PictureView {
     /// nothing. The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
         memory_gate::clear();
+        if self.rust().selection_transform_live() {
+            return self.as_mut().commit_selection_transform();
+        }
         let Some((
             path,
             members,
@@ -1132,6 +1135,7 @@ impl PictureViewRust {
         let corners = source_corners(orig_rect);
         let center = rect_center(orig_rect);
         Some(TransformSession {
+            target: TransformTarget::Layer,
             path,
             members,
             orig_rect,

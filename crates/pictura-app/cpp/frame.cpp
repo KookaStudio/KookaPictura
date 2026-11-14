@@ -950,6 +950,12 @@ void PicturaMainWindow::refreshSelectionOverlay()
     if (!view || !activeWindow_) {
         return;
     }
+    if (tools_ && tools_->transformSelectionTarget()) {
+        // The live border transform owns the ants; it supplies the preview.
+        forEachCanvas(*activeWindow_->doc,
+                      [](ImageView* canvas) { canvas->clearSelectionContour(); });
+        return;
+    }
     if (view->has_selection()) {
         const selection_api::SelectionContour contour = selection_api::contour(*view);
         forEachCanvas(*activeWindow_->doc,

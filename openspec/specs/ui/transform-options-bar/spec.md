@@ -14,10 +14,12 @@ tool icon, a show-reference-point toggle, a 3×3 reference point locator, an X
 field, a relative-positioning toggle, a Y field, a W field, a link toggle, an H
 field, an angle field, H and V skew fields, an interpolation combo, a warp
 button, a Cancel button, and an Apply button. The page SHALL be shown whenever
-a Free Transform session is active, whichever tool is active, and the bar SHALL
-return to the active tool's page when the session ends. The X/Y/W/H fields
-SHALL be seeded from the session on show and re-read on every change; the
-relative toggle and the W/H link are page state.
+a transform session is active, whichever tool is active, for both a Free
+Transform session and a Transform Selection session, and the bar SHALL return
+to the active tool's page when the session ends. The X/Y/W/H fields SHALL be
+seeded from the session on show and re-read on every change; for a Transform
+Selection session the box is the selection's coverage bounds. The relative
+toggle and the W/H link are page state.
 
 #### Scenario: Beginning a session shows the transform page
 
@@ -33,6 +35,11 @@ relative toggle and the W/H link are page state.
 
 - **WHEN** the transform page is shown on a fresh session over a 100×50 layer
 - **THEN** X/Y show the layer centre, W and H show 100%, and the angle shows 0°
+
+#### Scenario: A border session seeds from the selection bounds [tob_seed_border]
+
+- **WHEN** `Select > Transform Selection` begins on a 100×50 selection
+- **THEN** X/Y show the selection's centre, W and H show 100%, and the angle shows 0°
 
 ### Requirement: Transform change signal
 
@@ -61,7 +68,9 @@ interpolation combo sets the session's resample method. The interpolation combo
 SHALL list the six CS6 methods (Nearest Neighbor, Bilinear, Bicubic, Bicubic
 Smoother, Bicubic Sharper, Bicubic Automatic). The warp button SHALL switch
 between Free Transform and Warp modes and show as checked in Warp mode. Cancel
-SHALL cancel the session and Apply SHALL commit it, both ending the session.
+SHALL cancel the session and Apply SHALL commit it, both ending the session; the
+commit SHALL record the session's own history label (`"Free Transform"` for a
+layer, `"Transform Selection"` for a selection border).
 
 #### Scenario: The locator moves the pivot
 
@@ -71,7 +80,12 @@ SHALL cancel the session and Apply SHALL commit it, both ending the session.
 #### Scenario: Apply commits and records one state
 
 - **WHEN** a field changed the transform and Apply is clicked
-- **THEN** the session ends, exactly one `"Free Transform"` state is recorded, and the tool page returns
+- **THEN** the session ends, exactly one state labelled for the session's target is recorded, and the tool page returns
+
+#### Scenario: Apply on a border session records Transform Selection [tob_apply_border]
+
+- **WHEN** a field changes a selection-border transform and Apply is clicked
+- **THEN** exactly one `"Transform Selection"` state is recorded and the tool page returns
 
 #### Scenario: Cancel restores the document
 

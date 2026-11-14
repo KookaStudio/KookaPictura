@@ -70,6 +70,9 @@ LayerRect layerRect(const PictureView& view, const QString& path);
 /// computes it. Invalid when `path` does not resolve or has no content.
 LayerRect contentRect(const PictureView& view, const QString& path);
 Quad quad(const PictureView& view);
+/// The live border transform's marching-ants loops in document space (empty
+/// without a Transform Selection session).
+QList<QPolygonF> selectionContour(const PictureView& view);
 Matrix previewMatrix(const PictureView& view);
 Matrix previewLocalMatrix(const PictureView& view);
 WarpOverlay warpOverlay(const PictureView& view);

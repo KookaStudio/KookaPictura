@@ -114,7 +114,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | TOOL-1 | `marquee-selection.md` | Single Row / Single Column marquee tools | MISSING | no `ToolId`/registration | #525 |
-| TOOL-2 | `transform-selection.md` | Select ▸ Transform Selection | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #526 |
+| TOOL-2 | `transform-selection.md` | Select ▸ Transform Selection | SHIPPED | `crates/pictura-app/cpp/frame_menus_select.cpp`; `crates/pictura-render/src/document_ops/layer_ops/selection_transform.rs` | #526 |
 | TOOL-3 | `move-and-transform.md` | Puppet Warp | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #527 |
 | TOOL-4 | `move-and-transform.md` | Content-Aware Scale | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #528 |
 | TOOL-5 | `move-and-transform.md` | Transform Scale/Rotate/Again + exact rotations + flip | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #529 |

@@ -47,6 +47,42 @@ bool ToolController::beginTransformMode(const QString& path, const QString& mode
     return beginTransformImpl(path, mode);
 }
 
+bool ToolController::beginTransformSelection()
+{
+    PictureView* v = view();
+    if (!v) {
+        return false;
+    }
+    if (transformControls_) {
+        // A user command takes the Move tool's controls box over.
+        transformControls_ = false;
+        clearControlsBox();
+        v->cancel_transform();
+    }
+    if (transformPending() || !begin_transform_selection(*v)) {
+        return false;
+    }
+    transform_set_controls(*v, false);
+    transformControls_ = false;
+    transformGuideSnap_ = false;
+    if (canvas_) {
+        canvas_->beginTransformOverlay();
+        canvas_->clearSelectionContour();
+        updateTransformOverlay(v);
+        canvas_->setSpacePan(false);
+        canvas_->setPanEnabled(false);
+        canvas_->setFocus();
+    }
+    emit transformChanged();
+    return true;
+}
+
+bool ToolController::transformSelectionTarget() const
+{
+    PictureView* v = view();
+    return v && transform_session_is_selection(*v);
+}
+
 bool ToolController::setTransformMode(const QString& mode)
 {
     PictureView* v = view();
@@ -148,6 +184,13 @@ void ToolController::updateTransformOverlay(PictureView* v)
     // Warp mode has no reference point: the grid replaces the box.
     canvas_->setTransformPivot(QPointF(transform_pivot_x(*v), transform_pivot_y(*v)),
                                transform_show_pivot(*v) && !warping);
+    if (transform_session_is_selection(*v)) {
+        // No moving image: the box and the mapped border are the whole preview.
+        canvas_->setTransformWarp(warping ? transform_api::warpOverlay(*v)
+                                          : transform_api::WarpOverlay());
+        canvas_->setSelectionPreview(transform_api::selectionContour(*v));
+        return;
+    }
     if (warpStored) {
         // The moving layer already carries the warp and the frame; it is a new
         // image after every re-warp, so the canvas must be handed the latest.
@@ -373,6 +416,7 @@ void ToolController::resetTransformUi(bool keepPreview)
     transformGuideSnap_ = false;
     clearControlsBox();
     if (canvas_) {
+        canvas_->clearSelectionPreview();
         if (keepPreview) {
             canvas_->endTransformOverlay();
         } else {
@@ -587,7 +631,7 @@ bool ToolController::leaveTransformWarp()
     if (!v || !transform_leave_warp(*v)) {
         return false;
     }
-    if (canvas_) {
+    if (canvas_ && !transform_session_is_selection(*v)) {
         canvas_->updateTransformPreviewLayer(v->move_preview_layer(),
                                              QPointF(v->move_preview_x(), v->move_preview_y()));
     }

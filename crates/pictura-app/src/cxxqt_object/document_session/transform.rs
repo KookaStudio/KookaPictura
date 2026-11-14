@@ -50,6 +50,14 @@ impl TransformMode {
     }
 }
 
+/// What a transform session edits: a layer's pixels or the selection border.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub(in crate::cxxqt_object) enum TransformTarget {
+    #[default]
+    Layer,
+    Selection,
+}
+
 /// A committed similarity transform that `Edit > Transform > Again` can
 /// reapply to another target: the scale/rotation/shear, the translation, and
 /// the reference point's offset from the source rect's centre in the item's
@@ -57,6 +65,8 @@ impl TransformMode {
 /// position).
 #[derive(Clone, Copy)]
 pub(in crate::cxxqt_object) struct RepeatTransform {
+    /// Whether the last transform targeted the selection border.
+    pub(in crate::cxxqt_object) target: TransformTarget,
     pub(in crate::cxxqt_object) scale_x: f64,
     pub(in crate::cxxqt_object) scale_y: f64,
     pub(in crate::cxxqt_object) angle: f64,
@@ -89,6 +99,8 @@ pub(in crate::cxxqt_object) enum WarpDrag {
 /// The live Free Transform session: the target path, the source rect, the
 /// current similarity transform about its reference point, and the drag state.
 pub(in crate::cxxqt_object) struct TransformSession {
+    /// This session's target: a layer's pixels or the selection border.
+    pub(in crate::cxxqt_object) target: TransformTarget,
     pub(in crate::cxxqt_object) path: String,
     /// Every layer the session transforms with the source rect its map is
     /// centred on, in panel order. `orig_rect` is the union of their rects.

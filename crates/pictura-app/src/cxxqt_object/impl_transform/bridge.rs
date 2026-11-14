@@ -162,5 +162,19 @@ pub mod ffi {
         fn transform_has_repeat(view: &PictureView) -> bool;
         /// Set the label the next commit records.
         fn transform_set_history_label(view: Pin<&mut PictureView>, label: &QString);
+        /// Begin a Transform Selection session on the live selection border;
+        /// false without a non-empty document-sized selection or while a layer
+        /// transform is pending.
+        fn begin_transform_selection(view: Pin<&mut PictureView>) -> bool;
+        /// Whether the live transform targets the selection border rather than
+        /// a layer.
+        fn transform_session_is_selection(view: &PictureView) -> bool;
+        /// The live border's marching-ants loops mapped through the session's
+        /// warp and box frame, encoded `[count, x, y, …]` per loop with
+        /// fractional points; empty without a border session.
+        fn transform_selection_contour_extents(view: &PictureView) -> Vec<f64>;
+        /// What the last committed transform targeted: `"selection"`,
+        /// `"layer"`, or empty before a repeatable commit.
+        fn transform_last_target(view: &PictureView) -> QString;
     }
 }

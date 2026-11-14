@@ -65,6 +65,7 @@ pub(super) fn switch_mode(session: &mut TransformSession, mode: TransformMode) -
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::document_session::TransformTarget;
     use super::super::geometry::{source_corners, MapParams};
     use super::*;
     use pictura_core::PsdRect;
@@ -79,6 +80,7 @@ mod tests {
     fn free_session() -> TransformSession {
         let corners = source_corners(RECT);
         TransformSession {
+            target: TransformTarget::Layer,
             path: "0".to_string(),
             members: vec![("0".to_string(), RECT)],
             orig_rect: RECT,
