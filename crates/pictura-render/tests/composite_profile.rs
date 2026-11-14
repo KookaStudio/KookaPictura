@@ -66,6 +66,11 @@ fn pixel_layer(
     }
 }
 
+fn without_alpha(mut layer: Layer) -> Layer {
+    layer.channels.retain(|channel| channel.id != -1);
+    layer
+}
+
 fn scene(w: u32, h: u32, top: Layer) -> Document {
     let mut d = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     d.layers = LayerStack::from_layers(vec![
@@ -96,6 +101,29 @@ fn cpu_composite_profile_4000() {
         pixel_layer("top", w, h, (200, 100, 50), 255, BlendMode::Normal),
     );
     time(&normal, "Normal, no mask");
+
+    let opaque = scene(
+        w,
+        h,
+        without_alpha(pixel_layer(
+            "top",
+            w,
+            h,
+            (200, 100, 50),
+            255,
+            BlendMode::Normal,
+        )),
+    );
+    time(&opaque, "Normal, no alpha");
+
+    let mut plain_mask = pixel_layer("masked", w, h, (0, 0, 255), 255, BlendMode::Normal);
+    plain_mask.mask = Some(LayerMask {
+        rect: full(w, h),
+        default_color: 0,
+        data: Some(vec![128; (w * h) as usize].into()),
+        ..Default::default()
+    });
+    time(&scene(w, h, plain_mask), "Normal, plain raster mask");
 
     let multiply = scene(
         w,
