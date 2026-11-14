@@ -20,10 +20,12 @@ Fixed Ratio drag SHALL still derive the other axis from the entered ratio and MA
 extend outside the degenerate box. Fixed Ratio and Fixed Size SHALL round half
 away from zero. A Fixed Size selection partly or wholly outside the canvas SHALL
 be clipped by the rasteriser. Fixed Ratio and Fixed Size SHALL ignore Shift and
-Alt. Anti-alias SHALL be offered only for the Elliptical Marquee; because the
-engine rasteriser is binary, the control SHALL be visible but disabled with a
-reason rather than silently ignored. Fixed-ratio and fixed-size defaults, and
-non-pixel size units, are inferred and MAY be deferred.
+Alt. Anti-alias SHALL be offered for the Elliptical Marquee and SHALL be
+functional when enabled: boundary pixels MAY receive fractional coverage
+strictly between 0 and 255. When Anti-alias is disabled, every coverage value
+SHALL be 0 or 255. The Rectangular Marquee SHALL NOT expose Anti-alias.
+Fixed-ratio and fixed-size defaults, and non-pixel size units, are inferred and
+MAY be deferred.
 
 #### Scenario: Drag a rectangular selection
 - **WHEN** the Rectangular Marquee tool is dragged from one point to another
@@ -77,9 +79,13 @@ non-pixel size units, are inferred and MAY be deferred.
 - **WHEN** the Elliptical Marquee is set to Fixed Size with a 100x50 size on a document large enough to hold it and the pointer is dragged to (120,80)
 - **THEN** the committed ellipse is inscribed in a 100x50 rectangle with its top-left corner at (120,80)
 
+#### Scenario: Anti-alias softens the elliptical boundary [lst_aa_ellipse]
+- **WHEN** the Elliptical Marquee is dragged with Anti-alias on and then again with it off
+- **THEN** the mask committed with Anti-alias on contains boundary values strictly between 0 and 255, while the mask with it off contains only 0 and 255
+
 #### Scenario: Anti-alias is honest about the ceiling
 - **WHEN** the Elliptical Marquee options are inspected
-- **THEN** the Anti-alias control is visible and disabled with a reason that the rasteriser is binary
+- **THEN** the Anti-alias control is enabled, and the engine's inferred boundary sampling is treated as behavioural parity rather than Adobe pixel parity
 
 ### Requirement: Lasso selection
 The system SHALL create a selection from a freehand closed polygon traced by the
@@ -234,11 +240,12 @@ document selection unchanged.
 The system SHALL show context-sensitive options for each enabled selection tool:
 combine mode (New/Add/Subtract/Intersect) and Feather for the marquee and lasso
 tools, Tolerance and Contiguous for the Magic Wand, and mode plus Tolerance for
-Quick Selection. Options that the engine does not model SHALL be visible and
-disabled with a stated reason: Anti-alias for the ellipse, lasso, and wand;
-Sample All Layers for the wand and Quick Selection; and Auto-Enhance for Quick
-Selection. Quick Selection SHALL offer New, Add, and Subtract only, with no
-Intersect mode.
+Quick Selection. Anti-alias SHALL be enabled and functional for the Elliptical
+Marquee, the Lasso, the Polygonal Lasso, the Magnetic Lasso, and the Magic Wand.
+Options that the engine does not model SHALL be visible and disabled with a
+stated reason: Sample All Layers for the wand and Quick Selection; and
+Auto-Enhance for Quick Selection. Quick Selection SHALL offer New, Add, and
+Subtract only, with no Intersect mode.
 
 #### Scenario: The wand options bar exposes the engine parameters
 - **WHEN** the Magic Wand tool is active
@@ -248,9 +255,13 @@ Intersect mode.
 - **WHEN** Contiguous is unchecked and the wand clicks a colour region
 - **THEN** every matching pixel in the image is selected, not only the connected region
 
+#### Scenario: Modelled and unmodelled options are distinct [lst_options_aa]
+- **WHEN** the wand, lasso, ellipse, or Quick Selection options bar is shown
+- **THEN** Anti-alias is enabled for the ellipse, lasso, and wand tools, while Sample All Layers and Auto-Enhance remain disabled and carry a reason
+
 #### Scenario: Unmodelled options are disabled with a reason
 - **WHEN** the wand or Quick Selection options bar is shown
-- **THEN** Anti-alias, Sample All Layers, and Auto-Enhance are disabled and carry a reason
+- **THEN** Sample All Layers and Auto-Enhance are disabled and carry a reason
 
 #### Scenario: Quick Selection has no Intersect
 - **WHEN** the Quick Selection options bar is shown
@@ -477,3 +488,20 @@ already hold three placed vertices when the close click arrives.
 #### Scenario: A double-click outside the radius stays open [lst_polygon_double_click_zoom_miss]
 - **WHEN** the Polygonal Lasso is at 200% zoom, three vertices are placed, and the double-click is 4 document pixels from the last vertex
 - **THEN** the outline stays open
+
+### Requirement: Anti-aliased lasso rasterisation
+The system SHALL apply the tool-time Anti-alias setting when the Lasso,
+Polygonal Lasso, or Magnetic Lasso commits its closed polygon. With Anti-alias
+on, the polygon boundary SHALL be rasterised with fractional coverage so that
+boundary pixels MAY hold values strictly between 0 and 255. With it off, every
+coverage value SHALL be 0 or 255. Anti-aliasing SHALL be applied to the new
+primitive before the combine mode and Feather. The 50 %-coverage contour of an
+anti-aliased lasso mask SHALL follow the drawn polygon within 1 px.
+
+#### Scenario: Lasso Anti-alias produces fractional coverage [lst_aa_lasso]
+- **WHEN** a freehand Lasso is drawn with Anti-alias on and then again with it off
+- **THEN** the anti-aliased mask contains boundary values strictly between 0 and 255, while the mask with Anti-alias off contains only 0 and 255
+
+#### Scenario: Polygonal Lasso Anti-alias follows the clicked polygon [lst_aa_polygon]
+- **WHEN** the Polygonal Lasso closes a polygon with Anti-alias on
+- **THEN** boundary pixels hold intermediate coverage and the 50 %-coverage contour sits within 1 px of the clicked polygon
