@@ -6,13 +6,21 @@
 
 use pictura_core::{BlendIf, BlendMode, Document, Layer, PsdRect, SampleRow, Samples};
 
-use crate::composite::{blend_if_factor, Px};
+use crate::composite::{blend_if_factor, unit_u8, Px};
 use crate::composite_native::resolve_native_mask;
 use crate::composite_rows::blend_parts_row;
 use crate::mask_refine::{resolve_raster, resolve_vector, RasterGate, VectorGate};
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
+
+/// The row-span kernel selected for a layer pass.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Kernel {
+    Masked,
+    Alpha,
+    Opaque,
+}
 
 /// The layer state the blend kernel needs, resolved once for a layer pass.
 #[derive(Clone)]
@@ -67,6 +75,10 @@ impl<'a> BlendCtx<'a> {
         self.opacity
     }
 
+    pub(crate) fn fill(&self) -> f32 {
+        self.fill
+    }
+
     pub(crate) fn mode(&self) -> BlendMode {
         self.mode
     }
@@ -79,8 +91,50 @@ impl<'a> BlendCtx<'a> {
             && self.fill == 1.0
             && self.curve.is_none()
             && self.blend_if.is_none()
-            && matches!(self.mask.raster, RasterGate::None)
-            && matches!(self.mask.vector, VectorGate::None)
+            && self.mask.is_none()
+    }
+
+    /// The row-span kernel for the effective state, or `None` when the layer
+    /// must use the general per-pixel kernel.
+    pub(crate) fn kernel(&self, native: bool, alpha_plane: bool) -> Option<Kernel> {
+        if self.mode != BlendMode::Normal
+            || self.curve.is_some()
+            || self.blend_if.is_some()
+            || native
+        {
+            return None;
+        }
+        Some(if self.mask.is_none() {
+            if self.passes_alpha() && !alpha_plane {
+                Kernel::Opaque
+            } else {
+                Kernel::Alpha
+            }
+        } else {
+            Kernel::Masked
+        })
+    }
+
+    /// Fill `out` with the mask coverage for `[x0, x1)` on row `y`. Entries
+    /// whose source alpha after opacity and fill is zero stay `0.0` and do not
+    /// sample the mask, matching the general path's zero-alpha skip.
+    pub(crate) fn mask_row(
+        &self,
+        x0: i32,
+        x1: i32,
+        y: i32,
+        alpha: Option<&[u8]>,
+        out: &mut Vec<f32>,
+    ) {
+        out.clear();
+        out.resize((x1 - x0).max(0) as usize, 0.0);
+        for (i, x) in (x0..x1).enumerate() {
+            let a = alpha.map_or(1.0, |line| unit_u8(line[i]));
+            let content = (a * self.opacity) * self.fill;
+            if content > 0.0 {
+                out[i] = self.mask.alpha(x, y);
+            }
+        }
     }
 
     pub(crate) fn with_override(&self, over: &BlendOverride) -> Self {
@@ -133,17 +187,21 @@ impl<'a> MaskGate<'a> {
         }
     }
 
+    fn is_none(&self) -> bool {
+        matches!(self.raster, RasterGate::None) && matches!(self.vector, VectorGate::None)
+    }
+
     fn alpha(&self, x: i32, y: i32) -> f32 {
         #[cfg(test)]
         if self.counts() {
             MASK_SAMPLES.with(|samples| samples.set(samples.get() + 1));
         }
         if let Some(raster) = self.raster.native_at(x, y) {
-            return raster * (self.vector.u8_at(x, y) as f32 / 255.0);
+            return raster * unit_u8(self.vector.u8_at(x, y));
         }
         let raster = self.raster.u8_at(x, y);
         let vector = self.vector.u8_at(x, y);
-        (((u16::from(raster) * u16::from(vector) + 127) / 255) as u8) as f32 / 255.0
+        unit_u8(((u16::from(raster) * u16::from(vector) + 127) / 255) as u8)
     }
 
     /// Whether this layer has a mask to sample, so the test-only counter only
@@ -317,4 +375,40 @@ pub(crate) fn reset_mask_samples() {
 #[cfg(test)]
 pub(crate) fn mask_samples() -> usize {
     MASK_SAMPLES.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mask_alpha_uses_the_unit_table() {
+        let clip = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 1,
+            right: 1,
+        };
+        let layer = Layer {
+            rect: clip,
+            mask: Some(pictura_core::LayerMask {
+                rect: clip,
+                default_color: 255,
+                data: Some(vec![128].into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let doc = Document::new(
+            1,
+            1,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        let gate = MaskGate::resolve(&layer, &doc, clip);
+        assert_eq!(
+            gate.alpha(0, 0).to_bits(),
+            crate::composite::unit_u8(128).to_bits()
+        );
+    }
 }

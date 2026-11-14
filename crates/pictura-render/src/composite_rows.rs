@@ -9,11 +9,11 @@
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use pictura_core::{BlendMode, ColorMode, Document, Layer, SampleRow};
+use pictura_core::{BlendMode, ColorMode, Document, Layer, PsdRect, SampleRow};
 use rayon::prelude::*;
 
-use crate::composite::{blend, channel_plane, Canvas, Px};
-use crate::composite_blend::{blend_into_row_ctx, BlendCtx, BlendOverride};
+use crate::composite::{blend, channel_plane, unit_u8, Canvas, Px};
+use crate::composite_blend::{blend_into_row_ctx, BlendCtx, BlendOverride, Kernel};
 use crate::composite_plan::PlanNode;
 
 /// Test-only switch that routes [`for_each_row`] and the chunked kernels
@@ -25,6 +25,23 @@ pub(crate) static FORCE_SERIAL: AtomicBool = AtomicBool::new(false);
 /// path actually runs when [`FORCE_SERIAL`] is off.
 #[cfg(test)]
 pub(crate) static PARALLEL_RUNS: AtomicUsize = AtomicUsize::new(0);
+/// Test-only switch that routes `composite_pixels` through the general kernel.
+#[cfg(test)]
+pub(crate) static FORCE_GENERAL: AtomicBool = AtomicBool::new(false);
+
+thread_local! {
+    static MASK_ROW: std::cell::RefCell<Vec<f32>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+// Fast row-span evaluations `[Masked, Alpha, Opaque]` and covered passes for
+// this thread, so concurrent tests cannot pollute each other's counters.
+#[cfg(test)]
+thread_local! {
+    static KERNEL_RUNS: std::cell::Cell<[usize; 3]> =
+        const { std::cell::Cell::new([0; 3]) };
+    static COVERED_RUNS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 /// Whether the test-only switch forces the serial branch. Always `false` in a
 /// production build.
@@ -43,6 +60,55 @@ pub(crate) fn serial() -> bool {
 pub(crate) fn serial_test_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+pub(crate) fn set_force_general(on: bool) {
+    FORCE_GENERAL.store(on, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+fn forced_general() -> bool {
+    FORCE_GENERAL.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+fn kernel_slot(kernel: Kernel) -> usize {
+    match kernel {
+        Kernel::Masked => 0,
+        Kernel::Alpha => 1,
+        Kernel::Opaque => 2,
+    }
+}
+
+#[cfg(test)]
+fn note_kernel(kernel: Kernel) {
+    KERNEL_RUNS.with(|runs| {
+        let mut counts = runs.get();
+        counts[kernel_slot(kernel)] += 1;
+        runs.set(counts);
+    });
+}
+
+#[cfg(test)]
+fn note_covered() {
+    COVERED_RUNS.with(|runs| runs.set(runs.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn kernel_runs(kernel: Kernel) -> usize {
+    KERNEL_RUNS.with(|runs| runs.get()[kernel_slot(kernel)])
+}
+
+#[cfg(test)]
+pub(crate) fn covered_runs() -> usize {
+    COVERED_RUNS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_kernel_runs() {
+    KERNEL_RUNS.with(|runs| runs.set([0; 3]));
+    COVERED_RUNS.with(|runs| runs.set(0));
 }
 
 #[cfg(not(test))]
@@ -159,6 +225,168 @@ pub(crate) fn blend_parts_row(
     };
 }
 
+/// The general formula for Normal mode over the backdrop `cb`. Keeps
+/// `blend_parts_row`'s operation order and division exactly.
+#[inline]
+fn blend_normal_px(cb: Px, as_: f32, cs: [f32; 3]) -> Px {
+    let ab = cb.a;
+    let ao = as_ + ab * (1.0 - as_);
+    if ao <= 0.0 {
+        return Px::default();
+    }
+    let b = cs;
+    let co = |idx: usize, c: f32| {
+        ((1.0 - ab) * as_ * cs[idx] + as_ * ab * b[idx] + (1.0 - as_) * ab * c) / ao
+    };
+    Px {
+        r: co(0, cb.r),
+        g: co(1, cb.g),
+        b: co(2, cb.b),
+        a: ao,
+    }
+}
+
+/// The opaque shape: alpha 1, so `ao == 1` and the division folds away.
+fn blend_row_opaque(row: &mut [Px], x0: i32, x1: i32, ox: i32, cs: [&[u8]; 3]) {
+    for (i, x) in (x0..x1).enumerate() {
+        let at = (x - ox) as usize;
+        let cb = row[at];
+        let ab = cb.a;
+        let one_minus = 1.0 - ab;
+        let c = [unit_u8(cs[0][i]), unit_u8(cs[1][i]), unit_u8(cs[2][i])];
+        row[at] = Px {
+            r: one_minus * c[0] + ab * c[0],
+            g: one_minus * c[1] + ab * c[1],
+            b: one_minus * c[2] + ab * c[2],
+            a: 1.0,
+        };
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn blend_row_alpha(
+    row: &mut [Px],
+    x0: i32,
+    x1: i32,
+    ox: i32,
+    ctx: &BlendCtx<'_>,
+    alpha: Option<&[u8]>,
+    cs: [&[u8]; 3],
+) {
+    let opacity = ctx.opacity();
+    let fill = ctx.fill();
+    for (i, x) in (x0..x1).enumerate() {
+        let a = alpha.map_or(1.0, |line| unit_u8(line[i]));
+        if a <= 0.0 {
+            continue;
+        }
+        let content = (a * opacity) * fill;
+        if content <= 0.0 {
+            continue;
+        }
+        let at = (x - ox) as usize;
+        let c = [unit_u8(cs[0][i]), unit_u8(cs[1][i]), unit_u8(cs[2][i])];
+        row[at] = blend_normal_px(row[at], content, c);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn blend_row_masked(
+    row: &mut [Px],
+    x0: i32,
+    x1: i32,
+    ox: i32,
+    ctx: &BlendCtx<'_>,
+    alpha: Option<&[u8]>,
+    cs: [&[u8]; 3],
+    mask: &[f32],
+) {
+    let opacity = ctx.opacity();
+    let fill = ctx.fill();
+    for (i, x) in (x0..x1).enumerate() {
+        let a = alpha.map_or(1.0, |line| unit_u8(line[i]));
+        if a <= 0.0 {
+            continue;
+        }
+        let content = (a * opacity) * fill;
+        if content <= 0.0 {
+            continue;
+        }
+        let as_ = content * mask[i];
+        if as_ <= 0.0 {
+            continue;
+        }
+        let at = (x - ox) as usize;
+        let c = [unit_u8(cs[0][i]), unit_u8(cs[1][i]), unit_u8(cs[2][i])];
+        row[at] = blend_normal_px(row[at], as_, c);
+    }
+}
+
+/// The per-pixel body for a layer that cannot use a row-span kernel.
+#[allow(clippy::too_many_arguments)]
+fn blend_row_general(
+    row: &mut [Px],
+    mut cover: Option<&mut [bool]>,
+    x0: i32,
+    x1: i32,
+    y: i32,
+    ox: i32,
+    rect: PsdRect,
+    ctx: &BlendCtx<'_>,
+    layer: &Layer,
+    doc: &Document,
+    clip: PsdRect,
+    over: Option<&BlendOverride>,
+    native: [Option<SampleRow<'_>>; 4],
+    rows: [Option<&[u8]>; 4],
+    from: usize,
+    gray: bool,
+) {
+    for x in x0..x1 {
+        let lx = (x - rect.left) as usize;
+        let a = source_unit(native[3], rows[3], lx, from, 255);
+        if a <= 0.0 {
+            continue;
+        }
+        let (r, g, b) = if gray {
+            let v = source_unit(native[0], rows[0], lx, from, 0);
+            (v, v, v)
+        } else {
+            (
+                source_unit(native[0], rows[0], lx, from, 0),
+                source_unit(native[1], rows[1], lx, from, 0),
+                source_unit(native[2], rows[2], lx, from, 0),
+            )
+        };
+        blend_into_row_ctx(
+            row,
+            cover.as_deref_mut(),
+            ox,
+            ctx,
+            layer,
+            doc,
+            clip,
+            over,
+            x,
+            y,
+            [r, g, b],
+            a,
+        );
+    }
+}
+
+fn select_kernel(node: &PlanNode<'_>, ctx: &BlendCtx<'_>, alpha_plane: bool) -> Option<Kernel> {
+    #[cfg(test)]
+    if forced_general()
+        || crate::composite_blend::legacy_blend()
+        || crate::composite_blend::legacy_source()
+    {
+        return None;
+    }
+    let native = node.sources.as_ref().is_some_and(|s| s.any_native());
+    ctx.kernel(native, alpha_plane)
+}
+
 /// A source sample from the resolved native row, or the 8-bit plane.
 #[inline]
 /// `bytes` holds the 8-bit row from column `from`, so sample `lx` is at
@@ -175,11 +403,12 @@ fn source_unit(
             return v;
         }
     }
-    bytes
-        .and_then(|row| row.get(lx - from))
-        .copied()
-        .unwrap_or(default) as f32
-        / 255.0
+    unit_u8(
+        bytes
+            .and_then(|row| row.get(lx - from))
+            .copied()
+            .unwrap_or(default),
+    )
 }
 
 /// Paint a pixel layer's own channels over the canvas, row-parallel.
@@ -235,6 +464,17 @@ pub(crate) fn composite_pixels(
     let span = (x0 - rect.left) as usize..(x1 - rect.left) as usize;
     let from = span.start;
 
+    // A knockout canvas carries a cover mask; those layers take the general
+    // kernel so the cover flag is recorded.
+    let mut kernel = select_kernel(node, ctx, alpha.is_some());
+    if canvas.cover.is_some() {
+        #[cfg(test)]
+        if kernel.is_some() {
+            note_covered();
+        }
+        kernel = None;
+    }
+
     for_each_row(canvas, y0, y1, |y, row, mut cover| {
         // A row is copied out of a tiled plane (borrowed from a flat one), so
         // the plane is never materialized into one contiguous slice.
@@ -243,39 +483,43 @@ pub(crate) fn composite_pixels(
         let rows = [ch0, ch1, ch2, alpha].map(|p| p.and_then(|p| p.row_span(ly, span.clone(), lw)));
         let [r0, r1, r2, ra] = rows.each_ref().map(Option::as_deref);
         let native = source.row(ly, lw);
-        for x in x0..x1 {
-            let lx = (x - rect.left) as usize;
-            // A high-depth Grayscale/RGB layer reads its native samples; a
-            // channel missing from the store falls back to its 8-bit plane.
-            let a = source_unit(native[3], ra, lx, from, 255);
-            if a <= 0.0 {
-                continue;
+        if let (Some(kernel), None) = (kernel, cover.as_deref()) {
+            if let (Some(r0), Some(r1), Some(r2)) = (r0, r1, r2) {
+                let cs = if gray { [r0, r0, r0] } else { [r0, r1, r2] };
+                match kernel {
+                    Kernel::Opaque => blend_row_opaque(row, x0, x1, ox, cs),
+                    Kernel::Alpha => blend_row_alpha(row, x0, x1, ox, ctx, ra, cs),
+                    Kernel::Masked => MASK_ROW.with(|cell| {
+                        let mut mask = cell.borrow_mut();
+                        ctx.mask_row(x0, x1, y, ra, &mut mask);
+                        blend_row_masked(row, x0, x1, ox, ctx, ra, cs, &mask[..]);
+                    }),
+                }
+                #[cfg(test)]
+                note_kernel(kernel);
+                return;
             }
-            let (r, g, b) = if gray {
-                let v = source_unit(native[0], r0, lx, from, 0);
-                (v, v, v)
-            } else {
-                (
-                    source_unit(native[0], r0, lx, from, 0),
-                    source_unit(native[1], r1, lx, from, 0),
-                    source_unit(native[2], r2, lx, from, 0),
-                )
-            };
-            blend_into_row_ctx(
-                row,
-                cover.as_deref_mut(),
-                ox,
-                ctx,
-                layer,
-                doc,
-                clip,
-                over,
-                x,
-                y,
-                [r, g, b],
-                a,
-            );
         }
+        // A high-depth Grayscale/RGB layer reads its native samples; a
+        // channel missing from the store falls back to its 8-bit plane.
+        blend_row_general(
+            row,
+            cover.as_deref_mut(),
+            x0,
+            x1,
+            y,
+            ox,
+            rect,
+            ctx,
+            layer,
+            doc,
+            clip,
+            over,
+            native,
+            [r0, r1, r2, ra],
+            from,
+            gray,
+        );
     });
 }
 
@@ -429,6 +673,19 @@ mod tests {
         for (a, b) in parallel.px.iter().zip(sequential.px.iter()) {
             assert_eq!(a.r.to_bits(), b.r.to_bits());
             assert_eq!(a.a.to_bits(), b.a.to_bits());
+        }
+    }
+
+    #[test]
+    fn source_unit_uses_the_unit_table() {
+        for value in 0..=255u8 {
+            let bytes = [value];
+            let got = source_unit(None, Some(&bytes), 0, 0, 0).to_bits();
+            assert_eq!(
+                got,
+                crate::composite::unit_u8(value).to_bits(),
+                "sample {value}"
+            );
         }
     }
 }

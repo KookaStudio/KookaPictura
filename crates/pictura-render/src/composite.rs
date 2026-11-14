@@ -213,6 +213,24 @@ pub(crate) fn to_u8(v: f32) -> u8 {
     (v.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
+const fn unit_table() -> [f32; 256] {
+    let mut table = [0.0f32; 256];
+    let mut i = 0;
+    while i < 256 {
+        table[i] = i as f32 / 255.0;
+        i += 1;
+    }
+    table
+}
+
+/// The unit value of each 8-bit sample, bit-identical to the division form.
+static UNIT_U8: [f32; 256] = unit_table();
+
+#[inline]
+pub(crate) fn unit_u8(v: u8) -> f32 {
+    UNIT_U8[v as usize]
+}
+
 pub(crate) fn composite_layer_inner(
     canvas: &mut Canvas,
     node: &PlanNode<'_>,
