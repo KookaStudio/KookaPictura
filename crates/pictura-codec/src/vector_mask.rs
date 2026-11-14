@@ -23,18 +23,32 @@ const SUBDIVISIONS: u32 = 16;
 /// effective block leaves `vector_mask` unset.
 pub(crate) fn resolve_vector_masks(layers: &mut LayerStack, width: u32, height: u32) {
     for layer in layers.iter_mut() {
+        // A pixel mask rendered from a vector path keeps the source `vmsk`, but
+        // Photoshop does not expose that path as a live vector mask. A `-3`
+        // channel means a real raster+vector composite, so keep the view.
+        let rendered_source = !layer.pixel_data_irrelevant
+            && layer.mask.as_ref().is_some_and(|mask| {
+                mask.flags & crate::mask_params::FLAG_USER_MASK_FROM_RENDER != 0
+            })
+            && !layer.raw_channels.iter().any(|channel| channel.id == -3);
         // The reader leaves the mask record's vector density and feather on a
         // placeholder view.
+        // ponytail: a suppressed path's vector density/feather is normalized on
+        // save; the model has no carrier for those inert fields.
         let params = layer.vector_mask.take();
-        layer.vector_mask = vector_mask_block(layer)
-            .and_then(|block| decode(&block.data, width, height))
-            .map(|mut view| {
-                if let Some(params) = params {
-                    view.density = params.density;
-                    view.feather_bits = params.feather_bits;
-                }
-                view
-            });
+        layer.vector_mask = if rendered_source {
+            None
+        } else {
+            vector_mask_block(layer)
+                .and_then(|block| decode(&block.data, width, height))
+                .map(|mut view| {
+                    if let Some(params) = params {
+                        view.density = params.density;
+                        view.feather_bits = params.feather_bits;
+                    }
+                    view
+                })
+        };
         resolve_vector_masks(&mut layer.children, width, height);
     }
 }
@@ -322,7 +336,7 @@ fn cubic(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], p3: [i32; 2], t: f64) -> [i32
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{Document, Layer, LayerBlock, PsdRect};
+    use pictura_core::{Document, Layer, LayerBlock, LayerMask, PsdRect, RawChannel};
 
     fn mask_layer(data: Vec<u8>) -> Layer {
         Layer {
@@ -392,6 +406,56 @@ mod tests {
         let mut v = version.to_be_bytes().to_vec();
         v.extend_from_slice(&flags.to_be_bytes());
         v
+    }
+
+    /// Resolve a layer carrying a parseable `vmsk`, with the predicate's other
+    /// inputs varied: record bit 4, the raster mask flags, and raw channel ids.
+    fn resolve_source(
+        pixel_data_irrelevant: bool,
+        mask_flags: u8,
+        raw_ids: &[i16],
+    ) -> Option<VectorMask> {
+        let mut layers = LayerStack::from_layers(vec![Layer {
+            pixel_data_irrelevant,
+            mask: Some(LayerMask {
+                flags: mask_flags,
+                ..Default::default()
+            }),
+            raw_channels: raw_ids
+                .iter()
+                .map(|&id| RawChannel {
+                    id,
+                    data: Vec::new().into(),
+                })
+                .collect(),
+            extra_blocks: vec![LayerBlock {
+                key: *b"vmsk",
+                data: header(3, 0).into(),
+            }],
+            ..Default::default()
+        }]);
+        resolve_vector_masks(&mut layers, 8, 8);
+        layers[0].vector_mask.take()
+    }
+
+    #[test]
+    fn a_rendered_source_path_does_not_become_a_vector_mask() {
+        assert!(resolve_source(false, 0x08, &[]).is_none());
+    }
+
+    #[test]
+    fn a_pixel_data_irrelevant_layer_keeps_its_outline() {
+        assert!(resolve_source(true, 0x08, &[]).is_some());
+    }
+
+    #[test]
+    fn a_real_user_mask_channel_keeps_the_vector_view() {
+        assert!(resolve_source(false, 0x08, &[-3]).is_some());
+    }
+
+    #[test]
+    fn an_ordinary_raster_mask_keeps_the_vector_view() {
+        assert!(resolve_source(false, 0, &[]).is_some());
     }
 
     #[test]

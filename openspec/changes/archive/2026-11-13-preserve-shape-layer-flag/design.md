@@ -26,10 +26,9 @@ Read-only inspection confirms the classification rule and the fixtures:
   kind `solidcolorfill`; the generator does not set bit 4 for them.
 - `scripts/generate-fixtures.py` already sets
   `rec.flags.pixel_data_irrelevant = True` for the `vector_fill.psd` shape.
-- The external reference
-  `/mnt/work2/repos/kooka-pictura/reference-fixtures/OpenTS_logo2.1_Hyper-V1.psd`
-  has a shape layer whose flags byte is `0x38` (bits 3, 4, and an undocumented
-  bit 5); the committed `vector_fill.psd` shape copy is `0x18` (bits 3 and 4).
+- The external reference PSD has a shape layer whose flags byte is `0x38`
+  (bits 3, 4, and an undocumented bit 5); the committed `vector_fill.psd`
+  shape copy is `0x18` (bits 3 and 4).
 - psd-tools 1.19's layer factory classifies a shape from
   `record.flags.pixel_data_irrelevant` plus a vector block; it does not gate on
   bit 3.

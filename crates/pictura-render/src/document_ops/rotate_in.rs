@@ -22,7 +22,9 @@ const MAX_ANGLE: f64 = 359.99;
 /// next pixel; same intent as `transform.rs`'s bbox slack.
 const BBOX_SLACK: f64 = 1e-9;
 
-/// Whether any layer (recursively) carries a vector mask.
+/// Whether any layer (recursively) carries a live vector mask. A suppressed
+/// rendered-source `vmsk` has no view and is intentionally left untransformed;
+/// it is inert source data, not a mask.
 fn has_vector_mask(layers: &[pictura_core::Layer]) -> bool {
     layers
         .iter()
