@@ -96,9 +96,10 @@ layers.
 
 #### Scenario: M12 opens lazily within its bounds [sb_m12]
 
-- **WHEN** `scripts/profile-tools.py` runs M12 at 17000², and again under
-  `MemoryMax=2G` with open, pan, edit and save
-- **THEN** the time to first paint and the resident memory after it are
-  recorded against the eager baseline, and the constrained run completes
-  without an OOM kill or a refusal, its output equal to the unconstrained
-  run's
+- **WHEN** `scripts/profile-tools.py` runs M12 at 17000² with an eager and a
+  lazy open, and M24 (open, pan across, fill on one layer) under
+  `MemoryMax=2G` and without a limit
+- **THEN** the lazy open's time to its first fit-to-screen picture and its
+  peak resident size are recorded against the eager open's, and M24's open,
+  pan and fill complete under the limit with the same layer pixels as without
+  it

@@ -103,7 +103,12 @@ show. Those documents composite their layers, as today (`ponytail:`).
 
 ## 7. Measurement
 
-M12 at 17000²: time to first paint against the eager baseline, resident memory
-after the first paint, and the `MemoryMax=2G` run (open, pan, edit, save,
-compare). Results go to `docs/dev/STATE.md`, whether or not they meet the
-issue's targets.
+M12 at 17000² (eager through a temporary switch, same binary): time to the
+first fit-to-screen picture 9433 → 3598 ms (38 %; the issue's target was
+25 %, #1321), peak 1540 → 711 MiB. Two changes beyond the lazy open got it
+there: `MergedPreview::region` writes its buffer in place, and
+`Region::premultiplied` runs on every core. A band decode on every core was
+tried and dropped: it held a chunk's bands at once (peak 1300 MiB) and saved
+little. M24 (open, pan across, fill on one layer, save) under `MemoryMax=2G`:
+open, pan and fill pass with the unconstrained run's pixels (peak 1792 MiB);
+the save is refused by `save_bytes`, about 11 GB here, eager or lazy (#1320).
