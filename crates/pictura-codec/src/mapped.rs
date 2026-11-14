@@ -48,8 +48,12 @@ impl std::ops::Deref for MappedFile {
 impl MappedFile {
     /// Map `path`. An empty file maps nothing and reads as an empty slice.
     pub fn open(path: impl AsRef<Path>) -> std::io::Result<Self> {
+        Self::of_file(&std::fs::File::open(path)?)
+    }
+
+    /// Map an open `file`: the mapping outlives the descriptor.
+    pub fn of_file(file: &std::fs::File) -> std::io::Result<Self> {
         use std::os::fd::AsRawFd;
-        let file = std::fs::File::open(path)?;
         let len = usize::try_from(file.metadata()?.len())
             .map_err(|_| std::io::Error::other("file too large to map"))?;
         if len == 0 {

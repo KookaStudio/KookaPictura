@@ -222,6 +222,7 @@ pub(super) fn decode_channel_tasks(
     is_psb: bool,
     depth: u16,
     keep_native: bool,
+    source: Option<&std::sync::Arc<crate::SourcePin>>,
 ) -> Vec<Result<ChannelRead, PsdError>> {
     use rayon::prelude::*;
 
@@ -238,14 +239,60 @@ pub(super) fn decode_channel_tasks(
                 }
                 ChannelTask::Decode {
                     len, width, height, ..
-                } => read_channel_data(&mut r, *len, *width, *height, is_psb, depth, keep_native),
+                } => {
+                    let at = base.saturating_add(task.offset());
+                    if let Some(lazy) =
+                        index_channel(source, data, at, *len, *width, *height, is_psb, depth)
+                    {
+                        return lazy;
+                    }
+                    read_channel_data(&mut r, *len, *width, *height, is_psb, depth, keep_native)
+                }
             }
         })
         .collect()
 }
 
+/// Index an 8-bit raw or RLE channel at `data[at..at + len]` (its
+/// compression word first) as a plane backed by `source` (#1218); `None`
+/// when the channel is decoded at open instead.
+#[allow(clippy::too_many_arguments)]
+fn index_channel(
+    source: Option<&std::sync::Arc<crate::SourcePin>>,
+    data: &[u8],
+    at: usize,
+    len: usize,
+    width: usize,
+    height: usize,
+    is_psb: bool,
+    depth: u16,
+) -> Option<Result<ChannelRead, PsdError>> {
+    let pin = source?;
+    if depth != 8 || len < 2 || width == 0 || height == 0 {
+        return None;
+    }
+    let word = data.get(at..at.checked_add(2)?)?;
+    let compression = u16::from_be_bytes([word[0], word[1]]);
+    if !matches!(compression, COMPRESSION_RAW | COMPRESSION_RLE) {
+        return None;
+    }
+    Some(
+        crate::lazy::ChannelIndex::layer_channel(
+            pin,
+            data,
+            at + 2,
+            len - 2,
+            compression,
+            width,
+            height,
+            is_psb,
+        )
+        .map(|index| (index.into_plane(), compression, None)),
+    )
+}
+
 /// Decode one PackBits scanline into `dst` (exactly `dst.len()` bytes).
-pub(super) fn decode_packbits(src: &[u8], dst: &mut [u8]) -> Result<(), PsdError> {
+pub(crate) fn decode_packbits(src: &[u8], dst: &mut [u8]) -> Result<(), PsdError> {
     let mut si = 0usize;
     let mut di = 0usize;
     while di < dst.len() {
@@ -279,7 +326,7 @@ pub(super) fn decode_packbits(src: &[u8], dst: &mut [u8]) -> Result<(), PsdError
 }
 
 /// One scanline byte-count entry's width: `u32` in a PSB, `u16` otherwise.
-pub(super) fn count_bytes(is_psb: bool) -> usize {
+pub(crate) fn count_bytes(is_psb: bool) -> usize {
     if is_psb {
         4
     } else {
@@ -287,7 +334,7 @@ pub(super) fn count_bytes(is_psb: bool) -> usize {
     }
 }
 
-pub(super) fn read_rle_count(r: &mut Reader, is_psb: bool) -> Result<usize, PsdError> {
+pub(crate) fn read_rle_count(r: &mut Reader, is_psb: bool) -> Result<usize, PsdError> {
     Ok(if is_psb {
         r.u32()? as usize
     } else {

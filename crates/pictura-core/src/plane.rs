@@ -299,6 +299,15 @@ impl<T: TileSample> Plane<T> {
         )))
     }
 
+    /// A one-channel tiled plane whose tiles are away in a source and
+    /// decoded by `decode` when first read (#1218).
+    pub fn backed(width: usize, height: usize, decode: crate::TileDecode<T>) -> Self {
+        if width == 0 || height == 0 {
+            return Self::default();
+        }
+        Self::with_store(Store::Tiled(TiledPlane::backed(width, height, decode)))
+    }
+
     /// A tiled plane whose global rows `rows(y, row)` fills, one strip of
     /// 256 rows at a time, so the whole plane is never held contiguously.
     /// Tiles that come out uniform hold no allocation.

@@ -14,7 +14,7 @@ mod merged;
 mod stream;
 mod tagged_layers;
 
-pub(crate) use decode::decode_channel_data;
+pub(crate) use decode::{count_bytes, decode_channel_data, decode_packbits, read_rle_count};
 #[cfg(test)]
 pub(crate) use decode::decode_rle_channel;
 pub(crate) use decode::inflate;
@@ -41,6 +41,10 @@ pub struct OpenOptions {
     /// only to drop it is the open's largest allocation. The document still
     /// records that the file carried one, and its composite is empty.
     pub skip_layered_merged: bool,
+    /// The opened file, pinned (#1218): its 8-bit raw and RLE layer channels
+    /// are indexed and backed by it instead of decoded. `bytes` must be this
+    /// file's contents. `None` decodes everything at open.
+    pub source: Option<std::sync::Arc<crate::SourcePin>>,
 }
 
 /// Read a PSD/PSB applying the historical **Convert** incoming-profile policy.
@@ -105,16 +109,42 @@ pub fn read_psd_within_options(
     options: &OpenOptions,
     budget: ImageBudget,
 ) -> Result<Document, PsdError> {
-    let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget))?;
+    let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut None)?;
     crate::path_resources::resolve_paths(&mut doc);
     crate::guide_resources::resolve_guides(&mut doc);
     Ok(doc)
+}
+
+/// [`read_psd_within_options`] for an `options.source` open (#1218), with the
+/// file's merged image as a preview when it can stand for the layers on the
+/// canvas: the bottom layer is a visible Background, so the picture is
+/// opaque, and no profile was converted on read.
+///
+/// ponytail: a transparent document gets no preview. Its merged image holds
+/// transparency only when the layer count is negative, which the reader does
+/// not keep.
+pub fn read_psd_lazy(
+    bytes: &[u8],
+    options: &OpenOptions,
+    budget: ImageBudget,
+) -> Result<(Document, Option<crate::MergedPreview>), PsdError> {
+    let mut preview = None;
+    let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut preview)?;
+    crate::path_resources::resolve_paths(&mut doc);
+    crate::guide_resources::resolve_guides(&mut doc);
+    let usable = doc.source_icc.is_none()
+        && doc
+            .layers
+            .get(0)
+            .is_some_and(|bottom| bottom.background && bottom.visible);
+    Ok((doc, preview.filter(|_| usable)))
 }
 
 fn read_container(
     bytes: &[u8],
     options: &OpenOptions,
     budget: &mut DecodeBudget,
+    preview: &mut Option<crate::MergedPreview>,
 ) -> Result<Document, PsdError> {
     let mut r = Reader::new(bytes);
     let sig = r.u32()?;
@@ -218,7 +248,15 @@ fn read_container(
     let image_resources = r.take(resources_len)?.to_vec();
     // Layer and mask information section: 4-byte length (8 in PSB).
     let (mut layers, global_layer_mask, layer_section_extra, layer_compression) =
-        read_layer_section(&mut r, is_psb, color_count, depth, retain_planes, budget)?;
+        read_layer_section(
+            &mut r,
+            is_psb,
+            color_count,
+            depth,
+            retain_planes,
+            budget,
+            options.source.as_ref(),
+        )?;
     // Derive the smart-object view from the preserved bytes; a malformed
     // descriptor or linked-layer record degrades to Unresolved (design D5).
     crate::smart_object::resolve_smart_objects(&mut layers, &layer_section_extra, is_psb);
@@ -284,7 +322,21 @@ fn read_container(
         && matches!(composite_compression, Compression::Rle | Compression::Raw)
     {
         // Only the extra channels (saved selections, merged transparency)
-        // are decoded; the colour planes' bytes are skipped.
+        // are decoded; the colour planes' bytes are skipped, or indexed as a
+        // preview for a lazy open (#1218).
+        if let Some(pin) = &options.source {
+            *preview = crate::MergedPreview::index(
+                pin,
+                r.data,
+                r.pos,
+                compression,
+                header_channels,
+                width,
+                height,
+                is_psb,
+            )
+            .ok();
+        }
         charge_composite(budget, header_channels.saturating_sub(color_count))?;
         let colour_bytes = planar_len(color_count, stride, height)?;
         let extras = match composite_compression {
@@ -618,6 +670,7 @@ fn read_layer_section(
     depth: u16,
     retain: bool,
     budget: &mut DecodeBudget,
+    source: Option<&std::sync::Arc<crate::SourcePin>>,
 ) -> Result<LayerSection, PsdError> {
     let section_len = if is_psb {
         r.u64()? as usize
@@ -651,7 +704,16 @@ fn read_layer_section(
             return Err(PsdError::Invalid("layer info exceeds layer section".into()));
         }
         (layers, layer_compression) =
-            read_layer_info(r, is_psb, info_end, color_channels, depth, retain, budget)?;
+            read_layer_info(
+                r,
+                is_psb,
+                info_end,
+                color_channels,
+                depth,
+                retain,
+                budget,
+                source,
+            )?;
         r.pos = info_end;
     }
 
@@ -695,6 +757,7 @@ fn read_layer_info(
     depth: u16,
     retain: bool,
     budget: &mut DecodeBudget,
+    source: Option<&std::sync::Arc<crate::SourcePin>>,
 ) -> Result<(LayerStack, Option<Compression>), PsdError> {
     let count = r.i16()?;
     let n = count.unsigned_abs() as usize;
@@ -746,7 +809,8 @@ fn read_layer_info(
     // Phase B (parallel): decode every channel from its own slice, a row at a
     // time into tiles.
     let mut results =
-        decode::decode_channel_tasks(r.data, base, &tasks, is_psb, depth, retain).into_iter();
+        decode::decode_channel_tasks(r.data, base, &tasks, is_psb, depth, retain, source)
+            .into_iter();
 
     // Phase C (serial): reassemble in record order; the first error in that
     // order is the one returned.

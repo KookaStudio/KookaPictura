@@ -57,7 +57,8 @@ pub use text_render::{
     Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
 };
 pub use tiled_plane::{
-    DenseRef, Residency, SharedTile, TileData, TileMut, TileRef, TileSample, TileState, TILE,
+    DenseRef, Residency, SharedTile, TileData, TileDecode, TileMut, TileRect, TileRef, TileSample,
+    TileState, TILE,
 };
 pub use type_tool::{
     AntiAlias, CharacterAttrs, CharacterOverrides, CharacterStyle, Composer, Justify, KerningMode,

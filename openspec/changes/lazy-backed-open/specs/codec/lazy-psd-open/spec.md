@@ -66,9 +66,9 @@ SHALL NOT panic.
 
 A lazy open of a layered 8-bit RGB file whose merged image is raw or RLE SHALL
 offer that image as a preview that decodes a rectangle on demand, as straight
-planar RGBA. The preview SHALL be offered only when the file flags merged
-transparency or the bottom layer is the Background, and its alpha SHALL be the
-merged transparency channel, or opaque without one.
+planar RGBA with opaque alpha. The preview SHALL be offered only when the
+bottom layer is a visible Background, so the picture is opaque, and only when
+the read converted no colour profile.
 
 #### Scenario: The preview reads the merged image [lp_preview]
 
@@ -77,8 +77,8 @@ merged transparency channel, or opaque without one.
 - **THEN** the colour planes equal that crop of the file's merged image decoded
   eagerly, and alpha is 255
 
-#### Scenario: No preview without alpha or Background [lp_preview_gate]
+#### Scenario: No preview without a visible Background [lp_preview_gate]
 
-- **WHEN** a layered RGB PSD with a transparent bottom layer and no merged
-  transparency is opened lazily
+- **WHEN** a layered RGB PSD whose bottom layer is not a Background, and one
+  whose Background is hidden, are opened lazily
 - **THEN** no preview is offered

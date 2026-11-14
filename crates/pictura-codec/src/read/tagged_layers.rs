@@ -36,6 +36,8 @@ pub(super) fn read_tagged_layer_info(
         depth,
         retain,
         budget,
+        // The block is a copy, not the file: its offsets are not the file's.
+        None,
     )?;
     extra.drain(range);
     Ok(Some(read))

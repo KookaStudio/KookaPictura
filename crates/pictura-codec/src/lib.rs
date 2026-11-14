@@ -42,6 +42,7 @@ mod image_resources;
 mod iptc;
 mod lens_correction;
 mod live_shape;
+mod lazy;
 mod mapped;
 mod mask_params;
 mod metadata;
@@ -147,9 +148,10 @@ pub use profile_probe::{
 pub use raster_metadata::{
     embed_raster_metadata, raster_image_resources, raster_metadata, RasterMetadata,
 };
+pub use lazy::{MergedPreview, SourcePin};
 pub use read::{
-    read_psd, read_psd_with, read_psd_with_options, read_psd_within, read_psd_within_options,
-    OpenOptions,
+    read_psd, read_psd_lazy, read_psd_with, read_psd_with_options, read_psd_within,
+    read_psd_within_options, OpenOptions,
 };
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,

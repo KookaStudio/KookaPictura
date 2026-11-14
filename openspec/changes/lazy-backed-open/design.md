@@ -76,15 +76,16 @@ then reads as unreadable. The checks at open cover the offsets and lengths.
 
 `read_psd_lazy(bytes, options, budget) -> (Document, Option<MergedPreview>)`.
 In the existing `skip_layered_merged` branch (layered, RGB, 8-bit, raw or RLE)
-it indexes the colour channels of the merged image and, when present, the
-merged transparency channel. The preview is offered only when it can stand for
-the layers on the canvas: the file flags merged transparency (a negative layer
-count) or the bottom layer is the `Background`. Otherwise the merged image of a
-transparent document is flattened on white, which the canvas does not show.
+it indexes the three colour channels of the merged image. The preview is
+offered only when the bottom layer is a visible Background, so the picture is
+opaque, and when the read converted no profile (`source_icc` is `None`). A
+transparent document is left out: its merged image carries a transparency
+channel only when the layer count is negative, a sign the reader does not
+keep, and without it Photoshop flattens on white, which the canvas does not
+show. Those documents composite their layers, as today (`ponytail:`).
 
-`MergedPreview::region(rect) -> PixelBuffer` is planar straight RGBA, with
-alpha 255 when there is no transparency channel. It decodes through the band
-cache and keeps nothing else.
+`MergedPreview::region(rect) -> PixelBuffer` is planar straight RGBA with alpha
+255, decoded through the band cache; it keeps nothing else.
 
 ## 6. The app
 

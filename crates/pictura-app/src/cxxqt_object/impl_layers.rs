@@ -432,7 +432,8 @@ impl qobject::PictureView {
         if layer.is_group || layer.adjustment.is_some() {
             return QImage::default();
         }
-        layer_thumbnail_image(layer, size as u32).unwrap_or_default()
+        pictura_core::memory::eviction::transient(|| layer_thumbnail_image(layer, size as u32))
+            .unwrap_or_default()
     }
 
     /// One crossing for the whole layer tree: every row's typed fields, its
@@ -446,6 +447,14 @@ impl qobject::PictureView {
         thumb_size: i32,
         entire_document: bool,
     ) -> Vec<qobject::LayerRow> {
+        // Thumbnails sample layers backed by the opened file without making
+        // their tiles resident (#1218).
+        pictura_core::memory::eviction::transient(|| {
+            self.layer_rows(thumb_size, entire_document)
+        })
+    }
+
+    fn layer_rows(&self, thumb_size: i32, entire_document: bool) -> Vec<qobject::LayerRow> {
         let Some(doc) = self.rust().session.doc.as_ref() else {
             return Vec::new();
         };
