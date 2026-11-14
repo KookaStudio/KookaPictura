@@ -204,7 +204,7 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     fill_->setToolTip(tr("Fill"));
     locks->addWidget(fill_);
     layout->addLayout(locks);
-    model_ = new LayersModel(this);
+    model_ = new LayerRowModel(this);
     proxy_ = new LayersFilterProxyModel(model_, this);
 
     tree_ = new LayersTreeView(body);

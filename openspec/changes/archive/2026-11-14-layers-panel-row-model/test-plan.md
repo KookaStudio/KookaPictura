@@ -1,0 +1,21 @@
+# Test plan
+
+This change has no spec scenarios (`skip_specs: true`). The rows below map the
+issue's acceptance criteria and the design risks to runnable checks. The
+`tst_layers_row_model` cases are written by task 1.1 and pass once groups 2–3
+land; `check-test-plan.py` passes once they exist.
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| The row model is constructed from hand-built rows [lpr_direct_model] | Construct `LayerRowModel`, `setRows` with a pixel `LayerRowNode`, call `actionsFor(path, {})` | The resolved list covers blocks 1–4, 6–8, and 11 in order with no frame or `PictureView`; Rename and the panel separators are covered by the menu oracle | `tst_layers_row_model::pixelRowActionsFromHandBuiltRows` |
+| Static rows carry their command ids [lpr_static_ids] | Resolve a pixel row with a mask and a style | Duplicate, mask, smart-object, style, merge, and export actions carry their `command_ids` values | `tst_layers_row_model::theRowTableCarriesStaticCommandIds` |
+| Dynamic rows resolve from row state and facts [lpr_dynamic_rows] | Resolve with `fillContent`, `canRasterizeSmartObject`, `canReleaseClipping`, and `linked` toggled | Rasterize chooses smart/fill/plain; clipping chooses create/release; link chooses link/unlink | `tst_layers_row_model::dynamicRowsResolveFromRowFacts` |
+| Mask rows expose submenus and their enabled state [lpr_mask_submenus] | Resolve a row with no mask, then one with a raster mask and a vector mask | Both mask actions are submenus; each is disabled when its mask exists | `tst_layers_row_model::maskRowsExposeTheirSubmenus` |
+| Unimplemented rows are disabled stubs [lpr_stubs] | Resolve a pixel row | Copy CSS, Copy SVG, Rasterize Layer Style, and the other unimplemented rows have no command id, are disabled, and keep the "not implemented yet" tooltip path | `tst_layers_row_model::unimplementedRowsAreDisabled`, `tst_layers_row_menu::unimplementedDisabled` |
+| The row menu is byte-identical [lpr_menu_oracle] | Build the real row menu for pixel, group, adjustment, type, shape, smart-object, and fill rows | Texts, order, block separators, enabled states, and command ids match the pre-change menu | `tst_layers_row_menu::rowBlocksInOrder`, `tst_layers_row_menu::pixelRowFullSet`, `tst_layers_row_menu::kindTextLists` |
+| Type, Background, shape, and smart variants keep their menus [lpr_variants] | Build the row menu for a type layer, the Background, a shape layer, and a plain pixel layer | The type submenus appear in the block-6 slot; the Background uses its brief menu; shape omits adjustment rows; a plain pixel layer omits smart-object rows | `tst_layers_row_menu::typeRows`, `tst_layers_row_menu::backgroundBriefMenu`, `tst_layers_row_menu::shapeOmitsEditAdjustment`, `tst_layers_row_menu::plainPixelOmitsSmartRows` |
+| Triggering a row action still dispatches the command [lpr_dispatch] | Trigger the duplicate, clear-style, and mask row actions | The registry dispatches the same command ids; Clear Layer Style clears both selected layers | `tst_layers_row_menu::rowActionsCarryCommandIds`, `tst_layers_row_menu::clearLayerStyleClearsSelection` |
+| Mask row menus and their targets are unchanged [lpr_mask_menu] | Open the mask and vector-mask submenus and the mask thumbnail menu | The child rows, enabled states, and clicked-row target match the pre-change behavior | `tst_layers_mask_commands::addMaskSubmenu`, `tst_layers_mask_commands::addVectorMaskSubmenu`, `tst_layers_mask_commands::rowMenuFollowsTheMaskState` |
+| The panel still reaches the menu through its own surface [lpr_panel] | Run the panel shape/fill row-action checks | The panel builds the resolved actions without changing selection or anchor behavior | `tst_layers_panel::shapeRowActions`, `tst_layers_panel::fillAdjustmentMenu` |
+| The self-test is unchanged [lpr_selftest] | Run `./build/pictura --headless --self-test` after the change | The passed/failed/skipped summary and exit code match the pre-change run | manual: ./build/pictura --headless --self-test |
+| No file-size or allowlist growth [lpr_size] | Run `bash scripts/check-file-size.sh` and inspect the allowlist | `layers_panel_menu.cpp` is smaller and `scripts/file-size-allowlist.txt` gained no entry | manual: scripts/check-file-size.sh |

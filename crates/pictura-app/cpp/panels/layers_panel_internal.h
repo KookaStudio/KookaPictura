@@ -8,6 +8,9 @@
 #include <QtGui/qrgb.h>
 
 namespace pictura {
+/// A hand-built row for the kind-only row-menu test hooks.
+LayerRowNode syntheticRow(const QString& kind, bool shape = false, bool smart = false);
+
 class LayerRowDelegate : public QStyledItemDelegate {
 public:
     explicit LayerRowDelegate(QObject* parent = nullptr)
