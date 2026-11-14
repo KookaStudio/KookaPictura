@@ -27,6 +27,18 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
 - Qt decodes images at the app boundary to packed RGBA8888 (`cpp/decode_image.cpp`); the engine
   never sees Qt types.
 
+## Reading the picture (#1216, #1274)
+
+- A layered RGB document keeps no stored composite. Readers go through
+  `src/cxxqt_object/picture.rs` and never build a whole one: `picture_region` (a rect),
+  `stream_picture` (256-row bands, e.g. `picture_rgba` for export), `sample_tiles` +
+  `tile_source` (a `pictura_select::ImageSource` for wand/Grow/Similar/Refine Edge; owned
+  `PictureTiles` for the Magnetic Lasso), and `preview_picture` / `preview_display` (the
+  coarsest pyramid level covering a preview). The whole `picture()` is left for whole outputs.
+- New free bridge functions go in a domain bridge file, not `cxxqt_object.rs`: the root has a
+  line budget (`build_config::bridge_count_within_budget`).
+- Reader heap guards: `tests_profiles/memory/readers.rs` (`output + half a composite` at 4250²).
+
 ## Quick Mask selection and presentation
 
 - Runtime mask coverage is `DocumentSession.quick_mask.coverage` (None means implicit full coverage). While active, `DocumentSession.selection` is the independent temporary editing constraint; entry moves the original selection into coverage, exit replaces the constraint with coverage. Never write mask strokes into the selection slot.

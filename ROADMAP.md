@@ -617,7 +617,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Frame-budget instrumentation (#941)
 - [x] A tile cache with hit-rate accounting (#942): the viewport presents a
       256² display tile pyramid, with no stored full-resolution composite for
-      layered documents (#1216)
+      layered documents (#1216); export, selections, previews, conversions and
+      dialog backdrops read bands, tiles or reduced levels instead of a whole
+      composite (#1274)
 - [x] Scratch paging and Efficiency accounting (#943): cold tiles pack (LZ4)
       and spill to checksummed scratch volumes under the memory ceiling, with
       Scratch Sizes and Efficiency in `status` (#1217).
