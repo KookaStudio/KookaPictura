@@ -105,6 +105,9 @@ private slots:
     void aShapeLayerCompositesItsBounds();
     void aFillCompositesItsRect();
     void aLayerStyleRecompositesTheDocument();
+    void aMagicEraserCompositesItsRegion();
+    void aStyledMagicEraserRecompositesWhole();
+    void aCancelledMagicEraserJobChangesNothing();
     void toolOptionsPatchAndReadBack();
     void pointerDownMoveUpPaints();
     void quickSelectionOneStatePerStroke();
@@ -216,6 +219,55 @@ void ToolCommitTest::aLayerStyleRecompositesTheDocument()
     QVERIFY2(quint64(pictura::frame_revision(*f.view)) != frame,
              "a styled document must recomposite whole");
     QVERIFY(matchesFullRecomposite(*f.view, 200, 120));
+}
+
+void ToolCommitTest::aMagicEraserCompositesItsRegion()
+{
+    Fixture f(*window_, texturedSeed(200, 120), QStringLiteral("pictura_commit_magic"));
+    QVERIFY2(f.ok(), "magic eraser fixture");
+    f.view->set_gpu_compute(false);
+    const int base = f.view->history_index();
+    const quint64 frame = pictura::frame_revision(*f.view);
+    QVERIFY(pictura::magic_erase_at(*f.view, 100, 60, 0, false, true, false, 100, kWhite));
+    QCOMPARE(quint64(pictura::frame_revision(*f.view)), frame);
+    QVERIFY2(f.committedOnce(base, "Magic Eraser"), "one magic eraser state");
+    QVERIFY(matchesFullRecomposite(*f.view, 200, 120));
+    QVERIFY(f.view->undo());
+    QCOMPARE(f.view->history_index(), base);
+    QVERIFY(matchesFullRecomposite(*f.view, 200, 120));
+}
+
+void ToolCommitTest::aStyledMagicEraserRecompositesWhole()
+{
+    Fixture f(*window_, texturedSeed(200, 120), QStringLiteral("pictura_commit_magic_styled"));
+    QVERIFY2(f.ok(), "styled magic eraser fixture");
+    f.view->set_gpu_compute(false);
+    const QString styled = f.view->active_layer_path();
+    QVERIFY(!styled.isEmpty());
+    QVERIFY(f.view->layer_from_background(styled));
+    QVERIFY(pictura::layer_style_set(*f.view, styled, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*f.view, QStringLiteral("Layer Style"));
+    const quint64 frame = pictura::frame_revision(*f.view);
+    QVERIFY(pictura::magic_erase_at(*f.view, 100, 60, 0, false, true, false, 100, kWhite));
+    QVERIFY2(quint64(pictura::frame_revision(*f.view)) != frame,
+             "a styled document must recomposite whole");
+    QVERIFY(matchesFullRecomposite(*f.view, 200, 120));
+}
+
+void ToolCommitTest::aCancelledMagicEraserJobChangesNothing()
+{
+    Fixture f(*window_, texturedSeed(2100, 2000), QStringLiteral("pictura_commit_magic_job"));
+    QVERIFY2(f.ok(), "magic eraser job fixture");
+    f.view->set_gpu_compute(false);
+    const int base = f.view->history_index();
+    const quint32 before = f.view->composite_argb(1000, 1000);
+    pictura::document_job_arm(*f.view, true);
+    QVERIFY(pictura::magic_erase_at(*f.view, 1000, 1000, 255, false, false, false, 100, kWhite));
+    pictura::document_job_cancel(*f.view);
+    QVERIFY(!pictura::document_job_finish(*f.view));
+    pictura::document_job_arm(*f.view, false);
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(f.view->composite_argb(1000, 1000), before);
 }
 
 void ToolCommitTest::toolOptionsPatchAndReadBack()

@@ -204,6 +204,9 @@ pub trait Sample: Copy {
     fn to_unit(self) -> f64;
     fn from_unit(v: f64) -> Self;
 
+    /// An 8-bit channel as this store's sample, exact at the store's scale.
+    fn from_u8(v: u8) -> Self;
+
     /// The store's samples as a mutable slice, when the store holds samples of
     /// this width; `None` for a store of another width.
     ///
@@ -223,6 +226,10 @@ impl Sample for u8 {
         (v.clamp(0.0, 1.0) * 255.0).round() as u8
     }
 
+    fn from_u8(v: u8) -> Self {
+        v
+    }
+
     fn as_slice_mut(store: &mut Samples) -> Option<&mut [u8]> {
         match store {
             Samples::U8(v) => Some(v.as_mut_slice()),
@@ -238,6 +245,10 @@ impl Sample for u16 {
 
     fn from_unit(v: f64) -> Self {
         (v.clamp(0.0, 1.0) * 65535.0).round() as u16
+    }
+
+    fn from_u8(v: u8) -> Self {
+        u16::from(v) * 257
     }
 
     fn as_slice_mut(store: &mut Samples) -> Option<&mut [u16]> {
@@ -260,6 +271,10 @@ impl Sample for f32 {
 
     fn from_unit(v: f64) -> Self {
         v as f32
+    }
+
+    fn from_u8(v: u8) -> Self {
+        f32::from(v) / 255.0
     }
 
     fn as_slice_mut(store: &mut Samples) -> Option<&mut [f32]> {

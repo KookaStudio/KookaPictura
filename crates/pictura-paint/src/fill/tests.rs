@@ -63,6 +63,56 @@ fn flood(doc: &mut Document, mode: PaintMode, selection: Option<&[u8]>) -> Optio
 }
 
 #[test]
+fn an_opaque_full_strength_normal_fill_writes_the_source() {
+    let pass = Pass {
+        canvas: (4, 4),
+        mode: PaintMode::Normal,
+        through: Through::default(),
+        alpha: Alpha::Replace,
+        gray: false,
+        within: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 4,
+            right: 4,
+        },
+    };
+    let color = Rgba {
+        r: 12,
+        g: 200,
+        b: 31,
+        a: 255,
+    };
+    for alpha in [Alpha::Replace, Alpha::Keep, Alpha::Blend] {
+        for has_alpha in [false, true] {
+            let dst = (7u8, 9, 11, if has_alpha { 40 } else { 255 });
+            let mut p = pass;
+            p.alpha = alpha;
+            let fast = p
+                .blend_one(
+                    (0, 0),
+                    dst,
+                    has_alpha,
+                    255,
+                    (color, 1.0),
+                    crate::stroke::blend_pixel,
+                    &mut None,
+                )
+                .expect("changed");
+            let blended = crate::stroke::blend_pixel(PaintMode::Normal, dst, &color, 1.0, 0.0)
+                .expect("blend");
+            let expected = match alpha {
+                Alpha::Keep => (blended.0, blended.1, blended.2, dst.3),
+                Alpha::Replace => (blended.0, blended.1, blended.2, 255),
+                Alpha::Blend if has_alpha => blended,
+                Alpha::Blend => (blended.0, blended.1, blended.2, dst.3),
+            };
+            assert_eq!(fast, expected, "{alpha:?} has_alpha={has_alpha}");
+        }
+    }
+}
+
+#[test]
 fn a_fill_covers_the_layer_and_reports_what_changed() {
     let mut d = doc(8, 4, [255; 4]);
     let dirty = flood(&mut d, PaintMode::Normal, None).expect("filled");

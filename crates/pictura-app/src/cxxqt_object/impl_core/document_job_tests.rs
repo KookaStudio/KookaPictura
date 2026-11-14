@@ -44,10 +44,20 @@ fn land(view: &mut PictureViewRust) -> bool {
     let Some(done) = view.take_document_job() else {
         return view.note_document_op(None);
     };
-    view.session.doc = Some(done.doc);
-    let edit = (done.land)(view, &done.outcome);
-    view.apply_edit(&done.label, edit);
-    view.note_document_op(Some(done.outcome))
+    let FinishedJob {
+        label,
+        doc,
+        outcome,
+        land,
+        after,
+    } = done;
+    view.session.doc = Some(doc);
+    let edit = land(view, &outcome);
+    view.apply_edit(&label, edit);
+    if let Some(after) = after {
+        after(view);
+    }
+    view.note_document_op(Some(outcome))
 }
 
 fn rotate(view: &mut PictureViewRust) -> bool {
@@ -60,6 +70,7 @@ fn rotate(view: &mut PictureViewRust) -> bool {
                 .map(|()| Outcome::default())
         },
         Box::new(|_, _| Edit::Full),
+        None,
     )
 }
 
@@ -81,6 +92,7 @@ fn merge_down(view: &mut PictureViewRust) -> bool {
             rust.set_layer_target(target);
             Edit::Structural { damage: None }
         }),
+        None,
     )
 }
 
@@ -197,4 +209,43 @@ fn a_closed_document_drops_its_job() {
     view.cancel_move_composite();
     assert!(!view.document_job_pending());
     assert!(progress.cancelled(), "the worker was told to stop");
+}
+
+#[test]
+fn a_document_op_after_runs_only_when_the_command_lands() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let mut view = view(64);
+    let ran = Rc::new(Cell::new(0));
+    let seen = Rc::clone(&ran);
+    assert!(view.start_document_job(
+        "After",
+        JobBar::Busy,
+        |_| Some(Outcome::default()),
+        Box::new(|_, _| Edit::Meta),
+        Some(Box::new(move |_| seen.set(seen.get() + 1))),
+    ));
+    wait(&view);
+    assert!(land(&mut view));
+    assert_eq!(ran.get(), 1, "the after hook ran");
+
+    let ran = Rc::new(Cell::new(0));
+    let seen = Rc::clone(&ran);
+    view.document_jobs.delay_for_test = 30_000;
+    assert!(view.start_document_job(
+        "After",
+        JobBar::Busy,
+        |_| Some(Outcome::default()),
+        Box::new(|_, _| Edit::Meta),
+        Some(Box::new(move |_| seen.set(seen.get() + 1))),
+    ));
+    view.document_jobs
+        .job
+        .as_ref()
+        .expect("a job")
+        .progress
+        .cancel();
+    assert!(!land(&mut view), "a cancelled job lands nothing");
+    assert_eq!(ran.get(), 0, "the after hook did not run");
 }

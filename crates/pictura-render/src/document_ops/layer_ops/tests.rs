@@ -4,7 +4,7 @@ mod grow;
 use super::*;
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags,
-    PsdRect,
+    PsdRect, TileState,
 };
 
 pub(super) fn rect(w: i32, h: i32) -> PsdRect {
@@ -433,6 +433,26 @@ fn layer_from_background_clears_flag_and_unlocks() {
     let before = doc.clone();
     assert!(!layer_from_background(&mut doc, "0"), "not a background");
     assert_eq!(doc, before);
+}
+
+#[test]
+fn layer_from_background_gives_a_uniform_alpha_plane() {
+    let mut flagged = pixel_layer("Background", 4, 4, 1);
+    flagged.background = true;
+    flagged.channels.retain(|c| c.id != -1);
+    let mut doc = doc_with(vec![flagged]);
+    assert!(layer_from_background(&mut doc, "0"));
+    let alpha = doc.layers[0]
+        .channels
+        .iter()
+        .find(|c| c.id == -1)
+        .expect("an alpha channel");
+    assert_eq!(alpha.data.tile_state(0), Some(TileState::Uniform(255)));
+    assert_eq!(
+        alpha.data.tile_count(),
+        1,
+        "one uniform tile, no allocation"
+    );
 }
 
 #[test]

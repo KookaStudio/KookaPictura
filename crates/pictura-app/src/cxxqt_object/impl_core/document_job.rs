@@ -44,6 +44,11 @@ pub(in crate::cxxqt_object) struct Outcome {
 /// What lands a finished engine: its outcome in, the history edit out.
 type Land = Box<dyn FnOnce(&mut PictureViewRust, &Outcome) -> Edit>;
 
+/// What runs after a landed command has been applied and captured. The edit
+/// transaction clears the Fade record before it applies, so a command that
+/// installs one (the Magic Eraser) does it here.
+type After = Box<dyn FnOnce(&mut PictureViewRust)>;
+
 /// A whole-document engine running on a worker.
 pub(in crate::cxxqt_object) struct DocumentJob {
     label: String,
@@ -51,6 +56,7 @@ pub(in crate::cxxqt_object) struct DocumentJob {
     progress: Arc<JobProgress>,
     worker: Option<JoinHandle<Option<(Document, Outcome)>>>,
     land: Option<Land>,
+    after: Option<After>,
 }
 
 impl Drop for DocumentJob {
@@ -108,17 +114,44 @@ impl qobject::PictureView {
     /// true once it has started; otherwise it runs at once and this returns
     /// whether it applied.
     pub(in crate::cxxqt_object) fn document_op(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         label: &str,
         bar: JobBar,
         op: impl FnOnce(&mut Document) -> Option<Outcome> + Send + 'static,
         land: impl FnOnce(&mut PictureViewRust, &Outcome) -> Edit + 'static,
     ) -> bool {
+        self.document_op_with(label, bar, op, land, None)
+    }
+
+    /// [`Self::document_op`] with `after`, run once the edit has been applied
+    /// and captured (a Magic Eraser's Fade record).
+    pub(in crate::cxxqt_object) fn document_op_after(
+        self: Pin<&mut Self>,
+        label: &str,
+        bar: JobBar,
+        op: impl FnOnce(&mut Document) -> Option<Outcome> + Send + 'static,
+        land: impl FnOnce(&mut PictureViewRust, &Outcome) -> Edit + 'static,
+        after: impl FnOnce(&mut PictureViewRust) + 'static,
+    ) -> bool {
+        self.document_op_with(label, bar, op, land, Some(Box::new(after)))
+    }
+
+    fn document_op_with(
+        mut self: Pin<&mut Self>,
+        label: &str,
+        bar: JobBar,
+        op: impl FnOnce(&mut Document) -> Option<Outcome> + Send + 'static,
+        land: impl FnOnce(&mut PictureViewRust, &Outcome) -> Edit + 'static,
+        after: Option<After>,
+    ) -> bool {
         if self.rust().document_job_wanted() {
-            return self
-                .as_mut()
-                .rust_mut()
-                .start_document_job(label, bar, op, Box::new(land));
+            return self.as_mut().rust_mut().start_document_job(
+                label,
+                bar,
+                op,
+                Box::new(land),
+                after,
+            );
         }
         let mut outcome = None;
         self.as_mut().edit(label, |rust| {
@@ -132,6 +165,12 @@ impl qobject::PictureView {
             outcome = Some(done);
             edit
         });
+        let applied = outcome.is_some();
+        if let Some(after) = after {
+            if applied {
+                after(&mut self.as_mut().rust_mut());
+            }
+        }
         self.as_mut().rust_mut().note_document_op(outcome)
     }
 
@@ -149,11 +188,15 @@ impl qobject::PictureView {
             doc,
             outcome,
             land,
+            after,
         } = done;
         self.as_mut().edit(&label, |rust| {
             rust.session.doc = Some(doc);
             land(rust, &outcome)
         });
+        if let Some(after) = after {
+            after(&mut self.as_mut().rust_mut());
+        }
         self.as_mut().rust_mut().note_document_op(Some(outcome))
     }
 }
@@ -164,6 +207,7 @@ struct FinishedJob {
     doc: Document,
     outcome: Outcome,
     land: Land,
+    after: Option<After>,
 }
 
 impl PictureViewRust {
@@ -173,6 +217,7 @@ impl PictureViewRust {
         bar: JobBar,
         op: impl FnOnce(&mut Document) -> Option<Outcome> + Send + 'static,
         land: Land,
+        after: Option<After>,
     ) -> bool {
         let Some(mut doc) = self.session.doc.clone() else {
             return false;
@@ -198,6 +243,7 @@ impl PictureViewRust {
             progress,
             worker: Some(worker),
             land: Some(land),
+            after,
         });
         true
     }
@@ -217,6 +263,7 @@ impl PictureViewRust {
             doc,
             outcome,
             land: job.land.take()?,
+            after: job.after.take(),
         })
     }
 

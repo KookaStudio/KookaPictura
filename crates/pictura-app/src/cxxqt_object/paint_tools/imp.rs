@@ -6,7 +6,7 @@ use super::super::helpers::{
 };
 use super::super::impl_paint::tool_recording;
 use super::super::PictureViewRust;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use crate::history::BrushSource;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -630,6 +630,59 @@ pub(super) fn unlocked_background(doc: &Document, path: &str) -> Option<Document
     Some(layered)
 }
 
+/// The Magic Eraser's engine on `doc`: flood, anti-alias, unlock a Background
+/// and erase. `stored` says whether `doc`'s composite is current for a
+/// Sample All Layers flood. `None` when nothing changed.
+#[allow(clippy::too_many_arguments)]
+fn erase_magic(
+    doc: &mut Document,
+    path: &str,
+    x: i32,
+    y: i32,
+    tolerance: u8,
+    antialias: bool,
+    contiguous: bool,
+    sample_all: bool,
+    stored: bool,
+    opacity: f32,
+    background: Rgba,
+) -> Option<PsdRect> {
+    let size = (doc.width, doc.height);
+    // The wand's flood, over the composite or straight off the layer's
+    // planes, as a tiled mask (#1214).
+    let flood = if sample_all {
+        // The composite a tile at a time, never whole (#1216).
+        let fetch = super::super::picture::sample_tiles_from(doc, stored);
+        let source = BucketSource::Tiles {
+            fetch: &fetch,
+            width: doc.width,
+            height: doc.height,
+        };
+        bucket::magic_flood(source, size, (x, y), tolerance, contiguous)
+    } else {
+        BucketSource::layer(doc, path)
+            .and_then(|source| bucket::magic_flood(source, size, (x, y), tolerance, contiguous))
+    }?;
+    let mask = if antialias {
+        let canvas = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: size.1 as i32,
+            right: size.0 as i32,
+        };
+        bucket::antialias(flood, size, canvas, None)
+    } else {
+        flood
+    };
+    if pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.background) {
+        pictura_render::layer_from_background(doc, path);
+        if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
+            ensure_alpha(layer);
+        }
+    }
+    magic_erase(doc, path, &mask, opacity, background)
+}
+
 pub(super) fn magic_erase_at(
     mut view: Pin<&mut PictureView>,
     x: i32,
@@ -642,7 +695,7 @@ pub(super) fn magic_erase_at(
     background: u32,
 ) -> bool {
     let fade_capture = crate::cxxqt_object::fade::capture(view.rust());
-    let erased = {
+    let (path, stored, job) = {
         let rust = view.rust();
         let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
         else {
@@ -658,56 +711,68 @@ pub(super) fn magic_erase_at(
         {
             return false;
         }
-        let tolerance = tolerance.clamp(0, 255) as u8;
-        let size = (doc.width, doc.height);
-        // The wand's flood, over the composite or straight off the layer's
-        // planes, as a tiled mask (#1214).
-        let flood = if sample_all {
-            // The composite a tile at a time, never whole (#1216).
-            let fetch = super::super::picture::sample_tiles(doc, rust);
-            let source = BucketSource::Tiles {
-                fetch: &fetch,
-                width: doc.width,
-                height: doc.height,
-            };
-            bucket::magic_flood(source, size, (x, y), tolerance, contiguous)
-        } else {
-            BucketSource::layer(doc, path)
-                .and_then(|source| bucket::magic_flood(source, size, (x, y), tolerance, contiguous))
-        };
-        let Some(flood) = flood else {
+        let stored = super::super::picture::stored_is_current(doc, rust);
+        (path.to_string(), stored, rust.document_job_wanted())
+    };
+    let tolerance = tolerance.clamp(0, 255) as u8;
+    let opacity = opacity.clamp(0, 100) as f32 / 100.0;
+    let background = rgba_from_argb(background);
+    let after = move |rust: &mut PictureViewRust| {
+        if let Some(capture) = fade_capture {
+            crate::cxxqt_object::fade::record(rust, capture, "Magic Eraser");
+        }
+    };
+    if job {
+        return view.document_op_after(
+            "Magic Eraser",
+            JobBar::Busy,
+            move |doc| {
+                erase_magic(
+                    doc, &path, x, y, tolerance, antialias, contiguous, sample_all, stored,
+                    opacity, background,
+                )
+                .map(|rect| Outcome {
+                    rect: Some(rect),
+                    ..Outcome::default()
+                })
+            },
+            |rust, outcome| super::fills::fill_edit(rust, outcome.rect),
+            after,
+        );
+    }
+    let erased = {
+        let rust = view.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
-        let mask = if antialias {
-            let canvas = PsdRect {
-                top: 0,
-                left: 0,
-                bottom: size.1 as i32,
-                right: size.0 as i32,
-            };
-            bucket::antialias(flood, size, canvas, None)
-        } else {
-            flood
-        };
-        let mut edited = unlocked_background(doc, path).unwrap_or_else(|| doc.clone());
-        let opacity = opacity.clamp(0, 100) as f32 / 100.0;
-        magic_erase(
+        let mut edited = doc.clone();
+        let Some(dirty) = erase_magic(
             &mut edited,
-            path,
-            &mask,
+            &path,
+            x,
+            y,
+            tolerance,
+            antialias,
+            contiguous,
+            sample_all,
+            stored,
             opacity,
-            rgba_from_argb(background),
-        )
-        .map(|_| edited)
+            background,
+        ) else {
+            return false;
+        };
+        (edited, dirty)
     };
-    let Some(doc) = erased else {
-        return false;
-    };
-    view.as_mut().rust_mut().session.doc = Some(doc);
-    view.as_mut().edit("Magic Eraser", |_| Edit::Full);
-    if let Some(capture) = fade_capture {
-        crate::cxxqt_object::fade::record(&mut view.as_mut().rust_mut(), capture, "Magic Eraser");
-    }
+    let (edited, dirty) = erased;
+    view.as_mut().edit("Magic Eraser", |rust| {
+        rust.session.doc = Some(edited);
+        super::fills::fill_edit(rust, Some(dirty))
+    });
+    after(&mut view.as_mut().rust_mut());
+    view.as_mut().rust_mut().note_document_op(Some(Outcome {
+        rect: Some(dirty),
+        ..Outcome::default()
+    }));
     true
 }
 
