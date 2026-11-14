@@ -213,7 +213,7 @@ void LayersPanel::setOptionFlagsForTest(bool addCopy, bool useDefaultMasks)
 QStringList LayersPanel::rowMenuTextsForTest(const QString& kind)
 {
     QMenu menu;
-    populateRowMenu(menu, QString(), 0, kind);
+    populateRowMenu(menu, QString(), 0, syntheticRow(kind));
     QStringList texts;
     for (QAction* action : menu.actions()) {
         if (!action->isSeparator()) {
@@ -226,7 +226,7 @@ QStringList LayersPanel::rowMenuTextsForTest(const QString& kind)
 QStringList LayersPanel::rowMenuCommandIdsForTest(const QString& kind)
 {
     QMenu menu;
-    populateRowMenu(menu, QString(), 0, kind);
+    populateRowMenu(menu, QString(), 0, syntheticRow(kind));
     QStringList ids;
     for (QAction* action : menu.actions()) {
         const QString id = action->data().toString();
@@ -240,7 +240,7 @@ QStringList LayersPanel::rowMenuCommandIdsForTest(const QString& kind)
 bool LayersPanel::rowMenuEnabledForTest(const QString& kind, const QString& text)
 {
     QMenu menu;
-    populateRowMenu(menu, QString(), 0, kind);
+    populateRowMenu(menu, QString(), 0, syntheticRow(kind));
     for (QAction* action : menu.actions()) {
         if (!action->isSeparator() && action->text() == text) {
             return action->isEnabled();
@@ -252,7 +252,7 @@ bool LayersPanel::rowMenuEnabledForTest(const QString& kind, const QString& text
 QString LayersPanel::rowMenuToolTipForTest(const QString& kind, const QString& text)
 {
     QMenu menu;
-    populateRowMenu(menu, QString(), 0, kind);
+    populateRowMenu(menu, QString(), 0, syntheticRow(kind));
     for (QAction* action : menu.actions()) {
         if (!action->isSeparator() && action->text() == text) {
             return action->toolTip();
@@ -264,7 +264,7 @@ QString LayersPanel::rowMenuToolTipForTest(const QString& kind, const QString& t
 QStringList LayersPanel::shapeRowMenuTextsForTest()
 {
     QMenu menu;
-    populateRowMenu(menu, QString(), 0, QStringLiteral("adjustment"), true);
+    populateRowMenu(menu, QString(), 0, syntheticRow(QStringLiteral("adjustment"), true));
     QStringList texts;
     for (QAction* action : menu.actions()) {
         if (!action->isSeparator()) {
@@ -277,7 +277,7 @@ QStringList LayersPanel::shapeRowMenuTextsForTest()
 bool LayersPanel::shapeRowMenuEnabledForTest(const QString& text)
 {
     QMenu menu;
-    populateRowMenu(menu, QString(), 0, QStringLiteral("adjustment"), true);
+    populateRowMenu(menu, QString(), 0, syntheticRow(QStringLiteral("adjustment"), true));
     for (QAction* action : menu.actions()) {
         if (!action->isSeparator() && action->text() == text) {
             return action->isEnabled();
@@ -289,7 +289,7 @@ bool LayersPanel::shapeRowMenuEnabledForTest(const QString& text)
 QStringList LayersPanel::smartRowMenuTextsForTest()
 {
     QMenu menu;
-    populateRowMenu(menu, QString(), 0, QStringLiteral("pixel"), false, true);
+    populateRowMenu(menu, QString(), 0, syntheticRow(QStringLiteral("pixel"), false, true));
     QStringList texts;
     for (QAction* action : menu.actions()) {
         if (!action->isSeparator()) {

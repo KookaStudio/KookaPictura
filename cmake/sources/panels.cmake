@@ -63,6 +63,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/layers_panel_test_solo.cpp
     crates/pictura-app/cpp/panels/layers_panel_type_menu.cpp
     crates/pictura-app/cpp/panels/layers_panel_visibility.cpp
+    crates/pictura-app/cpp/panels/layers_row_actions.cpp
+    crates/pictura-app/cpp/panels/layers_row_actions.h
     crates/pictura-app/cpp/panels/navigator_panel.cpp
     crates/pictura-app/cpp/panels/navigator_panel.h
     crates/pictura-app/cpp/panels/notes_panel.cpp

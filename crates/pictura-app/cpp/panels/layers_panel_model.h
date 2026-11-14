@@ -2,6 +2,8 @@
 
 #include "layers_panel.h"
 
+#include "layers_row_actions.h"
+
 #include "blend_modes.h"
 
 #include "icons.h"
@@ -212,9 +214,9 @@ struct Node {
     std::vector<std::unique_ptr<Node>> children;
 };
 
-class LayersModel : public QAbstractItemModel {
+class LayerRowModel : public QAbstractItemModel {
 public:
-    explicit LayersModel(QObject* parent = nullptr)
+    explicit LayerRowModel(QObject* parent = nullptr)
         : QAbstractItemModel(parent)
         , root_(std::make_unique<Node>())
     {
@@ -533,6 +535,22 @@ public:
             return {};
         }
         return createIndex(node->rowInParent, 0, node);
+    }
+
+    /// The row for `path`, or null. The pointer is valid until the next
+    /// `setRows`.
+    const LayerRowNode* rowForPath(const QString& path) const
+    {
+        const Node* node = byPath_.value(path, nullptr);
+        return node ? &node->row : nullptr;
+    }
+
+    /// The applicable row-menu entries for `path`, or empty when the row is
+    /// absent. The panel owns the QMenu; this owns the table.
+    QVector<ResolvedRowAction> actionsFor(const QString& path, const RowFacts& facts) const
+    {
+        const LayerRowNode* row = rowForPath(path);
+        return row ? resolveRowActions(*row, facts) : QVector<ResolvedRowAction>{};
     }
 
     /// A node's ancestor name chain (its own name last), each level tagged with

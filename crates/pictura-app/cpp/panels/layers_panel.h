@@ -46,7 +46,7 @@ namespace layers_api {
 struct Snapshot;
 }
 class LayersFilterProxyModel;
-class LayersModel;
+class LayerRowModel;
 class LayersTreeView;
 class PercentField;
 class PictureView;
@@ -321,6 +321,9 @@ public:
     bool rowMenuEnabledForPathForTest(const QString& path, const QString& text);
     // Build the row menu and trigger the action with `text`.
     bool triggerRowMenuActionForPathForTest(const QString& path, const QString& text);
+    // The model row for a path, refreshed once if the row is not yet in the
+    // model. Null when the path still names no row.
+    const LayerRowNode* menuRowForTest(const QString& path);
     // Layer-effects rows: the synthetic row's kind/name/eye, a click on its
     // eye, its expansion, the CS6 layer-style menu, and a double-click on the
     // fx badge or a row's centre.
@@ -495,8 +498,8 @@ private:
     // a "Delete Vector Mask?" prompt; otherwise it deletes the selection.
     void deleteFromTrash();
     bool confirmDeleteVectorMask();
-    void populateRowMenu(QMenu& menu, const QString& path, int color, const QString& kind,
-                         bool shape = false, bool smart = false);
+    void populateRowMenu(QMenu& menu, const QString& path, int color,
+                         const LayerRowNode& row);
     void populateBackgroundMenu(QMenu& menu, const QString& path);
     // The Smart Filters group row and each smart-filter row.
     void populateSmartFiltersGroupMenu(QMenu& menu, const QString& path);
@@ -560,7 +563,7 @@ private:
     // The app's shared foreground/background colours; null when the panel was
     // built without them, in which case a fill falls back to black.
     ColorState* colors_ = nullptr;
-    LayersModel* model_ = nullptr;
+    LayerRowModel* model_ = nullptr;
     LayersFilterProxyModel* proxy_ = nullptr;
     LayerFilterBar* filterBar_ = nullptr;
     LayerRowDelegate* delegate_ = nullptr;

@@ -6,9 +6,11 @@
 #include "export_as_dialog.h"
 #include "layer_style_dialog.h"
 #include "layers_panel_internal.h"
+#include "layers_row_actions.h"
 
 #include "api/layers_bridge.h"
 
+#include <QtCore/QHash>
 #include <QtCore/QItemSelectionModel>
 #include <QtCore/QModelIndex>
 #include <QtCore/QPoint>
@@ -20,9 +22,6 @@
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QTreeView>
-
-#include <algorithm>
-#include <iterator>
 
 namespace pictura {
 
@@ -48,113 +47,6 @@ QString labelName(int label)
     default:
         return QStringLiteral("None");
     }
-}
-
-enum KindMask : unsigned {
-    Pixel = 1u << 0,
-    Background = 1u << 1,
-    Group = 1u << 2,
-    Adjustment = 1u << 3,
-    Type = 1u << 4,
-    Shape = 1u << 5,
-    SmartObject = 1u << 6,
-};
-
-constexpr unsigned kAllKinds = Pixel | Background | Group | Adjustment | Type;
-constexpr unsigned kEveryKind = kAllKinds | Shape | SmartObject;
-
-struct RowSpec {
-    const char* id;
-    const char* label;
-    unsigned kinds;
-    unsigned block;
-    bool implemented;
-};
-
-// Row menu, in CS6 block order. `populateRowMenu` emits one separator between
-// each non-empty block; Rename and the Color Label submenu bracket the table
-// as bespoke head/tail. The Background uses its own brief table.
-const RowSpec kRowSpecs[] = {
-    // 1. Blending / adjustment edit.
-    {"blendingOptions", "Blending Options…", Pixel | Group | Type, 1, true},
-    {"editAdjustment", "Edit Adjustment…", Adjustment, 1, true},
-    {"copyCss", "Copy CSS", Type | Group | Adjustment, 1, false},
-    {"copySvg", "Copy SVG", Type | Group | Adjustment, 1, false},
-    // 2. Layer operations.
-    {"duplicate", "Duplicate Layer(s)", kEveryKind, 2, true},
-    {"delete", "Delete Layer(s)", kEveryKind, 2, true},
-    {"groupFromLayers", "Group from Layers…", kEveryKind, 2, true},
-    {"newLayer", "New Layer", kEveryKind, 2, true},
-    {"newGroup", "New Group", kEveryKind, 2, true},
-    {"ungroup", "Ungroup Layers", Group, 2, true},
-    {"moveUp", "Move Layer Up", kEveryKind, 2, true},
-    {"moveDown", "Move Layer Down", kEveryKind, 2, true},
-    // 3. Export.
-    {"quickExport", "Quick Export as PNG", kAllKinds, 3, true},
-    {"exportAs", "Export As…", kAllKinds, 3, true},
-    // 4. Convert.
-    {"artboardFromLayers", "Artboard from Layers…", Type | Group | Adjustment, 4, false},
-    {"frameFromLayers", "Frame from Layers…", Type | Group | Adjustment, 4, false},
-    {"convertToFrame", "Convert to Frame", Type | Group | Adjustment, 4, false},
-    {"convertToSmartObject", "Convert to Smart Object",
-     Pixel | Background | Type | Group | Adjustment, 4, true},
-    {"resetTransform", "Reset Transform", SmartObject, 4, true},
-    {"convertToLayers", "Convert to Layers", SmartObject, 4, true},
-    {"newSmartObjectViaCopy", "New Smart Object via Copy", SmartObject, 4, true},
-    {"editContents", "Edit Contents", SmartObject, 4, true},
-    {"replaceContents", "Replace Contents…", SmartObject, 4, true},
-    {"exportContents", "Export Contents…", SmartObject, 4, true},
-    {"relinkToFile", "Relink to File…", SmartObject, 4, false},
-    {"convertToLinked", "Convert to Linked…", SmartObject, 4, false},
-    // 5. Rasterize.
-    {"rasterizeType", "Rasterize Type", Type, 5, true},
-    {"rasterizeShape", "Rasterize Shape", Shape, 5, true},
-    {"rasterizeLayer", "Rasterize Layer", SmartObject | Adjustment, 5, true},
-    {"rasterizeStyle", "Rasterize Layer Style", kEveryKind, 5, false},
-    // 6. Masks and clipping.
-    {"addLayerMask", "Add Layer Mask", Pixel | Group | Adjustment, 6, true},
-    {"deleteLayerMask", "Delete Layer Mask", Pixel | Group | Adjustment, 6, true},
-    {"enableLayerMask", "Enable Layer Mask", Pixel | Group | Adjustment, 6, true},
-    {"disableLayerMask", "Disable Layer Mask", Pixel | Group | Adjustment, 6, true},
-    {"addVectorMask", "Add Vector Mask", Pixel | Group | Adjustment, 6, true},
-    {"deleteVectorMask", "Delete Vector Mask", Pixel | Group | Adjustment, 6, true},
-    {"enableVectorMask", "Enable Vector Mask", Pixel | Group | Adjustment, 6, true},
-    {"disableVectorMask", "Disable Vector Mask", Pixel | Group | Adjustment, 6, true},
-    {"clippingToggle", "Create Clipping Mask", Pixel | Adjustment, 6, true},
-    // 7. Link.
-    {"link", "Link Layers", kEveryKind, 7, true},
-    {"selectLinked", "Select Linked Layers", kEveryKind, 7, true},
-    // 8. Layer style clipboard.
-    {"copyLayerStyle", "Copy Layer Style", kEveryKind, 8, true},
-    {"pasteLayerStyle", "Paste Layer Style", kEveryKind, 8, true},
-    {"clearLayerStyle", "Clear Layer Style", kEveryKind, 8, true},
-    // 9. Shape attributes.
-    {"copyShapeAttributes", "Copy Shape Attributes", Shape, 9, true},
-    {"pasteShapeAttributes", "Paste Shape Attributes", Shape, 9, true},
-    // 11. Merge and flatten. Block 10 is Release from Isolation, emitted
-    // between the table blocks only while isolation is active.
-    {"mergeDown", "Merge Down", Pixel | Group | Adjustment, 11, true},
-    {"mergeVisible", "Merge Visible", kEveryKind, 11, true},
-    {"mergeClippingMask", "Merge Clipping Mask", kEveryKind, 11, true},
-    {"flatten", "Flatten Image", kEveryKind, 11, true},
-};
-
-unsigned kindMaskFor(const QString& kind)
-{
-    if (kind == QLatin1String("background")) {
-        return Background;
-    }
-    if (kind == QLatin1String("group")) {
-        return Group;
-    }
-    if (kind == QLatin1String("adjustment")) {
-        return Adjustment;
-    }
-    if (kind == QLatin1String("type")) {
-        return Type;
-    }
-    // Pixel, unknown kinds, shapes, and smart objects.
-    return Pixel;
 }
 
 // The real layer path behind a synthetic smart-filter row path.
@@ -301,8 +193,11 @@ void LayersPanel::showContextMenu(const QPoint& pos)
         menu.exec(tree_->viewport()->mapToGlobal(pos));
         return;
     }
-    populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
-                    index.data(LayerRowShapeRole).toBool(), index.data(SmartObjectRole).toBool());
+    const LayerRowNode* row = model_ ? model_->rowForPath(path) : nullptr;
+    if (!row) {
+        return;
+    }
+    populateRowMenu(menu, path, index.data(ColorRole).toInt(), *row);
     menu.exec(tree_->viewport()->mapToGlobal(pos));
 }
 
@@ -618,9 +513,9 @@ void LayersPanel::populateLayerStyleMenu(QMenu& menu, const QString& path)
 }
 
 void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
-                                  const QString& kind, bool shape, bool smart)
+                                  const LayerRowNode& row)
 {
-    if (kind == QLatin1String("background")) {
+    if (row.kind == QLatin1String("background")) {
         populateBackgroundMenu(menu, path);
         return;
     }
@@ -635,194 +530,38 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
     });
     menu.addSeparator();
 
-    // A shape layer reports the `adjustment` kind (its solid fill), but its menu
-    // is a pixel layer's common commands plus the shape rows — never the
-    // adjustment-only rows.
-    const unsigned mask = (shape ? Pixel : kindMaskFor(kind)) | (shape ? Shape : 0u)
-                          | (smart ? SmartObject : 0u);
-    const bool linked = !path.isEmpty() && model_
-                        && model_->indexForPath(path).data(LayerRowLinkedRole).toBool();
-    const bool fillContent = view_ && view_->layer_is_fill_content(path);
+    RowFacts facts;
+    if (view_) {
+        facts.fillContent = view_->layer_is_fill_content(path);
+        facts.canRasterizeSmartObject = view_->layer_can_rasterize_smart_object(path);
+        facts.canReleaseClipping = clipping_can_release(*view_, QStringList{path});
+        facts.hasStyle = layer_style_has(*view_, path);
+        facts.hasMask = layer_mask_present_path(*view_, path);
+        facts.hasVectorMask = vector_mask_present_path(*view_, path);
+    }
+    const QVector<ResolvedRowAction> actions = resolveRowActions(row, facts);
+    QHash<int, QVector<ResolvedRowAction>> byBlock;
+    for (const ResolvedRowAction& action : actions) {
+        byBlock[action.block].push_back(action);
+    }
+
     // A row is offered only when its kind and row state make it applicable.
-    // This is also the block predicate: an empty block must not emit its
-    // separator, or the menu shows a gap between neighbours.
-    const auto rowApplies = [&](const RowSpec& row) {
-        if ((row.kinds & mask) == 0) {
-            return false;
-        }
-        const QString id = QLatin1String(row.id);
-        if (id == QLatin1String("rasterizeStyle")
-            && !(view_ && layer_style_has(*view_, path))) {
-            return false;
-        }
-        if (id == QLatin1String("rasterizeLayer") && !fillContent && !smart) {
-            return false;
-        }
-        return true;
-    };
+    // An empty block emits no separator, or the menu shows a gap.
     bool emitted = false;
-    const auto appendBlock = [&](unsigned block) {
-        const bool applies =
-            std::any_of(std::begin(kRowSpecs), std::end(kRowSpecs),
-                        [block, &rowApplies](const RowSpec& row) {
-                            return row.block == block && rowApplies(row);
-                        });
-        if (!applies) {
+    const auto appendBlock = [&](int block) {
+        const auto it = byBlock.constFind(block);
+        if (it == byBlock.constEnd() || it->isEmpty()) {
             return;
         }
         if (emitted) {
             menu.addSeparator();
         }
         emitted = true;
-        for (const RowSpec& row : kRowSpecs) {
-            if (row.block != block || !rowApplies(row)) {
-                continue;
-            }
-            const QString id = QLatin1String(row.id);
-            const auto commandForRow = [&]() -> QString {
-                if (id == QLatin1String("blendingOptions")) {
-                    return QString::fromLatin1(command_ids::LayerStyleBlendingOptions);
-                }
-                if (id == QLatin1String("editAdjustment")) {
-                    return QString::fromLatin1(command_ids::PanelLayersEditAdjustment);
-                }
-                if (id == QLatin1String("duplicate")) {
-                    return QString::fromLatin1(command_ids::LayerDuplicateLayer);
-                }
-                if (id == QLatin1String("delete")) {
-                    return QString::fromLatin1(command_ids::LayerDeleteLayer);
-                }
-                if (id == QLatin1String("groupFromLayers")) {
-                    return QString::fromLatin1(command_ids::LayerNewGroupFromLayers);
-                }
-                if (id == QLatin1String("newLayer")) {
-                    return QString::fromLatin1(command_ids::PanelLayersNewLayer);
-                }
-                if (id == QLatin1String("newGroup")) {
-                    return QString::fromLatin1(command_ids::PanelLayersNewGroup);
-                }
-                if (id == QLatin1String("ungroup")) {
-                    return QString::fromLatin1(command_ids::LayerUngroupLayers);
-                }
-                if (id == QLatin1String("moveUp")) {
-                    return QString::fromLatin1(command_ids::PanelLayersMoveUp);
-                }
-                if (id == QLatin1String("moveDown")) {
-                    return QString::fromLatin1(command_ids::PanelLayersMoveDown);
-                }
-                if (id == QLatin1String("quickExport")) {
-                    return QString::fromLatin1(command_ids::FileQuickExportPng);
-                }
-                if (id == QLatin1String("exportAs")) {
-                    return QString::fromLatin1(command_ids::FileExportAs);
-                }
-                if (id == QLatin1String("convertToSmartObject")) {
-                    return QString::fromLatin1(command_ids::LayerSmartObjectConvertTo);
-                }
-                if (id == QLatin1String("resetTransform")) {
-                    return QString::fromLatin1(command_ids::LayerSmartObjectResetTransform);
-                }
-                if (id == QLatin1String("convertToLayers")) {
-                    return QString::fromLatin1(command_ids::LayerSmartObjectConvertToLayers);
-                }
-                if (id == QLatin1String("newSmartObjectViaCopy")) {
-                    return QString::fromLatin1(command_ids::LayerSmartObjectNewViaCopy);
-                }
-                if (id == QLatin1String("editContents")) {
-                    return QString::fromLatin1(command_ids::LayerSmartObjectEditContents);
-                }
-                if (id == QLatin1String("replaceContents")) {
-                    return QString::fromLatin1(command_ids::LayerSmartObjectReplaceContents);
-                }
-                if (id == QLatin1String("exportContents")) {
-                    return QString::fromLatin1(command_ids::LayerSmartObjectExportContents);
-                }
-                if (id == QLatin1String("rasterizeType")) {
-                    return QString::fromLatin1(command_ids::LayerRasterizeType);
-                }
-                if (id == QLatin1String("rasterizeShape")) {
-                    return QString::fromLatin1(command_ids::LayerRasterizeShape);
-                }
-                if (id == QLatin1String("rasterizeLayer")) {
-                    if (view_ && view_->layer_can_rasterize_smart_object(path)) {
-                        return QString::fromLatin1(command_ids::LayerRasterizeSmartObject);
-                    }
-                    if (fillContent) {
-                        return QString::fromLatin1(command_ids::LayerRasterizeFillContent);
-                    }
-                    return QString::fromLatin1(command_ids::LayerRasterizeLayer);
-                }
-                if (id == QLatin1String("deleteLayerMask")) {
-                    return QString::fromLatin1(command_ids::LayerMaskDelete);
-                }
-                if (id == QLatin1String("enableLayerMask")) {
-                    return QString::fromLatin1(command_ids::LayerMaskEnable);
-                }
-                if (id == QLatin1String("disableLayerMask")) {
-                    return QString::fromLatin1(command_ids::LayerMaskDisable);
-                }
-                if (id == QLatin1String("deleteVectorMask")) {
-                    return QString::fromLatin1(command_ids::LayerVectorMaskDelete);
-                }
-                if (id == QLatin1String("enableVectorMask")) {
-                    return QString::fromLatin1(command_ids::LayerVectorMaskEnable);
-                }
-                if (id == QLatin1String("disableVectorMask")) {
-                    return QString::fromLatin1(command_ids::LayerVectorMaskDisable);
-                }
-                if (id == QLatin1String("clippingToggle")) {
-                    const QStringList targets{path};
-                    return QString::fromLatin1(
-                        view_ && clipping_can_release(*view_, targets)
-                            ? command_ids::LayerReleaseClippingMask
-                            : command_ids::LayerCreateClippingMask);
-                }
-                if (id == QLatin1String("link")) {
-                    return QString::fromLatin1(linked ? command_ids::LayerUnlinkLayers
-                                                      : command_ids::LayerLinkLayers);
-                }
-                if (id == QLatin1String("selectLinked")) {
-                    return QString::fromLatin1(command_ids::LayerSelectLinked);
-                }
-                if (id == QLatin1String("copyLayerStyle")) {
-                    return QString::fromLatin1(command_ids::LayerStyleCopyLayerStyle);
-                }
-                if (id == QLatin1String("pasteLayerStyle")) {
-                    return QString::fromLatin1(command_ids::LayerStylePasteLayerStyle);
-                }
-                if (id == QLatin1String("clearLayerStyle")) {
-                    return QString::fromLatin1(command_ids::LayerStyleClearLayerStyle);
-                }
-                if (id == QLatin1String("copyShapeAttributes")) {
-                    return QString::fromLatin1(command_ids::LayerCopyShapeAttributes);
-                }
-                if (id == QLatin1String("pasteShapeAttributes")) {
-                    return QString::fromLatin1(command_ids::LayerPasteShapeAttributes);
-                }
-                if (id == QLatin1String("mergeDown")) {
-                    return QString::fromLatin1(command_ids::LayerMergeLayers);
-                }
-                if (id == QLatin1String("mergeVisible")) {
-                    return QString::fromLatin1(command_ids::LayerMergeVisible);
-                }
-                if (id == QLatin1String("mergeClippingMask")) {
-                    return QString::fromLatin1(command_ids::LayerMergeClippingMask);
-                }
-                if (id == QLatin1String("flatten")) {
-                    return QString::fromLatin1(command_ids::LayerFlattenImage);
-                }
-                return QString();
-            };
-            if (!row.implemented) {
-                QAction* action = menu.addAction(tr(row.label));
-                action->setEnabled(false);
-                action->setToolTip(tr("%1 — not implemented yet").arg(action->text()));
-                continue;
-            }
-            if (id == QLatin1String("addLayerMask") || id == QLatin1String("addVectorMask")) {
-                const bool layerMask = id == QLatin1String("addLayerMask");
-                QMenu* sub =
-                    menu.addMenu(layerMask ? tr("Add Layer Mask") : tr("Add Vector Mask"));
+        for (const ResolvedRowAction& action : *it) {
+            if (action.submenu) {
+                const bool layerMask = action.id == QLatin1String("addLayerMask");
+                QMenu* sub = menu.addMenu(layerMask ? tr("Add Layer Mask")
+                                                    : tr("Add Vector Mask"));
                 const char* const layerIds[] = {
                     command_ids::LayerMaskRevealAll, command_ids::LayerMaskHideAll,
                     command_ids::LayerMaskRevealSelection,
@@ -835,62 +574,60 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
                 const int count = layerMask ? 5 : 3;
                 for (int i = 0; i < count; ++i) {
                     const QString command = QString::fromLatin1(ids[i]);
-                    QAction* action = registry_ ? registry_->detachedAction(command, sub)
-                                                : nullptr;
-                    if (!action) {
+                    QAction* child = registry_ ? registry_->detachedAction(command, sub)
+                                               : nullptr;
+                    if (!child) {
                         continue;
                     }
-                    sub->addAction(action);
-                    connect(action, &QAction::triggered, this, [this, command]() {
+                    sub->addAction(child);
+                    connect(child, &QAction::triggered, this, [this, command]() {
                         if (registry_) {
                             registry_->dispatch(command);
                         }
                     });
                 }
-                const bool present = view_ && (layerMask
-                                                   ? layer_mask_present_path(*view_, path)
-                                                   : vector_mask_present_path(*view_, path));
-                sub->menuAction()->setEnabled(view_ && !present);
+                sub->menuAction()->setEnabled(view_ && action.enabled);
                 continue;
             }
-            const QString command = commandForRow();
-            if (command.isEmpty() || !registry_) {
-                QAction* action = menu.addAction(tr(row.label));
-                action->setEnabled(false);
-                action->setToolTip(tr("%1 — not implemented yet").arg(action->text()));
+            if (action.commandId.isEmpty() || !registry_) {
+                QAction* stub = menu.addAction(tr(action.label.toUtf8().constData()));
+                stub->setEnabled(action.enabled);
+                stub->setToolTip(tr("%1 — not implemented yet").arg(stub->text()));
                 continue;
             }
-            QAction* action = registry_->detachedAction(command, &menu);
-            if (!action) {
+            QAction* qaction = registry_->detachedAction(action.commandId, &menu);
+            if (!qaction) {
                 continue;
             }
-            if (id == QLatin1String("rasterizeType") || id == QLatin1String("rasterizeShape")
-                || id == QLatin1String("rasterizeLayer")
-                || id == QLatin1String("deleteLayerMask")
-                || id == QLatin1String("enableLayerMask")
-                || id == QLatin1String("disableLayerMask")
-                || id == QLatin1String("deleteVectorMask")
-                || id == QLatin1String("enableVectorMask")
-                || id == QLatin1String("disableVectorMask")) {
-                action->setText(tr(row.label));
+            if (action.id == QLatin1String("rasterizeType")
+                || action.id == QLatin1String("rasterizeShape")
+                || action.id == QLatin1String("rasterizeLayer")
+                || action.id == QLatin1String("deleteLayerMask")
+                || action.id == QLatin1String("enableLayerMask")
+                || action.id == QLatin1String("disableLayerMask")
+                || action.id == QLatin1String("deleteVectorMask")
+                || action.id == QLatin1String("enableVectorMask")
+                || action.id == QLatin1String("disableVectorMask")) {
+                qaction->setText(tr(action.label.toUtf8().constData()));
             }
-            menu.addAction(action);
-            connect(action, &QAction::triggered, this, [this, command]() {
+            menu.addAction(qaction);
+            const QString command = action.commandId;
+            connect(qaction, &QAction::triggered, this, [this, command]() {
                 if (registry_) {
                     registry_->dispatch(command);
                 }
             });
         }
     };
-    for (const unsigned block : {1u, 2u, 3u, 4u, 5u}) {
+    for (const int block : {1, 2, 3, 4, 5}) {
         appendBlock(block);
     }
-    if (kind == QLatin1String("type")) {
+    if (row.kind == QLatin1String("type")) {
         addTypeRows(menu, path, emitted);
     } else {
         appendBlock(6);
     }
-    for (const unsigned block : {7u, 8u, 9u}) {
+    for (const int block : {7, 8, 9}) {
         appendBlock(block);
     }
     // Isolation sits between the style/shape blocks and the merge block.
@@ -902,9 +639,7 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
         QAction* release = menu.addAction(tr("Release from Isolation"));
         connect(release, &QAction::triggered, this, [this, path] { releaseIsolationFor(path); });
     }
-    for (const unsigned block : {11u}) {
-        appendBlock(block);
-    }
+    appendBlock(11);
 
     menu.addSeparator();
     addColorLabelActions(menu.addMenu(tr("Color Label")), color);
