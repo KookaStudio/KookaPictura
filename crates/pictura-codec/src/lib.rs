@@ -40,6 +40,7 @@ mod icc;
 mod icc_convert;
 mod image_resources;
 mod iptc;
+mod lazy;
 mod lens_correction;
 mod live_shape;
 mod mapped;
@@ -132,6 +133,7 @@ pub use pictura_raw::{
 };
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
+pub use lazy::{read_psd_lazy, MergedPreview, SourcePin};
 pub use live_shape::{
     decode_live_shape, encode_live_shape, LiveShape, ORIGIN_ELLIPSE, ORIGIN_RECTANGLE,
     ORIGIN_ROUNDED_RECTANGLE,

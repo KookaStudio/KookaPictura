@@ -15,6 +15,11 @@
 //! ([`PictureViewRust::apply_refreshed_region`]). A region refresh that would
 //! have to composite more than [`REPAIR_PIXELS`] on a large document marks the
 //! tiles stale instead, and only the visible ones are rebuilt.
+//!
+//! A lazily opened document's first tiles come from the file's merged image
+//! (#1218, [`DisplayTiles::preview`]) until the first change to the display,
+//! which drops it: every path that damages, repairs or invalidates composite
+//! tiles runs through [`PictureViewRust::drop_file_preview`] first.
 
 use super::helpers::paint_timing;
 use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame, level_display_image};
@@ -61,6 +66,9 @@ pub(in crate::cxxqt_object) struct DisplayTiles {
     view_holds: RefCell<Vec<HotHold>>,
     /// The view the holds were taken for.
     view_key: Cell<(i32, PsdRect)>,
+    /// The file's merged image, which composite tiles are built from while
+    /// the document is as opened (#1218).
+    pub(in crate::cxxqt_object) preview: RefCell<Option<pictura_codec::MergedPreview>>,
 }
 
 impl Default for DisplayTiles {
@@ -73,6 +81,7 @@ impl Default for DisplayTiles {
             drop_epoch: Cell::new(pictura_core::memory::eviction::display_drop_epoch()),
             view_holds: RefCell::new(Vec::new()),
             view_key: Cell::new((-1, PsdRect::default())),
+            preview: RefCell::new(None),
         }
     }
 }
@@ -106,6 +115,7 @@ struct TileJob {
     doc: Document,
     mask: Option<LayerMask>,
     painting: bool,
+    preview: Option<pictura_codec::MergedPreview>,
     ticket: Ticket,
     keys: Vec<(TileKey, PsdRect)>,
 }
@@ -123,6 +133,7 @@ impl TileJob {
                     &self.doc,
                     self.mask.as_ref(),
                     self.painting,
+                    self.preview.as_ref(),
                     key,
                     rect,
                     size,
@@ -134,18 +145,26 @@ impl TileJob {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_one(
     doc: &Document,
     mask: Option<&LayerMask>,
     painting: bool,
+    preview: Option<&pictura_codec::MergedPreview>,
     key: TileKey,
     rect: PsdRect,
     size: (u32, u32),
     cache: Option<&TilePyramid>,
 ) -> Arc<[u8]> {
-    match (key.source, mask) {
-        (TileSource::Mask, Some(mask)) => {
+    match (key.source, mask, preview) {
+        (TileSource::Mask, Some(mask), _) => {
             let source = |r: PsdRect| mask_region_plane(mask, r);
+            build_tile(cache, key, rect, size, &source)
+        }
+        (_, _, Some(preview)) if !painting => {
+            let source = |r: PsdRect| {
+                into_rgba_frame(pictura_codec::buffer_to_srgb(doc, &preview.region(r)).into_owned())
+            };
             build_tile(cache, key, rect, size, &source)
         }
         _ => {
@@ -206,8 +225,20 @@ impl PictureViewRust {
         }
     }
 
+    /// The display is about to change: the file's merged image no longer
+    /// stands for the document (#1218). Every tile built from it goes stale,
+    /// so none mixes with a tile composited from the layers.
+    pub(in crate::cxxqt_object) fn drop_file_preview(&mut self) {
+        if self.tiles.preview.get_mut().take().is_some() {
+            self.fit_tiles();
+            self.tiles.cache.get_mut().invalidate();
+            self.tiles.wanted.get_mut().clear();
+        }
+    }
+
     /// The whole display changed: every tile goes stale (kept as a stand-in).
     pub(in crate::cxxqt_object) fn invalidate_tiles(&mut self) {
+        self.tiles.preview.get_mut().take();
         self.fit_tiles();
         self.tiles.cache.get_mut().invalidate();
         self.tiles.wanted.get_mut().clear();
@@ -289,7 +320,17 @@ impl PictureViewRust {
             let built = {
                 let cache = self.tiles.cache.borrow();
                 let rect = cache.tile_rect(key);
-                build_one(doc, mask, painting, key, rect, size, Some(&cache))
+                let preview = self.tiles.preview.borrow();
+                build_one(
+                    doc,
+                    mask,
+                    painting,
+                    preview.as_ref(),
+                    key,
+                    rect,
+                    size,
+                    Some(&cache),
+                )
             };
             self.tiles.cache.borrow_mut().insert(key, built);
         }
@@ -381,6 +422,7 @@ impl PictureViewRust {
         clipped: PsdRect,
         region: PixelBuffer,
     ) {
+        self.drop_file_preview();
         self.fit_tiles();
         let painting = self.painting();
         let cache = self.tiles.cache.get_mut();
@@ -464,6 +506,7 @@ impl PictureViewRust {
         &mut self,
         rect: PsdRect,
     ) -> Option<PsdRect> {
+        self.drop_file_preview();
         self.fit_tiles();
         let painting_mask = self.session.live.mask_stroke().is_some();
         let gpu_compute = self.gpu_compute;
@@ -761,6 +804,7 @@ impl qobject::PictureView {
             doc: doc.clone(),
             mask: rust.solo_mask().cloned(),
             painting: rust.painting(),
+            preview: rust.tiles.preview.borrow().clone(),
             ticket,
             keys,
         };
@@ -1003,6 +1047,7 @@ impl PictureViewRust {
                 doc,
                 mask: self.solo_mask().cloned(),
                 painting: self.painting(),
+                preview: self.tiles.preview.borrow().clone(),
                 ticket: cache.ticket(),
                 keys: keys
                     .iter()

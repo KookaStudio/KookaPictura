@@ -573,6 +573,15 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **Parallel PSD decode** — layer channels, merged RLE rows, and
       ZIP-prediction rows decode on rayon, byte-identical to the serial decode
       with the same first error. `crates/pictura-codec/src/read/`. (#1019)
+- [x] **Lazy, file-backed PSD open** — 8-bit raw and RLE layer channels are
+      indexed at open and decoded a 256-row band at a time on first read; an
+      unedited tile drops back to the file instead of scratch, and the file's
+      merged image is the first picture until the first edit (#1218, #1318).
+      `crates/pictura-codec/src/lazy.rs`.
+- [ ] Fit-to-screen first paint without rebuilding every level from level 0
+      (#1321)
+- [ ] A save estimate that admits large tiled documents under a memory limit
+      (#1320)
 - [ ] A typed `prefs.toml` store, the config and state split, migration,
       quarantine, and the reset gesture (#641)
 - [ ] `QTranslator` and `.qm`, RTL, and locale number formatting (#642)

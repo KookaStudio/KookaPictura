@@ -4,9 +4,10 @@
 //! the ceiling, hot holds that keep the tiles in use resident, and the
 //! counters the readouts show.
 //!
-//! Order (R2): the display tile cache is asked to drop, then tiles only
-//! history holds, then cold live tiles; packing before spilling within each.
-//! `Backed` tiles (#1218) would come second; they do not exist yet.
+//! Order (R2): the display tile cache is asked to drop, then cold tiles still
+//! backed by their source file (#1218), which drop without a write, then
+//! tiles only history holds, then cold live tiles; packing before spilling
+//! within each.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
@@ -25,6 +26,8 @@ pub enum Residency {
     Packed,
     /// In a scratch extent.
     Spilled,
+    /// Away, decoded from the document's source file on the next read.
+    Backed,
     /// Lost from scratch: reads as the default.
     Unreadable,
 }
@@ -45,6 +48,8 @@ pub(crate) trait Evictable: Send + Sync {
     /// The epoch it was last touched at under an open hot hold, 0 for never.
     fn hot_stamp(&self) -> u64;
     fn history_held(&self) -> bool;
+    /// The samples still match the source file they were opened from.
+    fn backed(&self) -> bool;
     fn residency(&self) -> Residency;
     /// Pack a resident body (or drop it to its clean extent); an
     /// incompressible one is spilled raw when `may_spill`.
@@ -109,6 +114,7 @@ fn bodies() -> Vec<Weak<dyn Evictable>> {
 static PACKED: AtomicI64 = AtomicI64::new(0);
 static PACKED_BYTES: AtomicI64 = AtomicI64::new(0);
 static SPILLED: AtomicI64 = AtomicI64::new(0);
+static BACKED: AtomicI64 = AtomicI64::new(0);
 static UNREADABLE: AtomicI64 = AtomicI64::new(0);
 static UNREADABLE_READS: AtomicU64 = AtomicU64::new(0);
 
@@ -119,6 +125,10 @@ pub(crate) fn count_packed(n: i64, bytes: i64) {
 
 pub(crate) fn count_spilled(n: i64) {
     SPILLED.fetch_add(n, Ordering::Relaxed);
+}
+
+pub(crate) fn count_backed(n: i64) {
+    BACKED.fetch_add(n, Ordering::Relaxed);
 }
 
 pub(crate) fn count_unreadable() {
@@ -150,6 +160,8 @@ pub struct TileCounts {
     pub packed: u64,
     pub packed_bytes: u64,
     pub spilled: u64,
+    /// Away in their source file (#1218).
+    pub backed: u64,
     pub unreadable: u64,
 }
 
@@ -159,12 +171,38 @@ pub fn counts() -> TileCounts {
         packed: get(&PACKED),
         packed_bytes: get(&PACKED_BYTES),
         spilled: get(&SPILLED),
+        backed: get(&BACKED),
         unreadable: get(&UNREADABLE),
     }
 }
 
 pub(crate) fn residency_of(body: &dyn Evictable) -> Residency {
     body.residency()
+}
+
+// ---- Transient reads ----
+
+std::thread_local! {
+    static TRANSIENT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Run `f` with transient reads on this thread: a read of a tile that is
+/// away in its source file decodes it for that read only and leaves it away,
+/// so a reader of whole layers (thumbnails) keeps nothing resident (#1218).
+/// Other tiles are restored as usual.
+pub fn transient<R>(f: impl FnOnce() -> R) -> R {
+    struct Reset(bool);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            TRANSIENT.set(self.0);
+        }
+    }
+    let _reset = Reset(TRANSIENT.replace(true));
+    f()
+}
+
+pub(crate) fn is_transient() -> bool {
+    TRANSIENT.get()
 }
 
 // ---- Hot holds ----
@@ -375,9 +413,21 @@ pub fn run_pass(need: u64) -> PassReport {
     // A tile released from a view hold (nonzero stamp) goes before a
     // never-held tile (0), regardless of the registry's shard order.
     all.sort_by_key(|weak| std::cmp::Reverse(weak.upgrade().map_or(0, |body| body.hot_stamp())));
-    for (hot, history) in [(false, true), (false, false), (true, true), (true, false)] {
+    // A cold backed body drops free, so it goes first (`None`: any history).
+    // The other cold classes leave it out: the backed class has spent its
+    // clock bit, and it keeps its second chance until the next pass.
+    let classes = [
+        (false, None, true),
+        (false, Some(true), false),
+        (false, Some(false), false),
+        (true, Some(true), false),
+        (true, Some(false), false),
+    ];
+    for (hot, history, backed) in classes {
         let in_class = |body: &dyn Evictable| {
-            body.history_held() == history && hot_set.contains(body.hot_stamp()) == hot
+            (hot || body.backed() == backed)
+                && history.is_none_or(|h| body.history_held() == h)
+                && hot_set.contains(body.hot_stamp()) == hot
         };
         let spill = may_spill();
         for weak in &all {

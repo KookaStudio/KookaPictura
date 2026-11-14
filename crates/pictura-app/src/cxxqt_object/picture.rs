@@ -169,7 +169,13 @@ pub(super) fn sample_tiles_from(
 /// conversion between it and the display, no state that makes them stale,
 /// and every tile under `rect` current. `None` otherwise.
 fn from_tiles(doc: &Document, view: &PictureViewRust, rect: PsdRect) -> Option<PixelBuffer> {
-    if doc.composite_is_authoritative() || doc.document_icc.is_some() || !tiles_are_current(view) {
+    // Tiles built from the file's merged image (#1218) are Photoshop's
+    // picture, not the layers': the readers here composite the layers.
+    if doc.composite_is_authoritative()
+        || doc.document_icc.is_some()
+        || !tiles_are_current(view)
+        || view.tiles.preview.borrow().is_some()
+    {
         return None;
     }
     view.fit_tiles();

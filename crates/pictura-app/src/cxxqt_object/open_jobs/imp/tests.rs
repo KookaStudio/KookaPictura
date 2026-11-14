@@ -1,7 +1,7 @@
 //! Unit coverage for the open worker's decode/apply split (#729).
 
 use super::*;
-use pictura_core::{BitDepth, ColorMode, Document};
+use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -462,4 +462,221 @@ fn an_open_larger_than_the_room_is_admitted_with_scratch() {
     assert!(open_refused_for_memory(), "the refusal is for memory");
     unpin();
     std::fs::remove_file(path).ok();
+}
+
+// ---- Lazy, file-backed open (#1218) ----
+
+const LW: u32 = 600;
+const LH: u32 = 520;
+const GRAY: u8 = 128;
+
+fn noise(seed: u32, n: usize) -> Vec<u8> {
+    (0..n as u32)
+        .map(|i| (i.wrapping_add(seed).wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect()
+}
+
+/// An opaque noise Background under a partly transparent noise layer, saved
+/// with a uniform gray merged image: the file's picture and the layers' tell
+/// apart at every pixel.
+fn lazy_psd() -> std::path::PathBuf {
+    let mut rgba = noise(1, (LW * LH * 4) as usize);
+    rgba.as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .for_each(|px| px[3] = 255);
+    let mut doc = Document::from_rgba("Background", LW, LH, &rgba);
+    let bottom = doc.layers.get_mut(0).expect("a layer");
+    bottom.channels.retain(|c| c.id != -1);
+    bottom.background = true;
+    let top = Document::from_rgba("Top", 300, 200, &noise(9, 300 * 200 * 4));
+    let mut layer = top.layers.get(0).expect("a layer").clone();
+    layer.rect.left += 150;
+    layer.rect.right += 150;
+    layer.rect.top += 100;
+    layer.rect.bottom += 100;
+    doc.layers.push(layer).expect("push");
+    let plane = (LW * LH) as usize;
+    let mut merged = vec![GRAY; plane * 4];
+    merged[plane * 3..].fill(255);
+    doc.composite = PixelBuffer {
+        width: LW,
+        height: LH,
+        channels: 4,
+        data: merged.into(),
+    };
+    let path = temp_path("psd");
+    std::fs::write(&path, pictura_codec::write_psd(&doc).expect("write")).expect("fixture");
+    path
+}
+
+fn lazy_view(path: &std::path::Path) -> PictureViewRust {
+    let opened =
+        decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {}).expect("open");
+    assert!(
+        opened.preview.is_some(),
+        "the fixture offers its merged image"
+    );
+    let mut view = PictureViewRust {
+        gpu_compute: false,
+        ..Default::default()
+    };
+    apply_opened(&mut view, opened);
+    view
+}
+
+fn whole_rect(w: u32, h: u32) -> pictura_core::PsdRect {
+    pictura_core::PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    }
+}
+
+/// Whether every layer channel tile is still away in the file.
+fn layers_untouched(view: &PictureViewRust) -> bool {
+    let doc = view.session.doc.as_ref().expect("document");
+    doc.layers.iter().flat_map(|l| l.channels.iter()).all(|c| {
+        (0..c.data.tile_count())
+            .all(|i| c.data.tile_residency(i) == Some(pictura_core::Residency::Backed))
+    })
+}
+
+/// The tiles of `level` against a whole rebuild from the layers.
+fn assert_tiles_are_the_layers(view: &PictureViewRust, level: i32) {
+    let doc = view.session.doc.as_ref().expect("document");
+    let source = super::super::super::tiles::display_region(doc, whole_rect(LW, LH), false);
+    let planes = super::super::super::helpers_composite::planes_of(&source).expect("RGBA");
+    let pyramid = pictura_render::ViewPyramid::rebuild(planes);
+    let (w, h) = view.tiles.cache.borrow().level_size(level as usize);
+    let (crop, missing) = view.tile_crop(
+        pictura_render::TileSource::Composite,
+        level,
+        whole_rect(w, h),
+    );
+    assert!(missing.is_empty());
+    assert_eq!(
+        crop.data(),
+        pyramid
+            .crop(planes, level as usize, whole_rect(w, h))
+            .data()
+    );
+}
+
+// [sb_first_paint]
+#[test]
+fn first_paint_shows_the_files_merged_image() {
+    let path = lazy_psd();
+    let view = lazy_view(&path);
+    let level = view.display_level_count() - 1;
+    let (w, h) = view.tiles.cache.borrow().level_size(level as usize);
+    let (crop, missing) = view.tile_crop(
+        pictura_render::TileSource::Composite,
+        level,
+        whole_rect(w, h),
+    );
+    assert!(missing.is_empty(), "a small document builds at once");
+    assert!(crop
+        .data()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|px| *px == [GRAY, GRAY, GRAY, 255]));
+    assert!(layers_untouched(&view), "no layer tile was decoded");
+    std::fs::remove_file(path).ok();
+}
+
+// [sb_first_edit]
+#[test]
+fn an_edit_replaces_the_merged_preview() {
+    let path = lazy_psd();
+    let mut view = lazy_view(&path);
+    let level = view.display_level_count() - 1;
+    let (w, h) = view.tiles.cache.borrow().level_size(level as usize);
+    drop(view.tile_crop(
+        pictura_render::TileSource::Composite,
+        level,
+        whole_rect(w, h),
+    ));
+    {
+        let doc = view.session.doc.as_mut().expect("document");
+        let top = doc.layers.get_mut(1).expect("the top layer");
+        top.channels[0]
+            .data
+            .write_rect_from(0..50, 0..40, 300, &[250u8; 50 * 40]);
+    }
+    view.refresh_display_rect(pictura_core::PsdRect {
+        top: 100,
+        left: 150,
+        bottom: 140,
+        right: 200,
+    });
+    assert!(
+        view.tiles.preview.borrow().is_none(),
+        "the preview is dropped"
+    );
+    for level in 0..view.display_level_count() {
+        assert_tiles_are_the_layers(&view, level);
+    }
+    std::fs::remove_file(path).ok();
+}
+
+// [sb_picture]
+#[test]
+fn picture_reads_layers_while_the_preview_shows() {
+    let path = lazy_psd();
+    let view = lazy_view(&path);
+    // Level-0 tiles from the preview, which the picture must not reuse.
+    drop(view.tile_crop(pictura_render::TileSource::Composite, 0, whole_rect(LW, LH)));
+    let doc = view.session.doc.as_ref().expect("document");
+    let picture = super::super::super::picture::picture(doc, &view);
+    let layers = pictura_render::composite_region(doc, whole_rect(LW, LH));
+    assert!(view.tiles.preview.borrow().is_some());
+    assert!(*picture == layers, "the picture is the layers'");
+    assert!(layers.data.as_slice()[..LW as usize]
+        .iter()
+        .any(|&v| v != GRAY));
+    std::fs::remove_file(path).ok();
+}
+
+/// Save as the save job does: the save view, encoded, landed atomically.
+fn save_to(doc: &Document, path: &std::path::Path) -> Vec<u8> {
+    let view = pictura_render::save_view(doc);
+    let bytes = pictura_codec::write_psd(&view).expect("encode");
+    super::super::super::helpers::safe_io::write_atomically(path.to_str().unwrap(), &bytes, false)
+        .expect("save");
+    bytes
+}
+
+// [sb_save_over]
+#[test]
+fn save_over_source_with_backed_tiles() {
+    let path = lazy_psd();
+    let bytes = std::fs::read(&path).unwrap();
+    let mut lazy = decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {})
+        .expect("lazy open")
+        .doc;
+    let mut eager = pictura_codec::read_psd_within_options(
+        &bytes,
+        &open_options(Policy::Preserve),
+        pictura_codec::ImageBudget::default(),
+    )
+    .expect("eager open");
+    save_to(&lazy, &path);
+    for doc in [&mut lazy, &mut eager] {
+        let top = doc.layers.get_mut(1).expect("the top layer");
+        top.channels[1]
+            .data
+            .write_rect_from(10..60, 5..45, 300, &[7u8; 50 * 40]);
+    }
+    let lazy_bytes = save_to(&lazy, &path);
+    let eager_path = temp_path("psd");
+    let eager_bytes = save_to(&eager, &eager_path);
+    assert!(
+        lazy_bytes == eager_bytes,
+        "the edit saves as on an eager open"
+    );
+    std::fs::remove_file(path).ok();
+    std::fs::remove_file(eager_path).ok();
 }

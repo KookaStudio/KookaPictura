@@ -22,6 +22,7 @@ fn profile_options(policy: Policy) -> OpenOptions {
             ..ConversionOptions::default()
         },
         skip_layered_merged: false,
+        source: None,
     }
 }
 

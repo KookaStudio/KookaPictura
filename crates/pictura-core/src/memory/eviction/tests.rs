@@ -517,3 +517,104 @@ fn no_pressure_no_eviction() {
     assert_eq!(counts().packed + counts().spilled, 0);
     assert_all(&plane, Residency::Resident);
 }
+
+// ---- Backed tiles (#1218) ----
+
+/// The sample a backed test plane's source holds at `(x, y)`.
+fn pattern(x: usize, y: usize) -> u8 {
+    (x.wrapping_mul(7) ^ y.wrapping_mul(13)) as u8
+}
+
+/// A `w × h` plane backed by [`pattern`], and its count of decodes.
+fn backed_plane(w: usize, h: usize) -> (Plane<u8>, Arc<std::sync::atomic::AtomicUsize>) {
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = Arc::clone(&calls);
+    let decode: crate::TileDecode<u8> = Arc::new(move |r: crate::TileRect, out: &mut [u8]| {
+        counter.fetch_add(1, Ordering::Relaxed);
+        for dy in 0..r.h {
+            for dx in 0..r.w {
+                out[dy * r.w + dx] = pattern(r.x + dx, r.y + dy);
+            }
+        }
+        Ok(())
+    });
+    (Plane::backed(w, h, decode), calls)
+}
+
+fn expected(w: usize, h: usize) -> Vec<u8> {
+    (0..w * h).map(|i| pattern(i % w, i / w)).collect()
+}
+
+use std::sync::Arc;
+
+// [sb_redecode]
+#[test]
+fn backed_tile_dropped_and_redecoded_identity() {
+    let _f = fixture("backed-redecode");
+    let (plane, calls) = backed_plane(600, 300);
+    let tiles = plane.tile_count();
+    assert_all(&plane, Residency::Backed);
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        0,
+        "nothing decodes until read"
+    );
+    assert_eq!(every(&plane), expected(600, 300));
+    assert_all(&plane, Residency::Resident);
+    let report = evict_all();
+    assert_eq!(report.written, 0, "a backed tile drops without a write");
+    assert_all(&plane, Residency::Backed);
+    assert_eq!(every(&plane), expected(600, 300));
+    assert_eq!(calls.load(Ordering::Relaxed), 2 * tiles);
+}
+
+// [sb_detach]
+#[test]
+fn a_written_backed_tile_leaves_its_source() {
+    let _f = fixture("backed-detach");
+    let (mut plane, _) = backed_plane(600, 300);
+    let mut want = expected(600, 300);
+    for mut t in plane.tiles_mut(0..10, 0..1, 600) {
+        t.row_mut(0)[0] = !t.row(0)[0];
+    }
+    want[0] = !want[0];
+    plane.settle();
+    evict_all();
+    let first = plane.tile_residency(0).unwrap();
+    assert!(
+        matches!(first, Residency::Packed | Residency::Spilled),
+        "{first:?}"
+    );
+    assert_eq!(plane.tile_residency(1), Some(Residency::Backed));
+    assert_eq!(every(&plane), want);
+}
+
+// [sb_transient]
+#[test]
+fn a_transient_read_leaves_a_backed_tile_away() {
+    let _f = fixture("backed-transient");
+    let (plane, calls) = backed_plane(600, 300);
+    let read = transient(|| every(&plane));
+    assert_eq!(read, expected(600, 300));
+    assert_all(&plane, Residency::Backed);
+    assert_eq!(calls.load(Ordering::Relaxed), plane.tile_count());
+    assert!(!is_transient(), "the scope ends with the call");
+}
+
+// [sb_priority]
+#[test]
+fn backed_tiles_are_evicted_first_without_writes() {
+    let _f = fixture("backed-order");
+    let (backed, _) = backed_plane(TILE, TILE);
+    let live = plane_u8(TILE, TILE, 1, 11);
+    // Read both, so each holds its clock bit and the first pass takes them.
+    let _ = (every(&backed), every(&live));
+    assert_eq!(backed.tile_residency(0), Some(Residency::Resident));
+    let need = (TILE * TILE) as u64;
+    let first = run_pass(need);
+    assert_eq!(first.freed, 0, "both had a second chance");
+    let second = run_pass(need);
+    assert_eq!(second.written, 0);
+    assert_eq!(backed.tile_residency(0), Some(Residency::Backed));
+    assert_all(&live, Residency::Resident);
+}

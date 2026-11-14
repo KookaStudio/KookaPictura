@@ -216,6 +216,14 @@ def open_fixture(c):
     c.call("document", op="open", path=c.fixture)
 
 
+def fill_paint_layer(c):
+    """Edit > Fill a marquee on the M12 fixture's first painted layer."""
+    activate(c, "Paint 1")
+    marquee(c)
+    c.call("run_command", id="edit.fill", params={"color": 0xFF000000})
+    deselect(c)
+
+
 def pan_zoom(c):
     c.call("dispatch_command", id="view.fitOnScreen")
     c.call("status")
@@ -290,4 +298,7 @@ SCENARIOS = {
             [perspective_layer], False),
     "M23": ("Distort a full-layer gradient, top-left corner in by 12.5 %", [new_document, add_layer, gradient_layer],
             [distort_layer], False),
+    # #1218: the lazy open's acceptance case: pan every tile, edit, save.
+    "M24": ("Open the 4-layer PSD, pan across it, fill on one layer, save",
+            [open_fixture], [pan_zoom, fill_paint_layer, save_psd], True),
 }

@@ -68,7 +68,7 @@ fn scratch_json(
         })
         .collect();
     format!(
-        r#""scratch":{{"volumes":[{}],"used":{},"available":{}}},"efficiency":{{"compute_ms":{},"io_ms":{},"percent":{:.1}}},"tiles":{{"packed":{},"packed_bytes":{},"spilled":{},"unreadable":{}}}"#,
+        r#""scratch":{{"volumes":[{}],"used":{},"available":{}}},"efficiency":{{"compute_ms":{},"io_ms":{},"percent":{:.1}}},"tiles":{{"packed":{},"packed_bytes":{},"spilled":{},"backed":{},"unreadable":{}}}"#,
         volumes.join(","),
         sizes.used,
         sizes.available,
@@ -78,6 +78,7 @@ fn scratch_json(
         tiles.packed,
         tiles.packed_bytes,
         tiles.spilled,
+        tiles.backed,
         tiles.unreadable
     )
 }
@@ -186,12 +187,13 @@ mod tests {
                 packed: 2,
                 packed_bytes: 10,
                 spilled: 1,
+                backed: 3,
                 unreadable: 0,
             },
         );
         assert_eq!(
             json,
-            r#""scratch":{"volumes":[{"path":"/var/scr\"atch","file":8,"used":4,"available":100,"full":false,"tmpfs":true}],"used":4,"available":100},"efficiency":{"compute_ms":3,"io_ms":1,"percent":75.0},"tiles":{"packed":2,"packed_bytes":10,"spilled":1,"unreadable":0}"#
+            r#""scratch":{"volumes":[{"path":"/var/scr\"atch","file":8,"used":4,"available":100,"full":false,"tmpfs":true}],"used":4,"available":100},"efficiency":{"compute_ms":3,"io_ms":1,"percent":75.0},"tiles":{"packed":2,"packed_bytes":10,"spilled":1,"backed":3,"unreadable":0}"#
         );
         let full = memory_status_json().to_string();
         for key in [

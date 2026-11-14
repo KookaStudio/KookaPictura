@@ -112,6 +112,23 @@ impl TileSample for f32 {
     }
 }
 
+/// A tile's rectangle in its channel: first column, first row, and clipped
+/// size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TileRect {
+    pub x: usize,
+    pub y: usize,
+    pub w: usize,
+    pub h: usize,
+}
+
+/// Decodes a backed tile's samples (#1218): fills `out` with the `w × h`
+/// samples of `rect`, row after row. `rect` is a whole tile, or a part of one
+/// for a sparse transient read. An error leaves the tile unreadable. One
+/// closure serves every tile of a channel; it is the codec's, so core never
+/// names a file format.
+pub type TileDecode<T> = Arc<dyn Fn(TileRect, &mut [T]) -> Result<(), ()> + Send + Sync>;
+
 pub(crate) enum Tile<T> {
     /// Reads as `T::default()` and holds no allocation.
     Empty,
@@ -385,6 +402,22 @@ impl<T: TileSample> TiledPlane<T> {
         }
     }
 
+    /// A one-channel plane whose every tile is away, backed by `decode`
+    /// (#1218). Nothing is decoded until a tile is read, so no tile is known
+    /// to be uniform.
+    pub(crate) fn backed(width: usize, height: usize, decode: TileDecode<T>) -> Self {
+        let mut plane = Self::filled(width, height, 1, T::default());
+        for i in 0..plane.tile_count() {
+            let (x, y, w, h) = plane.tile_rect(i);
+            let source = body::Source {
+                decode: Arc::clone(&decode),
+                rect: TileRect { x, y, w, h },
+            };
+            plane.tiles[i] = Tile::Dense(Body::backed(w * h, source));
+        }
+        plane
+    }
+
     /// Copy a contiguous plane into tiles, one tile per core; a tile that holds
     /// one value becomes `Uniform` (or `Empty`) without an allocation.
     pub(crate) fn from_flat(data: &[T], width: usize, height: usize) -> Self {
@@ -459,7 +492,15 @@ impl<T: TileSample> TiledPlane<T> {
         match &self.tiles[i] {
             Tile::Empty => T::default(),
             Tile::Uniform(v) => *v,
-            Tile::Dense(d) => d.pin()[off],
+            Tile::Dense(d) => {
+                if crate::memory::eviction::is_transient() {
+                    let (dx, dy) = (x % TILE, (y % self.height) % TILE);
+                    if let Some(v) = d.peek_sample(dx, dy) {
+                        return v;
+                    }
+                }
+                d.pin()[off]
+            }
         }
     }
 

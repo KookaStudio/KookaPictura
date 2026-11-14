@@ -390,6 +390,7 @@ fn mode_profile_round_trip() {
             working_cmyk: Some(profile.to_icc()),
             conversion: options,
             skip_layered_merged: false,
+            source: None,
         },
     )
     .expect("reads");

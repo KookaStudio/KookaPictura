@@ -1,5 +1,6 @@
 //! A dense tile's samples behind a residency that can change (#1217): held
-//! in RAM, packed (LZ4 in RAM), spilled (a scratch extent), or unreadable.
+//! in RAM, packed (LZ4 in RAM), spilled (a scratch extent), backed by the
+//! file the document was opened from (#1218), or unreadable.
 //!
 //! Readers and writers **pin** a body before they touch its samples and the
 //! first pin restores them; the evictor moves only an unpinned body, under
@@ -10,7 +11,7 @@
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use super::TileSample;
+use super::{TileDecode, TileRect, TileSample};
 use crate::memory::eviction::{self, Evictable, Packing, Residency};
 use crate::scratch::{self, Extent, ScratchError};
 
@@ -29,13 +30,34 @@ enum Slot {
     Packed(Box<[u8]>),
     /// The payload is in `Cell::extent`.
     Spilled,
+    /// The samples are decoded from `Cell::source` on the next pin.
+    Backed,
 }
 
-struct Cell {
+/// Where a backed tile's samples are in the source file: the channel's
+/// decoder and the tile's rectangle in that channel.
+pub(crate) struct Source<T> {
+    pub(crate) decode: TileDecode<T>,
+    pub(crate) rect: TileRect,
+}
+
+impl<T> Clone for Source<T> {
+    fn clone(&self) -> Self {
+        Self {
+            decode: Arc::clone(&self.decode),
+            rect: self.rect,
+        }
+    }
+}
+
+struct Cell<T> {
     slot: Slot,
     /// The samples' copy on disk while it matches them: kept across a
     /// restore so evicting a clean tile again writes nothing (R3).
     extent: Option<Extent>,
+    /// The samples' copy in the source file while it matches them (#1218):
+    /// kept across a restore, as `extent` is, and cleared by the first write.
+    source: Option<Source<T>>,
 }
 
 pub(crate) struct Body<T> {
@@ -46,7 +68,9 @@ pub(crate) struct Body<T> {
     hot: AtomicU64,
     history: AtomicU32,
     unreadable: AtomicBool,
-    cell: Mutex<Cell>,
+    /// `cell.source` is set, readable without the lock by the evictor.
+    backed: AtomicBool,
+    cell: Mutex<Cell<T>>,
     /// The resident samples (a leaked `Box<[T]>` of `len`), or null while
     /// away. Read without the lock only by a pinned thread that saw
     /// `RESIDENT`.
@@ -73,12 +97,37 @@ impl<T: TileSample> Body<T> {
             hot: AtomicU64::new(0),
             history: AtomicU32::new(0),
             unreadable: AtomicBool::new(false),
+            backed: AtomicBool::new(false),
             cell: Mutex::new(Cell {
                 slot: Slot::Resident,
                 extent: None,
+                source: None,
             }),
             data: AtomicPtr::new(Box::into_raw(samples).cast::<T>()),
         });
+        eviction::register(Arc::downgrade(&body) as std::sync::Weak<dyn Evictable>);
+        body
+    }
+
+    /// An away body of `len` samples that `source` decodes on its first pin.
+    pub(crate) fn backed(len: usize, source: Source<T>) -> Arc<Self> {
+        let body = Arc::new(Self {
+            len,
+            state: AtomicU8::new(AWAY),
+            pins: AtomicU32::new(0),
+            referenced: AtomicBool::new(false),
+            hot: AtomicU64::new(0),
+            history: AtomicU32::new(0),
+            unreadable: AtomicBool::new(false),
+            backed: AtomicBool::new(true),
+            cell: Mutex::new(Cell {
+                slot: Slot::Backed,
+                extent: None,
+                source: Some(source),
+            }),
+            data: AtomicPtr::new(std::ptr::null_mut()),
+        });
+        eviction::count_backed(1);
         eviction::register(Arc::downgrade(&body) as std::sync::Weak<dyn Evictable>);
         body
     }
@@ -89,9 +138,67 @@ impl<T: TileSample> Body<T> {
     }
 
     /// Hold the samples resident until the pin drops, restoring them first.
+    /// Under [`eviction::transient`], an away backed body is decoded into
+    /// the pin alone and stays away.
     pub(crate) fn pin(&self) -> Pin<'_, T> {
+        if eviction::is_transient() {
+            if let Some(owned) = self.peek_backed() {
+                return Pin {
+                    body: self,
+                    owned: Some(owned),
+                };
+            }
+        }
         self.pin_raw();
-        Pin { body: self }
+        Pin {
+            body: self,
+            owned: None,
+        }
+    }
+
+    /// The sample at tile-local `(dx, dy)` of an away backed body, decoded
+    /// alone without restoring the body: a sparse reader (a thumbnail) pays
+    /// for the rows it samples, not for whole tiles. `None` when the body is
+    /// not away in its source or the decode fails.
+    pub(crate) fn peek_sample(&self, dx: usize, dy: usize) -> Option<T> {
+        if self.state.load(Ordering::SeqCst) == RESIDENT {
+            return None;
+        }
+        let source = {
+            let cell = self.lock();
+            if !matches!(cell.slot, Slot::Backed) {
+                return None;
+            }
+            cell.source.clone()?
+        };
+        let rect = TileRect {
+            x: source.rect.x + dx,
+            y: source.rect.y + dy,
+            w: 1,
+            h: 1,
+        };
+        let mut sample = [T::default()];
+        (source.decode)(rect, &mut sample).ok()?;
+        Some(sample[0])
+    }
+
+    /// The samples of an away backed body, decoded without installing them;
+    /// `None` when the body is not away in its source or the decode fails
+    /// (the caller's ordinary pin then records the loss).
+    fn peek_backed(&self) -> Option<Box<[T]>> {
+        if self.state.load(Ordering::SeqCst) == RESIDENT {
+            return None;
+        }
+        let source = {
+            let cell = self.lock();
+            if !matches!(cell.slot, Slot::Backed) {
+                return None;
+            }
+            cell.source.clone()?
+        };
+        let mut samples = vec![T::default(); self.len].into_boxed_slice();
+        (source.decode)(source.rect, &mut samples).ok()?;
+        Some(samples)
     }
 
     /// Increment the pin count and make the samples resident; the caller
@@ -114,6 +221,12 @@ impl<T: TileSample> Body<T> {
 
     /// Bring the samples back. Called by a pinning thread that saw them away.
     fn restore(&self) {
+        if self.backed.load(Ordering::Relaxed) {
+            // A decode from the source is a fresh allocation: let a burst of
+            // them evict first, as any new body does. Before the lock, so a
+            // pass this starts can claim other bodies freely.
+            eviction::on_allocate(self.bytes());
+        }
         let mut cell = self.lock();
         if self.state.load(Ordering::SeqCst) == RESIDENT {
             return;
@@ -121,6 +234,13 @@ impl<T: TileSample> Body<T> {
         let _io = scratch::io_timer();
         let samples = match &cell.slot {
             Slot::Resident => unreachable!("away state with a resident slot"),
+            Slot::Backed => {
+                let source = cell.source.as_ref().expect("a backed body has a source");
+                let mut samples = vec![T::default(); self.len].into_boxed_slice();
+                (source.decode)(source.rect, &mut samples)
+                    .map(|()| samples)
+                    .map_err(|()| ScratchError::Unreadable)
+            }
             Slot::Packed(payload) => unpack::<T>(payload, self.len),
             Slot::Spilled => {
                 let extent = cell.extent.expect("a spilled body has an extent");
@@ -136,14 +256,17 @@ impl<T: TileSample> Body<T> {
             if let Some(extent) = cell.extent.take() {
                 scratch::free(extent);
             }
+            cell.source = None;
+            self.backed.store(false, Ordering::Relaxed);
             self.unreadable.store(true, Ordering::Relaxed);
             eviction::count_unreadable();
             vec![T::default(); self.len].into_boxed_slice()
         });
-        if matches!(cell.slot, Slot::Packed(_)) {
-            eviction::count_packed(-1, -(packed_len(&cell.slot) as i64));
-        } else {
-            eviction::count_spilled(-1);
+        match cell.slot {
+            Slot::Packed(_) => eviction::count_packed(-1, -(packed_len(&cell.slot) as i64)),
+            Slot::Spilled => eviction::count_spilled(-1),
+            Slot::Backed => eviction::count_backed(-1),
+            Slot::Resident => {}
         }
         cell.slot = Slot::Resident;
         self.data
@@ -154,7 +277,7 @@ impl<T: TileSample> Body<T> {
     /// Claim the body for eviction: locked, resident, readable and unpinned.
     /// On `Some`, the state is `EVICTING` and the caller must leave it
     /// resident or away before unlocking.
-    fn claim(&self) -> Option<MutexGuard<'_, Cell>> {
+    fn claim(&self) -> Option<MutexGuard<'_, Cell<T>>> {
         if self.pins.load(Ordering::Relaxed) > 0 || self.unreadable.load(Ordering::Relaxed) {
             return None;
         }
@@ -195,7 +318,7 @@ impl<T> Body<T> {
         Arc::as_ptr(self) as usize
     }
 
-    fn lock(&self) -> MutexGuard<'_, Cell> {
+    fn lock(&self) -> MutexGuard<'_, Cell<T>> {
         self.cell.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -220,12 +343,15 @@ impl<T> Body<T> {
         unsafe { std::slice::from_raw_parts_mut(data, self.len) }
     }
 
-    /// The samples will change: the copy on disk no longer matches them.
+    /// The samples will change: neither the copy on disk nor the source
+    /// matches them any more.
     pub(crate) fn dirty(&self) {
         let mut cell = self.lock();
         if let Some(extent) = cell.extent.take() {
             scratch::free(extent);
         }
+        cell.source = None;
+        self.backed.store(false, Ordering::Relaxed);
     }
 
     pub(crate) fn is_unreadable(&self) -> bool {
@@ -241,22 +367,29 @@ impl<T> Body<T> {
     }
 }
 
-/// A pin on a body, released on drop.
+/// A pin on a body, released on drop; or, for a transient read of a
+/// backed body, the samples it decoded.
 pub(crate) struct Pin<'a, T> {
     body: &'a Body<T>,
+    owned: Option<Box<[T]>>,
 }
 
 impl<T> std::ops::Deref for Pin<'_, T> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {
-        self.body.samples()
+        match &self.owned {
+            Some(owned) => owned,
+            None => self.body.samples(),
+        }
     }
 }
 
 impl<T> Drop for Pin<'_, T> {
     fn drop(&mut self) {
-        self.body.unpin();
+        if self.owned.is_none() {
+            self.body.unpin();
+        }
     }
 }
 
@@ -272,6 +405,7 @@ impl<T> Drop for Body<T> {
             Slot::Resident => {}
             Slot::Packed(p) => eviction::count_packed(-1, -(p.len() as i64)),
             Slot::Spilled => eviction::count_spilled(-1),
+            Slot::Backed => eviction::count_backed(-1),
         }
         if *self.unreadable.get_mut() {
             eviction::count_unreadable_dropped();
@@ -339,6 +473,10 @@ impl<T: TileSample> Evictable for Body<T> {
         self.history.load(Ordering::Relaxed) > 0
     }
 
+    fn backed(&self) -> bool {
+        self.backed.load(Ordering::Relaxed)
+    }
+
     fn residency(&self) -> Residency {
         if self.is_unreadable() {
             return Residency::Unreadable;
@@ -350,6 +488,7 @@ impl<T: TileSample> Evictable for Body<T> {
             Slot::Resident => Residency::Resident,
             Slot::Packed(_) => Residency::Packed,
             Slot::Spilled => Residency::Spilled,
+            Slot::Backed => Residency::Backed,
         }
     }
 
@@ -357,6 +496,17 @@ impl<T: TileSample> Evictable for Body<T> {
         let Some(mut cell) = self.claim() else {
             return Packing::Skipped;
         };
+        if cell.source.is_some() {
+            // Unedited since the open: the source decodes it again (#1218).
+            self.drop_samples();
+            cell.slot = Slot::Backed;
+            self.state.store(AWAY, Ordering::SeqCst);
+            eviction::count_backed(1);
+            return Packing::Freed {
+                bytes: self.bytes(),
+                written: 0,
+            };
+        }
         if cell.extent.is_some() {
             // Clean: the copy on disk still matches (R3).
             self.drop_samples();

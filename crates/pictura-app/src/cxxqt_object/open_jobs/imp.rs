@@ -30,6 +30,8 @@ pub(in crate::cxxqt_object) struct OpenedDocument {
     pub(in crate::cxxqt_object) path: OpenedPath,
     pub(in crate::cxxqt_object) source_format: String,
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
+    /// The file's merged image, shown until the first edit (#1218).
+    pub(in crate::cxxqt_object) preview: Option<pictura_codec::MergedPreview>,
 }
 
 /// A PDF probe's outcome.
@@ -75,6 +77,8 @@ pub(in crate::cxxqt_object) fn apply_opened(rust: &mut PictureViewRust, opened: 
         opened.target,
         opened.pdf_password,
     );
+    // After the replace, whose display reset drops any preview.
+    *rust.tiles.preview.get_mut() = opened.preview;
     let OpenedPath::Set(path) = opened.path;
     rust.path = path;
     rust.source_format = opened.source_format;
@@ -120,6 +124,7 @@ pub(super) fn open_options(policy: Policy) -> pictura_codec::OpenOptions {
         working_cmyk: Some(pictura_codec::Profile::coated_cmyk().to_icc()),
         conversion: pictura_codec::ConversionOptions::default(),
         skip_layered_merged: true,
+        source: None,
     }
 }
 
@@ -162,17 +167,25 @@ pub(in crate::cxxqt_object) fn open_budget() -> (pictura_codec::ImageBudget, boo
 
 pub(super) fn decode_psd_with(
     path: &str,
-    options: pictura_codec::OpenOptions,
+    mut options: pictura_codec::OpenOptions,
     (budget, bounded): (pictura_codec::ImageBudget, bool),
     gpu: bool,
     progress: &dyn Fn(u8, &str),
 ) -> Option<OpenedDocument> {
     OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
     progress(5, "Reading file");
-    let bytes = pictura_codec::MappedFile::open(path).ok()?;
+    // The file stays open behind the document: its 8-bit raw and RLE layer
+    // channels are read from it on demand (#1218). Without a pin (no
+    // positioned reads on this platform) the open decodes everything.
+    let pin = pictura_codec::SourcePin::open(path).ok();
+    let bytes = match pin.as_ref().map(|pin| pin.map()) {
+        Some(mapped) => mapped.ok()?,
+        None => pictura_codec::MappedFile::open(path).ok()?,
+    };
+    options.source = pin;
     progress(25, "Decoding");
-    let mut doc = match pictura_codec::read_psd_within_options(&bytes, &options, budget) {
-        Ok(doc) => doc,
+    let (mut doc, preview) = match pictura_codec::read_psd_lazy(&bytes, &options, budget) {
+        Ok(read) => read,
         Err(error) => {
             // The codec names a budget refusal "… exceeds the decode budget".
             let memory = bounded && error.to_string().contains("decode budget");
@@ -186,6 +199,7 @@ pub(super) fn decode_psd_with(
     let target = LayerTarget::for_opened(&doc, None);
     let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
+        preview,
         doc,
         history,
         target,
@@ -333,6 +347,7 @@ pub(in crate::cxxqt_object) fn decode_image_with_options(
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
     let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
+        preview: None,
         doc,
         history,
         target,
@@ -399,6 +414,7 @@ pub(in crate::cxxqt_object) fn decode_smart_object(
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
     let history = history_for(&mut doc, &target, "Open As Smart Object");
     Some(OpenedDocument {
+        preview: None,
         doc,
         history,
         target,
@@ -424,6 +440,7 @@ pub(super) fn decode_pdf_psd(
     let target = LayerTarget::for_opened(&doc, None);
     let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
+        preview: None,
         doc,
         history,
         target,
@@ -559,6 +576,7 @@ pub(in crate::cxxqt_object) fn imported_document(
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
     let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
+        preview: None,
         doc,
         history,
         target,
@@ -675,6 +693,7 @@ pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
             working_cmyk: Some(rust.working_cmyk.clone()),
             conversion: rust.conversion_options,
             skip_layered_merged: true,
+            source: None,
         };
         (options, rust.gpu_compute)
     };
@@ -728,6 +747,7 @@ pub fn open_pdf_start(mut view: Pin<&mut PictureView>, path: &QString, password:
             working_cmyk: Some(rust.working_cmyk.clone()),
             conversion: rust.conversion_options,
             skip_layered_merged: true,
+            source: None,
         }
     };
     let gpu = view.rust().gpu_compute;
