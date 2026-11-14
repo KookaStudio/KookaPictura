@@ -484,7 +484,7 @@ pub(super) fn apply_job(
 
 /// The edit a landed fill job records: its rect, or the whole document when a
 /// layer style could carry the change past it, as [`refresh_edit`] decides.
-fn fill_edit(rust: &mut PictureViewRust, rect: Option<PsdRect>) -> Edit {
+pub(crate) fn fill_edit(rust: &mut PictureViewRust, rect: Option<PsdRect>) -> Edit {
     let styled = rust
         .session
         .doc

@@ -304,6 +304,25 @@ impl Pass<'_> {
         if self.alpha == Alpha::Keep && dst_alpha.to_unit() == 0.0 {
             return None;
         }
+        // An opaque source at full strength in Normal mode is the source: its
+        // alpha is 1, so the backdrop cannot contribute. The Gradient, the
+        // Paint Bucket and the fill family take this path for their common
+        // full-opacity case.
+        if self.mode == PaintMode::Normal && strength >= 1.0 && color.a == 255 {
+            let out_alpha = match self.alpha {
+                Alpha::Keep => dst_alpha,
+                Alpha::Replace => T::from_u8(255),
+                Alpha::Blend if has_alpha => T::from_u8(255),
+                Alpha::Blend => dst_alpha,
+            };
+            let out = (
+                T::from_u8(color.r),
+                T::from_u8(color.g),
+                T::from_u8(color.b),
+                out_alpha,
+            );
+            return (out != dst).then_some(out);
+        }
         // A uniform run feeds the blend the same inputs pixel after pixel, so
         // the last answer is reused; only Dissolve reads the per-pixel noise
         // (#1149).

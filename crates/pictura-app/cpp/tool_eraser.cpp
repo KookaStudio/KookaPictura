@@ -8,6 +8,8 @@
 
 #include "tool_handler.h"
 
+#include "document_command.h"
+
 #include "api/paint_api.h"
 #include "image_view.h"
 #include "paint_tip.h"
@@ -165,9 +167,14 @@ public:
             return true;
         }
         const MagicEraseOptions o = magicErase_->get();
-        if (!magic_erase_at(*v, qFloor(imagePos.x()), qFloor(imagePos.y()), o.tolerance,
-                            o.antialias, o.contiguous, o.sampleAllLayers, o.opacity,
-                            ctx.background().rgba())) {
+        QWidget* parent = ctx.canvas() ? ctx.canvas()->window() : nullptr;
+        const bool erased = runDocumentCommand(
+            parent, *v, QObject::tr("Magic Eraser"), [&] {
+                magic_erase_at(*v, qFloor(imagePos.x()), qFloor(imagePos.y()), o.tolerance,
+                               o.antialias, o.contiguous, o.sampleAllLayers, o.opacity,
+                               ctx.background().rgba());
+            });
+        if (!erased) {
             if (activePixelLocked(v)) {
                 ctx.refused(QObject::tr("Could not erase: the layer's pixels are locked."));
             } else if (!v->active_layer_visible()) {

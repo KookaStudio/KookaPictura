@@ -37,7 +37,9 @@ use crate::stamp::StampSource;
 use crate::stroke::{layer_at, layer_at_mut, parse_layer_path};
 use crate::{tip_coverage, PaintError, PaintMode, Rgba, Stroke, StrokeConfig};
 use pictura_core::mask_ops::{coverage_bounds, TiledMask};
-use pictura_core::{layer_transparency_locked, Channel, Document, Layer, PsdRect};
+use pictura_core::{
+    layer_transparency_locked, Channel, Document, Layer, Plane, PsdRect, TileState,
+};
 use rayon::prelude::*;
 
 /// The Block eraser's side, in *screen* pixels. CS6's Block is a fixed
@@ -285,10 +287,13 @@ pub fn ensure_alpha(layer: &mut Layer) {
     if layer.channels.iter().any(|c| c.id == -1) {
         return;
     }
-    let n = (layer.rect.width().max(0) * layer.rect.height().max(0)) as usize;
+    let (w, h) = (
+        layer.rect.width().max(0) as usize,
+        layer.rect.height().max(0) as usize,
+    );
     layer.channels.push(Channel {
         id: -1,
-        data: vec![255; n].into(),
+        data: Plane::filled(w, h, 1, 255),
     });
 }
 
@@ -347,24 +352,63 @@ pub fn magic_erase(
         if !channel.data.tile(w, h) {
             continue;
         }
-        let covered: Vec<usize> = channel
-            .data
-            .tiles_in(xs.clone(), ys.clone())
-            .into_iter()
-            .filter(|&t| {
-                channel.data.tile_rect(t).is_some_and(|(lx, ly, tw, th)| {
-                    // The tile's part on the canvas, in document pixels.
-                    let x0 = (rect.left as i64 + lx as i64).clamp(0, cw as i64) as usize;
-                    let y0 = (rect.top as i64 + ly as i64).clamp(0, ch as i64) as usize;
-                    let x1 = (rect.left as i64 + (lx + tw) as i64).clamp(0, cw as i64) as usize;
-                    let y1 = (rect.top as i64 + (ly + th) as i64).clamp(0, ch as i64) as usize;
-                    x0 < x1 && y0 < y1 && mask.uniform_over(x0..x1, y0..y1) != Some(0)
+        let mut dense: Vec<usize> = Vec::new();
+        let mut changed: Option<PsdRect> = None;
+        for t in channel.data.tiles_in(xs.clone(), ys.clone()) {
+            let Some((lx, ly, tw, th)) = channel.data.tile_rect(t) else {
+                continue;
+            };
+            let (left, top) = (rect.left + lx as i32, rect.top + ly as i32);
+            let (right, bottom) = (left + tw as i32, top + th as i32);
+            // A uniform tile may be written whole only when the mask covers
+            // all of it and it lies on the canvas; anything else keeps the
+            // per-pixel path so pixels outside the canvas are untouched.
+            let cover = (left >= 0
+                && top >= 0
+                && (right as i64) <= cw as i64
+                && (bottom as i64) <= ch as i64)
+                .then(|| {
+                    mask.uniform_over(left as usize..right as usize, top as usize..bottom as usize)
                 })
-            })
-            .collect();
-        let changed = channel
+                .flatten();
+            let Some(cover) = cover else {
+                dense.push(t);
+                continue;
+            };
+            if cover == 0 {
+                continue;
+            }
+            let cover = cover as f32 / 255.0 * opacity;
+            let current = match channel.data.tile_state(t) {
+                Some(TileState::Empty) => 0,
+                Some(TileState::Uniform(v)) => v,
+                _ => {
+                    dense.push(t);
+                    continue;
+                }
+            };
+            let out = match target {
+                Some(t) => (current as f32 + (t as f32 - current as f32) * cover).round() as u8,
+                None => (current as f32 * (1.0 - cover)).round() as u8,
+            };
+            if out == current {
+                continue;
+            }
+            if channel.data.set_tile_uniform(t, out) {
+                let at = PsdRect {
+                    top,
+                    left,
+                    bottom,
+                    right,
+                };
+                changed = Some(changed.map_or(at, |c| c.union(at)));
+            } else {
+                dense.push(t);
+            }
+        }
+        let dense_changed = channel
             .data
-            .tiles_mut_at(&covered)
+            .tiles_mut_at(&dense)
             .into_par_iter()
             .filter_map(|mut tile| {
                 let mut dirty = None;
@@ -404,6 +448,9 @@ pub fn magic_erase(
             })
             .reduce_with(PsdRect::union);
         channel.data.settle();
+        if let Some(c) = dense_changed {
+            changed = Some(changed.map_or(c, |d| d.union(c)));
+        }
         if let Some(c) = changed {
             dirty = Some(dirty.map_or(c, |d| d.union(c)));
         }
@@ -822,6 +869,101 @@ mod tests {
         assert!((half[3] as i32 - 128).abs() <= 1, "alpha {}", half[3]);
         assert_eq!(&half[..3], &GREY[..3], "erasing changed the colour");
         assert_eq!(pixel(&d, 6, 10)[3], 255);
+    }
+
+    /// A 512² layer whose planes are tiled uniform, so the erase's uniform
+    /// fast path applies.
+    fn uniform_tiled_doc(background: bool) -> Document {
+        let (w, h) = (512usize, 512usize);
+        let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
+        let ids: &[(i16, usize)] = if background {
+            &[(0, 0), (1, 1), (2, 2)]
+        } else {
+            &[(0, 0), (1, 1), (2, 2), (-1, 3)]
+        };
+        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h as i32,
+                right: w as i32,
+            },
+            channels: ids
+                .iter()
+                .map(|&(id, c)| Channel {
+                    id,
+                    data: Plane::filled(w, h, 1, GREY[c]),
+                })
+                .collect(),
+            background,
+            ..Default::default()
+        }]);
+        doc
+    }
+
+    #[test]
+    fn a_uniform_erase_writes_uniform_alpha_tiles() {
+        let mut d = uniform_tiled_doc(false);
+        let mask = TiledMask::filled(512, 512, 1, 255);
+        let dirty = magic_erase(&mut d, "0", &mask, 1.0, TEAL).expect("erased");
+        assert_eq!(
+            dirty,
+            PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 512,
+                right: 512
+            }
+        );
+        let alpha = d.layers[0]
+            .channels
+            .iter()
+            .find(|c| c.id == -1)
+            .expect("an alpha channel");
+        for t in 0..alpha.data.tile_count() {
+            assert!(
+                matches!(
+                    alpha.data.tile_state(t),
+                    Some(TileState::Empty | TileState::Uniform(0))
+                ),
+                "tile {t} was allocated: {:?}",
+                alpha.data.tile_state(t)
+            );
+        }
+        assert_eq!(pixel(&d, 300, 300)[3], 0);
+    }
+
+    #[test]
+    fn a_uniform_erase_matches_the_per_pixel_path() {
+        let mut fast = uniform_tiled_doc(false);
+        let mut dense = fast.clone();
+        let tiled = TiledMask::filled(512, 512, 1, 255);
+        // A flat mask has no uniform tile state, so it takes the per-pixel
+        // path with the same coverage.
+        let flat = TiledMask::from(vec![255u8; 512 * 512]);
+        assert!(magic_erase(&mut fast, "0", &tiled, 0.5, TEAL).is_some());
+        assert!(magic_erase(&mut dense, "0", &flat, 0.5, TEAL).is_some());
+        for (a, b) in fast.layers[0]
+            .channels
+            .iter()
+            .zip(&dense.layers[0].channels)
+        {
+            assert!(a.data == b.data, "channel {}", a.id);
+        }
+    }
+
+    #[test]
+    fn ensure_alpha_gives_a_uniform_plane() {
+        let d = doc(true);
+        let mut layer = d.layers[0].clone();
+        ensure_alpha(&mut layer);
+        let alpha = layer
+            .channels
+            .iter()
+            .find(|c| c.id == -1)
+            .expect("an alpha channel");
+        assert_eq!(alpha.data.tile_state(0), Some(TileState::Uniform(255)));
+        assert_eq!(alpha.data.tile_count(), 1, "one uniform tile");
     }
 
     #[test]
