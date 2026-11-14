@@ -53,10 +53,11 @@ impl qobject::PictureView {
         changed
     }
 
-    /// `File > Place…`: read `file_path`, decode it as a PSD/PSB source, and
-    /// append it as a topmost channel-less embedded smart-object layer. Records
-    /// one "Place" state on success; empty (no state) when the file is missing,
-    /// unreadable, or not a PSD/PSB document.
+    /// `File > Place…`: read `file_path`, decode it as a PSD/PSB source, append
+    /// it as a topmost channel-less embedded smart-object layer, and fit an
+    /// oversized source to the canvas. Records one "Place" state on success;
+    /// empty (no state) when the file is missing, unreadable, or not a PSD/PSB
+    /// document.
     pub fn place_smart_object(mut self: Pin<&mut Self>, file_path: &QString) -> QString {
         let path = file_path.to_string();
         let name = std::path::Path::new(&path)
@@ -72,6 +73,7 @@ impl qobject::PictureView {
             let Some(path) = pictura_render::place_smart_object(doc, &name, bytes) else {
                 return Edit::None;
             };
+            pictura_render::fit_smart_object_to_canvas(doc, &path);
             created = path;
             rust.select_only_layer(&created);
             let after = rust
@@ -86,11 +88,18 @@ impl qobject::PictureView {
 
     /// `File > Place…` for a raster image: read `file_path`, probe and decode it
     /// with Qt, append it as a native-size raster layer, convert that layer into
-    /// an embedded smart object, recomposite, and record one "Place" state.
-    /// Returns the new layer's path, or an empty string recording nothing on any
-    /// refusal (no document, missing/unreadable file, unsupported format, over
-    /// budget, or failed conversion).
+    /// an embedded smart object, release the raster proxy, fit an oversized
+    /// source to the canvas, recomposite, and record one "Place" state. Returns
+    /// the new layer's path, or an empty string recording nothing on any refusal
+    /// (no document, missing/unreadable file, unsupported format, over budget, or
+    /// failed conversion).
     pub fn place_image(mut self: Pin<&mut Self>, file_path: &QString) -> QString {
+        let policy = {
+            let mut rust = self.as_mut().rust_mut();
+            rust.open_policy_override
+                .take()
+                .unwrap_or(rust.color_policy)
+        };
         let file = file_path.to_string();
         let name = std::path::Path::new(&file)
             .file_stem()
@@ -104,12 +113,6 @@ impl qobject::PictureView {
         };
         let Some((rgba, width, height)) = decode_import(&bytes) else {
             return QString::default();
-        };
-        let policy = {
-            let mut rust = self.as_mut().rust_mut();
-            rust.open_policy_override
-                .take()
-                .unwrap_or(rust.color_policy)
         };
         let rgba = super::open_jobs::convert_placed_rgba(&bytes, rgba, width, height, policy);
         let mut created = String::new();
@@ -128,6 +131,15 @@ impl qobject::PictureView {
                 let _ = doc.layers.pop();
                 return Edit::None;
             }
+            // The conversion keeps the raster proxy so an ordinary Convert is
+            // visually unchanged. A Place must render from the embedded native
+            // source so the fit and later scale keep the original pixels.
+            if let Some(layer) = pictura_render::resolve_path_mut(doc, &path) {
+                layer.channels.clear();
+                layer.raw_channels.clear();
+                layer.source_channels = None;
+            }
+            pictura_render::fit_smart_object_to_canvas(doc, &path);
             created = path;
             rust.select_only_layer(&created);
             let after = rust

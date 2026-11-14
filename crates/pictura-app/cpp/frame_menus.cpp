@@ -3,6 +3,7 @@
 #include "document_command.h"
 #include "memory_refusal.h"
 #include "fill_layer_editor.h"
+#include "frame_place.h"
 #include "frame_update.h"
 #include "gpu_probe.h"
 
@@ -157,25 +158,16 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setHandler(command_ids::FilePlace, [this]() {
         PictureView* view = activeView();
-        if (!view) {
+        if (!view || !view->has_document() || view->transform_session_active()) {
             return;
         }
-        const QString path = getOpenFileName(this, tr("Place"),
-                                             documentDirectory(activeFilePath()), openFileFilters());
-        if (path.isEmpty()) {
+        const QStringList paths = getOpenFileNames(this, tr("Place"),
+                                                   documentDirectory(activeFilePath()),
+                                                   openFileFilters());
+        if (paths.isEmpty()) {
             return;
         }
-        const bool psd = PicturaMainWindow::isNativeDocumentPath(path);
-        applyColorSettings(view);
-        if (!psd && !confirmProfileForOpen(view, path)) {
-            return;
-        }
-        const QString created =
-            psd ? view->place_smart_object(path) : view->place_image(path);
-        if (!created.isEmpty()) {
-            beginFreeTransform(created);
-            selectLayerPath(created);
-        }
+        placeDocuments(*this, paths);
     });
 
     registry_->setHandler(command_ids::FileInfo, [this]() { showFileInfo(); });
@@ -247,10 +239,13 @@ void PicturaMainWindow::registerHandlers()
     for (const char* id : {command_ids::FileSave, command_ids::FileSaveAs, command_ids::FileExportAs,
                            command_ids::FileQuickExportPng, command_ids::FileSaveForWeb,
                            command_ids::FileClose,
-                           command_ids::FileCloseAll, command_ids::FilePlace,
-                           command_ids::FileInfo}) {
+                           command_ids::FileCloseAll, command_ids::FileInfo}) {
         registry_->setEnabledProvider(id, hasDocument);
     }
+    registry_->setEnabledProvider(command_ids::FilePlace, [this]() {
+        PictureView* view = activeView();
+        return view && view->has_document() && !view->transform_session_active();
+    });
     registry_->setEnabledProvider(command_ids::FileRevert, [this]() {
         PictureView* view = activeView();
         // A raster/smart-object import keeps the source path only on the tab;

@@ -793,8 +793,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`getOpenFileNames()` in `cpp/dialogs.cpp`), and `showOpenDialog()` starts one
   open per chosen path, so Shift-click/Ctrl-click opens one document per file
   (tabs or floating windows per the tabs preference). A failed file does not
-  stop the rest. Open As, Place, Open Recent, and the command line stay
-  single-file. Tests: `tst_multi_file_open`.
+  stop the rest. Open As, Open Recent, and the command line stay single-file;
+  Place now accepts a multi-file selection (below). Tests:
+  `tst_multi_file_open`.
+- **File > Place accepts a multi-file selection, with one Free Transform per
+  file** (#755, OpenSpec change `multi-file-place`). The Place dialog uses
+  `getOpenFileNames()` and offers an `Images (…)` filter. Each successful place
+  enters its own Free Transform; Enter or the apply control commits and
+  advances, Escape or the transform's Cancel control removes the current
+  placement and asks whole-batch vs next when files remain, and one summary
+  names the files that could not be placed. An oversized source is fitted to the
+  canvas non-destructively: PSD/PSB keeps its original bytes, the raster route
+  embeds the native-size source with its merged alpha and releases the proxy, and
+  a Free Transform scale/translation on the placed object changes only its rect.
+  The canvas-drop path keeps its place-all/last-transform behavior. Tests:
+  `tst_place_sequence`, `tst_place_fit`.
 - **DX12 defaults to the FXC shader compiler** (#1104, OpenSpec change
   `dx12-fxc-default`). wgpu 30's `Auto` loaded the stale `dxcompiler.dll`
   windeployqt ships, so a Windows launch fell back to the CPU. Both device
@@ -3043,10 +3056,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   The embedded-source render was refactored to `render_smart_source(so, rect,
   region)` so compositing allocates only the canvas-clipped region. `File >
   Place…` (archived `2026-09-19-place-smart-object`) inserts a PSD/PSB as a
-  channel-less top smart-object layer (native size at the origin, no transform
-  session) that renders from its embedded source; the GPU compositor declines a
-  channel-less smart-object layer so `composite_active` falls back to the CPU
-  oracle. `Layer > Smart Objects > Replace Contents…` (archived
+  channel-less top smart-object layer (native size at the origin; a successful
+  place enters Free Transform) that renders from its embedded source; the GPU
+  compositor declines a channel-less smart-object layer so `composite_active`
+  falls back to the CPU oracle. `Layer > Smart Objects > Replace Contents…` (archived
   `2026-09-19-replace-smart-object-contents`) swaps the embedded source while
   keeping the layer's geometry, clears the proxy, and drops the preserved
   `SoLd`/`lnk*` so the save re-authors the new payload. The C++ smart-object
@@ -3134,8 +3147,14 @@ Snapshot for resuming after a context break. Update after each milestone.
   channel-less smart objects materialized from their payload then consumed (the
   `SoLd`/`plLd` blocks and linked-source record dropped). `Edit > Free Transform`
   (`Ctrl+T`, `edit.freeTransform`) begins a session on the current layer; a
-  successful `File > Place…` or canvas drop selects the new layer and enters the
-  session (cancel keeps the `"Place"` state). C++ self-test code 292. Ceilings:
+  successful menu `File > Place…` places each selected file and enters its own
+  session, while a canvas drop selects the last placed layer and enters the
+  session (a cancelled drop session keeps the `"Place"` state; Escape or the
+  Cancel control on a menu item removes that placement). Oversized sources are
+  fitted non-destructively; a scale/translation on a placed smart object changes
+  only its rect, and a raster Place keeps its native source and alpha. C++
+  self-test code 292; `tst_place_sequence` and `tst_place_fit` cover the menu
+  flow. Ceilings:
   bilinear-only. This completes the place/drop program (image import + OS file
   drop + free transform).
 - **Skew / Distort / Perspective** (archived `2026-09-25-free-transform-quad`):

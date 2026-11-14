@@ -4,7 +4,8 @@ use super::super::helpers_composite::*;
 use super::super::qobject;
 use super::super::state::PictureViewRust;
 use super::geometry::{
-    apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
+    apply_session_transform, identity_transform, quad_driven, rect_center, session_quad,
+    source_corners, MapParams,
 };
 use super::group::{
     can_free_transform, commit_cost, group_apply, lifted_apply, move_commit_cost,
@@ -319,16 +320,22 @@ impl qobject::PictureView {
             .live
             .transform()
             .and_then(repeatable_transform);
-        let unmoved = || {
-            quad.iter()
-                .zip(source_corners(orig_rect).iter())
-                .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
-        };
-        let identity = match &warp {
-            Some(warp) => warp.is_identity() && unmoved(),
-            None if projective => unmoved(),
-            None => params.is_identity(),
-        };
+        let identity = identity_transform(quad, orig_rect, params, warp.as_ref(), projective);
+        if !identity {
+            if let Some(changed) = self.as_mut().commit_smart_object_rect(
+                &path,
+                &members,
+                params,
+                warp.as_ref(),
+                projective,
+                quad,
+                &history_label,
+                orig_rect,
+                repeat,
+            ) {
+                return changed;
+            }
+        }
         let mut cost = commit_cost(&preview_quad, orig_rect);
         if warp.is_some() {
             cost.working += warp_strip_bytes(&preview_quad);

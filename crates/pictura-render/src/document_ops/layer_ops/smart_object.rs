@@ -4,7 +4,9 @@
 //! raster, serializes it with `write_psd`, and attaches the bytes as an
 //! embedded [`SmartObject`]. The layer keeps its pixel channels (the raster
 //! proxy), so rendering is unchanged; a layer with a proxy is drawn from the
-//! proxy and the embedded source is only decoded for a channel-less layer.
+//! proxy and the embedded source is only decoded for a channel-less layer. The
+//! embedded source carries the layer's straight alpha as a merged extra plane,
+//! so a released proxy keeps transparency.
 
 use pictura_core::{
     BitDepth, BlendMode, Channel, Document, Layer, PsdRect, SmartObject, SmartObjectKind,
@@ -96,6 +98,17 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
                 let n = plane.min(channel.data.len());
                 embedded.composite.data[c * plane..c * plane + n]
                     .copy_from_slice(&channel.data[..n]);
+            }
+        }
+        // The merged extra plane restores the source's straight alpha on read
+        // (`with_merged_alpha`); without it a converted transparent raster
+        // would render as an opaque rectangle.
+        if let Some(alpha) = layer.channels.iter().find(|channel| channel.id == -1) {
+            if alpha.data.len() == plane {
+                embedded.channels.push(Channel {
+                    id: 0,
+                    data: alpha.data.clone(),
+                });
             }
         }
         let mut copy = layer.clone();
@@ -265,6 +278,87 @@ pub fn place_smart_object(doc: &mut Document, filename: &str, bytes: &[u8]) -> O
         return None;
     }
     Some(format_segments(&[index]))
+}
+
+/// Fit a freshly placed smart-object layer to the document canvas.
+///
+/// The layer's current rect is the source-native frame. A source whose width or
+/// height exceeds the canvas is scaled uniformly by
+/// `min(canvas_width / width, canvas_height / height)` and centred; a source that
+/// already fits keeps its native rect (no upscale). The fit changes the layer
+/// rect only: the embedded payload and the preserved blocks stay untouched.
+/// Returns false for a non-smart-object target or a non-positive source/docs.
+pub fn fit_smart_object_to_canvas(doc: &mut Document, path: &str) -> bool {
+    let (canvas_w, canvas_h) = (doc.width, doc.height);
+    let Some(layer) = resolve_path(doc, path) else {
+        return false;
+    };
+    if layer.is_group
+        || layer.adjustment.is_some()
+        || layer.smart_object.is_none()
+        || layer.rect.width() <= 0
+        || layer.rect.height() <= 0
+        || canvas_w == 0
+        || canvas_h == 0
+    {
+        return false;
+    }
+    let source_w = layer.rect.width();
+    let source_h = layer.rect.height();
+    let scale = (canvas_w as f64 / source_w as f64)
+        .min(canvas_h as f64 / source_h as f64)
+        .min(1.0);
+    if scale >= 1.0 {
+        return true;
+    }
+    let fitted_w = ((source_w as f64 * scale).round() as i32).max(1);
+    let fitted_h = ((source_h as f64 * scale).round() as i32).max(1);
+    let left = (canvas_w as i32 - fitted_w).max(0) / 2;
+    let top = (canvas_h as i32 - fitted_h).max(0) / 2;
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    layer.rect = PsdRect {
+        top,
+        left,
+        bottom: top + fitted_h,
+        right: left + fitted_w,
+    };
+    true
+}
+
+/// Whether `path` can be transformed by moving its smart-object rect directly,
+/// without materializing the embedded source. This is the scale/translation
+/// path: a fully channel-less embedded object (no modeled or raw channels, so
+/// nothing would go stale against the new rect) with no raster mask, decodable
+/// source, and an unlocked position.
+pub fn can_transform_smart_object_rect(doc: &Document, path: &str) -> bool {
+    resolve_path(doc, path).is_some_and(|layer| {
+        !layer.is_group
+            && layer.adjustment.is_none()
+            && !layer.background
+            && !layer.lock.contains(pictura_core::LockFlags::POSITION)
+            && layer.mask.is_none()
+            && layer.channels.is_empty()
+            && layer.raw_channels.is_empty()
+            && can_materialize_smart_source(layer)
+    })
+}
+
+/// Move a placed smart-object layer to `rect` without resampling its source.
+///
+/// Preserves `smart_object`, its payload, and the preserved blocks; the caller
+/// owns the composite refresh and history. Returns false without mutation for a
+/// non-positive rect or an ineligible target.
+pub fn transform_smart_object_rect(doc: &mut Document, path: &str, rect: PsdRect) -> bool {
+    if rect.width() <= 0 || rect.height() <= 0 || !can_transform_smart_object_rect(doc, path) {
+        return false;
+    }
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    layer.rect = rect;
+    true
 }
 
 /// Open `bytes` as a new document holding `filename` as one embedded smart

@@ -143,6 +143,28 @@ pub(super) fn map_quad(session: &TransformSession) -> [(f64, f64); 4] {
     MapParams::of(session).map_quad(session.orig_rect)
 }
 
+/// Whether a session's snapshot is the identity transform: a warp's own
+/// identity plus an unmoved box, an unmoved projective quad, or the similarity
+/// parameters at identity.
+pub(super) fn identity_transform(
+    quad: [(f64, f64); 4],
+    orig_rect: PsdRect,
+    params: MapParams,
+    warp: Option<&pictura_core::warp::Warp>,
+    projective: bool,
+) -> bool {
+    let unmoved = || {
+        quad.iter()
+            .zip(source_corners(orig_rect).iter())
+            .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
+    };
+    match warp {
+        Some(warp) => warp.is_identity() && unmoved(),
+        None if projective => unmoved(),
+        None => params.is_identity(),
+    }
+}
+
 /// Apply the session's live transform to `doc` at `path` with `interpolation`:
 /// the projective op for a quad-driven session ([`quad_driven`]), the affine
 /// quad when a shear is set, else the similarity op re-centred on `orig_rect`

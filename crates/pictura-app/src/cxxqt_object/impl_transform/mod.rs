@@ -9,6 +9,7 @@ mod mode_switch;
 mod perspective;
 mod session;
 mod skew;
+mod smart_rect;
 mod warp;
 
 pub(in crate::cxxqt_object) use dispatch::land_hdr_conversion;

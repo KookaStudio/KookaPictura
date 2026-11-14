@@ -3,130 +3,51 @@
 
 #include <QtTest/QtTest>
 
+#include <optional>
+
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QItemSelectionModel>
+#include <QtCore/QPointer>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
+#include <QtCore/QVector>
+#include <QtGui/QAction>
 #include <QtGui/QColor>
 #include <QtGui/QFileSystemModel>
 #include <QtGui/QImage>
+#include <QtGui/QKeyEvent>
+#include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QTabBar>
+#include <QtWidgets/QToolButton>
 
+#include "api/engine_bridge.h"
+#include "api/layers_api.h"
+#include "api/paint_bridge.h"
+#include "api/view_bridge.h"
+#include "color_settings_dialog.h"
 #include "command_ids.h"
 #include "commands.h"
+#include "dialogs.h"
 #include "frame.h"
+#include "frame_place.h"
+#include "image_view.h"
 #include "preferences_dialog.h"
+#include "profile_warning_dialog.h"
+#include "tools.h"
 
-#include "api/view_bridge.h"
-
+#include "multi_file_test_support.h"
 #include "qt_test_support.h"
 
 using namespace pictura;
 
 namespace {
-
-struct OpenDialogProbe {
-    bool seen = false;
-    QFileDialog::FileMode mode = QFileDialog::AnyFile;
-    QStringList selected;
-    QString error;
-};
-
-QFileDialog* visibleFileDialog()
-{
-    // The dialog is parented to the frame, so it is not in topLevelWidgets().
-    for (QWidget* widget : QApplication::allWidgets()) {
-        if (auto* dialog = qobject_cast<QFileDialog*>(widget); dialog && dialog->isVisible()) {
-            return dialog;
-        }
-    }
-    return nullptr;
-}
-
-// QFileSystemModel populates a folder asynchronously, so wait until the view
-// shows the chosen folder before selecting in it.
-bool waitForFiles(QFileSystemModel* model, QAbstractItemView* list, const QStringList& paths)
-{
-    for (int waited = 0; waited < 5000; waited += 20) {
-        bool ready = list->rootIndex().isValid() && model->rowCount(list->rootIndex()) > 0;
-        for (int i = 0; ready && i < paths.size(); ++i) {
-            ready = model->index(paths.at(i)).isValid();
-        }
-        if (ready) {
-            return true;
-        }
-        QTest::qWait(20); // QFileSystemModel populates the folder asynchronously.
-    }
-    return false;
-}
-
-// Select `paths` in the open dialog's file list and accept it.
-void chooseFiles(QFileDialog* dialog, const QStringList& paths, OpenDialogProbe* probe)
-{
-    dialog->setDirectory(QFileInfo(paths.first()).absolutePath());
-    auto* list = dialog->findChild<QAbstractItemView*>(QStringLiteral("listView"));
-    auto* model = list ? qobject_cast<QFileSystemModel*>(list->model()) : nullptr;
-    if (!list || !model || !list->selectionModel()) {
-        probe->error = QStringLiteral("the open dialog has no file list");
-        dialog->reject();
-        return;
-    }
-    if (!waitForFiles(model, list, paths)) {
-        probe->error = QStringLiteral("the open dialog did not show the folder");
-        dialog->reject();
-        return;
-    }
-    QItemSelection selection;
-    for (const QString& path : paths) {
-        const QModelIndex index = model->index(path);
-        if (!index.isValid()) {
-            probe->error = QStringLiteral("no index for %1").arg(path);
-            dialog->reject();
-            return;
-        }
-        selection.select(index, index);
-    }
-    list->selectionModel()->select(selection,
-                                   QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-    probe->selected = dialog->selectedFiles();
-    // QFileDialog overrides accept() as protected; access is checked on the
-    // static type while virtual dispatch still runs the dialog's override.
-    static_cast<QDialog*>(dialog)->accept();
-}
-
-// Schedule the interaction with the dialog that File > Open is about to show.
-// The watchdog rejects a dialog that never gets chosen, so a failed probe fails
-// the test instead of hanging it; `context` cancels both timers with the window.
-void queueOpenDialogInteraction(QWidget* context, const QStringList& paths,
-                                OpenDialogProbe* probe)
-{
-    QTimer::singleShot(0, context, [paths, probe] {
-        // showOpenDialog() shows the dialog after this timer is queued; poll so
-        // a slow platform cannot lose the interaction before it is visible.
-        for (int waited = 0; waited < 5000; waited += 10) {
-            QFileDialog* dialog = visibleFileDialog();
-            if (dialog) {
-                probe->seen = true;
-                probe->mode = dialog->fileMode();
-                chooseFiles(dialog, paths, probe);
-                return;
-            }
-            QTest::qWait(10); // Let the dialog finish being shown.
-        }
-        probe->error = QStringLiteral("no open dialog appeared");
-    });
-    QTimer::singleShot(10000, context, [probe] {
-        if (QFileDialog* dialog = visibleFileDialog()) {
-            probe->error = QStringLiteral("the open dialog did not accept");
-            dialog->reject();
-        }
-    });
-}
 
 QStringList documentPaths(const PicturaMainWindow& window)
 {
@@ -136,13 +57,6 @@ QStringList documentPaths(const PicturaMainWindow& window)
     }
     paths.sort();
     return paths;
-}
-
-bool writePng(const QString& path, const QColor& color)
-{
-    QImage image(8, 8, QImage::Format_ARGB32);
-    image.fill(color);
-    return image.save(path, "PNG");
 }
 
 bool writeBrokenPsd(const QString& path)
@@ -179,10 +93,8 @@ void MultiFileOpenTest::multiSelectOpensOneDocumentPerFile()
     QVERIFY(writePng(blue, Qt::blue));
 
     OpenDialogProbe probe;
-    auto window = pictura::test::makeMainWindow();
+    auto window = makeShownWindow();
     QVERIFY(window != nullptr);
-    window->show();
-    QTest::qWait(0);
 
     queueOpenDialogInteraction(window.get(), {red, green, blue}, &probe);
     window->showOpenDialog();
@@ -211,10 +123,8 @@ void MultiFileOpenTest::multipleSelectionFollowsTheTabsPreference()
     QVERIFY(writePng(second, Qt::blue));
 
     OpenDialogProbe probe;
-    auto window = pictura::test::makeMainWindow();
+    auto window = makeShownWindow();
     QVERIFY(window != nullptr);
-    window->show();
-    QTest::qWait(0);
 
     window->registry()->dispatch(QString::fromLatin1(command_ids::EditPreferencesInterface));
     QCoreApplication::processEvents();
@@ -244,10 +154,8 @@ void MultiFileOpenTest::singleSelectionOpensOneDocument()
     QVERIFY(writePng(path, Qt::red));
 
     OpenDialogProbe probe;
-    auto window = pictura::test::makeMainWindow();
+    auto window = makeShownWindow();
     QVERIFY(window != nullptr);
-    window->show();
-    QTest::qWait(0);
 
     queueOpenDialogInteraction(window.get(), {path}, &probe);
     window->showOpenDialog();
@@ -271,10 +179,8 @@ void MultiFileOpenTest::failedFileDoesNotStopTheRest()
     QVERIFY(writePng(last, Qt::blue));
 
     OpenDialogProbe probe;
-    auto window = pictura::test::makeMainWindow();
+    auto window = makeShownWindow();
     QVERIFY(window != nullptr);
-    window->show();
-    QTest::qWait(0);
 
     queueOpenDialogInteraction(window.get(), {first, broken, last}, &probe);
     window->showOpenDialog();
