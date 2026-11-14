@@ -233,8 +233,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] The interactive Refine Radius and Erase brushes (#612)
 - [ ] Color Range Skin Tones, Localized Clusters, Out Of Gamut, previews, and
       save and load (#613)
-- [ ] Engine-wide anti-aliased selection rasterisation, and the 56-channel cap
-      (#614)
+- [x] Anti-aliased selection rasterisation for the Elliptical Marquee, the
+      lasso tools, and the Magic Wand boundary ramp, and the 56-channel
+      document cap (#614); control-server selection ops stay binary.
 - [ ] Combine operations, the layer-mask target, and modifier-click combine on
       saved selections (#615)
 - [x] Quick Mask (#172)

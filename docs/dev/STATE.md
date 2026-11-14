@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Anti-aliased selection raster and 56-channel cap — #614 implemented**
+  (OpenSpec change `aa-selection-raster`, archived).
+  - `Selection::ellipse_aa` grades the per-row boundary band (including the
+    flat top/bottom caps), and `polygon_aa` reuses `shape::coverage_box`; the
+    Magic Wand adds the inferred colour-distance fringe in
+    `wand::soften_boundary`. The Elliptical Marquee, the three lassos, and the
+    Magic Wand commit through the AA bridge.
+  - `pictura_core::channels::MAX_CHANNELS` (56) is shared with the PSD codec;
+    New Channel and Save Selection refuse at the cap without history.
+  - Control-server selection ops remain binary. Targeted Qt and Rust checks
+    passed locally; full workspace verification is delegated to CI.
+
 - **Lazy, file-backed PSD open — #1218 complete, closes #1318** (OpenSpec
   change `lazy-backed-open`; capabilities `codec/lazy-psd-open` and
   `document/source-backed-tiles`).

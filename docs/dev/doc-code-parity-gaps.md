@@ -229,7 +229,7 @@ Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
 | SEL-3 | `channel-based-masking.md` | Channel Options (Masked/Selected Areas) | MISSING | no polarity model | #611 |
 | SEL-4 | `refine-edge.md` | Interactive Refine Radius/Erase brushes | MISSING | `changes/refine-edge` out of scope | #612 |
 | SEL-5 | `color-range.md` | Skin Tones, Localized Clusters, Out Of Gamut, previews, save/load | MISSING | `color_range.rs:7` | #613 |
-| SEL-6 | `selection-model.md` | Engine-wide anti-aliased rasterisation + 56-channel cap | MISSING | binary pixel-centre rasteriser | #614 |
+| SEL-6 | `selection-model.md` | Tool-path anti-aliased rasterisation (ellipse, lassos, wand ramp) + 56-channel cap | SHIPPED | `pictura-select/src/lib.rs` (`ellipse_aa`, `polygon_aa`), `wand.rs` (`soften_boundary`), `pictura-core/src/channels.rs`; control-server selection ops remain binary | #614 |
 | SEL-7 | `save-and-load-selections.md` | Combine ops, layer-mask target, channel modifier-click combine | PARTIAL | `impl_selection.rs:298-332` | #615 |
 
 Quick Mask is tracked by `#172`.
