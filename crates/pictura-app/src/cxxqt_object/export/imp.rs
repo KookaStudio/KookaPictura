@@ -1,7 +1,6 @@
 use super::*;
 
-use super::super::helpers_composite::buffer_to_rgba_bytes;
-use super::super::picture::picture;
+use super::super::picture::picture_rgba;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 
@@ -47,21 +46,9 @@ pub fn export_image(
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
-    let buffer = picture(doc, rust);
-    let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
-    let rgba = buffer_to_rgba_bytes(&srgb);
+    let rgba = picture_rgba(doc, rust, true);
     encode_raster(
-        &rgba,
-        srgb.width,
-        srgb.height,
-        &path,
-        &format,
-        quality,
-        scale,
-        -1,
-        false,
-        false,
-        -1,
+        &rgba, doc.width, doc.height, &path, &format, quality, scale, -1, false, false, -1,
     )
 }
 

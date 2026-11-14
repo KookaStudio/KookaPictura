@@ -2,7 +2,7 @@ use super::*;
 
 use super::super::helpers::active_pixel_layer;
 use super::super::impl_filters::{apply_op_active_region, cancel_filter_preview, ActiveOp};
-use super::super::picture::picture;
+use super::super::picture::{preview_level, preview_picture};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -171,15 +171,17 @@ pub(super) fn image_replace_color_mask(
     let Some(doc) = rust.session.doc.as_ref() else {
         return QImage::default();
     };
-    let p = params(
-        parse_samples(&samples.to_string()),
-        fuzziness,
-        localized,
-        0.0,
-        0.0,
-        0.0,
-    );
-    let mask = replace_color_mask(&picture(doc, rust), &p, size.clamp(1, 512) as usize);
+    let size = size.clamp(1, 512);
+    // A preview reads the level it shows (#1274); localized samples move to
+    // that level's coordinates, as its spread scales with its size.
+    let level = preview_level(doc.width, doc.height, size as u32) as u32;
+    let mut samples = parse_samples(&samples.to_string());
+    for sample in &mut samples {
+        sample.x >>= level;
+        sample.y >>= level;
+    }
+    let p = params(samples, fuzziness, localized, 0.0, 0.0, 0.0);
+    let mask = replace_color_mask(&preview_picture(doc, rust, size as u32), &p, size as usize);
     if mask.width == 0 || mask.height == 0 {
         return QImage::default();
     }

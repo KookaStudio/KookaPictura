@@ -12,7 +12,7 @@ use pictura_filters::{
 
 use super::super::super::helpers::{active_pixel_layer, mask_editing};
 use super::super::super::helpers_composite::{buffer_to_rgba_bytes, layer_buffer};
-use super::super::{document_supported, hidden_layer_buffer};
+use super::super::{document_supported, hidden_layer_rgba};
 
 /// ponytail: the eight most recent edits stay in memory for the process; a
 /// Last Filter that names an older one is refused.
@@ -103,7 +103,6 @@ pub(super) fn vp_begin(mut view: Pin<&mut PictureView>) -> bool {
     if mask_editing(&rust) {
         return false;
     }
-    let gpu_compute = rust.gpu_compute;
     let Some(path) = rust.layer_target.single().map(str::to_string) else {
         return false;
     };
@@ -133,8 +132,7 @@ pub(super) fn vp_begin(mut view: Pin<&mut PictureView>) -> bool {
     let gray = doc.mode == ColorMode::Grayscale;
     // ponytail: the layer shows in its own values over an sRGB backdrop, so a
     // document in another working space previews slightly off.
-    let backdrop = hidden_layer_buffer(doc, &path, gpu_compute)
-        .map(|b| buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(doc, &b)));
+    let backdrop = hidden_layer_rgba(doc, &path);
     let planes = kept
         .filter(|p| p.size() == (doc.width, doc.height))
         .unwrap_or_else(|| VpPlanes::new(doc.width, doc.height));

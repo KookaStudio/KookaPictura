@@ -7,9 +7,11 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::PsdRect;
 use pictura_paint::stamp::{layer_surface, surface_from_composite};
-use pictura_render::{match_color_stats, Adjustment, MatchColorParams, MatchColorStats};
+use pictura_render::{
+    match_color_stats, Adjustment, MatchColorAccumulator, MatchColorParams, MatchColorStats,
+};
 
-use super::super::picture::picture;
+use super::super::picture::{stream_picture, whole};
 
 use super::ffi::QList_f64;
 
@@ -60,18 +62,34 @@ pub(super) fn match_color_source_stats(
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let image = if path.is_empty() {
-        surface_from_composite(&picture(doc, rust))
-    } else {
-        match layer_surface(doc, &path.to_string()) {
-            Some(image) => image,
-            None => return Vec::new(),
-        }
+    let selection = selection_plane(source, use_selection);
+    if path.is_empty() {
+        return stats_vec(picture_stats(doc, rust, selection.as_deref()));
+    }
+    let Some(image) = layer_surface(doc, &path.to_string()) else {
+        return Vec::new();
     };
-    stats_vec(match_color_stats(
-        &image.data,
-        selection_plane(source, use_selection).as_deref(),
-    ))
+    stats_vec(match_color_stats(&image.data, selection.as_deref()))
+}
+
+/// Match Color's statistics of the picture, `selection` its coverage: band by
+/// band in pixel order, so they equal one pass over the whole picture bit for
+/// bit and no whole picture is built (#1274).
+pub(super) fn picture_stats(
+    doc: &pictura_core::Document,
+    view: &crate::cxxqt_object::state::PictureViewRust,
+    selection: Option<&[u8]>,
+) -> MatchColorStats {
+    let w = doc.width as usize;
+    let mut stats = MatchColorAccumulator::default();
+    stream_picture(doc, view, whole(doc), |offset, band| {
+        let pixels = surface_from_composite(&band).data;
+        let at = offset as usize * w;
+        let coverage = selection
+            .map(|plane| &plane[at.min(plane.len())..(at + pixels.len()).min(plane.len())]);
+        stats.add(&pixels, coverage);
+    });
+    stats.finish()
 }
 
 /// The six statistics doubles, or `None` (with `filter_error` set) when the
@@ -234,5 +252,29 @@ mod tests {
         assert!(parse_stats(&[0.0; 7]).is_none());
         assert!(parse_stats(&[f64::NAN, 0.0, 0.0, 0.0, 0.0, 0.0]).is_none());
         assert!(parse_stats(&[0.0, f64::INFINITY, 0.0, 0.0, 0.0, 0.0]).is_none());
+    }
+}
+
+#[cfg(test)]
+mod picture_stats_tests {
+    use super::*;
+    use crate::cxxqt_object::picture::readers_fixture::{full_picture, layered, view_of};
+
+    /// The source statistics of the streamed picture equal one pass over the
+    /// whole composite bit for bit, with and without a selection (#1274).
+    #[test]
+    fn match_color_stats_stream() {
+        let view = view_of(layered(613, 541, false));
+        let doc = view.session.doc.as_ref().expect("document");
+        let whole_pixels = surface_from_composite(&full_picture(&view)).data;
+        let coverage: Vec<u8> = (0..whole_pixels.len())
+            .map(|i| (i * 7 % 256) as u8)
+            .collect();
+        for selection in [None, Some(&coverage[..])] {
+            let streamed = picture_stats(doc, &view, selection);
+            let want = match_color_stats(&whole_pixels, selection);
+            assert_eq!(streamed.mean.map(f64::to_bits), want.mean.map(f64::to_bits));
+            assert_eq!(streamed.std.map(f64::to_bits), want.std.map(f64::to_bits));
+        }
     }
 }

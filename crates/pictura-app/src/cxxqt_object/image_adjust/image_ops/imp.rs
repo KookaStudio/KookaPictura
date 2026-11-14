@@ -1,7 +1,6 @@
 use super::*;
 
-use super::super::super::helpers_composite::buffer_to_rgba_bytes;
-use super::super::super::picture::picture;
+use super::super::super::picture::{coverage_bounds, picture_rgba};
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use core::pin::Pin;
@@ -20,8 +19,7 @@ pub(super) fn duplicate_into(
         return false;
     };
     let doc = if merged {
-        let buffer = picture(src, rust);
-        let rgba = buffer_to_rgba_bytes(&buffer);
+        let rgba = picture_rgba(src, rust, false);
         Document::from_rgba(&name.to_string(), src.width, src.height, &rgba)
     } else {
         src.clone()
@@ -48,28 +46,15 @@ pub(super) fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
             return false;
         }
     }
-    let Some((rgba, width, height)) = view.rust().session.doc.as_ref().map(|doc| {
-        let buffer = picture(doc, view.rust());
-        (buffer_to_rgba_bytes(&buffer), doc.width, doc.height)
-    }) else {
+    let Some((width, height, (left, top, right, bottom))) = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .map(|doc| (doc.width, doc.height, coverage_bounds(doc, view.rust())))
+    else {
         return false;
     };
-    // The content is wherever the composite has coverage; the layer rects are
-    // the whole canvas even when the pixels are transparent.
-    let mut left = width as i32;
-    let mut top = height as i32;
-    let mut right = -1i32;
-    let mut bottom = -1i32;
-    for y in 0..height as i32 {
-        for x in 0..width as i32 {
-            if rgba[((y * width as i32 + x) * 4 + 3) as usize] > 0 {
-                left = left.min(x);
-                top = top.min(y);
-                right = right.max(x + 1);
-                bottom = bottom.max(y + 1);
-            }
-        }
-    }
     if right <= left || bottom <= top {
         return false;
     }
@@ -153,4 +138,35 @@ pub(super) fn duplicate_name(view: &PictureView) -> QString {
         },
     );
     QString::from(format!("{base} copy"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cxxqt_object::helpers_composite::buffer_to_rgba_bytes;
+    use crate::cxxqt_object::picture::readers_fixture::{full_picture, layered, view_of};
+
+    /// Trim's coverage bounds and Duplicate (merged)'s pixels, read band by
+    /// band, equal the whole composite's (#1274).
+    #[test]
+    fn trim_and_duplicate_merged_stream() {
+        let view = view_of(layered(613, 541, false));
+        let doc = view.session.doc.as_ref().expect("document");
+        let rgba = buffer_to_rgba_bytes(&full_picture(&view));
+        let (w, h) = (doc.width as i32, doc.height as i32);
+        let (mut left, mut top, mut right, mut bottom) = (w, h, -1, -1);
+        for y in 0..h {
+            for x in 0..w {
+                if rgba[((y * w + x) * 4 + 3) as usize] > 0 {
+                    left = left.min(x);
+                    top = top.min(y);
+                    right = right.max(x + 1);
+                    bottom = bottom.max(y + 1);
+                }
+            }
+        }
+        assert_eq!(coverage_bounds(doc, &view), (left, top, right, bottom));
+        assert!((left, top) != (0, 0), "the fixture has transparent margins");
+        assert!(picture_rgba(doc, &view, false) == rgba);
+    }
 }

@@ -11,6 +11,7 @@
 #include "frame.h"
 #include "image_view.h"
 
+#include "api/document_bridge.h"
 #include "api/view_bridge.h"
 
 namespace pictura {
@@ -120,6 +121,7 @@ QJsonObject ControlServer::methodScreenshot(const QJsonObject& params)
     }
 
     QImage image;
+    QSize source;
     if (scope == QStringLiteral("window")) {
         image = frame_->grab().toImage();
     } else if (scope == QStringLiteral("canvas")) {
@@ -133,7 +135,10 @@ QJsonObject ControlServer::methodScreenshot(const QJsonObject& params)
         if (!view || !view->has_document()) {
             return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
         }
-        image = view->image();
+        // A reduced level no smaller than max_dim, never the whole document
+        // at full resolution (#1274); the source size is the document's.
+        image = pictura::preview_image(*view, maxDim);
+        source = QSize(view->document_width(), view->document_height());
     } else {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("unknown scope: %1").arg(scope));
@@ -142,8 +147,8 @@ QJsonObject ControlServer::methodScreenshot(const QJsonObject& params)
         return error(QStringLiteral("internal"), QStringLiteral("could not capture image"));
     }
 
-    const int sourceWidth = image.width();
-    const int sourceHeight = image.height();
+    const int sourceWidth = source.isValid() ? source.width() : image.width();
+    const int sourceHeight = source.isValid() ? source.height() : image.height();
     image = scaleToMaxDim(image, maxDim);
     const QByteArray base64 = encodePngBase64(image);
     if (base64.isEmpty()) {

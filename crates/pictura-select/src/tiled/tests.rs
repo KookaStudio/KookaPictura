@@ -327,10 +327,13 @@ fn tiled_source_matches_the_buffer() {
     let sel = tiled(&seeds, w, h);
     for tol in [0u8, 6, 40] {
         for (x, y) in [(0u32, 0u32), (300, 270), (612, 540)] {
-            for contiguous in [true, false] {
-                let got = crate::magic_wand_from(tiles, x, y, tol, contiguous).unwrap();
-                let want = crate::magic_wand(&img, x, y, tol, contiguous).unwrap();
-                assert!(got.data == want.data.to_vec(), "wand {tol} ({x},{y})");
+            for (contiguous, aa) in [(true, false), (false, false), (true, true), (false, true)] {
+                let got = crate::magic_wand_from(tiles, x, y, tol, contiguous, aa).unwrap();
+                let want = crate::magic_wand(&img, x, y, tol, contiguous, aa).unwrap();
+                assert!(
+                    got.data == want.data.to_vec(),
+                    "wand {tol} ({x},{y}) aa {aa}"
+                );
             }
         }
         let got = crate::grow_from(&sel, tiles, tol).unwrap();

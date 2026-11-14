@@ -173,3 +173,30 @@ pub(super) fn canvas_size_apply(
         },
     )
 }
+
+pub(super) fn preview_image(view: &PictureView, max_side: i32) -> cxx_qt_lib::QImage {
+    use crate::cxxqt_object::helpers_composite::premultiplied_display_image;
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return cxx_qt_lib::QImage::default();
+    };
+    let painting = rust.session.live.stroke().is_some();
+    let side = u32::try_from(max_side).unwrap_or(0);
+    match crate::cxxqt_object::picture::preview_display(doc, painting, side) {
+        // SAFETY: a level is exactly width*height premultiplied RGBA8888 bytes.
+        Some(level) => unsafe {
+            cxx_qt_lib::QImage::from_raw_bytes(
+                level.data().to_vec(),
+                level.width() as i32,
+                level.height() as i32,
+                cxx_qt_lib::QImageFormat::Format_RGBA8888_Premultiplied,
+            )
+        },
+        None => {
+            let whole = crate::cxxqt_object::picture::whole(doc);
+            premultiplied_display_image(&crate::cxxqt_object::tiles::display_region(
+                doc, whole, painting,
+            ))
+        }
+    }
+}

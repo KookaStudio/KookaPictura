@@ -1,10 +1,10 @@
 use super::*;
 
 use super::super::helpers::paint_timing;
-use super::super::picture::picture;
+use super::super::picture::{stored_is_current, stream_picture, whole, PictureTiles};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use pictura_select::EdgeMap;
+use pictura_select::{EdgeMap, EdgePeak};
 
 pub(super) fn magnetic_begin(mut view: Pin<&mut PictureView>, contrast: i32) -> bool {
     view.as_mut().rust_mut().begin_magnetic(contrast)
@@ -25,13 +25,26 @@ impl super::super::state::PictureViewRust {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
+            // The peak streams the picture by band and the costs read it a tile
+            // at a time from a document clone, so no whole picture is built
+            // (#1274).
             let t = std::time::Instant::now();
-            let shown = picture(doc, rust);
+            let tiles = PictureTiles::new(
+                std::sync::Arc::new(doc.clone()),
+                stored_is_current(doc, rust),
+            );
             paint_timing::record("magnetic_picture", t.elapsed());
             let t = std::time::Instant::now();
-            let map = EdgeMap::from_buffer(&shown, contrast.clamp(1, 100) as u32);
+            let mut peak = EdgePeak::new(doc.width, doc.height);
+            stream_picture(doc, rust, whole(doc), |_, band| peak.feed(&band));
             paint_timing::record("magnetic_edge_peak", t.elapsed());
-            map
+            EdgeMap::from_tiles(
+                doc.width,
+                doc.height,
+                contrast.clamp(1, 100) as u32,
+                peak.peak(),
+                std::sync::Arc::new(move |tx, ty| tiles.tile(tx, ty)),
+            )
         };
         self.session
             .live

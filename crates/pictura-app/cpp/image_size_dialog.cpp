@@ -294,7 +294,8 @@ void ImageSizeDialog::buildUi()
     preview_->setFixedSize(kPreviewBox, kPreviewBox);
     preview_->setAlignment(Qt::AlignCenter);
     if (view_) {
-        const QImage image = view_->image();
+        // The preview box is small, so a reduced level is enough (#1274).
+        const QImage image = pictura::preview_image(*view_, kPreviewBox);
         if (!image.isNull()) {
             preview_->setPixmap(QPixmap::fromImage(image).scaled(
                 preview_->size() - QSize(4, 4), Qt::KeepAspectRatio, Qt::SmoothTransformation));

@@ -1,10 +1,10 @@
 use super::*;
 
-use super::super::picture::picture;
+use super::super::picture::{preview_picture, stream_picture, whole};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::{BitDepth, PixelBuffer};
-use pictura_select::{color_range, ColorRangeSelect, CombineMode};
+use pictura_select::{color_range, ColorRangeSelect, CombineMode, Selection};
 
 pub(super) fn color_range_available(view: &PictureView) -> bool {
     view.rust()
@@ -72,7 +72,9 @@ pub(super) fn color_range_preview(
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let buffer = shrink(&picture(doc, rust), max_side.max(0) as u32);
+    // A preview reads the level it shows (#1274).
+    let side = max_side.max(0) as u32;
+    let buffer = shrink(&preview_picture(doc, rust, side), side);
     let mask = color_range(
         &buffer,
         select,
@@ -103,14 +105,19 @@ pub(super) fn color_range_apply(
         let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
-        let buffer = picture(doc, rust);
-        let shape = color_range(
-            &buffer,
-            select,
-            target(rgb),
-            fuzziness.max(0) as u32,
-            invert,
-        );
+        // Per pixel, so band by band into the one mask (#1274).
+        let w = doc.width as usize;
+        let mut data = vec![0u8; w * doc.height as usize];
+        stream_picture(doc, rust, whole(doc), |offset, band| {
+            let part = color_range(&band, select, target(rgb), fuzziness.max(0) as u32, invert);
+            let at = offset as usize * w;
+            data[at..at + part.data.len()].copy_from_slice(part.data.as_slice());
+        });
+        let shape = Selection {
+            width: doc.width,
+            height: doc.height,
+            data: data.into(),
+        };
         (shape, rust.session.selection.is_some())
     };
     // Run on a live selection, Color Range narrows it to a subset (CS6).

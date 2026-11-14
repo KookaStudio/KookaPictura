@@ -6,7 +6,7 @@ use pictura_core::mask_ops::{
     coverage_bounds, empty_mask, flood_tiled, match_mask, FloodSource, Grid, MatchTiles, Seeds,
     TileMatch, TiledMask,
 };
-use pictura_core::PixelBuffer;
+use pictura_core::{PixelBuffer, TILE};
 use rayon::prelude::*;
 
 use crate::source::{ImageSource, PixelReader};
@@ -71,7 +71,14 @@ pub fn magic_wand(
     contiguous: bool,
     anti_alias: bool,
 ) -> Result<Selection, SelectError> {
-    magic_wand_from(ImageSource::Buffer(img), x, y, tolerance, contiguous)
+    magic_wand_from(
+        ImageSource::Buffer(img),
+        x,
+        y,
+        tolerance,
+        contiguous,
+        anti_alias,
+    )
 }
 
 /// [`magic_wand`] over any [`ImageSource`].
@@ -81,6 +88,7 @@ pub fn magic_wand_from(
     y: u32,
     tolerance: u8,
     contiguous: bool,
+    anti_alias: bool,
 ) -> Result<Selection, SelectError> {
     let (w, h) = (img.width() as usize, img.height() as usize);
     if w == 0 || h == 0 || x as usize >= w || y as usize >= h {
@@ -119,7 +127,7 @@ pub fn magic_wand_from(
 /// unpublished. The pass reads the binary mask, so it does not chain fringes.
 fn soften_boundary(
     data: &mut TiledMask,
-    img: &PixelBuffer,
+    img: ImageSource<'_>,
     reference: [u8; 3],
     tolerance: u8,
     w: usize,
@@ -134,7 +142,8 @@ fn soften_boundary(
     let right = (x1 + 1).min(w);
     let t = f64::from(tolerance);
     let width = (0.5 * t).max(1.5);
-    let mut rows: Vec<(usize, Vec<(usize, u8)>)> = Vec::new();
+    let mut candidates: Vec<(usize, usize)> = Vec::new();
+    let mut changed: Vec<(usize, usize, u8)> = Vec::new();
     let mut previous = vec![0u8; w];
     let mut current = vec![0u8; w];
     let mut next = vec![0u8; w];
@@ -150,7 +159,6 @@ fn soften_boundary(
         } else {
             next.fill(0);
         }
-        let mut changes = Vec::new();
         for x in left..right {
             if current[x] != 0 {
                 continue;
@@ -162,17 +170,29 @@ fn soften_boundary(
             if !near {
                 continue;
             }
-            let d = f64::from(chebyshev(rgb_at(img, y * w + x), reference));
-            if d <= t || d >= t + width {
-                continue;
-            }
-            let coverage = ((1.0 - (d - t) / width).clamp(0.0, 1.0) * 255.0).round() as u8;
-            if coverage > 0 {
-                changes.push((x, coverage));
-            }
+            candidates.push((x, y));
         }
-        if !changes.is_empty() {
-            rows.push((y, changes));
+    }
+    // A pixel's coverage depends on its own colour only, so the candidates are
+    // read a tile at a time (#1274): a tiled source fetches each tile once.
+    candidates.sort_unstable_by_key(|&(x, y)| (y / TILE, x / TILE, y, x));
+    let mut reader = PixelReader::new(img);
+    for (x, y) in candidates {
+        let d = f64::from(chebyshev(reader.rgb(x, y), reference));
+        if d <= t || d >= t + width {
+            continue;
+        }
+        let coverage = ((1.0 - (d - t) / width).clamp(0.0, 1.0) * 255.0).round() as u8;
+        if coverage > 0 {
+            changed.push((y, x, coverage));
+        }
+    }
+    changed.sort_unstable_by_key(|&(y, x, _)| (y, x));
+    let mut rows: Vec<(usize, Vec<(usize, u8)>)> = Vec::new();
+    for (y, x, coverage) in changed {
+        match rows.last_mut() {
+            Some((row, changes)) if *row == y => changes.push((x, coverage)),
+            _ => rows.push((y, vec![(x, coverage)])),
         }
     }
     for (y, changes) in rows {
