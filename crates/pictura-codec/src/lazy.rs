@@ -507,38 +507,46 @@ impl MergedPreview {
     pub fn region(&self, rect: PsdRect) -> PixelBuffer {
         let (rw, rh) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
         let plane = rw * rh;
-        let mut data = vec![0u8; plane * 4];
         let x0 = rect.left.max(0) as usize;
         let x1 = (rect.right.max(0) as usize).min(self.width as usize);
         let y0 = rect.top.max(0) as usize;
         let y1 = (rect.bottom.max(0) as usize).min(self.height as usize);
         let width = self.width as usize;
-        let mut y = y0;
-        while x0 < x1 && y < y1 {
-            let band = y / TILE;
-            let end = ((band + 1) * TILE).min(y1);
-            let rows: Option<Vec<Arc<[u8]>>> =
-                self.channels.iter().map(|c| c.band(band).ok()).collect();
-            if let Some(rows) = rows {
-                for yy in y..end {
+        let bands = if x0 < x1 && y0 < y1 {
+            y0 / TILE..y1.div_ceil(TILE)
+        } else {
+            0..0
+        };
+        let n = x1.saturating_sub(x0);
+        // Zeroed pages straight from the allocator, written once. A band at a
+        // time, so at most one band per channel is held beside the cache.
+        let data = Plane::build(plane * 4, |data| {
+            for band in bands {
+                let rows: Vec<Option<Arc<[u8]>>> =
+                    self.channels.iter().map(|c| c.band(band).ok()).collect();
+                if rows.iter().any(Option::is_none) {
+                    continue;
+                }
+                let start = (band * TILE).max(y0);
+                let end = ((band + 1) * TILE).min(y1);
+                for yy in start..end {
                     let src = (yy - band * TILE) * width;
                     let dst = (yy as i64 - i64::from(rect.top)) as usize * rw
                         + (x0 as i64 - i64::from(rect.left)) as usize;
-                    let n = x1 - x0;
-                    for (c, plane_rows) in rows.iter().enumerate() {
+                    for (c, band_rows) in rows.iter().enumerate() {
+                        let band_rows = band_rows.as_ref().expect("checked");
                         data[c * plane + dst..c * plane + dst + n]
-                            .copy_from_slice(&plane_rows[src + x0..src + x1]);
+                            .copy_from_slice(&band_rows[src + x0..src + x1]);
                     }
                     data[3 * plane + dst..3 * plane + dst + n].fill(255);
                 }
             }
-            y = end;
-        }
+        });
         PixelBuffer {
             width: rw as u32,
             height: rh as u32,
             channels: 4,
-            data: data.into(),
+            data,
         }
     }
 }

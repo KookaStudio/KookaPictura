@@ -326,21 +326,27 @@ impl Region {
     fn premultiplied(buffer: &PixelBuffer, left: i32, top: i32) -> Self {
         let (w, h) = (buffer.width as usize, buffer.height as usize);
         let plane = w * h;
+        use rayon::prelude::*;
         let mut data = vec![0u8; plane * 4];
         let src = &buffer.data;
-        let mut rows = [vec![0u8; w], vec![0u8; w], vec![0u8; w], vec![0u8; w]];
-        for y in 0..h {
-            for (c, row) in rows.iter_mut().enumerate() {
-                src.read_into(c * plane + y * w, row);
-            }
-            let out = &mut data[y * w * 4..(y + 1) * w * 4];
-            for (x, px) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-                let a = rows[3][x];
-                px[0] = premul(rows[0][x], a);
-                px[1] = premul(rows[1][x], a);
-                px[2] = premul(rows[2][x], a);
-                px[3] = a;
-            }
+        if w > 0 {
+            // Rows on every core (#1218): a fit-to-screen level premultiplies
+            // the whole level 0.
+            data.par_chunks_mut(w * 4).enumerate().for_each_init(
+                || [vec![0u8; w], vec![0u8; w], vec![0u8; w], vec![0u8; w]],
+                |rows, (y, out)| {
+                    for (c, row) in rows.iter_mut().enumerate() {
+                        src.read_into(c * plane + y * w, row);
+                    }
+                    for (x, px) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                        let a = rows[3][x];
+                        px[0] = premul(rows[0][x], a);
+                        px[1] = premul(rows[1][x], a);
+                        px[2] = premul(rows[2][x], a);
+                        px[3] = a;
+                    }
+                },
+            );
         }
         Self {
             left,
