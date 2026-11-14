@@ -452,10 +452,10 @@ mod aa_tests {
     fn wand_aa_low_tolerance_fringes() {
         let img = gradient(8, 2, |x| x as u8);
         let selection = magic_wand(&img, 0, 1, 1, true, true).expect("wand");
-        assert_eq!(selection.data[1 * 8], 255);
-        let fringe = selection.data[1 * 8 + 2];
+        assert_eq!(selection.data[8], 255);
+        let fringe = selection.data[10];
         assert!(fringe > 0 && fringe < 255, "fringe {fringe}");
-        assert_eq!(selection.data[1 * 8 + 3], 0);
+        assert_eq!(selection.data[11], 0);
     }
 
     #[test]
