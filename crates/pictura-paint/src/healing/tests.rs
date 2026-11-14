@@ -439,6 +439,7 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
         "0",
         region,
         &all_ones(region),
+        None,
         |img, local, cov| heal_region(img, local, cov, HealMode::ProximityMatch),
     )
     .unwrap();
@@ -463,15 +464,15 @@ fn heal_layer_refuses_a_group_or_bad_path() {
         heal_region(img, local, cov, HealMode::ProximityMatch)
     };
     assert_eq!(
-        heal_layer(&mut doc, "9", region, &all_ones(region), op),
+        heal_layer(&mut doc, "9", region, &all_ones(region), None, op),
         Err(HealError::NoRasterLayer)
     );
     assert_eq!(
-        heal_layer(&mut doc, "nope", region, &all_ones(region), op),
+        heal_layer(&mut doc, "nope", region, &all_ones(region), None, op),
         Err(HealError::NoRasterLayer)
     );
     assert_eq!(
-        heal_layer(&mut doc, "1", region, &all_ones(region), op),
+        heal_layer(&mut doc, "1", region, &all_ones(region), None, op),
         Err(HealError::NoRasterLayer)
     );
 }
@@ -487,6 +488,7 @@ fn heal_layer_refuses_a_pixel_locked_layer() {
             "0",
             region,
             &all_ones(region),
+            None,
             |img, local, cov| { heal_region(img, local, cov, HealMode::ProximityMatch) }
         ),
         Err(HealError::Locked)
@@ -503,6 +505,7 @@ fn a_transparency_lock_keeps_alpha() {
         "0",
         region,
         &all_ones(region),
+        None,
         |img, local, cov| {
             // Pretend the heal changed alpha; the wrapper must restore it.
             let r = heal_region(img, local, cov, HealMode::ProximityMatch);
@@ -1034,4 +1037,220 @@ fn red_eye_ignores_no_red_an_off_canvas_box_or_a_locked_layer() {
         red_eye_layer(&mut locked, "0", eye_box(), 50, 50),
         Err(HealError::Locked)
     );
+}
+
+#[test]
+fn heal_layer_materializes_only_the_requested_window() {
+    let mut doc = layer_doc(256, 256, BASE);
+    let region = PsdRect {
+        top: 100,
+        left: 100,
+        bottom: 116,
+        right: 116,
+    };
+    let window = region.grow(8);
+    let mut seen = None;
+    let done = heal_layer(
+        &mut doc,
+        "0",
+        region,
+        &all_ones(region),
+        Some(window),
+        |img, local, cov| {
+            seen = Some((img.width, img.height));
+            heal_region(img, local, cov, HealMode::ProximityMatch)
+        },
+    )
+    .unwrap();
+    assert!(done.is_some());
+    assert_eq!(seen, Some((32, 32)), "the whole layer was materialized");
+    // A pixel far outside the window keeps its value.
+    assert_eq!(channel(&doc, 0, 0, 200, 200), BASE[0]);
+}
+
+#[test]
+fn the_solver_matches_the_reference_poisson_relaxation() {
+    let (w, h) = (64, 64);
+    let mut dest = vec![[0.0f32; 4]; w * h];
+    let mut src = vec![[0.0f32; 4]; w * h];
+    let mut hole = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            dest[i] = [
+                40.0 + (x as f32 * 3.0) % 170.0,
+                50.0 + (y as f32 * 5.0) % 160.0,
+                60.0 + ((x + y) as f32 * 2.0) % 150.0,
+                255.0,
+            ];
+            src[i] = [
+                200.0 - (x as f32 * 2.0) % 180.0,
+                30.0 + (y as f32 * 4.0) % 200.0,
+                120.0 - ((x * 2 + y) as f32) % 100.0,
+                255.0,
+            ];
+            hole[i] = (20..44).contains(&x) && (20..44).contains(&y);
+        }
+    }
+    let want = super::reference::poisson_fill(&dest, &src, &hole, w, h);
+    let got = poisson_fill(&dest, &src, &hole, w, h);
+    let worst = want
+        .iter()
+        .zip(&got)
+        .flat_map(|(a, b)| (0..4).map(move |c| (a[c] - b[c]).abs()))
+        .fold(0.0f32, f32::max);
+    assert!(
+        worst <= 4.0,
+        "the solver differs from the reference by {worst}"
+    );
+}
+
+#[test]
+fn the_solver_matches_the_reference_laplace_relaxation() {
+    let (w, h) = (64, 64);
+    let mut rgba = vec![[0.0f32; 4]; w * h];
+    let mut hole = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            rgba[i] = [
+                20.0 + (x as f32 * 7.0) % 210.0,
+                30.0 + (y as f32 * 11.0) % 200.0,
+                40.0 + ((x + y) as f32 * 3.0) % 190.0,
+                255.0,
+            ];
+            hole[i] = (18..46).contains(&x) && (22..42).contains(&y);
+        }
+    }
+    let want = super::reference::laplace_fill(&rgba, &hole, w, h);
+    let got = laplace_fill(&rgba, &hole, w, h);
+    let worst = want
+        .iter()
+        .zip(&got)
+        .flat_map(|(a, b)| (0..4).map(move |c| (a[c] - b[c]).abs()))
+        .fold(0.0f32, f32::max);
+    assert!(
+        worst <= 4.0,
+        "the solver differs from the reference by {worst}"
+    );
+}
+
+#[test]
+fn the_relaxation_is_deterministic() {
+    let (w, h) = (40, 40);
+    let mut dest = vec![[0.0f32; 4]; w * h];
+    let mut src = vec![[0.0f32; 4]; w * h];
+    let mut hole = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            dest[i] = [
+                30.0 + (x as f32 * 5.0) % 200.0,
+                40.0 + (y as f32 * 7.0) % 180.0,
+                50.0 + ((x + y) as f32 * 3.0) % 160.0,
+                255.0,
+            ];
+            src[i] = [
+                180.0 - (x as f32 * 2.0) % 150.0,
+                20.0 + (y as f32 * 6.0) % 220.0,
+                90.0 - ((x * 2 + y) as f32) % 80.0,
+                255.0,
+            ];
+            hole[i] = (10..30).contains(&x) && (12..28).contains(&y);
+        }
+    }
+    assert_eq!(
+        poisson_fill(&dest, &src, &hole, w, h),
+        poisson_fill(&dest, &src, &hole, w, h)
+    );
+    assert_eq!(
+        laplace_fill(&dest, &hole, w, h),
+        laplace_fill(&dest, &hole, w, h)
+    );
+}
+
+#[test]
+fn selection_bounds_match_a_serial_scan() {
+    let doc = layer_doc(32, 32, BASE);
+    let mut mask = vec![0u8; 32 * 32];
+    for y in 5..20 {
+        for x in 7..25 {
+            mask[y * 32 + x] = 255;
+        }
+    }
+    mask[3 * 32 + 2] = 128;
+    let (bounds, coverage) = super::patch::selection_coverage(&doc, &mask).unwrap();
+    assert_eq!(
+        bounds,
+        PsdRect {
+            top: 3,
+            left: 2,
+            bottom: 20,
+            right: 25,
+        }
+    );
+    assert_eq!(coverage.len(), (20 - 3) * (25 - 2));
+}
+
+#[test]
+fn red_eye_processes_a_wide_box_like_the_definition() {
+    let (w, h) = (64, 64);
+    let mut doc = layer_doc(w as u32, h as u32, BASE);
+    for y in 0..h {
+        for x in 0..w {
+            let i = (y * w + x) as usize;
+            let r = ((x * 7 + y * 3) % 256) as u8;
+            let g = ((x * 5 + y * 11) % 256) as u8;
+            let b = ((x * 13 + y * 2) % 256) as u8;
+            doc.layers[0].channels[0].data[i] = r;
+            doc.layers[0].channels[1].data[i] = g;
+            doc.layers[0].channels[2].data[i] = b;
+        }
+    }
+    let box_rect = PsdRect {
+        top: 8,
+        left: 8,
+        bottom: 56,
+        right: 56,
+    };
+    let before = doc.clone();
+    let dirty = red_eye_layer(&mut doc, "0", box_rect, 50, 50)
+        .unwrap()
+        .expect("the box holds red");
+    assert_eq!(dirty, box_rect);
+    let ratio = 1.8 - 0.5 * 0.75;
+    let keep = 1.0 - 0.5 * 0.6;
+    let to_u8 = |v: f32| v.round().clamp(0.0, 255.0) as u8;
+    for y in 0..h {
+        for x in 0..w {
+            let i = (y * w + x) as usize;
+            let inside = x >= box_rect.left
+                && x < box_rect.right
+                && y >= box_rect.top
+                && y < box_rect.bottom;
+            let [r, g, b, a] = [
+                before.layers[0].channels[0].data[i],
+                before.layers[0].channels[1].data[i],
+                before.layers[0].channels[2].data[i],
+                before.layers[0].channels[3].data[i],
+            ];
+            let want = if !inside || (r as f32) < (g.max(b).max(1) as f32) * ratio {
+                [r, g, b, a]
+            } else {
+                [
+                    to_u8((g as f32 + b as f32) / 2.0 * keep),
+                    to_u8(g as f32 * keep),
+                    to_u8(b as f32 * keep),
+                    a,
+                ]
+            };
+            let got = [
+                doc.layers[0].channels[0].data[i],
+                doc.layers[0].channels[1].data[i],
+                doc.layers[0].channels[2].data[i],
+                doc.layers[0].channels[3].data[i],
+            ];
+            assert_eq!(got, want, "pixel ({x}, {y})");
+        }
+    }
 }
