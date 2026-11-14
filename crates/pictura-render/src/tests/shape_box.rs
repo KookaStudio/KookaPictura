@@ -78,12 +78,22 @@ fn a_shape_composites_as_its_whole_rect_did() {
 
 #[test]
 fn a_shape_samples_its_mask_only_in_its_box() {
+    use crate::composite_rows::FORCE_SERIAL;
+    use std::sync::atomic::Ordering;
+
     let _guard = crate::composite_rows::serial_test_lock();
     let d = shape_doc(false);
+    // Keep the count on this thread: a non-banded region and the serial row
+    // branch, so a concurrent test cannot add samples to the thread-local
+    // counter. The region covers the shape's box.
+    WHOLE_FILL_RECT.store(false, Ordering::Relaxed);
+    FORCE_SERIAL.store(true, Ordering::Relaxed);
     crate::composite_blend::reset_mask_samples();
-    let _ = composite_with(&d, true);
+    let _ = crate::composite::composite_rgba_region(&d, 50, 30, 130, 100);
+    FORCE_SERIAL.store(false, Ordering::Relaxed);
     let sampled = crate::composite_blend::mask_samples();
     let box_area = 102 * 82;
+    assert!(sampled > 0, "the shape's mask must be sampled");
     assert!(
         sampled <= box_area,
         "sampled {sampled} mask pixels, more than the {box_area} of the shape's box"

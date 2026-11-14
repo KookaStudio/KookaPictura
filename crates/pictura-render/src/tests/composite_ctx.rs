@@ -130,8 +130,12 @@ fn zero_alpha_skips_mask() {
             layer,
         ],
     );
+    // Keep the count on this thread; the serial branch is required for a
+    // meaningful thread-local count.
+    crate::composite_rows::FORCE_SERIAL.store(true, std::sync::atomic::Ordering::Relaxed);
     crate::composite_blend::reset_mask_samples();
     let out = composite_rgba(&d);
+    crate::composite_rows::FORCE_SERIAL.store(false, std::sync::atomic::Ordering::Relaxed);
     assert_eq!(
         crate::composite_blend::mask_samples(),
         0,

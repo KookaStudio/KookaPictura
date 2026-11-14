@@ -12,7 +12,7 @@ use crate::composite_rows::blend_parts_row;
 use crate::mask_refine::{resolve_raster, resolve_vector, RasterGate, VectorGate};
 
 #[cfg(test)]
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The layer state the blend kernel needs, resolved once for a layer pass.
 #[derive(Clone)]
@@ -136,7 +136,7 @@ impl<'a> MaskGate<'a> {
     fn alpha(&self, x: i32, y: i32) -> f32 {
         #[cfg(test)]
         if self.counts() {
-            MASK_SAMPLES.fetch_add(1, Ordering::Relaxed);
+            MASK_SAMPLES.with(|samples| samples.set(samples.get() + 1));
         }
         if let Some(raster) = self.raster.native_at(x, y) {
             return raster * (self.vector.u8_at(x, y) as f32 / 255.0);
@@ -282,7 +282,12 @@ static FORCE_LEGACY_BLEND: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
 static FORCE_LEGACY_SOURCE: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
-pub(crate) static MASK_SAMPLES: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    /// Mask samples on the current thread. Counting tests force the serial
+    /// compositor branch and read this thread's counter, so a concurrent test
+    /// on another thread cannot pollute the count.
+    static MASK_SAMPLES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 #[cfg(test)]
 pub(crate) fn legacy_blend() -> bool {
@@ -306,10 +311,10 @@ pub(crate) fn set_legacy_source(on: bool) {
 
 #[cfg(test)]
 pub(crate) fn reset_mask_samples() {
-    MASK_SAMPLES.store(0, Ordering::Relaxed);
+    MASK_SAMPLES.with(|samples| samples.set(0));
 }
 
 #[cfg(test)]
 pub(crate) fn mask_samples() -> usize {
-    MASK_SAMPLES.load(Ordering::Relaxed)
+    MASK_SAMPLES.with(std::cell::Cell::get)
 }
