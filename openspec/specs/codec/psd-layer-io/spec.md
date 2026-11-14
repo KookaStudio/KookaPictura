@@ -253,7 +253,9 @@ block, the trailing global additional-layer information, and each layer channel
 whose id is not a modeled color/transparency/mask id (for example the `-3` real
 user mask), stored with its compression header intact. A recognized blend key
 SHALL NOT be stored, so a document constructed in memory still equals one read
-from disk after a write/read round trip.
+from disk after a write/read round trip. The mask record's modeled density and
+feather fields are governed by the mask-parameters requirement; this clause
+covers the unmodeled real-user-mask header and trailing bytes.
 
 #### Scenario: Unknown tagged blocks survive
 - **WHEN** a layer carries additional-layer-info blocks the codec does not model
@@ -278,10 +280,11 @@ from disk after a write/read round trip.
 ### Requirement: Decode the `vmsk` vector mask into a derived layer view
 
 `read_psd` SHALL decode a layer's `'vmsk'` additional-layer-info block into a
-derived `Layer.vector_mask` view. The view SHALL carry the mask's `invert` and
-`disabled` flags and its subpaths; each subpath SHALL carry whether it is closed,
-its `operation`, its fill rule, and its flattened document-pixel points. The
-view SHALL be derived only: the `'vmsk'` block SHALL remain in
+derived `Layer.vector_mask` view, except when the block is a rasterized
+vector-mask source path as defined below. The view SHALL carry the mask's
+`invert` and `disabled` flags and its subpaths; each subpath SHALL carry whether
+it is closed, its `operation`, its fill rule, and its flattened document-pixel
+points. The view SHALL be derived only: the `'vmsk'` block SHALL remain in
 `Layer.extra_blocks` and SHALL be written back verbatim, and the derived view
 SHALL NOT be serialized, so an open→save round trip leaves the block
 byte-identical.
@@ -310,6 +313,40 @@ Fixed-point coordinates SHALL be scaled to document pixels as
 `raw / 0x01000000 × document height` for y, and each cubic segment SHALL be
 flattened to a polyline. A subpath's fill rule SHALL be `even-odd` unless its
 fill-rule field equals `2`, which SHALL be `non-zero`.
+
+A layer's `'vmsk'` block SHALL NOT be decoded into `Layer.vector_mask` when all
+of the following hold:
+
+- the layer record's bit 4 ("pixel data irrelevant to the appearance of the
+  document") is clear, so the layer's appearance comes from its pixels;
+- the layer's raster mask record has mask flag bit 3 (`0x08`, "the user mask
+  actually came from rendering other data") set;
+- the layer's channel list carries no `-3` real-user-mask channel.
+
+Such a block is the source path that was rendered into the raster mask, not a
+live vector mask. The layer's raster `Layer.mask` SHALL be unchanged, the
+`'vmsk'` block SHALL remain in `Layer.extra_blocks`, and an open→save round trip
+SHALL re-emit the block verbatim. A layer whose record bit 4 is set SHALL keep
+the derived view, because its block may be the layer's content (a shape
+outline). A layer carrying a `-3` channel, or a raster mask whose bit 3 is
+clear, SHALL keep the derived view because a live raster and vector mask
+composite together.
+
+When the view is suppressed, the mask record's vector density and feather
+fields SHALL NOT be required to round-trip; the writer normalizes them to their
+defaults, while the raster mask's user density and feather SHALL round-trip
+unchanged.
+
+A pixel layer whose model carries a live vector mask SHALL be written with its
+raster mask's render flag (`0x08`) clear when no `-3` channel is present, so a
+save→read keeps the derived view. A suppressed source path SHALL keep the flag.
+This covers a mask authored after import and a live mask whose `-3` channel was
+dropped by an edit.
+
+The codec SHALL commit a `derived_raster_mask.psd` fixture carrying a pixel
+layer with record bit 4 clear, a rendered raster mask whose flags have bit 3
+set, a mask-parameters block with non-default user density and vector
+parameters, a parseable `vmsk`, and no `-3` channel.
 
 #### Scenario: The psd-tools rectangle fixture decodes to a closed subpath
 
@@ -350,6 +387,51 @@ fill-rule field equals `2`, which SHALL be `non-zero`.
 - **WHEN** a document carrying a `vmsk` block is written and read back
 - **THEN** the block's bytes are preserved and the reconstructed document equals
   the input
+
+#### Scenario: A rasterized source path is not a live vector mask [vmk_derived_source]
+
+- **WHEN** a pixel layer with record bit 4 clear carries a parseable `vmsk` and a
+  raster mask whose mask flags have bit 3 set, and carries no `-3` channel
+- **THEN** `read_psd` succeeds with the layer's raster mask present and its
+  `vector_mask` unset
+
+#### Scenario: A shape layer keeps its outline [vmk_derived_shape]
+
+- **WHEN** a layer with record bit 4 set carries the same parseable `vmsk` and a
+  raster mask whose mask flags have bit 3 set
+- **THEN** its derived `vector_mask` is present
+
+#### Scenario: A real-user-mask composite keeps the view [vmk_derived_composite]
+
+- **WHEN** a pixel layer carries the same `vmsk` and rendered raster mask and
+  also carries a `-3` real-user-mask channel
+- **THEN** its derived `vector_mask` is present
+
+#### Scenario: An ordinary raster mask keeps the view [vmk_derived_raster]
+
+- **WHEN** a pixel layer carries a `vmsk` and a raster mask whose flags have
+  bit 3 clear
+- **THEN** its derived `vector_mask` is present
+
+#### Scenario: The suppressed source path round-trips [vmk_derived_round_trip]
+
+- **WHEN** a document read from the rasterized-source fixture is written and
+  read back
+- **THEN** the layer again has no vector mask, its raster mask is unchanged, and
+  the raw `vmsk` block is preserved byte-for-byte
+
+#### Scenario: The fixture carries the source-path facts [vmk_derived_fixture]
+
+- **WHEN** the committed rasterized-source fixture is parsed with `psd-tools`
+- **THEN** its layer carries a `vmsk` block, a layer mask whose
+  `user_mask_from_render` flag is set, and non-default density/feather parameters
+
+#### Scenario: An authored live mask survives a save [vmk_derived_authored]
+
+- **WHEN** a pixel layer imported with a rendered source path receives a live
+  vector mask and the document is written and read back
+- **THEN** the layer's vector mask is present and its raster mask's render flag
+  is clear
 
 ### Requirement: Vector mask fixtures match independent decoders
 

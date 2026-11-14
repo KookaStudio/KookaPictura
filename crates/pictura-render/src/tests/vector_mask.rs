@@ -10,6 +10,9 @@ const PASS_THROUGH_VECTOR_MASK_FIXTURE: &[u8] =
 const VSMS_FIXTURE: &[u8] =
     include_bytes!("../../../pictura-codec/tests/fixtures/vector_mask_vsms.psd");
 
+const DERIVED_RASTER_MASK_FIXTURE: &[u8] =
+    include_bytes!("../../../pictura-codec/tests/fixtures/derived_raster_mask.psd");
+
 fn vector_mask_doc() -> Document {
     pictura_codec::read_psd(VECTOR_MASK_FIXTURE).expect("vector_mask.psd parses")
 }
@@ -136,6 +139,37 @@ fn malformed_vmsk_is_unset_and_never_panics() {
             .expect("the raw block is preserved");
         assert_eq!(raw.data, data, "{label}: raw block re-emitted verbatim");
     }
+}
+
+#[test]
+fn a_rendered_source_path_composites_through_its_raster_mask() {
+    let d = pictura_codec::read_psd(DERIVED_RASTER_MASK_FIXTURE)
+        .expect("derived_raster_mask.psd parses");
+    let layer = &d.layers[0];
+    let mask = layer.mask.as_ref().expect("the raster mask is modeled");
+    assert!(mask.data.is_some(), "the raster mask pixels decoded");
+    assert_eq!(mask.density, 128, "the fixture density is modeled");
+    assert!(!mask.disabled, "the mask is enabled");
+    assert!(
+        layer.vector_mask.is_none(),
+        "the rendered source path is not composited"
+    );
+
+    assert_eq!(
+        crate::composite::mask_alpha(layer, full(8, 8), 3, 3),
+        255,
+        "the covered pixel stays fully opaque"
+    );
+    assert_eq!(
+        crate::composite::mask_alpha(layer, full(8, 8), 1, 1),
+        127,
+        "density 128 lifts the hidden pixel to 127"
+    );
+    let out = composite_rgba(&d);
+    assert_eq!(rgb(&out, 3, 3), [200, 100, 50], "inside the raster mask");
+    assert_eq!(px(&out, 3, 3)[3], 255, "inside stays opaque");
+    assert_eq!(px(&out, 1, 1)[3], 127, "density reveals the hidden area");
+    assert_eq!(px(&out, 7, 7)[3], 127, "density reveals the hidden area");
 }
 
 #[test]

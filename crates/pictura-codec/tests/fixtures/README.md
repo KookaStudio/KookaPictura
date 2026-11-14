@@ -43,6 +43,7 @@ solid fill, type, and smart object.
 | `group.psd` | RGB | 8x8 | group `Group A` containing `Inner Green`, `Inner Yellow` |
 | `pass_through_vector_mask.psd` | RGB | 8x8 | blue `Backdrop` plus a Pass Through `Group A` containing `Inner Red`, with an inverted group vector mask over `(0,0)-(6,6)` |
 | `masked.psd` | RGB | 8x8 | `Masked` with a raster layer mask |
+| `derived_raster_mask.psd` | RGB | 8x8 | `Derived` pixel layer with a raster mask rendered from a closed `(2,2)-(6,6)` `vmsk`; the mask flags set `user_mask_from_render`, with user density 128 and non-default vector density/feather |
 | `gray.psd` | Grayscale | 8x8 | `Gray` |
 | `adjustment.psd` | RGB | 8x8 | `Base` pixel layer + adjustment layers `Invert`, `Posterize`, `Threshold`, `BrightnessContrast`, `Levels`, `PhotoFilter` |
 | `gradient_map.psd` | RGB | 8x8 | `Base` pixel layer + `Gradient Map` (`grdm`) adjustment layer |
@@ -98,6 +99,16 @@ builder. The group keeps psd-tools' default `pass` blend and carries a
 `vmsk` on the group record; the mask is inverted over `(0,0)-(6,6)`, so the
 group shows only on the right and bottom strips. It is the fixture for the
 pass-through fallback to isolation when a group has a vector mask.
+
+`derived_raster_mask.psd` is authored by the `derived_raster_mask()` builder:
+one `Derived` pixel layer whose raster layer mask is the rendered closed
+`(2,2)-(6,6)` `vmsk`, with the mask flags' `user_mask_from_render` bit set and a
+parameters block carrying user density 128 plus vector density 200 and feather
+4.0. The layer record leaves the pixel-data-irrelevant flag clear and the
+channel list has no `-3` real-user-mask channel, so the file models Photoshop's
+rasterized-vector-mask state where the `vmsk` is the mask's source path rather
+than a live vector mask; the non-default parameters prove the user half
+round-trips while the vector half is normalized on save.
 
 `knockout_group.psd` is authored by the `knockout_group()` builder: the same
 channel-stripped red `Background`, then a `create_group` folder containing

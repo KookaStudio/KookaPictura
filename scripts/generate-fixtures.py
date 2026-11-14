@@ -60,7 +60,7 @@ from psd_tools.psd.effects_layer import (
     OuterGlowInfo,
     ShadowInfo,
 )
-from psd_tools.psd.layer_and_mask import ChannelDataList
+from psd_tools.psd.layer_and_mask import ChannelDataList, MaskParameters
 from psd_tools.psd.image_resources import ImageResource
 from psd_tools.psd.patterns import (
     Pattern,
@@ -406,6 +406,37 @@ def masked() -> PSDImage:
         for x in range(WIDTH):
             mask.putpixel((x, y), 255 if x >= y else 0)
     layer.create_mask(mask)
+    return psd
+
+
+def derived_raster_mask() -> PSDImage:
+    """RGB, one pixel layer whose raster mask is a rendered closed-rectangle
+    ``vmsk``; the mask carries ``user_mask_from_render`` with non-default user
+    density and vector parameters, and the record leaves the
+    pixel-data-irrelevant flag clear."""
+    psd = PSDImage.new("RGB", (WIDTH, HEIGHT), color=(0, 0, 0))
+    layer = psd.create_pixel_layer(
+        _solid((WIDTH, HEIGHT), (200, 100, 50)), name="Derived"
+    )
+    mask = Image.new("L", (WIDTH, HEIGHT), 0)
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            mask.putpixel((x, y), 255 if 2 <= x < 6 and 2 <= y < 6 else 0)
+    layer.create_mask(mask)
+    mask_data = layer._record.mask_data
+    mask_data.flags.user_mask_from_render = True
+    mask_data.flags.parameters_applied = True
+    mask_data.parameters = MaskParameters(
+        user_mask_density=128,
+        vector_mask_density=200,
+        vector_mask_feather=4.0,
+    )
+    layer._record.tagged_blocks[Tag.VECTOR_MASK_SETTING1] = TaggedBlock(
+        key=Tag.VECTOR_MASK_SETTING1,
+        data=VectorMaskSetting(
+            version=3, flags=0, path=_closed_rect_path(2, 2, 6, 6)
+        ),
+    )
     return psd
 
 
@@ -2218,6 +2249,7 @@ FIXTURES = {
     "group.psd": group,
     "pass_through_vector_mask.psd": pass_through_vector_mask,
     "masked.psd": masked,
+    "derived_raster_mask.psd": derived_raster_mask,
     "mask_linked.psd": lambda: mask_link_state(False),
     "mask_unlinked.psd": lambda: mask_link_state(True),
     "gray.psd": gray,

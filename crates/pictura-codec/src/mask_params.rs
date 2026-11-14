@@ -12,6 +12,7 @@
 use pictura_core::{Layer, VectorMask};
 
 pub(crate) const FLAG_DISABLED: u8 = 0x02;
+pub(crate) const FLAG_USER_MASK_FROM_RENDER: u8 = 0x08;
 pub(crate) const FLAG_PARAMETERS: u8 = 0x10;
 const REAL_HEADER: usize = 18;
 
@@ -111,7 +112,17 @@ pub(crate) fn write_record(out: &mut Vec<u8>, layer: &Layer) {
         Some(m) => {
             let rect = [m.rect.top, m.rect.left, m.rect.bottom, m.rect.right];
             let disabled = if m.disabled { FLAG_DISABLED } else { 0 };
-            let flags = (m.flags & !(FLAG_DISABLED | FLAG_PARAMETERS)) | disabled;
+            // A live vector mask on a pixel layer must not keep the
+            // render-source marker: with no `-3` channel, a reload would read
+            // the `vmsk` as a dead source path and drop the live mask.
+            let render_bit = if layer.pixel_data_irrelevant || layer.vector_mask.is_none() {
+                m.flags & FLAG_USER_MASK_FROM_RENDER
+            } else {
+                0
+            };
+            let flags = (m.flags & !(FLAG_DISABLED | FLAG_PARAMETERS | FLAG_USER_MASK_FROM_RENDER))
+                | render_bit
+                | disabled;
             (rect, m.default_color, flags, m.extra.as_slice())
         }
         None if !params.is_empty() => ([0; 4], 255, 0, &[][..]),
