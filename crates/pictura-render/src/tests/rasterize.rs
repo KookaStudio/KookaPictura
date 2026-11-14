@@ -364,6 +364,100 @@ fn rasterize_shape_bakes_fill_and_drops_the_shape() {
 }
 
 #[test]
+fn a_vsms_shape_layer_is_recognized_and_rasterizes() {
+    let bytes = include_bytes!("../../../pictura-codec/tests/fixtures/vector_mask_vsms.psd");
+    let mut d = pictura_codec::read_psd(bytes).expect("vector_mask_vsms.psd parses");
+    let path = d
+        .layers
+        .iter()
+        .position(|layer| layer.name == "Shape")
+        .expect("Shape layer")
+        .to_string();
+    let layer = resolve_path(&d, &path).expect("Shape path");
+    assert!(is_shape_layer(layer), "a vsms shape is a shape layer");
+    assert_eq!(
+        layer_shape_paths(layer, 8, 8).expect("outline").len(),
+        1,
+        "the outline reads from vsms"
+    );
+    resolve_path_mut(&mut d, &path)
+        .expect("Shape path")
+        .extra_blocks
+        .push(pictura_core::LayerBlock {
+            key: *b"vstk",
+            data: vec![1, 2, 3].into(),
+        });
+    let before = composite_rgba(&d);
+
+    assert!(rasterize_shape(&mut d, &path));
+    let layer = resolve_path(&d, &path).expect("baked Shape");
+    assert!(layer.extra_block(b"vmsk").is_none());
+    assert!(layer.extra_block(b"vsms").is_none());
+    assert!(layer.extra_block(b"vscg").is_none(), "fill content dropped");
+    assert!(
+        layer.extra_block(b"vstk").is_none(),
+        "vector stroke dropped"
+    );
+    assert!(layer.vector_mask.is_none());
+    assert!(!is_shape_layer(layer));
+    assert_eq!(composite_rgba(&d).data, before.data);
+
+    let bytes = pictura_codec::write_psd(&d).expect("writes");
+    let back = pictura_codec::read_psd(&bytes).expect("re-reads");
+    assert_eq!(composite_rgba(&back).data, before.data);
+    assert!(resolve_path(&back, &path).unwrap().vector_mask.is_none());
+}
+
+#[test]
+fn a_pattern_filled_shape_rasterizes_with_the_document_pattern() {
+    let mut d = pattern_fixture_doc();
+    let path = "1";
+    let (width, height) = (d.width, d.height);
+    let corner = |x: f64, y: f64| pictura_core::path::PathPoint {
+        anchor: (x, y),
+        in_handle: None,
+        out_handle: None,
+        smooth: false,
+    };
+    let data = pictura_codec::encode_vector_mask(
+        &[pictura_core::path::Subpath {
+            points: vec![
+                corner(1.0, 1.0),
+                corner(7.0, 1.0),
+                corner(7.0, 7.0),
+                corner(1.0, 7.0),
+            ],
+            closed: true,
+        }],
+        width,
+        height,
+    );
+    {
+        let layer = resolve_path_mut(&mut d, path).expect("fill layer");
+        layer.vector_mask = pictura_codec::decode_vector_mask(&data, width, height);
+        layer.extra_blocks.push(pictura_core::LayerBlock {
+            key: *b"vmsk",
+            data: data.into(),
+        });
+    }
+    assert!(
+        is_shape_layer(resolve_path(&d, path).expect("fill layer")),
+        "a masked pattern fill is a shape"
+    );
+
+    let before = composite_rgba(&d);
+    assert!(rasterize_shape(&mut d, path));
+    let layer = resolve_path(&d, path).expect("baked shape");
+    assert!(!is_shape_layer(layer), "the baked layer is not a shape");
+    assert!(layer.extra_block(b"vmsk").is_none());
+    assert_eq!(
+        composite_rgba(&d).data,
+        before.data,
+        "the document pattern bakes, not the grey placeholder"
+    );
+}
+
+#[test]
 fn rasterize_shape_clears_the_pixel_data_irrelevant_flag() {
     use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
     let mut d = doc(20, 20, Vec::new());

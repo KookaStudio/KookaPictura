@@ -1,6 +1,6 @@
-//! A derived view of a layer's `vmsk` vector mask.
+//! A derived view of a layer's `vmsk`/`vsms` vector mask.
 //!
-//! The raw `vmsk` tagged block stays in [`crate::Layer::extra_blocks`] and is
+//! The raw tagged block stays in [`crate::Layer::extra_blocks`] and is
 //! re-emitted verbatim; this view is what the compositor can sample.
 
 use std::sync::OnceLock;

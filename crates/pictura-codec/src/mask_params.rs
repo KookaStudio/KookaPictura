@@ -84,7 +84,7 @@ fn double(tail: &[u8], at: &mut usize) -> Option<u64> {
 }
 
 /// The vector half of a record's parameters, as a placeholder view that
-/// `resolve_vector_masks` merges into the decoded `vmsk` mask.
+/// `resolve_vector_masks` merges into the decoded `vmsk`/`vsms` mask.
 pub(crate) fn vector_placeholder(vector: Params) -> Option<VectorMask> {
     (vector != DEFAULT).then(|| VectorMask {
         density: vector.0,

@@ -1,9 +1,9 @@
 //! Shape layers: a solid-color fill layer cut to an outline by an authored
-//! `vmsk` vector mask (the legacy shape-layer form CS6 reads), optionally live,
+//! `vmsk`/`vsms` vector mask (the legacy shape-layer form CS6 reads), optionally live,
 //! carrying the parametric shape it was drawn as in a `vogk` block (a CC
-//! feature; see `pictura_codec::LiveShape`). The `vmsk` block is the source of
-//! truth; the decoded [`pictura_core::VectorMask`] view is rebuilt from it on
-//! every write.
+//! feature; see `pictura_codec::LiveShape`). The effective `vmsk`/`vsms` block is
+//! the source of truth; the decoded [`pictura_core::VectorMask`] view is rebuilt
+//! from it on every write.
 
 use pictura_codec::LiveShape;
 use pictura_core::path::Subpath;
@@ -12,7 +12,6 @@ use pictura_core::{Document, Layer, LayerBlock, PsdRect};
 use super::create::{add_solid_fill, next_layer_name};
 use super::paths::resolve_path_mut;
 
-const VMSK: &[u8; 4] = b"vmsk";
 const VOGK: &[u8; 4] = b"vogk";
 
 /// Insert a shape layer above `selection_path`: a `rgba` fill named
@@ -42,7 +41,7 @@ pub fn add_shape_layer(
 /// adjustment block (an app-authored shape) or a preserved `vscg` vector-fill
 /// block (an imported CC shape).
 pub fn is_shape_layer(layer: &Layer) -> bool {
-    layer.extra_block(VMSK).is_some()
+    super::vector_masks::effective_key(layer).is_some()
         && matches!(
             crate::fill::decode_layer_fill(layer),
             Some(
@@ -60,22 +59,24 @@ pub fn has_forced_locks(layer: &Layer) -> bool {
 }
 
 /// The shape layer's outline as editable subpaths (document pixels); `None`
-/// when the layer is not a shape layer or its `vmsk` is malformed.
+/// when the layer is not a shape layer or its effective mask is malformed.
 pub fn layer_shape_paths(layer: &Layer, width: u32, height: u32) -> Option<Vec<Subpath>> {
     if !is_shape_layer(layer) {
         return None;
     }
-    pictura_codec::decode_vector_mask_paths(&layer.extra_block(VMSK)?.data, width, height)
+    let key = super::vector_masks::effective_key(layer)?;
+    pictura_codec::decode_vector_mask_paths(&layer.extra_block(key)?.data, width, height)
 }
 
-/// Replace the layer's `vmsk` outline with `subpaths` and rebuild its view.
+/// Replace the layer's effective vector-mask outline with `subpaths` and rebuild its view.
 pub fn set_layer_shape_paths(layer: &mut Layer, subpaths: &[Subpath], width: u32, height: u32) {
     let data = pictura_codec::encode_vector_mask(subpaths, width, height);
     layer.vector_mask = super::vector_masks::keep_params(
         layer.vector_mask.as_ref(),
         pictura_codec::decode_vector_mask(&data, width, height),
     );
-    set_block(layer, VMSK, Some(data));
+    let key = super::vector_masks::effective_key(layer).unwrap_or(b"vmsk");
+    set_block(layer, key, Some(data));
 }
 
 /// The live shape the layer was drawn as, or `None` once it is a regular path.
@@ -242,6 +243,34 @@ mod tests {
                 .filter(|b| &b.key == b"vmsk")
                 .count(),
             1
+        );
+    }
+
+    #[test]
+    fn a_vsms_shape_layer_edits_the_vsms_block() {
+        let bytes = include_bytes!("../../../../pictura-codec/tests/fixtures/vector_mask_vsms.psd");
+        let mut doc = pictura_codec::read_psd(bytes).expect("vector_mask_vsms.psd parses");
+        let index = doc
+            .layers
+            .iter()
+            .position(|layer| layer.name == "Shape")
+            .expect("Shape layer");
+        let layer = &mut doc.layers[index];
+        let before = layer.extra_block(b"vsms").expect("vsms block").data.clone();
+        let mut paths = layer_shape_paths(layer, 8, 8).expect("outline from vsms");
+        paths[0].points[0].anchor = (2.0, 2.0);
+        set_layer_shape_paths(layer, &paths, 8, 8);
+
+        assert!(layer.extra_block(b"vmsk").is_none(), "no vmsk authored");
+        let after = layer.extra_block(b"vsms").expect("vsms rewritten");
+        assert_ne!(after.data, before, "the vsms body changed");
+        assert_eq!(
+            layer_shape_paths(layer, 8, 8).expect("outline")[0].points[0].anchor,
+            (2.0, 2.0)
+        );
+        assert_eq!(
+            layer.vector_mask.as_ref().expect("decoded view").subpaths[0].points[0],
+            [512, 512]
         );
     }
 

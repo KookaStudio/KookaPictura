@@ -1105,7 +1105,7 @@ pub struct Layer {
     pub raw_channels: Vec<RawChannel>,
     /// Derived embedded/linked smart-object view; `None` for ordinary layers.
     pub smart_object: Option<SmartObject>,
-    /// Derived `vmsk` vector-mask view; `None` when absent or unparseable. The
+    /// Derived `vmsk`/`vsms` vector-mask view; `None` when absent or unparseable. The
     /// raw block remains in `extra_blocks` and is the serialization source.
     pub vector_mask: Option<VectorMask>,
     /// Derived `TySh` type-tool view; `None` when absent or unparseable. The

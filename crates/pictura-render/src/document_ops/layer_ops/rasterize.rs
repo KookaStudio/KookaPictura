@@ -73,10 +73,11 @@ pub fn rasterize_all_layers(doc: &mut Document) -> usize {
 
 /// Rasterize the shape layer at `path`: bake its fill cut to the outline, plus
 /// its stroke, into the layer's `0/1/2/-1` channels, then drop the shape/vector
-/// definition — the solid-fill adjustment, the `vmsk` vector mask, the
-/// live-shape `vogk` block, and the stroke/effects `lfx2` block. The name, rect,
-/// opacity, fill, blend mode, and layer mask are kept. Returns false (no
-/// mutation) when `path` does not resolve to a shape layer.
+/// definition — the solid-fill adjustment, the `vmsk`/`vsms` vector mask, the
+/// `vscg` fill content, the `vstk` vector stroke, the live-shape `vogk` block,
+/// and the stroke/effects `lfx2`/`lrFX` blocks. The name, rect, opacity, fill,
+/// blend mode, and layer mask are kept. Returns false (no mutation) when `path`
+/// does not resolve to a shape layer.
 pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = super::paths::resolve_path(doc, path) else {
         return false;
@@ -93,6 +94,11 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     // scratch copy neutralizes them; a shape's fill is binary (`0` or `255`), so
     // leaving it as-is bakes the fill on/off correctly.
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
+    // A pattern fill resolves its tile from the document's global `Patt` block,
+    // so the scratch copy must carry the same layer-section bytes (and PSB
+    // framing) as the real document.
+    scratch.layer_section_extra = doc.layer_section_extra.clone();
+    scratch.is_psb = doc.is_psb;
     let mut source = layer.clone();
     source.opacity = 255;
     source.mask = None;
@@ -110,7 +116,13 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     layer.pixel_data_irrelevant = false;
     layer.extra_blocks.retain(|block| {
         let key = block.key.as_slice();
-        key != b"vmsk" && key != b"vogk" && key != b"lfx2" && key != b"lrFX"
+        key != b"vmsk"
+            && key != b"vsms"
+            && key != b"vscg"
+            && key != b"vstk"
+            && key != b"vogk"
+            && key != b"lfx2"
+            && key != b"lrFX"
     });
     true
 }
