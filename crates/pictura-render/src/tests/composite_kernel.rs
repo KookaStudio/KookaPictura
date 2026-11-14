@@ -21,7 +21,9 @@ impl KernelTest {
     fn new() -> Self {
         let lock = serial_test_lock();
         set_force_general(false);
-        FORCE_SERIAL.store(false, Ordering::Relaxed);
+        // The kernel counters are thread-local, so keep row evaluation on the
+        // test thread while a test reads them.
+        FORCE_SERIAL.store(true, Ordering::Relaxed);
         set_legacy_blend(false);
         set_legacy_source(false);
         reset_kernel_runs();
@@ -771,6 +773,7 @@ fn kernel_parity_across_banded_region_and_serial() {
             ),
         ],
     );
+    FORCE_SERIAL.store(false, Ordering::Relaxed);
     let whole = crate::composite::composite_whole(&d);
     reset_kernel_runs();
     let banded = crate::composite_region::composite_banded_for_test(&d, 0, 0, w, h, true);
