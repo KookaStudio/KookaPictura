@@ -357,24 +357,29 @@ void CropOptionsTest::cropOptionsPersist()
     QVERIFY(tools->cropBoxSession());
     QVERIFY(tools->cropCommitSession());
 
-    // Changing a crop option persists it through the session store.
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // force a known start, then toggle
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setGridOverlay(2);
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setDeletePixels(false);
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(1.5);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    QVERIFY(crop);
+
+    // Changing a crop option persists it through the session store. Force a
+    // known start so the true setter has to write the store by itself.
+    crop->setClassicMode(false);
+    crop->setClassicMode(true);
+    QCOMPARE(pictura::loadSession().cropClassicMode, true);
+    crop->setGridOverlay(2);
+    crop->setDeletePixels(false);
+    crop->setRatio(1.5);
 
     const pictura::SessionState saved = pictura::loadSession();
-    QCOMPARE(saved.cropClassicMode, false);
+    QCOMPARE(saved.cropClassicMode, true);
     QCOMPARE(saved.cropGridOverlay, 2);
     QCOMPARE(saved.cropDeletePixels, false);
     QCOMPARE(saved.cropRatio, 1.5);
 
     // Restore the defaults so the sibling tests are unaffected.
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setGridOverlay(0);
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setDeletePixels(true);
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(0.0);
+    crop->setClassicMode(false);
+    crop->setGridOverlay(0);
+    crop->setDeletePixels(true);
+    crop->setRatio(0.0);
 }
 
 void CropOptionsTest::overlayModesRenderDifferently()
