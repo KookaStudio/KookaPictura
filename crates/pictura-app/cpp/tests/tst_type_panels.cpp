@@ -52,6 +52,7 @@ class TypePanelsTest : public QObject {
 private slots:
     void initTestCase();
     void glyphsPanel();
+    void glyphsFamilyTypeAhead();
 
 private:
     void showFrame();
@@ -136,6 +137,31 @@ void TypePanelsTest::glyphsPanel()
     QVERIFY(f.tools->textSession() && f.tools->textSession()->commitText());
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "commit");
     QCOMPARE(QString(pictura::type_api::readLayer(*f.view, typeLayer(f)).spec.text), QStringLiteral("aZ"));
+}
+
+void TypePanelsTest::glyphsFamilyTypeAhead()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_glyphs_typeahead"));
+    QVERIFY2(f.ok(), "fixture");
+    showFrame();
+    QVERIFY(openPanel(pictura::command_ids::WindowPanelsGlyphs, QStringLiteral("glyphsPanel")));
+
+    auto* family = child<QFontComboBox>(QStringLiteral("glyphsFamily"));
+    QVERIFY(family);
+    QVERIFY(family->isVisible());
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    QCOMPARE(family->currentText(), QStringLiteral("Liberation Sans"));
+
+    pictura::test::typeFamily(family, QStringLiteral("noto"));
+    QVERIFY2(family->currentText().startsWith(QStringLiteral("noto"), Qt::CaseInsensitive),
+             qPrintable(family->currentText()));
+    QVERIFY2(pictura::test::completionOffers(family, QStringLiteral("Noto Sans")),
+             "Noto Sans is offered");
+
+    QTest::keyClicks(family, QStringLiteral(" s"));
+    QCoreApplication::processEvents();
+    QCOMPARE(family->currentText().compare(QStringLiteral("Noto Sans"), Qt::CaseInsensitive), 0);
 }
 
 QTEST_MAIN(TypePanelsTest)

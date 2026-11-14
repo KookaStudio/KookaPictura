@@ -232,7 +232,10 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
         const TypeOptions o = type_->get();
         const QSignalBlocker blockFamily(family);
         const QSignalBlocker blockAntialias(antialias);
-        family->setCurrentFont(QFont(o.family));
+        // A per-keystroke sync must not replace the family the user is typing.
+        if (family->currentText() != o.family) {
+            family->setCurrentFont(QFont(o.family));
+        }
         size->setEditText(sizeText(o.size));
         color->setIcon(typeSwatchIcon(o.color));
         antialias->setCurrentIndex(o.antialias);

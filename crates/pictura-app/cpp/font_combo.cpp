@@ -1,14 +1,18 @@
 #include "font_combo.h"
 
 #include <QtCore/QByteArray>
+#include <QtCore/QEvent>
 #include <QtCore/QHash>
+#include <QtCore/QPointer>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QFontInfo>
 #include <QtGui/QFontMetrics>
 #include <QtGui/QIcon>
+#include <QtGui/QKeyEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QRawFont>
 #include <QtWidgets/QFontComboBox>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QStyledItemDelegate>
 
 namespace pictura {
@@ -125,6 +129,76 @@ private:
     mutable QHash<QString, QString> samples_;
 };
 
+// Caret movement and editing stay a precise edit; a modifier key does not.
+bool disarmsFreshSearch(int key)
+{
+    switch (key) {
+    case Qt::Key_Backspace:
+    case Qt::Key_Delete:
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    case Qt::Key_Home:
+    case Qt::Key_End:
+    case Qt::Key_PageUp:
+    case Qt::Key_PageDown:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Typing a family name starts a new search. Without this the field appends to
+// the family it shows, and the completer's whole-text prefix never matches.
+class FreshFamilySearch : public QObject {
+public:
+    explicit FreshFamilySearch(QFontComboBox* combo)
+        : QObject(combo)
+        , combo_(combo)
+        , line_(combo->lineEdit())
+    {
+        combo_->installEventFilter(this);
+        if (line_) {
+            line_->installEventFilter(this);
+            connect(line_, &QLineEdit::textEdited, this, [this]() { fresh_ = false; });
+            connect(line_, &QLineEdit::editingFinished, this, [this]() { fresh_ = true; });
+        }
+        // A popup pick or an unblocked index change starts a new search; the
+        // guarded option/session syncs keep the current search.
+        connect(combo_, qOverload<int>(&QComboBox::currentIndexChanged), this,
+                [this](int) { fresh_ = true; });
+        connect(combo_, qOverload<int>(&QComboBox::activated), this,
+                [this](int) { fresh_ = true; });
+    }
+
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if (event->type() == QEvent::FocusIn) {
+            fresh_ = true;
+        } else if (event->type() == QEvent::KeyPress && line_) {
+            auto* key = static_cast<QKeyEvent*>(event);
+            const bool printable = !key->text().isEmpty() && key->text().at(0).isPrint()
+                && !(key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+            if (printable && fresh_) {
+                line_->selectAll();
+                fresh_ = false;
+            } else if (!printable && disarmsFreshSearch(key->key())) {
+                fresh_ = false;
+            }
+        } else if (event->type() == QEvent::InputMethod && line_ && fresh_) {
+            line_->selectAll();
+            fresh_ = false;
+        }
+        return false;
+    }
+
+private:
+    QFontComboBox* combo_;
+    QPointer<QLineEdit> line_;
+    bool fresh_ = true;
+};
+
 } // namespace
 
 bool isColorFont(const QString& family)
@@ -136,6 +210,7 @@ bool isColorFont(const QString& family)
 void useFastFontPreviews(QFontComboBox* combo)
 {
     combo->setItemDelegate(new FontRowDelegate(combo));
+    new FreshFamilySearch(combo);
 }
 
 } // namespace pictura
