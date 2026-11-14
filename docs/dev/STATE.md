@@ -4,6 +4,42 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Lazy, file-backed PSD open — #1218 complete, closes #1318** (OpenSpec
+  change `lazy-backed-open`; capabilities `codec/lazy-psd-open` and
+  `document/source-backed-tiles`).
+  - **Backed tiles.** `tiled_plane/body.rs` has a `Slot::Backed` beside
+    Packed and Spilled: a body starts away with a `Source` (the channel's
+    `TileDecode` closure and its rect), decodes on first pin, drops free under
+    eviction, and the first write (`dirty`) detaches it. The evictor runs a
+    cold backed class first (`Residency::Backed`, `TileCounts::backed`).
+    `eviction::transient` reads an away backed tile without installing it;
+    `TiledPlane::sample` under it decodes one row (thumbnails).
+  - **Codec.** `lazy.rs`: `SourcePin` (descriptor, size and mtime at open;
+    `pread`, never a map, after the open), `ChannelIndex` (raw offset or RLE
+    row starts, checked at index and at every decode), a 32 MiB process-wide
+    band LRU, and `MergedPreview` (the merged image's three colour channels).
+    `OpenOptions::source` makes Phase B index 8-bit raw and RLE layer and mask
+    channels; ZIP, 16/32-bit and depth 1 decode as before. `read_psd_lazy`
+    offers the preview when the bottom layer is a visible Background with no
+    alpha and no profile was converted.
+  - **App.** `decode_psd_with` pins the file and reads lazily.
+    `DisplayTiles::preview` builds composite tiles from the merged image until
+    `drop_file_preview` (every repair, refresh and invalidate path); `from_tiles`
+    refuses while it is set, so pictures, exports and saves composite the
+    layers. Saving over the source needs no copy: `write_atomically` renames
+    and the descriptor keeps the old inode (owner decision). A source rewritten
+    in place makes unread tiles unreadable (#1217's refusal).
+  - **Results** (17000², eager through a temporary switch, same binary). M12:
+    first fit-to-screen picture 9433 → 3598 ms (38 %, target 25 %: #1321),
+    peak 1540 → 711 MiB. New M24 (open, pan across, fill on `Paint 1`, save)
+    under `MemoryMax=2G`: open, pan and fill pass, peak 1792 MiB, pixels the
+    same as uncapped; the save is refused by `save_bytes` (~11 GB, eager or
+    lazy): #1320. Heap guards: `open_psd` 245.9 → 53.6 MiB, `magic_wand` 1.8 →
+    57.7 MiB (its flood now decodes the tiles the open used to).
+  - **Local env.** `tst_open_save::rasterSaveKeepsFileInfo` fails on this host
+    as it did for #1290. The shared `../.target` had been deleted; recreating
+    it costs a cold build.
+
 - **Transform acceptance at 17000² — #1290 complete** (OpenSpec change
   `transform-acceptance-scenarios`; capabilities `compositing/gpu-region-memory`
   and `document/history-away-tiles`; additions to `interop/agentic-control`,
