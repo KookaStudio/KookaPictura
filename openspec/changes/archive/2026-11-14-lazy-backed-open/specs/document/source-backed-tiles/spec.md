@@ -27,7 +27,7 @@ SHALL decode an away backed tile without keeping its samples resident.
 
 ### Requirement: The evictor frees backed tiles first
 
-An eviction pass SHALL free cold backed tiles that history does not hold
+An eviction pass SHALL free cold backed tiles, held by history or not,
 before any other dense tile, after the display cache.
 
 #### Scenario: Backed tiles go before live ones [sb_priority]

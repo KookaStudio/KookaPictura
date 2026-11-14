@@ -133,7 +133,7 @@ pub use pictura_raw::{
 };
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
-pub use lazy::{MergedPreview, SourcePin};
+pub use lazy::{read_psd_lazy, MergedPreview, SourcePin};
 pub use live_shape::{
     decode_live_shape, encode_live_shape, LiveShape, ORIGIN_ELLIPSE, ORIGIN_RECTANGLE,
     ORIGIN_ROUNDED_RECTANGLE,
@@ -150,8 +150,8 @@ pub use raster_metadata::{
     embed_raster_metadata, raster_image_resources, raster_metadata, RasterMetadata,
 };
 pub use read::{
-    read_psd, read_psd_lazy, read_psd_with, read_psd_with_options, read_psd_within,
-    read_psd_within_options, OpenOptions,
+    read_psd, read_psd_with, read_psd_with_options, read_psd_within, read_psd_within_options,
+    OpenOptions,
 };
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,

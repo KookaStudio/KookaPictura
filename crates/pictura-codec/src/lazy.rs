@@ -22,8 +22,11 @@ use pictura_core::{PixelBuffer, Plane, PsdRect, TileDecode, TileRect, TILE};
 
 use crate::common::{Reader, COMPRESSION_RAW, COMPRESSION_RLE};
 use crate::error::PsdError;
+use crate::probe::ImageBudget;
 use crate::read::{decode_packbits, read_rle_count};
 use crate::MappedFile;
+use crate::OpenOptions;
+use pictura_core::Document;
 
 /// An open source file, its identity at open, and what has been read from it.
 pub struct SourcePin {
@@ -47,8 +50,12 @@ impl std::fmt::Debug for SourcePin {
 }
 
 impl SourcePin {
-    /// Open `path` and record its size and modification time.
+    /// Open `path` and record its size and modification time. Fails where
+    /// positioned reads are unavailable (off Unix): the caller opens eagerly.
     pub fn open(path: impl AsRef<Path>) -> std::io::Result<Arc<Self>> {
+        if !cfg!(unix) {
+            return Err(std::io::Error::other("lazy opens need positioned reads"));
+        }
         let path = path.as_ref().to_path_buf();
         let file = File::open(&path)?;
         let meta = file.metadata()?;
@@ -65,7 +72,10 @@ impl SourcePin {
 
     /// The file mapped read-only, for the open's parse.
     pub fn map(&self) -> std::io::Result<MappedFile> {
-        MappedFile::of_file(&self.file)
+        #[cfg(unix)]
+        return MappedFile::of_file(&self.file);
+        #[cfg(not(unix))]
+        return MappedFile::open(&self.path);
     }
 
     pub fn path(&self) -> &Path {
@@ -119,8 +129,8 @@ fn read_exact_at(file: &File, buf: &mut [u8], offset: u64) -> std::io::Result<()
     std::os::unix::fs::FileExt::read_exact_at(file, buf, offset)
 }
 
-// ponytail: positioned reads are Unix-only; elsewhere every decode fails and
-// the tiles read as unreadable. The app opens lazily on Linux only.
+// Never reached off Unix: `SourcePin::open` refuses there, so no tile is
+// backed by a file.
 #[cfg(not(unix))]
 fn read_exact_at(_: &File, _: &mut [u8], _: u64) -> std::io::Result<()> {
     Err(std::io::Error::other("positioned reads need Unix"))
@@ -399,6 +409,39 @@ impl BandCache {
             }
         }
     }
+}
+
+// ---- The lazy read ----
+
+/// [`crate::read_psd_within_options`] for an `options.source` open (#1218), with the
+/// file's merged image as a preview when it can stand for the layers on the
+/// canvas: the bottom layer is a visible Background with no transparency, so
+/// the picture is opaque, and no profile was converted on read.
+///
+/// ponytail: a transparent document gets no preview. Its merged image holds
+/// transparency only when the layer count is negative, which the reader does
+/// not keep.
+pub fn read_psd_lazy(
+    bytes: &[u8],
+    options: &OpenOptions,
+    budget: ImageBudget,
+) -> Result<(Document, Option<MergedPreview>), PsdError> {
+    let mut preview = None;
+    let mut doc = crate::read::read_container(
+        bytes,
+        options,
+        &mut crate::budget::DecodeBudget::new(budget),
+        &mut preview,
+    )?;
+    crate::path_resources::resolve_paths(&mut doc);
+    crate::guide_resources::resolve_guides(&mut doc);
+    // The Background flag is inferred from the name (the reader's `derive_background`):
+    // a bottom layer of that name with transparency is not opaque.
+    let usable = doc.source_icc.is_none()
+        && doc.layers.get(0).is_some_and(|bottom| {
+            bottom.background && bottom.visible && !bottom.channels.iter().any(|c| c.id == -1)
+        });
+    Ok((doc, preview.filter(|_| usable)))
 }
 
 // ---- The merged preview ----

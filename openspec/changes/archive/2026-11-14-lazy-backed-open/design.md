@@ -36,7 +36,8 @@ still allocates (the price of never reading at open).
 ## 2. Eviction order (core)
 
 `Evictable` gains `backed() -> bool` (a source is set). `run_pass` adds a
-first class before #1217's: cold backed bodies that history does not hold.
+first class before #1217's: cold backed bodies, held by history or not,
+since dropping one writes nothing.
 Then the existing order runs. A backed body reached in a later class still
 drops free. This is #1217 R2's "priority 2".
 

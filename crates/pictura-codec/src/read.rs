@@ -10,6 +10,7 @@ use crate::mask_params;
 use crate::probe::ImageBudget;
 
 mod decode;
+mod header_mode;
 mod merged;
 mod stream;
 mod tagged_layers;
@@ -19,6 +20,7 @@ pub(crate) use decode::decode_rle_channel;
 pub(crate) use decode::inflate;
 pub(crate) use decode::{count_bytes, decode_channel_data, decode_packbits, read_rle_count};
 use decode::{plan_channel_tasks, read_rle, read_rle_from};
+use header_mode::{color_mode_from_code, palette_from};
 
 /// The deepest group nesting a file may declare. CS6 nests groups ten deep;
 /// the cap keeps the recursive compositor and `Drop` off the stack limit.
@@ -115,33 +117,7 @@ pub fn read_psd_within_options(
     Ok(doc)
 }
 
-/// [`read_psd_within_options`] for an `options.source` open (#1218), with the
-/// file's merged image as a preview when it can stand for the layers on the
-/// canvas: the bottom layer is a visible Background with no transparency, so
-/// the picture is opaque, and no profile was converted on read.
-///
-/// ponytail: a transparent document gets no preview. Its merged image holds
-/// transparency only when the layer count is negative, which the reader does
-/// not keep.
-pub fn read_psd_lazy(
-    bytes: &[u8],
-    options: &OpenOptions,
-    budget: ImageBudget,
-) -> Result<(Document, Option<crate::MergedPreview>), PsdError> {
-    let mut preview = None;
-    let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut preview)?;
-    crate::path_resources::resolve_paths(&mut doc);
-    crate::guide_resources::resolve_guides(&mut doc);
-    // The Background flag is inferred from the name (`derive_background`):
-    // a bottom layer of that name with transparency is not opaque.
-    let usable = doc.source_icc.is_none()
-        && doc.layers.get(0).is_some_and(|bottom| {
-            bottom.background && bottom.visible && !bottom.channels.iter().any(|c| c.id == -1)
-        });
-    Ok((doc, preview.filter(|_| usable)))
-}
-
-fn read_container(
+pub(crate) fn read_container(
     bytes: &[u8],
     options: &OpenOptions,
     budget: &mut DecodeBudget,
@@ -428,40 +404,6 @@ fn read_container(
         options.policy,
         options.conversion,
     ))
-}
-
-/// The PSD `header.color_mode` code to the engine's [`ColorMode`]. Bitmap,
-/// Grayscale, Indexed, RGB, CMYK, Multichannel, Duotone, and Lab are accepted;
-/// every other code is unsupported.
-fn color_mode_from_code(code: u16) -> Result<ColorMode, PsdError> {
-    Ok(match code {
-        MODE_BITMAP => ColorMode::Bitmap,
-        MODE_GRAYSCALE => ColorMode::Grayscale,
-        MODE_INDEXED => ColorMode::Indexed,
-        MODE_RGB => ColorMode::Rgb,
-        MODE_CMYK => ColorMode::Cmyk,
-        MODE_MULTICHANNEL => ColorMode::Multichannel,
-        MODE_DUOTONE => ColorMode::Duotone,
-        MODE_LAB => ColorMode::Lab,
-        c => return Err(PsdError::Unsupported(format!("color mode {c}"))),
-    })
-}
-
-/// The 768-byte Indexed palette (256 red, then green, then blue), or `None` for
-/// a mode that has no palette. Any other length is malformed, never a panic.
-fn palette_from(mode: ColorMode, data: &[u8]) -> Result<Option<[u8; 768]>, PsdError> {
-    if mode != ColorMode::Indexed {
-        return Ok(None);
-    }
-    if data.len() != 768 {
-        return Err(PsdError::Invalid(format!(
-            "indexed palette length {}",
-            data.len()
-        )));
-    }
-    let mut palette = [0u8; 768];
-    palette.copy_from_slice(data);
-    Ok(Some(palette))
 }
 
 /// Normalize a non-RGB document to the engine's working mode. Grayscale and RGB

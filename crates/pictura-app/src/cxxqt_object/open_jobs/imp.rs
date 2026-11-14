@@ -175,10 +175,14 @@ pub(super) fn decode_psd_with(
     OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
     progress(5, "Reading file");
     // The file stays open behind the document: its 8-bit raw and RLE layer
-    // channels are read from it on demand (#1218).
-    let pin = pictura_codec::SourcePin::open(path).ok()?;
-    let bytes = pin.map().ok()?;
-    options.source = Some(pin);
+    // channels are read from it on demand (#1218). Without a pin (no
+    // positioned reads on this platform) the open decodes everything.
+    let pin = pictura_codec::SourcePin::open(path).ok();
+    let bytes = match pin.as_ref().map(|pin| pin.map()) {
+        Some(mapped) => mapped.ok()?,
+        None => pictura_codec::MappedFile::open(path).ok()?,
+    };
+    options.source = pin;
     progress(25, "Decoding");
     let (mut doc, preview) = match pictura_codec::read_psd_lazy(&bytes, &options, budget) {
         Ok(read) => read,
