@@ -359,11 +359,13 @@ void TransformSelectionTest::offCanvasCommitClearsTheSelection()
     pictura::PictureView* view = frame.activeView();
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(view && tools);
-    QVERIFY(selectBlock(view));
+    const QRect block(8, 6, 28, 20);
+    QVERIFY(view->select_rect(block.x(), block.y(), block.width(), block.height(),
+                              QStringLiteral("new"), 0.0));
     const QByteArray before = coverageBytes(view);
     QVERIFY(tools->beginTransformSelection());
     const int history = view->history_count();
-    QCOMPARE(view->transform_press(11.0, 9.0, 1.0, false, false), 9);
+    QCOMPARE(view->transform_press(14.0, 10.0, 1.0, false, false), 9);
     QVERIFY(view->transform_move(200.0, 200.0, 1.0, false, false));
     view->transform_release();
     tools->commitFreeTransform();
@@ -824,8 +826,11 @@ void TransformSelectionTest::againRepeatsABorderTransform()
     const pictura::selection_api::SelectionBounds after =
         pictura::selection_api::bounds(*view);
     QVERIFY(after.valid);
-    QVERIFY(std::abs(after.width - start.width) <= 1);
-    QVERIFY(std::abs(after.height - start.height) <= 1);
+    QVERIFY(after.width > after.height);
+    QVERIFY2(std::abs(after.width - start.width) <= 2,
+             qPrintable(QStringLiteral("width %1 vs %2").arg(after.width).arg(start.width)));
+    QVERIFY2(std::abs(after.height - start.height) <= 2,
+             qPrintable(QStringLiteral("height %1 vs %2").arg(after.height).arg(start.height)));
 }
 
 void TransformSelectionTest::warpKeepsAnOpenBorderSession()

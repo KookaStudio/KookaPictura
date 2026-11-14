@@ -255,6 +255,13 @@ fn warp_dest_rect_matches_the_mask() {
     let boxed = rect(8, 8, 36, 36);
     let warp = Warp::preset(WarpStyle::Arc, 40.0, warp_bounds(boxed));
     let dest = warp_dest_rect(boxed, &warp, None).expect("a valid warp");
+    // The mask is clipped to the canvas; the session box may extend past it.
+    let dest = PsdRect {
+        left: dest.left.max(0),
+        top: dest.top.max(0),
+        right: dest.right.min(48),
+        bottom: dest.bottom.min(48),
+    };
     let out = warp_selection(&selection, boxed, &warp, None, Interpolation::Bilinear)
         .expect("no memory refusal")
         .expect("a valid warp");
