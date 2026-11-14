@@ -18,7 +18,7 @@
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use pictura_core::PixelBuffer;
 use rayon::prelude::*;
@@ -50,9 +50,53 @@ pub struct EdgeMap {
     field: Option<Field>,
 }
 
+/// An owned [`crate::TileFetch`]: the edge map outlives the borrow a gesture
+/// starts from, so it holds its own fetch (over a document clone).
+pub type OwnedTileFetch = Arc<dyn Fn(usize, usize) -> Arc<[u8]> + Send + Sync>;
+
+/// What a [`Field`] computes its tile costs from.
+#[derive(Clone)]
+enum Pixels {
+    /// A planar composite (1–2 planes read as gray, 3+ as RGB).
+    Buffer(PixelBuffer),
+    /// A `width`×`height` RGBA composite fetched a level-0 tile at a time.
+    Tiles { fetch: OwnedTileFetch, width: usize },
+}
+
+impl Pixels {
+    /// The luma of row `y` from column `x0`, one value per `out` entry.
+    fn luma_row(&self, y: usize, x0: usize, out: &mut [f32]) {
+        match self {
+            Self::Buffer(buffer) => luma_row(buffer, buffer.data.as_slice(), y, x0, out),
+            Self::Tiles { fetch, width } => {
+                let side = pictura_core::TILE;
+                let mut x = x0;
+                let mut done = 0;
+                while done < out.len() {
+                    let tx = x / side;
+                    let stride = (width - tx * side).min(side);
+                    let run = (side - x % side).min(out.len() - done);
+                    let tile = fetch(tx, y / side);
+                    let row = (y % side) * stride + x % side;
+                    for (k, l) in out[done..done + run].iter_mut().enumerate() {
+                        let i = (row + k) * 4;
+                        *l = 0.299 * tile[i] as f32
+                            + 0.587 * tile[i + 1] as f32
+                            + 0.114 * tile[i + 2] as f32;
+                    }
+                    x += run;
+                    done += run;
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 struct Field {
-    buffer: PixelBuffer,
+    pixels: Pixels,
+    width: usize,
+    height: usize,
     peak: f32,
     threshold: f32,
     span: f32,
@@ -120,21 +164,84 @@ fn peak(buffer: &PixelBuffer, data: &[u8]) -> f32 {
         .reduce(|| 0.0, f32::max)
 }
 
+/// The strongest Sobel magnitude inside the one-pixel border of a picture fed
+/// in full-width bands, top to bottom (#1274): [`EdgeMap::from_tiles`]'s peak,
+/// equal to the one [`EdgeMap::from_buffer`] finds over the whole picture,
+/// with only a band and two carried luma rows held at a time.
+pub struct EdgePeak {
+    width: usize,
+    height: usize,
+    /// The last (at most two) luma rows of the bands fed so far.
+    carried: Vec<Vec<f32>>,
+    /// Rows fed so far.
+    rows: usize,
+    best: f32,
+}
+
+impl EdgePeak {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            width: width as usize,
+            height: height as usize,
+            carried: Vec::new(),
+            rows: 0,
+            best: 0.0,
+        }
+    }
+
+    /// Feed the next band: planar, the picture's width, 1–2 planes read as
+    /// gray and 3+ as RGB.
+    pub fn feed(&mut self, band: &PixelBuffer) {
+        let (w, bh) = (band.width as usize, band.height as usize);
+        if w != self.width || w < 3 || self.height < 3 || bh == 0 {
+            self.rows += bh;
+            return;
+        }
+        let data = band.data.as_slice();
+        let mut luma: Vec<Vec<f32>> = std::mem::take(&mut self.carried);
+        let first = self.rows - luma.len();
+        luma.extend((0..bh).map(|y| {
+            let mut row = vec![0f32; w];
+            luma_row(band, data, y, 0, &mut row);
+            row
+        }));
+        let last = self.height - 2;
+        let middles: Vec<usize> = (1..luma.len().saturating_sub(1))
+            .filter(|&m| (1..=last).contains(&(first + m)))
+            .collect();
+        let best = middles
+            .into_par_iter()
+            .map(|m| {
+                let rows = [&luma[m - 1][..], &luma[m][..], &luma[m + 1][..]];
+                (1..w - 1).fold(0f32, |best, x| best.max(sobel(rows, x)))
+            })
+            .reduce(|| 0.0, f32::max);
+        self.best = self.best.max(best);
+        self.rows += bh;
+        let keep = luma.len().min(2);
+        self.carried = luma.split_off(luma.len() - keep);
+    }
+
+    /// The strongest magnitude over the rows fed so far.
+    pub fn peak(&self) -> f32 {
+        self.best
+    }
+}
+
 impl Field {
     /// The costs of tile `(tx, ty)`, row-major over its clipped extent.
     fn tile(&self, tx: usize, ty: usize) -> &[f32] {
         self.tiles[ty * self.tiles_x + tx].get_or_init(|| {
-            let (w, h) = (self.buffer.width as usize, self.buffer.height as usize);
+            let (w, h) = (self.width, self.height);
             let (x0, y0) = (tx * TILE, ty * TILE);
             let (x1, y1) = ((x0 + TILE).min(w), (y0 + TILE).min(h));
-            let data = self.buffer.data.as_slice();
             let mut costs = vec![1.0f32; (x1 - x0) * (y1 - y0)];
             // The tile's columns and the one either side the kernel reads.
             let (lx0, lx1) = (x0.saturating_sub(1), (x1 + 1).min(w));
             let mut rows = [0, 1, 2].map(|_| vec![0f32; lx1 - lx0]);
             for y in y0.max(1)..y1.min(h - 1) {
                 for (k, row) in rows.iter_mut().enumerate() {
-                    luma_row(&self.buffer, data, y + k - 1, lx0, row);
+                    self.pixels.luma_row(y + k - 1, lx0, row);
                 }
                 let out = &mut costs[(y - y0) * (x1 - x0)..(y - y0 + 1) * (x1 - x0)];
                 for x in x0.max(1)..x1.min(w - 1) {
@@ -148,7 +255,7 @@ impl Field {
     }
 
     fn cost(&self, x: usize, y: usize) -> f32 {
-        let w = self.buffer.width as usize;
+        let w = self.width;
         let tile_w = (w - (x / TILE) * TILE).min(TILE);
         self.tile(x / TILE, y / TILE)[(y % TILE) * tile_w + x % TILE]
     }
@@ -172,9 +279,48 @@ impl EdgeMap {
             return flat;
         }
         let peak = peak(buffer, buffer.data.as_slice());
+        Self::from_pixels(
+            width,
+            height,
+            contrast,
+            peak,
+            Pixels::Buffer(buffer.clone()),
+        )
+    }
+
+    /// [`Self::from_buffer`] over a `width`×`height` RGBA composite read a
+    /// level-0 tile at a time through `fetch`, with `peak` its strongest
+    /// gradient from an [`EdgePeak`] (#1274): the map holds no whole picture.
+    pub fn from_tiles(
+        width: u32,
+        height: u32,
+        contrast: u32,
+        peak: f32,
+        fetch: OwnedTileFetch,
+    ) -> Self {
+        if width < 3 || height < 3 {
+            return Self {
+                width,
+                height,
+                field: None,
+            };
+        }
+        let pixels = Pixels::Tiles {
+            fetch,
+            width: width as usize,
+        };
+        Self::from_pixels(width, height, contrast, peak, pixels)
+    }
+
+    fn from_pixels(width: u32, height: u32, contrast: u32, peak: f32, pixels: Pixels) -> Self {
+        let (w, h) = (width as usize, height as usize);
         if peak <= 0.0 {
             // A flat image has nothing to snap to; the wire comes out straight.
-            return flat;
+            return Self {
+                width,
+                height,
+                field: None,
+            };
         }
         let threshold = contrast.clamp(1, 100) as f32 / 100.0;
         let tiles_x = w.div_ceil(TILE);
@@ -182,7 +328,9 @@ impl EdgeMap {
             width,
             height,
             field: Some(Field {
-                buffer: buffer.clone(),
+                pixels,
+                width: w,
+                height: h,
                 peak,
                 threshold,
                 span: (1.0 - threshold).max(1e-6),
@@ -602,6 +750,47 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// The edge map over tiles with a banded peak has the costs, bit for bit,
+    /// of the map over the whole buffer (#1274).
+    #[test]
+    fn tiled_edge_map_matches_the_buffer() {
+        let image = noise(613, 541, 4);
+        let (w, h) = (image.width as usize, image.height as usize);
+        for bands in [1usize, 2, 100, 541] {
+            let mut peak = EdgePeak::new(image.width, image.height);
+            let mut top = 0;
+            while top < h {
+                let rows = bands.min(h - top);
+                let mut band = PixelBuffer::new(image.width, rows as u32, 4);
+                for c in 0..4 {
+                    for y in 0..rows {
+                        for x in 0..w {
+                            band.data[(c * rows + y) * w + x] =
+                                image.data[(c * h + top + y) * w + x];
+                        }
+                    }
+                }
+                peak.feed(&band);
+                top += rows;
+            }
+            let whole = EdgeMap::from_buffer(&image, 20);
+            let owned = image.clone();
+            let fetch: OwnedTileFetch =
+                Arc::new(move |tx, ty| crate::source::test_support::fetch_of(&owned)(tx, ty));
+            let tiled = EdgeMap::from_tiles(image.width, image.height, 20, peak.peak(), fetch);
+            let field = whole.field.as_ref().expect("a field");
+            assert_eq!(peak.peak().to_bits(), field.peak.to_bits(), "bands {bands}");
+            for i in (0..w * h).step_by(7) {
+                let (x, y) = (i % w, i / w);
+                assert_eq!(tiled.cost(x, y).to_bits(), whole.cost(x, y).to_bits());
+            }
+            assert_eq!(
+                tiled.trace((3, 4), (600, 530), 10),
+                whole.trace((3, 4), (600, 530), 10)
+            );
         }
     }
 

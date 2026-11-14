@@ -131,6 +131,38 @@ pub fn copy_merged(
     })
 }
 
+/// [`copy_merged`] reading only the copied rectangle: `read(region)` returns
+/// that rectangle of the composite as 4-plane planar RGBA, so a small copy of a
+/// large document composites no more than its bounds (#1274).
+pub fn copy_merged_region(
+    doc: &Document,
+    selection: Option<&[u8]>,
+    read: impl FnOnce(PsdRect) -> PixelBuffer,
+) -> Option<Clip> {
+    let region = match selection {
+        Some(coverage) => {
+            canvas(doc).intersect(coverage_bounds(coverage, doc.width, doc.height)?)?
+        }
+        None => canvas(doc),
+    };
+    let pixels = read(region);
+    let (rw, rh) = (region.width().max(0) as u32, region.height().max(0) as u32);
+    if pixels.channels != 4 || pixels.width != rw || pixels.height != rh {
+        return None;
+    }
+    let plane = rw as usize * rh as usize;
+    let data = pixels.data.as_slice();
+    build(region, doc.width, selection, |x, y| {
+        let i = (y - region.top) as usize * rw as usize + (x - region.left) as usize;
+        [
+            data[i],
+            data[plane + i],
+            data[2 * plane + i],
+            data[3 * plane + i],
+        ]
+    })
+}
+
 /// Erase the selected pixels of the layer at `path`: alpha scales by
 /// `(255 - coverage) / 255`. A Background (no alpha channel) is filled toward
 /// white instead. Refuses a group, a channel-less layer, a pixel lock, and a

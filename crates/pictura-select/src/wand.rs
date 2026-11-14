@@ -9,53 +9,23 @@ use pictura_core::mask_ops::{
 use pictura_core::PixelBuffer;
 use rayon::prelude::*;
 
-use crate::tiled::{channel_tile, channel_uniform, tiled_view, zip_tiles};
-use crate::{chebyshev, matcher, rgb_at, SelectError, Selection};
+use crate::source::{ImageSource, PixelReader};
+use crate::tiled::{tiled_view, zip_tiles};
+use crate::{chebyshev, matcher, SelectError, Selection};
 
 type Rect = (usize, usize, usize, usize);
 
-fn check_dims(sel: &Selection, img: &PixelBuffer) -> Result<(), SelectError> {
-    if sel.width != img.width || sel.height != img.height {
+fn check_dims(sel: &Selection, img: ImageSource<'_>) -> Result<(), SelectError> {
+    if sel.width != img.width() || sel.height != img.height() {
         return Err(SelectError::SizeMismatch(format!(
             "{}x{} vs image {}x{}",
-            sel.width, sel.height, img.width, img.height
+            sel.width,
+            sel.height,
+            img.width(),
+            img.height()
         )));
     }
     Ok(())
-}
-
-/// The colour planes the wand compares: three for RGB, the one grey plane
-/// otherwise.
-fn colour_planes(img: &PixelBuffer) -> usize {
-    if img.channels >= 3 {
-        3
-    } else {
-        1
-    }
-}
-
-fn colour(planes: &[u8]) -> [u8; 3] {
-    match planes.len() {
-        3 => [planes[0], planes[1], planes[2]],
-        _ => [planes[0]; 3],
-    }
-}
-
-/// The composite's colour over a tile, when its tiles hold one value.
-fn uniform_colour(img: &PixelBuffer, rect: Rect) -> Option<[u8; 3]> {
-    let h = img.height as usize;
-    let values: Option<Vec<u8>> = (0..colour_planes(img))
-        .map(|k| channel_uniform(&img.data, h, k, rect))
-        .collect();
-    values.map(|v| colour(&v))
-}
-
-/// The composite's colour planes over a tile, each row-major.
-fn tile_planes(img: &PixelBuffer, rect: Rect) -> Vec<Vec<u8>> {
-    let (w, h) = (img.width as usize, img.height as usize);
-    (0..colour_planes(img))
-        .map(|k| channel_tile(&img.data, w, h, k, rect))
-        .collect()
 }
 
 fn pixel(planes: &[Vec<u8>], i: usize) -> [u8; 3] {
@@ -68,19 +38,19 @@ fn pixel(planes: &[Vec<u8>], i: usize) -> [u8; 3] {
 /// The wand's answers for one tile: the pixels within `tolerance` of
 /// `reference`.
 fn wand_tile(
-    img: &PixelBuffer,
+    img: ImageSource<'_>,
     reference: [u8; 3],
     tolerance: u8,
 ) -> impl Fn(usize, Rect) -> TileMatch + Sync + '_ {
     move |_, rect| {
-        if let Some(c) = uniform_colour(img, rect) {
+        if let Some(c) = img.uniform_colour(rect) {
             return if chebyshev(c, reference) <= tolerance {
                 TileMatch::All
             } else {
                 TileMatch::None
             };
         }
-        let planes = tile_planes(img, rect);
+        let planes = img.tile_planes(rect);
         let tw = rect.2;
         TileMatch::from_rows(tw, rect.3, |dy, out| {
             for (dx, o) in out.iter_mut().enumerate() {
@@ -101,13 +71,24 @@ pub fn magic_wand(
     contiguous: bool,
     anti_alias: bool,
 ) -> Result<Selection, SelectError> {
-    let (w, h) = (img.width as usize, img.height as usize);
+    magic_wand_from(ImageSource::Buffer(img), x, y, tolerance, contiguous)
+}
+
+/// [`magic_wand`] over any [`ImageSource`].
+pub fn magic_wand_from(
+    img: ImageSource<'_>,
+    x: u32,
+    y: u32,
+    tolerance: u8,
+    contiguous: bool,
+) -> Result<Selection, SelectError> {
+    let (w, h) = (img.width() as usize, img.height() as usize);
     if w == 0 || h == 0 || x as usize >= w || y as usize >= h {
         return Err(SelectError::InvalidParams(format!(
             "point ({x},{y}) outside {w}x{h}"
         )));
     }
-    let reference = rgb_at(img, y as usize * w + x as usize);
+    let reference = PixelReader::new(img).rgb(x as usize, y as usize);
     let eval = wand_tile(img, reference, tolerance);
     let mut data = if contiguous {
         let mut source = MatchTiles::new(w, h, eval);
@@ -120,8 +101,8 @@ pub fn magic_wand(
         soften_boundary(&mut data, img, reference, tolerance, w, h);
     }
     Ok(Selection {
-        width: img.width,
-        height: img.height,
+        width: img.width(),
+        height: img.height(),
         data,
     })
 }
@@ -207,24 +188,34 @@ fn soften_boundary(
 /// Grow's flood: a neighbour joins when its colour is within the tolerance
 /// of the pixel it is reached from, and a tile of one colour joins whole.
 struct Similar<'a> {
-    img: &'a PixelBuffer,
+    img: ImageSource<'a>,
+    reader: PixelReader<'a>,
     grid: Grid,
     tolerance: u8,
 }
 
 impl FloodSource for Similar<'_> {
     fn matches(&mut self, (fx, fy): (usize, usize), (tx, ty): (usize, usize)) -> bool {
-        let w = self.grid.w;
-        chebyshev(rgb_at(self.img, ty * w + tx), rgb_at(self.img, fy * w + fx)) <= self.tolerance
+        let to = self.reader.rgb(tx, ty);
+        chebyshev(to, self.reader.rgb(fx, fy)) <= self.tolerance
     }
 
     fn whole(&mut self, tile: usize) -> bool {
-        uniform_colour(self.img, self.grid.rect(tile)).is_some()
+        self.img.uniform_colour(self.grid.rect(tile)).is_some()
     }
 }
 
 /// Expand a selection to include adjacent similar-colored pixels.
 pub fn grow(sel: &Selection, img: &PixelBuffer, tolerance: u8) -> Result<Selection, SelectError> {
+    grow_from(sel, ImageSource::Buffer(img), tolerance)
+}
+
+/// [`grow`] over any [`ImageSource`].
+pub fn grow_from(
+    sel: &Selection,
+    img: ImageSource<'_>,
+    tolerance: u8,
+) -> Result<Selection, SelectError> {
     check_dims(sel, img)?;
     let (w, h) = (sel.width as usize, sel.height as usize);
     if w == 0 || h == 0 {
@@ -232,6 +223,7 @@ pub fn grow(sel: &Selection, img: &PixelBuffer, tolerance: u8) -> Result<Selecti
     }
     let mut source = Similar {
         img,
+        reader: PixelReader::new(img),
         grid: Grid::new(w, h),
         tolerance,
     };
@@ -258,6 +250,15 @@ pub fn similar(
     img: &PixelBuffer,
     tolerance: u8,
 ) -> Result<Selection, SelectError> {
+    similar_from(sel, ImageSource::Buffer(img), tolerance)
+}
+
+/// [`similar`] over any [`ImageSource`].
+pub fn similar_from(
+    sel: &Selection,
+    img: ImageSource<'_>,
+    tolerance: u8,
+) -> Result<Selection, SelectError> {
     check_dims(sel, img)?;
     let (w, h) = (sel.width as usize, sel.height as usize);
     if coverage_bounds(&sel.data, w, h).is_none() {
@@ -273,10 +274,10 @@ pub fn similar(
         if tile.uniform() == Some(0) {
             return Vec::new();
         }
-        if let Some(c) = uniform_colour(img, rect) {
+        if let Some(c) = img.uniform_colour(rect) {
             return vec![c];
         }
-        let planes = tile_planes(img, rect);
+        let planes = img.tile_planes(rect);
         let tw = rect.2;
         (0..rect.3)
             .flat_map(|dy| (0..tw).map(move |dx| (dx, dy)))
@@ -289,7 +290,7 @@ pub fn similar(
     let mut dense = Vec::new();
     for t in 0..grid.count() {
         let s = mask.tile_at(t).and_then(|tile| tile.uniform());
-        match (s, uniform_colour(img, grid.rect(t))) {
+        match (s, img.uniform_colour(grid.rect(t))) {
             (Some(v), _) if v > 0 => {
                 out.set_tile_uniform(t, v);
             }
@@ -306,7 +307,7 @@ pub fn similar(
             .for_each(|(mut tile, &t)| {
                 let rect = grid.rect(t);
                 let sel_tile = mask.tile_at(t).expect("a tiled view");
-                let planes = tile_planes(img, rect);
+                let planes = img.tile_planes(rect);
                 let tw = rect.2;
                 for dy in 0..tile.h {
                     for (dx, px) in tile.row_mut(dy).iter_mut().enumerate() {
@@ -332,6 +333,7 @@ pub fn similar(
 #[cfg(test)]
 pub(crate) mod dense {
     use super::*;
+    use crate::rgb_at;
     use pictura_core::mask_ops;
 
     pub(crate) fn magic_wand(

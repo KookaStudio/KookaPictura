@@ -545,3 +545,100 @@ fn mode_profile_round_trip() {
         );
     }
 }
+
+/// A two-layer RGB document that keeps no stored composite (#1216), tall
+/// enough for several streamed bands, with a half-opaque top layer.
+fn layered_without_composite(width: u32, height: u32) -> Document {
+    let mut doc = ramp(width, height);
+    let mut top = doc.layers[0].clone();
+    top.name = "Layer 2".into();
+    top.opacity = 128;
+    for channel in &mut top.channels {
+        let flipped: Vec<u8> = channel.data.to_vec().iter().rev().copied().collect();
+        channel.data = flipped.into();
+    }
+    doc.layers.push(top).expect("a second layer");
+    doc.composite = PixelBuffer::new(0, 0, 4);
+    doc
+}
+
+/// The fields a conversion writes, as plain values: mode, composite channels
+/// and samples, the source store's depth and bytes, and every layer plane.
+type ConvertedState = (
+    ColorMode,
+    u8,
+    Vec<u8>,
+    Option<(BitDepth, Vec<u8>)>,
+    Vec<Vec<u8>>,
+);
+
+fn converted_state(doc: &Document) -> ConvertedState {
+    let store = doc.source_planes.as_ref().map(|store| {
+        let bytes = match &store.samples {
+            Samples::U8(v) => v.to_vec(),
+            Samples::U16(v) => v.iter().flat_map(|s| s.to_le_bytes()).collect(),
+            Samples::F32(v) => v.iter().flat_map(|s| s.to_le_bytes()).collect(),
+        };
+        (store.depth, bytes)
+    });
+    let layers = doc
+        .layers
+        .iter()
+        .flat_map(|layer| layer.channels.iter().map(|c| c.data.to_vec()))
+        .collect();
+    (
+        doc.mode,
+        doc.composite.channels,
+        doc.composite.data.to_vec(),
+        store,
+        layers,
+    )
+}
+
+/// Grayscale, CMYK (GCR and a dithered profile), Lab and 16-bit conversions
+/// that stream their RGB source equal the ones run from a stored composite
+/// (#1274).
+#[test]
+fn streamed_conversions_match_the_whole_path() {
+    let profile = Profile::coated_cmyk();
+    let dithered = ConversionOptions::default();
+    assert!(dithered.dither);
+    type Convert = Box<dyn Fn(&mut Document)>;
+    let conversions: Vec<(&str, Convert)> = vec![
+        (
+            "gray",
+            Box::new(|d| convert_mode(d, ColorMode::Grayscale).unwrap()),
+        ),
+        (
+            "cmyk",
+            Box::new(|d| convert_mode(d, ColorMode::Cmyk).unwrap()),
+        ),
+        (
+            "cmyk profile",
+            Box::new(move |d| {
+                convert_mode_with_profiles(d, ColorMode::Cmyk, Some(&profile), dithered).unwrap()
+            }),
+        ),
+        (
+            "lab",
+            Box::new(|d| convert_mode(d, ColorMode::Lab).unwrap()),
+        ),
+        (
+            "16",
+            Box::new(|d| convert_bit_depth(d, BitDepth::Sixteen).unwrap()),
+        ),
+    ];
+    for (name, convert) in &conversions {
+        let mut streamed = layered_without_composite(301, 530);
+        assert!(stream::streams_source(&streamed));
+        let mut whole = streamed.clone();
+        whole.composite = crate::composite_tiled(&whole);
+        assert!(!stream::streams_source(&whole));
+        convert(&mut streamed);
+        convert(&mut whole);
+        assert!(
+            converted_state(&streamed) == converted_state(&whole),
+            "{name}"
+        );
+    }
+}

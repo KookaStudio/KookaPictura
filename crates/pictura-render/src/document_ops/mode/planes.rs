@@ -189,25 +189,28 @@ pub(super) fn expand_gray(doc: &mut Document) {
 /// Reshape a working RGB document to working Grayscale through [`luma_u8`]:
 /// composite, layer color channels, and any retained native store (whose luma
 /// is computed at its own depth, so a 16/32-bit document keeps its precision).
-pub(super) fn reduce_to_gray(doc: &mut Document) {
+/// `gray` is the gray composite when the caller streamed it (#1274).
+pub(super) fn reduce_to_gray(doc: &mut Document, gray: Option<PixelBuffer>) {
     if doc.mode != ColorMode::Rgb {
         return;
     }
     let plane = doc.width as usize * doc.height as usize;
-    let rgb = &doc.composite.data;
-    let gray: Vec<u8> = if rgb.len() >= 3 * plane {
-        (0..plane)
-            .map(|i| luma_u8(rgb[i], rgb[plane + i], rgb[2 * plane + i]))
-            .collect()
-    } else {
-        vec![0; plane]
-    };
-    doc.composite = PixelBuffer {
-        width: doc.width,
-        height: doc.height,
-        channels: 1,
-        data: gray.into(),
-    };
+    doc.composite = gray.unwrap_or_else(|| {
+        let rgb = &doc.composite.data;
+        let gray: Vec<u8> = if rgb.len() >= 3 * plane {
+            (0..plane)
+                .map(|i| luma_u8(rgb[i], rgb[plane + i], rgb[2 * plane + i]))
+                .collect()
+        } else {
+            vec![0; plane]
+        };
+        PixelBuffer {
+            width: doc.width,
+            height: doc.height,
+            channels: 1,
+            data: gray.into(),
+        }
+    });
     if let Some(store) = doc.source_planes.as_mut() {
         if store.samples.len() >= 3 * plane {
             store.samples = map_samples!(&store.samples, |v| rgb_store_to_gray(v, plane).into());
@@ -256,7 +259,7 @@ pub(super) fn reduce_to_gray(doc: &mut Document) {
 
 /// The 8-bit source-mode planes for working RGB `rgb` (plane-major), and the
 /// working RGB they display as.
-fn encode_source_mode(
+pub(super) fn encode_source_mode(
     mode: ColorMode,
     rgb: &[u8],
     cmyk_profile: Option<&pictura_codec::Profile>,
@@ -304,14 +307,19 @@ pub(super) fn rgb_to_cmyk_gcr(rgb: &[u8]) -> Vec<u8> {
 /// Encode a working RGB document in `mode` (CMYK or Lab): each color plane set
 /// gains an 8-bit store in that mode and the working RGB becomes what the
 /// store displays as, so a save re-emits the store and the canvas matches it.
+/// `encoded` is the composite and store when the caller streamed them (#1274).
 pub(super) fn encode_document(
     doc: &mut Document,
     mode: ColorMode,
     cmyk_profile: Option<&pictura_codec::Profile>,
     options: pictura_codec::ConversionOptions,
+    encoded: Option<(PixelBuffer, SourcePlanes)>,
 ) {
     let plane = doc.width as usize * doc.height as usize;
-    if doc.composite.data.len() >= 3 * plane {
+    if let Some((composite, store)) = encoded {
+        doc.composite = composite;
+        doc.source_planes = Some(store);
+    } else if doc.composite.data.len() >= 3 * plane {
         let (encoded, shown) = encode_source_mode(
             mode,
             &doc.composite.data[..3 * plane],

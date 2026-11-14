@@ -98,33 +98,57 @@ fn lab_to_rgb(lab: [f64; 3]) -> [f64; 3] {
 /// pixel's coverage — so transparent canvas and unselected pixels do not
 /// skew the means. Pixels with no weight are skipped entirely.
 pub fn match_color_stats(pixels: &[[u8; 4]], selection: Option<&[u8]>) -> MatchColorStats {
-    let mut weight = 0.0;
-    let mut sums = [0.0f64; 3];
-    let mut squares = [0.0f64; 3];
-    for (i, px) in pixels.iter().enumerate() {
-        let mut w = f64::from(px[3]) / 255.0;
-        if let Some(coverage) = selection.and_then(|data| data.get(i)) {
-            w *= f64::from(*coverage) / 255.0;
+    let mut stats = MatchColorAccumulator::default();
+    stats.add(pixels, selection);
+    stats.finish()
+}
+
+/// [`match_color_stats`] fed a piece at a time (#1274): pieces given in pixel
+/// order sum in the same order, so the result is bit-identical to one call over
+/// the whole image.
+#[derive(Debug, Default, Clone)]
+pub struct MatchColorAccumulator {
+    weight: f64,
+    sums: [f64; 3],
+    squares: [f64; 3],
+}
+
+impl MatchColorAccumulator {
+    /// Add `pixels`, with `selection` the coverage of those same pixels.
+    pub fn add(&mut self, pixels: &[[u8; 4]], selection: Option<&[u8]>) {
+        for (i, px) in pixels.iter().enumerate() {
+            let mut w = f64::from(px[3]) / 255.0;
+            if let Some(coverage) = selection.and_then(|data| data.get(i)) {
+                w *= f64::from(*coverage) / 255.0;
+            }
+            if w <= 0.0 {
+                continue;
+            }
+            let lab = rgb_to_lab([px[0], px[1], px[2]].map(|v| f64::from(v) / 255.0));
+            for (c, &v) in lab.iter().enumerate() {
+                self.sums[c] += w * v;
+                self.squares[c] += w * v * v;
+            }
+            self.weight += w;
         }
-        if w <= 0.0 {
-            continue;
-        }
-        let lab = rgb_to_lab([px[0], px[1], px[2]].map(|v| f64::from(v) / 255.0));
-        for c in 0..3 {
-            sums[c] += w * lab[c];
-            squares[c] += w * lab[c] * lab[c];
-        }
-        weight += w;
     }
-    if weight <= 0.0 {
-        return MatchColorStats::ZERO;
+
+    /// The statistics of every pixel added so far.
+    pub fn finish(&self) -> MatchColorStats {
+        let weight = self.weight;
+        if weight <= 0.0 {
+            return MatchColorStats::ZERO;
+        }
+        let mean = self.sums.map(|s| s / weight);
+        // The weighted variance is sumsq/w − mean²; a flat channel rounds to a
+        // tiny negative, so clamp at zero before the square root.
+        let std: [f64; 3] = std::array::from_fn(|c| {
+            (self.squares[c] / weight - mean[c] * mean[c])
+                .max(0.0)
+                .sqrt()
+        });
+        MatchColorStats { mean, std }
     }
-    let mean = sums.map(|s| s / weight);
-    // The weighted variance is sumsq/w − mean²; a flat channel rounds to a
-    // tiny negative, so clamp at zero before the square root.
-    let std: [f64; 3] =
-        std::array::from_fn(|c| (squares[c] / weight - mean[c] * mean[c]).max(0.0).sqrt());
-    MatchColorStats { mean, std }
 }
 
 fn check_params(p: &MatchColorParams) -> Result<(), AdjustError> {
@@ -228,6 +252,33 @@ pub(crate) fn match_color(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Statistics fed band by band in pixel order equal one whole call bit for
+    /// bit, with and without a selection (#1274).
+    #[test]
+    fn banded_stats_equal_whole_stats() {
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 24) as u8
+        };
+        let n = 997 * 13;
+        let pixels: Vec<[u8; 4]> = (0..n).map(|_| [next(), next(), next(), next()]).collect();
+        let coverage: Vec<u8> = (0..n).map(|_| next()).collect();
+        for selection in [None, Some(&coverage[..])] {
+            let whole = match_color_stats(&pixels, selection);
+            let mut banded = MatchColorAccumulator::default();
+            for start in (0..n).step_by(997 * 4) {
+                let end = (start + 997 * 4).min(n);
+                banded.add(&pixels[start..end], selection.map(|s| &s[start..end]));
+            }
+            let banded = banded.finish();
+            assert_eq!(whole.mean.map(f64::to_bits), banded.mean.map(f64::to_bits));
+            assert_eq!(whole.std.map(f64::to_bits), banded.std.map(f64::to_bits));
+        }
+    }
 
     #[test]
     fn lab_round_trips_within_one_lsb() {

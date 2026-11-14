@@ -20,13 +20,14 @@ pub use contour::{contour, contour_within};
 mod blur;
 
 mod magnetic;
-pub use magnetic::EdgeMap;
+pub use magnetic::{EdgeMap, EdgePeak, OwnedTileFetch};
 
 mod matcher;
 
 mod refine;
 pub use refine::{
-    coverage_plane, decontaminate, refine, OutputTarget, RefineEdgeSettings, ViewMode,
+    coverage_plane, decontaminate, decontaminate_into, refine, refine_from, OutputTarget,
+    RefineEdgeSettings, ViewMode,
 };
 
 mod translate;
@@ -39,9 +40,11 @@ pub mod geometry;
 
 mod bounded;
 pub mod quick_mask;
+mod source;
 mod tiled;
+pub use source::{ImageSource, TileFetch};
 mod wand;
-pub use wand::{grow, magic_wand, similar};
+pub use wand::{grow, grow_from, magic_wand, magic_wand_from, similar, similar_from};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SelectError {

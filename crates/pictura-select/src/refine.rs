@@ -11,8 +11,9 @@
 //! fringes at soft edges with nearby foreground colour and returns a new pixel
 //! buffer.
 
-use pictura_core::{PixelBuffer, Plane};
+use pictura_core::{PixelBuffer, Plane, TILE};
 
+use crate::source::{ImageSource, PixelReader};
 use crate::{SelectError, Selection};
 
 const MAX_RADIUS: u32 = 100;
@@ -122,7 +123,7 @@ impl Default for RefineEdgeSettings {
 /// gradient) and stays near `radius` where it is soft, scaled by `radius`.
 fn smart_band_radius(
     selection: &Selection,
-    image: &PixelBuffer,
+    image: &mut PixelReader<'_>,
     x: usize,
     y: usize,
     radius: u32,
@@ -135,21 +136,7 @@ fn smart_band_radius(
     if !(1..w.saturating_sub(1)).contains(&x) || !(1..h.saturating_sub(1)).contains(&y) {
         return radius;
     }
-    let lum = |xi: usize, yi: usize| {
-        let i = yi * w + xi;
-        let n = w * h;
-        let (r, g, b) = if image.channels >= 3 {
-            (
-                image.data[i] as i32,
-                image.data[n + i] as i32,
-                image.data[2 * n + i] as i32,
-            )
-        } else {
-            let v = image.data[i] as i32;
-            (v, v, v)
-        };
-        (r * 299 + g * 587 + b * 114) / 1000
-    };
+    let mut lum = |xi: usize, yi: usize| luma(image, xi, yi);
     // Sobel magnitude: a hard edge has a large gradient.
     let gx = (lum(x + 1, y - 1) + 2 * lum(x + 1, y) + lum(x + 1, y + 1))
         - (lum(x - 1, y - 1) + 2 * lum(x - 1, y) + lum(x - 1, y + 1));
@@ -250,10 +237,23 @@ pub fn refine(
     image: &PixelBuffer,
     settings: &RefineEdgeSettings,
 ) -> Result<Selection, SelectError> {
-    if mask.width != image.width || mask.height != image.height {
+    refine_from(mask, ImageSource::Buffer(image), settings)
+}
+
+/// [`refine`] over any [`ImageSource`]: the image is read only inside the edge
+/// band, a tile at a time (#1274).
+pub fn refine_from(
+    mask: &Selection,
+    image: ImageSource<'_>,
+    settings: &RefineEdgeSettings,
+) -> Result<Selection, SelectError> {
+    if mask.width != image.width() || mask.height != image.height() {
         return Err(SelectError::SizeMismatch(format!(
             "{}x{} vs image {}x{}",
-            mask.width, mask.height, image.width, image.height
+            mask.width,
+            mask.height,
+            image.width(),
+            image.height()
         )));
     }
     if settings.radius > MAX_RADIUS
@@ -282,22 +282,34 @@ pub fn refine(
     // back to the input so the band edge stays continuous.
     if settings.radius > 0 {
         let dist = boundary_distance(mask);
-        for y in 0..h {
-            for x in 0..w {
-                let i = y * w + x;
-                let r = if settings.smart_radius {
-                    smart_band_radius(mask, image, x, y, settings.radius)
-                } else {
-                    settings.radius
-                };
-                if r == 0 || dist[i] > r {
-                    continue;
+        let mut reader = PixelReader::new(image);
+        // Each pixel depends only on its own inputs, so the band is walked a
+        // tile at a time: a tiled image is then fetched about once per tile.
+        for (ty, tx) in
+            (0..h.div_ceil(TILE)).flat_map(|ty| (0..w.div_ceil(TILE)).map(move |tx| (ty, tx)))
+        {
+            for y in ty * TILE..((ty + 1) * TILE).min(h) {
+                for x in tx * TILE..((tx + 1) * TILE).min(w) {
+                    let i = y * w + x;
+                    // A smart radius never exceeds `radius`, so a pixel past it
+                    // is outside the band either way and reads no image.
+                    if dist[i] > settings.radius {
+                        continue;
+                    }
+                    let r = if settings.smart_radius {
+                        smart_band_radius(mask, &mut reader, x, y, settings.radius)
+                    } else {
+                        settings.radius
+                    };
+                    if r == 0 || dist[i] > r {
+                        continue;
+                    }
+                    // The band edge blends from the re-estimated value at the
+                    // contour back to the input at distance r.
+                    let t = dist[i] as f64 / r as f64;
+                    let estimated = estimate_coverage(&mut reader, w, h, x, y, mask.data[i]);
+                    coverage[i] = estimated * (1.0 - t) + coverage[i] * t;
                 }
-                // The band edge blends from the re-estimated value at the
-                // contour back to the input at distance r.
-                let t = dist[i] as f64 / r as f64;
-                let estimated = estimate_coverage(image, w, h, x, y, mask.data[i]);
-                coverage[i] = estimated * (1.0 - t) + coverage[i] * t;
             }
         }
     }
@@ -347,26 +359,15 @@ pub fn refine(
 /// position; coverage moves toward the image where the local gradient is
 /// strong, otherwise it stays near the input. `input` is the current coverage.
 fn estimate_coverage(
-    image: &PixelBuffer,
+    image: &mut PixelReader<'_>,
     w: usize,
     h: usize,
     x: usize,
     y: usize,
     input: u8,
 ) -> f64 {
-    let lum = |xi: usize, yi: usize| {
-        let i = yi * w + xi;
-        let n = w * h;
-        let v = if image.channels >= 3 {
-            (image.data[i] as i32 * 299
-                + image.data[n + i] as i32 * 587
-                + image.data[2 * n + i] as i32 * 114)
-                / 1000
-        } else {
-            image.data[i] as i32
-        };
-        v as f64
-    };
+    // A gray pixel `v` reads as (v, v, v), whose weighted sum is exactly `v`.
+    let mut lum = |xi: usize, yi: usize| luma(image, xi, yi) as f64;
     let x0 = x.saturating_sub(1);
     let y0 = y.saturating_sub(1);
     let x1 = (x + 1).min(w - 1);
@@ -380,6 +381,12 @@ fn estimate_coverage(
     let mid = 127.5;
     let base = input as f64;
     base + (mid - base) * strength * 0.5
+}
+
+/// The integer Rec.601 luma of pixel `(x, y)` the edge band reads.
+fn luma(image: &mut PixelReader<'_>, x: usize, y: usize) -> i32 {
+    let [r, g, b] = image.rgb(x, y).map(i32::from);
+    (r * 299 + g * 587 + b * 114) / 1000
 }
 
 /// Signed distance from the 50 % contour: positive inside, negative outside.
@@ -452,6 +459,17 @@ pub fn decontaminate(
     alpha: &Selection,
     amount: u32,
 ) -> Result<PixelBuffer, SelectError> {
+    decontaminate_into(image.clone(), alpha, amount)
+}
+
+/// [`decontaminate`] in place, so the image is the one output buffer (#1274).
+/// Exact: a pixel is rewritten only where its alpha is partial, and the
+/// neighbours it reads are fully selected, so none of them was rewritten.
+pub fn decontaminate_into(
+    mut image: PixelBuffer,
+    alpha: &Selection,
+    amount: u32,
+) -> Result<PixelBuffer, SelectError> {
     if image.width != alpha.width || image.height != alpha.height {
         return Err(SelectError::SizeMismatch(format!(
             "alpha {}x{} vs image {}x{}",
@@ -463,7 +481,7 @@ pub fn decontaminate(
     }
     let (w, h) = (image.width as usize, image.height as usize);
     if w == 0 || h == 0 {
-        return Ok(image.clone());
+        return Ok(image);
     }
     let channels = image.channels as usize;
     let n = w * h;
@@ -471,15 +489,15 @@ pub fn decontaminate(
     // Radius in which we look for fully-opaque foreground neighbours.
     let search = 2isize;
 
-    let sample = |c: usize, x: usize, y: usize| -> f64 {
+    let out = image.data.as_mut_slice();
+    let sample = |out: &[u8], c: usize, x: usize, y: usize| -> f64 {
         if channels >= 3 {
-            image.data[c * n + y * w + x] as f64
+            out[c * n + y * w + x] as f64
         } else {
-            image.data[y * w + x] as f64
+            out[y * w + x] as f64
         }
     };
 
-    let mut out = image.data.to_vec();
     for y in 0..h {
         for x in 0..w {
             let i = y * w + x;
@@ -507,10 +525,10 @@ pub fn decontaminate(
                     let (xu, yu) = (xx as usize, yy as usize);
                     if channels >= 3 {
                         for (c, value) in sum.iter_mut().enumerate() {
-                            *value += sample(c, xu, yu);
+                            *value += sample(out, c, xu, yu);
                         }
                     } else {
-                        let g = sample(0, xu, yu);
+                        let g = sample(out, 0, xu, yu);
                         for value in &mut sum {
                             *value += g;
                         }
@@ -530,18 +548,13 @@ pub fn decontaminate(
             let weight = (1.0 - a) * blend;
             let chans = channels.min(3);
             for c in 0..chans {
-                let original = sample(c, x, y);
+                let original = sample(out, c, x, y);
                 let mixed = original + (foreground[c] - original) * weight;
                 out[c * n + i] = mixed.round().clamp(0.0, 255.0) as u8;
             }
         }
     }
-    Ok(PixelBuffer {
-        width: image.width,
-        height: image.height,
-        channels: image.channels,
-        data: out.into(),
-    })
+    Ok(image)
 }
 
 /// Build a full-frame [`Plane`] from refined coverage (used by the app to write

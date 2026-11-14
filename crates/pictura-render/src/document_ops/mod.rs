@@ -41,18 +41,18 @@ pub use layer_ops::{
     can_replace_smart_object_contents, can_reset_smart_object_transform,
     can_transform_smart_object_rect, clear_layer, clear_layer_style, clipping_release_paths,
     content_rect, convert_for_smart_filters, convert_smart_object_to_layers,
-    convert_to_smart_object, copy_layer, copy_layer_style, copy_merged, copy_path_to_document,
-    copy_shape_attributes, coverage_bounds, create_clipping_mask, delete_hidden_layers,
-    delete_layer_mask, delete_paths, delete_paths_report, delete_vector_mask, distribute_layers,
-    duplicate_layer, duplicate_paths, fit_smart_object_to_canvas, flatten, flatten_rows,
-    group_layer, group_paths, has_forced_locks, has_layer_mask, has_layer_style, has_vector_mask,
-    hidden_layer_paths, insert_layer, invert_layer_mask, is_background, is_fill_content_layer,
-    is_shape_layer, is_visible_in_panel, layer_content_bounds, layer_from_background,
-    layer_live_shape, layer_mask_disabled, layer_mask_linked, layer_mask_refinement,
-    layer_shape_paths, layer_style_effect_names, layer_style_pattern_names, layer_style_value,
-    layer_via_copy, layer_via_cut, lift_selection, lock_group_layers, mask_document,
-    mask_document_coverage, merge_lifted, merge_scope, move_mask_selection_content, move_path,
-    move_path_to, move_path_to_result, move_selection_content, neutral_color,
+    convert_to_smart_object, copy_layer, copy_layer_style, copy_merged, copy_merged_region,
+    copy_path_to_document, copy_shape_attributes, coverage_bounds, create_clipping_mask,
+    delete_hidden_layers, delete_layer_mask, delete_paths, delete_paths_report, delete_vector_mask,
+    distribute_layers, duplicate_layer, duplicate_paths, fit_smart_object_to_canvas, flatten,
+    flatten_rows, group_layer, group_paths, has_forced_locks, has_layer_mask, has_layer_style,
+    has_vector_mask, hidden_layer_paths, insert_layer, invert_layer_mask, is_background,
+    is_fill_content_layer, is_shape_layer, is_visible_in_panel, layer_content_bounds,
+    layer_from_background, layer_live_shape, layer_mask_disabled, layer_mask_linked,
+    layer_mask_refinement, layer_shape_paths, layer_style_effect_names, layer_style_pattern_names,
+    layer_style_value, layer_via_copy, layer_via_cut, lift_selection, lock_group_layers,
+    mask_document, mask_document_coverage, merge_lifted, merge_scope, move_mask_selection_content,
+    move_path, move_path_to, move_path_to_result, move_selection_content, neutral_color,
     new_smart_object_via_copy, next_layer_name, open_as_smart_object, parent_path, paste_clip,
     paste_layer_style, paste_shape_attributes, perspective_crop, perspective_crop_refusal,
     perspective_crop_size, perspective_crop_sized, place_smart_object, plan_auto_align,
@@ -116,10 +116,9 @@ pub(crate) fn valid_size(width: u32, height: u32) -> Result<(), pictura_ops::Ops
 }
 
 /// Give a document that keeps no stored composite (#1216) its composite, for
-/// the mode and depth conversions that read it as their source; the converted
-/// document keeps it, because its composite is then authoritative.
-/// ponytail: the composite is canvas-sized (uniform tiles excepted) for the
-/// conversion; a conversion that streamed its source would not need it.
+/// a mode conversion that does not stream its source (Grayscale, CMYK, Lab and
+/// depth up-conversion do, #1274); the converted document keeps it, because
+/// its composite is then authoritative.
 pub(crate) fn materialize_composite(doc: &mut pictura_core::Document) {
     if !doc.layers.is_empty() && !crate::DocumentComposite::is_stored(doc) {
         doc.composite = crate::composite_tiled(doc);
