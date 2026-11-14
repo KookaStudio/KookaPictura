@@ -16,6 +16,28 @@ Snapshot for resuming after a context break. Update after each milestone.
   - Control-server selection ops remain binary. Targeted Qt and Rust checks
     passed locally; full workspace verification is delegated to CI.
 
+- **Main window collaborators — #1166 implemented, verification deferred to CI**
+  (OpenSpec change `main-window-collaborators`; capability
+  `ui/main-window-collaborators`).
+  - **Ownership.** `PicturaMainWindow` is now wiring over four owned
+    collaborators: `DocumentRegistry` (documents, `DocEntry`/`DocWindow`, active
+    window, tab/float/tile hosts), `PanelHost` (panels, columns, tools column,
+    splitter, workspace store, visibility), `ImportSaveCoordinator` (open
+    pipeline, save/import, close, recent, recovery), and `MenuRegistrar`
+    (`CommandRegistry`, handlers, menu bar, dynamic menus). The frame keeps the
+    `QMainWindow` overrides, chrome/settings, composition, and one-line test-hook
+    forwarders.
+  - **Seams.** Panel, menu, and collaborator TUs no longer include `frame.h` or
+    name the frame. `frame_includes.h` keeps only the shared frame includes;
+    each TU includes its panel/collaborator headers directly. `frame.h` no
+    longer includes `document_window.h`, `panels/panel_column.h`,
+    `recovery_store.h`, or `workspace_store.h`; `PanelColumn`, `DocEntry`,
+    `DocWindow`, and `PanelSide` are forward-declared.
+  - **Guard.** `scripts/check-shell-seams.py` (wired into
+    `scripts/verify-fast.sh`) rejects a panel/menu/collaborator frame dependency,
+    a surviving `frame_menus*.cpp`, and growth past `frame.h` 760 lines or
+    `frame_includes.h` 60 include lines.
+
 - **Lazy, file-backed PSD open — #1218 complete, closes #1318** (OpenSpec
   change `lazy-backed-open`; capabilities `codec/lazy-psd-open` and
   `document/source-backed-tiles`).
