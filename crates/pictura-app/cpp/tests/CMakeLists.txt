@@ -5,6 +5,8 @@ set(PICTURA_QT_TESTS
     tst_offthread_jobs
     tst_open_save
     tst_multi_file_open
+    tst_place_fit
+    tst_place_sequence
     tst_document_api
     tst_document_session
     tst_selection_api

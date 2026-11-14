@@ -266,6 +266,7 @@ const QStringList& openFileFilters()
                        "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS)"),
         QStringLiteral("Photoshop (*.PSD)"),
         QStringLiteral("Photoshop Large Format (*.PSB)"),
+        QStringLiteral("Images (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
         QStringLiteral("PNG (*.PNG)"),
         QStringLiteral("JPEG (*.JPG *.JPEG *.JPE)"),
         QStringLiteral("TIFF (*.TIF *.TIFF)"),

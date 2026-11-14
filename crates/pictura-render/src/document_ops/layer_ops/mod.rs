@@ -149,10 +149,11 @@ pub use smart_object::{
     can_convert_smart_object_to_layers, can_convert_to_smart_object,
     can_edit_smart_object_contents, can_materialize_smart_source, can_new_smart_object_via_copy,
     can_rasterize_smart_object, can_replace_smart_object_contents,
-    can_reset_smart_object_transform, convert_for_smart_filters, convert_smart_object_to_layers,
-    convert_to_smart_object, new_smart_object_via_copy, open_as_smart_object, place_smart_object,
-    rasterize_smart_object, replace_smart_object_contents, reset_smart_object_transform,
-    smart_object_source_bytes,
+    can_reset_smart_object_transform, can_transform_smart_object_rect, convert_for_smart_filters,
+    convert_smart_object_to_layers, convert_to_smart_object, fit_smart_object_to_canvas,
+    new_smart_object_via_copy, open_as_smart_object, place_smart_object, rasterize_smart_object,
+    replace_smart_object_contents, reset_smart_object_transform, smart_object_source_bytes,
+    transform_smart_object_rect,
 };
 pub use transfer::copy_path_to_document;
 pub use transform::{

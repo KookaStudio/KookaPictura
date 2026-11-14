@@ -43,6 +43,10 @@ Deeper technical status for PSD/PSB lives in
   `crates/pictura-codec/src/write.rs`.
 - [x] **Import.** PSD, PSB, PNG, JPEG, TIFF, WebP, GIF, BMP, and PDF and EPS
   through Ghostscript. `crates/pictura-app/cpp/frame_import.cpp`.
+- [x] **Multi-file selection in File > Place**, with one Free Transform session
+  per file and a summary for files that could not be placed (#755).
+- [x] **Non-destructive canvas fit for oversized Place sources**, keeping the
+  native embedded source and its alpha through scale/translation (#755).
 - [x] **Export.** PSD, PSB, PNG, JPEG, TIFF, WebP, BMP, GIF, SVG and Photoshop
   PDF, plus Save for Web with palette reduction, dithering and transparency.
   `crates/pictura-app/cpp/export_as_dialog.cpp`,
