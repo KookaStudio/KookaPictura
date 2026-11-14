@@ -2,7 +2,7 @@
 
 #include "panel_column_internal.h"
 
-#include "frame.h"
+#include "panel_host.h"
 #include "icons.h"
 #include "panel_group.h"
 #include "theme.h"
@@ -177,7 +177,7 @@ PanelColumn::PanelColumn(QWidget* parent)
 
     // A widget column keeps a width drag even though the splitter handles are
     // 0-width: an invisible 4 px grip on its workspace-facing edge drives the
-    // adjacent handle (see PicturaMainWindow::beginWidgetColumnResize).
+    // adjacent handle (see PanelHost::beginWidgetColumnResize).
     resizeGrip_ = new QWidget(this);
     resizeGrip_->setObjectName(QStringLiteral("panelResizeGrip"));
     resizeGrip_->setFixedWidth(Theme::scaled(kResizeGripWidth));
@@ -251,6 +251,7 @@ void PanelColumn::addGroup(PanelGroup* group)
     if (!group) {
         return;
     }
+    group->setHost(host_);
     // A group adopted from another column may still be wired to it; drop any
     // stale wiring to this column so `insertGroupAt` re-wires it cleanly.
     QObject::disconnect(group, nullptr, this, nullptr);
@@ -272,6 +273,7 @@ void PanelColumn::adoptGroup(PanelGroup* group)
     if (!group) {
         return;
     }
+    group->setHost(host_);
     // M45 W4: take a group from another column. Its own tab visibility carries
     // the state (a group closed via `closeGroup` has its tabs hidden), so
     // `insertGroupAt` restores exactly the right visibility.
@@ -446,8 +448,8 @@ PanelFloat* PanelColumn::floatForPanel(const QString& objectName) const
 void PanelColumn::refreshFloorAfterContentChange()
 {
     updateMinimumWidth();
-    if (PicturaMainWindow* frame = owningFrame()) {
-        refreshSharedFloor(frame);
+    if (PanelHost* host = owningHost()) {
+        refreshSharedFloor(host);
     }
 }
 
@@ -569,26 +571,11 @@ void PanelColumn::closeGroup(PanelGroup* group)
 
 void PanelColumn::maybeRemoveSelf()
 {
-    // M45 W4: the frame owns the "is this dynamic column empty" test; every
+    // M45 W4: the host owns the "is this dynamic column empty" test; every
     // path that can empty this column funnels through here.
-    if (auto* frame = owningFrame()) {
-        frame->removeColumnIfEmpty(this);
+    if (PanelHost* host = owningHost()) {
+        host->removeColumnIfEmpty(this);
     }
-}
-
-PicturaMainWindow* PanelColumn::owningFrame() const
-{
-    QWidget* top = window();
-    if (auto* frame = qobject_cast<PicturaMainWindow*>(top)) {
-        return frame;
-    }
-    // A column hosted in a floating overlay: the overlay's parent is the frame.
-    if (top) {
-        if (auto* frame = qobject_cast<PicturaMainWindow*>(top->parentWidget())) {
-            return frame;
-        }
-    }
-    return nullptr;
 }
 
 void PanelColumn::setToolsContent(QWidget* content, std::function<int()> columnsState,
@@ -727,13 +714,13 @@ void PanelColumn::updateMinimumWidth()
     setMinimumWidth(gSharedFloor);
 }
 
-void PanelColumn::refreshSharedFloor(PicturaMainWindow* frame)
+void PanelColumn::refreshSharedFloor(PanelHost* host)
 {
     gSharedFloor = minNormalWidth();
-    if (!frame) {
+    if (!host) {
         return;
     }
-    for (PanelColumn* column : frame->allPanelColumns()) {
+    for (PanelColumn* column : host->allPanelColumns()) {
         column->updateMinimumWidth();
     }
 }

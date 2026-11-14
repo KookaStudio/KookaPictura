@@ -5,6 +5,10 @@
 #include "frame_canvas.h"
 
 #include "frame_includes.h"
+#include "panels/info_panel.h"
+#include "panels/layers_panel.h"
+
+#include "import_save_coordinator.h"
 
 #include "api/document_api.h"
 #include "api/paint_api.h"
@@ -90,14 +94,14 @@ void PicturaMainWindow::wireCanvas(DocWindow& window)
     connect(window.canvas, &ImageView::zoomChanged, this,
             &PicturaMainWindow::onCanvasZoomChanged);
     connect(window.canvas, &ImageView::mouseMoved, this, [this](const QPointF& p) {
-        if (infoPanel_) {
-            infoPanel_->setCursorPosition(p);
+        if (panels_->infoPanel()) {
+            panels_->infoPanel()->setCursorPosition(p);
         }
     });
     // Scroll All Windows: a Hand drag pans the other visible windows too.
     connect(window.canvas, &ImageView::handPanned, this,
             [this, canvas = window.canvas](const QPointF& delta, Qt::KeyboardModifiers mods) {
-                scrollOtherWindows(canvas, delta, mods);
+                documents_->scrollOtherWindows(canvas, delta, mods);
             });
     // The active tool's canvas context menu (or the pasteboard colour menu).
     connect(window.canvas, &ImageView::contextMenuRequested, this,
@@ -115,9 +119,9 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
     // the marker to the active view so a background document's notification
     // cannot suppress the active panels' refresh.
     connect(view, &PictureView::changed, this, [this, view]() {
-        panelsFreshlyBound_ = false;
+        panels_->setPanelsFreshlyBound(false);
         if (view == activeView()) {
-            panelsRefreshedByChanged_ = true;
+            panels_->setPanelsRefreshedByChanged(true);
         }
     });
     connect(view, &PictureView::sessionCancelled, this, [this, view]() {
@@ -126,8 +130,8 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
         }
         if (view == activeView()) {
             refresh();
-            panelRefreshTimer_->stop();
-            refreshPanels();
+            panels_->stopPanelRefreshTimer();
+            panels_->refreshPanels();
         }
     });
     connect(view, &PictureView::historyRestored, this, [this]() {
@@ -135,7 +139,9 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
             tools_->onSessionCancelled();
         }
     });
-    trackRecovery(view);
+    if (importSave_) {
+        importSave_->trackRecovery(view);
+    }
     // The cheapest sync only: restart the same 120 ms panel timer the `changed`
     // path uses, and never call image()/replaceImage(), so the region path
     // cannot refresh panels faster than a full recomposite.
@@ -157,13 +163,13 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
             return;
         }
         if (view == activeView()) {
-            panelsRefreshedByChanged_ = false;
+            panels_->setPanelsRefreshedByChanged(false);
         }
-        panelsFreshlyBound_ = false;
-        panelRefreshTimer_->start();
+        panels_->setPanelsFreshlyBound(false);
+        panels_->schedulePanelRefresh();
         updateTabTitle(index);
         updateWindowTitle();
-        registryRefreshPending_ = true;
+        panels_->setRegistryRefreshPending(true);
     };
     // Document canvases receive the changed rectangle only: their present crop
     // is patched from the pyramid, so no region pixels cross the bridge.
@@ -173,7 +179,7 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
                 const int index = indexOfView(view);
                 if (index >= 0) {
                     const QRect damaged(x, y, w, h);
-                    forEachCanvas(*docs_.at(index), [&damaged](ImageView* canvas) {
+                    forEachCanvas(*documents_->docAt(index), [&damaged](ImageView* canvas) {
                         canvas->damageRegion(damaged);
                     });
                 }
@@ -182,7 +188,7 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
     connect(view, &PictureView::pyramid_settled, this, [this, view] {
         const int index = indexOfView(view);
         if (index >= 0) {
-            forEachCanvas(*docs_.at(index), [](ImageView* canvas) { canvas->update(); });
+            forEachCanvas(*documents_->docAt(index), [](ImageView* canvas) { canvas->update(); });
         }
     });
     // A large Move commit keeps its drag preview while a worker composites; the
@@ -190,7 +196,7 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
     connect(view, &PictureView::moveCommitted, this, [this, view] {
         const int index = indexOfView(view);
         if (index >= 0) {
-            forEachCanvas(*docs_.at(index), [](ImageView* canvas) { canvas->endMovePreview(); });
+            forEachCanvas(*documents_->docAt(index), [](ImageView* canvas) { canvas->endMovePreview(); });
         }
     });
     // A canvas that holds its own image still takes the pixel path (the
@@ -200,37 +206,12 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
                 pictura::ScopedTimer blitSlotTimer("cxx_regionBlitted_slot");
                 const int index = indexOfView(view);
                 if (index >= 0) {
-                    forEachCanvas(*docs_.at(index), [&region, x, y](ImageView* canvas) {
+                    forEachCanvas(*documents_->docAt(index), [&region, x, y](ImageView* canvas) {
                         canvas->blitRegion(region, x, y);
                     });
                 }
                 afterPresent(index);
             });
-}
-
-void PicturaMainWindow::forEachCanvas(const DocEntry& doc,
-                                      const std::function<void(ImageView*)>& fn) const
-{
-    for (const DocWindow* window : doc.windows) {
-        if (window->canvas) {
-            fn(window->canvas);
-        }
-    }
-}
-
-QList<ImageView*> PicturaMainWindow::activeDocumentCanvases() const
-{
-    QList<ImageView*> canvases;
-    if (!activeWindow_ || !activeWindow_->canvas) {
-        return canvases;
-    }
-    canvases.append(activeWindow_->canvas);
-    forEachCanvas(*activeWindow_->doc, [&canvases](ImageView* canvas) {
-        if (!canvases.contains(canvas)) {
-            canvases.append(canvas);
-        }
-    });
-    return canvases;
 }
 
 namespace {
@@ -257,7 +238,7 @@ void PicturaMainWindow::cycleCanvasColor(bool forward)
 {
     canvasColorIndex_ =
         (canvasColorIndex_ + (forward ? 1 : -1) + kCanvasColorCount) % kCanvasColorCount;
-    for (const DocWindow* window : windows_) {
+    for (const DocWindow* window : documents_->windows()) {
         if (window->canvas) {
             window->canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
         }
@@ -272,7 +253,7 @@ QMenu* PicturaMainWindow::canvasBackgroundMenu()
         connect(action, &QAction::triggered, this, [this, i]() {
             canvasColorIndex_ = i;
             const QColor chosen = canvasColorForIndex(i);
-            for (const DocWindow* window : windows_) {
+            for (const DocWindow* window : documents_->windows()) {
                 if (window->canvas) {
                     window->canvas->setCanvasColor(chosen);
                 }
@@ -296,11 +277,43 @@ void PicturaMainWindow::applyWorkspaceCanvasColor()
         return;
     }
     const QColor color = canvasColorForIndex(canvasColorIndex_);
-    for (const DocWindow* window : windows_) {
+    for (const DocWindow* window : documents_->windows()) {
         if (window->canvas) {
             window->canvas->setCanvasColor(color);
         }
     }
+}
+
+} // namespace pictura
+
+namespace pictura {
+
+void PicturaMainWindow::showCanvasContextMenu(ImageView* canvas, const QPoint& globalPos)
+{
+    if (!canvas) {
+        return;
+    }
+    // A right-click routes to the active tool's menu, which may also show over
+    // the pasteboard (e.g. the Zoom menu). With no tool menu, the pasteboard
+    // falls back to the canvas-background colour menu.
+    const QPointF imagePos = canvas->widgetToImage(canvas->mapFromGlobal(globalPos));
+    if (tools_ && tools_->routeCanvasContextMenu(canvas, imagePos, globalPos)) {
+        return;
+    }
+    const bool overDocument = canvas->hasDocument()
+        && QRectF(QPointF(0, 0), canvas->documentSize()).contains(imagePos);
+    if (!overDocument) {
+        showCanvasBackgroundMenu(globalPos);
+    }
+}
+
+bool PicturaMainWindow::releaseIsolation()
+{
+    if (panels_ && panels_->layersPanel() && panels_->layersPanel()->isolationActive()) {
+        panels_->layersPanel()->releaseIsolation();
+        return true;
+    }
+    return false;
 }
 
 } // namespace pictura

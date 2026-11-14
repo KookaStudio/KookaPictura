@@ -2,7 +2,7 @@
 
 #include "panel_column_internal.h"
 
-#include "frame.h"
+#include "panel_host.h"
 #include "icons.h"
 #include "panel_group.h"
 #include "theme.h"
@@ -57,7 +57,7 @@ PanelFloat* PanelColumn::createFloat(PanelGroup* group, const QPoint& globalPos)
     // The overlay parents to the main window (transient for it) so it stays
     // above the frame; it must not parent to the `centerSplitter`, which would
     // absorb it as a splitter pane, nor to a float, which would nest it.
-    QWidget* host = owningFrame();
+    QWidget* host = owningHost() ? owningHost()->shellWidget() : nullptr;
     if (!host) {
         host = window();
     }
@@ -230,7 +230,7 @@ PanelFloat* PanelColumn::restoreGroupFloat(PanelGroup* group, const QRect& geome
         groups_.removeAt(index);
     }
     group->setParent(nullptr);
-    QWidget* host = owningFrame();
+    QWidget* host = owningHost() ? owningHost()->shellWidget() : nullptr;
     if (!host) {
         host = window();
     }
@@ -352,7 +352,7 @@ PanelFloat* PanelColumn::floatColumn(const QPoint& globalTopLeft)
     if (columnFloat_) {
         return columnFloat_;
     }
-    QWidget* host = owningFrame();
+    QWidget* host = owningHost() ? owningHost()->shellWidget() : nullptr;
     if (!host) {
         host = window();
     }
@@ -398,13 +398,13 @@ PanelFloat* PanelColumn::floatColumn(const QPoint& globalTopLeft)
 
 bool PanelColumn::redockColumnFloat(int side, PanelColumn* anchor)
 {
-    auto* frame = owningFrame();
-    if (!columnFloat_ || !frame) {
+    auto* host = owningHost();
+    if (!columnFloat_ || !host) {
         return false;
     }
     // The frame's move path reparents the column out of the overlay and into
     // the splitter; only then is the empty overlay safe to delete.
-    if (!frame->movePanelColumn(this, side, anchor)) {
+    if (!host->movePanelColumn(this, side, anchor)) {
         return false;
     }
     destroyColumnFloat();
@@ -437,8 +437,8 @@ void PanelColumn::cancelColumnFloat()
 bool PanelColumn::resolveColumnDragTarget(const QPoint& globalPos, PanelColumn** anchor,
                                           int* side) const
 {
-    auto* frame = owningFrame();
-    if (!frame) {
+    auto* host = owningHost();
+    if (!host) {
         return false;
     }
     // A popped-out Tools panel is independent: it moves freely on the desktop
@@ -446,7 +446,7 @@ bool PanelColumn::resolveColumnDragTarget(const QPoint& globalPos, PanelColumn**
     // A point outside the workspace (over the desktop, or above/below it) never
     // docks, so dragging the panel around outside the app leaves it floating.
     if (toolsContent_ && columnDragStartedFloating_) {
-        const int edgeSide = frame->newColumnSideAtInsideWorkspace(globalPos);
+        const int edgeSide = host->newColumnSideAtInsideWorkspace(globalPos);
         if (edgeSide < 0) {
             return false;
         }
@@ -458,7 +458,7 @@ bool PanelColumn::resolveColumnDragTarget(const QPoint& globalPos, PanelColumn**
         }
         return true;
     }
-    PanelColumn* target = frame->resolveColumnMoveTarget(globalPos, this, side);
+    PanelColumn* target = host->resolveColumnMoveTarget(globalPos, this, side);
     if (anchor) {
         *anchor = target;
     }
@@ -467,8 +467,8 @@ bool PanelColumn::resolveColumnDragTarget(const QPoint& globalPos, PanelColumn**
 
 void PanelColumn::updateColumnDrag(const QPoint& globalPos)
 {
-    auto* frame = owningFrame();
-    if (!frame) {
+    auto* host = owningHost();
+    if (!host) {
         return;
     }
     int side = -1;
@@ -494,7 +494,7 @@ void PanelColumn::updateColumnDrag(const QPoint& globalPos)
     PanelColumn* indicator = anchor;
     bool workspaceEdge = false;
     if (!indicator && hasTarget) {
-        const QList<PanelColumn*> columns = frame->panelColumns();
+        const QList<PanelColumn*> columns = host->panelColumns();
         PanelColumn* outer = nullptr;
         if (side == 0) {
             for (PanelColumn* column : columns) {
@@ -532,8 +532,8 @@ void PanelColumn::updateColumnDrag(const QPoint& globalPos)
 bool PanelColumn::finishColumnDrag(const QPoint& globalPos)
 {
     setDragDimTarget(nullptr);
-    auto* frame = owningFrame();
-    if (!frame) {
+    auto* host = owningHost();
+    if (!host) {
         return false;
     }
     int side = -1;
@@ -549,7 +549,7 @@ bool PanelColumn::finishColumnDrag(const QPoint& globalPos)
         // A valid target re-places the column; a floating one redocks into the
         // splitter at the resolved boundary.
         return columnFloat_ ? redockColumnFloat(side, anchor)
-                            : frame->movePanelColumn(this, side, anchor);
+                            : host->movePanelColumn(this, side, anchor);
     }
     // No target: the column stays torn off in the floating overlay instead of
     // doing nothing, and a drag that never moved floats it now.

@@ -1,6 +1,11 @@
 # frame sources for pictura_shell.
 # Included from the root CMakeLists.txt; keep paths explicit (no globbing).
 list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/document_registry.cpp
+    crates/pictura-app/cpp/document_registry.h
+    crates/pictura-app/cpp/document_registry_arrange.cpp
+    crates/pictura-app/cpp/document_registry_drag.cpp
+    crates/pictura-app/cpp/document_registry_windows.cpp
     crates/pictura-app/cpp/frame.cpp
     crates/pictura-app/cpp/frame.h
     crates/pictura-app/cpp/frame_build.cpp
@@ -8,36 +13,18 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_canvas.h
     crates/pictura-app/cpp/frame_chrome.cpp
     crates/pictura-app/cpp/frame_color.cpp
-    crates/pictura-app/cpp/frame_columns.cpp
-    crates/pictura-app/cpp/frame_document_arrange.cpp
-    crates/pictura-app/cpp/frame_document_menus.cpp
-    crates/pictura-app/cpp/frame_document_windows.cpp
+    crates/pictura-app/cpp/frame_commands.cpp
     crates/pictura-app/cpp/frame_guides.cpp
     crates/pictura-app/cpp/frame_import.cpp
+    crates/pictura-app/cpp/frame_import_save.cpp
     crates/pictura-app/cpp/frame_keys.cpp
     crates/pictura-app/cpp/frame_mask_overlay.cpp
-    crates/pictura-app/cpp/frame_menus.cpp
-    crates/pictura-app/cpp/frame_menus_adjust.cpp
-    crates/pictura-app/cpp/frame_menus_align.cpp
-    crates/pictura-app/cpp/frame_menus_edit.cpp
-    crates/pictura-app/cpp/frame_menus_filter.cpp
-    crates/pictura-app/cpp/frame_menus_image.cpp
-    crates/pictura-app/cpp/frame_menus_image_mode.cpp
-    crates/pictura-app/cpp/frame_menus_layer_ops.cpp
-    crates/pictura-app/cpp/frame_menus_layer_style.cpp
-    crates/pictura-app/cpp/frame_menus_matting.cpp
-    crates/pictura-app/cpp/frame_menus_select.cpp
-    crates/pictura-app/cpp/frame_menus_smart_object.cpp
-    crates/pictura-app/cpp/frame_menus_transform.cpp
-    crates/pictura-app/cpp/frame_menus_type.cpp
     crates/pictura-app/cpp/frame_open.cpp
-    crates/pictura-app/cpp/frame_panel_commands.cpp
     crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_place.cpp
     crates/pictura-app/cpp/frame_place.h
     crates/pictura-app/cpp/frame_preferences.cpp
     crates/pictura-app/cpp/frame_quick_mask.cpp
-    crates/pictura-app/cpp/frame_recent.cpp
     crates/pictura-app/cpp/frame_recovery.cpp
     crates/pictura-app/cpp/frame_save_options.cpp
     crates/pictura-app/cpp/frame_search.cpp
@@ -49,6 +36,33 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_ui_scale.cpp
     crates/pictura-app/cpp/frame_update.cpp
     crates/pictura-app/cpp/frame_update.h
-    crates/pictura-app/cpp/frame_workspace_controller.cpp
-    crates/pictura-app/cpp/frame_workspaces.cpp
+    crates/pictura-app/cpp/import_save_coordinator.cpp
+    crates/pictura-app/cpp/import_save_coordinator.h
+    crates/pictura-app/cpp/import_save_import.cpp
+    crates/pictura-app/cpp/import_save_open.cpp
+    crates/pictura-app/cpp/import_save_pdf.cpp
+    crates/pictura-app/cpp/import_save_recent.cpp
+    crates/pictura-app/cpp/import_save_recovery.cpp
+    crates/pictura-app/cpp/import_save_save.cpp
+    crates/pictura-app/cpp/menu_adjust.cpp
+    crates/pictura-app/cpp/menu_align.cpp
+    crates/pictura-app/cpp/menu_document_menus.cpp
+    crates/pictura-app/cpp/menu_edit.cpp
+    crates/pictura-app/cpp/menu_filter.cpp
+    crates/pictura-app/cpp/menu_image.cpp
+    crates/pictura-app/cpp/menu_image_mode.cpp
+    crates/pictura-app/cpp/menu_layer_ops.cpp
+    crates/pictura-app/cpp/menu_layer_style.cpp
+    crates/pictura-app/cpp/menu_matting.cpp
+    crates/pictura-app/cpp/menu_panel_commands.cpp
+    crates/pictura-app/cpp/menu_recent.cpp
+    crates/pictura-app/cpp/menu_registrar.cpp
+    crates/pictura-app/cpp/menu_registrar.h
+    crates/pictura-app/cpp/menu_registrar_internal.h
+    crates/pictura-app/cpp/menu_select.cpp
+    crates/pictura-app/cpp/menu_smart_object.cpp
+    crates/pictura-app/cpp/menu_transform.cpp
+    crates/pictura-app/cpp/menu_type.cpp
+    crates/pictura-app/cpp/menu_window_arrange.cpp
+    crates/pictura-app/cpp/menu_workspace_commands.cpp
 )

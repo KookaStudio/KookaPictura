@@ -21,7 +21,7 @@ class QToolButton;
 
 namespace pictura {
 
-class PicturaMainWindow;
+class PanelHost;
 
 // One CS6 panel group: a top-tab QTabWidget whose tab text is the panel title.
 // There is deliberately no group-title label; the tabs are the group chrome.
@@ -32,6 +32,9 @@ class PanelGroup : public QWidget {
 
 public:
     explicit PanelGroup(QWidget* parent = nullptr);
+
+    void setHost(PanelHost* host) { host_ = host; }
+    PanelHost* owningHost() const { return host_; }
 
     void addPanel(QWidget* panel, const QString& title, const QIcon& icon);
     QStringList titles() const;
@@ -159,9 +162,6 @@ private:
     void rebuildIconRow();
     void applyMinimize();
     void updateHeaderMenu();
-    // The frame that owns this group, whether it is docked or hosted in a
-    // floating overlay (whose parent is the frame). Null for a standalone group.
-    PicturaMainWindow* owningFrame() const;
     void runPanelPreference(const QString& actionId);
     QToolButton* makeIconButton(const QIcon& icon, const QString& title,
                                 const QString& objectName);
@@ -170,6 +170,7 @@ private:
     // M47: keep the full-width header band sized to the tab bar.
     void updateHeaderBand();
 
+    PanelHost* host_ = nullptr;
     QTabWidget* tabs_ = nullptr;
     QWidget* iconRow_ = nullptr;
     QBoxLayout* iconRowLayout_ = nullptr;

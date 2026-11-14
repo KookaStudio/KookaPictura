@@ -1,4 +1,8 @@
 #include "frame_includes.h"
+#include "document_float_window.h"
+#include "document_tile_host.h"
+#include "panels/panel_column.h"
+#include "panels/panel_group.h"
 
 namespace pictura {
 
@@ -30,12 +34,12 @@ bool PicturaMainWindow::newColumnDropForTest(const QString& panelName, const QSt
         // D1: the Tools panel is now a column; a widget-panel drop at its outer
         // (left) edge allocates a new sibling column on that side. This helper
         // needs the panel visible as an anchor.
-        if (!toolsColumn_) {
+        if (!panels_->toolsColumn()) {
             return false;
         }
-        toolsColumn_->show();
+        panels_->toolsColumn()->show();
         QCoreApplication::processEvents();
-        const QRect tr(toolsColumn_->mapToGlobal(QPoint(0, 0)), toolsColumn_->size());
+        const QRect tr(panels_->toolsColumn()->mapToGlobal(QPoint(0, 0)), panels_->toolsColumn()->size());
         point = QPoint(tr.left() - 8, tr.center().y());
         expected = 0;
     } else {
@@ -81,8 +85,8 @@ bool PicturaMainWindow::newColumnBesideForTest(const QString& panelName,
     if (!dropped || !destination || destination == source || columnCount() != before + 1) {
         return false;
     }
-    const int destIndex = centerSplitter_->indexOf(destination);
-    const int anchorIndex = centerSplitter_->indexOf(anchor);
+    const int destIndex = panels_->centerSplitter()->indexOf(destination);
+    const int anchorIndex = panels_->centerSplitter()->indexOf(anchor);
     return destIndex >= 0 && anchorIndex >= 0 && qAbs(destIndex - anchorIndex) == 1;
 }
 
@@ -174,44 +178,119 @@ bool PicturaMainWindow::dropBoundaryForTest(const QString& panelName, const QStr
 
 void PicturaMainWindow::setDocumentNameForTest(int index, const QString& name)
 {
-    if (index < 0 || index >= docs_.size()) {
+    if (index < 0 || index >= documents_->docs().size()) {
         return;
     }
-    docs_[index]->displayName = name;
+    documents_->docs()[index]->displayName = name;
     updateTabTitle(index);
 }
 
 bool PicturaMainWindow::reorderDocumentsForTest()
 {
-    if (!tabs_ || !tabs_->tabBar()) {
+    if (!documents_->tabs() || !documents_->tabs()->tabBar()) {
         return false;
     }
     newDocument(QStringLiteral("ReorderA"), 4, 3, QStringLiteral("rgb"), 8,
                 QStringLiteral("white"));
     newDocument(QStringLiteral("ReorderB"), 4, 3, QStringLiteral("rgb"), 8,
                 QStringLiteral("white"));
-    const int docA = docs_.size() - 2;
-    const int docB = docs_.size() - 1;
+    const int docA = documents_->docs().size() - 2;
+    const int docB = documents_->docs().size() - 1;
     if (docA < 0) {
         return false;
     }
     PictureView* a = viewAt(docA);
     PictureView* b = viewAt(docB);
-    const int from = tabOf(docs_.at(docA)->windows.value(0));
-    const int to = tabOf(docs_.at(docB)->windows.value(0));
+    const int from = tabOf(documents_->docs().at(docA)->windows.value(0));
+    const int to = tabOf(documents_->docs().at(docB)->windows.value(0));
     if (from < 0 || to < 0) {
         return false;
     }
     const QString nameA = documentName(docA);
     const bool activeBefore = viewAt(activeDocumentIndex()) == b;
-    tabs_->tabBar()->moveTab(from, to);
+    documents_->tabs()->tabBar()->moveTab(from, to);
     QCoreApplication::processEvents();
     const DocWindow* atFrom = windowAtTab(from);
     const DocWindow* atTo = windowAtTab(to);
     return activeBefore && a && b && atFrom && atTo && atFrom->doc->view == b
-           && atTo->doc->view == a && windows_.at(from) == atFrom && windows_.at(to) == atTo
+           && atTo->doc->view == a && documents_->windows().at(from) == atFrom && documents_->windows().at(to) == atTo
            && viewAt(docA) == a && documentName(docA) == nameA
            && viewAt(activeDocumentIndex()) == b;
+}
+
+DocumentFloatWindow* PicturaMainWindow::floatWindowForTest(int index) const
+{
+    return documents_ ? documents_->floatWindowForTest(index) : nullptr;
+}
+
+bool PicturaMainWindow::floatDocumentForTest(int index)
+{
+    return documents_ && documents_->floatDocumentForTest(index);
+}
+
+bool PicturaMainWindow::dockDocumentForTest(int index, int tab)
+{
+    return documents_ && documents_->dockDocumentForTest(index, tab);
+}
+
+int PicturaMainWindow::tabOfDocumentForTest(int index) const
+{
+    return documents_ ? documents_->tabOfDocumentForTest(index) : -1;
+}
+
+QString PicturaMainWindow::documentWindowLabelForTest(int index) const
+{
+    return documents_ ? documents_->documentWindowLabelForTest(index) : QString();
+}
+
+DocumentTilePane* PicturaMainWindow::tilePaneForTest(int index) const
+{
+    return documents_ ? documents_->tilePaneForTest(index) : nullptr;
+}
+
+int PicturaMainWindow::windowCountForTest(int index) const
+{
+    return documents_ ? documents_->windowCountForTest(index) : 0;
+}
+
+ImageView* PicturaMainWindow::windowCanvasForTest(int index, int ordinal) const
+{
+    return documents_ ? documents_->windowCanvasForTest(index, ordinal) : nullptr;
+}
+
+QString PicturaMainWindow::windowLabelForTest(int index, int ordinal) const
+{
+    return documents_ ? documents_->windowLabelForTest(index, ordinal) : QString();
+}
+
+int PicturaMainWindow::windowTabForTest(int index, int ordinal) const
+{
+    return documents_ ? documents_->windowTabForTest(index, ordinal) : -1;
+}
+
+DocumentFloatWindow* PicturaMainWindow::windowFloatForTest(int index, int ordinal) const
+{
+    return documents_ ? documents_->windowFloatForTest(index, ordinal) : nullptr;
+}
+
+void PicturaMainWindow::activateWindowForTest(int index, int ordinal)
+{
+    if (documents_) {
+        documents_->activateWindowForTest(index, ordinal);
+    }
+}
+
+DocumentTileHost* PicturaMainWindow::tileHostForTest() const
+{
+    return documents_ ? documents_->tileHost() : nullptr;
+}
+
+void PicturaMainWindow::setWindowDockDragForTest(
+    std::function<void(std::unique_ptr<QMimeData>)> hook)
+{
+    if (documents_) {
+        documents_->setWindowDockDragForTest(std::move(hook));
+    }
 }
 
 } // namespace pictura

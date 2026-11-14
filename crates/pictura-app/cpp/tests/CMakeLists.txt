@@ -8,6 +8,10 @@ set(PICTURA_QT_TESTS
     tst_place_fit
     tst_place_sequence
     tst_document_api
+    tst_document_registry
+    tst_panel_host
+    tst_import_save_coordinator
+    tst_menu_registrar
     tst_document_session
     tst_selection_api
     tst_paint_api

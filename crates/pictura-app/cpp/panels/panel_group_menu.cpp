@@ -4,7 +4,7 @@
 #include "commands.h"
 #include "adjustment_catalogue.h"
 #include "character_panel.h"
-#include "frame.h"
+#include "panel_host.h"
 #include "history_panel.h"
 #include "layers_panel.h"
 #include "paragraph_panel.h"
@@ -491,21 +491,6 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
 }
 } // namespace
 
-PicturaMainWindow* PanelGroup::owningFrame() const
-{
-    QWidget* top = window();
-    if (auto* frame = qobject_cast<PicturaMainWindow*>(top)) {
-        return frame;
-    }
-    // A group hosted in a floating overlay: the overlay's parent is the frame.
-    if (top) {
-        if (auto* frame = qobject_cast<PicturaMainWindow*>(top->parentWidget())) {
-            return frame;
-        }
-    }
-    return nullptr;
-}
-
 void PanelGroup::updateHeaderMenu()
 {
     if (!headerButton_) {
@@ -530,12 +515,12 @@ void PanelGroup::updateHeaderMenu()
     headerMenu_ = new QMenu(headerButton_);
     populatePanelMenu(headerMenu_, panel,
                       [this](const QString& id) { runPanelPreference(id); },
-                      owningFrame() ? owningFrame()->registry() : nullptr);
+                      owningHost() ? owningHost()->commands() : nullptr);
     QObject::connect(headerMenu_, &QMenu::aboutToShow, headerMenu_, [this, panel] {
         // The menu is built once; re-read every command's state so a document
         // opened (or a selection changed) since then is reflected.
-        if (PicturaMainWindow* frame = owningFrame()) {
-            if (CommandRegistry* registry = frame->registry()) {
+        if (PanelHost* host = owningHost()) {
+            if (CommandRegistry* registry = host->commands()) {
                 for (QAction* action : headerMenu_->findChildren<QAction*>()) {
                     registry->applyState(action);
                 }
@@ -557,8 +542,8 @@ void PanelGroup::updateHeaderMenu()
         }
         PanelMenuHook hook = panelMenuHooks_.value(panel);
         if (!hook) {
-            if (PicturaMainWindow* frame = owningFrame()) {
-                hook = frame->panelMenuHook(panel);
+            if (PanelHost* host = owningHost()) {
+                hook = host->panelMenuHook(panel);
             }
         }
         if (hook) {

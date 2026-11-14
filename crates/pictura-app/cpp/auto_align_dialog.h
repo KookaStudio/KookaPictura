@@ -11,7 +11,7 @@ class PicturaMainWindow;
 
 // Run Auto-Align Layers over `window`'s selected layers, with progress and
 // Cancel, and keep the moved layers selected. False when nothing was
-// committed. Defined in frame_menus_align.cpp.
+// committed. Defined in frame_commands.cpp.
 bool runAutoAlign(PicturaMainWindow& window, int projection, bool vignette, bool geometric);
 
 // The dialog's options, kept between runs in a session.
