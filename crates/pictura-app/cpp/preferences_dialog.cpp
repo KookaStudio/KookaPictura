@@ -465,6 +465,7 @@ void PreferencesDialog::setTypeMissingGlyphProtection(bool on)
 void PreferencesDialog::setGpuCompute(bool on)
 {
     if (QCheckBox* box = checkbox(QStringLiteral("useGpuCompute"))) {
+        const QSignalBlocker block(box);
         box->setChecked(on);
     }
 }
