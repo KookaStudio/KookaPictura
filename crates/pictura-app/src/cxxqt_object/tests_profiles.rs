@@ -103,7 +103,7 @@ fn quick_selection_profile_4000() {
     let composite = t.elapsed().as_secs_f64() * 1000.0;
 
     let t = std::time::Instant::now();
-    let first = pictura_select::magic_wand(&buffer, 4, 4, 32, true).expect("flood");
+    let first = pictura_select::magic_wand(&buffer, 4, 4, 32, true, false).expect("flood");
     let flood = t.elapsed().as_secs_f64() * 1000.0;
 
     let mut add = first.clone();
@@ -116,7 +116,7 @@ fn quick_selection_profile_4000() {
     let contour = t.elapsed().as_secs_f64() * 1000.0;
 
     let t = std::time::Instant::now();
-    let second = pictura_select::magic_wand(&buffer, 20, 4, 32, true).expect("flood 2");
+    let second = pictura_select::magic_wand(&buffer, 20, 4, 32, true, false).expect("flood 2");
     add.combine_with(&second, pictura_select::CombineMode::Add);
     let new_region = t.elapsed().as_secs_f64() * 1000.0;
 

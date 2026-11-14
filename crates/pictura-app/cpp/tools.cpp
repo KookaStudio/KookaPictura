@@ -154,6 +154,8 @@ ToolController::ToolController(QObject* parent)
     // for signal wiring and its own reads.
     auto paint = std::make_shared<PaintOptions>();
     auto selection = std::make_shared<SelectionOptions>(), ellipticalSelection = std::make_shared<SelectionOptions>();
+    // The Magic Wand owns its Anti-alias, separate from the lasso tools.
+    auto wandSelection = std::make_shared<SelectionOptions>();
     // Quick Selection owns its combine mode: its New-to-Add switch must not
     // leak into the marquee and the other selection tools.
     auto quickSelection = std::make_shared<SelectionOptions>();
@@ -266,7 +268,7 @@ ToolController::ToolController(QObject* parent)
     registry_.registerTool(ToolId::Eyedropper, makeEyedropperToolHandler(eyedropper));
     registry_.registerTool(ToolId::Brush, makeBrushToolHandler(false, paint));
     registry_.registerTool(ToolId::Pencil, makeBrushToolHandler(true, paint));
-    registry_.registerTool(ToolId::MagicWand, makeMagicWandToolHandler(selection));
+    registry_.registerTool(ToolId::MagicWand, makeMagicWandToolHandler(wandSelection));
     registry_.registerTool(ToolId::QuickSelection, makeQuickSelectionToolHandler(quickSelection));
     registry_.registerTool(ToolId::Move, makeMoveToolHandler(move));
     registry_.registerTool(ToolId::Crop, makeCropToolHandler(crop));

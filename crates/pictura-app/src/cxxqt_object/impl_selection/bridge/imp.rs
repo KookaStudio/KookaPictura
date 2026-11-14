@@ -1,8 +1,12 @@
 use super::*;
 
+use crate::cxxqt_object::helpers::{combine_mode_from, feathered, feathered_within};
+use crate::cxxqt_object::picture::picture;
 use core::pin::Pin;
+use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_select::geometry::{marquee_rect, within_radius, MarqueeStyle};
+use pictura_select::Selection;
 
 pub(super) fn begin_selection_move(view: Pin<&mut PictureView>) -> bool {
     view.begin_selection_move()
@@ -61,6 +65,103 @@ pub(super) fn quick_select_commit(view: Pin<&mut PictureView>) -> bool {
 
 pub(super) fn quick_select_cancel(view: Pin<&mut PictureView>) -> bool {
     view.quick_select_cancel()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn selection_select_ellipse_aa(
+    mut view: Pin<&mut PictureView>,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    mode: &QString,
+    feather: f64,
+    anti_alias: bool,
+) -> bool {
+    let shape = {
+        let rust = view.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return false;
+        };
+        let shape = if anti_alias {
+            Selection::ellipse_aa(doc.width, doc.height, x, y, w, h)
+        } else {
+            Selection::ellipse(doc.width, doc.height, x, y, w, h)
+        };
+        feathered(shape, feather)
+    };
+    let mode = combine_mode_from(&mode.to_string());
+    view.as_mut()
+        .apply_selection_labeled(shape, mode, "Selection")
+}
+
+pub(super) fn selection_end_lasso_aa(
+    mut view: Pin<&mut PictureView>,
+    feather: f64,
+    anti_alias: bool,
+) -> bool {
+    let shape = {
+        let rust = view.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return false;
+        };
+        let points = rust.session.live.lasso_points().unwrap_or_default();
+        if points.len() < 3 {
+            return false;
+        }
+        let (polygon, bounds) = if anti_alias {
+            Selection::polygon_bounded_aa(doc.width, doc.height, points)
+        } else {
+            Selection::polygon_bounded(doc.width, doc.height, points)
+        };
+        feathered_within(polygon, bounds, feather)
+    };
+    let mode = combine_mode_from(view.rust().session.live.lasso_mode().unwrap_or_default());
+    if !view.as_mut().apply_selection_boxed(shape, mode) {
+        return false;
+    }
+    view.as_mut()
+        .rust_mut()
+        .session
+        .live
+        .take_selection_gesture();
+    true
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn selection_magic_wand_aa(
+    mut view: Pin<&mut PictureView>,
+    x: i32,
+    y: i32,
+    tolerance: i32,
+    contiguous: bool,
+    mode: &QString,
+    anti_alias: bool,
+) -> bool {
+    let shape = {
+        let rust = view.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return false;
+        };
+        if x < 0 || y < 0 {
+            return false;
+        }
+        let tolerance = tolerance.clamp(0, 255) as u8;
+        match pictura_select::magic_wand(
+            &picture(doc, rust),
+            x as u32,
+            y as u32,
+            tolerance,
+            contiguous,
+            anti_alias,
+        ) {
+            Ok(selection) => selection,
+            Err(_) => return false,
+        }
+    };
+    let mode = combine_mode_from(&mode.to_string());
+    view.as_mut()
+        .apply_selection_labeled(shape, mode, "Selection")
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -405,9 +405,15 @@ fn sample_all_reads_regions() {
         height: doc.height,
     };
     for (seed, tolerance, contiguous) in [((40, 30), 25u8, true), ((500, 300), 60, false)] {
-        let wand =
-            pictura_select::magic_wand(&full, seed.0 as u32, seed.1 as u32, tolerance, contiguous)
-                .expect("a wand selection");
+        let wand = pictura_select::magic_wand(
+            &full,
+            seed.0 as u32,
+            seed.1 as u32,
+            tolerance,
+            contiguous,
+            false,
+        )
+        .expect("a wand selection");
         let flooded = pictura_paint::bucket::magic_flood(tiles, size, seed, tolerance, contiguous)
             .expect("a flood");
         assert!(

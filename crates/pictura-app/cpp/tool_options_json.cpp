@@ -399,7 +399,7 @@ void applyPaint(PaintOptions& p, const PaintFields& v)
 struct SelectionFields {
     int combineMode, marqueeStyle, fixedSizeW, fixedSizeH, tolerance;
     double feather, fixedRatioW, fixedRatioH;
-    bool contiguous;
+    bool contiguous, antiAlias;
     int magneticWidth, magneticContrast, magneticFrequency;
 };
 
@@ -414,6 +414,7 @@ template <typename F> void fields(SelectionFields& o, F&& f)
     f("fixedSizeHeight", o.fixedSizeH);
     f("tolerance", o.tolerance);
     f("contiguous", o.contiguous);
+    f("antiAlias", o.antiAlias);
     f("magneticWidth", o.magneticWidth);
     f("magneticContrast", o.magneticContrast);
     f("magneticFrequency", o.magneticFrequency);
@@ -423,8 +424,9 @@ SelectionFields selectionFields(const SelectionOptions& s)
 {
     return {int(s.combineMode()),  int(s.marqueeStyle()), s.fixedSizeWidth(),
             s.fixedSizeHeight(),   s.tolerance(),         s.feather(),
-            s.fixedRatioWidth(),   s.fixedRatioHeight(),  s.contiguous(),
-            s.magneticWidth(),     s.magneticContrast(),  s.magneticFrequency()};
+        s.fixedRatioWidth(),   s.fixedRatioHeight(),  s.contiguous(),
+        s.antiAlias(),         s.magneticWidth(),     s.magneticContrast(),
+        s.magneticFrequency()};
 }
 
 void applySelection(SelectionOptions& s, const SelectionFields& v)
@@ -436,6 +438,7 @@ void applySelection(SelectionOptions& s, const SelectionFields& v)
     s.setFixedSize(v.fixedSizeW, v.fixedSizeH);
     s.setTolerance(v.tolerance);
     s.setContiguous(v.contiguous);
+    s.setAntiAlias(v.antiAlias);
     s.setMagneticWidth(v.magneticWidth);
     s.setMagneticContrast(v.magneticContrast);
     s.setMagneticFrequency(v.magneticFrequency);
@@ -511,6 +514,9 @@ QJsonObject toolOptionsToJson(const ToolController& tools)
             tools.optionsFor<SelectionOptions>(ToolId::QuickSelection)) {
         out.insert(QStringLiteral("quickSelection"), write(selectionFields(*s)));
     }
+    if (const SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::MagicWand)) {
+        out.insert(QStringLiteral("wandSelection"), write(selectionFields(*s)));
+    }
     if (const CropOptions* crop = tools.optionsFor<CropOptions>(ToolId::Crop)) {
         out.insert(QStringLiteral("crop"), write(crop->settings()));
     }
@@ -570,6 +576,15 @@ void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
         }
         s->apply(restored);
     }
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::MagicWand)) {
+        SelectionOptions restored;
+        const QJsonValue wandSelection = json.value(QStringLiteral("wandSelection"));
+        if (wandSelection.isObject()) {
+            applySelection(restored,
+                           read(wandSelection.toObject(), selectionFields(SelectionOptions{})));
+        }
+        s->apply(restored);
+    }
 }
 
 void patchToolOptionsJson(ToolController& tools, const QJsonObject& json)
@@ -604,6 +619,11 @@ void patchToolOptionsJson(ToolController& tools, const QJsonObject& json)
     if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::QuickSelection);
         s && quickSelection.isObject()) {
         applySelection(*s, read(quickSelection.toObject(), selectionFields(*s)));
+    }
+    const QJsonValue wandSelection = json.value(QStringLiteral("wandSelection"));
+    if (SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::MagicWand);
+        s && wandSelection.isObject()) {
+        applySelection(*s, read(wandSelection.toObject(), selectionFields(*s)));
     }
 }
 

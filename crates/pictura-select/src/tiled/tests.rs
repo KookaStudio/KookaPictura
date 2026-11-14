@@ -280,7 +280,7 @@ fn tiled_wand_matches_dense() {
     for tol in [0u8, 4, 32, 255] {
         for (x, y) in [(0u32, 0u32), (310, 260), (619, 529)] {
             for contiguous in [true, false] {
-                let got = crate::magic_wand(&img, x, y, tol, contiguous).unwrap();
+                let got = crate::magic_wand(&img, x, y, tol, contiguous, false).unwrap();
                 let want = wand::dense::magic_wand(&img, x, y, tol, contiguous);
                 assert!(
                     got.data == want,

@@ -72,6 +72,36 @@ pub mod ffi {
         /// Restore the selection captured at the start of the Quick Selection stroke.
         fn quick_select_cancel(view: Pin<&mut PictureView>) -> bool;
 
+        /// Commit an ellipse, anti-aliased when `anti_alias` is set.
+        fn selection_select_ellipse_aa(
+            view: Pin<&mut PictureView>,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+            mode: &QString,
+            feather: f64,
+            anti_alias: bool,
+        ) -> bool;
+
+        /// Commit the pending lasso polygon, anti-aliased when `anti_alias` is set.
+        fn selection_end_lasso_aa(
+            view: Pin<&mut PictureView>,
+            feather: f64,
+            anti_alias: bool,
+        ) -> bool;
+
+        /// Flood-select around `(x, y)`, anti-aliased when `anti_alias` is set.
+        fn selection_magic_wand_aa(
+            view: Pin<&mut PictureView>,
+            x: i32,
+            y: i32,
+            tolerance: i32,
+            contiguous: bool,
+            mode: &QString,
+            anti_alias: bool,
+        ) -> bool;
+
         /// The integer rect a marquee drag marks out. `style` is the C++
         /// `MarqueeStyle` value (0 Normal, 1 Fixed Ratio, 2 Fixed Size).
         fn selection_marquee_rect(

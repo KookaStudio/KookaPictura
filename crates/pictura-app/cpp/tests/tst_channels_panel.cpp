@@ -19,6 +19,7 @@ private slots:
     void rowsAndThumbnails();
     void eyesHideChannelsOnTheCanvas();
     void alphaChannelsAndFooter();
+    void newChannelDisabledAtCap();
     void ctrlClickLoadsChannelSelection();
     void refreshKeepsRows();
     void grayscaleDocumentShowsSingleGrayRow();
@@ -174,6 +175,30 @@ void ChannelsPanelTest::alphaChannelsAndFooter()
     QVERIFY(view_->has_selection());
     QCOMPARE(view_->selection_coverage(4, 4), 255);
     QCOMPARE(view_->selection_coverage(12, 12), 0);
+}
+
+// The 56-channel budget disables New Channel and refuses the extra add.
+void ChannelsPanelTest::newChannelDisabledAtCap()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Cap"), 8, 8, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    for (int i = 0; i < 53; ++i) {
+        QCOMPARE(pictura::channels_new_alpha(*view_), i);
+    }
+    QCOMPARE(view_->selection_channel_count(), 53);
+    const int history = view_->history_count();
+    QCOMPARE(pictura::channels_new_alpha(*view_), -1);
+    QCOMPARE(view_->selection_channel_count(), 53);
+    QCOMPARE(view_->history_count(), history);
+    panel_->refresh();
+    auto* add = panel_->findChild<QToolButton*>(QStringLiteral("channelsNew"));
+    QVERIFY(add);
+    QVERIFY(!add->isEnabled());
+    QVERIFY(add->toolTip().contains(QString::number(pictura::channels_max())));
 }
 
 // Ctrl-clicking a colour row loads that channel's pixels as the selection: the

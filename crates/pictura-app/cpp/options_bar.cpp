@@ -389,19 +389,24 @@ QWidget* OptionsBar::buildWandPage(ToolId id)
                 [group](bool on) { group->setContiguous(on); });
     }
 
-    // ponytail: the engine rasteriser is binary (pixel-centre) and the wand
-    // samples the visible composite; both controls stay visible but disabled.
+    // ponytail: the wand samples the visible composite, so Sample All Layers
+    // stays visible but disabled; Anti-alias uses the inferred boundary ramp.
     auto* antiAlias = new QCheckBox(QStringLiteral("Anti-alias"), page);
+    antiAlias->setObjectName(QStringLiteral("optionsWandAntiAlias"));
     antiAlias->setChecked(group ? group->antiAlias() : true);
-    antiAlias->setEnabled(false);
     antiAlias->setToolTip(
-        QStringLiteral("Not modelled: the selection rasteriser is binary (pixel-centre)."));
+        QStringLiteral("Anti-aliased edge (inferred colour-distance coverage)."));
     layout->addWidget(antiAlias);
+    if (controller_ && group) {
+        connect(antiAlias, &QCheckBox::toggled, this,
+                [group](bool on) { group->setAntiAlias(on); });
+    }
     auto* sample = new QCheckBox(QStringLiteral("Sample All Layers"), page);
+    sample->setObjectName(QStringLiteral("optionsWandSampleAllLayers"));
     sample->setChecked(group ? group->sampleAllLayers() : true);
     sample->setEnabled(false);
     sample->setToolTip(QStringLiteral("Not modelled: the wand samples the visible composite."));
-        layout->addWidget(sample);
+    layout->addWidget(sample);
 
     addRefineEdgeButton(layout, page);
     layout->addStretch(1);
@@ -545,15 +550,16 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
     }
 
     if (id != ToolId::Marquee) {
-        // ponytail: the engine rasterises at the pixel centre (binary coverage);
-        // a fractional-coverage rasteriser is new engine work, so the control is
-        // visible but disabled rather than a silent no-op.
         auto* antiAlias = new QCheckBox(QStringLiteral("Anti-alias"), page);
-        antiAlias->setChecked(true);
-        antiAlias->setEnabled(false);
+        antiAlias->setObjectName(QStringLiteral("optionsSelectionAntiAlias"));
+        antiAlias->setChecked(group ? group->antiAlias() : true);
         antiAlias->setToolTip(QStringLiteral(
-            "Not modelled: the selection rasteriser is binary (pixel-centre)."));
+            "Anti-aliased edge (inferred coverage); set before making the selection."));
         layout->addWidget(antiAlias);
+        if (controller_ && group) {
+            connect(antiAlias, &QCheckBox::toggled, this,
+                    [group](bool on) { group->setAntiAlias(on); });
+        }
     }
 
     addRefineEdgeButton(layout, page);

@@ -9,6 +9,7 @@
 //! marked below.
 
 use pictura_core::mask_ops::{self, Border};
+use pictura_core::path::{PathPoint, Subpath};
 use pictura_core::{Channel, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 
 mod color_range;
@@ -203,6 +204,105 @@ impl Selection {
         Self::of(width, height, data)
     }
 
+    /// [`Selection::ellipse`] with a fractional boundary: every pixel whose
+    /// square straddles the ellipse is supersampled 4×4, so the mask has
+    /// partial coverage instead of a pixel-centre stair-step. Each row's
+    /// candidate band runs from the widest analytic span at the y in the row
+    /// closest to `cy` to the narrowest span at the y farthest from `cy`:
+    /// pixels inside the narrowest span stay fully selected and pixels outside
+    /// the widest stay empty. Canvas clipping is unchanged; only the shape's
+    /// own boundary is softened.
+    //
+    // ponytail: 4×4 boundary sampling (17 levels); raise to 8×8 or exact
+    // per-pixel coverage if banding shows.
+    pub fn ellipse_aa(width: u32, height: u32, x: i32, y: i32, w: i32, h: i32) -> Self {
+        let mut sel = Selection::ellipse(width, height, x, y, w, h);
+        if w <= 0 || h <= 0 || sel.data.is_empty() {
+            return sel;
+        }
+        let w_us = width as usize;
+        let rx = w as f64 / 2.0;
+        let ry = h as f64 / 2.0;
+        let cx = x as f64 + rx;
+        let cy = y as f64 + ry;
+        let inside = |px: f64, py: f64| {
+            let dx = (px - cx) / rx;
+            let dy = (py - cy) / ry;
+            dx * dx + dy * dy <= 1.0
+        };
+        let clip = |lo: i32, len: i32, max: u32| {
+            let (lo, hi) = (lo as i64, lo as i64 + len as i64);
+            (lo.clamp(0, max as i64), hi.clamp(0, max as i64))
+        };
+        let (xs, xe) = clip(x, w, width);
+        let (ys, ye) = clip(y, h, height);
+        let top = cy - ry;
+        let bottom = cy + ry;
+        let mut sample = [0u8; 1];
+        for py in ys..ye {
+            let y0 = py as f64;
+            let y1 = y0 + 1.0;
+            if y1 <= top || y0 >= bottom {
+                continue;
+            }
+            let y_near = cy.clamp(y0, y1);
+            let dy_near = (y_near - cy) / ry;
+            let half_wide = rx * (1.0 - dy_near * dy_near).max(0.0).sqrt();
+            if half_wide <= 0.0 {
+                continue;
+            }
+            let y_far = if (y0 - cy).abs() > (y1 - cy).abs() {
+                y0
+            } else {
+                y1
+            };
+            let dy_far = (y_far - cy) / ry;
+            let half_narrow = rx * (1.0 - dy_far * dy_far).max(0.0).sqrt();
+            let start = ((cx - half_wide).floor() as i64).max(xs);
+            let end = (((cx + half_wide).floor() as i64) + 1).min(xe);
+            if start >= end {
+                continue;
+            }
+            let inner_start = (cx - half_narrow).ceil() as i64;
+            let inner_end = (cx + half_narrow).floor() as i64 - 1;
+            let skip_start = inner_start.max(start).min(end);
+            let skip_end = (inner_end + 1).max(start).min(end);
+            let mut write_edge = |edge: i64| {
+                let mut covered = 0u32;
+                for sub_y in 0..4 {
+                    for sub_x in 0..4 {
+                        let px = edge as f64 + (sub_x as f64 + 0.5) / 4.0;
+                        let py_sub = py as f64 + (sub_y as f64 + 0.5) / 4.0;
+                        if inside(px, py_sub) {
+                            covered += 1;
+                        }
+                    }
+                }
+                sample[0] = ((covered * 255 + 8) / 16) as u8;
+                sel.data.write_rect_from(
+                    edge as usize..edge as usize + 1,
+                    py as usize..py as usize + 1,
+                    w_us,
+                    &sample,
+                );
+            };
+            if skip_start < skip_end {
+                for edge in start..skip_start {
+                    write_edge(edge);
+                }
+                for edge in skip_end..end {
+                    write_edge(edge);
+                }
+            } else {
+                for edge in start..end {
+                    write_edge(edge);
+                }
+            }
+        }
+        sel.data.settle();
+        sel
+    }
+
     /// Even-odd fill of `points`, sampled at pixel centres and clipped to the
     /// canvas. Fewer than three points yields an empty selection.
     pub fn polygon(width: u32, height: u32, points: &[(i32, i32)]) -> Self {
@@ -219,6 +319,51 @@ impl Selection {
     ) -> (Self, Option<PsdRect>) {
         let (data, bounds) = polygon::fill(width, height, points);
         (Self::of(width, height, data), bounds)
+    }
+
+    /// [`Selection::polygon`] with an anti-aliased edge, using the core
+    /// shape/path scanline coverage (four sub-rows per pixel and fractional
+    /// horizontal spans).
+    pub fn polygon_aa(width: u32, height: u32, points: &[(i32, i32)]) -> Self {
+        Self::polygon_bounded_aa(width, height, points).0
+    }
+
+    /// [`Selection::polygon_aa`] and the tight bounds of its covered pixels.
+    pub fn polygon_bounded_aa(
+        width: u32,
+        height: u32,
+        points: &[(i32, i32)],
+    ) -> (Self, Option<PsdRect>) {
+        if points.len() < 3 {
+            return (Selection::none(width, height), None);
+        }
+        let subpath = Subpath {
+            points: points
+                .iter()
+                .map(|&(x, y)| PathPoint {
+                    anchor: (x as f64, y as f64),
+                    in_handle: None,
+                    out_handle: None,
+                    smooth: false,
+                })
+                .collect(),
+            closed: true,
+        };
+        let Some((rect, mask)) = pictura_core::shape::coverage_box(&subpath, width, height) else {
+            return (Selection::none(width, height), None);
+        };
+        let (w, h) = (width as usize, height as usize);
+        let mut data = mask_ops::empty_mask(w, h);
+        data.write_rect_from(
+            rect.left as usize..rect.right as usize,
+            rect.top as usize..rect.bottom as usize,
+            w,
+            &mask,
+        );
+        data.settle();
+        let sel = Selection::of(width, height, data);
+        let bounds = sel.bounds();
+        (sel, bounds)
     }
 
     /// Export this selection as a document-level channel (8-bit grayscale

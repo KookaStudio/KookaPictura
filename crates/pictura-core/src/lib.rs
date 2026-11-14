@@ -8,6 +8,7 @@ mod advanced_blending;
 mod annotations;
 pub mod blend;
 pub mod blur;
+pub mod channels;
 mod crs;
 mod digest;
 mod document_composite;

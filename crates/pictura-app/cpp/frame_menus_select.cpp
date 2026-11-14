@@ -78,6 +78,13 @@ void PicturaMainWindow::registerSelectHandlers()
         if (!view || !view->has_selection()) {
             return;
         }
+        if (!channels_can_add(*view)) {
+            statusBar()->showMessage(
+                tr("Cannot save selection: the document already has %1 channels.")
+                    .arg(channels_max()),
+                6000);
+            return;
+        }
         bool ok = false;
         const QString name = QInputDialog::getText(
             this, tr("Save Selection"), tr("Name:"), QLineEdit::Normal,

@@ -81,18 +81,40 @@ pub(super) fn channels_alpha_thumbnail(
     plane
 }
 
+pub(super) fn channels_max() -> i32 {
+    i32::from(pictura_core::channels::MAX_CHANNELS)
+}
+
+pub(super) fn channels_can_add(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| doc.can_add_channel())
+}
+
+fn new_alpha(doc: &mut pictura_core::Document) -> Option<usize> {
+    if !doc.can_add_channel() {
+        return None;
+    }
+    let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+    doc.channels.push(Channel {
+        id,
+        data: vec![0u8; doc.width as usize * doc.height as usize].into(),
+    });
+    Some(doc.channels.len() - 1)
+}
+
 pub(super) fn channels_new_alpha(mut view: Pin<&mut PictureView>) -> i32 {
     let mut index = -1;
     view.as_mut().edit("New Channel", |rust| {
         let Some(doc) = rust.session.doc.as_mut() else {
             return Edit::None;
         };
-        let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
-        doc.channels.push(Channel {
-            id,
-            data: vec![0u8; doc.width as usize * doc.height as usize].into(),
-        });
-        index = doc.channels.len() as i32 - 1;
+        let Some(i) = new_alpha(doc) else {
+            return Edit::None;
+        };
+        index = i as i32;
         Edit::Meta
     });
     index
@@ -158,6 +180,22 @@ pub(super) fn channels_active_mask_thumbnail(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_alpha_refuses_at_cap() {
+        use pictura_core::{BitDepth, ColorMode, Document};
+
+        let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
+        for i in 0..53 {
+            doc.channels.push(Channel {
+                id: i,
+                data: vec![0u8; 4].into(),
+            });
+        }
+        assert!(!doc.can_add_channel());
+        assert_eq!(new_alpha(&mut doc), None);
+        assert_eq!(doc.channels.len(), 53);
+    }
 
     #[test]
     fn shrink_plane_fits_and_samples() {

@@ -6,6 +6,7 @@
 #include "tools.h"
 
 #include "api/paint_bridge.h"
+#include "api/selection_bridge.h"
 
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QPolygonF>
@@ -199,7 +200,9 @@ private:
             for (const QPoint& p : path_) {
                 v->lasso_add_point(p.x(), p.y());
             }
-            committed = path_.size() >= 3 && v->end_lasso(selection_->feather());
+            committed =
+                path_.size() >= 3
+                && selection_end_lasso_aa(*v, selection_->feather(), selection_->antiAlias());
             if (!committed) {
                 v->cancel_lasso();
             }

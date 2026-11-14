@@ -11,6 +11,8 @@ use pictura_core::{Channel, ColorMode, Document, PixelBuffer, PsdRect};
 use pictura_select::{CombineMode, Selection};
 
 mod bridge;
+#[cfg(test)]
+mod cap_tests;
 mod query;
 mod quick;
 mod refine;
@@ -509,6 +511,7 @@ impl qobject::PictureView {
                 y as u32,
                 tolerance,
                 contiguous,
+                false,
             ) {
                 Ok(selection) => selection,
                 Err(_) => return false,
@@ -810,6 +813,9 @@ fn save_selection_channel(rust: &mut super::state::PictureViewRust) -> Edit {
     let Some(doc) = rust.session.doc.as_mut() else {
         return Edit::None;
     };
+    if !doc.can_add_channel() {
+        return Edit::None;
+    }
     let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
     doc.channels.push(selection.to_channel(id));
     Edit::Meta

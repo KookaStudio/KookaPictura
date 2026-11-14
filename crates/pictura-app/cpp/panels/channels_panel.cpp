@@ -16,6 +16,8 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QMainWindow>
+#include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
@@ -30,6 +32,26 @@ constexpr int kThumbnailSize = 24;
 
 // The `alpha` sentinel for the active layer's mask channel row.
 constexpr int kMaskChannel = -2;
+
+// The panel can live in a floated group, where window() is the float rather
+// than the frame that owns the status bar.
+QMainWindow* mainWindowOf(QWidget* within)
+{
+    if (auto* main = qobject_cast<QMainWindow*>(within ? within->window() : nullptr)) {
+        return main;
+    }
+    for (QWidget* widget = within; widget; widget = widget->parentWidget()) {
+        if (auto* main = qobject_cast<QMainWindow*>(widget)) {
+            return main;
+        }
+    }
+    for (QWidget* top : QApplication::topLevelWidgets()) {
+        if (auto* main = qobject_cast<QMainWindow*>(top)) {
+            return main;
+        }
+    }
+    return nullptr;
+}
 
 struct ChannelDef {
     const char* name;
@@ -153,7 +175,19 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
     connect(load_, &QToolButton::clicked, this,
             [this]() { loadRowSelection(list_->currentRow()); });
     connect(save_, &QToolButton::clicked, this, [this]() {
-        if (view_ && view_->save_selection(QString())) {
+        if (!view_ || !view_->has_selection()) {
+            return;
+        }
+        if (!channels_can_add(*view_)) {
+            if (QMainWindow* main = mainWindowOf(window())) {
+                main->statusBar()->showMessage(
+                    tr("Cannot save selection: the document already has %1 channels.")
+                        .arg(channels_max()),
+                    6000);
+            }
+            return;
+        }
+        if (view_->save_selection(QString())) {
             refresh();
         }
     });
@@ -402,7 +436,12 @@ void ChannelsPanel::updateFooter()
     load_->setEnabled(document && alpha);
     remove_->setEnabled(document && alpha);
     const bool temporary=list_->currentRow()>=0 && list_->currentRow()==quickMaskRowIndex_;
-    add_->setEnabled(document && !temporary);
+    const bool room = document && channels_can_add(*view_);
+    add_->setEnabled(document && !temporary && room);
+    add_->setToolTip(room || !document || temporary
+                         ? tr("Create new channel")
+                         : tr("Cannot create a channel: the document already has %1 channels.")
+                               .arg(channels_max()));
     save_->setEnabled(document && view_->has_selection() && !temporary);
     styleRows();
 }
