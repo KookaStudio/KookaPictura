@@ -1,7 +1,7 @@
 //! Layer > Vector Mask authoring: create (Reveal All / Hide All / Current Path),
 //! delete, enable/disable, link/unlink, and rasterize to a layer mask. The
 //! compositor already honours [`pictura_core::VectorMask`]; these edit the
-//! layer's preserved `vmsk` block, which stays the source of truth.
+//! layer's preserved `vmsk`/`vsms` block, which stays the source of truth.
 
 use pictura_core::path::{PathPoint, Subpath};
 use pictura_core::{Document, Layer, LayerBlock, LayerMask, PsdRect, VectorMask};
@@ -10,6 +10,8 @@ use super::paths::{resolve_path, resolve_path_mut};
 
 /// The `vmsk` additional-layer-information key.
 const VMSK: &[u8; 4] = b"vmsk";
+/// The alternate vector-mask key some Photoshop shape layers use.
+const VSMS: &[u8; 4] = b"vsms";
 
 /// The vector mask kind [`add_vector_mask`] creates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,9 +42,20 @@ fn write_flags(data: &mut [u8], flags: u32) {
     }
 }
 
-/// Replace (`Some`) or remove (`None`) the layer's `vmsk` block.
-fn set_vmsk_block(layer: &mut Layer, data: Option<Vec<u8>>) -> bool {
-    let slot = layer.extra_blocks.iter().position(|b| &b.key == VMSK);
+/// The layer's effective vector-mask key: `vmsk` when present, else `vsms`.
+pub(crate) fn effective_key(layer: &Layer) -> Option<&'static [u8; 4]> {
+    if layer.extra_block(VMSK).is_some() {
+        Some(VMSK)
+    } else if layer.extra_block(VSMS).is_some() {
+        Some(VSMS)
+    } else {
+        None
+    }
+}
+
+/// Replace (`Some`) or remove (`None`) the layer's `key` block.
+fn set_vector_mask_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>) -> bool {
+    let slot = layer.extra_blocks.iter().position(|b| &b.key == key);
     match (slot, data) {
         (Some(i), Some(data)) => {
             layer.extra_blocks[i].data = data.into();
@@ -50,7 +63,7 @@ fn set_vmsk_block(layer: &mut Layer, data: Option<Vec<u8>>) -> bool {
         }
         (None, Some(data)) => {
             layer.extra_blocks.push(LayerBlock {
-                key: *VMSK,
+                key: *key,
                 data: data.into(),
             });
             true
@@ -63,11 +76,21 @@ fn set_vmsk_block(layer: &mut Layer, data: Option<Vec<u8>>) -> bool {
     }
 }
 
-/// Set or clear one flags bit in the existing `vmsk` block and re-decode the
+/// Remove every vector-mask block, so no key restores the mask on reload.
+fn remove_vector_mask_blocks(layer: &mut Layer) {
+    layer
+        .extra_blocks
+        .retain(|block| &block.key != VMSK && &block.key != VSMS);
+}
+
+/// Set or clear one flags bit in the effective vector-mask block and re-decode the
 /// view from it, preserving the encoded path bytes exactly. Returns whether the
 /// bit changed.
 fn patch_flag(layer: &mut Layer, bit: u32, on: bool, width: u32, height: u32) -> bool {
-    let Some(index) = layer.extra_blocks.iter().position(|b| &b.key == VMSK) else {
+    let Some(key) = effective_key(layer) else {
+        return false;
+    };
+    let Some(index) = layer.extra_blocks.iter().position(|b| &b.key == key) else {
         return false;
     };
     let flags = flags_of(&layer.extra_blocks[index].data);
@@ -84,8 +107,8 @@ fn patch_flag(layer: &mut Layer, bit: u32, on: bool, width: u32, height: u32) ->
     true
 }
 
-/// `view` re-decoded from `vmsk` bytes, carrying `old`'s density and feather:
-/// they live in the layer's mask record, not in the block.
+/// `view` re-decoded from the effective `vmsk`/`vsms` bytes, carrying `old`'s
+/// density and feather: they live in the layer's mask record, not in the block.
 pub(crate) fn keep_params(
     old: Option<&VectorMask>,
     view: Option<VectorMask>,
@@ -98,13 +121,13 @@ pub(crate) fn keep_params(
     Some(view)
 }
 
-/// Re-encode a layer's in-memory `VectorMask` view into its `vmsk` block,
-/// preserving the block's flags (invert / disabled / link). An external geometry
-/// operation such as rotation mutates the view directly, so this keeps the
-/// authoritative raw block from going stale on save. Returns false without a
-/// view. `ponytail:` re-encodes the flattened polyline, so a rotated curved
-/// mask serializes as its flattened vertices — the compositor already renders
-/// that polyline, so the result stays consistent.
+/// Re-encode a layer's in-memory `VectorMask` view into its effective
+/// `vmsk`/`vsms` block, preserving the block's flags (invert / disabled / link).
+/// An external geometry operation such as rotation mutates the view directly,
+/// so this keeps the authoritative raw block from going stale on save. Returns
+/// false without a view. `ponytail:` re-encodes the flattened polyline, so a
+/// rotated curved mask serializes as its flattened vertices — the compositor
+/// already renders that polyline, so the result stays consistent.
 pub fn sync_vector_mask_block(layer: &mut Layer, width: u32, height: u32) -> bool {
     let Some(view) = layer.vector_mask.as_ref() else {
         return false;
@@ -117,15 +140,16 @@ pub fn sync_vector_mask_block(layer: &mut Layer, width: u32, height: u32) -> boo
     if view.disabled {
         view_flags |= VECTOR_MASK_FLAG_DISABLED;
     }
+    let key = effective_key(layer).unwrap_or(VMSK);
     let flags = layer
         .extra_blocks
         .iter()
-        .find(|b| &b.key == VMSK)
+        .find(|b| &b.key == key)
         .map(|b| flags_of(&b.data))
         .unwrap_or(view_flags);
     let mut data = pictura_codec::encode_vector_mask_view(&subpaths, width, height);
     write_flags(&mut data, flags);
-    set_vmsk_block(layer, Some(data))
+    set_vector_mask_block(layer, key, Some(data))
 }
 
 /// A closed rectangle subpath over `rect`, in document pixels.
@@ -185,7 +209,7 @@ pub fn add_vector_mask(doc: &mut Document, path: &str, kind: VectorMaskKind) -> 
     let mut data = pictura_codec::encode_vector_mask(&subpaths, width, height);
     write_flags(&mut data, flags);
     layer.vector_mask = pictura_codec::decode_vector_mask(&data, width, height);
-    set_vmsk_block(layer, Some(data));
+    set_vector_mask_block(layer, VMSK, Some(data));
     true
 }
 
@@ -197,7 +221,7 @@ pub fn delete_vector_mask(doc: &mut Document, path: &str) -> bool {
     if layer.vector_mask.take().is_none() {
         return false;
     }
-    set_vmsk_block(layer, None);
+    remove_vector_mask_blocks(layer);
     true
 }
 
@@ -243,7 +267,7 @@ pub fn rasterize_vector_mask(doc: &mut Document, path: &str) -> bool {
     let Some(vector) = layer.vector_mask.take() else {
         return false;
     };
-    set_vmsk_block(layer, None);
+    remove_vector_mask_blocks(layer);
     let rect = layer.rect;
     let width = rect.width().max(0) as usize;
     let height = rect.height().max(0) as usize;
@@ -320,7 +344,7 @@ pub fn has_vector_mask(doc: &Document, path: &str) -> bool {
 /// Whether the layer at `path`'s vector mask is linked. A new mask is linked.
 pub fn vector_mask_linked(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path)
-        .and_then(|layer| layer.extra_block(VMSK))
+        .and_then(|layer| effective_key(layer).and_then(|key| layer.extra_block(key)))
         .is_some_and(|block| flags_of(&block.data) & VECTOR_MASK_FLAG_NOT_LINKED == 0)
 }
 
@@ -523,5 +547,150 @@ mod tests {
         let mask = doc.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.data.as_deref(), Some(&[255u8; 16][..]));
         assert_eq!(composite_rgba(&doc).data, shown);
+    }
+
+    /// A 4x4 white layer with a `(1,1)-(3,3)` `vsms` mask view and block.
+    fn vsms_doc() -> Document {
+        let mut doc = doc(4, 4);
+        let corner = |x: f64, y: f64| PathPoint {
+            anchor: (x, y),
+            in_handle: None,
+            out_handle: None,
+            smooth: false,
+        };
+        let data = pictura_codec::encode_vector_mask(
+            &[Subpath {
+                points: vec![
+                    corner(1.0, 1.0),
+                    corner(3.0, 1.0),
+                    corner(3.0, 3.0),
+                    corner(1.0, 3.0),
+                ],
+                closed: true,
+            }],
+            4,
+            4,
+        );
+        let layer = &mut doc.layers[0];
+        layer.vector_mask = pictura_codec::decode_vector_mask(&data, 4, 4);
+        layer.extra_blocks.push(LayerBlock {
+            key: *b"vsms",
+            data: data.into(),
+        });
+        doc
+    }
+
+    #[test]
+    fn a_vsms_mask_deletes_and_round_trips() {
+        let mut doc = vsms_doc();
+        assert!(has_vector_mask(&doc, "0"));
+        assert_eq!(alpha(&composite_rgba(&doc), 0, 0), 0, "masked out");
+        assert!(delete_vector_mask(&mut doc, "0"));
+        assert!(!has_vector_mask(&doc, "0"));
+        assert!(doc.layers[0].extra_block(b"vmsk").is_none());
+        assert!(doc.layers[0].extra_block(b"vsms").is_none());
+        assert_eq!(alpha(&composite_rgba(&doc), 0, 0), 255, "mask removed");
+
+        let bytes = pictura_codec::write_psd(&doc).expect("writes");
+        let back = pictura_codec::read_psd(&bytes).expect("re-reads");
+        assert!(
+            back.layers[0].vector_mask.is_none(),
+            "a deleted vsms mask must not return on reload"
+        );
+    }
+
+    #[test]
+    fn a_vsms_mask_flags_and_link_edit() {
+        let mut doc = vsms_doc();
+        assert!(vector_mask_linked(&doc, "0"));
+        let path_before = doc.layers[0].extra_block(b"vsms").unwrap().data[8..].to_vec();
+
+        assert!(set_vector_mask_linked(&mut doc, "0", false));
+        assert!(!vector_mask_linked(&doc, "0"));
+        let flags = flags_of(&doc.layers[0].extra_block(b"vsms").unwrap().data);
+        assert_eq!(flags, VECTOR_MASK_FLAG_NOT_LINKED);
+
+        assert!(set_vector_mask_enabled(&mut doc, "0", false));
+        assert!(vector_mask_disabled(&doc, "0"));
+        let flags = flags_of(&doc.layers[0].extra_block(b"vsms").unwrap().data);
+        assert_eq!(
+            flags,
+            VECTOR_MASK_FLAG_NOT_LINKED | VECTOR_MASK_FLAG_DISABLED
+        );
+        assert_eq!(alpha(&composite_rgba(&doc), 0, 0), 255, "disabled mask");
+
+        let path_after = doc.layers[0].extra_block(b"vsms").unwrap().data[8..].to_vec();
+        assert_eq!(path_before, path_after, "the path bytes are untouched");
+
+        assert!(set_vector_mask_enabled(&mut doc, "0", true));
+        assert!(!vector_mask_disabled(&doc, "0"));
+    }
+
+    #[test]
+    fn sync_rewrites_the_vsms_block_without_a_vmsk() {
+        let mut doc = vsms_doc();
+        let before = doc.layers[0]
+            .extra_block(b"vsms")
+            .expect("vsms block")
+            .data
+            .clone();
+        doc.layers[0]
+            .vector_mask
+            .as_mut()
+            .expect("vsms view")
+            .subpaths[0]
+            .points[0] = [512, 512];
+
+        assert!(sync_vector_mask_block(&mut doc.layers[0], 4, 4));
+        assert!(
+            doc.layers[0].extra_block(b"vmsk").is_none(),
+            "no vmsk authored"
+        );
+        let after = doc.layers[0].extra_block(b"vsms").expect("vsms rewritten");
+        assert_ne!(after.data, before, "the vsms body changed");
+        let decoded = pictura_codec::decode_vector_mask(&after.data, 4, 4).expect("decodes");
+        assert_eq!(decoded.subpaths[0].points[0], [512, 512]);
+    }
+
+    #[test]
+    fn a_vsms_mask_rasterizes_without_a_reload_change() {
+        let mut doc = vsms_doc();
+        let before = composite_rgba(&doc).data;
+        assert!(rasterize_vector_mask(&mut doc, "0"));
+        assert!(!has_vector_mask(&doc, "0"));
+        assert!(doc.layers[0].extra_block(b"vmsk").is_none());
+        assert!(doc.layers[0].extra_block(b"vsms").is_none());
+        assert!(doc.layers[0].mask.is_some());
+        assert_eq!(composite_rgba(&doc).data, before);
+
+        let bytes = pictura_codec::write_psd(&doc).expect("writes");
+        let back = pictura_codec::read_psd(&bytes).expect("re-reads");
+        assert!(
+            back.layers[0].vector_mask.is_none(),
+            "rasterized vsms must not return on reload"
+        );
+        assert!(back.layers[0].mask.is_some());
+        assert_eq!(composite_rgba(&back).data, before);
+    }
+
+    #[test]
+    fn vsms_read_predicates_track_the_effective_block() {
+        let mut doc = vsms_doc();
+        assert!(has_vector_mask(&doc, "0"));
+        assert!(vector_mask_linked(&doc, "0"));
+        assert!(!vector_mask_disabled(&doc, "0"));
+
+        doc.layers[0].extra_blocks.push(LayerBlock {
+            key: *b"vmsk",
+            data: {
+                let mut data = pictura_codec::encode_vector_mask(&[], 4, 4);
+                write_flags(&mut data, VECTOR_MASK_FLAG_NOT_LINKED);
+                data.into()
+            },
+        });
+        assert!(
+            !vector_mask_linked(&doc, "0"),
+            "the linked read follows the effective vmsk block"
+        );
     }
 }

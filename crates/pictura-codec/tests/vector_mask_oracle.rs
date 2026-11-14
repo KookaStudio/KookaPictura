@@ -1,5 +1,5 @@
-//! Independent `psd-tools` oracle for the `vmsk` vector-mask fixture and for
-//! the shape layers the shape tools author.
+//! Independent `psd-tools` oracle for the `vmsk`/`vsms` vector-mask fixtures
+//! and for the shape layers the shape tools author.
 //!
 //! `oracle.rs` is at its 1400-line cap, so this check lives in its own binary.
 //! It reads a PSD with `psd-tools` (not with `pictura-codec`) and reports each
@@ -23,6 +23,8 @@ lines = []
 for layer in psd:
     blocks = layer.tagged_blocks
     block = blocks.get(Tag.VECTOR_MASK_SETTING1) if blocks else None
+    if block is None and blocks:
+        block = blocks.get(Tag.VECTOR_MASK_SETTING2)
     if block is None:
         continue
     mask = block.data
@@ -315,4 +317,75 @@ fn psd_tools_reads_a_shape_stroke_and_no_fill() {
         "the stroke effect: {stdout}"
     );
     assert_eq!(fields[5], "0", "Fill None is fill opacity 0: {stdout}");
+}
+
+fn vsms_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vector_mask_vsms.psd")
+}
+
+fn read_vsms_fixture() -> pictura_core::Document {
+    let bytes = std::fs::read(vsms_fixture()).expect("read vector_mask_vsms.psd");
+    pictura_codec::read_psd(&bytes).expect("vector_mask_vsms.psd parses")
+}
+
+#[test]
+fn vsms_fixture_decodes() {
+    let doc = read_vsms_fixture();
+    let shape = doc
+        .layers
+        .iter()
+        .find(|layer| layer.name == "Shape")
+        .expect("Shape layer");
+    let mask = shape.vector_mask.as_ref().expect("Shape vsms mask");
+    assert!(!mask.invert && !mask.disabled);
+    assert_eq!(mask.subpaths.len(), 1);
+    assert!(mask.subpaths[0].points.contains(&[256, 256]));
+    assert!(mask.subpaths[0].points.contains(&[5 * 256, 5 * 256]));
+    assert!(
+        shape.extra_block(b"vmsk").is_none(),
+        "no vmsk in the fixture"
+    );
+}
+
+#[test]
+fn vsms_fixture_round_trips() {
+    let doc = read_vsms_fixture();
+    let before = doc
+        .layers
+        .iter()
+        .find(|layer| layer.name == "Shape")
+        .and_then(|layer| layer.extra_block(b"vsms"))
+        .expect("vsms block")
+        .data
+        .clone();
+
+    let bytes = pictura_codec::write_psd(&doc).expect("writes");
+    let back = pictura_codec::read_psd(&bytes).expect("re-reads");
+    let shape = back
+        .layers
+        .iter()
+        .find(|layer| layer.name == "Shape")
+        .expect("Shape layer");
+    assert!(shape.vector_mask.is_some());
+    assert_eq!(
+        shape.extra_block(b"vsms").expect("vsms preserved").data,
+        before
+    );
+    assert_eq!(back, doc, "the whole document round-trips");
+}
+
+#[test]
+fn vsms_fixture_matches_psd_tools() {
+    if !psd_tools_available() {
+        eprintln!("skipping: python3 + psd-tools not available");
+        return;
+    }
+
+    let (stdout, lines) = read_with_psd_tools(&vsms_fixture());
+    assert_eq!(lines.len(), 1, "one vector-mask layer:\n{stdout}");
+    assert_eq!(
+        lines[0],
+        vec!["Shape", "3", "0", "1", "1", "16", "1,1 5,1 5,5 1,5"],
+        "the (1,1)-(5,5) vsms rectangle: {stdout}"
+    );
 }

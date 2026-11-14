@@ -237,7 +237,7 @@ pub(crate) fn read_container(
     // Derive the smart-object view from the preserved bytes; a malformed
     // descriptor or linked-layer record degrades to Unresolved (design D5).
     crate::smart_object::resolve_smart_objects(&mut layers, &layer_section_extra, is_psb);
-    // Derive the vector-mask view from the preserved `vmsk` blocks.
+    // Derive the vector-mask view from the preserved `vmsk`/`vsms` blocks.
     // ponytail: this is a read snapshot. In-session resize/crop/orientation do
     // not re-derive it; the raw block stays authoritative and a reload re-derives.
     crate::vector_mask::resolve_vector_masks(&mut layers, width, height);

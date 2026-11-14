@@ -1,4 +1,4 @@
-//! Decode a layer's preserved `vmsk` block into the derived
+//! Decode a layer's preserved `vmsk`/`vsms` block into the derived
 //! [`pictura_core::VectorMask`] view, and author one from a Work Path outline.
 //!
 //! The raw block stays in `Layer.extra_blocks` and is the source of truth for
@@ -6,7 +6,7 @@
 //! leaves the view unset rather than failing the document.
 
 use pictura_core::path::{PathPoint, Subpath};
-use pictura_core::{LayerStack, VectorFillRule, VectorMask, VectorSubpath};
+use pictura_core::{Layer, LayerStack, VectorFillRule, VectorMask, VectorSubpath};
 
 use crate::common::Reader;
 
@@ -17,15 +17,16 @@ const RECORD: usize = 26;
 /// Cubics are flattened at a fixed subdivision; see `flatten`.
 const SUBDIVISIONS: u32 = 16;
 
-/// Resolve `vmsk` for `layers` (and their children) against the document size.
-/// Never fails: an absent or unparseable block leaves `vector_mask` unset.
+/// Resolve the layer vector mask for `layers` (and their children) against the
+/// document size. `vmsk` is effective when present, even if malformed;
+/// otherwise `vsms` is consulted. Never fails: an absent or unparseable
+/// effective block leaves `vector_mask` unset.
 pub(crate) fn resolve_vector_masks(layers: &mut LayerStack, width: u32, height: u32) {
     for layer in layers.iter_mut() {
         // The reader leaves the mask record's vector density and feather on a
         // placeholder view.
         let params = layer.vector_mask.take();
-        layer.vector_mask = layer
-            .extra_block(b"vmsk")
+        layer.vector_mask = vector_mask_block(layer)
             .and_then(|block| decode(&block.data, width, height))
             .map(|mut view| {
                 if let Some(params) = params {
@@ -38,14 +39,21 @@ pub(crate) fn resolve_vector_masks(layers: &mut LayerStack, width: u32, height: 
     }
 }
 
-/// Decode a `vmsk` block against the document size; `None` when malformed.
+/// The layer's effective vector-mask block: `vmsk` when present, else `vsms`.
+fn vector_mask_block(layer: &Layer) -> Option<&pictura_core::LayerBlock> {
+    layer
+        .extra_block(b"vmsk")
+        .or_else(|| layer.extra_block(b"vsms"))
+}
+
+/// Decode a `vmsk`/`vsms` block against the document size; `None` when malformed.
 pub fn decode_vector_mask(data: &[u8], width: u32, height: u32) -> Option<VectorMask> {
     decode(data, width, height)
 }
 
-/// Decode a `vmsk` block's subpaths as editable Bezier anchors in document
-/// pixels: a handle that sits on its anchor reads as absent, and a linked knot
-/// is smooth. `None` when malformed.
+/// Decode a `vmsk`/`vsms` block's subpaths as editable Bezier anchors in
+/// document pixels: a handle that sits on its anchor reads as absent, and a
+/// linked knot is smooth. `None` when malformed.
 pub fn decode_vector_mask_paths(data: &[u8], width: u32, height: u32) -> Option<Vec<Subpath>> {
     let mut r = Reader::new(data);
     if r.u32().ok()? != 3 {
@@ -314,7 +322,7 @@ fn cubic(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], p3: [i32; 2], t: f64) -> [i32
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{Layer, LayerBlock};
+    use pictura_core::{Document, Layer, LayerBlock, PsdRect};
 
     fn mask_layer(data: Vec<u8>) -> Layer {
         Layer {
@@ -330,6 +338,54 @@ mod tests {
         let mut layers = LayerStack::from_layers(vec![mask_layer(data)]);
         resolve_vector_masks(&mut layers, 8, 8);
         layers[0].vector_mask.take()
+    }
+
+    fn mask_layer_with(key: &[u8; 4], data: Vec<u8>) -> Layer {
+        Layer {
+            extra_blocks: vec![LayerBlock {
+                key: *key,
+                data: data.into(),
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn resolve_layer(layer: Layer) -> Option<VectorMask> {
+        let mut layers = LayerStack::from_layers(vec![layer]);
+        resolve_vector_masks(&mut layers, 8, 8);
+        layers[0].vector_mask.take()
+    }
+
+    fn resolve_layer_with_blocks(layer: Layer) -> (Option<VectorMask>, Layer) {
+        let mut layers = LayerStack::from_layers(vec![layer]);
+        resolve_vector_masks(&mut layers, 8, 8);
+        let mask = layers[0].vector_mask.take();
+        (mask, layers[0].clone())
+    }
+
+    /// A version-3 body holding one closed rectangle through `corners`
+    /// (y, x) in an 8x8 document.
+    fn rectangle_body(corners: &[(u32, u32)]) -> Vec<u8> {
+        let mut data = header(3, 0);
+        data.extend_from_slice(&0u16.to_be_bytes());
+        data.extend_from_slice(&(corners.len() as u16).to_be_bytes());
+        data.extend_from_slice(&1i16.to_be_bytes());
+        data.extend_from_slice(&1u16.to_be_bytes());
+        data.extend_from_slice(&[0u8; 18]);
+        for (y, x) in corners {
+            data.extend_from_slice(&1u16.to_be_bytes());
+            for value in [
+                ((*y as f64 / 8.0) * FIXED_ONE) as i32,
+                ((*x as f64 / 8.0) * FIXED_ONE) as i32,
+            ]
+            .repeat(3)
+            {
+                data.extend_from_slice(&value.to_be_bytes());
+            }
+        }
+        data.extend_from_slice(&6u16.to_be_bytes());
+        data.extend_from_slice(&[0u8; 24]);
+        data
     }
 
     fn header(version: u32, flags: u32) -> Vec<u8> {
@@ -495,5 +551,171 @@ mod tests {
         truncated.extend_from_slice(&1u16.to_be_bytes());
         truncated.extend_from_slice(&[0u8; 18]);
         assert!(resolve(truncated).is_none(), "missing knots");
+    }
+
+    #[test]
+    fn a_vsms_block_decodes_when_vmsk_is_absent() {
+        let data = rectangle_body(&[(1, 1), (1, 5), (5, 5), (5, 1)]);
+        let mask = resolve_layer(mask_layer_with(b"vsms", data)).expect("decodes");
+        assert_eq!(mask.subpaths.len(), 1);
+        assert!(mask.subpaths[0].points.contains(&[256, 256]));
+        assert!(mask.subpaths[0].points.contains(&[5 * 256, 5 * 256]));
+    }
+
+    #[test]
+    fn vmsk_wins_when_both_blocks_exist() {
+        let vmsk = rectangle_body(&[(1, 1), (1, 3), (3, 3), (3, 1)]);
+        let vsms = rectangle_body(&[(2, 2), (2, 6), (6, 6), (6, 2)]);
+        let mut layer = mask_layer_with(b"vmsk", vmsk);
+        layer.extra_blocks.push(LayerBlock {
+            key: *b"vsms",
+            data: vsms.into(),
+        });
+
+        let mask = resolve_layer(layer).expect("decodes");
+        assert!(mask.subpaths[0].points.contains(&[3 * 256, 3 * 256]));
+        assert!(!mask.subpaths[0].points.contains(&[6 * 256, 6 * 256]));
+    }
+
+    #[test]
+    fn a_malformed_vsms_block_is_unset_and_preserved() {
+        let mut unknown_selector = header(3, 0);
+        unknown_selector.extend_from_slice(&9u16.to_be_bytes());
+        unknown_selector.extend_from_slice(&[0u8; 24]);
+
+        let mut truncated_knot = header(3, 0);
+        truncated_knot.extend_from_slice(&0u16.to_be_bytes());
+        truncated_knot.extend_from_slice(&1u16.to_be_bytes());
+        truncated_knot.extend_from_slice(&1i16.to_be_bytes());
+        truncated_knot.extend_from_slice(&1u16.to_be_bytes());
+        truncated_knot.extend_from_slice(&[0u8; 18]);
+        truncated_knot.extend_from_slice(&1u16.to_be_bytes());
+        truncated_knot.extend_from_slice(&[0u8; 4]);
+
+        for (label, bad) in [
+            ("version 2", header(2, 0)),
+            ("unknown selector", unknown_selector),
+            ("truncated knot", truncated_knot),
+        ] {
+            let (mask, layer) = resolve_layer_with_blocks(mask_layer_with(b"vsms", bad.clone()));
+            assert!(mask.is_none(), "{label}: the view is unset");
+            assert_eq!(
+                layer
+                    .extra_block(b"vsms")
+                    .expect("preserved")
+                    .data
+                    .as_slice(),
+                bad.as_slice(),
+                "{label}: the raw block is preserved"
+            );
+        }
+    }
+
+    #[test]
+    fn a_valid_vmsk_wins_over_a_malformed_vsms() {
+        let vmsk = rectangle_body(&[(1, 1), (1, 3), (3, 3), (3, 1)]);
+        let bad = header(2, 0);
+        let mut layer = mask_layer_with(b"vmsk", vmsk.clone());
+        layer.extra_blocks.push(LayerBlock {
+            key: *b"vsms",
+            data: bad.clone().into(),
+        });
+
+        let (mask, layer) = resolve_layer_with_blocks(layer);
+        let mask = mask.expect("vmsk decodes");
+        assert!(mask.subpaths[0].points.contains(&[3 * 256, 3 * 256]));
+        assert_eq!(
+            layer
+                .extra_block(b"vmsk")
+                .expect("preserved")
+                .data
+                .as_slice(),
+            vmsk.as_slice()
+        );
+        assert_eq!(
+            layer
+                .extra_block(b"vsms")
+                .expect("preserved")
+                .data
+                .as_slice(),
+            bad.as_slice()
+        );
+    }
+
+    #[test]
+    fn a_malformed_vmsk_does_not_fall_back_to_vsms() {
+        let bad = header(2, 0);
+        let vsms = rectangle_body(&[(1, 1), (1, 5), (5, 5), (5, 1)]);
+        let mut layer = mask_layer_with(b"vmsk", bad.clone());
+        layer.extra_blocks.push(LayerBlock {
+            key: *b"vsms",
+            data: vsms.clone().into(),
+        });
+
+        let (mask, layer) = resolve_layer_with_blocks(layer);
+        assert!(mask.is_none(), "no fallback past a present vmsk");
+        assert_eq!(
+            layer
+                .extra_block(b"vmsk")
+                .expect("preserved")
+                .data
+                .as_slice(),
+            bad.as_slice()
+        );
+        assert_eq!(
+            layer
+                .extra_block(b"vsms")
+                .expect("preserved")
+                .data
+                .as_slice(),
+            vsms.as_slice()
+        );
+    }
+
+    #[test]
+    fn a_vsms_block_round_trips_verbatim() {
+        let data = rectangle_body(&[(1, 1), (1, 5), (5, 5), (5, 1)]);
+        let mut doc = Document::from_rgba("Base", 8, 8, &[255; 8 * 8 * 4]);
+        // The reader reconstructs an RGB merged composite with three planes;
+        // match that here so whole-document equality can hold.
+        doc.composite = pictura_core::PixelBuffer {
+            width: 8,
+            height: 8,
+            channels: 3,
+            data: vec![255u8; 8 * 8 * 3].into(),
+        };
+        let mut shape = doc.layers[0].clone();
+        shape.name = "Shape".into();
+        shape.rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 8,
+            right: 8,
+        };
+        shape.extra_blocks = vec![LayerBlock {
+            key: *b"vsms",
+            data: data.clone().into(),
+        }];
+        shape.vector_mask = crate::decode_vector_mask(&data, 8, 8);
+        let _ = doc.layers.push(shape);
+
+        let bytes = crate::write_psd(&doc).expect("writes");
+        let back = crate::read_psd(&bytes).expect("re-reads");
+        let shape = back
+            .layers
+            .iter()
+            .find(|layer| layer.name == "Shape")
+            .expect("Shape layer");
+        assert!(shape.vector_mask.is_some());
+        assert!(shape.extra_block(b"vmsk").is_none());
+        assert_eq!(
+            shape
+                .extra_block(b"vsms")
+                .expect("preserved")
+                .data
+                .as_slice(),
+            data.as_slice()
+        );
+        assert_eq!(back, doc, "the whole document round-trips");
     }
 }

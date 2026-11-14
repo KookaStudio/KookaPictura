@@ -15,7 +15,9 @@ cargo run -p pictura-codec --example make_smart_fixtures
 
 The generator is deterministic: fixed dimensions, pixel values, offsets, and
 layer names, and `psd-tools`/PIL produce byte-identical output across runs. Do
-not hand-edit these files.
+not hand-edit these files. Regeneration is sensitive to the installed
+`psd-tools` writer version (some fixtures embed it); unrelated drift, such as
+`pattern_fill_masked.psd`, must be reverted rather than committed.
 
 `scripts/generate-fixtures.py` authors everything in this directory (including
 `engine_data.bin`) with `psd-tools`. The two embedded-smart-object fixtures live
@@ -66,6 +68,7 @@ solid fill, type, and smart object.
 | `bevel.psd` | RGB | 8x8 | `Base` pixel layer + `Beveled` layer carrying an `lfx2` `ebbl` bevel & emboss |
 | `legacy_effects.psd` | RGB | 8x8 | `Base` pixel layer + `Legacy` layer carrying a legacy `lrFX` `EffectsLayer` (`cmnS` + `dsdw` + `oglw`) |
 | `vector_fill.psd` | RGB | 8x8 | `Base` pixel layer + `Shape` shape layer with a `vscg` `SoCo` solid fill clipped by a closed `(1,1)-(5,5)` `vmsk` |
+| `vector_mask_vsms.psd` | RGB | 8x8 | `Base` pixel layer + `Shape` `vscg` solid-fill layer whose only vector mask is a closed `(1,1)-(5,5)` `vsms` (`VECTOR_MASK_SETTING2`); no `vmsk` |
 | `engine_data.bin` | — | 692 B | synthetic EngineData blob (not a PSD), authored by `scripts/generate-fixtures.py` through psd-tools' `EngineData` writer |
 
 `engine_data.bin` is a minimal, synthetic `EngineData` value: a font set

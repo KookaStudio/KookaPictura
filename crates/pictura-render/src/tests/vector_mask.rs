@@ -7,6 +7,9 @@ const VECTOR_MASK_FIXTURE: &[u8] =
 const PASS_THROUGH_VECTOR_MASK_FIXTURE: &[u8] =
     include_bytes!("../../../pictura-codec/tests/fixtures/pass_through_vector_mask.psd");
 
+const VSMS_FIXTURE: &[u8] =
+    include_bytes!("../../../pictura-codec/tests/fixtures/vector_mask_vsms.psd");
+
 fn vector_mask_doc() -> Document {
     pictura_codec::read_psd(VECTOR_MASK_FIXTURE).expect("vector_mask.psd parses")
 }
@@ -206,4 +209,55 @@ fn a_shape_layer_is_a_fill_cut_to_its_outline_and_survives_a_save() {
     let bytes = pictura_codec::write_psd(&d).expect("writes");
     let reread = pictura_codec::read_psd(&bytes).expect("re-reads");
     assert_eq!(composite_rgba(&reread), out, "the shape layer round-trips");
+}
+
+fn vsms_doc() -> Document {
+    pictura_codec::read_psd(VSMS_FIXTURE).expect("vector_mask_vsms.psd parses")
+}
+
+#[test]
+fn a_vsms_shape_fill_renders_inside_its_path() {
+    let out = composite_rgba(&vsms_doc());
+    assert_eq!(rgb(&out, 2, 2), [255, 0, 0], "inside the vsms rectangle");
+    assert_eq!(rgb(&out, 0, 0), [200, 100, 50], "outside it is the base");
+    assert_eq!(rgb(&out, 6, 6), [200, 100, 50]);
+}
+
+#[test]
+fn an_inverted_vsms_mask_hides_its_inside() {
+    let mut d = vsms_doc();
+    let index = d
+        .layers
+        .iter()
+        .position(|layer| layer.name == "Shape")
+        .expect("Shape layer");
+    d.layers[index].rect = full(8, 8);
+    let data = {
+        let block = d.layers[index]
+            .extra_blocks
+            .iter_mut()
+            .find(|block| block.key == *b"vsms")
+            .expect("Shape vsms block");
+        let mut flags = u32::from_be_bytes(
+            block.data.as_slice()[4..8]
+                .try_into()
+                .expect("vsms flags word"),
+        );
+        flags |= crate::VECTOR_MASK_FLAG_INVERT;
+        block.data.as_mut_slice()[4..8].copy_from_slice(&flags.to_be_bytes());
+        block.data.clone()
+    };
+    d.layers[index].vector_mask = pictura_codec::decode_vector_mask(&data, 8, 8);
+    assert!(
+        d.layers[index]
+            .vector_mask
+            .as_ref()
+            .expect("vsms view")
+            .invert,
+        "the invert flag is decoded from the block"
+    );
+
+    let out = composite_rgba(&d);
+    assert_eq!(rgb(&out, 2, 2), [200, 100, 50], "inside is hidden");
+    assert_eq!(rgb(&out, 0, 0), [255, 0, 0], "outside shows the fill");
 }

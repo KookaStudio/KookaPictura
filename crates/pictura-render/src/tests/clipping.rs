@@ -9,6 +9,9 @@ use pictura_core::{Channel, SmartObject};
 const WHITE: [u8; 3] = [255, 255, 255];
 const GREEN: [u8; 3] = [0, 255, 0];
 
+const VSMS_FIXTURE: &[u8] =
+    include_bytes!("../../../pictura-codec/tests/fixtures/vector_mask_vsms.psd");
+
 /// A white background, a red 4 x 4 base at (2, 2), and a full-canvas green
 /// layer clipped to it.
 fn clipped_doc() -> Document {
@@ -298,4 +301,80 @@ fn a_clipped_layer_respects_a_proxy_bases_alpha() {
     assert_eq!(rgb(&out, 1, 3), GREEN);
     assert_eq!(rgb(&out, 2, 0), WHITE, "over the proxy's transparent half");
     assert_eq!(rgb(&out, 3, 3), WHITE);
+}
+
+fn vsms_clipped_doc() -> Document {
+    let mut d = pictura_codec::read_psd(VSMS_FIXTURE).expect("vector_mask_vsms.psd parses");
+    let mut green = solid(
+        "Clipped",
+        full(8, 8),
+        (0, 255, 0),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    green.clipping = true;
+    let _ = d.layers.push(green);
+    d
+}
+
+fn shape_index(d: &Document) -> usize {
+    d.layers
+        .iter()
+        .position(|layer| layer.name == "Shape")
+        .expect("Shape layer")
+}
+
+#[test]
+fn a_clipped_layer_follows_a_vsms_shape_base() {
+    let out = composite_rgba(&vsms_clipped_doc());
+    assert_eq!(rgb(&out, 2, 2), GREEN, "inside the vsms rectangle");
+    assert_eq!(
+        rgb(&out, 0, 0),
+        [200, 100, 50],
+        "outside it shows the base layer"
+    );
+    assert_eq!(rgb(&out, 6, 6), [200, 100, 50]);
+}
+
+#[test]
+fn a_clipped_layer_follows_a_vmsk_shape_base() {
+    let vsms = composite_rgba(&vsms_clipped_doc());
+
+    let mut d = vsms_clipped_doc();
+    let index = shape_index(&d);
+    let data = {
+        let block = d.layers[index]
+            .extra_blocks
+            .iter_mut()
+            .find(|block| block.key == *b"vsms")
+            .expect("Shape vsms block");
+        block.key = *b"vmsk";
+        block.data.clone()
+    };
+    d.layers[index].vector_mask = pictura_codec::decode_vector_mask(&data, 8, 8);
+    assert!(
+        d.layers[index].vector_mask.is_some(),
+        "the vmsk block decodes"
+    );
+    let vmsk = composite_rgba(&d);
+    assert_eq!(vmsk.data, vsms.data, "vmsk and vsms clip identically");
+}
+
+#[test]
+fn a_disabled_vsms_mask_leaves_the_base_alpha() {
+    let mut d = vsms_clipped_doc();
+    let index = shape_index(&d);
+    let path = index.to_string();
+    d.layers[index].rect = full(8, 8);
+    assert!(crate::set_vector_mask_enabled(&mut d, &path, false));
+    assert!(crate::vector_mask_disabled(&d, &path));
+
+    let out = composite_rgba(&d);
+    assert_eq!(
+        rgb(&out, 0, 0),
+        GREEN,
+        "the fill base's unmasked alpha now reveals the clipped layer"
+    );
+    assert_eq!(rgb(&out, 7, 7), GREEN);
 }
