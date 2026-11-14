@@ -552,6 +552,11 @@ void GpuBackendTest::statusBarShowsTheBackendLabel()
                  || text == QStringLiteral("CPU") || text == QStringLiteral("CPU (no GPU)")
                  || text == QStringLiteral("CPU (safe mode)"),
              qPrintable(text));
+    PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    if (!view->gpu_available() && !gpuChainHasResetPath()) {
+        QCOMPARE(text, QStringLiteral("CPU (no GPU)"));
+    }
 }
 
 void GpuBackendTest::aboutTextNamesBackend()
@@ -564,10 +569,20 @@ void GpuBackendTest::toggleIsDisabledOnlyWhenNoBackendExists()
     PictureView probe;
     const bool available = probe.gpu_available();
     window_ = pictura::test::makeMainWindow();
+    QVERIFY(window_->newDocument(QStringLiteral("GpuToggle"), 32, 32, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
     window_->showPreferences(PreferencesDialog::kPerformance);
     auto* box = window_->findChild<QCheckBox*>(QStringLiteral("preferences_useGpuCompute"));
     QVERIFY(box != nullptr);
     QCOMPARE(box->isEnabled(), available || gpuChainHasResetPath());
+    if (!box->isEnabled()) {
+        QVERIFY2(!box->isChecked(), "no candidate must read as unchecked");
+        PictureView* view = window_->activeView();
+        QVERIFY(view != nullptr);
+        QVERIFY(!view->gpu_compute());
+        window_->saveSessionNow();
+        QVERIFY(!pictura::loadSession().gpuCompute);
+    }
 }
 
 void GpuBackendTest::statusBackendTokenIsLegacy()

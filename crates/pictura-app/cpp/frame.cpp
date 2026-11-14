@@ -166,6 +166,12 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
         }
     }
     gpuCandidatesAvailable_ = gpuAvailable_ || gpuChainHasResetPath();
+    // No candidate means the preference cannot be honored: read it as off so the
+    // Preferences checkbox and the session agree with the CPU backend. A
+    // safe-mode reset path keeps the stored value so off-and-on can retry.
+    if (!gpuCandidatesAvailable_) {
+        gpuCompute_ = false;
+    }
     registerHandlers();
     if (updateChecksEnabled_ && !qEnvironmentVariableIsSet("PICTURA_DISABLE_UPDATE_CHECK")) {
         ensureUpdateChecker(*this, state.checkForUpdatesOnLaunch);

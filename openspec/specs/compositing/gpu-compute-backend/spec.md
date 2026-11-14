@@ -53,8 +53,8 @@ It SHALL return false when no candidate is selected or no usable adapter exists.
 A boolean session preference `gpuCompute` SHALL control GPU compositing. Its
 default SHALL be true, and a missing value SHALL be read as true. When `gpuCompute`
 is false the system MUST force the CPU backend for every composite while keeping
-results within the parity tolerance. A checkable, implemented command SHALL toggle
-the preference and reflect the persisted value.
+results within the parity tolerance. The Preferences > Performance **Use GPU
+Compute** checkbox SHALL toggle the preference and reflect the effective value.
 
 #### Scenario: Disabling forces the CPU backend
 
@@ -63,8 +63,13 @@ the preference and reflect the persisted value.
 
 #### Scenario: Toggle command reflects the value
 
-- **WHEN** the GPU-compute command is invoked
-- **THEN** the preference flips, the document recomposites on the newly selected backend, and the command's checked state matches the persisted `gpuCompute` value
+- **WHEN** the removed `view.gpuCompute` command is requested
+- **THEN** it is not offered, and the Preferences > Performance **Use GPU Compute** checkbox is the toggle
+
+#### Scenario: Toggle reflects the value
+
+- **WHEN** the Preferences > Performance **Use GPU Compute** checkbox is toggled
+- **THEN** the preference flips, the active view and checkbox reflect the new value, and a session save records it
 
 ### Requirement: GPU compute preference persists
 
@@ -127,21 +132,41 @@ selected, not a compiled-in default. Help > About SHALL show the same label.
 When no candidate is usable, or the candidate chain ends in safe mode, the system
 SHALL fall back to the CPU backend, compositing SHALL continue to work without a
 panic or an error dialog, consistent with the existing `Graceful CPU fallback`
-requirement. The GPU-compute toggle SHALL be disabled only when no GPU backend is
-compiled or present. In safe mode the toggle SHALL remain enabled so that turning
-it off and on clears the cache and lets a later launch retry.
+requirement. The GPU-compute toggle SHALL be disabled only when no GPU candidate
+is available: no usable adapter and no safe-mode reset path. In safe mode the
+toggle SHALL remain enabled so that turning it off and on clears the cache and
+lets a later launch retry.
 
 #### Scenario: Document opens without a GPU
 
 - **WHEN** a document is opened on a machine where no candidate is usable
-- **THEN** it composites on the CPU without a panic or error dialog
+- **THEN** it composites on the CPU without a panic or an error dialog
 
 #### Scenario: Toggle stays disabled without an adapter
 
-- **WHEN** the GPU-compute command is offered while no GPU backend is compiled or present
-- **THEN** it is disabled/greyed and invoking it does not enable the GPU backend
+- **WHEN** the Preferences > Performance **Use GPU Compute** toggle is offered while no GPU candidate is available (no usable adapter and no safe-mode reset path)
+- **THEN** it is disabled and unchecked, and the document does not request the GPU backend
 
 #### Scenario: Safe mode keeps the reset path [gb_safe_mode_toggle]
 
 - **WHEN** the chain ended in safe mode and the user turns GPU compute off and back on
 - **THEN** the toggle is available, the cache is cleared, and the next launch retries the candidates
+
+### Requirement: An unavailable GPU reads as off
+
+After the startup probe establishes that no GPU candidate is available, the
+effective `gpuCompute` preference SHALL be false even when the session store
+holds true. Preferences > Performance SHALL show **Use GPU Compute** unchecked
+and disabled, and a subsequent session save SHALL record false. A launch whose
+candidate chain ended in safe mode SHALL retain the stored value, keep the toggle
+enabled, and leave the off-and-on reset path intact.
+
+#### Scenario: No candidate leaves the preference off [gb_no_gpu_unchecked]
+
+- **WHEN** a launch has no usable adapter and no safe-mode reset path, and the Performance preferences page is opened
+- **THEN** Use GPU Compute is unchecked and disabled, and saving the session records `gpuCompute` false
+
+#### Scenario: Safe mode keeps the stored preference [gb_safe_mode_stored]
+
+- **WHEN** the candidate chain ended in safe mode and the stored `gpuCompute` is true
+- **THEN** the toggle remains enabled and checked, and saving the session keeps `gpuCompute` true

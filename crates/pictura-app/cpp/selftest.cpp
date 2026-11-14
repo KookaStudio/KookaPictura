@@ -46,6 +46,7 @@
 #include "commands.h"
 #include "dialogs.h"
 #include "frame.h"
+#include "gpu_probe.h"
 #include "icons.h"
 #include "image_view.h"
 #include "panels/layers_panel.h"
@@ -1330,14 +1331,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_FAIL(69, "filter determinism wrong");
         }
 
-        // M26: GPU-compute default/toggle and its persisted preference.
-        // 70: default is on; the toggle flips to CPU and restores the backend.
+        // 70: the M26 default follows candidate availability; the toggle flips to CPU and restores.
         pictura::PictureView* gpuView = frame.activeView();
         if (!gpuView) {
             ST_FAIL(70, "no active view");
         }
         const bool avail = gpuView->gpu_available();
         const bool defaultOn = gpuView->gpu_compute();
+        const bool candidateDefault = avail || pictura::gpuChainHasResetPath();
         const QString onBackend = gpuView->active_backend();
         const bool onOk = avail ? onBackend == QStringLiteral("GPU")
                                       : onBackend == QStringLiteral("CPU (no GPU)");
@@ -1347,14 +1348,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // with a GPU, disabling it drops the label to "CPU".
         const bool offCpu = avail ? offBackend == QStringLiteral("CPU")
                                   : offBackend == QStringLiteral("CPU (no GPU)");
-        gpuView->set_gpu_compute(true);
+        gpuView->set_gpu_compute(defaultOn);
         const bool gpuRestored = gpuView->active_backend() == onBackend;
         ST_BEGIN("gpu_available");
         ST_PASS("gpu available=%d default_on=%d off_cpu=%d on_back=%d", avail ? 1 : 0,
                      defaultOn ? 1 : 0,
                      offCpu ? 1 : 0,
                      gpuRestored ? 1 : 0);
-        if (!defaultOn || !onOk || !offCpu || !gpuRestored) {
+        if (defaultOn != candidateDefault || !onOk || !offCpu || !gpuRestored) {
             ST_FAIL(70, "gpu backend wrong");
         }
 

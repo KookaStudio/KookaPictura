@@ -31,7 +31,6 @@
 
 #include "preferences_dialog.h"
 #include "session.h"
-#include "theme.h"
 #include "tool_hint_bar.h"
 #include "toolbox.h"
 
@@ -976,17 +975,18 @@ void CommandTreeTest::preferencesPages()
     prefs->openOn(QStringLiteral("Interface"));
     QCOMPARE(prefs->currentPageForTest(), QStringLiteral("Interface"));
     // A disabled pane never becomes the shown page.
-    prefs->openOn(QStringLiteral("Cursors"));
-    QCOMPARE(prefs->currentPageForTest(), QStringLiteral("Interface"));
-
+    prefs->openOn(QStringLiteral("Cursors")); QCOMPARE(prefs->currentPageForTest(), QStringLiteral("Interface"));
     QSignalSpy gpuSpy(prefs, &pictura::PreferencesDialog::gpuComputeChanged);
     prefs->setGpuCompute(true);
     QVERIFY(prefs->checkboxForTest(QStringLiteral("useGpuCompute")));
     prefs->setCheckboxForTest(QStringLiteral("useGpuCompute"), false);
-    QCOMPARE(gpuSpy.count(), 1);
-    QCOMPARE(gpuSpy.at(0).at(0).toBool(), false);
-    prefs->setGpuComputeEnabled(false);
-    prefs->close();
+    QCOMPARE(gpuSpy.count(), 1); QCOMPARE(gpuSpy.at(0).at(0).toBool(), false);
+    if (!window_->activeView()) QVERIFY(window_->newDocument(QStringLiteral("GpuToggle"), 32, 32, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    auto* view = window_->activeView();
+    QVERIFY(view && !view->gpu_compute());
+    QVERIFY2(view->active_backend() == QStringLiteral("CPU") || view->active_backend() == QStringLiteral("CPU (no GPU)"), "GPU toggle reached the document");
+    QVERIFY(!pictura::loadSession().gpuCompute);
+    prefs->setGpuComputeEnabled(false); prefs->close();
 }
 
 // View > Tool Hints is a checkable toggle, on by default; it hides the footer
