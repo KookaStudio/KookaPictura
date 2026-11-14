@@ -37,11 +37,25 @@
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 
 #include "qt_test_support.h"
 
 namespace {
+
+// Dialogs are shown non-modally, so they are not active modal widgets; find
+// the open dialog among the top-level windows.
+template <typename T>
+T* activeTopLevel()
+{
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (auto* dialog = qobject_cast<T*>(widget)) {
+            return dialog;
+        }
+    }
+    return nullptr;
+}
 
 QByteArray block(const char* kind)
 {
@@ -111,6 +125,7 @@ private slots:
     void cleanup();
     void menuIsLiveOnAnOpenedImage();
     void dialogPreviewsCancelsAndApplies();
+    void cancellingAdjustmentDialogsIsSilent();
     void colorLookupPresetRebuildsTheLook();
     void brightnessContrastPreviewsAndApplies();
     void levelsAutoStretchesTheRamp();
@@ -278,6 +293,38 @@ void ImageAdjustmentsTest::dialogPreviewsCancelsAndApplies()
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Hue/Saturation"));
     QVERIFY(view_->undo());
     QCOMPARE(view_->composite_argb(5, 5), before);
+}
+
+// Cancel is not a refusal: abandoning an adjustment dialog must not paint the
+// status bar's error banner.
+void ImageAdjustmentsTest::cancellingAdjustmentDialogsIsSilent()
+{
+    QVERIFY(openImage(QColor(100, 150, 200)));
+    const QRgb before = view_->composite_argb(5, 5);
+    const int history = view_->history_count();
+    window_->statusBar()->clearMessage();
+
+    QTimer::singleShot(0, [] {
+        if (auto* dialog = activeTopLevel<pictura::AdjustmentDialog>()) {
+            dialog->reject();
+        }
+    });
+    leaf(QStringLiteral("Levels"))->trigger();
+    QVERIFY2(window_->statusBar()->currentMessage().isEmpty(),
+             qPrintable(window_->statusBar()->currentMessage()));
+    QCOMPARE(view_->composite_argb(5, 5), before);
+    QCOMPARE(view_->history_count(), history);
+
+    QTimer::singleShot(0, [] {
+        if (auto* dialog = activeTopLevel<pictura::HdrToningDialog>()) {
+            dialog->reject();
+        }
+    });
+    leaf(QStringLiteral("HDR Toning"))->trigger();
+    QVERIFY2(window_->statusBar()->currentMessage().isEmpty(),
+             qPrintable(window_->statusBar()->currentMessage()));
+    QCOMPARE(view_->composite_argb(5, 5), before);
+    QCOMPARE(view_->history_count(), history);
 }
 
 void ImageAdjustmentsTest::colorLookupPresetRebuildsTheLook()

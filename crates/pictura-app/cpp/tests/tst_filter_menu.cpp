@@ -11,6 +11,7 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
+#include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QWidget>
 
@@ -66,6 +67,7 @@ private slots:
     void lastFilterSettingsReopensPrefilled();
     void everyRowsKindIsSupportedAndArityMatches();
     void dialogRejectRestoresPixels();
+    void cancellingAFilterDialogIsSilent();
     void nonPixelActiveLayerDisablesFilters();
     void addedRowsAreImplemented();
     void grayscaleDocumentAppliesThroughDialog();
@@ -384,6 +386,26 @@ void FilterMenuTest::dialogRejectRestoresPixels()
     spin->setValue(spin->value() + 3.0);
     dialog.reject();
     QCOMPARE(view->image(), before);
+}
+
+// Cancel is not a refusal: the menu handler must not paint the status banner.
+void FilterMenuTest::cancellingAFilterDialogIsSilent()
+{
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    const int history = view->history_count();
+    window_->statusBar()->clearMessage();
+
+    QTimer::singleShot(0, [] {
+        if (auto* dialog = activeFilterDialog()) {
+            dialog->reject();
+        }
+    });
+    QVERIFY(window_->registry()->dispatch(
+        filterId(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"))));
+    QVERIFY2(window_->statusBar()->currentMessage().isEmpty(),
+             qPrintable(window_->statusBar()->currentMessage()));
+    QCOMPARE(view->history_count(), history);
 }
 
 void FilterMenuTest::nonPixelActiveLayerDisablesFilters()

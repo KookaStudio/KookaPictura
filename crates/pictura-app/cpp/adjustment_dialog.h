@@ -186,6 +186,7 @@ std::unique_ptr<AdjustmentDialog> makeAdjustmentDialog(const QString& kind, Pict
 
 // Open the `kind` dialog (`"levels"`, …) over `view`'s active layer, seeded
 // with `tools`' foreground and background colours; true when it was applied.
+// A false result is a cancel or a dialog that could not open.
 // `canvas` may be panned or zoomed while the dialog is open (see `runDialog`);
 // the preview follows the section it shows.
 bool runAdjustmentDialog(QWidget* parent, PictureView* view, const QString& kind,
