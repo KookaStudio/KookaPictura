@@ -32,7 +32,7 @@ same bytes.
 ### Requirement: A backed tile decodes only the rows it covers
 
 Decoding a backed tile SHALL read only the bytes of the rows of its 256-row
-band. A decoded band SHALL be kept in a process-wide cache of at most 64 MiB, so
+band. A decoded band SHALL be kept in a process-wide cache of at most 32 MiB, so
 reading every tile of a band decodes it once.
 
 #### Scenario: A tile reads its band only [lp_rows]

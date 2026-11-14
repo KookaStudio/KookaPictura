@@ -449,9 +449,7 @@ impl qobject::PictureView {
     ) -> Vec<qobject::LayerRow> {
         // Thumbnails sample layers backed by the opened file without making
         // their tiles resident (#1218).
-        pictura_core::memory::eviction::transient(|| {
-            self.layer_rows(thumb_size, entire_document)
-        })
+        pictura_core::memory::eviction::transient(|| self.layer_rows(thumb_size, entire_document))
     }
 
     fn layer_rows(&self, thumb_size: i32, entire_document: bool) -> Vec<qobject::LayerRow> {

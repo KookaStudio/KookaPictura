@@ -3,7 +3,7 @@
 ## 1. Tests named by the plan
 
 - [ ] 1.1 `pictura-core`: `backed_tile_dropped_and_redecoded_identity`, `a_written_backed_tile_leaves_its_source`, `a_transient_read_leaves_a_backed_tile_away`, `backed_tiles_are_evicted_first_without_writes`.
-- [ ] 1.2 `pictura-codec`: `lazy_open_matches_eager`, `lazy_open_decodes_no_layer_pixels`, `zip_and_deep_channels_open_eagerly`, `a_backed_tile_reads_only_its_band`, `lazy_index_rejects_short_channels`, `lazy_decode_of_a_truncated_source_is_unreadable`, `merged_preview_matches_the_merged_image`, `merged_preview_needs_alpha_or_background`, `source_replaced_keeps_backed_tiles`, `source_deleted_while_open`, `source_modified_in_place_marks_tiles_unreadable`.
+- [ ] 1.2 `pictura-codec`: `lazy_open_matches_eager`, `lazy_open_decodes_no_layer_pixels`, `zip_and_deep_channels_open_eagerly`, `a_backed_tile_reads_only_its_band`, `lazy_index_rejects_short_channels`, `lazy_decode_of_a_truncated_source_is_unreadable`, `merged_preview_matches_the_merged_image`, `merged_preview_needs_a_visible_background`, `source_replaced_keeps_backed_tiles`, `source_deleted_while_open`, `source_modified_in_place_marks_tiles_unreadable`.
 - [ ] 1.3 `pictura-app`: `save_over_source_with_backed_tiles`, `first_paint_shows_the_files_merged_image`, `an_edit_replaces_the_merged_preview`, `picture_reads_layers_while_the_preview_shows`.
 
 ## 2. Core

@@ -51,13 +51,13 @@ const BASELINE: &[(&str, usize)] = &[
     // The merged image is composited band by band into tiles (#1216); the
     // peak is the save job's copy, a band's compositor canvas and the file.
     ("save_psd", 128_845_134),
-    // Layer channels decode a row at a time into tiles and the file is mapped
-    // (#1273); the peak is the opened document's tiles.
-    ("open_psd", 257_815_559),
-    // Raised by #1216: Sample All Layers composites the tiles it floods (about
-    // 1.5 MiB at once), where #1214 read a retained composite the setup held
-    // (72 MiB at 4250², outside this delta). The absolute peak fell.
-    ("magic_wand", 1_932_132),
+    // Lowered by #1218: 8-bit raw and RLE layer channels are indexed and
+    // decoded on first read, so the open holds no layer tiles.
+    ("open_psd", 56_221_921),
+    // Raised by #1218: the open no longer decodes the layers, so the tiles the
+    // flood reads are decoded here (about 25 MiB at 4250²) through the 32 MiB
+    // band cache. The open's peak fell by 190 MiB; the absolute peak fell.
+    ("magic_wand", 60_500_860),
 ];
 
 /// The scenarios whose measured step must not materialize a tiled plane into

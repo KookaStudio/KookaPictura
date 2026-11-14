@@ -24,7 +24,7 @@ This plan covers `lazy-backed-open` (#1218): the new capabilities
 | `lp_hostile_index` | Lazily open a PSD with a count table longer than its channel, and one whose channel ends past the file | Same error variant as the eager open | `pictura-codec::lazy_index_rejects_short_channels` |
 | `lp_hostile_decode` | Open lazily, truncate the file in place, read a tile past the end | Default samples, tile unreadable, no panic | `pictura-codec::lazy_decode_of_a_truncated_source_is_unreadable` |
 | `lp_preview` | Open the Background fixture lazily; read the preview over a rect crossing two bands | RGB equals the eager merged image's crop; alpha 255 | `pictura-codec::merged_preview_matches_the_merged_image` |
-| `lp_preview_gate` | Open a fixture whose bottom layer is not a Background, and one with a hidden Background | No preview for either | `pictura-codec::merged_preview_needs_alpha_or_background` |
+| `lp_preview_gate` | Open a fixture whose bottom layer is not a Background, and one with a hidden Background | No preview for either | `pictura-codec::merged_preview_needs_a_visible_background` |
 | `sb_redecode` | Read a backed tile, evict it, read again | Same samples; pass wrote 0 bytes; decoder called twice | `pictura-core::backed_tile_dropped_and_redecoded_identity` |
 | `sb_detach` | Write a backed tile, evict it, read it | Packed or spilled, not backed; written samples | `pictura-core::a_written_backed_tile_leaves_its_source` |
 | `sb_transient` | Read an away backed tile under `transient` | Decoded samples; tile still away | `pictura-core::a_transient_read_leaves_a_backed_tile_away` |

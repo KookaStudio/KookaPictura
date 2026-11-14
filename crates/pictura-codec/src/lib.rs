@@ -40,9 +40,9 @@ mod icc;
 mod icc_convert;
 mod image_resources;
 mod iptc;
+mod lazy;
 mod lens_correction;
 mod live_shape;
-mod lazy;
 mod mapped;
 mod mask_params;
 mod metadata;
@@ -133,6 +133,7 @@ pub use pictura_raw::{
 };
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
+pub use lazy::{MergedPreview, SourcePin};
 pub use live_shape::{
     decode_live_shape, encode_live_shape, LiveShape, ORIGIN_ELLIPSE, ORIGIN_RECTANGLE,
     ORIGIN_ROUNDED_RECTANGLE,
@@ -148,7 +149,6 @@ pub use profile_probe::{
 pub use raster_metadata::{
     embed_raster_metadata, raster_image_resources, raster_metadata, RasterMetadata,
 };
-pub use lazy::{MergedPreview, SourcePin};
 pub use read::{
     read_psd, read_psd_lazy, read_psd_with, read_psd_with_options, read_psd_within,
     read_psd_within_options, OpenOptions,

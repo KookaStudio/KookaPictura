@@ -14,10 +14,10 @@ mod merged;
 mod stream;
 mod tagged_layers;
 
-pub(crate) use decode::{count_bytes, decode_channel_data, decode_packbits, read_rle_count};
 #[cfg(test)]
 pub(crate) use decode::decode_rle_channel;
 pub(crate) use decode::inflate;
+pub(crate) use decode::{count_bytes, decode_channel_data, decode_packbits, read_rle_count};
 use decode::{plan_channel_tasks, read_rle, read_rle_from};
 
 /// The deepest group nesting a file may declare. CS6 nests groups ten deep;
@@ -117,8 +117,8 @@ pub fn read_psd_within_options(
 
 /// [`read_psd_within_options`] for an `options.source` open (#1218), with the
 /// file's merged image as a preview when it can stand for the layers on the
-/// canvas: the bottom layer is a visible Background, so the picture is
-/// opaque, and no profile was converted on read.
+/// canvas: the bottom layer is a visible Background with no transparency, so
+/// the picture is opaque, and no profile was converted on read.
 ///
 /// ponytail: a transparent document gets no preview. Its merged image holds
 /// transparency only when the layer count is negative, which the reader does
@@ -132,11 +132,12 @@ pub fn read_psd_lazy(
     let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut preview)?;
     crate::path_resources::resolve_paths(&mut doc);
     crate::guide_resources::resolve_guides(&mut doc);
+    // The Background flag is inferred from the name (`derive_background`):
+    // a bottom layer of that name with transparency is not opaque.
     let usable = doc.source_icc.is_none()
-        && doc
-            .layers
-            .get(0)
-            .is_some_and(|bottom| bottom.background && bottom.visible);
+        && doc.layers.get(0).is_some_and(|bottom| {
+            bottom.background && bottom.visible && !bottom.channels.iter().any(|c| c.id == -1)
+        });
     Ok((doc, preview.filter(|_| usable)))
 }
 
@@ -703,17 +704,16 @@ fn read_layer_section(
         if info_end > section_end {
             return Err(PsdError::Invalid("layer info exceeds layer section".into()));
         }
-        (layers, layer_compression) =
-            read_layer_info(
-                r,
-                is_psb,
-                info_end,
-                color_channels,
-                depth,
-                retain,
-                budget,
-                source,
-            )?;
+        (layers, layer_compression) = read_layer_info(
+            r,
+            is_psb,
+            info_end,
+            color_channels,
+            depth,
+            retain,
+            budget,
+            source,
+        )?;
         r.pos = info_end;
     }
 
@@ -749,6 +749,7 @@ fn read_layer_section(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn read_layer_info(
     r: &mut Reader,
     is_psb: bool,

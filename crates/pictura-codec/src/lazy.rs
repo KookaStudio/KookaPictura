@@ -242,7 +242,9 @@ impl ChannelIndex {
                 }
                 Self::rle(pin, &mut counts, is_psb, at + table, end, width, height)
             }
-            c => Err(PsdError::Unsupported(format!("lazy channel compression {c}"))),
+            c => Err(PsdError::Unsupported(format!(
+                "lazy channel compression {c}"
+            ))),
         }
     }
 
@@ -290,7 +292,9 @@ impl ChannelIndex {
         }
         let mut out = vec![0u8; self.width];
         match &self.rows {
-            Rows::Raw(start) => self.pin.read_at(start + (y * self.width) as u64, &mut out)?,
+            Rows::Raw(start) => self
+                .pin
+                .read_at(start + (y * self.width) as u64, &mut out)?,
             Rows::Rle(starts) => {
                 let mut packed =
                     vec![0u8; usize::try_from(starts[y + 1] - starts[y]).map_err(|_| ())?];
@@ -336,14 +340,21 @@ impl ChannelIndex {
 // ---- The band cache ----
 
 /// The most decoded band bytes kept, process-wide: a 17000-wide band is about
-/// 4 MiB, and a row-major sweep of tiles needs one band per channel.
-const CACHE_BYTES: usize = 64 << 20;
+/// 4 MiB, so this holds one band of each channel of a layer and of the merged
+/// image, which a row-major sweep of tiles reads together.
+///
+/// ponytail: the governor does not see this heap; it is a fixed 32 MiB.
+const CACHE_BYTES: usize = 32 << 20;
+
+/// A band: its channel's key and its number.
+type BandKey = (u64, usize);
 
 #[derive(Default)]
 struct BandCache {
-    bands: HashMap<(u64, usize), (Arc<[u8]>, u64)>,
-    /// Use stamp → key, oldest first.
-    order: BTreeMap<u64, (u64, usize)>,
+    /// Each band's rows and use stamp.
+    bands: HashMap<BandKey, (Arc<[u8]>, u64)>,
+    /// Use stamp → band, oldest first.
+    order: BTreeMap<u64, BandKey>,
     bytes: usize,
     clock: u64,
 }
@@ -432,9 +443,7 @@ impl MergedPreview {
                 let available = file.len().saturating_sub(at);
                 let mut out = Vec::with_capacity(3);
                 for c in 0..3 {
-                    let start = at
-                        .checked_add(c * plane)
-                        .ok_or(PsdError::Truncated)?;
+                    let start = at.checked_add(c * plane).ok_or(PsdError::Truncated)?;
                     out.push(ChannelIndex::raw(
                         pin,
                         start,
@@ -475,7 +484,11 @@ impl MergedPreview {
                 }
                 out.try_into().ok().expect("three channels")
             }
-            c => return Err(PsdError::Unsupported(format!("lazy merged compression {c}"))),
+            c => {
+                return Err(PsdError::Unsupported(format!(
+                    "lazy merged compression {c}"
+                )))
+            }
         };
         Ok(Self {
             width: width as u32,

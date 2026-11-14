@@ -414,6 +414,8 @@ pub fn run_pass(need: u64) -> PassReport {
     // never-held tile (0), regardless of the registry's shard order.
     all.sort_by_key(|weak| std::cmp::Reverse(weak.upgrade().map_or(0, |body| body.hot_stamp())));
     // A cold backed body drops free, so it goes first (`None`: any history).
+    // The other cold classes leave it out: the backed class has spent its
+    // clock bit, and it keeps its second chance until the next pass.
     let classes = [
         (false, None, true),
         (false, Some(true), false),
@@ -423,7 +425,7 @@ pub fn run_pass(need: u64) -> PassReport {
     ];
     for (hot, history, backed) in classes {
         let in_class = |body: &dyn Evictable| {
-            (!backed || body.backed())
+            (hot || body.backed() == backed)
                 && history.is_none_or(|h| body.history_held() == h)
                 && hot_set.contains(body.hot_stamp()) == hot
         };

@@ -453,7 +453,7 @@ fn decode_channel_tasks_reads_each_channel_from_its_own_slice() {
             height: 1,
         },
     ];
-    let planes: Vec<Vec<u8>> = decode_channel_tasks(&data, 0, &tasks, false, 8, true)
+    let planes: Vec<Vec<u8>> = decode_channel_tasks(&data, 0, &tasks, false, 8, true, None)
         .into_iter()
         .map(|result| result.expect("decode").0.to_vec())
         .collect();

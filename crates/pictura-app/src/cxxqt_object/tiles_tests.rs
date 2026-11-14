@@ -295,6 +295,7 @@ fn a_missing_large_tile_does_not_block() {
             doc: view.session.doc.clone().expect("document"),
             mask: None,
             painting: false,
+            preview: None,
             ticket: cache.ticket(),
             keys: missing
                 .iter()

@@ -57,7 +57,7 @@ drops free. This is #1217 R2's "priority 2".
   bounds-checked `decode_packbits`. A raw channel reads only the rows asked.
 - **The band cache.** A tile asks for 256 rows and keeps 256 columns, so
   without help a 17000-wide band would be decoded 67 times. Decoded bands go to
-  one process-wide LRU (`(channel id, band) → Arc<[u8]>`), capped at 64 MiB:
+  one process-wide LRU (`(channel id, band) → Arc<[u8]>`), capped at 32 MiB:
   a row-major sweep decodes each band once.
 
 ## 4. Where the lazy path applies (codec)

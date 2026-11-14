@@ -554,7 +554,11 @@ fn backed_tile_dropped_and_redecoded_identity() {
     let (plane, calls) = backed_plane(600, 300);
     let tiles = plane.tile_count();
     assert_all(&plane, Residency::Backed);
-    assert_eq!(calls.load(Ordering::Relaxed), 0, "nothing decodes until read");
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        0,
+        "nothing decodes until read"
+    );
     assert_eq!(every(&plane), expected(600, 300));
     assert_all(&plane, Residency::Resident);
     let report = evict_all();
@@ -574,6 +578,7 @@ fn a_written_backed_tile_leaves_its_source() {
         t.row_mut(0)[0] = !t.row(0)[0];
     }
     want[0] = !want[0];
+    plane.settle();
     evict_all();
     let first = plane.tile_residency(0).unwrap();
     assert!(
