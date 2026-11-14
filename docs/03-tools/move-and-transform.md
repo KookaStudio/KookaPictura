@@ -190,7 +190,7 @@ Widgets over QML for consistency with `ARCH-003`: these are dense, keyboard-cent
 - **1-px / tiny documents:** handles overlap; numeric entry required; rotation of a 1-px row can produce an empty bounding box — guard against zero-area transforms.
 - **PSB / huge docs:** full-image resample may exceed memory; must use tiled/streaming resample with a memory budget and a tiled undo snapshot.
 - **GPU unavailable:** transform preview and warp mesh rendering fall back to CPU; overlays are cheap vector work and should not require the GPU.
-- **Smart Objects:** non-destructive; the interpolation menu is disabled and the preference default applies; smart filters must be re-evaluated after transform.
+- **Smart Objects:** non-destructive; the interpolation menu is disabled and the preference default applies; a placed source larger than the canvas is auto-fitted by a non-destructive Smart Object transform, so the source keeps its original pixels; the fit and a scale or translation on a placed source are preserved, while rotation/skew/warp use the raster transform path; smart filters must be re-evaluated after transform.
 - **Puppet Warp** is unavailable on Background layers and on some layer types; recommend Smart Object conversion for non-destructive use.
 - **Content-Aware Scale** does not work on adjustment layers, layer masks, individual channels, Smart Objects, 3D layers, video layers, multiple simultaneous layers, or layer groups.
 - **Undo/redo** must re-apply or unwind the matrix without cumulative resample loss; repeated commit/resample is an accepted Photoshop behaviour but our undo should be lossless.

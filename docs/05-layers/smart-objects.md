@@ -21,7 +21,7 @@ A **Smart Object** is a layer that contains source image data from a raster or v
 | Method | Result |
 |---|---|
 | `File > Open As Smart Object`, pick a file, `Open` | New document whose sole layer is a Smart Object containing that file |
-| `File > Place` in an open document | File is imported as a Smart Object; it is transformed interactively before commit |
+| `File > Place` in an open document | One or more files are imported as Smart Objects; an oversized source is fitted to the canvas by a non-destructive transform that keeps its original pixels, then each is transformed interactively before the next is placed (application enhancement; CS6 places one file at a time) |
 | `Layer > Smart Objects > Convert to Smart Object` (also written `Layer > Smart Object > Convert to Smart Object`) | Selected layer(s) are bundled into one Smart Object |
 | `Edit > Preferences > General > Place Or Drag Raster Images As Smart Objects` | When on (default), a file dragged onto an open document or an image copied between documents is placed as a Smart Object; when off it becomes a standard raster layer |
 | Bridge `File > Place > In Photoshop` | File is imported as a Smart Object |
@@ -48,7 +48,7 @@ The new layer keeps the original name with a `copy` suffix.
 
 ### Non-destructive transform
 
-A Smart Object can be scaled, rotated, skewed, distorted, perspective-transformed, and warped without altering the original data. The Free Transform **Interpolation** pop-up in the options bar does not apply to Smart Objects — they use the `Edit > Preferences > General` default (see `TOOL-001`). While a Smart Object carrying Smart Filters is being transformed, Photoshop **turns off the filter effects**, then re-applies them after the transform completes.
+A Smart Object can be scaled, rotated, skewed, distorted, perspective-transformed, and warped without altering the original data. A source placed into a smaller canvas is fitted to the canvas by scaling the Smart Object, not by resampling the source: the embedded source keeps its original pixel dimensions, so scaling the placed layer up again samples the original data. In this application the canvas fit and a scale or translation on a placed source are non-destructive; rotation, skew, and warp use the raster transform path. The Free Transform **Interpolation** pop-up in the options bar does not apply to Smart Objects — they use the `Edit > Preferences > General` default (see `TOOL-001`). While a Smart Object carrying Smart Filters is being transformed, Photoshop **turns off the filter effects**, then re-applies them after the transform completes.
 
 ### Stack Modes (Photoshop Extended)
 
@@ -67,7 +67,13 @@ Layer comps record layer visibility, position, and appearance, but **Smart Filte
 
 ### Placed vector formats and PSD/PSB/TIFF carriage
 
-- `File > Place` and `Open As Smart Object` accept raster and vector sources. A **PDF or AI** file placed as a Smart Object keeps its vector data, so it stays resolution-independent and can be opened in Illustrator via Edit Contents. `File > Open` on a generic PDF, by contrast, opens a rasterised document and offers an Import PDF dialog (Pages/Images, Crop To box, Width/Height, Resolution, Mode, Bit Depth).
+- `File > Place` accepts raster and PSD/PSB sources in this application; a **PDF
+  or AI** vector `Place` is not implemented (the dialog's non-PSD route goes
+  through the raster import edge). `Open As Smart Object` accepts a PSD/PSB
+  source or a supported raster, which it converts to a smart object.
+  `File > Open` on a generic PDF opens a rasterised document and offers an
+  Import PDF dialog (Pages/Images, Crop To box, Width/Height, Resolution, Mode,
+  Bit Depth).
 - **EPS** placed/opened is PostScript and is rasterised (with an Anti-aliased option); it does not remain editable vector in Photoshop.
 - A placed **PSD/PSB/TIFF** is embedded whole and can be re-edited without flattening the host document; a placed multilayer file appears flattened on the layer unless the source layers are duplicated in.
 - In PSD, the Smart Object content is carried as a **Placed Layer Data** block (`SoLd`, CS3+, replacing the older `plLd`); the object's transform/warp and page selection live in the accompanying descriptor. The embedded source file bytes are held in the same placed-layer structure. See `## Data-model impact` and `LAY-024`.
@@ -77,7 +83,7 @@ Layer comps record layer visibility, position, and appearance, but **Smart Filte
 | Location | Type | Shortcut | Notes |
 |---|---|---|---|
 | `File > Open As Smart Object` | Menu | — | Opens a file as a one-layer Smart Object document |
-| `File > Place` | Menu | — | Imports a file as a Smart Object into the current document |
+| `File > Place` | Menu | — | Multi-file selection; each file gets its own Free Transform (application enhancement) |
 | `File > Scripts > Load Files into Stack` | Menu | — | One image per layer for an image stack |
 | `File > Scripts > Statistics` | Menu | — | Automated image stack + stack mode |
 | `Layer > Smart Objects > Convert to Smart Object` | Menu | — | Bundles one or more layers |
@@ -195,7 +201,7 @@ Widgets over QML for the panel/dialog controls (dense, docked, keyboard-centric)
 
 - `NodeKind::SmartObject` (already sketched in `ARCH-008`) must carry the embedded source, transform matrix, warp descriptor, placed-layer type, optional warp descriptor, stack mode, and the Smart Filter stack.
 - The embedded source is a **nested `Document`**; its history is separate from the host document's history. Opening it for editing opens a second document window (Help: edits to the source propagate to all linked instances).
-- Undo: a `Place`/`Convert`/`Replace Contents`/`Rasterize`/stack-mode change is one command; `Rasterize` is destructive and needs a pixel backup (or keep the Smart Object data for lossless undo, which is a non-parity enhancement). Transform edits are non-destructive and undo by restoring the previous matrix/descriptor.
+- Undo: a `Place`/`Convert`/`Replace Contents`/`Rasterize`/stack-mode change is one command per placed file; a committed non-identity `Free Transform` adds one more state and an identity commit adds none. The automatic canvas fit of an oversized placed source is part of its `Place` state, not a separate state. `Rasterize` is destructive and needs a pixel backup (or keep the Smart Object data for lossless undo, which is a non-parity enhancement). Transform edits are non-destructive and undo by restoring the previous matrix/descriptor.
 - Serialization: `plLd` (read), `SoLd` (write), warp descriptor, and — for linked objects — `lnk2`/`lnkD`/`lnk3` (`LAY-024`). Unknown placed-layer descriptor fields are preserved as opaque bytes.
 - XMP: no dedicated Smart Object metadata; the source bytes inside the PSD carry their own metadata.
 - Layer comps: visibility/position/appearance are captured, but the Smart Filter stack is not comp-varied (`LAY-022`).

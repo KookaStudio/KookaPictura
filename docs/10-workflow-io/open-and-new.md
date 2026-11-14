@@ -102,8 +102,9 @@ dialog:
 - **Suppress Warning** for color-profile warnings.
 
 Opening a **Photoshop PDF** (saved with Preserve Photoshop Editing Capabilities)
-does not show the Import PDF dialog. PDF can also arrive via `Place`, Paste, or
-drag-and-drop as a Smart Object (`LAY-020`).
+does not show the Import PDF dialog. PDF can also arrive via Paste or
+drag-and-drop as a Smart Object (`LAY-020`); PDF/AI vector `Place` is not
+implemented in this application.
 
 ### Open EPS
 
@@ -145,9 +146,8 @@ own `File > Open` remains the canonical path.
   than one disables the option), specify a **frame rate**, and each image becomes
   a frame in a video layer. Files should share pixel dimensions and be named in
   numeric/alphabetical order.
-- **Place video (Extended)**: `File > Place` with a video/image sequence wraps the
-  footage in a Smart Object (navigable via the Animation panel, Smart-Filter
-  capable).
+- **Place video (Extended)**: not implemented; `File > Place` rejects a
+  video/image sequence source.
 - **Scanners / WIA (Windows)**: `File > Import > WIA Support`, or `File > Import`
   and select the device; see the Help scan topic.
 - **Annotations**: `File > Import > Annotations` imports PDF annotations
@@ -163,7 +163,7 @@ own `File > Open` remains the canonical path.
 | `File > Open Recent` | Submenu | — | Count from File Handling |
 | `File > Open As` (Windows) / `File > Open`+Format (macOS) | Dialog | — | Force type on extension mismatch |
 | `File > Open As Smart Object` | Dialog | — | Single smart-object document |
-| `File > Place` | Dialog | — | Smart Object import into open doc (`LAY-020`) |
+| `File > Place` | Dialog | — | Multi-file selection (application enhancement over CS6); an oversized file is fitted to the canvas as a non-destructive Smart Object transform, then each file enters Free Transform before the next; Esc or the transform's Cancel control removes the current placement (`LAY-020`) |
 | `File > Open with > Adobe Photoshop` (Bridge) | Command | — | External open path |
 | `Layer > Video Layers > New Video Layer From File` | Command | — | Extended: add video/sequence to open doc |
 | `File > Import` | Submenu | — | WIA/scan, annotations; device-dependent |
@@ -246,8 +246,18 @@ Rendering/export is `WF-004`.
 
 `Open As Smart Object` embeds the source bytes and creates a single
 `NodeKind::SmartObject` layer; the source document is rendered through the placed
-transform (`LAY-020`). Placement (`File > Place`) differs only in that it targets
-an existing document and runs an interactive transform before commit.
+transform (`LAY-020`). Placement (`File > Place`) targets an existing document
+and runs an interactive transform before commit. An oversized source is first
+embedded as a Smart Object at its native size and then fitted to the canvas by a
+non-destructive layer transform; the source keeps its original pixels, so a
+later scale/translation samples the original data. Rotation, skew, and warp use
+the raster transform path. In this application the dialog
+accepts several files (an enhancement over CS6, which places one at a time):
+each file is placed in dialog order, its own Free Transform session is settled
+before the next file is placed, Escape or the transform's Cancel control removes
+the current placement, any other non-interruption session end keeps it, and one
+summary names the files that could not be placed. The canvas-drop path fits
+every dropped file and transforms only the last.
 
 ## Rust module mapping
 
