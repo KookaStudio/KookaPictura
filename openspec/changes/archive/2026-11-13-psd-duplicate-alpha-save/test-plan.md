@@ -1,0 +1,13 @@
+# Test plan
+
+One row per delta scenario, plus the no-extras and depth-32 regression guards.
+Coverage names the automated test (`<crate>::<fn>`); no manual-only rows.
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| An opened or converted CMYK document re-saves as CMYK | Build a CMYK-source document whose composite the app stored as RGBA; save it. | The written file is header mode CMYK, not RGB with an alpha channel. | `pictura-render::cmyk_conversion_saves_as_cmyk_and_shows_what_it_saves` |
+| `dc_save_alpha_count` | Build the `Document::from_rgba` base, then set `doc.composite = pictura_core::PixelBuffer::new(0, 0, 4)` (keeping `merged_composite_present` true) so `save_view` builds the tiled composite, and give it one `doc.channels` extra alpha; write it with `write_psd(&save_view(&doc))`. | The header channel count is 4: three color planes followed by the extra channel. | `pictura-render::an_extra_channel_saves_without_a_duplicate_alpha_plane` |
+| `dc_save_alpha_unique` | Same document, with an extra-alpha pattern that differs from the composite alpha (for example `[255, 0, 128, 200]`); read the written bytes back. | The re-read document has three composite planes and exactly one extra channel whose bytes are the pushed pattern; no duplicated alpha plane. | `pictura-render::an_extra_channel_saves_without_a_duplicate_alpha_plane` |
+| `dc_save_alpha_depth16` | Build a 2x2 layered RGB/16 fixture with `source_depth = Some(BitDepth::Sixteen)`, a four-plane `SourcePlanes` store, and one document extra channel; save through `save_view` and read back. | The header declares 4 channels at depth 16, the extra plane is retained, and no alpha plane is duplicated. | `pictura-render::a_depth16_extra_channel_saves_without_a_duplicate_alpha_plane` |
+| A document without extras keeps its composite alpha | Build an RGBA document from `Document::from_rgba` with a non-opaque alpha and no extra channels; write it and read it back. | The header declares 4 channels and the re-read extra channel carries the composite alpha pattern. | `pictura-render::an_rgba_document_without_extra_channels_keeps_its_alpha_plane` |
+| Extra: a depth-32 extra channel | Build a 2x2 RGB/32 fixture with `source_depth = Some(BitDepth::ThirtyTwo)`, a four-plane `SourcePlanes` store (the last plane the extra), and one document extra channel; save through `save_view` and read back. | The header declares 4 channels at depth 32, the re-read composite equals the trimmed view's three color planes, and the extra plane round-trips. | `pictura-render::a_depth32_extra_channel_saves_without_a_duplicate_alpha_plane` |

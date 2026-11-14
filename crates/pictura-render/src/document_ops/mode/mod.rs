@@ -189,8 +189,9 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
 /// composited band by band into tiled planes, so a uniform area costs nothing
 /// and no canvas-sized buffer is built for it. The app keeps an RGB composite
 /// as RGBA for display, but a document carrying a source mode (CMYK, Lab,
-/// Indexed, Bitmap, ...) is written from three color planes, so the display
-/// alpha plane is dropped; any other document is borrowed unchanged.
+/// Indexed, Bitmap, ...) or document-level extra channels is written from three
+/// color planes, so the display alpha plane is dropped; any other document is
+/// borrowed unchanged.
 pub fn save_view(doc: &Document) -> Cow<'_, Document> {
     let doc: Cow<'_, Document> = if doc.merged_composite_present
         && !doc.composite_is_authoritative()
@@ -203,23 +204,30 @@ pub fn save_view(doc: &Document) -> Cow<'_, Document> {
         Cow::Borrowed(doc)
     };
     let plane = doc.width as usize * doc.height as usize;
-    if doc.source_mode.is_none()
+    if (doc.source_mode.is_none() && doc.channels.is_empty())
         || doc.mode != ColorMode::Rgb
         || doc.composite.channels != 4
-        || doc.composite.data.len() < 3 * plane
+        || doc.composite.width != doc.width
+        || doc.composite.height != doc.height
+        || doc.composite.data.len() != 4 * plane
     {
         return doc;
     }
     let mut trimmed = doc.into_owned();
-    // ponytail: the three colour planes are copied flat; only documents read
-    // from another mode take this path.
-    let rgb = trimmed.composite.data.as_ref()[..3 * plane].to_vec();
+    // ponytail: the three colour planes are copied into one flat buffer; a
+    // tiled composite is read plane by plane, so it is not materialized whole.
+    let mut rgb = vec![0u8; 3 * plane];
+    trimmed.composite.data.read_into(0, &mut rgb);
     trimmed.composite = PixelBuffer {
         width: trimmed.width,
         height: trimmed.height,
         channels: 3,
         data: rgb.into(),
     };
+    // ponytail: the trimmed plane is fresh each save, so the composite cache
+    // key (the plane ident) changes and a document with extras re-encodes its
+    // merged block every save; keying on the source composite ident is the
+    // upgrade if that cost matters.
     Cow::Owned(trimmed)
 }
 
