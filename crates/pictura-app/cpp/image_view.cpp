@@ -283,6 +283,39 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     update();
 }
 
+void ImageView::beginTransformOverlay()
+{
+    // A border transform has no moving image and no backdrop patch: the live
+    // selection preview is the border.
+    clearBrushOutline();
+    movePreviewActive_ = false;
+    moveBase_ = QImage();
+    moveBasePos_.reset();
+    moveLayer_ = QImage();
+    moveLayerPos_ = QPointF();
+    moveDelta_ = QPointF();
+    moveOpacity_ = 1.0;
+    moveScale_ = 1;
+    moveAbove_ = QImage();
+    moveAbovePos_.reset();
+    moveAboveScale_ = 1;
+    transformActive_ = true;
+    transformScaleX_ = 1.0;
+    transformScaleY_ = 1.0;
+    transformAngle_ = 0.0;
+    transformDx_ = 0.0;
+    transformDy_ = 0.0;
+    transformProjective_ = QTransform();
+    transformProjectiveCoefficients_ = {};
+    transformProjectiveSource_ = QRectF();
+    transformWarped_ = WarpedTransformPreview();
+    transformWarpedStale_ = true;
+    transformProjectiveActive_ = false;
+    transformQuad_.clear();
+    transformWarp_ = transform_api::WarpOverlay();
+    update();
+}
+
 void ImageView::setTransformPreviewProjective(const std::array<double, 9>& coefficients,
                                               const QRectF& sourceRect)
 {

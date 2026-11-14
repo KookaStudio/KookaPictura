@@ -106,6 +106,12 @@ void PicturaMainWindow::registerSelectHandlers()
         view->load_selection(name);
     });
 
+    registry_->setHandler(command_ids::SelectTransformSelection, [this]() {
+        if (tools_ && tools_->beginTransformSelection()) {
+            refresh();
+        }
+    });
+
     registry_->setHandler(command_ids::SelectAllLayers, [this]() {
         PictureView* view = activeView();
         if (!view || !layersPanel_) {
@@ -175,6 +181,11 @@ void PicturaMainWindow::registerSelectHandlers()
     registry_->setEnabledProvider(command_ids::SelectSimilarLayers, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
             && !layerAnchor().isEmpty();
+    });
+    registry_->setEnabledProvider(command_ids::SelectTransformSelection, [this]() {
+        PictureView* view = activeView();
+        return view && view->has_document() && view->has_selection()
+            && view->selection_count() > 0 && !(tools_ && tools_->transformPending());
     });
 
     // Select > Color Range…: non-modal, so its eyedropper reaches the canvas;

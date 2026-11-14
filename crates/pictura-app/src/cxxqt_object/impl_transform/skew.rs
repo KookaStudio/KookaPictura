@@ -133,7 +133,7 @@ pub(super) fn gesture_free_skew(
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::document_session::{TransformMode, TransformSession};
+    use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
     use super::super::convex::quad_is_convex;
     use super::super::geometry::source_corners;
     use super::*;
@@ -151,6 +151,7 @@ mod tests {
     fn skew_session() -> TransformSession {
         let corners = source_corners(rect100x50());
         TransformSession {
+            target: TransformTarget::Layer,
             path: "0".to_string(),
             members: vec![("0".to_string(), rect100x50())],
             orig_rect: rect100x50(),

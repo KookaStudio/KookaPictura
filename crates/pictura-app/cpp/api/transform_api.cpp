@@ -7,6 +7,8 @@
 
 #include <QtCore/QStringList>
 
+#include <algorithm>
+
 namespace pictura::transform_api {
 
 namespace {
@@ -95,6 +97,23 @@ Quad quad(const PictureView& view)
     Quad out;
     for (size_t i = 0; i + 1 < extents.size(); i += 2) {
         out.corners << QPointF(extents[i], extents[i + 1]);
+    }
+    return out;
+}
+
+QList<QPolygonF> selectionContour(const PictureView& view)
+{
+    const ::rust::Vec<double> extents = transform_selection_contour_extents(view);
+    QList<QPolygonF> out;
+    size_t i = 0;
+    while (i < extents.size()) {
+        const size_t count = static_cast<size_t>(std::max(0.0, extents[i]));
+        ++i;
+        QPolygonF loop;
+        for (size_t k = 0; k < count && i + 1 < extents.size(); ++k, i += 2) {
+            loop << QPointF(extents[i], extents[i + 1]);
+        }
+        out << loop;
     }
     return out;
 }

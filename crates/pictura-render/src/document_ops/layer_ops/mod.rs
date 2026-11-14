@@ -24,6 +24,9 @@ mod paths;
 mod perspective_crop;
 mod properties;
 mod rasterize;
+mod selection_transform;
+#[cfg(test)]
+mod selection_transform_tests;
 mod shape_layer;
 mod shape_style;
 mod smart_object;
@@ -134,6 +137,9 @@ pub use properties::{
 };
 pub use rasterize::{
     is_fill_content_layer, rasterize_all_layers, rasterize_fill_content, rasterize_shape,
+};
+pub use selection_transform::{
+    selection_transform_point, transform_selection, warp_dest_rect, warp_selection,
 };
 pub(crate) use shape_layer::map_shape_layer;
 pub use shape_layer::{

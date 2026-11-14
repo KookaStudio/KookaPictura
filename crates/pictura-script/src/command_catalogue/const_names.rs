@@ -95,6 +95,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("SelectModifyFeather", "select.modify.feather"),
     ("SelectGrow", "select.grow"),
     ("SelectSimilar", "select.similar"),
+    ("SelectTransformSelection", "select.transform.selection"),
     ("SelectSave", "select.save"),
     ("SelectLoad", "select.load"),
     ("SelectAllLayers", "select.allLayers"),

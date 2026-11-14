@@ -355,7 +355,7 @@ select.modify.contract	Select/Modify/Contract…	Contract…		1	0
 select.modify.feather	Select/Modify/Feather…	Feather…	Shift+F6	1	0
 select.grow	Select/Grow	Grow		1	0
 select.similar	Select/Similar	Similar		1	0
-select.transform.selection	Select/Transform Selection	Transform Selection		0	0
+select.transform.selection	Select/Transform Selection	Transform Selection		1	0
 select.save	Select/Save Selection…	Save Selection…		1	0
 select.load	Select/Load Selection…	Load Selection…		1	0
 filter.last	Filter/Last Filter	Last Filter	Ctrl+F	1	0

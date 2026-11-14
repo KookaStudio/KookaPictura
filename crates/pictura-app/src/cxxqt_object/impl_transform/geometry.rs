@@ -671,7 +671,7 @@ fn point_segment_dist2(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::document_session::TransformMode;
+    use super::super::super::document_session::{TransformMode, TransformTarget};
     use super::super::convex::quad_is_convex;
     use super::super::distort::gesture_distort;
     use super::*;
@@ -696,6 +696,7 @@ mod tests {
 
     fn session() -> TransformSession {
         TransformSession {
+            target: TransformTarget::Layer,
             path: "0".to_string(),
             members: vec![("0".to_string(), rect4())],
             orig_rect: rect4(),

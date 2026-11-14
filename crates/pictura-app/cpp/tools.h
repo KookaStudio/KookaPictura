@@ -502,6 +502,11 @@ public:
     bool setTransformAngle(double degrees);
     bool setTransformSkew(double hDegrees, double vDegrees);
     bool setTransformInterpolation(const QString& id);
+    // Begin a Transform Selection session on the live selection border.
+    bool beginTransformSelection();
+    // Whether the live transform targets the selection border (the Select
+    // menu locks while one is pending).
+    bool transformSelectionTarget() const;
     // Edit > Transform > Warp: switch the open session into Warp mode, or
     // begin a Free Transform session on `path` first.
     bool beginWarp(const QString& path);
