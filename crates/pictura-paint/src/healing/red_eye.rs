@@ -12,6 +12,7 @@
 use super::layer::{heal_layer, HealError};
 use super::RgbaImage;
 use pictura_core::{Document, PsdRect};
+use rayon::prelude::*;
 
 /// CS6's Pupil Size and Darken Amount defaults (both 0–100).
 pub const RED_EYE_DEFAULT_PUPIL: u32 = 50;
@@ -37,8 +38,8 @@ pub fn red_eye_layer(
     let Some(rect) = rect.intersect(canvas) else {
         return Ok(None);
     };
-    let coverage = vec![1.0; (rect.width() * rect.height()) as usize];
-    heal_layer(doc, path, rect, &coverage, |img, local, _| {
+    // Red Eye is a per-pixel box test, so it carries no coverage mask.
+    heal_layer(doc, path, rect, &[], Some(rect), |img, local, _| {
         red_eye_region(img, local, pupil, darken)
     })
 }
@@ -54,29 +55,33 @@ fn red_eye_region(
     // anything where red merely leads.
     let ratio = 1.8 - (pupil.min(100) as f32 / 100.0) * 0.75;
     let keep = 1.0 - (darken.min(100) as f32 / 100.0) * 0.6;
-    let mut touched = false;
-    for y in work.top..work.bottom {
-        for x in work.left..work.right {
-            let [r, g, b, a] = img.get(x, y);
-            let (r, g, b) = (r as f32, g as f32, b as f32);
-            if r < g.max(b).max(1.0) * ratio {
-                continue;
-            }
-            // Red becomes the green/blue level, which is what the pupil would
-            // have been without the flash; then everything is darkened.
-            let to_u8 = |v: f32| v.round().clamp(0.0, 255.0) as u8;
-            img.set(
-                x,
-                y,
-                [
-                    to_u8((g + b) / 2.0 * keep),
-                    to_u8(g * keep),
-                    to_u8(b * keep),
+    let to_u8 = |v: f32| v.round().clamp(0.0, 255.0) as u8;
+    let width = img.width as usize;
+    let (top, bottom) = (work.top as usize, work.bottom as usize);
+    let (left, right) = (work.left as usize, work.right as usize);
+    let touched = img.data[top * width..bottom * width]
+        .par_chunks_mut(width)
+        .map(|row| {
+            let mut touched = false;
+            for pixel in &mut row[left..right] {
+                let [r, g, b, a] = *pixel;
+                let (rf, gf, bf) = (r as f32, g as f32, b as f32);
+                if rf < gf.max(bf).max(1.0) * ratio {
+                    continue;
+                }
+                // Red becomes the green/blue level, which is what the pupil
+                // would have been without the flash; then everything is
+                // darkened.
+                *pixel = [
+                    to_u8((gf + bf) / 2.0 * keep),
+                    to_u8(gf * keep),
+                    to_u8(bf * keep),
                     a,
-                ],
-            );
-            touched = true;
-        }
-    }
+                ];
+                touched = true;
+            }
+            touched
+        })
+        .reduce(|| false, |a, b| a || b);
     touched.then_some(work)
 }

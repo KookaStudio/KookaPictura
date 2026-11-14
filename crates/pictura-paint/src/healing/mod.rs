@@ -21,8 +21,9 @@
 //!
 //! Behavioural parity only: Adobe's solver is closed
 //! (`docs/03-tools/healing-brushes.md` records its biharmonic refinement,
-//! which this does not attempt). ponytail: single-threaded (photorust uses
-//! rayon); fine for brush-sized regions.
+//! which this does not attempt). The relaxation is red-black so its sweeps run
+//! in parallel on the same 4-neighbour kernel; the iteration count and result
+//! stay the established ones.
 //!
 //! Ported from photorust's `core/src/healing.rs`
 //! (<https://github.com/perfecto25/photorust>).
@@ -44,6 +45,7 @@ pub use red_eye::{red_eye_layer, RED_EYE_DEFAULT_DARKEN, RED_EYE_DEFAULT_PUPIL};
 pub use stroke::HealStroke;
 
 use pictura_core::PsdRect;
+use rayon::prelude::*;
 
 /// Spot Healing's Type buttons.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -166,16 +168,37 @@ impl RgbaImage {
     }
 }
 
+/// The pixels a shifted rect reads after clamping at `canvas`, so a source that
+/// runs off the layer is still inside the materialized window.
+pub(super) fn clamped_shift(rect: PsdRect, dx: i32, dy: i32, canvas: PsdRect) -> PsdRect {
+    if canvas.is_empty() {
+        return rect;
+    }
+    let left = (rect.left + dx).clamp(canvas.left, canvas.right - 1);
+    let right = (rect.right - 1 + dx).clamp(canvas.left, canvas.right - 1) + 1;
+    let top = (rect.top + dy).clamp(canvas.top, canvas.bottom - 1);
+    let bottom = (rect.bottom - 1 + dy).clamp(canvas.top, canvas.bottom - 1) + 1;
+    PsdRect {
+        top,
+        left,
+        bottom,
+        right,
+    }
+}
+
 /// Coverage at or above which a pixel is rebuilt; below it (a soft edge) the
 /// pixel is only blended toward the fill, so the heal is not larger than the
 /// brush.
 const HOLE_THRESHOLD: f32 = 0.5;
 
 /// How far outside the hole boundary data is read.
-const BORDER: i32 = 4;
+pub(super) const BORDER: i32 = 4;
 
-/// Gauss-Seidel sweeps; ample for the small regions a brush covers.
+/// Gauss-Seidel sweeps; ample for the regions a retouch commit covers.
 const RELAX_SWEEPS: usize = 96;
+
+/// A sweep whose largest channel change is below this has converged.
+const CONVERGED: f32 = 0.01;
 
 /// Over-relaxation factor of the Poisson solve. A source lit differently from
 /// the destination starts a whole level off, and plain Gauss-Seidel leaves part
@@ -344,10 +367,9 @@ pub fn clone_region(
     region.intersect(img.rect())
 }
 
-/// Successive over-relaxation on the Poisson equation: each unknown moves past
-/// the mean of its neighbours plus the mean source difference to them, which
-/// carries the source's detail over while `dest` around the hole stays the
-/// boundary.
+/// Relaxation on the Poisson equation: each unknown moves past the mean of its
+/// neighbours plus the mean source difference to them, which carries the
+/// source's detail over while `dest` around the hole stays the boundary.
 fn poisson_fill(
     dest: &[[f32; 4]],
     src: &[[f32; 4]],
@@ -361,30 +383,7 @@ fn poisson_fill(
             out[i] = src[i];
         }
     }
-    for _ in 0..RELAX_SWEEPS {
-        for y in 0..h {
-            for x in 0..w {
-                let i = y * w + x;
-                if !hole[i] {
-                    continue;
-                }
-                let mut acc = [0.0f32; 4];
-                let mut n = 0.0f32;
-                for j in neighbours(i, x, y, w, h).into_iter().flatten() {
-                    for c in 0..4 {
-                        acc[c] += out[j][c] + (src[i][c] - src[j][c]);
-                    }
-                    n += 1.0;
-                }
-                if n > 0.0 {
-                    let was = out[i];
-                    out[i] = std::array::from_fn(|c| {
-                        (was[c] + POISSON_OMEGA * (acc[c] / n - was[c])).clamp(0.0, 255.0)
-                    });
-                }
-            }
-        }
-    }
+    relax(&mut out, hole, w, h, RELAX_SWEEPS, Some(src), POISSON_OMEGA);
     out
 }
 
@@ -431,28 +430,107 @@ fn laplace_fill(rgba: &[[f32; 4]], hole: &[bool], w: usize, h: usize) -> Vec<[f3
             *px = mean;
         }
     }
-    for _ in 0..RELAX_SWEEPS {
-        for y in 0..h {
-            for x in 0..w {
-                let i = y * w + x;
-                if !hole[i] {
-                    continue;
-                }
-                let mut acc = [0.0f32; 4];
-                let mut n = 0.0f32;
-                for j in neighbours(i, x, y, w, h).into_iter().flatten() {
-                    for c in 0..4 {
-                        acc[c] += out[j][c];
-                    }
-                    n += 1.0;
-                }
-                if n > 0.0 {
-                    out[i] = acc.map(|v| v / n);
-                }
+    relax(&mut out, hole, w, h, RELAX_SWEEPS, None, 1.0);
+    out
+}
+
+/// A raw pointer shared with a Rayon closure. Keeping the pointer (rather than
+/// an integer address) preserves its provenance; the red-black pass only reads
+/// the colour it is not writing, so the shared reads never alias a write.
+#[derive(Clone, Copy)]
+struct SharedPtr(*const [f32; 4]);
+
+// SAFETY: `relax` reads through the pointer only from cells of the other
+// colour, which that pass never writes.
+unsafe impl Send for SharedPtr {}
+unsafe impl Sync for SharedPtr {}
+
+impl SharedPtr {
+    /// # Safety
+    /// `i` must be in bounds and its cell must not be written concurrently.
+    unsafe fn read(self, i: usize) -> [f32; 4] {
+        *self.0.add(i)
+    }
+}
+
+/// Red-black successive over-relaxation. Cells of one colour have only the
+/// other colour as 4-neighbours, so a colour's rows update in parallel without
+/// reading a cell another thread writes. `src` is the Poisson source (the
+/// recurrence carries `src[i] - src[j]`); `omega` is the over-relaxation
+/// factor. The result is deterministic: every cell reads the previous colour's
+/// values, never a same-pass neighbour.
+fn relax(
+    out: &mut [[f32; 4]],
+    hole: &[bool],
+    w: usize,
+    h: usize,
+    sweeps: usize,
+    src: Option<&[[f32; 4]]>,
+    omega: f32,
+) {
+    // The hole can be a small part of a long stroke's bounding box, so keep the
+    // covered columns per row and touch only those cells.
+    let mut rows: Vec<Vec<usize>> = vec![Vec::new(); h];
+    for (y, row) in rows.iter_mut().enumerate() {
+        for x in 0..w {
+            if hole[y * w + x] {
+                row.push(x);
             }
         }
     }
-    out
+    for _ in 0..sweeps {
+        let mut sweep_change = 0.0f32;
+        for parity in 0..2 {
+            let base = SharedPtr(out.as_ptr());
+            let changed = out
+                .par_chunks_mut(w)
+                .enumerate()
+                .zip(rows.par_iter())
+                .map(|((y, row), xs)| {
+                    let mut local = 0.0f32;
+                    for &x in xs {
+                        if (x + y) % 2 != parity {
+                            continue;
+                        }
+                        let i = y * w + x;
+                        let mut acc = [0.0f32; 4];
+                        let mut n = 0.0f32;
+                        for j in neighbours(i, x, y, w, h).into_iter().flatten() {
+                            // SAFETY: a same-colour cell's 4-neighbours are all
+                            // the other colour, which this pass never writes, so
+                            // no other thread can touch `j` while it is read.
+                            let neighbour = unsafe { base.read(j) };
+                            for c in 0..4 {
+                                acc[c] += match src {
+                                    Some(src) => neighbour[c] + (src[i][c] - src[j][c]),
+                                    None => neighbour[c],
+                                };
+                            }
+                            n += 1.0;
+                        }
+                        if n > 0.0 {
+                            let was = row[x];
+                            let mut delta = 0.0f32;
+                            row[x] = std::array::from_fn(|c| {
+                                let value =
+                                    (was[c] + omega * (acc[c] / n - was[c])).clamp(0.0, 255.0);
+                                delta = delta.max((value - was[c]).abs());
+                                value
+                            });
+                            local = local.max(delta);
+                        }
+                    }
+                    local
+                })
+                .reduce(|| 0.0, f32::max);
+            sweep_change = sweep_change.max(changed);
+        }
+        // A converged solve stops short instead of spending the remaining
+        // sweeps on sub-hundredth channel changes.
+        if sweep_change < CONVERGED {
+            break;
+        }
+    }
 }
 
 /// Add noise to a smooth fill, its strength matched to the known pixels'
@@ -512,5 +590,114 @@ fn keep_destination_colour(solved: &mut [[f32; 4]], dest: &[[f32; 4]], hole: &[b
             solved[i][c] = (dest[i][c] * scale).clamp(0.0, 255.0);
         }
         solved[i][3] = dest[i][3];
+    }
+}
+
+/// The former serial lexicographic relaxation, kept as a test oracle for the
+/// red-black sweeps. Not compiled into the product.
+#[cfg(test)]
+mod reference {
+    use super::neighbours;
+
+    const RELAX_SWEEPS: usize = 2000;
+    const POISSON_OMEGA: f32 = 1.85;
+
+    pub(super) fn poisson_fill(
+        dest: &[[f32; 4]],
+        src: &[[f32; 4]],
+        hole: &[bool],
+        w: usize,
+        h: usize,
+    ) -> Vec<[f32; 4]> {
+        let mut out = dest.to_vec();
+        for i in 0..out.len() {
+            if hole[i] {
+                out[i] = src[i];
+            }
+        }
+        for _ in 0..RELAX_SWEEPS {
+            for y in 0..h {
+                for x in 0..w {
+                    let i = y * w + x;
+                    if !hole[i] {
+                        continue;
+                    }
+                    let mut acc = [0.0f32; 4];
+                    let mut n = 0.0f32;
+                    for j in neighbours(i, x, y, w, h).into_iter().flatten() {
+                        for c in 0..4 {
+                            acc[c] += out[j][c] + (src[i][c] - src[j][c]);
+                        }
+                        n += 1.0;
+                    }
+                    if n > 0.0 {
+                        let was = out[i];
+                        out[i] = std::array::from_fn(|c| {
+                            (was[c] + POISSON_OMEGA * (acc[c] / n - was[c])).clamp(0.0, 255.0)
+                        });
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    pub(super) fn laplace_fill(
+        rgba: &[[f32; 4]],
+        hole: &[bool],
+        w: usize,
+        h: usize,
+    ) -> Vec<[f32; 4]> {
+        let mut out = rgba.to_vec();
+        let mut sum = [0.0f32; 4];
+        let mut ring = 0usize;
+        for y in 0..h {
+            for x in 0..w {
+                let i = y * w + x;
+                if hole[i]
+                    || !neighbours(i, x, y, w, h)
+                        .into_iter()
+                        .flatten()
+                        .any(|j| hole[j])
+                {
+                    continue;
+                }
+                for c in 0..4 {
+                    sum[c] += rgba[i][c];
+                }
+                ring += 1;
+            }
+        }
+        if ring == 0 {
+            return out;
+        }
+        let mean = sum.map(|v| v / ring as f32);
+        for (i, px) in out.iter_mut().enumerate() {
+            if hole[i] {
+                *px = mean;
+            }
+        }
+        for _ in 0..RELAX_SWEEPS {
+            for y in 0..h {
+                for x in 0..w {
+                    let i = y * w + x;
+                    if !hole[i] {
+                        continue;
+                    }
+                    let mut acc = [0.0f32; 4];
+                    let mut n = 0.0f32;
+                    for j in neighbours(i, x, y, w, h).into_iter().flatten() {
+                        for c in 0..4 {
+                            acc[c] += out[j][c];
+                        }
+                        n += 1.0;
+                    }
+                    if n > 0.0 {
+                        out[i] = acc.map(|v| v / n);
+                    }
+                }
+            }
+        }
+        out
     }
 }

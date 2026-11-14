@@ -11,9 +11,9 @@
 //! (<https://github.com/perfecto25/photorust>), without its later-CC Structure
 //! and Color controls: CS6 exposes only Mode and Adaptation.
 
-use super::layer::{heal_layer, HealError};
+use super::layer::{heal_layer, layer_rect, HealError};
 use super::patch::selection_coverage;
-use super::{heal_region_adapted, Adaptation, HealMode, RgbaImage};
+use super::{heal_region_adapted, Adaptation, HealMode, RgbaImage, BORDER};
 use pictura_core::{Document, PsdRect};
 
 /// The Content-Aware Move options bar, plus the drag.
@@ -40,7 +40,20 @@ pub fn move_layer(
     let Some((bounds, coverage)) = selection_coverage(doc, selection) else {
         return Ok(None);
     };
-    heal_layer(doc, path, bounds, &coverage, |img, local, cov| {
+    let destination = PsdRect {
+        top: bounds.top + options.dy,
+        left: bounds.left + options.dx,
+        bottom: bounds.bottom + options.dy,
+        right: bounds.right + options.dx,
+    };
+    let window = layer_rect(doc, path).map(|canvas| {
+        bounds
+            .union(destination)
+            .intersect(canvas)
+            .unwrap_or(bounds)
+            .grow(BORDER)
+    });
+    heal_layer(doc, path, bounds, &coverage, window, |img, local, cov| {
         move_region(img, local, cov, options)
     })
 }

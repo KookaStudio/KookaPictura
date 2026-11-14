@@ -6,7 +6,7 @@
 //! [`clone_region`]: super::clone_region
 
 use super::layer::{heal_layer, HealError};
-use super::{clone_region, heal_region, HealMode, Transfer};
+use super::{clamped_shift, clone_region, heal_region, proximity, HealMode, Transfer, BORDER};
 use crate::spacing::{DabPlacer, SpacingMode};
 use crate::stroke::{layer_at, parse_layer_path};
 use crate::tip::tip_coverage;
@@ -134,12 +134,24 @@ impl HealStroke {
         let dirty = self.dirty.expect("painted implies dirty");
         let region = offset(dirty, self.rect);
         let coverage = slice(&self.coverage, self.rect, dirty);
+        let window = match source {
+            Some((dx, dy)) => {
+                let source = clamped_shift(region, dx, dy, self.rect);
+                region.union(source).grow(BORDER)
+            }
+            None => match mode {
+                HealMode::ProximityMatch => proximity::search_window(region),
+                HealMode::CreateTexture => region.grow(proximity::MAX_MARGIN + BORDER),
+                HealMode::ContentAware => region.grow(BORDER),
+            },
+        };
         let path = self.path;
         let changed = heal_layer(
             doc,
             &path,
             region,
             &coverage,
+            Some(window),
             move |img, local, cov| match source {
                 Some(offset) => clone_region(img, local, cov, offset, transfer),
                 None => heal_region(img, local, cov, mode),

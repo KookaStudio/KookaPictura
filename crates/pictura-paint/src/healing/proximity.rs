@@ -15,7 +15,7 @@ const CORE_COVERAGE: f32 = 0.99;
 /// The margin as a fraction of the core's thickness, and its bounds in pixels.
 const MARGIN_FRACTION: f32 = 0.3;
 const MIN_MARGIN: i32 = 3;
-const MAX_MARGIN: i32 = 8;
+pub(super) const MAX_MARGIN: i32 = 8;
 
 /// How far outside the hole the context compared between candidates reaches.
 const CONTEXT: f32 = 4.0;
@@ -29,6 +29,16 @@ const COARSE_STEPS: i32 = 48;
 
 /// The most context or interior pixels a candidate is scored on.
 const MAX_SAMPLES: usize = 1024;
+
+/// The document rectangle a Proximity Match source search can read around
+/// `region`: the work rect, the candidate footprint, and the whole search
+/// reach. Clipped to the layer by the caller, so a long stroke still materializes
+/// only what its search can touch.
+pub(super) fn search_window(region: PsdRect) -> PsdRect {
+    let span = region.width().max(region.height()) + 2 * MAX_MARGIN;
+    let reach = 2 * span + 2 * CONTEXT as i32 + 2;
+    region.grow(MAX_MARGIN + super::BORDER + reach + CONTEXT as i32 + 1)
+}
 
 /// Distance from each pixel of a `w`×`h` grid to the nearest `seed` pixel, by a
 /// two-pass chamfer (steps 1 and √2). `f32::INFINITY` when there is no seed.
