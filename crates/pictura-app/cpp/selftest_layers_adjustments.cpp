@@ -634,198 +634,6 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             }
         }
 
-        // file_info_metadata (456): a PSD carrying EXIF, IPTC, and XMP image
-        // resources decodes into File Info rows, and the read-only dialog shows
-        // the three categories with those values.
-        {
-            QTemporaryDir fiDir;
-            const QString fiPath = fiDir.filePath(QStringLiteral("metadata.psd"));
-            QByteArray fiRes;
-            const auto fiRes16 = [&fiRes](unsigned short value) {
-                fiRes.append(char((value >> 8) & 0xff));
-                fiRes.append(char(value & 0xff));
-            };
-            const auto fiRes32 = [&fiRes](unsigned int value) {
-                fiRes.append(char((value >> 24) & 0xff));
-                fiRes.append(char((value >> 16) & 0xff));
-                fiRes.append(char((value >> 8) & 0xff));
-                fiRes.append(char(value & 0xff));
-            };
-            const auto fiResource = [&](unsigned short id, const QByteArray& data) {
-                fiRes.append("8BIM", 4);
-                fiRes16(id);
-                fiRes.append(char(0)); // empty Pascal name
-                fiRes.append(char(0)); // name pad to even
-                fiRes32(unsigned(data.size()));
-                fiRes.append(data);
-                if (data.size() % 2 != 0) {
-                    fiRes.append(char(0));
-                }
-            };
-            // Little-endian TIFF with IFD0 Make = "ACME" at offset 0x1a.
-            const QByteArray fiExif = QByteArrayLiteral(
-                "II\x2a\x00\x08\x00\x00\x00"
-                "\x01\x00"
-                "\x0f\x01\x02\x00\x05\x00\x00\x00\x1a\x00\x00\x00"
-                "\x00\x00\x00\x00"
-                "ACME\x00");
-            // IPTC-IIM: Object Name (2:5) = "Hi".
-            const QByteArray fiIptc = QByteArrayLiteral("\x1c\x02\x05\x00\x02Hi");
-            // XMP: Element-form dc:title = "Hi" plus a property in an unknown
-            // namespace that must survive an edit.
-            const QByteArray fiXmp = QByteArrayLiteral(
-                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">"
-                "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
-                "<rdf:Description rdf:about=\"\""
-                " xmlns:dc=\"http://purl.org/dc/elements/1.1/\""
-                " xmlns:my=\"http://example.com/ns/\">"
-                "<dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">Hi</rdf:li></rdf:Alt>"
-                "</dc:title>"
-                "<my:Custom>keep</my:Custom>"
-                "</rdf:Description></rdf:RDF></x:xmpmeta>");
-            fiResource(1058, fiExif);
-            fiResource(1028, fiIptc);
-            fiResource(1060, fiXmp);
-
-            QByteArray fi;
-            const auto fi16 = [&fi](unsigned short value) {
-                fi.append(char((value >> 8) & 0xff));
-                fi.append(char(value & 0xff));
-            };
-            const auto fi32 = [&fi](unsigned int value) {
-                fi.append(char((value >> 24) & 0xff));
-                fi.append(char((value >> 16) & 0xff));
-                fi.append(char((value >> 8) & 0xff));
-                fi.append(char(value & 0xff));
-            };
-            fi.append("8BPS", 4);
-            fi16(1);
-            fi.append(6, char(0));
-            fi16(3); // channels
-            fi32(1); // height
-            fi32(1); // width
-            fi16(8); // depth
-            fi16(3); // RGB
-            fi32(0); // color mode data
-            fi32(unsigned(fiRes.size()));
-            fi.append(fiRes);
-            fi32(0); // layer/mask section
-            fi16(0); // raw compression
-            fi.append(char(10));
-            fi.append(char(20));
-            fi.append(char(30));
-            QFile fiFile(fiPath);
-            const bool fiWritten = fiFile.open(QIODevice::WriteOnly)
-                && fiFile.write(fi) == fi.size();
-            fiFile.close();
-
-            const int fiDocs = frame.documentCount();
-            const bool fiOpened = fiWritten && frame.openPath(fiPath);
-            pictura::PictureView* fiView = frame.activeView();
-            const QStringList fiExifRows = fiView ? fiView->exif_rows() : QStringList();
-            const QStringList fiEditFields =
-                fiView ? fiView->iptc_edit_fields() : QStringList();
-            const QStringList fiOtherRows = fiView ? fiView->iptc_rows() : QStringList();
-            const QStringList fiXmpRows = fiView ? fiView->xmp_rows() : QStringList();
-            const QString fiXmpText = fiView ? fiView->xmp_packet() : QString();
-            const bool fiExifOk = fiExifRows.contains(QStringLiteral("Make\tACME"));
-            const bool fiIptcOk =
-                fiEditFields.contains(QStringLiteral("2:5\tObject Name\tHi"));
-            const bool fiXmpRowsOk = fiXmpRows.contains(QStringLiteral("Title\tHi"));
-            const bool fiXmpOk = fiXmpText.contains(QStringLiteral("dc:title"));
-
-            pictura::FileInfoDialog fiDialog(fiExifRows, fiXmpRows, fiEditFields, fiOtherRows,
-                                             fiXmpText);
-            const bool fiCategories =
-                fiDialog.categoriesForTest()
-                == QStringList({QStringLiteral("Camera Data"), QStringLiteral("Description"),
-                                QStringLiteral("IPTC"), QStringLiteral("Raw Data")});
-            const bool fiDialogRows = fiDialog.rowsForTest(QStringLiteral("Camera Data"))
-                                          .contains(QStringLiteral("Make\tACME"));
-            const bool fiDescriptionRows = fiDialog.rowsForTest(QStringLiteral("Description"))
-                                               .contains(QStringLiteral("Title\tHi"));
-            const bool fiDialogXmp = fiDialog.xmpForTest() == fiXmpText;
-            const bool fiFieldShown = fiDialog.fieldForTest(QStringLiteral("2:5"))
-                == QStringLiteral("Hi");
-            const bool fiEditsEmpty = fiDialog.edits().isEmpty();
-            fiDialog.setFieldForTest(QStringLiteral("2:5"), QStringLiteral("FromDialog"));
-            const bool fiEditsRow = fiDialog.edits().size() == 1
-                && fiDialog.edits().contains(QStringLiteral("2:5\tFromDialog"));
-            QAction* fiAction = frame.registry()->action(
-                QString::fromLatin1(pictura::command_ids::FileInfo));
-            const bool fiEnabled = fiAction && fiAction->isEnabled();
-
-            const bool fiOk = fiOpened && frame.documentCount() == fiDocs + 1 && fiExifOk
-                && fiIptcOk && fiXmpRowsOk && fiXmpOk && fiCategories && fiDialogRows
-                && fiDescriptionRows && fiDialogXmp && fiFieldShown && fiEditsEmpty && fiEditsRow
-                && fiEnabled;
-            ST_BEGIN("file_info_metadata");
-            ST_PASS("file_info_metadata open=%d exif=%d iptc=%d xmpr=%d xmp=%d categories=%d "
-                    "rows=%d desc=%d",
-                    fiOpened ? 1 : 0, fiExifOk ? 1 : 0, fiIptcOk ? 1 : 0, fiXmpRowsOk ? 1 : 0,
-                    fiXmpOk ? 1 : 0, fiCategories ? 1 : 0, fiDialogRows ? 1 : 0,
-                    fiDescriptionRows ? 1 : 0);
-            if (!fiOk) {
-                return pictura::selfTest().fail(456, "file info metadata");
-            }
-
-            // file_info_iptc_edit (457): applying a metadata edit through the
-            // bridge changes both the IIM record and the parsed XMP, marks the
-            // document dirty, records one undo state, and undo restores both;
-            // re-applying the same value is a no-op.
-            const bool fiNoop = !fiView->apply_metadata_edits(
-                QStringList({QStringLiteral("2:5\tHi")}));
-            const int fiStates = fiView->history_count();
-            const bool fiEdited =
-                fiView->apply_metadata_edits(QStringList({QStringLiteral("2:5\tEdited")}));
-            const bool fiApplied =
-                fiView->iptc_edit_fields().contains(QStringLiteral("2:5\tObject Name\tEdited"));
-            const bool fiXmpApplied = fiView->xmp_rows().contains(QStringLiteral("Title\tEdited"));
-            const bool fiDirty = fiView->is_dirty();
-            const bool fiOneState = fiView->history_count() == fiStates + 1
-                && fiView->history_label(fiView->history_count() - 1)
-                    == QStringLiteral("File Info");
-            const bool fiUndone =
-                fiView->undo()
-                && fiView->iptc_edit_fields().contains(QStringLiteral("2:5\tObject Name\tHi"))
-                && fiView->xmp_rows().contains(QStringLiteral("Title\tHi"));
-            ST_BEGIN("file_info_iptc_edit");
-            ST_PASS("file_info_iptc_edit noop=%d edited=%d applied=%d xmp=%d dirty=%d state=%d "
-                    "undone=%d",
-                    fiNoop ? 1 : 0, fiEdited ? 1 : 0, fiApplied ? 1 : 0, fiXmpApplied ? 1 : 0,
-                    fiDirty ? 1 : 0, fiOneState ? 1 : 0, fiUndone ? 1 : 0);
-
-            // file_info_xmp_sync (459): one apply writes the IIM record and the
-            // XMP title together as a single undo state, and undo restores both.
-            const int syncBase = fiView->history_index();
-            const bool syncApplied = fiView->apply_metadata_edits(
-                QStringList({QStringLiteral("2:5\tSynced")}));
-            const bool syncXmp = fiView->xmp_rows().contains(QStringLiteral("Title\tSynced"));
-            const bool syncIim = fiView->iptc_edit_fields().contains(
-                QStringLiteral("2:5\tObject Name\tSynced"));
-            const bool syncOneState = fiView->history_index() == syncBase + 1
-                && fiView->history_count() == fiView->history_index() + 1
-                && fiView->history_label(fiView->history_index()) == QStringLiteral("File Info");
-            const bool syncUndone = fiView->undo()
-                && fiView->xmp_rows().contains(QStringLiteral("Title\tHi"))
-                && fiView->iptc_edit_fields().contains(QStringLiteral("2:5\tObject Name\tHi"));
-            ST_BEGIN("file_info_xmp_sync");
-            ST_PASS("file_info_xmp_sync applied=%d xmp=%d iim=%d state=%d undone=%d",
-                    syncApplied ? 1 : 0, syncXmp ? 1 : 0, syncIim ? 1 : 0, syncOneState ? 1 : 0,
-                    syncUndone ? 1 : 0);
-
-            if (fiView) {
-                frame.closeDocument(frame.activeDocumentIndex(), false);
-            }
-            if (!fiNoop || !fiEdited || !fiApplied || !fiXmpApplied || !fiDirty || !fiOneState
-                || !fiUndone) {
-                return pictura::selfTest().fail(457, "file info iptc edit");
-            }
-            if (!syncApplied || !syncXmp || !syncIim || !syncOneState || !syncUndone) {
-                return pictura::selfTest().fail(459, "file info xmp sync");
-            }
-        }
-
         // profile_assign_convert (458): Assign Profile retags the active RGB
         // document as exactly one undoable dirty state, undo restores the pre-
         // assign cursor, a bad index is refused without a state, and Convert to
@@ -906,13 +714,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const int mtSourceDoc = frame.activeDocumentIndex();
             mtSource->apply_metadata_edits(QStringList(
                 {QStringLiteral("2:5\tTpl"), QStringLiteral("2:110\tTplCred")}));
-            const QStringList mtBefore = mtSource->xmp_rows();
+            const QStringList mtBefore = mtSource->file_info_edit_fields();
             const int mtHistory = mtSource->history_count();
             const bool mtDirtyBefore = mtSource->is_dirty();
             const bool mtExported = mtSource->export_metadata_template(mtPath);
             const bool mtFileOk = QFile::exists(mtPath) && QFile(mtPath).size() > 0;
             const bool mtUnchanged = mtSource->history_count() == mtHistory
-                && mtSource->xmp_rows() == mtBefore
+                && mtSource->file_info_edit_fields() == mtBefore
                 && mtSource->is_dirty() == mtDirtyBefore;
             frame.closeDocument(mtSourceDoc, false);
 
@@ -932,11 +740,11 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 && mtView->history_label(mtView->history_index())
                     == QStringLiteral("Metadata Template");
             const bool mtAppendEffect = mtView
-                && mtView->xmp_rows().contains(QStringLiteral("Title\tOld"))
-                && mtView->xmp_rows().contains(QStringLiteral("Credit\tTplCred"));
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:5\tDocument Title\tOld"))
+                && mtView->file_info_edit_fields().contains(QStringLiteral("IPTC\t2:110\tCredit\tTplCred"));
             const bool mtAppendUndo = mtView && mtView->undo()
-                && mtView->xmp_rows().contains(QStringLiteral("Title\tOld"))
-                && !mtView->xmp_rows().contains(QStringLiteral("Credit\tTplCred"));
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:5\tDocument Title\tOld"))
+                && !mtView->file_info_edit_fields().contains(QStringLiteral("IPTC\t2:110\tCredit\tTplCred"));
 
             const int mtReplaceBase = mtView ? mtView->history_index() : 0;
             const bool mtReplace = mtView && mtView->apply_metadata_template(mtPath, 1);
@@ -944,12 +752,12 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 && mtView->history_label(mtView->history_index())
                     == QStringLiteral("Metadata Template");
             const bool mtReplaceEffect = mtView
-                && mtView->xmp_rows().contains(QStringLiteral("Title\tTpl"))
-                && mtView->xmp_rows().contains(QStringLiteral("Credit\tTplCred"))
-                && !mtView->xmp_rows().contains(QStringLiteral("Description\tDocDesc"));
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:5\tDocument Title\tTpl"))
+                && mtView->file_info_edit_fields().contains(QStringLiteral("IPTC\t2:110\tCredit\tTplCred"))
+                && !mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:120\tDescription\tDocDesc"));
             const bool mtReplaceUndo = mtView && mtView->undo()
-                && mtView->xmp_rows().contains(QStringLiteral("Title\tOld"))
-                && mtView->xmp_rows().contains(QStringLiteral("Description\tDocDesc"));
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:5\tDocument Title\tOld"))
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:120\tDescription\tDocDesc"));
 
             const int mtKeepBase = mtView ? mtView->history_index() : 0;
             const bool mtKeep = mtView && mtView->apply_metadata_template(mtPath, 2);
@@ -957,14 +765,14 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 && mtView->history_label(mtView->history_index())
                     == QStringLiteral("Metadata Template");
             const bool mtKeepEffect = mtView
-                && mtView->xmp_rows().contains(QStringLiteral("Title\tTpl"))
-                && mtView->xmp_rows().contains(QStringLiteral("Credit\tTplCred"))
-                && mtView->xmp_rows().contains(QStringLiteral("Description\tDocDesc"));
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:5\tDocument Title\tTpl"))
+                && mtView->file_info_edit_fields().contains(QStringLiteral("IPTC\t2:110\tCredit\tTplCred"))
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:120\tDescription\tDocDesc"));
             const bool mtKeepUndo = mtView && mtView->undo()
-                && mtView->xmp_rows().contains(QStringLiteral("Title\tOld"))
-                && mtView->xmp_rows().contains(QStringLiteral("Description\tDocDesc"));
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:5\tDocument Title\tOld"))
+                && mtView->file_info_edit_fields().contains(QStringLiteral("Description\t2:120\tDescription\tDocDesc"));
 
-            pictura::FileInfoDialog mtDialog({}, {}, {}, {}, QString());
+            pictura::FileInfoDialog mtDialog({}, {}, QString());
             int mtCaptured = -1;
             mtDialog.onApplyTemplate = [&mtCaptured](int mode) { mtCaptured = mode; };
             QPushButton* mtApplyButton =

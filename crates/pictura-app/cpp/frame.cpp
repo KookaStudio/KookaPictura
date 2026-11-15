@@ -690,8 +690,13 @@ void PicturaMainWindow::showFileInfo()
     if (!view) {
         return;
     }
-    FileInfoDialog dialog(view->exif_rows(), view->xmp_rows(), view->iptc_edit_fields(),
-                          view->iptc_rows(), view->xmp_packet(), this);
+    QStringList rows = view->exif_rows();
+    rows += view->iptc_rows();
+    rows += view->xmp_rows();
+    FileInfoDialog dialog(rows, view->file_info_edit_fields(), view->xmp_packet(), this);
+    dialog.onApply = [view](const QStringList& edits) {
+        return view->apply_metadata_edits(edits);
+    };
     dialog.onExportTemplate = [this, &dialog, view] {
         const QString filter = QStringLiteral("XMP files (*.xmp)");
         QString dest = getSaveFileName(this, tr("Export Metadata Template"),
@@ -722,9 +727,7 @@ void PicturaMainWindow::showFileInfo()
                                  tr("Could not apply the template."));
         }
     };
-    if (runDialog(dialog, this) == QDialog::Accepted) {
-        view->apply_metadata_edits(dialog.edits());
-    }
+    runDialog(dialog, this);
 }
 
 void PicturaMainWindow::showOpenDialog()
