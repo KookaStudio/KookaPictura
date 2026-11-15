@@ -180,7 +180,7 @@ impl Default for StrokeConfig {
 pub use bristle::{BristleDab, BristleShape, BristleTip};
 pub use fill::Alpha;
 pub use healing::HealStroke;
-pub use stroke::{paint_stroke, PaintError, Stroke, StrokeKind, StrokeOutcome};
+pub use stroke::{paint_stroke, CoverageClip, PaintError, Stroke, StrokeKind, StrokeOutcome};
 pub use tip::{tip_coverage, wet_edge};
 
 #[cfg(test)]

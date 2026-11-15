@@ -1,12 +1,21 @@
 use super::*;
 
+/// A document-space coverage clip: the active selection. The stroke's layer
+/// rect is in document coordinates, so the stencil maps its local index into
+/// the clip directly.
+#[derive(Clone, Debug)]
+pub struct CoverageClip {
+    pub data: pictura_core::Plane<u8>,
+    pub width: u32,
+}
+
 /// A stroke's per-pixel inputs, resolved once per sample so a dab's loop walks
 /// neither the layer path nor the channel list and re-derives no profile.
 pub(super) struct Stencil<'a> {
     pub(super) base: [Option<&'a [u8]>; 4],
     pub(super) locked: bool,
     pub(super) inverse_grayscale: bool,
-    pub(super) coverage_clip: Option<&'a pictura_core::Plane>,
+    pub(super) coverage_clip: Option<&'a CoverageClip>,
     pub(super) cfg: StrokeConfig,
     /// Clone Stamp / Pattern Stamp / History Brush: the colour at each pixel
     /// comes from the source instead of `paint`.
@@ -29,7 +38,21 @@ impl Stencil<'_> {
         paint: Rgba,
         opacity: f32,
     ) -> bool {
-        let clip = self.coverage_clip.map_or(255, |p| p.sample(i).unwrap_or(0));
+        let clip = match self.coverage_clip {
+            None => 255,
+            Some(c) => {
+                let w = self.rect.width().max(1) as usize;
+                let dx = self.rect.left + (i % w) as i32;
+                let dy = self.rect.top + (i / w) as i32;
+                if dx < 0 || dy < 0 {
+                    0
+                } else {
+                    c.data
+                        .sample(dy as usize * c.width as usize + dx as usize)
+                        .unwrap_or(0)
+                }
+            }
+        };
         let cov = coverage as f32 / 255.0 * clip as f32 / 255.0;
         if clip == 0 {
             return false;
@@ -81,9 +104,75 @@ impl Stencil<'_> {
     }
 }
 
+/// Apply [`mask_dab_output`] to every rect a per-dab sample changed.
+pub(super) fn mask_dabs(
+    clip: Option<&CoverageClip>,
+    stroke_rect: PsdRect,
+    doc: &Document,
+    layer_path: &[usize],
+    pixels: &mut crate::healing::RgbaImage,
+    rects: &[PsdRect],
+) {
+    let Some(clip) = clip else {
+        return;
+    };
+    let Some(layer) = super::layer_at(doc, layer_path) else {
+        return;
+    };
+    for &rect in rects {
+        mask_dab_output(clip, stroke_rect, layer, pixels, rect);
+    }
+}
+
+/// Restore the parts of a per-dab engine's output the selection does not
+/// cover, blending partial coverage between the pre-dab layer pixel and the
+/// engine's result.
+pub(super) fn mask_dab_output(
+    clip: &CoverageClip,
+    stroke_rect: PsdRect,
+    layer: &Layer,
+    pixels: &mut crate::healing::RgbaImage,
+    rect: PsdRect,
+) {
+    let w = stroke_rect.width().max(1) as usize;
+    for y in rect.top.max(0)..rect.bottom {
+        for x in rect.left.max(0)..rect.right {
+            let dx = stroke_rect.left + x;
+            let dy = stroke_rect.top + y;
+            let coverage = if dx < 0 || dy < 0 {
+                0
+            } else {
+                clip.data
+                    .sample(dy as usize * clip.width as usize + dx as usize)
+                    .unwrap_or(0)
+            };
+            if coverage == 255 {
+                continue;
+            }
+            let i = y as usize * w + x as usize;
+            let Some(px) = pixels.data.get_mut(i) else {
+                continue;
+            };
+            let orig = super::read_pixel(layer, i);
+            if coverage == 0 {
+                *px = [orig.0, orig.1, orig.2, orig.3];
+            } else {
+                let t = u32::from(coverage);
+                let inv = 255 - t;
+                *px = [
+                    ((u32::from(px[0]) * t + u32::from(orig.0) * inv + 127) / 255) as u8,
+                    ((u32::from(px[1]) * t + u32::from(orig.1) * inv + 127) / 255) as u8,
+                    ((u32::from(px[2]) * t + u32::from(orig.2) * inv + 127) / 255) as u8,
+                    ((u32::from(px[3]) * t + u32::from(orig.3) * inv + 127) / 255) as u8,
+                ];
+            }
+        }
+    }
+}
+
 impl Stroke {
-    /// Constrain dab coverage with a plane in the target layer's stored geometry.
-    pub fn set_coverage_clip(&mut self, clip: Option<pictura_core::Plane>) {
+    /// Constrain dab coverage with a document-space selection clip.
+    pub fn set_coverage_clip(&mut self, clip: Option<CoverageClip>) {
         self.coverage_clip = clip;
     }
     /// Blend a grayscale coverage plane in its inverted editing convention.

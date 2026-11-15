@@ -35,6 +35,7 @@ fn preview(
         samples: Vec::new(),
         cfg,
         mask: None,
+        clip: None,
     }
 }
 
@@ -156,6 +157,58 @@ fn preview_blend_is_source_over_and_clear_removes_the_snapshot() {
         preview_blend(&clear_translucent, rect(1, 1)),
         preview_blend(&clear, rect(1, 1)),
         "Clear ignores the foreground alpha"
+    );
+}
+
+#[test]
+fn preview_blend_honours_the_selection_clip() {
+    let snapshot = vec![
+        10u8, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255,
+    ];
+    let blue = Rgba {
+        r: 0,
+        g: 0,
+        b: 255,
+        a: 255,
+    };
+    let mut p = preview(
+        2,
+        2,
+        0,
+        snapshot.clone(),
+        vec![255, 255, 255, 255],
+        StrokeConfig {
+            color: blue,
+            mode: PaintMode::Normal,
+            ..Default::default()
+        },
+    );
+    // The left column is selected; the right column is not.
+    p.clip = Some(pictura_paint::CoverageClip {
+        data: pictura_core::Plane::from(vec![255u8, 0, 255, 0]),
+        width: 2,
+    });
+
+    let out = preview_blend(&p, rect(2, 2));
+    assert_eq!(
+        &out[0..4],
+        &[0, 0, 255, 255],
+        "selected top-left is painted"
+    );
+    assert_eq!(
+        &out[4..8],
+        &snapshot[4..8],
+        "unselected top-right is untouched"
+    );
+    assert_eq!(
+        &out[8..12],
+        &[0, 0, 255, 255],
+        "selected bottom-left is painted"
+    );
+    assert_eq!(
+        &out[12..16],
+        &snapshot[12..16],
+        "unselected bottom-right is untouched"
     );
 }
 

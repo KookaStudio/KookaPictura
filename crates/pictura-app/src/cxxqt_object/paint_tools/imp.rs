@@ -2,7 +2,7 @@ use super::*;
 
 use super::super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, mask_stroke_config,
-    paint_mode_from, rgba_from_argb,
+    paint_mode_from, rgba_from_argb, stroke_selection_clip,
 };
 use super::super::impl_paint::tool_recording;
 use super::super::PictureViewRust;
@@ -982,7 +982,10 @@ pub(super) fn begin_kind(
         // Opened only once the stroke can start, so a refused call never leaves
         // a session for the next tool to report under its title.
         super::super::helpers::paint_timing::start(label);
-        start(doc, path, rust)
+        start(doc, path, rust).map(|mut stroke| {
+            stroke.set_coverage_clip(stroke_selection_clip(rust));
+            stroke
+        })
     };
     let Some(stroke) = stroke else {
         super::super::helpers::paint_timing::report();

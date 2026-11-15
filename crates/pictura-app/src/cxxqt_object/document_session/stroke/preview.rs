@@ -36,6 +36,8 @@ pub(in crate::cxxqt_object) struct PreviewStroke {
     /// Set when the stroke paints a layer mask: the coverage then moves the
     /// composite between the mask's extremes instead of laying down colour.
     pub(in crate::cxxqt_object) mask: Option<MaskPreview>,
+    /// The active selection, so the preview shows only the selected pixels.
+    pub(in crate::cxxqt_object) clip: Option<pictura_paint::CoverageClip>,
 }
 
 /// What a previewed mask stroke blends between, on the reduced-document grid

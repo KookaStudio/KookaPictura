@@ -10,7 +10,7 @@ use super::super::helpers::*;
 use super::super::helpers_composite::display_rgba_bytes;
 use super::super::qobject;
 use super::super::state::PictureViewRust;
-use super::{gpu_paint_mode, mask_gpu, preview_level};
+use super::{gpu_paint_mode, mask_gpu, preview_clip, preview_level};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -40,6 +40,7 @@ fn mask_preview(rust: &PictureViewRust, path: &str, cfg: StrokeConfig) -> Option
     let t = Instant::now();
     let snapshot = rust.level_snapshot(level)?;
     let mut preview = PreviewStroke::new(level, snapshot, (doc.width, doc.height), cfg)?;
+    preview.clip = stroke_selection_clip(rust);
     let whole = PsdRect {
         top: 0,
         left: 0,
@@ -98,7 +99,8 @@ pub(super) fn mask_preview_blend(
             } else {
                 preview.coverage[li]
             };
-            let k = strength * coverage as f32 / 255.0;
+            let clip = preview_clip(preview, lx as i32, ly as i32);
+            let k = strength * coverage as f32 / 255.0 * clip as f32 / 255.0;
             let start = mask.coverage[mi] as f32;
             let t = (value - start) * k / 255.0;
             let o = (y * rw + x) * 4;
@@ -169,12 +171,15 @@ impl PictureViewRust {
             };
             Stroke::begin_at(&mask.document, "0", cfg)
                 .ok()
-                .map(|stroke| MaskStroke {
-                    path: path.to_string(),
-                    baseline: pictura_render::resolve_path(doc, path).cloned(),
-                    rect: mask.rect,
-                    document: mask.document,
-                    stroke,
+                .map(|mut stroke| {
+                    stroke.set_coverage_clip(stroke_selection_clip(rust));
+                    MaskStroke {
+                        path: path.to_string(),
+                        baseline: pictura_render::resolve_path(doc, path).cloned(),
+                        rect: mask.rect,
+                        document: mask.document,
+                        stroke,
+                    }
                 })
         };
         let Some(mask_stroke) = built else {
@@ -195,7 +200,7 @@ impl PictureViewRust {
                         && !cfg.pressure_opacity
                         && cfg.dynamics.is_default()
                 }),
-                self.gpu_compute,
+                self.gpu_compute && self.session.selection.is_none(),
             ) {
                 (Some(_), Some(mode), true) => {
                     let seed = mask_gpu::mask_rgba_seed(&mask_stroke.document);
@@ -477,6 +482,7 @@ mod tests {
             samples: Vec::new(),
             cfg,
             mask: None,
+            clip: None,
         }
     }
 

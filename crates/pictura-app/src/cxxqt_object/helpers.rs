@@ -376,6 +376,16 @@ pub(super) fn active_mask_target(rust: &super::state::PictureViewRust) -> Option
 pub(super) fn luma_u8(color: Rgba) -> u8 {
     pictura_core::rec601_luma(color.r, color.g, color.b)
 }
+/// The active selection as a document-space stroke clip, or `None`.
+pub(super) fn stroke_selection_clip(
+    rust: &super::state::PictureViewRust,
+) -> Option<pictura_paint::CoverageClip> {
+    let selection = rust.session.selection.as_ref()?;
+    Some(pictura_paint::CoverageClip {
+        data: selection.data.clone(),
+        width: selection.width,
+    })
+}
 /// `cfg` for a stroke on a mask: the foreground and background paint their
 /// luma, so black hides and white reveals.
 pub(super) fn mask_stroke_config(cfg: pictura_paint::StrokeConfig) -> pictura_paint::StrokeConfig {
