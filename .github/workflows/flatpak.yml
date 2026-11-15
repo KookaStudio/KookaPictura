@@ -66,14 +66,30 @@ jobs:
       (github.head_ref == 'release-please--branches--master' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:b0a8a2acb9e420dd0e3e083ff552bea5a817e17e41532f1d2287ff49ef9aae0e
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:b0a8a2acb9e420dd0e3e083ff552bea5a817e17e41532f1d2287ff49ef9aae0e # kde-6.11
       options: --privileged
+      # flatpak-builder updates the image's runtimes when Flathub is newer, and
+      # flatpak retires the replaced checkout by renaming its directory. That
+      # directory is an overlayfs lower layer, which a kernel without
+      # redirect_dir cannot rename ("Invalid cross-device link", #1336). The
+      # volume seeds the installation onto the runner's own filesystem.
+      volumes:
+        - /var/lib/flatpak
     env:
       VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || github.sha }}
+
+      # Runs before the build so the versions are logged even when the runtime
+      # update fails (#1336).
+      - name: Name the Flatpak tool and runtime versions
+        run: |
+          flatpak --version
+          flatpak-builder --version
+          flatpak list --system --runtime --columns=ref,active
+          uname -r
 
       - name: Build the bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6
