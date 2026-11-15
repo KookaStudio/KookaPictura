@@ -240,8 +240,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Anti-aliased selection rasterisation for the Elliptical Marquee, the
       lasso tools, and the Magic Wand boundary ramp, and the 56-channel
       document cap (#614); control-server selection ops stay binary.
-- [ ] Combine operations, the layer-mask target, and modifier-click combine on
-      saved selections (#615)
+- [x] Combine operations, the layer-mask target, modifier-click combine on
+      saved selections, and channel names (#615)
 - [x] Quick Mask (#172)
 
 ## Adjustments and image operations

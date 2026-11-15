@@ -81,7 +81,7 @@ Alpha channels are grayscale masks with the same pixel dimensions as the documen
 
 | Control | Type | Default | Range / options | Notes |
 |---|---|---|---|---|
-| Save Document | enum | active image | active image / any open same-size image / New | New-image option creates a single-channel multichannel image |
+| Save Document | enum | active image | active image / any open same-size image / New | New-image option creates a single-channel grayscale image with the selection as its extra channel; the codec does not write Multichannel, so this is the grayscale+alpha fallback |
 | Save Channel | enum | new channel | new / existing channel / layer mask | Layer mask only if the image has layers |
 | Channel Name | string | `Alpha 1`, `Alpha 2`, … (community) | free text | Sequence-based default |
 | Save operation | enum | Replace existing channel contents | New (implicit) / Replace / Add / Subtract / Intersect | Only when an existing channel is targeted |
