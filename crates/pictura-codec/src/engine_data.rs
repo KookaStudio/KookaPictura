@@ -605,7 +605,7 @@ fn unescape(payload: &[u8]) -> Vec<u8> {
     out
 }
 
-fn decode_macroman(bytes: &[u8]) -> String {
+pub(crate) fn decode_macroman(bytes: &[u8]) -> String {
     bytes
         .iter()
         .map(|&b| {

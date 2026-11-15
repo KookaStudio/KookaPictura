@@ -22,6 +22,10 @@ pub const EXIF_DATA_1: u16 = 1058;
 pub const EXIF_DATA_3: u16 = 1059;
 /// The IPTC-NAA resource id.
 pub const IPTC_NAA: u16 = 1028;
+/// The legacy alpha-channel names resource id (MacRoman Pascal strings).
+pub const ALPHA_NAMES_PASCAL: u16 = 1006;
+/// The Unicode alpha-channel names resource id.
+pub const ALPHA_NAMES_UNICODE: u16 = 1045;
 /// The ResolutionInfo resource id.
 pub const RESOLUTION_INFO: u16 = 1005;
 
@@ -128,6 +132,119 @@ pub fn set_document_resolution(document: &mut Document, resolution: Resolution) 
     let mut section = encode_image_resources(&resources);
     section.extend_from_slice(&document.image_resources[consumed..]);
     document.image_resources = section.into();
+}
+
+/// The stored extra-channel names in channel order. Resource 1045 (Unicode) is
+/// preferred; resource 1006 (MacRoman Pascal strings) is the legacy fallback.
+pub fn alpha_names(document: &Document) -> Vec<String> {
+    let mut names = stored_alpha_names(document).unwrap_or_default();
+    names.truncate(document.channels.len());
+    names
+}
+
+fn stored_alpha_names(document: &Document) -> Option<Vec<String>> {
+    let (resources, _) = decode_image_resources_with_len(document);
+    let unicode = resources
+        .iter()
+        .find(|r| r.id == ALPHA_NAMES_UNICODE)
+        .and_then(|r| decode_unicode_names(&r.data));
+    let pascal = resources
+        .iter()
+        .find(|r| r.id == ALPHA_NAMES_PASCAL)
+        .and_then(|r| decode_pascal_names(&r.data));
+    unicode.or(pascal)
+}
+
+/// Replace the document's alpha-name resources with `names`, or remove them
+/// when `names` is empty. Every other block and the unparsed tail are kept
+/// byte-for-byte; unchanged names leave the section untouched.
+pub fn set_alpha_names(document: &mut Document, names: &[String]) {
+    let stored = stored_alpha_names(document);
+    let unchanged = match &stored {
+        Some(stored) => stored == names,
+        None => names.is_empty(),
+    };
+    if unchanged {
+        return;
+    }
+    let (resources, consumed) = decode_image_resources_with_len(document);
+    let mut kept: Vec<ImageResource> = resources
+        .into_iter()
+        .filter(|r| r.id != ALPHA_NAMES_PASCAL && r.id != ALPHA_NAMES_UNICODE)
+        .collect();
+    if !names.is_empty() {
+        kept.push(frame_image_resource(
+            ALPHA_NAMES_UNICODE,
+            "",
+            &encode_unicode_names(names),
+        ));
+        kept.push(frame_image_resource(
+            ALPHA_NAMES_PASCAL,
+            "",
+            &encode_pascal_names(names),
+        ));
+    }
+    let mut section = encode_image_resources(&kept);
+    section.extend_from_slice(&document.image_resources[consumed..]);
+    document.image_resources = section.into();
+}
+
+fn decode_pascal_names(data: &[u8]) -> Option<Vec<String>> {
+    let mut names = Vec::new();
+    let mut at = 0;
+    while at < data.len() {
+        let len = *data.get(at)? as usize;
+        at += 1;
+        let bytes = data.get(at..at.checked_add(len)?)?;
+        at += len;
+        names.push(crate::engine_data::decode_macroman(bytes));
+    }
+    Some(names)
+}
+
+fn encode_pascal_names(names: &[String]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for name in names {
+        let mut bytes: Vec<u8> = name
+            .chars()
+            .map(|c| if c.is_ascii() { c as u8 } else { b'?' })
+            .collect();
+        bytes.truncate(u8::MAX as usize);
+        out.push(bytes.len() as u8);
+        out.extend_from_slice(&bytes);
+    }
+    out
+}
+
+fn decode_unicode_names(data: &[u8]) -> Option<Vec<String>> {
+    let mut names = Vec::new();
+    let mut at = 0;
+    while at < data.len() {
+        let count = u32::from_be_bytes(data.get(at..at + 4)?.try_into().ok()?) as usize;
+        at += 4;
+        let bytes = data.get(at..at.checked_add(count.checked_mul(2)?)?)?;
+        at += count * 2;
+        let units: Vec<u16> = bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_be_bytes(*pair))
+            .collect();
+        names.push(String::from_utf16_lossy(&units));
+    }
+    Some(names)
+}
+
+fn encode_unicode_names(names: &[String]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for name in names {
+        let units: Vec<u16> = name.encode_utf16().collect();
+        out.extend_from_slice(&(units.len() as u32).to_be_bytes());
+        for unit in units {
+            out.extend_from_slice(&unit.to_be_bytes());
+        }
+    }
+    out
 }
 
 /// One image-resource block.
@@ -253,7 +370,7 @@ pub fn frame_image_resource(id: u16, name: &str, data: &[u8]) -> ImageResource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, ColorMode};
+    use pictura_core::{BitDepth, Channel, ColorMode};
 
     fn resource(signature: &[u8; 4], id: u16, name: &str, data: &[u8]) -> Vec<u8> {
         let mut out = signature.to_vec();
@@ -448,5 +565,90 @@ mod tests {
         );
         set_vanishing_point_data(&mut doc, None);
         assert_eq!(doc.image_resources, section);
+    }
+
+    fn channel(id: i16, len: usize) -> Channel {
+        Channel {
+            id,
+            data: vec![0u8; len].into(),
+        }
+    }
+
+    #[test]
+    fn alpha_names_round_trip_ascii_and_unicode() {
+        let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
+        doc.channels = vec![channel(0, 8), channel(1, 8)];
+        let names = vec!["Hair".to_string(), "Ciel étoilé".to_string()];
+        set_alpha_names(&mut doc, &names);
+        let back = crate::read_psd(&crate::write_psd(&doc).expect("write")).expect("read");
+        assert_eq!(alpha_names(&back), names);
+    }
+
+    #[test]
+    fn alpha_names_pascal_fallback() {
+        let data = encode_pascal_names(&["Legacy".to_string()]);
+        let section =
+            encode_image_resources(&[frame_image_resource(ALPHA_NAMES_PASCAL, "", &data)]);
+        let mut doc = document_with(section);
+        doc.channels = vec![channel(0, 1)];
+        assert_eq!(alpha_names(&doc), vec!["Legacy".to_string()]);
+    }
+
+    #[test]
+    fn alpha_names_preserve_other_resources() {
+        let other = frame_image_resource(XMP_METADATA, "", b"<x/>");
+        let mut doc = document_with(encode_image_resources(&[other]));
+        doc.channels = vec![channel(0, 1)];
+        set_alpha_names(&mut doc, &["Hair".to_string()]);
+        let resources = decode_image_resources(&doc);
+        assert!(resources
+            .iter()
+            .any(|r| r.id == XMP_METADATA && r.data == b"<x/>"));
+        assert_eq!(alpha_names(&doc), vec!["Hair".to_string()]);
+    }
+
+    #[test]
+    fn alpha_names_unchanged_keeps_bytes() {
+        let mut doc = document_with(Vec::new());
+        doc.channels = vec![channel(0, 1)];
+        set_alpha_names(&mut doc, &["Hair".to_string()]);
+        let before = doc.image_resources.clone();
+        set_alpha_names(&mut doc, &["Hair".to_string()]);
+        assert_eq!(doc.image_resources, before);
+    }
+
+    #[test]
+    fn alpha_names_empty_removes_the_resources() {
+        let mut doc = document_with(Vec::new());
+        doc.channels = vec![channel(0, 1)];
+        set_alpha_names(&mut doc, &["Hair".to_string()]);
+        set_alpha_names(&mut doc, &[]);
+        assert!(decode_image_resources(&doc).is_empty());
+    }
+
+    #[test]
+    fn alpha_names_pascal_encodes_non_ascii_as_a_fallback() {
+        let names = vec!["Ciel étoilé".to_string()];
+        let encoded = encode_pascal_names(&names);
+        assert_eq!(&encoded[1..1 + encoded[0] as usize], b"Ciel ?toil?");
+        let unicode = decode_unicode_names(&encode_unicode_names(&names)).expect("unicode");
+        assert_eq!(unicode, names);
+    }
+
+    #[test]
+    fn alpha_names_pascal_reads_unpadded_names() {
+        let data = [4u8, b'H', b'a', b'i', b'r', 3, b'B', b'o', b'b'];
+        assert_eq!(
+            decode_pascal_names(&data),
+            Some(vec!["Hair".to_string(), "Bob".to_string()])
+        );
+    }
+
+    #[test]
+    fn alpha_names_pascal_decodes_macroman() {
+        assert_eq!(
+            decode_pascal_names(&[2, 0x8E, 0xA9]),
+            Some(vec!["é©".to_string()])
+        );
     }
 }

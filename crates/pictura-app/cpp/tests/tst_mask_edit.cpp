@@ -9,6 +9,7 @@
 #include <QtWidgets/QToolButton>
 #include "api/layers_api.h"
 #include "api/selection_api.h"
+#include "api/selection_bridge.h"
 #include "api/transform_api.h"
 #include "api/type_api.h"
 
@@ -79,6 +80,12 @@ void workPathSquare(pictura::PictureView& v, double l, double t, double r, doubl
     pictura::path_close(v);
 }
 
+::rust::Slice<const std::uint8_t> maskBytes(const QByteArray& bytes)
+{
+    return ::rust::Slice<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(bytes.constData()), bytes.size());
+}
+
 } // namespace
 
 class MaskEditTest : public QObject {
@@ -89,6 +96,15 @@ private slots:
     void maskEditTarget();
     void maskThumbnailOnNonActiveRowKeepsTarget();
     void ctrlClickMaskLoadsSelection();
+    void ctrlShiftAddsMask();
+    void ctrlAltSubtractsMask();
+    void ctrlShiftAltIntersectsMask();
+    void saveSelectionIntoMaskReplaces();
+    void saveSelectionIntoMaskCombines();
+    void saveSelectionIntoMaskPreservesMetadata();
+    void saveSelectionIntoDisabledMask();
+    void saveSelectionIntoMaskOneState();
+    void saveSelectionIntoMissingMaskRefuses();
     void invertOnMaskTarget();
     void paintAndFillWriteCoverage();
     void canvasToolsWriteCoverage();
@@ -1173,6 +1189,204 @@ void MaskEditTest::gradientFillsALockedLayersMask()
     QVERIFY2(nearLeft < 128, "the ramp's black end hid the text there");
     QVERIFY2(nearRight > 128, "the ramp's white end revealed the text there");
     f.view->deselect();
+}
+
+
+void MaskEditTest::ctrlShiftAddsMask()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    paint_fixture::Fixture f(frame, maskMoveSeed(), QStringLiteral("pictura_mask_add"));
+    QVERIFY(f.ok());
+    QString layer;
+    QVERIFY(setUpMaskedLayer(f, layer));
+    pictura::LayersPanel* panel =
+        frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->setView(f.view);
+    frame.selectLayerPath(layer);
+    panel->refresh();
+    QCoreApplication::processEvents();
+    const QByteArray base(32 * 32, char(64));
+    QVERIFY(pictura::load_selection_coverage(*f.view, maskBytes(base), 32, 32, false,
+                                            QStringLiteral("new")));
+    QVERIFY(panel->ctrlShiftClickMaskThumbnailForTest(layer));
+    QCOMPARE(f.view->selection_coverage(8, 8), 255);
+    QCOMPARE(f.view->selection_coverage(1, 1), 64);
+}
+
+void MaskEditTest::ctrlAltSubtractsMask()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    paint_fixture::Fixture f(frame, maskMoveSeed(), QStringLiteral("pictura_mask_sub"));
+    QVERIFY(f.ok());
+    QString layer;
+    QVERIFY(setUpMaskedLayer(f, layer));
+    pictura::LayersPanel* panel =
+        frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->setView(f.view);
+    frame.selectLayerPath(layer);
+    panel->refresh();
+    QCoreApplication::processEvents();
+    f.view->select_all();
+    QVERIFY(panel->ctrlAltClickMaskThumbnailForTest(layer));
+    QCOMPARE(f.view->selection_coverage(8, 8), 0);
+    QCOMPARE(f.view->selection_coverage(1, 1), 255);
+}
+
+void MaskEditTest::ctrlShiftAltIntersectsMask()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    paint_fixture::Fixture f(frame, maskMoveSeed(), QStringLiteral("pictura_mask_intersect"));
+    QVERIFY(f.ok());
+    QString layer;
+    QVERIFY(setUpMaskedLayer(f, layer));
+    pictura::LayersPanel* panel =
+        frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->setView(f.view);
+    frame.selectLayerPath(layer);
+    panel->refresh();
+    QCoreApplication::processEvents();
+    f.view->select_all();
+    QVERIFY(panel->ctrlShiftAltClickMaskThumbnailForTest(layer));
+    QCOMPARE(f.view->selection_coverage(8, 8), 255);
+    QCOMPARE(f.view->selection_coverage(1, 1), 0);
+}
+
+void MaskEditTest::saveSelectionIntoMaskReplaces()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskSave"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString path = addUnmaskedFill(*view);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    QVERIFY(view->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::save_selection_to(*view, QStringLiteral("mask:") + path, QString(),
+                                    QStringLiteral("replace")));
+    QVERIFY(view->mask_selection(path, QStringLiteral("new")));
+    QCOMPARE(view->selection_coverage(5, 5), 255);
+    QCOMPARE(view->selection_coverage(1, 1), 0);
+    frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::saveSelectionIntoMaskCombines()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskCombine"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString path = addUnmaskedFill(*view);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    const QByteArray base(16 * 16, char(128));
+    const QByteArray incoming(16 * 16, char(64));
+    const QString target = QStringLiteral("mask:") + path;
+    const QList<QPair<QString, int>> cases {
+        {QStringLiteral("add"), 128},
+        {QStringLiteral("subtract"), 64},
+        {QStringLiteral("intersect"), 32},
+    };
+    for (const auto& [mode, expected] : cases) {
+        QVERIFY(pictura::load_selection_coverage(*view, maskBytes(base), 16, 16, false,
+                                              QStringLiteral("new")));
+        QVERIFY(pictura::save_selection_to(*view, target, QString(), QStringLiteral("replace")));
+        QVERIFY(pictura::load_selection_coverage(*view, maskBytes(incoming), 16, 16, false,
+                                              QStringLiteral("new")));
+        QVERIFY(pictura::save_selection_to(*view, target, QString(), mode));
+        QVERIFY(view->mask_selection(path, QStringLiteral("new")));
+        QCOMPARE(view->selection_coverage(8, 8), expected);
+    }
+    frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::saveSelectionIntoMaskPreservesMetadata()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskMetadata"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString path = addUnmaskedFill(*view);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::mask_edit_target_set(*view, path));
+    QVERIFY(pictura::layer_mask_set_density(*view, 128, true));
+    QVERIFY(pictura::layer_mask_set_feather(*view, 2.0, false));
+    QVERIFY(pictura::layer_mask_set_enabled_path(*view, path, false));
+    QVERIFY(view->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::save_selection_to(*view, QStringLiteral("mask:") + path, QString(),
+                                    QStringLiteral("replace")));
+    QCOMPARE(pictura::layer_mask_density(*view), 128);
+    QCOMPARE(pictura::layer_mask_feather(*view), 2.0);
+    QVERIFY(pictura::layer_mask_disabled_path(*view, path));
+    QVERIFY(pictura::mask_edit_target_set(*view, QString()));
+    frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::saveSelectionIntoDisabledMask()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskDisabled"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString path = addUnmaskedFill(*view);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::layer_mask_set_enabled_path(*view, path, false));
+    QVERIFY(view->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::save_selection_to(*view, QStringLiteral("mask:") + path, QString(),
+                                    QStringLiteral("replace")));
+    QVERIFY(pictura::layer_mask_disabled_path(*view, path));
+    QVERIFY(pictura::layer_mask_set_enabled_path(*view, path, true));
+    QVERIFY(view->mask_selection(path, QStringLiteral("new")));
+    QCOMPARE(view->selection_coverage(5, 5), 255);
+    QCOMPARE(view->selection_coverage(1, 1), 0);
+    frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::saveSelectionIntoMaskOneState()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskState"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const QString path = addUnmaskedFill(*view);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
+    QVERIFY(view->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    const int before = view->history_count();
+    QVERIFY(pictura::save_selection_to(*view, QStringLiteral("mask:") + path, QString(),
+                                    QStringLiteral("replace")));
+    QCOMPARE(view->history_count(), before + 1);
+    frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::saveSelectionIntoMissingMaskRefuses()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("MaskMissing"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    view->select_all();
+    const int before = view->history_count();
+    QVERIFY(!pictura::save_selection_to(*view, QStringLiteral("mask:9"), QString(),
+                                     QStringLiteral("replace")));
+    QCOMPARE(view->history_count(), before);
+    frame.closeDocument(doc, false);
 }
 
 QTEST_MAIN(MaskEditTest)

@@ -306,6 +306,7 @@ public:
     QString documentPath(int index) const;
     QString documentName(int index) const;
     QString documentTabTextForTest(int index) const;
+    QStringList selectionDocumentLabelsForTest() const;
     // Give document `index` a display name, as a typed New or Duplicate name does.
     void setDocumentNameForTest(int index, const QString& name);
     bool isDocumentDirty(int index) const;
@@ -540,6 +541,8 @@ private:
     // open) opens the Open dialog.
     void installWorkspaceOpenGesture();
     void wirePdfCommands();
+    void openSaveSelectionDialog();
+    void openLoadSelectionDialog();
     void applyTextGamma(bool enabled, double gamma);
     // frame_mask_overlay.cpp: re-render the rubylith overlay when the Layers
     // panel changes it, and draw the view's overlay on `canvas`.

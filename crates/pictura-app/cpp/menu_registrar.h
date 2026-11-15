@@ -43,6 +43,8 @@ class MenuRegistrar : public QObject {
 public:
     struct Runtime {
         std::function<void()> requestRefresh;
+        std::function<void()> openSaveSelectionDialog;
+        std::function<void()> openLoadSelectionDialog;
         std::function<void(const QString& message, int timeoutMs)> showStatus;
         std::function<OptionsBar*()> optionsBar;
         std::function<QWidget*()> dialogParent;

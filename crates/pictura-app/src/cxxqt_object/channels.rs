@@ -23,6 +23,8 @@ pub mod ffi {
         type QImage = cxx_qt_lib::QImage;
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -71,8 +73,19 @@ pub mod ffi {
         /// Delete alpha channel `index`; one "Delete Channel" state. False for a bad index.
         fn channels_delete_alpha(view: Pin<&mut PictureView>, index: i32) -> bool;
 
-        /// Load colour channel row `row` (0 = the composite) as the selection; `mask` is the visible RGB channels (bit 0 red, 1 green, 2 blue). False for a row outside the mode's colour rows.
-        fn channels_load_color_selection(view: Pin<&mut PictureView>, row: i32, mask: i32) -> bool;
+        /// Load colour channel row `row` (0 = the composite) as the selection; `mask` is the visible RGB channels (bit 0 red, 1 green, 2 blue). `mode` is `new`, `add`, `subtract`, or `intersect`. False for a row outside the mode's colour rows.
+        fn channels_load_color_selection(
+            view: Pin<&mut PictureView>,
+            row: i32,
+            mask: i32,
+            mode: &QString,
+        ) -> bool;
+
+        /// Display names for every extra channel, falling back to `Alpha N`.
+        fn channels_alpha_names(view: &PictureView) -> QStringList;
+
+        /// Display name for extra channel `index`, or empty for a bad index.
+        fn channels_alpha_name(view: &PictureView, index: i32) -> QString;
 
         /// The active layer's raster-mask channel name (`"<layer name> Mask"`), or
         /// empty when the active layer carries no raster mask.

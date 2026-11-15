@@ -1,5 +1,6 @@
 #include "channels_panel.h"
 #include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 #include <QtCore/QScopedValueRollback>
 
 #include "api/document_api.h"
@@ -9,7 +10,11 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QEvent>
+#include <QtCore/QMimeData>
 #include <QtGui/QImage>
+#include <QtGui/QDrag>
+#include <QtGui/QDragEnterEvent>
+#include <QtGui/QDropEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPalette>
 #include <QtWidgets/QApplication>
@@ -29,6 +34,7 @@ namespace pictura {
 namespace {
 
 constexpr int kThumbnailSize = 24;
+constexpr const char* kChannelRowMime = "application/x-pictura-channel-row";
 
 // The `alpha` sentinel for the active layer's mask channel row.
 constexpr int kMaskChannel = -2;
@@ -157,7 +163,9 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
                         "channelsNew");
     remove_ = footerButton(this, "layers.delete", QStringLiteral("Delete current channel"),
                            "channelsDelete");
+    load_->setAcceptDrops(true);
     for (QToolButton* button : {load_, save_}) {
+        button->installEventFilter(this);
         footer->addWidget(button);
     }
     footer->addStretch(1);
@@ -173,7 +181,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
         }
     });
     connect(load_, &QToolButton::clicked, this,
-            [this]() { loadRowSelection(list_->currentRow()); });
+            [this]() { loadRowSelection(list_->currentRow(), Qt::NoModifier); });
     connect(save_, &QToolButton::clicked, this, [this]() {
         if (!view_ || !view_->has_selection()) {
             return;
@@ -203,7 +211,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
             refresh();
         }
     });
-    rebuild(QStringLiteral("rgb"), 0);
+    rebuild(QStringLiteral("rgb"), QStringList());
     updateFooter();
 }
 
@@ -244,7 +252,7 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
     styleRows();
 }
 
-void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
+void ChannelsPanel::rebuild(const QString& mode, const QStringList& alphaNames)
 {
     QScopedValueRollback<bool> syncing(syncing_,true);
     quickMask_=view_ && quick_mask_active(*view_);
@@ -269,8 +277,8 @@ void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
     }
     // Alpha channels follow on the next Ctrl+number, as far as Ctrl+9 goes.
     int key = QString::fromLatin1(defs.last().shortcut).back().digitValue() + 1;
-    for (int i = 0; i < alphaCount; ++i, ++key) {
-        addRow(QStringLiteral("Alpha %1").arg(i + 1),
+    for (int i = 0; i < alphaNames.size(); ++i, ++key) {
+        addRow(alphaNames.value(i, QStringLiteral("Alpha %1").arg(i + 1)),
                key <= 9 ? QStringLiteral("Ctrl+%1").arg(key) : QString(), i);
     }
     if(quickMask_) {
@@ -292,7 +300,8 @@ void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
         }
     }
     mode_ = mode;
-    alphaCount_ = alphaCount;
+    alphaCount_ = alphaNames.size();
+    alphaNames_ = alphaNames;
     if (mask_ != 0x7) {
         mask_ = 0x7;
         emit channelMaskChanged(mask_);
@@ -320,10 +329,12 @@ void ChannelsPanel::refresh()
 {
     const bool document = view_ && view_->has_document();
     const QString mode = document ? QString(channels_mode(*view_)) : QStringLiteral("rgb");
-    const int alphas = document ? view_->selection_channel_count() : 0;
+    const QStringList alphaNames = document ? channels_alpha_names(*view_) : QStringList();
     const QString maskName = document ? QString(channels_active_mask_name(*view_)) : QString();
-    if (mode != mode_ || alphas != alphaCount_ || maskName != maskName_ || quickMask_ != (document && quick_mask_active(*view_))) {
-        rebuild(mode, alphas);
+    if (mode != mode_ || alphaNames.size() != alphaCount_ || alphaNames != alphaNames_
+        || maskName != maskName_
+        || quickMask_ != (document && quick_mask_active(*view_))) {
+        rebuild(mode, alphaNames);
     }
     refreshThumbnails();
     updateFooter();
@@ -433,7 +444,10 @@ void ChannelsPanel::updateFooter()
 {
     const bool document = view_ && view_->has_document();
     const bool alpha = selectedAlpha() >= 0;
-    load_->setEnabled(document && alpha);
+    const int row = list_->currentRow();
+    const bool loadable = document && row >= 0 && row < rows_.size()
+        && (rows_.at(row).kind == RowKind::Color || rows_.at(row).kind == RowKind::Alpha);
+    load_->setEnabled(loadable);
     remove_->setEnabled(document && alpha);
     const bool temporary=list_->currentRow()>=0 && list_->currentRow()==quickMaskRowIndex_;
     const bool room = document && channels_can_add(*view_);
@@ -465,6 +479,34 @@ void ChannelsPanel::styleRows()
 
 bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
 {
+    if (watched == load_) {
+        if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove) {
+            auto* drag = static_cast<QDropEvent*>(event);
+            if (drag->mimeData()->hasFormat(QString::fromLatin1(kChannelRowMime))) {
+                drag->acceptProposedAction();
+                return true;
+            }
+        } else if (event->type() == QEvent::Drop) {
+            auto* drop = static_cast<QDropEvent*>(event);
+            const int row = drop->mimeData()
+                                ->data(QString::fromLatin1(kChannelRowMime))
+                                .toInt();
+            loadRowSelection(row, Qt::NoModifier);
+            drop->acceptProposedAction();
+            return true;
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+    if (watched == save_) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() == Qt::LeftButton && (mouse->modifiers() & Qt::AltModifier)) {
+                emit saveOptionsRequested();
+                return true;
+            }
+        }
+        return QWidget::eventFilter(watched, event);
+    }
     auto* widget = qobject_cast<QWidget*>(watched);
     const bool inList = widget
         && (widget == list_->viewport() || list_->viewport()->isAncestorOf(widget));
@@ -475,12 +517,24 @@ bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
             const int row = rowAt(pos);
             list_->viewport()->setCursor(row >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);
             updateCtrlOverlay(row, pos, mouse->modifiers());
+            if ((mouse->buttons() & Qt::LeftButton) && dragRow_ >= 0
+                && (pos - dragStart_).manhattanLength()
+                    >= QApplication::startDragDistance()) {
+                const int dragged = dragRow_;
+                dragRow_ = -1;
+                startChannelDrag(dragged);
+                return true;
+            }
         } else if (event->type() == QEvent::MouseButtonPress) {
             auto* mouse = static_cast<QMouseEvent*>(event);
+            const QPoint pos = widget->mapTo(list_->viewport(), mouse->position().toPoint());
+            dragRow_ = rowAt(pos);
+            dragStart_ = pos;
             if (mouse->button() == Qt::LeftButton && (mouse->modifiers() & Qt::ControlModifier)) {
-                const QPoint pos = widget->mapTo(list_->viewport(), mouse->position().toPoint());
-                loadRowSelection(rowAt(pos));
+                loadRowSelection(dragRow_, mouse->modifiers());
             }
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            dragRow_ = -1;
         } else if (event->type() == QEvent::Leave) {
             list_->viewport()->unsetCursor();
             if (ctrlOverlay_) {
@@ -497,19 +551,47 @@ int ChannelsPanel::rowAt(const QPoint& viewportPos) const
     return item ? list_->row(item) : -1;
 }
 
-void ChannelsPanel::loadRowSelection(int row)
+void ChannelsPanel::loadRowSelection(int row, Qt::KeyboardModifiers mods)
 {
     if(row>=0 && row==quickMaskRowIndex_) return;
     if (!view_ || row < 0 || row >= rows_.size()) {
         return;
     }
+    QString mode = QStringLiteral("new");
+    if (mods & Qt::ControlModifier) {
+        const bool shift = mods.testFlag(Qt::ShiftModifier);
+        const bool alt = mods.testFlag(Qt::AltModifier);
+        if (shift && alt) {
+            mode = QStringLiteral("intersect");
+        } else if (shift) {
+            mode = QStringLiteral("add");
+        } else if (alt) {
+            mode = QStringLiteral("subtract");
+        }
+    }
     const int alpha = rows_.at(row).alpha;
     if (alpha >= 0) {
-        view_->load_selection(QStringLiteral("Alpha %1").arg(alpha + 1));
+        load_selection_target(*view_, QStringLiteral("alpha:%1").arg(alpha), false, mode);
     } else if (alpha == -1) {
         // The mask row (kMaskChannel) keeps its view-only solo, not a load.
-        channels_load_color_selection(*view_, row, mask_);
+        channels_load_color_selection(*view_, row, mask_, mode);
     }
+}
+
+void ChannelsPanel::startChannelDrag(int row)
+{
+    if (!view_ || row < 0 || row >= rows_.size()) {
+        return;
+    }
+    const Row& candidate = rows_.at(row);
+    if (candidate.kind != RowKind::Color && candidate.kind != RowKind::Alpha) {
+        return;
+    }
+    auto* mime = new QMimeData;
+    mime->setData(QString::fromLatin1(kChannelRowMime), QByteArray::number(row));
+    auto* drag = new QDrag(list_->viewport());
+    drag->setMimeData(mime);
+    drag->exec(Qt::CopyAction);
 }
 
 void ChannelsPanel::updateCtrlOverlay(int index, const QPoint& pos, Qt::KeyboardModifiers mods)

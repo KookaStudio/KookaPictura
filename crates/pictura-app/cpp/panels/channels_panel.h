@@ -60,6 +60,8 @@ public:
 signals:
     // The visible working colour channels: bit 0 red, 1 green, 2 blue (0x7 all).
     void channelMaskChanged(int mask);
+    // Alt-clicking Save Selection asks the frame for the Save dialog.
+    void saveOptionsRequested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -76,7 +78,7 @@ private:
         QWidget* widget = nullptr;  // the row's own widget (for its surface)
     };
 
-    void rebuild(const QString& mode, int alphaCount);
+    void rebuild(const QString& mode, const QStringList& alphaNames);
     void addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind=RowKind::Color);
     void refreshThumbnails();
     void toggle(int index);
@@ -89,9 +91,10 @@ private:
     void updateCtrlOverlay(int index, const QPoint& pos, Qt::KeyboardModifiers mods);
     // The list row under a viewport position, or -1 outside any row.
     int rowAt(const QPoint& viewportPos) const;
-    // Load the row as a selection: an alpha row via `load_selection`, a colour
-    // row (or the composite) via `load_channel_selection` under `mask_`.
-    void loadRowSelection(int row);
+    // Load the row as a selection: an alpha row via `load_selection_target`, a
+    // colour row (or the composite) via `load_channel_selection` under `mask_`.
+    void loadRowSelection(int row, Qt::KeyboardModifiers mods);
+    void startChannelDrag(int row);
 
     PictureView* view_ = nullptr;
     QListWidget* list_ = nullptr;
@@ -99,6 +102,9 @@ private:
     QList<Row> rows_;
     QString mode_;
     int alphaCount_ = -1;
+    QStringList alphaNames_;
+    int dragRow_ = -1;
+    QPoint dragStart_;
     int mask_ = 0x7;
     // The active layer's mask channel row (`-1` when it has no raster mask) and
     // its name, so `refresh` rebuilds when the mask appears or disappears.

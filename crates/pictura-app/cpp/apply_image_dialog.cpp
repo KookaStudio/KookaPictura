@@ -10,6 +10,7 @@
 #include "api/filters_bridge.h"
 
 #include <QtCore/QSignalBlocker>
+#include <QtCore/QStringList>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialogButtonBox>
@@ -292,9 +293,9 @@ void ApplyImageDialog::rebuildChannels(const Picker& picker, bool mask)
             }
         }
     }
-    const int alphas = source->selection_channel_count();
-    for (int i = 0; i < alphas; ++i) {
-        picker.channel->addItem(tr("Alpha %1").arg(i + 1), kAlphaBase + i);
+    const QStringList alphas = channels_alpha_names(*source);
+    for (int i = 0; i < alphas.size(); ++i) {
+        picker.channel->addItem(alphas.at(i), kAlphaBase + i);
     }
     picker.channel->setCurrentIndex(0);
 }

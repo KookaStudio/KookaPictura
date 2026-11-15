@@ -164,6 +164,8 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     menuRuntime.closeWindow = [this](DocWindow* window, bool interactive) {
         return closeWindow(window, interactive);
     };
+    menuRuntime.openSaveSelectionDialog = [this]() { openSaveSelectionDialog(); };
+    menuRuntime.openLoadSelectionDialog = [this]() { openLoadSelectionDialog(); };
     menuRuntime.uiScalePercent = [this]() { return uiScalePercent_; };
     menuRuntime.foregroundColor = [this]() { return foregroundColor(); };
     menu_ = std::make_unique<MenuRegistrar>(
@@ -189,6 +191,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
             menu_->cancelDocumentDialogs(view);
         }
     };
+    panelHooks.saveSelectionOptions = [this]() { openSaveSelectionDialog(); };
     panelHooks.convertImageMode = [this](const QString& mode) {
         if (menu_) {
             menu_->convertImageMode(mode);

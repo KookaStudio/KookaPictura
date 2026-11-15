@@ -4,8 +4,13 @@
 #include "image_view.h"
 #include "panels/channels_panel.h"
 #include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 
+#include <QtTest/QSignalSpy>
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QDragEnterEvent>
+#include <QtGui/QDropEvent>
+#include <QtCore/QMimeData>
 #include <QtWidgets/QToolButton>
 
 #include "qt_test_support.h"
@@ -25,6 +30,13 @@ private slots:
     void grayscaleDocumentShowsSingleGrayRow();
     void thumbnailsTrackDocument();
     void maskChannelRow();
+    void ctrlShiftAdds();
+    void ctrlAltSubtracts();
+    void ctrlShiftAltIntersects();
+    void dragLoadsChannel();
+    void altClickSaveOpensDialog();
+    void alphaRowShowsStoredName();
+    void modifierClickRecordsOneState();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -324,6 +336,148 @@ void ChannelsPanelTest::maskChannelRow()
     panel_->selectChannelForTest(0);
     QCoreApplication::processEvents();
     QVERIFY(pictura::mask_solo_get(*view_).isEmpty());
+}
+
+
+void ChannelsPanelTest::ctrlShiftAdds()
+{
+    QTemporaryDir dir;
+    QImage image(16, 16, QImage::Format_RGB32);
+    image.fill(QColor(100, 150, 200));
+    const QString path = dir.filePath(QStringLiteral("flat.png"));
+    QVERIFY(image.save(path) && window_->openDocumentAtPath(path));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    const QByteArray base(16 * 16, 64);
+    QVERIFY(pictura::load_selection_coverage(*view_,
+        ::rust::Slice<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(base.constData()), base.size()),
+        16, 16, false, QStringLiteral("new")));
+    panel_->clickChannelForTest(1, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(view_->selection_coverage(8, 8), 100);
+}
+
+void ChannelsPanelTest::ctrlAltSubtracts()
+{
+    QTemporaryDir dir;
+    QImage image(16, 16, QImage::Format_RGB32);
+    image.fill(QColor(100, 150, 200));
+    const QString path = dir.filePath(QStringLiteral("flat.png"));
+    QVERIFY(image.save(path) && window_->openDocumentAtPath(path));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    view_->select_all();
+    panel_->clickChannelForTest(1, Qt::ControlModifier | Qt::AltModifier);
+    QCOMPARE(view_->selection_coverage(8, 8), 155);
+}
+
+void ChannelsPanelTest::ctrlShiftAltIntersects()
+{
+    QTemporaryDir dir;
+    QImage image(16, 16, QImage::Format_RGB32);
+    image.fill(QColor(100, 150, 200));
+    const QString path = dir.filePath(QStringLiteral("flat.png"));
+    QVERIFY(image.save(path) && window_->openDocumentAtPath(path));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    view_->select_all();
+    panel_->clickChannelForTest(1, Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier);
+    QCOMPARE(view_->selection_coverage(8, 8), 100);
+}
+
+void ChannelsPanelTest::dragLoadsChannel()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Drag"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    view_->select_all();
+    QVERIFY(pictura::save_selection_to(*view_, QStringLiteral("new"), QStringLiteral("Hair"),
+                                     QStringLiteral("replace")));
+    view_->deselect();
+    panel_->refresh();
+    QToolButton* load = panel_->findChild<QToolButton*>(QStringLiteral("channelsLoadSelection"));
+    QVERIFY(load);
+    QMimeData mime;
+    mime.setData(QStringLiteral("application/x-pictura-channel-row"), QByteArray::number(4));
+    QDragEnterEvent enter(QPoint(0, 0), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(load, &enter);
+    QVERIFY(enter.isAccepted());
+    QDropEvent drop(QPointF(0, 0), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    const int before = view_->history_count();
+    QCoreApplication::sendEvent(load, &drop);
+    QVERIFY2(drop.isAccepted(), "the Load button did not accept the channel drop");
+    QCOMPARE(view_->history_count(), before + 1);
+    QVERIFY(view_->has_selection());
+    QCOMPARE(view_->selection_coverage(8, 8), 255);
+}
+
+void ChannelsPanelTest::altClickSaveOpensDialog()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("AltSave"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    QToolButton* save = panel_->findChild<QToolButton*>(QStringLiteral("channelsSaveSelection"));
+    QVERIFY(save);
+    const int channels = view_->selection_channel_count();
+    const int history = view_->history_count();
+    QSignalSpy spy(panel_, &pictura::ChannelsPanel::saveOptionsRequested);
+    QTest::mouseClick(save, Qt::LeftButton, Qt::AltModifier);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(view_->selection_channel_count(), channels);
+    QCOMPARE(view_->history_count(), history);
+}
+
+void ChannelsPanelTest::alphaRowShowsStoredName()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Names"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    view_->select_all();
+    QVERIFY(pictura::save_selection_to(*view_, QStringLiteral("new"), QStringLiteral("Hair"),
+                                     QStringLiteral("replace")));
+    panel_->refresh();
+    QCOMPARE(panel_->channelNameForTest(4), QStringLiteral("Hair"));
+    QCOMPARE(panel_->channelShortcutForTest(4), QStringLiteral("Ctrl+6"));
+}
+
+void ChannelsPanelTest::modifierClickRecordsOneState()
+{
+    QTemporaryDir dir;
+    QImage image(16, 16, QImage::Format_RGB32);
+    image.fill(QColor(100, 150, 200));
+    const QString path = dir.filePath(QStringLiteral("flat.png"));
+    QVERIFY(image.save(path) && window_->openDocumentAtPath(path));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    const QList<Qt::KeyboardModifiers> modes {
+        Qt::ControlModifier,
+        Qt::ControlModifier | Qt::ShiftModifier,
+        Qt::ControlModifier | Qt::AltModifier,
+        Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier,
+    };
+    for (Qt::KeyboardModifiers mods : modes) {
+        view_->select_all();
+        const int before = view_->history_count();
+        panel_->clickChannelForTest(1, mods);
+        QCOMPARE(view_->history_count(), before + 1);
+    }
 }
 
 QTEST_MAIN(ChannelsPanelTest)
