@@ -49,5 +49,5 @@
 
 - [x] 7.1 Tick the PDF writer options item in `ROADMAP.md` and record the milestone in `docs/dev/STATE.md`; commit with `TASK-ALLOWS-DOCS`.
 - [x] 7.2 CI runs the workspace fmt, clippy, nextest, and verify-fast gates; local execution was superseded by the user's instruction to let CI verify.
-- [ ] 7.3 Run `openspec validate --all --strict`, archive `pdf-writer-jpx-spot-proof`, and verify `bash scripts/check-openspec-archived.sh` passes.
-- [ ] 7.4 Confirm the commit sequence: `feat(io)`/`feat(color)`/`feat(ui)` commits for the features and a separate `docs:` commit, every subject ending `(#626)`.
+- [x] 7.3 Run `openspec validate --all --strict`, archive `pdf-writer-jpx-spot-proof`, and verify `bash scripts/check-openspec-archived.sh` passes.
+- [x] 7.4 Confirm the commit sequence: `feat(io)`/`feat(color)`/`feat(ui)` commits for the features and a separate `docs:` commit, every subject ending `(#626)`.
