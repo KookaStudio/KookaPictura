@@ -1,6 +1,7 @@
 #include "api/layers_bridge.h"
 #include "color_picker_dialog.h"
 #include "frame_includes.h"
+#include "panels/color_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/color_swatch_widget.h"
 #include <QtCore/QScopedValueRollback>
