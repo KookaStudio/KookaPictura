@@ -28,6 +28,29 @@ fn property_compositing(doc: &Document, path: &str) -> Option<(BlendMode, u8, u8
     pictura_render::resolve_path(doc, path).map(|layer| (layer.blend, layer.opacity, layer.fill))
 }
 
+/// The reach of every node whose eye `apply_visibility` flips, or `None` when
+/// any is unbounded. Solo hides the nodes it does not name, so the named paths'
+/// reach alone would leave those hidden layers on screen.
+fn visibility_change_region(doc: &Document, visible: &[&str]) -> Option<pictura_core::PsdRect> {
+    let wanted: std::collections::HashSet<&str> = visible
+        .iter()
+        .copied()
+        .filter(|path| pictura_render::resolve_path(doc, path).is_some())
+        .collect();
+    let mut region: Option<pictura_core::PsdRect> = None;
+    for (path, _) in pictura_render::flatten_rows(doc) {
+        let Some(layer) = pictura_render::resolve_path(doc, &path) else {
+            continue;
+        };
+        if layer.visible == wanted.contains(path.as_str()) {
+            continue;
+        }
+        let rect = pictura_render::damage::influence(doc, &path)?;
+        region = Some(region.map_or(rect, |union| union.union(rect)));
+    }
+    region
+}
+
 /// The edit for a completed layer move: [`Edit::Inserted`] when the moved node
 /// draws nothing (inert or hidden) and is not a clipping base on either side,
 /// else the bounded structural edit.
@@ -824,9 +847,24 @@ impl qobject::PictureView {
 
     pub fn apply_visibility(mut self: Pin<&mut Self>, paths: &QStringList, label: &QString) -> i32 {
         let label = label.to_string();
-        self.as_mut().batch_changed(paths, &label, |doc, paths| {
-            pictura_render::apply_visibility(doc, paths)
-        })
+        let owned = list_of_strings(paths);
+        let refs = as_str_slice(&owned);
+        let mut changed = 0;
+        self.as_mut().edit(&label, |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            let region = visibility_change_region(doc, &refs);
+            changed = pictura_render::apply_visibility(doc, &refs);
+            if changed == 0 {
+                return Edit::None;
+            }
+            match region {
+                Some(rect) => Edit::regions(vec![rect], true),
+                None => Edit::Full,
+            }
+        });
+        changed as i32
     }
 
     pub fn duplicate_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> QStringList {
@@ -1068,6 +1106,34 @@ mod tests {
     fn compositing(doc: &Document, path: &str) -> Option<(BlendMode, u8, u8)> {
         pictura_render::resolve_path(doc, path)
             .map(|layer| (layer.blend, layer.opacity, layer.fill))
+    }
+
+    #[test]
+    fn visibility_change_region_covers_the_layers_solo_hides() {
+        let base = vec![255u8; 64 * 64 * 4];
+        let mut doc = Document::from_rgba("base", 64, 64, &base);
+        let top: Vec<u8> = vec![128u8; 16 * 16 * 4];
+        let top_path = pictura_render::add_raster_layer_from_rgba(&mut doc, "top", 16, 16, &top);
+        let top_rect = pictura_render::resolve_path(&doc, &top_path)
+            .expect("top layer")
+            .rect;
+
+        let region = visibility_change_region(&doc, &[top_path.as_str()])
+            .expect("the base and the top layer are both bounded");
+        assert_eq!(
+            region,
+            pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 64,
+                right: 64,
+            },
+            "soloing the small top layer hides the full-canvas base"
+        );
+        assert!(
+            region.right > top_rect.right,
+            "the region reaches past the soloed layer"
+        );
     }
 
     #[test]
