@@ -293,3 +293,79 @@ fn an_empty_template_replace_on_xmpless_document_is_a_noop() {
     ));
     assert_eq!(doc.image_resources, before);
 }
+
+#[test]
+fn template_serializes_the_expanded_managed_set() {
+    let props = XmpProperties {
+        title: Some("Title".into()),
+        city: Some("Paris".into()),
+        usage_terms: Some("Editorial".into()),
+        ..Default::default()
+    };
+    let packet = crate::xmp::to_xmp_packet(&props);
+    let back = crate::xmp::parse_xmp(&packet);
+    assert_eq!(back.city.as_deref(), Some("Paris"));
+    assert_eq!(back.usage_terms.as_deref(), Some("Editorial"));
+}
+
+#[test]
+fn template_origin_field_reaches_both_channels() {
+    let template = XmpProperties {
+        city: Some("Berlin".into()),
+        ..Default::default()
+    };
+    let mut doc = document();
+    assert!(apply_template(
+        &mut doc,
+        &template,
+        MergeMode::KeepOriginalReplaceMatching
+    ));
+    assert_eq!(xmp_properties(&doc).city.as_deref(), Some("Berlin"));
+    assert_eq!(
+        crate::metadata::read_metadata(&doc)
+            .iptc
+            .text(2, 90)
+            .as_deref(),
+        Some("Berlin")
+    );
+}
+
+#[test]
+fn template_keyword_list_reaches_both_channels() {
+    let template = XmpProperties {
+        subject: vec!["one".into(), "two".into()],
+        ..Default::default()
+    };
+    let mut doc = document();
+    assert!(apply_template(
+        &mut doc,
+        &template,
+        MergeMode::KeepOriginalReplaceMatching
+    ));
+    assert_eq!(xmp_properties(&doc).subject, vec!["one", "two"]);
+    assert_eq!(
+        crate::metadata::read_metadata(&doc)
+            .iptc
+            .values(2, 25)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn replace_clears_new_managed_fields() {
+    const PACKET: &str = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\"><photoshop:City>Paris</photoshop:City><xmpRights:UsageTerms><rdf:Alt><rdf:li xml:lang=\"x-default\">Editorial</rdf:li></rdf:Alt></xmpRights:UsageTerms></rdf:Description></rdf:RDF></x:xmpmeta>";
+    let mut doc = document_with(PACKET);
+    assert!(apply_template(
+        &mut doc,
+        &XmpProperties::default(),
+        MergeMode::Replace
+    ));
+    let props = xmp_properties(&doc);
+    assert!(props.city.is_none());
+    assert!(props.usage_terms.is_none());
+    assert!(crate::metadata::read_metadata(&doc)
+        .iptc
+        .get(2, 90)
+        .is_none());
+}

@@ -31,6 +31,30 @@ pub fn to_xmp_packet(props: &XmpProperties) -> String {
     simple(&mut out, XmpField::Credit, props.credit.as_deref());
     simple(&mut out, XmpField::Source, props.source.as_deref());
     simple(&mut out, XmpField::Headline, props.headline.as_deref());
+    simple(&mut out, XmpField::City, props.city.as_deref());
+    simple(&mut out, XmpField::State, props.state.as_deref());
+    simple(&mut out, XmpField::Country, props.country.as_deref());
+    simple(
+        &mut out,
+        XmpField::Instructions,
+        props.instructions.as_deref(),
+    );
+    simple(
+        &mut out,
+        XmpField::AuthorsPosition,
+        props.authors_position.as_deref(),
+    );
+    simple(
+        &mut out,
+        XmpField::CaptionWriter,
+        props.caption_writer.as_deref(),
+    );
+    simple(
+        &mut out,
+        XmpField::WebStatement,
+        props.web_statement.as_deref(),
+    );
+    alt(&mut out, XmpField::UsageTerms, props.usage_terms.as_deref());
     if let Some(marked) = props.marked {
         let q = qname(XmpField::Marked);
         let text = if marked { "True" } else { "False" };

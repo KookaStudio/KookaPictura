@@ -1,345 +1,17 @@
-//! XMP (RDF/XML) property reader and span patcher.
-//!
-//! A bounded, entity-free scanner locates the managed properties inside the
-//! `rdf:Description` element(s) and records their byte spans in the original
-//! packet; [`patch_xmp`] replaces only those spans, so unknown namespaces,
-//! unknown properties, comments, and the packet wrapper round-trip verbatim.
-//! Only the five predefined XML entities are decoded and no external resource
-//! is ever fetched, so an XXE payload has no effect.
-//!
-//! ponytail: only the fixed property set is modelled; arbitrary RDF and IPTC
-//! Extension are preserved but not editable. A packet without a recognisable
-//! `rdf:Description`, or a managed property using a construct the patcher
-//! cannot safely rewrite, leaves the resource untouched.
-
+//! XMP tokenizer and managed-field scanner.
+use super::{
+    managed_field, ContainerKind, Description, Form, LiVal, Scan, SpanInfo, XmpField, MAX_ATTRS,
+    MAX_DEPTH, MAX_ENTITY_RUN, MAX_PACKET_BYTES, MAX_TOKENS, MAX_VALUE_BYTES, RDF_URI,
+};
 use std::collections::HashMap;
-
-mod serialize;
-
-pub use serialize::to_xmp_packet;
-
-const RDF_URI: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-const DC_URI: &str = "http://purl.org/dc/elements/1.1/";
-const PHOTOSHOP_URI: &str = "http://ns.adobe.com/photoshop/1.0/";
-const XMPRIGHTS_URI: &str = "http://ns.adobe.com/xap/1.0/rights/";
-
-/// Caps so a hostile packet cannot spin the scanner.
-const MAX_TOKENS: usize = 8192;
-const MAX_ATTRS: usize = 8192;
-const MAX_DEPTH: usize = 64;
-const MAX_PACKET_BYTES: usize = 8 << 20;
-const MAX_VALUE_BYTES: usize = 1 << 20;
-const MAX_ENTITY_RUN: usize = 32;
-
-/// A managed XMP property.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum XmpField {
-    Title,
-    Creator,
-    Description,
-    Subject,
-    Rights,
-    Credit,
-    Source,
-    Headline,
-    Marked,
-}
-
-/// The managed property set of a document's XMP packet.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct XmpProperties {
-    pub title: Option<String>,
-    pub creator: Vec<String>,
-    pub description: Option<String>,
-    pub subject: Vec<String>,
-    pub rights: Option<String>,
-    pub credit: Option<String>,
-    pub source: Option<String>,
-    pub headline: Option<String>,
-    pub marked: Option<bool>,
-}
-
-impl XmpProperties {
-    /// Whether no managed property is present.
-    pub fn is_empty(&self) -> bool {
-        self.title.is_none()
-            && self.creator.is_empty()
-            && self.description.is_none()
-            && self.subject.is_empty()
-            && self.rights.is_none()
-            && self.credit.is_none()
-            && self.source.is_none()
-            && self.headline.is_none()
-            && self.marked.is_none()
-    }
-}
-
-/// Parse the fixed property set out of an XMP packet. A malformed or truncated
-/// packet yields whatever decoded so far and never panics.
-pub fn parse_xmp(packet: &str) -> XmpProperties {
-    scan_packet(packet.as_bytes()).properties()
-}
-
-/// Replace managed properties in a packet by replacing only the bytes of each
-/// matched property and copying every other byte verbatim. `Creator` is written
-/// as an `rdf:Seq` and `Subject` as an `rdf:Bag` with one `rdf:li` per element;
-/// the other fields use their single element. An empty vector removes the
-/// property. Setting a property that already holds the requested value(s)
-/// returns the input unchanged. Returns `None` when the packet has no
-/// recognisable `rdf:Description`, or a managed property that must be rewritten
-/// uses a construct that cannot be safely reserialised (the caller then leaves
-/// the resource untouched).
-pub fn patch_xmp_values(packet: &str, updates: &[(XmpField, Vec<String>)]) -> Option<String> {
-    if updates.is_empty() {
-        return Some(packet.to_string());
-    }
-    let bytes = packet.as_bytes();
-    let scan = scan_packet(bytes);
-    let description = scan.description.as_ref()?;
-    if scan.malformed || scan.over_limit {
-        return None;
-    }
-
-    let mut requested: Vec<(XmpField, Vec<String>)> = Vec::new();
-    for (field, values) in updates {
-        let values = normalize_values(values);
-        match requested.iter_mut().find(|(f, _)| f == field) {
-            Some(slot) => slot.1 = values,
-            None => requested.push((*field, values)),
-        }
-    }
-
-    let mut edits: Vec<(usize, usize, String)> = Vec::new();
-    let mut insertions = String::new();
-    for (field, values) in &requested {
-        if scan.spans.iter().filter(|s| s.field == *field).count() > 1 {
-            return None;
-        }
-        match scan.spans.iter().find(|s| s.field == *field) {
-            Some(span) => {
-                if span.unsafe_ || !span.complete {
-                    return None;
-                }
-                if values.is_empty() {
-                    // Clearing removes the property bytes entirely; an absent
-                    // property already satisfies an empty request.
-                    edits.push((span.start, span.end, String::new()));
-                    continue;
-                }
-                if *field == XmpField::Marked && parse_xmp_bool(&values[0]).is_none() {
-                    return None;
-                }
-                if already_matches(span, *field, values) {
-                    continue;
-                }
-                edits.push((
-                    span.start,
-                    span.end,
-                    replacement(span, *field, values, &description.scope)?,
-                ));
-            }
-            None => {
-                if values.is_empty() {
-                    continue;
-                }
-                if *field == XmpField::Marked && parse_xmp_bool(&values[0]).is_none() {
-                    return None;
-                }
-                insertions.push_str(&insertion(*field, values, &description.scope)?);
-            }
-        }
-    }
-    if edits.is_empty() && insertions.is_empty() {
-        return Some(packet.to_string());
-    }
-
-    if !insertions.is_empty() {
-        // ponytail: a self-closing rdf:Description that needs both an attribute
-        // edit and an insertion fails closed, because the insertion rewrites the
-        // whole start tag and would overlap the attribute's span.
-        if description.self_closing {
-            let raw = &bytes[description.start_tag.0..description.start_tag.1];
-            let head = raw.strip_suffix(b"/>")?;
-            let head = std::str::from_utf8(head).ok()?;
-            let qname = str_at(bytes, description.qname);
-            edits.push((
-                description.start_tag.0,
-                description.start_tag.1,
-                format!("{head}>{insertions}</{qname}>"),
-            ));
-        } else {
-            let at = description.content_end;
-            edits.push((at, at, insertions));
-        }
-    }
-
-    edits.sort_by_key(|e| (e.0, e.1));
-    for pair in edits.windows(2) {
-        if pair[1].0 < pair[0].1 {
-            return None;
-        }
-    }
-    let mut out = String::with_capacity(packet.len() + 64);
-    let mut cursor = 0;
-    for (start, end, fragment) in &edits {
-        if *start < cursor {
-            return None;
-        }
-        out.push_str(&packet[cursor..*start]);
-        out.push_str(fragment);
-        cursor = *end;
-    }
-    out.push_str(&packet[cursor..]);
-    Some(out)
-}
-
-/// Set single managed properties. See [`patch_xmp_values`] for list fields.
-pub fn patch_xmp(packet: &str, updates: &[(XmpField, String)]) -> Option<String> {
-    let updates: Vec<(XmpField, Vec<String>)> = updates
-        .iter()
-        .map(|(field, value)| (*field, vec![value.clone()]))
-        .collect();
-    patch_xmp_values(packet, &updates)
-}
-
-/// Drop empty elements so a single empty value (or an all-empty list) clears the
-/// property, matching the parser's absent-when-empty view.
-fn normalize_values(values: &[String]) -> Vec<String> {
-    values
-        .iter()
-        .filter(|value| !value.is_empty())
-        .cloned()
-        .collect()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Form {
-    Attribute,
-    Element,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ContainerKind {
-    Alt,
-    Seq,
-    Bag,
-}
-
 #[derive(Debug, Clone)]
-struct LiVal {
-    lang: Option<String>,
-    value: String,
-}
-
-#[derive(Debug, Clone)]
-struct SpanInfo {
-    field: XmpField,
-    form: Form,
-    start: usize,
-    end: usize,
-    name: String,
-    values: Vec<LiVal>,
-    container: Option<(ContainerKind, String)>,
-    unsafe_: bool,
-    complete: bool,
-}
-
-impl SpanInfo {
-    fn scalar_value(&self) -> Option<String> {
-        self.values
-            .iter()
-            .find(|v| v.lang.as_deref() == Some("x-default"))
-            .or_else(|| self.values.first())
-            .map(|v| v.value.clone())
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Description {
-    qname: (usize, usize),
-    start_tag: (usize, usize),
-    self_closing: bool,
-    content_end: usize,
-    /// The namespace declarations in scope at the Description start tag, so an
-    /// insertion only reuses a prefix actually bound there.
-    scope: HashMap<String, String>,
-}
-
-#[derive(Debug, Default)]
-struct Scan {
-    spans: Vec<SpanInfo>,
-    description: Option<Description>,
-    malformed: bool,
-    over_limit: bool,
-}
-
-impl Scan {
-    fn properties(&self) -> XmpProperties {
-        let mut props = XmpProperties::default();
-        for span in &self.spans {
-            match span.field {
-                XmpField::Title if props.title.is_none() => {
-                    props.title = span.scalar_value().filter(|v| !v.is_empty());
-                }
-                XmpField::Creator if props.creator.is_empty() => {
-                    props.creator = span
-                        .values
-                        .iter()
-                        .map(|v| v.value.clone())
-                        .filter(|v| !v.is_empty())
-                        .collect();
-                }
-                XmpField::Description if props.description.is_none() => {
-                    props.description = span.scalar_value().filter(|v| !v.is_empty());
-                }
-                XmpField::Subject if props.subject.is_empty() => {
-                    props.subject = span
-                        .values
-                        .iter()
-                        .map(|v| v.value.clone())
-                        .filter(|v| !v.is_empty())
-                        .collect();
-                }
-                XmpField::Rights if props.rights.is_none() => {
-                    props.rights = span.scalar_value().filter(|v| !v.is_empty());
-                }
-                XmpField::Credit if props.credit.is_none() => {
-                    props.credit = span.scalar_value().filter(|v| !v.is_empty());
-                }
-                XmpField::Source if props.source.is_none() => {
-                    props.source = span.scalar_value().filter(|v| !v.is_empty());
-                }
-                XmpField::Headline if props.headline.is_none() => {
-                    props.headline = span.scalar_value().filter(|v| !v.is_empty());
-                }
-                XmpField::Marked if props.marked.is_none() => {
-                    props.marked = span.scalar_value().and_then(|v| parse_xmp_bool(&v));
-                }
-                _ => {}
-            }
-        }
-        props
-    }
-}
-
-/// The lexicographically smallest declared prefix bound to `uri` in `scope`.
-fn prefix_for(scope: &HashMap<String, String>, uri: &str) -> Option<String> {
-    scope
-        .iter()
-        .filter(|(prefix, declared)| !prefix.is_empty() && declared.as_str() == uri)
-        .map(|(prefix, _)| prefix.as_str())
-        .min()
-        .map(str::to_string)
-}
-
-#[derive(Debug, Clone)]
-struct RawAttr {
-    name: (usize, usize),
-    value: (usize, usize),
+pub(super) struct RawAttr {
+    pub(super) name: (usize, usize),
+    pub(super) value: (usize, usize),
 }
 
 #[derive(Debug)]
-enum RawKind {
+pub(super) enum RawKind {
     Start {
         qname: (usize, usize),
         self_closing: bool,
@@ -353,10 +25,10 @@ enum RawKind {
 }
 
 #[derive(Debug)]
-struct RawToken {
-    start: usize,
-    end: usize,
-    kind: RawKind,
+pub(super) struct RawToken {
+    pub(super) start: usize,
+    pub(super) end: usize,
+    pub(super) kind: RawKind,
 }
 
 #[derive(Debug)]
@@ -375,201 +47,11 @@ struct Frame {
     /// Declarations this element added, restored when its scope closes.
     ns_undo: Vec<(String, Option<String>)>,
 }
-
-fn managed_field(uri: &str, local: &str) -> Option<XmpField> {
-    Some(match (uri, local) {
-        (DC_URI, "title") => XmpField::Title,
-        (DC_URI, "creator") => XmpField::Creator,
-        (DC_URI, "description") => XmpField::Description,
-        (DC_URI, "subject") => XmpField::Subject,
-        (DC_URI, "rights") => XmpField::Rights,
-        (PHOTOSHOP_URI, "Credit") => XmpField::Credit,
-        (PHOTOSHOP_URI, "Source") => XmpField::Source,
-        (PHOTOSHOP_URI, "Headline") => XmpField::Headline,
-        (XMPRIGHTS_URI, "Marked") => XmpField::Marked,
-        _ => return None,
-    })
-}
-
-fn canonical(field: XmpField) -> (&'static str, &'static str) {
-    match field {
-        XmpField::Title => (DC_URI, "title"),
-        XmpField::Creator => (DC_URI, "creator"),
-        XmpField::Description => (DC_URI, "description"),
-        XmpField::Subject => (DC_URI, "subject"),
-        XmpField::Rights => (DC_URI, "rights"),
-        XmpField::Credit => (PHOTOSHOP_URI, "Credit"),
-        XmpField::Source => (PHOTOSHOP_URI, "Source"),
-        XmpField::Headline => (PHOTOSHOP_URI, "Headline"),
-        XmpField::Marked => (XMPRIGHTS_URI, "Marked"),
-    }
-}
-
-/// Whether the property already holds the requested value(s). Scalar fields use
-/// the property's scalar value — the `x-default` item for an `rdf:Alt`, the text
-/// for a simple property — so it agrees with the reader and the IPTC-Core sync
-/// gate. List fields (`Creator`/`Subject`) match the full item list, so a
-/// shorter list can replace a longer one.
-fn already_matches(span: &SpanInfo, field: XmpField, values: &[String]) -> bool {
-    if is_list_field(field) {
-        let current: Vec<&str> = span.values.iter().map(|v| v.value.as_str()).collect();
-        let requested: Vec<&str> = values.iter().map(String::as_str).collect();
-        return current == requested;
-    }
-    let value = values.first().map(String::as_str).unwrap_or("");
-    if field == XmpField::Marked {
-        return span.values.first().and_then(|v| parse_xmp_bool(&v.value)) == parse_xmp_bool(value);
-    }
-    span.scalar_value().as_deref() == Some(value)
-}
-
-/// The `rdf:` prefix in scope for a rewritten property: the existing container's
-/// prefix, or one declared on the `rdf:Description`. `None` fails the rewrite
-/// closed rather than dropping items or emitting an unbound prefix.
-fn rdf_prefix(span: &SpanInfo, scope: &HashMap<String, String>) -> Option<String> {
-    match span.container.as_ref() {
-        Some((_, prefix)) if !prefix.is_empty() => Some(prefix.clone()),
-        Some(_) => None,
-        None => prefix_for(scope, RDF_URI),
-    }
-}
-
-fn list_element(
-    name: &str,
-    kind: &str,
-    span: &SpanInfo,
-    values: &[String],
-    scope: &HashMap<String, String>,
-) -> Option<String> {
-    let rdf = rdf_prefix(span, scope)?;
-    Some(format!(
-        "<{name}><{rdf}:{kind}>{}</{rdf}:{kind}></{name}>",
-        seq_items(&rdf, values)
-    ))
-}
-
-fn replacement(
-    span: &SpanInfo,
-    field: XmpField,
-    values: &[String],
-    scope: &HashMap<String, String>,
-) -> Option<String> {
-    if span.form == Form::Attribute {
-        return Some(format!("{}=\"{}\"", span.name, escape_xml(values.first()?)));
-    }
-    let name = span.name.as_str();
-    match field {
-        XmpField::Creator => list_element(name, "Seq", span, values, scope),
-        XmpField::Subject => list_element(name, "Bag", span, values, scope),
-        XmpField::Title | XmpField::Description | XmpField::Rights if span.container.is_some() => {
-            let rdf = rdf_prefix(span, scope)?;
-            let value = values.first()?;
-            Some(format!(
-                "<{name}><{rdf}:Alt><{rdf}:li xml:lang=\"x-default\">{}</{rdf}:li></{rdf}:Alt></{name}>",
-                escape_xml(value)
-            ))
-        }
-        XmpField::Marked => {
-            let text = if parse_xmp_bool(values.first()?)? {
-                "True"
-            } else {
-                "False"
-            };
-            Some(format!("<{name}>{text}</{name}>"))
-        }
-        _ => Some(format!("<{name}>{}</{name}>", escape_xml(values.first()?))),
-    }
-}
-
-fn is_list_field(field: XmpField) -> bool {
-    matches!(field, XmpField::Creator | XmpField::Subject)
-}
-
-fn seq_items(rdf: &str, values: &[String]) -> String {
-    let mut out = String::new();
-    for value in values {
-        out.push_str(&format!("<{rdf}:li>{}</{rdf}:li>", escape_xml(value)));
-    }
-    out
-}
-
-fn insertion(
-    field: XmpField,
-    values: &[String],
-    scope: &HashMap<String, String>,
-) -> Option<String> {
-    let (uri, local) = canonical(field);
-    // ponytail: an inserted property reuses a prefix the receiving
-    // rdf:Description already has in scope; an unbound prefix fails closed
-    // rather than editing the namespace declarations.
-    let prefix = prefix_for(scope, uri)?;
-    match field {
-        XmpField::Title | XmpField::Description | XmpField::Rights => {
-            let rdf = prefix_for(scope, RDF_URI)?;
-            let value = values.first()?;
-            Some(format!(
-                "<{prefix}:{local}><{rdf}:Alt><{rdf}:li xml:lang=\"x-default\">{}</{rdf}:li></{rdf}:Alt></{prefix}:{local}>",
-                escape_xml(value)
-            ))
-        }
-        XmpField::Creator => {
-            let rdf = prefix_for(scope, RDF_URI)?;
-            Some(format!(
-                "<{prefix}:{local}><{rdf}:Seq>{}</{rdf}:Seq></{prefix}:{local}>",
-                seq_items(&rdf, values)
-            ))
-        }
-        XmpField::Subject => {
-            let rdf = prefix_for(scope, RDF_URI)?;
-            Some(format!(
-                "<{prefix}:{local}><{rdf}:Bag>{}</{rdf}:Bag></{prefix}:{local}>",
-                seq_items(&rdf, values)
-            ))
-        }
-        XmpField::Marked => {
-            let text = if parse_xmp_bool(values.first()?)? {
-                "True"
-            } else {
-                "False"
-            };
-            Some(format!("<{prefix}:{local}>{text}</{prefix}:{local}>"))
-        }
-        _ => Some(format!(
-            "<{prefix}:{local}>{}</{prefix}:{local}>",
-            escape_xml(values.first()?)
-        )),
-    }
-}
-
-fn parse_xmp_bool(value: &str) -> Option<bool> {
-    if value.eq_ignore_ascii_case("true") || value == "1" {
-        Some(true)
-    } else if value.eq_ignore_ascii_case("false") || value == "0" {
-        Some(false)
-    } else {
-        None
-    }
-}
-
-fn escape_xml(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for ch in value.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
-fn str_at(bytes: &[u8], span: (usize, usize)) -> &str {
+pub(super) fn str_at(bytes: &[u8], span: (usize, usize)) -> &str {
     std::str::from_utf8(&bytes[span.0..span.1]).unwrap_or("")
 }
 
-fn split_qname(name: &str) -> (&str, &str) {
+pub(super) fn split_qname(name: &str) -> (&str, &str) {
     match name.split_once(':') {
         Some((prefix, local)) => (prefix, local),
         None => ("", name),
@@ -584,7 +66,7 @@ fn xmlns_prefix(name: &str) -> Option<&str> {
     }
 }
 
-fn push_declarations(
+pub(super) fn push_declarations(
     current: &mut HashMap<String, String>,
     bytes: &[u8],
     attrs: &[RawAttr],
@@ -601,7 +83,7 @@ fn push_declarations(
     declared
 }
 
-fn restore_declarations(
+pub(super) fn restore_declarations(
     current: &mut HashMap<String, String>,
     declared: Vec<(String, Option<String>)>,
 ) {
@@ -621,12 +103,12 @@ fn nearest_field(stack: &[Frame]) -> Option<usize> {
     stack.iter().rposition(|frame| frame.field.is_some())
 }
 
-struct Decoded {
-    text: String,
-    unsafe_: bool,
+pub(super) struct Decoded {
+    pub(super) text: String,
+    pub(super) unsafe_: bool,
 }
 
-fn decode_text(raw: &[u8]) -> Decoded {
+pub(super) fn decode_text(raw: &[u8]) -> Decoded {
     let source = String::from_utf8_lossy(raw);
     let mut out = String::with_capacity(source.len());
     let mut unsafe_ = false;
@@ -706,7 +188,7 @@ fn find_from(bytes: &[u8], start: usize, needle: &[u8], limit: usize) -> Option<
     None
 }
 
-fn tokenize(bytes: &[u8]) -> (Vec<RawToken>, bool) {
+pub(super) fn tokenize(bytes: &[u8]) -> (Vec<RawToken>, bool) {
     let mut tokens: Vec<RawToken> = Vec::new();
     let limit = bytes.len().min(MAX_PACKET_BYTES);
     let mut pos = 0;
@@ -885,7 +367,7 @@ fn tokenize(bytes: &[u8]) -> (Vec<RawToken>, bool) {
     (tokens, true)
 }
 
-fn scan_packet(bytes: &[u8]) -> Scan {
+pub(super) fn scan_packet(bytes: &[u8]) -> Scan {
     let (tokens, complete) = tokenize(bytes);
     let mut scan = Scan {
         malformed: !complete,
@@ -1185,6 +667,3 @@ fn frame(qname: (usize, usize), start: usize) -> Frame {
         ns_undo: Vec::new(),
     }
 }
-
-#[cfg(test)]
-mod tests;

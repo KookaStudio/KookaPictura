@@ -76,7 +76,7 @@ mod write_cmyk;
 mod write_duotone;
 mod write_indexed;
 mod write_layers;
-mod xmp;
+pub mod xmp;
 
 #[cfg(test)]
 mod probe_tests;
@@ -117,9 +117,11 @@ pub use lens_correction::{
     DEFAULT_SLOTS as LENS_CORRECTION_DEFAULT_SLOTS, LENS_CORRECTION_FILTER_ID,
     LENS_CORRECTION_FILTER_NAME,
 };
+pub use metadata::iptc_extension;
 pub use metadata::{
-    apply_template, export_template, read_metadata, set_file_info_fields, set_iptc_fields,
-    set_xmp_fields, set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,
+    apply_template, export_template, photoshop_rows, read_metadata, set_file_info_fields,
+    set_file_info_values, set_iptc_fields, set_iptc_values, set_xmp_fields, set_xmp_packet,
+    set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,
 };
 pub use patterns::{builtin_patterns, decode_patterns, PatternPixels};
 pub use patterns_write::{add_document_pattern, encode_rgb_pattern};

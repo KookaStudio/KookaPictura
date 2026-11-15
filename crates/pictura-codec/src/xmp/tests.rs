@@ -10,7 +10,8 @@ fn packet(description: &str) -> String {
 fn element_packet() -> String {
     packet(
         "<rdf:Description xmlns:dc=\"http://purl.org/dc/elements/1.1/\" \
-         xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\">\
+         xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" \
+         xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\">\
          <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">Old Title</rdf:li></rdf:Alt></dc:title>\
          <photoshop:Credit>Old Credit</photoshop:Credit>\
          <acme:Note xmlns:acme=\"http://example.com/acme/\">keep me</acme:Note>\
@@ -199,7 +200,8 @@ fn scalar_value_governs_the_noop_decision() {
 #[test]
 fn a_comment_inside_a_managed_property_fails_closed() {
     let packet = packet(
-        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\">\
+        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" \
+         xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\">\
          <photoshop:Credit>A<!--keep-->B</photoshop:Credit></rdf:Description>",
     );
     assert!(
@@ -212,7 +214,8 @@ fn a_comment_inside_a_managed_property_fails_closed() {
 fn an_over_cap_packet_fails_closed() {
     let mut big = String::from(HEAD);
     big.push_str(
-        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\">\
+        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" \
+         xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\">\
          <photoshop:Credit>Old</photoshop:Credit></rdf:Description>",
     );
     big.push_str(TAIL);
@@ -231,7 +234,8 @@ fn clearing_a_property_removes_its_bytes() {
     assert!(edited.contains("keep me"), "unmanaged bytes survive");
 
     let only_credit = packet(
-        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\">\
+        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" \
+         xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\">\
          <photoshop:Credit>C</photoshop:Credit></rdf:Description>",
     );
     assert_eq!(
@@ -258,7 +262,8 @@ fn insertion_requires_an_in_scope_prefix() {
 #[test]
 fn a_managed_element_with_an_attribute_fails_closed() {
     let packet = packet(
-        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\">\
+        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" \
+         xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\">\
          <photoshop:Credit xml:lang=\"fr\">Old</photoshop:Credit>\
          </rdf:Description>",
     );
@@ -313,7 +318,8 @@ fn caps_fail_closed_without_panicking() {
     assert!(patch_xmp(&many_attrs, &[(XmpField::Title, "x".into())]).is_none());
 
     let big = packet(&format!(
-        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\">\
+        "<rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" \
+         xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\">\
          <photoshop:Credit>{}</photoshop:Credit></rdf:Description>",
         "a".repeat(MAX_VALUE_BYTES + 100)
     ));
@@ -429,4 +435,34 @@ fn serializer_round_trips_special_and_non_ascii_values() {
     let packet = to_xmp_packet(&props);
     assert!(packet.contains("&amp;") && packet.contains("&lt;"));
     assert_eq!(parse_xmp(&packet), props);
+}
+
+#[test]
+fn metadata_description_fields_parse() {
+    let packet = element_packet().replace(
+        "<acme:Note",
+        "<photoshop:AuthorsPosition>Engineer</photoshop:AuthorsPosition>\
+         <photoshop:CaptionWriter>Grace</photoshop:CaptionWriter>\
+         <photoshop:City>Paris</photoshop:City>\
+         <photoshop:State>Ile-de-France</photoshop:State>\
+         <photoshop:Country>France</photoshop:Country>\
+         <photoshop:Instructions>Careful</photoshop:Instructions>\
+         <xmpRights:Marked>True</xmpRights:Marked>\
+         <xmpRights:WebStatement>https://example.com/rights</xmpRights:WebStatement>\
+         <xmpRights:UsageTerms><rdf:Alt><rdf:li xml:lang=\"x-default\">Editorial</rdf:li></rdf:Alt></xmpRights:UsageTerms>\
+         <acme:Note",
+    );
+    let props = parse_xmp(&packet);
+    assert_eq!(props.authors_position.as_deref(), Some("Engineer"));
+    assert_eq!(props.caption_writer.as_deref(), Some("Grace"));
+    assert_eq!(props.city.as_deref(), Some("Paris"));
+    assert_eq!(props.state.as_deref(), Some("Ile-de-France"));
+    assert_eq!(props.country.as_deref(), Some("France"));
+    assert_eq!(props.instructions.as_deref(), Some("Careful"));
+    assert_eq!(props.marked, Some(true));
+    assert_eq!(
+        props.web_statement.as_deref(),
+        Some("https://example.com/rights")
+    );
+    assert_eq!(props.usage_terms.as_deref(), Some("Editorial"));
 }
