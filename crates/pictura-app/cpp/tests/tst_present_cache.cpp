@@ -7,19 +7,24 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDebug>
+#include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QFileInfo>
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtCore/QTemporaryDir>
 
 #include <memory>
 
 #include "frame.h"
 #include "image_view.h"
 
+#include "api/layers_bridge.h"
 #include "api/view_bridge.h"
 
 #include "qt_test_support.h"
+#include "selftest_paint_fixture.h"
 
 namespace {
 
@@ -55,6 +60,10 @@ private slots:
     void documentRefreshArrivesAsDamage();
     void nonDocumentCanvasBlitsPixels();
     void documentRefreshMatchesFullRecomposite();
+    void hiddenLayerHidesAtFitZoom();
+    void openedBackgroundHidesAtFitZoom();
+    void soloHideRefreshesTheWholeCanvas();
+    void lazyOpenedBackgroundHidesAtFitZoom();
     void presentDoesNotBuildTheFullImage();
     void reducedLevelPresentsADab();
     void cachedLevelCropMatchesTheUncachedDraw();
@@ -175,6 +184,158 @@ void PresentCacheTest::documentRefreshMatchesFullRecomposite()
 
     QVERIFY2(samePixels(regionShot, fullShot),
              "the damaged present equals a full recomposite");
+}
+
+void PresentCacheTest::hiddenLayerHidesAtFitZoom()
+{
+    QVERIFY2(newDoc(1200, 800), "document fixture");
+    setZoom(0.4);
+    renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentLevelForTest(), 1);
+
+    QVERIFY(view_->set_layers_visible(QStringList{QStringLiteral("0")}, false) >= 0);
+    QCoreApplication::processEvents();
+    canvas_->setControlsBox(QPolygonF());
+    const QImage regionShot = renderCanvas(*canvas_);
+
+    view_->set_gpu_compute(view_->gpu_compute());
+    QCoreApplication::processEvents();
+    canvas_->setControlsBox(QPolygonF());
+    const QImage fullShot = renderCanvas(*canvas_);
+
+    QVERIFY2(samePixels(regionShot, fullShot),
+             "the hidden layer still shows at the fit level");
+}
+
+void PresentCacheTest::openedBackgroundHidesAtFitZoom()
+{
+    QImage seed(4200, 4200, QImage::Format_RGB32);
+    seed.fill(Qt::red);
+    paint_fixture::Fixture f(*window_, seed, QStringLiteral("pictura_bg_hide"));
+    QVERIFY2(f.ok(), "opened image fixture");
+    QVERIFY(f.view->add_layer(0) >= 0);
+    f.canvas->setZoom(0.19, f.canvas->rect().center());
+    QCoreApplication::processEvents();
+    QVERIFY2(f.canvas->presentLevelForTest() > 0, "fit zoom presents a level");
+
+    QSignalSpy settled(f.view, &pictura::PictureView::pyramid_settled);
+    renderCanvas(*f.canvas);
+    if (settled.count() == 0) {
+        QVERIFY2(settled.wait(30000), "the initial tiles landed");
+    }
+    const QImage before = renderCanvas(*f.canvas);
+
+    const int landed = settled.count();
+    QCOMPARE(f.view->set_layers_visible(QStringList{QStringLiteral("0")}, false), 1);
+    QCoreApplication::processEvents();
+    if (settled.count() == landed) {
+        QVERIFY2(settled.wait(30000), "the hidden tiles landed");
+    }
+    QCoreApplication::processEvents();
+    f.canvas->setControlsBox(QPolygonF());
+    const QImage regionShot = renderCanvas(*f.canvas);
+
+    const int shown = settled.count();
+    f.view->set_gpu_compute(f.view->gpu_compute());
+    QCoreApplication::processEvents();
+    if (settled.count() == shown) {
+        QVERIFY2(settled.wait(30000), "the full rebuild landed");
+    }
+    QCoreApplication::processEvents();
+    f.canvas->setControlsBox(QPolygonF());
+    const QImage fullShot = renderCanvas(*f.canvas);
+
+    QVERIFY2(!samePixels(before, regionShot), "the hidden Background still shows at fit zoom");
+    QVERIFY2(samePixels(regionShot, fullShot),
+             "the hidden Background's present differs from a full recomposite");
+}
+
+void PresentCacheTest::soloHideRefreshesTheWholeCanvas()
+{
+    QImage seed(1200, 800, QImage::Format_RGB32);
+    seed.fill(Qt::red);
+    paint_fixture::Fixture f(*window_, seed, QStringLiteral("pictura_solo_hide"));
+    QVERIFY2(f.ok(), "opened image fixture");
+    QVERIFY(f.view->add_layer(0) >= 0);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.view->begin_paint(kRed, kWhite, 12, 100, 100, 0, 100, 100, 25,
+                                QStringLiteral("normal"), false, false));
+    QVERIFY(f.view->paint_dab(100.0, 100.0, 1.0));
+    QVERIFY(f.view->end_paint());
+    f.canvas->setZoom(0.4, f.canvas->rect().center());
+    QCoreApplication::processEvents();
+    renderCanvas(*f.canvas);
+
+    // Alt-click solo: only the painted layer stays visible, so the Background
+    // outside its small reach must go too.
+    pictura::solo_set(*f.view, QStringLiteral("1"));
+    QCoreApplication::processEvents();
+    f.canvas->setControlsBox(QPolygonF());
+    const QImage regionShot = renderCanvas(*f.canvas);
+
+    f.view->set_gpu_compute(f.view->gpu_compute());
+    QCoreApplication::processEvents();
+    f.canvas->setControlsBox(QPolygonF());
+    const QImage fullShot = renderCanvas(*f.canvas);
+
+    QVERIFY2(samePixels(regionShot, fullShot),
+             "solo left the hidden Background outside the soloed layer");
+
+    // Restoring the snapshot flips the Background back on; that edit must also
+    // reach the whole canvas.
+    pictura::solo_restore(*f.view);
+    QCoreApplication::processEvents();
+    f.canvas->setControlsBox(QPolygonF());
+    const QImage restored = renderCanvas(*f.canvas);
+
+    f.view->set_gpu_compute(f.view->gpu_compute());
+    QCoreApplication::processEvents();
+    f.canvas->setControlsBox(QPolygonF());
+    const QImage restoredFull = renderCanvas(*f.canvas);
+
+    QVERIFY2(samePixels(restored, restoredFull),
+             "restoring solo left the shown Background outside the soloed layer");
+}
+
+void PresentCacheTest::lazyOpenedBackgroundHidesAtFitZoom()
+{
+    const QString fixture = QFINDTESTDATA("../../../../assets/layers_panel_smoke.psd");
+    if (fixture.isEmpty()) {
+        QSKIP("layers_panel_smoke.psd fixture not found");
+    }
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(window_->openDocumentAtPath(fixture));
+    pictura::PictureView* v = window_->activeView();
+    pictura::ImageView* c = window_->imageView();
+    QVERIFY(v && c);
+    QVERIFY(v->resize_image(QStringLiteral("nearest"), 512, 512));
+    const QString psd = dir.filePath(QStringLiteral("lazy.psd"));
+    QVERIFY(window_->saveActiveAs(psd));
+    window_->closeDocument(window_->activeDocumentIndex(), false);
+
+    QVERIFY(window_->openDocumentAtPath(psd));
+    v = window_->activeView();
+    c = window_->imageView();
+    QVERIFY(v && c);
+    c->setZoom(0.25, c->rect().center());
+    QCoreApplication::processEvents();
+    QCOMPARE(c->presentLevelForTest(), 1);
+
+    const QImage before = renderCanvas(*c);
+    QCOMPARE(v->set_layers_visible(QStringList{QStringLiteral("0")}, false), 1);
+    QCoreApplication::processEvents();
+    c->setControlsBox(QPolygonF());
+    const QImage regionShot = renderCanvas(*c);
+
+    v->set_gpu_compute(v->gpu_compute());
+    QCoreApplication::processEvents();
+    c->setControlsBox(QPolygonF());
+    const QImage fullShot = renderCanvas(*c);
+
+    QVERIFY2(!samePixels(before, regionShot), "the hidden Background still shows");
+    QVERIFY2(samePixels(regionShot, fullShot),
+             "the lazy-open preview kept the hidden Background");
 }
 
 void PresentCacheTest::presentDoesNotBuildTheFullImage()
