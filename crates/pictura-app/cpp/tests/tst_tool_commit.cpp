@@ -102,6 +102,9 @@ private slots:
     void initTestCase();
     void aStrokeCommitsOnlyWhatIsPending();
     void aCancelledStrokePutsTheCompositeBack();
+    void aSelectionClipsABrushStroke();
+    void aSelectionClipsANewLayerStroke();
+    void aSelectionClipsAMaskStroke();
     void aShapeLayerCompositesItsBounds();
     void aFillCompositesItsRect();
     void aLayerStyleRecompositesTheDocument();
@@ -169,6 +172,87 @@ void ToolCommitTest::aCancelledStrokePutsTheCompositeBack()
     f.view->cancel_paint();
     QVERIFY(!f.view->is_painting());
     QCOMPARE(compositeGrid(*f.view, 240, 160), before);
+}
+
+// #1362: the active selection is the document editing mask, so a stroke must
+// stop at its edge on a layer, on a layer that grows under the brush, and on a
+// layer mask.
+void ToolCommitTest::aSelectionClipsABrushStroke()
+{
+    Fixture f(*window_, texturedSeed(64, 64), QStringLiteral("pictura_clip_layer"));
+    QVERIFY2(f.ok(), "clip fixture");
+    f.view->set_gpu_compute(false);
+    const quint32 outsideLeft = f.view->composite_argb(10, 32);
+    const quint32 outsideRight = f.view->composite_argb(52, 32);
+    QVERIFY(f.view->select_rect(20, 20, 24, 24, QStringLiteral("new"), 0.0));
+
+    const pictura::PaintTip tip{16, 100, 100, 0, 25, 0, 1, 0, 0, 0};
+    QVERIFY(pictura::begin_brush(*f.view, kRed, kWhite, tip, 100, 100,
+                                 QStringLiteral("normal"), false, false, false, false));
+    bool painted = false;
+    for (int x = 4; x <= 60; x += 4) {
+        painted |= f.view->paint_dab(x, 32.0, 1.0);
+    }
+    QVERIFY(painted);
+    QVERIFY(f.view->end_paint());
+
+    QCOMPARE(f.view->composite_argb(10, 32), outsideLeft);
+    QCOMPARE(f.view->composite_argb(52, 32), outsideRight);
+    QCOMPARE(f.view->composite_argb(32, 32), kRed);
+}
+
+void ToolCommitTest::aSelectionClipsANewLayerStroke()
+{
+    Fixture f(*window_, texturedSeed(64, 64), QStringLiteral("pictura_clip_grow"));
+    QVERIFY2(f.ok(), "grow fixture");
+    f.view->set_gpu_compute(false);
+    const int added = f.view->add_layer(0);
+    QVERIFY(added >= 0);
+    f.view->set_active_layer(QString::number(added));
+    const quint32 outsideLeft = f.view->composite_argb(10, 32);
+    const quint32 outsideRight = f.view->composite_argb(52, 32);
+    QVERIFY(f.view->select_rect(20, 20, 24, 24, QStringLiteral("new"), 0.0));
+
+    const pictura::PaintTip tip{16, 100, 100, 0, 25, 0, 1, 0, 0, 0};
+    QVERIFY(pictura::begin_brush(*f.view, kRed, kWhite, tip, 100, 100,
+                                 QStringLiteral("normal"), false, false, false, false));
+    bool painted = false;
+    for (int x = 4; x <= 60; x += 4) {
+        painted |= f.view->paint_dab(x, 32.0, 1.0);
+    }
+    QVERIFY(painted);
+    QVERIFY(f.view->end_paint());
+
+    QCOMPARE(f.view->composite_argb(10, 32), outsideLeft);
+    QCOMPARE(f.view->composite_argb(52, 32), outsideRight);
+    QCOMPARE(f.view->composite_argb(32, 32), kRed);
+}
+
+void ToolCommitTest::aSelectionClipsAMaskStroke()
+{
+    Fixture f(*window_, texturedSeed(64, 64), QStringLiteral("pictura_clip_mask"));
+    QVERIFY2(f.ok(), "mask clip fixture");
+    f.view->set_gpu_compute(false);
+    f.view->set_active_layer(QStringLiteral("0"));
+    QVERIFY(pictura::layer_mask_add_path(*f.view, QStringLiteral("0"),
+                                         QStringLiteral("reveal-all")));
+    QVERIFY(pictura::mask_edit_target_set(*f.view, QStringLiteral("0")));
+    QVERIFY(f.view->select_rect(20, 20, 24, 24, QStringLiteral("new"), 0.0));
+
+    const pictura::PaintTip tip{16, 100, 100, 0, 25, 0, 1, 0, 0, 0};
+    QVERIFY(pictura::begin_brush(*f.view, 0xff000000u, kWhite, tip, 100, 100,
+                                 QStringLiteral("normal"), false, false, false, false));
+    bool painted = false;
+    for (int x = 4; x <= 60; x += 4) {
+        painted |= f.view->paint_dab(x, 32.0, 1.0);
+    }
+    QVERIFY(painted);
+    QVERIFY(f.view->end_paint());
+
+    QVERIFY(f.view->mask_selection(QStringLiteral("0"), QStringLiteral("new")));
+    QCOMPARE(f.view->selection_coverage(32, 32), 0);
+    QCOMPARE(f.view->selection_coverage(10, 32), 255);
+    QCOMPARE(f.view->selection_coverage(52, 32), 255);
 }
 
 void ToolCommitTest::aShapeLayerCompositesItsBounds()

@@ -198,6 +198,7 @@ impl PreviewStroke {
             samples: Vec::new(),
             cfg,
             mask: None,
+            clip: None,
         })
     }
 }
@@ -275,6 +276,18 @@ fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool 
     changed
 }
 
+/// The active selection's coverage at a level-space pixel, in document
+/// coordinates; `255` without a selection.
+fn preview_clip(preview: &PreviewStroke, lx: i32, ly: i32) -> u8 {
+    preview.clip.as_ref().map_or(255, |clip| {
+        let dx = lx.max(0) as u32 * preview.scale;
+        let dy = ly.max(0) as u32 * preview.scale;
+        clip.data
+            .sample(dy as usize * clip.width as usize + dx as usize)
+            .unwrap_or(0)
+    })
+}
+
 /// The premultiplied level-space region for `rect` of `preview`: the stroke-start
 /// snapshot blended with the accumulated coverage under the stroke's paint mode.
 /// Normal is source-over; Clear removes the snapshot's coverage (`dst * (1 - k)`);
@@ -302,7 +315,8 @@ fn preview_blend(preview: &PreviewStroke, rect: PsdRect) -> Vec<u8> {
             } else {
                 preview.coverage[li]
             };
-            let alpha = opacity * coverage as f32 / 255.0;
+            let clip = preview_clip(preview, rect.left + x as i32, rect.top + y as i32);
+            let alpha = opacity * coverage as f32 / 255.0 * clip as f32 / 255.0;
             // Normal carries the foreground alpha; Clear removes coverage and
             // ignores it, exactly as `Stencil::composite` does.
             let k = if clear { alpha } else { alpha * tint };
@@ -428,7 +442,10 @@ impl PictureViewRust {
             let t = Instant::now();
             let outcome = Stroke::begin_at(doc, path, cfg);
             paint_timing::record("stroke_begin_at (doc clone)", t.elapsed());
-            outcome
+            outcome.map(|mut stroke| {
+                stroke.set_coverage_clip(stroke_selection_clip(rust));
+                stroke
+            })
         };
         match begun {
             Ok(stroke) => {
@@ -483,7 +500,7 @@ impl PictureViewRust {
                         && cfg.dynamics.is_default()
                         && cfg.bristle.is_none()
                 });
-                if level.is_some() && rust.gpu_compute {
+                if level.is_some() && rust.gpu_compute && rust.session.selection.is_none() {
                     let seeded = match (
                         gpu_mode,
                         rust.session.live.stroke(),
@@ -545,6 +562,11 @@ impl PictureViewRust {
                             .and_then(|snapshot| PreviewStroke::new(level, snapshot, size, cfg)),
                         _ => None,
                     };
+                    let clip = stroke_selection_clip(rust);
+                    let preview = preview.map(|mut preview| {
+                        preview.clip = clip;
+                        preview
+                    });
                     if let Some(preview) = preview {
                         rust.session.live.set_preview(preview);
                     }

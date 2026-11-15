@@ -328,7 +328,12 @@ impl PictureViewRust {
             return false;
         };
         stroke.set_inverse_grayscale(self.session.quick_mask.selected);
-        stroke.set_coverage_clip(self.session.selection.as_ref().map(|s| s.data.clone()));
+        stroke.set_coverage_clip(self.session.selection.as_ref().map(|s| {
+            pictura_paint::CoverageClip {
+                data: s.data.clone(),
+                width: s.width,
+            }
+        }));
         let session = StrokeSession {
             quick_mask: Some(QuickMaskStroke {
                 document,
