@@ -7,14 +7,19 @@
 
 namespace pictura {
 
-bool PicturaMainWindow::saveActiveAsWithOptions(const QString& path)
+bool PicturaMainWindow::saveActiveAsWithRememberedOptions(const QString& path)
 {
-    return importSave_ && importSave_->saveActiveAsWithOptions(path);
+    return importSave_ && importSave_->saveActiveAtPath(path);
 }
 
-bool PicturaMainWindow::promptSaveFormatOptions(const QString& path)
+bool PicturaMainWindow::saveActiveAsWithOptions(const QString& path, SaveFormatKind hint)
 {
-    return importSave_ && importSave_->promptSaveFormatOptions(path);
+    return importSave_ && importSave_->saveActiveAsWithOptions(path, hint);
+}
+
+bool PicturaMainWindow::promptSaveFormatOptions(const QString& path, SaveFormatKind hint)
+{
+    return importSave_ && importSave_->promptSaveFormatOptions(path, hint);
 }
 
 void PicturaMainWindow::setSaveFormatDialogForTest(
@@ -22,6 +27,22 @@ void PicturaMainWindow::setSaveFormatDialogForTest(
 {
     if (importSave_) {
         importSave_->setSaveFormatDialogForTest(std::move(hook));
+    }
+}
+
+void PicturaMainWindow::setGifDialogForTest(
+    std::function<bool(PictureView*, SaveFormatOptions&)> hook)
+{
+    if (importSave_) {
+        importSave_->setGifDialogForTest(std::move(hook));
+    }
+}
+
+void PicturaMainWindow::setWarningDriverForTest(
+    std::function<bool(const QString&, const QString&)> driver)
+{
+    if (importSave_) {
+        importSave_->setWarningDriverForTest(std::move(driver));
     }
 }
 

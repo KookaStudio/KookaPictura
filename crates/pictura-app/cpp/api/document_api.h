@@ -26,8 +26,9 @@ bool openAsSmartObject(PictureView& view, const QString& path);
 bool newDocument(PictureView& view, int width, int height, const QString& mode, int depth,
                  const QString& background);
 bool save(PictureView& view, const QString& path);
-// Native PSD/PSB save off the GUI thread. `saveStart` is false for a raster or
-// PDF path; `saveFinish` joins and applies the path/dirty result.
+// Native PSD/PSB save off the GUI thread. `saveStart` is false for every other
+// suffix, including the engine Save As formats; `saveFinish` joins and applies
+// the path/dirty result.
 bool saveStart(PictureView& view, const QString& path);
 bool saveRunning(const PictureView& view);
 bool saveFinish(PictureView& view);

@@ -1214,6 +1214,7 @@ dependencies = [
  "pictura-testkit",
  "pollster",
  "rayon",
+ "serde_json",
  "wgpu",
 ]
 

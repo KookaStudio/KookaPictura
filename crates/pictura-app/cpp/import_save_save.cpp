@@ -4,22 +4,33 @@
 #include "import_save_coordinator.h"
 
 #include "api/document_api.h"
+#include "api/document_bridge.h"
+#include "api/layers_bridge.h"
 
 #include "bmp_options_dialog.h"
 #include "busy_job.h"
+#include "cineon_options_dialog.h"
 #include "command_ids.h"
+#include "dcs_options_dialog.h"
 #include "dialogs.h"
 #include "document_registry.h"
+#include "eps_options_dialog.h"
+#include "gif_options_dialog.h"
+#include "indexed_color_dialog.h"
 #include "jpeg_options_dialog.h"
 #include "memory_refusal.h"
 #include "png_options_dialog.h"
+#include "raw_options_dialog.h"
 #include "save_options_dialog.h"
 #include "session.h"
+#include "tga_options_dialog.h"
 #include "tiff_options_dialog.h"
 
 #include "api/engine_bridge.h"
 
+#include <QtCore/QByteArray>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonDocument>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QMessageBox>
 
@@ -96,6 +107,13 @@ bool ImportSaveCoordinator::saveActive()
         }
         return saved;
     }
+    SaveFormatKind kind = lastSaveKinds_.value(view, SaveFormatKind::None);
+    if (kind == SaveFormatKind::None) {
+        kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    }
+    if (view && kind != SaveFormatKind::None) {
+        applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(saveFormatOptions_));
+    }
     const bool saved = saveActiveAs(path);
     if (saved) {
         record();
@@ -144,6 +162,24 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path)
     return true;
 }
 
+bool ImportSaveCoordinator::saveActiveAtPath(const QString& path)
+{
+    PictureView* view = documents_.activeView();
+    if (!view || path.isEmpty()) {
+        return false;
+    }
+    const SaveFormatKind kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    if (kind != SaveFormatKind::None) {
+        applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(saveFormatOptions_));
+        lastSaveKinds_.insert(view, kind);
+    }
+    if (kind == SaveFormatKind::Gif && pictura::image_mode(*view) != QStringLiteral("indexed")
+        && !convert_to_indexed(*view, 4, 256, 0, 0)) {
+        return false;
+    }
+    return saveActiveAs(path);
+}
+
 bool ImportSaveCoordinator::saveAsWithDialog()
 {
     PictureView* view = documents_.activeView();
@@ -161,6 +197,7 @@ bool ImportSaveCoordinator::saveAsWithDialog()
     // The chosen filter owns the extension; All Formats keeps a typed suffix.
     const int chosen = filters.indexOf(selected);
     const int filterIndex = chosen >= 0 ? chosen : sourceIndex;
+    const SaveFormatKind hint = saveFormatKindForFilter(filterIndex);
     path = pathForSaveFilter(path, filterIndex, sourceIndex);
     if (isPdfPath(path)) {
         const bool saved = savePdfWithDialog(path);
@@ -173,14 +210,29 @@ bool ImportSaveCoordinator::saveAsWithDialog()
         }
         return saved;
     }
-    return saveActiveAsWithOptions(path);
+    return saveActiveAsWithOptions(path, hint);
 }
 
-bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path)
+bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFormatKind hint)
 {
     PictureView* view = documents_.activeView();
-    if (!view || !view->has_document() || !promptSaveFormatOptions(path)) {
+    if (!view || !view->has_document()) {
         return false;
+    }
+    SaveFormatKind kind = hint;
+    if (kind == SaveFormatKind::None) {
+        kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    }
+    // GIF converts to Indexed during the options prompt; capture the warning
+    // decision before that flattening so it is still shown.
+    const bool featureWarning = saveAsNeedsFeatureWarning(path, view);
+    if (!promptSaveFormatOptions(path, kind)) {
+        return false;
+    }
+    if (kind != SaveFormatKind::None) {
+        lastSaveKinds_.insert(view, kind);
+    } else {
+        lastSaveKinds_.remove(view);
     }
     const QString suffix = QFileInfo(path).suffix().toLower();
     const bool native = suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
@@ -195,22 +247,45 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path)
         }
         pictura::set_save_embed_profile(*view, options.embedProfile());
     }
-    if (saveAsNeedsFeatureWarning(path, view)) {
-        const auto choice = QMessageBox::warning(
-            dialogParent_, tr("Save As"),
-            tr("The chosen format cannot hold all of the document's features. "
-               "The flattened composite will be written."),
-            QMessageBox::Save | QMessageBox::Cancel);
-        if (choice != QMessageBox::Save) {
+    const auto warn = [this](const QString& title, const QString& text) {
+        if (warningDriverForTest_) {
+            return warningDriverForTest_(title, text);
+        }
+        return QMessageBox::warning(dialogParent_, title, text,
+                                    QMessageBox::Save | QMessageBox::Cancel)
+            == QMessageBox::Save;
+    };
+    if (featureWarning) {
+        if (!warn(tr("Save As"),
+                  tr("The chosen format cannot hold all of the document's features. "
+                     "The flattened composite will be written."))) {
             return false;
+        }
+    }
+    if (kind == SaveFormatKind::Dcs && view) {
+        const QString mode = pictura::image_mode(*view);
+        if (mode != QStringLiteral("cmyk") && mode != QStringLiteral("multichannel")) {
+            if (!warn(tr("Save As"),
+                      tr("DCS separations need CMYK; the document will be converted."))) {
+                return false;
+            }
+        }
+        if (!channels_alpha_names(*view).isEmpty()) {
+            if (!warn(tr("Save As"),
+                      tr("DCS cannot carry named spot inks; the extra channels will be omitted."))) {
+                return false;
+            }
         }
     }
     return saveActiveAs(path);
 }
 
-bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path)
+bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFormatKind hint)
 {
-    const SaveFormatKind kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    SaveFormatKind kind = hint;
+    if (kind == SaveFormatKind::None) {
+        kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    }
     if (kind == SaveFormatKind::None) {
         return true;
     }
@@ -219,7 +294,54 @@ bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path)
         return true;
     }
     SaveFormatOptions options = saveFormatOptionsFromJson(saveFormatOptions_);
-    if (!runSaveFormatDialog(kind, options)) {
+    if (kind == SaveFormatKind::Gif && pictura::image_mode(*view) != QStringLiteral("indexed")) {
+        if (gifDialogForTest_) {
+            if (!gifDialogForTest_(view, options)) {
+                return false;
+            }
+        } else {
+            IndexedColorDialog dialog(indexed_exact_available(*view), dialogParent_);
+            const auto preview = [view, &dialog]() {
+                if (dialog.preview()) {
+                    preview_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
+                                    dialog.amount());
+                } else {
+                    cancel_mode_preview(*view);
+                }
+            };
+            connect(&dialog, &IndexedColorDialog::optionsChanged, &dialog, preview);
+            preview();
+            if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+                cancel_mode_preview(*view);
+                return false;
+            }
+            if (!runSaveFormatDialog(kind, options)) {
+                cancel_mode_preview(*view);
+                return false;
+            }
+            if (!convert_to_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
+                                    dialog.amount())) {
+                cancel_mode_preview(*view);
+                return false;
+            }
+            rememberSaveFormatOptions(kind, options);
+            applySaveRasterOptions(*view, kind, options);
+            if (hooks_.saveSession) {
+                hooks_.saveSession();
+                return true;
+            }
+            SessionState state = loadSession();
+            state.saveFormatOptions = saveFormatOptions_;
+            pictura::saveSession(state);
+            return true;
+        }
+        if (!runSaveFormatDialog(kind, options)) {
+            return false;
+        }
+        if (!convert_to_indexed(*view, 1, 256, 0, 0)) {
+            return false;
+        }
+    } else if (!runSaveFormatDialog(kind, options)) {
         return false;
     }
     rememberSaveFormatOptions(kind, options);
@@ -290,6 +412,65 @@ bool ImportSaveCoordinator::runSaveFormatDialog(SaveFormatKind kind,
         options.tiffTransparency = dialog.transparency();
         return true;
     }
+    case SaveFormatKind::Gif: {
+        GifOptionsDialog dialog(options, dialogParent_);
+        if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+            return false;
+        }
+        options.gifRowOrder = dialog.rowOrder();
+        return true;
+    }
+    case SaveFormatKind::Eps: {
+        EpsOptionsDialog dialog(options, dialogParent_);
+        if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+            return false;
+        }
+        options.epsPreview = dialog.preview();
+        options.epsEncoding = dialog.encoding();
+        options.epsJpegQuality = dialog.jpegQuality();
+        options.epsHalftone = dialog.halftone();
+        options.epsTransfer = dialog.transfer();
+        options.epsTransparentWhites = dialog.transparentWhites();
+        options.epsPsColorManagement = dialog.psColorManagement();
+        options.epsVectorData = dialog.vectorData();
+        options.epsInterpolation = dialog.interpolation();
+        return true;
+    }
+    case SaveFormatKind::Dcs: {
+        DcsOptionsDialog dialog(options, dialogParent_);
+        if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+            return false;
+        }
+        options.dcsVersion = dialog.version();
+        options.dcsPreview = dialog.preview();
+        return true;
+    }
+    case SaveFormatKind::Raw: {
+        RawOptionsDialog dialog(options, dialogParent_);
+        if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+            return false;
+        }
+        options.rawHeader = dialog.header();
+        options.rawInterleave = dialog.interleave();
+        return true;
+    }
+    case SaveFormatKind::Tga: {
+        TgaOptionsDialog dialog(options, dialogParent_);
+        if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+            return false;
+        }
+        options.tgaDepth = dialog.depth();
+        options.tgaRle = dialog.rle();
+        return true;
+    }
+    case SaveFormatKind::Cineon: {
+        CineonOptionsDialog dialog(options, dialogParent_);
+        if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+            return false;
+        }
+        options.cineonBits = dialog.bits();
+        return true;
+    }
     default:
         return true;
     }
@@ -308,6 +489,13 @@ void ImportSaveCoordinator::rememberSaveFormatOptions(
 void ImportSaveCoordinator::applySaveRasterOptions(PictureView& view, SaveFormatKind kind,
                                                    const SaveFormatOptions& options)
 {
+    if (kind == SaveFormatKind::None) {
+        return;
+    }
+    const QJsonObject root = saveFormatOptionsToJson(options);
+    const QByteArray json = QJsonDocument(root).toJson(QJsonDocument::Compact);
+    pictura::set_save_options(view, static_cast<int>(kind),
+                              ::rust::Str(json.constData(), static_cast<size_t>(json.size())));
     switch (kind) {
     case SaveFormatKind::Jpeg:
         pictura::set_save_raster_options(view, jpegQualityPercent(options.jpegQuality), -1,
@@ -322,7 +510,7 @@ void ImportSaveCoordinator::applySaveRasterOptions(PictureView& view, SaveFormat
         break;
     case SaveFormatKind::Tiff:
         pictura::set_save_raster_options(
-            view, options.tiffCompression == 5 ? jpegQualityPercent(options.tiffJpegQuality) : -1,
+            view, options.tiffCompression == 4 ? jpegQualityPercent(options.tiffJpegQuality) : -1,
             options.tiffCompression, false, false, options.tiffTransparency ? -1 : 0xFFFFFF);
         break;
     default:
@@ -347,6 +535,7 @@ bool ImportSaveCoordinator::revertActive()
     if (!reloaded) {
         return false;
     }
+    lastSaveKinds_.remove(view);
     documents_.updateTabTitle(index);
     if (hooks_.requestRefresh) {
         hooks_.requestRefresh();
@@ -399,6 +588,7 @@ bool ImportSaveCoordinator::closeDocument(int index, bool interactive)
             break;
         }
     }
+    lastSaveKinds_.remove(documents_.viewAt(index));
     documents_.removeDocument(index);
     return true;
 }

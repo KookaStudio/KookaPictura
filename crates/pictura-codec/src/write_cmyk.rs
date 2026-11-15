@@ -16,7 +16,10 @@ use pictura_core::{Document, Layer};
 /// upgrade if that matters.
 pub(crate) fn cmyk_composite_planes(doc: &Document, depth: u16, plane: usize) -> Vec<u8> {
     let color_channels = doc.composite.channels as usize;
-    let current = &doc.composite.data[..color_channels * plane];
+    // The working composite can be RGBA (the app's display buffer). The colour
+    // planes are R, G, B; the alpha plane is not a CMYK plate.
+    let rgb_channels = color_channels.min(3);
+    let current = &doc.composite.data[..rgb_channels * plane];
     let profile = crate::icc::cmyk_profile_from_resources(doc);
     let options = ConversionOptions {
         dither: false,

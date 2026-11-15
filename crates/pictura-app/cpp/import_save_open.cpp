@@ -493,13 +493,7 @@ bool ImportSaveCoordinator::isNativeDocumentPath(const QString& path)
 bool ImportSaveCoordinator::saveRunsOnWorker(const QString& path)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
-    static const QStringList raster = {
-        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
-        QStringLiteral("jpe"), QStringLiteral("tif"),  QStringLiteral("tiff"),
-        QStringLiteral("webp"), QStringLiteral("bmp"),
-    };
-    return suffix != QStringLiteral("pdf") && suffix != QStringLiteral("pdp")
-        && !raster.contains(suffix);
+    return suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
 }
 
 quint64 ImportSaveCoordinator::startOpenDocumentAtPath(const QString& path, bool interactive,

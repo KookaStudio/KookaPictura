@@ -395,16 +395,22 @@ public:
     // active document's source format) and write through `saveActiveAs`. Warns
     // before flattening a layered document into a raster format.
     bool saveAsWithDialog();
-    // Prompt for the destination format's options dialog (JPEG/PNG/BMP/TIFF),
-    // remember the accepted settings, and store them on the view. False aborts
-    // the save. A format that opens no dialog returns true.
-    bool promptSaveFormatOptions(const QString& path);
+    // Save a known path with the suffix's remembered options, no dialog.
+    bool saveActiveAsWithRememberedOptions(const QString& path);
+    // Prompt for the destination format's options dialog, remember the accepted
+    // settings, and store them on the view. False aborts the save. A format that
+    // opens no dialog returns true.
+    bool promptSaveFormatOptions(const QString& path,
+                                 SaveFormatKind hint = SaveFormatKind::None);
     // Save As with a known path: prompt for the format options, then write.
-    bool saveActiveAsWithOptions(const QString& path);
+    bool saveActiveAsWithOptions(const QString& path,
+                                 SaveFormatKind hint = SaveFormatKind::None);
     // Test seam: replace the format options dialog. Returns true to proceed with
     // `options` (possibly edited); false to abort.
     void setSaveFormatDialogForTest(
         std::function<bool(SaveFormatKind, SaveFormatOptions&)> hook);
+    void setGifDialogForTest(std::function<bool(PictureView*, SaveFormatOptions&)> hook);
+    void setWarningDriverForTest(std::function<bool(const QString&, const QString&)> driver);
     bool revertActive();
     // frame_pdf.cpp: Photoshop PDF save through the Save Adobe PDF dialog,
     // reopening a Pictura Photoshop PDF, and Edit > Adobe PDF Presets.

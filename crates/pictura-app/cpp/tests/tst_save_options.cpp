@@ -3,6 +3,7 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QFileInfo>
 #include <QtGui/QImage>
 #include <QtGui/QImageWriter>
 
@@ -16,12 +17,6 @@
 #include "qt_test_support.h"
 
 namespace {
-
-bool tiffWriterAvailable()
-{
-    const QList<QByteArray> formats = QImageWriter::supportedImageFormats();
-    return formats.contains("tif") || formats.contains("tiff");
-}
 
 } // namespace
 
@@ -46,6 +41,7 @@ private slots:
     void exportAsSrgb();
     void psbOn();
     void unsupportedFormats();
+    void exportEdgeScaleAlpha();
 
 private:
     pictura::PictureView* newView(const QColor& color, bool adobe);
@@ -154,9 +150,6 @@ void SaveOptionsTest::jpegApp2()
 
 void SaveOptionsTest::tiffTag()
 {
-    if (!tiffWriterAvailable()) {
-        QSKIP("Qt TIFF writer unavailable");
-    }
     pictura::PictureView* view = newView(QColor(30, 120, 220), true);
     QVERIFY(view);
     pictura::set_save_embed_profile(*view, true);
@@ -168,9 +161,6 @@ void SaveOptionsTest::tiffTag()
 
 void SaveOptionsTest::tiffOff()
 {
-    if (!tiffWriterAvailable()) {
-        QSKIP("Qt TIFF writer unavailable");
-    }
     pictura::PictureView* view = newView(QColor(30, 120, 220), true);
     QVERIFY(view);
     pictura::set_save_embed_profile(*view, false);
@@ -182,17 +172,14 @@ void SaveOptionsTest::tiffOff()
 
 void SaveOptionsTest::cmykSourceNotMistagged()
 {
-    if (!tiffWriterAvailable()) {
-        QSKIP("Qt TIFF writer unavailable");
-    }
     pictura::PictureView* view = newView(QColor(30, 120, 220), false);
     QVERIFY(view);
     QVERIFY(pictura::convert_image_mode(*view, QStringLiteral("cmyk")));
     pictura::set_save_embed_profile(*view, true);
     const QString file = path("cmyk-source.tif");
     QVERIFY(view->save(file));
-    QVERIFY2(profileKind(file) != QStringLiteral("mismatch"),
-             "a CMYK source must not embed its CMYK profile in a TIFF");
+    QVERIFY2(profileKind(file) != QStringLiteral("srgb"),
+             "a CMYK TIFF must not be tagged with the RGB working profile");
     closeActive();
 }
 
@@ -276,6 +263,39 @@ void SaveOptionsTest::unsupportedFormats()
         QVERIFY(view->save(file));
         QCOMPARE(profileKind(file), QStringLiteral("missing"));
     }
+    closeActive();
+}
+
+
+void SaveOptionsTest::exportEdgeScaleAlpha()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Export"), 8, 8, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("transparent")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+    const QString png = path("edge.png");
+    const QString jpg = path("edge.jpg");
+    const QString bmp = path("edge.bmp");
+    QVERIFY(pictura::export_image(*view, png, QStringLiteral("PNG"), 90, 100));
+    QVERIFY(pictura::export_image(*view, jpg, QStringLiteral("JPG"), 90, 100));
+    QVERIFY(pictura::export_image(*view, bmp, QStringLiteral("BMP"), 90, 100));
+    const QImage pngImage(png);
+    const QImage jpgImage(jpg);
+    const QImage bmpImage(bmp);
+    QVERIFY(!pngImage.isNull());
+    QVERIFY(!jpgImage.isNull());
+    QVERIFY(!bmpImage.isNull());
+    QCOMPARE(qAlpha(pngImage.pixel(1, 1)), 0);
+    QCOMPARE(qAlpha(jpgImage.pixel(1, 1)), 255);
+    QCOMPARE(qAlpha(bmpImage.pixel(1, 1)), 255);
+    const QString scaled = path("edge-half.png");
+    QVERIFY(pictura::export_image(*view, scaled, QStringLiteral("PNG"), 90, 50));
+    const QImage half(scaled);
+    QCOMPARE(half.width(), 4);
+    QCOMPARE(half.height(), 4);
+    QVERIFY(!pictura::export_image(*view, QStringLiteral("/missing-dir/out.png"),
+                                   QStringLiteral("PNG"), 90, 100));
+    QVERIFY(!QFileInfo::exists(QStringLiteral("/missing-dir/out.png")));
     closeActive();
 }
 

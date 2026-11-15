@@ -5,6 +5,7 @@
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGroupBox>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSpinBox>
@@ -14,19 +15,11 @@ namespace pictura {
 
 namespace {
 
-// Qt's TIFF compression enum (0 None, 1 LZW, 5 JPEG) plus placeholder ids for
-// the shown-but-unhonored RLE and ZIP choices.
 constexpr int kNone = 0;
-constexpr int kLzw = 1;
-constexpr int kRlePlaceholder = 2;
-constexpr int kZipPlaceholder = 3;
-constexpr int kJpeg = 5;
-
-void disableWithReason(QWidget* widget)
-{
-    widget->setEnabled(false);
-    widget->setToolTip(QObject::tr("This TIFF option is not written yet."));
-}
+constexpr int kRle = 1;
+constexpr int kLzw = 2;
+constexpr int kZip = 3;
+constexpr int kJpeg = 4;
 
 } // namespace
 
@@ -51,22 +44,18 @@ TiffOptionsDialog::TiffOptionsDialog(const SaveFormatOptions& initial, QWidget* 
     const struct {
         const char* name;
         int id;
-        bool enabled;
     } compressions[] = {
-        {"None", kNone, true},
-        {"RLE", kRlePlaceholder, false},
-        {"LZW", kLzw, true},
-        {"ZIP", kZipPlaceholder, false},
-        {"JPEG", kJpeg, true},
+        {"None", kNone},
+        {"RLE", kRle},
+        {"LZW", kLzw},
+        {"ZIP", kZip},
+        {"JPEG", kJpeg},
     };
     for (const auto& entry : compressions) {
         auto* button = new QRadioButton(tr(entry.name), compressionBox);
         button->setObjectName(QStringLiteral("tiffOptionsCompression%1")
                                   .arg(QString::fromLatin1(entry.name)));
         compression_->addButton(button, entry.id);
-        if (!entry.enabled) {
-            disableWithReason(button);
-        }
         if (entry.id == initial.tiffCompression) {
             button->setChecked(true);
         }
@@ -93,7 +82,6 @@ TiffOptionsDialog::TiffOptionsDialog(const SaveFormatOptions& initial, QWidget* 
         auto* button = new QRadioButton(tr(entry.first), pixelBox);
         button->setObjectName(QStringLiteral("tiffOptionsPixelOrder%1").arg(entry.second));
         pixelOrder_->addButton(button, entry.second);
-        disableWithReason(button);
         if (entry.second == initial.tiffPixelOrder) {
             button->setChecked(true);
         }
@@ -109,13 +97,20 @@ TiffOptionsDialog::TiffOptionsDialog(const SaveFormatOptions& initial, QWidget* 
         auto* button = new QRadioButton(tr(entry.first), byteBox);
         button->setObjectName(QStringLiteral("tiffOptionsByteOrder%1").arg(entry.second));
         byteOrder_->addButton(button, entry.second);
-        disableWithReason(button);
         if (entry.second == initial.tiffByteOrder) {
             button->setChecked(true);
         }
         byteLayout->addWidget(button);
     }
     right->addWidget(byteBox);
+    auto* byteNote = new QLabel(
+        tr("Layered TIFF is always written Macintosh byte order so tag 37724 "
+           "matches the PSD layer data. This setting applies to flat TIFFs "
+           "and Discard Layers."),
+        this);
+    byteNote->setObjectName(QStringLiteral("tiffOptionsByteOrderNote"));
+    byteNote->setWordWrap(true);
+    right->addWidget(byteNote);
 
     auto* layerBox = new QGroupBox(tr("Layer Compression"), this);
     auto* layerLayout = new QVBoxLayout(layerBox);
@@ -127,7 +122,6 @@ TiffOptionsDialog::TiffOptionsDialog(const SaveFormatOptions& initial, QWidget* 
         auto* button = new QRadioButton(tr(entry.first), layerBox);
         button->setObjectName(QStringLiteral("tiffOptionsLayer%1").arg(entry.second));
         layerCompression_->addButton(button, entry.second);
-        disableWithReason(button);
         if (entry.second == initial.tiffLayerCompression) {
             button->setChecked(true);
         }
@@ -138,7 +132,6 @@ TiffOptionsDialog::TiffOptionsDialog(const SaveFormatOptions& initial, QWidget* 
     pyramid_ = new QCheckBox(tr("Save Image Pyramid"), this);
     pyramid_->setObjectName(QStringLiteral("tiffOptionsPyramid"));
     pyramid_->setChecked(initial.tiffPyramid);
-    disableWithReason(pyramid_);
     left->addWidget(pyramid_);
 
     transparency_ = new QCheckBox(tr("Save Transparency"), this);
@@ -164,7 +157,7 @@ TiffOptionsDialog::TiffOptionsDialog(const SaveFormatOptions& initial, QWidget* 
 int TiffOptionsDialog::compression() const
 {
     const int id = compression_->checkedId();
-    return id == kLzw || id == kJpeg ? id : kNone;
+    return id >= 0 ? id : kNone;
 }
 
 int TiffOptionsDialog::jpegQuality() const

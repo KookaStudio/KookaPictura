@@ -8,7 +8,7 @@
 mod imp;
 
 use super::qobject::PictureView;
-use super::save_format::{raster_preview_bytes, set_save_raster_options};
+use super::save_format::{raster_preview_bytes, set_save_options, set_save_raster_options};
 pub use imp::*;
 
 #[cxx_qt::bridge]
@@ -94,6 +94,9 @@ pub mod ffi {
             progressive: bool,
             matte: i32,
         );
+
+        /// Store the typed Save As kind and JSON options for the engine writers.
+        fn set_save_options(view: Pin<&mut PictureView>, kind: i32, json: &str);
 
         /// The composite encoded at the given settings, for the JPEG dialog's
         /// size estimate and preview; empty when there is no document.

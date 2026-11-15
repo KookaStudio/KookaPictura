@@ -32,6 +32,9 @@ pollster = "1"
 # Whole-plane history diffs and copies run on every core; already in the
 # workspace through pictura-render and pictura-filters.
 rayon = "1"
+# The Save As dialogs are authored as JSON in C++; the typed SaveOptions parse
+# that payload here. Already in Cargo.lock through pictura-script.
+serde_json = "1"
 
 # ash is the Vulkan bindings the zero-copy interop probe uses to export raw
 # VkDevice/VkImage handles. wgpu has no Vulkan backend on Apple targets, so it

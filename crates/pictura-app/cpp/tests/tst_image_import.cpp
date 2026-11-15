@@ -6,6 +6,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QTimer>
 #include <QtGui/QImage>
+#include <QtGui/QImageReader>
 #include <QtGui/QImageWriter>
 #include <QtWidgets/QApplication>
 
@@ -79,9 +80,9 @@ QByteArray pngWithIccp(QByteArray png, const QByteArray& profile)
 
 namespace {
 
-bool tiffWriterAvailable()
+bool tiffReaderAvailable()
 {
-    const QList<QByteArray> formats = QImageWriter::supportedImageFormats();
+    const QList<QByteArray> formats = QImageReader::supportedImageFormats();
     return formats.contains("tif") || formats.contains("tiff");
 }
 
@@ -219,8 +220,8 @@ void ImageImportTest::jpegPreserve()
 
 void ImageImportTest::tiffConvert()
 {
-    if (!tiffWriterAvailable()) {
-        QSKIP("Qt TIFF writer unavailable");
+    if (!tiffReaderAvailable()) {
+        QSKIP("Qt TIFF reader unavailable");
     }
     const QString path = makeEmbedded(QStringLiteral("convert.tif"), "TIF", true);
     QVERIFY(!path.isEmpty());

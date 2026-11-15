@@ -526,6 +526,7 @@ impl PictureViewRust {
         self.filter_error = None;
         self.save_embed_profile = None;
         self.save_raster_options = None;
+        self.save_options = None;
         self.filter_jobs.cancel_all();
         self.auto_blend.cancel();
         self.auto_align.cancel();

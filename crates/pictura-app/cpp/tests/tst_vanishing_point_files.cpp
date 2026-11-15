@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QImageReader>
 #include <QtGui/QImageWriter>
 
 #include <cmath>
@@ -111,11 +112,11 @@ void VanishingPointFilesTest::planesReopenFromSavedFiles()
     });
 
     for (const char* suffix : {"psd", "psb", "tif", "jpg", "png"}) {
-        // Qt's TIFF writer ships in the optional imageformats module; the
-        // codec tests cover the TIFF block without it.
+        // Save As writes TIFF through the engine; the reopen below still uses
+        // Qt's optional TIFF reader.
         if (QLatin1String(suffix) == QLatin1String("tif")
-            && !QImageWriter::supportedImageFormats().contains("tif")) {
-            qInfo("no Qt TIFF writer: TIFF skipped");
+            && !QImageReader::supportedImageFormats().contains("tif")) {
+            qInfo("no Qt TIFF reader: TIFF skipped");
             continue;
         }
         const QString path = dir_.filePath(QStringLiteral("planes.%1").arg(QLatin1String(suffix)));

@@ -3,7 +3,7 @@ use super::*;
 use super::super::super::color_management::save_embed_default;
 use super::super::super::filter_tools::store_planes;
 use super::super::super::state::PictureViewRust;
-use super::super::{format_for_path, raster_writer_for_suffix};
+use super::super::format_for_path;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -34,7 +34,7 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
         return false;
     }
     let suffix = format_for_path(path);
-    if matches!(suffix.as_str(), "pdf" | "pdp") || raster_writer_for_suffix(&suffix).is_some() {
+    if !matches!(suffix.as_str(), "psd" | "psb") {
         return false;
     }
     let session = &rust.session;
