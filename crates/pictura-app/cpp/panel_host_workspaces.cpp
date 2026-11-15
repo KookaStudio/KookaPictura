@@ -13,6 +13,7 @@
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMenuBar>
+#include <QtWidgets/QSplitter>
 
 namespace pictura {
 namespace {

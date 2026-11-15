@@ -5,6 +5,7 @@
 #include "session.h"
 
 #include <QtCore/QRect>
+#include <QtWidgets/QSplitter>
 
 namespace pictura {
 

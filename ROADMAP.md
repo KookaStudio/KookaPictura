@@ -424,7 +424,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       Actions. `crates/pictura-app/cpp/frame_build.cpp`.
 - [x] **Dockable panels**, a dark theme, a remembered layout, and the
       Essentials, Painting, Photography and Typography workspaces.
-      `crates/pictura-app/cpp/frame_workspaces.cpp`.
+      `crates/pictura-app/cpp/panel_host_workspaces.cpp`.
 - [x] **The toolbox, the options bar, and the keyboard-shortcuts editor.**
       `crates/pictura-app/cpp/toolbox.cpp`.
 - [x] The Adjustments panel icon grid (#509)
