@@ -8,6 +8,7 @@
 // never locks.
 
 #include "frame_includes.h"
+#include "panels/layers_panel.h"
 
 namespace pictura {
 
@@ -39,10 +40,10 @@ bool locksDocumentEdit(const CommandSpec& spec)
 
 void PicturaMainWindow::installTransformLock()
 {
-    if (!tools_ || !registry_) {
+    if (!tools_ || !commandRegistry()) {
         return;
     }
-    registry_->setBlockedProvider([this](const CommandSpec& spec) {
+    commandRegistry()->setBlockedProvider([this](const CommandSpec& spec) {
         if (!transformLocked_) {
             return false;
         }
@@ -56,10 +57,10 @@ void PicturaMainWindow::installTransformLock()
     });
     tools_->setTransformDecisionPrompt([this]() { return askApplyTransform(this); });
     tools_->setCropDecisionPrompt([this]() { return askCropImage(this); });
-    if (layersPanel_) {
+    if (panels_->layersPanel()) {
         // A layer click while a transform is pending runs the same Apply /
         // Cancel / Don't Apply prompt a tool switch does.
-        layersPanel_->setPendingTransformResolver(
+        panels_->layersPanel()->setPendingTransformResolver(
             [this]() { return tools_ && tools_->resolvePendingTransform(); });
     }
     connect(tools_, &ToolController::transformChanged, this, [this]() { syncTransformLock(); });
@@ -72,13 +73,13 @@ void PicturaMainWindow::syncTransformLock()
         return;
     }
     transformLocked_ = locked;
-    if (layersPanel_) {
+    if (panels_->layersPanel()) {
         // The layer list stays selectable; the panel's editing controls are
         // disabled until the transform is resolved.
-        layersPanel_->setTransformPending(locked);
+        panels_->layersPanel()->setTransformPending(locked);
     }
-    if (registry_) {
-        registry_->refresh();
+    if (commandRegistry()) {
+        commandRegistry()->refresh();
     }
 }
 

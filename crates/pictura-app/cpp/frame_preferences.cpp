@@ -1,7 +1,9 @@
 // The Edit > Preferences leaves and the dialog they open, lifted out of
-// frame.cpp / frame_menus.cpp to keep them within their size budgets.
+// frame.cpp / menu_registrar.cpp to keep them within their size budgets.
 
 #include "frame_includes.h"
+#include "panels/character_panel.h"
+#include "panels/paragraph_panel.h"
 #include "agent_control.h"
 #include "api/paint_bridge.h"
 #include "api/type_api.h"
@@ -21,23 +23,23 @@ namespace pictura {
 // are no-ops (their command-tree enablement is unchanged).
 void PicturaMainWindow::registerPreferenceHandlers()
 {
-    registry_->setHandler(command_ids::EditPreferencesGeneral,
+    commandRegistry()->setHandler(command_ids::EditPreferencesGeneral,
                           [this]() { showPreferences(PreferencesDialog::kGeneral); });
-    registry_->setHandler(command_ids::EditPreferencesInterface,
+    commandRegistry()->setHandler(command_ids::EditPreferencesInterface,
                           [this]() { showPreferences(PreferencesDialog::kInterface); });
-    registry_->setHandler(command_ids::EditPreferencesPerformance,
+    commandRegistry()->setHandler(command_ids::EditPreferencesPerformance,
                           [this]() { showPreferences(PreferencesDialog::kPerformance); });
-    registry_->setHandler(command_ids::EditPreferencesUnits,
+    commandRegistry()->setHandler(command_ids::EditPreferencesUnits,
                           [this]() { showPreferences(PreferencesDialog::kUnits); });
-    registry_->setHandler(command_ids::EditPreferencesGuides,
+    commandRegistry()->setHandler(command_ids::EditPreferencesGuides,
                           [this]() { showPreferences(PreferencesDialog::kGuides); });
-    registry_->setHandler(command_ids::EditPreferencesType,
+    commandRegistry()->setHandler(command_ids::EditPreferencesType,
                           [this]() { showPreferences(PreferencesDialog::kType); });
-    registry_->setHandler(command_ids::EditPreferencesAgentControl,
+    commandRegistry()->setHandler(command_ids::EditPreferencesAgentControl,
                           [this]() { showPreferences(PreferencesDialog::kAgentControl); });
     // Only an interactive window has one, parented to the frame. A recursive
     // search walks every widget on each command refresh (#1151).
-    registry_->setEnabledProvider(command_ids::EditPreferencesAgentControl, [this]() {
+    commandRegistry()->setEnabledProvider(command_ids::EditPreferencesAgentControl, [this]() {
         return findChild<AgentControl*>(QString(), Qt::FindDirectChildrenOnly) != nullptr;
     });
 }
@@ -50,8 +52,8 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setOpenDocumentsAsTabs(openDocumentsAsTabs_);
         preferencesDialog_->setFloatingDocumentDocking(floatingDocumentDocking_);
         preferencesDialog_->setZoomResizesWindows(zoomResizesWindows_);
-        preferencesDialog_->setAutoCollapseIconic(panelColumn_->autoCollapseIconic());
-        preferencesDialog_->setAutoShowHidden(panelColumn_->autoShowHidden());
+        preferencesDialog_->setAutoCollapseIconic(panels_->panelColumn()->autoCollapseIconic());
+        preferencesDialog_->setAutoShowHidden(panels_->panelColumn()->autoShowHidden());
         preferencesDialog_->setBrightnessLevel(brightnessLevel_);
         preferencesDialog_->setThemeFamily(themeFamily_);
         preferencesDialog_->setUiScalePercent(uiScalePercent_);
@@ -72,8 +74,8 @@ void PicturaMainWindow::showPreferences(const QString& page)
         connectRecoveryPreferences(preferencesDialog_);
         connectGuidePreferences(preferencesDialog_);
         connect(preferencesDialog_, &PreferencesDialog::exportSettingsRequested, this, [this]() {
-            if (actionsEngine_) {
-                actionsEngine_->saveLibrary();
+            if (panels_->actionsEngine()) {
+                panels_->actionsEngine()->saveLibrary();
             }
             saveSession();
             QString selected;
@@ -103,8 +105,8 @@ void PicturaMainWindow::showPreferences(const QString& page)
             }
         });
         connect(preferencesDialog_, &PreferencesDialog::importSettingsRequested, this, [this]() {
-            if (actionsEngine_) {
-                actionsEngine_->saveLibrary();
+            if (panels_->actionsEngine()) {
+                panels_->actionsEngine()->saveLibrary();
             }
             saveSession();
             const QStringList filters{tr("Pictura Settings (*.json)"), tr("All Files (*)")};
@@ -144,9 +146,9 @@ void PicturaMainWindow::showPreferences(const QString& page)
                     saveSession();
                 });
         connect(preferencesDialog_, &PreferencesDialog::autoCollapseIconicChanged, this,
-                [this](bool on) { panelColumn_->setAutoCollapseIconic(on); });
+                [this](bool on) { panels_->panelColumn()->setAutoCollapseIconic(on); });
         connect(preferencesDialog_, &PreferencesDialog::autoShowHiddenChanged, this,
-                [this](bool on) { panelColumn_->setAutoShowHidden(on); });
+                [this](bool on) { panels_->panelColumn()->setAutoShowHidden(on); });
         connect(preferencesDialog_, &PreferencesDialog::brightnessLevelChanged, this,
                 [this](int level) {
                     setBrightnessLevel(level);
@@ -160,7 +162,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 [this](int choice) {
                     pickerChoice_ = choice == 1 ? 1 : 0;
                     ColorPickerDialog::setPickerPreference(pickerChoice_);
-                    for (const DocEntry* entry : docs_) {
+                    for (const DocEntry* entry : documents_->docs()) {
                         if (entry && entry->view) {
                             pictura::set_picker_choice(*entry->view, pickerChoice_);
                         }
@@ -184,16 +186,16 @@ void PicturaMainWindow::showPreferences(const QString& page)
         connect(preferencesDialog_, &PreferencesDialog::typeShowAsianOptionsChanged, this,
                 [this](bool on) {
                     typeShowAsianOptions_ = on;
-                    if (characterPanel_) {
-                        characterPanel_->setShowAsianOptions(on);
+                    if (panels_->characterPanel()) {
+                        panels_->characterPanel()->setShowAsianOptions(on);
                     }
                     saveSession();
                 });
         connect(preferencesDialog_, &PreferencesDialog::typeMiddleEasternChanged, this,
                 [this](bool on) {
                     typeMiddleEastern_ = on;
-                    if (paragraphPanel_) {
-                        paragraphPanel_->setMiddleEastern(on);
+                    if (panels_->paragraphPanel()) {
+                        panels_->paragraphPanel()->setMiddleEastern(on);
                     }
                     saveSession();
                 });
@@ -201,7 +203,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 [this](bool on) {
                     typeMissingGlyphProtection_ = on;
                     pictura::type_api::setMissingGlyphProtection(on);
-                    for (const DocEntry* entry : docs_) {
+                    for (const DocEntry* entry : documents_->docs()) {
                         if (entry && entry->view) {
                             pictura::type_api::refreshMissingGlyphProtection(*entry->view);
                         }

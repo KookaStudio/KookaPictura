@@ -651,6 +651,39 @@ QString commandIdForPath(const QStringList& path)
     return command_id_for_path(path);
 }
 
+const QList<PanelToggle>& panelToggles()
+{
+    static const QList<PanelToggle> toggles = {
+        {command_ids::WindowPanelsLayers, "layersPanel"},
+        {command_ids::WindowPanelsNavigator, "navigatorPanel"},
+        {command_ids::WindowPanelsHistory, "historyPanel"},
+        {command_ids::WindowPanelsColor, "colorPanel"},
+        {command_ids::WindowPanelsSwatches, "swatchesPanel"},
+        {command_ids::WindowPanelsInfo, "infoPanel"},
+        {command_ids::WindowPanelsHistogram, "histogramPanel"},
+        {command_ids::WindowPanelsGradients, "gradientsPanel"},
+        {command_ids::WindowPanelsPatterns, "patternsPanel"},
+        {command_ids::WindowPanelsNotes, "notesPanel"},
+        {command_ids::WindowPanelsProperties, "propertiesPanel"},
+        {command_ids::WindowPanelsAdjustments, "adjustmentsPanel"},
+        {command_ids::WindowPanelsChannels, "channelsPanel"},
+        {command_ids::WindowPanelsPaths, "pathsPanel"},
+        {command_ids::WindowPanelsActions, "actionsPanel"},
+        {command_ids::WindowPanelsBrush, "brushPanel"},
+        {command_ids::WindowPanelsCloneSource, "cloneSourcePanel"},
+        {command_ids::WindowPanelsCharacter, "characterPanel"},
+        {command_ids::WindowPanelsParagraph, "paragraphPanel"},
+        {command_ids::WindowPanelsGlyphs, "glyphsPanel"},
+        {command_ids::WindowPanelsParagraphStyles, "paragraphStylesPanel"},
+        {command_ids::WindowPanelsCharacterStyles, "characterStylesPanel"},
+        {command_ids::TypePanelsCharacter, "characterPanel"},
+        {command_ids::TypePanelsParagraph, "paragraphPanel"},
+        {command_ids::TypePanelsParagraphStyles, "paragraphStylesPanel"},
+        {command_ids::TypePanelsCharacterStyles, "characterStylesPanel"},
+    };
+    return toggles;
+}
+
 } // namespace pictura
 
 #include "moc_commands.cpp"

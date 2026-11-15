@@ -1,6 +1,8 @@
 #include "api/layers_bridge.h"
 #include "color_picker_dialog.h"
 #include "frame_includes.h"
+#include "panels/color_panel.h"
+#include "panels/layers_panel.h"
 #include "panels/color_swatch_widget.h"
 #include <QtCore/QScopedValueRollback>
 #include <QtCore/QSignalBlocker>
@@ -68,7 +70,7 @@ void PicturaMainWindow::wireQuickMask()
     quickMaskUi_.selected = state.quickMaskSelected;
     quickMaskUi_.color = QColor(state.quickMaskColor);
     quickMaskUi_.opacity = state.quickMaskOpacity;
-    if (QAction* action = registry_->action(maskCommand)) {
+    if (QAction* action = commandRegistry()->action(maskCommand)) {
         action->setAutoRepeat(false);
         for (QObject* object : action->associatedObjects()) {
             if (auto* menu = qobject_cast<QMenu*>(object))
@@ -76,20 +78,20 @@ void PicturaMainWindow::wireQuickMask()
         }
         addAction(action);
     }
-    registry_->setHandler(maskCommand, [this] {
+    commandRegistry()->setHandler(maskCommand, [this] {
         if (auto* view = activeView())
             quick_mask_set(*view, !quick_mask_active(*view));
     });
-    registry_->setEnabledProvider(maskCommand, [this] {
+    commandRegistry()->setEnabledProvider(maskCommand, [this] {
         return activeView() && activeView()->has_document();
     });
-    registry_->setCheckedProvider(maskCommand, [this] {
+    commandRegistry()->setCheckedProvider(maskCommand, [this] {
         return activeView() && quick_mask_active(*activeView());
     });
     new QuickMaskKeys(this);
     connect(toolbox_, &Toolbox::paintMaskToggled, this, [this](bool) {
         if (activeView() && activeView()->has_document())
-            registry_->dispatch(maskCommand);
+            commandRegistry()->dispatch(maskCommand);
     });
     connect(toolbox_, &Toolbox::quickMaskOptionsRequested, this,
         &PicturaMainWindow::showQuickMaskOptions);
@@ -104,7 +106,7 @@ void PicturaMainWindow::wireQuickMask()
 
 void PicturaMainWindow::syncQuickMask()
 {
-    if (quickMaskUi_.syncing || !toolbox_ || !colorState_)
+    if (quickMaskUi_.syncing || !toolbox_ || !panels_->colorState())
         return;
     QScopedValueRollback<bool> syncing(quickMaskUi_.syncing, true);
     auto* view = activeView();
@@ -121,43 +123,43 @@ void PicturaMainWindow::syncQuickMask()
     if (quickMaskUi_.colorsActive && (!active || quickMaskUi_.colorView != view)) {
         if (quickMaskUi_.colorView) {
             quickMaskUi_.colorView->setProperty("quickMaskForeground",
-                colorState_->foreground());
+                panels_->colorState()->foreground());
             quickMaskUi_.colorView->setProperty("quickMaskBackground",
-                colorState_->background());
+                panels_->colorState()->background());
             if (!quick_mask_active(*quickMaskUi_.colorView)) {
                 quickMaskUi_.colorView->setProperty("quickMaskForeground", QVariant());
                 quickMaskUi_.colorView->setProperty("quickMaskBackground", QVariant());
             }
         }
-        colorState_->setMaskActive(quickMaskUi_.returnMask);
-        colorState_->setForeground(quickMaskUi_.returnForeground);
-        colorState_->setBackground(quickMaskUi_.returnBackground);
+        panels_->colorState()->setMaskActive(quickMaskUi_.returnMask);
+        panels_->colorState()->setForeground(quickMaskUi_.returnForeground);
+        panels_->colorState()->setBackground(quickMaskUi_.returnBackground);
         quickMaskUi_.colorsActive = false;
     }
     if (!quickMaskUi_.colorsActive) {
         const bool mask = view && !mask_edit_target_get(*view).isEmpty();
-        if (colorState_->maskActive() != mask) {
-            const QColor fg = colorState_->foreground(),
-                         bg = colorState_->background();
-            colorState_->setForeground(otherForeground_);
-            colorState_->setBackground(otherBackground_);
+        if (panels_->colorState()->maskActive() != mask) {
+            const QColor fg = panels_->colorState()->foreground(),
+                         bg = panels_->colorState()->background();
+            panels_->colorState()->setForeground(otherForeground_);
+            panels_->colorState()->setBackground(otherBackground_);
             otherForeground_ = fg;
             otherBackground_ = bg;
-            colorState_->setMaskActive(mask);
+            panels_->colorState()->setMaskActive(mask);
         }
         if (active) {
             if (tools_)
                 tools_->onSessionCancelled();
-            quickMaskUi_.returnMask = colorState_->maskActive();
-            quickMaskUi_.returnForeground = colorState_->foreground();
-            quickMaskUi_.returnBackground = colorState_->background();
+            quickMaskUi_.returnMask = panels_->colorState()->maskActive();
+            quickMaskUi_.returnForeground = panels_->colorState()->foreground();
+            quickMaskUi_.returnBackground = panels_->colorState()->background();
             quickMaskUi_.colorView = view;
-            colorState_->setMaskActive(true);
-            colorState_->setForeground(
+            panels_->colorState()->setMaskActive(true);
+            panels_->colorState()->setForeground(
                 view->property("quickMaskForeground").value<QColor>().isValid()
                     ? view->property("quickMaskForeground").value<QColor>()
                     : QColor(Qt::black));
-            colorState_->setBackground(
+            panels_->colorState()->setBackground(
                 view->property("quickMaskBackground").value<QColor>().isValid()
                     ? view->property("quickMaskBackground").value<QColor>()
                     : QColor(Qt::white));
@@ -170,8 +172,8 @@ void PicturaMainWindow::syncQuickMask()
         tools_->setMaskActive(active || (view && !mask_edit_target_get(*view).isEmpty()));
         tools_->refreshCursor();
     }
-    if (layersPanel_) {
-        if (auto* tree = layersPanel_->findChild<QTreeView*>()) {
+    if (panels_->layersPanel()) {
+        if (auto* tree = panels_->layersPanel()->findChild<QTreeView*>()) {
             tree->setProperty("quickMaskActivePath",
                 active ? layer_selection_anchor(*view) : QString());
             tree->viewport()->update();

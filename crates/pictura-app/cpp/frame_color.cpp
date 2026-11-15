@@ -2,7 +2,10 @@
 // every view. Split from frame.cpp to stay under the file-size cap.
 
 #include "frame_includes.h"
+#include "color_settings_dialog.h"
+#include "profile_dialog.h"
 #include "api/document_api.h"
+#include "api/type_api.h"
 
 #include "api/engine_bridge.h"
 
@@ -10,11 +13,11 @@ namespace pictura {
 
 void PicturaMainWindow::wireColorManagementMenu()
 {
-    registry_->setHandler(command_ids::EditAssignProfile, [this]() { showProfileCommand(false); });
-    registry_->setHandler(command_ids::EditConvertProfile, [this]() { showProfileCommand(true); });
-    registry_->setHandler(command_ids::EditColorSettings, [this]() { showColorSettings(); });
+    commandRegistry()->setHandler(command_ids::EditAssignProfile, [this]() { showProfileCommand(false); });
+    commandRegistry()->setHandler(command_ids::EditConvertProfile, [this]() { showProfileCommand(true); });
+    commandRegistry()->setHandler(command_ids::EditColorSettings, [this]() { showColorSettings(); });
     for (const char* id : {command_ids::EditAssignProfile, command_ids::EditConvertProfile}) {
-        registry_->setEnabledProvider(id, [this]() {
+        commandRegistry()->setEnabledProvider(id, [this]() {
             PictureView* view = activeView();
             return view && view->has_document()
                 && document_api::documentMode(*view) == QStringLiteral("rgb");
@@ -96,12 +99,28 @@ void PicturaMainWindow::showColorSettings()
     askMismatchOpen_ = out.askMismatchOpen;
     askMissingOpen_ = out.askMissingOpen;
     applyTextGamma(out.textGammaEnabled, out.textGamma);
-    for (const DocEntry* entry : docs_) {
+    for (const DocEntry* entry : documents_->docs()) {
         if (entry) {
             applyColorSettings(entry->view);
         }
     }
     saveSession();
+}
+
+void PicturaMainWindow::applyTextGamma(bool enabled, double gamma)
+{
+    const bool changed = enabled != textGammaEnabled_ || !qFuzzyCompare(gamma, textGamma_);
+    textGammaEnabled_ = enabled;
+    textGamma_ = gamma;
+    type_api::setTextGamma(enabled, gamma);
+    if (!changed) {
+        return;
+    }
+    for (const DocEntry* entry : documents_->docs()) {
+        if (entry->view) {
+            type_api::refreshTextGamma(*entry->view);
+        }
+    }
 }
 
 } // namespace pictura

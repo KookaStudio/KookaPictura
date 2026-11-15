@@ -11,7 +11,7 @@ class PicturaMainWindow;
 
 // Run Auto-Blend Layers over `window`'s selected layers, with progress and
 // Cancel, and keep the processed layers selected. False when nothing was
-// committed. Defined in frame_menus_align.cpp.
+// committed. Defined in frame_commands.cpp.
 bool runAutoBlend(PicturaMainWindow& window, bool stackImages, bool seamless,
                   bool fillTransparent = false);
 

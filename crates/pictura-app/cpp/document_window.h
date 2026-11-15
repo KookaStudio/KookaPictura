@@ -20,6 +20,10 @@ struct DocWindow;
 
 enum class OpenKind { Psd, Raster, SmartObject, Pdf, PdfPage, Eps };
 
+// How an open ended. A user cancel is not a failure: callers must not show an
+// error for it.
+enum class OpenOutcome { Opened, Cancelled, Failed };
+
 // The canvas property recording the view `frame_revision` its image came from.
 inline constexpr const char* kFrameRevisionKey = "picturaFrameRevision";
 

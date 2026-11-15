@@ -1,14 +1,14 @@
 #include <QtCore/QRect>
 #include "frame_includes.h"
+#include "panels/layers_panel.h"
+#include "panels/panel_column.h"
 
-#include "gpu_probe.h"
 #include "api/paint_bridge.h"
+#include "import_save_coordinator.h"
+#include "gpu_probe.h"
+#include "panel_host.h"
 #include "panels/actions_panel.h"
 #include "update_checker.h"
-
-#include "api/type_api.h"
-#include "pictura_debug_timing.h"
-#include "type_fonts.h"
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
@@ -17,182 +17,226 @@
 
 namespace pictura {
 
+bool PicturaMainWindow::panelsHidden() const
+{
+    return panels_ && panels_->panelsHidden();
+}
+
 void PicturaMainWindow::setPanelsHidden(bool hidden)
 {
-    panelsHidden_ = hidden;
-    if (hidden) {
-        // Frame-parented flyouts are not panel-column children; hide them with
-        // the rest of the panels.
-        for (PanelColumn* column : allPanelColumns()) {
-            if (column) {
-                column->closeFlyout();
-            }
-        }
+    if (panels_) {
+        panels_->setPanelsHidden(hidden);
     }
-    setPanelColumnsVisible(!hidden);
 }
 
-void PicturaMainWindow::retargetDock()
+PanelColumn* PicturaMainWindow::panelColumn() const
 {
-    pictura::ScopedTimer dockTimer("cxx_retargetDock (all panels)");
-    PictureView* view = activeView();
-    ImageView* canvas = canvasAt(activeDocumentIndex());
-
-    if (layersPanel_) {
-        pictura::ScopedTimer t("cxx_layersPanel_refresh");
-        // setView ends with a refresh; the debounced pass must not refresh it
-        // a second time.
-        layersPanel_->setView(view);
-    }
-    if (historyPanel_) {
-        pictura::ScopedTimer t("cxx_historyPanel_refresh");
-        historyPanel_->setView(view);
-    }
-    if (navigatorPanel_) {
-        pictura::ScopedTimer t("cxx_navigatorPanel_refresh");
-        navigatorPanel_->setCanvas(canvas);
-        navigatorPanel_->setView(view);
-    }
-    if (infoPanel_) {
-        pictura::ScopedTimer t("cxx_infoPanel_refresh");
-        infoPanel_->setView(view);
-    }
-    if (propertiesPanel_) {
-        pictura::ScopedTimer t("cxx_propertiesPanel_refresh");
-        propertiesPanel_->setView(view);
-    }
-    if (adjustmentsPanel_) {
-        pictura::ScopedTimer t("cxx_adjustmentsPanel_refresh");
-        adjustmentsPanel_->setView(view);
-    }
-    if (channelsPanel_) {
-        pictura::ScopedTimer t("cxx_channelsPanel_refresh");
-        channelsPanel_->setView(view);
-    }
-    if (characterPanel_) {
-        pictura::ScopedTimer t("cxx_characterPanel_refresh");
-        characterPanel_->setView(view);
-    }
-    if (paragraphPanel_) {
-        pictura::ScopedTimer t("cxx_paragraphPanel_refresh");
-        paragraphPanel_->setView(view);
-    }
-    if (paragraphStylesPanel_) {
-        pictura::ScopedTimer t("cxx_paragraphStylesPanel_refresh");
-        paragraphStylesPanel_->setView(view);
-    }
-    if (characterStylesPanel_) {
-        pictura::ScopedTimer t("cxx_characterStylesPanel_refresh");
-        characterStylesPanel_->setView(view);
-    }
-    if (notesPanel_) {
-        pictura::ScopedTimer t("cxx_notesPanel_refresh");
-        notesPanel_->setView(view);
-    }
-    // Color Range works on one document; switching away cancels it.
-    if (colorRangeDialog_ && colorRangeDialog_->view() != view) {
-        colorRangeDialog_->reject();
-    }
-    // Replace Color holds the same raw view; retargeting must cancel it before
-    // its view is left behind.
-    if (replaceColorDialog_ && replaceColorDialog_->view() != view) {
-        replaceColorDialog_->reject();
-    }
-    if (pathsPanel_) {
-        pictura::ScopedTimer t("cxx_pathsPanel_refresh");
-        pathsPanel_->setView(view);
-    }
-    if (histogramPanel_) {
-        pictura::ScopedTimer t("cxx_histogramPanel_refresh");
-        histogramPanel_->setView(view);
-    }
-
-    dockView_ = view;
-    dockCanvas_ = canvas;
-    dockGeneration_ = view ? view->document_generation() : 0;
-    panelsRefreshedByChanged_ = false;
-    panelsFreshlyBound_ = true;
-    ++dockRetargetCount_;
+    return panels_ ? panels_->panelColumn() : nullptr;
 }
 
-bool PicturaMainWindow::dockNeedsRebind() const
+PanelColumn* PicturaMainWindow::toolsColumn() const
 {
-    PictureView* view = activeView();
-    ImageView* canvas = canvasAt(activeDocumentIndex());
-    return view != dockView_ || canvas != dockCanvas_
-           || (view && view->document_generation() != dockGeneration_);
+    return panels_ ? panels_->toolsColumn() : nullptr;
 }
 
-void PicturaMainWindow::refreshDock(bool includeSelfRefreshing, bool includeLayers)
+QList<PanelColumn*> PicturaMainWindow::panelColumns() const
 {
-    // Each panel is timed by name so a panel whose refresh scales with the
-    // document shows up under PICTURA_PAINT_TIMING (#1151).
-    const auto timed = [](const char* label, auto* panel) {
-        if (panel) {
-            pictura::ScopedTimer t(label);
-            panel->refresh();
-        }
-    };
-    if (includeSelfRefreshing) {
-        // A visibility edit already patched its rows in place; its pending
-        // pass skips this panel rather than rebuilding every thumbnail.
-        if (includeLayers) {
-            timed("cxx_layersPanel_refresh", layersPanel_);
-        }
-        timed("cxx_historyPanel_refresh", historyPanel_);
+    return panels_ ? panels_->panelColumns() : QList<PanelColumn*>{};
+}
+
+QList<PanelColumn*> PicturaMainWindow::allPanelColumns() const
+{
+    return panels_ ? panels_->allPanelColumns() : QList<PanelColumn*>{};
+}
+
+int PicturaMainWindow::columnCount() const
+{
+    return panels_ ? panels_->columnCount() : 0;
+}
+
+PanelSide PicturaMainWindow::sideOf(const PanelColumn* column) const
+{
+    return panels_ ? panels_->sideOf(column) : PanelSide::Right;
+}
+
+PanelColumn* PicturaMainWindow::createPanelColumn(PanelSide side, PanelColumn* anchor)
+{
+    return panels_ ? panels_->createPanelColumn(side, anchor) : nullptr;
+}
+
+void PicturaMainWindow::removeColumnIfEmpty(PanelColumn* column)
+{
+    if (panels_) {
+        panels_->removeColumnIfEmpty(column);
     }
-    timed("cxx_navigatorPanel_refresh", navigatorPanel_);
-    timed("cxx_infoPanel_refresh", infoPanel_);
-    timed("cxx_propertiesPanel_refresh", propertiesPanel_);
-    timed("cxx_adjustmentsPanel_refresh", adjustmentsPanel_);
-    timed("cxx_channelsPanel_refresh", channelsPanel_);
-    timed("cxx_characterPanel_refresh", characterPanel_);
-    timed("cxx_paragraphPanel_refresh", paragraphPanel_);
-    timed("cxx_paragraphStylesPanel_refresh", paragraphStylesPanel_);
-    timed("cxx_characterStylesPanel_refresh", characterStylesPanel_);
-    timed("cxx_notesPanel_refresh", notesPanel_);
-    timed("cxx_pathsPanel_refresh", pathsPanel_);
-    timed("cxx_histogramPanel_refresh", histogramPanel_);
+}
+
+PanelColumn* PicturaMainWindow::columnForPanel(const QString& objectName) const
+{
+    return panels_ ? panels_->columnForPanel(objectName) : nullptr;
+}
+
+PanelColumn* PicturaMainWindow::columnAtGlobal(const QPoint& globalPos) const
+{
+    return panels_ ? panels_->columnAtGlobal(globalPos) : nullptr;
+}
+
+int PicturaMainWindow::newColumnSideAt(const QPoint& globalPos) const
+{
+    return panels_ ? panels_->newColumnSideAt(globalPos) : -1;
+}
+
+int PicturaMainWindow::newColumnSideAtInsideWorkspace(const QPoint& globalPos) const
+{
+    return panels_ ? panels_->newColumnSideAtInsideWorkspace(globalPos) : -1;
+}
+
+PanelColumn* PicturaMainWindow::columnEdgeAnchorAt(const QPoint& globalPos,
+                                                   const PanelColumn* exclude, int* side) const
+{
+    return panels_ ? panels_->columnEdgeAnchorAt(globalPos, exclude, side) : nullptr;
+}
+
+PanelColumn* PicturaMainWindow::resolveColumnMoveTarget(const QPoint& globalPos,
+                                                        const PanelColumn* exclude,
+                                                        int* side) const
+{
+    return panels_ ? panels_->resolveColumnMoveTarget(globalPos, exclude, side) : nullptr;
+}
+
+bool PicturaMainWindow::movePanelColumn(PanelColumn* column, int side, PanelColumn* anchor)
+{
+    return panels_ && panels_->movePanelColumn(column, side, anchor);
+}
+
+void PicturaMainWindow::beginWidgetColumnResize(PanelColumn* column, int globalX)
+{
+    if (panels_) {
+        panels_->beginWidgetColumnResize(column, globalX);
+    }
+}
+
+void PicturaMainWindow::updateWidgetColumnResize(int globalX)
+{
+    if (panels_) {
+        panels_->updateWidgetColumnResize(globalX);
+    }
+}
+
+void PicturaMainWindow::endWidgetColumnResize()
+{
+    if (panels_) {
+        panels_->endWidgetColumnResize();
+    }
+}
+
+void PicturaMainWindow::layoutWorkspaceFrame()
+{
+    if (panels_) {
+        panels_->layoutWorkspaceFrame();
+    }
+}
+
+void PicturaMainWindow::updateColumnFrameEdges()
+{
+    if (panels_) {
+        panels_->updateColumnFrameEdges();
+    }
 }
 
 void PicturaMainWindow::refreshPanels()
 {
-    pictura::ScopedTimer t("cxx_refreshPanels (debounced timer)");
-    PictureView* view = activeView();
-    pictura::MetricsTimer<PictureView> metrics(view, "panels_refresh");
-    // The per-script fallback scan opens every installed family; a document
-    // without type never needs it (#1151). It runs before the early returns
-    // below on purpose: it is once-only, and a held refresh lands soon after.
-    if (view && type_api::hasTypeLayers(*view)) {
-        registerTypeFallbacks();
+    if (panels_) {
+        panels_->refreshPanels();
     }
-    // A filter commit holds the history on its worker; the commit's own
-    // refresh restarts this timer once it lands.
-    if (view && filter_commit_running(*view)) {
-        return;
+}
+
+int PicturaMainWindow::dockRetargetCountForTest() const
+{
+    return panels_ ? panels_->dockRetargetCount() : 0;
+}
+
+LayersPanel* PicturaMainWindow::layersPanelForTest() const
+{
+    return panels_ ? panels_->layersPanel() : nullptr;
+}
+
+void PicturaMainWindow::applyPanelSessionForTest(const SessionState& state)
+{
+    if (panels_) {
+        panels_->applyPanelSession(state);
     }
-    if (view && view->is_painting()) {
-        return;
+}
+
+void PicturaMainWindow::applyWorkspaceLayoutForTest(const QJsonArray& columns)
+{
+    if (panels_) {
+        panels_->applyWorkspaceLayout(columns);
     }
-    if (dockNeedsRebind()) {
-        retargetDock();
-    } else if (panelsFreshlyBound_) {
-        panelsFreshlyBound_ = false;
-    } else {
-        const bool includeSelfRefreshing = !panelsRefreshedByChanged_;
-        const bool includeLayers = !layersPanel_ || !layersPanel_->consumeVisibilityPatch();
-        panelsRefreshedByChanged_ = false;
-        refreshingDock_ = true;
-        refreshDock(includeSelfRefreshing, includeLayers);
-        refreshingDock_ = false;
+}
+
+bool PicturaMainWindow::createWorkspaceForTest(const QString& name)
+{
+    return panels_ && panels_->createWorkspace(name);
+}
+
+bool PicturaMainWindow::deleteWorkspaceForTest(const QString& name)
+{
+    return panels_ && panels_->deleteWorkspace(name);
+}
+
+QString PicturaMainWindow::workspaceNameErrorForTest(const QString& name) const
+{
+    return panels_ ? panels_->workspaceNameError(name) : QString();
+}
+
+void PicturaMainWindow::switchWorkspaceForTest(const QString& name)
+{
+    if (panels_) {
+        panels_->switchWorkspace(name);
     }
-    if (registryRefreshPending_) {
-        registryRefreshPending_ = false;
-        if (registry_) {
-            pictura::ScopedTimer registryTimer("cxx_registry_refresh");
-            registry_->refresh();
-        }
+}
+
+QString PicturaMainWindow::activeWorkspaceForTest() const
+{
+    return panels_ ? panels_->activeWorkspace() : QString();
+}
+
+QStringList PicturaMainWindow::userWorkspacesForTest() const
+{
+    return panels_ ? panels_->userWorkspaces() : QStringList{};
+}
+
+QJsonArray PicturaMainWindow::workspaceLayoutForTest() const
+{
+    return panels_ ? panels_->workspaceLayout() : QJsonArray{};
+}
+
+void PicturaMainWindow::refreshWorkspaceMenuForTest()
+{
+    if (panels_) {
+        panels_->refreshWorkspaceMenu(panels_->workspaceMenu());
     }
+}
+
+QStringList PicturaMainWindow::workspaceMenuLabelsForTest() const
+{
+    return panels_ ? panels_->workspaceMenuLabels() : QStringList{};
+}
+
+int PicturaMainWindow::workspaceMenuSeparatorCountForTest() const
+{
+    return panels_ ? panels_->workspaceMenuSeparatorCount() : 0;
+}
+
+QStringList PicturaMainWindow::deleteWorkspaceChoicesForTest() const
+{
+    return panels_ ? panels_->deleteWorkspaceChoices() : QStringList{};
+}
+
+PanelColumn* PicturaMainWindow::restoreLegacyDefaultForTest()
+{
+    return panels_ ? panels_->restoreLegacyDefaultForTest() : nullptr;
 }
 
 void PicturaMainWindow::applyGpuComputePreference(bool on)
@@ -203,13 +247,13 @@ void PicturaMainWindow::applyGpuComputePreference(bool on)
         clearGpuBackendCache();
     }
     gpuCompute_ = on;
-    for (const DocEntry* entry : docs_) {
+    for (const DocEntry* entry : documents_->docs()) {
         if (entry->view) {
             entry->view->set_gpu_compute(on);
         }
     }
     saveSession();
-    registry_->refresh();
+    commandRegistry()->refresh();
     refresh();
 }
 
@@ -217,7 +261,7 @@ void PicturaMainWindow::saveSession()
 {
     // A session restore rebuilds the columns from the store; re-saving mid
     // rebuild would persist a partial layout.
-    if (restoringPanelSession_) {
+    if (!panels_ || panels_->isRestoringSession()) {
         return;
     }
     SessionState state = pictura::loadSession();
@@ -252,9 +296,10 @@ void PicturaMainWindow::saveSession()
     state.typeMiddleEastern = typeMiddleEastern_;
     state.typeMissingGlyphProtection = typeMissingGlyphProtection_;
     state.shortcuts.clear();
-    const QHash<QString, QList<QKeySequence>> overrides = registry_->shortcutOverrides();
+    const QHash<QString, QList<QKeySequence>> overrides = commandRegistry()->shortcutOverrides();
     const QSet<QString> shadowed =
-        actionsPanel_ ? actionsPanel_->shadowedCommandIds() : QSet<QString>();
+        panels_->actionsPanel() ? panels_->actionsPanel()->shadowedCommandIds()
+                                : QSet<QString>();
     for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
         if (shadowed.contains(it.key())) {
             continue;
@@ -271,8 +316,6 @@ void PicturaMainWindow::saveSession()
         state.toolShortcuts.insert(toolIdName(it.key()), it.value().isNull() ? QString()
                                                                              : QString(it.value()));
     }
-    state.autoSaveRecovery = autoSaveRecovery_;
-    state.autoSaveMinutes = autoSaveMinutes_;
     state.rulersVisible = rulersVisible_;
     state.rulerUnit = int(rulerUnit_);
     state.traditionalPoints = traditionalPoints_;
@@ -281,12 +324,11 @@ void PicturaMainWindow::saveSession()
     state.smartGuidesVisible = smartGuidesVisible_;
     state.freePan = freePan_;
     state.snapCanvasToWorkspace = snapCanvasToWorkspace_;
-    state.quickMaskSelected=quickMaskUi_.selected;
-    state.quickMaskColor=quickMaskUi_.color.name();
-    state.quickMaskOpacity=quickMaskUi_.opacity;
+    state.quickMaskSelected = quickMaskUi_.selected;
+    state.quickMaskColor = quickMaskUi_.color.name();
+    state.quickMaskOpacity = quickMaskUi_.opacity;
     state.guideColor = guideColor_.name();
     state.guideDashed = guideDashed_;
-    state.saveFormatOptions = saveFormatOptions_;
     if (tools_ && tools_->optionsFor<CropOptions>(ToolId::Crop)) {
         const CropOptions* crop = tools_->optionsFor<CropOptions>(ToolId::Crop);
         state.cropClassicMode = crop->classicMode();
@@ -297,46 +339,16 @@ void PicturaMainWindow::saveSession()
     if (tools_) {
         state.toolOptions = toolOptionsToJson(*tools_);
     }
-    if (swatchesPanel_) {
-        QJsonArray swatches;
-        for (const Swatch& swatch : swatchesPanel_->grid()->swatches()) {
-            QJsonObject entry;
-            entry.insert(QStringLiteral("name"), swatch.name);
-            entry.insert(QStringLiteral("color"), swatch.color.name());
-            swatches.append(entry);
-        }
-        state.swatches = swatches;
-        state.swatchesLoaded = true;
-    }
-    if (panelColumn_) {
-        const bool iconic = panelColumn_->railMode();
-        state.panelRailMode = iconic ? QStringLiteral("iconic") : QStringLiteral("normal");
-        // Keep the last normal-mode width; an iconic column has no width of its
-        // own, so the loaded value survives unchanged. The remembered width,
-        // not the live width, so a mid-flip strip width cannot leak through.
-        if (!iconic) {
-            const int remembered = panelColumn_->persistedWidth();
-            if (remembered > 0) {
-                state.railWidth = remembered;
-            }
-        }
-        state.autoCollapseIconic = panelColumn_->autoCollapseIconic();
-        state.autoShowHidden = panelColumn_->autoShowHidden();
-        // Legacy flat mirror of the primary column kept for older stores.
-        state.panelGroups = panelColumn_->savePanelState();
-    }
-    // v9: the ordered per-column layout, in central-splitter order; shared with
-    // the workspace store's arrangement shape (see serializeWorkspaceLayout).
-    state.panelColumns = serializeWorkspaceLayout();
+    panels_->saveState(state);
+    importSave_->saveState(state);
     state.schemaVersion = 12;
     if (auto* checker = findChild<UpdateChecker*>(QStringLiteral("updateChecker"))) {
         state.checkForUpdatesOnLaunch = checker->settings().automaticChecksEnabled;
     }
-    state.recent = recent_;
     // A refused write means another instance wrote the store after this one
     // launched; leave its workspace snapshot alone too.
     if (pictura::saveSession(state)) {
-        snapshotActiveWorkspace();
+        panels_->snapshotActiveWorkspace();
     }
 }
 
@@ -372,11 +384,11 @@ void PicturaMainWindow::onCanvasZoomChanged()
 
 QString PicturaMainWindow::documentTabTextForTest(int index) const
 {
-    if (index < 0 || index >= docs_.size() || docs_.at(index)->windows.isEmpty()) {
+    if (index < 0 || index >= documents_->docs().size() || documents_->docs().at(index)->windows.isEmpty()) {
         return QString();
     }
-    const int tab = tabOf(docs_.at(index)->windows.first());
-    return tab >= 0 ? tabs_->tabText(tab) : QString();
+    const int tab = tabOf(documents_->docs().at(index)->windows.first());
+    return tab >= 0 ? documents_->tabs()->tabText(tab) : QString();
 }
 
 bool PicturaMainWindow::restoreStoredLayout(const QByteArray& layout, int revision)
@@ -385,166 +397,6 @@ bool PicturaMainWindow::restoreStoredLayout(const QByteArray& layout, int revisi
         return false;
     }
     return restoreState(layout);
-}
-
-void PicturaMainWindow::applyPanelSession(const SessionState& state)
-{
-    if (!panelColumn_) {
-        return;
-    }
-    restoringPanelSession_ = true;
-    // A new session apply supersedes any float restore still waiting for show.
-    pendingFloatRestores_.clear();
-
-    if (!sessionHasColumnLayout(state)) {
-        // No per-column layout: keep the legacy flat-state behaviour and reset
-        // the tools column to its default left slot.
-        // An empty layout carries no float state: dock every live group and
-        // column overlay before applying the legacy flat state.
-        const QList<PanelColumn*> live = allPanelColumns();
-        for (PanelColumn* column : live) {
-            if (column) {
-                column->closeFlyout();
-            }
-        }
-        for (PanelColumn* column : live) {
-            if (column) {
-                column->redockGroupFloats();
-            }
-        }
-        for (PanelColumn* column : live) {
-            if (!column || !column->isColumnFloating()) {
-                continue;
-            }
-            column->cancelColumnFloat();
-            if (centerSplitter_->indexOf(column) < 0) {
-                centerSplitter_->insertWidget(centerSplitter_->count(), column);
-            }
-            column->setVisible(!panelsHidden_);
-        }
-        clearDynamicColumns();
-        panelColumn_->restorePanelState(state.panelGroups);
-        // The legacy reset path still restores the primary rail mode and width.
-        panelColumn_->setRailMode(state.panelRailMode == QStringLiteral("iconic"));
-        panelColumn_->setRestoredWidth(state.railWidth > 0
-                                            ? state.railWidth
-                                            : PanelColumn::defaultNormalWidth());
-        // A test/reset apply should leave the primary column visible when any
-        // group still has visible tabs.
-        bool anyVisible = false;
-        for (PanelGroup* group : panelColumn_->groups()) {
-            if (!group) {
-                continue;
-            }
-            const bool visible = !group->visibleTitles().isEmpty();
-            group->setVisible(visible);
-            anyVisible = anyVisible || visible;
-        }
-        if (anyVisible) {
-            panelColumn_->setVisible(!panelsHidden_);
-        }
-        if (toolsColumn_ && centerSplitter_) {
-            toolsColumn_->cancelColumnFloat();
-            toolsColumn_->setParent(nullptr);
-            centerSplitter_->insertWidget(0, toolsColumn_);
-            toolsColumn_->setVisible(!panelsHidden_);
-            reapplyColumnStretch();
-        }
-        for (PanelColumn* column : allPanelColumns()) {
-            if (column) {
-                column->setAutoCollapseIconic(state.autoCollapseIconic);
-                column->setAutoShowHidden(state.autoShowHidden);
-            }
-        }
-        restoringPanelSession_ = false;
-        return;
-    }
-
-    // Normalise pre-v7/v8 entries before the one layout builder runs. The first
-    // right-hand column is the primary: it inherits the legacy railWidth; every
-    // other column gets the default normal width.
-    QJsonArray layout = state.panelColumns;
-    int primaryIndex = -1;
-    int primaryOrder = (1 << 30);
-    for (int i = 0; i < layout.size(); ++i) {
-        const QJsonObject entry = layout.at(i).toObject();
-        if (entry.value(QStringLiteral("tools")).toBool()
-            || entry.value(QStringLiteral("side")).toString() == QStringLiteral("left")) {
-            continue;
-        }
-        const int order = entry.value(QStringLiteral("order")).toInt(0);
-        if (order < primaryOrder) {
-            primaryOrder = order;
-            primaryIndex = i;
-        }
-    }
-    for (int i = 0; i < layout.size(); ++i) {
-        QJsonObject entry = layout.at(i).toObject();
-        if (entry.value(QStringLiteral("tools")).toBool()) {
-            continue;
-        }
-        if (!entry.contains(QStringLiteral("railMode"))) {
-            entry.insert(QStringLiteral("railMode"), state.panelRailMode);
-        }
-        if (entry.value(QStringLiteral("width")).toInt() <= 0) {
-            entry.insert(QStringLiteral("width"),
-                         i == primaryIndex && state.railWidth > 0
-                             ? state.railWidth
-                             : PanelColumn::defaultNormalWidth());
-        }
-        layout.replace(i, entry);
-    }
-
-    regroupAndApply(layout, false);
-
-    // regroupAndApply creates fresh columns; re-apply the legacy global flags to
-    // every docked and floating column.
-    for (PanelColumn* column : allPanelColumns()) {
-        if (!column) {
-            continue;
-        }
-        column->setAutoCollapseIconic(state.autoCollapseIconic);
-        column->setAutoShowHidden(state.autoShowHidden);
-    }
-
-    // The tools entry is skipped by regroupAndApply (workspace apply must leave
-    // Tools untouched), so place it here and restore a floating Tools overlay
-    // only on the session path.
-    bool haveTools = false;
-    bool toolsRight = false;
-    bool toolsFloating = false;
-    QRect toolsGeometry;
-    for (const QJsonValue& value : state.panelColumns) {
-        const QJsonObject entry = value.toObject();
-        if (!entry.value(QStringLiteral("tools")).toBool()) {
-            continue;
-        }
-        haveTools = true;
-        toolsRight = entry.value(QStringLiteral("side")).toString() == QStringLiteral("right");
-        toolsFloating = entry.value(QStringLiteral("floating")).toBool(false);
-        const QJsonArray geometry = entry.value(QStringLiteral("floatGeometry")).toArray();
-        if (geometry.size() == 4) {
-            toolsGeometry = QRect(geometry.at(0).toInt(), geometry.at(1).toInt(),
-                                  geometry.at(2).toInt(), geometry.at(3).toInt());
-        }
-        break;
-    }
-    if (toolsColumn_ && centerSplitter_) {
-        toolsColumn_->cancelColumnFloat();
-        toolsColumn_->setParent(nullptr);
-        const int at = toolsRight ? centerSplitter_->count() : 0;
-        centerSplitter_->insertWidget(at, toolsColumn_);
-        toolsColumn_->setVisible(!panelsHidden_);
-        if (toolsColumn_->toolsContentForTest()) {
-            toolsColumn_->refreshToolsWidth();
-        }
-        reapplyColumnStretch();
-        if (haveTools && toolsFloating && toolsGeometry.isValid()) {
-            queueOrRestoreFloat(toolsColumn_, nullptr, toolsGeometry);
-        }
-    }
-
-    restoringPanelSession_ = false;
 }
 
 } // namespace pictura

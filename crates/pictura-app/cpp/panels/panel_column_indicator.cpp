@@ -1,6 +1,6 @@
 #include "panel_column.h"
 
-#include "frame.h"
+#include "panel_host.h"
 #include "panel_group.h"
 
 #include <QtCore/QRect>
@@ -17,20 +17,20 @@ void PanelColumn::showWorkspaceEdgeIndicator(bool left)
     // is drawn at the central area's own left/right edge. Never suppressed: this
     // is where a dragged Tools column lands, so it may be owned by the tools
     // column.
-    auto* frame = owningFrame();
-    QWidget* central = frame ? frame->centralWidget() : nullptr;
-    if (!frame || !central) {
+    auto* host = owningHost();
+    QWidget* central = host ? host->workspaceWidget() : nullptr;
+    if (!host || !central) {
         return;
     }
     if (!edgeIndicator_) {
-        edgeIndicator_ = new QWidget(frame);
+        edgeIndicator_ = new QWidget(host->shellWidget());
         edgeIndicator_->setObjectName(QStringLiteral("panelColumnEdgeIndicator"));
         edgeIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
     }
     const QRect centralRect(central->mapToGlobal(QPoint(0, 0)), central->size());
     const int globalX = left ? centralRect.left() : centralRect.right() - 2;
     edgeIndicator_->setGeometry(
-        QRect(frame->mapFromGlobal(QPoint(globalX, centralRect.top())),
+        QRect(host->shellWidget()->mapFromGlobal(QPoint(globalX, centralRect.top())),
               QSize(3, centralRect.height())));
     edgeIndicator_->show();
     edgeIndicator_->raise();
@@ -41,19 +41,19 @@ void PanelColumn::showColumnEdgeIndicator(bool left)
     // A full-height mark at the workspace edge for a new-column candidate. It is
     // parented to the frame and raised, so an in-window floating overlay (which
     // follows the cursor, above the splitter) cannot hide it.
-    auto* frame = owningFrame();
-    if (!frame) {
+    auto* host = owningHost();
+    if (!host) {
         return;
     }
     if (!edgeIndicator_) {
-        edgeIndicator_ = new QWidget(frame);
+        edgeIndicator_ = new QWidget(host->shellWidget());
         edgeIndicator_->setObjectName(QStringLiteral("panelColumnEdgeIndicator"));
         edgeIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
     }
     const QRect selfRect(mapToGlobal(QPoint(0, 0)), size());
     const int globalX = left ? selfRect.left() : selfRect.right() - 2;
     edgeIndicator_->setGeometry(
-        QRect(frame->mapFromGlobal(QPoint(globalX, selfRect.top())),
+        QRect(host->shellWidget()->mapFromGlobal(QPoint(globalX, selfRect.top())),
               QSize(3, selfRect.height())));
     edgeIndicator_->show();
     edgeIndicator_->raise();

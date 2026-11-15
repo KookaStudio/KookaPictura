@@ -1,6 +1,11 @@
 # panels sources for pictura_shell.
 # Included from the root CMakeLists.txt; keep paths explicit (no globbing).
 list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/panel_host.cpp
+    crates/pictura-app/cpp/panel_host.h
+    crates/pictura-app/cpp/panel_host_build.cpp
+    crates/pictura-app/cpp/panel_host_session.cpp
+    crates/pictura-app/cpp/panel_host_workspaces.cpp
     crates/pictura-app/cpp/panels/actions_button_view.cpp
     crates/pictura-app/cpp/panels/actions_button_view.h
     crates/pictura-app/cpp/panels/actions_dialogs.cpp

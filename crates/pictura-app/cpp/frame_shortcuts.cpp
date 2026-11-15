@@ -8,8 +8,8 @@ namespace pictura {
 
 void PicturaMainWindow::registerShortcutHandlers()
 {
-    registry_->setHandler(command_ids::EditKeyboardShortcuts, [this]() { showKeyboardShortcuts(); });
-    registry_->setHandler(command_ids::WindowWorkspaceKeyboardShortcuts,
+    commandRegistry()->setHandler(command_ids::EditKeyboardShortcuts, [this]() { showKeyboardShortcuts(); });
+    commandRegistry()->setHandler(command_ids::WindowWorkspaceKeyboardShortcuts,
                           [this]() { showKeyboardShortcuts(); });
 }
 
@@ -26,7 +26,7 @@ void PicturaMainWindow::applyShortcutOverrides(const SessionState& state)
                 bindings << sequence;
             }
         }
-        registry_->setShortcuts(it.key(), bindings);
+        commandRegistry()->setShortcuts(it.key(), bindings);
     }
     resetToolShortcuts();
     for (auto it = state.toolShortcuts.cbegin(); it != state.toolShortcuts.cend(); ++it) {
@@ -53,7 +53,7 @@ void PicturaMainWindow::rebuildToolShortcuts()
             const QKeySequence sequence = shift
                 ? QKeySequence(Qt::SHIFT | Qt::Key(key.toUpper().unicode()))
                 : QKeySequence(QString(key));
-            if (!registry_->commandForShortcut(sequence).isEmpty()) {
+            if (!commandRegistry()->commandForShortcut(sequence).isEmpty()) {
                 continue;
             }
             auto* shortcut = new QShortcut(sequence, this);
@@ -73,7 +73,7 @@ void PicturaMainWindow::rebuildToolShortcuts()
 
 void PicturaMainWindow::showKeyboardShortcuts()
 {
-    KeyboardShortcutsDialog dialog(registry_, this);
+    KeyboardShortcutsDialog dialog(commandRegistry(), this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }

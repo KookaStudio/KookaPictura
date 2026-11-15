@@ -64,10 +64,10 @@ void PicturaMainWindow::prepareCanvasGuides(const DocWindow& window)
 
 void PicturaMainWindow::syncSiblingGuides()
 {
-    if (!activeWindow_ || activeWindow_->doc->windows.size() < 2) {
+    if (!documents_->activeWindow() || documents_->activeWindow()->doc->windows.size() < 2) {
         return;
     }
-    PictureView* view = activeWindow_->doc->view;
+    PictureView* view = documents_->activeWindow()->doc->view;
     QList<ImageView::GuideLine> lines;
     const int count = view && view->has_document() ? guide_count(*view) : 0;
     for (int i = 0; i < count; ++i) {
@@ -76,8 +76,8 @@ void PicturaMainWindow::syncSiblingGuides()
             lines.append({guide[0] != 0.0, guide[1]});
         }
     }
-    ImageView* active = activeWindow_->canvas;
-    forEachCanvas(*activeWindow_->doc, [active, &lines](ImageView* canvas) {
+    ImageView* active = documents_->activeWindow()->canvas;
+    forEachCanvas(*documents_->activeWindow()->doc, [active, &lines](ImageView* canvas) {
         if (canvas != active) {
             canvas->setGuides(lines);
         }
@@ -86,7 +86,7 @@ void PicturaMainWindow::syncSiblingGuides()
 
 void PicturaMainWindow::applyGuideViewState()
 {
-    for (const DocWindow* window : windows_) {
+    for (const DocWindow* window : documents_->windows()) {
         // A document still loading has no canvas yet; setupCanvas() calls
         // prepareCanvasGuides() with the current state when it completes.
         if (!window->host || !window->canvas) {
@@ -101,8 +101,8 @@ void PicturaMainWindow::applyGuideViewState()
     if (tools_) {
         tools_->setGuidesLocked(guidesLocked_);
     }
-    if (registry_) {
-        registry_->refresh();
+    if (commandRegistry()) {
+        commandRegistry()->refresh();
     }
 }
 
@@ -124,25 +124,25 @@ void PicturaMainWindow::registerGuideHandlers()
         // Flip the flag rather than read the action, so a control-server
         // dispatch (which runs the handler without toggling the action)
         // toggles too; the checked provider then re-syncs the action.
-        registry_->setHandler(command, [this, flag]() {
+        commandRegistry()->setHandler(command, [this, flag]() {
             this->*flag = !(this->*flag);
             applyGuideViewState();
             saveSession();
         });
-        registry_->setCheckedProvider(command, [this, flag]() { return this->*flag; });
+        commandRegistry()->setCheckedProvider(command, [this, flag]() { return this->*flag; });
     }
 
-    registry_->setHandler(command_ids::ViewClearGuides, [this]() {
+    commandRegistry()->setHandler(command_ids::ViewClearGuides, [this]() {
         if (PictureView* view = activeView()) {
             clear_guides(*view);
         }
     });
-    registry_->setEnabledProvider(command_ids::ViewClearGuides, [this]() {
+    commandRegistry()->setEnabledProvider(command_ids::ViewClearGuides, [this]() {
         PictureView* view = activeView();
         return view && view->has_document() && guide_count(*view) > 0;
     });
 
-    registry_->setHandler(command_ids::ViewNewGuide, [this]() {
+    commandRegistry()->setHandler(command_ids::ViewNewGuide, [this]() {
         PictureView* view = activeView();
         if (!view || !view->has_document()) {
             return;
@@ -158,7 +158,7 @@ void PicturaMainWindow::registerGuideHandlers()
         }
         add_guide(*view, dialog.vertical(), dialog.position());
     });
-    registry_->setEnabledProvider(command_ids::ViewNewGuide, [this]() {
+    commandRegistry()->setEnabledProvider(command_ids::ViewNewGuide, [this]() {
         PictureView* view = activeView();
         return view && view->has_document();
     });

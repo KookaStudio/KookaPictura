@@ -14,18 +14,17 @@
 #include <functional>
 #include <memory>
 #include "canvas_ruler.h"
-#include "document_window.h"
+#include "document_registry.h"
 #include "panels/panel_column.h"
-#include "recovery_store.h"
 #include "quick_mask_ui.h"
 #include "save_format_options.h"
 #include "tools.h"
-#include "workspace_store.h"
 class QDialog;
 class QDockWidget;
 class QFrame;
 class QLabel;
 class QListWidget;
+class QMenu;
 class QMimeData;
 class QResizeEvent;
 class QShortcut;
@@ -46,6 +45,9 @@ class CommandRegistry;
 class ColorPanel;
 class ChannelsPanel;
 class ColorState;
+class DocumentRegistry;
+struct DocEntry;
+struct DocWindow;
 class CanvasScrollBars;
 class DesignSystemDialog;
 class DocumentFloatWindow;
@@ -64,8 +66,10 @@ class ParagraphStylesPanel;
 class CharacterStylesPanel;
 class BrushTipPreview;
 class ImageView;
+class ImportSaveCoordinator;
 class InfoPanel;
 class LayersPanel;
+class MenuRegistrar;
 class NavigatorPanel;
 class NotesPanel;
 class NumericField;
@@ -74,6 +78,8 @@ class ReplaceColorDialog;
 class PathsPanel;
 class OptionsBar;
 class PanelColumn;
+enum class PanelSide;
+class PanelHost;
 class PictureView;
 class PlaceholderPanel;
 class AdjustmentsPanel;
@@ -97,13 +103,6 @@ bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded);
 // records only the origin Save step.
 bool saveActiveInProgress();
 
-// A Window > Panels (or Type > Panels) command and the panel it toggles.
-struct PanelToggle {
-    const char* command;
-    const char* panel;
-};
-const QList<PanelToggle>& panelToggles();
-
 // Factory panel-column layouts for the built-in workspaces (design D6). The
 // name is matched exactly; an unknown name returns an empty array.
 QJsonArray workspacePresets(const QString& name);
@@ -111,14 +110,15 @@ QJsonArray workspacePresets(const QString& name);
 // The CS6-shaped application frame: menu bar, tabbed document area, status bar,
 // and dock areas. Owns the UI and the open documents; each document's state
 // lives in its own cxx-qt PictureView.
-class PicturaMainWindow : public QMainWindow, public PanelMenuHookStore {
+class PicturaMainWindow : public QMainWindow {
     Q_OBJECT
 public:
     enum class ScreenMode { Standard, FullWithMenuBar, Full };
     explicit PicturaMainWindow(QWidget* parent = nullptr, bool enableUpdateCheck = true);
     ~PicturaMainWindow() override;
     // Test hooks.
-    CommandRegistry* registry() const { return registry_; }
+    CommandRegistry* registry() const;
+    DocumentRegistry* documentRegistry() const { return documents_.get(); }
     bool updateChecksEnabled() const { return updateChecksEnabled_; }
     ImageView* imageView() const;       // active canvas, or nullptr with no document
     PictureView* activeView() const;    // active document, or nullptr
@@ -128,8 +128,8 @@ public:
     bool reorderDocumentsForTest();
     QStringList topLevelMenuTitles() const;
     bool registerPanel(QWidget* panel, Qt::DockWidgetArea area);
-    const QSet<QString>& panelObjectNames() const { return panelNames_; }
-    PanelColumn* panelColumn() const { return panelColumn_; }
+    QSet<QString> panelObjectNames() const;
+    PanelColumn* panelColumn() const;
     PreferencesDialog* preferencesDialog() const { return preferencesDialog_; }
     void showPreferences(const QString& page);
     void saveSessionNow() { saveSession(); }
@@ -177,7 +177,7 @@ public:
     void endWidgetColumnResize();
     // The tabless, atomic Tools column hosted in the central splitter (default
     // left, index 0). Its content is the `toolbox_` widget.
-    PanelColumn* toolsColumn() const { return toolsColumn_; }
+    PanelColumn* toolsColumn() const;
     // M43 Phase B test hooks. All drive the same resolve/commit drag path.
     int panelColumnCountForTest() const { return columnCount(); }
     QString panelColumnSideForTest(int index) const;
@@ -189,24 +189,21 @@ public:
     bool dropBoundaryForTest(const QString& panelName, const QString& targetPanel, bool above);
     // M43 Phase C test hook: re-runs the real startup restore path so a saved
     // layout can be applied and re-applied without a second frame.
-    void applyPanelSessionForTest(const SessionState& state) { applyPanelSession(state); }
+    void applyPanelSessionForTest(const SessionState& state);
     // Applies a workspace-shaped column spec through the re-group-capable path.
-    void applyWorkspaceLayoutForTest(const QJsonArray& columns) { regroupAndApply(columns); }
+    void applyWorkspaceLayoutForTest(const QJsonArray& columns);
     // Workspace controller test hooks; all bypass the modal dialogs.
-    bool createWorkspaceForTest(const QString& name) { return createWorkspace(name); }
-    bool deleteWorkspaceForTest(const QString& name) { return deleteWorkspace(name); }
-    QString workspaceNameErrorForTest(const QString& name) const
-    {
-        return workspaceNameError(name);
-    }
-    void switchWorkspaceForTest(const QString& name) { switchWorkspace(name); }
-    QString activeWorkspaceForTest() const { return workspaceStore_.activeWorkspace; }
+    bool createWorkspaceForTest(const QString& name);
+    bool deleteWorkspaceForTest(const QString& name);
+    QString workspaceNameErrorForTest(const QString& name) const;
+    void switchWorkspaceForTest(const QString& name);
+    QString activeWorkspaceForTest() const;
     QStringList userWorkspacesForTest() const;
-    QJsonArray workspaceLayoutForTest() const { return serializeWorkspaceLayout(); }
+    QJsonArray workspaceLayoutForTest() const;
     void refreshWorkspaceMenuForTest();
     QStringList workspaceMenuLabelsForTest() const;
     int workspaceMenuSeparatorCountForTest() const;
-    QStringList deleteWorkspaceChoicesForTest() const { return deleteWorkspaceChoices(); }
+    QStringList deleteWorkspaceChoicesForTest() const;
     // Rebuilds the pre-Essentials single-column default for the legacy self-test
     // panel machinery and returns the primary column. New default coverage lives
     // in the Qt Test suites.
@@ -234,8 +231,8 @@ public:
     bool commitCrop();
     // A pending transform locks the Layer menu and greys the Layers panel.
     bool layersLockedForTest() const { return transformLocked_; }
-    LayersPanel* layersPanelForTest() const { return layersPanel_; }
-    int dockRetargetCountForTest() const { return dockRetargetCount_; }
+    LayersPanel* layersPanelForTest() const;
+    int dockRetargetCountForTest() const;
 
     int brightnessLevel() const { return brightnessLevel_; }
     void setBrightnessLevel(int level);
@@ -261,11 +258,11 @@ public:
     // Test hook: the built pasteboard colour menu, without popping it.
     QMenu* canvasBackgroundMenuForTest() { return canvasBackgroundMenu(); }
 
-    bool panelsHidden() const { return panelsHidden_; }
+    bool panelsHidden() const;
     void setPanelsHidden(bool hidden);
     void refresh();
     void saveSession();
-    // The per-format Save As options (frame_menus.cpp).
+    // The per-format Save As options (ImportSaveCoordinator).
     bool runSaveFormatDialog(SaveFormatKind kind, SaveFormatOptions& options);
     void rememberSaveFormatOptions(SaveFormatKind kind, const SaveFormatOptions& options);
     void applySaveRasterOptions(PictureView& view, SaveFormatKind kind,
@@ -289,8 +286,8 @@ public:
     // Clean shutdown: finish snapshot writes and delete this session's store.
     void shutdownRecovery();
     void setAutoSaveRecovery(bool on, int minutes);
-    bool autoSaveRecovery() const { return autoSaveRecovery_; }
-    int autoSaveMinutes() const { return autoSaveMinutes_; }
+    bool autoSaveRecovery() const;
+    int autoSaveMinutes() const;
     QString recoverySessionDirForTest() const;
 
     // Mirror the active document's selection outline onto its canvas (or clear
@@ -301,7 +298,7 @@ public:
     void syncBrushTipPreview();
 
     // Document operations.
-    int documentCount() const { return docs_.size(); }
+    int documentCount() const;
     int activeDocumentIndex() const;
     void setActiveDocumentIndex(int index);
     PictureView* viewAt(int index) const;
@@ -317,11 +314,11 @@ public:
     bool isActiveDirty() const;
     // True when no document is open, so a double-click on the empty workspace
     // opens the Open dialog.
-    bool workspaceOpenArmed() const { return docs_.isEmpty(); }
+    bool workspaceOpenArmed() const;
 
     // How an open ended. A user cancel is not a failure: callers must not show
     // an error for it.
-    enum class OpenOutcome { Opened, Cancelled, Failed };
+    using OpenOutcome = pictura::OpenOutcome;
 
     // Takes ownership of `view` and adds it as a document window: a tab, or a
     // floating window while Open Documents As Tabs is off unless `asTab`.
@@ -363,7 +360,7 @@ public:
     bool openAsSmartObjectPath(const QString& path);
     // Test seam: hold a started open's completion for `ms` milliseconds so the
     // loading tab, spinner, hover, and cancel are observable.
-    void setOpenDelayForTest(int ms) { openDelayForTest_ = ms; }
+    void setOpenDelayForTest(int ms);
     // Pump events until every started open has finished or been cancelled. The
     // self-test's drop checks need the asynchronous opens to land.
     void waitForOpensForTest();
@@ -418,37 +415,25 @@ public:
     // Import PDF dialog, an EPS through the Rasterize Generic EPS Format
     // dialog, and File > Open As with a chosen decoder (index into
     // openAsFileFilters()). Each opened page or image is an untitled document.
-    // Ask for the password of a protected PDF (`refused`: the last one was
-    // wrong); false on Cancel.
-    bool askPdfPassword(const QString& path, bool refused, QString& password);
     quint64 startImportEpsPath(const QString& path, bool interactive = true);
     void showOpenAsDialog();
     quint64 startOpenAsPath(const QString& path, int formatIndex);
     bool openAsPath(const QString& path, int formatIndex);
     // Test seam: answer the import dialogs (password prompt, Import PDF,
     // Rasterize Generic EPS Format, the warnings box).
-    void setImportDialogDriverForTest(std::function<bool(QDialog&)> driver)
-    {
-        importDialogDriver_ = std::move(driver);
-    }
+    void setImportDialogDriverForTest(std::function<bool(QDialog&)> driver);
     // Test seams: answer the PDF dialogs (the Save Adobe PDF dialog, the
     // features warning, the presets manager and its editor) and catch View PDF
     // After Saving instead of launching the system viewer.
-    void setPdfDialogDriverForTest(std::function<bool(QDialog&)> driver)
-    {
-        pdfDialogDriver_ = std::move(driver);
-    }
-    void setPdfViewerForTest(std::function<void(const QString&)> viewer)
-    {
-        pdfViewer_ = std::move(viewer);
-    }
+    void setPdfDialogDriverForTest(std::function<bool(QDialog&)> driver);
+    void setPdfViewerForTest(std::function<void(const QString&)> viewer);
     // Test seam: catch Reveal in File Manager's folder URL instead of opening
     // the desktop file manager.
     void setUrlOpenerForTest(std::function<void(const QUrl&)> opener)
     {
         urlOpener_ = std::move(opener);
     }
-    // Document window test hooks (frame_document_windows.cpp), by document
+    // Document window test hooks (frame_test.cpp), by document
     // index and acting on the document's first window: its floating window
     // (null unless it floats), float or dock it as the menus do, its tab index
     // (-1 unless tabbed), and its full label.
@@ -459,7 +444,7 @@ public:
     QString documentWindowLabelForTest(int index) const;
     // The tile host while Tile lasts (null otherwise), and document `index`'s
     // first window's tile pane (null unless it is tiled).
-    DocumentTileHost* tileHostForTest() const { return tileHost_; }
+    DocumentTileHost* tileHostForTest() const;
     DocumentTilePane* tilePaneForTest(int index) const;
     // The tab or header context menu last opened, while it is open.
     QMenu* documentMenuForTest() const;
@@ -476,13 +461,11 @@ public:
     // While set, a floating window's dock drag (Ctrl+drag, or the carried
     // window drag) hands its drag data to `hook` instead of running the
     // blocking `QDrag::exec`.
-    void setWindowDockDragForTest(std::function<void(std::unique_ptr<QMimeData>)> hook)
-    {
-        windowDockDragForTest_ = std::move(hook);
-    }
+    void setWindowDockDragForTest(std::function<void(std::unique_ptr<QMimeData>)> hook);
+    bool closeWindow(DocWindow* window, bool interactive = true);
     bool closeDocument(int index, bool interactive);
     // The recent-files list, most recent first; setting it persists it.
-    const QStringList& recentFiles() const { return recent_; }
+    const QStringList& recentFiles() const;
     void setRecentFiles(const QStringList& files);
     // File > Open Recent, or null before the menu bar is built.
     QMenu* recentMenu() const;
@@ -547,104 +530,17 @@ private:
     void showCanvasBackgroundMenu(const QPoint& globalPos);
     // Leave isolation mode if active; true when it was. Escape routes here.
     bool releaseIsolation();
-    // A PDF probe that has no tab yet. `token` is the open the caller waits on;
-    // `password` is the one already accepted, if any.
-    struct PdfProbe {
-        quint64 token = 0;
-        QString path;
-        bool interactive = true;
-        QString password;
-    };
 
-    // One open Edit Contents editor: the untitled tab, the document that owns
-    // the edited layer, and the per-session temporary file holding the source.
-    struct SmartObjectEditSession {
-        PictureView* editor = nullptr;
-        PictureView* origin = nullptr;
-        QString layerPath;
-        QString filename;
-        QTemporaryDir* temp = nullptr;
-    };
-
-    void buildMenus();
-    void buildUiSizeMenu();
-    void updateUiSizeMenu();
-    QList<PanelGroup*> buildPanels(const SessionState& state);
     // `toolOptions` is the session's saved tool options, restored before the
     // options bar is built so its controls start from them.
     void buildTools(int toolsColumns, bool useShiftKeyForToolSwitch,
                     const QJsonObject& toolOptions = QJsonObject());
-    void buildDocumentTabs();
     void buildStatusBar();
     // Filter the tab pane so a double-click on the empty workspace (no document
     // open) opens the Open dialog.
     void installWorkspaceOpenGesture();
-    void registerHandlers();
     void wirePdfCommands();
-    bool runPdfDialog(QDialog& dialog);
-    bool runImportDialog(QDialog& dialog);
-    void reportImportError(const QString& path, const QString& reason);
-    void registerSelectHandlers();
-    void registerEditHandlers();
-    // Wire the CS6 Filter menu: one handler per implemented filter, plus Last
-    // Filter / Last Filter Settings.
-    void wireFilterMenu();
-    void applyFilterCommand(const FilterCommandSpec& spec);
-    // Surface why a filter was refused (status bar + stderr) instead of a
-    // silent no-op.
-    void reportFilterRefusal(PictureView* view);
-    void editSmartFilter(const QString& path, int index);
-    // frame_menus_align.cpp: Layer > Align / Align Layers To Selection /
-    // Distribute, and the Move tool's buttons, over the selected layers.
-    void wireAlignMenu();
-    void wireTypeMenu();
-    void wireWarpText();
-    void wireReplaceMissingFonts();
-    void alertMissingFonts(PictureView* view);
     void applyTextGamma(bool enabled, double gamma);
-    // frame_menus_layer_style.cpp: Layer > Layer Style, the Layer Style dialog
-    // and the style commands over the Layers panel's selection.
-    void wireLayerStyleMenu();
-    // frame_menus_image.cpp: Image > Crop, Trim, and Duplicate.
-    void wireImageMenu();
-    // frame_menus_transform.cpp: Edit > Transform Scale/Rotate/Again, the
-    // exact rotations, and the flips.
-    void wireTransformMenu();
-    // frame_menus_edit.cpp: Edit > Undo/Redo/Step, honoring the active tool's
-    // modal session before the document history.
-    void wireEditHistory();
-    // frame_menus_image_mode.cpp: Image > Mode, the color-mode and bit-depth
-    // conversions with their prompts and dialogs.
-    void wireImageModeMenu();
-    void convertImageMode(const QString& mode);
-    void convertImageDepth(int bits);
-    // frame_menus_adjust.cpp: Image > Adjustments and the Image > Auto commands.
-    void wireImageAdjustments();
-    // frame_menus_adjust.cpp: Layer > New Adjustment Layer, the sixteen
-    // adjustment-layer kinds over the active document.
-    void wireLayerAdjustments();
-    // frame_menus_adjust.cpp: Layer > Layer Content Options, which opens the
-    // active fill/adjustment layer's Properties page.
-    void wireLayerContentOptions();
-    // frame_menus_layer_ops.cpp: Layer > Arrange / Reverse, Delete Layer, and
-    // the non-destructive Stamp Visible / Stamp Selected.
-    void wireLayerArrangeStamp();
-    void wirePanelMenuCommands();
-    // frame_menus_layer_ops.cpp: Layer > Rasterize Shape and Copy/Paste Shape
-    // Attributes over the current shape layer.
-    void wireShapeLayerActions();
-    // frame_menus_layer_ops.cpp: the Layer > Vector Mask submenu and
-    // Layer > Rasterize > Vector Mask over the active layer.
-    void wireVectorMaskActions();
-    // frame_menus_matting.cpp: Layer > Matting (Defringe / Remove Black Matte /
-    // Remove White Matte) over the active layer.
-    void wireMattingActions();
-    // frame_menus_smart_object.cpp: Layer > Smart Objects > Reset Transform /
-    // Convert to Layers / New Smart Object via Copy over the active layer.
-    void wireAdvancedSmartObjectActions();
-    // frame_menus_smart_object.cpp: run the Layers row menu's Edit / Replace /
-    // Export Contents actions on the row's path.
-    void wireSmartObjectRowMenu();
     // frame_mask_overlay.cpp: re-render the rubylith overlay when the Layers
     // panel changes it, and draw the view's overlay on `canvas`.
     void wireMaskOverlay();
@@ -652,87 +548,20 @@ private:
     void syncQuickMask();
     void showQuickMaskOptions();
     void syncMaskOverlay(PictureView* view, ImageView* canvas);
-    // frame_menus_smart_object.cpp: Layer > Smart Filter > Clear Smart Filters.
-    void wireSmartFilterActions();
-    void alignSelectedLayers(int edge, bool toSelection, int alignTo = 0);
-    void distributeSelectedLayers(int edge);
-    void updateAlignControls();
-    void exportClipboard();
-    void applyPanelSession(const SessionState& state);
-    // Rebuild the widget columns from a workspace-shaped spec, moving panels
-    // between groups and restoring floating groups/columns. Shared by session
-    // restore and workspace apply; `staged` are first-run groups never docked.
-    void regroupAndApply(const QJsonArray& columns, bool persist = true, QList<PanelGroup*> staged = {});
-    // A float restored while the frame is hidden waits for `showEvent` so its
-    // stored position is interpreted against the restored window geometry.
-    void queueOrRestoreFloat(PanelColumn* column, PanelGroup* group, const QRect& geometry);
-    void applyPendingFloatRestores();
-    // Serialize the live widget columns into the same `panelColumns` shape
-    // saveSession persists, shared by the session and the workspace store.
-    QJsonArray serializeWorkspaceLayout() const;
-    // Load/reconcile the workspace store; `sessionHadLayout` says whether the
-    // session carried a panel layout to adopt into the active workspace, so a
-    // lost session state does not clobber the active workspace's saved layout.
-    void initWorkspaces(bool sessionHadLayout);
-    // Attach the Window > Workspace menu to the Options-bar switcher.
-    void attachWorkspaceSwitcher();
-    // Keep the Options-bar switcher's value in step with the active workspace.
-    void updateWorkspaceSwitcher();
-    // Snapshot the active workspace's live arrangement into the store; called on
-    // session save so the arrangement is durable independent of state.json.
-    void snapshotActiveWorkspace();
-    void switchWorkspace(const QString& name);
-    void resetWorkspace();
-    bool createWorkspace(const QString& name);
-    bool deleteWorkspace(const QString& name);
-    // Human message for a rejected workspace name, or "" when it is valid.
-    QString workspaceNameError(const QString& name) const;
-    // Wire the Window > Workspace commands and the dynamic user workspace menu.
-    void wireWorkspaceCommands();
-    void refreshWorkspaceMenu(QMenu* menu);
-    int workspaceIndexOf(const QString& name) const;
-    QMenu* workspaceMenu() const;
-    // Every workspace but the active one; the Delete chooser's list.
-    QStringList deleteWorkspaceChoices() const;
-    // Apply the Essentials factory layout when the session has no saved or
-    // legacy panel layout (a fresh session); a stored layout is left untouched.
-    void applyFreshSessionDefault(const SessionState& state, const QList<PanelGroup*>& staged);
-    void wirePanelColumn(PanelColumn* column);
-    void clearDynamicColumns();
-    void reapplyColumnStretch();
-    // Center-splitter drag: keep the workspace-side column fixed between two
-    // widget columns, then coalesce a session save.
-    void onCenterSplitterMoved(int pos, int index);
-    // Draw the 3 px central-band frame (2 px panel + 1 px border on each edge)
-    // below the menu bar and above the status bar, and suppress the outermost
-    // column's frame-side border so it does not double the 1 px line.
+    // PanelHost forwarders used by the remaining chrome translation units.
     void layoutWorkspaceFrame();
     void updateColumnFrameEdges();
-    void retargetDock();
-    void refreshDock(bool includeSelfRefreshing, bool includeLayers);
-    bool dockNeedsRebind() const;
     void refreshPanels();
     void updateStatus();
     void updateToolHint();
     void updateTabTitle(int index);
     void updateWindowTitle();
+    void onAboutToRemoveDocument(int index);
     // Restore the persisted window geometry (and maximized state) at startup, or
     // fall back to the default size when the stored position is off-screen.
     void restoreSessionWindowGeometry(const SessionState& state);
     // A canvas zoom changed: refresh the footer readout and that tab's title.
     void onCanvasZoomChanged();
-    void removeDocument(int index);
-    void rememberRecent(const QString& path);
-    // Repopulate File > Open Recent from `recent_` each time it opens.
-    void refreshRecentMenu(QMenu* menu);
-    // frame_open.cpp: the loading-tab lifecycle and the async open entry points.
-    quint64 nextOpenToken();
-    void beginOpenCursor();
-    void endOpenCursor();
-    void wireOpenSignals(PictureView* view);
-    void beginLoadingDocument(PictureView* view, const QString& path,
-                              const QString& displayName, quint64 token,
-                              const QString& recentPath, OpenKind kind);
     // frame_canvas.cpp: a window's canvas and scroll bars, and their
     // connections; a ready document's view connections, made once.
     void setupCanvas(DocWindow& window);
@@ -744,157 +573,14 @@ private:
     // The active document's canvases, the active window's first; empty with
     // no document. A filter dialog previews on all of them.
     QList<ImageView*> activeDocumentCanvases() const;
-    void installCloseButton(DocWindow* window);
-    void finishLoadingDocument(int index);
-    void restorePreviousTab(PictureView* view);
-    void cancelOpen(int index);
-    void cancelOpenForView(PictureView* view);
-    void onOpenDetected(PictureView* view);
-    void onOpenFinished(PictureView* view, const QString& status,
-                        const QStringList& warnings);
-    void onOpenProgress(PictureView* view, int percent, const QString& phase);
-    void handlePdfProbeFinished(PictureView* view, const PdfProbe& probe,
-                                const QString& status, const QStringList& warnings);
-    void startPdfProbe(const QString& path, bool interactive, const QString& password,
-                       quint64 token);
-    OpenOutcome importPdfPathWithToken(const QString& path, bool interactive,
-                                       const QString& knownPassword, quint64 token);
-    void finishOpen(quint64 token, OpenOutcome outcome, const QString& error = QString());
-    OpenOutcome waitForOpen(quint64 token);
     int indexOfView(PictureView* view) const;
-    // frame_document_windows.cpp: the document window registry.
+    // DocumentRegistry forwarders used by the frame's presentation code.
     int indexOfDoc(const DocEntry* doc) const;
     DocWindow* windowAtTab(int tab) const;
     int tabOf(const DocWindow* window) const;
     DocWindow* windowOfCanvas(const ImageView* canvas) const;
-    // Register `window` as the last tab and return its tab index.
-    int addTabWindow(DocWindow* window);
-    // Host a ready window the tab strip holds: a tile pane while Tile lasts,
-    // otherwise as Open Documents As Tabs says (it floats while the preference
-    // is off), activated as `floatWindow` / `tileWindow` do. The one place
-    // that picks a new ready window's host.
-    void hostReadyWindow(DocWindow* window, bool activate);
-    // Make `window` the active one through its host.
-    void activateDocWindow(DocWindow* window);
-    // Window > Arrange > New Window For: another window of `doc` on a fresh
-    // canvas, hosted as a new ready window is, and activated. Refuses a
-    // loading document.
-    bool addDocumentWindow(DocEntry* doc);
-    // True while the tab strip's current tab decides the active window: no
-    // window is active, or the active one is a tab.
-    bool stripOwnsActivation() const;
-    void onTabCurrentChanged(int tab);
-    void onTabBarClicked(int tab);
-    // Move `window` into a floating document window, at `globalGeometry` (an
-    // empty rect places it in the document area), and activate it unless
-    // `activate` is off and it was not active. Refuses a loading document or a
-    // window that already floats.
-    bool floatWindow(DocWindow* window, const QRect& globalGeometry = QRect(),
-                     bool activate = true);
-    // Move a floating window or tile pane into the tab strip at `index` (out
-    // of range: the end) and activate it.
-    bool dockWindow(DocWindow* window, int index);
-    // Move `window` into a tile pane after the others, starting the tile
-    // layout if none is active, and activate it unless `activate` is off and
-    // it was not active. Refuses a loading document or a window already tiled.
-    bool tileWindow(DocWindow* window, bool activate = true);
-    // Take a tiled window's page out of its pane; the last pane leaving ends
-    // the tile layout and the document area shows the tab strip again.
-    void untileWindow(DocWindow* window);
-    // Close `window` under the tab close rules: the last window of its
-    // document closes the document (prompting when modified); another window
-    // closes without a prompt.
-    bool closeWindow(DocWindow* window, bool interactive = true);
-    // Take `windows` out of the registry and their hosts, handing the active
-    // window to the strip's current tab or another window when it leaves.
-    void detachWindows(const QList<DocWindow*>& windows);
-    // Delete a detached window's widgets (its page, canvas host, and float).
-    void destroyWindowWidgets(DocWindow* window);
-    // The document area in global coordinates, and `geometry` moved and
-    // shrunk so the window's header lies inside it.
-    QRect documentAreaGlobalRect() const;
-    QRect clampFloatGeometry(const QRect& geometry) const;
-    // A float's size and place when nothing gives one: 60% of the document
-    // area, centred on it.
-    QRect defaultFloatGeometry() const;
-    // Keep a child-hosted float under the floating panel overlays.
-    void raiseDocumentFloat(DocumentFloatWindow* floating);
-    // The dock zone in global coordinates: the band along the top of the tab
-    // widget, as high as the tab bar while it shows tabs and otherwise as high
-    // as a tab bar would be, a header high at least. Empty while docking is
-    // off, while tiled, or while the tab widget is not the document area's
-    // page.
-    QRect dockZoneGlobalRect() const;
-    // The tab index a dock at `globalPos` inserts at; -1 for the end.
-    int dockIndexAt(const QPoint& globalPos) const;
-    // A float's header drag ended: dock it when released over the dock zone.
-    void onFloatDragReleased(DocWindow* window, const QPoint& globalPos);
-    // Present every window whose document's frame revision moved.
     void presentWindows();
-    // The screen modes: in a full-screen mode only the active window shows,
-    // and an active float's page fills the document area without its header,
-    // as an active tile pane does; Standard shows every float and pane again
-    // where it was.
     void syncScreenModeWindows();
-    // frame_document_menus.cpp: the tab and header context menus, the tab
-    // strip's tear-out, and the menus' actions.
-    void wireDocumentMenus();
-    void showTabMenu(const QPoint& barPos);
-    void showHeaderMenu(DocWindow* window, const QPoint& globalPos);
-    bool tearOutFilter(QEvent* event);
-    // A floating window's dock drag: carry `window` as drag-and-drop under the
-    // private document-window MIME type. With `carryWindow` the drag also names
-    // the float's top-level, held at `grabOffset`, so the compositor moves it
-    // with the pointer (Wayland). The strip filter docks it where it is
-    // dropped on the dock zone and claims no other drag, so file and layer
-    // drops pass on to `FileDropRouter`.
-    void startWindowDockDrag(DocWindow* window, bool carryWindow = false,
-                             const QPoint& grabOffset = QPoint());
-    DocWindow* windowOfDockMime(const QMimeData* mime) const;
-    bool windowDropFilter(QObject* watched, QEvent* event);
-    // The dock line: shown for a dock drag at `globalPos` while it is in the
-    // dock zone (vertical at the insertion point between tabs, horizontal
-    // along the band without tabs), hidden outside. Whether it shows.
-    bool updateDockIndicator(const QPoint& globalPos);
-    void hideDockIndicator();
-    // Dock the window a drop recorded, once no platform drag is running.
-    void applyPendingDock();
-    // Dock every floating window, then activate `target` (null: keep the
-    // active window).
-    void consolidateAllToTabs(DocWindow* target);
-    void closeOtherWindows(DocWindow* keep);
-    void revealInFileManager(const DocWindow* window);
-    // frame_document_arrange.cpp: the Window > Arrange commands. Cascade
-    // places window `slot` (in cycle order) stepped from the document area's
-    // top-left, restarting there when a header would leave the area; Float All
-    // places newly floated windows the same way. The Match commands copy the
-    // active canvas's zoom and/or centre (as document fractions) to every other
-    // window.
-    void wireWindowArrange();
-    QRect cascadeGeometry(int slot) const;
-    void floatAllWindows();
-    void cascadeWindows();
-    void tileWindows();
-    void matchWindows(bool zoom, bool location);
-    // The Hand and Zoom tools' multi-window options. A Hand drag on `source`
-    // pans every other visible window by `delta` under Scroll All Windows or
-    // Shift; a Zoom tool zoom applies `factor` to every other window when
-    // `allWindows` and fits a floating active window when `resizeToFit`.
-    void scrollOtherWindows(const ImageView* source, const QPointF& delta,
-                            Qt::KeyboardModifiers mods);
-    void onToolZoomed(double factor, bool allWindows, bool resizeToFit);
-    // Resize a floating `window` so its canvas shows the whole zoomed image,
-    // kept inside the document area; other hosts keep their size.
-    void resizeWindowToFit(DocWindow* window);
-    // Ctrl+Tab / Shift+Ctrl+Tab: step the active window `step` places along
-    // `windows_`, wrapping; nothing with fewer than two windows.
-    void wireDocumentCycling();
-    void cycleDocumentWindow(int step);
-    // The active window changed: settle loading entries and transform
-    // sessions of the other documents, then refresh.
-    void onActiveWindowChanged();
-    void reportOpenFailure(int index, const QString& status);
-    void openRecent(const QString& path);
     void applyBrightness(int level);
     // Re-scale the explicit chrome that the stylesheet and app font cannot
     // reach: status bar, menu-corner icons, tool slots, panel columns/groups.
@@ -908,145 +594,26 @@ private:
     // menu bar, so the first Tab reveals the chrome.
     ScreenMode nextScreenMode(bool forward) const;
     void togglePanelsHidden();
-    void setPanelColumnsVisible(bool visible);
-    // The open documents, in open order; the public index API indexes them.
-    QList<DocEntry*> docs_;
-    // Every document window in cycle order: the tab windows in their visual
-    // order first, then the windows of the other hosts.
-    QList<DocWindow*> windows_;
-    // The window the commands and tools target; null with no document.
-    DocWindow* activeWindow_ = nullptr;
-    QList<SmartObjectEditSession> editSessions_;
-    // PDF probes that have no tab yet, keyed by their temporary view.
-    QHash<PictureView*, PdfProbe> pdfProbes_;
-    // Views whose open signals are already wired (a PDF probe's view becomes a
-    // tab, so it is wired once).
-    QSet<PictureView*> openWired_;
-    // Per-open side data that must outlive the tab's removal.
-    QHash<quint64, QString> openSourcePaths_;
-    QHash<quint64, QStringList> openWarnings_;
-    // A per-open failure message for routes that must not fail silently (Open
-    // As's "format mismatch or damaged file.").
-    QHash<quint64, QString> openFailureMessages_;
-    QSet<quint64> reportFailureTokens_;
-    QSet<quint64> finishedOpens_;
-    // Opens that own a busy-cursor reference (the outer open, not a PDF page).
-    QSet<quint64> cursorTokens_;
-    quint64 nextOpenToken_ = 1;
-    int openCount_ = 0;
-    int openDelayForTest_ = 0;
-    // Set while the frame changes tabs itself, so a loading entry does not read
-    // the programmatic switch as a user selection.
-    bool suppressTabTracking_ = false;
-    QTabWidget* tabs_ = nullptr;
-    // The splitter's stretch pane: the stack that holds the document hosts.
-    QStackedWidget* documentArea_ = nullptr;
-    // The document area's tile layout while Tile lasts; null otherwise.
-    DocumentTileHost* tileHost_ = nullptr;
-    // Set while a window moves between hosts, so the strip's own current-tab
-    // changes do not take the activation; the move settles it.
-    bool movingHost_ = false;
-    // A tab strip press that may become a tear-out, and the float a tear-out
-    // handed the drag to.
-    DocWindow* tearWindow_ = nullptr;
-    QPoint tearPressPos_;
-    QPointer<DocumentFloatWindow> tearFloat_;
-    bool tearSynthesizing_ = false;
-    std::function<void(std::unique_ptr<QMimeData>)> windowDockDragForTest_;
-    // The frame's dock line, made on first use.
-    QWidget* dockIndicator_ = nullptr;
-    // A drop on the dock zone, docked once the drag that carries the window
-    // has finished: the float must outlive a running platform drag.
-    DocWindow* pendingDockWindow_ = nullptr;
-    int pendingDockIndex_ = -1;
-    bool windowDockDragRunning_ = false;
-    QPointer<QMenu> documentMenu_;
+    std::unique_ptr<DocumentRegistry> documents_;
+    std::unique_ptr<MenuRegistrar> menu_;
+    std::unique_ptr<PanelHost> panels_;
+    std::unique_ptr<ImportSaveCoordinator> importSave_;
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.
     QMetaObject::Connection spacePanFocusConn_;
     QMetaObject::Connection deleteShortcutsFocusConn_;
     FileDropRouter* fileDropRouter_ = nullptr;
-    QSplitter* centerSplitter_ = nullptr;
-    // The 3 px central-band frame lines (outer 2 px is the window `${surface}`).
-    QWidget* workspaceFrameLeft_ = nullptr;
-    QWidget* workspaceFrameRight_ = nullptr;
-    QTimer* panelRefreshTimer_ = nullptr;
-    QTimer* sessionSaveTimer_ = nullptr;
-    // The surface the docked panels are bound to; a pass rebinds only when the
-    // active view, active canvas, or document generation changes.
-    PictureView* dockView_ = nullptr;
-    ImageView* dockCanvas_ = nullptr;
-    quint64 dockGeneration_ = 0;
-    // A notifying change already refreshed the panels that subscribe to it.
-    bool panelsRefreshedByChanged_ = false;
-    // A bind already refreshed every panel; skip the next redundant pass.
-    bool panelsFreshlyBound_ = false;
-    // A panel pass is running and owns the one command-table refresh.
-    bool refreshingDock_ = false;
-    // A region presentation requested a command-table refresh in the next pass.
-    bool registryRefreshPending_ = false;
-    int dockRetargetCount_ = 0;
-    // M49: while dragging the divider between two widget columns, keep the
-    // workspace-side column's width fixed and let the workspace absorb the delta.
-    PanelColumn* resizeAnchorColumn_ = nullptr;
-    int resizeAnchorWidth_ = -1;
-    bool adjustingColumns_ = false;
-    // A grip drag on a widget column: the splitter handle it drives, the press
-    // global x, and the pane sizes at press so each move maps from the origin.
-    int resizeHandleIndex_ = -1;
-    int resizeStartGlobalX_ = 0;
-    QList<int> resizeStartSizes_;
-    CommandRegistry* registry_ = nullptr;
-    LayersPanel* layersPanel_ = nullptr;
     // A pending (uncommitted, modal) transform: the Layer menu and Layers panel
     // are locked and a tool switch asks "Apply the transformation?".
     void installTransformLock();
     void syncTransformLock();
     bool transformLocked_ = false;
-    // The remembered per-format Save As options (the session store's object),
-    // and the test seam that replaces the format options dialog.
-    QJsonObject saveFormatOptions_;
-    std::function<bool(SaveFormatKind, SaveFormatOptions&)> saveFormatDialogForTest_;
     // The pasteboard colour menu, created lazily and popped up non-modally.
     QMenu* backgroundMenu_ = nullptr;
-    HistoryPanel* historyPanel_ = nullptr;
-    NavigatorPanel* navigatorPanel_ = nullptr;
-    ColorState* colorState_ = nullptr;
     // The FG/BG pair of the edit target that is not active: the image's while
     // a mask is edited, the mask's (initially white/black) otherwise.
     QColor otherForeground_{Qt::white};
     QColor otherBackground_{Qt::black};
-    ColorPanel* colorPanel_ = nullptr;
-    QPointer<ColorRangeDialog> colorRangeDialog_;
-    QPointer<ReplaceColorDialog> replaceColorDialog_;
-    SwatchesPanel* swatchesPanel_ = nullptr;
-    InfoPanel* infoPanel_ = nullptr;
-    HistogramPanel* histogramPanel_ = nullptr;
-    PlaceholderPanel* gradientsPanel_ = nullptr;
-    PlaceholderPanel* patternsPanel_ = nullptr;
-    NotesPanel* notesPanel_ = nullptr;
-    BrushPanel* brushPanel_ = nullptr;
-    CloneSourcePanel* cloneSourcePanel_ = nullptr;
-    CharacterPanel* characterPanel_ = nullptr;
-    ParagraphPanel* paragraphPanel_ = nullptr;
-    GlyphsPanel* glyphsPanel_ = nullptr;
-    ParagraphStylesPanel* paragraphStylesPanel_ = nullptr;
-    CharacterStylesPanel* characterStylesPanel_ = nullptr;
-    PropertiesPanel* propertiesPanel_ = nullptr;
-    AdjustmentsPanel* adjustmentsPanel_ = nullptr;
-    ChannelsPanel* channelsPanel_ = nullptr;
-    PathsPanel* pathsPanel_ = nullptr;
-    ActionsPanel* actionsPanel_ = nullptr;
-    ActionsEngineBridge* actionsEngine_ = nullptr;
-    PlaceholderPanel* stylesPanel_ = nullptr;
-    PanelColumn* panelColumn_ = nullptr;
-    // Named workspaces and the active workspace, independent of the session
-    // store. `workspacesInitialized_` gates snapshots made during construction
-    // before the store is loaded.
-    WorkspaceStore workspaceStore_;
-    bool workspacesInitialized_ = false;
-    // Dynamic user-workspace actions the Window > Workspace menu rebuilds.
-    QList<QAction*> workspaceMenuActions_;
     PreferencesDialog* preferencesDialog_ = nullptr;
     QPointer<DesignSystemDialog> designSystemDialog_;
     QPointer<SystemInfoDialog> systemInfoDialog_;
@@ -1055,8 +622,6 @@ private:
 
     OptionsBar* optionsBar_ = nullptr;
     Toolbox* toolbox_ = nullptr;
-    // The tabless, atomic Tools column that hosts `toolbox_` in the splitter.
-    PanelColumn* toolsColumn_ = nullptr;
     NumericField* zoomField_ = nullptr;
     QLabel* sizeLabel_ = nullptr;
     ToolHintBar* hintBar_ = nullptr;
@@ -1076,12 +641,6 @@ private:
     // document fits the viewport is pinned to the centre, panning is refused,
     // and the workspace scrollbars hide. Default off. Persisted.
     bool snapCanvasToWorkspace_ = false;
-    QSet<QString> panelNames_;
-    QStringList recent_;
-    // Actions refreshRecentMenu added (file rows, separator, Clear); the
-    // registry's "No Recent Files" placeholder is not among them.
-    QList<QAction*> recentActions_;
-    int untitledCounter_ = 0;
     int brightnessLevel_ = 1;
     int themeFamily_ = 0;
     int uiScalePercent_ = 100;
@@ -1110,43 +669,19 @@ private:
     bool updateChecksEnabled_ = true;
     // Set while a Hand pan is fanned out to the other windows, so the fan-out
     // never echoes.
-    bool scrollingAllWindows_ = false;
     ScreenMode screenMode_ = ScreenMode::Standard;
     int canvasColorIndex_ = 0;
-    bool panelsHidden_ = false;
     // The chrome reveal Tab toggles while in Full Screen Mode (the panel
     // columns and the menu bar); transient, so leaving the mode restores the
     // Standard-mode chrome unchanged.
     bool fullScreenChromeShown_ = false;
-    bool restoringPanelSession_ = false;
-    struct PendingFloatRestore {
-        QPointer<PanelColumn> column;
-        QPointer<PanelGroup> group;
-        QRect geometry;
-    };
-    QList<PendingFloatRestore> pendingFloatRestores_;
-    // System-clipboard mirror of the bridge clipboard (frame_menus_edit.cpp):
-    // `clipboardMirrored_` while both hold the same pixels, `clipboardExported_`
-    // while the system clipboard holds our own export, `clipboardSetting_` only
-    // during our own write so its dataChanged is not taken for another app's.
-    bool clipboardMirrored_ = false;
-    bool clipboardExported_ = false;
-    bool clipboardSetting_ = false;
-
-    // Crash recovery (frame_recovery.cpp): each document's snapshot id, the
-    // documents changed since their last snapshot, and those with one on disk.
+    // Crash recovery preferences wiring stays on the frame; the store, timer,
+    // snapshots, and autosave settings live in the coordinator.
     void connectRecoveryPreferences(PreferencesDialog* dialog);
-    void trackRecovery(PictureView* view);
-    void dropRecoverySnapshot(PictureView* view);
-    void forgetRecovery(PictureView* view);
-    std::unique_ptr<RecoveryStore> recovery_;
-    QTimer* autosaveTimer_ = nullptr;
-    QHash<PictureView*, int> recoveryIds_;
-    QSet<PictureView*> recoveryStale_;
-    QSet<PictureView*> recoverySnapshots_;
-    int recoveryCounter_ = 0;
-    bool autoSaveRecovery_ = true;
-    int autoSaveMinutes_ = 10;
+    // Frame-owned chrome/settings commands, registered through MenuRegistrar's
+    // callback so the menu translation units never name PicturaMainWindow.
+    void registerFrameCommands(CommandRegistry& registry);
+    CommandRegistry* commandRegistry() const;
 
     // Rulers and guides (frame_guides.cpp): the View commands, each canvas's
     // rulers and guide look, and the Guides preferences. Global view state,
@@ -1192,9 +727,6 @@ private:
     bool smartGuidesVisible_ = true;
     QColor guideColor_{0x4a, 0xff, 0xff};
     bool guideDashed_ = false;
-    std::function<bool(QDialog&)> pdfDialogDriver_;
-    std::function<bool(QDialog&)> importDialogDriver_;
-    std::function<void(const QString&)> pdfViewer_;
     std::function<void(const QUrl&)> urlOpener_;
 };
 } // namespace pictura

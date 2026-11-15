@@ -1,4 +1,12 @@
 #include "frame_includes.h"
+#include "file_info_dialog.h"
+#include "new_document_dialog.h"
+#include "panels/panel_group.h"
+#include "document_registry.h"
+#include "panel_host.h"
+#include "panels/actions_engine_bridge.h"
+#include "panels/actions_panel.h"
+#include "panels/color_panel.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/engine_bridge.h"
@@ -10,6 +18,8 @@
 #include "file_drop_router.h"
 #include "fonts.h"
 #include "frame_canvas.h"
+#include "import_save_coordinator.h"
+#include "menu_registrar.h"
 #include "frame_update.h"
 #include "gpu_probe.h"
 #include "memory_refusal.h"
@@ -22,95 +32,250 @@
 #include <QtCore/QHash>
 #include <QtCore/QSize>
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QDesktopServices>
 #include <QtGui/QFontMetrics>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QFrame>
+#include <QtGui/QResizeEvent>
+#include <QtGui/QShowEvent>
 #include <QtWidgets/QTabBar>
 
 namespace pictura {
-namespace {
-
-// Save may route through Save As; only the origin command records the step.
-thread_local bool saveActiveOrigin = false;
-
-struct SaveActiveOrigin {
-    SaveActiveOrigin() { saveActiveOrigin = true; }
-    ~SaveActiveOrigin() { saveActiveOrigin = false; }
-};
-// The document pane keeps a minimum width even with no document open, so the
-// widget columns can never absorb the whole workspace (and the splitter keeps a
-// grabbable handle on each side of it). ponytail: chosen, not a sourced CS6
-// metric.
-constexpr int kWorkspaceMinWidth = 160;
-
-} // namespace
 
 bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded)
 {
     return selfTest && !codecLoaded;
 }
 
-bool saveActiveInProgress() { return saveActiveOrigin; }
-
 PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     : QMainWindow(parent)
 {
     updateChecksEnabled_ = enableUpdateCheck;
-    tabs_ = new QTabWidget(this);
-    tabs_->setObjectName(QStringLiteral("documentTabs"));
-    tabs_->tabBar()->setObjectName(QStringLiteral("documentTabBar"));
-    // Every tab gets a custom close button (or spinner) tab button, so the
-    // close glyph is part of the tab's size hint and never clipped.
-    tabs_->setTabsClosable(false);
-    tabs_->setMovable(true);
-    tabs_->tabBar()->setElideMode(Qt::ElideRight);
-    // Middle-click on a loading tab cancels it; normal tabs are untouched.
-    tabs_->tabBar()->installEventFilter(this);
-    // The tab windows lead windows_ in visual order, so a dragged tab moves
-    // its window there; documents keep their index. QTabBar::tabMoved(from,
-    // to) mirrors QList::move(from, to), and Qt keeps the current tab current.
-    connect(tabs_->tabBar(), &QTabBar::tabMoved, this, [this](int from, int to) {
-        if (from >= 0 && from < tabs_->count() && to >= 0 && to < tabs_->count()
-            && tabs_->count() <= windows_.size()) {
-            windows_.move(from, to);
+    {
+        DocumentRegistry::Hooks hooks;
+        hooks.shellWidget = [this]() -> QWidget* { return this; };
+        hooks.openDocumentsAsTabs = [this]() { return openDocumentsAsTabs_; };
+        hooks.floatingDocumentDocking = [this]() { return floatingDocumentDocking_; };
+        hooks.fullScreen = [this]() { return screenMode_ != ScreenMode::Standard; };
+        hooks.requestRefresh = [this]() { refresh(); };
+        hooks.requestPanelRefresh = [this]() {
+            if (panels_) {
+                panels_->refreshPanels();
+            }
+        };
+        hooks.stopPanelRefreshTimer = [this]() {
+            if (panels_) {
+                panels_->stopPanelRefreshTimer();
+            }
+        };
+        hooks.activateShellWindow = [this]() { activateWindow(); };
+        hooks.raisePanelOverlays = [this]() {
+            for (PanelFloat* panel : findChildren<PanelFloat*>(Qt::FindDirectChildrenOnly)) {
+                if (!panel->isWindow()) {
+                    panel->raise();
+                }
+            }
+        };
+        hooks.retargetPanels = [this]() {
+            if (!panels_) {
+                return;
+            }
+            // The last close leaves no active view; the dock still holds the
+            // freed one, so it must be unbound even though null == null.
+            if (!activeView() || panels_->dockNeedsRebind()) {
+                panels_->retargetDock();
+            }
+        };
+        hooks.closeWindowRequested = [this](DocWindow* window) { closeWindow(window, true); };
+        hooks.setupCanvas = [this](DocWindow& window) { setupCanvas(window); };
+        hooks.wireCanvas = [this](DocWindow& window) { wireCanvas(window); };
+        hooks.wireDocument = [this](DocEntry& doc) { wireDocument(doc); };
+        hooks.applyViewSettings = [this](PictureView* view) {
+            if (view->gpu_compute() != gpuCompute_) {
+                view->set_gpu_compute(gpuCompute_);
+            }
+            applyColorSettings(view);
+            gpuAvailable_ = view->gpu_available();
+        };
+        hooks.wireOpenSignals = [this](PictureView* view) {
+            if (importSave_) {
+                importSave_->wireOpenSignals(view);
+            }
+        };
+        hooks.rememberRecent = [this](const QString& path) {
+            if (importSave_) {
+                importSave_->rememberRecent(path);
+            }
+        };
+        hooks.forgetToolView = [this](PictureView* view) {
+            if (tools_) {
+                tools_->forgetView(view);
+            }
+        };
+        hooks.forgetCanvas = [this](ImageView* canvas) {
+            if (tools_ && tools_->canvas() == canvas) {
+                tools_->bindCanvas(nullptr);
+            }
+        };
+        hooks.openDelayForTest = [this]() -> quint64 {
+            return importSave_ ? quint64(importSave_->openDelayForTest()) : 0;
+        };
+        hooks.loadingPageColor = [this]() { return canvasColorForIndex(canvasColorIndex_); };
+        hooks.scrollAllWindows = [this]() {
+            const HandGroup* hand =
+                tools_ ? tools_->optionsFor<HandGroup>(ToolId::Hand) : nullptr;
+            return hand && hand->get().scrollAll;
+        };
+        hooks.toolCanvas = [this]() { return tools_ ? tools_->canvas() : nullptr; };
+        documents_ = std::make_unique<DocumentRegistry>(std::move(hooks), this, this);
+    }
+    connect(documents_.get(), &DocumentRegistry::aboutToRemoveDocument, this,
+            &PicturaMainWindow::onAboutToRemoveDocument);
+    connect(documents_.get(), &DocumentRegistry::cancelOpenRequested, this,
+            [this](PictureView* view) {
+                if (importSave_) {
+                    importSave_->cancelOpenForView(view);
+                }
+            });
+    connect(documents_.get(), &DocumentRegistry::closeDocumentRequested, this,
+            [this](int index) {
+                if (importSave_) {
+                    importSave_->closeDocument(index, true);
+                }
+            });
+    MenuRegistrar::Runtime menuRuntime;
+    menuRuntime.requestRefresh = [this]() { refresh(); };
+    menuRuntime.showStatus = [this](const QString& message, int ms) {
+        if (statusBar()) {
+            statusBar()->showMessage(message, ms);
+        }
+    };
+    menuRuntime.optionsBar = [this]() { return optionsBar_; };
+    menuRuntime.dialogParent = [this]() -> QWidget* { return this; };
+    menuRuntime.updateWindowTitle = [this]() { updateWindowTitle(); };
+    menuRuntime.openUrl = [this](const QUrl& url) {
+        if (urlOpener_) {
+            urlOpener_(url);
+        } else {
+            QDesktopServices::openUrl(url);
+        }
+    };
+    menuRuntime.installMenuCornerButtons = [this]() { installMenuCornerButtons(); };
+    menuRuntime.closeWindow = [this](DocWindow* window, bool interactive) {
+        return closeWindow(window, interactive);
+    };
+    menuRuntime.uiScalePercent = [this]() { return uiScalePercent_; };
+    menuRuntime.foregroundColor = [this]() { return foregroundColor(); };
+    menu_ = std::make_unique<MenuRegistrar>(
+        [this](CommandRegistry& registry) { registerFrameCommands(registry); },
+        std::move(menuRuntime), this);
+
+    auto* colorState = new ColorState(this);
+    auto* actionsEngine = new ActionsEngineBridge(new ActionsEngine(this), this);
+    PanelHost::Hooks panelHooks;
+    panelHooks.saveSession = [this]() { saveSession(); };
+    panelHooks.interfaceOptionsRequested = [this]() {
+        showPreferences(PreferencesDialog::kInterface);
+    };
+    panelHooks.activeView = [this]() { return activeView(); };
+    panelHooks.activeCanvas = [this]() { return canvasAt(activeDocumentIndex()); };
+    panelHooks.showStatus = [this](const QString& message, int ms) {
+        if (statusBar()) {
+            statusBar()->showMessage(message, ms);
+        }
+    };
+    panelHooks.cancelDocumentDialogs = [this](PictureView* view) {
+        if (menu_) {
+            menu_->cancelDocumentDialogs(view);
+        }
+    };
+    panelHooks.convertImageMode = [this](const QString& mode) {
+        if (menu_) {
+            menu_->convertImageMode(mode);
+        }
+    };
+    panelHooks.convertImageDepth = [this](int depth) {
+        if (menu_) {
+            menu_->convertImageDepth(depth);
+        }
+    };
+    panelHooks.editSmartFilter = [this](const QString& path, int index) {
+        if (menu_) {
+            menu_->editSmartFilter(path, index);
+        }
+    };
+    panelHooks.attachWorkspaceMenu = [this](QMenu* menu) {
+        if (optionsBar_) {
+            optionsBar_->setWorkspaceMenu(menu);
+        }
+    };
+    panelHooks.setActiveWorkspace = [this](const QString& name) {
+        if (optionsBar_) {
+            optionsBar_->setActiveWorkspace(name);
+        }
+    };
+    panels_ = std::make_unique<PanelHost>(this, documents_.get(), menu_->commands(), colorState,
+                                          actionsEngine, std::move(panelHooks));
+    connect(panels_.get(), &PanelHost::layerEditTargetChanged, this, [this](bool mask) {
+        ColorState* state = panels_->colorState();
+        if ((activeView() && quick_mask_active(*activeView())) || quickMaskUi_.colorsActive) {
+            syncQuickMask();
+            return;
+        }
+        if (state->maskActive() == mask) {
+            return;
+        }
+        state->setMaskActive(mask);
+        if (tools_) {
+            tools_->setMaskActive(mask);
+        }
+        const QColor foreground = state->foreground();
+        const QColor background = state->background();
+        state->setForeground(otherForeground_);
+        state->setBackground(otherBackground_);
+        otherForeground_ = foreground;
+        otherBackground_ = background;
+    });
+    connect(panels_.get(), &PanelHost::layerSelectionChanged, this, [this]() {
+        syncQuickMask();
+        if (menu_) {
+            menu_->updateAlignControls();
+        }
+        if (tools_) {
+            tools_->syncTransformControls();
         }
     });
-    tabs_->setDocumentMode(true);
-    buildDocumentTabs();
-    // The document area and the panel columns share the central widget through
-    // a splitter; the columns are the only host for the panels. M43: the
-    // splitter is an ordered set of left columns, the document area, then right
-    // columns, with the document area keeping the stretch.
-    documentArea_ = new QStackedWidget(this);
-    documentArea_->setObjectName(QStringLiteral("documentArea"));
-    documentArea_->addWidget(tabs_);
-    panelColumn_ = new PanelColumn(this);
-    // The splitter itself is the central widget, so drop-target geometry keeps
-    // its existing meaning. It reserves the 3 px band on each side; 0-width
-    // handles leave no resize seam between panes.
-    centerSplitter_ = new QSplitter(Qt::Horizontal, this);
-    centerSplitter_->setObjectName(QStringLiteral("centerSplitter"));
-    centerSplitter_->setHandleWidth(0);
-    centerSplitter_->setContentsMargins(kWorkspaceFrameWidth, 0, kWorkspaceFrameWidth, 0);
-    centerSplitter_->addWidget(documentArea_);
-    centerSplitter_->addWidget(panelColumn_);
-    documentArea_->setMinimumWidth(kWorkspaceMinWidth);
-    centerSplitter_->setStretchFactor(0, 1);
-    centerSplitter_->setStretchFactor(1, 0);
-    centerSplitter_->setChildrenCollapsible(false);
-    setCentralWidget(centerSplitter_);
-    setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowTabbedDocks);
 
     // Double-clicking the empty workspace (no documents open) opens the Open
     // dialog. The blank pane is the tab widget's internal stacked widget.
     installWorkspaceOpenGesture();
 
-    registry_ = new CommandRegistry(this);
-    addDefaultCommands(*registry_);
+    ImportSaveCoordinator::Hooks saveHooks;
+    saveHooks.applyColorSettings = [this](PictureView* view) { applyColorSettings(view); };
+    saveHooks.gpuCompute = [this]() { return gpuCompute_; };
+    saveHooks.requestRefresh = [this]() { refresh(); };
+    saveHooks.updateWindowTitle = [this]() { updateWindowTitle(); };
+    saveHooks.showStatus = [this](const QString& message, int ms) {
+        if (statusBar()) {
+            statusBar()->showMessage(message, ms);
+        }
+    };
+    saveHooks.recordCommand = [this](const QString& id, const QJsonObject& values) {
+        if (menu_) {
+            menu_->commands()->recordCommand(id, CommandParams{values});
+        }
+    };
+    saveHooks.saveSession = [this]() { saveSession(); };
+    saveHooks.foregroundColor = [this]() { return foregroundColor(); };
+    saveHooks.backgroundColor = [this]() { return backgroundColor(); };
+    importSave_ = std::make_unique<ImportSaveCoordinator>(*documents_, this,
+                                                         std::move(saveHooks), this);
+    menu_->setCollaborators(documents_.get(), panels_.get(), importSave_.get());
+    connect(importSave_.get(), &ImportSaveCoordinator::documentOpenFinished, this,
+            &PicturaMainWindow::documentOpenFinished);
 
     const SessionState state = pictura::loadSession();
-    recent_ = state.recent;
-    setFileDialogRecentPaths(recent_);
+    importSave_->loadState(state);
     gpuCompute_ = state.gpuCompute;
     set_memory_usage_percent(state.memoryUsagePercent);
     set_scratch_volumes(state.scratchVolumes.join(QLatin1Char('\n')));
@@ -134,10 +299,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     floatingDocumentDocking_ = state.enableFloatingDocumentDocking;
     zoomResizesWindows_ = state.zoomResizesWindows;
     applyShortcutOverrides(state);
-    autoSaveRecovery_ = state.autoSaveRecovery;
-    autoSaveMinutes_ = state.autoSaveMinutes;
     loadGuideSession(state);
-    saveFormatOptions_ = state.saveFormatOptions;
     // The family drives the theme chrome built below, so resolve it before the menu bar (and its theme toggle icon) is built.
     themeFamily_ = state.themeFamily == 1 ? 1 : 0;
     // The application font and every chrome metric built below read the scale,
@@ -172,77 +334,46 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     if (!gpuCandidatesAvailable_) {
         gpuCompute_ = false;
     }
-    registerHandlers();
+    menu_->registerHandlers();
     if (updateChecksEnabled_ && !qEnvironmentVariableIsSet("PICTURA_DISABLE_UPDATE_CHECK")) {
         ensureUpdateChecker(*this, state.checkForUpdatesOnLaunch);
     }
-    const auto saveToRecordedPath = [this](const CommandParams& params) {
-        return saveActiveAs(params.values.value(QStringLiteral("in")).toString());
-    };
-    registry_->setExecutor(command_ids::FileSave, saveToRecordedPath);
-    registry_->setExecutor(command_ids::FileSaveAs, saveToRecordedPath);
-    buildMenus();
-    const QList<PanelGroup*> stagedGroups = buildPanels(state);
+    menu_->buildMenus(menuBar());
+    const QList<PanelGroup*> stagedGroups = panels_->buildPanels(state);
+    // The Layers row menu's Edit / Replace / Export Contents actions run through
+    // the frame, so this is wired here where the panel exists (registerHandlers
+    // runs before the panels are built).
+    menu_->wireSmartObjectRowMenu();
+    wireMaskOverlay();
     buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch, state.toolOptions);
+    menu_->setTools(tools_);
     if (tools_) {
         tools_->setTypePlaceholderText(state.typePlaceholderText);
         tools_->applyCropOptions(state.cropClassicMode, state.cropDeletePixels, state.cropRatio,
                                  state.cropGridOverlay);
     }
     buildStatusBar();
-    // The two 1 px inner frame lines span the whole central band (options bar
-    // included); the outer 2 px is the window `${surface}` showing through the
-    // reserved margin. They are raised above the chrome in layoutWorkspaceFrame.
-    workspaceFrameLeft_ = new QWidget(this);
-    workspaceFrameRight_ = new QWidget(this);
-    for (QWidget* line : {workspaceFrameLeft_, workspaceFrameRight_}) {
-        line->setObjectName(QStringLiteral("workspaceFrameLine"));
-        line->setAttribute(Qt::WA_StyledBackground, true);
-        line->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    }
     // Route OS file drops by target: a document canvas places into the active
     // document, every other target opens a new tab. Enabling drops is what makes
     // each widget a drop target; per-canvas install happens in addDocument.
     fileDropRouter_ = new FileDropRouter(this);
     for (QWidget* target :
-         {static_cast<QWidget*>(tabs_), static_cast<QWidget*>(tabs_->tabBar()),
+         {static_cast<QWidget*>(documents_->tabs()),
+          static_cast<QWidget*>(documents_->tabBar()),
           static_cast<QWidget*>(menuBar()), static_cast<QWidget*>(optionsBar_),
           static_cast<QWidget*>(this)}) {
         target->setAcceptDrops(true);
         target->installEventFilter(fileDropRouter_);
     }
     applyBrightness(state.brightnessLevel);
-    applyPanelSession(state);
-    applyFreshSessionDefault(state, stagedGroups);
+    panels_->applyPanelSession(state);
+    panels_->applyFreshSessionDefault(state, stagedGroups);
     const bool sessionHadLayout = !state.panelColumns.isEmpty() || !state.panelGroups.isEmpty();
-    initWorkspaces(sessionHadLayout);
-    // Persist every column change through the same path as the Window toggles,
-    // and route the tab menu's `Interface Options…` to the Interface pane.
-    wirePanelColumn(panelColumn_);
+    panels_->initWorkspaces(sessionHadLayout);
     if (!state.layout.isEmpty()) {
         restoreStoredLayout(state.layout, state.layoutRevision);
     }
 
-    // Expensive panel work (layer thumbnails, histogram) is coalesced off the
-    // paint-dab/commit path so the canvas can repaint first.
-    panelRefreshTimer_ = new QTimer(this);
-    panelRefreshTimer_->setSingleShot(true);
-    panelRefreshTimer_->setInterval(120);
-    connect(panelRefreshTimer_, &QTimer::timeout, this, &PicturaMainWindow::refreshPanels);
-
-    // A splitter drag has no other save trigger; coalesce the column-width
-    // changes into one write instead of saving on every pixel of the drag.
-    sessionSaveTimer_ = new QTimer(this);
-    sessionSaveTimer_->setSingleShot(true);
-    sessionSaveTimer_->setInterval(400);
-    connect(sessionSaveTimer_, &QTimer::timeout, this, &PicturaMainWindow::saveSession);
-    connect(centerSplitter_, &QSplitter::splitterMoved, this,
-            [this](int pos, int index) { onCenterSplitterMoved(pos, index); });
-
-    connect(tabs_, &QTabWidget::currentChanged, this,
-            [this](int tab) { onTabCurrentChanged(tab); });
-    connect(tabs_->tabBar(), &QTabBar::tabBarClicked, this,
-            [this](int tab) { onTabBarClicked(tab); });
     auto* hidePanels = new QShortcut(QKeySequence(Qt::Key_Tab), this);
     connect(hidePanels, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     auto* hidePanelsBack = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Tab), this);
@@ -255,9 +386,8 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
         connect(qApp, &QApplication::focusChanged, shortcut,
                 [shortcut](QWidget*, QWidget* now) { shortcut->setEnabled(!isTextInput(now)); });
     }
-    wireDocumentCycling();
-    wireDocumentMenus();
-    wireWindowArrange();
+    menu_->wireDocumentMenus();
+    menu_->wireWindowArrange();
     auto* brightnessDown = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F1), this);
     connect(brightnessDown, &QShortcut::activated, this,
             [this]() { setBrightnessLevel(brightnessLevel_ - 1); });
@@ -273,37 +403,43 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     setWindowTitle(QStringLiteral("Kooka Pictura"));
     // Make the splitter handles inert from the start: the widget columns' own
     // grips are the only width-drag affordance on a workspace-facing edge.
-    reapplyColumnStretch();
-    layoutWorkspaceFrame();
+    panels_->reapplyColumnStretch();
+    panels_->layoutWorkspaceFrame();
+}
+
+void PicturaMainWindow::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+    if (panels_) {
+        panels_->handleShellResize();
+    }
+}
+
+void PicturaMainWindow::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+    if (panels_) {
+        panels_->layoutWorkspaceFrame();
+    }
+    scheduleUpdateCheck(*this);
+    if (panels_) {
+        // Let the compositor apply the restored/maximized frame geometry first;
+        // an in-window overlay then converts its stored global rect against it.
+        QTimer::singleShot(0, this, [this]() { panels_->applyPendingFloatRestores(); });
+    }
 }
 
 PicturaMainWindow::~PicturaMainWindow()
 {
-    shutdownRecovery();
     // Detach the focus-loss Space guard before the child widgets are torn down;
-    // a child's clearFocus() emits focusChanged while tabs_ is already gone.
+    // a child's clearFocus() emits focusChanged while documents_->tabs() is already gone.
     QObject::disconnect(spacePanFocusConn_);
     QObject::disconnect(deleteShortcutsFocusConn_);
-    for (const SmartObjectEditSession& session : editSessions_) {
-        delete session.temp;
-    }
-    editSessions_.clear();
-    // The registry is plain data; stop the tab signals from reaching it while
-    // the child widgets are torn down.
-    QObject::disconnect(tabs_, nullptr, this, nullptr);
-    QObject::disconnect(tabs_->tabBar(), nullptr, this, nullptr);
-    activeWindow_ = nullptr;
-    windows_.clear();
-    for (DocEntry* doc : docs_) {
-        qDeleteAll(doc->windows);
-    }
-    qDeleteAll(docs_);
-    docs_.clear();
 }
 
 QStringList PicturaMainWindow::topLevelMenuTitles() const
 {
-    return registry_->topLevelTitles();
+    return menu_ ? menu_->commands()->topLevelTitles() : QStringList{};
 }
 
 ToolId PicturaMainWindow::activeTool() const
@@ -335,149 +471,134 @@ bool PicturaMainWindow::commitCrop()
 
 bool PicturaMainWindow::registerPanel(QWidget* panel, Qt::DockWidgetArea area)
 {
-    if (!panel || panelNames_.contains(panel->objectName())) {
-        return false;
-    }
-    panelNames_.insert(panel->objectName());
-    if (auto* dock = qobject_cast<QDockWidget*>(panel)) {
-        addDockWidget(area, dock);
-    }
-    return true;
+    return panels_ && panels_->registerPanel(panel, area);
+}
+
+QSet<QString> PicturaMainWindow::panelObjectNames() const
+{
+    return panels_ ? panels_->panelObjectNames() : QSet<QString>{};
 }
 
 ImageView* PicturaMainWindow::imageView() const
 {
-    return canvasAt(activeDocumentIndex());
+    return documents_->imageView();
 }
 
 PictureView* PicturaMainWindow::activeView() const
 {
-    return viewAt(activeDocumentIndex());
+    return documents_->activeView();
+}
+
+int PicturaMainWindow::documentCount() const
+{
+    return documents_ ? documents_->count() : 0;
+}
+
+bool PicturaMainWindow::workspaceOpenArmed() const
+{
+    return !documents_ || documents_->count() == 0;
 }
 
 int PicturaMainWindow::activeDocumentIndex() const
 {
-    return activeWindow_ ? indexOfDoc(activeWindow_->doc) : -1;
+    return documents_->activeIndex();
 }
 
 void PicturaMainWindow::setActiveDocumentIndex(int index)
 {
-    if (index < 0 || index >= docs_.size()) {
-        return;
-    }
-    const DocEntry* doc = docs_.at(index);
-    if (activeWindow_ && activeWindow_->doc == doc) {
-        activateDocWindow(activeWindow_);
-    } else if (doc->lastActive) {
-        activateDocWindow(doc->lastActive);
-    } else if (!doc->windows.isEmpty()) {
-        activateDocWindow(doc->windows.first());
-    }
+    documents_->setActiveIndex(index);
 }
 
 PictureView* PicturaMainWindow::viewAt(int index) const
 {
-    if (index < 0 || index >= docs_.size()) {
-        return nullptr;
-    }
-    return docs_.at(index)->view;
+    return documents_->viewAt(index);
 }
 
 ImageView* PicturaMainWindow::canvasAt(int index) const
 {
-    if (index < 0 || index >= docs_.size()) {
-        return nullptr;
-    }
-    const DocEntry* doc = docs_.at(index);
-    if (activeWindow_ && activeWindow_->doc == doc) {
-        return activeWindow_->canvas;
-    }
-    if (doc->lastActive) {
-        return doc->lastActive->canvas;
-    }
-    return doc->windows.isEmpty() ? nullptr : doc->windows.first()->canvas;
+    return documents_->canvasAt(index);
 }
 
 QString PicturaMainWindow::documentPath(int index) const
 {
-    if (index < 0 || index >= docs_.size()) {
-        return QString();
-    }
-    return docs_.at(index)->path;
+    return documents_->documentPath(index);
 }
 
 QString PicturaMainWindow::documentName(int index) const
 {
-    if (index < 0 || index >= docs_.size()) {
-        return QStringLiteral("Untitled");
-    }
-    return documentDisplayName(*docs_.at(index));
+    return documents_->documentName(index);
 }
 
 bool PicturaMainWindow::isDocumentDirty(int index) const
 {
-    PictureView* view = viewAt(index);
-    return view && document_api::isDirty(*view);
+    return documents_->isDocumentDirty(index);
 }
 
 QString PicturaMainWindow::activeFilePath() const
 {
-    return documentPath(activeDocumentIndex());
+    return documents_->activeFilePath();
 }
 
 QString PicturaMainWindow::activeDocumentName() const
 {
-    return documentName(activeDocumentIndex());
+    return documents_->activeDocumentName();
 }
 
 bool PicturaMainWindow::isActiveDirty() const
 {
-    return isDocumentDirty(activeDocumentIndex());
+    return documents_->isActiveDirty();
 }
 
 int PicturaMainWindow::addDocument(PictureView* view, const QString& path, bool asTab)
 {
-    if (!view) {
-        return -1;
-    }
-    // Apply the persisted preference to every newly created/opened tab.
-    if (view->gpu_compute() != gpuCompute_) {
-        view->set_gpu_compute(gpuCompute_);
-    }
-    applyColorSettings(view);
-    gpuAvailable_ = view->gpu_available();
-    auto* entry = new DocEntry;
-    entry->view = view;
-    if (path.isEmpty()) {
-        entry->untitledNumber = ++untitledCounter_;
-    } else {
-        entry->path = path;
-    }
-    auto* window = new DocWindow;
-    window->doc = entry;
-    entry->windows.append(window);
-    setupCanvas(*window);
-    window->page = window->host;
-    wireDocument(*entry);
-    wireCanvas(*window);
+    return documents_->addDocument(view, path, asTab);
+}
 
-    docs_.append(entry);
-    const int index = docs_.size() - 1;
-    addTabWindow(window);
-    installCloseButton(window);
-    activateDocWindow(window);
-    // A tile layout takes in even a window asked for as a tab, which would
-    // otherwise sit in the hidden strip.
-    if (!asTab || tileHost_) {
-        hostReadyWindow(window, true);
+int PicturaMainWindow::indexOfDoc(const DocEntry* doc) const
+{
+    return documents_ ? documents_->indexOfDoc(doc) : -1;
+}
+
+DocWindow* PicturaMainWindow::windowAtTab(int tab) const
+{
+    return documents_ ? documents_->windowAtTab(tab) : nullptr;
+}
+
+int PicturaMainWindow::tabOf(const DocWindow* window) const
+{
+    return documents_ ? documents_->tabOf(window) : -1;
+}
+
+DocWindow* PicturaMainWindow::windowOfCanvas(const ImageView* canvas) const
+{
+    return documents_ ? documents_->windowOfCanvas(canvas) : nullptr;
+}
+
+void PicturaMainWindow::presentWindows()
+{
+    if (documents_) {
+        documents_->presentWindows();
     }
-    if (!path.isEmpty()) {
-        rememberRecent(path);
+}
+
+void PicturaMainWindow::syncScreenModeWindows()
+{
+    if (documents_) {
+        documents_->syncScreenModeWindows();
     }
-    refresh();
-    panelRefreshTimer_->stop();
-    refreshPanels();
-    return index;
+}
+
+void PicturaMainWindow::forEachCanvas(const DocEntry& doc,
+                                      const std::function<void(ImageView*)>& fn) const
+{
+    if (documents_) {
+        documents_->forEachCanvas(doc, fn);
+    }
+}
+
+QList<ImageView*> PicturaMainWindow::activeDocumentCanvases() const
+{
+    return documents_ ? documents_->activeDocumentCanvases() : QList<ImageView*>{};
 }
 
 bool PicturaMainWindow::newDocument(const QString& name, int width, int height,
@@ -496,236 +617,48 @@ bool PicturaMainWindow::newDocument(const QString& name, int width, int height,
     return true;
 }
 
-bool PicturaMainWindow::editSmartObjectContents(const QString& layerPath)
+bool PicturaMainWindow::closeWindow(DocWindow* window, bool interactive)
 {
-    PictureView* origin = activeView();
-    if (!origin || layerPath.isEmpty()
-        || !origin->layer_can_edit_smart_object_contents(layerPath)) {
+    if (!window || !documents_ || !documents_->windows().contains(window)) {
         return false;
     }
-    auto* temp = new QTemporaryDir();
-    if (!temp->isValid()) {
-        delete temp;
-        return false;
+    DocEntry* doc = window->doc;
+    const int index = documents_->indexOfDoc(doc);
+    if (doc->windows.size() < 2) {
+        return closeDocument(index, interactive);
     }
-    const QString filename = QStringLiteral("contents.psd");
-    const QString file = temp->filePath(filename);
-    if (!origin->export_smart_object_contents(layerPath, file)) {
-        delete temp;
-        return false;
-    }
-    auto* editor = new PictureView(this);
-    if (!document_api::open(*editor, file)) {
-        delete editor;
-        delete temp;
-        return false;
-    }
-    addDocument(editor, QString());
-    editSessions_.append(SmartObjectEditSession{editor, origin, layerPath, filename, temp});
-    return true;
-}
-
-bool PicturaMainWindow::saveActive()
-{
-    SaveActiveOrigin origin;
-    const auto record = [this] {
-        registry_->recordCommand(command_ids::FileSave,
-            CommandParams{QJsonObject{{QStringLiteral("in"), activeFilePath()}}});
-    };
-    const int index = activeDocumentIndex();
-    if (index < 0) {
-        return false;
-    }
-    PictureView* view = viewAt(index);
-    for (const SmartObjectEditSession& session : editSessions_) {
-        if (session.editor != view) {
-            continue;
-        }
-        const QString file = session.temp->filePath(session.filename);
-        const QString name = QFileInfo(file).fileName();
-        const bool saved = saveRunsOnWorker(file)
-            ? runBusyJob(this, name, tr("Saving %1…").arg(name),
-                         [view, file] { return document_api::saveStart(*view, file); },
-                         [view] { return document_api::saveRunning(*view); },
-                         [view] { return document_api::saveFinish(*view); })
-            : document_api::save(*view, file);
-        if (!saved
-            || !session.origin->commit_smart_object_edit(session.layerPath, file)) {
-            return false;
-        }
-        refresh();
-        updateTabTitle(index);
-        updateWindowTitle();
-        // The editor tab has no file path of its own; the step would replay an
-        // empty save target, so a smart-object commit records nothing here.
-        return true;
-    }
-    QString path = docs_.at(index)->path;
-    if (!path.isEmpty() && isPdfPath(path)) {
-        const bool saved = savePdfWithDialog(path);
-        if (saved) {
-            record();
-        }
-        return saved;
-    }
-    if (path.isEmpty()
-        || savePathNeedsFormatDialog(path, view, isNativeDocumentPath(path))) {
-        const bool saved = saveAsWithDialog();
-        if (saved) {
-            record();
-        }
-        return saved;
-    }
-    const bool saved = saveActiveAs(path);
-    if (saved) {
-        record();
-    }
-    return saved;
-}
-
-bool PicturaMainWindow::saveActiveAs(const QString& path)
-{
-    const int index = activeDocumentIndex();
-    PictureView* view = viewAt(index);
-    if (!view || path.isEmpty()) {
-        return false;
-    }
-    const QString name = QFileInfo(path).fileName();
-    const bool saved = saveRunsOnWorker(path)
-        ? runBusyJob(this, name, tr("Saving %1…").arg(name),
-                     [view, path] { return document_api::saveStart(*view, path); },
-                     [view] { return document_api::saveRunning(*view); },
-                     [view] { return document_api::saveFinish(*view); })
-        : document_api::save(*view, path);
-    if (!saved) {
-        if (saveRunsOnWorker(path)) {
-            reportMemoryRefusal(this, tr("save the document"));
-        }
-        return false;
-    }
-    docs_[index]->path = path;
-    // A stale save leaves the document modified; keep the recovery snapshot so
-    // an edit made during the save is still recoverable.
-    if (!document_api::isDirty(*view)) {
-        dropRecoverySnapshot(view);
-    }
-    updateTabTitle(index);
-    rememberRecent(path);
-    updateWindowTitle();
-    if (!saveActiveOrigin) {
-        registry_->recordCommand(command_ids::FileSaveAs,
-            CommandParams{QJsonObject{{QStringLiteral("as"), path.section(QLatin1Char('.'), -1).toUpper()},
-                                      {QStringLiteral("in"), path}}});
-    }
-    return true;
-}
-
-bool PicturaMainWindow::revertActive()
-{
-    const int index = activeDocumentIndex();
-    PictureView* view = viewAt(index);
-    if (!view) {
-        return false;
-    }
-    const QString path = document_api::filePath(*view);
-    if (path.isEmpty()) {
-        return false;
-    }
-    // Reload in place through the Rust edge: decode first, preserve history and
-    // file identity, then append one undoable Revert state.
-    const bool reloaded = document_api::revert(*view, path);
-    if (!reloaded) {
-        return false;
-    }
-    updateTabTitle(index);
+    documents_->detachWindows(QList<DocWindow*>{window});
+    doc->windows.removeOne(window);
+    documents_->destroyWindowWidgets(window);
+    delete window;
+    documents_->updateTabTitle(index);
     refresh();
+    panels_->stopPanelRefreshTimer();
+    panels_->refreshPanels();
     return true;
 }
 
-bool PicturaMainWindow::closeDocument(int index, bool interactive)
+void PicturaMainWindow::onAboutToRemoveDocument(int index)
 {
-    if (index < 0 || index >= docs_.size()) {
-        return false;
-    }
-    // Closing a loading tab cancels its open; there is no document to save.
-    if (docs_.at(index)->loading) {
-        cancelOpen(index);
-        return true;
-    }
-    if (interactive && isDocumentDirty(index)) {
-        switch (askUnsaved(this, documentName(index))) {
-        case UnsavedChoice::Cancel:
-            return false;
-        case UnsavedChoice::Save:
-            setActiveDocumentIndex(index);
-            if (!saveActive()) {
-                return false;
-            }
-            break;
-        case UnsavedChoice::Discard:
-            break;
-        }
-    }
-    removeDocument(index);
-    return true;
-}
-
-bool PicturaMainWindow::closeActiveDocument(bool interactive)
-{
-    return closeDocument(activeDocumentIndex(), interactive);
-}
-
-void PicturaMainWindow::removeDocument(int index)
-{
-    if (index < 0 || index >= docs_.size()) {
+    DocEntry* entry = documents_ ? documents_->docAt(index) : nullptr;
+    if (!entry) {
         return;
     }
-    DocEntry* entry = docs_.takeAt(index);
-    // Replace Color is non-modal and holds the raw view; cancel it before the
-    // view is deleted, or its preview teardown would touch freed memory.
-    if (replaceColorDialog_ && replaceColorDialog_->view() == entry->view) {
-        replaceColorDialog_->reject();
+    if (menu_) {
+        menu_->cancelDocumentDialogs(entry->view);
     }
-    for (int i = editSessions_.size() - 1; i >= 0; --i) {
-        const SmartObjectEditSession& session = editSessions_.at(i);
-        if (session.editor == entry->view || session.origin == entry->view) {
-            delete session.temp;
-            editSessions_.removeAt(i);
-        }
-    }
-    const bool removedWasActive = entry->view && activeWindow_ && activeWindow_->doc == entry;
-    const bool removedWasBound = entry->view && entry->view == dockView_;
-    detachWindows(entry->windows);
-    forgetRecovery(entry->view);
     if (entry->view) {
-        openWired_.remove(entry->view);
-        pdfProbes_.remove(entry->view);
         entry->view->cancel_transform();
         if (tools_) {
             tools_->forgetView(entry->view);
         }
     }
-    openSourcePaths_.remove(entry->token);
-    openWarnings_.remove(entry->token);
-    for (DocWindow* window : entry->windows) {
-        destroyWindowWidgets(window);
-    }
-    qDeleteAll(entry->windows);
-    // Unbind the panels before the active or bound view is freed; closing an
-    // unbound, inactive document leaves the surface untouched.
-    if (removedWasActive || removedWasBound) {
-        retargetDock();
-    }
-    delete entry->view;
-    delete entry;
-    refresh();
-    panelRefreshTimer_->stop();
-    refreshPanels();
 }
 
 void PicturaMainWindow::showNewDocumentDialog()
 {
-    const QString suggested = QStringLiteral("Untitled-%1").arg(untitledCounter_ + 1);
+    const QString suggested =
+        QStringLiteral("Untitled-%1").arg(documents_->untitledCounter() + 1);
     NewDocumentSpec spec;
     if (!NewDocumentDialog::get(this, suggested,
                                 tools_ ? tools_->background() : QColor(Qt::white), &spec)) {
@@ -743,7 +676,7 @@ void PicturaMainWindow::showNewDocumentDialog()
     const int index = addDocument(view, QString());
     // A name the user typed replaces the generated Untitled-n.
     if (index >= 0 && spec.name.trimmed() != documentName(index) && !spec.name.trimmed().isEmpty()) {
-        docs_[index]->displayName = spec.name.trimmed();
+        documents_->setDocumentName(index, spec.name.trimmed());
         updateTabTitle(index);
     }
 }
@@ -807,7 +740,7 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
     const ScreenMode previous = screenMode_;
     screenMode_ = mode;
     auto setCanvasColor = [this](const QColor& color) {
-        for (const DocWindow* window : windows_) {
+        for (const DocWindow* window : documents_->windows()) {
             if (window->canvas) {
                 window->canvas->setCanvasColor(color);
             }
@@ -820,7 +753,7 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
         setWindowState(state);
         menuBar()->setVisible(true);
         statusBar()->setVisible(true);
-        setPanelColumnsVisible(!panelsHidden_);
+        panels_->setPanelColumnsVisible(!panels_->panelsHidden());
         setCanvasColor(canvasColorForIndex(canvasColorIndex_));
         break;
     }
@@ -831,7 +764,7 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
         statusBar()->setVisible(false);
         // CS6 keeps the Tools panel, Options bar, and panels in this mode; only
         // the document-window chrome (tab, scroll bars, status bar) goes away.
-        setPanelColumnsVisible(!panelsHidden_);
+        panels_->setPanelColumnsVisible(!panels_->panelsHidden());
         setCanvasColor(QColor(128, 128, 128));
         break;
     case ScreenMode::Full:
@@ -841,16 +774,18 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
         setWindowState(Qt::WindowFullScreen);
         menuBar()->setVisible(fullScreenChromeShown_);
         statusBar()->setVisible(false);
-        setPanelColumnsVisible(fullScreenChromeShown_);
+        panels_->setPanelColumnsVisible(fullScreenChromeShown_);
         setCanvasColor(Qt::black);
         break;
     }
     syncScreenModeWindows();
-    registry_->refresh();
+    if (menu_) {
+        menu_->commands()->refresh();
+    }
     if (toolbox_) {
         toolbox_->setActiveScreenMode(static_cast<int>(mode));
     }
-    layoutWorkspaceFrame();
+    panels_->layoutWorkspaceFrame();
 }
 
 PicturaMainWindow::ScreenMode PicturaMainWindow::nextScreenMode(bool forward) const
@@ -875,27 +810,20 @@ void PicturaMainWindow::requestScreenMode(ScreenMode mode)
     setScreenMode(mode);
 }
 
-void PicturaMainWindow::setPanelColumnsVisible(bool visible)
-{
-    for (PanelColumn* column : panelColumns()) {
-        column->setVisible(visible);
-    }
-}
-
 void PicturaMainWindow::togglePanelsHidden()
 {
     if (screenMode_ != ScreenMode::Full) {
         // Standard and Full Screen With Menu Bar share the persisted Tab state;
         // CS6 toggles the same chrome in both.
-        setPanelsHidden(!panelsHidden_);
+        setPanelsHidden(!panels_->panelsHidden());
         return;
     }
     // Full Screen Mode hides the panels and the menu bar; Tab reveals them
     // transiently, and the next Tab hides them again.
     fullScreenChromeShown_ = !fullScreenChromeShown_;
     menuBar()->setVisible(fullScreenChromeShown_);
-    setPanelColumnsVisible(fullScreenChromeShown_);
-    layoutWorkspaceFrame();
+    panels_->setPanelColumnsVisible(fullScreenChromeShown_);
+    panels_->layoutWorkspaceFrame();
 }
 
 void PicturaMainWindow::refresh()
@@ -909,11 +837,11 @@ void PicturaMainWindow::refresh()
     // the minimum width, so the widget columns can never absorb the workspace),
     // but hide the empty tab strip. This is the single writer of the pane's
     // visibility so every document-set change routes here.
-    if (tabs_) {
+    if (QTabWidget* tabs = documents_->tabs()) {
         // A full-screen float's page may hold the document area instead.
-        tabs_->setVisible(documentArea_->currentWidget() == tabs_);
-        if (tabs_->tabBar()) {
-            tabs_->tabBar()->setVisible(!docs_.isEmpty());
+        tabs->setVisible(documents_->documentArea()->currentWidget() == tabs);
+        if (tabs->tabBar()) {
+            tabs->tabBar()->setVisible(documents_->count() > 0);
         }
     }
 
@@ -923,22 +851,24 @@ void PicturaMainWindow::refresh()
         tools_->bindCanvas(canvas);
     }
     syncBrushTipPreview();
-    if (activeWindow_) {
-        forEachCanvas(*activeWindow_->doc,
+    if (DocWindow* active = documents_->activeWindow()) {
+        forEachCanvas(*active->doc,
                       [this, view](ImageView* each) { syncMaskOverlay(view, each); });
     }
     syncSiblingGuides();
 
-    panelRefreshTimer_->start();
+    panels_->schedulePanelRefresh();
     updateStatus();
     // A session can end without a transformChanged (a document switch).
     syncTransformLock();
-    if (registry_) {
+    if (menu_) {
         pictura::ScopedTimer registryTimer("cxx_registry_refresh");
-        registry_->refresh();
+        menu_->commands()->refresh();
     }
-    registryRefreshPending_ = false;
-    updateAlignControls();
+    panels_->setRegistryRefreshPending(false);
+    if (menu_) {
+        menu_->updateAlignControls();
+    }
     updateTabTitle(index);
     updateWindowTitle();
     refreshSelectionOverlay();
@@ -947,21 +877,22 @@ void PicturaMainWindow::refresh()
 void PicturaMainWindow::refreshSelectionOverlay()
 {
     PictureView* view = activeView();
-    if (!view || !activeWindow_) {
+    DocWindow* active = documents_->activeWindow();
+    if (!view || !active) {
         return;
     }
     if (tools_ && tools_->transformSelectionTarget()) {
         // The live border transform owns the ants; it supplies the preview.
-        forEachCanvas(*activeWindow_->doc,
+        forEachCanvas(*active->doc,
                       [](ImageView* canvas) { canvas->clearSelectionContour(); });
         return;
     }
     if (view->has_selection()) {
         const selection_api::SelectionContour contour = selection_api::contour(*view);
-        forEachCanvas(*activeWindow_->doc,
+        forEachCanvas(*active->doc,
                       [&contour](ImageView* canvas) { canvas->setSelectionContour(contour); });
     } else {
-        forEachCanvas(*activeWindow_->doc,
+        forEachCanvas(*active->doc,
                       [](ImageView* canvas) { canvas->clearSelectionContour(); });
     }
 }
@@ -973,13 +904,14 @@ void PicturaMainWindow::syncBrushTipPreview()
     const bool paintTool = tools_
         && (tools_->activeTool() == ToolId::Brush || tools_->activeTool() == ToolId::Pencil);
     const bool penTip = paint && paint->penTip();
-    for (const DocWindow* window : windows_) {
+    DocWindow* active = documents_->activeWindow();
+    for (const DocWindow* window : documents_->windows()) {
         BrushTipPreview* preview = window->tip;
         if (!preview) {
             continue;
         }
         ImageView* canvas = window->canvas;
-        const bool show = window == activeWindow_ && paintTool && penTip && canvas
+        const bool show = window == active && paintTool && penTip && canvas
                           && canvas->hasDocument();
         preview->setVisible(show);
         if (show) {
@@ -990,32 +922,13 @@ void PicturaMainWindow::syncBrushTipPreview()
 
 bool PicturaMainWindow::isLoadingDocument(int index) const
 {
-    return index >= 0 && index < docs_.size() && docs_.at(index)->loading;
+    return documents_->isLoading(index);
 }
 
 void PicturaMainWindow::updateTabTitle(int index)
 {
-    if (!tabs_ || index < 0 || index >= docs_.size()) {
-        return;
-    }
-    const DocEntry* doc = docs_.at(index);
-    // Keep the close button (or loading spinner) inside the tab: elide the text
-    // rather than letting the tab grow past the bar. The dirty star survives.
-    const QFontMetrics metrics(tabs_->tabBar()->font());
-    const bool dirty = !doc->loading && isDocumentDirty(index);
-    for (const DocWindow* window : doc->windows) {
-        const QString label = fullLabel(window);
-        if (window->floating) {
-            window->floating->setLabel(label, dirty);
-        }
-        if (window->tile) {
-            window->tile->setLabel(label, dirty);
-        }
-        const int tab = tabOf(window);
-        if (tab >= 0) {
-            tabs_->setTabText(tab, documentTabText(label, dirty, metrics));
-            tabs_->setTabToolTip(tab, label);
-        }
+    if (documents_) {
+        documents_->updateTabTitle(index);
     }
 }
 
@@ -1024,28 +937,6 @@ void PicturaMainWindow::updateWindowTitle()
     const int index = activeDocumentIndex();
     const QString name = index >= 0 ? documentName(index) : QStringLiteral("Untitled");
     setWindowTitle(QStringLiteral("%1 — Kooka Pictura").arg(name));
-}
-
-bool PicturaMainWindow::saveAllDocumentsForRestart()
-{
-    for (int i = 0; i < docs_.size(); ++i) {
-        if (!isDocumentDirty(i)) {
-            continue;
-        }
-        switch (askUnsaved(this, documentName(i))) {
-        case UnsavedChoice::Cancel:
-            return false;
-        case UnsavedChoice::Save:
-            setActiveDocumentIndex(i);
-            if (!saveActive()) {
-                return false;
-            }
-            break;
-        case UnsavedChoice::Discard:
-            break;
-        }
-    }
-    return true;
 }
 
 void PicturaMainWindow::closeEvent(QCloseEvent* event)
@@ -1065,7 +956,7 @@ void PicturaMainWindow::updateStatus()
     // a temporary message takes the readouts' row so the banner never overprints
     // them. Qt hides the normal widgets itself, but a later refresh re-shows
     // them, so the gate has to live here.
-    const bool hasDoc = !docs_.isEmpty();
+    const bool hasDoc = documents_ && documents_->count() > 0;
     const bool messageShown = statusBar() && !statusBar()->currentMessage().isEmpty();
     const bool showReadouts = hasDoc && !messageShown;
     ImageView* canvas = imageView();
@@ -1145,6 +1036,78 @@ void PicturaMainWindow::updateStatus()
         statusOptionsButton_->setVisible(showReadouts);
     }
 }
+CommandRegistry* PicturaMainWindow::registry() const
+{
+    return menu_ ? menu_->commands() : nullptr;
+}
+
+CommandRegistry* PicturaMainWindow::commandRegistry() const
+{
+    return registry();
+}
+
+bool PicturaMainWindow::beginFreeTransform(const QString& path)
+{
+    return menu_ && menu_->beginFreeTransform(path);
+}
+
+bool PicturaMainWindow::beginTransformMode(const QString& path, const QString& mode)
+{
+    return menu_ && menu_->beginTransformMode(path, mode);
+}
+
+void PicturaMainWindow::selectLayerPath(const QString& path)
+{
+    if (menu_) {
+        menu_->selectLayerPath(path);
+    }
+}
+
+void PicturaMainWindow::importSystemClipboard()
+{
+    if (menu_) {
+        menu_->importSystemClipboard();
+    }
+}
+
+bool PicturaMainWindow::replaceSmartObjectContents(const QString& layerPath)
+{
+    return menu_ && menu_->replaceSmartObjectContents(layerPath);
+}
+
+bool PicturaMainWindow::exportSmartObjectContents(const QString& layerPath)
+{
+    return menu_ && menu_->exportSmartObjectContents(layerPath);
+}
+
+bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString& path)
+{
+    PictureView* target = activeView();
+    PictureView* from = nullptr;
+    for (const DocEntry* entry : documents_->docs()) {
+        if (entry->view == source) {
+            from = entry->view;
+        }
+    }
+    // The bridge holds the source shared and the target exclusive, so the two
+    // must be different documents.
+    if (!target || !from || from == target || path.isEmpty()) {
+        return false;
+    }
+    const QString selection = layerAnchor();
+    const QString created = copy_layer_from_document(*target, *from, path, selection);
+    if (created.isEmpty()) {
+        return false;
+    }
+    selectLayerPath(created);
+    return true;
+}
+
+QMenu* PicturaMainWindow::documentMenuForTest() const
+{
+    return menu_ ? menu_->documentMenu() : nullptr;
+}
+
 QStringList PicturaMainWindow::selectedLayerPaths() const
 {
     PictureView* view = activeView();

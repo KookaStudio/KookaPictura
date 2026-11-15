@@ -14,8 +14,6 @@
 
 #include "theme.h"
 
-// `PicturaMainWindow` inherits the panel menu hook registry; `frame.h` reaches
-// it through this header.
 #include "panel_menu_hooks.h"
 
 #include <functional>
@@ -37,7 +35,7 @@ namespace pictura {
 
 class PanelColumn;
 class PanelGroup;
-class PicturaMainWindow;
+class PanelHost;
 
 // A panel column's side is a property of its order in the central splitter
 // relative to the document tabs, never of its on-screen geometry (M43).
@@ -143,6 +141,9 @@ class PanelColumn : public QWidget {
 public:
     explicit PanelColumn(QWidget* parent = nullptr);
     ~PanelColumn() override;
+
+    void setHost(PanelHost* host) { host_ = host; }
+    PanelHost* owningHost() const { return host_; }
 
     void addGroup(PanelGroup* group);
     // M45 W4: adopt a group from another column without clobbering its panel
@@ -266,7 +267,7 @@ public:
     // M45 W8: drop a column's contribution to the shared minimum floor after it
     // is added or removed, recomputing from the columns currently alive so a
     // since-destroyed wide column cannot pin every column's minimum high.
-    static void refreshSharedFloor(PicturaMainWindow* frame);
+    static void refreshSharedFloor(PanelHost* host);
 
     // Per-group order/visibility/minimized/collapsed as a compact JSON array;
     // round-trips exactly and skips groups whose stored name is gone.
@@ -502,10 +503,6 @@ private:
     // M45 W4: remove this dynamic column when no group/panel is left, through
     // the frame's one cleanup entry point.
     void maybeRemoveSelf();
-    // The main window that owns this column, whether it is docked or hosted in
-    // a frameless floating overlay (whose parent is the frame). `window()` is the
-    // float once the column is floated, so callers that need the frame use this.
-    PicturaMainWindow* owningFrame() const;
     DropTarget resolveDrop(const QPoint& globalPos) const;
     DropTarget resolveLocalDrop(const QPoint& globalPos, bool dragIsPanel = false,
                                 PanelGroup* dragGroup = nullptr) const;
@@ -570,6 +567,7 @@ private:
     QWidget* makeGroupGrip(PanelGroup* group);
     QWidget* stripGroupBoxFor(PanelGroup* group) const;
 
+    PanelHost* host_ = nullptr;
     QWidget* header_ = nullptr;
     QHBoxLayout* headerLayout_ = nullptr;
     QToolButton* columnToggle_ = nullptr;

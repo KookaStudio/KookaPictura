@@ -1,5 +1,5 @@
 // The Warp Text dialog's widgets. Previewing, committing and cancelling are
-// the frame's (frame_menus_type.cpp).
+// the registrar's (menu_type.cpp).
 
 #include "warp_text_dialog.h"
 

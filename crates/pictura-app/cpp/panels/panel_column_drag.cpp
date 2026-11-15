@@ -2,7 +2,7 @@
 
 #include "panel_column_internal.h"
 
-#include "frame.h"
+#include "panel_host.h"
 #include "icons.h"
 #include "panel_group.h"
 #include "theme.h"
@@ -48,21 +48,21 @@ bool PanelColumn::eventFilter(QObject* watched, QEvent* event)
         if (type == QEvent::MouseButtonPress) {
             auto* mouse = static_cast<QMouseEvent*>(event);
             if (mouse->button() == Qt::LeftButton) {
-                if (PicturaMainWindow* frame = owningFrame()) {
-                    frame->beginWidgetColumnResize(this,
+                if (PanelHost* host = owningHost()) {
+                    host->beginWidgetColumnResize(this,
                                                    mouse->globalPosition().toPoint().x());
                 }
                 return true;
             }
         } else if (type == QEvent::MouseMove) {
-            if (PicturaMainWindow* frame = owningFrame()) {
-                frame->updateWidgetColumnResize(
+            if (PanelHost* host = owningHost()) {
+                host->updateWidgetColumnResize(
                     static_cast<QMouseEvent*>(event)->globalPosition().toPoint().x());
             }
             return true;
         } else if (type == QEvent::MouseButtonRelease) {
-            if (PicturaMainWindow* frame = owningFrame()) {
-                frame->endWidgetColumnResize();
+            if (PanelHost* host = owningHost()) {
+                host->endWidgetColumnResize();
             }
             return true;
         }
@@ -244,8 +244,8 @@ PanelColumn::DropTarget PanelColumn::resolveDrop(const QPoint& globalPos) const
     // grammar claims the point. A whole-column float (no group) is never a
     // tabify target, so it falls through to the existing behaviour. The float
     // being dragged can never target itself.
-    if (auto* frame = owningFrame()) {
-        for (PanelColumn* column : frame->allPanelColumns()) {
+    if (auto* host = owningHost()) {
+        for (PanelColumn* column : host->allPanelColumns()) {
             if (!column) {
                 continue;
             }
@@ -284,19 +284,19 @@ PanelColumn::DropTarget PanelColumn::resolveDrop(const QPoint& globalPos) const
             return iconic;
         }
     }
-    if (auto* frame = owningFrame()) {
-        const int side = frame->newColumnSideAt(globalPos);
+    if (auto* host = owningHost()) {
+        const int side = host->newColumnSideAt(globalPos);
         if (side >= 0) {
             DropTarget target;
             target.valid = true;
             // The new column lands at the workspace end on `side`; the line is
             // drawn by the column actually on that side, not the drag source.
-            const QList<PanelColumn*> columns = frame->panelColumns();
+            const QList<PanelColumn*> columns = host->panelColumns();
             PanelColumn* edgeColumn = nullptr;
             if (side == 0) {
                 for (PanelColumn* column : columns) {
                     if (column && column->isVisible()
-                        && frame->sideOf(column) == PanelSide::Left) {
+                        && host->sideOf(column) == PanelSide::Left) {
                         edgeColumn = column;
                         break;
                     }
@@ -305,7 +305,7 @@ PanelColumn::DropTarget PanelColumn::resolveDrop(const QPoint& globalPos) const
                 for (int i = columns.size() - 1; i >= 0; --i) {
                     PanelColumn* column = columns.at(i);
                     if (column && column->isVisible()
-                        && frame->sideOf(column) == PanelSide::Right) {
+                        && host->sideOf(column) == PanelSide::Right) {
                         edgeColumn = column;
                         break;
                     }
@@ -321,7 +321,7 @@ PanelColumn::DropTarget PanelColumn::resolveDrop(const QPoint& globalPos) const
         // in-body local drop declines (below), so a tab insertion near its own
         // edge still reorders instead of opening a new column.
         int anchorSide = -1;
-        PanelColumn* anchor = frame->columnEdgeAnchorAt(globalPos, this, &anchorSide);
+        PanelColumn* anchor = host->columnEdgeAnchorAt(globalPos, this, &anchorSide);
         if (anchor) {
             DropTarget target;
             target.valid = true;
@@ -335,7 +335,7 @@ PanelColumn::DropTarget PanelColumn::resolveDrop(const QPoint& globalPos) const
         // D4 atomic target: a widget panel/group may never combine with the tools
         // column. Resolve nothing (not even an outside float) so no indicator is
         // drawn and no in-column grouping can commit.
-        if (PanelColumn* over = frame->columnAtGlobal(globalPos)) {
+        if (PanelColumn* over = host->columnAtGlobal(globalPos)) {
             if (over->isToolsColumn()) {
                 return DropTarget{};
             }
@@ -346,8 +346,8 @@ PanelColumn::DropTarget PanelColumn::resolveDrop(const QPoint& globalPos) const
     if (target.outside) {
         // A point inside another column may still land there; that column's own
         // grammar decides the valid non-outside target.
-        if (auto* frame = owningFrame()) {
-            if (PanelColumn* other = frame->columnAtGlobal(globalPos)) {
+        if (auto* host = owningHost()) {
+            if (PanelColumn* other = host->columnAtGlobal(globalPos)) {
                 if (other != this) {
                     DropTarget delegated =
                         other->resolveLocalDrop(globalPos, dragIsPanel_, dragGroup_);
@@ -362,9 +362,9 @@ PanelColumn::DropTarget PanelColumn::resolveDrop(const QPoint& globalPos) const
         // M48: no in-body target and no other column claimed the point, so a
         // point beside this column docks a panel/group to its own
         // document-facing edge (left of a right column, and vice versa).
-        if (auto* frame = owningFrame()) {
+        if (auto* host = owningHost()) {
             int selfSide = -1;
-            if (PanelColumn* self = frame->columnEdgeAnchorAt(globalPos, nullptr, &selfSide)) {
+            if (PanelColumn* self = host->columnEdgeAnchorAt(globalPos, nullptr, &selfSide)) {
                 // Only a point strictly beyond the column's own edge docks a new
                 // sibling; the last tab insertion maps a pixel past the edge, so
                 // an exact-edge hit must stay an in-column drop.
@@ -1034,8 +1034,8 @@ bool PanelColumn::applyStripDrop(PanelGroup* source, const QString& name, int st
 
 bool PanelColumn::applyNewColumnDrop(PanelSide side, PanelColumn* anchor)
 {
-    auto* frame = owningFrame();
-    if (!frame || !dragGroup_) {
+    auto* host = owningHost();
+    if (!host || !dragGroup_) {
         return false;
     }
     PanelGroup* source = dragGroup_;
@@ -1069,7 +1069,7 @@ bool PanelColumn::applyNewColumnDrop(PanelSide side, PanelColumn* anchor)
             source->setParent(nullptr);
         }
     }
-    PanelColumn* destination = frame->createPanelColumn(side, anchor);
+    PanelColumn* destination = host->createPanelColumn(side, anchor);
     if (!destination) {
         if (takenPanel) {
             // No column to adopt the panel: put it back in the stack it was

@@ -206,6 +206,13 @@ private:
 // separators before the command rows they precede.
 void addDefaultCommands(CommandRegistry& registry);
 
+// A Window > Panels (or Type > Panels) command and the panel it toggles.
+struct PanelToggle {
+    const char* command;
+    const char* panel;
+};
+const QList<PanelToggle>& panelToggles();
+
 // The stable id derived from a command path's segments. Delegates to the Rust
 // catalogue so path-derived stubs and handlers always agree with it.
 QString commandIdForPath(const QStringList& path);

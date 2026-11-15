@@ -3,6 +3,7 @@
 // document.
 
 #include "frame_includes.h"
+#include "panels/layers_panel.h"
 
 #include "api/layers_bridge.h"
 
@@ -19,7 +20,7 @@ constexpr int kMaskOverlayMaxSide = 4096;
 
 void PicturaMainWindow::wireMaskOverlay()
 {
-    connect(layersPanel_, &LayersPanel::maskDisplayChanged, this, &PicturaMainWindow::refresh);
+    connect(panels_->layersPanel(), &LayersPanel::maskDisplayChanged, this, &PicturaMainWindow::refresh);
 }
 
 void PicturaMainWindow::syncMaskOverlay(PictureView* view, ImageView* canvas)

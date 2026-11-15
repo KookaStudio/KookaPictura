@@ -2,7 +2,7 @@
 
 #include "panel_column_internal.h"
 
-#include "frame.h"
+#include "panel_host.h"
 #include "icons.h"
 #include "panel_group.h"
 #include "theme.h"
@@ -292,7 +292,7 @@ void PanelColumn::ensureFlyout()
     }
     // The flyout is parented to the frame so a child-mode overlay can extend
     // across the workspace rather than being clipped to this column.
-    QWidget* host = owningFrame();
+    QWidget* host = owningHost() ? owningHost()->shellWidget() : nullptr;
     if (!host) {
         host = this;
     }

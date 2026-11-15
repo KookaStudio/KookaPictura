@@ -2,7 +2,7 @@
 
 #include "panel_column_internal.h"
 
-#include "frame.h"
+#include "panel_host.h"
 #include "icons.h"
 #include "panel_group.h"
 #include "theme.h"
@@ -248,15 +248,15 @@ void PanelColumn::cancelDragForTest()
 
 bool PanelColumn::selfAnchorDockForTest(const QString& objectName, bool toRight)
 {
-    auto* frame = owningFrame();
-    if (!frame) {
+    auto* host = owningHost();
+    if (!host) {
         return false;
     }
-    PanelColumn* source = frame->columnForPanel(objectName);
+    PanelColumn* source = host->columnForPanel(objectName);
     if (!source) {
         return false;
     }
-    const int before = frame->panelColumns().size();
+    const int before = host->panelColumns().size();
     const QRect r(source->mapToGlobal(QPoint(0, 0)), source->size());
     const QPoint point(toRight ? r.right() + 8 : r.left() - 8, r.center().y());
     if (!source->beginTabDragForTest(objectName)) {
@@ -265,15 +265,15 @@ bool PanelColumn::selfAnchorDockForTest(const QString& objectName, bool toRight)
     source->dragToForTest(point);
     const bool dropped = source->dropForTest(point);
     QCoreApplication::processEvents();
-    PanelColumn* destination = frame->columnForPanel(objectName);
+    PanelColumn* destination = host->columnForPanel(objectName);
     if (!dropped || !destination || destination == source
-        || frame->panelColumns().size() != before + 1) {
+        || host->panelColumns().size() != before + 1) {
         return false;
     }
     // The source column survives (the test uses the multi-group primary), so
     // the new column must sit immediately on the requested side of it.
-    const int destinationIndex = frame->panelColumns().indexOf(destination);
-    const int sourceIndex = frame->panelColumns().indexOf(source);
+    const int destinationIndex = host->panelColumns().indexOf(destination);
+    const int sourceIndex = host->panelColumns().indexOf(source);
     if (destinationIndex < 0 || sourceIndex < 0) {
         return false;
     }
@@ -313,7 +313,7 @@ QRect PanelColumn::dropIndicatorGeometryForTest() const
 bool PanelColumn::edgeIndicatorOnFrameForTest() const
 {
     return edgeIndicator_ && edgeIndicator_->parentWidget()
-           && edgeIndicator_->parentWidget() == owningFrame();
+           && edgeIndicator_->parentWidget() == (owningHost() ? owningHost()->shellWidget() : nullptr);
 }
 
 int PanelColumn::scrollViewportHeightForTest() const

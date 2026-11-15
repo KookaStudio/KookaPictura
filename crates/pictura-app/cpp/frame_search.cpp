@@ -3,6 +3,7 @@
 // decision.
 
 #include "frame_includes.h"
+#include "panels/panel_column.h"
 
 #include "search_bar.h"
 #include "search_index.h"
@@ -79,7 +80,7 @@ void focusControl(QWidget* control)
 
 void PicturaMainWindow::registerSearchHandlers()
 {
-    registry_->setHandler(command_ids::HelpSearch, [this]() { openSearch(); });
+    commandRegistry()->setHandler(command_ids::HelpSearch, [this]() { openSearch(); });
 }
 
 void PicturaMainWindow::openSearch()
@@ -90,25 +91,25 @@ void PicturaMainWindow::openSearch()
         connect(searchBar_, &SearchBar::revealRequested, this,
                 &PicturaMainWindow::revealSearchEntry);
     }
-    registry_->refresh();
+    commandRegistry()->refresh();
     QWidget* host = imageView();
     if (!host) {
-        host = documentArea_ ? static_cast<QWidget*>(documentArea_) : centralWidget();
+        host = documents_->documentArea() ? static_cast<QWidget*>(documents_->documentArea()) : centralWidget();
     }
     const QRect rect(host->mapTo(this, QPoint(0, 0)), host->size());
-    searchBar_->open(buildSearchIndex(*registry_), rect);
+    searchBar_->open(buildSearchIndex(*commandRegistry()), rect);
 }
 
 QWidget* PicturaMainWindow::showPanelForSearch(const QString& objectName)
 {
     PanelColumn* owner = columnForPanel(objectName);
     if (!owner) {
-        owner = panelColumn_;
+        owner = panels_->panelColumn();
     }
     if (owner) {
         owner->showPanel(objectName, true);
     }
-    registry_->refresh();
+    commandRegistry()->refresh();
     return findChild<QWidget*>(objectName);
 }
 
@@ -139,8 +140,8 @@ void PicturaMainWindow::runSearchEntry(const SearchEntry& entry)
     case SearchEntry::Kind::Command:
         // Through the action, so a checkable command toggles as from its menu;
         // a disabled action does not fire.
-        registry_->refresh();
-        if (QAction* action = registry_->action(entry.command)) {
+        commandRegistry()->refresh();
+        if (QAction* action = commandRegistry()->action(entry.command)) {
             action->trigger();
         }
         break;
@@ -171,8 +172,8 @@ void PicturaMainWindow::revealSearchEntry(const SearchEntry& entry)
     switch (entry.kind) {
     case SearchEntry::Kind::Command:
     case SearchEntry::Kind::Preference:
-        registry_->refresh();
-        revealMenuChain(menuBar(), registry_->action(entry.command));
+        commandRegistry()->refresh();
+        revealMenuChain(menuBar(), commandRegistry()->action(entry.command));
         break;
     case SearchEntry::Kind::Tool:
         if (ToolId tool; toolbox_ && toolForName(entry.id, &tool)) {
@@ -193,7 +194,7 @@ void PicturaMainWindow::buildSearchHint(QStatusBar* bar)
     searchHint_ = new ToolHintBar(bar);
     searchHint_->setObjectName(QStringLiteral("statusSearchHint"));
     bar->addPermanentWidget(searchHint_);
-    connect(registry_, &CommandRegistry::shortcutsChanged, this, [this](const QString& id) {
+    connect(commandRegistry(), &CommandRegistry::shortcutsChanged, this, [this](const QString& id) {
         if (id == QLatin1String(command_ids::HelpSearch)) {
             updateSearchHint();
         }
@@ -206,7 +207,7 @@ void PicturaMainWindow::updateSearchHint()
     if (!searchHint_) {
         return;
     }
-    const QList<QKeySequence> keys = registry_->shortcuts(QLatin1String(command_ids::HelpSearch));
+    const QList<QKeySequence> keys = commandRegistry()->shortcuts(QLatin1String(command_ids::HelpSearch));
     if (keys.isEmpty()) {
         searchHint_->setHints({}, QString());
         searchHint_->hide();

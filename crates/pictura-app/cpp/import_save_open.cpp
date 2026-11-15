@@ -1,0 +1,551 @@
+// The document-open pipeline: every entry point starts the read/decode/first
+// composite/history capture on a worker and returns a token. The worker queues
+// its result onto the GUI thread, where the view applies it and emits
+// `openFinished`; this file turns that into a filled tab, a removed tab, or a
+// cancelled one. The synchronous wrappers pump a local event loop for the
+// self-test, the control server, and tests.
+
+#include "import_save_coordinator.h"
+
+#include "api/document_api.h"
+
+#include "api/document_bridge.h"
+#include "api/engine_bridge.h"
+#include "api/type_api.h"
+
+#include "dialogs.h"
+#include "document_registry.h"
+#include "loading_card.h"
+#include "memory_refusal.h"
+#include "profile_warning_dialog.h"
+#include "type_fonts.h"
+
+#include <QtCore/QCoreApplication>
+#include <QtCore/QEventLoop>
+#include <QtCore/QFileInfo>
+#include <QtCore/QTimer>
+#include <QtGui/QPalette>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QMessageBox>
+
+namespace pictura {
+
+quint64 ImportSaveCoordinator::nextOpenToken()
+{
+    return nextOpenToken_++;
+}
+
+int ImportSaveCoordinator::indexOfView(PictureView* view) const
+{
+    return documents_.indexOfView(view);
+}
+
+void ImportSaveCoordinator::beginOpenCursor()
+{
+    if (openCount_++ == 0) {
+        QApplication::setOverrideCursor(Qt::BusyCursor);
+    }
+}
+
+void ImportSaveCoordinator::endOpenCursor()
+{
+    if (openCount_ <= 0) {
+        return;
+    }
+    if (--openCount_ == 0) {
+        QApplication::restoreOverrideCursor();
+    }
+}
+
+void ImportSaveCoordinator::wireOpenSignals(PictureView* view)
+{
+    if (!view || openWired_.contains(view)) {
+        return;
+    }
+    openWired_.insert(view);
+    connect(view, &PictureView::openDetected, this, [this, view] { onOpenDetected(view); });
+    connect(view, &PictureView::openFinished, this,
+            [this, view](const QString& status, const QStringList& warnings) {
+                onOpenFinished(view, status, warnings);
+            });
+    connect(view, &PictureView::openProgress, this,
+            [this, view](int percent, const QString& phase) {
+                onOpenProgress(view, percent, phase);
+            });
+}
+
+bool ImportSaveCoordinator::confirmProfileForOpen(PictureView* view, const QString& path)
+{
+    if (!view || path.isEmpty()) {
+        return true;
+    }
+    const QStringList probe = pictura::probe_file_profile(path);
+    if (probe.isEmpty()) {
+        return true;
+    }
+    const QString kind = probe.value(0);
+    const bool mismatch = kind == QStringLiteral("mismatch");
+    const bool missing = kind == QStringLiteral("missing");
+    if (kind == QStringLiteral("malformed")) {
+        return true;
+    }
+    if ((!mismatch && !missing)
+        || (mismatch && !pictura::ask_mismatch_open(*view))
+        || (missing && !pictura::ask_missing_open(*view))) {
+        return true;
+    }
+    ProfileWarningDialog dialog(mismatch ? ProfileWarningDialog::Mismatch
+                                         : ProfileWarningDialog::Missing,
+                                probe.value(1), dialogParent_);
+    if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+        return false;
+    }
+    int policy = 0;
+    switch (dialog.choice()) {
+    case ProfileWarningDialog::ConvertToWorking:
+    case ProfileWarningDialog::AssignThenConvert:
+        policy = 1;
+        break;
+    case ProfileWarningDialog::DiscardEmbedded:
+    case ProfileWarningDialog::LeaveUntagged:
+        policy = 2;
+        break;
+    default:
+        policy = 0;
+        break;
+    }
+    pictura::set_open_policy_override(*view, policy);
+    return true;
+}
+
+void ImportSaveCoordinator::restorePreviousTab(PictureView* view)
+{
+    if (!view) {
+        return;
+    }
+    const int index = indexOfView(view);
+    if (index < 0) {
+        return;
+    }
+    documents_.setTabTrackingSuppressed(true);
+    documents_.setActiveIndex(index);
+    documents_.setTabTrackingSuppressed(false);
+}
+
+void ImportSaveCoordinator::cancelOpen(int index)
+{
+    if (index < 0 || index >= documents_.count()) {
+        return;
+    }
+    const DocEntry entry = *documents_.docAt(index);
+    if (!entry.loading) {
+        return;
+    }
+    if (entry.view) {
+        open_cancel(*entry.view);
+    }
+    documents_.setTabTrackingSuppressed(true);
+    documents_.removeDocument(index);
+    documents_.setTabTrackingSuppressed(false);
+    restorePreviousTab(entry.previousActiveView);
+    finishOpen(entry.token, OpenOutcome::Cancelled);
+}
+
+void ImportSaveCoordinator::cancelOpenForView(PictureView* view)
+{
+    const int index = indexOfView(view);
+    if (index >= 0) {
+        cancelOpen(index);
+    }
+}
+
+void ImportSaveCoordinator::finishLoadedDocument(int index)
+{
+    DocEntry* entry = documents_.docAt(index);
+    if (!entry) {
+        return;
+    }
+    const QString recentPath = entry->recentPath;
+    const quint64 token = entry->token;
+    PictureView* view = entry->view;
+    documents_.finishLoadingDocument(index);
+    if (!recentPath.isEmpty()) {
+        rememberRecent(recentPath);
+    }
+    const QString notice = document_api::openNotice(*view);
+    if (!notice.isEmpty() && hooks_.showStatus) {
+        hooks_.showStatus(notice, 0);
+    }
+    alertMissingFonts(view);
+    finishOpen(token, OpenOutcome::Opened);
+}
+
+void ImportSaveCoordinator::waitForOpensForTest()
+{
+    while (openCount_ > 0) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+}
+
+void ImportSaveCoordinator::finishOpen(quint64 token, OpenOutcome outcome, const QString& error)
+{
+    if (token == 0 || finishedOpens_.contains(token)) {
+        return;
+    }
+    finishedOpens_.insert(token);
+    reportFailureTokens_.remove(token);
+    openFailureMessages_.remove(token);
+    if (cursorTokens_.remove(token)) {
+        endOpenCursor();
+    }
+    emit documentOpenFinished(token, int(outcome), error);
+}
+
+OpenOutcome ImportSaveCoordinator::waitForOpen(quint64 token)
+{
+    if (token == 0) {
+        return OpenOutcome::Failed;
+    }
+    OpenOutcome outcome = OpenOutcome::Failed;
+    QEventLoop loop;
+    const QMetaObject::Connection connection =
+        connect(this, &ImportSaveCoordinator::documentOpenFinished, &loop,
+                [&](quint64 finished, int result, const QString&) {
+                    if (finished == token) {
+                        outcome = static_cast<OpenOutcome>(result);
+                        loop.quit();
+                    }
+                });
+    loop.exec();
+    disconnect(connection);
+    return outcome;
+}
+
+void ImportSaveCoordinator::onOpenDetected(PictureView* view)
+{
+    const auto probe = pdfProbes_.value(view);
+    if (probe.token == 0 || indexOfView(view) >= 0) {
+        return;
+    }
+    documents_.addLoadingDocument(view, probe.path, QFileInfo(probe.path).fileName(),
+                                  probe.token, probe.path, OpenKind::Pdf);
+}
+
+void ImportSaveCoordinator::onOpenProgress(PictureView* view, int percent,
+                                           const QString& phase)
+{
+    const int index = indexOfView(view);
+    if (index < 0 || !documents_.isLoading(index)) {
+        return;
+    }
+    const DocWindow* window = documents_.docAt(index)->windows.value(0);
+    if (!window || !window->card) {
+        return;
+    }
+    window->card->setProgress(percent, phase);
+}
+
+void ImportSaveCoordinator::reportOpenFailure(int index, const QString& status)
+{
+    if (index < 0 || index >= documents_.count()) {
+        return;
+    }
+    const DocEntry& entry = *documents_.docAt(index);
+    const QString message =
+        status.startsWith(QStringLiteral("error:")) ? status.mid(6) : status;
+    switch (entry.kind) {
+    case OpenKind::Pdf:
+    case OpenKind::PdfPage:
+    case OpenKind::Eps:
+        reportImportError(openSourcePaths_.value(entry.token, entry.path),
+                          message.isEmpty() ? tr("the document could not be opened.")
+                                            : message);
+        break;
+    case OpenKind::SmartObject:
+        if (hooks_.showStatus) {
+            hooks_.showStatus(tr("Open As Smart Object: %1 is not a supported image")
+                                  .arg(documents_.documentName(index)),
+                              0);
+        }
+        break;
+    case OpenKind::Psd:
+    case OpenKind::Raster:
+        if (status == QStringLiteral("error:memory")) {
+            if (hooks_.showStatus) {
+                hooks_.showStatus(
+                    memoryRefusalMessage(
+                        tr("open %1").arg(documents_.documentName(index))),
+                    6000);
+            }
+        } else if (openFailureMessages_.contains(entry.token)) {
+            const QString source = entry.path.isEmpty() ? entry.recentPath : entry.path;
+            reportImportError(source, openFailureMessages_.value(entry.token));
+        } else if (reportFailureTokens_.contains(entry.token) && hooks_.showStatus) {
+            hooks_.showStatus(
+                tr("Could not open %1").arg(documents_.documentName(index)), 4000);
+        }
+        break;
+    }
+}
+
+void ImportSaveCoordinator::alertMissingFonts(PictureView* view)
+{
+    const QStringList missing =
+        view ? missingFonts(type_api::documentFonts(*view)) : QStringList();
+    if (missing.isEmpty()) {
+        return;
+    }
+    const QString remedy = type_api::layersEditable(*view)
+        ? tr("Type > Replace All Missing Fonts sets them in the default font.")
+        : tr("Type can only be re-set in an 8-bit RGB document, so convert it to 8-bit RGB "
+             "before replacing them.");
+    auto* box = new QMessageBox(
+        QMessageBox::Warning, tr("Missing Fonts"),
+        tr("This document's type layers use fonts that are not installed. They keep their "
+           "current pixels until edited. %1\n\n%2")
+            .arg(remedy, missing.join(QLatin1Char('\n'))),
+        QMessageBox::Ok, dialogParent_);
+    box->setObjectName(QStringLiteral("missingFontsAlert"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
+}
+
+void ImportSaveCoordinator::handlePdfProbeFinished(PictureView* view, const PdfProbe& probe,
+                                                   const QString& status,
+                                                   const QStringList& warnings)
+{
+    int index = indexOfView(view);
+    if (status == QStringLiteral("ok")) {
+        if (index < 0) {
+            documents_.addLoadingDocument(view, probe.path, QFileInfo(probe.path).fileName(),
+                                          probe.token, probe.path, OpenKind::Pdf);
+            index = indexOfView(view);
+        }
+        openWarnings_.insert(probe.token, warnings);
+        if (index >= 0) {
+            finishLoadedDocument(index);
+        }
+        return;
+    }
+    // A probe that found no editing data or needs a password has no tab.
+    PictureView* previous =
+        index >= 0 ? documents_.docAt(index)->previousActiveView.data() : nullptr;
+    if (index >= 0) {
+        documents_.setTabTrackingSuppressed(true);
+        documents_.removeDocument(index);
+        documents_.setTabTrackingSuppressed(false);
+        restorePreviousTab(previous);
+    } else {
+        open_cancel(*view);
+        openWired_.remove(view);
+        delete view;
+    }
+    if (status == QStringLiteral("none")) {
+        importPdfPathWithToken(probe.path, probe.interactive, probe.password, probe.token);
+    } else if (status == QStringLiteral("password")
+               || status == QStringLiteral("wrongpassword")) {
+        if (!probe.interactive) {
+            finishOpen(probe.token, OpenOutcome::Failed, tr("the PDF is protected"));
+            return;
+        }
+        QString password = probe.password;
+        if (!askPdfPassword(probe.path, status == QStringLiteral("wrongpassword"), password)) {
+            finishOpen(probe.token, OpenOutcome::Cancelled);
+            return;
+        }
+        startPdfProbe(probe.path, probe.interactive, password, probe.token);
+    } else {
+        const QString message =
+            status.startsWith(QStringLiteral("error:")) ? status.mid(6) : status;
+        reportImportError(probe.path, message);
+        finishOpen(probe.token, OpenOutcome::Failed, message);
+    }
+}
+
+void ImportSaveCoordinator::onOpenFinished(PictureView* view, const QString& status,
+                                           const QStringList& warnings)
+{
+    // Deleting the view inside its own signal emission is unsafe. A failure or
+    // a probe that falls back removes it on the next event-loop turn; a success
+    // only fills the tab, so it can run now.
+    const QPointer<PictureView> guard(view);
+    if (pdfProbes_.contains(view)) {
+        const PdfProbe probe = pdfProbes_.take(view);
+        if (status == QStringLiteral("ok")) {
+            handlePdfProbeFinished(view, probe, status, warnings);
+            return;
+        }
+        QTimer::singleShot(0, this, [this, guard, probe, status, warnings] {
+            if (!guard) {
+                finishOpen(probe.token, OpenOutcome::Failed, status);
+                return;
+            }
+            handlePdfProbeFinished(guard.data(), probe, status, warnings);
+        });
+        return;
+    }
+
+    const int index = indexOfView(view);
+    if (index < 0 || !documents_.isLoading(index)) {
+        return;
+    }
+    const DocEntry entry = *documents_.docAt(index);
+    if (status == QStringLiteral("ok")) {
+        openWarnings_.insert(entry.token, warnings);
+        finishLoadedDocument(index);
+        return;
+    }
+    QTimer::singleShot(0, this, [this, guard, entry, status] {
+        if (!guard) {
+            finishOpen(entry.token, OpenOutcome::Failed, status);
+            return;
+        }
+        const int current = indexOfView(guard.data());
+        if (current < 0 || !documents_.isLoading(current)) {
+            return;
+        }
+        reportOpenFailure(current, status);
+        documents_.setTabTrackingSuppressed(true);
+        documents_.removeDocument(current);
+        documents_.setTabTrackingSuppressed(false);
+        restorePreviousTab(entry.previousActiveView);
+        finishOpen(entry.token, OpenOutcome::Failed, status);
+    });
+}
+
+void ImportSaveCoordinator::cancelAllOpens()
+{
+    for (int i = documents_.count() - 1; i >= 0; --i) {
+        if (documents_.isLoading(i)) {
+            cancelOpen(i);
+        }
+    }
+    const QHash<PictureView*, PdfProbe> probes = pdfProbes_;
+    pdfProbes_.clear();
+    for (auto it = probes.cbegin(); it != probes.cend(); ++it) {
+        PictureView* view = it.key();
+        if (indexOfView(view) >= 0) {
+            continue;
+        }
+        open_cancel(*view);
+        openWired_.remove(view);
+        delete view;
+        finishOpen(it.value().token, OpenOutcome::Cancelled);
+    }
+}
+
+quint64 ImportSaveCoordinator::startOpenPath(const QString& path)
+{
+    const quint64 token = nextOpenToken();
+    auto* view = new PictureView(dialogParent_);
+    if (hooks_.applyColorSettings) {
+        hooks_.applyColorSettings(view);
+    }
+    if (!confirmProfileForOpen(view, path)) {
+        delete view;
+        return 0;
+    }
+    beginOpenCursor();
+    cursorTokens_.insert(token);
+    documents_.addLoadingDocument(view, path, QFileInfo(path).fileName(), token, path,
+                                  OpenKind::Psd);
+    open_psd_start(*view, path);
+    return token;
+}
+
+quint64 ImportSaveCoordinator::startOpenImagePath(const QString& path)
+{
+    const quint64 token = nextOpenToken();
+    auto* view = new PictureView(dialogParent_);
+    if (hooks_.applyColorSettings) {
+        hooks_.applyColorSettings(view);
+    }
+    if (!confirmProfileForOpen(view, path)) {
+        delete view;
+        return 0;
+    }
+    beginOpenCursor();
+    cursorTokens_.insert(token);
+    documents_.addLoadingDocument(view, path, QFileInfo(path).fileName(), token, path,
+                                  OpenKind::Raster);
+    open_image_start(*view, path);
+    return token;
+}
+
+quint64 ImportSaveCoordinator::startOpenAsSmartObjectPath(const QString& path)
+{
+    const quint64 token = nextOpenToken();
+    auto* view = new PictureView(dialogParent_);
+    beginOpenCursor();
+    cursorTokens_.insert(token);
+    documents_.addLoadingDocument(view, QString(), QFileInfo(path).fileName(), token, QString(),
+                                  OpenKind::SmartObject);
+    open_smart_object_start(*view, path);
+    return token;
+}
+
+bool ImportSaveCoordinator::isNativeDocumentPath(const QString& path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    return suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
+}
+
+bool ImportSaveCoordinator::saveRunsOnWorker(const QString& path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    static const QStringList raster = {
+        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
+        QStringLiteral("jpe"), QStringLiteral("tif"),  QStringLiteral("tiff"),
+        QStringLiteral("webp"), QStringLiteral("bmp"),
+    };
+    return suffix != QStringLiteral("pdf") && suffix != QStringLiteral("pdp")
+        && !raster.contains(suffix);
+}
+
+quint64 ImportSaveCoordinator::startOpenDocumentAtPath(const QString& path, bool interactive,
+                                                       bool reportFailure)
+{
+    const QString kind(vector_sniff(path));
+    quint64 token = 0;
+    if (kind == QStringLiteral("pdf") || isPdfPath(path)) {
+        token = startOpenPdfPath(path, interactive);
+    } else if (kind == QStringLiteral("eps")) {
+        token = startImportEpsPath(path, interactive);
+    } else if (isNativeDocumentPath(path)) {
+        token = startOpenPath(path);
+    } else {
+        token = startOpenImagePath(path);
+    }
+    if (reportFailure && token != 0) {
+        reportFailureTokens_.insert(token);
+    }
+    return token;
+}
+
+bool ImportSaveCoordinator::openPath(const QString& path)
+{
+    return waitForOpen(startOpenPath(path)) == OpenOutcome::Opened;
+}
+
+bool ImportSaveCoordinator::openImagePath(const QString& path)
+{
+    return waitForOpen(startOpenImagePath(path)) == OpenOutcome::Opened;
+}
+
+bool ImportSaveCoordinator::openAsSmartObjectPath(const QString& path)
+{
+    return waitForOpen(startOpenAsSmartObjectPath(path)) == OpenOutcome::Opened;
+}
+
+bool ImportSaveCoordinator::openDocumentAtPath(const QString& path, bool interactive)
+{
+    return openDocumentAtPathOutcome(path, interactive) == OpenOutcome::Opened;
+}
+
+OpenOutcome ImportSaveCoordinator::openDocumentAtPathOutcome(const QString& path,
+                                                             bool interactive)
+{
+    return waitForOpen(startOpenDocumentAtPath(path, interactive));
+}
+
+} // namespace pictura

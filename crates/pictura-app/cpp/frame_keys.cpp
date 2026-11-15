@@ -3,6 +3,7 @@
 // frame.cpp unchanged).
 
 #include "frame_includes.h"
+#include "menu_registrar.h"
 
 namespace pictura {
 
@@ -145,6 +146,53 @@ void PicturaMainWindow::keyReleaseEvent(QKeyEvent* event)
         tools_->refreshCursor();
     }
     QMainWindow::keyReleaseEvent(event);
+}
+
+} // namespace pictura
+
+namespace pictura {
+
+bool PicturaMainWindow::dispatchCommandKey(QKeyEvent* event)
+{
+    // Typing `+` takes Shift on most layouts, so Zoom In's Ctrl++ arrives as
+    // Ctrl+=, Ctrl+Shift+=, or keypad Ctrl++ and misses the menu shortcut;
+    // only keys no shortcut or widget took reach the frame.
+    const Qt::KeyboardModifiers mods = event->modifiers();
+    if ((mods & Qt::ControlModifier) && !(mods & Qt::AltModifier)
+        && (event->key() == Qt::Key_Equal || event->key() == Qt::Key_Plus)) {
+        commandRegistry()->dispatch(QLatin1String(command_ids::ViewZoomIn));
+        event->accept();
+        return true;
+    }
+    // Ctrl+\ selects the active layer's mask channel: it shows the mask on the
+    // canvas (the view-only solo) and toggles back to the composite, matching
+    // the Channels panel's mask channel row.
+    if ((mods & Qt::ControlModifier) && !(mods & Qt::AltModifier)
+        && event->key() == Qt::Key_Backslash) {
+        PictureView* view = activeView();
+        if (view && view->has_document() && layer_mask_present(*view)) {
+            const QString path = layer_selection_anchor(*view);
+            mask_solo_set(*view, mask_solo_get(*view) == path ? QString() : path);
+            refresh();
+            event->accept();
+            return true;
+        }
+    }
+    // CS6: Delete / Backspace clear a selection, else delete the selected
+    // layer(s), once no tool has claimed the key.
+    if (!event->isAutoRepeat() && mods == Qt::NoModifier
+        && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace)) {
+        if (handleDeleteKey()) {
+            event->accept();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PicturaMainWindow::handleDeleteKey()
+{
+    return menu_ && menu_->handleDeleteKey();
 }
 
 } // namespace pictura
