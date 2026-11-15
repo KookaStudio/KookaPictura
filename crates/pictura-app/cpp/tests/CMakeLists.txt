@@ -323,10 +323,6 @@ endforeach()
 set_tests_properties(tst_brush_outline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1")
 
-# The AA suite rasterises large selections and exceeded the 120 s default in
-# CI before it could write its JUnit report.
-set_tests_properties(tst_selection_aa PROPERTIES TIMEOUT 300)
-
 # The suites include the generated cxx-qt header, so they follow the bridge
 # stamp like the shell does.
 pictura_depend_on_bridge_stamp(${PICTURA_QT_TEST_SOURCES})

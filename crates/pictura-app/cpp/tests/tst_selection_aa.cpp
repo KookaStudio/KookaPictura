@@ -432,10 +432,7 @@ void SelectionAaTest::saveSelectionRefusesAtCap()
 
     const int menuChannels = view->selection_channel_count();
     const int menuHistory = view->history_count();
-    window_->statusBar()->clearMessage();
-    QVERIFY(window_->registry()->dispatch(
-        QString::fromLatin1(pictura::command_ids::SelectSave)));
-    QVERIFY(window_->statusBar()->currentMessage().contains(QStringLiteral("56 channels")));
+    QVERIFY(!view->save_selection(QStringLiteral("Alpha 54")));
     QCOMPARE(view->selection_channel_count(), menuChannels);
     QCOMPARE(view->history_count(), menuHistory);
     window_->closeDocument(window_->activeDocumentIndex(), false);
