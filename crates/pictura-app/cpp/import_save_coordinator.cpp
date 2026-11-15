@@ -9,6 +9,7 @@
 #include "session.h"
 
 #include <QtCore/QFileInfo>
+#include <QtCore/QTemporaryDir>
 
 namespace pictura {
 
