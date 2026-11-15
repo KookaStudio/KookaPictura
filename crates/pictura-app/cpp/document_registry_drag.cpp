@@ -68,6 +68,12 @@ void DocumentRegistry::wireDocumentMenus()
     tabs_->installEventFilter(this);
 }
 
+void DocumentRegistry::setWindowDockDragForTest(
+    std::function<void(std::unique_ptr<QMimeData>)> hook)
+{
+    windowDockDragForTest_ = std::move(hook);
+}
+
 bool DocumentRegistry::eventFilter(QObject* watched, QEvent* event)
 {
     if (tabs_ && watched == tabs_->tabBar() && tearOutFilter(event)) {
