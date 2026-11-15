@@ -19,7 +19,7 @@ impl ColorTable {
 pub fn parse_act(bytes: &[u8]) -> Option<ColorTable> {
     match bytes.len() {
         768 => Some(ColorTable {
-            colors: bytes.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+            colors: bytes.as_chunks::<3>().0.to_vec(),
             transparent: None,
         }),
         772 => {
@@ -27,19 +27,13 @@ pub fn parse_act(bytes: &[u8]) -> Option<ColorTable> {
             if count == 0 || count > 256 {
                 // A bad trailer: the first 768 bytes are still a full table.
                 return Some(ColorTable {
-                    colors: bytes[..768]
-                        .chunks_exact(3)
-                        .map(|c| [c[0], c[1], c[2]])
-                        .collect(),
+                    colors: bytes[..768].as_chunks::<3>().0.to_vec(),
                     transparent: None,
                 });
             }
             let clear = u16::from_be_bytes([bytes[770], bytes[771]]);
             Some(ColorTable {
-                colors: bytes[..count * 3]
-                    .chunks_exact(3)
-                    .map(|c| [c[0], c[1], c[2]])
-                    .collect(),
+                colors: bytes[..count * 3].as_chunks::<3>().0.to_vec(),
                 transparent: (clear < count as u16).then_some(clear as u8),
             })
         }

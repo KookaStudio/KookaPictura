@@ -199,6 +199,8 @@ void SaveForWebTest::sizePresetsSaveAndDone()
     QVERIFY(dir.isValid());
     {
         pictura::SaveForWebDialog dialog(picture());
+        // Remembered settings persist across tests; pin the format this check decodes.
+        child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
         // Image Size: 50 % halves both sides, proportions kept.
         child<QSpinBox>(dialog, "saveForWebPercent")->setValue(50);
         QCOMPARE(child<QSpinBox>(dialog, "saveForWebWidth")->value(), 32);
