@@ -73,7 +73,8 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
 - Revert… — `F12` ✓
 - Place… ✓
 - Import ▸ ✓ (Variable Data Sets ✓; WIA Support ✓; installed scanner/camera devices)
-- Export ▸ ✓ (Data Sets As Files ✓; Render Video… ✓; Zoomify… ✓)
+- Export ▸ ✓ (Data Sets As Files ✓; Render Video… ✓; Zoomify… ✓;
+  Paths to Illustrator… ✓)
 - Automate ▸ ✓ (Batch… ✓; Conditional Mode Change… ✓; Contact Sheet II ✓;
   Create Droplet… ✓; Crop And Straighten Photos ✓; Merge To HDR Pro… ✓;
   PDF Presentation ✓; Photomerge… ✓; Picture Package ✓)
