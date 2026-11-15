@@ -53,9 +53,10 @@ Deeper technical status for PSD/PSB lives in
   `crates/pictura-app/cpp/save_for_web_dialog.cpp`.
 - [x] **Print.** A print dialog over `QPrinter`, with printer-managed colour and
   a "Save as PDF" option. `crates/pictura-app/cpp/print_dialog.cpp`.
-- [x] **Metadata.** EXIF, IPTC and XMP reading, six editable IPTC fields, File
-  Info, and XMP metadata templates. `crates/pictura-codec/src/exif.rs`,
-  `crates/pictura-codec/src/xmp.rs`.
+- [x] **Metadata.** EXIF, IPTC and XMP reading, fourteen editable IPTC and
+  IPTC Extension fields, File Info with Description, IPTC, Origin, IPTC
+  Extension, Photoshop and editable raw XMP tabs, and XMP metadata templates.
+  `crates/pictura-codec/src/exif.rs`, `crates/pictura-codec/src/xmp/mod.rs`.
 - [x] **Save As format options dialogs** for JPEG, PNG, BMP and TIFF, with the
   JPEG quality/format/matte, PNG compression, and TIFF compression/transparency
   options honored and the last-used settings remembered. `crates/pictura-app/cpp/jpeg_options_dialog.cpp`,
