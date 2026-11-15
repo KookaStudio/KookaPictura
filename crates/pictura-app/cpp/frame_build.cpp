@@ -1,6 +1,7 @@
 #include "frame_includes.h"
 #include "panels/brush_panel.h"
 #include "panels/character_panel.h"
+#include "panels/color_panel.h"
 #include "panels/clone_source_panel.h"
 #include "panels/glyphs_panel.h"
 #include "panels/info_panel.h"
