@@ -115,10 +115,6 @@ PanelHost::PanelHost(QWidget* shell, DocumentRegistry* documents, CommandRegistr
             [this](int pos, int index) { onCenterSplitterMoved(pos, index); });
 
     if (documents_) {
-        // Panel binding follows the active document immediately; the debounced
-        // pass then only refreshes in place.
-        connect(documents_, &DocumentRegistry::activeDocumentChanged, this,
-                &PanelHost::retargetDockIfNeeded);
         connect(documents_, &DocumentRegistry::aboutToRemoveDocument, this, [this](int index) {
             DocEntry* entry = documents_->docAt(index);
             if (entry && entry->view && entry->view == dockView_) {
