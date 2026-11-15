@@ -6,6 +6,7 @@
 #include <QtCore/QEvent>
 #include <QtCore/QMetaObject>
 #include <QtGui/QKeyEvent>
+#include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QAbstractSpinBox>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QColorDialog>
@@ -103,6 +104,13 @@ private:
             || qobject_cast<QFontDialog*>(window) || qobject_cast<QInputDialog*>(window);
     }
 
+    // A foreign QLineEdit has no public emit helper, so invoke its signal by
+    // name; the owner's editingFinished connection is the commit path.
+    static void finishEdit(QLineEdit* edit)
+    {
+        QMetaObject::invokeMethod(edit, "editingFinished");
+    }
+
     static void commitField(QWidget* field)
     {
         if (auto* spin = qobject_cast<QAbstractSpinBox*>(field)) {
@@ -112,7 +120,7 @@ private:
         if (auto* combo = qobject_cast<QComboBox*>(field)) {
             acceptCompletion(combo);
             if (QLineEdit* edit = combo->lineEdit()) {
-                QMetaObject::invokeMethod(edit, "editingFinished");
+                finishEdit(edit);
             }
             if (auto* fonts = qobject_cast<QFontComboBox*>(combo)) {
                 commitFont(fonts);
@@ -120,7 +128,7 @@ private:
             return;
         }
         if (auto* edit = qobject_cast<QLineEdit*>(field)) {
-            QMetaObject::invokeMethod(edit, "editingFinished");
+            finishEdit(edit);
         }
     }
 
