@@ -297,6 +297,7 @@ fn pdf_file(doc: &Document, include_icc: bool, path: &str) -> bool {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default(),
         live_text: None,
+        proof: None,
     };
     match pictura_codec::pdf::write_pdf(doc, &doc.composite, &options, &env) {
         Ok(bytes) => super::super::helpers::safe_io::write_atomically(path, &bytes, false).is_ok(),
