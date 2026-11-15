@@ -17,7 +17,8 @@ file.import.variable.data.sets	File/Import/Variable Data Sets	Variable Data Sets
 file.import.wia.support	File/Import/WIA Support	WIA Support		0	0
 file.export.data.sets.as.files	File/Export/Data Sets As Files…	Data Sets As Files…		0	0
 file.export.render.video	File/Export/Render Video…	Render Video…		0	0
-file.export.zoomify	File/Export/Zoomify…	Zoomify…		0	0
+file.export.zoomify	File/Export/Zoomify…	Zoomify…		1	0
+file.export.paths.to.illustrator	File/Export/Paths to Illustrator…	Paths to Illustrator…		1	0
 file.automate.batch	File/Automate/Batch…	Batch…		0	0
 file.automate.conditional.mode.change	File/Automate/Conditional Mode Change…	Conditional Mode Change…		0	0
 file.automate.contact.sheet.ii	File/Automate/Contact Sheet II	Contact Sheet II		0	0
@@ -27,7 +28,7 @@ file.automate.merge.to.hdr.pro	File/Automate/Merge To HDR Pro…	Merge To HDR Pr
 file.automate.pdf.presentation	File/Automate/PDF Presentation	PDF Presentation		0	0
 file.automate.photomerge	File/Automate/Photomerge…	Photomerge…		0	0
 file.automate.picture.package	File/Automate/Picture Package	Picture Package		0	0
-file.scripts.export.layers.to.files	File/Scripts/Export Layers to Files	Export Layers to Files		0	0
+file.scripts.export.layers.to.files	File/Scripts/Export Layers to Files…	Export Layers to Files…		1	0
 file.scripts.image.processor	File/Scripts/Image Processor	Image Processor		0	0
 file.scripts.layer.comps.to.files	File/Scripts/Layer Comps to Files	Layer Comps to Files		0	0
 file.scripts.load.files.into.stack	File/Scripts/Load Files into Stack	Load Files into Stack		0	0

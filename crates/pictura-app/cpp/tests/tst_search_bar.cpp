@@ -464,10 +464,10 @@ void SearchBarTest::enterRunsPanelPreferenceControl()
 
 void SearchBarTest::stubIsNotRunnable()
 {
-    pictura::SearchBar* searchBar = openBar(QStringLiteral("zoomify"));
+    pictura::SearchBar* searchBar = openBar(QStringLiteral("render video"));
     QVERIFY(searchBar && searchBar->results()->count() > 0);
     QListWidgetItem* item = searchBar->results()->item(0);
-    QCOMPARE(item->text(), QStringLiteral("File > Export > Zoomify"));
+    QCOMPARE(item->text(), QStringLiteral("File > Export > Render Video"));
     QVERIFY2(!item->data(pictura::SearchBar::kRunnableRole).toBool(), "the stub row is greyed");
     QVERIFY(!searchBar->entryAt(0)->implemented);
 
@@ -480,9 +480,9 @@ void SearchBarTest::stubIsNotRunnable()
 
     // Alt+Enter still opens the chain. QMenu does not activate a disabled
     // action, so the stub item itself is not highlighted.
-    QAction* zoomify = window_->registry()->action(searchBar->entryAt(0)->command);
-    QVERIFY(zoomify);
-    QMenu* exportMenu = owningMenu(zoomify);
+    QAction* renderVideo = window_->registry()->action(searchBar->entryAt(0)->command);
+    QVERIFY(renderVideo);
+    QMenu* exportMenu = owningMenu(renderVideo);
     QVERIFY(exportMenu);
     QMenu* file = owningMenu(exportMenu->menuAction());
     QVERIFY(file);

@@ -7,6 +7,7 @@
 
 mod imp;
 
+use super::export_tools::*;
 use super::qobject::PictureView;
 use super::save_format::{raster_preview_bytes, set_save_raster_options};
 pub use imp::*;
@@ -106,5 +107,45 @@ pub mod ffi {
             progressive: bool,
             matte: i32,
         ) -> Vec<u8>;
+
+        /// The document's Work Path and saved paths as Illustrator-8 EPS bytes; empty without a document.
+        fn illustrator_paths_eps(view: &PictureView) -> Vec<u8>;
+
+        /// The document's Work Path and saved paths as PDF-based `.ai` bytes; empty without a document.
+        fn illustrator_paths_pdf(view: &PictureView) -> Vec<u8>;
+
+        /// Whether the document has at least one path to export.
+        fn illustrator_has_paths(view: &PictureView) -> bool;
+
+        /// The Zoomify plan flattened as `[base_w, base_h, tiers, tiles]`, then per tier `[level, w, h, tiles]`, then per tile `[x, y, left, top, w, h]`.
+        fn zoomify_plan_flat(base_width: i32, base_height: i32) -> Vec<i32>;
+
+        /// The `TileGroup` index for a tile ordinal.
+        fn zoomify_group_for(ordinal: i32) -> i32;
+
+        /// The `ImageProperties.xml` text for a base size; empty for a zero size.
+        fn zoomify_properties(base_width: i32, base_height: i32) -> QString;
+
+        /// The self-contained viewer HTML for a base size; empty for a zero size.
+        fn zoomify_html(base_width: i32, base_height: i32) -> QString;
+
+        /// One line per export target: `layer path<TAB>base file name` (no suffix). Empty without a document.
+        fn export_layer_targets(
+            view: &PictureView,
+            visible_only: bool,
+            prefix: &QString,
+        ) -> QString;
+
+        /// Write one layer to `path` as `format` (PSD/JPEG/TIFF/BMP/PDF), alone on a document-sized canvas; false without writing on any failure.
+        fn export_layer_file(
+            view: &PictureView,
+            layer_path: &QString,
+            format: &QString,
+            include_icc: bool,
+            path: &QString,
+        ) -> bool;
+
+        /// Hold each export unit for `micros` microseconds; the tests' deterministic cancel seam.
+        fn export_tools_set_delay(view: &PictureView, micros: i32);
     }
 }

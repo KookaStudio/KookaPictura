@@ -38,6 +38,7 @@ mod ghostscript;
 mod guide_resources;
 mod icc;
 mod icc_convert;
+pub mod illustrator;
 mod image_resources;
 mod iptc;
 mod lazy;
@@ -77,6 +78,7 @@ mod write_duotone;
 mod write_indexed;
 mod write_layers;
 pub mod xmp;
+pub mod zoomify;
 
 #[cfg(test)]
 mod probe_tests;
@@ -103,6 +105,7 @@ pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind
 pub use icc::{
     assign_cmyk_profile, assign_document_profile, buffer_to_srgb, convert_document,
     convert_document_with, document_cmyk_profile, profile_description, remove_document_profile,
+    strip_document_icc,
 };
 pub use image_resources::{
     alpha_names, decode_image_resources, display_info, document_resolution, encode_image_resources,

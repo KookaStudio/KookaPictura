@@ -9,6 +9,9 @@ FileQuickExportPng	file.quickExportPng
 FileRevert	file.revert
 FilePlace	file.place
 FileInfo	file.fileInfo
+FileExportZoomify	file.export.zoomify
+FileExportPathsToIllustrator	file.export.paths.to.illustrator
+FileScriptsExportLayersToFiles	file.scripts.export.layers.to.files
 FileClose	file.close
 FileCloseAll	file.closeAll
 FileExit	file.exit

@@ -19,6 +19,7 @@ mod document_session;
 mod edit;
 mod engine_tables;
 mod export;
+mod export_tools;
 mod eyedropper_sample;
 mod fade;
 mod file_info;

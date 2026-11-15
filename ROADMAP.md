@@ -71,10 +71,11 @@ Deeper technical status for PSD/PSB lives in
 - [ ] GIF-via-Indexed on save, and Save a Copy (#628)
 - [x] The Save for Web slice HTML and CSS emitter, 2-Up and 4-Up, the
       colour-table editor, and the metadata menu (#629)
-- [ ] Data Sets As Files, Zoomify, Render Video, and Paths to Illustrator
-      (#630)
-- [x] The File Info tabs for IPTC Extension, GPS, Origin and Photoshop, and
-      the editing they imply (#631). Video, Audio and DICOM are not planned.
+- [x] **Zoomify and Paths to Illustrator** (#630)
+- [ ] Data Sets As Files (#622) and Render Video (deferred Extended-only,
+      codec backend needed) (#630)
+- [x] The File Info tabs for IPTC Extension, GPS, Origin, Video, Audio,
+      Photoshop and DICOM, and the editing they imply (#631)
 - [ ] Print colour management, proofing, output marks, and persisted defaults
       (#634)
 - [ ] The measurement scale and presets, the exporters, and PSD resource 1074
@@ -140,7 +141,8 @@ Deeper technical status for PSD/PSB lives in
 - [ ] The `00` / `Shift+00` layer opacity shortcut (#523)
 - [x] Shape layer naming `<Tool> N` (#588).
   `crates/pictura-render/src/document_ops/layer_ops/shape_layer.rs`
-- [ ] Export Layers To Files (#587)
+- [x] **Export Layers To Files — core** (#587)
+- [ ] Export Layers' shared Save As option controls and Targa (#587, #625)
 - [ ] Merge Down's result appearance when the target's blend mode or opacity is
       non-default (#813)
 
@@ -656,7 +658,8 @@ condition behind each live in
 
 - 3D tools and 3D layers — the 3D object and camera tools sit in the tool
   catalogue but are not built, and there is no 3D panel
-- Video, the timeline, and video layers
+- Video, the timeline, and video layers — exact timeline parity; Render Video
+  is deferred Extended-only until a codec backend exists
 - The measurement engine, its Measurement Log panel, and DICOM — the Count tool
   ships, the rest do not
 - Print fidelity matching Adobe's engine
