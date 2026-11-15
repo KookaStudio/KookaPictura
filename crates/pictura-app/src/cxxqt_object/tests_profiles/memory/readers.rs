@@ -116,9 +116,18 @@ fn similar_heap_holds_no_composite() {
     bounded("similar", output, || with_marquee(GUARD_SIDE), similar);
 }
 
+/// A `side`² layered document whose two layers are canvas-sized and dense
+/// (every pixel varies), so a copy of their planes would show in a peak.
+fn dense_layers(side: u32) -> PictureViewRust {
+    use crate::cxxqt_object::picture::readers_fixture::{layered, view_of};
+    view_of(layered(side, side, false))
+}
+
+/// On a document with dense canvas-sized layers, so the Magnetic Lasso's
+/// document clone would show if it copied their planes.
 #[test]
 fn magnetic_begin_heap_holds_no_composite() {
-    bounded("magnetic_begin", 0, || with_square(GUARD_SIDE), magnetic);
+    bounded("magnetic_begin", 0, || dense_layers(GUARD_SIDE), magnetic);
 }
 
 #[test]
@@ -138,7 +147,7 @@ fn readers_heap_peak_full() {
     report("export_rgba", || with_square(FULL_SIDE), export);
     report("trim_bounds", || with_square(FULL_SIDE), trim);
     report("similar", || with_marquee(FULL_SIDE), similar);
-    report("magnetic_begin", || with_square(FULL_SIDE), magnetic);
+    report("magnetic_begin", || dense_layers(FULL_SIDE), magnetic);
     report("preview_level", || with_square(FULL_SIDE), preview);
     report("gray_conversion", || small_layers(FULL_SIDE), gray);
 }

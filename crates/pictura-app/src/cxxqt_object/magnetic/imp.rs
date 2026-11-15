@@ -27,7 +27,9 @@ impl super::super::state::PictureViewRust {
             };
             // The peak streams the picture by band and the costs read it a tile
             // at a time from a document clone, so no whole picture is built
-            // (#1274).
+            // (#1274). The clone shares every plane's tiles (refcounts), so it
+            // costs the layer tree, not the pixels; the dense-layer heap guard
+            // measures it.
             let t = std::time::Instant::now();
             let tiles = PictureTiles::new(
                 std::sync::Arc::new(doc.clone()),

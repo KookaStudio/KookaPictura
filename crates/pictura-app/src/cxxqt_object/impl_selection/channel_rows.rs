@@ -135,24 +135,22 @@ fn channel_row_value(
     depth: usize,
     i: usize,
 ) -> u8 {
-    {
-        let r = samples[i];
-        let (g, b) = if depth >= 3 {
-            (samples[plane + i], samples[2 * plane + i])
-        } else {
-            (r, r)
-        };
-        if composite && row == 0 {
-            // The composite row follows the visible channels.
-            q_gray(
-                if mask & 0x1 != 0 { r } else { 0 },
-                if mask & 0x2 != 0 { g } else { 0 },
-                if mask & 0x4 != 0 { b } else { 0 },
-            )
-        } else {
-            // A colour row is its own plane regardless of the eyes: CS6 loads a
-            // hidden channel too.
-            channel_value(mode, if composite { row - 1 } else { row }, r, g, b)
-        }
+    let r = samples[i];
+    let (g, b) = if depth >= 3 {
+        (samples[plane + i], samples[2 * plane + i])
+    } else {
+        (r, r)
+    };
+    if composite && row == 0 {
+        // The composite row follows the visible channels.
+        q_gray(
+            if mask & 0x1 != 0 { r } else { 0 },
+            if mask & 0x2 != 0 { g } else { 0 },
+            if mask & 0x4 != 0 { b } else { 0 },
+        )
+    } else {
+        // A colour row is its own plane regardless of the eyes: CS6 loads a
+        // hidden channel too.
+        channel_value(mode, if composite { row - 1 } else { row }, r, g, b)
     }
 }
