@@ -207,6 +207,7 @@ set(PICTURA_QT_TESTS
     tst_selection_alt
     tst_selection_move
     tst_selection_preview
+    tst_selection_save_load
     tst_nested_layer_target
     tst_screen_modes
     tst_dialog_chrome

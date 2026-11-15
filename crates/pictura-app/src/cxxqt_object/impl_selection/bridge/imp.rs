@@ -4,7 +4,7 @@ use crate::cxxqt_object::helpers::{combine_mode_from, feathered, feathered_withi
 use crate::cxxqt_object::picture::picture;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
+use cxx_qt_lib::{QString, QStringList};
 use pictura_select::geometry::{marquee_rect, within_radius, MarqueeStyle};
 use pictura_select::Selection;
 
@@ -193,4 +193,67 @@ pub(super) fn selection_marquee_rect(
 
 pub(super) fn selection_within_radius(x0: f64, y0: f64, x1: f64, y1: f64, radius: f64) -> bool {
     within_radius((x0, y0), (x1, y1), radius)
+}
+
+pub(super) fn save_selection_to(
+    view: Pin<&mut PictureView>,
+    target: &QString,
+    name: &QString,
+    mode: &QString,
+) -> bool {
+    view.save_selection_to(target, name, mode)
+}
+
+pub(super) fn load_selection_target(
+    view: Pin<&mut PictureView>,
+    target: &QString,
+    invert: bool,
+    mode: &QString,
+) -> bool {
+    view.load_selection_target(target, invert, mode)
+}
+
+pub(super) fn selection_mask_targets(view: &PictureView) -> QStringList {
+    view.selection_mask_targets()
+}
+
+pub(super) fn selection_coverage_bytes(view: &PictureView) -> Vec<u8> {
+    view.selection_coverage_bytes()
+}
+
+pub(super) fn channel_coverage(view: &PictureView, target: &QString) -> Vec<u8> {
+    view.channel_coverage(target)
+}
+
+pub(super) fn save_selection_coverage(
+    view: Pin<&mut PictureView>,
+    coverage: &[u8],
+    width: i32,
+    height: i32,
+    target: &QString,
+    name: &QString,
+    mode: &QString,
+) -> bool {
+    view.save_selection_coverage(coverage, width, height, target, name, mode)
+}
+
+pub(super) fn load_selection_coverage(
+    view: Pin<&mut PictureView>,
+    coverage: &[u8],
+    width: i32,
+    height: i32,
+    invert: bool,
+    mode: &QString,
+) -> bool {
+    view.load_selection_coverage(coverage, width, height, invert, mode)
+}
+
+pub(super) fn new_selection_document(
+    view: Pin<&mut PictureView>,
+    coverage: &[u8],
+    width: i32,
+    height: i32,
+    name: &QString,
+) -> bool {
+    view.new_selection_document(coverage, width, height, name)
 }

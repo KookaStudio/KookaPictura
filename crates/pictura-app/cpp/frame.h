@@ -306,6 +306,7 @@ public:
     QString documentPath(int index) const;
     QString documentName(int index) const;
     QString documentTabTextForTest(int index) const;
+    QStringList selectionDocumentLabelsForTest() const;
     // Give document `index` a display name, as a typed New or Duplicate name does.
     void setDocumentNameForTest(int index, const QString& name);
     bool isDocumentDirty(int index) const;
@@ -497,12 +498,10 @@ public:
     // links.
     void installMenuCornerButtons();
     void updateThemeCornerIcon();
-
 Q_SIGNALS:
     // Emitted on the GUI thread when a started open ends. `outcome` is
     // `OpenOutcome`; `error` is the failure message (empty for success/cancel).
     void documentOpenFinished(quint64 token, int outcome, const QString& error);
-
 protected:
     void closeEvent(QCloseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -510,7 +509,6 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
-
 private:
     // Keys the menu shortcuts miss: Ctrl+= / Ctrl+Shift+= / keypad Ctrl++
     // zoom in, and Delete / Backspace clear a selection. True when handled.
@@ -540,6 +538,7 @@ private:
     // open) opens the Open dialog.
     void installWorkspaceOpenGesture();
     void wirePdfCommands();
+    void openSaveSelectionDialog(); void openLoadSelectionDialog();
     void applyTextGamma(bool enabled, double gamma);
     // frame_mask_overlay.cpp: re-render the rubylith overlay when the Layers
     // panel changes it, and draw the view's overlay on `canvas`.

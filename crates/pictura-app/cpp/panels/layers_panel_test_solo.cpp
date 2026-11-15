@@ -45,6 +45,22 @@ bool LayersPanel::ctrlClickMaskThumbnailForTest(const QString& path)
     return clickMaskThumbWithModifiersForTest(path, Qt::ControlModifier);
 }
 
+bool LayersPanel::ctrlShiftClickMaskThumbnailForTest(const QString& path)
+{
+    return clickMaskThumbWithModifiersForTest(path, Qt::ControlModifier | Qt::ShiftModifier);
+}
+
+bool LayersPanel::ctrlAltClickMaskThumbnailForTest(const QString& path)
+{
+    return clickMaskThumbWithModifiersForTest(path, Qt::ControlModifier | Qt::AltModifier);
+}
+
+bool LayersPanel::ctrlShiftAltClickMaskThumbnailForTest(const QString& path)
+{
+    return clickMaskThumbWithModifiersForTest(
+        path, Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier);
+}
+
 bool LayersPanel::altShiftClickMaskThumbnailForTest(const QString& path)
 {
     return clickMaskThumbWithModifiersForTest(path, Qt::AltModifier | Qt::ShiftModifier);

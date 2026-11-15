@@ -3,8 +3,8 @@ use super::*;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
-use pictura_core::{Channel, ColorMode};
+use cxx_qt_lib::{QString, QStringList};
+use pictura_core::{Channel, ColorMode, Document};
 
 pub(in crate::cxxqt_object) fn mode_name(mode: ColorMode) -> &'static str {
     match mode {
@@ -129,10 +129,9 @@ pub(super) fn channels_delete_alpha(mut view: Pin<&mut PictureView>, index: i32)
         let Ok(i) = usize::try_from(index) else {
             return Edit::None;
         };
-        if i >= doc.channels.len() {
+        if !delete_alpha_with_name(doc, i) {
             return Edit::None;
         }
-        doc.channels.remove(i);
         removed = true;
         Edit::Meta
     });
@@ -143,8 +142,60 @@ pub(super) fn channels_load_color_selection(
     view: Pin<&mut PictureView>,
     row: i32,
     mask: i32,
+    mode: &QString,
 ) -> bool {
-    view.load_channel_selection(row, mask)
+    view.load_channel_selection(row, mask, mode)
+}
+
+fn delete_alpha_with_name(doc: &mut Document, index: usize) -> bool {
+    if index >= doc.channels.len() {
+        return false;
+    }
+    let mut names = pictura_codec::alpha_names(doc);
+    doc.channels.remove(index);
+    if index < names.len() {
+        names.remove(index);
+    }
+    names.truncate(doc.channels.len());
+    pictura_codec::set_alpha_names(doc, &names);
+    true
+}
+
+fn alpha_display_names(doc: &Document) -> Vec<String> {
+    let names = pictura_codec::alpha_names(doc);
+    (0..doc.channels.len())
+        .map(|index| {
+            let stored = names.get(index).map(String::as_str).unwrap_or("");
+            if stored.trim().is_empty() {
+                format!("Alpha {}", index + 1)
+            } else {
+                stored.to_string()
+            }
+        })
+        .collect()
+}
+
+pub(super) fn channels_alpha_names(view: &PictureView) -> QStringList {
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return QStringList::default();
+    };
+    alpha_display_names(doc)
+        .into_iter()
+        .map(QString::from)
+        .collect()
+}
+
+pub(super) fn channels_alpha_name(view: &PictureView, index: i32) -> QString {
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return QString::default();
+    };
+    usize::try_from(index)
+        .ok()
+        .and_then(|index| alpha_display_names(doc).into_iter().nth(index))
+        .map(QString::from)
+        .unwrap_or_default()
 }
 
 pub(super) fn channels_active_mask_name(view: &PictureView) -> QString {
@@ -180,6 +231,7 @@ pub(super) fn channels_active_mask_thumbnail(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pictura_core::BitDepth;
 
     #[test]
     fn new_alpha_refuses_at_cap() {
@@ -205,5 +257,46 @@ mod tests {
         assert_eq!(small, [0, 2, 4, 6]);
         assert_eq!(shrink_plane(&data, 8, 2, 100).0.len(), 16);
         assert_eq!(mode_name(ColorMode::Lab), "lab");
+    }
+
+    fn doc() -> Document {
+        let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
+        doc.channels = (0..3)
+            .map(|id| Channel {
+                id,
+                data: vec![0u8; 4].into(),
+            })
+            .collect();
+        doc
+    }
+
+    #[test]
+    fn channel_name_falls_back_to_alpha_n() {
+        let mut doc = doc();
+        assert_eq!(
+            alpha_display_names(&doc),
+            vec!["Alpha 1", "Alpha 2", "Alpha 3"]
+        );
+        pictura_codec::set_alpha_names(&mut doc, &["Hair".to_string()]);
+        assert_eq!(
+            alpha_display_names(&doc),
+            vec!["Hair", "Alpha 2", "Alpha 3"]
+        );
+    }
+
+    #[test]
+    fn channel_name_positions_follow_add_and_delete() {
+        let mut doc = doc();
+        pictura_codec::set_alpha_names(
+            &mut doc,
+            &["A".to_string(), "B".to_string(), "C".to_string()],
+        );
+        assert!(delete_alpha_with_name(&mut doc, 1));
+        assert_eq!(alpha_display_names(&doc), vec!["A", "C"]);
+        doc.channels.push(Channel {
+            id: 9,
+            data: vec![0u8; 4].into(),
+        });
+        assert_eq!(alpha_display_names(&doc), vec!["A", "C", "Alpha 3"]);
     }
 }

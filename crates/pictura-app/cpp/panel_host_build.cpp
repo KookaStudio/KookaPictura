@@ -155,6 +155,11 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
             }
         }
     });
+    connect(channelsPanel_, &ChannelsPanel::saveOptionsRequested, this, [this]() {
+        if (hooks_.saveSelectionOptions) {
+            hooks_.saveSelectionOptions();
+        }
+    });
 
     pathsPanel_ = new PathsPanel(shell_);
     pathsPanel_->setObjectName(QStringLiteral("pathsPanel"));

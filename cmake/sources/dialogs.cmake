@@ -41,6 +41,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/rasterize_eps_dialog.cpp
     crates/pictura-app/cpp/rasterize_eps_dialog.h
     crates/pictura-app/cpp/refine_edge_dialog.cpp
+    crates/pictura-app/cpp/save_load_selection_dialog.cpp
+    crates/pictura-app/cpp/save_load_selection_dialog.h
     crates/pictura-app/cpp/shape_dialogs.cpp
     crates/pictura-app/cpp/slider_dialog.cpp
     crates/pictura-app/cpp/slider_dialog.h

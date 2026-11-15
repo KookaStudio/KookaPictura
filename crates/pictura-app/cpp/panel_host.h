@@ -65,6 +65,7 @@ class PanelHost : public QObject, public PanelMenuHookStore {
 public:
     struct Hooks {
         std::function<void()> saveSession;
+        std::function<void()> saveSelectionOptions;
         std::function<void()> interfaceOptionsRequested;
         std::function<PictureView*()> activeView;
         std::function<ImageView*()> activeCanvas;

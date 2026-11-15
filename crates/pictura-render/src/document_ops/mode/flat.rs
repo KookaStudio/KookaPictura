@@ -244,6 +244,7 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(),
     }
     doc.layers = pictura_core::LayerStack::default();
     doc.channels.clear();
+    pictura_codec::set_alpha_names(doc, &[]);
     doc.mode = ColorMode::Rgb;
     doc.composite = PixelBuffer {
         width: doc.width,

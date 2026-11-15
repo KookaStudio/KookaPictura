@@ -235,6 +235,10 @@ public:
     bool altClickMaskThumbnailForTest(const QString& path);
     // Ctrl-click the mask thumbnail: load its coverage as a selection.
     bool ctrlClickMaskThumbnailForTest(const QString& path);
+    // Ctrl-prefixed combine clicks on the mask thumbnail.
+    bool ctrlShiftClickMaskThumbnailForTest(const QString& path);
+    bool ctrlAltClickMaskThumbnailForTest(const QString& path);
+    bool ctrlShiftAltClickMaskThumbnailForTest(const QString& path);
     // Alt+Shift-click the mask thumbnail (the rubylith overlay toggle); false
     // when the row shows no mask.
     bool altShiftClickMaskThumbnailForTest(const QString& path);

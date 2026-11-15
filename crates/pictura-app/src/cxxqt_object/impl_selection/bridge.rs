@@ -14,6 +14,8 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -120,5 +122,60 @@ pub mod ffi {
 
         /// Whether `(x1, y1)` lies within `radius` of `(x0, y0)`.
         fn selection_within_radius(x0: f64, y0: f64, x1: f64, y1: f64, radius: f64) -> bool;
+
+        /// Save into `target` (`new`, `alpha:<index>`, `mask:<path>`) with `mode`.
+        fn save_selection_to(
+            view: Pin<&mut PictureView>,
+            target: &QString,
+            name: &QString,
+            mode: &QString,
+        ) -> bool;
+
+        /// Load `target` (`alpha:<index>` or `mask:<path>`) with invert and `mode`.
+        fn load_selection_target(
+            view: Pin<&mut PictureView>,
+            target: &QString,
+            invert: bool,
+            mode: &QString,
+        ) -> bool;
+
+        /// Every existing raster layer mask as `path|Layer Name Mask`.
+        fn selection_mask_targets(view: &PictureView) -> QStringList;
+
+        /// The live selection coverage, row-major; empty without a selection.
+        fn selection_coverage_bytes(view: &PictureView) -> Vec<u8>;
+
+        /// The coverage of `target` in this document; empty on failure.
+        fn channel_coverage(view: &PictureView, target: &QString) -> Vec<u8>;
+
+        /// Save transferred coverage into `target`; one history state.
+        fn save_selection_coverage(
+            view: Pin<&mut PictureView>,
+            coverage: &[u8],
+            width: i32,
+            height: i32,
+            target: &QString,
+            name: &QString,
+            mode: &QString,
+        ) -> bool;
+
+        /// Load transferred coverage into this document; one history state.
+        fn load_selection_coverage(
+            view: Pin<&mut PictureView>,
+            coverage: &[u8],
+            width: i32,
+            height: i32,
+            invert: bool,
+            mode: &QString,
+        ) -> bool;
+
+        /// Build a single-channel multichannel document from coverage.
+        fn new_selection_document(
+            view: Pin<&mut PictureView>,
+            coverage: &[u8],
+            width: i32,
+            height: i32,
+            name: &QString,
+        ) -> bool;
     }
 }

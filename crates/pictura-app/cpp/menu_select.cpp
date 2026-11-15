@@ -1,5 +1,7 @@
 #include "menu_registrar.h"
 
+#include "frame.h"
+
 #include "commands.h"
 
 #include "menu_registrar_internal.h"
@@ -16,13 +18,38 @@
 #include "color_range_dialog.h"
 #include "replace_color_dialog.h"
 #include "refine_edge_dialog.h"
+#include "save_load_selection_dialog.h"
 
 #include <QtCore/QPointF>
 #include <QtCore/QRectF>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMessageBox>
 
 namespace pictura {
+
+namespace {
+
+QList<int> sameSizeDocumentIndexes(const PicturaMainWindow& frame)
+{
+    QList<int> indexes;
+    PictureView* active = frame.activeView();
+    if (!active || !active->has_document()) {
+        return indexes;
+    }
+    const int width = active->document_width();
+    const int height = active->document_height();
+    for (int i = 0; i < frame.documentCount(); ++i) {
+        PictureView* view = frame.viewAt(i);
+        if (view && view->has_document() && view->document_width() == width
+            && view->document_height() == height) {
+            indexes.push_back(i);
+        }
+    }
+    return indexes;
+}
+
+} // namespace
 
 // Select menu operations. Parameters come from QInputDialog; a cancelled dialog
 // returns before the bridge, so it records nothing. Each applied command records
@@ -86,43 +113,14 @@ void MenuRegistrar::registerSelectHandlers()
         }
     });
     commands_->setHandler(command_ids::SelectSave, [this]() {
-        PictureView* view = activeView();
-        if (!view || !view->has_selection()) {
-            return;
+        if (runtime_.openSaveSelectionDialog) {
+            runtime_.openSaveSelectionDialog();
         }
-        if (!channels_can_add(*view)) {
-            showStatus(
-                tr("Cannot save selection: the document already has %1 channels.")
-                    .arg(channels_max()),
-                6000);
-            return;
-        }
-        bool ok = false;
-        const QString name = QInputDialog::getText(
-            dialogParent(), tr("Save Selection"), tr("Name:"), QLineEdit::Normal,
-            QStringLiteral("Alpha %1").arg(view->selection_channel_count() + 1), &ok);
-        if (!ok || name.trimmed().isEmpty()) {
-            return;
-        }
-        view->save_selection(name);
     });
     commands_->setHandler(command_ids::SelectLoad, [this]() {
-        PictureView* view = activeView();
-        const int channels = view ? view->selection_channel_count() : 0;
-        if (!view || channels < 1) {
-            return;
+        if (runtime_.openLoadSelectionDialog) {
+            runtime_.openLoadSelectionDialog();
         }
-        QStringList labels;
-        for (int i = 1; i <= channels; ++i) {
-            labels.push_back(QStringLiteral("Alpha %1").arg(i));
-        }
-        bool ok = false;
-        const QString name = QInputDialog::getItem(dialogParent(), tr("Load Selection"), tr("Channel:"),
-                                                   labels, 0, false, &ok);
-        if (!ok || name.isEmpty()) {
-            return;
-        }
-        view->load_selection(name);
     });
 
     commands_->setHandler(command_ids::SelectTransformSelection, [this]() {
@@ -194,8 +192,26 @@ void MenuRegistrar::registerSelectHandlers()
             && activeView()->has_deselected_selection();
     });
     commands_->setEnabledProvider(command_ids::SelectLoad, [this]() {
-        return activeView() && activeView()->has_document()
-            && activeView()->selection_channel_count() > 0;
+        PictureView* active = activeView();
+        if (!active || !active->has_document()) {
+            return false;
+        }
+        const int width = active->document_width();
+        const int height = active->document_height();
+        for (int i = 0; i < documentCount(); ++i) {
+            PictureView* view = viewAt(i);
+            if (!view || !view->has_document()) {
+                continue;
+            }
+            if (view->document_width() != width || view->document_height() != height) {
+                continue;
+            }
+            if (view->selection_channel_count() > 0
+                || !selection_mask_targets(*view).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     });
     commands_->setEnabledProvider(command_ids::SelectSimilarLayers, [this]() {
         return activeView() && activeView()->has_document() && panels_->layersPanel()
@@ -269,6 +285,122 @@ void MenuRegistrar::cancelDocumentDialogs(PictureView* view)
     }
     if (replaceColorDialog_ && replaceColorDialog_->view() != view) {
         replaceColorDialog_->reject();
+    }
+}
+
+QStringList PicturaMainWindow::selectionDocumentLabelsForTest() const
+{
+    QStringList labels;
+    for (int i : sameSizeDocumentIndexes(*this)) {
+        labels.push_back(documentName(i));
+    }
+    return labels;
+}
+
+void PicturaMainWindow::openSaveSelectionDialog()
+{
+    PictureView* active = activeView();
+    if (!active || !active->has_document() || !active->has_selection()) {
+        return;
+    }
+    const int width = active->document_width();
+    const int height = active->document_height();
+    const QList<int> indexes = sameSizeDocumentIndexes(*this);
+    if (indexes.isEmpty()) {
+        return;
+    }
+    QList<SelectionDocument> documents;
+    for (int i : indexes) {
+        PictureView* view = viewAt(i);
+        documents.push_back({view, documentName(i), view == active});
+    }
+    const auto refuse = [this]() {
+        QMessageBox::warning(
+            this, tr("Save Selection"),
+            tr("Could not save the selection. A new channel may exceed the document's "
+               "56-channel limit, or the target is no longer available."));
+    };
+    SaveLoadSelectionDialog dialog(SaveLoadSelectionDialog::Mode::Save, documents, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const SelectionSaveRequest request = dialog.saveRequest();
+    const auto coverage = selection_coverage_bytes(*active);
+    const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
+    if (request.newDocument) {
+        auto* view = new PictureView(this);
+        if (!new_selection_document(*view, bytes, width, height, request.name)) {
+            delete view;
+            refuse();
+            return;
+        }
+        addDocument(view, QString());
+        refresh();
+        return;
+    }
+    PictureView* target = request.document ? request.document : active;
+    if (target == active) {
+        if (save_selection_to(*active, request.target, request.name, request.mode)) {
+            refresh();
+        } else {
+            refuse();
+        }
+        return;
+    }
+    if (save_selection_coverage(*target, bytes, width, height, request.target, request.name,
+                                        request.mode)) {
+        refresh();
+    } else {
+        refuse();
+    }
+}
+
+void PicturaMainWindow::openLoadSelectionDialog()
+{
+    PictureView* active = activeView();
+    if (!active || !active->has_document()) {
+        return;
+    }
+    const int width = active->document_width();
+    const int height = active->document_height();
+    const QList<int> indexes = sameSizeDocumentIndexes(*this);
+    if (indexes.isEmpty()) {
+        return;
+    }
+    QList<SelectionDocument> documents;
+    for (int i : indexes) {
+        PictureView* view = viewAt(i);
+        documents.push_back({view, documentName(i), view == active});
+    }
+    const auto refuse = [this]() {
+        QMessageBox::warning(this, tr("Load Selection"),
+                             tr("Could not load the selection from the chosen source."));
+    };
+    SaveLoadSelectionDialog dialog(SaveLoadSelectionDialog::Mode::Load, documents, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const SelectionLoadRequest request = dialog.loadRequest();
+    if (!request.document) {
+        return;
+    }
+    if (request.document == active) {
+        if (!load_selection_target(*active, request.target, request.invert, request.mode)) {
+            refuse();
+        }
+        return;
+    }
+    const auto coverage = channel_coverage(*request.document, request.target);
+    if (coverage.size() == 0) {
+        refuse();
+        return;
+    }
+    if (load_selection_coverage(*active,
+            ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), width, height,
+            request.invert, request.mode)) {
+        refresh();
+    } else {
+        refuse();
     }
 }
 

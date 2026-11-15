@@ -236,10 +236,21 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 };
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)
                     && mouse->modifiers().testFlag(Qt::ControlModifier)) {
-                    // Ctrl-click loads the mask coverage as a selection; it must
-                    // not fall through to the tree's Ctrl-click row toggle.
+                    // Ctrl-click loads the mask coverage as a selection; adding
+                    // Shift or Alt combines it. It must not fall through to the
+                    // tree's Ctrl-click row toggle.
+                    QString mode = QStringLiteral("new");
+                    const bool shift = mouse->modifiers().testFlag(Qt::ShiftModifier);
+                    const bool alt = mouse->modifiers().testFlag(Qt::AltModifier);
+                    if (shift && alt) {
+                        mode = QStringLiteral("intersect");
+                    } else if (shift) {
+                        mode = QStringLiteral("add");
+                    } else if (alt) {
+                        mode = QStringLiteral("subtract");
+                    }
                     selectRow();
-                    view_->mask_selection(rowPath, QStringLiteral("new"));
+                    view_->mask_selection(rowPath, mode);
                     return true;
                 }
                 const Qt::KeyboardModifiers rubylith = Qt::AltModifier | Qt::ShiftModifier;

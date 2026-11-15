@@ -6,8 +6,9 @@ use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
-use pictura_core::{Channel, PsdRect};
+use pictura_core::{ColorMode, Document, LayerMask, PsdRect};
 use pictura_select::{CombineMode, Selection};
+use save_load::*;
 
 mod bridge;
 #[cfg(test)]
@@ -16,6 +17,9 @@ mod channel_rows;
 mod query;
 mod quick;
 mod refine;
+mod save_load;
+#[cfg(test)]
+mod tests;
 
 use channel_rows::channel_row_selection_from;
 #[cfg(test)]
@@ -421,42 +425,83 @@ impl qobject::PictureView {
         true
     }
 
-    /// Append the coverage as a document extra channel. The dialog `name` is
-    /// accepted but not stored: `Channel` has only `id`.
-    // ponytail: names map positionally to `Alpha N` = channels[N-1]; add a
-    // `Channel.name` field only if PSD round-tripping of names is required.
-    pub fn save_selection(mut self: Pin<&mut Self>, _name: &QString) -> bool {
-        matches!(
-            self.as_mut().edit("Save Selection", save_selection_channel),
-            Edit::Meta
+    /// Append the coverage as a new document extra channel. The `name` is
+    /// stored in the PSD alpha-name resources; empty uses `Alpha N`.
+    pub fn save_selection(mut self: Pin<&mut Self>, name: &QString) -> bool {
+        self.as_mut()
+            .save_selection_to(&QString::from("new"), name, &QString::from("replace"))
+    }
+
+    /// Save the live selection into `target` (`"new"`, `"alpha:<index>"`, or
+    /// `"mask:<layer path>"`) with `mode`. One history state; false on refusal.
+    pub fn save_selection_to(
+        mut self: Pin<&mut Self>,
+        target: &QString,
+        name: &QString,
+        mode: &QString,
+    ) -> bool {
+        let Some(target) = parse_selection_target(&target.to_string()) else {
+            return false;
+        };
+        let mode = combine_mode_from(&mode.to_string());
+        let name = name.to_string();
+        let outcome = self.as_mut().edit("Save Selection", |rust| {
+            save_selection_target(rust, target, &name, mode)
+        });
+        !matches!(outcome, Edit::None)
+    }
+
+    /// Restore a selection from the extra channel named `Alpha N`. Kept for
+    /// the footer and existing callers; the dialog uses the target form.
+    pub fn load_selection(mut self: Pin<&mut Self>, name: &QString) -> bool {
+        let Some(index) = parse_channel_name(&name.to_string()) else {
+            return false;
+        };
+        self.as_mut().load_selection_target(
+            &QString::from(format!("alpha:{index}")),
+            false,
+            &QString::from("new"),
         )
     }
 
-    pub fn load_selection(mut self: Pin<&mut Self>, name: &QString) -> bool {
-        let loaded = {
+    /// Load `target` (`"alpha:<index>"` or `"mask:<layer path>"`) as the
+    /// selection, optionally inverted and combined with `mode`.
+    pub fn load_selection_target(
+        mut self: Pin<&mut Self>,
+        target: &QString,
+        invert: bool,
+        mode: &QString,
+    ) -> bool {
+        let shape = {
             let rust = self.rust();
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            selection_from_named_channel(&doc.channels, doc.width, doc.height, &name.to_string())
+            let Some(shape) = selection_from_target(doc, &target.to_string()) else {
+                return false;
+            };
+            if invert {
+                shape.invert()
+            } else {
+                shape
+            }
         };
-        let Some(selection) = loaded else {
-            return false;
-        };
-        self.as_mut()
-            .rust_mut()
-            .session
-            .set_selection(Some(selection));
-        self.as_mut().edit("Load Selection", |_| Edit::Meta);
-        true
+        self.as_mut().apply_selection_labeled(
+            shape,
+            combine_mode_from(&mode.to_string()),
+            "Load Selection",
+        )
     }
 
     /// Load the Channels-panel colour row `row` (0 = the composite) as the
     /// selection, using the same grayscale derivation as the row thumbnails.
-    /// `mask` is the visible RGB channels (bit 0 red, 1 green, 2 blue); a hidden
-    /// channel is zeroed in the composite row, matching the canvas. One
-    /// "Load Selection" state; false for a row outside the mode's colour rows.
-    pub fn load_channel_selection(self: Pin<&mut Self>, row: i32, mask: i32) -> bool {
+    /// `mask` is the visible RGB channels (bit 0 red, 1 green, 2 blue).
+    pub fn load_channel_selection(
+        self: Pin<&mut Self>,
+        row: i32,
+        mask: i32,
+        mode: &QString,
+    ) -> bool {
         let shape = {
             let rust = self.rust();
             let Some(doc) = rust.session.doc.as_ref() else {
@@ -472,7 +517,137 @@ impl qobject::PictureView {
         let Some(shape) = shape else {
             return false;
         };
-        self.apply_selection_labeled(shape, CombineMode::New, "Load Selection")
+        self.apply_selection_labeled(
+            shape,
+            combine_mode_from(&mode.to_string()),
+            "Load Selection",
+        )
+    }
+
+    /// Every existing raster layer mask as `"path|Layer Name Mask"`.
+    pub fn selection_mask_targets(&self) -> QStringList {
+        self.rust()
+            .session
+            .doc
+            .as_ref()
+            .map(|doc| mask_targets(doc).into_iter().map(QString::from).collect())
+            .unwrap_or_default()
+    }
+
+    /// The live selection's coverage, row-major; empty without a selection.
+    pub fn selection_coverage_bytes(&self) -> Vec<u8> {
+        self.rust()
+            .session
+            .selection
+            .as_ref()
+            .map(|selection| selection.data.to_vec())
+            .unwrap_or_default()
+    }
+
+    /// The coverage of `target` in this document; empty on failure.
+    pub fn channel_coverage(&self, target: &QString) -> Vec<u8> {
+        self.rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| selection_from_target(doc, &target.to_string()))
+            .map(|selection| selection.data.to_vec())
+            .unwrap_or_default()
+    }
+
+    /// Save `coverage` transferred from another document into `target`.
+    pub fn save_selection_coverage(
+        mut self: Pin<&mut Self>,
+        coverage: &[u8],
+        width: i32,
+        height: i32,
+        target: &QString,
+        name: &QString,
+        mode: &QString,
+    ) -> bool {
+        let Some(shape) = coverage_selection(coverage, width, height) else {
+            return false;
+        };
+        if !document_matches(self.rust(), width, height) {
+            return false;
+        }
+        let Some(target) = parse_selection_target(&target.to_string()) else {
+            return false;
+        };
+        let mode = combine_mode_from(&mode.to_string());
+        let name = name.to_string();
+        let outcome = self.as_mut().edit("Save Selection", |rust| {
+            save_selection_shape(rust, shape, target, &name, mode)
+        });
+        !matches!(outcome, Edit::None)
+    }
+
+    /// Load `coverage` transferred from another document into this one.
+    pub fn load_selection_coverage(
+        mut self: Pin<&mut Self>,
+        coverage: &[u8],
+        width: i32,
+        height: i32,
+        invert: bool,
+        mode: &QString,
+    ) -> bool {
+        let Some(shape) = coverage_selection(coverage, width, height) else {
+            return false;
+        };
+        if !document_matches(self.rust(), width, height) {
+            return false;
+        }
+        let shape = if invert { shape.invert() } else { shape };
+        self.as_mut().apply_selection_labeled(
+            shape,
+            combine_mode_from(&mode.to_string()),
+            "Load Selection",
+        )
+    }
+
+    /// Build a new grayscale document holding `coverage` as its extra channel.
+    /// The codec does not write Multichannel, so the design's grayscale+alpha
+    /// fallback is used.
+    pub fn new_selection_document(
+        mut self: Pin<&mut Self>,
+        coverage: &[u8],
+        width: i32,
+        height: i32,
+        name: &QString,
+    ) -> bool {
+        let Some(shape) = coverage_selection(coverage, width, height) else {
+            return false;
+        };
+        let mut doc = Document::new(
+            width as u32,
+            height as u32,
+            ColorMode::Grayscale,
+            pictura_core::BitDepth::Eight,
+        );
+        doc.channels.push(shape.to_channel(0));
+        let label = if name.trimmed().is_empty() {
+            "Alpha 1".to_string()
+        } else {
+            name.trimmed().to_string()
+        };
+        pictura_codec::set_alpha_names(&mut doc, &[label]);
+        let mut view = self.as_mut().rust_mut();
+        view.replace_document(
+            Some(doc),
+            crate::history::History::default(),
+            Default::default(),
+            None,
+        );
+        let target = view.layer_target.clone();
+        let view = &mut *view;
+        if let Some(doc) = view.session.doc.as_mut() {
+            view.session
+                .history
+                .capture_live(doc, &None, &target, "New");
+        }
+        view.path = None;
+        view.session.mark_saved();
+        true
     }
 
     pub fn selection_channel_count(&self) -> i32 {
@@ -815,23 +990,6 @@ impl super::state::PictureViewRust {
     }
 }
 
-/// Append the live selection's coverage as a document alpha channel, as one
-/// metadata transaction outcome.
-fn save_selection_channel(rust: &mut super::state::PictureViewRust) -> Edit {
-    let Some(selection) = rust.session.selection.clone() else {
-        return Edit::None;
-    };
-    let Some(doc) = rust.session.doc.as_mut() else {
-        return Edit::None;
-    };
-    if !doc.can_add_channel() {
-        return Edit::None;
-    }
-    let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
-    doc.channels.push(selection.to_channel(id));
-    Edit::Meta
-}
-
 impl super::state::PictureViewRust {
     /// Start a lasso gesture in `mode`. False without a document or when
     /// another session owns the slot.
@@ -932,191 +1090,9 @@ fn selection_duplicate_preview(
 
 /// The zero-based `doc.channels` index for a dialog label `"Alpha N"`.
 ///
-/// Names are positional because [`Channel`] has no name field; anything that is
+/// Names are positional because `Channel` has no name field; anything that is
 /// not exactly `"Alpha N"` (N >= 1) resolves to `None`.
 fn parse_channel_name(name: &str) -> Option<usize> {
     let n: usize = name.strip_prefix("Alpha ")?.trim().parse().ok()?;
     n.checked_sub(1)
-}
-
-/// The selection stored in the named extra channel, or `None` for an unknown
-/// name or a channel whose byte length is not `width * height`.
-fn selection_from_named_channel(
-    channels: &[Channel],
-    width: u32,
-    height: u32,
-    name: &str,
-) -> Option<Selection> {
-    let channel = channels.get(parse_channel_name(name)?)?;
-    Selection::from_channel(channel, width, height).ok()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::cxxqt_object::document_session::DocumentSession;
-    use crate::cxxqt_object::edit::Edit;
-    use crate::cxxqt_object::state::PictureViewRust;
-    use pictura_core::{BitDepth, ColorMode, Document};
-
-    #[test]
-    fn save_selection_notifies() {
-        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite = pictura_core::PixelBuffer {
-            width: 4,
-            height: 4,
-            channels: 4,
-            data: vec![0u8; 4 * 4 * 4].into(),
-        };
-        let mut rust = PictureViewRust {
-            session: DocumentSession::with_document(doc),
-            ..Default::default()
-        };
-        rust.session.selection = Some(Selection::all(4, 4));
-        let before = rust
-            .session
-            .doc
-            .as_ref()
-            .expect("document")
-            .composite
-            .clone();
-        let outcome = save_selection_channel(&mut rust);
-        let applied = rust.apply_edit("Save Selection", outcome);
-        assert_eq!(applied.declaration, Some(Edit::Meta));
-        assert!(applied.notify);
-        assert_eq!(rust.session.history.count(), 1);
-        assert_eq!(
-            rust.session.doc.as_ref().expect("document").channels.len(),
-            1
-        );
-        assert_eq!(
-            rust.session.doc.as_ref().expect("document").composite,
-            before
-        );
-    }
-
-    fn channel(id: i16, len: usize) -> Channel {
-        Channel {
-            id,
-            data: vec![7; len].into(),
-        }
-    }
-
-    #[test]
-    fn channel_name_maps_positionally() {
-        assert_eq!(parse_channel_name("Alpha 1"), Some(0));
-        assert_eq!(parse_channel_name("Alpha 3"), Some(2));
-        assert_eq!(parse_channel_name("Alpha 0"), None);
-        assert_eq!(parse_channel_name("alpha 1"), None);
-        assert_eq!(parse_channel_name("Alpha x"), None);
-        assert_eq!(parse_channel_name(""), None);
-    }
-
-    #[test]
-    fn wrong_length_channel_is_refused() {
-        let channels = [channel(1, 3)];
-        assert!(selection_from_named_channel(&channels, 2, 2, "Alpha 1").is_none());
-        assert!(selection_from_named_channel(&channels, 1, 3, "Alpha 1").is_some());
-        assert!(selection_from_named_channel(&channels, 2, 2, "Alpha 2").is_none());
-    }
-
-    #[test]
-    fn gray_and_ink_match_the_panel_derivation() {
-        assert_eq!(q_gray(100, 150, 200), 140);
-        assert_eq!(q_gray(0, 150, 200), 106);
-        assert_eq!(q_gray(255, 255, 255), 255);
-        // Pure red: no cyan or black ink, full magenta and yellow.
-        assert_eq!(cmyk_ink(255, 0, 0, 0), 0);
-        assert_eq!(cmyk_ink(255, 0, 0, 1), 255);
-        assert_eq!(cmyk_ink(0, 0, 0, 3), 255);
-    }
-
-    /// Load Channel Selection over the streamed picture equals the selection
-    /// derived from the whole composite, for every row and a hidden channel
-    /// (#1274).
-    #[test]
-    fn channel_row_selection_streams() {
-        use crate::cxxqt_object::picture::readers_fixture::{full_picture, layered, view_of};
-        let view = view_of(layered(613, 541, true));
-        let doc = view.session.doc.as_ref().expect("document");
-        let full = full_picture(&view);
-        for (row, mask) in [(0, 0x7), (0, 0x5), (1, 0x7), (2, 0x7), (3, 0x7)] {
-            let streamed = channel_row_selection_from(
-                doc,
-                |f| stream_picture(doc, &view, whole(doc), f),
-                row,
-                mask,
-            )
-            .expect("a selection");
-            let want = channel_row_selection(doc, &full, row, mask).expect("a selection");
-            assert!(streamed.data == want.data, "row {row} mask {mask}");
-        }
-    }
-
-    #[test]
-    fn channel_row_selection_reads_the_row_plane() {
-        let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-        // Planes 0/1/2 are R/G/B.
-        doc.composite.data = vec![100, 100, 150, 150, 200, 200].into();
-
-        let red = channel_row_selection(&doc, &doc.composite, 1, 0x7).unwrap();
-        assert_eq!(red.data, vec![100, 100]);
-        let green = channel_row_selection(&doc, &doc.composite, 2, 0x7).unwrap();
-        assert_eq!(green.data, vec![150, 150]);
-        let blue = channel_row_selection(&doc, &doc.composite, 3, 0x7).unwrap();
-        assert_eq!(blue.data, vec![200, 200]);
-
-        let composite = channel_row_selection(&doc, &doc.composite, 0, 0x7).unwrap();
-        assert_eq!(composite.data, vec![140, 140]);
-
-        // A hidden red channel is zeroed in the composite row.
-        let hidden = channel_row_selection(&doc, &doc.composite, 0, 0x6).unwrap();
-        assert_eq!(hidden.data, vec![106, 106]);
-
-        // Rows past the colour channels are refused.
-        assert!(channel_row_selection(&doc, &doc.composite, 4, 0x7).is_none());
-        assert!(channel_row_selection(&doc, &doc.composite, -1, 0x7).is_none());
-    }
-
-    #[test]
-    fn multichannel_rows_derive_naive_inks() {
-        let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-        doc.source_mode = Some(ColorMode::Multichannel);
-        doc.composite.data = vec![255, 0, 0].into();
-        // Row 0 is Cyan (ink 0), rows 1/2 Magenta and Yellow (full ink) — and
-        // there is no composite row in Multichannel.
-        assert_eq!(
-            channel_row_selection(&doc, &doc.composite, 0, 0x7)
-                .unwrap()
-                .data,
-            vec![255]
-        );
-        assert_eq!(
-            channel_row_selection(&doc, &doc.composite, 1, 0x7)
-                .unwrap()
-                .data,
-            vec![0]
-        );
-        assert_eq!(
-            channel_row_selection(&doc, &doc.composite, 2, 0x7)
-                .unwrap()
-                .data,
-            vec![0]
-        );
-        assert!(channel_row_selection(&doc, &doc.composite, 3, 0x7).is_none());
-    }
-
-    #[test]
-    fn single_row_modes_have_no_second_channel() {
-        let mut doc = Document::new(1, 1, ColorMode::Grayscale, BitDepth::Eight);
-        doc.composite.data = vec![200].into();
-        // The one Gray row is the composite; there is no colour channel after it.
-        assert_eq!(
-            channel_row_selection(&doc, &doc.composite, 0, 0x7)
-                .unwrap()
-                .data,
-            vec![200]
-        );
-        assert!(channel_row_selection(&doc, &doc.composite, 1, 0x7).is_none());
-    }
 }
