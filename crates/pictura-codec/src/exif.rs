@@ -49,10 +49,22 @@ impl ExifValue {
     }
 }
 
-/// Ordered decoded EXIF tags.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Typed GPS values decoded from the GPS sub-IFD.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Gps {
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub altitude: Option<f64>,
+    pub timestamp: Option<String>,
+    pub date: Option<String>,
+    pub datum: Option<String>,
+}
+
+/// Ordered decoded EXIF tags plus the optional GPS block.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Exif {
     entries: Vec<(u16, ExifValue)>,
+    gps: Option<Gps>,
 }
 
 impl Exif {
@@ -65,7 +77,11 @@ impl Exif {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.is_empty() && self.gps.is_none()
+    }
+
+    pub fn gps(&self) -> Option<&Gps> {
+        self.gps.as_ref()
     }
 }
 
@@ -121,13 +137,33 @@ pub fn parse_exif(data: &[u8]) -> Exif {
         return exif;
     };
     let mut exif_ifd = None;
+    let mut gps_ifd = None;
     // A hostile resource can point many entries at one large offset; budget the
     // total value bytes cloned so decoding stays O(resource size), not
     // O(entries * resource size).
     let mut budget = tiff.len();
-    walk_ifd(tiff, ifd0, little, &mut exif, &mut exif_ifd, &mut budget);
+    walk_ifd(
+        tiff,
+        ifd0,
+        little,
+        &mut exif,
+        &mut exif_ifd,
+        &mut gps_ifd,
+        &mut budget,
+    );
     if let Some(offset) = exif_ifd {
-        walk_ifd(tiff, offset, little, &mut exif, &mut None, &mut budget);
+        walk_ifd(
+            tiff,
+            offset,
+            little,
+            &mut exif,
+            &mut None,
+            &mut None,
+            &mut budget,
+        );
+    }
+    if let Some(offset) = gps_ifd {
+        exif.gps = parse_gps_ifd(tiff, offset, little, &mut budget);
     }
     exif
 }
@@ -138,6 +174,7 @@ fn walk_ifd(
     little: bool,
     out: &mut Exif,
     exif_ifd: &mut Option<usize>,
+    gps_ifd: &mut Option<usize>,
     budget: &mut usize,
 ) {
     let Some(count) = read_u16(data, offset, little).map(usize::from) else {
@@ -156,6 +193,11 @@ fn walk_ifd(
         if tag == 0x8769 && typ == 4 {
             if let Some(ptr) = read_u32(data, entry + 8, little) {
                 *exif_ifd = Some(ptr as usize);
+            }
+        }
+        if tag == 0x8825 && typ == 4 {
+            if let Some(ptr) = read_u32(data, entry + 8, little) {
+                *gps_ifd = Some(ptr as usize);
             }
         }
         if let Some(value) = decode_value(data, entry, little, typ, count, budget) {
@@ -203,6 +245,137 @@ fn decode_value(
         }
         _ => ExifValue::Undefined(bytes.to_vec()),
     })
+}
+
+fn parse_gps_ifd(data: &[u8], offset: usize, little: bool, budget: &mut usize) -> Option<Gps> {
+    let count = read_u16(data, offset, little).map(usize::from)?;
+    let mut lat_ref = None;
+    let mut lat = None;
+    let mut lon_ref = None;
+    let mut lon = None;
+    let mut altitude_ref = 0u8;
+    let mut altitude = None;
+    let mut timestamp = None;
+    let mut date = None;
+    let mut datum = None;
+    for i in 0..count.min(MAX_ENTRIES) {
+        let entry = offset + 2 + i * 12;
+        let (Some(tag), Some(typ), Some(n)) = (
+            read_u16(data, entry, little),
+            read_u16(data, entry + 2, little),
+            read_u32(data, entry + 4, little),
+        ) else {
+            break;
+        };
+        let n = n as usize;
+        let Some(bytes) = entry_bytes(data, entry, little, typ, n, budget) else {
+            continue;
+        };
+        match tag {
+            0x0001 => lat_ref = Some(ascii(bytes)),
+            0x0002 => lat = rationals(bytes, little, 3).map(dms),
+            0x0003 => lon_ref = Some(ascii(bytes)),
+            0x0004 => lon = rationals(bytes, little, 3).map(dms),
+            0x0005 => altitude_ref = bytes.first().copied().unwrap_or(0),
+            0x0006 => altitude = rationals(bytes, little, 1).map(|v| v[0]),
+            0x0007 => {
+                timestamp = rationals(bytes, little, 3).map(|v| {
+                    format!(
+                        "{:02}:{:02}:{:02}",
+                        v[0] as u32,
+                        v[1] as u32,
+                        v[2].round() as u32
+                    )
+                })
+            }
+            0x0012 => datum = Some(ascii(bytes)),
+            0x001d => date = Some(ascii(bytes)),
+            _ => {}
+        }
+    }
+    let mut gps = Gps {
+        latitude: lat,
+        longitude: lon,
+        altitude,
+        timestamp,
+        date,
+        datum,
+    };
+    if lat_ref.as_deref() == Some("S") {
+        gps.latitude = gps.latitude.map(|v| -v);
+    }
+    if lon_ref.as_deref() == Some("W") {
+        gps.longitude = gps.longitude.map(|v| -v);
+    }
+    if altitude_ref == 1 {
+        gps.altitude = gps.altitude.map(|v| -v);
+    }
+    if gps.latitude.is_none()
+        && gps.longitude.is_none()
+        && gps.altitude.is_none()
+        && gps.timestamp.is_none()
+        && gps.date.is_none()
+        && gps.datum.is_none()
+    {
+        return None;
+    }
+    Some(gps)
+}
+
+fn entry_bytes<'a>(
+    data: &'a [u8],
+    entry: usize,
+    little: bool,
+    typ: u16,
+    count: usize,
+    budget: &mut usize,
+) -> Option<&'a [u8]> {
+    let unit = match typ {
+        1 | 2 | 7 => 1,
+        3 => 2,
+        4 => 4,
+        5 => 8,
+        _ => return None,
+    };
+    let total = count.checked_mul(unit)?;
+    if total > *budget {
+        return None;
+    }
+    let bytes = if total <= 4 {
+        data.get(entry + 8..entry + 8 + total)?
+    } else {
+        let start = read_u32(data, entry + 8, little)? as usize;
+        data.get(start..start.checked_add(total)?)?
+    };
+    *budget -= total;
+    Some(bytes)
+}
+
+fn rationals(bytes: &[u8], little: bool, count: usize) -> Option<Vec<f64>> {
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        let at = i * 8;
+        let num = read_u32(bytes, at, little)?;
+        let den = read_u32(bytes, at + 4, little)?;
+        out.push(if den == 0 {
+            0.0
+        } else {
+            f64::from(num) / f64::from(den)
+        });
+    }
+    Some(out)
+}
+
+fn dms(parts: Vec<f64>) -> f64 {
+    parts.first().copied().unwrap_or(0.0)
+        + parts.get(1).copied().unwrap_or(0.0) / 60.0
+        + parts.get(2).copied().unwrap_or(0.0) / 3600.0
+}
+
+fn ascii(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes)
+        .trim_end_matches('\0')
+        .to_string()
 }
 
 fn read_u16(data: &[u8], offset: usize, little: bool) -> Option<u16> {
@@ -293,6 +466,38 @@ mod tests {
         assert_eq!(exif.get(0x0112), Some(&ExifValue::Short(6)));
         assert_eq!(exif.get(0x829d), Some(&ExifValue::Rational(28, 10)));
         assert_eq!(exif.get(0x8827), Some(&ExifValue::Short(200)));
+    }
+
+    #[test]
+    fn exif_gps_decodes_the_fixture_values() {
+        let bytes = include_bytes!("../tests/fixtures/metadata.psd");
+        let doc = crate::read_psd(bytes).expect("fixture parses");
+        let metadata = crate::metadata::read_metadata(&doc);
+        let gps = metadata.exif.gps().expect("fixture carries GPS");
+        assert!((gps.latitude.unwrap() - 48.858_333).abs() < 1e-6);
+        assert!((gps.longitude.unwrap() + 2.291_667).abs() < 1e-6);
+        assert!((gps.altitude.unwrap() - 35.0).abs() < 1e-9);
+        assert_eq!(gps.timestamp.as_deref(), Some("12:00:00"));
+        assert_eq!(gps.date.as_deref(), Some("2026:09:22"));
+        assert_eq!(gps.datum.as_deref(), Some("WGS-84"));
+    }
+
+    #[test]
+    fn exif_gps_survives_a_truncated_ifd() {
+        let bytes = include_bytes!("../tests/fixtures/metadata.psd");
+        let doc = crate::read_psd(bytes).expect("fixture parses");
+        let resource = crate::decode_image_resources(&doc)
+            .into_iter()
+            .find(|r| r.id == crate::EXIF_DATA_1)
+            .expect("fixture carries EXIF");
+        for cut in 0..resource.data.len() {
+            let _ = parse_exif(&resource.data[..cut]);
+        }
+    }
+
+    #[test]
+    fn exif_gps_absent_without_the_pointer() {
+        assert!(parse_exif(&sample_tiff()).gps().is_none());
     }
 
     #[test]

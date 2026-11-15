@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QHash>
+#include <QtCore/QList>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtWidgets/QDialog>
@@ -12,39 +13,31 @@ class QLineEdit;
 class QListWidget;
 class QPlainTextEdit;
 class QStackedWidget;
+class QWidget;
 
 namespace pictura {
 
-// CS6 File Info: a category list (Camera Data / Description / IPTC / Raw Data)
-// over a stacked pane. Camera Data, Description, and Raw Data are read-only; the
-// IPTC core fields are editable and the caller applies `edits()` on OK.
+// CS6 File Info: a category list over stacked pages. Read-only sheets for
+// Camera Data, GPS Data, and Photoshop; editable forms for Description, IPTC,
+// Origin, and IPTC Extension; an editable raw XMP packet.
 class FileInfoDialog : public QDialog {
     Q_OBJECT
 
 public:
-    static const QString kCameraData;
-    static const QString kDescription;
-    static const QString kIptc;
-    static const QString kRawData;
-
-    // `xmpRows` rows are the parsed XMP properties as `"Label\tValue"`, shown
-    // read-only under Description. `iptcEditFields` rows are
-    // `"record:dataset\tLabel\tValue"`. `iptcOtherRows` rows are `"Label\tValue"`
-    // for IPTC records outside the editable core set; they are shown read-only.
-    FileInfoDialog(const QStringList& exifRows, const QStringList& xmpRows,
-                   const QStringList& iptcEditFields, const QStringList& iptcOtherRows,
+    // `readOnlyRows` are `"Section\tLabel\tValue"`; `editFields` are
+    // `"Section\tid\tLabel\tValue"` with repeated ids for list values.
+    FileInfoDialog(const QStringList& readOnlyRows, const QStringList& editFields,
                    const QString& xmp, QWidget* parent = nullptr);
 
-    // The edited core fields as `"record:dataset\tValue"` rows, in field order.
+    // Changed fields as `"id\tValue"` rows plus the raw packet row.
     QStringList edits() const;
 
-    // Metadata-template controls. The frame sets these; the buttons stay on the
-    // dialog and pass the current merge mode to `onApplyTemplate`.
+    // Metadata-template controls. The frame sets these.
     std::function<void()> onExportTemplate;
     std::function<void(int)> onApplyTemplate;
+    // Applies the changed rows. Returning false keeps the dialog open.
+    std::function<bool(const QStringList&)> onApply;
 
-    // Merge mode the Apply button passes: 0 Append, 1 Replace,
-    // 2 KeepOriginalReplaceMatching.
     int templateMode() const;
 
     // Test hooks.
@@ -53,24 +46,39 @@ public:
     QString xmpForTest() const;
     QString fieldForTest(const QString& id) const;
     void setFieldForTest(const QString& id, const QString& value);
+    void addListValueForTest(const QString& id, const QString& value);
+    QStringList listValuesForTest(const QString& id) const;
+    void setXmpForTest(const QString& packet);
     bool hasTemplateControlsForTest() const;
     int mergeModeForTest() const;
     void setMergeModeForTest(int mode);
 
-private:
-    QWidget* buildIptcPage(const QStringList& editFields, const QStringList& otherRows);
+public:
+    void accept() override;
 
-    QStringList exifRows_;
-    QStringList xmpRows_;
-    QStringList iptcOtherRows_;
+private:
+    QWidget* buildEditablePage(const QString& section);
+    QWidget* buildTablePage(const QString& section);
+    QWidget* buildRawPage();
+    QWidget* buildListField(const QString& id, const QStringList& values, QWidget* parent);
+    QString comboValue(const QString& id) const;
+
+    QStringList readOnlyRows_;
+    QStringList editFields_;
     QString xmp_;
-    QStringList fieldIds_;
+    QStringList categories_;
+    QHash<QString, QStringList> rowsBySection_;
+    QHash<QString, QStringList> fieldsBySection_;
     QListWidget* categoryList_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     QPlainTextEdit* xmpEdit_ = nullptr;
     QComboBox* templateMode_ = nullptr;
-    QHash<QString, QLineEdit*> fields_;
+    QHash<QString, QList<QLineEdit*>> fields_;
+    QHash<QString, QComboBox*> combos_;
+    QHash<QString, QListWidget*> lists_;
     QHash<QString, QString> initial_;
+    QHash<QString, QStringList> initialLists_;
+    bool updating_ = false;
 };
 
 } // namespace pictura

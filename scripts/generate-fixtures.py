@@ -113,14 +113,42 @@ METADATA_XMP = (
     b'<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" '
     b'xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" '
     b'xmlns:xmpRights="http://ns.adobe.com/xap/1.0/rights/" '
+    b'xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/" '
+    b'xmlns:xmp="http://ns.adobe.com/xap/1.0/" '
+    b'xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" '
     b'xmlns:acme="http://example.com/acme/1.0/" '
     b'dc:format="image/psd" acme:Marker="keep-me">'
     b"<dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">Fixture Title</rdf:li></rdf:Alt></dc:title>"
     b"<dc:creator><rdf:Seq><rdf:li>Ada Lovelace</rdf:li></rdf:Seq></dc:creator>"
     b"<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">A fixture caption.</rdf:li></rdf:Alt></dc:description>"
+    b"<dc:subject><rdf:Bag><rdf:li>fixture</rdf:li><rdf:li>metadata</rdf:li></rdf:Bag></dc:subject>"
     b"<dc:rights><rdf:Alt><rdf:li xml:lang=\"x-default\">(c) 2026 Kooka Pictura</rdf:li></rdf:Alt></dc:rights>"
     b"<photoshop:Credit>Kooka Pictura</photoshop:Credit>"
     b"<photoshop:Source>Test Suite</photoshop:Source>"
+    b"<photoshop:Headline>Fixture Headline</photoshop:Headline>"
+    b"<photoshop:Instructions>Handle with care</photoshop:Instructions>"
+    b"<photoshop:AuthorsPosition>Engineer</photoshop:AuthorsPosition>"
+    b"<photoshop:CaptionWriter>Grace Hopper</photoshop:CaptionWriter>"
+    b"<photoshop:City>Paris</photoshop:City>"
+    b"<photoshop:State>Ile-de-France</photoshop:State>"
+    b"<photoshop:Country>France</photoshop:Country>"
+    b"<photoshop:History>Fixture history</photoshop:History>"
+    b"<xmpRights:Marked>True</xmpRights:Marked>"
+    b"<xmpRights:WebStatement>https://example.com/rights</xmpRights:WebStatement>"
+    b"<xmpRights:UsageTerms><rdf:Alt><rdf:li xml:lang=\"x-default\">Editorial use only</rdf:li></rdf:Alt></xmpRights:UsageTerms>"
+    b"<xmp:MetadataDate>2026-09-22T12:00:00Z</xmp:MetadataDate>"
+    b"<xmpMM:DocumentID>uuid:fixture-document</xmpMM:DocumentID>"
+    b"<Iptc4xmpExt:PersonInImage><rdf:Bag><rdf:li>Ada Lovelace</rdf:li><rdf:li>Grace Hopper</rdf:li></rdf:Bag></Iptc4xmpExt:PersonInImage>"
+    b"<Iptc4xmpExt:OrganisationInImageName><rdf:Bag><rdf:li>Kooka Pictura</rdf:li></rdf:Bag></Iptc4xmpExt:OrganisationInImageName>"
+    b"<Iptc4xmpExt:Event><rdf:Alt><rdf:li xml:lang=\"x-default\">Fixture Event</rdf:li></rdf:Alt></Iptc4xmpExt:Event>"
+    b'<Iptc4xmpExt:LocationCreated><rdf:Description Iptc4xmpExt:City="Paris" Iptc4xmpExt:CountryName="France"/></Iptc4xmpExt:LocationCreated>'
+    b'<Iptc4xmpExt:LocationShown><rdf:Description Iptc4xmpExt:City="Paris" Iptc4xmpExt:CountryName="France"/></Iptc4xmpExt:LocationShown>'
+    b"<Iptc4xmpExt:ImageRating>4</Iptc4xmpExt:ImageRating>"
+    b"<Iptc4xmpExt:ModelReleaseStatus>Not Applicable</Iptc4xmpExt:ModelReleaseStatus>"
+    b"<Iptc4xmpExt:PropertyReleaseStatus>Not Applicable</Iptc4xmpExt:PropertyReleaseStatus>"
+    b"<Iptc4xmpExt:DigitalSourceType>Original digital capture</Iptc4xmpExt:DigitalSourceType>"
+    b"<Iptc4xmpExt:AddlModelInfo>None</Iptc4xmpExt:AddlModelInfo>"
+    b'<Iptc4xmpExt:Licensor><rdf:Description Iptc4xmpExt:LicensorName="Kooka Pictura"/></Iptc4xmpExt:Licensor>'
     b"<acme:Note>keep-me-too</acme:Note>"
     b"</rdf:Description>"
     b'</rdf:RDF></x:xmpmeta>\n<?xpacket end="w"?>'
@@ -129,7 +157,8 @@ METADATA_XMP = (
 
 def _metadata_exif() -> bytes:
     """A little-endian TIFF: IFD0 (Make/Model/Orientation/Software/DateTime)
-    plus an Exif sub-IFD (ExposureTime/FNumber/ISO/DateTimeOriginal/FocalLength).
+    plus an Exif sub-IFD (ExposureTime/FNumber/ISO/DateTimeOriginal/FocalLength)
+    and a GPS sub-IFD (latitude/longitude/altitude/timestamp/date/datum).
     """
     make = b"ACME Cameras\x00"
     model = b"ACME One\x00"
@@ -139,18 +168,53 @@ def _metadata_exif() -> bytes:
     exposure = struct.pack("<II", 1, 125)
     f_number = struct.pack("<II", 28, 10)
     focal = struct.pack("<II", 50, 1)
+    gps_lat = struct.pack("<IIIIII", 48, 1, 51, 1, 30, 1)
+    gps_lon = struct.pack("<IIIIII", 2, 1, 17, 1, 30, 1)
+    gps_alt = struct.pack("<II", 35, 1)
+    gps_time = struct.pack("<IIIIII", 12, 1, 0, 1, 0, 1)
+    gps_datum = b"WGS-84\x00"
+    gps_date = b"2026:09:22\x00"
 
-    blobs = [make, model, software, date_time, exposure, f_number, focal, date_orig]
-    ifd0_size = 2 + 6 * 12 + 4
+    blobs = [
+        make,
+        model,
+        software,
+        date_time,
+        exposure,
+        f_number,
+        focal,
+        date_orig,
+        gps_lat,
+        gps_lon,
+        gps_alt,
+        gps_time,
+        gps_datum,
+        gps_date,
+    ]
+    ifd0_size = 2 + 7 * 12 + 4
     exif_size = 2 + 5 * 12 + 4
+    gps_size = 2 + 10 * 12 + 4
     offsets = []
-    cursor = 8 + ifd0_size + exif_size
+    cursor = 8 + ifd0_size + exif_size + gps_size
     for blob in blobs:
         offsets.append(cursor)
         cursor += len(blob)
-    make_off, model_off, software_off, dt_off, exp_off, fnum_off, focal_off, dto_off = (
-        offsets
-    )
+    (
+        make_off,
+        model_off,
+        software_off,
+        dt_off,
+        exp_off,
+        fnum_off,
+        focal_off,
+        dto_off,
+        lat_off,
+        lon_off,
+        alt_off,
+        time_off,
+        datum_off,
+        gps_date_off,
+    ) = offsets
 
     def pointer(tag: int, typ: int, count: int, offset: int) -> bytes:
         return struct.pack("<HHI", tag, typ, count) + struct.pack("<I", offset)
@@ -158,13 +222,17 @@ def _metadata_exif() -> bytes:
     def inline(tag: int, typ: int, value: int) -> bytes:
         return struct.pack("<HHI", tag, typ, 1) + struct.pack("<H", value) + b"\x00\x00"
 
-    ifd0 = struct.pack("<H", 6)
+    def inline_bytes(tag: int, typ: int, count: int, value: bytes) -> bytes:
+        return struct.pack("<HHI", tag, typ, count) + value.ljust(4, b"\x00")
+
+    ifd0 = struct.pack("<H", 7)
     ifd0 += pointer(271, 2, len(make), make_off)
     ifd0 += pointer(272, 2, len(model), model_off)
     ifd0 += inline(274, 3, 1)
     ifd0 += pointer(305, 2, len(software), software_off)
     ifd0 += pointer(306, 2, len(date_time), dt_off)
     ifd0 += pointer(0x8769, 4, 1, 8 + ifd0_size)
+    ifd0 += pointer(0x8825, 4, 1, 8 + ifd0_size + exif_size)
     ifd0 += struct.pack("<I", 0)
 
     exif = struct.pack("<H", 5)
@@ -175,8 +243,21 @@ def _metadata_exif() -> bytes:
     exif += pointer(37386, 5, 1, focal_off)
     exif += struct.pack("<I", 0)
 
+    gps = struct.pack("<H", 10)
+    gps += inline_bytes(0x0000, 1, 4, bytes((2, 3, 0, 0)))
+    gps += inline_bytes(0x0001, 2, 2, b"N\x00")
+    gps += pointer(0x0002, 5, 3, lat_off)
+    gps += inline_bytes(0x0003, 2, 2, b"W\x00")
+    gps += pointer(0x0004, 5, 3, lon_off)
+    gps += inline_bytes(0x0005, 1, 1, b"\x00")
+    gps += pointer(0x0006, 5, 1, alt_off)
+    gps += pointer(0x0007, 5, 3, time_off)
+    gps += pointer(0x0012, 2, len(gps_datum), datum_off)
+    gps += pointer(0x001d, 2, len(gps_date), gps_date_off)
+    gps += struct.pack("<I", 0)
+
     header = b"II" + struct.pack("<H", 42) + struct.pack("<I", 8)
-    return header + ifd0 + exif + b"".join(blobs)
+    return header + ifd0 + exif + gps + b"".join(blobs)
 
 
 def _metadata_iptc() -> bytes:
@@ -188,12 +269,19 @@ def _metadata_iptc() -> bytes:
     return b"".join(
         [
             record(2, 5, b"Fixture Title"),
+            record(2, 25, b"fixture"),
+            record(2, 25, b"metadata"),
+            record(2, 40, b"Handle with care"),
             record(2, 80, b"Ada Lovelace"),
             record(2, 85, b"Engineer"),
+            record(2, 90, b"Paris"),
+            record(2, 95, b"Ile-de-France"),
+            record(2, 101, b"France"),
             record(2, 110, b"Kooka Pictura"),
             record(2, 115, b"Test Suite"),
             record(2, 116, b"(c) 2026 Kooka Pictura"),
             record(2, 120, b"A fixture caption."),
+            record(2, 122, b"Grace Hopper"),
         ]
     )
 

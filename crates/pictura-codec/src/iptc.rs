@@ -24,6 +24,40 @@ impl Iptc {
             .map(|(_, _, v)| v.as_slice())
     }
 
+    /// Every value for a `record:dataset` pair, in stream order.
+    pub fn values(&self, record: u8, dataset: u8) -> impl Iterator<Item = &[u8]> + '_ {
+        self.records
+            .iter()
+            .filter(move |(r, d, _)| *r == record && *d == dataset)
+            .map(|(_, _, value)| value.as_slice())
+    }
+
+    /// Replace every occurrence of `record:dataset` with `values`. An empty
+    /// list removes the record. Returns whether the record set changed.
+    pub fn set_values(&mut self, record: u8, dataset: u8, values: &[Vec<u8>]) -> bool {
+        let existing: Vec<&[u8]> = self.values(record, dataset).collect();
+        if existing.len() == values.len()
+            && existing.iter().zip(values).all(|(a, b)| *a == b.as_slice())
+        {
+            return false;
+        }
+        let first = self
+            .records
+            .iter()
+            .position(|(r, d, _)| *r == record && *d == dataset);
+        self.records
+            .retain(|(r, d, _)| !(*r == record && *d == dataset));
+        if let Some(at) = first {
+            let at = at.min(self.records.len());
+            self.records
+                .splice(at..at, values.iter().cloned().map(|v| (record, dataset, v)));
+        } else {
+            self.records
+                .extend(values.iter().cloned().map(|v| (record, dataset, v)));
+        }
+        true
+    }
+
     /// The value for a `record:dataset` pair decoded as UTF-8 (lossy).
     pub fn text(&self, record: u8, dataset: u8) -> Option<String> {
         self.get(record, dataset)
@@ -199,6 +233,21 @@ mod tests {
         assert_eq!(iptc.get(2, 80), None);
         assert!(!iptc.remove(2, 80), "absent remove returns false");
         assert_eq!(parse_iptc(&encode_iptc(&iptc)), iptc, "encode round-trips");
+    }
+
+    #[test]
+    fn iptc_list_values_round_trip() {
+        let mut iptc = Iptc::default();
+        assert!(iptc.set_values(2, 25, &[b"one".to_vec(), b"two".to_vec()]));
+        assert_eq!(
+            iptc.values(2, 25).collect::<Vec<_>>(),
+            vec![b"one".as_slice(), b"two".as_slice()]
+        );
+        assert!(!iptc.set_values(2, 25, &[b"one".to_vec(), b"two".to_vec()]));
+        let round_tripped = parse_iptc(&encode_iptc(&iptc));
+        assert_eq!(round_tripped.values(2, 25).count(), 2);
+        assert!(iptc.set_values(2, 25, &[]));
+        assert_eq!(iptc.values(2, 25).count(), 0);
     }
 
     #[test]

@@ -19,12 +19,15 @@ use crate::image_resources::{
 use crate::iptc::{encode_iptc, parse_iptc, Iptc};
 use crate::xmp::{parse_xmp, patch_xmp_values, XmpField, XmpProperties};
 
+pub mod iptc_extension;
 pub mod template;
+
+use crate::xmp::tree as xmp_tree;
 
 pub use template::{apply_template, export_template, MergeMode};
 
 /// A document's decoded metadata. An absent resource yields the empty value.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct DocumentMetadata {
     pub exif: Exif,
     pub iptc: Iptc,
@@ -100,6 +103,99 @@ pub fn set_iptc_fields(document: &mut Document, fields: &[(u8, u8, String)]) -> 
     true
 }
 
+/// Apply list-valued IPTC-IIM edits, writing one dataset occurrence per value.
+/// An empty list removes every occurrence. Returns whether the section changed.
+pub fn set_iptc_values(document: &mut Document, fields: &[(u8, u8, Vec<String>)]) -> bool {
+    let (mut resources, consumed) = decode_image_resources_with_len(document);
+    if encode_image_resources(&resources) != document.image_resources[..consumed] {
+        return false;
+    }
+    let mut iptc = resources
+        .iter()
+        .find(|r| r.id == IPTC_NAA)
+        .map(|r| parse_iptc(&r.data))
+        .unwrap_or_default();
+
+    let mut changed = false;
+    for (record, dataset, values) in fields {
+        let values: Vec<Vec<u8>> = values
+            .iter()
+            .map(|value| value.as_bytes().to_vec())
+            .collect();
+        changed |= iptc.set_values(*record, *dataset, &values);
+    }
+    if !changed {
+        return false;
+    }
+
+    let block = frame_image_resource(IPTC_NAA, "", &encode_iptc(&iptc));
+    match resources.iter_mut().find(|r| r.id == IPTC_NAA) {
+        Some(slot) => *slot = block,
+        None => resources.push(block),
+    }
+    let mut section = encode_image_resources(&resources);
+    section.extend_from_slice(&document.image_resources[consumed..]);
+    document.image_resources = section.into();
+    true
+}
+
+/// Replace the XMP packet (resource 1060) when it is well formed. Empty text
+/// removes the resource. Every other resource and the unparsed tail survive.
+pub fn set_xmp_packet(document: &mut Document, packet: &str) -> bool {
+    if !crate::xmp::is_well_formed(packet) {
+        return false;
+    }
+    let (mut resources, consumed) = decode_image_resources_with_len(document);
+    if encode_image_resources(&resources) != document.image_resources[..consumed] {
+        return false;
+    }
+    if packet.is_empty() {
+        let before = resources.len();
+        resources.retain(|r| r.id != XMP_METADATA);
+        if resources.len() == before {
+            return false;
+        }
+    } else {
+        if resources
+            .iter()
+            .any(|r| r.id == XMP_METADATA && r.data.as_slice() == packet.as_bytes())
+        {
+            return false;
+        }
+        let block = frame_image_resource(XMP_METADATA, "", packet.as_bytes());
+        match resources.iter_mut().find(|r| r.id == XMP_METADATA) {
+            Some(slot) => *slot = block,
+            None => resources.push(block),
+        }
+    }
+    let mut section = encode_image_resources(&resources);
+    section.extend_from_slice(&document.image_resources[consumed..]);
+    document.image_resources = section.into();
+    true
+}
+
+/// Read-only Photoshop-family XMP properties for the File Info Photoshop tab.
+pub fn photoshop_rows(document: &Document) -> Vec<(String, String)> {
+    let Some(resource) = decode_image_resources(document)
+        .into_iter()
+        .find(|resource| resource.id == XMP_METADATA)
+    else {
+        return Vec::new();
+    };
+    let packet = String::from_utf8_lossy(&resource.data);
+    let mut rows = Vec::new();
+    for namespace in [
+        "http://ns.adobe.com/photoshop/1.0/",
+        "http://ns.adobe.com/xap/1.0/",
+        "http://ns.adobe.com/xap/1.0/mm/",
+    ] {
+        for leaf in xmp_tree::read(&packet, namespace).leaves {
+            rows.push((leaf.path.join(" / "), leaf.value));
+        }
+    }
+    rows
+}
+
 /// The document's parsed XMP properties, or empty when it has no XMP resource.
 pub fn xmp_properties(document: &Document) -> XmpProperties {
     decode_image_resources(document)
@@ -163,7 +259,7 @@ pub fn set_xmp_values(document: &mut Document, updates: &[(XmpField, Vec<String>
     true
 }
 
-/// Apply the six shared IPTC-Core fields to both the XMP packet and the IIM
+/// Apply the shared IPTC-Core fields to both the XMP packet and the IIM
 /// record in one call, so the two channels cannot disagree. A field whose XMP
 /// side cannot be written is skipped in both channels. A mapped value is
 /// truncated to the IIM length before either write, so the channels stay equal.
@@ -204,6 +300,45 @@ pub fn set_file_info_fields(document: &mut Document, fields: &[(u8, u8, String)]
     xmp_changed || iptc_changed
 }
 
+/// Apply list-valued shared fields to both XMP and IIM. Each value is truncated
+/// to the IIM length before either write, and a field whose XMP side cannot be
+/// written is skipped in both channels.
+pub fn set_file_info_values(document: &mut Document, fields: &[(u8, u8, Vec<String>)]) -> bool {
+    if fields.is_empty() {
+        return false;
+    }
+    let fields: Vec<(u8, u8, Vec<String>)> = fields
+        .iter()
+        .map(|(record, dataset, values)| {
+            (
+                *record,
+                *dataset,
+                values.iter().map(|value| truncate_to_iim(value)).collect(),
+            )
+        })
+        .collect();
+    let xmp_updates: Vec<(XmpField, Vec<String>)> = fields
+        .iter()
+        .filter_map(|(record, dataset, values)| {
+            file_info_xmp_field(*record, *dataset).map(|field| (field, values.clone()))
+        })
+        .collect();
+    let xmp_changed = set_xmp_values(document, &xmp_updates);
+    let props = xmp_properties(document);
+    let iptc_fields: Vec<(u8, u8, Vec<String>)> = fields
+        .iter()
+        .filter(
+            |(record, dataset, values)| match file_info_xmp_field(*record, *dataset) {
+                Some(field) => xmp_has_values(&props, field, values),
+                None => true,
+            },
+        )
+        .cloned()
+        .collect();
+    let iptc_changed = set_iptc_values(document, &iptc_fields);
+    xmp_changed || iptc_changed
+}
+
 /// Truncate to the IIM record length (a `u16`), backing off to a UTF-8 boundary
 /// so the same bytes go to both channels.
 fn truncate_to_iim(value: &str) -> String {
@@ -226,6 +361,14 @@ fn file_info_xmp_field(record: u8, dataset: u8) -> Option<XmpField> {
         (2, 120) => XmpField::Description,
         (2, 110) => XmpField::Credit,
         (2, 115) => XmpField::Source,
+        (2, 85) => XmpField::AuthorsPosition,
+        (2, 25) => XmpField::Subject,
+        (2, 105) => XmpField::Headline,
+        (2, 40) => XmpField::Instructions,
+        (2, 90) => XmpField::City,
+        (2, 95) => XmpField::State,
+        (2, 101) => XmpField::Country,
+        (2, 122) => XmpField::CaptionWriter,
         _ => return None,
     })
 }
@@ -241,6 +384,16 @@ fn xmp_has(props: &XmpProperties, field: XmpField, value: &str) -> bool {
             XmpField::Rights => props.rights.is_none(),
             XmpField::Credit => props.credit.is_none(),
             XmpField::Source => props.source.is_none(),
+            XmpField::Subject => props.subject.is_empty(),
+            XmpField::Headline => props.headline.is_none(),
+            XmpField::City => props.city.is_none(),
+            XmpField::State => props.state.is_none(),
+            XmpField::Country => props.country.is_none(),
+            XmpField::Instructions => props.instructions.is_none(),
+            XmpField::AuthorsPosition => props.authors_position.is_none(),
+            XmpField::CaptionWriter => props.caption_writer.is_none(),
+            XmpField::WebStatement => props.web_statement.is_none(),
+            XmpField::UsageTerms => props.usage_terms.is_none(),
             _ => false,
         };
     }
@@ -251,7 +404,28 @@ fn xmp_has(props: &XmpProperties, field: XmpField, value: &str) -> bool {
         XmpField::Rights => props.rights.as_deref() == Some(value),
         XmpField::Credit => props.credit.as_deref() == Some(value),
         XmpField::Source => props.source.as_deref() == Some(value),
+        XmpField::Subject => props.subject.first().map(String::as_str) == Some(value),
+        XmpField::Headline => props.headline.as_deref() == Some(value),
+        XmpField::City => props.city.as_deref() == Some(value),
+        XmpField::State => props.state.as_deref() == Some(value),
+        XmpField::Country => props.country.as_deref() == Some(value),
+        XmpField::Instructions => props.instructions.as_deref() == Some(value),
+        XmpField::AuthorsPosition => props.authors_position.as_deref() == Some(value),
+        XmpField::CaptionWriter => props.caption_writer.as_deref() == Some(value),
+        XmpField::WebStatement => props.web_statement.as_deref() == Some(value),
+        XmpField::UsageTerms => props.usage_terms.as_deref() == Some(value),
         _ => false,
+    }
+}
+
+fn xmp_has_values(props: &XmpProperties, field: XmpField, values: &[String]) -> bool {
+    match field {
+        XmpField::Subject => props.subject.as_slice() == values,
+        _ => xmp_has(
+            props,
+            field,
+            values.first().map(String::as_str).unwrap_or(""),
+        ),
     }
 }
 
@@ -708,5 +882,95 @@ xmlns:acme=\"http://example.com/acme/\" acme:Marker=\"keep\">\
             &[(XmpField::Title, String::new())]
         ));
         assert_eq!(doc.image_resources, before);
+    }
+    const XMP_TITLE: &str = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\"><dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">Old</rdf:li></rdf:Alt></dc:title></rdf:Description></rdf:RDF></x:xmpmeta>";
+    const XMP_NEW: &str = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">New</rdf:li></rdf:Alt></dc:title></rdf:Description></rdf:RDF></x:xmpmeta>";
+
+    fn xmp_title_document() -> Document {
+        document_with(&[resource(XMP_METADATA, "xmp", XMP_TITLE.as_bytes())])
+    }
+
+    #[test]
+    fn shared_field_writes_both_channels() {
+        let mut doc = xmp_title_document();
+        assert!(set_file_info_fields(&mut doc, &[(2, 5, "New".into())]));
+        assert_eq!(xmp_properties(&doc).title.as_deref(), Some("New"));
+        assert_eq!(read_metadata(&doc).iptc.text(2, 5).as_deref(), Some("New"));
+    }
+
+    #[test]
+    fn metadata_keywords_sync_as_a_list() {
+        let mut doc = xmp_title_document();
+        assert!(set_file_info_values(
+            &mut doc,
+            &[(2, 25, vec!["one".into(), "two".into()])]
+        ));
+        assert_eq!(xmp_properties(&doc).subject, vec!["one", "two"]);
+        assert_eq!(read_metadata(&doc).iptc.values(2, 25).count(), 2);
+    }
+
+    #[test]
+    fn metadata_origin_fields_sync_both_channels() {
+        let mut doc = xmp_title_document();
+        assert!(set_file_info_fields(&mut doc, &[(2, 90, "Berlin".into())]));
+        assert_eq!(xmp_properties(&doc).city.as_deref(), Some("Berlin"));
+        assert_eq!(
+            read_metadata(&doc).iptc.text(2, 90).as_deref(),
+            Some("Berlin")
+        );
+    }
+
+    #[test]
+    fn metadata_unchanged_shared_field_is_a_noop() {
+        let mut iim = vec![0x1c, 2, 5];
+        iim.extend_from_slice(&4u16.to_be_bytes());
+        iim.extend_from_slice(b"Same");
+        let mut doc = document_with(&[
+            resource(XMP_METADATA, "xmp", XMP_TITLE.as_bytes()),
+            resource(IPTC_NAA, "iptc", &iim),
+        ]);
+        assert!(set_file_info_fields(&mut doc, &[(2, 5, "Old".into())]));
+        let mut iim = vec![0x1c, 2, 5];
+        iim.extend_from_slice(&3u16.to_be_bytes());
+        iim.extend_from_slice(b"Old");
+        let mut synced = document_with(&[
+            resource(XMP_METADATA, "xmp", XMP_TITLE.as_bytes()),
+            resource(IPTC_NAA, "iptc", &iim),
+        ]);
+        let before = synced.image_resources.clone();
+        assert!(!set_file_info_fields(&mut synced, &[(2, 5, "Old".into())]));
+        assert_eq!(synced.image_resources, before);
+    }
+
+    #[test]
+    fn metadata_raw_packet_replaces_the_resource() {
+        let exif = b"II\x2a\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00".to_vec();
+        let mut doc = document_with(&[
+            resource(XMP_METADATA, "xmp", XMP_TITLE.as_bytes()),
+            resource(EXIF_DATA_1, "exif", &exif),
+        ]);
+        assert!(set_xmp_packet(&mut doc, XMP_NEW));
+        assert_eq!(read_metadata(&doc).xmp, XMP_NEW);
+        let resources = decode_image_resources(&doc);
+        assert!(resources
+            .iter()
+            .any(|resource| resource.id == EXIF_DATA_1 && resource.data == exif));
+    }
+
+    #[test]
+    fn metadata_raw_packet_rejects_malformed() {
+        let mut doc = xmp_title_document();
+        let before = doc.image_resources.clone();
+        assert!(!set_xmp_packet(&mut doc, "<x:xmpmeta>"));
+        assert_eq!(doc.image_resources, before);
+    }
+
+    #[test]
+    fn metadata_raw_packet_empty_removes() {
+        let mut doc = xmp_title_document();
+        assert!(set_xmp_packet(&mut doc, ""));
+        assert!(!decode_image_resources(&doc)
+            .iter()
+            .any(|resource| resource.id == XMP_METADATA));
     }
 }

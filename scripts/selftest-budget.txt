@@ -16,4 +16,5 @@
 # the Qt text helper; Rasterize Type now bakes the on-canvas render (#962).
 # Lowered to 506 when the tsc_fixed_size check (exit code 244, retired) moved
 # to tst_selection_preview::fixedSizeFollowsTheCursor.
-506
+# Lowered to 503 when the file-info 456/457/459 checks moved to tst_file_info.
+503

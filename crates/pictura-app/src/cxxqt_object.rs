@@ -21,6 +21,7 @@ mod engine_tables;
 mod export;
 mod eyedropper_sample;
 mod fade;
+mod file_info;
 mod filter_map;
 mod filter_tools;
 mod guides;
@@ -235,7 +236,7 @@ pub mod qobject {
         fn assign_profile(self: Pin<&mut Self>, profile_index: i32) -> bool;
         #[qinvokable]
         fn convert_profile(self: Pin<&mut Self>, profile_index: i32) -> bool;
-        /// File Info rows: EXIF, parsed XMP properties, IPTC-IIM, and the raw XMP packet.
+        /// File Info read-only rows: EXIF/GPS, IPTC leftovers, Photoshop and unsupported IPTC Extension leaves.
         #[qinvokable]
         fn exif_rows(&self) -> QStringList;
         #[qinvokable]
@@ -245,7 +246,7 @@ pub mod qobject {
         #[qinvokable]
         fn xmp_rows(&self) -> QStringList;
         #[qinvokable]
-        fn iptc_edit_fields(&self) -> QStringList;
+        fn file_info_edit_fields(&self) -> QStringList;
         #[qinvokable]
         fn apply_metadata_edits(self: Pin<&mut Self>, edits: &QStringList) -> bool;
         /// Export the active document's managed metadata to `dest` as a standalone XMP template; records no history.
