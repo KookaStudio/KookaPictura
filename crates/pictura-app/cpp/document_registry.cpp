@@ -22,6 +22,7 @@
 #include <QtWidgets/QApplication>
 #include <QtGui/QShortcut>
 #include <QtWidgets/QStackedLayout>
+#include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QVBoxLayout>
