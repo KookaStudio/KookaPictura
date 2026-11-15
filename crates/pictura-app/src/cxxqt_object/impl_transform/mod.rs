@@ -61,8 +61,9 @@ pub(super) fn build_move_preview_base(
             buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &base_buffer))
         }
         None => {
-            // ponytail: full-composite fallback for a missing/mismatched
-            // composite; the region path covers the common case.
+            // ponytail: a whole backdrop. Callers reach this only when
+            // `backdrop_patch` refuses, where the hidden layers' reach is
+            // unbounded (a knockout) (#1274).
             set_member_visibility(doc, &members, false);
             let base = document_to_image(doc, gpu_compute);
             restore_member_visibility(doc, &members);

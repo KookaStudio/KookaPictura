@@ -39,21 +39,17 @@ use std::borrow::Cow;
 /// `Cow::Borrowed` is a stored authoritative composite. Anything else is
 /// assembled by [`picture_region`] over the whole document.
 ///
-/// ponytail: a whole picture is one document-sized buffer. Its callers are the
-/// readers that need every pixel at once (raster export, Copy Merged, Color
-/// Range, Refine Edge, the image operations); the region readers use
-/// [`picture_region`].
+/// ponytail: a whole picture is one document-sized buffer. Its callers are
+/// Refine Edge's decontamination, whose output is the whole picture, and a
+/// preview of a document no larger than the preview; every other reader
+/// streams bands ([`stream_picture`]), reads tiles ([`sample_tiles`]) or a
+/// reduced level ([`preview_picture`]), or a region ([`picture_region`])
+/// (#1274).
 pub(super) fn picture<'a>(doc: &'a Document, view: &PictureViewRust) -> Cow<'a, PixelBuffer> {
     if stored_is_current(doc, view) {
         return Cow::Borrowed(&doc.composite);
     }
-    let whole = PsdRect {
-        top: 0,
-        left: 0,
-        bottom: doc.height as i32,
-        right: doc.width as i32,
-    };
-    Cow::Owned(picture_region(doc, view, whole))
+    Cow::Owned(picture_region(doc, view, whole(doc)))
 }
 
 /// `rect` of the picture as currently shown: straight working-space RGBA,
@@ -101,6 +97,207 @@ pub(super) fn picture_region(doc: &Document, view: &PictureViewRust, rect: PsdRe
     out
 }
 
+/// The picture over `rect` (clipped to the document) in full-width bands, top
+/// to bottom: `f(offset, band)` gets each band's first row relative to the
+/// clipped rect and its straight planar RGBA. The bands are byte-identical to
+/// the same rows of [`picture`], and no canvas-sized buffer is built (#1274).
+pub(super) fn stream_picture(
+    doc: &Document,
+    view: &PictureViewRust,
+    rect: PsdRect,
+    mut f: impl FnMut(u32, PixelBuffer),
+) {
+    let rect = PsdRect {
+        top: rect.top.max(0),
+        left: rect.left.max(0),
+        bottom: rect.bottom.min(doc.height as i32),
+        right: rect.right.min(doc.width as i32),
+    };
+    if rect.width() <= 0 || rect.height() <= 0 {
+        return;
+    }
+    let (w, h) = (rect.width() as u32, rect.height() as u32);
+    // One tile row a band: a band is then a small fraction of the picture even
+    // with the reader's own per-band copies (#1274).
+    let rows = STREAM_ROWS;
+    if stored_is_current(doc, view) {
+        let mut top = 0;
+        while top < h {
+            let band = rows.min(h - top);
+            f(
+                top,
+                crop_planar(&doc.composite, rect.left, rect.top + top as i32, w, band),
+            );
+            top += band;
+        }
+    } else {
+        pictura_render::stream_composite(doc, rect, rows, f);
+    }
+}
+
+/// Rows per [`stream_picture`] band.
+const STREAM_ROWS: u32 = pictura_core::TILE as u32;
+
+/// The coarsest view-pyramid level of a `width`×`height` document whose
+/// longer side still reaches `side`: 0 when the document is no larger.
+pub(super) fn preview_level(width: u32, height: u32, side: u32) -> usize {
+    let side = side.max(1);
+    let mut level = 0;
+    loop {
+        let (w, h) = pictura_render::level_size(width, height, level + 1);
+        if w.max(h) < side || (w, h) == pictura_render::level_size(width, height, level) {
+            return level;
+        }
+        level += 1;
+    }
+}
+
+/// `level` of a `width`×`height` image from `source`, premultiplied
+/// interleaved RGBA, composited one tile row of level-0 pixels at a time.
+fn level_from(
+    source: pictura_render::Level0Source<'_>,
+    width: u32,
+    height: u32,
+    level: usize,
+) -> pictura_render::PyramidLevel {
+    let (lw, lh) = pictura_render::level_size(width, height, level);
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: lh as i32,
+        right: lw as i32,
+    };
+    let chunk = u64::from(width) * u64::from(STREAM_ROWS);
+    pictura_render::region_level_chunked(source, (width, height), rect, level, chunk)
+}
+
+/// The picture for a preview no larger than `side`: [`picture`] on a document
+/// no larger, else the coarsest level whose longer side reaches `side` as
+/// straight planar RGBA. A reduced level is approximate (premultiplied
+/// halving, then unpremultiplied), and no canvas-sized buffer is built
+/// (#1274).
+pub(super) fn preview_picture<'a>(
+    doc: &'a Document,
+    view: &PictureViewRust,
+    side: u32,
+) -> Cow<'a, PixelBuffer> {
+    let level = preview_level(doc.width, doc.height, side);
+    if level == 0 {
+        return picture(doc, view);
+    }
+    let stored = stored_is_current(doc, view);
+    let source = |r: PsdRect| {
+        if stored {
+            crop_planar(
+                &doc.composite,
+                r.left,
+                r.top,
+                r.width().max(0) as u32,
+                r.height().max(0) as u32,
+            )
+        } else {
+            pictura_render::composite_region(doc, r)
+        }
+    };
+    Cow::Owned(straight_planar(&level_from(
+        &source, doc.width, doc.height, level,
+    )))
+}
+
+/// The display picture (sRGB) for a preview no larger than `side`, as
+/// premultiplied interleaved RGBA and its size; `None` when the document is
+/// no larger, so the caller shows the whole display picture (#1274).
+pub(super) fn preview_display(
+    doc: &Document,
+    painting: bool,
+    side: u32,
+) -> Option<pictura_render::PyramidLevel> {
+    let level = preview_level(doc.width, doc.height, side);
+    (level > 0).then(|| {
+        let source = |r: PsdRect| super::tiles::display_region(doc, r, painting);
+        level_from(&source, doc.width, doc.height, level)
+    })
+}
+
+/// Premultiplied interleaved RGBA as straight planar RGBA.
+fn straight_planar(level: &pictura_render::PyramidLevel) -> PixelBuffer {
+    let (w, h) = (level.width(), level.height());
+    let n = w as usize * h as usize;
+    let mut data = vec![0u8; n * 4];
+    for (i, px) in level.data().as_chunks::<4>().0.iter().enumerate() {
+        let a = u32::from(px[3]);
+        for c in 0..3 {
+            data[c * n + i] = (u32::from(px[c]) * 255 + a / 2)
+                .checked_div(a)
+                .map_or(0, |v| v.min(255) as u8);
+        }
+        data[3 * n + i] = px[3];
+    }
+    PixelBuffer {
+        width: w,
+        height: h,
+        channels: 4,
+        data: data.into(),
+    }
+}
+
+/// The whole picture as packed RGBA8888, converted to sRGB with `srgb`: band by
+/// band into the one output buffer, so the composite, its sRGB copy and the
+/// planar frame are never whole (#1274).
+pub(super) fn picture_rgba(doc: &Document, view: &PictureViewRust, srgb: bool) -> Vec<u8> {
+    let w = doc.width as usize;
+    let mut rgba = vec![0u8; w * doc.height as usize * 4];
+    stream_picture(doc, view, whole(doc), |offset, band| {
+        let band = if srgb {
+            pictura_codec::buffer_to_srgb(doc, &band)
+        } else {
+            Cow::Borrowed(&band)
+        };
+        let bytes = super::helpers_composite::buffer_to_rgba_bytes(&band);
+        let at = offset as usize * w * 4;
+        rgba[at..at + bytes.len()].copy_from_slice(&bytes);
+    });
+    rgba
+}
+
+/// The `(left, top, right, bottom)` bounds of the picture's coverage, read band
+/// by band so no canvas-sized buffer is kept (#1274); `right <= left` when the
+/// picture is fully transparent. The content is wherever the composite has
+/// coverage; the layer rects are the whole canvas even when the pixels are
+/// transparent.
+pub(super) fn coverage_bounds(doc: &Document, view: &PictureViewRust) -> (i32, i32, i32, i32) {
+    let (mut left, mut top) = (doc.width as i32, doc.height as i32);
+    let (mut right, mut bottom) = (-1i32, -1i32);
+    stream_picture(doc, view, whole(doc), |offset, band| {
+        let w = band.width as usize;
+        let n = w * band.height as usize;
+        let mut alpha = vec![0u8; n];
+        band.data.read_into(3 * n, &mut alpha);
+        for (row, line) in alpha.chunks_exact(w).enumerate() {
+            let Some(first) = line.iter().position(|&a| a > 0) else {
+                continue;
+            };
+            let last = line.iter().rposition(|&a| a > 0).unwrap_or(first);
+            let y = offset as i32 + row as i32;
+            left = left.min(first as i32);
+            right = right.max(last as i32 + 1);
+            top = top.min(y);
+            bottom = bottom.max(y + 1);
+        }
+    });
+    (left, top, right, bottom)
+}
+
+/// The document's whole canvas.
+pub(super) fn whole(doc: &Document) -> PsdRect {
+    PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    }
+}
+
 /// Tiles a Sample All Layers flood keeps: a flood revisits a tile's rows, and
 /// 64 tiles are 16 MiB.
 const SAMPLE_MEMO: usize = 64;
@@ -117,18 +314,57 @@ pub(super) fn sample_tiles<'a>(
     sample_tiles_from(doc, stored_is_current(doc, view))
 }
 
+/// The picture read through `fetch` (a [`sample_tiles`] closure) as a
+/// selection's [`pictura_select::ImageSource`] (#1274).
+pub(super) fn tile_source<'a>(
+    doc: &Document,
+    fetch: &'a (dyn Fn(usize, usize) -> std::sync::Arc<[u8]> + Sync),
+) -> pictura_select::ImageSource<'a> {
+    pictura_select::ImageSource::Tiles {
+        fetch,
+        width: doc.width,
+        height: doc.height,
+    }
+}
+
 /// [`sample_tiles`] given whether the stored composite is current, read
 /// beforehand, so the flood can run off the GUI thread (#1300).
 pub(super) fn sample_tiles_from(
     doc: &Document,
     stored: bool,
 ) -> impl Fn(usize, usize) -> std::sync::Arc<[u8]> + Sync + '_ {
-    let memo = std::sync::Mutex::new(std::collections::VecDeque::<(
-        (usize, usize),
-        std::sync::Arc<[u8]>,
-    )>::new());
-    move |tx, ty| {
-        if let Some((_, bytes)) = memo
+    let tiles = PictureTiles::new(doc, stored);
+    move |tx, ty| tiles.tile(tx, ty)
+}
+
+/// A memoized tile: its `(tx, ty)` and straight interleaved RGBA.
+type MemoTile = ((usize, usize), std::sync::Arc<[u8]>);
+
+/// The picture of a document a level-0 tile at a time, keeping the last
+/// [`SAMPLE_MEMO`] tiles: what [`sample_tiles`] reads through. `D` is a borrow
+/// for a read that ends with the call, or an owned clone (`Arc<Document>`)
+/// for one that outlives it, such as the Magnetic Lasso's edge map (#1274).
+pub(super) struct PictureTiles<D> {
+    doc: D,
+    stored: bool,
+    memo: std::sync::Mutex<std::collections::VecDeque<MemoTile>>,
+}
+
+impl<D: std::ops::Deref<Target = Document>> PictureTiles<D> {
+    pub(super) fn new(doc: D, stored: bool) -> Self {
+        Self {
+            doc,
+            stored,
+            memo: Default::default(),
+        }
+    }
+
+    /// The straight interleaved RGBA of tile `(tx, ty)`, clipped at the canvas
+    /// edge: cropped from the stored composite when that is current,
+    /// composited for the tile alone otherwise.
+    pub(super) fn tile(&self, tx: usize, ty: usize) -> std::sync::Arc<[u8]> {
+        if let Some((_, bytes)) = self
+            .memo
             .lock()
             .expect("the memo lock")
             .iter()
@@ -136,6 +372,7 @@ pub(super) fn sample_tiles_from(
         {
             return std::sync::Arc::clone(bytes);
         }
+        let doc = &*self.doc;
         let side = pictura_core::TILE as i32;
         let rect = PsdRect {
             top: ty as i32 * side,
@@ -143,7 +380,7 @@ pub(super) fn sample_tiles_from(
             bottom: (ty as i32 * side + side).min(doc.height as i32),
             right: (tx as i32 * side + side).min(doc.width as i32),
         };
-        let pixels = if stored {
+        let pixels = if self.stored {
             crop_planar(
                 &doc.composite,
                 rect.left,
@@ -155,7 +392,7 @@ pub(super) fn sample_tiles_from(
             pictura_render::composite_region(doc, rect)
         };
         let bytes: std::sync::Arc<[u8]> = pictura_render::interleave(&pixels).into();
-        let mut memo = memo.lock().expect("the memo lock");
+        let mut memo = self.memo.lock().expect("the memo lock");
         if memo.len() == SAMPLE_MEMO {
             memo.pop_front();
         }
@@ -707,3 +944,8 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+pub(in crate::cxxqt_object) mod readers_fixture;
+#[cfg(test)]
+mod readers_tests;

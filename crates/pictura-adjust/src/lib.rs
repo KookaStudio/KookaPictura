@@ -32,7 +32,9 @@ pub use apply::{
 pub use color::apply_channel_mixer_ink;
 pub use hdr_toning::{exposure_gamma, tone_map, ExposureGamma, HdrToneMap, LocalAdaptationParams};
 pub use lut::parse_cube;
-pub use match_color::{match_color_stats, MatchColorParams, MatchColorStats};
+pub use match_color::{
+    match_color_stats, MatchColorAccumulator, MatchColorParams, MatchColorStats,
+};
 pub use native::{apply_native, apply_native_in_mode};
 pub use pictura_raw::render_pictura_raw;
 pub use replace_color::{

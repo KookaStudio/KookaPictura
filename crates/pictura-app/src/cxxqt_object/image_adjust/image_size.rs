@@ -16,6 +16,8 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -24,6 +26,13 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        /// The display picture for a preview whose longer side is at most
+        /// about `max_side` (the Image Size preview, the control server's
+        /// document capture): a reduced view-pyramid level on a larger
+        /// document, so no full-resolution image is built (#1274). Empty
+        /// without a document.
+        fn preview_image(view: &PictureView, max_side: i32) -> QImage;
+
         /// The document's resolution in pixels per inch (CS6's 72 when the
         /// file names none).
         fn document_ppi(view: &PictureView) -> f64;

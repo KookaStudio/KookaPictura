@@ -3,13 +3,13 @@ use super::*;
 use super::super::super::helpers::active_pixel_layer;
 use super::super::super::helpers_composite::selection_to_mask;
 use super::super::super::impl_layers::coverage_at;
-use super::super::super::picture::picture;
+use super::super::super::picture::{picture, preview_picture, sample_tiles, tile_source};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::{LayerMask, PsdRect};
-use pictura_select::{refine, OutputTarget, RefineEdgeSettings, Selection};
+use pictura_select::{refine, refine_from, OutputTarget, RefineEdgeSettings, Selection};
 
 /// What a refine starts from: the active selection (Refine Edge) or the mask
 /// of the layer at a path (Refine Mask).
@@ -282,7 +282,9 @@ pub(super) fn preview(
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let image = shrink(&picture(doc, rust), max_side.max(0) as u32);
+    // A preview reads the level it shows (#1274).
+    let side = max_side.max(0) as u32;
+    let image = shrink(&preview_picture(doc, rust, side), side);
     let Some(mask) = source.preview_coverage(view, image.width, image.height) else {
         return Vec::new();
     };
@@ -427,13 +429,16 @@ pub(super) fn apply(
         let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
-        let image = picture(doc, rust);
-        let refined = match refine(&coverage, &image, &settings) {
+        // The edge band reads tiles; decontaminating rewrites the picture in
+        // place, so it is the one whole buffer (#1274).
+        let fetch = sample_tiles(doc, rust);
+        let refined = match refine_from(&coverage, tile_source(doc, &fetch), &settings) {
             Ok(refined) => refined,
             Err(_) => return false,
         };
         let decon = if decontaminate {
-            match pictura_select::decontaminate(&image, &refined, amount.clamp(0, 100) as u32) {
+            let image = picture(doc, rust).into_owned();
+            match pictura_select::decontaminate_into(image, &refined, amount.clamp(0, 100) as u32) {
                 Ok(buffer) => Some(buffer),
                 Err(_) => return false,
             }

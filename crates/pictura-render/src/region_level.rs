@@ -134,7 +134,7 @@ pub fn composite_tiled(doc: &Document) -> PixelBuffer {
 }
 
 /// Rows per streamed band: whole tile rows holding about [`CHUNK_PIXELS`].
-fn band_rows(width: usize) -> u32 {
+pub fn band_rows(width: usize) -> u32 {
     let tiles = (CHUNK_PIXELS as usize / (width.max(1) * TILE)).max(1);
     (tiles * TILE) as u32
 }
@@ -169,7 +169,9 @@ pub fn region_level(
     region_level_chunked(source, size, rect, level, CHUNK_PIXELS)
 }
 
-fn region_level_chunked(
+/// [`region_level`] compositing at most `chunk_pixels` level-0 pixels per
+/// chunk, for a reader that bounds its working memory below the default.
+pub fn region_level_chunked(
     source: Level0Source<'_>,
     size: (u32, u32),
     rect: PsdRect,

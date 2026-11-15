@@ -55,8 +55,9 @@ pub use render_session::{RenderSession, DEFAULT_PREVIEW_BUDGET};
 mod region_level;
 mod smart_source;
 pub use region_level::{
-    composite_channels, composite_region, composite_region_level, composite_tiled, level_size,
-    premultiply_planar, region_level, stream_composite, ChunkConvert, Level0Source,
+    band_rows, composite_channels, composite_region, composite_region_level, composite_tiled,
+    level_size, premultiply_planar, region_level, region_level_chunked, stream_composite,
+    ChunkConvert, Level0Source,
 };
 mod tile_pyramid;
 pub use tile_pyramid::{
@@ -78,8 +79,9 @@ pub use composite_native::refresh_native_composite;
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
     Adjustment, AutoKind, ColorBalanceMode, ExposureGamma, GradientFillParams, GradientKind,
-    GradientMapParams, GradientStop, HdrToneMap, LocalAdaptationParams, MatchColorParams,
-    MatchColorStats, OpacityStop, PatternFillParams, ReplaceColorParams, ReplaceColorSample,
+    GradientMapParams, GradientStop, HdrToneMap, LocalAdaptationParams, MatchColorAccumulator,
+    MatchColorParams, MatchColorStats, OpacityStop, PatternFillParams, ReplaceColorParams,
+    ReplaceColorSample,
 };
 
 mod color_balance;
@@ -204,13 +206,13 @@ pub use document_ops::{
     convert_depth_exposure_gamma, convert_for_smart_filters, convert_mode,
     convert_mode_with_profiles, convert_smart_object_to_layers, convert_to_bitmap,
     convert_to_indexed, convert_to_smart_object, copy_layer, copy_layer_style, copy_merged,
-    copy_path_to_document, copy_shape_attributes, coverage_bounds, create_clipping_mask,
-    crop_document, crop_document_grow, defringe, delete_cropped_pixels, delete_hidden_layers,
-    delete_layer_mask, delete_paths, delete_paths_report, delete_smart_filter,
-    delete_smart_filter_mask, delete_vector_mask, distribute_layers, document_bit_depth,
-    document_color_mode, duplicate_is_content_neutral, duplicate_layer, duplicate_paths,
-    extend_background, fit_smart_object_to_canvas, flatten, flatten_rows, flip_document,
-    group_layer, group_paths, has_forced_locks, has_layer_mask, has_layer_style,
+    copy_merged_region, copy_path_to_document, copy_shape_attributes, coverage_bounds,
+    create_clipping_mask, crop_document, crop_document_grow, defringe, delete_cropped_pixels,
+    delete_hidden_layers, delete_layer_mask, delete_paths, delete_paths_report,
+    delete_smart_filter, delete_smart_filter_mask, delete_vector_mask, distribute_layers,
+    document_bit_depth, document_color_mode, duplicate_is_content_neutral, duplicate_layer,
+    duplicate_paths, extend_background, fit_smart_object_to_canvas, flatten, flatten_rows,
+    flip_document, group_layer, group_paths, has_forced_locks, has_layer_mask, has_layer_style,
     has_smart_filter_mask, has_vector_mask, hidden_layer_paths, indexed_exact_available,
     insert_layer, insertion_is_content_neutral, invert_layer_mask, is_background,
     is_fill_content_layer, is_shape_layer, is_visible_in_panel, layer_content_bounds,

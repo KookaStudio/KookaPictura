@@ -636,8 +636,9 @@ impl qobject::PictureView {
         // Composited on demand, not through the tile cache (which it would
         // flush), so no full-resolution `QImage` is held between calls.
         // ponytail: the image is one document-sized allocation for as long as
-        // the caller holds it; its callers are the capture command,
-        // small-document dialogs and tests.
+        // the caller holds it; its callers are the Qt tests and the
+        // no-document placeholder; previews use `image_size::preview_image`
+        // (#1274).
         let rust = self.rust();
         let Some(doc) = rust.session.doc.as_ref() else {
             return test_image();

@@ -19,7 +19,7 @@ use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{QImage, QRect, QString};
+use cxx_qt_lib::{QImage, QString};
 use pictura_core::{layer_move_locked, BlendMode, LayerStack, PsdRect};
 use pictura_render::Interpolation;
 

@@ -79,8 +79,8 @@ pub use auto_blend::{
     BlendObjective, BlendedLayer, Cancelled as AutoBlendCancelled, AUTO_BLEND_PROGRESS_MAX,
 };
 pub use clipboard::{
-    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, plane_has_coverage, Clip,
-    PasteMode,
+    clear_layer, copy_layer, copy_merged, copy_merged_region, coverage_bounds, paste_clip,
+    plane_has_coverage, Clip, PasteMode,
 };
 pub use clipping::{
     can_create_clipping_mask, can_release_clipping_mask, clipping_release_paths,

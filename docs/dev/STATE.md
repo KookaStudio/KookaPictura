@@ -4,6 +4,40 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Whole-picture readers — #1274 complete** (OpenSpec change
+  `whole-picture-readers`; capability `compositing/whole-picture-readers`).
+  The `ponytail:` readers #1216 left no longer build a canvas-sized composite.
+  - **Bands.** `picture::stream_picture` hands over 256-row bands (stored
+    composite crops or `stream_composite`). Export, Save for Web and raster
+    save formats (`picture_rgba`), Duplicate (merged), Trim
+    (`coverage_bounds`), Load Channel Selection, the Color Range commit and
+    Match Color's statistics (`MatchColorAccumulator`, same summation order)
+    read it. Copy Merged composites the selection bounds only
+    (`copy_merged_region`).
+  - **Tiles.** `pictura_select::ImageSource` (a buffer or a tile fetch) feeds
+    the wand action, Grow, Similar and Refine Edge (its band walked a tile at a
+    time). The Magnetic Lasso's `EdgeMap::from_tiles` takes an `EdgePeak` fed
+    by bands and an owned fetch (`picture::PictureTiles` over an `Arc`
+    document clone). Decontaminate rewrites its one output in place.
+  - **Reduced levels.** `picture::preview_picture` / `preview_display` read
+    the coarsest level that still covers the preview: Color Range, Refine Edge
+    and Replace Color previews (localized samples scaled), and
+    `image_size::preview_image` for the Image Size dialog and the control
+    server's document capture.
+  - **Conversions.** `document_ops/mode/stream.rs`: Grayscale, CMYK/Lab and
+    depth up-conversion stream the RGB source into their stores, exact with the
+    ordered dither too (its period divides the band offsets).
+  - **Backdrops.** Liquify composites its frame (`hidden_layer_region`),
+    Vanishing Point streams its sRGB backdrop (`hidden_layer_rgba`), and the
+    Move/transform patch covers groups, effects and adjustments through
+    `damage::influence`; whole backdrops remain for knockouts and lifts.
+  - **Measured** (heap over setup, `readers_heap_peak_full`, composite
+    1102 MiB at 17000²): export 1169 MiB (its RGBA output plus a band), Trim,
+    magnetic begin, previews and Grayscale ≈ 67 MiB (one band), Similar
+    19 MiB. 4250² guards assert `output + half a composite`.
+  - **Left (`ponytail:`).** Refine Edge's own f64 work arrays, the clipboard's
+    coverage copy, `ImageView::image()` in the crop content pan, knockout and
+    lifted-transform backdrops, an adjustment layer's whole-canvas patch.
 - **Anti-aliased selection raster and 56-channel cap — #614 implemented**
   (OpenSpec change `aa-selection-raster`, archived).
   - `Selection::ellipse_aa` grades the per-row boundary band (including the

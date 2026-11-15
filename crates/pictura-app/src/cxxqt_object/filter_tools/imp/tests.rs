@@ -94,7 +94,8 @@ fn the_proxy_base_hides_the_active_layer_and_restores_it() {
     ]);
     doc.composite = pictura_render::composite_rgba(&doc);
 
-    let base = hidden_layer_buffer(&mut doc, "1", false).expect("base");
+    let canvas = whole_canvas(&doc);
+    let base = hidden_layer_region(&mut doc, "1", canvas).expect("base").0;
     assert!(doc.layers[1].visible, "hiding must be undone");
     let plane = 16;
     assert_eq!(base.data[0], 255, "the red bottom layer");
@@ -118,7 +119,10 @@ fn a_nested_active_layer_resolves_for_the_proxy() {
     doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
     doc.composite = pictura_render::composite_rgba(&doc);
 
-    let base = hidden_layer_buffer(&mut doc, "0/1", false).expect("nested base");
+    let canvas = whole_canvas(&doc);
+    let base = hidden_layer_region(&mut doc, "0/1", canvas)
+        .expect("nested base")
+        .0;
     let plane = 16;
     assert_eq!(base.data[0], 255, "the red nested layer survives");
     assert_eq!(base.data[2 * plane], 0, "the blue nested layer is hidden");
@@ -160,4 +164,71 @@ fn hdr_toning_is_not_a_filter_command() {
         0
     );
     assert!(pictura_filters::catalogue::descriptor("hdr-toning").is_some());
+}
+
+/// The whole canvas of `doc`.
+fn whole_canvas(doc: &Document) -> pictura_core::PsdRect {
+    pictura_core::PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    }
+}
+
+/// `doc` with the layer at `path` hidden, composited whole: the reference the
+/// backdrops are checked against.
+fn hidden_whole(doc: &Document, path: &str) -> PixelBuffer {
+    let mut hidden = doc.clone();
+    pictura_render::resolve_path_mut(&mut hidden, path)
+        .expect("a layer")
+        .visible = false;
+    pictura_render::composite_rgba(&hidden)
+}
+
+/// Liquify's backdrop composites its frame alone (clipped to the canvas) and
+/// equals that crop of the whole composite with the layer hidden (#1274).
+#[test]
+fn liquify_backdrop_reads_its_frame() {
+    use crate::cxxqt_object::helpers_composite::crop_planar;
+    use crate::cxxqt_object::picture::readers_fixture::{layered, rect};
+
+    let mut doc = layered(613, 541, false);
+    let reference = hidden_whole(&doc, "1");
+    for frame in [rect(50, 40, 300, 200), rect(-10, -5, 100, 90)] {
+        let (base, at) = hidden_layer_region(&mut doc, "1", frame).expect("a backdrop");
+        assert!(doc.layers[1].visible, "hiding must be undone");
+        assert_eq!(
+            at,
+            rect(
+                frame.left.max(0),
+                frame.top.max(0),
+                frame.right,
+                frame.bottom
+            )
+        );
+        let want = crop_planar(
+            &reference,
+            at.left,
+            at.top,
+            at.width() as u32,
+            at.height() as u32,
+        );
+        assert!(base == want, "frame {frame:?}");
+    }
+}
+
+/// Vanishing Point's sRGB backdrop, streamed into its one buffer, equals the
+/// whole hidden-layer composite converted (#1274).
+#[test]
+fn vanishing_point_backdrop_streams() {
+    use crate::cxxqt_object::helpers_composite::buffer_to_rgba_bytes;
+    use crate::cxxqt_object::picture::readers_fixture::layered;
+
+    let mut doc = layered(613, 541, true);
+    let reference = hidden_whole(&doc, "1");
+    let want = buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(&doc, &reference));
+    let got = hidden_layer_rgba(&mut doc, "1").expect("a backdrop");
+    assert!(doc.layers[1].visible, "hiding must be undone");
+    assert!(got == want);
 }

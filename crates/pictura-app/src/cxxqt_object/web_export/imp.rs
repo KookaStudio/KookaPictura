@@ -1,7 +1,7 @@
 use super::*;
 
 use super::super::helpers_composite::buffer_to_rgba_bytes;
-use super::super::picture::picture;
+use super::super::picture::picture_rgba;
 use cxx_qt::CxxQtType;
 use ffi::WebPalette;
 use pictura_codec::{ColorReduction, Dither, Indexed, PaletteOptions};
@@ -26,8 +26,7 @@ pub(super) fn web_flattened(view: &PictureView) -> Vec<u8> {
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let buffer = picture(doc, rust);
-    buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(doc, &buffer))
+    picture_rgba(doc, rust, true)
 }
 
 /// The bounds a layer's subtree covers: its own rect for a leaf, the union of

@@ -1,11 +1,10 @@
 use super::*;
 
-use super::super::picture::picture;
+use super::super::picture::picture_region;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_render::rgba_frame;
 use pictura_render::{Clip, PasteMode};
 use std::sync::Mutex;
 
@@ -105,8 +104,9 @@ pub(super) fn copy_of(view: &PictureView, path: &str, merged: bool) -> Option<Cl
     let rust = view.rust();
     let doc = rust.session.doc.as_ref()?;
     if merged {
-        let composite = rgba_frame(&picture(doc, rust));
-        pictura_render::copy_merged(doc, &composite, selection.as_deref())
+        pictura_render::copy_merged_region(doc, selection.as_deref(), |region| {
+            picture_region(doc, rust, region)
+        })
     } else {
         pictura_render::copy_layer(doc, path, selection.as_deref())
     }

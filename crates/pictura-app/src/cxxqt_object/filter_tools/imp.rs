@@ -3,7 +3,8 @@ use super::*;
 use super::super::filter_map::filter_from_kind_params;
 use super::super::helpers::{active_layer_visible, active_pixel_layer};
 use super::super::helpers_composite::{
-    buffer_to_image, layer_buffer, premultiplied_display_image, selection_to_mask,
+    buffer_to_image, buffer_to_rgba_bytes, layer_buffer, premultiplied_display_image,
+    selection_to_mask,
 };
 use super::super::impl_filters::{
     apply_filter_active, apply_filter_active_region, apply_op_active_region, cancel_filter_preview,
@@ -13,8 +14,7 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
-use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
-use pictura_render::patch_buffer_region;
+use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer, PsdRect};
 
 pub(super) fn apply_filter_params(
     mut view: Pin<&mut PictureView>,
@@ -547,40 +547,60 @@ pub(super) fn rgba_to_buffer(rgba: &[u8], width: u32, height: u32) -> Option<Pix
     Some(buffer)
 }
 
-/// The document's composite with the layer at `path` hidden, patched over the
-/// cached `doc.composite` so opening a dialog does not pay for a full
-/// recomposite. `None` when the path does not resolve.
-pub(super) fn hidden_layer_buffer(
-    doc: &mut Document,
-    path: &str,
-    gpu_compute: bool,
-) -> Option<PixelBuffer> {
-    let (rect, was_visible) = {
-        let layer = pictura_render::resolve_path(doc, path)?;
-        (layer.rect, layer.visible)
-    };
-    let cached_ok = doc.composite.width == doc.width
-        && doc.composite.height == doc.height
-        && !doc.composite.data.is_empty()
-        && rect.width() > 0
-        && rect.height() > 0;
+/// Run `f` on `doc` with the layer at `path` hidden, then restore its own
+/// visibility. `None` when the path does not resolve.
+fn with_hidden<R>(doc: &mut Document, path: &str, f: impl FnOnce(&Document) -> R) -> Option<R> {
+    let was_visible = pictura_render::resolve_path(doc, path)?.visible;
     pictura_render::resolve_path_mut(doc, path)?.visible = false;
-    let base = if cached_ok {
-        let (region, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
-            doc,
-            rect,
-            gpu_compute,
-        ));
-        let mut base = doc.composite.clone();
-        patch_buffer_region(&mut base, &region, rect.left, rect.top);
-        base
-    } else {
-        pictura_render::composite_rgba(doc)
-    };
+    let out = f(doc);
     if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
         layer.visible = was_visible;
     }
-    Some(base)
+    Some(out)
+}
+
+/// `rect` of the document's composite with the layer at `path` hidden,
+/// composited for `rect` alone (clipped to the canvas), so a dialog backdrop
+/// costs its frame, not the document (#1274). The buffer and the clipped
+/// rect; `None` when the path does not resolve or `rect` misses the canvas.
+pub(super) fn hidden_layer_region(
+    doc: &mut Document,
+    path: &str,
+    rect: PsdRect,
+) -> Option<(PixelBuffer, PsdRect)> {
+    let clipped = PsdRect {
+        top: rect.top.max(0),
+        left: rect.left.max(0),
+        bottom: rect.bottom.min(doc.height as i32),
+        right: rect.right.min(doc.width as i32),
+    };
+    if clipped.width() <= 0 || clipped.height() <= 0 {
+        return None;
+    }
+    with_hidden(doc, path, |doc| {
+        (pictura_render::composite_region(doc, clipped), clipped)
+    })
+}
+
+/// The whole document's composite with the layer at `path` hidden, in sRGB as
+/// packed RGBA8888: composited band by band into that one buffer (#1274).
+pub(super) fn hidden_layer_rgba(doc: &mut Document, path: &str) -> Option<Vec<u8>> {
+    with_hidden(doc, path, |doc| {
+        let w = doc.width as usize;
+        let mut rgba = vec![0u8; w * doc.height as usize * 4];
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        };
+        pictura_render::stream_composite(doc, whole, pictura_core::TILE as u32, |offset, band| {
+            let bytes = buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(doc, &band));
+            let at = offset as usize * w * 4;
+            rgba[at..at + bytes.len()].copy_from_slice(&bytes);
+        });
+        rgba
+    })
 }
 
 pub(super) fn filter_proxy_composite(

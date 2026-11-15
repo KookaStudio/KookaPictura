@@ -310,3 +310,73 @@ fn tiled_grow_and_similar_match_dense() {
         );
     }
 }
+
+/// The wand, Grow and Similar read through a tile fetch select exactly what
+/// they select over the whole buffer (#1274).
+#[test]
+fn tiled_source_matches_the_buffer() {
+    let (w, h) = (613usize, 541usize);
+    let img = composite(w, h, 51);
+    let fetch = crate::source::test_support::fetch_of(&img);
+    let tiles = crate::ImageSource::Tiles {
+        fetch: &fetch,
+        width: w as u32,
+        height: h as u32,
+    };
+    let seeds = soft(w, h, &[0, 0, 0, 255, 120], 61);
+    let sel = tiled(&seeds, w, h);
+    for tol in [0u8, 6, 40] {
+        for (x, y) in [(0u32, 0u32), (300, 270), (612, 540)] {
+            for (contiguous, aa) in [(true, false), (false, false), (true, true), (false, true)] {
+                let got = crate::magic_wand_from(tiles, x, y, tol, contiguous, aa).unwrap();
+                let want = crate::magic_wand(&img, x, y, tol, contiguous, aa).unwrap();
+                assert!(
+                    got.data == want.data.to_vec(),
+                    "wand {tol} ({x},{y}) aa {aa}"
+                );
+            }
+        }
+        let got = crate::grow_from(&sel, tiles, tol).unwrap();
+        let want = crate::grow(&sel, &img, tol).unwrap();
+        assert!(got.data == want.data.to_vec(), "grow {tol}");
+        let got = crate::similar_from(&sel, tiles, tol).unwrap();
+        let want = crate::similar(&sel, &img, tol).unwrap();
+        assert!(got.data == want.data.to_vec(), "similar {tol}");
+    }
+}
+
+/// Refine Edge reads its edge band through a tile fetch with the result it
+/// gets over the whole buffer, and decontaminating in place equals the copy
+/// (#1274).
+#[test]
+fn tiled_refine_matches_the_buffer() {
+    let (w, h) = (547usize, 389usize);
+    let img = composite(w, h, 71);
+    let fetch = crate::source::test_support::fetch_of(&img);
+    let tiles = crate::ImageSource::Tiles {
+        fetch: &fetch,
+        width: w as u32,
+        height: h as u32,
+    };
+    let mask = tiled(&soft(w, h, &[0, 0, 255, 255, 140], 81), w, h);
+    for smart_radius in [false, true] {
+        let settings = crate::RefineEdgeSettings {
+            smart_radius,
+            radius: 9,
+            smooth: 3,
+            feather: 2,
+            contrast: 20,
+            shift_edge: 15,
+            ..Default::default()
+        };
+        let got = crate::refine_from(&mask, tiles, &settings).unwrap();
+        let want = crate::refine(&mask, &img, &settings).unwrap();
+        assert!(
+            got.data.to_vec() == want.data.to_vec(),
+            "smart radius {smart_radius}"
+        );
+        let copied = crate::decontaminate(&img, &want, 60).unwrap();
+        let in_place = crate::decontaminate_into(img.clone(), &want, 60).unwrap();
+        assert!(copied.data.to_vec() == in_place.data.to_vec());
+    }
+}

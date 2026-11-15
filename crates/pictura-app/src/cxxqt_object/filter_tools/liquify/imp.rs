@@ -12,7 +12,7 @@ use pictura_select::Selection;
 
 use super::super::super::helpers::active_pixel_layer;
 use super::super::super::helpers_composite::{layer_buffer, rgba_image};
-use super::super::hidden_layer_buffer;
+use super::super::hidden_layer_region;
 
 /// ponytail: the eight most recent meshes stay in memory for the process; a
 /// Last Filter that names an older one is refused, and none survive a
@@ -219,7 +219,6 @@ pub(super) fn liquify_grid_lines(
 pub(super) fn liquify_backdrop(mut view: Pin<&mut PictureView>, path: &QString) -> QImage {
     view.as_mut().settle_pending_composite();
     let mut rust = view.as_mut().rust_mut();
-    let gpu_compute = rust.gpu_compute;
     let Some(active) = rust.layer_target.single().map(str::to_string) else {
         return QImage::default();
     };
@@ -242,8 +241,14 @@ pub(super) fn liquify_backdrop(mut view: Pin<&mut PictureView>, path: &QString) 
     };
     let path = path.to_string();
     let picture = if path.is_empty() {
-        hidden_layer_buffer(doc, &active, gpu_compute)
-            .map(|base| (pictura_codec::buffer_to_srgb(doc, &base).into_owned(), 0, 0))
+        // Only the frame is composited (#1274).
+        hidden_layer_region(doc, &active, frame).map(|(base, at)| {
+            (
+                pictura_codec::buffer_to_srgb(doc, &base).into_owned(),
+                at.left,
+                at.top,
+            )
+        })
     } else {
         active_pixel_layer(doc, Some(&path))
             .and_then(|layer| Some((layer_buffer(layer)?, layer.rect.left, layer.rect.top)))

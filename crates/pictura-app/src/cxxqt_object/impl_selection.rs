@@ -1,22 +1,26 @@
 use super::edit::Edit;
 use super::helpers::*;
 use super::helpers_composite::*;
-use super::picture::picture;
+use super::picture::{sample_tiles, stream_picture, tile_source, whole};
 use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
-use pictura_codec::buffer_to_srgb;
-use pictura_core::{Channel, ColorMode, Document, PixelBuffer, PsdRect};
+use pictura_core::{Channel, PsdRect};
 use pictura_select::{CombineMode, Selection};
 
 mod bridge;
 #[cfg(test)]
 mod cap_tests;
+mod channel_rows;
 mod query;
 mod quick;
 mod refine;
 
+use channel_rows::channel_row_selection_from;
+#[cfg(test)]
+use channel_rows::{channel_row_selection, cmyk_ink};
+pub(super) use channel_rows::{channel_value, color_rows, q_gray};
 #[cfg(test)]
 pub(in crate::cxxqt_object) use quick::combine_for_profile;
 pub(in crate::cxxqt_object) use quick::ShapeBox;
@@ -383,7 +387,8 @@ impl qobject::PictureView {
                 return false;
             };
             let tolerance = tolerance.clamp(0, 255) as u8;
-            match pictura_select::grow(sel, &picture(doc, rust), tolerance) {
+            let fetch = sample_tiles(doc, rust);
+            match pictura_select::grow_from(sel, tile_source(doc, &fetch), tolerance) {
                 Ok(selection) => selection,
                 Err(_) => return false,
             }
@@ -402,7 +407,8 @@ impl qobject::PictureView {
                 return false;
             };
             let tolerance = tolerance.clamp(0, 255) as u8;
-            match pictura_select::similar(sel, &picture(doc, rust), tolerance) {
+            let fetch = sample_tiles(doc, rust);
+            match pictura_select::similar_from(sel, tile_source(doc, &fetch), tolerance) {
                 Ok(selection) => selection,
                 Err(_) => return false,
             }
@@ -456,8 +462,12 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            let picture = picture(doc, rust);
-            channel_row_selection(doc, &picture, row, mask as u8)
+            channel_row_selection_from(
+                doc,
+                |f| stream_picture(doc, rust, whole(doc), f),
+                row,
+                mask as u8,
+            )
         };
         let Some(shape) = shape else {
             return false;
@@ -505,8 +515,9 @@ impl qobject::PictureView {
                 return false;
             }
             let tolerance = tolerance.clamp(0, 255) as u8;
-            match pictura_select::magic_wand(
-                &picture(doc, rust),
+            let fetch = sample_tiles(doc, rust);
+            match pictura_select::magic_wand_from(
+                tile_source(doc, &fetch),
                 x as u32,
                 y as u32,
                 tolerance,
@@ -940,119 +951,13 @@ fn selection_from_named_channel(
     Selection::from_channel(channel, width, height).ok()
 }
 
-/// The colour-channel row layout of a document `mode`: whether a composite row
-/// leads the list, and the number of colour channels after it. Mirrors the
-/// Channels panel's `channelsForMode`: a single-row mode's one row is the
-/// composite, with no separate colour channel.
-pub(super) fn color_rows(mode: ColorMode) -> (bool, usize) {
-    match mode {
-        ColorMode::Rgb | ColorMode::Lab => (true, 3),
-        ColorMode::Cmyk => (true, 4),
-        ColorMode::Multichannel => (false, 3),
-        ColorMode::Grayscale | ColorMode::Indexed | ColorMode::Bitmap | ColorMode::Duotone => {
-            (true, 0)
-        }
-    }
-}
-
-/// Qt's `qGray`: `(r*11 + g*16 + b*5) >> 5`.
-pub(super) fn q_gray(r: u8, g: u8, b: u8) -> u8 {
-    ((r as u32 * 11 + g as u32 * 16 + b as u32 * 5) >> 5) as u8
-}
-
-/// The naive CMYK ink level `0..=255` for one channel of an RGB pixel: the
-/// plate split the Channels panel thumbnails show (`color_models::channel_plane`).
-fn cmyk_ink(r: u8, g: u8, b: u8, index: usize) -> u8 {
-    let (rf, gf, bf) = (r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
-    let k = 1.0 - rf.max(gf).max(bf);
-    let inv = if k < 1.0 { 1.0 / (1.0 - k) } else { 0.0 };
-    let inks = [
-        (1.0 - rf - k) * inv,
-        (1.0 - gf - k) * inv,
-        (1.0 - bf - k) * inv,
-        k,
-    ];
-    (inks[index].clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
-/// The panel thumbnail's grayscale value for colour row `index`
-/// (`color_models::channel_plane`): RGB uses its own plane, CMYK and Multichannel their naive
-/// ink coverage, everything else the composite luminance.
-pub(super) fn channel_value(mode: ColorMode, index: usize, r: u8, g: u8, b: u8) -> u8 {
-    match mode {
-        ColorMode::Rgb => [r, g, b][index.min(2)],
-        ColorMode::Cmyk => 255 - cmyk_ink(r, g, b, index.min(3)),
-        ColorMode::Multichannel => 255 - cmyk_ink(r, g, b, index.min(2)),
-        _ => q_gray(r, g, b),
-    }
-}
-
-/// The selection a Channels-panel colour `row` holds: the composite (row 0) is
-/// its luminance over the visible `mask` channels, each colour row its own
-/// grayscale plane (the same derivation the row thumbnails use). `None` for a
-/// row outside the mode's colour rows or a buffer that does not match the
-/// document.
-// ponytail: the derived-mode planes (CMYK inks, Lab) are the naive
-// conversions the thumbnails already use, not real separations.
-fn channel_row_selection(
-    doc: &Document,
-    picture: &PixelBuffer,
-    row: i32,
-    mask: u8,
-) -> Option<Selection> {
-    let row = usize::try_from(row).ok()?;
-    let mode = doc.source_mode.unwrap_or(doc.mode);
-    let (composite, channels) = color_rows(mode);
-    if row >= channels + usize::from(composite) {
-        return None;
-    }
-    let srgb = buffer_to_srgb(doc, picture);
-    let buffer = srgb.as_ref();
-    let plane = buffer.pixel_count();
-    let depth = buffer.channels as usize;
-    if plane == 0
-        || depth == 0
-        || buffer.width != doc.width
-        || buffer.height != doc.height
-        || buffer.data.len() != plane * depth
-    {
-        return None;
-    }
-    let mut data = vec![0u8; plane];
-    for (i, out) in data.iter_mut().enumerate() {
-        let r = buffer.data[i];
-        let (g, b) = if depth >= 3 {
-            (buffer.data[plane + i], buffer.data[2 * plane + i])
-        } else {
-            (r, r)
-        };
-        *out = if composite && row == 0 {
-            // The composite row follows the visible channels.
-            q_gray(
-                if mask & 0x1 != 0 { r } else { 0 },
-                if mask & 0x2 != 0 { g } else { 0 },
-                if mask & 0x4 != 0 { b } else { 0 },
-            )
-        } else {
-            // A colour row is its own plane regardless of the eyes: CS6 loads a
-            // hidden channel too.
-            channel_value(mode, if composite { row - 1 } else { row }, r, g, b)
-        };
-    }
-    Some(Selection {
-        width: doc.width,
-        height: doc.height,
-        data: data.into(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cxxqt_object::document_session::DocumentSession;
     use crate::cxxqt_object::edit::Edit;
     use crate::cxxqt_object::state::PictureViewRust;
-    use pictura_core::BitDepth;
+    use pictura_core::{BitDepth, ColorMode, Document};
 
     #[test]
     fn save_selection_notifies() {
@@ -1124,6 +1029,28 @@ mod tests {
         assert_eq!(cmyk_ink(255, 0, 0, 0), 0);
         assert_eq!(cmyk_ink(255, 0, 0, 1), 255);
         assert_eq!(cmyk_ink(0, 0, 0, 3), 255);
+    }
+
+    /// Load Channel Selection over the streamed picture equals the selection
+    /// derived from the whole composite, for every row and a hidden channel
+    /// (#1274).
+    #[test]
+    fn channel_row_selection_streams() {
+        use crate::cxxqt_object::picture::readers_fixture::{full_picture, layered, view_of};
+        let view = view_of(layered(613, 541, true));
+        let doc = view.session.doc.as_ref().expect("document");
+        let full = full_picture(&view);
+        for (row, mask) in [(0, 0x7), (0, 0x5), (1, 0x7), (2, 0x7), (3, 0x7)] {
+            let streamed = channel_row_selection_from(
+                doc,
+                |f| stream_picture(doc, &view, whole(doc), f),
+                row,
+                mask,
+            )
+            .expect("a selection");
+            let want = channel_row_selection(doc, &full, row, mask).expect("a selection");
+            assert!(streamed.data == want.data, "row {row} mask {mask}");
+        }
     }
 
     #[test]

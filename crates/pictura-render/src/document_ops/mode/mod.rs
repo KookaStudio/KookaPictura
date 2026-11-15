@@ -15,6 +15,7 @@
 
 mod flat;
 mod planes;
+mod stream;
 
 pub use flat::{convert_to_bitmap, convert_to_indexed, indexed_exact_available, BitmapMethod};
 
@@ -124,19 +125,35 @@ pub fn convert_mode_with_profiles(
         )));
     }
     let depth = document_bit_depth(doc);
-    super::materialize_composite(doc);
+    // A layered RGB document keeps no composite: Grayscale, CMYK and Lab read
+    // it band by band into what they build (#1274), computed before any store
+    // is reset, where the composite used to be materialized.
+    let streamed = stream::streams_source(doc);
+    let (mut gray, mut encoded) = (None, None);
+    match target {
+        ColorMode::Grayscale if streamed => gray = Some(stream::gray_composite(doc)),
+        ColorMode::Cmyk | ColorMode::Lab if streamed => {
+            encoded = Some(stream::encoded_composite(
+                doc,
+                target,
+                working_cmyk,
+                options,
+            ));
+        }
+        _ => super::materialize_composite(doc),
+    }
     if doc.layers.is_empty() && doc.source_mode == Some(ColorMode::Bitmap) {
         planes::background_from_composite(doc);
     }
     planes::drop_source_state(doc);
     match target {
-        ColorMode::Grayscale => planes::reduce_to_gray(doc),
+        ColorMode::Grayscale => planes::reduce_to_gray(doc, gray),
         ColorMode::Rgb => planes::expand_gray(doc),
         _ => {
             planes::expand_gray(doc);
             doc.source_planes = None;
             planes::drop_layer_stores(doc);
-            planes::encode_document(doc, target, working_cmyk, options);
+            planes::encode_document(doc, target, working_cmyk, options, encoded);
             if target == ColorMode::Cmyk {
                 if let Some(profile) = working_cmyk {
                     pictura_codec::assign_cmyk_profile(doc, profile);
@@ -176,7 +193,12 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
         doc.source_depth = None;
         return Ok(());
     }
-    super::materialize_composite(doc);
+    if stream::streams_source(doc) {
+        // The composite and its 8-bit store in one banded pass (#1274).
+        let (composite, store) = stream::composite_with_store(doc);
+        doc.composite = composite;
+        doc.source_planes = Some(store);
+    }
     planes::ensure_stores(doc);
     planes::restore_depth(doc, out);
     doc.source_depth = Some(out);

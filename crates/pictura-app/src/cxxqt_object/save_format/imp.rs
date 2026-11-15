@@ -1,7 +1,6 @@
 use super::*;
 
-use super::super::helpers_composite::buffer_to_rgba_bytes;
-use super::super::picture::picture;
+use super::super::picture::picture_rgba;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -63,13 +62,12 @@ pub fn raster_preview_bytes(
     let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
-    let buffer = picture(doc, rust);
-    let rgba = buffer_to_rgba_bytes(&buffer);
+    let rgba = picture_rgba(doc, rust, false);
     let format = format.to_string();
     super::super::export::ffi::encode_image_bytes(
         &rgba,
-        buffer.width as i32,
-        buffer.height as i32,
+        doc.width as i32,
+        doc.height as i32,
         &format,
         quality,
         100,

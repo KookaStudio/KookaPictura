@@ -12,6 +12,7 @@
 //! benchmark (`scripts/profile-tools.py --scenarios memory`) is the end-to-end
 //! check. M13 (pan and zoom) is view-only and has no engine path.
 
+mod readers;
 mod scenarios;
 
 use super::super::state::PictureViewRust;

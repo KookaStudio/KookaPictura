@@ -76,25 +76,24 @@ fn a_small_layer_gets_a_backdrop_patch() {
     );
 }
 
-// [tpr_full_backdrop]
+// [tpr_full_backdrop] A layer with effects patches the backdrop over its
+// proven reach since #1274; only a lift keeps the whole backdrop.
 #[test]
-fn effects_and_lifts_keep_the_whole_backdrop() {
+fn effects_patch_their_reach_and_lifts_keep_the_whole_backdrop() {
     let mut effected = small_layer();
     effected.extra_blocks.push(LayerBlock {
         key: *b"lfx2",
         data: Vec::new().into(),
     });
-    let styled = build_transform_preview(
-        &document(effected),
-        "1",
-        &["1".to_string()],
-        RECT,
-        false,
-        true,
-    )
-    .expect("preview");
-    assert_eq!(styled.base_origin, None);
-    assert_eq!((styled.base.width(), styled.base.height()), (40, 30));
+    let doc = document(effected);
+    let styled =
+        build_transform_preview(&doc, "1", &["1".to_string()], RECT, false, true).expect("preview");
+    let reach = pictura_render::damage::influence(&doc, "1").expect("a bounded reach");
+    assert_eq!(styled.base_origin, Some((reach.left, reach.top)));
+    assert_eq!(
+        (styled.base.width(), styled.base.height()),
+        (reach.width(), reach.height())
+    );
 
     let lifted = build_transform_preview(
         &document(small_layer()),

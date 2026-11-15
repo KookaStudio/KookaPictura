@@ -91,7 +91,7 @@ pub(super) fn transform_preview_bytes(
     };
     // A reduced preview's patch is its layer's box; only a full one reads the
     // content bounds.
-    let whole = linked || !bounded || (level == 0 && backdrop_patch_rect(doc, &hide).is_none());
+    let whole = !bounded || (level == 0 && backdrop_patch_rect(doc, &hide).is_none());
     let canvas = if whole {
         u64::from(doc.width) * u64::from(doc.height)
     } else {
@@ -405,9 +405,20 @@ pub(super) fn rendered_clipping_group(
     }
     let mut scratch = doc.clone();
     scratch.layers = LayerStack::from_layers(layers);
-    let rendered = current_buffer(&scratch, gpu_compute);
+    // Only the group's rect is composited (#1274).
+    let region = PsdRect {
+        top: y0,
+        left: x0,
+        bottom: y1,
+        right: x1,
+    };
+    let (rendered, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &scratch,
+        region,
+        gpu_compute,
+    ));
     let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
-    Some((image.copy(&QRect::new(x0, y0, x1 - x0, y1 - y0)), x0, y0))
+    Some((image, x0, y0))
 }
 
 /// The bounds of the transform targets at `paths`, when nothing they draw lands
@@ -422,12 +433,15 @@ fn backdrop_patch_rect(
         // A shape layer reaches its outline box, its effects, and its clipped
         // run; hiding it changes nothing past that reach.
         let shape = pictura_render::is_shape_layer(layer) && layer.channels.is_empty();
-        if !shape && (layer_has_effects(layer) || layer.adjustment.is_some() || layer.is_group) {
-            return None;
-        }
+        // Hiding a group, an effect or an adjustment changes at most the pixels
+        // that can depend on it, the reach history damage already proves
+        // (#1274); `None` (a knockout) keeps the whole backdrop.
+        let reaching = layer_has_effects(layer) || layer.adjustment.is_some() || layer.is_group;
         // A painted layer's rect can be the whole canvas around a small mark.
         let drawn = if shape {
             pictura_render::damage::content_influence(doc, path)?
+        } else if reaching {
+            pictura_render::damage::influence(doc, path)?
         } else {
             pictura_render::content_rect(doc, path).unwrap_or(layer.rect)
         };
@@ -496,6 +510,9 @@ pub(super) fn build_transform_preview(
             level: 0,
         });
     }
+    // ponytail: a whole backdrop where the hidden layers' reach is unbounded
+    // (a knockout) or the canvas does not show the document as it stands; every
+    // other case is the patch above (#1274).
     let rendered = current_buffer(&hidden(doc, &hide), gpu_compute);
     Some(TransformPreview {
         base: buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
@@ -543,9 +560,20 @@ pub(in crate::cxxqt_object) fn rendered_transform_group(
     }
     let mut scratch = doc.clone();
     scratch.layers = LayerStack::from_layers(layers);
-    let rendered = current_buffer(&scratch, gpu_compute);
+    // Only the members' rect is composited (#1274).
+    let region = PsdRect {
+        top: y0,
+        left: x0,
+        bottom: y1,
+        right: x1,
+    };
+    let (rendered, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
+        &scratch,
+        region,
+        gpu_compute,
+    ));
     let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
-    Some((image.copy(&QRect::new(x0, y0, x1 - x0, y1 - y0)), x0, y0))
+    Some((image, x0, y0))
 }
 
 /// `doc` with the layers at `paths` hidden.
@@ -611,3 +639,6 @@ pub(in crate::cxxqt_object) fn transform_preview_layer(
     };
     Some(image)
 }
+
+#[cfg(test)]
+mod patch_tests;
