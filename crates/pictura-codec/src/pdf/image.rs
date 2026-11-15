@@ -58,6 +58,11 @@ impl Raster {
     pub(crate) fn jpeg_capable(&self) -> bool {
         self.bpc == 8 && !matches!(self.space, Space::Indexed(_))
     }
+
+    /// Whether JPEG 2000 can carry it: 8-bit continuous tone, like JPEG.
+    pub(crate) fn jpx_capable(&self) -> bool {
+        self.bpc == 8 && !matches!(self.space, Space::Indexed(_))
+    }
 }
 
 /// The working profile of the stored colour numbers: the document profile,
@@ -75,6 +80,18 @@ fn working_profile(doc: &Document) -> Profile {
                 Profile::srgb()
             }
         })
+}
+
+/// The profile of the RGB display composite used as proof input. Lab, Indexed,
+/// and Bitmap sources keep their source planes but present an RGB composite;
+/// their ICC profile is not the composite's profile.
+fn proof_input_profile(doc: &Document) -> Profile {
+    match doc.source_mode {
+        Some(ColorMode::Lab) | Some(ColorMode::Bitmap) | Some(ColorMode::Indexed) => {
+            Profile::srgb()
+        }
+        _ => working_profile(doc),
+    }
 }
 
 /// The ICC bytes that tag an unconverted Gray/RGB image.
@@ -148,6 +165,7 @@ pub(crate) fn build_raster(
     composite: &PixelBuffer,
     options: &PdfOptions,
     ppi: f64,
+    proof: Option<&super::ProofRequest>,
 ) -> Result<Raster, PsdError> {
     if doc.source_mode == Some(ColorMode::Multichannel) || doc.mode == ColorMode::Multichannel {
         return Err(PsdError::Unsupported(
@@ -206,7 +224,9 @@ pub(crate) fn build_raster(
         options.downsample_above_ppi,
     );
     let downsampled = (nw as usize, nh as usize) != (w, h);
-    let converting = options.color_conversion == ColorConversion::ToDestination;
+    let proofing = proof.filter(|_| options.color_conversion == ColorConversion::None);
+    let converting =
+        options.color_conversion == ColorConversion::ToDestination || proofing.is_some();
 
     let sixteen = !options.convert_16_to_8
         && options.compatibility >= Compatibility::Acrobat6
@@ -214,7 +234,27 @@ pub(crate) fn build_raster(
         && doc.source_mode.is_none()
         && !converting;
 
-    let (space, samples, max): (Space, Vec<u16>, u16) = if converting {
+    let (space, samples, max): (Space, Vec<u16>, u16) = if let Some(proof) = proofing {
+        let destination =
+            Profile::from_icc(proof.icc).map_err(|e| PsdError::Unsupported(e.to_string()))?;
+        let interleaved: Vec<u8> = planar_to_interleaved(&current, color, plane)
+            .into_iter()
+            .map(|v| v as u8)
+            .collect();
+        let converted = pictura_color::convert_space(
+            &proof_input_profile(doc),
+            &destination,
+            &interleaved,
+            proof.intent,
+            proof.bpc,
+        )
+        .map_err(|e| PsdError::Unsupported(e.to_string()))?;
+        (
+            Space::Icc(proof.components, proof.icc.to_vec()),
+            converted.into_iter().map(u16::from).collect(),
+            255,
+        )
+    } else if converting {
         let destination = options.destination;
         let interleaved: Vec<u8> = planar_to_interleaved(&current, color, plane)
             .into_iter()
@@ -334,11 +374,25 @@ pub(crate) fn text_fill(
     options: &PdfOptions,
     raster: &Raster,
     color: [u8; 3],
+    proof: Option<&super::ProofRequest>,
 ) -> Result<Fill, PsdError> {
     let unit = |v: u8| f64::from(v) / 255.0;
     let working = &color[..color_of(doc)];
     if raster.bpc == 1 {
         return Ok(Fill::Gray(if color[0] < 128 { 0.0 } else { 1.0 }));
+    }
+    if let Some(proof) = proof.filter(|_| options.color_conversion == ColorConversion::None) {
+        let destination =
+            Profile::from_icc(proof.icc).map_err(|e| PsdError::Unsupported(e.to_string()))?;
+        let converted = pictura_color::convert_space(
+            &proof_input_profile(doc),
+            &destination,
+            working,
+            proof.intent,
+            proof.bpc,
+        )
+        .map_err(|e| PsdError::Unsupported(e.to_string()))?;
+        return Ok(Fill::Space(converted.into_iter().map(unit).collect()));
     }
     if options.color_conversion == ColorConversion::ToDestination {
         let converted = pictura_color::convert_space(

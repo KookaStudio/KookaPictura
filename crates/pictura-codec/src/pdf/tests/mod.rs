@@ -24,6 +24,7 @@ pub(super) fn env() -> PdfEnv<'static> {
         entropy: [9; 32],
         title: "test".into(),
         live_text: None,
+        proof: None,
     }
 }
 
@@ -43,6 +44,23 @@ pub(super) fn rgb_doc(w: u32, h: u32, ppi: f64, transparent: Option<usize>) -> D
 /// Write `doc` with its own composite.
 pub(super) fn write(doc: &Document, options: &PdfOptions) -> Vec<u8> {
     write_pdf(doc, &doc.composite, options, &env()).expect("writes")
+}
+
+pub(super) fn proof_env() -> PdfEnv<'static> {
+    let mut env = env();
+    env.proof = Some(super::ProofRequest {
+        icc: pictura_color::Profile::coated_cmyk_icc(),
+        components: 4,
+        intent: pictura_color::Intent::RelativeColorimetric,
+        bpc: true,
+    });
+    env
+}
+
+pub(super) fn write_with_env(doc: &Document, options: &PdfOptions, env: &PdfEnv) -> Vec<u8> {
+    let mut options = options.clone();
+    options.normalize();
+    write_pdf(doc, &doc.composite, &options, env).expect("writes")
 }
 
 pub(super) fn text(pdf: &[u8]) -> String {
@@ -153,6 +171,69 @@ fn pdf_zip_decodes_to_composite() {
             assert_eq!(samples[i * 3 + c], doc.composite.data[c * plane + i]);
         }
     }
+}
+
+#[test]
+fn pdf_jpeg2000_writes_codestream() {
+    let options = PdfOptions {
+        compression: Compression::Jpeg2000,
+        ..options()
+    };
+    let pdf = write(&rgb_doc(32, 24, 72.0, None), &options);
+    let (dict, data) = image(&pdf);
+    assert!(dict.contains("/Filter /JPXDecode"), "{dict}");
+    assert_eq!(&data[..2], &[0xFF, 0x4F], "a JPEG 2000 SOC marker");
+}
+
+#[test]
+fn pdf_jpeg2000_quality_changes_size() {
+    let doc = rgb_doc(64, 64, 72.0, None);
+    let mut low = PdfOptions {
+        compression: Compression::Jpeg2000,
+        quality: Quality::Low,
+        ..options()
+    };
+    low.normalize();
+    let mut maximum = PdfOptions {
+        compression: Compression::Jpeg2000,
+        quality: Quality::Maximum,
+        ..options()
+    };
+    maximum.normalize();
+    let low = image(&write(&doc, &low)).1.len();
+    let maximum = image(&write(&doc, &maximum)).1.len();
+    assert!(low < maximum, "Low {low} vs Maximum {maximum}");
+}
+
+#[test]
+fn pdf_jpeg2000_gated_to_zip() {
+    let doc = rgb_doc(8, 8, 72.0, None);
+    let mut old_level = PdfOptions {
+        compression: Compression::Jpeg2000,
+        ..options()
+    };
+    old_level.set("compatibility", "1");
+    assert_eq!(old_level.compression, Compression::Zip);
+    assert!(image(&write(&doc, &old_level))
+        .0
+        .contains("/Filter /FlateDecode"));
+
+    let mut pdf_a = options();
+    pdf_a.set("compression", "3");
+    pdf_a.set("standard", "4");
+    assert_eq!(pdf_a.compression, Compression::Zip);
+    assert!(image(&write(&doc, &pdf_a))
+        .0
+        .contains("/Filter /FlateDecode"));
+
+    let (deep, _) = sixteen_bit_doc();
+    let mut deep_options = options();
+    deep_options.set("compression", "3");
+    deep_options.set("convert16To8", "0");
+    assert_eq!(deep_options.compression, Compression::Jpeg2000);
+    assert!(image(&write(&deep, &deep_options))
+        .0
+        .contains("/Filter /FlateDecode"));
 }
 
 #[test]
@@ -437,6 +518,224 @@ fn pdf_embeds_psd_payload() {
     let reread = crate::read::read_psd(&psd).expect("a PSD");
     assert_eq!(reread.layers.len(), 2);
     assert_eq!(reread.layers[1].name, "second");
+}
+
+pub(super) fn spot_doc() -> Document {
+    let mut doc = rgb_doc(4, 4, 72.0, None);
+    let plane = 16;
+    // The test document is opaque: a 3-channel composite keeps the embedded
+    // PSD's extra channels to the two document channels under test.
+    doc.composite = PixelBuffer {
+        width: 4,
+        height: 4,
+        channels: 3,
+        data: doc.composite.data[..3 * plane].to_vec().into(),
+    };
+    doc.channels.push(pictura_core::Channel {
+        id: 0,
+        data: vec![40; plane].into(),
+    });
+    doc.channels.push(pictura_core::Channel {
+        id: 1,
+        data: vec![180; plane].into(),
+    });
+    crate::image_resources::set_alpha_names(
+        &mut doc,
+        &["Hair".to_string(), "PANTONE 185 C".to_string()],
+    );
+    crate::image_resources::set_display_info(
+        &mut doc,
+        &[
+            crate::image_resources::ChannelDisplayInfo::default(),
+            crate::image_resources::ChannelDisplayInfo {
+                color_space: 1,
+                components: [220, 20, 60, 0],
+                opacity: 100,
+                mode: crate::image_resources::SPOT_CHANNEL_MODE,
+            },
+        ],
+    );
+    doc
+}
+
+fn spot_payload(options: PdfOptions) -> Document {
+    let pdf = write(&spot_doc(), &options);
+    let psd = embedded_psd(&pdf).expect("payload");
+    crate::read::read_psd(&psd).expect("a PSD")
+}
+
+#[test]
+fn pdf_spot_payload_keeps_spot_and_alpha() {
+    let options = PdfOptions {
+        preserve_editing: true,
+        spot_colors: true,
+        alpha_channels: true,
+        ..options()
+    };
+    let reread = spot_payload(options);
+    assert_eq!(reread.channels.len(), 2);
+    assert_eq!(
+        crate::image_resources::alpha_names(&reread),
+        vec!["Hair".to_string(), "PANTONE 185 C".to_string()]
+    );
+    let infos = crate::image_resources::display_info(&reread);
+    assert_eq!(infos.len(), 2);
+    assert_eq!(infos[0].mode, 0);
+    assert_eq!(infos[1].mode, crate::image_resources::SPOT_CHANNEL_MODE);
+}
+
+#[test]
+fn pdf_spot_payload_drops_spot_only() {
+    let options = PdfOptions {
+        preserve_editing: true,
+        spot_colors: false,
+        alpha_channels: true,
+        ..options()
+    };
+    let reread = spot_payload(options);
+    assert_eq!(reread.channels.len(), 1);
+    assert_eq!(
+        crate::image_resources::alpha_names(&reread),
+        vec!["Hair".to_string()]
+    );
+    let infos = crate::image_resources::display_info(&reread);
+    assert_eq!(infos.len(), 1);
+    assert_eq!(infos[0].mode, 0);
+}
+
+#[test]
+fn pdf_spot_payload_drops_alpha_only() {
+    let options = PdfOptions {
+        preserve_editing: true,
+        spot_colors: true,
+        alpha_channels: false,
+        ..options()
+    };
+    let reread = spot_payload(options);
+    assert_eq!(reread.channels.len(), 1);
+    assert_eq!(
+        crate::image_resources::alpha_names(&reread),
+        vec!["PANTONE 185 C".to_string()]
+    );
+    let infos = crate::image_resources::display_info(&reread);
+    assert_eq!(infos.len(), 1);
+    assert_eq!(infos[0].mode, crate::image_resources::SPOT_CHANNEL_MODE);
+}
+
+#[test]
+fn pdf_spot_payload_matches_psd_tools() {
+    if std::process::Command::new("python3")
+        .args(["-c", "import psd_tools"])
+        .output()
+        .map(|o| !o.status.success())
+        .unwrap_or(true)
+    {
+        eprintln!("SKIP: python3 + psd-tools not available");
+        return;
+    }
+    let options = PdfOptions {
+        preserve_editing: true,
+        spot_colors: true,
+        alpha_channels: true,
+        ..options()
+    };
+    let pdf = write(&spot_doc(), &options);
+    let psd = embedded_psd(&pdf).expect("payload");
+    let path =
+        std::env::temp_dir().join(format!("pictura-spot-payload-{}.psd", std::process::id()));
+    std::fs::write(&path, &psd).expect("temp PSD");
+    let script = "from psd_tools import PSDImage\nimport sys\npsd=PSDImage.open(sys.argv[1])\nprint(psd.channels)\n";
+    let out = std::process::Command::new("python3")
+        .args(["-c", script, path.to_str().unwrap()])
+        .output()
+        .expect("run python3");
+    assert!(
+        out.status.success(),
+        "psd-tools failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "5");
+}
+
+#[test]
+fn pdf_use_proof_setup_converts_to_device() {
+    let doc = rgb_doc(8, 8, 72.0, None);
+    let options = PdfOptions {
+        use_proof_setup: true,
+        icc_profile: true,
+        ..options()
+    };
+    let pdf = write_with_env(&doc, &options, &proof_env());
+    let (dict, _) = image(&pdf);
+    assert!(dict.contains("/ColorSpace [/ICCBased"), "{dict}");
+    let (_, icc) = stream(&pdf, &["/N 4"]).expect("a four-component ICC profile");
+    assert_eq!(inflate(icc), pictura_color::Profile::coated_cmyk_icc());
+}
+
+#[test]
+fn pdf_use_proof_setup_ignores_profile_policy() {
+    let doc = rgb_doc(8, 8, 72.0, None);
+    let options = PdfOptions {
+        use_proof_setup: true,
+        profile_inclusion: ProfileInclusion::None,
+        ..options()
+    };
+    let pdf = write_with_env(&doc, &options, &proof_env());
+    assert!(
+        stream(&pdf, &["/N 4"]).is_some(),
+        "the proof ICC is still embedded"
+    );
+}
+
+#[test]
+fn pdf_use_proof_setup_writes_eight_bit() {
+    let (doc, _) = sixteen_bit_doc();
+    let options = PdfOptions {
+        use_proof_setup: true,
+        convert_16_to_8: false,
+        ..options()
+    };
+    let pdf = write_with_env(&doc, &options, &proof_env());
+    let (dict, _) = image(&pdf);
+    assert!(dict.contains("/BitsPerComponent 8"), "{dict}");
+    assert!(stream(&pdf, &["/N 4"]).is_some());
+}
+
+#[test]
+fn pdf_output_conversion_overrides_proof() {
+    let doc = rgb_doc(8, 8, 72.0, None);
+    let options = PdfOptions {
+        use_proof_setup: true,
+        color_conversion: ColorConversion::ToDestination,
+        destination: Destination::Srgb,
+        profile_inclusion: ProfileInclusion::IncludeDestination,
+        ..options()
+    };
+    let pdf = write_with_env(&doc, &options, &proof_env());
+    assert!(
+        stream(&pdf, &["/N 3"]).is_some(),
+        "the Output destination wins"
+    );
+    assert!(
+        stream(&pdf, &["/N 4"]).is_none(),
+        "the proof profile is not used"
+    );
+}
+
+#[test]
+fn pdf_use_proof_off_keeps_document_tag() {
+    let doc = rgb_doc(8, 8, 72.0, None);
+    let options = PdfOptions {
+        use_proof_setup: false,
+        icc_profile: true,
+        ..options()
+    };
+    let pdf = write_with_env(&doc, &options, &proof_env());
+    assert!(
+        stream(&pdf, &["/N 3"]).is_some(),
+        "the document profile stays"
+    );
+    assert!(stream(&pdf, &["/N 4"]).is_none(), "no proof conversion");
 }
 
 #[test]

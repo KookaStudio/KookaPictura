@@ -105,10 +105,11 @@ pub use icc::{
     convert_document_with, document_cmyk_profile, profile_description, remove_document_profile,
 };
 pub use image_resources::{
-    alpha_names, decode_image_resources, document_resolution, encode_image_resources,
-    frame_image_resource, set_alpha_names, set_document_resolution, set_vanishing_point_data,
-    vanishing_point_data, ImageResource, Resolution, ALPHA_NAMES_PASCAL, ALPHA_NAMES_UNICODE,
-    EXIF_DATA_1, EXIF_DATA_3, ICC_PROFILE, IPTC_NAA, RESOLUTION_INFO, VANISHING_POINT,
+    alpha_names, decode_image_resources, display_info, document_resolution, encode_image_resources,
+    frame_image_resource, set_alpha_names, set_display_info, set_document_resolution,
+    set_vanishing_point_data, spot_channel_indices, vanishing_point_data, ChannelDisplayInfo,
+    ImageResource, Resolution, ALPHA_NAMES_PASCAL, ALPHA_NAMES_UNICODE, DISPLAY_INFO, EXIF_DATA_1,
+    EXIF_DATA_3, ICC_PROFILE, IPTC_NAA, RESOLUTION_INFO, SPOT_CHANNEL_MODE, VANISHING_POINT,
     VANISHING_POINT_NAME, XMP_METADATA,
 };
 pub use iptc::{encode_iptc, iptc_field_name, parse_iptc, Iptc};

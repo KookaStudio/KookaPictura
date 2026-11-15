@@ -189,6 +189,100 @@ pub fn set_alpha_names(document: &mut Document, names: &[String]) {
     document.image_resources = section.into();
 }
 
+/// The PSD DisplayInfo resource id: one entry per extra channel.
+pub const DISPLAY_INFO: u16 = 1077;
+
+/// The DisplayInfo mode that marks a spot channel.
+pub const SPOT_CHANNEL_MODE: u8 = 2;
+
+/// One extra channel's stored display information: its on-screen colour and
+/// whether it is an alpha channel or a spot ink.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ChannelDisplayInfo {
+    pub color_space: u16,
+    pub components: [u16; 4],
+    pub opacity: u16,
+    /// `0` alpha, `1` inverted alpha, `2` spot.
+    pub mode: u8,
+}
+
+/// The document's stored extra-channel display information in channel order.
+/// An absent or malformed resource is an empty list.
+pub fn display_info(document: &Document) -> Vec<ChannelDisplayInfo> {
+    let (resources, _) = decode_image_resources_with_len(document);
+    resources
+        .iter()
+        .find(|r| r.id == DISPLAY_INFO)
+        .map(|r| decode_display_info(&r.data))
+        .unwrap_or_default()
+}
+
+fn decode_display_info(data: &[u8]) -> Vec<ChannelDisplayInfo> {
+    let mut entries = Vec::new();
+    for entry in data.get(4..).unwrap_or_default().as_chunks::<13>().0 {
+        let word = |at: usize| u16::from_be_bytes([entry[at], entry[at + 1]]);
+        entries.push(ChannelDisplayInfo {
+            color_space: word(0),
+            components: [word(2), word(4), word(6), word(8)],
+            opacity: word(10),
+            mode: entry[12],
+        });
+    }
+    entries
+}
+
+fn encode_display_info(entries: &[ChannelDisplayInfo]) -> Vec<u8> {
+    let mut out = 1u32.to_be_bytes().to_vec();
+    for entry in entries {
+        for word in [
+            entry.color_space,
+            entry.components[0],
+            entry.components[1],
+            entry.components[2],
+            entry.components[3],
+            entry.opacity,
+        ] {
+            out.extend_from_slice(&word.to_be_bytes());
+        }
+        out.push(entry.mode);
+    }
+    out
+}
+
+/// Replace the document's DisplayInfo resource with `entries`, or remove it
+/// when `entries` is empty. Unparsed trailing bytes are preserved.
+pub fn set_display_info(document: &mut Document, entries: &[ChannelDisplayInfo]) {
+    let (resources, consumed) = decode_image_resources_with_len(document);
+    let has_resource = resources.iter().any(|r| r.id == DISPLAY_INFO);
+    if !has_resource && entries.is_empty() {
+        return;
+    }
+    let mut kept: Vec<ImageResource> = resources
+        .into_iter()
+        .filter(|r| r.id != DISPLAY_INFO)
+        .collect();
+    if !entries.is_empty() {
+        kept.push(frame_image_resource(
+            DISPLAY_INFO,
+            "",
+            &encode_display_info(entries),
+        ));
+    }
+    let mut section = encode_image_resources(&kept);
+    section.extend_from_slice(&document.image_resources[consumed..]);
+    document.image_resources = section.into();
+}
+
+/// The indices of the document's extra channels whose stored mode is spot.
+pub fn spot_channel_indices(document: &Document) -> Vec<usize> {
+    display_info(document)
+        .into_iter()
+        .enumerate()
+        .filter(|(i, entry)| *i < document.channels.len() && entry.mode == SPOT_CHANNEL_MODE)
+        .map(|(i, _)| i)
+        .collect()
+}
+
 fn decode_pascal_names(data: &[u8]) -> Option<Vec<String>> {
     let mut names = Vec::new();
     let mut at = 0;
@@ -400,6 +494,77 @@ mod tests {
             decode_image_resources(&document_with(Vec::new())),
             Vec::new()
         );
+    }
+
+    #[test]
+    fn display_info_round_trips() {
+        let mut doc = document_with(Vec::new());
+        doc.channels.push(Channel {
+            id: 0,
+            data: vec![0; 4].into(),
+        });
+        doc.channels.push(Channel {
+            id: 1,
+            data: vec![0; 4].into(),
+        });
+        let entries = [
+            ChannelDisplayInfo {
+                color_space: 2,
+                components: [0, 0, 0, 0],
+                opacity: 50,
+                mode: 0,
+            },
+            ChannelDisplayInfo {
+                color_space: 1,
+                components: [255, 0, 0, 0],
+                opacity: 100,
+                mode: SPOT_CHANNEL_MODE,
+            },
+        ];
+        set_display_info(&mut doc, &entries);
+        assert_eq!(display_info(&doc), entries);
+        assert_eq!(spot_channel_indices(&doc), vec![1]);
+        set_display_info(&mut doc, &[]);
+        assert!(display_info(&doc).is_empty());
+    }
+
+    #[test]
+    fn empty_display_info_resource_is_removed() {
+        let mut doc = document_with(resource(b"8BIM", DISPLAY_INFO, "", &1u32.to_be_bytes()));
+        assert!(display_info(&doc).is_empty());
+        set_display_info(&mut doc, &[]);
+        assert!(!decode_image_resources(&doc)
+            .iter()
+            .any(|r| r.id == DISPLAY_INFO));
+    }
+
+    #[test]
+    fn spot_channel_indices_ignore_alpha_and_out_of_range() {
+        let mut doc = document_with(Vec::new());
+        doc.channels.push(Channel {
+            id: 0,
+            data: vec![0; 4].into(),
+        });
+        set_display_info(
+            &mut doc,
+            &[
+                ChannelDisplayInfo {
+                    mode: 0,
+                    ..ChannelDisplayInfo::default()
+                },
+                ChannelDisplayInfo {
+                    mode: SPOT_CHANNEL_MODE,
+                    ..ChannelDisplayInfo::default()
+                },
+            ],
+        );
+        assert_eq!(spot_channel_indices(&doc), Vec::<usize>::new());
+
+        doc.channels.push(Channel {
+            id: 1,
+            data: vec![0; 4].into(),
+        });
+        assert_eq!(spot_channel_indices(&doc), vec![1]);
     }
 
     #[test]
