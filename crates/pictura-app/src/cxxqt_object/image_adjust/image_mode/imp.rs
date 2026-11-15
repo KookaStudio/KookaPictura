@@ -63,6 +63,7 @@ pub(crate) fn palette_options(
         dither,
         amount: amount.clamp(0, 100) as u8,
         transparency: false,
+        mapped_transparency: false,
         matte: [255, 255, 255],
     }
 }

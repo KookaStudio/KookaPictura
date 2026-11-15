@@ -98,7 +98,9 @@ pub use pictura_raw::{
 };
 pub use resize::{resize_document, resized_plane_bytes};
 pub use rotate_in::{rotate_document_in, rotate_document_in_offset, rotated_plane_bytes};
-pub use slices::{add_slice, remove_slice, resolve_slices, set_slice, Slice};
+pub use slices::{
+    add_slice, remove_slice, resolve_export_slices, resolve_slices, set_slice, Slice,
+};
 pub use smart_filter_apply::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
 pub use smart_filters::{
     add_smart_filter, can_add_smart_filter, clear_smart_filters, delete_smart_filter,

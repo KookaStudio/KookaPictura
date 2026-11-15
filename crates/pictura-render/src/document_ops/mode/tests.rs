@@ -44,6 +44,7 @@ fn indexed_options(reduction: ColorReduction, dither: Dither) -> PaletteOptions 
         dither,
         amount: 75,
         transparency: false,
+        mapped_transparency: false,
         matte: [255, 255, 255],
     }
 }

@@ -36,7 +36,14 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/png_options_dialog.cpp
     crates/pictura-app/cpp/png_options_dialog.h
     crates/pictura-app/cpp/print_dialog.cpp
+    crates/pictura-app/cpp/save_for_web_color_table.cpp
+    crates/pictura-app/cpp/save_for_web_color_table.h
     crates/pictura-app/cpp/save_for_web_dialog.cpp
+    crates/pictura-app/cpp/save_for_web_dialog.h
+    crates/pictura-app/cpp/save_for_web_settings.cpp
+    crates/pictura-app/cpp/save_for_web_settings.h
+    crates/pictura-app/cpp/save_optimized_dialog.cpp
+    crates/pictura-app/cpp/save_optimized_dialog.h
     crates/pictura-app/cpp/save_format_options.cpp
     crates/pictura-app/cpp/save_format_options.h
     crates/pictura-app/cpp/save_options_dialog.cpp

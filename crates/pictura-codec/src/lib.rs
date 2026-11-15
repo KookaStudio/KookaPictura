@@ -52,10 +52,10 @@ mod patterns_write;
 pub mod pdf;
 mod pictura_filter;
 mod pictura_raw;
-mod png;
+pub(crate) mod png;
 mod probe;
 mod profile_probe;
-mod raster_metadata;
+pub(crate) mod raster_metadata;
 mod read;
 mod smart_filter;
 mod smart_object;
@@ -172,8 +172,11 @@ pub use vector_mask::{
     decode_vector_mask, decode_vector_mask_paths, encode_vector_mask, encode_vector_mask_view,
 };
 pub use web::{
-    encode_gif, encode_wbmp, quantize, web_safe_palette, ColorReduction, Dither, Indexed,
-    PaletteOptions,
+    embed_web_metadata, encode_act, encode_gif, encode_wbmp, pack_indexed, palette_delete,
+    palette_edit, palette_map_transparency, palette_sort, parse_act, quantize, quantize_custom,
+    quantize_locked, sfw_metadata, slice_html, unpack_indexed, web_safe_palette, ColorReduction,
+    ColorTable, Dither, Indexed, MetadataLevel, PaletteOptions, PaletteSort, SliceCell,
+    SliceHtmlOptions, SliceLayout, WebMetadata,
 };
 pub use webp::{decode_webp, encode_webp};
 pub use write::{write_psb, write_psb_cached, write_psd, write_psd_cached};

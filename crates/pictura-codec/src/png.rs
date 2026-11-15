@@ -144,6 +144,43 @@ pub fn encode_base64(rgba: &[u8], width: u32, height: u32) -> Option<String> {
     Some(base64(&encode_rgba(rgba, width, height)?))
 }
 
+/// Insert an XMP packet as an `iTXt` chunk before `IEND`. `None` when the
+/// input is not a PNG or has no `IEND` chunk.
+pub fn attach_xmp(png: &[u8], xmp: &[u8]) -> Option<Vec<u8>> {
+    const SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    if !png.starts_with(&SIGNATURE) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(png.len() + xmp.len() + 64);
+    out.extend_from_slice(&SIGNATURE);
+    let mut at = 8;
+    let mut inserted = false;
+    while at + 8 <= png.len() {
+        let len = u32::from_be_bytes(png[at..at + 4].try_into().ok()?) as usize;
+        let kind = &png[at + 4..at + 8];
+        let end = at.checked_add(12 + len)?;
+        if end > png.len() {
+            return None;
+        }
+        if kind == b"IEND" {
+            let mut data = Vec::with_capacity(xmp.len() + 32);
+            data.extend_from_slice(b"XML:com.adobe.xmp\0");
+            // Compression flag, compression method, empty language tag, and
+            // empty translated keyword, each NUL-terminated where required.
+            data.extend_from_slice(&[0, 0, 0, 0]);
+            data.extend_from_slice(xmp);
+            write_chunk(&mut out, b"iTXt", &data);
+            inserted = true;
+        }
+        out.extend_from_slice(&png[at..end]);
+        at = end;
+        if kind == b"IEND" {
+            break;
+        }
+    }
+    inserted.then_some(out)
+}
+
 fn write_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
     out.extend_from_slice(&(data.len() as u32).to_be_bytes());
     out.extend_from_slice(kind);
@@ -325,6 +362,31 @@ mod tests {
         write_chunk(&mut png, b"IDAT", second);
         write_chunk(&mut png, b"IEND", &[]);
         assert_eq!(decode_rgba(&png).expect("decodes").rgba, pixels);
+    }
+
+    #[test]
+    fn png_xmp_chunk() {
+        let png = encode_rgba(&[1, 2, 3, 255], 1, 1).expect("encodes");
+        let xmp = b"<x:xmpmeta/>";
+        let with = attach_xmp(&png, xmp).expect("attaches");
+        let mut at = 8;
+        let mut found = None;
+        while at + 8 <= with.len() {
+            let len = u32::from_be_bytes(with[at..at + 4].try_into().unwrap()) as usize;
+            let kind = &with[at + 4..at + 8];
+            if kind == b"iTXt" {
+                found = Some(with[at + 8..at + 8 + len].to_vec());
+            }
+            at += 12 + len;
+        }
+        let data = found.expect("iTXt chunk");
+        assert!(data.starts_with(b"XML:com.adobe.xmp\0"));
+        assert!(data.ends_with(xmp));
+        assert_eq!(
+            decode_rgba(&with).expect("decodes").rgba,
+            vec![1, 2, 3, 255]
+        );
+        assert_eq!(attach_xmp(b"not a png", xmp), None);
     }
 
     #[test]

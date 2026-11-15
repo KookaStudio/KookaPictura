@@ -86,6 +86,97 @@ pub fn resolve_slices(doc: &Document) -> Vec<Slice> {
     slices
 }
 
+/// Export cells: the user slices clipped into a disjoint set (later-created
+/// slices own any overlap, so an earlier rectangle is split around them) plus
+/// auto slices filling the rest. The canvas overlay keeps [`resolve_slices`],
+/// which preserves overlaps.
+pub fn resolve_export_slices(doc: &Document) -> Vec<Slice> {
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    if canvas.width() <= 0 || canvas.height() <= 0 {
+        return Vec::new();
+    }
+    let mut user_rects = Vec::new();
+    let mut taken = Vec::new();
+    let mut slices = Vec::new();
+    for (index, rect) in doc.slices.iter().enumerate().rev() {
+        let Some(clipped) = rect.intersect(canvas) else {
+            continue;
+        };
+        user_rects.push(clipped);
+        let mut pieces = vec![clipped];
+        for blocker in &taken {
+            pieces = pieces
+                .into_iter()
+                .flat_map(|piece| subtract_rect(piece, *blocker))
+                .collect();
+        }
+        for piece in pieces {
+            slices.push(Slice {
+                rect: piece,
+                number: 0,
+                user_index: Some(index),
+            });
+        }
+        taken.push(clipped);
+    }
+    slices.extend(
+        auto_slices(&user_rects, canvas)
+            .into_iter()
+            .map(|rect| Slice {
+                rect,
+                number: 0,
+                user_index: None,
+            }),
+    );
+    slices.sort_by_key(|s| (s.rect.top, s.rect.left));
+    for (i, slice) in slices.iter_mut().enumerate() {
+        slice.number = i as u32 + 1;
+    }
+    slices
+}
+
+/// `rect` minus `blocker`, split into at most four disjoint rectangles.
+fn subtract_rect(rect: PsdRect, blocker: PsdRect) -> Vec<PsdRect> {
+    let Some(overlap) = rect.intersect(blocker) else {
+        return vec![rect];
+    };
+    let mut out = Vec::new();
+    if overlap.top > rect.top {
+        out.push(PsdRect {
+            bottom: overlap.top,
+            ..rect
+        });
+    }
+    if overlap.bottom < rect.bottom {
+        out.push(PsdRect {
+            top: overlap.bottom,
+            ..rect
+        });
+    }
+    if overlap.left > rect.left {
+        out.push(PsdRect {
+            top: overlap.top,
+            bottom: overlap.bottom,
+            left: rect.left,
+            right: overlap.left,
+        });
+    }
+    if overlap.right < rect.right {
+        out.push(PsdRect {
+            top: overlap.top,
+            bottom: overlap.bottom,
+            left: overlap.right,
+            right: rect.right,
+        });
+    }
+    out
+}
+
 /// The rects covering what `user` leaves of `canvas`: every user edge is
 /// extended across the canvas into a grid, uncovered cells are the auto slices,
 /// and runs of them along a row merge into one wide slice, as CS6 draws them.
@@ -281,6 +372,34 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn overlapping_slices_export_disjoint() {
+        let mut d = doc();
+        add_slice(&mut d, rect(10, 10, 40, 40));
+        add_slice(&mut d, rect(30, 30, 40, 40));
+        let slices = resolve_export_slices(&d);
+        assert_eq!(area(&slices), 100 * 100);
+        for (i, a) in slices.iter().enumerate() {
+            for b in &slices[i + 1..] {
+                assert!(
+                    !overlaps(a.rect, b.rect),
+                    "{:?} overlaps {:?}",
+                    a.rect,
+                    b.rect
+                );
+            }
+        }
+        assert!(slices
+            .iter()
+            .any(|s| s.user_index == Some(1) && s.rect == rect(30, 30, 40, 40)));
+        assert!(slices
+            .iter()
+            .any(|s| s.user_index == Some(0) && s.rect == rect(10, 10, 40, 20)));
+        assert!(slices
+            .iter()
+            .any(|s| s.user_index == Some(0) && s.rect == rect(10, 30, 20, 20)));
     }
 
     #[test]
