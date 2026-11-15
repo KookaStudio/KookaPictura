@@ -303,6 +303,12 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     zoomResizesWindows_ = state.zoomResizesWindows;
     applyShortcutOverrides(state);
     loadGuideSession(state);
+    proofDevice_ = state.proofDevice;
+    proofIntent_ = state.proofIntent;
+    proofBpc_ = state.proofBpc;
+    proofSimulatePaper_ = state.proofSimulatePaper;
+    proofSimulateBlack_ = state.proofSimulateBlack;
+    proofColors_ = state.proofColors;
     // The family drives the theme chrome built below, so resolve it before the menu bar (and its theme toggle icon) is built.
     themeFamily_ = state.themeFamily == 1 ? 1 : 0;
     // The application font and every chrome metric built below read the scale,
@@ -942,7 +948,9 @@ void PicturaMainWindow::updateWindowTitle()
 {
     const int index = activeDocumentIndex();
     const QString name = index >= 0 ? documentName(index) : QStringLiteral("Untitled");
-    setWindowTitle(QStringLiteral("%1 — Kooka Pictura").arg(name));
+    const QString proof =
+        proofColors_ ? tr(" [Proof: %1]").arg(proofSetupName()) : QString();
+    setWindowTitle(QStringLiteral("%1%2 — Kooka Pictura").arg(name, proof));
 }
 
 void PicturaMainWindow::closeEvent(QCloseEvent* event)

@@ -132,6 +132,7 @@ set(PICTURA_QT_TESTS
     tst_color_picker
     tst_eyedropper
     tst_color_settings
+    tst_proof_setup
     tst_profile_dialog
     tst_profile_warnings
     tst_save_options

@@ -201,6 +201,12 @@ SessionState loadSession()
     state.snapCanvasToWorkspace =
         obj.value(QStringLiteral("snapCanvasToWorkspace")).toBool(false);
     state.guideColor = obj.value(QStringLiteral("guideColor")).toString(state.guideColor);
+    state.proofDevice = qBound(0, obj.value(QStringLiteral("proofDevice")).toInt(0), 4);
+    state.proofIntent = qBound(0, obj.value(QStringLiteral("proofIntent")).toInt(1), 3);
+    state.proofBpc = obj.value(QStringLiteral("proofBpc")).toBool(true);
+    state.proofSimulatePaper = obj.value(QStringLiteral("proofSimulatePaper")).toBool(false);
+    state.proofSimulateBlack = obj.value(QStringLiteral("proofSimulateBlack")).toBool(false);
+    state.proofColors = obj.value(QStringLiteral("proofColors")).toBool(false);
     state.pdfOptions = obj.value(QStringLiteral("pdfOptions")).toString();
     state.saveFormatOptions = obj.value(QStringLiteral("saveFormatOptions")).toObject();
     state.guideDashed = obj.value(QStringLiteral("guideDashed")).toBool(false);
@@ -362,6 +368,12 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("freePan"), state.freePan);
     obj.insert(QStringLiteral("snapCanvasToWorkspace"), state.snapCanvasToWorkspace);
     obj.insert(QStringLiteral("guideColor"), state.guideColor);
+    obj.insert(QStringLiteral("proofDevice"), state.proofDevice);
+    obj.insert(QStringLiteral("proofIntent"), state.proofIntent);
+    obj.insert(QStringLiteral("proofBpc"), state.proofBpc);
+    obj.insert(QStringLiteral("proofSimulatePaper"), state.proofSimulatePaper);
+    obj.insert(QStringLiteral("proofSimulateBlack"), state.proofSimulateBlack);
+    obj.insert(QStringLiteral("proofColors"), state.proofColors);
     obj.insert(QStringLiteral("pdfOptions"), state.pdfOptions);
     obj.insert(QStringLiteral("saveFormatOptions"), state.saveFormatOptions);
     obj.insert(QStringLiteral("guideDashed"), state.guideDashed);

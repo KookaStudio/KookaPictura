@@ -263,6 +263,7 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registerUpdateHandlers(*this);
     registerShortcutHandlers();
     registerGuideHandlers();
+    registerProofHandlers();
     registerSearchHandlers();
 
     registry.setHandler(command_ids::HelpSystemInfo, [this]() { showSystemInfo(); });

@@ -329,6 +329,12 @@ void PicturaMainWindow::saveSession()
     state.quickMaskOpacity = quickMaskUi_.opacity;
     state.guideColor = guideColor_.name();
     state.guideDashed = guideDashed_;
+    state.proofDevice = proofDevice_;
+    state.proofIntent = proofIntent_;
+    state.proofBpc = proofBpc_;
+    state.proofSimulatePaper = proofSimulatePaper_;
+    state.proofSimulateBlack = proofSimulateBlack_;
+    state.proofColors = proofColors_;
     if (tools_ && tools_->optionsFor<CropOptions>(ToolId::Crop)) {
         const CropOptions* crop = tools_->optionsFor<CropOptions>(ToolId::Crop);
         state.cropClassicMode = crop->classicMode();

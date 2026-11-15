@@ -94,6 +94,14 @@ struct SessionState {
     // hide the workspace scrollbars. Default off.
     bool snapCanvasToWorkspace = false;
     QString guideColor = QStringLiteral("#4affff");
+    // View > Proof Setup / Proof Colors: application view state (not PSD).
+    // device 0 Working CMYK, 1 Working Gray, 2 sRGB, 3 Adobe RGB, 4 ProPhoto.
+    int proofDevice = 0;
+    int proofIntent = 1;
+    bool proofBpc = true;
+    bool proofSimulatePaper = false;
+    bool proofSimulateBlack = false;
+    bool proofColors = false;
     // The last Save Adobe PDF settings as canonical `.joboptions` text, minus
     // the passwords (empty until the first PDF save).
     QString pdfOptions;

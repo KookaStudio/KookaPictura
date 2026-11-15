@@ -853,17 +853,25 @@ pub(super) fn premultiplied_display_image(buffer: &PixelBuffer) -> QImage {
         )
     }
 }
-/// Wrap an already-premultiplied interleaved RGBA pyramid level as a `QImage`.
-pub(super) fn level_display_image(level: &PyramidLevel) -> QImage {
-    // SAFETY: level data is exactly width*height premultiplied RGBA8888 bytes.
+/// Wrap premultiplied interleaved RGBA bytes as a `QImage`.
+pub(super) fn level_display_image_data(data: Vec<u8>, width: i32, height: i32) -> QImage {
+    // SAFETY: the caller supplies exactly width*height premultiplied RGBA8888 bytes.
     unsafe {
         QImage::from_raw_bytes(
-            level.data().to_vec(),
-            level.width() as i32,
-            level.height() as i32,
+            data,
+            width,
+            height,
             QImageFormat::Format_RGBA8888_Premultiplied,
         )
     }
+}
+/// Wrap an already-premultiplied interleaved RGBA pyramid level as a `QImage`.
+pub(super) fn level_display_image(level: &PyramidLevel) -> QImage {
+    level_display_image_data(
+        level.data().to_vec(),
+        level.width() as i32,
+        level.height() as i32,
+    )
 }
 /// A borrowed 4-plane view of `buffer`, or `None` unless it is exactly RGBA:
 /// the whole-rebuild reference the display tests compare tiles with.

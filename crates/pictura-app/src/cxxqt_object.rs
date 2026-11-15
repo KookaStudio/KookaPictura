@@ -62,6 +62,7 @@ mod paths;
 mod pdf_export;
 mod picture;
 mod presentation;
+mod proofing;
 mod quick_mask;
 mod save_format;
 mod scratch_rollback;
