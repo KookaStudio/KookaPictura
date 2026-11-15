@@ -17,7 +17,9 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QLocale>
+#include <QtCore/QTimer>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
 
 namespace pictura {
 
