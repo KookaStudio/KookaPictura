@@ -965,6 +965,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const bool keyHit = view->transform_press(4.0, 4.0, 1.0, false, false) == 2;
     const bool keyMoved = view->transform_move(6.0, 6.0, 1.0, false, false);
     QKeyEvent enterEvent(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    canvas->setFocus();
     QCoreApplication::sendEvent(canvas, &enterEvent);
     const bool keyCommitted = enterEvent.isAccepted() && keyBegin && keyHit && keyMoved
         && !view->transform_session_active() && view->history_count() == keyCommitBase + 1

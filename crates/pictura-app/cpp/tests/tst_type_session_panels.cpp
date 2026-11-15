@@ -133,6 +133,7 @@ class TypeSessionPanelsTest : public QObject {
 private slots:
     void initTestCase();
     void init();
+    void enterInSizeFieldCommitsAndLeaves();
     void reopenedCharacterEditsSession();
     void reopenedCharacterCancelKeepsLayer();
     void paragraphEditsNewText();
@@ -661,6 +662,30 @@ void TypeSessionPanelsTest::fontFamilyEditingFinishedRearms()
              "editingFinished re-arms the replacement");
     QVERIFY2(family->currentText().startsWith(QStringLiteral("aria"), Qt::CaseInsensitive),
              qPrintable(family->currentText()));
+}
+
+void TypeSessionPanelsTest::enterInSizeFieldCommitsAndLeaves()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_type_enter"));
+    QVERIFY2(f.ok(), "type fixture");
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    QVERIFY(character_->editingEnabledForTest());
+
+    QComboBox* size = character_->sizeFieldForTest();
+    QVERIFY(size && size->isEditable());
+    QLineEdit* edit = size->lineEdit();
+    QVERIFY(edit);
+    edit->setFocus();
+    QCoreApplication::processEvents();
+    QVERIFY(edit->hasFocus());
+    edit->selectAll();
+    QTest::keyClicks(edit, QStringLiteral("48"));
+    QTest::keyClick(edit, Qt::Key_Return);
+
+    QCOMPARE(size->currentText(), QStringLiteral("48 px"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 48.0);
+    QVERIFY(!edit->hasFocus());
 }
 
 QTEST_MAIN(TypeSessionPanelsTest)

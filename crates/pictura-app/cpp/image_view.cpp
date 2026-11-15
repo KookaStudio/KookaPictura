@@ -4,6 +4,7 @@
 #include "icons.h"
 #include "pictura_debug_timing.h"
 #include "selection_geometry.h"
+#include "text_input.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QRect>
@@ -18,6 +19,7 @@
 #include <QtGui/QPixmap>
 #include <QtGui/QTabletEvent>
 #include <QtGui/QWheelEvent>
+#include <QtWidgets/QApplication>
 
 #include <algorithm>
 #include <cmath>
@@ -1120,7 +1122,8 @@ void ImageView::keyPressEvent(QKeyEvent* event)
         emit modifierKeyChanged(int(event->modifiers()) | flag);
     }
     if (transformActive_) {
-        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+            && !isTextInput(QApplication::focusWidget())) {
             emit transformCommitRequested();
             event->accept();
             return;

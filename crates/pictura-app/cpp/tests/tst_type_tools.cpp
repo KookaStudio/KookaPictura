@@ -59,6 +59,17 @@ QImage seed()
     return image;
 }
 
+template <typename T>
+T* visibleChild(pictura::PicturaMainWindow& frame, const QString& name)
+{
+    for (auto* widget : frame.findChildren<T*>(name)) {
+        if (widget->isVisible()) {
+            return widget;
+        }
+    }
+    return nullptr;
+}
+
 // A stable digest of the layer-rect pixels, so a cancel can be compared
 // bit-for-bit.
 quint64 layerPixelHash(const Fixture& f, const QString& path)
@@ -153,6 +164,7 @@ private slots:
     void typeMaskTools();
     void typeOptionsBar();
     void typeBarSizeAlignAndColor();
+    void typeSizeEnterCommitsAndLeaves();
     void caretBlinks();
     void caretPlacementAndBaseline();
     void caretContrastsWithTheImage();
@@ -1069,6 +1081,44 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
 
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     f.tools->setForeground(foreground);
+}
+
+void TypeToolsTest::typeSizeEnterCommitsAndLeaves()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_size_enter"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const pictura::TypeOptions saved =
+        f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+
+    auto* size = visibleChild<QComboBox>(frame, QStringLiteral("optionsTypeSize"));
+    QVERIFY2(size && size->isEditable(), "editable size");
+    QLineEdit* edit = size->lineEdit();
+    QVERIFY(edit);
+    edit->setFocus();
+    QCoreApplication::processEvents();
+    QVERIFY(edit->hasFocus());
+    edit->selectAll();
+    QTest::keyClicks(edit, QStringLiteral("37.5"));
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size,
+             37.5);
+    QVERIFY(!edit->hasFocus());
+
+    // An out-of-range value reverts and still leaves the field.
+    edit->setFocus();
+    QCoreApplication::processEvents();
+    QVERIFY(edit->hasFocus());
+    edit->setText(QStringLiteral("0"));
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size,
+             37.5);
+    QCOMPARE(size->currentText(), QStringLiteral("37.5"));
+    QVERIFY(!edit->hasFocus());
+
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::caretBlinks()

@@ -12,6 +12,7 @@
 
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
 
 #include "qt_test_support.h"
@@ -62,6 +63,7 @@ private slots:
     void ctrlUndoCancelsALiveGesture();
     void ctrlUndoCancelsAConvertDrag();
     void ctrlUndoCancelsAFreeformTrail();
+    void enterInFieldKeepsPathActive();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -474,6 +476,46 @@ void PenToolsTest::ctrlUndoCancelsAFreeformTrail()
     f.canvas->mouseReleased(QPointF(50, 20));
     QCOMPARE(f.view->history_count(), 1);
     QCOMPARE(pictura::path_subpath_count(*f.view), 0);
+}
+
+void PenToolsTest::enterInFieldKeepsPathActive()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_pen_enter"));
+    QVERIFY2(f.ok(), "pen enter fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    frame.activateWindow();
+    QCoreApplication::processEvents();
+
+    frame.setActiveTool(pictura::ToolId::Pen);
+    click(f, QPointF(10, 10));
+    click(f, QPointF(50, 10));
+    QVERIFY(pictura::path_editing_subpath(*f.view) >= 0);
+
+    // Enter in a value field commits it and leaves the subpath open.
+    auto* zoom = frame.findChild<pictura::NumericField*>(QStringLiteral("statusZoomField"));
+    QVERIFY(zoom);
+    auto* edit = zoom->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->setFocus();
+    QCoreApplication::processEvents();
+    QVERIFY(edit->hasFocus());
+    edit->selectAll();
+    QTest::keyClicks(edit, QStringLiteral("200"));
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(zoom->value(), 200.0);
+    QVERIFY(!edit->hasFocus());
+    QVERIFY(pictura::path_editing_subpath(*f.view) >= 0);
+
+    // Enter with no value input focused ends the subpath open.
+    f.canvas->setFocus();
+    QCoreApplication::processEvents();
+    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(&frame, &enter);
+    QCOMPARE(pictura::path_editing_subpath(*f.view), -1);
 }
 
 QTEST_MAIN(PenToolsTest)

@@ -4,6 +4,9 @@
 
 #include "frame_includes.h"
 #include "menu_registrar.h"
+#include "text_input.h"
+
+#include <QtWidgets/QApplication>
 
 namespace pictura {
 
@@ -63,8 +66,12 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
             || event->key() == Qt::Key_Control)) {
         tools_->refreshCursor();
     }
+    // A focused value input owns Enter: it commits and deactivates itself, so
+    // the key must not also apply the active tool.
+    const bool editingValue = isTextInput(QApplication::focusWidget());
     if (!event->isAutoRepeat()
         && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && !editingValue
         && tools_
         && (tools_->activeTool() == ToolId::Crop
             || tools_->activeTool() == ToolId::PerspectiveCrop)) {
@@ -73,6 +80,7 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
     }
     if (!event->isAutoRepeat()
         && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && !editingValue
         && tools_
         && tools_->handleFinishPath()) {
         return;

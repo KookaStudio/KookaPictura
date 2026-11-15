@@ -64,6 +64,7 @@ private slots:
     void canvasPivotDragSnapsToAnAnchor();
     void perimeterRotatesAndFarPressDoesNotCommit();
     void applyCommitsCancelRestores();
+    void enterInFieldKeepsTransformActive();
 
 private:
     // A new document with one filled raster layer selected; returns its path.
@@ -543,6 +544,46 @@ void TransformOptionsTest::applyCommitsCancelRestores()
     QVERIFY(tools->beginFreeTransform(layer));
     typeInto(angle, QStringLiteral("30"));
     apply->click();
+    QVERIFY(!view->transform_session_active());
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
+}
+
+void TransformOptionsTest::enterInFieldKeepsTransformActive()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    frame.activateWindow();
+    QCoreApplication::processEvents();
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools && tools->beginFreeTransform(layer));
+
+    auto* angle =
+        frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformAngle"));
+    QVERIFY(angle);
+    auto* edit = angle->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->setFocus();
+    QCoreApplication::processEvents();
+    QVERIFY(edit->hasFocus());
+    edit->selectAll();
+    QTest::keyClicks(edit, QStringLiteral("30"));
+    QTest::keyClick(edit, Qt::Key_Return);
+
+    QCOMPARE(angle->value(), 30.0);
+    QVERIFY(!edit->hasFocus());
+    QVERIFY(view->transform_session_active());
+
+    // Enter with no value input focused commits one Free Transform state.
+    const int base = view->history_count();
+    canvas->setFocus();
+    QCoreApplication::processEvents();
+    QTest::keyClick(canvas, Qt::Key_Return);
     QVERIFY(!view->transform_session_active());
     QCOMPARE(view->history_count(), base + 1);
     QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));

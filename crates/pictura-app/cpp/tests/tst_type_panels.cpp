@@ -53,6 +53,7 @@ private slots:
     void initTestCase();
     void glyphsPanel();
     void glyphsFamilyTypeAhead();
+    void glyphsFamilyEnterCommitsAndLeaves();
 
 private:
     void showFrame();
@@ -162,6 +163,27 @@ void TypePanelsTest::glyphsFamilyTypeAhead()
     QTest::keyClicks(family, QStringLiteral(" s"));
     QCoreApplication::processEvents();
     QCOMPARE(family->currentText().compare(QStringLiteral("Noto Sans"), Qt::CaseInsensitive), 0);
+}
+
+void TypePanelsTest::glyphsFamilyEnterCommitsAndLeaves()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_glyphs_enter"));
+    QVERIFY2(f.ok(), "fixture");
+    showFrame();
+    QVERIFY(openPanel(pictura::command_ids::WindowPanelsGlyphs, QStringLiteral("glyphsPanel")));
+
+    auto* family = child<QFontComboBox>(QStringLiteral("glyphsFamily"));
+    QVERIFY(family);
+    pictura::test::selectFamily(family, QStringLiteral("Liberation Sans"));
+    family->clearFocus();
+    QCoreApplication::processEvents();
+    pictura::test::typeFamily(family, QStringLiteral("Noto Sans"));
+    QTest::keyClick(family, Qt::Key_Return);
+
+    QCOMPARE(family->currentText(), QStringLiteral("Noto Sans"));
+    QVERIFY(family->lineEdit());
+    QVERIFY(!family->lineEdit()->hasFocus());
 }
 
 QTEST_MAIN(TypePanelsTest)

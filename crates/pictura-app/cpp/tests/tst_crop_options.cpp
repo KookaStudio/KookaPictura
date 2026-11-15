@@ -14,6 +14,8 @@
 
 #include "qt_test_support.h"
 
+#include <QtGui/QKeyEvent>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
@@ -29,6 +31,7 @@ private slots:
     void ratioPresetLocksTheBox();
     void ratioFieldsShowRatioValues();
     void ratioFieldsAcceptDecimals();
+    void enterInFieldKeepsCropActive();
     void resolutionModeShowsPixels();
     void resetRestoresCanvasBox();
     void straightenToggleArmsLineMode();
@@ -182,6 +185,49 @@ void CropOptionsTest::ratioFieldsAcceptDecimals()
     // no decimal was typed).
     typeInto(width, QStringLiteral("2.5"));
     QCOMPARE(width->value(), 2.5);
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::enterInFieldKeepsCropActive()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptEnter"), 40, 40, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas && tools);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(30, 30), QPointF(10, 10));
+    QVERIFY(frame.hasPendingCrop());
+
+    // Enter in a tool-options field commits it and leaves the crop pending.
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    QVERIFY(width);
+    auto* edit = width->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->setFocus();
+    QCoreApplication::processEvents();
+    QVERIFY(edit->hasFocus());
+    edit->selectAll();
+    QTest::keyClicks(edit, QStringLiteral("12"));
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(width->value(), 12.0);
+    QVERIFY(!edit->hasFocus());
+    QVERIFY(frame.hasPendingCrop());
+
+    // Enter with no value input focused commits the crop.
+    canvas->setFocus();
+    QCoreApplication::processEvents();
+    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(&frame, &enter);
+    QVERIFY(!frame.hasPendingCrop());
+    QVERIFY(frame.activeView()->document_width() < 40);
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);

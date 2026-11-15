@@ -59,6 +59,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/type_frame.cpp
     crates/pictura-app/cpp/type_key_filter.cpp
     crates/pictura-app/cpp/type_text_edit.cpp
+    crates/pictura-app/cpp/value_input_enter.cpp
+    crates/pictura-app/cpp/value_input_enter.h
     crates/pictura-app/cpp/workspace_store.cpp
     crates/pictura-app/cpp/workspace_store.h
 )

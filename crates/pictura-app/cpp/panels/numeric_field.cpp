@@ -371,9 +371,30 @@ bool NumericField::eventFilter(QObject* watched, QEvent* event)
             return QWidget::eventFilter(watched, event);
         case QEvent::ShortcutOverride:
         case QEvent::KeyPress: {
+            auto* key = static_cast<QKeyEvent*>(event);
+            // Enter finishes the edit and leaves the field; Shift+Enter keeps
+            // focus and highlights the committed value.
+            if (event->type() == QEvent::KeyPress
+                && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter)) {
+                if (key->isAutoRepeat()) {
+                    event->accept();
+                    return true;
+                }
+                if (key->modifiers()
+                    & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) {
+                    break;
+                }
+                commitEdit();
+                if (key->modifiers().testFlag(Qt::ShiftModifier)) {
+                    edit_->selectAll();
+                } else {
+                    edit_->clearFocus();
+                }
+                event->accept();
+                return true;
+            }
             // Up/Down step the value (Shift 10x, Ctrl 0.1x) and commit, ahead
             // of any arrow-key shortcut.
-            auto* key = static_cast<QKeyEvent*>(event);
             if (key->key() != Qt::Key_Up && key->key() != Qt::Key_Down) {
                 break;
             }
