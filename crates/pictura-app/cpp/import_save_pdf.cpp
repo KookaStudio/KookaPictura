@@ -13,7 +13,7 @@
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/engine_bridge.h"
-#include "pictura_app/src/cxxqt_object/proofing.cxxqt.h"
+#include "api/proofing_bridge.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QUrl>

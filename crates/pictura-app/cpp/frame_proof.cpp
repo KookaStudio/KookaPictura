@@ -3,11 +3,10 @@
 
 #include "frame_includes.h"
 
-#include "pictura_app/src/cxxqt_object/proofing.cxxqt.h"
-
 #include "proof_setup_dialog.h"
 
 #include "api/engine_bridge.h"
+#include "api/proofing_bridge.h"
 
 namespace pictura {
 

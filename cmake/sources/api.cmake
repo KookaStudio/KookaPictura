@@ -14,6 +14,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/api/paint_api.cpp
     crates/pictura-app/cpp/api/paint_api.h
     crates/pictura-app/cpp/api/paint_bridge.h
+    crates/pictura-app/cpp/api/proofing_bridge.h
     crates/pictura-app/cpp/api/selection_api.cpp
     crates/pictura-app/cpp/api/selection_api.h
     crates/pictura-app/cpp/api/selection_bridge.h

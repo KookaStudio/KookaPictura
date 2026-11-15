@@ -14,8 +14,8 @@
 
 #include "api/document_api.h"
 #include "api/engine_bridge.h"
-#include "pictura_app/src/cxxqt_object/proofing.cxxqt.h"
 #include "api/layers_bridge.h"
+#include "api/proofing_bridge.h"
 #include "command_ids.h"
 #include "commands.h"
 #include "frame.h"
