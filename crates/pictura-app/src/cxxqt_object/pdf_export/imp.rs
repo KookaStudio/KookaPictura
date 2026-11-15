@@ -4,7 +4,7 @@ use super::super::helpers_composite::current_buffer;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_codec::pdf::{self, JpegRequest, PdfEnv, PdfOptions};
+use pictura_codec::pdf::{self, Compression, JpegRequest, PdfEnv, PdfOptions};
 
 pub(super) fn parse(options: &QString) -> Option<PdfOptions> {
     pdf::parse_joboptions(&options.to_string())
@@ -22,6 +22,32 @@ pub(super) fn save_view(
 ) -> Result<(), String> {
     let gpu_compute = view.rust().gpu_compute;
     let dirty = view.rust().session.dirty;
+    let mut options = options.clone();
+    if options.compression == Compression::Jpeg2000 {
+        let (continuous, deep) = view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map_or((true, false), |doc| {
+                let mode = doc.source_mode.unwrap_or(doc.mode);
+                (
+                    !matches!(
+                        mode,
+                        pictura_core::ColorMode::Bitmap | pictura_core::ColorMode::Indexed
+                    ),
+                    doc.source_depth == Some(pictura_core::BitDepth::Sixteen),
+                )
+            });
+        if !continuous || (deep && !options.convert_16_to_8) {
+            options.compression = Compression::Zip;
+        }
+    }
+    let proof_state = view.rust().proof;
+    let proof_icc = crate::cxxqt_object::proofing::proof_device_icc(proof_state.device);
+    let proof_components =
+        crate::cxxqt_object::proofing::proof_device_components(proof_state.device);
+    let proof_intent = crate::cxxqt_object::proofing::proof_intent_from_code(proof_state.intent);
     let bytes = {
         let mut rust = view.as_mut().rust_mut();
         let doc = rust
@@ -62,8 +88,14 @@ pub(super) fn save_view(
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default(),
             live_text,
+            proof: Some(pdf::ProofRequest {
+                icc: proof_icc.as_slice(),
+                components: proof_components,
+                intent: proof_intent,
+                bpc: proof_state.bpc,
+            }),
         };
-        pdf::write_pdf(&save_doc, &composite, options, &env).map_err(|e| e.to_string())?
+        pdf::write_pdf(&save_doc, &composite, &options, &env).map_err(|e| e.to_string())?
     };
     if super::super::helpers::safe_io::write_atomically(path, &bytes, false).is_err() {
         return Err(format!("Could not write {path}."));
@@ -121,6 +153,38 @@ pub fn pdf_view_options(view: &PictureView) -> QString {
             .as_deref()
             .unwrap_or_default(),
     )
+}
+
+pub fn pdf_document_is_16bit(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| doc.source_depth == Some(pictura_core::BitDepth::Sixteen))
+}
+
+pub fn pdf_spot_channel_count(view: &PictureView) -> i32 {
+    view.rust().session.doc.as_ref().map_or(0, |doc| {
+        pictura_codec::spot_channel_indices(doc).len() as i32
+    })
+}
+
+pub fn pdf_document_is_continuous_tone(view: &PictureView) -> bool {
+    view.rust().session.doc.as_ref().is_some_and(|doc| {
+        let mode = doc.source_mode.unwrap_or(doc.mode);
+        !matches!(
+            mode,
+            pictura_core::ColorMode::Bitmap | pictura_core::ColorMode::Indexed
+        )
+    })
+}
+
+pub fn pdf_document_is_bitmap(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| doc.source_mode.unwrap_or(doc.mode) == pictura_core::ColorMode::Bitmap)
 }
 
 pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {

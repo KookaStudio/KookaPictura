@@ -109,6 +109,7 @@ private slots:
     void cancelWritesNothing();
     void failedWriteCreatesNoFile();
     void jpegCompressionRenders();
+    void jpeg2000IsEnabled();
     void jpeg2000IsDisabled();
     void reopenRestoresLayers();
     void preserveOffWarnsForLayers();
@@ -119,6 +120,9 @@ private slots:
     void savePresetWritesFile();
     void presetManagerEditsUserPresets();
     void dialogHasFivePages();
+    void spotColorsFollowTheDocument();
+    void proofSetupLabelFollowsTheSetup();
+    void proofSetupLocksUnderOutputConversion();
     void compatibilityGatesControls();
     void summaryListsSettings();
     void typeLayerIsLiveText();
@@ -256,8 +260,8 @@ void SavePdfTest::jpegCompressionRenders()
     QVERIFY2(cmykDiff >= 0 && cmykDiff < 60, qPrintable(QString::number(cmykDiff)));
 }
 
-// pdf_jpeg2000_disabled
-void SavePdfTest::jpeg2000IsDisabled()
+// pdf_jpeg2000
+void SavePdfTest::jpeg2000IsEnabled()
 {
     QTemporaryDir dir;
     PdfSaveDialog dialog(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save);
@@ -265,8 +269,37 @@ void SavePdfTest::jpeg2000IsDisabled()
         qobject_cast<QComboBox*>(dialog.fieldWidgetForTest(QStringLiteral("compression")));
     QVERIFY(compression);
     QCOMPARE(compression->itemText(3), QStringLiteral("JPEG 2000"));
+    QVERIFY(dialog.compressionItemEnabled(3));
+}
+
+// pdf_jpeg2000_disabled
+void SavePdfTest::jpeg2000IsDisabled()
+{
+    QTemporaryDir dir;
+    PdfSaveDialog dialog(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save);
+    QVERIFY(dialog.compressionItemEnabled(3));
+
+    dialog.setFieldForTest(QStringLiteral("compatibility"), QStringLiteral("1"));
     QVERIFY(!dialog.compressionItemEnabled(3));
-    QVERIFY(dialog.compressionItemEnabled(2));
+    dialog.setFieldForTest(QStringLiteral("compatibility"), QStringLiteral("2"));
+    QVERIFY(dialog.compressionItemEnabled(3));
+
+    dialog.setFieldForTest(QStringLiteral("standard"), QStringLiteral("4"));
+    QVERIFY(!dialog.compressionItemEnabled(3));
+
+    PdfSaveDialog::SaveContext deep;
+    deep.documentIs16Bit = true;
+    PdfSaveDialog deepDialog(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save, deep,
+                             nullptr);
+    QVERIFY(deepDialog.compressionItemEnabled(3));
+    deepDialog.setFieldForTest(QStringLiteral("convert16To8"), QStringLiteral("0"));
+    QVERIFY(!deepDialog.compressionItemEnabled(3));
+
+    PdfSaveDialog::SaveContext bitmap;
+    bitmap.documentIsContinuousTone = false;
+    PdfSaveDialog bitmapDialog(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save,
+                               bitmap, nullptr);
+    QVERIFY(!bitmapDialog.compressionItemEnabled(3));
 }
 
 // pdf_reopen_layers
@@ -476,7 +509,61 @@ void SavePdfTest::dialogHasFivePages()
                               "alphaChannels", "spotColors", "iccProfile"}) {
         QVERIFY2(dialog.fieldWidgetForTest(QString::fromLatin1(field)), field);
     }
-    QVERIFY(!dialog.fieldWidgetForTest(QStringLiteral("spotColors"))->isEnabled());
+    QVERIFY(dialog.fieldWidgetForTest(QStringLiteral("spotColors"))->isEnabled());
+}
+
+// pdf_save_options
+void SavePdfTest::spotColorsFollowTheDocument()
+{
+    QTemporaryDir dir;
+    PdfSaveDialog::SaveContext context;
+    context.hasSpotChannels = false;
+    PdfSaveDialog without(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save, context,
+                          nullptr);
+    QVERIFY(!without.fieldWidgetForTest(QStringLiteral("spotColors"))->isEnabled());
+
+    context.hasSpotChannels = true;
+    PdfSaveDialog with(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save, context,
+                       nullptr);
+    QVERIFY(with.fieldWidgetForTest(QStringLiteral("spotColors"))->isEnabled());
+}
+
+// pdf_save_options
+void SavePdfTest::proofSetupLabelFollowsTheSetup()
+{
+    QTemporaryDir dir;
+    PdfSaveDialog::SaveContext context;
+    context.hasSpotChannels = true;
+    context.proofSetupName = QStringLiteral("Working Gray");
+    PdfSaveDialog dialog(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save, context,
+                         nullptr);
+    auto* proof = qobject_cast<QCheckBox*>(dialog.fieldWidgetForTest(QStringLiteral("useProofSetup")));
+    QVERIFY(proof);
+    QVERIFY2(proof->text().contains(QStringLiteral("Working Gray")), qPrintable(proof->text()));
+}
+
+// pdf_use_proof_override
+void SavePdfTest::proofSetupLocksUnderOutputConversion()
+{
+    QTemporaryDir dir;
+    PdfSaveDialog dialog(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save);
+    auto* proof = qobject_cast<QCheckBox*>(dialog.fieldWidgetForTest(QStringLiteral("useProofSetup")));
+    auto* convert =
+        qobject_cast<QCheckBox*>(dialog.fieldWidgetForTest(QStringLiteral("convert16To8")));
+    QVERIFY(proof && convert);
+    QVERIFY(proof->isEnabled());
+    dialog.setFieldForTest(QStringLiteral("useProofSetup"), QStringLiteral("1"));
+    QVERIFY(convert->isChecked());
+    QVERIFY(!convert->isEnabled());
+    dialog.setFieldForTest(QStringLiteral("colorConversion"), QStringLiteral("1"));
+    QVERIFY(!proof->isEnabled());
+    QVERIFY(dialog.summaryText().contains(QStringLiteral("overrides Use Proof Setup")));
+
+    PdfSaveDialog::SaveContext bitmap;
+    bitmap.documentIsBitmap = true;
+    PdfSaveDialog bitmapDialog(pdf_default_options(), dir.path(), PdfSaveDialog::Mode::Save,
+                               bitmap, nullptr);
+    QVERIFY(!bitmapDialog.fieldWidgetForTest(QStringLiteral("useProofSetup"))->isEnabled());
 }
 
 // pdf_compat_gates

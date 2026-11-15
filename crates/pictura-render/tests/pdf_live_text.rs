@@ -9,7 +9,7 @@ use std::process::Command;
 
 use pictura_codec::pdf::{
     write_pdf, ColorConversion, Compatibility, Destination, JpegRequest, LiveText, PdfEnv,
-    PdfOptions, ProfileInclusion,
+    PdfIntent, PdfOptions, PdfProfile, ProfileInclusion, ProofRequest,
 };
 use pictura_core::{Document, PixelBuffer, TypeSpec};
 
@@ -71,6 +71,12 @@ fn write_live(doc: &Document, options: &PdfOptions) -> (Vec<u8>, Option<PixelBuf
         entropy: [9; 32],
         title: "live".into(),
         live_text,
+        proof: Some(ProofRequest {
+            icc: PdfProfile::coated_cmyk_icc(),
+            components: 4,
+            intent: PdfIntent::RelativeColorimetric,
+            bpc: true,
+        }),
     };
     let pdf = write_pdf(doc, &doc.composite, &options, &env).expect("writes");
     (pdf, background)
@@ -319,6 +325,28 @@ fn pdf_live_text_colour_follows_conversion() {
     assert_eq!(cmyk.len(), 4, "{fill}");
     assert!(
         cmyk[0] < 0.2 && cmyk[1] > 0.6 && cmyk[2] > 0.6,
+        "red is magenta and yellow ink: {fill}"
+    );
+}
+
+#[test]
+fn pdf_live_text_colour_follows_proof() {
+    let options = PdfOptions {
+        use_proof_setup: true,
+        ..options()
+    };
+    let (pdf, _) = write_live(&type_doc(), &options);
+    assert!(page_text(&pdf).contains("/ColorSpace <</CS0 [/ICCBased "));
+    let ops = content(&pdf);
+    let fill = ops
+        .lines()
+        .find_map(|l| l.strip_prefix("/CS0 cs "))
+        .and_then(|l| l.strip_suffix(" scn"))
+        .unwrap_or_else(|| panic!("an ICC-based fill: {ops}"));
+    let inks: Vec<f64> = fill.split(' ').map(|v| v.parse().unwrap()).collect();
+    assert_eq!(inks.len(), 4, "the proof device is CMYK: {fill}");
+    assert!(
+        inks[0] < 0.2 && inks[1] > 0.6 && inks[2] > 0.6,
         "red is magenta and yellow ink: {fill}"
     );
 }

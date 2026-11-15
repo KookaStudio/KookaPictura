@@ -8,6 +8,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QSignalBlocker>
+#include <QtGui/QStandardItem>
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -35,6 +36,7 @@ const QString kModified = QStringLiteral(" (Modified)");
 // Fields a preset never carries: switching presets keeps them.
 const char* const kKeptFields[] = {
     "layers",          "notes",       "alphaChannels",      "iccProfile",
+    "spotColors",      "useProofSetup",
     "openPassword",    "permissionsPassword", "printing",  "changes",
     "enableCopying",   "enableAccessibility", "plaintextMetadata",
 };
@@ -81,11 +83,25 @@ QString PdfSaveDialog::presetOptions(const QString& name, const QString& dir)
 
 PdfSaveDialog::PdfSaveDialog(const QString& options, const QString& presetsDir, Mode mode,
                              QWidget* parent)
+    : PdfSaveDialog(options, presetsDir, mode, SaveContext{}, parent)
+{
+}
+
+PdfSaveDialog::PdfSaveDialog(const QString& options, const QString& presetsDir, Mode mode,
+                             const SaveContext& context, QWidget* parent)
     : QDialog(parent)
     , options_(options.isEmpty() ? pdf_default_options() : options)
     , presetsDir_(presetsDir)
     , mode_(mode)
+    , context_(context)
 {
+    if (context_.documentIsBitmap) {
+        options_ =
+            pdf_set_option(options_, QStringLiteral("useProofSetup"), QStringLiteral("0"));
+    }
+    if (!jpeg2000Available() && field(options_, "compression") == QStringLiteral("3")) {
+        options_ = pdf_set_option(options_, "compression", QStringLiteral("1"));
+    }
     setObjectName(QStringLiteral("pdfSaveDialog"));
     setWindowTitle(mode == Mode::Save ? tr("Save Adobe PDF") : tr("Edit PDF Preset"));
     auto* layout = new QVBoxLayout(this);
@@ -217,13 +233,13 @@ QWidget* PdfSaveDialog::buildGeneralPage()
         bind(name, check);
         saveLayout->addWidget(check);
     }
-    // ponytail: the model has no spot channels and the app no Proof Setup yet.
-    fieldWidgetForTest(QStringLiteral("spotColors"))
-        ->setToolTip(tr("Spot channels are not modelled yet."));
-    auto* proof = new QCheckBox(tr("Use Proof Setup: Working CMYK"), saveOptions_);
+    auto* proof = new QCheckBox(
+        context_.proofSetupName.isEmpty()
+            ? tr("Use Proof Setup")
+            : tr("Use Proof Setup: %1").arg(context_.proofSetupName),
+        saveOptions_);
     proof->setObjectName(QStringLiteral("pdfUseProofSetup"));
-    proof->setEnabled(false);
-    proof->setToolTip(tr("Proof Setup is not available yet."));
+    bind(QStringLiteral("useProofSetup"), proof);
     saveLayout->addWidget(proof);
     layout->addWidget(saveOptions_);
 
@@ -275,9 +291,7 @@ QWidget* PdfSaveDialog::buildCompressionPage()
     auto* compression = combo(QStringLiteral("compression"),
                               {tr("None"), tr("ZIP"), tr("JPEG"), tr("JPEG 2000")}, page);
     if (auto* model = qobject_cast<QStandardItemModel*>(compression->model())) {
-        // ponytail: no JPEG 2000 encoder in Qt or the dependency tree.
-        model->item(3)->setEnabled(false);
-        model->item(3)->setToolTip(tr("JPEG 2000 encoding is not available yet."));
+        model->item(3)->setToolTip(tr("JPEG 2000 requires PDF 1.5 and 8-bit output."));
     }
     form->addRow(tr("Compression:"), compression);
     form->addRow(tr("Image Quality:"),
@@ -395,6 +409,15 @@ void PdfSaveDialog::setField(const QString& name, const QString& value)
     refresh();
 }
 
+bool PdfSaveDialog::jpeg2000Available() const
+{
+    const bool level = field(options_, "compatibility").toInt() >= 2;
+    const bool standard = field(options_, "standard").toInt() != 4;
+    const bool depth =
+        !context_.documentIs16Bit || field(options_, "convert16To8") == QStringLiteral("1");
+    return level && standard && depth && context_.documentIsContinuousTone;
+}
+
 void PdfSaveDialog::refresh()
 {
     refreshing_ = true;
@@ -431,7 +454,19 @@ void PdfSaveDialog::refresh()
                 text->setPlainText(value);
             }
         }
-        binding.widget->setEnabled(!locked);
+        const bool available =
+            (binding.field != QLatin1String("spotColors") || context_.hasSpotChannels)
+            && (binding.field != QLatin1String("useProofSetup")
+                || !context_.documentIsBitmap);
+        binding.widget->setEnabled(!locked && available);
+    }
+    if (auto* compression =
+            qobject_cast<QComboBox*>(fieldWidgetForTest(QStringLiteral("compression")))) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(compression->model())) {
+            if (QStandardItem* item = model->item(3)) {
+                item->setEnabled(jpeg2000Available());
+            }
+        }
     }
     encryptionLevel_->setText(tr("Encryption Level: %1").arg(field(options_, "encryptionLevel")));
     summary_->setPlainText(pdf_summary(options_));
