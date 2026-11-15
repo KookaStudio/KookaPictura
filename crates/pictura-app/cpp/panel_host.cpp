@@ -115,6 +115,10 @@ PanelHost::PanelHost(QWidget* shell, DocumentRegistry* documents, CommandRegistr
             [this](int pos, int index) { onCenterSplitterMoved(pos, index); });
 
     if (documents_) {
+        // A switch retargets at once, but a filter commit or a live stroke holds
+        // the panels on their old view until the debounced refresh runs again.
+        connect(documents_, &DocumentRegistry::activeDocumentChanged, this,
+                &PanelHost::retargetDockIfNeeded);
         connect(documents_, &DocumentRegistry::aboutToRemoveDocument, this, [this](int index) {
             DocEntry* entry = documents_->docAt(index);
             if (entry && entry->view && entry->view == dockView_) {
@@ -781,7 +785,11 @@ void PanelHost::stopPanelRefreshTimer()
 
 void PanelHost::retargetDockIfNeeded()
 {
-    if (!hooks_.activeView || !hooks_.activeView() || dockNeedsRebind()) {
+    PictureView* view = hooks_.activeView ? hooks_.activeView() : nullptr;
+    if (view && (filter_commit_running(*view) || view->is_painting())) {
+        return;
+    }
+    if (!view || dockNeedsRebind()) {
         retargetDock();
     }
 }

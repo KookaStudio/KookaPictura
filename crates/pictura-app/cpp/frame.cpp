@@ -77,8 +77,8 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
             }
         };
         hooks.retargetPanels = [this]() {
-            if (panels_) {
-                panels_->retargetDockIfNeeded();
+            if (panels_ && panels_->dockNeedsRebind()) {
+                panels_->retargetDock();
             }
         };
         hooks.closeWindowRequested = [this](DocWindow* window) { closeWindow(window, true); };
