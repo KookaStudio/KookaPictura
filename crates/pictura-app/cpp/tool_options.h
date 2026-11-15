@@ -478,6 +478,7 @@ public:
     void setContiguous(bool on) { contiguous_ = on; }
 
     bool antiAlias() const { return antiAlias_; }
+    void setAntiAlias(bool on) { antiAlias_ = on; }
     bool sampleAllLayers() const { return sampleAllLayers_; }
 
     int magneticWidth() const { return magneticWidth_; }
@@ -514,6 +515,7 @@ public:
         fixedSizeH_ = std::max(other.fixedSizeH_, 1);
         tolerance_ = std::clamp(other.tolerance_, 0, 255);
         contiguous_ = other.contiguous_;
+        antiAlias_ = other.antiAlias_;
         magneticWidth_ = std::clamp(other.magneticWidth_, 1, 256);
         magneticContrast_ = std::clamp(other.magneticContrast_, 1, 100);
         magneticFrequency_ = std::clamp(other.magneticFrequency_, 0, 100);

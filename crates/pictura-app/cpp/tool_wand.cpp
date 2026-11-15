@@ -26,9 +26,10 @@ public:
             return true;
         }
         ctx.setDragMode(ctx.resolveSelectionMode(mods, v->has_selection()));
-        const bool committed = v->magic_wand(qRound(imagePos.x()), qRound(imagePos.y()),
-                                             selection_->tolerance(), selection_->contiguous(),
-                                             selectionModeString(ctx.dragMode()));
+        const bool committed =
+            selection_magic_wand_aa(*v, qRound(imagePos.x()), qRound(imagePos.y()),
+                                    selection_->tolerance(), selection_->contiguous(),
+                                    selectionModeString(ctx.dragMode()), selection_->antiAlias());
         if (committed) {
             ctx.emitSelectionCommitted();
         }

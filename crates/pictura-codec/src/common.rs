@@ -13,7 +13,7 @@ pub(crate) const MODE_MULTICHANNEL: u16 = 7;
 pub(crate) const MODE_DUOTONE: u16 = 8;
 pub(crate) const MODE_LAB: u16 = 9;
 
-pub(crate) const MAX_CHANNELS: u16 = 56;
+pub(crate) use pictura_core::channels::MAX_CHANNELS;
 pub(crate) const MAX_DIM_PSD: u32 = 30_000;
 pub(crate) const MAX_DIM_PSB: u32 = 300_000;
 

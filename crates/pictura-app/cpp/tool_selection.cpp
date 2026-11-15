@@ -5,6 +5,7 @@
 #include "selection_geometry.h"
 #include "tools.h"
 
+#include "api/selection_bridge.h"
 #include "api/view_bridge.h"
 
 #include <QtCore/QElapsedTimer>
@@ -103,10 +104,12 @@ public:
         const QRect rect = marqueeGeometry(*selection_, anchor_, imagePos, dragMods_, mirrorAlt_);
         const bool shaped = v && rect.width() > 0 && rect.height() > 0;
         const bool committed = shaped
-            && (elliptical_ ? v->select_ellipse(rect.x(), rect.y(), rect.width(), rect.height(),
-                                                selectionModeString(ctx.dragMode()), selection_->feather())
-                            : v->select_rect(rect.x(), rect.y(), rect.width(), rect.height(),
-                                             selectionModeString(ctx.dragMode()), selection_->feather()));
+            && (elliptical_
+                    ? selection_select_ellipse_aa(*v, rect.x(), rect.y(), rect.width(),
+                                                  rect.height(), selectionModeString(ctx.dragMode()),
+                                                  selection_->feather(), selection_->antiAlias())
+                    : v->select_rect(rect.x(), rect.y(), rect.width(), rect.height(),
+                                     selectionModeString(ctx.dragMode()), selection_->feather()));
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSelectionPreview();
             canvas->clearDragSizeHint();
@@ -226,7 +229,9 @@ public:
         ctx.setDragging(false);
         PictureView* v = ctx.view();
         const bool click = lassoPolygon_.size() < 3;
-        const bool committed = !click && v && v->end_lasso(selection_->feather());
+        const bool committed =
+            !click && v
+            && selection_end_lasso_aa(*v, selection_->feather(), selection_->antiAlias());
         if (click && v) {
             v->cancel_lasso();
             clickDeselect(ctx, v);
@@ -368,7 +373,9 @@ private:
     {
         PictureView* v = ctx.view();
         const bool enough = polygonPoints_.size() >= 3;
-        const bool committed = enough && v && v->end_lasso(selection_->feather());
+        const bool committed =
+            enough && v
+            && selection_end_lasso_aa(*v, selection_->feather(), selection_->antiAlias());
         if (v && !committed) {
             v->cancel_lasso();
         }

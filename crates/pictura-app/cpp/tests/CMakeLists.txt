@@ -199,6 +199,7 @@ set(PICTURA_QT_TESTS
     tst_settings_backup
     tst_rulers_guides
     tst_panels_parity
+    tst_selection_aa
     tst_selection_alt
     tst_selection_move
     tst_selection_preview

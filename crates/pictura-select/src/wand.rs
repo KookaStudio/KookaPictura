@@ -4,7 +4,7 @@
 
 use pictura_core::mask_ops::{
     coverage_bounds, empty_mask, flood_tiled, match_mask, FloodSource, Grid, MatchTiles, Seeds,
-    TileMatch,
+    TileMatch, TiledMask,
 };
 use pictura_core::PixelBuffer;
 use rayon::prelude::*;
@@ -90,13 +90,16 @@ fn wand_tile(
     }
 }
 
-/// Flood/global selection by color tolerance (Magic Wand).
+/// Flood/global selection by color tolerance (Magic Wand). With
+/// `anti_alias`, unselected boundary pixels get the inferred colour-distance
+/// fringe described by [`soften_boundary`].
 pub fn magic_wand(
     img: &PixelBuffer,
     x: u32,
     y: u32,
     tolerance: u8,
     contiguous: bool,
+    anti_alias: bool,
 ) -> Result<Selection, SelectError> {
     let (w, h) = (img.width as usize, img.height as usize);
     if w == 0 || h == 0 || x as usize >= w || y as usize >= h {
@@ -106,18 +109,99 @@ pub fn magic_wand(
     }
     let reference = rgb_at(img, y as usize * w + x as usize);
     let eval = wand_tile(img, reference, tolerance);
-    let data = if contiguous {
+    let mut data = if contiguous {
         let mut source = MatchTiles::new(w, h, eval);
         flood_tiled(w, h, Seeds::Pixel(x as usize, y as usize), &mut source)
             .unwrap_or_else(|| empty_mask(w, h))
     } else {
         match_mask(w, h, eval)
     };
+    if anti_alias && tolerance > 0 {
+        soften_boundary(&mut data, img, reference, tolerance, w, h);
+    }
     Ok(Selection {
         width: img.width,
         height: img.height,
         data,
     })
+}
+
+/// The inferred anti-alias fringe on the binary wand result.
+///
+/// Every unselected pixel four-adjacent to a selected one whose Chebyshev
+/// distance `d` from the seed satisfies `tolerance < d < tolerance + width`
+/// gets coverage `clamp(1 - (d - tolerance) / width, 0, 1)`, where
+/// `width = max(0.5 * tolerance, 1.5)`. The `1.5` floor keeps Tolerance 1 and
+/// 2 able to produce a fringe. Pixels already selected keep 255.
+///
+/// ponytail: the GIMP-style 1.5× window is inferred; Adobe's exact ramp is
+/// unpublished. The pass reads the binary mask, so it does not chain fringes.
+fn soften_boundary(
+    data: &mut TiledMask,
+    img: &PixelBuffer,
+    reference: [u8; 3],
+    tolerance: u8,
+    w: usize,
+    h: usize,
+) {
+    let Some((x0, y0, x1, y1)) = coverage_bounds(data, w, h) else {
+        return;
+    };
+    let top = y0.saturating_sub(1);
+    let bottom = (y1 + 1).min(h);
+    let left = x0.saturating_sub(1);
+    let right = (x1 + 1).min(w);
+    let t = f64::from(tolerance);
+    let width = (0.5 * t).max(1.5);
+    let mut rows: Vec<(usize, Vec<(usize, u8)>)> = Vec::new();
+    let mut previous = vec![0u8; w];
+    let mut current = vec![0u8; w];
+    let mut next = vec![0u8; w];
+    for y in top..bottom {
+        if y > 0 {
+            let _ = data.read_row_into(y - 1, w, &mut previous);
+        } else {
+            previous.fill(0);
+        }
+        let _ = data.read_row_into(y, w, &mut current);
+        if y + 1 < h {
+            let _ = data.read_row_into(y + 1, w, &mut next);
+        } else {
+            next.fill(0);
+        }
+        let mut changes = Vec::new();
+        for x in left..right {
+            if current[x] != 0 {
+                continue;
+            }
+            let near = (x > 0 && current[x - 1] != 0)
+                || (x + 1 < w && current[x + 1] != 0)
+                || previous[x] != 0
+                || next[x] != 0;
+            if !near {
+                continue;
+            }
+            let d = f64::from(chebyshev(rgb_at(img, y * w + x), reference));
+            if d <= t || d >= t + width {
+                continue;
+            }
+            let coverage = ((1.0 - (d - t) / width).clamp(0.0, 1.0) * 255.0).round() as u8;
+            if coverage > 0 {
+                changes.push((x, coverage));
+            }
+        }
+        if !changes.is_empty() {
+            rows.push((y, changes));
+        }
+    }
+    for (y, changes) in rows {
+        let _ = data.read_row_into(y, w, &mut current);
+        for (x, value) in changes {
+            current[x] = value;
+        }
+        let _ = data.write_row_from(y, w, &current);
+    }
+    data.settle();
 }
 
 /// Grow's flood: a neighbour joins when its colour is within the tolerance
@@ -306,5 +390,89 @@ pub(crate) mod dense {
             }
         }
         data
+    }
+}
+
+#[cfg(test)]
+mod aa_tests {
+    use super::*;
+
+    fn gradient(w: u32, h: u32, value: impl Fn(u32) -> u8) -> PixelBuffer {
+        let n = w as usize * h as usize;
+        let mut img = PixelBuffer::new(w, h, 3);
+        for y in 0..h {
+            for x in 0..w {
+                let p = (y * w + x) as usize;
+                let v = value(x);
+                img.data[p] = v;
+                img.data[n + p] = 0;
+                img.data[2 * n + p] = 0;
+            }
+        }
+        img
+    }
+
+    fn partial(selection: &Selection) -> bool {
+        selection.data.as_slice().iter().any(|&v| v > 0 && v < 255)
+    }
+
+    fn binary(selection: &Selection) -> bool {
+        selection
+            .data
+            .as_slice()
+            .iter()
+            .all(|&v| v == 0 || v == 255)
+    }
+
+    #[test]
+    fn wand_aa_grades_boundary() {
+        let img = gradient(16, 4, |x| (x * 12) as u8);
+        let selection = magic_wand(&img, 0, 2, 10, true, true).expect("wand");
+        assert_eq!(selection.data[2 * 16], 255);
+        let fringe = selection.data[2 * 16 + 1];
+        assert!(fringe > 0 && fringe < 255, "fringe {fringe}");
+        assert_eq!(selection.data[2 * 16 + 2], 0);
+    }
+
+    #[test]
+    fn wand_aa_off_is_binary() {
+        let img = gradient(16, 4, |x| (x * 12) as u8);
+        let selection = magic_wand(&img, 0, 2, 10, true, false).expect("wand");
+        assert!(binary(&selection));
+    }
+
+    #[test]
+    fn wand_aa_zero_tolerance_is_binary() {
+        let img = gradient(16, 4, |x| x as u8);
+        let selection = magic_wand(&img, 0, 2, 0, true, true).expect("wand");
+        assert!(binary(&selection));
+    }
+
+    #[test]
+    fn wand_aa_low_tolerance_fringes() {
+        let img = gradient(8, 2, |x| x as u8);
+        let selection = magic_wand(&img, 0, 1, 1, true, true).expect("wand");
+        assert_eq!(selection.data[8], 255);
+        let fringe = selection.data[10];
+        assert!(fringe > 0 && fringe < 255, "fringe {fringe}");
+        assert_eq!(selection.data[11], 0);
+    }
+
+    #[test]
+    fn wand_aa_global_fringes_each_region() {
+        let img = gradient(32, 4, |x| {
+            if x < 8 {
+                (x * 4) as u8
+            } else if (16..24).contains(&x) {
+                ((x - 16) * 4) as u8
+            } else {
+                255
+            }
+        });
+        let selection = magic_wand(&img, 0, 2, 10, false, true).expect("wand");
+        assert!(partial(&selection));
+        assert!(selection.data[2 * 32 + 3] > 0 && selection.data[2 * 32 + 3] < 255);
+        assert!(selection.data[2 * 32 + 19] > 0 && selection.data[2 * 32 + 19] < 255);
+        assert_eq!(selection.data[2 * 32 + 12], 0);
     }
 }

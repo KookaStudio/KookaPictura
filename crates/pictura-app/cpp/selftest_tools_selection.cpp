@@ -181,9 +181,10 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         };
         const bool wandPainted = wandDab(3, 3) && wandDab(12, 12);
         frame.setActiveTool(pictura::ToolId::MagicWand);
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setTolerance(32);
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setContiguous(true);
+        tools->optionsFor<SelectionOptions>(ToolId::MagicWand)->setTolerance(32);
+        tools->optionsFor<SelectionOptions>(ToolId::MagicWand)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::MagicWand)->setContiguous(true);
+        tools->optionsFor<SelectionOptions>(ToolId::MagicWand)->setAntiAlias(false);
         ellipseView->deselect();
         const int wandBase = ellipseView->history_count();
         ellipseCanvas->mousePressed(QPointF(3, 3), Qt::LeftButton, int(Qt::NoModifier));
@@ -203,7 +204,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // tsc_wand_global (249): non-contiguous mode includes the disconnected
         // patch, so the committed selection grows and covers its seed pixel.
         ellipseView->deselect();
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setContiguous(false);
+        tools->optionsFor<SelectionOptions>(ToolId::MagicWand)->setContiguous(false);
         const int wandGlobalBase = ellipseView->history_count();
         ellipseCanvas->mousePressed(QPointF(3, 3), Qt::LeftButton, int(Qt::NoModifier));
         const bool wandGlobalDrawn = ellipseView->has_selection()
@@ -220,8 +221,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // tsc_wand_add (250): Add mode unions the wand result with the existing
         // selection instead of replacing it.
         ellipseView->deselect();
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setContiguous(true);
-        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::Add);
+        tools->optionsFor<SelectionOptions>(ToolId::MagicWand)->setContiguous(true);
+        tools->optionsFor<SelectionOptions>(ToolId::MagicWand)->setCombineMode(pictura::SelectionMode::Add);
         const bool wandSeeded =
             ellipseView->select_rect(10, 10, 5, 5, QStringLiteral("new"), 0.0);
         const int wandSeedPx = ellipseView->selection_count();

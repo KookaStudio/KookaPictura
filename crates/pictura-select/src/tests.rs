@@ -384,14 +384,14 @@ fn smooth_removes_isolated_and_keeps_majority() {
 #[test]
 fn magic_wand_contiguous_and_global() {
     let img = rgb_image(8, 8, |x, _| if x < 4 { [255, 0, 0] } else { [0, 0, 255] });
-    let red = magic_wand(&img, 1, 1, 10, true).unwrap();
+    let red = magic_wand(&img, 1, 1, 10, true, false).unwrap();
     for y in 0..8 {
         for x in 0..8 {
             let expected = if x < 4 { 255 } else { 0 };
             assert_eq!(red.data[(y * 8 + x) as usize], expected);
         }
     }
-    let blue = magic_wand(&img, 6, 6, 10, false).unwrap();
+    let blue = magic_wand(&img, 6, 6, 10, false, false).unwrap();
     assert_eq!(blue.data[0], 0);
     assert_eq!(blue.data[(3 * 8 + 6) as usize], 255);
 }
@@ -399,7 +399,7 @@ fn magic_wand_contiguous_and_global() {
 #[test]
 fn magic_wand_rejects_tolerance_and_bounds() {
     let img = rgb_image(4, 4, |_, _| [100, 100, 100]);
-    let picky = magic_wand(&img, 0, 0, 5, true).unwrap();
+    let picky = magic_wand(&img, 0, 0, 5, true, false).unwrap();
     assert_eq!(picky, Selection::all(4, 4));
 
     let img2 = rgb_image(4, 4, |x, _| {
@@ -409,11 +409,11 @@ fn magic_wand_rejects_tolerance_and_bounds() {
             [140, 100, 100]
         }
     });
-    let strict = magic_wand(&img2, 0, 0, 10, true).unwrap();
+    let strict = magic_wand(&img2, 0, 0, 10, true, false).unwrap();
     assert_eq!(strict.data[0], 255);
     assert_eq!(strict.data[1], 0, "colour outside tolerance is rejected");
 
-    assert!(magic_wand(&img, 9, 9, 0, true).is_err());
+    assert!(magic_wand(&img, 9, 9, 0, true, false).is_err());
 }
 
 #[test]

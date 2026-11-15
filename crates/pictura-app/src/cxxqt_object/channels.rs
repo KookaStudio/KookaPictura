@@ -59,7 +59,13 @@ pub mod ffi {
             height: &mut i32,
         ) -> Vec<u8>;
 
-        /// Add an alpha channel, black (all masked) as CS6's New Channel makes it; one "New Channel" state. Returns its index, or -1 without a document.
+        /// The document channel limit shared with the PSD codec.
+        fn channels_max() -> i32;
+
+        /// Whether the document has room for another extra channel (the 56-channel budget).
+        fn channels_can_add(view: &PictureView) -> bool;
+
+        /// Add an alpha channel, black (all masked) as CS6's New Channel makes it; one "New Channel" state. Returns its index, or -1 without a document or at the cap.
         fn channels_new_alpha(view: Pin<&mut PictureView>) -> i32;
 
         /// Delete alpha channel `index`; one "Delete Channel" state. False for a bad index.

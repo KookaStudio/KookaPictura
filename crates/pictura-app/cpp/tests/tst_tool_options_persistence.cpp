@@ -286,6 +286,7 @@ const QVector<OptionRow>& optionRows()
                      {QStringLiteral("fixedSizeHeight"), 130},
                      {QStringLiteral("tolerance"), 40},
                      {QStringLiteral("contiguous"), false},
+                     {QStringLiteral("antiAlias"), false},
                      {QStringLiteral("magneticWidth"), 20},
                      {QStringLiteral("magneticContrast"), 20},
                      {QStringLiteral("magneticFrequency"), 60}}},
@@ -299,6 +300,7 @@ const QVector<OptionRow>& optionRows()
                      {QStringLiteral("fixedSizeHeight"), 90},
                      {QStringLiteral("tolerance"), 50},
                      {QStringLiteral("contiguous"), false},
+                     {QStringLiteral("antiAlias"), false},
                      {QStringLiteral("magneticWidth"), 30},
                      {QStringLiteral("magneticContrast"), 30},
                      {QStringLiteral("magneticFrequency"), 70}}},
@@ -312,9 +314,24 @@ const QVector<OptionRow>& optionRows()
                      {QStringLiteral("fixedSizeHeight"), 60},
                      {QStringLiteral("tolerance"), 60},
                      {QStringLiteral("contiguous"), false},
+                     {QStringLiteral("antiAlias"), false},
                      {QStringLiteral("magneticWidth"), 40},
                      {QStringLiteral("magneticContrast"), 40},
                      {QStringLiteral("magneticFrequency"), 80}}},
+        {"wandSelection",
+         QJsonObject{{QStringLiteral("combineMode"), 1},
+                     {QStringLiteral("marqueeStyle"), 2},
+                     {QStringLiteral("feather"), 8.0},
+                     {QStringLiteral("fixedRatioWidth"), 5.0},
+                     {QStringLiteral("fixedRatioHeight"), 3.0},
+                     {QStringLiteral("fixedSizeWidth"), 70},
+                     {QStringLiteral("fixedSizeHeight"), 50},
+                     {QStringLiteral("tolerance"), 70},
+                     {QStringLiteral("contiguous"), false},
+                     {QStringLiteral("antiAlias"), false},
+                     {QStringLiteral("magneticWidth"), 35},
+                     {QStringLiteral("magneticContrast"), 35},
+                     {QStringLiteral("magneticFrequency"), 35}}},
     };
     return rows;
 }
@@ -408,6 +425,8 @@ private slots:
     void missingFieldsRestoreDefaults();
     void patchMergesAndNotifies();
     void ellipticalOptionsRoundTrip();
+    void antiAliasRoundTrips();
+    void wandAntiAliasIndependent();
     void roundTripTableIsComplete();
     void everyToolOptionsKeyRoundTrips_data();
     void everyToolOptionsKeyRoundTrips();
@@ -675,6 +694,8 @@ void ToolOptionsPersistenceTest::missingFieldsRestoreDefaults()
     paint->setOpacity(40);
     marquee->setTolerance(200);
     marquee->setMagneticWidth(40);
+    marquee->setAntiAlias(false);
+    ellipse->setAntiAlias(false);
     ellipse->setMarqueeStyle(MarqueeStyle::FixedSize);
     ellipse->setFixedRatio(3.0, 2.0);
     ellipse->setFixedSize(20, 10);
@@ -693,8 +714,10 @@ void ToolOptionsPersistenceTest::missingFieldsRestoreDefaults()
     QCOMPARE(paint->hardness(), PaintOptions{}.hardness());
     QCOMPARE(paint->opacity(), PaintOptions{}.opacity());
     QCOMPARE(marquee->tolerance(), 100);
+    QVERIFY(marquee->antiAlias());
     QCOMPARE(marquee->magneticWidth(), SelectionOptions{}.magneticWidth());
     QCOMPARE(int(ellipse->marqueeStyle()), int(MarqueeStyle::Normal));
+    QVERIFY(ellipse->antiAlias());
     QCOMPARE(ellipse->fixedRatioWidth(), SelectionOptions{}.fixedRatioWidth());
     QCOMPARE(ellipse->fixedRatioHeight(), SelectionOptions{}.fixedRatioHeight());
     QCOMPARE(ellipse->fixedSizeWidth(), SelectionOptions{}.fixedSizeWidth());
@@ -749,6 +772,40 @@ void ToolOptionsPersistenceTest::ellipticalOptionsRoundTrip()
     QCOMPARE(restoredRect->fixedSizeWidth(), 100);
     QCOMPARE(int(restoredEllipse->marqueeStyle()), int(MarqueeStyle::FixedRatio));
     QCOMPARE(restoredEllipse->fixedRatioWidth(), 2.0);
+}
+
+void ToolOptionsPersistenceTest::antiAliasRoundTrips()
+{
+    using namespace pictura;
+    ToolController tools;
+    SelectionOptions* selection = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
+    SelectionOptions* ellipse = tools.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee);
+    QVERIFY(selection && ellipse);
+    selection->setAntiAlias(true);
+    ellipse->setAntiAlias(false);
+
+    const QJsonObject json = toolOptionsToJson(tools);
+    ToolController restored;
+    applyToolOptionsJson(restored, json);
+    QVERIFY(restored.optionsFor<SelectionOptions>(ToolId::Marquee)->antiAlias());
+    QVERIFY(!restored.optionsFor<SelectionOptions>(ToolId::EllipticalMarquee)->antiAlias());
+}
+
+void ToolOptionsPersistenceTest::wandAntiAliasIndependent()
+{
+    using namespace pictura;
+    ToolController tools;
+    SelectionOptions* wand = tools.optionsFor<SelectionOptions>(ToolId::MagicWand);
+    SelectionOptions* lasso = tools.optionsFor<SelectionOptions>(ToolId::Marquee);
+    QVERIFY(wand && lasso);
+    wand->setAntiAlias(false);
+    lasso->setAntiAlias(true);
+
+    const QJsonObject json = toolOptionsToJson(tools);
+    ToolController restored;
+    applyToolOptionsJson(restored, json);
+    QVERIFY(!restored.optionsFor<SelectionOptions>(ToolId::MagicWand)->antiAlias());
+    QVERIFY(restored.optionsFor<SelectionOptions>(ToolId::Marquee)->antiAlias());
 }
 
 void ToolOptionsPersistenceTest::roundTripTableIsComplete()
