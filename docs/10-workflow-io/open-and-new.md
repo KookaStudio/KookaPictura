@@ -109,8 +109,9 @@ implemented in this application.
 ### Open EPS
 
 `File > Open` on an EPS rasterizes vector artwork to pixels. The user sets desired
-dimensions, resolution, and mode, with **Constrain Proportions** to keep the
-aspect ratio, and **Anti-aliased** to minimize jagged edges.
+dimensions, resolution, mode, and **Bit Depth** (8 or 16), with **Constrain
+Proportions** to keep the aspect ratio, and **Anti-aliased** to minimize jagged
+edges.
 
 ### Open camera raw
 
@@ -168,7 +169,7 @@ own `File > Open` remains the canonical path.
 | `Layer > Video Layers > New Video Layer From File` | Command | — | Extended: add video/sequence to open doc |
 | `File > Import` | Submenu | — | WIA/scan, annotations; device-dependent |
 | `Import PDF` dialog | Dialog | — | Pages/Images, Crop To, Image Size |
-| `EPS` open options | Dialog | — | Dimensions, resolution, mode, anti-alias |
+| `EPS` open options | Dialog | — | Dimensions, resolution, mode, bit depth, anti-alias |
 | Camera Raw dialog | Dialog | `Ctrl/Cmd+R` (Bridge) | Shift+Open bypasses; Shift+Open Image = Smart Object |
 | `Edit/PS > Preferences > Camera Raw` | Preference | `Ctrl/Cmd+K` | JPEG/TIFF Handling |
 | `Edit/PS > Preferences > File Handling` | Preference | — | Recent File List Contains |
