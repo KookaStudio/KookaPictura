@@ -4,6 +4,11 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Save As all formats — #625 implemented; verification via CI** (OpenSpec
+  change `save-as-all-formats`). `pictura-codec` has the engine Save As writers
+  under `crates/pictura-codec/src/save/`; the six new dialogs and the BMP
+  Advanced Modes dialog live in `crates/pictura-app/cpp/`. Save As dispatch
+  shares one format set with the PSD worker.
 - **Save for Web slices — #629 implemented; verification via CI** (OpenSpec
   change `save-for-web-slices`; capability `interop/web-slice-export` and
   `interop/save-for-web`). Slice images plus a table/CSS emitter, 4-Up with

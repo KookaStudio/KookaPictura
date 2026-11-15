@@ -61,14 +61,20 @@ Deeper technical status for PSD/PSB lives in
   JPEG quality/format/matte, PNG compression, and TIFF compression/transparency
   options honored and the last-used settings remembered. `crates/pictura-app/cpp/jpeg_options_dialog.cpp`,
   `png_options_dialog.cpp`, `bmp_options_dialog.cpp`, `tiff_options_dialog.cpp`.
-- [ ] The Save As options the Qt writer cannot honor (BMP format/depth/RLE/flip,
+- [x] The Save As options the Qt writer cannot honor (BMP format/depth/RLE/flip,
       PNG interlace, TIFF pixel/byte order, pyramid, layer compression) and the
-      GIF, EPS, DCS, Raw, TGA and Cineon dialogs (#625)
+      GIF, EPS, DCS, Raw, TGA and Cineon dialogs (#625).
+      `crates/pictura-codec/src/save/`, `crates/pictura-app/cpp/gif_options_dialog.cpp`,
+      `eps_options_dialog.cpp`, `dcs_options_dialog.cpp`, `raw_options_dialog.cpp`,
+      `tga_options_dialog.cpp`, `cineon_options_dialog.cpp`.
 - [x] JPEG 2000 compression, Spot Colors, and Use Proof Setup in the PDF writer
       (#626)
 - [x] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
       PDFs, and inline images (#627)
-- [ ] GIF-via-Indexed on save, and Save a Copy (#628)
+- [x] GIF-via-Indexed on save (#628).
+      `crates/pictura-app/cpp/gif_options_dialog.cpp`;
+      `crates/pictura-codec/src/save/mod.rs`.
+- [ ] Save a Copy (#628)
 - [x] The Save for Web slice HTML and CSS emitter, 2-Up and 4-Up, the
       colour-table editor, and the metadata menu (#629)
 - [ ] Data Sets As Files, Zoomify, Render Video, and Paths to Illustrator
