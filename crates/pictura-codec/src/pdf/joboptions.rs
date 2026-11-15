@@ -383,7 +383,11 @@ pub fn parse_joboptions(text: &str) -> Option<PdfOptions> {
             "PicturaLayers" => o.layers = value.flag().unwrap_or(o.layers),
             "PicturaNotes" => o.notes = value.flag().unwrap_or(o.notes),
             "PicturaAlphaChannels" => o.alpha_channels = value.flag().unwrap_or(o.alpha_channels),
+            "PicturaSpotColors" => o.spot_colors = value.flag().unwrap_or(o.spot_colors),
             "PicturaIccProfile" => o.icc_profile = value.flag().unwrap_or(o.icc_profile),
+            "PicturaUseProofSetup" => {
+                o.use_proof_setup = value.flag().unwrap_or(o.use_proof_setup);
+            }
             "PicturaOpenPassword" => s.open_password = value.text().unwrap_or_default(),
             "PicturaPermissionsPassword" => {
                 s.permissions_password = value.text().unwrap_or_default()
@@ -579,7 +583,9 @@ pub fn write_joboptions(options: &PdfOptions, preset: bool) -> String {
             format!("/PicturaLayers {}", ps_bool(o.layers)),
             format!("/PicturaNotes {}", ps_bool(o.notes)),
             format!("/PicturaAlphaChannels {}", ps_bool(o.alpha_channels)),
+            format!("/PicturaSpotColors {}", ps_bool(o.spot_colors)),
             format!("/PicturaIccProfile {}", ps_bool(o.icc_profile)),
+            format!("/PicturaUseProofSetup {}", ps_bool(o.use_proof_setup)),
             format!("/PicturaOpenPassword {}", ps_string(&s.open_password)),
             format!(
                 "/PicturaPermissionsPassword {}",

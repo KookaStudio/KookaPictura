@@ -45,6 +45,19 @@ pub mod ffi {
         /// The options this document was last saved to PDF with; empty when never.
         fn pdf_view_options(view: &PictureView) -> QString;
 
+        /// Whether the document's source depth is 16-bit, so the PDF dialog can
+        /// gate JPEG 2000 without guessing from the 16→8 option.
+        fn pdf_document_is_16bit(view: &PictureView) -> bool;
+
+        /// The document's spot-channel count, so the dialog can enable Spot Colors only when it can carry them.
+        fn pdf_spot_channel_count(view: &PictureView) -> i32;
+
+        /// Whether the document's source mode is 8-bit continuous tone (not Bitmap or Indexed).
+        fn pdf_document_is_continuous_tone(view: &PictureView) -> bool;
+
+        /// Whether the document's source mode is Bitmap.
+        fn pdf_document_is_bitmap(view: &PictureView) -> bool;
+
         /// Open a Photoshop PDF with its layers (Pictura's embedded PSD, or Photoshop's own editing data rebuilt into a PSD) into the view, decrypting it with `password` (empty: the password this view last opened it with, else none). `ok`; else, the view unchanged, `none` (no editing data: import it), `password` (needs one), or `wrongpassword`.
         fn pdf_open(view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString;
 

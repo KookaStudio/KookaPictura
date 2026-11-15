@@ -16,11 +16,20 @@ pub(super) struct CanvasProxy {
     pub(super) proxy: pictura_render::FilterProxy,
 }
 
+/// The cached proof transform keyed by the setup fields it was built for.
+pub(super) type ProofCache =
+    RefCell<Option<((i32, i32, bool, bool, bool), pictura_color::ProofPreview)>>;
+
 /// Backing Rust state for [`super::qobject::PictureView`].
 pub struct PictureViewRust {
     /// The document, the selection, and the history: the state the document
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
+    /// View > Proof Setup / Proof Colors: application view state, never document
+    /// or history state.
+    pub(super) proof: super::proofing::ProofState,
+    /// The cached proofing transform for `proof`, rebuilt when the setup changes.
+    pub(super) proof_preview: ProofCache,
     /// The encoded committed selection outline and the selection revision it
     /// was built for. `None` until the outline is first requested.
     pub(super) selection_contour_cache: RefCell<Option<(u64, Vec<i32>)>>,
@@ -244,6 +253,8 @@ impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
             session: Default::default(),
+            proof: Default::default(),
+            proof_preview: RefCell::new(None),
             selection_contour_cache: RefCell::new(None),
             selection_contour_computes: Cell::new(0),
             selection_bounds_cache: Cell::new(None),

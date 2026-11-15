@@ -70,6 +70,7 @@ void PicturaMainWindow::applyColorSettings(PictureView* view)
                                 blackPointCompensation_, useDither_, askMismatchOpen_,
                                 askMissingOpen_);
     pictura::set_picker_choice(*view, pickerChoice_);
+    applyProofState(view);
 }
 
 void PicturaMainWindow::showColorSettings()

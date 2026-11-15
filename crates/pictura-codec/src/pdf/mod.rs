@@ -8,6 +8,7 @@ mod crypt;
 mod image;
 pub mod import;
 mod joboptions;
+mod jpx;
 mod linearize;
 mod object;
 mod options;
@@ -29,6 +30,8 @@ pub use options::{
     Changes, ColorConversion, Compatibility, Compression, Destination, Downsample, Encryption,
     OutputIntent, PdfOptions, Printing, ProfileInclusion, Quality, Security, Standard, FIELDS,
 };
+pub use pictura_color::Intent as PdfIntent;
+pub use pictura_color::Profile as PdfProfile;
 pub use presets::{builtin_preset, BUILTIN_PRESETS};
 pub use read::{editing_psd, embedded_psd, photoshop_psd, EditingPsd};
 pub use text::{LiveText, PdfFont, PdfGlyph, PdfText, TextPolicy};
@@ -37,6 +40,15 @@ use crate::error::PsdError;
 use crypt::{Encryptor, Entropy};
 use image::{Raster, Space};
 use object::{Body, Dict, Obj, Objects};
+
+/// A proof-setup output conversion: the device ICC bytes and how to convert.
+pub struct ProofRequest<'a> {
+    pub icc: &'a [u8],
+    /// The device profile's colour-channel count (1, 3, or 4).
+    pub components: u8,
+    pub intent: pictura_color::Intent,
+    pub bpc: bool,
+}
 
 /// What the JPEG edge is asked to encode: interleaved 8-bit samples.
 pub struct JpegRequest<'a> {
@@ -62,6 +74,9 @@ pub struct PdfEnv<'a> {
     /// Type layers drawn as live text over a page image that omits them; the
     /// editing payload and thumbnail still take the full composite.
     pub live_text: Option<LiveText<'a>>,
+    /// The active proof setup for Use Proof Setup; ignored unless the option is
+    /// on and Color Conversion is No Conversion.
+    pub proof: Option<ProofRequest<'a>>,
 }
 
 const PRODUCER: &str = "Kooka Pictura";
@@ -163,7 +178,7 @@ fn image_stream(
             );
             ccitt::encode_g4(bits, raster.width as usize)
         }
-        (None, Compression::Jpeg | Compression::Jpeg2000) if raster.jpeg_capable() => {
+        (None, Compression::Jpeg) if raster.jpeg_capable() => {
             let components = raster.space.components() as u8;
             let bytes = (env.jpeg)(&JpegRequest {
                 samples: &raster.samples,
@@ -182,6 +197,10 @@ fn image_stream(
                 );
             }
             bytes
+        }
+        (None, Compression::Jpeg2000) if raster.jpx_capable() => {
+            dict.set("Filter", Obj::name("JPXDecode"));
+            jpx::encode(raster, options.tile_size, options.quality)?
         }
         _ => {
             dict.set("Filter", Obj::name("FlateDecode"));
@@ -231,8 +250,36 @@ fn editing_payload(
             data: planes.into(),
         };
     }
-    if !options.alpha_channels {
-        payload.channels.clear();
+    let spots = crate::image_resources::spot_channel_indices(doc);
+    let keep = |index: usize| {
+        let spot = spots.contains(&index);
+        (spot && options.spot_colors) || (!spot && options.alpha_channels)
+    };
+    let retained: Vec<usize> = (0..payload.channels.len()).filter(|&i| keep(i)).collect();
+    if retained.len() != payload.channels.len() {
+        let names = crate::image_resources::alpha_names(doc);
+        let infos = crate::image_resources::display_info(doc);
+        let kept_names: Vec<String> = retained
+            .iter()
+            .map(|&i| {
+                names
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("Alpha {}", i + 1))
+            })
+            .collect();
+        payload.channels = retained
+            .iter()
+            .map(|&i| payload.channels[i].clone())
+            .collect();
+        crate::image_resources::set_alpha_names(&mut payload, &kept_names);
+        if !infos.is_empty() {
+            let kept_infos = retained
+                .iter()
+                .map(|&i| infos.get(i).copied().unwrap_or_default())
+                .collect::<Vec<_>>();
+            crate::image_resources::set_display_info(&mut payload, &kept_infos);
+        }
     }
     if !options.notes {
         payload.annotations.clear(MarkerKind::Note);
@@ -249,6 +296,11 @@ pub fn write_pdf(
     options: &PdfOptions,
     env: &PdfEnv,
 ) -> Result<Vec<u8>, PsdError> {
+    if options.use_proof_setup && crate::write_bitmap::writes_bitmap(doc) {
+        return Err(PsdError::Unsupported(
+            "Use Proof Setup does not support Bitmap documents".into(),
+        ));
+    }
     let mut options = options.clone();
     options.normalize();
     let built = build(doc, composite, &options, env)?;
@@ -267,6 +319,11 @@ fn build(
 ) -> Result<Built, PsdError> {
     let ppi = document_ppi(doc);
     let live = env.live_text.as_ref().filter(|t| !t.texts.is_empty());
+    let proof = if options.use_proof_setup && options.color_conversion == ColorConversion::None {
+        env.proof.as_ref()
+    } else {
+        None
+    };
     let raster = match live {
         Some(live) => {
             let background = &live.background;
@@ -281,9 +338,9 @@ fn build(
                 source_planes: None,
                 ..doc.clone()
             };
-            image::build_raster(&without_type, background, options, ppi)?
+            image::build_raster(&without_type, background, options, ppi, proof)?
         }
-        None => image::build_raster(doc, composite, options, ppi)?,
+        None => image::build_raster(doc, composite, options, ppi, proof)?,
     };
     let entropy = Entropy::new(env.entropy);
     let id: [u8; 16] = entropy.bytes();
@@ -331,7 +388,7 @@ fn build(
             };
             let font_name = format!("F{}", run.font);
             fonts.set(&font_name, Obj::Ref(font.font));
-            let fill = image::text_fill(doc, options, &raster, run.color)?;
+            let fill = image::text_fill(doc, options, &raster, run.color, proof)?;
             named_space |= matches!(fill, text::Fill::Space(_));
             let alpha = (run.opacity < 255).then(|| format!("GS{i}"));
             if let Some(gs) = &alpha {

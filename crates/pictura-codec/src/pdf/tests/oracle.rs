@@ -8,7 +8,7 @@ use std::process::Command;
 
 use pictura_core::{Document, MarkerKind};
 
-use super::{plain_options, rgb_doc, write};
+use super::{plain_options, proof_env, rgb_doc, write, write_with_env};
 use crate::pdf::{Compatibility, Compression, PdfOptions, Security};
 
 pub(super) fn has_tool(name: &str) -> bool {
@@ -184,6 +184,56 @@ fn qpdf(args: &[&str], pdf: &[u8]) -> (i32, String) {
     let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
     text.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.code().unwrap_or(-1), text)
+}
+
+#[test]
+fn pdf_jpeg2000_poppler_lists_jpx() {
+    if skip("pdfimages") {
+        return;
+    }
+    let options = PdfOptions {
+        compression: Compression::Jpeg2000,
+        ..plain_options()
+    };
+    let pdf = write(&rgb_doc(8, 8, 72.0, None), &options);
+    let path = temp_file("jpx.pdf", &pdf);
+    let out = Command::new("pdfimages")
+        .arg("-list")
+        .arg(&path)
+        .output()
+        .expect("runs pdfimages");
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        out.status.success(),
+        "pdfimages failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout)
+            .to_ascii_lowercase()
+            .contains("jpx"),
+        "pdfimages did not report the JPX filter"
+    );
+}
+
+#[test]
+fn pdf_use_proof_setup_renders_like_composite() {
+    if skip("pdftoppm") {
+        return;
+    }
+    let doc = rgb_doc(12, 8, 72.0, None);
+    let options = PdfOptions {
+        use_proof_setup: true,
+        ..plain_options()
+    };
+    let pdf = write_with_env(&doc, &options, &proof_env());
+    let (w, h, rgb) = render(&pdf, 72.0, "pdftoppm", None);
+    assert_eq!((w, h), (12, 8));
+    let (max, mean) = difference(&rgb, &expected_rgb(&doc));
+    assert!(
+        max <= 160 && mean <= 30.0,
+        "proof render differs by up to {max} (mean {mean:.1})"
+    );
 }
 
 #[test]

@@ -15,8 +15,10 @@ use lcms2::{
 
 pub mod model;
 pub mod ntsc;
+pub mod proof;
 mod space;
 
+pub use proof::{ProofPreview, ProofSetup};
 use space::space_format;
 pub use space::SpaceTransform;
 

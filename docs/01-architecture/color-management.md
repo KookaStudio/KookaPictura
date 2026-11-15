@@ -232,7 +232,7 @@ handle.
 | `ColorSettingsDialog` | `QDialog` | Working spaces (RGB/CMYK/Gray/Spot combos), policies, warnings, conversion options, advanced group, preset combo, Save/Load `.csf` |
 | `AssignProfileDialog` | `QDialog` | Don't-color-manage radio, working-space radio, profile picker with preview |
 | `ConvertToProfileDialog` | `QDialog` | Source read-out, destination picker, intent/BPC/dither, Preview toggle |
-| `ProofSetupDialog` | `QDialog` | Device-to-simulate, Preserve Numbers, intent, BPC, paper/black-ink simulation |
+| `ProofSetupDialog` | `QDialog` | Device-to-simulate, intent, BPC, paper/black-ink simulation (Preserve Numbers is not modelled) |
 | `ProfileCombo` | `QComboBox` | Discovers installed profiles via the platform profile store; caches metadata |
 | `DocumentProfileStatus` | `QWidget` (status bar) | Shows document profile / `Untagged` / proof space; opens the picker |
 | `ColorProfileModel` | `QAbstractListModel` | Profile list for combos and the status bar |
@@ -254,9 +254,9 @@ the platform-integration layer.
 - `DocumentColorMode` and `DocumentBitDepth` are document fields
   (`ARCH-008`). Changing either is a destructive command with its own undo
   record.
-- Proof setup is document-level view state in CS6 (not saved in PSD) plus a
-  global default in Preferences; represent both, persist only the global
-  default.
+- Proof setup is application view state in Pictura (not saved in PSD, history,
+  or a document) and persists as a preference; the Preserve Numbers and Monitor
+  RGB proof entries are not modelled.
 - Undo records: Assign Profile and Convert to Profile are single commands.
   Conversion stores either the before-image or a reversible transform
   descriptor; because conversion is lossy, undo stores the pre-conversion pixel

@@ -4,13 +4,13 @@
 //! see the solo mask. The solo mask is served by [`canvas_present_image`],
 //! which only the canvas provider reads.
 
-use super::super::helpers_composite::level_display_image;
+use super::super::helpers_composite::level_display_image_data;
 use crate::cxxqt_object::qobject;
 use crate::cxxqt_object::state::PictureViewRust;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QImage;
 use pictura_core::{LayerMask, PixelBuffer, PsdRect};
-use pictura_render::TileKey;
+use pictura_render::{TileKey, TileSource};
 
 impl qobject::PictureView {
     /// A premultiplied crop of the **canvas display source** at `level` over
@@ -45,11 +45,19 @@ impl PictureViewRust {
         if !self.level_meets(level, rect) {
             return (QImage::default(), Vec::new());
         }
-        let (crop, missing) = self.tile_crop(self.canvas_source(), level, rect);
+        let source = self.canvas_source();
+        let (crop, missing) = self.tile_crop(source, level, rect);
         if crop.width() == 0 || crop.height() == 0 {
             return (QImage::default(), missing);
         }
-        (level_display_image(&crop), missing)
+        let mut data = crop.data().to_vec();
+        if source == TileSource::Composite {
+            self.proof_rgba(&mut data);
+        }
+        (
+            level_display_image_data(data, crop.width() as i32, crop.height() as i32),
+            missing,
+        )
     }
 
     /// A `max_side`-bounded grayscale thumbnail of the active layer's raster mask

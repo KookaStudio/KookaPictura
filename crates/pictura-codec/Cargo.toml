@@ -21,6 +21,10 @@ rayon = "1"
 # Qt's optional `qt6-imageformats` plugin. This is the pure-Rust crate the
 # `image` meta-crate delegates to for WebP.
 image-webp = "0.2"
+# JPEG 2000 codestream encoding for the PDF writer. 0.11 is a pure-Rust port of
+# OpenJPEG (no native library), so `/JPXDecode` does not depend on a Qt or KDE
+# image plugin.
+jpeg2k = "0.11"
 # The Photoshop PDF standard security handler (RC4-40 … AES-256): MD5, AES,
 # and SHA-256/384/512 primitives from RustCrypto rather than hand-rolled
 # cryptography; RC4 and CBC chaining are written over them in `pdf/crypt.rs`.

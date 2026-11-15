@@ -24,6 +24,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_place.cpp
     crates/pictura-app/cpp/frame_place.h
     crates/pictura-app/cpp/frame_preferences.cpp
+    crates/pictura-app/cpp/frame_proof.cpp
     crates/pictura-app/cpp/frame_quick_mask.cpp
     crates/pictura-app/cpp/frame_recovery.cpp
     crates/pictura-app/cpp/frame_save_options.cpp

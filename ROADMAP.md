@@ -64,7 +64,7 @@ Deeper technical status for PSD/PSB lives in
 - [ ] The Save As options the Qt writer cannot honor (BMP format/depth/RLE/flip,
       PNG interlace, TIFF pixel/byte order, pyramid, layer compression) and the
       GIF, EPS, DCS, Raw, TGA and Cineon dialogs (#625)
-- [ ] JPEG 2000 compression, Spot Colors, and Use Proof Setup in the PDF writer
+- [x] JPEG 2000 compression, Spot Colors, and Use Proof Setup in the PDF writer
       (#626)
 - [x] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
       PDFs, and inline images (#627)

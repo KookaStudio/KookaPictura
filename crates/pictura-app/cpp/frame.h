@@ -653,6 +653,13 @@ private:
     int cmykPolicy_ = 0;
     int workingCmyk_ = 0;
     int renderIntent_ = 1;
+    // View > Proof Setup / Proof Colors (frame_proof.cpp).
+    int proofDevice_ = 0;
+    int proofIntent_ = 1;
+    bool proofBpc_ = true;
+    bool proofSimulatePaper_ = false;
+    bool proofSimulateBlack_ = false;
+    bool proofColors_ = false;
     bool blackPointCompensation_ = true;
     bool useDither_ = true;
     bool askMismatchOpen_ = false;
@@ -690,6 +697,11 @@ private:
     // rulers and guide look, and the Guides preferences. Global view state,
     // persisted in the session.
     void registerGuideHandlers();
+    void registerProofHandlers();
+    void applyProofState(PictureView* view);
+    void showProofSetupCustom();
+    void setProofColors(bool on);
+    QString proofSetupName() const;
     void loadGuideSession(const SessionState& state);
     void prepareCanvasGuides(const DocWindow& window);
     // Give the active document's other windows its guides; the tools keep the

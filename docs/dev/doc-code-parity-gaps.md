@@ -86,7 +86,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | UI-2 | `application-frame.md` | Active layer name in the title bar | MISSING | `frame.cpp:1006` | #498 |
 | UI-5 | `menus.md` | Menu customization (Edit ▸ Menus, Show All Menu Items, enablement matrix) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #501 |
 | UI-6 | `menus.md` | Type menu (work path, convert to shape, spellcheck); warp text landed in #684, convert point/paragraph in #682 | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #502 |
-| UI-7 | `menus.md` | View menu stubs (Proof Setup/Colors, Gamut Warning, Snap To, Lock Slices, Extras, Pixel Aspect Ratio, 32-bit Preview Options) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #503 |
+| UI-7 | `menus.md` | View menu stubs (Gamut Warning, Snap To, Lock Slices, Extras, Pixel Aspect Ratio, 32-bit Preview Options) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #503 |
 | UI-8 | `menus.md` | File menu stubs (Open As, Import, Export, Automate, Scripts, Browse in Bridge) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #504 |
 | UI-9 | `preferences.md` | 5 missing panes (Cursors, Transparency & Gamut, Plug-ins, Type, 3D) | MISSING | `preferences_dialog.cpp:35-47` | #505 |
 | UI-10 | `preferences.md` | Sparse existing panes (General/Interface/File Handling/Performance/Units/Guides) | PARTIAL | `preferences_dialog.cpp:113-177` | #506 |
@@ -261,7 +261,7 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | WF-1 | `save-and-save-as.md` | JPEG/PNG/BMP/TIFF Save As options dialogs shipped (#958) with JPEG quality/format/matte, PNG compression, and TIFF compression/transparency honored; still missing: the controls the Qt writer cannot honor (BMP format/depth/RLE/flip, PNG interlace, TIFF pixel/byte order, image pyramid, layer compression) and the GIF/EPS/DCS/Raw/TGA/Cineon dialogs | PARTIAL | `jpeg_options_dialog.cpp`; `png_options_dialog.cpp`; `bmp_options_dialog.cpp`; `tiff_options_dialog.cpp`; `encode_image.cpp:88-118` | #958, #625 |
-| WF-2 | `save-and-save-as.md` | Photoshop PDF writer shipped (#626); still missing: JPEG2000 compression (no encoder), Spot Colors (no spot-channel model), Use Proof Setup (no Proof Setup); Preserve Photoshop Editing Capabilities embeds Pictura's own PSD, not Adobe's layout | PARTIAL | `pictura-codec/src/pdf/options.rs:661`; `pdf_save_dialog.cpp:220,278` | #626 |
+| WF-2 | `save-and-save-as.md` | Photoshop PDF writer shipped (#626); JPEG 2000, Spot Colors, and Use Proof Setup landed; Preserve Photoshop Editing Capabilities still embeds Pictura's own PSD, not Adobe's layout | PARTIAL | `pictura-codec/src/pdf/options.rs`; `pdf_save_dialog.cpp` | #626 |
 | WF-3 | `open-and-new.md` | Generic PDF/EPS import (Import PDF and Rasterize Generic EPS Format dialogs), Open As, native CMYK/16-bit rendering, Images mode on encrypted PDFs, and inline images shipped (#627) through Ghostscript; the 3D option remains out of scope (see ROADMAP not-planned) | SHIPPED | `pictura-codec/src/pdf/import/mod.rs`; `import_pdf_dialog.cpp`; `frame_import.cpp` | #627 |
 | WF-4 | `save-and-save-as.md` | GIF-via-Indexed on save + Save a Copy | MISSING | `encode_image.cpp` | #628 |
 | WF-5 | `web-export-and-slices.md` | Save for Web slice HTML/CSS emitter, 2-Up/4-Up, colour-table editor, metadata menu | MISSING | `save_for_web_dialog.cpp:176-292` | #629 |

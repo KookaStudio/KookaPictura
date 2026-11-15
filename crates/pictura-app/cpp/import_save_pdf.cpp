@@ -10,8 +10,10 @@
 #include "session.h"
 #include "type_fonts.h"
 
+#include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/engine_bridge.h"
+#include "api/proofing_bridge.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QUrl>
@@ -66,8 +68,14 @@ bool ImportSaveCoordinator::savePdfWithDialog(const QString& path)
     if (seed.isEmpty()) {
         seed = loadSession().pdfOptions;
     }
+    PdfSaveDialog::SaveContext context;
+    context.documentIs16Bit = pdf_document_is_16bit(*view);
+    context.documentIsContinuousTone = pdf_document_is_continuous_tone(*view);
+    context.documentIsBitmap = pdf_document_is_bitmap(*view);
+    context.hasSpotChannels = pdf_spot_channel_count(*view) > 0;
+    context.proofSetupName = proof_setup_name(*view);
     PdfSaveDialog dialog(seed, PdfSaveDialog::presetsDirectory(), PdfSaveDialog::Mode::Save,
-                         dialogParent_);
+                         context, dialogParent_);
     if (!runPdfDialog(dialog)) {
         return false;
     }

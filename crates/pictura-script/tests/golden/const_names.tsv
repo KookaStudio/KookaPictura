@@ -185,6 +185,10 @@ ViewFreePan	view.freePan
 ViewSnapCanvasToWorkspace	view.snapCanvasToWorkspace
 ViewToolHints	view.toolHints
 ViewShowSelectionEdges	view.show.selectionEdges
+ViewProofSetupWorkingCmyk	view.proof.setup.working.cmyk
+ViewProofSetupWorkingGray	view.proof.setup.working.gray
+ViewProofSetupCustom	view.proof.setup.custom
+ViewProofColors	view.proof.colors
 ViewRulers	view.rulers
 ViewShowGuides	view.show.guides
 ViewShowSmartGuides	view.show.smartGuides

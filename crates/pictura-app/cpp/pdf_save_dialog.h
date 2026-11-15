@@ -26,8 +26,20 @@ class PdfSaveDialog : public QDialog {
 public:
     enum class Mode { Save, PresetEditor };
 
+    // What the dialog cannot read from the options text: the open document's
+    // depth and extra channels, and the active proof setup's name.
+    struct SaveContext {
+        bool documentIs16Bit = false;
+        bool documentIsContinuousTone = true;
+        bool documentIsBitmap = false;
+        bool hasSpotChannels = true;
+        QString proofSetupName;
+    };
+
     PdfSaveDialog(const QString& options, const QString& presetsDir, Mode mode,
                   QWidget* parent = nullptr);
+    PdfSaveDialog(const QString& options, const QString& presetsDir, Mode mode,
+                  const SaveContext& context, QWidget* parent);
 
     // The edited options as canonical `.joboptions` text.
     QString options() const { return options_; }
@@ -64,6 +76,7 @@ private:
     void bind(const QString& field, QWidget* widget);
     void setField(const QString& field, const QString& value);
     void refresh();
+    bool jpeg2000Available() const;
     void applyPreset(int index);
     void setPreset(int index, const QString& options);
     void promptSavePreset();
@@ -77,6 +90,7 @@ private:
     QString options_;
     QString presetsDir_;
     Mode mode_;
+    SaveContext context_;
     // The preset the options came from: its combo row, plain name, and options.
     int presetIndex_ = 0;
     QString presetName_;

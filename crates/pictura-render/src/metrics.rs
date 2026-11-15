@@ -165,7 +165,12 @@ static SOURCE_HITS: AtomicU64 = AtomicU64::new(0);
 static SOURCE_MISSES: AtomicU64 = AtomicU64::new(0);
 static SOURCE_BYTES: AtomicU64 = AtomicU64::new(0);
 static EFFECT_DECODES: AtomicU64 = AtomicU64::new(0);
+#[cfg(not(test))]
 static LARGEST_CANVAS: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+thread_local! {
+    static LARGEST_CANVAS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
 /// Device time of the last GPU composite in nanoseconds; `u64::MAX` is "none".
 static DEVICE_NS: AtomicU64 = AtomicU64::new(u64::MAX);
 
@@ -212,11 +217,26 @@ pub(crate) fn count_effect_decode() {
 
 /// Note a composite canvas of `bytes`; the largest since the last
 /// [`take_largest_canvas`] is kept.
+#[cfg(test)]
+pub(crate) fn note_canvas(bytes: usize) {
+    LARGEST_CANVAS.with(|cell| cell.set(cell.get().max(bytes as u64)));
+}
+
+/// Note a composite canvas of `bytes`; the largest since the last
+/// [`take_largest_canvas`] is kept.
+#[cfg(not(test))]
 pub(crate) fn note_canvas(bytes: usize) {
     LARGEST_CANVAS.fetch_max(bytes as u64, Relaxed);
 }
 
 /// The largest composite canvas noted since the previous call, then reset.
+#[cfg(test)]
+pub fn take_largest_canvas() -> u64 {
+    LARGEST_CANVAS.with(|cell| cell.take())
+}
+
+/// The largest composite canvas noted since the previous call, then reset.
+#[cfg(not(test))]
 pub fn take_largest_canvas() -> u64 {
     LARGEST_CANVAS.swap(0, Relaxed)
 }
@@ -320,7 +340,8 @@ mod tests {
     fn largest_canvas_covers_full_document() {
         let (w, h) = (37u32, 23u32);
         let _ = crate::composite_rgba(&solid_doc(w, h, BlendMode::Normal));
-        // Other tests composite concurrently; the max is at least this canvas.
+        // Test builds read the metric on the compositing thread, so a
+        // concurrent test cannot claim another test's canvas.
         assert!(take_largest_canvas() >= u64::from(w * h * 4));
     }
 

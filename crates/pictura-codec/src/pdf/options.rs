@@ -139,7 +139,7 @@ pub enum Compression {
     None,
     Zip,
     Jpeg,
-    /// Listed but not encodable (design D4); `normalize` maps it to JPEG.
+    /// JPEG 2000 codestream; available at PDF 1.5+ for 8-bit continuous tone.
     Jpeg2000,
 }
 
@@ -357,6 +357,7 @@ pub struct PdfOptions {
     pub notes: bool,
     pub alpha_channels: bool,
     pub spot_colors: bool,
+    pub use_proof_setup: bool,
     pub icc_profile: bool,
 }
 
@@ -389,13 +390,14 @@ impl Default for PdfOptions {
             notes: true,
             alpha_channels: true,
             spot_colors: false,
+            use_proof_setup: false,
             icc_profile: true,
         }
     }
 }
 
 /// The fields `get`/`set` address, in dialog order.
-pub const FIELDS: [&str; 33] = [
+pub const FIELDS: [&str; 34] = [
     "description",
     "standard",
     "compatibility",
@@ -428,6 +430,7 @@ pub const FIELDS: [&str; 33] = [
     "notes",
     "alphaChannels",
     "spotColors",
+    "useProofSetup",
     "iccProfile",
 ];
 
@@ -523,6 +526,7 @@ impl PdfOptions {
             "notes" => bit(self.notes),
             "alphaChannels" => bit(self.alpha_channels),
             "spotColors" => bit(self.spot_colors),
+            "useProofSetup" => bit(self.use_proof_setup),
             "iccProfile" => bit(self.icc_profile),
             "encryptionLevel" => self.compatibility.encryption().label().to_string(),
             _ => return None,
@@ -616,6 +620,7 @@ impl PdfOptions {
             "notes" => flag(value).map(|v| self.notes = v).is_some(),
             "alphaChannels" => flag(value).map(|v| self.alpha_channels = v).is_some(),
             "spotColors" => flag(value).map(|v| self.spot_colors = v).is_some(),
+            "useProofSetup" => flag(value).map(|v| self.use_proof_setup = v).is_some(),
             "iccProfile" => flag(value).map(|v| self.icc_profile = v).is_some(),
             _ => false,
         };
@@ -664,10 +669,14 @@ impl PdfOptions {
                 self.profile_inclusion = ProfileInclusion::IncludeDestination;
             }
         }
-        if self.compression == Compression::Jpeg2000 {
-            self.compression = Compression::Jpeg;
+        if self.compatibility < Compatibility::Acrobat6 && self.compression == Compression::Jpeg2000
+        {
+            self.compression = Compression::Zip;
         }
         if self.compatibility < Compatibility::Acrobat6 {
+            self.convert_16_to_8 = true;
+        }
+        if self.use_proof_setup && self.color_conversion == ColorConversion::None {
             self.convert_16_to_8 = true;
         }
         if !self.convert_16_to_8 && self.compression == Compression::Jpeg {
@@ -678,7 +687,6 @@ impl PdfOptions {
             .downsample_above_ppi
             .clamp(self.downsample_ppi, 2400.0 * 2.0);
         self.tile_size = self.tile_size.clamp(128, 2048);
-        self.spot_colors = false;
     }
 
     /// Whether the standard or compatibility level forces `field`, so the
@@ -690,7 +698,10 @@ impl PdfOptions {
                 self.standard,
                 Standard::X1a2001 | Standard::X32002 | Standard::A1b2005
             ),
-            "convert16To8" => self.compatibility < Compatibility::Acrobat6,
+            "convert16To8" => {
+                self.compatibility < Compatibility::Acrobat6
+                    || (self.use_proof_setup && self.color_conversion == ColorConversion::None)
+            }
             "colorConversion" | "profileInclusion" => self.standard == Standard::X1a2001,
             "outputIntentProfile"
             | "outputCondition"
@@ -704,11 +715,13 @@ impl PdfOptions {
             | "enableAccessibility" => standard,
             // `/EncryptMetadata` exists only for the V4/V5 (AES) handlers.
             "plaintextMetadata" => standard || self.compatibility < Compatibility::Acrobat7,
-            "spotColors" | "tileSize" => true,
+            "spotColors" => false,
+            "tileSize" => self.compression != Compression::Jpeg2000,
             "iccProfile" => matches!(self.standard, Standard::X32002 | Standard::X42008),
             "downsamplePpi" | "downsampleAbovePpi" => self.downsample == Downsample::None,
-            "quality" => self.compression != Compression::Jpeg,
+            "quality" => !matches!(self.compression, Compression::Jpeg | Compression::Jpeg2000),
             "destination" => self.color_conversion == ColorConversion::None,
+            "useProofSetup" => self.color_conversion == ColorConversion::ToDestination,
             _ => false,
         }
     }
@@ -735,6 +748,8 @@ impl PdfOptions {
                 "Preserve Photoshop Editing Capabilities: {}",
                 on_off(self.preserve_editing)
             ),
+            format!("Spot Colors: {}", on_off(self.spot_colors)),
+            format!("Use Proof Setup: {}", on_off(self.use_proof_setup)),
             format!(
                 "Downsampling: {}",
                 match self.downsample {
@@ -756,7 +771,8 @@ impl PdfOptions {
                 match self.compression {
                     Compression::None => "None".to_string(),
                     Compression::Zip => "ZIP".to_string(),
-                    _ => format!("JPEG, {:?} quality", self.quality),
+                    Compression::Jpeg => format!("JPEG, {:?} quality", self.quality),
+                    Compression::Jpeg2000 => format!("JPEG 2000, {:?} quality", self.quality),
                 }
             ),
             format!(
@@ -793,6 +809,9 @@ impl PdfOptions {
                  PDF/X and PDF/A workflows."
                     .into(),
             );
+        }
+        if self.use_proof_setup && self.color_conversion == ColorConversion::ToDestination {
+            lines.push("Warning: Output Color Conversion overrides Use Proof Setup.".into());
         }
         lines
     }
@@ -845,14 +864,14 @@ mod tests {
     }
 
     #[test]
-    fn older_levels_force_eight_bit_and_jpeg2000_maps_to_jpeg() {
+    fn older_levels_force_eight_bit_and_jpeg2000_maps_to_zip() {
         let mut options = PdfOptions::default();
         options.set("convert16To8", "0");
         assert!(!options.convert_16_to_8);
         options.set("compatibility", "1");
         assert!(options.convert_16_to_8 && options.locked("convert16To8"));
         options.set("compression", "3");
-        assert_eq!(options.compression, Compression::Jpeg);
+        assert_eq!(options.compression, Compression::Zip);
         assert_eq!(Compatibility::from_level(1.2), Compatibility::Acrobat4);
         assert_eq!(Compatibility::from_level(1.7), Compatibility::AcrobatX);
         assert_eq!(Quality::from_qfactor(0.5), Quality::High);

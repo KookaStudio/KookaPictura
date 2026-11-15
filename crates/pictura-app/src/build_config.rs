@@ -734,7 +734,7 @@ fn no_small_bridge_files() {
 fn bridge_count_within_budget() {
     let files = bridge_files();
     let count = files.len();
-    assert!(count <= 71, "bridge file count grew to {count} (budget 71)");
+    assert!(count <= 72, "bridge file count grew to {count} (budget 72)");
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let listed: std::collections::HashSet<String> = listed_bridge_files().into_iter().collect();
     let actual: std::collections::HashSet<String> = files
