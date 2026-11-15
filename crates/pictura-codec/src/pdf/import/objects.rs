@@ -798,6 +798,85 @@ fn unescape_name(raw: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Parse an inline image whose `BI` ends at `at`: its dictionary, the data
+/// after `ID`, and the offset past `EI`. `None` for a malformed dictionary or a
+/// missing terminator.
+pub(crate) fn inline_image_at(bytes: &[u8], at: usize) -> Option<(Dict, Vec<u8>, usize)> {
+    let mut lexer = Lexer::new(bytes, at);
+    let mut dict = Dict::default();
+    loop {
+        lexer.skip_space();
+        if bytes[lexer.at..].starts_with(b"ID")
+            && bytes
+                .get(lexer.at + 2)
+                .is_none_or(|b| is_space(*b) || is_delimiter(*b))
+        {
+            lexer.at += 2;
+            if bytes.get(lexer.at) == Some(&b'\r') && bytes.get(lexer.at + 1) == Some(&b'\n') {
+                lexer.at += 2;
+            } else if bytes.get(lexer.at).is_some_and(|b| is_space(*b)) {
+                lexer.at += 1;
+            }
+            let start = lexer.at;
+            let (data_end, end) = find_inline_ei(bytes, start, &dict)?;
+            return Some((dict, bytes[start..data_end].to_vec(), end));
+        }
+        let Object::Name(key) = lexer.value()? else {
+            return None;
+        };
+        let value = lexer.value()?;
+        dict.0.push((key, value));
+    }
+}
+
+fn find_inline_ei(bytes: &[u8], start: usize, dict: &Dict) -> Option<(usize, usize)> {
+    let filters = match dict.get("F") {
+        Some(Object::Name(name)) => vec![name.as_slice()],
+        Some(Object::Array(items)) => items
+            .iter()
+            .filter_map(|item| match item {
+                Object::Name(name) => Some(name.as_slice()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let terminator = |marker: &[u8]| {
+        let at = bytes[start..]
+            .windows(marker.len())
+            .position(|window| window == marker)?;
+        let data_end = start + at + marker.len();
+        let mut after = data_end;
+        while bytes.get(after).is_some_and(|b| is_space(*b)) {
+            after += 1;
+        }
+        bytes[after..]
+            .starts_with(b"EI")
+            .then_some((data_end, after + 2))
+    };
+    let has = |want: &[u8]| filters.contains(&want);
+    if has(b"A85") || has(b"ASCII85Decode") {
+        return terminator(b"~>");
+    }
+    if has(b"AHx") || has(b"ASCIIHexDecode") {
+        return terminator(b">");
+    }
+    let mut i = start.saturating_add(1);
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'E'
+            && bytes[i + 1] == b'I'
+            && is_space(bytes[i - 1])
+            && bytes
+                .get(i + 2)
+                .is_none_or(|b| is_space(*b) || is_delimiter(*b))
+        {
+            return Some((i - 1, i + 2));
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Serialize `object` (the writer half used for the one-image wrapper PDFs).
 pub(crate) fn write_object(out: &mut Vec<u8>, object: &Object) {
     match object {

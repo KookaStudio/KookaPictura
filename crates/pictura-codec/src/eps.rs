@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use crate::ghostscript::{png_args, read_png, Ghostscript, RasterError, ScratchDir};
-use crate::pdf::import::{crop_raster, PdfRect, Rendered};
+use crate::pdf::import::{crop_raster, native::NativeRender, PdfRect, Rendered};
 
 /// The DOS binary EPS header's magic number.
 pub const DOS_EPS_MAGIC: [u8; 4] = [0xC5, 0xD0, 0xD3, 0xC6];
@@ -45,6 +45,20 @@ pub fn bounding_box(bytes: &[u8]) -> Option<PdfRect> {
             .next()
     };
     find("%%HiResBoundingBox:").or_else(|| find("%%BoundingBox:"))
+}
+
+/// Render the EPS at `path` natively in `mode`/`depth`, cropping its bounding
+/// box to `width` × `height` pixels.
+pub fn render_native_eps(
+    gs: &Ghostscript,
+    path: &Path,
+    bounds: PdfRect,
+    size: (u32, u32),
+    anti_alias: bool,
+    mode: pictura_core::ColorMode,
+    depth: pictura_core::BitDepth,
+) -> Result<NativeRender, RasterError> {
+    crate::pdf::import::native::render_native_eps(gs, path, bounds, size, anti_alias, mode, depth)
 }
 
 /// Render the EPS at `path` so its bounding box fills `width` × `height`

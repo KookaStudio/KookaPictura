@@ -614,6 +614,6 @@ fn mutated_pdfs_never_panic_or_overallocate() {
         if let EditingPsd::Psd(psd) = editing_psd(bytes, "pw") {
             let _ = read_psd_within(&psd, Policy::Convert, budget);
         }
-        let _ = PdfImages::read(bytes);
+        let _ = PdfImages::read(bytes, "");
     });
 }

@@ -220,7 +220,7 @@ OpenOutcome ImportSaveCoordinator::importPdfPathWithToken(
                                       OpenKind::PdfPage);
         openSourcePaths_.insert(pageToken, path);
         if (images) {
-            open_pdf_image_start(*view, path, index, target);
+            open_pdf_image_start(*view, path, password, index, target);
         } else {
             open_pdf_page_start(*view, path, password, index + 1, area, target);
         }

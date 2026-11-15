@@ -16,7 +16,7 @@ RasterizeEpsDialog::RasterizeEpsDialog(QSizeF boundingPoints, QWidget* parent)
     setWindowTitle(tr("Rasterize Generic EPS Format"));
     auto* root = new QHBoxLayout(this);
     auto* left = new QVBoxLayout;
-    size_ = new RasterSizeFields(false, this);
+    size_ = new RasterSizeFields(true, this);
     size_->setSourceSize(boundingPoints);
     left->addWidget(size_);
     antiAliased_ = new QCheckBox(tr("Anti-aliased"), this);

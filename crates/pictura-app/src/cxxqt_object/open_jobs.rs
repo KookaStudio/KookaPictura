@@ -67,6 +67,7 @@ pub mod ffi {
         fn open_pdf_image_start(
             view: Pin<&mut PictureView>,
             path: &QString,
+            password: &QString,
             index: i32,
             target: &ImportTarget,
         );

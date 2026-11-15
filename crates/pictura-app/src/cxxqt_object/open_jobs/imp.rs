@@ -8,9 +8,11 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::{CxxQtThread, CxxQtType, Threading};
 use cxx_qt_lib::{QString, QStringList};
-use pictura_codec::pdf::import::{self as pdf_import, PdfImages, PdfRect, Rendered};
+use pictura_codec::pdf::import::{self as pdf_import, NativeRender, PdfImages, PdfRect, Rendered};
 use pictura_codec::{eps, Ghostscript, Policy, Raster, RasterError, Resolution};
-use pictura_core::{BitDepth, ColorMode, Document, Layer, LockFlags};
+use pictura_core::{
+    BitDepth, ColorMode, Document, Layer, LockFlags, PsdRect, Samples, SourceChannels, SourcePlanes,
+};
 use pictura_render::DocumentComposite;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,6 +44,12 @@ pub(in crate::cxxqt_object) enum PdfOpen {
     WrongPassword,
 }
 
+/// What an import render produces: the legacy RGBA8 raster or a native render.
+pub(in crate::cxxqt_object) enum Imported {
+    Rgba(Rendered),
+    Native(NativeRender),
+}
+
 /// The import target as owned Rust data, so it can cross into a worker.
 pub(in crate::cxxqt_object) struct ImportSpec {
     width: i32,
@@ -66,6 +74,27 @@ impl ImportSpec {
             per_cm: target.per_cm,
             name: target.name.to_string(),
         }
+    }
+
+    fn color_mode(&self) -> ColorMode {
+        match self.mode.as_str() {
+            "grayscale" => ColorMode::Grayscale,
+            "cmyk" => ColorMode::Cmyk,
+            "lab" => ColorMode::Lab,
+            _ => ColorMode::Rgb,
+        }
+    }
+
+    fn bit_depth(&self) -> BitDepth {
+        if self.depth >= 16 {
+            BitDepth::Sixteen
+        } else {
+            BitDepth::Eight
+        }
+    }
+
+    fn wants_native(&self) -> bool {
+        self.color_mode() == ColorMode::Cmyk || self.bit_depth() == BitDepth::Sixteen
     }
 }
 
@@ -480,7 +509,7 @@ pub(in crate::cxxqt_object) fn render_pdf_page(
     page: i32,
     area: &str,
     spec: &ImportSpec,
-) -> Result<Rendered, RasterError> {
+) -> Result<Imported, RasterError> {
     let numbers: Vec<f64> = area
         .split_whitespace()
         .filter_map(|token| token.parse().ok())
@@ -489,32 +518,63 @@ pub(in crate::cxxqt_object) fn render_pdf_page(
         return Err(RasterError::Failed("bad page area".into()));
     };
     Ghostscript::locate().and_then(|gs| {
-        pdf_import::render_area(
-            &gs,
-            Path::new(path),
-            (!password.is_empty()).then_some(password),
-            page.max(1) as u32,
-            PdfRect::new(x0, y0, x1, y1),
-            view_height,
-            (spec.width.max(1) as u32, spec.height.max(1) as u32),
-            spec.anti_alias,
-        )
+        let password = (!password.is_empty()).then_some(password);
+        let size = (spec.width.max(1) as u32, spec.height.max(1) as u32);
+        if spec.wants_native() {
+            pdf_import::native::render_native_area(
+                &gs,
+                Path::new(path),
+                password,
+                page.max(1) as u32,
+                PdfRect::new(x0, y0, x1, y1),
+                view_height,
+                size,
+                spec.anti_alias,
+                spec.color_mode(),
+                spec.bit_depth(),
+            )
+            .map(Imported::Native)
+        } else {
+            pdf_import::render_area(
+                &gs,
+                Path::new(path),
+                password,
+                page.max(1) as u32,
+                PdfRect::new(x0, y0, x1, y1),
+                view_height,
+                size,
+                spec.anti_alias,
+            )
+            .map(Imported::Rgba)
+        }
     })
 }
 
 /// Render embedded PDF image `index` at its native size.
 pub(in crate::cxxqt_object) fn render_pdf_image(
     path: &str,
+    password: &str,
     index: i32,
-    _spec: &ImportSpec,
-) -> Result<Rendered, RasterError> {
+    spec: &ImportSpec,
+) -> Result<Imported, RasterError> {
+    let bytes = std::fs::read(path).map_err(|e| RasterError::Failed(e.to_string()))?;
+    let found = PdfImages::read(&bytes, password)
+        .ok_or_else(|| RasterError::Failed("no readable images".into()))?;
     Ghostscript::locate().and_then(|gs| {
-        let found = std::fs::read(path)
-            .ok()
-            .as_deref()
-            .and_then(PdfImages::read)
-            .ok_or_else(|| RasterError::Failed("no readable images".into()))?;
-        found.render(&gs, index.max(0) as usize, None)
+        if spec.wants_native() {
+            found
+                .render_native(
+                    &gs,
+                    index.max(0) as usize,
+                    spec.color_mode(),
+                    spec.bit_depth(),
+                )
+                .map(Imported::Native)
+        } else {
+            found
+                .render(&gs, index.max(0) as usize, None)
+                .map(Imported::Rgba)
+        }
     })
 }
 
@@ -522,20 +582,28 @@ pub(in crate::cxxqt_object) fn render_pdf_image(
 pub(in crate::cxxqt_object) fn render_eps(
     path: &str,
     spec: &ImportSpec,
-) -> Result<Rendered, RasterError> {
+) -> Result<Imported, RasterError> {
     Ghostscript::locate().and_then(|gs| {
         let bounds = std::fs::read(path)
             .ok()
             .as_deref()
             .and_then(eps::bounding_box)
             .ok_or_else(|| RasterError::Failed("no bounding box".into()))?;
-        eps::render_eps(
-            &gs,
-            Path::new(path),
-            bounds,
-            (spec.width.max(1) as u32, spec.height.max(1) as u32),
-            spec.anti_alias,
-        )
+        let size = (spec.width.max(1) as u32, spec.height.max(1) as u32);
+        if spec.wants_native() {
+            eps::render_native_eps(
+                &gs,
+                Path::new(path),
+                bounds,
+                size,
+                spec.anti_alias,
+                spec.color_mode(),
+                spec.bit_depth(),
+            )
+            .map(Imported::Native)
+        } else {
+            eps::render_eps(&gs, Path::new(path), bounds, size, spec.anti_alias).map(Imported::Rgba)
+        }
     })
 }
 
@@ -572,6 +640,95 @@ pub(in crate::cxxqt_object) fn imported_document(
     }
     progress(90, "Compositing");
     store_opened_composite(&mut doc, gpu);
+    progress(95, "Preparing layers");
+    let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
+    let history = history_for(&mut doc, &target, "Open");
+    Some(OpenedDocument {
+        preview: None,
+        doc,
+        history,
+        target,
+        path: OpenedPath::Set(None),
+        source_format: "psd".to_string(),
+        pdf_password: None,
+    })
+}
+
+/// Build the untitled document a native render becomes: the working RGB8
+/// display plus the retained native samples.
+pub(in crate::cxxqt_object) fn imported_native_document(
+    native: &NativeRender,
+    spec: &ImportSpec,
+    gpu: bool,
+    progress: &dyn Fn(u8, &str),
+) -> Option<OpenedDocument> {
+    progress(80, "Preparing layers");
+    let (width, height) = (native.width, native.height);
+    let plane = width as usize * height as usize;
+    if plane == 0 || native.display.len() < plane * 3 || native.alpha.len() < plane {
+        return None;
+    }
+    let mut rgba = vec![0u8; plane * 4];
+    for i in 0..plane {
+        rgba[i * 4] = native.display[i];
+        rgba[i * 4 + 1] = native.display[plane + i];
+        rgba[i * 4 + 2] = native.display[2 * plane + i];
+        rgba[i * 4 + 3] = native.alpha[i];
+    }
+    let mut doc = Document::from_rgba(&spec.name, width, height, &rgba);
+    if let Some(layer) = doc.layers.last_mut() {
+        layer.name = "Layer 1".to_string();
+    }
+    pictura_codec::set_document_resolution(
+        &mut doc,
+        Resolution {
+            ppi: if spec.ppi > 0.0 { spec.ppi } else { 72.0 },
+            per_cm: spec.per_cm,
+        },
+    );
+    doc.source_mode = (native.mode == ColorMode::Cmyk).then_some(ColorMode::Cmyk);
+    doc.source_depth = (native.depth == BitDepth::Sixteen).then_some(BitDepth::Sixteen);
+    doc.source_planes = Some(SourcePlanes {
+        depth: native.depth,
+        width,
+        height,
+        samples: native.samples.clone(),
+    });
+    let colours = native.mode.color_channels() as usize;
+    let mut planes: Vec<(i16, Samples)> = Vec::with_capacity(colours + 1);
+    for c in 0..colours {
+        let start = c * plane;
+        let end = start + plane;
+        planes.push((c as i16, native.samples.slice(start..end)?));
+    }
+    let alpha = if native.depth == BitDepth::Sixteen {
+        Samples::U16(
+            native
+                .alpha
+                .iter()
+                .map(|&a| u16::from(a) * 257)
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    } else {
+        Samples::U8(native.alpha.clone().into())
+    };
+    planes.push((-1, alpha));
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: height as i32,
+        right: width as i32,
+    };
+    if let Some(layer) = doc.layers.last_mut() {
+        layer.source_channels = Some(SourceChannels::new(native.depth, rect, planes));
+    }
+    let target = spec.color_mode();
+    if target == ColorMode::Grayscale || target == ColorMode::Lab {
+        pictura_render::convert_mode(&mut doc, target).ok()?;
+    }
+    progress(90, "Compositing");
+    let _ = DocumentComposite::new(&mut doc).refresh(pictura_render::CompositeScope::Full, gpu);
     progress(95, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
     let history = history_for(&mut doc, &target, "Open");
@@ -810,6 +967,39 @@ pub fn open_pdf_start(mut view: Pin<&mut PictureView>, path: &QString, password:
     });
 }
 
+/// Turn one import render into the result the open worker reports.
+fn finish_import(
+    rendered: Imported,
+    spec: &ImportSpec,
+    gpu: bool,
+    progress: &dyn Fn(u8, &str),
+) -> (Option<OpenedDocument>, String, Vec<String>) {
+    match rendered {
+        Imported::Rgba(rendered) => {
+            let warnings = rendered.warnings.clone();
+            match imported_document(&rendered.raster, spec, gpu, progress) {
+                Some(opened) => (Some(opened), "ok".to_string(), warnings),
+                None => (
+                    None,
+                    "error:the image could not be converted".to_string(),
+                    Vec::new(),
+                ),
+            }
+        }
+        Imported::Native(native) => {
+            let warnings = native.warnings.clone();
+            match imported_native_document(&native, spec, gpu, progress) {
+                Some(opened) => (Some(opened), "ok".to_string(), warnings),
+                None => (
+                    None,
+                    "error:the image could not be converted".to_string(),
+                    Vec::new(),
+                ),
+            }
+        }
+    }
+}
+
 pub fn open_pdf_page_start(
     mut view: Pin<&mut PictureView>,
     path: &QString,
@@ -826,14 +1016,7 @@ pub fn open_pdf_page_start(
     start(&mut view, move |progress| {
         progress(10, "Rendering page");
         match render_pdf_page(&path, &password, page, &area, &spec) {
-            Ok(rendered) => match imported_document(&rendered.raster, &spec, gpu, progress) {
-                Some(opened) => (Some(opened), "ok".to_string(), rendered.warnings),
-                None => (
-                    None,
-                    "error:the image could not be converted".to_string(),
-                    Vec::new(),
-                ),
-            },
+            Ok(rendered) => finish_import(rendered, &spec, gpu, progress),
             Err(error) => (None, error_status(&error), Vec::new()),
         }
     });
@@ -842,23 +1025,18 @@ pub fn open_pdf_page_start(
 pub fn open_pdf_image_start(
     mut view: Pin<&mut PictureView>,
     path: &QString,
+    password: &QString,
     index: i32,
     target: &ImportTarget,
 ) {
     let path = path.to_string();
+    let password = password.to_string();
     let spec = ImportSpec::from_target(target);
     let gpu = view.rust().gpu_compute;
     start(&mut view, move |progress| {
         progress(10, "Rendering image");
-        match render_pdf_image(&path, index, &spec) {
-            Ok(rendered) => match imported_document(&rendered.raster, &spec, gpu, progress) {
-                Some(opened) => (Some(opened), "ok".to_string(), rendered.warnings),
-                None => (
-                    None,
-                    "error:the image could not be converted".to_string(),
-                    Vec::new(),
-                ),
-            },
+        match render_pdf_image(&path, &password, index, &spec) {
+            Ok(rendered) => finish_import(rendered, &spec, gpu, progress),
             Err(error) => (None, error_status(&error), Vec::new()),
         }
     });
@@ -871,14 +1049,7 @@ pub fn open_eps_start(mut view: Pin<&mut PictureView>, path: &QString, target: &
     start(&mut view, move |progress| {
         progress(10, "Rendering EPS");
         match render_eps(&path, &spec) {
-            Ok(rendered) => match imported_document(&rendered.raster, &spec, gpu, progress) {
-                Some(opened) => (Some(opened), "ok".to_string(), rendered.warnings),
-                None => (
-                    None,
-                    "error:the image could not be converted".to_string(),
-                    Vec::new(),
-                ),
-            },
+            Ok(rendered) => finish_import(rendered, &spec, gpu, progress),
             Err(error) => (None, error_status(&error), Vec::new()),
         }
     });

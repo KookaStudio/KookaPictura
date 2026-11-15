@@ -91,8 +91,9 @@ native **Files panel** is the replacement.
 ### EPS interop
 
 - `File > Open` an EPS: "When you open an EPS file containing vector art, it is
-  rasterized." The open options are dimensions, resolution, mode, and an
-  **Anti-aliased** toggle; EPS can also be brought in via Place/Paste/drag.
+  rasterized." The open options are dimensions, resolution, mode, **Bit Depth**
+  (8 or 16), and an **Anti-aliased** toggle; EPS can also be brought in via
+  Place/Paste/drag.
 
 ### Adobe Stock and Flash (non-goals)
 
@@ -121,7 +122,7 @@ native **Files panel** is the replacement.
 | `Layer > Smart Objects > Replace Contents` | Menu | — | Keeps transforms/effects. |
 | `Layer > Smart Objects > Export Contents` | Menu | — | Writes the original placed format. |
 | Import PDF dialog | Dialog | — | Pages/Images, Crop To, Image Size, Resolution/Mode/Bit Depth. |
-| Open EPS options | Dialog | — | Dimensions, resolution, mode, Anti-aliased. |
+| Open EPS options | Dialog | — | Dimensions, resolution, mode, bit depth, Anti-aliased. |
 | `File > Export > Paths to Illustrator` | Menu | — | Writes a `.ai` file from paths. |
 | `Window > Files` (proposed) | Panel | — | Native replacement for Bridge/Mini Bridge browsing (`AUTO-014`). |
 | `File > Open With…` (proposed) | Menu | — | External application via desktop portal. |
@@ -141,6 +142,7 @@ native **Files panel** is the replacement.
 | Import PDF Mode | enum | document default | Bitmap/Grayscale/RGB/CMYK/Lab | New-document color mode. |
 | Import PDF Bit Depth | enum | 8 | 8 / 16 / 32 | New-document depth. |
 | Import PDF Suppress Warning | bool | Off | on / off | Color-profile warnings. |
+| Open EPS Bit Depth | enum | 8 | 8 / 16 | New-document depth. |
 | Open EPS Anti-aliased | bool | On | on / off | Minimizes jagged vector edges. |
 | Illustrator paste clipboard | requirement | — | AICB enabled | Needed for Paste As options. |
 | External open handler | path/cmd | OS default | `xdg-open`/portal | Proposed Linux mechanism. |
@@ -295,7 +297,7 @@ Flatpak/sandbox policy (`11-cross-cutting/security-and-sandboxing.md`).
    Constrain Proportions, Resolution, Mode, Bit Depth, and Suppress Warning
    behave as described.
 3. Given an EPS file, opening it rasterizes with the dimensions/resolution/mode
-   and Anti-aliased option.
+   and Bit Depth, and the Anti-aliased option.
 4. Given Illustrator artwork pasted with AICB enabled, the Paste As options
    Smart Object / Pixels / Paths / Shape Layer are offered and produce the
    corresponding node types.
@@ -328,8 +330,9 @@ Flatpak/sandbox policy (`11-cross-cutting/security-and-sandboxing.md`).
   objects and `Ctrl`/`Command` path drop; Edit/Replace/Export Contents; the
   Paste As options and AICB requirement; the Import PDF dialog (Pages/Images,
   Crop To's six boxes, Image Size, Resolution, Mode, Bit Depth, Suppress
-  Warning); PDF as Illustrator/Acrobat's primary format; EPS rasterization and
-  the Anti-aliased option; `File > Export > Paths to Illustrator`; PDF
+  Warning); PDF as Illustrator/Acrobat's primary format; EPS rasterization
+  with mode/bit depth and the Anti-aliased option; `File > Export > Paths to
+  Illustrator`; PDF
   Presentation; Flash 3D as export-only; Mini Bridge
   (`Window > Extensions > Mini Bridge`).
 - `https://doc.qt.io/qt-6/qtpdf-index.html` — Qt PDF module: `QPdfDocument`,

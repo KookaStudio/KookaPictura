@@ -47,8 +47,9 @@ pub mod ffi {
         /// Page thumbnails whose longest page side is `longest` px: per page a little-endian `u32` width and height, then RGBA8888. Empty on failure.
         fn pdf_import_thumbnails(path: &QString, password: &QString, longest: i32) -> Vec<u8>;
 
-        /// Images-mode thumbnails at most `longest` px, in the same layout.
-        fn pdf_import_image_thumbnails(path: &QString, longest: i32) -> Vec<u8>;
+        /// Images-mode thumbnails at most `longest` px, in the same layout; `password` opens an encrypted PDF.
+        fn pdf_import_image_thumbnails(path: &QString, password: &QString, longest: i32)
+            -> Vec<u8>;
 
         /// Open page `page` (1-based), cropped to `area` (`x0 y0 x1 y1 view_height`), into the view as a new document.
         fn pdf_import_open_page(
@@ -64,6 +65,7 @@ pub mod ffi {
         fn pdf_import_open_image(
             view: Pin<&mut PictureView>,
             path: &QString,
+            password: &QString,
             index: i32,
             target: &ImportTarget,
         ) -> QString;
