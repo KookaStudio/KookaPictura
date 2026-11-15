@@ -325,6 +325,9 @@ void PicturaMainWindow::openSaveSelectionDialog()
         return;
     }
     const SelectionSaveRequest request = dialog.saveRequest();
+    // ponytail: the whole width x height coverage plane crosses FFI here and is
+    // cloned again by the Rust receiver. Same-size, user-initiated only; tile the
+    // transfer if large-document latency matters.
     const auto coverage = selection_coverage_bytes(*active);
     const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
     if (request.newDocument) {
@@ -390,6 +393,7 @@ void PicturaMainWindow::openLoadSelectionDialog()
         }
         return;
     }
+    // ponytail: same full-plane FFI copy as Save Selection.
     const auto coverage = channel_coverage(*request.document, request.target);
     if (coverage.size() == 0) {
         refuse();

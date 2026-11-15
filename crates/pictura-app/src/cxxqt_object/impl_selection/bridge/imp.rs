@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::cxxqt_object::helpers::{combine_mode_from, feathered, feathered_within};
-use crate::cxxqt_object::picture::picture;
+use crate::cxxqt_object::picture::{sample_tiles, tile_source};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -147,8 +147,9 @@ pub(super) fn selection_magic_wand_aa(
             return false;
         }
         let tolerance = tolerance.clamp(0, 255) as u8;
-        match pictura_select::magic_wand(
-            &picture(doc, rust),
+        let fetch = sample_tiles(doc, rust);
+        match pictura_select::magic_wand_from(
+            tile_source(doc, &fetch),
             x as u32,
             y as u32,
             tolerance,
