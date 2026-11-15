@@ -6,7 +6,10 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 156 gaps — 5 systemic in §B, 151 per-domain in §C.
+- **Re-checked:** `#1358` corrected five rows whose tracking issues had shipped
+  since that sweep, narrowed `PAN-15`, and added the remaining Smart-Filter
+  preview gap as `FILT-11`; the corrections are listed in §G.
+- **Rows:** 157 gaps — 4 systemic in §B, 153 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -26,6 +29,8 @@ and it answers "does a spec exist?", not "is it implemented?".
   - `UNRESOLVED` — spec too vague to confirm either way.
   - `STALE-DOC` — the doc is out of date; code is ahead.
   - `NON-GOAL` — declared absence, correct by design.
+  - `SHIPPED` — implemented and evidenced; kept so a shipped roadmap item
+    resolves here.
 - **Evidence** is `path:line` in the current tree, or `none found`.
 - **Issue** is the GitHub issue tracking the gap (`#489`–`#651` were filed from
   this register; existing issues are linked where they already covered a gap).
@@ -107,7 +112,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | PAN-12 | `panels/navigator-panel.md` | Proxy colour, Ctrl-drag proxy positioning, zoom buttons, typed zoom | MISSING | `navigator_panel.cpp:138-159` | #520 |
 | PAN-13 | `panels/paths-panel.md` | Make Work Path, clipping-path designation, Panel Options thumbnail size | MISSING | `paths_panel.h:24-25` | #521 |
 | PAN-14 | `panels/note-panel.md` | Notes Author/Colour options + PSD/PDF/TIFF annotation round-trip | MISSING | `options_bar.cpp:593`; `annotations.rs:10` | #522 |
-| PAN-15 | `panels/layers-panel.md` | Panel Options thumbnail size + `00`/`Shift+00` opacity shortcut | MISSING | `session.h:25`; `layers_panel_events.cpp` | #523 |
+| PAN-15 | `panels/layers-panel.md` | `00`/`Shift+00` layer opacity shortcut (the Panel Options thumbnail size shipped in #586) | MISSING | `crates/pictura-app/cpp/panels/layers_panel_events.cpp` | #523 |
 
 ### 03-tools
 
@@ -117,7 +122,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-2 | `transform-selection.md` | Select ▸ Transform Selection | SHIPPED | `crates/pictura-app/cpp/frame_menus_select.cpp`; `crates/pictura-render/src/document_ops/layer_ops/selection_transform.rs` | #526 |
 | TOOL-3 | `move-and-transform.md` | Puppet Warp | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #527 |
 | TOOL-4 | `move-and-transform.md` | Content-Aware Scale | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #528 |
-| TOOL-5 | `move-and-transform.md` | Transform Scale/Rotate/Again + exact rotations + flip | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #529 |
+| TOOL-5 | `move-and-transform.md` | Transform Scale/Rotate/Again + exact rotations + flip | SHIPPED | `crates/pictura-script/src/command_catalogue/entries.rs:65-76` | #529 |
 | TOOL-6 | `move-and-transform.md` | Transform Path / Transform Points submenus | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #530 |
 | TOOL-7 | `pen-and-path-tools.md` | Magnetic Pen | MISSING | `options_bar_pen.cpp:19` | #531 |
 | TOOL-8 | `merge-and-flatten.md` | Merge Shape Components (path boolean ops) | MISSING | no path-boolean in `pictura-core/src/path*` | #532 |
@@ -178,10 +183,10 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | LAY-2 | `layer-styles.md` | Global Light dialog, Create Layers, Rasterize Layer Style | MISSING | `frame_menus_layer_style.cpp:3`; `crates/pictura-script/src/command_catalogue/entries.rs` | #580 |
 | LAY-3 | `layer-styles.md` | Bevel Contour/Texture UI, gradient editor, channel include in the authoring dialog | MISSING | `layer_style_dialog.h:9` | #581 |
 | LAY-4 | `align-and-distribute.md` | Auto-Align Layers | SHIPPED | `crates/pictura-render/src/document_ops/layer_ops/auto_align/`; `crates/pictura-app/cpp/auto_align_dialog.cpp`; `tst_auto_align`. Behavioral parity only: the matcher and projection tolerances are our own | #582 |
-| LAY-6 | `blend-modes.md` | `Fill With (Mode)-Neutral Color` for new layers | MISSING | none found | #584 |
-| LAY-8 | `layer-management-ui.md` | Panel Options thumbnail size (Entire Document/Bounds) | PARTIAL | `session.h:25` | #586 |
+| LAY-6 | `blend-modes.md` | `Fill With (Mode)-Neutral Color` for new layers | SHIPPED | `crates/pictura-app/cpp/layer_new_dialog.cpp:49`; `crates/pictura-render/src/document_ops/layer_ops/create.rs:317` | #584 |
+| LAY-8 | `layer-management-ui.md` | Panel Options thumbnail size (Entire Document/Bounds) | SHIPPED | `crates/pictura-app/cpp/panels/layers_panel.cpp:1053` | #586 |
 | LAY-9 | `export-formats.md` | File ▸ Scripts ▸ Export Layers To Files | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #587 |
-| LAY-10 | `layer-management-ui.md` | Shape layer naming `<Tool> N` | DIVERGENT | `shapes.rs:238` | #588 |
+| LAY-10 | `layer-management-ui.md` | Shape layer naming `<Tool> N` | SHIPPED | `crates/pictura-render/src/document_ops/layer_ops/shape_layer.rs:17`; `crates/pictura-app/cpp/tests/tst_shape_tools.cpp:258` | #588 |
 | LAY-11 | `blend-modes.md` | 32-bit/Lab blend-mode menu gating | MISSING | `blend.rs` offers all | #589 |
 | LAY-12 | `layer-management-ui.md` | `Ctrl+J` duplicate-group semantics | DIVERGENT | `crates/pictura-script/src/command_catalogue/entries.rs` | #590 |
 | LAY-13 | `smart-objects.md` | Extended Stack Modes | MISSING | no `StackMode`/`reduce_stack` | #591 |
@@ -194,12 +199,13 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #593 |
+| FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | SHIPPED | `crates/pictura-app/cpp/reduce_noise_dialog.cpp:32`; `crates/pictura-filters/src/noise/reduce.rs:36` | #593 |
 | FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `crates/pictura-filters/src/catalogue/rows/render.rs` (Smart Sharpen row) | #595 |
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `crates/pictura-filters/src/catalogue/build/paint.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
+| FILT-11 | `filters-overview.md` | Filter Gallery canvas and Shear below-input previews over an existing Smart Filter chain | PARTIAL | `crates/pictura-app/src/cxxqt_object/filter_tools/imp.rs:492`; `crates/pictura-app/cpp/filter_preview_dialog.cpp:566` | #1003 |
 
 De-Interlace (`#344`) and NTSC Colors (`#345`) shipped and are no longer gaps.
 Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
@@ -379,3 +385,8 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
     "linked/embedded objects — verified absent" — both corrected above.
   - `OVR-1` (the "no source code" claim, `#496`) — the claim is corrected and
     the issue is closed, so the row is removed.
+- **Corrections from the `#1358` roadmap sweep.** Five rows the tree had moved
+  past are now `SHIPPED`: `LAY-6` (#584), `LAY-8` (#586), `LAY-10` (#588),
+  `TOOL-5` (#529), and `FILT-2` (#593). `PAN-15` is narrowed to the remaining
+  `00`/`Shift+00` opacity shortcut, and `FILT-11` records the Filter Gallery and
+  Shear previews that still ignore an existing Smart Filter chain (#1003).

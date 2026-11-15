@@ -124,7 +124,8 @@ Deeper technical status for PSD/PSB lives in
       channel include (#581)
 - [x] Auto-Align Layers (#582)
 - [x] Auto-Blend Layers (#583)
-- [ ] Fill With (Mode)-Neutral Color for new layers (#584)
+- [x] Fill With (Mode)-Neutral Color for new layers (#584).
+  `crates/pictura-app/cpp/layer_new_dialog.cpp`
 - [ ] 32-bit and Lab blend-mode menu gating (#589)
 - [ ] `Ctrl+J` duplicate-group semantics (#590)
 - [ ] Smart-object Stack Modes (#591)
@@ -133,9 +134,11 @@ Deeper technical status for PSD/PSB lives in
 - [ ] Vector-mask path authoring (#261)
 - [ ] A Blend-If editor UI (#264)
 - [ ] Relink and convert-to-linked for smart objects (#113)
-- [ ] The Layers panel thumbnail-size option and the `00` / `Shift+00` opacity
-      shortcut (#523, #586)
-- [ ] Shape layer naming `<Tool> N` (#588)
+- [x] The Layers panel thumbnail-size option (#586).
+  `crates/pictura-app/cpp/panels/layers_panel.cpp`
+- [ ] The `00` / `Shift+00` layer opacity shortcut (#523)
+- [x] Shape layer naming `<Tool> N` (#588).
+  `crates/pictura-render/src/document_ops/layer_ops/shape_layer.rs`
 - [ ] Export Layers To Files (#587)
 - [ ] Merge Down's result appearance when the target's blend mode or opacity is
       non-default (#813)
@@ -173,8 +176,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Hand, rotate view and zoom
 - [ ] Single Row and Single Column marquee tools (#525)
 - [ ] Puppet Warp (#527) and Content-Aware Scale (#528)
-- [ ] Transform ▸ Scale, Rotate and Again, the exact rotations, and flips (#529),
-      and the Transform Path and Transform Points submenus (#530)
+- [x] Transform ▸ Scale, Rotate and Again, the exact rotations, and flips (#529).
+  `crates/pictura-script/src/command_catalogue/entries.rs`
+- [ ] The Transform Path and Transform Points submenus (#530)
 - [ ] Magnetic Pen (#531), and Merge Shape Components — path boolean
       operations (#532)
 - [x] Hand and Zoom multi-window options: Scroll All Windows, Zoom All
@@ -311,7 +315,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-app/cpp/blur_gallery_dialog.cpp`.
 - [x] Maximum/Minimum Preserve (Squareness/Roundness), a 500 px radius, and the
       above-100 warning (#364)
-- [ ] Reduce Noise, including the Advanced per-channel view (#593)
+- [x] Reduce Noise, including the Advanced per-channel view (#593).
+  `crates/pictura-app/cpp/reduce_noise_dialog.cpp`,
+  `crates/pictura-filters/src/noise/reduce.rs`
 - [x] The Radial Blur Blur Center, honored by the kernel (#594)
 - [ ] The Smart Sharpen Basic and Advanced split, and the 32-bpc disable (#595)
 - [ ] The eight Stylize filters missing from the Filter Gallery category (#596)
@@ -353,7 +359,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] White filter mask without a selection and Add Filter Mask (#1000)
 - [ ] Lens Blur, Displace and Adaptive Wide Angle as Smart Filters (#1001)
 - [ ] Smart Filter chain rendered off the UI thread (#1002)
-- [ ] Dialog pane preview over an existing Smart Filter chain (#1003)
+- [ ] Filter Gallery canvas and Shear below-input previews over an existing Smart
+      Filter chain (#1003)
 - [x] Fade disabled on a Smart Object (#1004): Smart Filters create no Fade record
 - [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
       Grid Size, related planes torn off at 90° with Angle, Render Grids
