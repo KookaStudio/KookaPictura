@@ -200,7 +200,7 @@ pub(super) fn web_quantize_locked(
     let Some((w, h)) = size(rgba, width, height) else {
         return Vec::new();
     };
-    let locked: Vec<[u8; 3]> = locked.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+    let locked: Vec<[u8; 3]> = locked.as_chunks::<3>().0.to_vec();
     let indexed = pictura_codec::quantize_locked(rgba, w, h, options_of(palette), &locked);
     pictura_codec::pack_indexed(&indexed)
 }
@@ -215,10 +215,7 @@ pub(super) fn web_quantize_custom(
     let Some((w, h)) = size(rgba, width, height) else {
         return Vec::new();
     };
-    let table: Vec<[u8; 4]> = table
-        .chunks_exact(4)
-        .map(|c| [c[0], c[1], c[2], c[3]])
-        .collect();
+    let table: Vec<[u8; 4]> = table.as_chunks::<4>().0.to_vec();
     let indexed = pictura_codec::quantize_custom(rgba, w, h, options_of(palette), &table);
     pictura_codec::pack_indexed(&indexed)
 }
