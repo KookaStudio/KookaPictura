@@ -269,7 +269,6 @@ pub mod qobject {
         /// A premultiplied crop of view-pyramid `level` at `(x, y, w, h)`, or an empty image for an out-of-range level or rectangle.
         #[qinvokable]
         fn display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
-
         /// The **canvas display source** crop at `(x, y, w, h)`: the solo mask plane while a mask is soloed, else the composite. The canvas provider uses this; other panels keep `display_image`.
         #[qinvokable]
         fn canvas_display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
