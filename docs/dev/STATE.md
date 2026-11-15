@@ -30,9 +30,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   - **Seams.** Panel, menu, and collaborator TUs no longer include `frame.h` or
     name the frame. `frame_includes.h` keeps only the shared frame includes;
     each TU includes its panel/collaborator headers directly. `frame.h` no
-    longer includes `document_window.h`, `panels/panel_column.h`,
-    `recovery_store.h`, or `workspace_store.h`; `PanelColumn`, `DocEntry`,
-    `DocWindow`, and `PanelSide` are forward-declared.
+    longer includes `document_window.h`, `recovery_store.h`, or
+    `workspace_store.h`; it keeps `panels/panel_column.h` so the existing
+    panel-column test hooks stay source-compatible. `DocEntry`/`DocWindow` and
+    `PanelSide` are forward-declared.
   - **Guard.** `scripts/check-shell-seams.py` (wired into
     `scripts/verify-fast.sh`) rejects a panel/menu/collaborator frame dependency,
     a surviving `frame_menus*.cpp`, and growth past `frame.h` 760 lines or
