@@ -3,7 +3,7 @@ use super::*;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_codec::pdf::import::{self as pdf_import, PdfImages, Rendered};
+use pictura_codec::pdf::import::{self as pdf_import, PdfImages};
 use pictura_codec::{eps, Ghostscript, Raster, RasterError, VectorKind};
 use std::path::Path;
 
@@ -72,7 +72,7 @@ pub(super) fn probe(path: &Path, password: Option<&str>) -> Result<Vec<String>, 
     match std::fs::read(path)
         .ok()
         .as_deref()
-        .and_then(PdfImages::read)
+        .and_then(|bytes| PdfImages::read(bytes, password.unwrap_or("")))
     {
         Some(found) => {
             lines.push(format!("images {}", found.images.len()));
@@ -114,14 +114,19 @@ pub fn pdf_import_thumbnails(path: &QString, password_text: &QString, longest: i
     rasters.map(|r| pack(&r)).unwrap_or_default()
 }
 
-pub fn pdf_import_image_thumbnails(path: &QString, longest: i32) -> Vec<u8> {
+pub fn pdf_import_image_thumbnails(
+    path: &QString,
+    password_text: &QString,
+    longest: i32,
+) -> Vec<u8> {
     let Ok(gs) = Ghostscript::locate() else {
         return Vec::new();
     };
+    let password = password(password_text);
     let Some(found) = std::fs::read(path.to_string())
         .ok()
         .as_deref()
-        .and_then(PdfImages::read)
+        .and_then(|bytes| PdfImages::read(bytes, password.as_deref().unwrap_or("")))
     else {
         return Vec::new();
     };
@@ -158,12 +163,17 @@ pub fn pdf_import_open_page(
 pub fn pdf_import_open_image(
     view: Pin<&mut PictureView>,
     path: &QString,
+    password_text: &QString,
     index: i32,
     target: &ImportTarget,
 ) -> QString {
     let spec = super::super::super::open_jobs::ImportSpec::from_target(target);
-    let rendered =
-        super::super::super::open_jobs::render_pdf_image(&path.to_string(), index, &spec);
+    let rendered = super::super::super::open_jobs::render_pdf_image(
+        &path.to_string(),
+        &password_text.to_string(),
+        index,
+        &spec,
+    );
     finish_rendered(view, rendered, &spec)
 }
 
@@ -191,11 +201,11 @@ pub fn eps_import_open(
 /// Install a render into the view as an untitled document, or report why not.
 pub(super) fn finish_rendered(
     mut view: Pin<&mut PictureView>,
-    rendered: Result<Rendered, RasterError>,
+    rendered: Result<super::super::super::open_jobs::Imported, RasterError>,
     spec: &super::super::super::open_jobs::ImportSpec,
 ) -> QString {
     match rendered {
-        Ok(rendered) => {
+        Ok(super::super::super::open_jobs::Imported::Rgba(rendered)) => {
             match super::super::super::open_jobs::imported_document(
                 &rendered.raster,
                 spec,
@@ -209,6 +219,27 @@ pub(super) fn finish_rendered(
                     );
                     view.as_mut().session_cancelled();
                     ok_text(&rendered.warnings)
+                }
+                None => error_text(&RasterError::Failed(
+                    "the image could not be converted".into(),
+                )),
+            }
+        }
+        Ok(super::super::super::open_jobs::Imported::Native(native)) => {
+            let warnings = native.warnings.clone();
+            match super::super::super::open_jobs::imported_native_document(
+                &native,
+                spec,
+                view.rust().gpu_compute,
+                &|_, _| {},
+            ) {
+                Some(opened) => {
+                    super::super::super::open_jobs::apply_opened(
+                        &mut view.as_mut().rust_mut(),
+                        opened,
+                    );
+                    view.as_mut().session_cancelled();
+                    ok_text(&warnings)
                 }
                 None => error_text(&RasterError::Failed(
                     "the image could not be converted".into(),

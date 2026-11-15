@@ -23,7 +23,7 @@ pub(crate) const MIN_VERSION: (u32, u32) = (9, 55);
 /// The most stdout or stderr text kept from one run.
 const MAX_TEXT_OUTPUT: u64 = 16 << 20;
 /// The most bytes one rendered page file may hold when it is read back.
-const MAX_RASTER_FILE: u64 = 4 << 30;
+pub(crate) const MAX_RASTER_FILE: u64 = 4 << 30;
 /// The largest page bitmap Ghostscript holds whole (#646); a larger page is
 /// rendered in bands, so its memory follows the band, not the page, and stays
 /// under [`MAX_ADDRESS_SPACE`]. An RGBA page about 11 500 px square fits.
@@ -454,9 +454,32 @@ pub(crate) fn png_args(
     out: &Path,
     input: &Path,
 ) -> Vec<String> {
+    raster_args("pngalpha", rx, ry, anti_alias, out, input)
+}
+
+/// The PSD-device arguments rendering `input` at `rx` × `ry` pixels per inch.
+pub(crate) fn psd_args(
+    device: &str,
+    rx: f64,
+    ry: f64,
+    anti_alias: bool,
+    out: &Path,
+    input: &Path,
+) -> Vec<String> {
+    raster_args(device, rx, ry, anti_alias, out, input)
+}
+
+fn raster_args(
+    device: &str,
+    rx: f64,
+    ry: f64,
+    anti_alias: bool,
+    out: &Path,
+    input: &Path,
+) -> Vec<String> {
     let bits = if anti_alias { 4 } else { 1 };
     vec![
-        "-sDEVICE=pngalpha".into(),
+        format!("-sDEVICE={device}"),
         format!("-r{rx:.4}x{ry:.4}"),
         format!("-dTextAlphaBits={bits}"),
         format!("-dGraphicsAlphaBits={bits}"),

@@ -123,7 +123,7 @@ fn deep_page_and_form_trees_end() {
     }
     objects.push(b"<< /Type /Page >>".to_vec());
     let file = PdfObjects::parse(&pdf(&objects)).unwrap();
-    assert_eq!(list_images(&file), Some(Vec::new()));
+    assert!(list_images(&file).unwrap().images.is_empty());
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn image_listing_is_capped() {
         objects.push(stream("/Subtype /Image /Width 1 /Height 1", &[0]));
     }
     let file = PdfObjects::parse(&pdf(&objects)).unwrap();
-    assert_eq!(list_images(&file).unwrap().len(), MAX_IMAGES);
+    assert_eq!(list_images(&file).unwrap().images.len(), MAX_IMAGES);
 }
 
 #[test]

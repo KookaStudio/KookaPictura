@@ -242,7 +242,7 @@ void ImportPdfDialog::showImages()
 {
     if (!imageThumbsLoaded_) {
         imageThumbs_ =
-            unpackThumbnails(toBytes(pdf_import_image_thumbnails(path_, kThumbRender)));
+            unpackThumbnails(toBytes(pdf_import_image_thumbnails(path_, password_, kThumbRender)));
         imageThumbsLoaded_ = true;
     }
     const QSignalBlocker block(grid_);

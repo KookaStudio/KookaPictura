@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod hostile_tests;
 mod images;
+pub mod native;
 pub(crate) mod objects;
 #[cfg(test)]
 mod tests;
@@ -12,6 +13,7 @@ mod tests;
 use std::path::Path;
 
 pub use images::PdfImage;
+pub use native::NativeRender;
 
 use crate::budget::rgba_within_budget as within_budget;
 use crate::ghostscript::{png_args, read_png, Ghostscript, Raster, RasterError, ScratchDir};
@@ -417,18 +419,41 @@ pub(crate) fn budget_scale(width: u32, height: u32) -> f64 {
     (by_side.min(by_area) * 0.999).min(1.0)
 }
 
-/// The image XObjects of one PDF (Images mode).
+/// The images of one PDF (Images mode).
 pub struct PdfImages {
     objects: objects::PdfObjects,
     pub images: Vec<PdfImage>,
+    sources: Vec<images::ImageSource>,
 }
 
 impl PdfImages {
-    /// `None` when `pdf` is unreadable or encrypted (Images mode is then off).
-    pub fn read(pdf: &[u8]) -> Option<PdfImages> {
-        let objects = objects::PdfObjects::parse(pdf)?;
-        let images = images::list_images(&objects)?;
-        Some(PdfImages { objects, images })
+    /// `None` when `pdf` is unreadable or encrypted without the password.
+    pub fn read(pdf: &[u8], password: &str) -> Option<PdfImages> {
+        let mut objects = objects::PdfObjects::parse(pdf)?;
+        if objects.encrypted() {
+            match objects.decrypt(password) {
+                objects::Unlock::Open => {}
+                objects::Unlock::WrongPassword | objects::Unlock::Unsupported => return None,
+            }
+        }
+        let listed = images::list_images(&objects)?;
+        Some(PdfImages {
+            objects,
+            images: listed.images,
+            sources: listed.sources,
+        })
+    }
+
+    fn wrap(&self, index: usize) -> Option<(u32, u32, Vec<u8>)> {
+        let image = self.images.get(index)?;
+        let source = self.sources.get(index)?;
+        let wrapped = match source {
+            images::ImageSource::XObject(num) => images::wrap_image(&self.objects, *num)?,
+            images::ImageSource::Inline(dict, data) => {
+                images::wrap_stream(&self.objects, dict.clone(), data.clone())?
+            }
+        };
+        Some((image.width, image.height, wrapped))
     }
 
     /// Render image `index` at its own pixel size, scaled down to fit the
@@ -439,24 +464,39 @@ impl PdfImages {
         index: usize,
         longest: Option<u32>,
     ) -> Result<Rendered, RasterError> {
-        let image = self
-            .images
-            .get(index)
-            .ok_or_else(|| RasterError::Failed("no such image".into()))?;
-        let wrapped = images::wrap_image(&self.objects, image.object)
+        let (width, height, wrapped) = self
+            .wrap(index)
             .ok_or_else(|| RasterError::Failed("unreadable image".into()))?;
         let scratch = ScratchDir::new()?;
         let input = scratch.path("image.pdf");
         std::fs::write(&input, wrapped).map_err(|e| RasterError::Failed(e.to_string()))?;
         let out = scratch.path("image.png");
-        let side = image.width.max(image.height);
+        let side = width.max(height);
         let res = longest.map_or(72.0, |l| 72.0 * f64::from(l.min(side)) / f64::from(side))
-            * budget_scale(image.width, image.height);
+            * budget_scale(width, height);
         let run = gs.run(&input, None, &png_args(res, res, false, &out, &input))?;
         let raster = read_png(&out)?;
         Ok(Rendered {
             raster,
             warnings: run.warnings,
         })
+    }
+
+    /// Render image `index` natively in `mode`/`depth`.
+    pub fn render_native(
+        &self,
+        gs: &Ghostscript,
+        index: usize,
+        mode: pictura_core::ColorMode,
+        depth: pictura_core::BitDepth,
+    ) -> Result<NativeRender, RasterError> {
+        let (width, height, wrapped) = self
+            .wrap(index)
+            .ok_or_else(|| RasterError::Failed("unreadable image".into()))?;
+        let scratch = ScratchDir::new()?;
+        let input = scratch.path("image.pdf");
+        std::fs::write(&input, wrapped).map_err(|e| RasterError::Failed(e.to_string()))?;
+        let res = 72.0 * budget_scale(width, height);
+        native::render_native_wrapper(gs, &input, res, false, mode, depth)
     }
 }

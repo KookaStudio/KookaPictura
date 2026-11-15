@@ -147,6 +147,18 @@ QByteArray redPage()
     return pages({{"0 0 144 72", kRedRect}});
 }
 
+// A 144 x 72 pt page rotated 90 degrees with a Crop Box of [20 20 80 50] pt.
+QByteArray rotatedCropPage()
+{
+    return pdf({
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 144 72] /CropBox [20 20 80 50] "
+        "/Rotate 90 /Contents 4 0 R >>",
+        stream(QByteArray(), kRedRect),
+    });
+}
+
 const QByteArray kBlueEps("%!PS-Adobe-3.0 EPSF-3.0\n"
                           "%%BoundingBox: 0 0 144 72\n"
                           "%%EndComments\n"
@@ -200,6 +212,32 @@ QByteArray imagesPdf()
     });
 }
 
+// A page drawing one 2×2 image XObject and one 2×2 inline image.
+QByteArray inlinePdf()
+{
+    QByteArray inlineData;
+    for (int i = 1; i <= 12; ++i) {
+        inlineData.append(char(i));
+    }
+    QByteArray content =
+        "q 2 0 0 2 0 0 cm /Im0 Do Q BI /W 2 /H 2 /BPC 8 /CS /RGB ID ";
+    content += inlineData;
+    content += " EI";
+    QByteArray xobject;
+    for (int i = 10; i < 22; ++i) {
+        xobject.append(char(i));
+    }
+    return pdf({
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /XObject << /Im0 5 0 R >> >> >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 4 4] /Contents 4 0 R >>",
+        stream(QByteArray(), content),
+        stream("/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB "
+               "/BitsPerComponent 8",
+               xobject),
+    });
+}
+
 QColor pixel(PictureView* view, int x, int y)
 {
     return view->image().pixelColor(x, y);
@@ -239,6 +277,14 @@ private slots:
     void multiSelectOpensDocuments();
     void imagesModeListsImages();
     void imagesModeOpensImage();
+    void encryptedImagesNeedThePassword();
+    void inlineImagesAreListed();
+    void inlineImageOpens();
+    void nativeRgb16ImportKeepsDepth();
+    void nativeCmyk16ImportKeepsTransparency();
+    void nativeGray16ImportKeepsDepth();
+    void nativeCropKeepsNameAndResolution();
+    void epsNativeCmyk16();
     void passwordPromptOpens();
     void wrongPasswordAsksAgain();
     void suppressWarningsHidesMessage();
@@ -758,7 +804,184 @@ QString encryptedPdf(const QTemporaryDir& dir)
     return locked;
 }
 
+QString encryptedImagesPdf(const QTemporaryDir& dir, int* status = nullptr)
+{
+    const QString plain = write(dir, QStringLiteral("pictures.pdf"), imagesPdf());
+    const QString locked = dir.filePath(QStringLiteral("locked-images.pdf"));
+    const int exit = QProcess::execute(
+        QStringLiteral("gs"),
+        {QStringLiteral("-q"), QStringLiteral("-dSAFER"), QStringLiteral("-dBATCH"),
+         QStringLiteral("-dNOPAUSE"), QStringLiteral("-sDEVICE=pdfwrite"),
+         QStringLiteral("-sOwnerPassword=owner"), QStringLiteral("-sUserPassword=kooka"),
+         QStringLiteral("-dEncryptionR=3"), QStringLiteral("-dKeyLength=128"), QStringLiteral("-o"),
+         locked, plain});
+    if (status) {
+        *status = exit;
+    }
+    return locked;
+}
+
 } // namespace
+
+// pdf_images_encrypted
+void ImportPdfTest::encryptedImagesNeedThePassword()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    int encryptStatus = -1;
+    const QString locked = encryptedImagesPdf(dir, &encryptStatus);
+    QCOMPARE(encryptStatus, 0);
+    Seen seen;
+    window->setImportDialogDriverForTest(
+        driver(window, &seen, {{QStringLiteral("images"), QStringLiteral("1")}},
+               {QStringLiteral("imagesEnabled"), QStringLiteral("count")},
+               {QStringLiteral("kooka")}));
+    QVERIFY(window->openDocumentAtPath(locked));
+    QCOMPARE(seen.fields.value(QStringLiteral("imagesEnabled")), QStringLiteral("1"));
+    QVERIFY(seen.fields.value(QStringLiteral("count")).toInt() >= 1);
+}
+
+// pdf_inline_images_listed
+void ImportPdfTest::inlineImagesAreListed()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    Seen seen;
+    window->setImportDialogDriverForTest(
+        driver(window, &seen, {{QStringLiteral("images"), QStringLiteral("1")}},
+               {QStringLiteral("imagesEnabled"), QStringLiteral("count")}, {}, false));
+    window->openDocumentAtPath(write(dir, QStringLiteral("inline.pdf"), inlinePdf()));
+    QCOMPARE(seen.fields.value(QStringLiteral("imagesEnabled")), QStringLiteral("1"));
+    QCOMPARE(seen.fields.value(QStringLiteral("count")), QStringLiteral("2"));
+}
+
+// pdf_inline_image_opens
+void ImportPdfTest::inlineImageOpens()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    Seen seen;
+    window->setImportDialogDriverForTest(
+        driver(window, &seen,
+               {{QStringLiteral("images"), QStringLiteral("1")},
+                {QStringLiteral("select"), QStringLiteral("2")}}));
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("inline.pdf"), inlinePdf())));
+    PictureView* view = window->activeView();
+    QCOMPARE(view->document_width(), 2);
+    QCOMPARE(view->document_height(), 2);
+    for (int i = 0; i < 4; ++i) {
+        const QColor got = pixel(view, i % 2, i / 2);
+        QCOMPARE(got.red(), i * 3 + 1);
+        QCOMPARE(got.green(), i * 3 + 2);
+        QCOMPARE(got.blue(), i * 3 + 3);
+    }
+}
+
+// pdf_native_rgb16_precision
+void ImportPdfTest::nativeRgb16ImportKeepsDepth()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    Seen seen;
+    window->setImportDialogDriverForTest(driver(
+        window, &seen,
+        {{QStringLiteral("resolution"), QStringLiteral("72")},
+         {QStringLiteral("mode"), QStringLiteral("RGB Color")},
+         {QStringLiteral("depth"), QStringLiteral("16 bit")}}));
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("rgb16.pdf"), redPage())));
+    QCOMPARE(QString(image_mode(*window->activeView())), QStringLiteral("rgb"));
+    QCOMPARE(image_depth_bits(*window->activeView()), 16);
+}
+
+// pdf_native_cmyk16
+void ImportPdfTest::nativeCmyk16ImportKeepsTransparency()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    Seen seen;
+    window->setImportDialogDriverForTest(driver(
+        window, &seen,
+        {{QStringLiteral("resolution"), QStringLiteral("72")},
+         {QStringLiteral("mode"), QStringLiteral("CMYK Color")},
+         {QStringLiteral("depth"), QStringLiteral("16 bit")},
+         {QStringLiteral("cropTo"), QStringLiteral("Media Box")}}));
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("cmyk16.pdf"), redPage())));
+    PictureView* view = window->activeView();
+    QCOMPARE(QString(image_mode(*view)), QStringLiteral("cmyk"));
+    QCOMPARE(image_depth_bits(*view), 16);
+    QCOMPARE(pixel(view, 5, 5).alpha(), 0);
+    QCOMPARE(pixel(view, 50, 37).alpha(), 255);
+}
+
+// pdf_native_gray16_precision
+void ImportPdfTest::nativeGray16ImportKeepsDepth()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    Seen seen;
+    window->setImportDialogDriverForTest(driver(
+        window, &seen,
+        {{QStringLiteral("resolution"), QStringLiteral("72")},
+         {QStringLiteral("mode"), QStringLiteral("Grayscale")},
+         {QStringLiteral("depth"), QStringLiteral("16 bit")},
+         {QStringLiteral("cropTo"), QStringLiteral("Media Box")}}));
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("gray16.pdf"), redPage())));
+    PictureView* view = window->activeView();
+    QCOMPARE(QString(image_mode(*view)), QStringLiteral("grayscale"));
+    QCOMPARE(image_depth_bits(*view), 16);
+    const QColor inside = pixel(view, 50, 37);
+    QCOMPARE(inside.alpha(), 255);
+    QCOMPARE(inside.red(), inside.green());
+    QCOMPARE(inside.green(), inside.blue());
+}
+
+// pdf_native_crop
+void ImportPdfTest::nativeCropKeepsNameAndResolution()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    Seen seen;
+    window->setImportDialogDriverForTest(driver(
+        window, &seen,
+        {{QStringLiteral("resolution"), QStringLiteral("144")},
+         {QStringLiteral("mode"), QStringLiteral("RGB Color")},
+         {QStringLiteral("depth"), QStringLiteral("16 bit")},
+         {QStringLiteral("cropTo"), QStringLiteral("Crop Box")},
+         {QStringLiteral("name"), QStringLiteral("turned-native.pdf")}}));
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("turned.pdf"), rotatedCropPage())));
+    PictureView* view = window->activeView();
+    QCOMPARE(QString(image_mode(*view)), QStringLiteral("rgb"));
+    QCOMPARE(image_depth_bits(*view), 16);
+    const QString resolution = QString(image_resolution(*view));
+    QVERIFY2(resolution.startsWith(QStringLiteral("144")), qPrintable(resolution));
+    QCOMPARE(window->documentName(0), QStringLiteral("turned-native.pdf"));
+}
+
+// eps_native_cmyk
+void ImportPdfTest::epsNativeCmyk16()
+{
+    REQUIRE_GS();
+    QTemporaryDir dir;
+    PicturaMainWindow* window = window_.get();
+    Seen seen;
+    window->setImportDialogDriverForTest(driver(
+        window, &seen,
+        {{QStringLiteral("resolution"), QStringLiteral("72")},
+         {QStringLiteral("mode"), QStringLiteral("CMYK Color")},
+         {QStringLiteral("depth"), QStringLiteral("16 bit")}}));
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("blue.eps"), kBlueEps)));
+    PictureView* view = window->activeView();
+    QCOMPARE(QString(image_mode(*view)), QStringLiteral("cmyk"));
+    QCOMPARE(image_depth_bits(*view), 16);
+    QCOMPARE(pixel(view, 72, 36).alpha(), 255);
+}
 
 // pdf_password_prompt
 void ImportPdfTest::passwordPromptOpens()
@@ -864,7 +1087,7 @@ void ImportPdfTest::epsDialogDefaults()
         window, &seen, {},
         {QStringLiteral("width"), QStringLiteral("height"), QStringLiteral("widthUnit"),
          QStringLiteral("resolution"), QStringLiteral("resolutionUnit"), QStringLiteral("mode"),
-         QStringLiteral("constrain"), QStringLiteral("antiAliased")},
+         QStringLiteral("depth"), QStringLiteral("constrain"), QStringLiteral("antiAliased")},
         {}, false));
     QVERIFY(!window->openDocumentAtPath(write(dir, QStringLiteral("blue.eps"), kBlueEps)));
     QCOMPARE(seen.epsDialogs, 1);
@@ -874,6 +1097,7 @@ void ImportPdfTest::epsDialogDefaults()
     QCOMPARE(seen.fields.value(QStringLiteral("resolution")), QStringLiteral("300"));
     QCOMPARE(seen.fields.value(QStringLiteral("resolutionUnit")), QStringLiteral("Pixels/Inch"));
     QCOMPARE(seen.fields.value(QStringLiteral("mode")), QStringLiteral("RGB Color"));
+    QCOMPARE(seen.fields.value(QStringLiteral("depth")), QStringLiteral("8 bit"));
     QCOMPARE(seen.fields.value(QStringLiteral("constrain")), QStringLiteral("1"));
     QCOMPARE(seen.fields.value(QStringLiteral("antiAliased")), QStringLiteral("1"));
 }

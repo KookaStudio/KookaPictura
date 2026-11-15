@@ -65,8 +65,8 @@ Deeper technical status for PSD/PSB lives in
       GIF, EPS, DCS, Raw, TGA and Cineon dialogs (#625)
 - [ ] JPEG 2000 compression, Spot Colors, and Use Proof Setup in the PDF writer
       (#626)
-- [ ] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
-      PDFs, inline images, and the 3D option (#627)
+- [x] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
+      PDFs, and inline images (#627)
 - [ ] GIF-via-Indexed on save, and Save a Copy (#628)
 - [ ] The Save for Web slice HTML and CSS emitter, 2-Up and 4-Up, the
       colour-table editor, and the metadata menu (#629)
