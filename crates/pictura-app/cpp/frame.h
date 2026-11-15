@@ -15,6 +15,7 @@
 #include <memory>
 #include "canvas_ruler.h"
 #include "document_registry.h"
+#include "panels/panel_column.h"
 #include "quick_mask_ui.h"
 #include "save_format_options.h"
 #include "tools.h"
