@@ -203,7 +203,6 @@ public:
     void setPanelsRefreshedByChanged(bool refreshed) { panelsRefreshedByChanged_ = refreshed; }
     void setRegistryRefreshPending(bool pending) { registryRefreshPending_ = pending; }
     void retargetDock();
-    void retargetDockIfNeeded();
     bool dockNeedsRebind() const;
     void refreshDock(bool includeSelfRefreshing, bool includeLayers);
     void refreshPanels();

@@ -60,7 +60,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
         hooks.requestRefresh = [this]() { refresh(); };
         hooks.requestPanelRefresh = [this]() {
             if (panels_) {
-                panels_->schedulePanelRefresh();
+                panels_->refreshPanels();
             }
         };
         hooks.stopPanelRefreshTimer = [this]() {
@@ -77,7 +77,12 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
             }
         };
         hooks.retargetPanels = [this]() {
-            if (panels_ && panels_->dockNeedsRebind()) {
+            if (!panels_) {
+                return;
+            }
+            // The last close leaves no active view; the dock still holds the
+            // freed one, so it must be unbound even though null == null.
+            if (!activeView() || panels_->dockNeedsRebind()) {
                 panels_->retargetDock();
             }
         };
