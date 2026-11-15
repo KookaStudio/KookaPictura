@@ -56,7 +56,9 @@ not affect output.
    Images / Images Only / HTML Only), optional output settings, and (for slices)
    **Slices** = All Slices or Selected Slices. **Alt/Option + Reset** resets to the
    last saved optimization settings; **Alt/Option + Remember** keeps them for next
-   time.
+   time. **Shipped:** the dialog offers Format and a Table/CSS layout; Slices is
+   always All Slices, and the remaining Output Settings controls are not
+   implemented.
 
 ### Web graphic formats
 
@@ -129,11 +131,18 @@ multiple slices with different tables shows "Mixed". Operations:
 
 ### Metadata
 
-**Metadata** menu: **None** (smallest; JPEG still keeps the EXIF copyright
-notice), **Copyright**, **Copyright and Contact Info**, **All Except Camera
-Info**, **All**. Fully supported for JPEG; partially for GIF/PNG. Output conforms
-to Metadata Working Group standards, so some JPEG metadata is written as EXIF/IIM
-rather than XMP.
+**Metadata** menu: **None** (smallest; JPEG keeps only a minimal EXIF copyright
+notice when the document has one), **Copyright**, **Copyright and Contact
+Info**, **All Except Camera Info**, **All**. Fully supported for JPEG; partially
+for GIF/PNG. Output conforms to Metadata Working Group standards, so some JPEG
+metadata is written as EXIF/IIM rather than XMP.
+
+**Shipped:** JPEG carries the selected EXIF/IPTC/XMP blocks (None keeps only
+the copyright notice); PNG-8 and PNG-24 carry the selected XMP packet in an
+`iTXt` chunk for every level except None when the document has one or the
+copyright levels generate one; GIF and WBMP carry none. The
+copyright levels write a generated minimal IPTC/XMP packet, and All Except
+Camera Info keeps the original IPTC/XMP without EXIF.
 
 ### Image Size while optimizing
 
@@ -178,7 +187,11 @@ HTML/CSS.
 ### Output settings (HTML/CSS generation)
 
 **Output Settings** dialog, reachable from **Other** in the Save Optimized Settings
-menu or **Edit Output Settings** on the Optimize menu:
+menu or **Edit Output Settings** on the Optimize menu. **Shipped:** the Save
+Optimized As dialog offers the Table/CSS choice, and the emitters write the
+PS-shaped table/charset/title and escaped paths; the finer HTML, spacer,
+background, and file-naming controls below are not implemented.
+
 
 - **HTML**: Output XHTML, Tags Case, Attribute Case, Indent, Line Endings, Encoding
   (Photoshop always uses UTF-8), Include Comments, Always Add Alt Attribute,
