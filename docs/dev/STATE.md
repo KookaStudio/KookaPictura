@@ -1877,7 +1877,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   profile-free CMYK source, inverted) / Lab / Indexed / 1-bit CCITT G4 by
   output mode, Multichannel refused; ICC tagging (v2 at PDF ≤ 1.4); soft-mask
   alpha or flatten onto white; None / ZIP / JPEG (encoded at the Qt boundary,
-  `encode_jpeg`; JPEG2000 listed but disabled); Average / Subsampling / Bicubic
+  `encode_jpeg`) / JPEG 2000 (codestream through the pure-Rust `jpeg2k` 0.11);
+  Average / Subsampling / Bicubic
   downsampling; 16-bit at PDF ≥ 1.5; thumbnails; notes as text annotations;
   XMP; PDF/X-1a/X-3/X-4 and PDF/A-1b output intents and info keys; standard
   security R2/R3/R4/R6 (`md-5`, `aes`, `sha2`; RC4 and CBC hand-written);
@@ -1897,6 +1898,13 @@ Snapshot for resuming after a context break. Update after each milestone.
   `poppler-utils`, `ghostscript`, `qpdf` for the render / structure /
   linearization / decryption oracles (renders sampled at 4× pixel centres:
   poppler filters images at 1:1).
+- **PDF writer options** (#626, branch `feat/626-pdf-writer-options`, OpenSpec
+  change `pdf-writer-jpx-spot-proof`, implementation complete, verification
+  pending). JPEG 2000 at PDF 1.5+ for 8-bit images (`/JPXDecode`); Spot Colors
+  reads PSD DisplayInfo (resource 1077) and filters spot/alpha extras
+  independently in the embedded PSD; View > Proof Setup / Proof Colors
+  (Working CMYK/Gray/Custom, lcms2 canvas proof, persisted setup) and Use Proof
+  Setup output conversion; updated `catalogue.tsv`/`command_ids.h`.
 - **Paragraph type and the type caret** (#682 / #681, branch
   `feat/541-advanced-type-tools`, OpenSpec changes `paragraph-type` and
   `type-caret-blink`, archived into `tools/paragraph-type` and

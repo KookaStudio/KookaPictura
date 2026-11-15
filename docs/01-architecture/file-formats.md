@@ -32,7 +32,7 @@ layer preservation, alpha, and metadata are per-format.
 | TIFF | `.tif`, `.tiff` | R/W | 8/16 (32 inferred); RGB, Gray, CMYK, Lab, Indexed | Photoshop layers, alpha/transparency, clipping path | ICC, EXIF, IPTC, XMP, Photoshop tags | `tiff` 0.11 / `image` codec |
 | PNG | `.png` | R/W | 8/16; Gray, RGB, Indexed, alpha | single image; alpha | ICC (iCCP); limited text/XMP (write support limited) | `png` 0.18 / `image` codec |
 | JPEG | `.jpg`, `.jpeg`, `.jpe` | R/W | 8 only; Gray, RGB, CMYK | no layers; no alpha | ICC, EXIF, IPTC, XMP | decode `zune-jpeg` 0.5 / `jpeg-decoder` 0.3; encode `jpeg-encoder` 0.7.1 (or `mozjpeg`) |
-| JPEG 2000 | `.jp2`, `.j2k`, `.jpf`, `.jpx`, `.jpm` | R/W | 8/16 (JPX/JP2); Gray, RGB, Indexed, alpha | single image; alpha | ICC | `jpeg2k` 0.10.1 (OpenJPEG bindings); alternatives `jp2k`, `hayro_jpeg2000` |
+| JPEG 2000 | `.jp2`, `.j2k`, `.jpf`, `.jpx`, `.jpm` | R/W | 8/16 (JPX/JP2); Gray, RGB, Indexed, alpha | single image; alpha | ICC | `jpeg2k` 0.11 (pure-Rust OpenJPEG port); alternatives `jp2k`, `openjp2`, `hayro_jpeg2000` |
 | GIF | `.gif` | R/W | 8 indexed (1-bit alpha) | single image or animation frames; 1-bit alpha | none (no ICC) | `gif` 0.14 / `image`; palette via `imagequant` 4.4.1 |
 | BMP | `.bmp`, `.dib` | R/W | 1/4/8/24/32 (16 inferred); RGB, Gray, Indexed | single image; 32-bit alpha | minimal; ICC via resource | `image` codec |
 | PDF | `.pdf` | R/W (import rasterizes pages; export writes multi-page) | 8/16 container; RGB, Gray, CMYK, Lab, Indexed | open recreates layers from PDF; save can preserve Photoshop layers and PDF/X | ICC, XMP, output intents | `printpdf` 0.12.8 / `lopdf`; read+rasterize via Ghostscript/Poppler (candidate) |
@@ -181,7 +181,7 @@ a common `DecodedImage`/`EncodeRequest`.
   GIF, BMP, TIFF, PNM, TGA, HDR, EXR) and specialized encoders where quality
   matters (`jpeg-encoder`, `imagequant`).
 - `pictura_io::tiff` — TIFF options (compression, layers, depth) over `tiff`.
-- `pictura_io::jpeg2000` — `jpeg2k` wrapper.
+- `pictura_io::jpeg2000` — `jpeg2k` 0.11 wrapper (pure Rust).
 - `pictura_io::pdf` — write via `printpdf`/`lopdf`; import via an external
   renderer adapter (Ghostscript/Poppler).
 - `pictura_io::eps` — write PostScript directly or via a `postscript` crate
@@ -319,9 +319,9 @@ Fetched for this document:
   quantization for PNG/GIF.
 - `https://docs.rs/crate/printpdf/latest` — `printpdf` 0.12.8: read/write PDF,
   images, layers, SVG, fonts; built on `lopdf`.
-- `https://docs.rs/jpeg2k` (search result) and `https://docs.rs/openjpeg-sys` —
-  `jpeg2k` is a safe wrapper over `openjpeg-sys` for loading/saving JPEG 2000;
-  alternatives `jp2k`, `openjp2`, `hayro_jpeg2000`.
+- `https://docs.rs/jpeg2k` — `jpeg2k` 0.11 is a pure-Rust port of OpenJPEG
+  (the 0.10 native `openjpeg-sys` bindings were removed in 0.11) for loading and
+  saving JPEG 2000; alternatives `jp2k`, `openjp2`, `hayro_jpeg2000`.
 - `https://docs.rs/rawler` — `rawler` 0.7.2: extract raw image data and metadata
   from camera raw formats (`RawImage`, CFA config, black level).
 - `https://docs.rs/libraw-rs` — `libraw-rs` 0.0.4: Rust bindings to the LibRaw
