@@ -28,6 +28,7 @@
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
 #include "text_input.h"
+#include "value_input_enter.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QSize>
@@ -50,6 +51,7 @@ bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded)
 PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     : QMainWindow(parent)
 {
+    installValueInputEnter();
     updateChecksEnabled_ = enableUpdateCheck;
     {
         DocumentRegistry::Hooks hooks;

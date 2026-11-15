@@ -123,6 +123,7 @@ set(PICTURA_QT_TESTS
     tst_type_placeholder
     tst_text_gamma_fonts
     tst_shared_widgets
+    tst_value_input_enter
     tst_info_panel
     tst_system_info
     tst_histogram_panel

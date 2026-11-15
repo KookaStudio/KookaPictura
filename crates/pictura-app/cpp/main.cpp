@@ -61,6 +61,7 @@
 #include "theme.h"
 #include "toolbox.h"
 #include "tools.h"
+#include "value_input_enter.h"
 
 #include "api/view_bridge.h"
 
@@ -130,6 +131,7 @@ int main(int argc, char* argv[])
     // and the weighted chrome (Medium tab labels, etc.) hits a face that exists.
     pictura::applyBundledUiFont();
     pictura::installDialogChrome();
+    pictura::installValueInputEnter();
 
     // Surface Qt's own diagnostics (QRhi logs through qWarning) on stderr so
     // the interop probe can capture them under xvfb/offscreen.

@@ -350,6 +350,7 @@ struct PlaceDriver {
         switch (action) {
         case PlaceAction::CommitEnter: {
             if (ImageView* canvas = window->imageView()) {
+                canvas->setFocus();
                 QKeyEvent key(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
                 QCoreApplication::sendEvent(canvas, &key);
             }

@@ -17,6 +17,7 @@
 #include <QtGui/QImage>
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QToolButton>
 
 class PerspectiveCropTest : public QObject {
@@ -28,6 +29,7 @@ private slots:
     void clickOrderIsOrientedUpright();
     void rotateCursorOutsideCompleteQuad();
     void optionsBarApplyCancelFollowQuad();
+    void enterInFieldKeepsQuadStaged();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -201,6 +203,50 @@ void PerspectiveCropTest::optionsBarApplyCancelFollowQuad()
     QVERIFY(width->isBlank());
     QVERIFY(apply->isHidden() && cancel->isHidden() && reset->isHidden());
     QCOMPARE(frame.activeTool(), pictura::ToolId::PerspectiveCrop);
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void PerspectiveCropTest::enterInFieldKeepsQuadStaged()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("PerspEnter"), 120, 120, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(canvas);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    frame.setActiveTool(pictura::ToolId::PerspectiveCrop);
+    click(canvas, QPointF(20, 20));
+    click(canvas, QPointF(100, 20));
+    click(canvas, QPointF(100, 100));
+    click(canvas, QPointF(20, 100));
+    QVERIFY(canvas->hasPerspectiveCropQuadForTest());
+
+    auto* zoom = frame.findChild<pictura::NumericField*>(QStringLiteral("statusZoomField"));
+    QVERIFY(zoom);
+    auto* edit = zoom->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->setFocus();
+    QCoreApplication::processEvents();
+    QVERIFY(edit->hasFocus());
+    edit->selectAll();
+    QTest::keyClicks(edit, QStringLiteral("200"));
+    QTest::keyClick(edit, Qt::Key_Return);
+
+    QCOMPARE(zoom->value(), 200.0);
+    QVERIFY(!edit->hasFocus());
+    QVERIFY(canvas->hasPerspectiveCropQuadForTest());
+
+    // Enter with no value input focused commits the staged quad.
+    canvas->setFocus();
+    QCoreApplication::processEvents();
+    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(&frame, &enter);
+    QVERIFY(!canvas->hasPerspectiveCropQuadForTest());
+    QCOMPARE(frame.activeView()->document_width(), 80);
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
