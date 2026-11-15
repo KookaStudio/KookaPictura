@@ -265,7 +265,6 @@ pub mod qobject {
         /// The image to display: cached when clean, else rebuilt.
         #[qinvokable]
         fn image(self: Pin<&mut Self>) -> QImage;
-
         /// A premultiplied crop of view-pyramid `level` at `(x, y, w, h)`, or an empty image for an out-of-range level or rectangle.
         #[qinvokable]
         fn display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
