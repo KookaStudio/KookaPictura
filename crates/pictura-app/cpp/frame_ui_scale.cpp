@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "panels/numeric_field.h"
 #include "panels/panel_column.h"
 #include "menu_registrar.h"
 
