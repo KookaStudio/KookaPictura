@@ -260,7 +260,7 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | WF-4 | `save-and-save-as.md` | GIF-via-Indexed on save + Save a Copy | MISSING | `encode_image.cpp` | #628 |
 | WF-5 | `web-export-and-slices.md` | Save for Web slice HTML/CSS emitter, 2-Up/4-Up, colour-table editor, metadata menu | MISSING | `save_for_web_dialog.cpp:176-292` | #629 |
 | WF-6 | `export-formats.md` | Export Layers To Files, Data Sets As Files, Zoomify, Render Video, Paths to Illustrator | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #630 |
-| WF-7 | `file-info-and-metadata.md` | Extra tabs (IPTC Extension/GPS/Origin/Video/Audio/Photoshop/DICOM) + editing | PARTIAL | `file_info_dialog.cpp:73` | #631 |
+| WF-7 | `file-info-and-metadata.md` | Extra tabs (IPTC Extension/GPS/Origin/Photoshop) + editing | SHIPPED | `file_info_dialog.{h,cpp}`; `pictura-codec/src/xmp/tree.rs`; `pictura-codec/src/metadata/iptc_extension.rs`; `pictura-codec/src/exif.rs` | #631 |
 | WF-8 | `camera-raw-workflow.md` | Camera Raw settings stores (XMP sidecar / ACR database) | MISSING | `crs_xmp.rs:1-9` | #632 |
 | WF-9 | `camera-raw-workflow.md` | ACR Workflow Options, ACR preferences, batch, Purge Camera Raw | MISSING | `pictura_raw_dialog.cpp:47-60` | #633 |
 | WF-10 | `printing.md` | Print colour management, proofing, output marks, persist defaults | PARTIAL | `print_dialog.cpp:181-199` | #634 |

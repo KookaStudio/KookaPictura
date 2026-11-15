@@ -72,8 +72,8 @@ Deeper technical status for PSD/PSB lives in
       colour-table editor, and the metadata menu (#629)
 - [ ] Data Sets As Files, Zoomify, Render Video, and Paths to Illustrator
       (#630)
-- [ ] The File Info tabs for IPTC Extension, GPS, Origin, Video, Audio,
-      Photoshop and DICOM, and the editing they imply (#631)
+- [x] The File Info tabs for IPTC Extension, GPS, Origin and Photoshop, and
+      the editing they imply (#631). Video, Audio and DICOM are not planned.
 - [ ] Print colour management, proofing, output marks, and persisted defaults
       (#634)
 - [ ] The measurement scale and presets, the exporters, and PSD resource 1074
