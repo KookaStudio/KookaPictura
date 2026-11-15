@@ -19,6 +19,7 @@
 #include <QtCore/QTimer>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtGui/QImageWriter>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -30,6 +31,12 @@
 #include <memory>
 
 namespace {
+
+bool tiffWriterAvailable()
+{
+    const QList<QByteArray> formats = QImageWriter::supportedImageFormats();
+    return formats.contains("tif") || formats.contains("tiff");
+}
 
 template <typename T>
 T* child(QObject& parent, const char* name)
@@ -68,7 +75,7 @@ QString addLayer(pictura::PictureView& view, const QString& name)
 }
 
 bool exportAll(pictura::PictureView& view, const QString& folder, const QString& prefix = QString(),
-               bool visibleOnly = false, const QString& format = QStringLiteral("TIFF"),
+               bool visibleOnly = false, const QString& format = QStringLiteral("PSD"),
                bool icc = false)
 {
     return pictura::exportLayers(&view, folder, prefix, visibleOnly, format, icc);
@@ -200,13 +207,16 @@ void ExportLayersTest::layersWritesOneFilePerLayer()
 
 void ExportLayersTest::layersUseDocumentCanvas()
 {
+    if (!tiffWriterAvailable()) {
+        QSKIP("Qt TIFF writer unavailable");
+    }
     pictura::PictureView* view = newDoc(*window_, QStringLiteral("LayersCanvas"), 200, 100);
     QVERIFY(view);
     QVERIFY(!addLayer(*view, QStringLiteral("only")).isEmpty());
     hideBackground(*view);
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
-    QVERIFY(exportAll(*view, dir.path(), QString(), true));
+    QVERIFY(exportAll(*view, dir.path(), QString(), true, QStringLiteral("TIFF")));
     const QStringList output = files(dir.path());
     QCOMPARE(output.size(), 1);
     const QImage image(dir.filePath(output.first()));
@@ -231,9 +241,9 @@ void ExportLayersTest::layersGroupChildren()
     QVERIFY(exportAll(*view, dir.path()));
     const QStringList output = files(dir.path());
     QCOMPARE(output.size(), 3);
-    QVERIFY(!output.contains(QStringLiteral("Group.tif")));
-    QVERIFY(output.contains(QStringLiteral("a.tif")));
-    QVERIFY(output.contains(QStringLiteral("b.tif")));
+    QVERIFY(!output.contains(QStringLiteral("Group.psd")));
+    QVERIFY(output.contains(QStringLiteral("a.psd")));
+    QVERIFY(output.contains(QStringLiteral("b.psd")));
 }
 
 void ExportLayersTest::layersGroupEffectsNotApplied()
@@ -248,7 +258,7 @@ void ExportLayersTest::layersGroupEffectsNotApplied()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QVERIFY(exportAll(*view, dir.path()));
-    QVERIFY(files(dir.path()).contains(QStringLiteral("child.tif")));
+    QVERIFY(files(dir.path()).contains(QStringLiteral("child.psd")));
 }
 
 void ExportLayersTest::layersAdjustmentTarget()
@@ -258,17 +268,19 @@ void ExportLayersTest::layersAdjustmentTarget()
     QVERIFY(view->add_adjustment(QStringLiteral("invert")));
 
     // The adjustment alone has no pixels: its raster target is transparent.
-    QTemporaryDir tiffDir;
-    QVERIFY(tiffDir.isValid());
-    QVERIFY(exportAll(*view, tiffDir.path(), QString(), false, QStringLiteral("TIFF")));
-    bool transparent = false;
-    for (const QString& name : files(tiffDir.path())) {
-        const QImage image(tiffDir.filePath(name));
-        if (image.hasAlphaChannel() && image.pixelColor(0, 0).alpha() == 0) {
-            transparent = true;
+    if (tiffWriterAvailable()) {
+        QTemporaryDir tiffDir;
+        QVERIFY(tiffDir.isValid());
+        QVERIFY(exportAll(*view, tiffDir.path(), QString(), false, QStringLiteral("TIFF")));
+        bool transparent = false;
+        for (const QString& name : files(tiffDir.path())) {
+            const QImage image(tiffDir.filePath(name));
+            if (image.hasAlphaChannel() && image.pixelColor(0, 0).alpha() == 0) {
+                transparent = true;
+            }
         }
+        QVERIFY(transparent);
     }
-    QVERIFY(transparent);
 
     // The PSD target carries the adjustment layer.
     QTemporaryDir psdDir;
@@ -297,7 +309,7 @@ void ExportLayersTest::layersHiddenLayerRenders()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QVERIFY(exportAll(*view, dir.path(), QString(), false));
-    QVERIFY(files(dir.path()).contains(QStringLiteral("hidden.tif")));
+    QVERIFY(files(dir.path()).contains(QStringLiteral("hidden.psd")));
 }
 
 void ExportLayersTest::layersPsdKeepsSingleLayer()
@@ -318,6 +330,9 @@ void ExportLayersTest::layersPsdKeepsSingleLayer()
 
 void ExportLayersTest::layersTiffDocumentCanvas()
 {
+    if (!tiffWriterAvailable()) {
+        QSKIP("Qt TIFF writer unavailable");
+    }
     pictura::PictureView* view = newDoc(*window_, QStringLiteral("LayersTiff"), 200, 100);
     QVERIFY(view);
     QVERIFY(!addLayer(*view, QStringLiteral("only")).isEmpty());
@@ -401,12 +416,12 @@ void ExportLayersTest::layersReplaceExistingFiles()
     hideBackground(*view);
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
-    QFile old(dir.filePath(QStringLiteral("replace.tif")));
+    QFile old(dir.filePath(QStringLiteral("replace.psd")));
     QVERIFY(old.open(QIODevice::WriteOnly));
     old.write("old");
     old.close();
     QVERIFY(exportAll(*view, dir.path(), QString(), true));
-    QVERIFY(QFileInfo(dir.filePath(QStringLiteral("replace.tif"))).size() > 4);
+    QVERIFY(QFileInfo(dir.filePath(QStringLiteral("replace.psd"))).size() > 4);
 }
 
 void ExportLayersTest::layersDirectoryTargetStopsBatch()
@@ -417,7 +432,7 @@ void ExportLayersTest::layersDirectoryTargetStopsBatch()
     hideBackground(*view);
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
-    QVERIFY(QDir(dir.path()).mkdir(QStringLiteral("taken.tif")));
+    QVERIFY(QDir(dir.path()).mkdir(QStringLiteral("taken.psd")));
     QVERIFY(!exportAll(*view, dir.path(), QString(), true));
 }
 
@@ -462,7 +477,7 @@ void ExportLayersTest::layersWriteFailureStopsBatch()
     hideBackground(*view);
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
-    QVERIFY(QDir(dir.path()).mkdir(QStringLiteral("taken.tif")));
+    QVERIFY(QDir(dir.path()).mkdir(QStringLiteral("taken.psd")));
     QVERIFY(!exportAll(*view, dir.path(), QString(), true));
 }
 
