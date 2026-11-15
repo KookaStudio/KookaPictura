@@ -331,3 +331,120 @@ print(np.array(psd[0].mask.topil()).tobytes().hex())
         assert_eq!(got[5], hex(&mask), "raster mask ({tag})");
     }
 }
+
+/// Alpha-channel names written by the codec are visible to psd-tools through
+/// the Unicode alpha-names resource (1045).
+#[test]
+fn psd_tools_reports_alpha_names() {
+    if !psd_tools_available() {
+        eprintln!("skipping: python3 + psd-tools not available");
+        return;
+    }
+
+    let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
+    doc.channels = vec![
+        Channel {
+            id: 0,
+            data: vec![0u8; 8].into(),
+        },
+        Channel {
+            id: 1,
+            data: vec![0u8; 8].into(),
+        },
+    ];
+    let names = vec!["Hair".to_string(), "Ciel étoilé".to_string()];
+    pictura_codec::set_alpha_names(&mut doc, &names);
+
+    let dir = scratch_dir("psd-alpha-names");
+    let path = dir.join("alpha_names.psd");
+    std::fs::write(&path, write_psd(&doc).unwrap()).unwrap();
+
+    let script = r#"
+import sys
+from psd_tools import PSDImage
+psd = PSDImage.open(sys.argv[1])
+print("|".join(str(name) for name in psd.image_resources.get_data(1045)))
+"#;
+    let out = Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .arg(&path)
+        .output()
+        .expect("run python3");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(
+        out.status.success(),
+        "psd-tools failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "Hair|Ciel étoilé",
+        "psd-tools reports the Unicode alpha names"
+    );
+}
+
+/// A PSD whose names exist only in the legacy 1006 resource is readable by
+/// psd-tools: the Pascal strings are unpadded and MacRoman-encoded.
+#[test]
+fn psd_tools_reports_pascal_alpha_names() {
+    if !psd_tools_available() {
+        eprintln!("skipping: python3 + psd-tools not available");
+        return;
+    }
+
+    let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
+    doc.channels = vec![
+        Channel {
+            id: 0,
+            data: vec![0u8; 8].into(),
+        },
+        Channel {
+            id: 1,
+            data: vec![0u8; 8].into(),
+        },
+    ];
+    let names = [&b"Hair"[..], &b"Caf\x8E"[..]];
+    let mut data = Vec::new();
+    for name in names {
+        data.push(name.len() as u8);
+        data.extend_from_slice(name);
+    }
+    doc.image_resources =
+        pictura_codec::encode_image_resources(&[pictura_codec::frame_image_resource(
+            pictura_codec::ALPHA_NAMES_PASCAL,
+            "",
+            &data,
+        )])
+        .into();
+
+    let dir = scratch_dir("psd-alpha-pascal-names");
+    let path = dir.join("alpha_pascal_names.psd");
+    std::fs::write(&path, write_psd(&doc).unwrap()).unwrap();
+
+    let script = r#"
+import sys
+from psd_tools import PSDImage
+psd = PSDImage.open(sys.argv[1])
+print("|".join(str(name) for name in psd.image_resources.get_data(1006)))
+"#;
+    let out = Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .arg(&path)
+        .output()
+        .expect("run python3");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(
+        out.status.success(),
+        "psd-tools failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "Hair|Café",
+        "psd-tools reports the legacy Pascal alpha names"
+    );
+}
