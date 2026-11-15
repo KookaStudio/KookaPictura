@@ -108,6 +108,47 @@ impl Default for SaveRasterOptions {
     }
 }
 
+/// The palette settings the engine GIF encoder uses for the next GIF save.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::cxxqt_object) struct SaveGifOptions {
+    /// 0 Exact, 1 Web, 2 Local Perceptual, 3 Local Selective, 4 Local Adaptive.
+    pub(in crate::cxxqt_object) palette: i32,
+    pub(in crate::cxxqt_object) colors: i32,
+    /// 0 None, 1 Diffusion, 2 Pattern, 3 Noise.
+    pub(in crate::cxxqt_object) dither: i32,
+    pub(in crate::cxxqt_object) amount: i32,
+    pub(in crate::cxxqt_object) interlaced: bool,
+}
+
+impl Default for SaveGifOptions {
+    fn default() -> Self {
+        Self {
+            palette: 2,
+            colors: 256,
+            dither: 1,
+            amount: 75,
+            interlaced: false,
+        }
+    }
+}
+
+pub fn set_save_gif_options(
+    mut view: Pin<&mut PictureView>,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+    interlaced: bool,
+) {
+    view.as_mut().rust_mut().save_gif_options = Some(SaveGifOptions {
+        palette,
+        colors,
+        dither,
+        amount,
+        interlaced,
+    });
+}
+
 pub fn set_save_raster_options(
     mut view: Pin<&mut PictureView>,
     quality: i32,

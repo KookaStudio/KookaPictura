@@ -58,6 +58,11 @@ partial file.
 
 - **WHEN** the encode edge is given a path in a directory that does not exist
 - **THEN** it returns failure and no file is created
+#### Scenario: GIF Save As uses the engine, not the Qt edge [raster-export-gif]
+
+- **WHEN** a document is saved to a `.gif` destination
+- **THEN** the engine GIF89a encoder writes the file and the Qt raster edge is not used
+
 ### Requirement: Export As writes the flattened composite
 
 The application SHALL provide `File ▸ Export As…`. It SHALL open the CC-style

@@ -139,6 +139,10 @@ QJsonObject saveFormatOptionsToJson(const SaveFormatOptions& options)
 
     QJsonObject gif;
     gif.insert(QStringLiteral("rowOrder"), options.gifRowOrder);
+    gif.insert(QStringLiteral("palette"), options.gifPalette);
+    gif.insert(QStringLiteral("colors"), options.gifColors);
+    gif.insert(QStringLiteral("dither"), options.gifDither);
+    gif.insert(QStringLiteral("amount"), options.gifAmount);
 
     QJsonObject eps;
     eps.insert(QStringLiteral("preview"), options.epsPreview);
@@ -218,6 +222,10 @@ SaveFormatOptions saveFormatOptionsFromJson(const QJsonObject& root)
 
     const QJsonObject gif = root.value(QStringLiteral("gif")).toObject();
     options.gifRowOrder = clamped(gif.value(QStringLiteral("rowOrder")).toInt(options.gifRowOrder), 0, 1);
+    options.gifPalette = clamped(gif.value(QStringLiteral("palette")).toInt(options.gifPalette), 0, 4);
+    options.gifColors = clamped(gif.value(QStringLiteral("colors")).toInt(options.gifColors), 2, 256);
+    options.gifDither = clamped(gif.value(QStringLiteral("dither")).toInt(options.gifDither), 0, 3);
+    options.gifAmount = clamped(gif.value(QStringLiteral("amount")).toInt(options.gifAmount), 0, 100);
 
     const QJsonObject eps = root.value(QStringLiteral("eps")).toObject();
     options.epsPreview = clamped(eps.value(QStringLiteral("preview")).toInt(options.epsPreview), 0, 2);

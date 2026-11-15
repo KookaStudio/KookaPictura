@@ -191,6 +191,7 @@ pub use web::{
 pub use webp::{decode_webp, encode_webp};
 pub use write::{write_psb, write_psb_cached, write_psd, write_psd_cached};
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
+pub use write_indexed::indexed_source_is_current;
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};
 
 /// Read a Pictura Raw filter's `Fltr` options from a

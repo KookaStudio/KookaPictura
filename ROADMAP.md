@@ -74,7 +74,7 @@ Deeper technical status for PSD/PSB lives in
 - [x] GIF-via-Indexed on save (#628).
       `crates/pictura-app/cpp/gif_options_dialog.cpp`;
       `crates/pictura-codec/src/save/mod.rs`.
-- [ ] Save a Copy (#628)
+- [x] Save a Copy (#628)
 - [x] The Save for Web slice HTML and CSS emitter, 2-Up and 4-Up, the
       colour-table editor, and the metadata menu (#629)
 - [x] **Zoomify and Paths to Illustrator** (#630)

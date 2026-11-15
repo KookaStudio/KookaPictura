@@ -38,6 +38,10 @@ pub mod ffi {
         /// PDF path, no document, or a save already running.
         fn save_start(view: Pin<&mut PictureView>, path: &QString) -> bool;
 
+        /// Start a native `.psd`/`.psb` copy on a worker without recording the
+        /// path or clearing modified.
+        fn save_copy_start(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
         /// Whether a started native save is still running.
         fn save_running(view: &PictureView) -> bool;
 

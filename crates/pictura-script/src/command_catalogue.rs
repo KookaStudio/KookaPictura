@@ -88,6 +88,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "file.fileInfo",
         "file.save",
         "file.saveAs",
+        "file.saveCopy",
         "file.exportAs",
         "file.export.zoomify",
         "file.export.paths.to.illustrator",

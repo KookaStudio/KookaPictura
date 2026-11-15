@@ -46,6 +46,28 @@ void PicturaMainWindow::setWarningDriverForTest(
     }
 }
 
+void PicturaMainWindow::setProfileDialogForTest(std::function<bool(bool, bool&)> hook)
+{
+    if (importSave_) {
+        importSave_->setProfileDialogForTest(std::move(hook));
+    }
+}
+
+void PicturaMainWindow::setFeatureWarningForTest(std::function<bool()> hook)
+{
+    if (importSave_) {
+        importSave_->setFeatureWarningForTest(std::move(hook));
+    }
+}
+
+void PicturaMainWindow::setGifDialogDriverForTest(
+    std::function<bool(IndexedColorDialog&)> driver)
+{
+    if (importSave_) {
+        importSave_->setGifDialogDriverForTest(std::move(driver));
+    }
+}
+
 bool PicturaMainWindow::runSaveFormatDialog(SaveFormatKind kind, SaveFormatOptions& options)
 {
     return importSave_ && importSave_->runSaveFormatDialog(kind, options);

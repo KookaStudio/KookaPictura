@@ -206,9 +206,11 @@ pub mod qobject {
             depth: i32,
             background: &QString,
         ) -> bool;
-        /// Serialize the document to `path` in the format named by the path's extension: PSD/PSB through the codec, WebP through the engine encoder, every other raster format through the Qt encode edge. Clears the dirty flag; false on any encode/IO error.
+        /// Serialize the document to `path` in the format named by the path's extension: PSD/PSB through the codec, GIF through the engine GIF89a encoder, WebP through the engine encoder, and the other raster formats through the Qt encode edge. Clears the dirty flag; false on any encode/IO error.
         #[qinvokable]
         fn save(self: Pin<&mut Self>, path: &QString) -> bool;
+        #[qinvokable]
+        fn save_copy(self: Pin<&mut Self>, path: &QString) -> bool;
         /// Whether the document has unsaved changes (false when none).
         #[qinvokable]
         fn is_dirty(&self) -> bool;

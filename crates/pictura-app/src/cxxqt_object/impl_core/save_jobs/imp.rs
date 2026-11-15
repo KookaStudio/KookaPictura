@@ -17,9 +17,14 @@ pub(in crate::cxxqt_object) struct SaveJob {
     start_history: Option<u64>,
     start_revision: u64,
     generation: u64,
+    copy: bool,
 }
 
-pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path: &str) -> bool {
+pub(in crate::cxxqt_object) fn save_start_rust(
+    rust: &mut PictureViewRust,
+    path: &str,
+    copy: bool,
+) -> bool {
     super::super::super::helpers::memory_gate::clear();
     if rust
         .save_job
@@ -116,6 +121,7 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
         start_history,
         start_revision,
         generation,
+        copy,
     });
     true
 }
@@ -141,6 +147,9 @@ pub(in crate::cxxqt_object) fn save_finish_rust(rust: &mut PictureViewRust) -> b
         // "not applied" so the frame keeps the replacement's path and title.
         return false;
     }
+    if job.copy {
+        return true;
+    }
     rust.path = Some(job.path);
     let current = (
         rust.session.history.current_id(),
@@ -154,7 +163,12 @@ pub(in crate::cxxqt_object) fn save_finish_rust(rust: &mut PictureViewRust) -> b
 
 pub(super) fn save_start(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     view.as_mut().settle_pending_composite();
-    save_start_rust(&mut view.as_mut().rust_mut(), &path.to_string())
+    save_start_rust(&mut view.as_mut().rust_mut(), &path.to_string(), false)
+}
+
+pub(super) fn save_copy_start(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+    view.as_mut().settle_pending_composite();
+    save_start_rust(&mut view.as_mut().rust_mut(), &path.to_string(), true)
 }
 
 pub(super) fn save_running(view: &PictureView) -> bool {
@@ -206,7 +220,7 @@ mod tests {
     fn a_started_save_finishes_writes_and_clears_modified() {
         let mut rust = view();
         let path = path("save.psd");
-        assert!(save_start_rust(&mut rust, &path));
+        assert!(save_start_rust(&mut rust, &path, false));
         wait(&rust);
         assert!(save_finish_rust(&mut rust));
         assert_eq!(rust.path.as_deref(), Some(path.as_str()));
@@ -223,7 +237,7 @@ mod tests {
         rust.session.dirty = true;
         lose_tiles(rust.session.doc.as_ref().unwrap());
         let path = path("unreadable.psd");
-        assert!(!save_start_rust(&mut rust, &path));
+        assert!(!save_start_rust(&mut rust, &path, false));
         assert!(crate::cxxqt_object::helpers::memory_gate::edit_refused_for_scratch());
         assert!(!std::path::Path::new(&path).exists(), "nothing was written");
     }
@@ -236,8 +250,8 @@ mod tests {
         // legitimately succeeds.
         rust.save_delay_for_test = 200;
         let path = path("twice.psd");
-        assert!(save_start_rust(&mut rust, &path));
-        assert!(!save_start_rust(&mut rust, &path));
+        assert!(save_start_rust(&mut rust, &path, false));
+        assert!(!save_start_rust(&mut rust, &path, false));
         wait(&rust);
         assert!(save_finish_rust(&mut rust));
         let _ = std::fs::remove_file(&path);
@@ -248,7 +262,7 @@ mod tests {
         let mut rust = view();
         let path = path("stale.psd");
         let snapshot = rust.session.doc.clone().expect("document");
-        assert!(save_start_rust(&mut rust, &path));
+        assert!(save_start_rust(&mut rust, &path, false));
         rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
         wait(&rust);
         assert!(save_finish_rust(&mut rust));
@@ -265,7 +279,7 @@ mod tests {
         let mut rust = view();
         rust.path = Some("original.psd".to_string());
         let path = path("replaced.psd");
-        assert!(save_start_rust(&mut rust, &path));
+        assert!(save_start_rust(&mut rust, &path, false));
         rust.session.doc = Some(Document::from_rgba("Other", 4, 4, &[1u8; 4 * 4 * 4]));
         rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
         wait(&rust);
@@ -280,7 +294,7 @@ mod tests {
         let mut rust = view();
         let path = path("save.psd");
         std::fs::create_dir_all(&path).unwrap();
-        assert!(save_start_rust(&mut rust, &path));
+        assert!(save_start_rust(&mut rust, &path, false));
         wait(&rust);
         assert!(!save_finish_rust(&mut rust));
         assert!(rust.path.is_none());
@@ -299,7 +313,7 @@ mod tests {
     fn a_synchronous_save_writes_the_worker_bytes() {
         let mut rust = view();
         let path = path("sync.psd");
-        assert!(save_start_rust(&mut rust, &path));
+        assert!(save_start_rust(&mut rust, &path, false));
         wait(&rust);
         assert!(save_finish_rust(&mut rust));
         let written = std::fs::read(&path).expect("saved file");
@@ -330,11 +344,25 @@ mod tests {
         rust.session.doc = Some(doc);
         rust.session.dirty = true;
         let path = path("layers.psd");
-        assert!(save_start_rust(&mut rust, &path));
+        assert!(save_start_rust(&mut rust, &path, false));
         wait(&rust);
         assert!(save_finish_rust(&mut rust));
         let back = pictura_codec::read_psd(&std::fs::read(&path).unwrap()).expect("reads");
         assert_eq!(back.layers.len(), 2);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn copy_intent_skips_path_and_dirty() {
+        let mut rust = view();
+        rust.path = Some("original.psd".to_string());
+        let path = path("copy.psd");
+        assert!(save_start_rust(&mut rust, &path, true));
+        wait(&rust);
+        assert!(save_finish_rust(&mut rust));
+        assert_eq!(rust.path.as_deref(), Some("original.psd"));
+        assert!(rust.session.dirty);
+        assert!(std::path::Path::new(&path).is_file());
         let _ = std::fs::remove_file(&path);
     }
 }

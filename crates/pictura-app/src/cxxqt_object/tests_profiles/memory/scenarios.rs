@@ -351,7 +351,7 @@ pub(super) fn free_transform(view: &mut PictureViewRust) {
 
 /// M11, as Save As PSD: the save job's snapshot, its worker's encode and write.
 pub(super) fn save_psd(view: &mut PictureViewRust, file: &TempFile) {
-    assert!(save_start_rust(view, &file.0), "the save starts");
+    assert!(save_start_rust(view, &file.0, false), "the save starts");
     assert!(save_finish_rust(view), "the save lands");
 }
 

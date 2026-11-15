@@ -137,8 +137,8 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path)
                      [view] { return document_api::saveFinish(*view); })
         : document_api::save(*view, path);
     if (!saved) {
-        if (saveRunsOnWorker(path)) {
-            reportMemoryRefusal(dialogParent_, tr("save the document"));
+        if (!reportMemoryRefusal(dialogParent_, tr("save the document")) && hooks_.showStatus) {
+            hooks_.showStatus(tr("Could not save %1.").arg(name), 6000);
         }
         return false;
     }
@@ -163,6 +163,112 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path)
     return true;
 }
 
+bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, PictureView& view)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    const bool native = suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
+    const bool offersProfile = native || suffix == QStringLiteral("jpg")
+        || suffix == QStringLiteral("jpeg") || suffix == QStringLiteral("jpe")
+        || suffix == QStringLiteral("tif") || suffix == QStringLiteral("tiff");
+    if (!offersProfile) {
+        return true;
+    }
+    const bool initial = pictura::default_save_embed_profile(view, native);
+    if (profileDialogForTest_) {
+        bool embed = initial;
+        if (!profileDialogForTest_(initial, embed)) {
+            return false;
+        }
+        pictura::set_save_embed_profile(view, embed);
+        return true;
+    }
+    SaveOptionsDialog options(initial, true, dialogParent_);
+    if (runDialog(options, dialogParent_) != QDialog::Accepted) {
+        return false;
+    }
+    pictura::set_save_embed_profile(view, options.embedProfile());
+    return true;
+}
+
+bool ImportSaveCoordinator::confirmFeatureWarning(const QString& path, PictureView& view,
+                                                  const QString& title)
+{
+    if (!saveAsNeedsFeatureWarning(path, &view)) {
+        return true;
+    }
+    if (featureWarningForTest_) {
+        return featureWarningForTest_();
+    }
+    return QMessageBox::warning(
+               dialogParent_, title,
+               tr("The chosen format cannot hold all of the document's features. "
+                  "The flattened composite will be written."),
+               QMessageBox::Save | QMessageBox::Cancel)
+        == QMessageBox::Save;
+}
+
+bool ImportSaveCoordinator::saveCopyWithDialog()
+{
+    PictureView* view = documents_.activeView();
+    if (!view || !view->has_document()) {
+        return false;
+    }
+    const QStringList& filters = saveFileFilters();
+    const int sourceIndex = defaultSaveFilterIndex(view);
+    QString selected = filters.at(sourceIndex);
+    QString path = getSaveFileName(dialogParent_, tr("Save a Copy"),
+                                   documents_.activeFilePath(), filters, &selected);
+    if (path.isEmpty()) {
+        return false;
+    }
+    const int chosen = filters.indexOf(selected);
+    const int filterIndex = chosen >= 0 ? chosen : sourceIndex;
+    const SaveFormatKind hint = saveFormatKindForFilter(filterIndex);
+    path = pathForSaveFilter(path, filterIndex, sourceIndex);
+    if (isPdfPath(path)) {
+        return savePdfWithDialog(path, true);
+    }
+    return saveCopyAsWithOptions(path, hint);
+}
+
+bool ImportSaveCoordinator::saveCopyAsWithOptions(const QString& path, SaveFormatKind hint)
+{
+    PictureView* view = documents_.activeView();
+    if (!view || !view->has_document() || !promptSaveFormatOptions(path, hint)) {
+        return false;
+    }
+    if (!confirmSaveProfile(path, *view)
+        || !confirmFeatureWarning(path, *view, tr("Save a Copy"))) {
+        return false;
+    }
+    return saveCopyAs(path);
+}
+
+bool ImportSaveCoordinator::saveCopyAs(const QString& path)
+{
+    const int index = documents_.activeIndex();
+    PictureView* view = documents_.viewAt(index);
+    if (!view || path.isEmpty()) {
+        return false;
+    }
+    const QString name = QFileInfo(path).fileName();
+    const bool native = saveRunsOnWorker(path);
+    const bool saved = native
+        ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
+                     [view, path] { return document_api::saveCopyStart(*view, path); },
+                     [view] { return document_api::saveRunning(*view); },
+                     [view] { return document_api::saveFinish(*view); })
+        : document_api::saveCopy(*view, path);
+    if (!saved) {
+        const QString action = tr("save a copy of %1").arg(name);
+        if (!reportMemoryRefusal(dialogParent_, action) && hooks_.showStatus) {
+            hooks_.showStatus(tr("Could not save a copy of %1.").arg(name), 6000);
+        }
+        return false;
+    }
+    return true;
+}
+
 bool ImportSaveCoordinator::saveActiveAtPath(const QString& path)
 {
     PictureView* view = documents_.activeView();
@@ -173,10 +279,6 @@ bool ImportSaveCoordinator::saveActiveAtPath(const QString& path)
     if (kind != SaveFormatKind::None) {
         applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(saveFormatOptions_));
         lastSaveKinds_.insert(view, kind);
-    }
-    if (kind == SaveFormatKind::Gif && pictura::image_mode(*view) != QStringLiteral("indexed")
-        && !convert_to_indexed(*view, 4, 256, 0, 0)) {
-        return false;
     }
     return saveActiveAs(path);
 }
@@ -295,53 +397,46 @@ bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFor
         return true;
     }
     SaveFormatOptions options = saveFormatOptionsFromJson(saveFormatOptions_);
-    if (kind == SaveFormatKind::Gif && pictura::image_mode(*view) != QStringLiteral("indexed")) {
-        if (gifDialogForTest_) {
-            if (!gifDialogForTest_(view, options)) {
-                return false;
-            }
-        } else {
-            IndexedColorDialog dialog(indexed_exact_available(*view), dialogParent_);
-            const auto preview = [view, &dialog]() {
+    if (kind == SaveFormatKind::Gif) {
+        if (pictura::image_mode(*view) != QStringLiteral("indexed")) {
+            auto preview = [view](IndexedColorDialog& dialog) {
                 if (dialog.preview()) {
-                    preview_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
-                                    dialog.amount());
+                    preview_indexed(*view, dialog.palette(), dialog.colors(),
+                                    dialog.dither(), dialog.amount());
                 } else {
                     cancel_mode_preview(*view);
                 }
             };
-            connect(&dialog, &IndexedColorDialog::optionsChanged, &dialog, preview);
-            preview();
-            if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
-                cancel_mode_preview(*view);
-                return false;
+            if (gifDialogForTest_) {
+                if (!gifDialogForTest_(view, options)) {
+                    return false;
+                }
+            } else {
+                IndexedColorDialog dialog(indexed_exact_available(*view), dialogParent_);
+                connect(&dialog, &IndexedColorDialog::optionsChanged, &dialog, [&] {
+                    preview(dialog);
+                });
+                preview(dialog);
+                const int result = gifDialogDriver_
+                    ? (gifDialogDriver_(dialog) ? QDialog::Accepted : QDialog::Rejected)
+                    : runDialog(dialog, dialogParent_);
+                if (result != QDialog::Accepted) {
+                    cancel_mode_preview(*view);
+                    return false;
+                }
+                options.gifPalette = dialog.palette();
+                options.gifColors = dialog.colors();
+                options.gifDither = dialog.dither();
+                options.gifAmount = dialog.amount();
+                if (!runSaveFormatDialog(kind, options)) {
+                    cancel_mode_preview(*view);
+                    return false;
+                }
             }
-            if (!runSaveFormatDialog(kind, options)) {
-                cancel_mode_preview(*view);
-                return false;
-            }
-            if (!convert_to_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
-                                    dialog.amount())) {
-                cancel_mode_preview(*view);
-                return false;
-            }
-            rememberSaveFormatOptions(kind, options);
-            applySaveRasterOptions(*view, kind, options);
-            if (hooks_.saveSession) {
-                hooks_.saveSession();
-                return true;
-            }
-            SessionState state = loadSession();
-            state.saveFormatOptions = saveFormatOptions_;
-            pictura::saveSession(state);
-            return true;
+            cancel_mode_preview(*view);
         }
-        if (!runSaveFormatDialog(kind, options)) {
-            return false;
-        }
-        if (!convert_to_indexed(*view, 1, 256, 0, 0)) {
-            return false;
-        }
+        // An already-Indexed document has no palette dialog, and its remembered
+        // row order applies without changing the document.
     } else if (!runSaveFormatDialog(kind, options)) {
         return false;
     }
@@ -502,6 +597,11 @@ void ImportSaveCoordinator::applySaveRasterOptions(PictureView& view, SaveFormat
         pictura::set_save_raster_options(view, jpegQualityPercent(options.jpegQuality), -1,
                                          options.jpegFormat != 0, options.jpegFormat == 2,
                                          options.jpegMatte);
+        break;
+    case SaveFormatKind::Gif:
+        pictura::set_save_gif_options(view, options.gifPalette, options.gifColors,
+                                      options.gifDither, options.gifAmount,
+                                      options.gifRowOrder == 1);
         break;
     case SaveFormatKind::Png:
         pictura::set_save_raster_options(view, -1, options.pngCompression, false, false, -1);

@@ -9,7 +9,9 @@ mod imp;
 
 use super::export_tools::*;
 use super::qobject::PictureView;
-use super::save_format::{raster_preview_bytes, set_save_options, set_save_raster_options};
+use super::save_format::{
+    raster_preview_bytes, set_save_gif_options, set_save_options, set_save_raster_options,
+};
 pub use imp::*;
 
 #[cxx_qt::bridge]
@@ -98,6 +100,16 @@ pub mod ffi {
 
         /// Store the typed Save As kind and JSON options for the engine writers.
         fn set_save_options(view: Pin<&mut PictureView>, kind: i32, json: &str);
+
+        /// Store the palette settings the next GIF save of this document uses.
+        fn set_save_gif_options(
+            view: Pin<&mut PictureView>,
+            palette: i32,
+            colors: i32,
+            dither: i32,
+            amount: i32,
+            interlaced: bool,
+        );
 
         /// The composite encoded at the given settings, for the JPEG dialog's
         /// size estimate and preview; empty when there is no document.

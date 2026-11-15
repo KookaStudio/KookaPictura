@@ -88,6 +88,13 @@ pub(crate) fn writes_indexed(doc: &Document, depth: u16, plane: usize) -> bool {
     indexed_layers_unchanged(&doc.layers, &palette, depth)
 }
 
+/// Whether the document's retained Indexed palette and index plane still
+/// expand to its current composite, so a save can re-emit them byte-exactly.
+/// An edit or a dropped palette makes this false.
+pub fn indexed_source_is_current(doc: &Document) -> bool {
+    writes_indexed(doc, 8, doc.width as usize * doc.height as usize)
+}
+
 /// The retained index plane to emit for an Indexed output's pixel layer, or
 /// `None` when the layer carries no RGB color (a group/adjustment) or has no
 /// retained index channel. [`writes_indexed`] already guaranteed the retained
