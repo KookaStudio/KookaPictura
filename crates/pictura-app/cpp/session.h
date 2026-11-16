@@ -105,7 +105,7 @@ struct SessionState {
     // The last Save Adobe PDF settings as canonical `.joboptions` text, minus
     // the passwords (empty until the first PDF save).
     QString pdfOptions;
-    // The remembered per-format Save As options (jpeg/png/bmp/tiff); an absent
+    // The remembered per-format Save As options (jpeg/png/bmp/tiff/gif); an absent
     // key uses the CS6 defaults (`save_format_options.h`).
     QJsonObject saveFormatOptions;
     bool guideDashed = false;

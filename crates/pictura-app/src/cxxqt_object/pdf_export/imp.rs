@@ -104,7 +104,12 @@ pub(super) fn save_view(
     Ok(())
 }
 
-pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QString) -> QString {
+fn pdf_save_impl(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    options: &QString,
+    copy: bool,
+) -> QString {
     let path = path.to_string();
     let Some(mut options) = parse(options) else {
         return QString::from("The PDF settings could not be read.");
@@ -114,17 +119,29 @@ pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QStri
         return QString::from(reason.as_str());
     }
     let mut rust = view.rust_mut();
-    rust.path = Some(path);
-    rust.session.mark_saved();
+    if !copy {
+        rust.path = Some(path);
+        rust.session.mark_saved();
+    }
     rust.session.pdf_options = Some(pdf::write_joboptions(&options, false));
     QString::default()
 }
 
+pub fn pdf_save(view: Pin<&mut PictureView>, path: &QString, options: &QString) -> QString {
+    pdf_save_impl(view, path, options, false)
+}
+
+/// `pdf_save` without recording the path or clearing the modified state.
+pub fn pdf_save_copy(view: Pin<&mut PictureView>, path: &QString, options: &QString) -> QString {
+    pdf_save_impl(view, path, options, true)
+}
+
 /// `PictureView::save` for a `.pdf`/`.pdp` path: the document's last PDF
-/// options, else `[Photoshop Default]`.
+/// options, else `[Photoshop Default]`. `commit` false writes a copy.
 pub(in crate::cxxqt_object) fn save_with_last_options(
     view: Pin<&mut PictureView>,
     path: &QString,
+    commit: bool,
 ) -> bool {
     let options = view
         .rust()
@@ -132,7 +149,7 @@ pub(in crate::cxxqt_object) fn save_with_last_options(
         .pdf_options
         .clone()
         .unwrap_or_else(|| pdf::write_joboptions(&PdfOptions::default(), false));
-    pdf_save(view, path, &QString::from(options.as_str())).is_empty()
+    pdf_save_impl(view, path, &QString::from(options.as_str()), !commit).is_empty()
 }
 
 pub fn pdf_type_fonts(view: &PictureView) -> QString {

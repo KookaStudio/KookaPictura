@@ -9,6 +9,7 @@ inline constexpr char FileOpenAs[] = "file.openAs";
 inline constexpr char FileNew[] = "file.new";
 inline constexpr char FileSave[] = "file.save";
 inline constexpr char FileSaveAs[] = "file.saveAs";
+inline constexpr char FileSaveCopy[] = "file.saveCopy";
 inline constexpr char FileExportAs[] = "file.exportAs";
 inline constexpr char FileQuickExportPng[] = "file.quickExportPng";
 inline constexpr char FileRevert[] = "file.revert";

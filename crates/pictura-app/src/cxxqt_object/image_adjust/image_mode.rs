@@ -78,6 +78,17 @@ pub mod ffi {
             amount: i32,
         ) -> bool;
 
+        /// Show the GIF save preview: quantize the writer's 8-bit sRGB snapshot
+        /// with the same palette settings the GIF encoder will use. Each call
+        /// starts from the pre-preview document.
+        fn preview_gif_indexed(
+            view: Pin<&mut PictureView>,
+            palette: i32,
+            colors: i32,
+            dither: i32,
+            amount: i32,
+        ) -> bool;
+
         /// Restore the document from before `preview_indexed`; false when no
         /// preview is shown.
         fn cancel_mode_preview(view: Pin<&mut PictureView>) -> bool;

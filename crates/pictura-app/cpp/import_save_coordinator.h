@@ -25,6 +25,7 @@ namespace pictura {
 
 class DocumentRegistry;
 class PictureView;
+class IndexedColorDialog;
 struct SessionState;
 
 // Owns the file seam: the async open pipeline and its tokens/probes, the
@@ -92,6 +93,12 @@ public:
     bool saveAsWithDialog();
     bool saveActiveAsWithOptions(const QString& path,
                                  SaveFormatKind hint = SaveFormatKind::None);
+    bool saveCopyWithDialog();
+    bool saveCopyAs(const QString& path);
+    bool saveCopyAsWithOptions(const QString& path,
+                               SaveFormatKind hint = SaveFormatKind::None);
+    bool confirmSaveProfile(const QString& path, PictureView& view);
+    bool confirmFeatureWarning(const QString& path, PictureView& view, const QString& title);
     bool promptSaveFormatOptions(const QString& path,
                                  SaveFormatKind hint = SaveFormatKind::None);
     bool runSaveFormatDialog(SaveFormatKind kind, SaveFormatOptions& options);
@@ -105,7 +112,7 @@ public:
     bool editSmartObjectContents(const QString& layerPath);
 
     // PDF.
-    bool savePdfWithDialog(const QString& path);
+    bool savePdfWithDialog(const QString& path, bool copy = false);
     quint64 startOpenPdfPath(const QString& path, bool interactive = true);
     void showPdfPresets();
 
@@ -151,6 +158,21 @@ public:
     void setPdfDialogDriverForTest(std::function<bool(QDialog&)> driver)
     {
         pdfDialogDriver_ = std::move(driver);
+    }
+    // Test seam: answer the Embed Color Profile dialog; false cancels.
+    void setProfileDialogForTest(std::function<bool(bool, bool&)> hook)
+    {
+        profileDialogForTest_ = std::move(hook);
+    }
+    // Test seam: answer the feature-loss warning; false cancels.
+    void setFeatureWarningForTest(std::function<bool()> hook)
+    {
+        featureWarningForTest_ = std::move(hook);
+    }
+    // Test seam: answer the GIF Indexed Color dialog; false cancels.
+    void setGifDialogDriverForTest(std::function<bool(IndexedColorDialog&)> driver)
+    {
+        gifDialogDriver_ = std::move(driver);
     }
     void setPdfViewerForTest(std::function<void(const QString&)> viewer)
     {
@@ -244,6 +266,9 @@ private:
     std::function<bool(SaveFormatKind, SaveFormatOptions&)> saveFormatDialogForTest_;
     std::function<bool(PictureView*, SaveFormatOptions&)> gifDialogForTest_;
     std::function<bool(const QString&, const QString&)> warningDriverForTest_;
+    std::function<bool(bool, bool&)> profileDialogForTest_;
+    std::function<bool()> featureWarningForTest_;
+    std::function<bool(IndexedColorDialog&)> gifDialogDriver_;
     std::function<bool(QDialog&)> pdfDialogDriver_;
     std::function<bool(QDialog&)> importDialogDriver_;
     std::function<void(const QString&)> pdfViewer_;

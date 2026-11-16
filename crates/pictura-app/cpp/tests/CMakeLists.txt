@@ -142,6 +142,7 @@ set(PICTURA_QT_TESTS
     tst_save_options
     tst_save_format_options
     tst_save_format_dialogs
+    tst_save_gif_copy
     tst_properties_panel
     tst_properties_preview
     tst_adjustment_presets
@@ -329,6 +330,10 @@ endforeach()
 # indices; pin the device pixel ratio so the two agree.
 set_tests_properties(tst_brush_outline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1")
+
+# Quick Mask runs about 112 s under the 80% CPU budget; give it headroom over
+# the default 120 s timeout so a loaded machine does not fail a passing suite.
+set_tests_properties(tst_quick_mask PROPERTIES TIMEOUT 300)
 
 # The suites include the generated cxx-qt header, so they follow the bridge
 # stamp like the shell does.

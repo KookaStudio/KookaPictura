@@ -7,6 +7,7 @@ file.close	File/Close	Close	Ctrl+W	1	0
 file.closeAll	File/Close All	Close All	Ctrl+Alt+W	1	0
 file.save	File/Save	Save	Ctrl+S	1	0
 file.saveAs	File/Save As…	Save As…	Shift+Ctrl+S	1	0
+file.saveCopy	File/Save a Copy…	Save a Copy…		1	0
 file.exportAs	File/Export As…	Export As…		1	0
 file.quickExportPng	File/Quick Export as PNG	Quick Export as PNG		1	0
 file.check.in	File/Check In…	Check In…		0	0

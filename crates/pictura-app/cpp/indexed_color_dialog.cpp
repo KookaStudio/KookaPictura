@@ -6,9 +6,29 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QVBoxLayout>
 
+#include <algorithm>
+
 namespace pictura {
 
-IndexedColorDialog::IndexedColorDialog(bool exactAvailable, QWidget* parent) : QDialog(parent)
+namespace {
+
+IndexedColorOptions legacyIndexedOptions(bool exactAvailable)
+{
+    IndexedColorOptions options;
+    options.palette = exactAvailable ? 0 : 2;
+    return options;
+}
+
+} // namespace
+
+IndexedColorDialog::IndexedColorDialog(bool exactAvailable, QWidget* parent)
+    : IndexedColorDialog(exactAvailable, legacyIndexedOptions(exactAvailable), parent)
+{
+}
+
+IndexedColorDialog::IndexedColorDialog(bool exactAvailable,
+                                       const IndexedColorOptions& initial, QWidget* parent)
+    : QDialog(parent)
 {
     setWindowTitle(tr("Indexed Color"));
     auto* root = new QHBoxLayout(this);
@@ -25,12 +45,13 @@ IndexedColorDialog::IndexedColorDialog(bool exactAvailable, QWidget* parent) : Q
     palette_->addItem(tr("Local (Perceptual)"), 2);
     palette_->addItem(tr("Local (Selective)"), 3);
     palette_->addItem(tr("Local (Adaptive)"), 4);
-    palette_->setCurrentIndex(exactAvailable ? 0 : palette_->findData(2));
+    const int wanted = palette_->findData(initial.palette);
+    palette_->setCurrentIndex(wanted >= 0 ? wanted : palette_->findData(2));
     paletteForm->addRow(tr("Palette:"), palette_);
     colors_ = new QSpinBox(paletteBox);
     colors_->setObjectName(QStringLiteral("indexedColors"));
     colors_->setRange(2, 256);
-    colors_->setValue(256);
+    colors_->setValue(std::clamp(initial.colors, 2, 256));
     paletteForm->addRow(tr("Colors:"), colors_);
     left->addWidget(paletteBox);
 
@@ -42,12 +63,13 @@ IndexedColorDialog::IndexedColorDialog(bool exactAvailable, QWidget* parent) : Q
     dither_->addItem(tr("Diffusion"), 1);
     dither_->addItem(tr("Pattern"), 2);
     dither_->addItem(tr("Noise"), 3);
-    dither_->setCurrentIndex(1);
+    const int wantedDither = dither_->findData(initial.dither);
+    dither_->setCurrentIndex(wantedDither >= 0 ? wantedDither : 1);
     optionsForm->addRow(tr("Dither:"), dither_);
     amount_ = new QSpinBox(optionsBox);
     amount_->setObjectName(QStringLiteral("indexedAmount"));
     amount_->setRange(0, 100);
-    amount_->setValue(75);
+    amount_->setValue(std::clamp(initial.amount, 0, 100));
     amount_->setSuffix(QStringLiteral(" %"));
     optionsForm->addRow(tr("Amount:"), amount_);
     left->addWidget(optionsBox);
@@ -62,7 +84,7 @@ IndexedColorDialog::IndexedColorDialog(bool exactAvailable, QWidget* parent) : Q
     right->addWidget(buttons);
     preview_ = new QCheckBox(tr("Preview"), this);
     preview_->setObjectName(QStringLiteral("indexedPreview"));
-    preview_->setChecked(true);
+    preview_->setChecked(initial.preview);
     right->addWidget(preview_);
     right->addStretch();
     root->addLayout(right);
@@ -108,6 +130,14 @@ int IndexedColorDialog::dither() const { return dither_->currentData().toInt(); 
 int IndexedColorDialog::amount() const { return amount_->value(); }
 
 bool IndexedColorDialog::preview() const { return preview_->isChecked(); }
+
+void IndexedColorDialog::setPreviewAvailable(bool available)
+{
+    preview_->setEnabled(available);
+    if (!available) {
+        preview_->setChecked(false);
+    }
+}
 
 } // namespace pictura
 

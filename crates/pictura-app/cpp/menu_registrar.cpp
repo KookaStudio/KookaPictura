@@ -953,6 +953,7 @@ void MenuRegistrar::buildMenus(QMenuBar* menuBar)
         connect(recent, &QMenu::aboutToShow, this, [this, recent]() { refreshRecentMenu(recent); });
     }
     // Icon for every implemented command; ids without an asset are skipped.
+    // ponytail: file.saveCopy has no icon asset yet; the File action stays text-only.
     static const char* const kIconCommands[] = {
         command_ids::FileNew,
         command_ids::FileOpen,

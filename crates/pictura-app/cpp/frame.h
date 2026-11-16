@@ -81,6 +81,7 @@ class PanelColumn;
 enum class PanelSide;
 class PanelHost;
 class PictureView;
+class IndexedColorDialog;
 class PlaceholderPanel;
 class AdjustmentsPanel;
 class PreferencesDialog;
@@ -397,6 +398,9 @@ public:
     bool saveAsWithDialog();
     // Save a known path with the suffix's remembered options, no dialog.
     bool saveActiveAsWithRememberedOptions(const QString& path);
+    // Prompt for a copy path with the same filters as Save As and write it
+    // without changing the document's path or modified state.
+    bool saveCopyWithDialog();
     // Prompt for the destination format's options dialog, remember the accepted
     // settings, and store them on the view. False aborts the save. A format that
     // opens no dialog returns true.
@@ -411,11 +415,15 @@ public:
         std::function<bool(SaveFormatKind, SaveFormatOptions&)> hook);
     void setGifDialogForTest(std::function<bool(PictureView*, SaveFormatOptions&)> hook);
     void setWarningDriverForTest(std::function<bool(const QString&, const QString&)> driver);
+    // Test seam: answer the Embed Color Profile dialog and the feature warning.
+    void setProfileDialogForTest(std::function<bool(bool, bool&)> hook);
+    void setFeatureWarningForTest(std::function<bool()> hook);
+    void setGifDialogDriverForTest(std::function<bool(IndexedColorDialog&)> driver);
     bool revertActive();
     // frame_pdf.cpp: Photoshop PDF save through the Save Adobe PDF dialog,
     // reopening a Pictura Photoshop PDF, and Edit > Adobe PDF Presets.
     static bool isPdfPath(const QString& path);
-    bool savePdfWithDialog(const QString& path);
+    bool savePdfWithDialog(const QString& path, bool copy = false);
     quint64 startOpenPdfPath(const QString& path, bool interactive = true);
     void showPdfPresets();
     // frame_import.cpp: a generic PDF through the password prompt and the

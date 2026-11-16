@@ -227,6 +227,7 @@ class SaveFormatOptionsTest : public QObject {
 private slots:
     void initTestCase();
     void formatKindForSuffix();
+    void gifSettingsRoundTrip();
     void dialogDefaults();
     void unsupportedControlsDisabled();
     void jpegQualityChangesSize();
@@ -255,7 +256,7 @@ private slots:
     void rawOptionsWrite();
     void tgaOptionsWrite();
     void cineonOptionsWrite();
-    void gifSaveConverts();
+    void gifSaveKeepsMode();
     void gifCancelLeavesMode();
     void gifWarningBeforeConversion();
     void gifRowOrderWrite();
@@ -313,6 +314,24 @@ void SaveFormatOptionsTest::formatKindForSuffix()
                  SaveFormatKind::Tga);
     }
     QCOMPARE(pictura::saveFormatKindForSuffix(QStringLiteral("cin")), SaveFormatKind::Cineon);
+}
+
+void SaveFormatOptionsTest::gifSettingsRoundTrip()
+{
+    pictura::SaveFormatOptions options;
+    options.gifPalette = 1;
+    options.gifColors = 216;
+    options.gifDither = 3;
+    options.gifAmount = 40;
+    options.gifRowOrder = 1;
+    const pictura::SaveFormatOptions back =
+        pictura::saveFormatOptionsFromJson(pictura::saveFormatOptionsToJson(options));
+    QCOMPARE(back.gifPalette, 1);
+    QCOMPARE(back.gifColors, 216);
+    QCOMPARE(back.gifDither, 3);
+    QCOMPARE(back.gifAmount, 40);
+    QCOMPARE(back.gifRowOrder, 1);
+    QCOMPARE(pictura::saveFormatKey(pictura::SaveFormatKind::Gif), QStringLiteral("gif"));
 }
 
 void SaveFormatOptionsTest::dialogDefaults()
@@ -853,7 +872,7 @@ void SaveFormatOptionsTest::cineonOptionsWrite()
     closeActive();
 }
 
-void SaveFormatOptionsTest::gifSaveConverts()
+void SaveFormatOptionsTest::gifSaveKeepsMode()
 {
     pictura::PictureView* view = newView(QStringLiteral("white"));
     QVERIFY(view);
@@ -863,7 +882,7 @@ void SaveFormatOptionsTest::gifSaveConverts()
     window_->setSaveFormatDialogForTest(
         [](pictura::SaveFormatKind, pictura::SaveFormatOptions&) { return true; });
     QVERIFY(window_->saveActiveAsWithOptions(path("converted.gif")));
-    QCOMPARE(pictura::image_mode(*view), QStringLiteral("indexed"));
+    QCOMPARE(pictura::image_mode(*view), QStringLiteral("rgb"));
     window_->setGifDialogForTest(nullptr);
     window_->setSaveFormatDialogForTest(nullptr);
     closeActive();

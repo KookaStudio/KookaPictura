@@ -12,6 +12,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "file.closeAll", path: &["File", "Close All"], label: "Close All", shortcut: "Ctrl+Alt+W", implemented: true, checkable: false },
     CommandSpec { id: "file.save", path: &["File", "Save"], label: "Save", shortcut: "Ctrl+S", implemented: true, checkable: false },
     CommandSpec { id: "file.saveAs", path: &["File", "Save As…"], label: "Save As…", shortcut: "Shift+Ctrl+S", implemented: true, checkable: false },
+    CommandSpec { id: "file.saveCopy", path: &["File", "Save a Copy…"], label: "Save a Copy…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.exportAs", path: &["File", "Export As…"], label: "Export As…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.quickExportPng", path: &["File", "Quick Export as PNG"], label: "Quick Export as PNG", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.check.in", path: &["File", "Check In…"], label: "Check In…", shortcut: "", implemented: false, checkable: false },

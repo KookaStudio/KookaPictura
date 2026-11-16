@@ -149,6 +149,8 @@ pub struct PictureViewRust {
     pub(super) save_raster_options: Option<super::save_format::SaveRasterOptions>,
     /// Typed Save As kind and options for the engine writers.
     pub(super) save_options: Option<super::save_format::SaveSettings>,
+    /// The GIF palette settings the next GIF save of this document uses.
+    pub(super) save_gif_options: Option<super::save_format::SaveGifOptions>,
     /// Outstanding display damage; the canvas redraws the region `take` reports.
     /// No longer consumed by present: it keys on [`Self::canvas_revision`].
     pub(super) damage: CanvasDamage,
@@ -313,6 +315,7 @@ impl Default for PictureViewRust {
             save_embed_profile: None,
             save_raster_options: None,
             save_options: None,
+            save_gif_options: None,
             damage: CanvasDamage::default(),
             canvas_revision: 0,
             frame_revision: 0,

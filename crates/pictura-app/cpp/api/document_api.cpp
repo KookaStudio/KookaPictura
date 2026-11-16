@@ -39,9 +39,19 @@ bool save(PictureView& view, const QString& path)
     return view.save(path);
 }
 
+bool saveCopy(PictureView& view, const QString& path)
+{
+    return view.save_copy(path);
+}
+
 bool saveStart(PictureView& view, const QString& path)
 {
     return pictura::save_start(view, path);
+}
+
+bool saveCopyStart(PictureView& view, const QString& path)
+{
+    return pictura::save_copy_start(view, path);
 }
 
 bool saveRunning(const PictureView& view)

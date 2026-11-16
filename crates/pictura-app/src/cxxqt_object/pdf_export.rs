@@ -39,6 +39,10 @@ pub mod ffi {
         /// Write the document to `path` as a Photoshop PDF with the canonical `options` text; on success record the path, clear the modified state, and remember the options. Returns an empty string on success, else the reason.
         fn pdf_save(view: Pin<&mut PictureView>, path: &QString, options: &QString) -> QString;
 
+        /// Write a PDF copy at `path` without recording the path or clearing the modified state.
+        fn pdf_save_copy(view: Pin<&mut PictureView>, path: &QString, options: &QString)
+            -> QString;
+
         /// The font family of every type layer, one per line, for the shell to register before a save sets them as live text.
         fn pdf_type_fonts(view: &PictureView) -> QString;
 

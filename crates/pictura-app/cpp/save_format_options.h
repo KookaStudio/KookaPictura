@@ -5,8 +5,8 @@
 
 namespace pictura {
 
-// Which per-format options dialog a Save As destination opens. The integer
-// values are the wire codes shared with the Rust SaveKind.
+// Which per-format options dialog a Save As or Save a Copy destination opens.
+// The integer values are the wire codes shared with the Rust SaveKind.
 enum class SaveFormatKind {
     None = 0,
     Jpeg = 1,
@@ -63,6 +63,10 @@ struct SaveFormatOptions {
 
     // GIF Options.
     int gifRowOrder = 0;       // 0 Normal, 1 Interlaced
+    int gifPalette = 2;        // 0 Exact, 1 Web, 2/3/4 Local Perceptual/Selective/Adaptive
+    int gifColors = 256;
+    int gifDither = 1;         // 0 None, 1 Diffusion, 2 Pattern, 3 Noise
+    int gifAmount = 75;
 
     // Photoshop EPS Options.
     int epsPreview = 2;        // 0 None, 1 TIFF 1-bit, 2 TIFF 8-bit

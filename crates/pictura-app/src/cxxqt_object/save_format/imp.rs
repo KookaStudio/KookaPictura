@@ -4,6 +4,7 @@ use super::super::picture::picture_rgba;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_codec::{ColorReduction, Dither, PaletteOptions};
 
 /// The typed Save As kind and options accepted by the dialogs.
 #[derive(Clone, Debug, Default)]
@@ -106,6 +107,82 @@ impl Default for SaveRasterOptions {
             matte: -1,
         }
     }
+}
+
+/// The palette settings the engine GIF encoder uses for the next GIF save.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::cxxqt_object) struct SaveGifOptions {
+    /// 0 Exact, 1 Web, 2 Local Perceptual, 3 Local Selective, 4 Local Adaptive.
+    pub(in crate::cxxqt_object) palette: i32,
+    pub(in crate::cxxqt_object) colors: i32,
+    /// 0 None, 1 Diffusion, 2 Pattern, 3 Noise.
+    pub(in crate::cxxqt_object) dither: i32,
+    pub(in crate::cxxqt_object) amount: i32,
+    pub(in crate::cxxqt_object) interlaced: bool,
+}
+
+impl Default for SaveGifOptions {
+    fn default() -> Self {
+        Self {
+            palette: 2,
+            colors: 256,
+            dither: 1,
+            amount: 75,
+            interlaced: false,
+        }
+    }
+}
+
+impl SaveGifOptions {
+    /// The engine palette options for these dialog values. The GIF save and
+    /// the GIF save preview both use this mapping so they cannot drift.
+    pub(in crate::cxxqt_object) fn palette_options(self) -> PaletteOptions {
+        let reduction = match self.palette {
+            0 => ColorReduction::Adaptive,
+            1 => ColorReduction::Restrictive,
+            2 => ColorReduction::Perceptual,
+            3 => ColorReduction::Selective,
+            _ => ColorReduction::Adaptive,
+        };
+        let colors = match self.palette {
+            0 => 256,
+            1 => 216,
+            _ => self.colors,
+        };
+        let dither = match (self.palette, self.dither) {
+            (0, _) => Dither::None,
+            (_, 1) => Dither::Diffusion,
+            (_, 2) => Dither::Pattern,
+            (_, 3) => Dither::Noise,
+            _ => Dither::None,
+        };
+        PaletteOptions {
+            reduction,
+            colors: colors.clamp(2, 256) as u16,
+            dither,
+            amount: self.amount.clamp(0, 100) as u8,
+            transparency: false,
+            mapped_transparency: false,
+            matte: [255, 255, 255],
+        }
+    }
+}
+
+pub fn set_save_gif_options(
+    mut view: Pin<&mut PictureView>,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+    interlaced: bool,
+) {
+    view.as_mut().rust_mut().save_gif_options = Some(SaveGifOptions {
+        palette,
+        colors,
+        dither,
+        amount,
+        interlaced,
+    });
 }
 
 pub fn set_save_raster_options(

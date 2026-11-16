@@ -56,7 +56,7 @@ bool ImportSaveCoordinator::runPdfDialog(QDialog& dialog)
     return runDialog(dialog, dialogParent_) == QDialog::Accepted;
 }
 
-bool ImportSaveCoordinator::savePdfWithDialog(const QString& path)
+bool ImportSaveCoordinator::savePdfWithDialog(const QString& path, bool copy)
 {
     const int index = documents_.activeIndex();
     PictureView* view = documents_.viewAt(index);
@@ -95,7 +95,8 @@ bool ImportSaveCoordinator::savePdfWithDialog(const QString& path)
     for (const QString& font : pdf_type_fonts(*view).split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
         registerTypeFont(familyForFontName(font));
     }
-    const QString error = pdf_save(*view, path, options);
+    const QString error = copy ? pdf_save_copy(*view, path, options)
+                               : pdf_save(*view, path, options);
     if (!error.isEmpty()) {
         if (hooks_.showStatus) {
             hooks_.showStatus(tr("Save Adobe PDF: %1").arg(error), 0);
@@ -105,12 +106,14 @@ bool ImportSaveCoordinator::savePdfWithDialog(const QString& path)
     SessionState state = loadSession();
     state.pdfOptions = withoutPasswords(options);
     pictura::saveSession(state);
-    documents_.setDocumentPath(index, path);
-    dropRecoverySnapshot(view);
-    documents_.updateTabTitle(index);
-    rememberRecent(path);
-    if (hooks_.updateWindowTitle) {
-        hooks_.updateWindowTitle();
+    if (!copy) {
+        documents_.setDocumentPath(index, path);
+        dropRecoverySnapshot(view);
+        documents_.updateTabTitle(index);
+        rememberRecent(path);
+        if (hooks_.updateWindowTitle) {
+            hooks_.updateWindowTitle();
+        }
     }
     if (isOn(options, "viewAfterSaving")) {
         if (pdfViewer_) {

@@ -9,6 +9,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FileNew", "file.new"),
     ("FileSave", "file.save"),
     ("FileSaveAs", "file.saveAs"),
+    ("FileSaveCopy", "file.saveCopy"),
     ("FileExportAs", "file.exportAs"),
     ("FileQuickExportPng", "file.quickExportPng"),
     ("FileRevert", "file.revert"),

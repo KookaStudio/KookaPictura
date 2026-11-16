@@ -242,6 +242,7 @@ static EXTRA: &[CommandDefinition] = &[
 #[rustfmt::skip]
 static NON_RECORDABLE: &[&str] = &[
     "file.exit",
+    "file.saveCopy",
     "edit.undo", "edit.redo", "edit.stepForward", "edit.stepBackward",
     "edit.purge.undo", "edit.purge.histories", "edit.purge.clipboard", "edit.purge.all",
     "edit.keyboardShortcuts",

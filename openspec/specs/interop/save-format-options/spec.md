@@ -271,21 +271,22 @@ flattens layers SHALL show the existing feature-loss warning before writing.
 - **WHEN** a layered document is saved as GIF or TGA
 - **THEN** the existing feature-loss warning is shown before anything is written
 
-### Requirement: GIF Save As converts through Indexed Color
+### Requirement: GIF Save As previews Indexed Color without converting
 
 When the document is not already in Indexed mode, `File ▸ Save As` for GIF SHALL
-first present the Indexed Color conversion, previewing the palette and dither
-choices without changing the document, then present GIF Options with its Row
-Order (Normal or Interlaced) control. The document SHALL become Indexed only
-after both dialogs are accepted. Cancelling either dialog SHALL leave the
-document's pixels, mode, path, modified state, and history unchanged. The written
-file SHALL be a GIF89a whose pixels are the converted palette indices and whose
-row order follows the accepted setting.
+first present the Indexed Color dialog (palette, colors, dither, amount, and
+preview), then GIF Options with its Row Order control. Accepting the dialogs
+SHALL NOT change the document's mode, depth, pixels, path, modified state, or
+history: the GIF SHALL be encoded from a snapshot using the accepted palette
+settings and row order. Cancelling either dialog SHALL leave the document
+unchanged and write no file. A document already in Indexed mode SHALL skip the
+Indexed Color dialog, use its retained palette, and apply the remembered row
+order.
 
-#### Scenario: GIF Save As converts before writing [save-options-gif-indexed]
+#### Scenario: GIF Save As keeps the document mode [save-options-gif-indexed]
 
 - **WHEN** an RGB document is saved as GIF and both dialogs are accepted
-- **THEN** the document becomes Indexed and the written GIF uses the accepted palette and row order
+- **THEN** the document remains RGB and the written GIF uses the accepted palette and row order
 
 #### Scenario: Cancelling the GIF flow leaves the mode unchanged [save-options-gif-cancel]
 

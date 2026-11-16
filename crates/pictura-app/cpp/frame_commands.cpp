@@ -64,6 +64,7 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
 
     registry.setHandler(command_ids::FileSave, [this]() { saveActive(); });
     registry.setHandler(command_ids::FileSaveAs, [this]() { saveAsWithDialog(); });
+    registry.setHandler(command_ids::FileSaveCopy, [this]() { saveCopyWithDialog(); });
     wirePdfCommands();
     registry.setHandler(command_ids::FileExportAs,
                         [this]() { exportAsFromView(this, activeView()); });
@@ -134,7 +135,8 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
 
     auto hasDocument = [this]() { return documentCount() > 0; };
     for (const char* id : {command_ids::FileSave, command_ids::FileSaveAs,
-                           command_ids::FileExportAs, command_ids::FileQuickExportPng,
+                           command_ids::FileSaveCopy, command_ids::FileExportAs,
+                           command_ids::FileQuickExportPng,
                            command_ids::FileExportZoomify,
                            command_ids::FileExportPathsToIllustrator,
                            command_ids::FileScriptsExportLayersToFiles,

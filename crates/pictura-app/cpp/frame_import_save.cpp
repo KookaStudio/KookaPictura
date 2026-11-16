@@ -24,6 +24,11 @@ bool PicturaMainWindow::saveAsWithDialog()
     return importSave_ && importSave_->saveAsWithDialog();
 }
 
+bool PicturaMainWindow::saveCopyWithDialog()
+{
+    return importSave_ && importSave_->saveCopyWithDialog();
+}
+
 const QStringList& PicturaMainWindow::recentFiles() const
 {
     static const QStringList empty;

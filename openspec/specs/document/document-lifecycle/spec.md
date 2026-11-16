@@ -98,30 +98,31 @@ The system SHALL write the active document in its current output format, chosen
 by the save path's extension, writing atomically so a failed write never
 truncates an existing file. A `psd` path SHALL write the document's composite
 and layer tree through the PSD codec; a `psb` path SHALL force a version-2 PSB
-container through the codec. A supported raster path (PNG, JPEG, TIFF, WebP, or
-BMP) SHALL write the flattened composite through the Qt-boundary raster encode
-edge. Save As SHALL default its format to PSD unless the document is a single
-pixel or background layer imported from a supported raster, in which case it
-SHALL default to that source format. When the document's recorded path is a
-raster format and the document has more than one layer, a group, an adjustment,
-or a type layer, Save SHALL behave as Save As rather than silently flattening
-into that raster file. Saving a document that has more than one layer, a group,
-an adjustment, or a type layer to a format that cannot hold them SHALL warn
-before writing and then write the flattened composite. The `composite`
-serialized to PSD SHALL be the active document's current rendered composite, so
-a save after any edit round-trips to the edited pixels rather than to a pre-edit
-merged image. The `write_psd` byte layout and its use of `doc.composite.channels`
-to derive the PSD colour-plane count MUST NOT change; an RGB document's merged
-composite is RGBA (four planes) after a canvas rebuild, while a grayscale
-document keeps its composite colour-plane count. Save on an untitled document
-SHALL behave as Save As. On success the save SHALL record the file path. It
-SHALL clear the modified state only when the document is the same document that
-was snapshotted when the write started — the same history identity, content
-revision, and document generation — and that snapshot is still current; a
-document changed after the snapshot SHALL keep the recorded path and remain
-modified. When the document generation changed during the save (the document was
-replaced), the replacement document's path and modified state SHALL be
-unchanged. On failure the path and modified state SHALL be unchanged and no
+container through the codec. A supported raster path (PNG, JPEG, TIFF, WebP,
+BMP, or GIF) SHALL write the flattened composite: PNG, JPEG, TIFF, WebP, and BMP
+through the Qt-boundary raster encode edge, and GIF through the engine GIF89a
+encoder (`interop/gif-save`). Save As SHALL default its format to PSD unless the
+document is a single pixel or background layer imported from a supported raster,
+in which case it SHALL default to that source format. When the document's
+recorded path is a raster format and the document has more than one layer, a
+group, an adjustment, or a type layer, Save SHALL behave as Save As rather than
+silently flattening into that raster file. Saving a document that has more than
+one layer, a group, an adjustment, or a type layer to a format that cannot hold
+them SHALL warn before writing and then write the flattened composite. The
+`composite` serialized to PSD SHALL be the active document's current rendered
+composite, so a save after any edit round-trips to the edited pixels rather than
+to a pre-edit merged image. The `write_psd` byte layout and its use of
+`doc.composite.channels` to derive the PSD colour-plane count MUST NOT change; an
+RGB document's merged composite is RGBA (four planes) after a canvas rebuild,
+while a grayscale document keeps its composite colour-plane count. Save on an
+untitled document SHALL behave as Save As. On success the save SHALL record the
+file path. It SHALL clear the modified state only when the document is the same
+document that was snapshotted when the write started — the same history
+identity, content revision, and document generation — and that snapshot is still
+current; a document changed after the snapshot SHALL keep the recorded path and
+remain modified. When the document generation changed during the save (the
+document was replaced), the replacement document's path and modified state SHALL
+be unchanged. On failure the path and modified state SHALL be unchanged and no
 temporary file SHALL remain.
 
 #### Scenario: Save As writes a file
@@ -620,10 +621,10 @@ untitled.
 When Save As is used and a single-format filter is selected, the application
 SHALL write that filter's format. A conflicting suffix typed in the file name
 SHALL be replaced with the filter's canonical suffix (`.psd`, `.psb`, `.png`,
-`.jpg`, `.tif`, `.webp`, `.bmp`, or `.pdf`); the typed suffix SHALL NOT silently
-choose a different codec. The `All Formats` entry SHALL keep the typed suffix
-and choose the codec from it. The document's recorded path SHALL be the path
-actually written.
+`.jpg`, `.tif`, `.webp`, `.bmp`, `.gif`, or `.pdf`); the typed suffix SHALL NOT
+silently choose a different codec. The `All Formats` entry SHALL keep the typed
+suffix and choose the codec from it. The document's recorded path SHALL be the
+path actually written.
 
 #### Scenario: The chosen format wins over a typed suffix
 

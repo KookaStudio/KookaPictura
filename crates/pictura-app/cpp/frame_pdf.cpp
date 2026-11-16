@@ -12,9 +12,9 @@ bool PicturaMainWindow::isPdfPath(const QString& path)
     return ImportSaveCoordinator::isPdfPath(path);
 }
 
-bool PicturaMainWindow::savePdfWithDialog(const QString& path)
+bool PicturaMainWindow::savePdfWithDialog(const QString& path, bool copy)
 {
-    return importSave_ && importSave_->savePdfWithDialog(path);
+    return importSave_ && importSave_->savePdfWithDialog(path, copy);
 }
 
 quint64 PicturaMainWindow::startOpenPdfPath(const QString& path, bool interactive)
