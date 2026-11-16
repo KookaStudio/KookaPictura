@@ -156,6 +156,59 @@ pub fn convert_for_smart_filters(doc: &mut Document, path: &str) -> bool {
     convert_to_smart_object(doc, path)
 }
 
+/// Combine every top-level layer of `doc` into one embedded smart object layer.
+///
+/// The embedded source is a document of the same canvas, mode, and depth that
+/// clones `doc.layers`, so the individual layers survive inside the object and
+/// a later Edit Contents or Rasterize sees the stack. The result is one
+/// channel-less embedded layer at the canvas rect, named after the topmost
+/// layer. Returns false without mutating for a non-8-bit or empty document, or
+/// when the source cannot be serialized.
+pub fn stack_into_smart_object(doc: &mut Document) -> bool {
+    if doc.depth != BitDepth::Eight || doc.layers.is_empty() || doc.width == 0 || doc.height == 0 {
+        return false;
+    }
+    let name = doc
+        .layers
+        .last()
+        .map(|layer| layer.name.clone())
+        .unwrap_or_else(|| "Layer".to_string());
+    let (width, height) = (doc.width, doc.height);
+    let mut embedded = Document::new(width, height, doc.mode, doc.depth);
+    embedded.layers = doc.layers.clone();
+    let Ok(payload) = pictura_codec::write_psd(&embedded) else {
+        return false;
+    };
+    let layer = Layer {
+        name: name.clone(),
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: height as i32,
+            right: width as i32,
+        },
+        blend: BlendMode::Normal,
+        opacity: 255,
+        fill: 255,
+        visible: true,
+        channels: Vec::new(),
+        smart_object: Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so.filename = format!("{name}.psd");
+                so.filetype = *b"8BPB";
+                so.creator = *b"8BIM";
+                so
+            }
+            .with_payload(payload),
+        ),
+        ..Default::default()
+    };
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    true
+}
+
 /// Whether `path` resolves to a replaceable smart-object layer: not a group, no
 /// adjustment data, and an `Embedded` object with a non-empty payload.
 pub fn can_replace_smart_object_contents(doc: &Document, path: &str) -> bool {

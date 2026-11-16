@@ -69,6 +69,7 @@ mod save_format;
 mod scratch_rollback;
 mod selection_move;
 mod shapes;
+mod stack_files;
 mod state;
 pub(crate) mod svg_export;
 mod tiles;
@@ -274,7 +275,6 @@ pub mod qobject {
         /// The **canvas display source** crop at `(x, y, w, h)`: the solo mask plane while a mask is soloed, else the composite. The canvas provider uses this; other panels keep `display_image`.
         #[qinvokable]
         fn canvas_display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
-
         /// Extents of every view-pyramid level as flat `w,h` pairs; empty without a document.
         #[qinvokable]
         fn display_level_extents(&self) -> Vec<i32>;

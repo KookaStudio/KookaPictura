@@ -37,7 +37,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "file.scripts.export.layers.to.files", path: &["File", "Scripts", "Export Layers to Files…"], label: "Export Layers to Files…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.scripts.image.processor", path: &["File", "Scripts", "Image Processor"], label: "Image Processor", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.scripts.layer.comps.to.files", path: &["File", "Scripts", "Layer Comps to Files"], label: "Layer Comps to Files", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "file.scripts.load.files.into.stack", path: &["File", "Scripts", "Load Files into Stack"], label: "Load Files into Stack", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "file.scripts.load.files.into.stack", path: &["File", "Scripts", "Load Files into Stack…"], label: "Load Files into Stack…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.scripts.script.events.manager", path: &["File", "Scripts", "Script Events Manager"], label: "Script Events Manager", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.scripts.statistics", path: &["File", "Scripts", "Statistics"], label: "Statistics", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.fileInfo", path: &["File", "File Info…"], label: "File Info…", shortcut: "Ctrl+Alt+Shift+I", implemented: true, checkable: false },

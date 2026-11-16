@@ -221,6 +221,7 @@ fn main() {
                 "src/cxxqt_object/pdf_export/import.rs",
                 "src/cxxqt_object/proofing.rs",
                 "src/cxxqt_object/shapes.rs",
+                "src/cxxqt_object/stack_files.rs",
                 "src/cxxqt_object/type_tools.rs",
                 "src/cxxqt_object/type_tools/warp.rs",
                 "src/cxxqt_object/type_tools/fonts.rs",

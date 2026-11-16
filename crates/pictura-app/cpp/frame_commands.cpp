@@ -19,6 +19,8 @@
 #include "frame_place.h"
 #include "frame_update.h"
 #include "gpu_probe.h"
+#include "load_layers_dialog.h"
+#include "memory_refusal.h"
 
 #include "api/engine_bridge.h"
 #include "api/filters_bridge.h"
@@ -29,9 +31,54 @@
 #include "panels/layers_panel.h"
 
 #include <QtCore/QJsonValue>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QMessageBox>
 
 namespace pictura {
+
+namespace {
+
+void showLoadLayersDialog(PicturaMainWindow& frame)
+{
+    QStringList openPaths;
+    for (int index = 0; index < frame.documentCount(); ++index) {
+        const QString path = frame.documentPath(index);
+        if (!path.isEmpty()) {
+            openPaths.append(path);
+        }
+    }
+    LoadLayersDialog dialog(openPaths, documentDirectory(frame.activeFilePath()), &frame);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    auto* view = new PictureView(&frame);
+    const QStringList failures =
+        document_api::loadFilesIntoStack(*view, dialog.paths(), dialog.alignImages(),
+                                         dialog.createSmartObject());
+    if (!view->has_document()) {
+        delete view;
+        if (!reportMemoryRefusal(&frame, PicturaMainWindow::tr("load the files"))) {
+            QMessageBox::warning(&frame, PicturaMainWindow::tr("Load Files into Stack"),
+                                 PicturaMainWindow::tr(
+                                     "None of the selected files could be loaded."));
+        }
+        return;
+    }
+    frame.addDocument(view, QString());
+    if (!failures.isEmpty()) {
+        QStringList names;
+        names.reserve(failures.size());
+        for (const QString& path : failures) {
+            names.append(QFileInfo(path).fileName());
+        }
+        QMessageBox::warning(
+            &frame, PicturaMainWindow::tr("Load Files into Stack"),
+            PicturaMainWindow::tr("Could not load the following files:\n%1")
+                .arg(names.join(QLatin1Char('\n'))));
+    }
+}
+
+} // namespace
 
 void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
 {
@@ -74,6 +121,8 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
                         [this]() { exportPathsFromView(this, activeView()); });
     registry.setHandler(command_ids::FileScriptsExportLayersToFiles,
                         [this]() { exportLayersFromView(this, activeView()); });
+    registry.setHandler(command_ids::FileScriptsLoadFilesIntoStack,
+                        [this]() { showLoadLayersDialog(*this); });
     // File > Print… and Print One Copy (WF-013).
     const char* const printIds[] = {command_ids::FilePrint, command_ids::FilePrintOneCopy};
     for (int i = 0; i < 2; ++i) {

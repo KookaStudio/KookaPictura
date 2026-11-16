@@ -3,6 +3,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/stack_files.cxxqt.h"
 
 #include <rust/cxx.h>
 
@@ -32,6 +33,12 @@ bool newDocument(PictureView& view, int width, int height, const QString& mode, 
                  const QString& background)
 {
     return view.new_document(width, height, mode, depth, background);
+}
+
+QStringList loadFilesIntoStack(PictureView& view, const QStringList& paths, bool align,
+                               bool smartObject)
+{
+    return pictura::load_files_into_stack(view, paths, align, smartObject);
 }
 
 bool save(PictureView& view, const QString& path)
