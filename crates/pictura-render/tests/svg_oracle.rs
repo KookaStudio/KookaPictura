@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use pictura_adjust::{GradientKind, GradientStop, PatternFillParams};
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{BitDepth, BlendMode, ColorMode, Document, Layer};
 use pictura_testkit::compare;
@@ -114,6 +115,112 @@ fn vector_document() -> Document {
     ellipse.blend = BlendMode::Multiply;
     ellipse.opacity = 200;
     doc
+}
+
+fn add_gradient_shape(
+    doc: &mut Document,
+    kind: GradientKind,
+    rect: (f64, f64, f64, f64),
+    angle: f32,
+) {
+    let outline = outline_in_box(ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3), rect).unwrap();
+    let path = pictura_render::add_shape_layer(doc, "", [0, 0, 0, 255], "Gradient", &outline, None);
+    let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
+    layer.adjustment = Some(pictura_render::encode_gradient_fill(
+        kind,
+        &[
+            GradientStop {
+                location: 0,
+                color: [255, 30, 20],
+            },
+            GradientStop {
+                location: 4096,
+                color: [20, 40, 230],
+            },
+        ],
+        angle,
+    ));
+}
+
+fn add_pattern_shape(doc: &mut Document, rect: (f64, f64, f64, f64)) {
+    let outline = outline_in_box(ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3), rect).unwrap();
+    let path = pictura_render::add_shape_layer(doc, "", [0, 0, 0, 255], "Pattern", &outline, None);
+    let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
+    layer.adjustment = Some(pictura_render::encode_pattern_fill(&PatternFillParams {
+        pattern_id: "oracle-checker".into(),
+        scale: 100.0,
+        link_with_layer: true,
+        origin: (0, 0),
+    }));
+}
+
+fn add_stroked_shape(doc: &mut Document, rect: (f64, f64, f64, f64)) {
+    let outline = outline_in_box(ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3), rect).unwrap();
+    let path =
+        pictura_render::add_shape_layer(doc, "", [250, 220, 30, 255], "Stroke", &outline, None);
+    let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
+    pictura_render::set_shape_stroke(
+        layer,
+        Some(&pictura_render::ShapeStroke {
+            color: [20, 60, 240],
+            width: 3,
+            position: pictura_render::StrokePosition::Outside,
+        }),
+    );
+}
+
+/// A vector-only document with both gradient kinds, a pattern, and an outside
+/// stroke.
+fn primitive_document() -> Document {
+    let mut doc = Document::new(64, 56, ColorMode::Rgb, BitDepth::Eight);
+    let mut tile = Vec::with_capacity(8 * 8 * 4);
+    for y in 0..8 {
+        for x in 0..8 {
+            let v = if (x + y) % 2 == 0 { 32 } else { 224 };
+            tile.extend_from_slice(&[v, v, v, 255]);
+        }
+    }
+    let record =
+        pictura_codec::encode_rgb_pattern("Checker", "oracle-checker", 8, 8, &tile).unwrap();
+    assert!(pictura_codec::add_document_pattern(
+        &mut doc,
+        "oracle-checker",
+        &record
+    ));
+    add_gradient_shape(&mut doc, GradientKind::Linear, (4.0, 4.0, 24.0, 20.0), 0.0);
+    add_gradient_shape(&mut doc, GradientKind::Radial, (32.0, 4.0, 28.0, 20.0), 0.0);
+    add_pattern_shape(&mut doc, (4.0, 30.0, 24.0, 22.0));
+    add_stroked_shape(&mut doc, (34.0, 30.0, 24.0, 20.0));
+    doc
+}
+
+#[test]
+fn librsvg_renders_gradients_patterns_and_strokes_like_the_composite() {
+    let doc = primitive_document();
+    let svg = pictura_render::encode_document_svg(&doc, |_: &Document| {
+        panic!("a primitive document rasterized a layer")
+    });
+    let body = svg
+        .split_once("</defs>")
+        .map_or(svg.as_str(), |(_, body)| body);
+    assert!(!body.contains("<image"), "{svg}");
+    assert!(svg.contains("<linearGradient"), "{svg}");
+    assert!(svg.contains("<radialGradient"), "{svg}");
+    assert!(svg.contains("<pattern"), "{svg}");
+    assert!(svg.contains("stroke="), "{svg}");
+
+    if !rsvg_available() {
+        eprintln!("skipping: magick with the RSVG coder not available");
+        return;
+    }
+    let rendered = rsvg_render(&svg, "primitives").expect("librsvg renders the export");
+    let expected = composite_on_white(&doc);
+    let diff = compare(&rendered, &expected, 6).expect("same size");
+    assert!(
+        diff.differing * 100 <= diff.samples * 3 && diff.mean_delta() < 2.0,
+        "{diff:?} mean {:.3}\n{svg}",
+        diff.mean_delta()
+    );
 }
 
 #[test]

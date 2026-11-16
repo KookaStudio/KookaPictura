@@ -5,6 +5,7 @@
 #include "export_as_dialog.h"
 #include "frame.h"
 
+#include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -14,6 +15,7 @@
 #include <QtWidgets/QSpinBox>
 
 #include "api/engine_bridge.h"
+#include "api/layers_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -77,6 +79,8 @@ private slots:
     void saveToBytes();
     void sizeEstimate();
     void svgExport();
+    void svgExportPerLayer();
+    void svgExportPaintServers();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -273,6 +277,81 @@ void ExportAsTest::svgExport()
     QVERIFY(svg.contains(QStringLiteral("viewBox=\"0 0 16 12\"")));
     QVERIFY(svg.contains(QStringLiteral("data:img/png;base64,")));
     QVERIFY(svg.endsWith(QStringLiteral("</svg>\n")));
+}
+
+void ExportAsTest::svgExportPerLayer()
+{
+    QVERIFY(stateHome_.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    QVERIFY(window->newDocument(QStringLiteral("Svg"), 16, 12, QStringLiteral("rgb"), 8,
+                                QStringLiteral("white")));
+    pictura::PictureView* view = window->activeView();
+    QVERIFY(view);
+    QVERIFY(!view->add_layer_in(QStringLiteral("0")).isEmpty());
+    QCOMPARE(view->layer_count(), 2);
+
+    const QString bottom = pictura::svg_from_layer(*view, 0);
+    const QString top = pictura::svg_from_layer(*view, 1);
+    QVERIFY(bottom.contains(QStringLiteral("viewBox=\"0 0 16 12\"")));
+    QVERIFY(top.contains(QStringLiteral("viewBox=\"0 0 16 12\"")));
+    QCOMPARE(bottom.count(QStringLiteral("<image ")), 1);
+    QCOMPARE(top.count(QStringLiteral("<image ")), 1);
+    QVERIFY(bottom != top);
+    QVERIFY(pictura::svg_from_layer(*view, 2).isEmpty());
+}
+
+void ExportAsTest::svgExportPaintServers()
+{
+    QVERIFY(stateHome_.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    QVERIFY(window->newDocument(QStringLiteral("SvgPrimitives"), 24, 16, QStringLiteral("rgb"), 8,
+                                QStringLiteral("white")));
+    pictura::PictureView* view = window->activeView();
+    QVERIFY(view);
+
+    // The app gives new fill layers a full-white default mask; that must not
+    // force a gradient to a raster.
+    const QString gradient = view->add_gradient_fill();
+    QVERIFY(!gradient.isEmpty());
+
+    const QStringList ids = available_pattern_ids(*view);
+    QVERIFY(!ids.isEmpty());
+    const QString pattern =
+        add_fill_layer(*view, QStringLiteral("pattern"),
+                       ids.first() + QStringLiteral("|100|1|0|0"), QString(), QString(), 0,
+                       QStringLiteral("norm"), 255, false);
+    QVERIFY(!pattern.isEmpty());
+
+    const QString svg = pictura::svg_from_view(*view);
+    QVERIFY2(svg.contains(QStringLiteral("<linearGradient")), qPrintable(svg));
+    QVERIFY2(svg.contains(QStringLiteral("<pattern")), qPrintable(svg));
+    QVERIFY2(svg.contains(QStringLiteral("fill=\"url(#")), qPrintable(svg));
+    QVERIFY2(svg.contains(QStringLiteral("viewBox=\"0 0 24 16\"")), qPrintable(svg));
+    // The pattern tile is an <image> inside <defs>; only the white background
+    // is a document-level raster fallback.
+    const int defsEnd = svg.indexOf(QStringLiteral("</defs>"));
+    QVERIFY(defsEnd >= 0);
+    QCOMPARE(svg.mid(defsEnd).count(QStringLiteral("<image ")), 1);
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("primitives.svg"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray bytes = svg.toUtf8();
+    QCOMPARE(file.write(bytes), qint64(bytes.size()));
+    file.close();
+    QVERIFY(QFileInfo(path).size() > 0);
+
+    // Keep the generated file for a command-line run that wants to inspect it.
+    const QString keep = qEnvironmentVariable("PICTURA_SVG_OUT");
+    if (!keep.isEmpty()) {
+        QFile out(keep);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        QCOMPARE(out.write(bytes), qint64(bytes.size()));
+    }
 }
 
 QTEST_MAIN(ExportAsTest)

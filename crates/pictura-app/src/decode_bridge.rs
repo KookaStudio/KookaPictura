@@ -7,7 +7,7 @@
 mod imp;
 
 use crate::cxxqt_object::qobject::PictureView;
-use crate::cxxqt_object::svg_export::svg_from_view;
+use crate::cxxqt_object::svg_export::{svg_from_layer, svg_from_view};
 use crate::mcp_entry::mcp_run;
 use imp::*;
 
@@ -38,5 +38,9 @@ pub mod ffi {
         /// The active document serialized to SVG text, or empty without one.
         /// Never changes the document, its path, dirty flag, or history.
         fn svg_from_view(view: &PictureView) -> QString;
+
+        /// Top-level layer `index` serialized to a document-sized SVG, or empty
+        /// without that layer. Never changes the document.
+        fn svg_from_layer(view: &PictureView, index: i32) -> QString;
     }
 }

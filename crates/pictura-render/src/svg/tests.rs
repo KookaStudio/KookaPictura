@@ -1,4 +1,5 @@
 use super::*;
+use pictura_adjust::{GradientKind, GradientStop, PatternFillParams};
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{AdjustmentData, BitDepth, ColorMode, LayerBlock};
 
@@ -18,6 +19,12 @@ fn shape_layer(rgb: [u8; 3]) -> Layer {
     )
     .unwrap();
     Layer {
+        rect: pictura_core::PsdRect {
+            left: 0,
+            top: 0,
+            right: SIZE as i32,
+            bottom: SIZE as i32,
+        },
         extra_blocks: vec![
             LayerBlock {
                 key: *b"vmsk",
@@ -90,8 +97,10 @@ fn an_imported_shape_layer_becomes_a_filled_primitive() {
     let (nodes, calls) = nodes(vec![shape_layer([10, 20, 30])]);
     assert!(calls.is_empty(), "a shape needs no raster");
     match &nodes[0].content {
-        SvgContent::Shape { fill, subpaths, .. } => {
-            assert_eq!(*fill, [10, 20, 30, 255]);
+        SvgContent::Shape {
+            paint, subpaths, ..
+        } => {
+            assert!(matches!(paint, SvgPaint::Solid([10, 20, 30, 255])));
             assert!(!subpaths.is_empty());
         }
         other => panic!("expected a shape, got {other:?}"),
@@ -106,7 +115,8 @@ fn a_shape_fill_opacity_scales_its_fill_alpha() {
     assert!(matches!(
         nodes[0].content,
         SvgContent::Shape {
-            fill: [1, 2, 3, 128],
+            paint: SvgPaint::Solid([1, 2, 3, 255]),
+            fill_opacity: 128,
             ..
         }
     ));
@@ -115,10 +125,11 @@ fn a_shape_fill_opacity_scales_its_fill_alpha() {
 #[test]
 fn a_shape_with_effects_is_rasterized() {
     let mut layer = shape_layer([1, 2, 3]);
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"lfx2",
-        data: Vec::new().into(),
-    });
+    assert!(crate::set_layer_style_value(
+        &mut layer,
+        "dropShadow.on",
+        1.0
+    ));
     let (nodes, _) = nodes(vec![layer]);
     raster_fill(&nodes[0]);
 }
@@ -260,5 +271,218 @@ fn a_type_layer_uses_its_raster_fallback() {
         data: Vec::new().into(),
     });
     let (nodes, _) = nodes(vec![text]);
+    raster_fill(&nodes[0]);
+}
+
+fn gradient_layer(kind: GradientKind) -> Layer {
+    let mut layer = shape_layer([0, 0, 0]);
+    layer.adjustment = Some(crate::encode_gradient_fill(
+        kind,
+        &[
+            GradientStop {
+                location: 0,
+                color: [255, 0, 0],
+            },
+            GradientStop {
+                location: 4096,
+                color: [0, 0, 255],
+            },
+        ],
+        0.0,
+    ));
+    layer
+}
+
+fn pattern_layer() -> Layer {
+    let mut layer = shape_layer([0, 0, 0]);
+    layer.adjustment = Some(crate::encode_pattern_fill(&PatternFillParams {
+        pattern_id: "missing".into(),
+        scale: 100.0,
+        link_with_layer: true,
+        origin: (0, 0),
+    }));
+    layer
+}
+
+#[test]
+fn a_linear_gradient_shape_becomes_a_gradient_fill() {
+    let (nodes, calls) = nodes(vec![gradient_layer(GradientKind::Linear)]);
+    assert!(calls.is_empty(), "a gradient shape needs no raster");
+    assert!(matches!(
+        nodes[0].content,
+        SvgContent::Shape {
+            paint: SvgPaint::Gradient(SvgGradient::Linear { .. }),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn a_radial_gradient_shape_becomes_a_radial_fill() {
+    let (nodes, calls) = nodes(vec![gradient_layer(GradientKind::Radial)]);
+    assert!(calls.is_empty(), "a gradient shape needs no raster");
+    assert!(matches!(
+        nodes[0].content,
+        SvgContent::Shape {
+            paint: SvgPaint::Gradient(SvgGradient::Radial { .. }),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn an_unsupported_gradient_kind_is_rasterized() {
+    for kind in [
+        GradientKind::Angle,
+        GradientKind::Reflected,
+        GradientKind::Diamond,
+    ] {
+        let (nodes, _) = nodes(vec![gradient_layer(kind)]);
+        raster_fill(&nodes[0]);
+    }
+}
+
+#[test]
+fn a_gradient_fill_layer_becomes_a_canvas_primitive() {
+    let layer = Layer {
+        rect: pictura_core::PsdRect {
+            left: 2,
+            top: 3,
+            right: 7,
+            bottom: 8,
+        },
+        fill: 255,
+        adjustment: Some(crate::encode_gradient_fill(
+            GradientKind::Linear,
+            &[
+                GradientStop {
+                    location: 0,
+                    color: [255, 0, 0],
+                },
+                GradientStop {
+                    location: 4096,
+                    color: [0, 0, 255],
+                },
+            ],
+            0.0,
+        )),
+        ..Default::default()
+    };
+    let (nodes, calls) = nodes(vec![layer]);
+    assert!(calls.is_empty(), "a gradient fill needs no raster");
+    match &nodes[0].content {
+        SvgContent::Shape {
+            subpaths,
+            paint: SvgPaint::Gradient(_),
+            ..
+        } => {
+            assert_eq!(subpaths[0].points[0].anchor, (2.0, 3.0));
+            assert_eq!(subpaths[0].points[2].anchor, (7.0, 8.0));
+        }
+        other => panic!("expected a gradient shape, got {other:?}"),
+    }
+}
+
+fn white_mask() -> pictura_core::LayerMask {
+    pictura_core::LayerMask {
+        rect: pictura_core::PsdRect {
+            left: 0,
+            top: 0,
+            right: SIZE as i32,
+            bottom: SIZE as i32,
+        },
+        default_color: 255,
+        data: Some(vec![255u8; (SIZE * SIZE) as usize].into()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_full_white_layer_mask_keeps_a_gradient_fill_vector() {
+    let mut layer = gradient_layer(GradientKind::Linear);
+    layer.mask = Some(white_mask());
+    let (nodes, calls) = nodes(vec![layer]);
+    assert!(calls.is_empty(), "a no-op mask must not force a raster");
+    assert!(matches!(
+        nodes[0].content,
+        SvgContent::Shape {
+            paint: SvgPaint::Gradient(SvgGradient::Linear { .. }),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn a_painted_layer_mask_rasterizes_a_gradient_fill() {
+    let mut layer = gradient_layer(GradientKind::Linear);
+    layer.mask = Some(pictura_core::LayerMask {
+        data: Some(vec![0u8; (SIZE * SIZE) as usize].into()),
+        ..white_mask()
+    });
+    let (nodes, _) = nodes(vec![layer]);
+    raster_fill(&nodes[0]);
+}
+
+#[test]
+fn a_pattern_shape_becomes_a_pattern_fill() {
+    let (nodes, calls) = nodes(vec![pattern_layer()]);
+    assert!(calls.is_empty(), "a pattern shape needs no raster");
+    match &nodes[0].content {
+        SvgContent::Shape {
+            paint: SvgPaint::Pattern(pattern),
+            ..
+        } => {
+            assert_eq!((pattern.width, pattern.height), (1, 1));
+            assert_eq!(pattern.rgba, vec![128, 128, 128, 255]);
+        }
+        other => panic!("expected a pattern, got {other:?}"),
+    }
+}
+
+fn stroked_layer(position: crate::StrokePosition) -> Layer {
+    let mut layer = shape_layer([1, 2, 3]);
+    crate::set_shape_stroke(
+        &mut layer,
+        Some(&crate::ShapeStroke {
+            color: [255, 0, 0],
+            width: 3,
+            position,
+        }),
+    );
+    layer
+}
+
+#[test]
+fn a_solid_shape_stroke_becomes_a_stroke() {
+    for (position, expected) in [
+        (crate::StrokePosition::Outside, SvgStrokePosition::Outside),
+        (crate::StrokePosition::Inside, SvgStrokePosition::Inside),
+        (crate::StrokePosition::Center, SvgStrokePosition::Center),
+    ] {
+        let (nodes, calls) = nodes(vec![stroked_layer(position)]);
+        assert!(calls.is_empty(), "a stroked shape needs no raster");
+        match &nodes[0].content {
+            SvgContent::Shape {
+                stroke: Some(stroke),
+                ..
+            } => {
+                assert_eq!(stroke.rgb, [255, 0, 0]);
+                assert_eq!(stroke.width, 3.0);
+                assert_eq!(stroke.position, expected);
+            }
+            other => panic!("expected a stroke, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_shape_with_another_effect_is_rasterized() {
+    let mut layer = stroked_layer(crate::StrokePosition::Outside);
+    assert!(crate::set_layer_style_value(
+        &mut layer,
+        "dropShadow.on",
+        1.0
+    ));
+    let (nodes, _) = nodes(vec![layer]);
     raster_fill(&nodes[0]);
 }

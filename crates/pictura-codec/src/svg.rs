@@ -44,11 +44,14 @@ impl SvgNode {
 /// The content of an [`SvgNode`], decoded by the caller.
 #[derive(Clone, Debug)]
 pub enum SvgContent {
-    /// A shape layer: its outline in document pixels, its solid fill, and the
+    /// A shape layer: its outline in document pixels, its paint, and the
     /// live-shape form when the layer is still parametric.
     Shape {
         subpaths: Vec<Subpath>,
-        fill: [u8; 4],
+        paint: SvgPaint,
+        /// The layer's Fill opacity, `0..=255`, scaling the paint.
+        fill_opacity: u8,
+        stroke: Option<SvgStroke>,
         live: Option<LiveShape>,
     },
     /// A raster fallback as straight-alpha RGBA8888 at its own size; the codec
@@ -65,6 +68,71 @@ pub enum SvgContent {
         children: Vec<SvgNode>,
         isolated: bool,
     },
+}
+
+/// A shape's fill paint.
+#[derive(Clone, Debug)]
+pub enum SvgPaint {
+    /// A straight RGBA solid colour.
+    Solid([u8; 4]),
+    /// A linear or radial gradient in document user space.
+    Gradient(SvgGradient),
+    /// A tiled pattern in document user space.
+    Pattern(SvgPattern),
+}
+
+/// A gradient paint server; every coordinate is in document user space.
+#[derive(Clone, Debug)]
+pub enum SvgGradient {
+    Linear {
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        stops: Vec<SvgGradientStop>,
+    },
+    Radial {
+        cx: f64,
+        cy: f64,
+        rx: f64,
+        ry: f64,
+        stops: Vec<SvgGradientStop>,
+    },
+}
+
+/// One gradient colour stop; `offset` is `0..=1`.
+#[derive(Clone, Debug)]
+pub struct SvgGradientStop {
+    pub offset: f64,
+    pub rgba: [u8; 4],
+}
+
+/// A pattern paint server: its scaled tile as straight-alpha RGBA8888 and its
+/// user-space origin.
+#[derive(Clone, Debug)]
+pub struct SvgPattern {
+    pub rgba: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Where a stroke sits on the outline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SvgStrokePosition {
+    Center,
+    Inside,
+    Outside,
+}
+
+/// A solid vector stroke.
+#[derive(Clone, Copy, Debug)]
+pub struct SvgStroke {
+    pub rgb: [u8; 3],
+    pub width: f64,
+    pub opacity: f64,
+    pub position: SvgStrokePosition,
 }
 
 /// SVG export options.
@@ -92,6 +160,10 @@ pub fn encode_svg(doc: &Document, options: &SvgOptions) -> String {
         precision: options.precision.min(6),
         defs: Vec::new(),
         clips: 0,
+        paints: 0,
+        masks: 0,
+        width: doc.width,
+        height: doc.height,
     };
     let body: Vec<String> = options
         .nodes
@@ -123,6 +195,10 @@ struct Writer {
     precision: u8,
     defs: Vec<String>,
     clips: usize,
+    paints: usize,
+    masks: usize,
+    width: u32,
+    height: u32,
 }
 
 impl Writer {
@@ -135,10 +211,18 @@ impl Writer {
         match &node.content {
             SvgContent::Shape {
                 subpaths,
-                fill,
+                paint,
+                fill_opacity,
+                stroke,
                 live,
             } => {
-                let element = shape_element(subpaths, *fill, live.as_ref(), self.precision)?;
+                let element = self.shape(
+                    subpaths,
+                    paint,
+                    *fill_opacity,
+                    stroke.as_ref(),
+                    live.as_ref(),
+                )?;
                 Some(wrap(&element, &attrs))
             }
             SvgContent::Raster {
@@ -174,6 +258,192 @@ impl Writer {
         }
     }
 
+    /// The element(s) for a shape: its fill primitive, plus a separate
+    /// stroke-only element when an inside/outside stroke needs a mask.
+    fn shape(
+        &mut self,
+        subpaths: &[Subpath],
+        paint: &SvgPaint,
+        fill_opacity: u8,
+        stroke: Option<&SvgStroke>,
+        live: Option<&LiveShape>,
+    ) -> Option<String> {
+        let base = shape_base(subpaths, live, self.precision)?;
+        let mut fill_attrs = self.paint_attrs(paint, fill_opacity)?;
+        let stroke = stroke.map(|stroke| self.stroke_attrs(stroke, subpaths));
+        match stroke {
+            Some((stroke_attrs, true)) => {
+                let fill_element = with_attrs(&base, &fill_attrs);
+                let mut stroke_attrs = stroke_attrs;
+                stroke_attrs.insert(0, "fill=\"none\"".to_string());
+                let stroke_element = with_attrs(&base, &stroke_attrs);
+                Some(format!("{fill_element}\n{stroke_element}"))
+            }
+            Some((stroke_attrs, false)) => {
+                fill_attrs.extend(stroke_attrs);
+                Some(with_attrs(&base, &fill_attrs))
+            }
+            None => Some(with_attrs(&base, &fill_attrs)),
+        }
+    }
+
+    /// The fill attributes for `paint`, registering a paint server when needed.
+    fn paint_attrs(&mut self, paint: &SvgPaint, fill_opacity: u8) -> Option<Vec<String>> {
+        match paint {
+            SvgPaint::Solid(fill) => {
+                let alpha = (u16::from(fill[3]) * u16::from(fill_opacity) + 127) / 255;
+                let mut attrs = vec![format!(
+                    "fill=\"#{:02x}{:02x}{:02x}\"",
+                    fill[0], fill[1], fill[2]
+                )];
+                if alpha != 255 {
+                    attrs.push(format!(
+                        "fill-opacity=\"{}\"",
+                        format_coord(f64::from(alpha) / 255.0, 3)
+                    ));
+                }
+                Some(attrs)
+            }
+            SvgPaint::Gradient(gradient) => {
+                let id = self.gradient_def(gradient);
+                Some(self.paint_ref_attrs(&id, fill_opacity))
+            }
+            SvgPaint::Pattern(pattern) => {
+                let id = self.pattern_def(pattern)?;
+                Some(self.paint_ref_attrs(&id, fill_opacity))
+            }
+        }
+    }
+
+    /// A `fill="url(#…)"` attribute list, with the fill opacity when not full.
+    fn paint_ref_attrs(&self, id: &str, fill_opacity: u8) -> Vec<String> {
+        let mut attrs = vec![format!("fill=\"url(#{id})\"")];
+        if fill_opacity != 255 {
+            attrs.push(format!(
+                "fill-opacity=\"{}\"",
+                format_coord(f64::from(fill_opacity) / 255.0, 3)
+            ));
+        }
+        attrs
+    }
+
+    /// Register a gradient paint server and return its id.
+    fn gradient_def(&mut self, gradient: &SvgGradient) -> String {
+        let id = format!("grad{}", self.paints);
+        self.paints += 1;
+        let (open, stops) = match gradient {
+            SvgGradient::Linear {
+                x1,
+                y1,
+                x2,
+                y2,
+                stops,
+            } => (
+                format!(
+                    "<linearGradient id=\"{id}\" gradientUnits=\"userSpaceOnUse\" x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\">",
+                    format_coord(*x1, self.precision),
+                    format_coord(*y1, self.precision),
+                    format_coord(*x2, self.precision),
+                    format_coord(*y2, self.precision)
+                ),
+                stops,
+            ),
+            SvgGradient::Radial {
+                cx,
+                cy,
+                rx,
+                ry,
+                stops,
+            } => (
+                format!(
+                    "<radialGradient id=\"{id}\" gradientUnits=\"userSpaceOnUse\" cx=\"0\" cy=\"0\" r=\"1\" gradientTransform=\"translate({} {}) scale({} {})\">",
+                    format_coord(*cx, self.precision),
+                    format_coord(*cy, self.precision),
+                    format_coord(*rx, self.precision),
+                    format_coord(*ry, self.precision)
+                ),
+                stops,
+            ),
+        };
+        let close = if matches!(gradient, SvgGradient::Linear { .. }) {
+            "</linearGradient>"
+        } else {
+            "</radialGradient>"
+        };
+        let body: Vec<String> = stops.iter().map(gradient_stop).collect();
+        self.defs
+            .push(format!("  {open}\n{}\n  {close}", body.join("\n")));
+        id
+    }
+
+    /// Register a pattern paint server and return its id.
+    fn pattern_def(&mut self, pattern: &SvgPattern) -> Option<String> {
+        let href = crate::encode_png_base64(&pattern.rgba, pattern.width, pattern.height)?;
+        let id = format!("pat{}", self.paints);
+        self.paints += 1;
+        let x = format_coord(pattern.x, self.precision);
+        let y = format_coord(pattern.y, self.precision);
+        let (w, h) = (pattern.width, pattern.height);
+        self.defs.push(format!(
+            "  <pattern id=\"{id}\" patternUnits=\"userSpaceOnUse\" patternContentUnits=\"userSpaceOnUse\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\">\n    <image xlink:href=\"data:img/png;base64,{}\" x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\"/>\n  </pattern>",
+            escape_xml(&href)
+        ));
+        Some(id)
+    }
+
+    /// The stroke attributes and whether they use an inside/outside mask.
+    fn stroke_attrs(&mut self, stroke: &SvgStroke, subpaths: &[Subpath]) -> (Vec<String>, bool) {
+        let mut attrs = vec![format!(
+            "stroke=\"#{:02x}{:02x}{:02x}\"",
+            stroke.rgb[0], stroke.rgb[1], stroke.rgb[2]
+        )];
+        let mask = self.stroke_mask(stroke.position, subpaths);
+        let masked = mask.is_some();
+        if let Some(id) = mask {
+            attrs.push(format!("mask=\"url(#{id})\""));
+        }
+        let width = if masked {
+            stroke.width * 2.0
+        } else {
+            stroke.width
+        };
+        attrs.push(format!(
+            "stroke-width=\"{}\"",
+            format_coord(width, self.precision)
+        ));
+        if stroke.opacity < 1.0 {
+            attrs.push(format!(
+                "stroke-opacity=\"{}\"",
+                format_coord(stroke.opacity.clamp(0.0, 1.0), 3)
+            ));
+        }
+        (attrs, masked)
+    }
+
+    /// Register a mask that keeps only the interior or exterior of `subpaths`.
+    fn stroke_mask(&mut self, position: SvgStrokePosition, subpaths: &[Subpath]) -> Option<String> {
+        if position == SvgStrokePosition::Center {
+            return None;
+        }
+        let data = path_data(subpaths, self.precision);
+        if data.is_empty() {
+            return None;
+        }
+        let id = format!("mask{}", self.masks);
+        self.masks += 1;
+        let (backdrop, shape) = match position {
+            SvgStrokePosition::Inside => ("black", "white"),
+            SvgStrokePosition::Outside => ("white", "black"),
+            SvgStrokePosition::Center => unreachable!(),
+        };
+        let (w, h) = (self.width, self.height);
+        self.defs.push(format!(
+            "  <mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" maskContentUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\">\n    <rect x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" fill=\"{backdrop}\"/>\n    <path d=\"{}\" fill=\"{shape}\" fill-rule=\"evenodd\"/>\n  </mask>",
+            escape_xml(&data)
+        ));
+        Some(id)
+    }
+
     /// Register a `<clipPath>` for a vector mask and return its id, `None`
     /// when the mask is absent, disabled, or empty.
     fn clip_path(&mut self, mask: Option<&VectorMask>) -> Option<String> {
@@ -198,13 +468,8 @@ impl Writer {
 /// The primitive for a shape layer: a live shape's `rect` / rounded `rect` /
 /// `ellipse` when still parametric, else the outline as a `<path>`. `None` when
 /// the outline is empty and there is no live form.
-fn shape_element(
-    subpaths: &[Subpath],
-    fill: [u8; 4],
-    live: Option<&LiveShape>,
-    precision: u8,
-) -> Option<String> {
-    let base = match live {
+fn shape_base(subpaths: &[Subpath], live: Option<&LiveShape>, precision: u8) -> Option<String> {
+    Some(match live {
         Some(shape) if shape.origin_type == crate::ORIGIN_ELLIPSE => {
             let (l, t, r, b) = shape.bounds;
             ellipse_element(
@@ -233,25 +498,34 @@ fn shape_element(
             }
             path_element(&data, VectorFillRule::EvenOdd)
         }
-    };
-    Some(with_fill(&base, fill))
+    })
 }
 
-/// Insert the fill attributes into a self-closing primitive.
-fn with_fill(element: &str, fill: [u8; 4]) -> String {
-    let attrs = if fill[3] == 255 {
-        format!(" fill=\"#{:02x}{:02x}{:02x}\"", fill[0], fill[1], fill[2])
-    } else {
-        format!(
-            " fill=\"#{:02x}{:02x}{:02x}\" fill-opacity=\"{}\"",
-            fill[0],
-            fill[1],
-            fill[2],
-            format_coord(f64::from(fill[3]) / 255.0, 3)
-        )
-    };
+/// One `<stop>` element.
+fn gradient_stop(stop: &SvgGradientStop) -> String {
+    let mut attrs = format!(
+        "offset=\"{}\" stop-color=\"#{:02x}{:02x}{:02x}\"",
+        format_coord(stop.offset.clamp(0.0, 1.0), 4),
+        stop.rgba[0],
+        stop.rgba[1],
+        stop.rgba[2]
+    );
+    if stop.rgba[3] != 255 {
+        attrs.push_str(&format!(
+            " stop-opacity=\"{}\"",
+            format_coord(f64::from(stop.rgba[3]) / 255.0, 3)
+        ));
+    }
+    format!("    <stop {attrs}/>")
+}
+
+/// Insert `attrs` into a self-closing primitive.
+fn with_attrs(element: &str, attrs: &[String]) -> String {
+    if attrs.is_empty() {
+        return element.to_string();
+    }
     match element.strip_suffix("/>") {
-        Some(head) => format!("{head}{attrs}/>"),
+        Some(head) => format!("{head} {}/>", attrs.join(" ")),
         None => element.to_string(),
     }
 }
@@ -539,282 +813,4 @@ fn indent_lines(s: &str, level: usize) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use pictura_core::path::PathPoint;
-    use pictura_core::VectorSubpath;
-
-    fn doc(width: u32, height: u32) -> Document {
-        Document::new(
-            width,
-            height,
-            pictura_core::ColorMode::Rgb,
-            pictura_core::BitDepth::Eight,
-        )
-    }
-
-    fn svg(width: u32, height: u32, nodes: Vec<SvgNode>) -> String {
-        encode_svg(
-            &doc(width, height),
-            &SvgOptions {
-                nodes,
-                precision: 3,
-            },
-        )
-    }
-
-    fn straight_subpath() -> Subpath {
-        Subpath {
-            points: vec![
-                PathPoint {
-                    anchor: (0.0, 0.0),
-                    in_handle: None,
-                    out_handle: None,
-                    smooth: false,
-                },
-                PathPoint {
-                    anchor: (10.0, 0.0),
-                    in_handle: None,
-                    out_handle: None,
-                    smooth: false,
-                },
-            ],
-            closed: false,
-        }
-    }
-
-    fn raster(width: u32, height: u32) -> SvgContent {
-        SvgContent::Raster {
-            rgba: vec![0u8; (width * height * 4) as usize],
-            width,
-            height,
-        }
-    }
-
-    #[test]
-    fn straight_segment_is_a_line() {
-        assert_eq!(subpath_data(&straight_subpath(), 3), "M 0 0 L 10 0");
-    }
-
-    #[test]
-    fn curved_closed_subpath_is_cubics_with_z() {
-        let subpath = Subpath {
-            points: vec![
-                PathPoint {
-                    anchor: (0.0, 0.0),
-                    in_handle: Some((-1.0, 0.0)),
-                    out_handle: Some((1.0, 0.0)),
-                    smooth: true,
-                },
-                PathPoint {
-                    anchor: (2.0, 2.0),
-                    in_handle: Some((1.0, 2.0)),
-                    out_handle: Some((3.0, 2.0)),
-                    smooth: true,
-                },
-            ],
-            closed: true,
-        };
-        let d = subpath_data(&subpath, 3);
-        assert!(d.starts_with("M 0 0 C "), "{d}");
-        assert!(d.ends_with(" Z"), "{d}");
-        assert_eq!(d.matches('C').count(), 2, "two segments: {d}");
-    }
-
-    #[test]
-    fn coordinates_trim_trailing_zeros() {
-        assert_eq!(format_coord(1.5, 3), "1.5");
-        assert_eq!(format_coord(2.0, 3), "2");
-        assert_eq!(format_coord(-0.0004, 3), "0");
-        assert_eq!(format_coord(1.23456, 2), "1.23");
-    }
-
-    #[test]
-    fn a_raster_document_matches_the_cc_sample() {
-        let svg = svg(1000, 652, vec![SvgNode::plain(raster(1000, 652))]);
-        assert!(
-            svg.starts_with(
-                "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" preserveAspectRatio=\"xMidYMid\" width=\"1000\" height=\"652\" viewBox=\"0 0 1000 652\">\n"
-            ),
-            "{svg}"
-        );
-        assert!(
-            svg.contains("  <image xlink:href=\"data:img/png;base64,"),
-            "{svg}"
-        );
-        assert!(
-            svg.contains("\" width=\"1000\" height=\"652\"/>\n"),
-            "{svg}"
-        );
-        assert!(svg.ends_with("</svg>\n"), "{svg}");
-    }
-
-    #[test]
-    fn image_element_is_well_formed() {
-        assert_eq!(
-            image_element("AAAA", 10, 5, None),
-            "<image xlink:href=\"data:img/png;base64,AAAA\" width=\"10\" height=\"5\"/>"
-        );
-    }
-
-    #[test]
-    fn a_zero_opacity_node_is_skipped() {
-        let node = SvgNode {
-            opacity: 0,
-            ..SvgNode::plain(raster(4, 4))
-        };
-        assert!(!svg(4, 4, vec![node]).contains("image"));
-    }
-
-    #[test]
-    fn opacity_wraps_in_a_group() {
-        let node = SvgNode {
-            opacity: 128,
-            blend: BlendMode::Multiply,
-            ..SvgNode::plain(raster(4, 4))
-        };
-        let svg = svg(4, 4, vec![node]);
-        assert!(
-            svg.contains("<g opacity=\"0.502\" style=\"mix-blend-mode:multiply\">"),
-            "{svg}"
-        );
-    }
-
-    #[test]
-    fn a_vector_mask_becomes_a_clip_path() {
-        let mask = VectorMask {
-            subpaths: vec![VectorSubpath {
-                closed: true,
-                operation: 1,
-                fill_rule: VectorFillRule::EvenOdd,
-                points: vec![[0, 0], [2560, 0], [2560, 2560], [0, 2560]],
-            }],
-            ..Default::default()
-        };
-        let clipped = |mask: &VectorMask| SvgNode {
-            clip: Some(mask.clone()),
-            ..SvgNode::plain(raster(10, 10))
-        };
-        let svg = svg(10, 10, vec![clipped(&mask), clipped(&mask)]);
-        assert!(svg.contains("<clipPath id=\"clip0\">"), "{svg}");
-        assert!(svg.contains("clip-path=\"url(#clip0)\""), "{svg}");
-        assert!(
-            svg.contains("clip-path=\"url(#clip1)\""),
-            "ids are unique: {svg}"
-        );
-        assert!(svg.contains("M 0 0 L 10 0 L 10 10 L 0 10 Z"), "{svg}");
-    }
-
-    #[test]
-    fn a_shape_content_emits_a_filled_path() {
-        let shape = SvgContent::Shape {
-            subpaths: vec![straight_subpath()],
-            fill: [10, 20, 30, 255],
-            live: None,
-        };
-        let svg = svg(10, 10, vec![SvgNode::plain(shape)]);
-        assert!(svg.contains("<path d=\"M 0 0 L 10 0\""), "{svg}");
-        assert!(svg.contains("fill=\"#0a141e\""), "{svg}");
-    }
-
-    #[test]
-    fn a_live_shape_emits_its_parametric_primitive() {
-        let shape = |fill, live| {
-            SvgNode::plain(SvgContent::Shape {
-                subpaths: Vec::new(),
-                fill,
-                live: Some(live),
-            })
-        };
-        let rect = LiveShape {
-            origin_type: crate::ORIGIN_RECTANGLE,
-            bounds: (1.0, 2.0, 6.0, 8.0),
-            radii: [0.0; 4],
-        };
-        let svg_rect = svg(10, 10, vec![shape([255, 0, 0, 128], rect)]);
-        assert!(
-            svg_rect.contains("<rect x=\"1\" y=\"2\" width=\"5\" height=\"6\""),
-            "{svg_rect}"
-        );
-        assert!(
-            svg_rect.contains("fill=\"#ff0000\" fill-opacity=\"0.502\""),
-            "{svg_rect}"
-        );
-
-        let ellipse = LiveShape {
-            origin_type: crate::ORIGIN_ELLIPSE,
-            bounds: (0.0, 0.0, 10.0, 4.0),
-            radii: [0.0; 4],
-        };
-        let svg_ellipse = svg(10, 10, vec![shape([0, 0, 0, 255], ellipse)]);
-        assert!(
-            svg_ellipse.contains("<ellipse cx=\"5\" cy=\"2\" rx=\"5\" ry=\"2\""),
-            "{svg_ellipse}"
-        );
-    }
-
-    #[test]
-    fn a_group_nests_its_children() {
-        let group = |isolated, opacity| SvgNode {
-            opacity,
-            ..SvgNode::plain(SvgContent::Group {
-                children: vec![SvgNode::plain(raster(2, 2))],
-                isolated,
-            })
-        };
-        let svg_pass = svg(2, 2, vec![group(false, 255)]);
-        assert!(svg_pass.contains("  <g>\n    <image "), "{svg_pass}");
-        let svg_iso = svg(2, 2, vec![group(true, 255)]);
-        assert!(
-            svg_iso.contains("<g style=\"isolation:isolate\">"),
-            "{svg_iso}"
-        );
-        let svg_faded = svg(2, 2, vec![group(true, 128)]);
-        assert!(svg_faded.contains("<g opacity=\"0.502\">"), "{svg_faded}");
-        assert!(!svg_faded.contains("isolation"), "{svg_faded}");
-    }
-
-    #[test]
-    fn an_empty_group_is_omitted() {
-        let group = SvgNode::plain(SvgContent::Group {
-            children: Vec::new(),
-            isolated: true,
-        });
-        assert!(!svg(2, 2, vec![group]).contains("<g"));
-    }
-
-    #[test]
-    fn primitives_format_their_attributes() {
-        assert_eq!(
-            rect_element(1.0, 2.0, 30.0, 40.0, 3),
-            "<rect x=\"1\" y=\"2\" width=\"30\" height=\"40\"/>"
-        );
-        assert_eq!(
-            rounded_rect_element(0.0, 0.0, 10.0, 10.0, 2.5, 3),
-            "<rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" rx=\"2.5\" ry=\"2.5\"/>"
-        );
-        assert_eq!(
-            ellipse_element(5.0, 5.0, 5.0, 2.0, 3),
-            "<ellipse cx=\"5\" cy=\"5\" rx=\"5\" ry=\"2\"/>"
-        );
-    }
-
-    #[test]
-    fn text_and_href_are_xml_escaped() {
-        let svg = text_element(0.0, 0.0, "a<b&c", "Font \"X\"", 12.0, [255, 0, 0, 128], 3);
-        assert!(svg.contains("a&lt;b&amp;c"), "{svg}");
-        assert!(svg.contains("font-family=\"Font &quot;X&quot;\""), "{svg}");
-        assert!(
-            svg.contains("fill=\"#ff0000\" fill-opacity=\"0.502\""),
-            "{svg}"
-        );
-    }
-
-    #[test]
-    fn only_css_blend_modes_map() {
-        assert_eq!(blend_css(BlendMode::Multiply), Some("multiply"));
-        assert_eq!(blend_css(BlendMode::Normal), None);
-        assert_eq!(blend_css(BlendMode::Dissolve), None);
-        assert_eq!(blend_css(BlendMode::LinearBurn), None);
-    }
-}
+mod tests;

@@ -2041,8 +2041,18 @@ Snapshot for resuming after a context break. Update after each milestone.
   Oracle: `pictura-render/tests/svg_oracle.rs` renders a vector document with
   ImageMagick's `RSVG:` coder (librsvg) and compares with the CPU composite on
   white (2% / mean 1.5 edge tolerance; self-skips without the coder). Docs:
-  `export-formats.md` *SVG (CC)*. Not done (#652): gradient/pattern
-  `<defs>`, `vstk` strokes, per-layer SVG files.
+  `export-formats.md` *SVG (CC)*.
+- **SVG vector primitives** (#652, change `svg-export-vector-primitives`):
+  `pictura-codec::svg` gained `SvgPaint` (`Solid` / `Gradient` / `Pattern`),
+  `SvgStroke`, and defs for `<linearGradient>`, `<radialGradient>`, `<pattern>`,
+  and stroke masks. `pictura-render::svg` maps the compositor's layer-rect
+  gradient geometry and nearest-neighbour pattern tile into those types, and
+  emits a solid stroke when it is the only active effect (inside/outside use a
+  doubled width plus a mask). Export As SVG now writes one document-sized file
+  per checked row through `svg_from_layer` / `svg_from_view`; several rows share
+  the folder-and-disambiguate flow. Still rasterized: angle/reflected/diamond
+  gradients, gradient/pattern strokes, strokes combined with another effect,
+  and imported `vstk` strokes.
 - **Semantic theme tokens** (change `semantic-theme-tokens`, issue #419): every
   key emitted by `Theme::tokens` and substituted into the stylesheet is renamed
   from an implementation-surface name to a semantic role name in kebab-case —

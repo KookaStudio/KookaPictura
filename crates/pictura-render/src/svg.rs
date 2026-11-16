@@ -9,8 +9,12 @@
 //! actual SVG text is built by `pictura_codec::svg`; this module only decodes
 //! the engine views the codec cannot reach.
 
-use pictura_codec::{encode_svg, SvgContent, SvgNode, SvgOptions};
-use pictura_core::{BlendMode, Document, Layer};
+use pictura_adjust::{Adjustment, GradientFillParams, GradientKind, PatternFillParams};
+use pictura_codec::{
+    encode_svg, SvgContent, SvgGradient, SvgGradientStop, SvgNode, SvgOptions, SvgPaint,
+    SvgPattern, SvgStroke, SvgStrokePosition,
+};
+use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
 /// Composites a scratch document (the source document's settings with only
 /// the given layers) to straight-alpha sRGB RGBA8888 at the document size.
@@ -129,28 +133,329 @@ fn plan_group(doc: &Document, group: &Layer, raster: &mut Rasterize) -> Plan {
     Plan::Node(Box::new(styled(group, content)))
 }
 
-/// A non-group layer: a filled primitive when it is a plain solid shape, else
-/// the layer's own raster.
+/// A non-group layer: a filled primitive when its fill and effects are
+/// expressible as SVG, else the layer's own raster.
 fn leaf_node(doc: &Document, layer: &Layer, raster: &mut Rasterize) -> SvgNode {
-    let shape = (layer.mask.is_none() && !crate::composite::has_effect_block(layer))
-        .then(|| crate::shape_fill_color(layer))
-        .flatten()
-        .zip(crate::layer_shape_paths(layer, doc.width, doc.height));
-    if let Some((mut fill, subpaths)) = shape {
-        fill[3] = ((u16::from(fill[3]) * u16::from(layer.fill) + 127) / 255) as u8;
-        return styled(
-            layer,
-            SvgContent::Shape {
-                subpaths,
-                fill,
-                live: crate::layer_live_shape(layer),
-            },
-        );
+    if let Some(content) = shape_content(doc, layer) {
+        return styled(layer, content);
     }
     SvgNode {
         clip: layer.vector_mask.clone(),
         ..styled(layer, raster_content(doc, &[normalized(layer)], raster))
     }
+}
+
+/// The vector primitive for `layer`, or `None` when it needs the raster
+/// fallback.
+fn shape_content(doc: &Document, layer: &Layer) -> Option<SvgContent> {
+    if layer.mask.as_ref().is_some_and(|mask| !mask_is_noop(mask)) {
+        return None;
+    }
+    let fill = crate::fill::decode_layer_fill(layer)?;
+    let subpaths = match crate::layer_shape_paths(layer, doc.width, doc.height) {
+        Some(subpaths) => subpaths,
+        None => match &fill {
+            Adjustment::GradientFill(_) | Adjustment::PatternFill(_)
+                if crate::is_fill_content_layer(layer) =>
+            {
+                vec![rect_outline(layer.rect)?]
+            }
+            _ => return None,
+        },
+    };
+    let paint = fill_paint(&fill, layer.rect, doc)?;
+    let stroke = match effects_plan(layer) {
+        EffectsPlan::None => None,
+        EffectsPlan::Stroke(stroke) => Some(stroke),
+        EffectsPlan::Raster => return None,
+    };
+    Some(SvgContent::Shape {
+        subpaths,
+        paint,
+        fill_opacity: layer.fill,
+        stroke,
+        live: crate::layer_live_shape(layer),
+    })
+}
+
+/// The fill paint for a decoded fill, or `None` when SVG cannot express it.
+fn fill_paint(fill: &Adjustment, rect: PsdRect, doc: &Document) -> Option<SvgPaint> {
+    match fill {
+        Adjustment::SolidFill(rgba) => Some(SvgPaint::Solid(*rgba)),
+        Adjustment::GradientFill(params) => gradient_paint(params, rect),
+        Adjustment::PatternFill(params) => {
+            Some(SvgPaint::Pattern(pattern_paint(doc, params, rect)))
+        }
+        _ => None,
+    }
+}
+
+/// Whether a layer mask leaves the layer fully visible: disabled, or a full
+/// white mask at full density with no feather. The app gives every new fill
+/// layer such a mask, so treating it as a real mask would rasterize the
+/// gradient and pattern fills the SVG writer can express.
+fn mask_is_noop(mask: &pictura_core::LayerMask) -> bool {
+    if mask.disabled {
+        return true;
+    }
+    if mask.density != 255 || mask.feather() > 0.0 || mask.default_color != 255 {
+        return false;
+    }
+    mask.data
+        .as_ref()
+        .is_none_or(|data| data.iter().all(|&v| v == 255))
+}
+
+/// A full-rectangle outline for a fill layer with no vector mask.
+fn rect_outline(rect: PsdRect) -> Option<pictura_core::path::Subpath> {
+    if rect.width() <= 0 || rect.height() <= 0 {
+        return None;
+    }
+    pictura_core::shape::outline_in_box(
+        pictura_core::shape::ShapeOptions::new(pictura_core::shape::ShapeKind::Rectangle, 0.0, 3),
+        (
+            f64::from(rect.left),
+            f64::from(rect.top),
+            f64::from(rect.width()),
+            f64::from(rect.height()),
+        ),
+    )
+}
+
+/// Map a gradient fill to an SVG paint server, or a solid colour for a
+/// degenerate gradient, or `None` for a kind SVG cannot represent.
+fn gradient_paint(params: &GradientFillParams, rect: PsdRect) -> Option<SvgPaint> {
+    let (w, h) = (f64::from(rect.width()), f64::from(rect.height()));
+    if w <= 0.0 || h <= 0.0 {
+        return None;
+    }
+    let angle = f64::from(params.angle_deg);
+    let ratio = angle.rem_euclid(90.0);
+    let s = (f64::from(params.scale) / 100.0) * ((90.0 - ratio) / 90.0 * w + (ratio / 90.0) * h);
+    if !s.is_finite() || s <= 0.0 {
+        return None;
+    }
+    let theta = angle.rem_euclid(360.0).to_radians();
+    let (sin_t, cos_t) = (theta.sin(), theta.cos());
+    let ax = if w > 1.0 {
+        2.0 * w / s / (w - 1.0)
+    } else {
+        0.0
+    };
+    let ay = if h > 1.0 {
+        2.0 * h / s / (h - 1.0)
+    } else {
+        0.0
+    };
+    let bx = -w / s;
+    let by = -h / s;
+    let stops = gradient_stops(params);
+    match params.kind {
+        GradientKind::Linear => {
+            let gx = 0.5 * cos_t * ax;
+            let gy = -0.5 * sin_t * ay;
+            let c = 0.5 * (cos_t * bx - sin_t * by + 1.0);
+            let g2 = gx * gx + gy * gy;
+            if g2 <= f64::EPSILON {
+                return Some(SvgPaint::Solid(crate::fill::sample_stops(
+                    &params.stops,
+                    c.clamp(0.0, 1.0),
+                )));
+            }
+            // The compositor samples the gradient at integer pixel origins;
+            // SVG rasterizers sample at pixel centers, so shift by half a pixel.
+            let c = c - 0.5 * (gx + gy);
+            let p1 = (-c / g2 * gx, -c / g2 * gy);
+            let p2 = (p1.0 + gx / g2, p1.1 + gy / g2);
+            let (dx, dy) = (f64::from(rect.left), f64::from(rect.top));
+            Some(SvgPaint::Gradient(SvgGradient::Linear {
+                x1: p1.0 + dx,
+                y1: p1.1 + dy,
+                x2: p2.0 + dx,
+                y2: p2.1 + dy,
+                stops,
+            }))
+        }
+        GradientKind::Radial => {
+            if ax.abs() <= f64::EPSILON || ay.abs() <= f64::EPSILON {
+                return None;
+            }
+            // Pixel centers: the compositor samples at integer origins.
+            let cx = -bx / ax + f64::from(rect.left) + 0.5;
+            let cy = -by / ay + f64::from(rect.top) + 0.5;
+            let rx = 1.0 / ax.abs();
+            let ry = 1.0 / ay.abs();
+            if !cx.is_finite() || !cy.is_finite() || !rx.is_finite() || !ry.is_finite() {
+                return None;
+            }
+            Some(SvgPaint::Gradient(SvgGradient::Radial {
+                cx,
+                cy,
+                rx,
+                ry,
+                stops,
+            }))
+        }
+        _ => None,
+    }
+}
+
+/// The gradient stops in SVG order, reversed when the PSD fill is reversed.
+fn gradient_stops(params: &GradientFillParams) -> Vec<SvgGradientStop> {
+    let mut stops: Vec<SvgGradientStop> = params
+        .stops
+        .iter()
+        .map(|stop| SvgGradientStop {
+            offset: f64::from(stop.location) / 4096.0,
+            rgba: [stop.color[0], stop.color[1], stop.color[2], 255],
+        })
+        .collect();
+    if params.reverse {
+        stops.reverse();
+        for stop in &mut stops {
+            stop.offset = 1.0 - stop.offset;
+        }
+    }
+    stops
+}
+
+const PATTERN_PLACEHOLDER: [u8; 4] = [128, 128, 128, 255];
+
+/// Map a pattern fill to a nearest-neighbour scaled tile and its user-space
+/// origin, using the compositor's placeholder when the pattern is missing.
+fn pattern_paint(doc: &Document, params: &PatternFillParams, rect: PsdRect) -> SvgPattern {
+    let patterns = pictura_codec::decode_patterns(doc);
+    let pattern = patterns
+        .iter()
+        .find(|pattern| pattern.pattern_id == params.pattern_id)
+        .filter(|pattern| {
+            pattern.width > 0
+                && pattern.height > 0
+                && pattern.rgba.len() >= pattern.width as usize * pattern.height as usize * 4
+        });
+    let (pw, ph, rgba) = match pattern {
+        Some(pattern) => (
+            i64::from(pattern.width),
+            i64::from(pattern.height),
+            pattern.rgba.as_slice(),
+        ),
+        None => (1, 1, PATTERN_PLACEHOLDER.as_slice()),
+    };
+    let scale = if params.scale.is_finite() {
+        f64::from(params.scale)
+    } else {
+        100.0
+    };
+    // ponytail: cap the embedded tile; a huge scale would otherwise allocate a
+    // multi-gigabyte PNG. Normal pattern scales are far below this.
+    const MAX_TILE: f64 = 4096.0;
+    let tw = (pw as f64 * scale / 100.0).round().clamp(1.0, MAX_TILE) as u32;
+    let th = (ph as f64 * scale / 100.0).round().clamp(1.0, MAX_TILE) as u32;
+    let mut tile = Vec::with_capacity((tw * th * 4) as usize);
+    for ty in 0..th {
+        let py = ((f64::from(ty) / f64::from(th)) * ph as f64).floor() as i64;
+        let py = py.clamp(0, ph - 1) as usize;
+        for tx in 0..tw {
+            let px = ((f64::from(tx) / f64::from(tw)) * pw as f64).floor() as i64;
+            let px = px.clamp(0, pw - 1) as usize;
+            let i = (py * pw as usize + px) * 4;
+            tile.extend_from_slice(&rgba[i..i + 4]);
+        }
+    }
+    let x = if params.link_with_layer {
+        f64::from(rect.left)
+    } else {
+        0.0
+    } + f64::from(params.origin.0);
+    let y = if params.link_with_layer {
+        f64::from(rect.top)
+    } else {
+        0.0
+    } + f64::from(params.origin.1);
+    SvgPattern {
+        rgba: tile,
+        width: tw,
+        height: th,
+        x,
+        y,
+    }
+}
+
+/// How a layer's effects map to SVG.
+enum EffectsPlan {
+    None,
+    Stroke(SvgStroke),
+    Raster,
+}
+
+/// A layer is stroke-vectorizable only when a solid, Normal stroke is its sole
+/// active effect.
+fn effects_plan(layer: &Layer) -> EffectsPlan {
+    use crate::layer_effects::{decode_layer_effects, StrokeFill, StrokePosition};
+
+    let effects = decode_layer_effects(layer);
+    let on = |enabled: bool, present: bool| enabled && present;
+    let other_active = effects
+        .drop_shadow
+        .as_ref()
+        .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .outer_glow
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .inner_shadow
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .inner_glow
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .bevel
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .satin
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .color_overlay
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .gradient_overlay
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .pattern_overlay
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present));
+    if other_active {
+        return EffectsPlan::Raster;
+    }
+    let Some(stroke) = effects.stroke else {
+        return EffectsPlan::None;
+    };
+    if !on(stroke.enabled, stroke.present) {
+        return EffectsPlan::None;
+    }
+    let StrokeFill::Solid(rgb) = stroke.fill else {
+        return EffectsPlan::Raster;
+    };
+    if stroke.blend_mode != BlendMode::Normal {
+        return EffectsPlan::Raster;
+    }
+    EffectsPlan::Stroke(SvgStroke {
+        rgb,
+        width: f64::from(stroke.size),
+        opacity: f64::from(stroke.opacity) / 100.0,
+        position: match stroke.position {
+            StrokePosition::Inside => SvgStrokePosition::Inside,
+            StrokePosition::Center => SvgStrokePosition::Center,
+            StrokePosition::Outside => SvgStrokePosition::Outside,
+        },
+    })
 }
 
 /// `content` carrying `layer`'s opacity and (CSS) blend.
