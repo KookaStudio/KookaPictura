@@ -294,7 +294,7 @@ pub fn embed_document_icc(doc: &mut Document, icc: &[u8]) {
     let (resources, consumed) = decode_image_resources_with_len(doc);
     let section = rebuild_resources(doc, resources, consumed, Some(icc));
     doc.image_resources = section.into();
-    doc.document_icc = Some(icc.into());
+    doc.document_icc = Some(icc.to_vec().into());
 }
 
 pub(crate) fn resources_for_output(doc: &Document, mode_code: u16) -> Vec<u8> {
