@@ -470,9 +470,10 @@ void SaveFormatOptionsTest::tiffTransparencyOffFlattens()
     const QString file = path("opaque.tif");
     pictura::set_save_raster_options(*view, -1, 1, false, false, 0xFFFFFF);
     QVERIFY(view->save(file));
-    const QImage image(file);
-    QVERIFY(!image.isNull());
-    QCOMPARE(qAlpha(image.pixel(1, 1)), 255);
+    // CI's Qt package has no TIFF image plugin; assert the written tags here.
+    // The codec test checks the flattened pixel itself.
+    QCOMPARE(readTiffTagValue(file, 277), qint64(3));
+    QCOMPARE(readTiffTagValue(file, 338), qint64(-1));
     closeActive();
 }
 
