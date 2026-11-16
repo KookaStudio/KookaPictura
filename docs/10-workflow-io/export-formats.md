@@ -143,31 +143,51 @@ layer target is the layer rendered alone on transparency, cropped to its bounds.
 
 ### SVG (CC)
 
-The `SVG` format writes the whole document as one `.svg` text file (atomic,
-temp file plus rename); the checked rows do not select SVG targets. It is not a
-traced raster: vector content becomes SVG primitives and everything else an
-embedded PNG.
+The `SVG` format writes one `.svg` text file per checked row (atomic, temp file
+plus rename). The document row is the whole document; a layer row is that
+top-level layer alone (including its group subtree) on the document canvas. One
+checked row prompts for a file, several prompt for a folder and write one file
+each, named from the document or layer name with duplicate disambiguation. It is
+not a traced raster: vector content becomes SVG primitives and everything else
+an embedded PNG.
 
 - **Header.** Taken verbatim from a shipped CC sample: `<svg>` with `xmlns`,
   `xmlns:xlink`, `preserveAspectRatio="xMidYMid"`, `width`, `height`, and
   `viewBox="0 0 W H"` in that order, document pixels, two-space indentation, no
-  XML declaration, and a trailing newline.
+  XML declaration, and a trailing newline. A per-layer file keeps the document
+  `width`/`height`/`viewBox`, so its content stays at absolute document
+  coordinates.
 - **Raster fallback.** `<image xlink:href="data:img/png;base64,…" width="W"
   height="H"/>` at the document size with no `x`/`y`; the MIME subtype is
   spelled `img/png` as CC writes it. The PNG is 8-bit RGBA, straight alpha, sRGB.
 - **Vector vs. raster.** Per layer, bottom to top, hidden and zero-opacity layers
   skipped:
-  - a shape layer with a solid fill and no layer effects or pixel mask is a
-    primitive — a live rectangle `<rect>`, a live rounded rectangle `<rect rx
-    ry>` (one uniform radius), a live ellipse `<ellipse>`, any other outline
-    `<path d>` (even-odd); the fill opacity scales `fill-opacity`;
+  - a shape layer with a solid, linear-gradient, or radial-gradient fill and no
+    appearance-changing pixel mask or unsupported effect is a primitive (a
+    disabled or fully opaque white mask is ignored, including the default mask
+    the app gives new fill layers) — a live rectangle `<rect>`,
+    a live rounded rectangle `<rect rx ry>` (one uniform radius), a live ellipse
+    `<ellipse>`, any other outline `<path d>` (even-odd); the fill opacity scales
+    `fill-opacity`;
+  - a gradient fill references a `<linearGradient>` or `<radialGradient>` in
+    `<defs>`, in document user space, with one `<stop>` per PSD colour stop and
+    the compositor's layer-rect scale/angle geometry; angle, reflected, and
+    diamond gradients stay raster because SVG cannot reproduce them faithfully;
+  - a pattern fill references a `<pattern>` in `<defs>` whose tile is the
+    pattern pixels nearest-neighbour scaled to the compositor's tile size and
+    anchored by the fill's link/origin;
+  - a solid stroke that is the layer's only active effect emits `stroke`,
+    `stroke-width`, and `stroke-opacity`; a center stroke uses the centerline,
+    while inside/outside strokes double the width and mask the band to the
+    shape's interior/exterior;
   - a group is a nested `<g>`; a non-pass-through group is isolated
     (`isolation:isolate` when no opacity or blend already isolates it);
   - opacity and a CSS-representable blend wrap the element in `<g opacity
     style="mix-blend-mode:…">`;
-  - every other layer — pixels, type, smart object, gradient or pattern fill, a
-    shape with effects — is its own raster at full opacity and Normal, clipped
-    by its vector mask, with the opacity and blend on the wrapping `<g>`;
+  - every other layer — pixels, type, smart object, a gradient/pattern stroke, a
+    shape with another effect or an appearance-changing pixel mask — is its own
+    raster at full opacity and Normal, clipped by its vector mask, with the opacity and blend
+    on the wrapping `<g>`;
   - a plain clipping stack (base and clipped layers all Normal, base at full
     opacity) is one raster;
   - content SVG cannot express — an adjustment layer, a blend mode with no CSS
@@ -180,15 +200,17 @@ embedded PNG.
 - **Text.** A type layer is emitted as its raster fallback, not live `<text>`
   or outlined glyphs: live text depends on the viewer's fonts and outlining
   needs a glyph source. *(Decision, issue #477.)*
-- **Not yet emitted.** Gradient and pattern fills (`<linearGradient>` /
-  `<pattern>`), vector strokes, and per-layer SVG files are rasterized or absent.
+- **Still rasterized.** Angle/reflected/diamond gradients, gradient and pattern
+  strokes, a stroke combined with another effect, and imported `vstk` strokes
+  (not decoded by the engine).
 
 **Provenance.** No Adobe source. The header and raster fallback come from a
-shipped CC sample of a raster-only document; there is no CC sample with vector
-content, so the primitives, the fill rule, the blend map, and the coordinate
-precision (three decimals, trailing zeros trimmed) are *(inferred)*. A librsvg
-oracle checks a vector document's rendering against the CPU composite at the
-pixel level; nothing claims byte parity with CC.
+shipped CC sample of a raster-only document; there is still no CC sample with
+vector content, so the primitives, the paint-server geometry, the stroke band
+model, the per-layer canvas choice, the fill rule, the blend map, and the
+coordinate precision (three decimals, trailing zeros trimmed) are *(inferred)*.
+A librsvg oracle checks a vector document's rendering against the CPU composite
+at the pixel level; nothing claims byte parity with CC.
 
 ### Mobile preview (legacy)
 
