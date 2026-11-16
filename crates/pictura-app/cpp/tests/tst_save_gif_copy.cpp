@@ -435,7 +435,11 @@ void SaveGifCopyTest::gifPreviewUsesSrgbSnapshot()
         QSKIP("the Adobe RGB profile is unavailable");
     }
     const int history = view->history_count();
-    window_->setSaveFormatDialogForTest(nullptr);
+    window_->setGifDialogForTest(nullptr);
+    window_->setSaveFormatDialogForTest(
+        [](pictura::SaveFormatKind kind, pictura::SaveFormatOptions&) {
+            return kind == pictura::SaveFormatKind::Gif;
+        });
     QColor previewColor;
     const auto drive = [&previewColor, view](pictura::IndexedColorDialog& dialog) {
         auto* preview = dialog.findChild<QCheckBox*>(QStringLiteral("indexedPreview"));

@@ -372,7 +372,8 @@ fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-        use std::sync::atomic::{AtomicU64, Ordering};
+    use pictura_codec::{ColorReduction, Dither, PaletteOptions};
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
     fn save_composite_converts_profiled_rgb_for_srgb_writers() {
@@ -384,7 +385,6 @@ mod tests {
         let expected = pictura_codec::buffer_to_srgb(&doc, &native).into_owned();
         assert_eq!(srgb.data, expected.data);
     }
-
 
     static NEXT: AtomicU64 = AtomicU64::new(1);
 

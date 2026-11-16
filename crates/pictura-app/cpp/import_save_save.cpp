@@ -199,11 +199,13 @@ bool ImportSaveCoordinator::confirmFeatureWarning(const QString& path, PictureVi
     if (featureWarningForTest_) {
         return featureWarningForTest_();
     }
-    return QMessageBox::warning(
-               dialogParent_, title,
-               tr("The chosen format cannot hold all of the document's features. "
-                  "The flattened composite will be written."),
-               QMessageBox::Save | QMessageBox::Cancel)
+    const QString text = tr("The chosen format cannot hold all of the document's features. "
+                            "The flattened composite will be written.");
+    if (warningDriverForTest_) {
+        return warningDriverForTest_(title, text);
+    }
+    return QMessageBox::warning(dialogParent_, title, text,
+                                QMessageBox::Save | QMessageBox::Cancel)
         == QMessageBox::Save;
 }
 
@@ -234,11 +236,11 @@ bool ImportSaveCoordinator::saveCopyWithDialog()
 bool ImportSaveCoordinator::saveCopyAsWithOptions(const QString& path, SaveFormatKind hint)
 {
     PictureView* view = documents_.activeView();
-    if (!view || !view->has_document() || !promptSaveFormatOptions(path, hint)) {
+    if (!view || !view->has_document()) {
         return false;
     }
-    if (!confirmSaveProfile(path, *view)
-        || !confirmFeatureWarning(path, *view, tr("Save a Copy"))) {
+    if (!confirmFeatureWarning(path, *view, tr("Save a Copy"))
+        || !promptSaveFormatOptions(path, hint) || !confirmSaveProfile(path, *view)) {
         return false;
     }
     return saveCopyAs(path);
@@ -326,9 +328,8 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
     if (kind == SaveFormatKind::None) {
         kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
     }
-    // GIF converts to Indexed during the options prompt, so every warning that
-    // can abort the save must run before the prompt commits that conversion.
-    const bool featureWarning = saveAsNeedsFeatureWarning(path, view);
+    // The warning must run before the GIF options prompt: a cancelled save
+    // leaves the document and any previous file untouched.
     const auto warn = [this](const QString& title, const QString& text) {
         if (warningDriverForTest_) {
             return warningDriverForTest_(title, text);
@@ -337,12 +338,8 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
                                     QMessageBox::Save | QMessageBox::Cancel)
             == QMessageBox::Save;
     };
-    if (featureWarning) {
-        if (!warn(tr("Save As"),
-                  tr("The chosen format cannot hold all of the document's features. "
-                     "The flattened composite will be written."))) {
-            return false;
-        }
+    if (!confirmFeatureWarning(path, *view, tr("Save As"))) {
+        return false;
     }
     if (kind == SaveFormatKind::Dcs) {
         const QString mode = pictura::image_mode(*view);
@@ -367,18 +364,8 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
     } else {
         lastSaveKinds_.remove(view);
     }
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    const bool native = suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
-    const bool offersProfile = native || suffix == QStringLiteral("jpg")
-        || suffix == QStringLiteral("jpeg") || suffix == QStringLiteral("jpe")
-        || suffix == QStringLiteral("tif") || suffix == QStringLiteral("tiff");
-    if (offersProfile) {
-        SaveOptionsDialog options(pictura::default_save_embed_profile(*view, native), true,
-                                  dialogParent_);
-        if (runDialog(options, dialogParent_) != QDialog::Accepted) {
-            return false;
-        }
-        pictura::set_save_embed_profile(*view, options.embedProfile());
+    if (!confirmSaveProfile(path, *view)) {
+        return false;
     }
     return saveActiveAs(path);
 }
