@@ -8,7 +8,10 @@ impl qobject::PictureView {
     pub fn save(mut self: Pin<&mut Self>, path: &QString) -> bool {
         self.as_mut().settle_pending_composite();
         let path_string = path.to_string();
-        if Path::new(&path_string).extension().is_none() {
+        if Path::new(&path_string)
+            .extension()
+            .is_none_or(|extension| extension.is_empty())
+        {
             return false;
         }
         let suffix = format_for_path(&path_string);
@@ -139,6 +142,12 @@ impl qobject::PictureView {
         // layer stack here, as Export As does: a document that keeps no stored
         // composite (or whose stored copy is stale) must not save blank.
         let mut doc = doc_ref.clone();
+        // A document missing tiles lost from scratch is never written.
+        if crate::history::unreadable_tiles(&doc) > 0 {
+            super::super::helpers::memory_gate::refuse_for_scratch();
+            return false;
+        }
+        let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
         if dirty {
             pictura_render::refresh_native_composite(&mut doc);
         }
@@ -151,7 +160,17 @@ impl qobject::PictureView {
         ) else {
             return false;
         };
-        doc.composite = super::super::helpers_composite::current_buffer(&doc, gpu_compute);
+        let source_mode = doc.source_mode.unwrap_or(doc.mode);
+        let srgb = matches!(
+            kind,
+            pictura_codec::SaveKind::Png
+                | pictura_codec::SaveKind::Bmp
+                | pictura_codec::SaveKind::Tga
+                | pictura_codec::SaveKind::Gif
+                | pictura_codec::SaveKind::Eps
+                | pictura_codec::SaveKind::Dcs
+        ) && source_mode == pictura_core::ColorMode::Rgb;
+        doc.composite = save_composite(&doc, gpu_compute, srgb);
         if embed_tiff {
             let mode = doc.source_mode.unwrap_or(doc.mode);
             options.icc = match mode {
@@ -177,12 +196,23 @@ impl qobject::PictureView {
             );
             (!bytes.is_empty()).then_some(bytes)
         };
-        if pictura_codec::save_document_with_jpeg(
+        let guard = || {
+            if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
+                && crate::history::unreadable_tiles(&doc) > 0
+            {
+                super::super::helpers::memory_gate::refuse_for_scratch();
+                false
+            } else {
+                true
+            }
+        };
+        if pictura_codec::save_document_with_jpeg_guarded(
             kind,
             &doc,
             &options,
             Path::new(path),
             Some(&jpeg),
+            Some(&guard),
         )
         .is_err()
         {
@@ -199,5 +229,36 @@ impl qobject::PictureView {
         };
         rust.session.mark_saved();
         true
+    }
+}
+
+/// The composite a save writer consumes. sRGB-only writers convert a profiled
+/// working-space composite; TIFF/Raw retain the working/mode samples.
+pub(super) fn save_composite(
+    doc: &pictura_core::Document,
+    gpu_compute: bool,
+    srgb: bool,
+) -> pictura_core::PixelBuffer {
+    let buffer = current_buffer(doc, gpu_compute);
+    if srgb && doc.document_icc.is_some() {
+        pictura_codec::buffer_to_srgb(doc, &buffer).into_owned()
+    } else {
+        buffer
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_composite_converts_profiled_rgb_for_srgb_writers() {
+        let mut doc = pictura_core::Document::from_rgba("srgb", 1, 1, &[200, 100, 50, 255]);
+        pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
+        let native = save_composite(&doc, false, false);
+        let srgb = save_composite(&doc, false, true);
+        assert_ne!(native.data, srgb.data, "the working profile is converted");
+        let expected = pictura_codec::buffer_to_srgb(&doc, &native).into_owned();
+        assert_eq!(srgb.data, expected.data);
     }
 }

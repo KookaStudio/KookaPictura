@@ -16,6 +16,7 @@ use crate::vector_mask::{decode_path_records, encode_path_records};
 const WORK_PATH: u16 = 1025;
 const SAVED_FIRST: u16 = 2000;
 const SAVED_LAST: u16 = 2997;
+const CLIPPING_PATH: u16 = 2999;
 
 fn is_path_resource(id: u16) -> bool {
     id == WORK_PATH || (SAVED_FIRST..=SAVED_LAST).contains(&id)
@@ -59,6 +60,20 @@ pub(crate) fn resolve_paths(doc: &mut Document) {
     let (work, saved) = decode_paths(&doc.image_resources, doc.width, doc.height);
     doc.work_path = work;
     doc.saved_paths = saved;
+}
+
+/// The saved path named by the Clipping Path resource (2999), if the resource
+/// and its path both exist. The resource data is a Pascal string.
+pub(crate) fn clipping_path(doc: &Document) -> Option<&NamedPath> {
+    let resource = decode_section(&doc.image_resources)
+        .0
+        .into_iter()
+        .find(|resource| resource.id == CLIPPING_PATH)?;
+    let len = usize::from(*resource.data.first()?);
+    let name = String::from_utf8_lossy(resource.data.get(1..1 + len)?);
+    doc.saved_paths
+        .iter()
+        .find(|path| path.name.as_str() == name.as_ref())
 }
 
 /// The image-resource section a save of `doc` under header mode `mode_code`

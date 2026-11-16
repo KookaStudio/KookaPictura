@@ -158,7 +158,10 @@ pub use read::{
     read_psd, read_psd_with, read_psd_with_options, read_psd_within, read_psd_within_options,
     OpenOptions,
 };
-pub use save::{save_document, save_document_with_jpeg, JpegEncode, SaveKind, SaveOptions};
+pub use save::{
+    save_document, save_document_with_jpeg, save_document_with_jpeg_guarded, BeforeWrite,
+    JpegEncode, SaveKind, SaveOptions,
+};
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
     set_filter_mask_enabled, set_smart_filter_enabled, set_smart_filters_enabled,

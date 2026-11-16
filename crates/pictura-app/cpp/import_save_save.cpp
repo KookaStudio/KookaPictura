@@ -99,17 +99,18 @@ bool ImportSaveCoordinator::saveActive()
         }
         return saved;
     }
+    SaveFormatKind kind = lastSaveKinds_.value(view, SaveFormatKind::None);
+    if (kind == SaveFormatKind::None) {
+        kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    }
+    const bool rememberedDcs = kind == SaveFormatKind::Dcs;
     if (path.isEmpty()
-        || savePathNeedsFormatDialog(path, view, isNativeDocumentPath(path))) {
+        || savePathNeedsFormatDialog(path, view, isNativeDocumentPath(path), rememberedDcs)) {
         const bool saved = saveAsWithDialog();
         if (saved) {
             record();
         }
         return saved;
-    }
-    SaveFormatKind kind = lastSaveKinds_.value(view, SaveFormatKind::None);
-    if (kind == SaveFormatKind::None) {
-        kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
     }
     if (view && kind != SaveFormatKind::None) {
         applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(saveFormatOptions_));
@@ -223,9 +224,39 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
     if (kind == SaveFormatKind::None) {
         kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
     }
-    // GIF converts to Indexed during the options prompt; capture the warning
-    // decision before that flattening so it is still shown.
+    // GIF converts to Indexed during the options prompt, so every warning that
+    // can abort the save must run before the prompt commits that conversion.
     const bool featureWarning = saveAsNeedsFeatureWarning(path, view);
+    const auto warn = [this](const QString& title, const QString& text) {
+        if (warningDriverForTest_) {
+            return warningDriverForTest_(title, text);
+        }
+        return QMessageBox::warning(dialogParent_, title, text,
+                                    QMessageBox::Save | QMessageBox::Cancel)
+            == QMessageBox::Save;
+    };
+    if (featureWarning) {
+        if (!warn(tr("Save As"),
+                  tr("The chosen format cannot hold all of the document's features. "
+                     "The flattened composite will be written."))) {
+            return false;
+        }
+    }
+    if (kind == SaveFormatKind::Dcs) {
+        const QString mode = pictura::image_mode(*view);
+        if (mode != QStringLiteral("cmyk") && mode != QStringLiteral("multichannel")) {
+            if (!warn(tr("Save As"),
+                      tr("DCS separations need CMYK; the document will be converted."))) {
+                return false;
+            }
+        }
+        if (!channels_alpha_names(*view).isEmpty()) {
+            if (!warn(tr("Save As"),
+                      tr("DCS cannot carry named spot inks; the extra channels will be omitted."))) {
+                return false;
+            }
+        }
+    }
     if (!promptSaveFormatOptions(path, kind)) {
         return false;
     }
@@ -246,36 +277,6 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
             return false;
         }
         pictura::set_save_embed_profile(*view, options.embedProfile());
-    }
-    const auto warn = [this](const QString& title, const QString& text) {
-        if (warningDriverForTest_) {
-            return warningDriverForTest_(title, text);
-        }
-        return QMessageBox::warning(dialogParent_, title, text,
-                                    QMessageBox::Save | QMessageBox::Cancel)
-            == QMessageBox::Save;
-    };
-    if (featureWarning) {
-        if (!warn(tr("Save As"),
-                  tr("The chosen format cannot hold all of the document's features. "
-                     "The flattened composite will be written."))) {
-            return false;
-        }
-    }
-    if (kind == SaveFormatKind::Dcs && view) {
-        const QString mode = pictura::image_mode(*view);
-        if (mode != QStringLiteral("cmyk") && mode != QStringLiteral("multichannel")) {
-            if (!warn(tr("Save As"),
-                      tr("DCS separations need CMYK; the document will be converted."))) {
-                return false;
-            }
-        }
-        if (!channels_alpha_names(*view).isEmpty()) {
-            if (!warn(tr("Save As"),
-                      tr("DCS cannot carry named spot inks; the extra channels will be omitted."))) {
-                return false;
-            }
-        }
     }
     return saveActiveAs(path);
 }

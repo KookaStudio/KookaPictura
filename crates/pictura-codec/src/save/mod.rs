@@ -358,6 +358,10 @@ fn over_white(value: u8, alpha: u8) -> u8 {
 /// A JPEG encoder supplied by the app for TIFF strips and EPS/DCS payloads.
 pub type JpegEncode<'a> = dyn Fn(&[u8], u32, u32, u8, u8) -> Option<Vec<u8>> + 'a;
 
+/// A final integrity check run after encoding and before the writer replaces
+/// any destination. Returning false aborts the save with the target untouched.
+pub type BeforeWrite<'a> = dyn Fn() -> bool + 'a;
+
 pub(super) fn jpeg_quality_percent(quality: u8) -> u8 {
     // Match the JPEG Save As dialog's 0-12 -> libjpeg table.
     const PERCENT: [u8; 13] = [60, 64, 68, 72, 75, 78, 81, 84, 86, 89, 92, 95, 98];
@@ -382,21 +386,81 @@ pub fn save_document_with_jpeg(
     path: &Path,
     jpeg: Option<&JpegEncode<'_>>,
 ) -> Result<(), PsdError> {
+    save_document_with_jpeg_guarded(kind, doc, options, path, jpeg, None)
+}
+
+/// As [`save_document_with_jpeg`], with a final integrity check after encoding
+/// and before any destination is replaced. A false check leaves the target set
+/// untouched.
+pub fn save_document_with_jpeg_guarded(
+    kind: SaveKind,
+    doc: &Document,
+    options: &SaveOptions,
+    path: &Path,
+    jpeg: Option<&JpegEncode<'_>>,
+    before_write: Option<&BeforeWrite<'_>>,
+) -> Result<(), PsdError> {
     let options = options.clone().with_defaults();
     let raster = Raster::from_document(doc)?;
+    let check = || before_write.map_or(true, |guard| guard());
     match kind {
-        SaveKind::Png => write_atomic(path, &write_png(&raster, &options)?),
-        SaveKind::Bmp => write_atomic(path, &write_bmp(&raster, &options)?),
-        SaveKind::Gif => write_atomic(path, &write_gif(&raster, &options)?),
-        SaveKind::Tga => write_atomic(path, &write_tga(&raster, &options)?),
-        SaveKind::Raw => write_atomic(path, &write_raw(&raster, &options)?),
-        SaveKind::Cineon => write_atomic(path, &write_cineon(&raster, &options)?),
-        SaveKind::Tiff => {
-            let bytes = tiff::write(doc, &raster, &options, jpeg)?;
+        SaveKind::Png => {
+            let bytes = write_png(&raster, &options)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
             write_atomic(path, &bytes)
         }
-        SaveKind::Eps => write_atomic(path, &eps::write(&raster, &options, doc, jpeg)?),
-        SaveKind::Dcs => eps::write_dcs(path, &raster, &options, doc, jpeg),
+        SaveKind::Bmp => {
+            let bytes = write_bmp(&raster, &options)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
+            write_atomic(path, &bytes)
+        }
+        SaveKind::Gif => {
+            let bytes = write_gif(&raster, &options)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
+            write_atomic(path, &bytes)
+        }
+        SaveKind::Tga => {
+            let bytes = write_tga(&raster, &options)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
+            write_atomic(path, &bytes)
+        }
+        SaveKind::Raw => {
+            let bytes = write_raw(&raster, &options)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
+            write_atomic(path, &bytes)
+        }
+        SaveKind::Cineon => {
+            let bytes = write_cineon(&raster, &options)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
+            write_atomic(path, &bytes)
+        }
+        SaveKind::Tiff => {
+            let bytes = tiff::write(doc, &raster, &options, jpeg)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
+            write_atomic(path, &bytes)
+        }
+        SaveKind::Eps => {
+            let bytes = eps::write(&raster, &options, doc, jpeg)?;
+            if !check() {
+                return Err(PsdError::Invalid("save was interrupted".into()));
+            }
+            write_atomic(path, &bytes)
+        }
+        SaveKind::Dcs => eps::write_dcs_guarded(path, &raster, &options, doc, jpeg, before_write),
         SaveKind::Jpeg => Err(PsdError::Unsupported("JPEG stays on Qt".into())),
     }
 }

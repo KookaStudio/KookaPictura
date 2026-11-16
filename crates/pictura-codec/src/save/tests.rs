@@ -1,5 +1,5 @@
 use super::*;
-use pictura_core::path::{PathPoint, Subpath, VectorPath};
+use pictura_core::path::{NamedPath, PathPoint, Subpath, VectorPath};
 use pictura_core::{BitDepth, ColorMode, Document, Samples, SourcePlanes};
 
 const JPEG: &[u8] = include_bytes!("../../tests/fixtures/one.jpg");
@@ -57,6 +57,18 @@ fn triangle() -> VectorPath {
         closed: true,
     });
     path
+}
+
+fn with_clipping_path(mut doc: Document, name: &str, path: VectorPath) -> Document {
+    doc.saved_paths.push(NamedPath {
+        name: name.to_string(),
+        path,
+    });
+    let mut data = vec![name.len() as u8];
+    data.extend_from_slice(name.as_bytes());
+    doc.image_resources =
+        crate::encode_image_resources(&[crate::frame_image_resource(2999, "", &data)]).into();
+    doc
 }
 
 fn u16_at(bytes: &[u8], at: usize) -> u16 {
@@ -160,6 +172,67 @@ fn save_atomic_set_rename() {
     let files = vec![(path.clone(), b"master".to_vec()), (bad, b"plate".to_vec())];
     assert!(eps::write_set(files).is_err());
     assert!(!path.exists(), "the master was rolled back");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dcs_set_refuses_directory_target() {
+    let dir = std::env::temp_dir().join(format!("pictura-dcs-dir-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("art.eps");
+    std::fs::write(&path, b"old master").unwrap();
+    std::fs::create_dir_all(dir.join("art.C")).unwrap();
+    let doc = rgba_doc(&[1, 2, 3, 255], 1, 1);
+    let mut o = opts();
+    o.dcs_version = 1;
+    o.dcs_preview = 0;
+    assert!(eps::write_dcs(&path, &raster(&doc), &o, &doc, None).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), b"old master");
+    assert!(dir.join("art.C").is_dir());
+    for ext in ["M", "Y", "K"] {
+        assert!(!dir.join(format!("art.{ext}")).exists());
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn before_write_guard_aborts_before_replacing() {
+    let dir = std::env::temp_dir().join(format!("pictura-guard-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let doc = rgba_doc(&[1, 2, 3, 255], 1, 1);
+    let called = std::cell::Cell::new(false);
+    let guard = || {
+        called.set(true);
+        false
+    };
+    let png = dir.join("guard.png");
+    std::fs::write(&png, b"old png").unwrap();
+    assert!(save_document_with_jpeg_guarded(
+        SaveKind::Png,
+        &doc,
+        &opts(),
+        &png,
+        None,
+        Some(&guard)
+    )
+    .is_err());
+    assert!(called.get());
+    assert_eq!(std::fs::read(&png).unwrap(), b"old png");
+
+    called.set(false);
+    let dcs = dir.join("set.eps");
+    std::fs::write(&dcs, b"old set").unwrap();
+    let mut o = opts();
+    o.dcs_version = 1;
+    o.dcs_preview = 0;
+    assert!(
+        save_document_with_jpeg_guarded(SaveKind::Dcs, &doc, &o, &dcs, None, Some(&guard)).is_err()
+    );
+    assert!(called.get());
+    assert_eq!(std::fs::read(&dcs).unwrap(), b"old set");
+    for ext in ["C", "M", "Y", "K"] {
+        assert!(!dir.join(format!("set.{ext}")).exists());
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -727,8 +800,7 @@ fn eps_encodings() {
 
 #[test]
 fn eps_clipping_path() {
-    let mut doc = rgba_doc(&[1, 2, 3, 255], 3, 3);
-    doc.work_path = triangle();
+    let doc = with_clipping_path(rgba_doc(&[1, 2, 3, 255], 3, 3), "cutout", triangle());
     let mut o = opts();
     o.eps_preview = 0;
     let bytes = eps::write(&raster(&doc), &o, &doc, None).unwrap();
@@ -736,6 +808,13 @@ fn eps_clipping_path() {
     assert!(text.contains("newpath"));
     assert!(text.contains("clip"));
     assert!(text.contains("moveto"));
+
+    // A Work Path that was never designated as the clipping path must not
+    // silently crop the artwork.
+    let mut work_only = rgba_doc(&[1, 2, 3, 255], 3, 3);
+    work_only.work_path = triangle();
+    let bytes = eps::write(&raster(&work_only), &o, &work_only, None).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).contains("clip"));
 }
 
 #[test]
@@ -775,9 +854,25 @@ fn dcs_1_plate_files() {
     let doc = Document::new(1, 1, ColorMode::Cmyk, BitDepth::Eight);
     let mut o = opts();
     o.dcs_version = 1;
+    o.dcs_preview = 0;
     assert!(eps::write_dcs(&path, &raster(&doc), &o, &doc, None).is_ok());
     for ext in ["eps", "C", "M", "Y", "K"] {
         assert!(dir.join(format!("art.{ext}")).exists());
+    }
+    let master = std::fs::read(&path).unwrap();
+    let text = String::from_utf8_lossy(master);
+    assert!(text.contains("%%DocumentProcessColors: Cyan Magenta Yellow Black"));
+    for name in ["Cyan", "Magenta", "Yellow", "Black"] {
+        assert!(
+            text.contains(&format!("%%{name}Plate: ")),
+            "master names the {name} plate"
+        );
+    }
+    for ext in ["C", "M", "Y", "K"] {
+        let plate = std::fs::read(dir.join(format!("art.{ext}"))).unwrap();
+        let ps = crate::eps::postscript_section(&plate).expect("plate PostScript");
+        assert!(String::from_utf8_lossy(ps).contains(" image"));
+        assert!(!String::from_utf8_lossy(ps).contains("%%PlateFile:"));
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -796,8 +891,33 @@ fn dcs_2_single_file() {
     assert!(!dir.join("art.C").exists());
     let bytes = std::fs::read(&path).unwrap();
     let text = String::from_utf8_lossy(&bytes);
-    assert_eq!(text.matches("%%Plate:").count(), 4);
-    assert_eq!(text.matches(" image").count(), 4);
+    assert!(text.contains("DeviceCMYK"));
+    assert!(!text.contains("%%Plate:"));
+    let records: Vec<&str> = text
+        .lines()
+        .filter(|line| line.starts_with("%%PlateFile:"))
+        .collect();
+    assert_eq!(records.len(), 4);
+    let mut expected = 0usize;
+    for (index, record) in records.iter().enumerate() {
+        let fields: Vec<&str> = record.split_whitespace().collect();
+        assert_eq!(fields.len(), 5, "{record}");
+        let offset = fields[3]
+            .strip_prefix('#')
+            .and_then(|value| value.parse::<usize>().ok())
+            .expect("plate offset");
+        let size = fields[4].parse::<usize>().expect("plate size");
+        if index == 0 {
+            expected = offset;
+        }
+        assert_eq!(offset, expected, "plate records are contiguous");
+        assert!(
+            bytes[offset..].starts_with(b"%!PS-Adobe-3.0 EPSF-3.0"),
+            "plate {index} starts its own EPS"
+        );
+        expected = offset + size;
+    }
+    assert_eq!(expected, bytes.len(), "the last plate ends the file");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1015,6 +1135,32 @@ fn eps_bounding_box_uses_document_resolution() {
     let bytes = eps::write(&raster(&doc), &o, &doc, None).unwrap();
     let text = String::from_utf8_lossy(&bytes);
     assert!(text.contains("%%BoundingBox: 0 0 1 0"), "{text}");
+}
+
+#[test]
+fn eps_image_and_paths_share_the_point_scale() {
+    let mut doc = rgba_doc(&[1, 2, 3, 255], 4, 2);
+    crate::set_document_resolution(
+        &mut doc,
+        crate::Resolution {
+            ppi: 300.0,
+            per_cm: false,
+        },
+    );
+    doc.work_path = triangle();
+    let mut o = opts();
+    o.eps_preview = 0;
+    o.eps_vector_data = true;
+    let bytes = eps::write(&raster(&doc), &o, &doc, None).unwrap();
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("/ImageMatrix [0.96 0 0 -0.48 0 0.48]"),
+        "raster is placed in the point-sized bounding box: {text}"
+    );
+    assert!(
+        text.contains("0.24 0.24 moveto"),
+        "vector coordinates use the same pixel-to-point scale: {text}"
+    );
 }
 
 #[test]

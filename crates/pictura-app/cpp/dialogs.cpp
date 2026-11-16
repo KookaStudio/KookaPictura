@@ -297,12 +297,23 @@ bool documentRequiresLayers(PictureView* view)
     return !documentIsFlat(view);
 }
 
-bool savePathNeedsFormatDialog(const QString& path, PictureView* view, bool pathIsNative)
+bool savePathNeedsFormatDialog(const QString& path, PictureView* view, bool pathIsNative,
+                               bool rememberedDcs)
 {
     if (path.isEmpty()) {
         return true;
     }
-    return view && !pathIsNative && documentRequiresLayers(view);
+    if (!view || pathIsNative || !documentRequiresLayers(view)) {
+        return false;
+    }
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    // A TIFF keeps its layer section unless the options discard it, and the
+    // remembered DCS kind is what makes a shared .eps path a separation set.
+    if (suffix == QLatin1String("tif") || suffix == QLatin1String("tiff")
+        || (suffix == QLatin1String("eps") && rememberedDcs)) {
+        return false;
+    }
+    return true;
 }
 
 int defaultSaveFilterIndex(PictureView* view)

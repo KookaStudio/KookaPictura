@@ -559,7 +559,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                 view->add_adjustment(QStringLiteral("invert"));
             }
             const bool reverted = frame.revertActive() && view && !view->is_dirty()
-                && output_format(*view) == QStringLiteral("psd")
+                && output_format(*view) == QStringLiteral("png")
                 && view->file_path() == pngPath;
 
             // A .psb path forces a version-2 PSB container ("8BPS" + version 2).

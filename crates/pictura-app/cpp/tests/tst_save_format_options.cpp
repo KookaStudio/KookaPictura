@@ -257,7 +257,9 @@ private slots:
     void cineonOptionsWrite();
     void gifSaveConverts();
     void gifCancelLeavesMode();
+    void gifWarningBeforeConversion();
     void gifRowOrderWrite();
+    void plainSaveLayeredTiff();
     void dcsFiles();
     void dcsSpotCeiling();
     void plainSaveKind();
@@ -631,6 +633,8 @@ void SaveFormatOptionsTest::missingSuffixRefused()
     pictura::PictureView* view = newView(QStringLiteral("white"));
     QVERIFY(view);
     QVERIFY(!view->save(path("no-extension")));
+    QVERIFY(!view->save(path("trailing.")));
+    QVERIFY(!QFileInfo::exists(path("trailing.")));
     closeActive();
 }
 
@@ -640,6 +644,8 @@ void SaveFormatOptionsTest::saveStartRefusesNewFormats()
     QVERIFY(view);
     QVERIFY(!pictura::document_api::saveStart(*view, path("out.gif")));
     QVERIFY(!pictura::document_api::saveStart(*view, path("out.xyz")));
+    QVERIFY(!pictura::document_api::saveStart(*view, path("suffixless")));
+    QVERIFY(!pictura::document_api::saveStart(*view, path("trailing.")));
     closeActive();
 }
 
@@ -781,7 +787,8 @@ void SaveFormatOptionsTest::epsOptionsWrite()
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QString text = QString::fromUtf8(file.readAll());
     QVERIFY2(text.contains(QStringLiteral("sethalftone")), "halftone PostScript");
-    QVERIFY2(text.contains(QStringLiteral("clip")), "clipping path");
+    QVERIFY2(!text.contains(QStringLiteral("clip")),
+             "a Work Path alone is not a designated clipping path");
     QVERIFY2(text.contains(QStringLiteral("stroke")), "vector path operators");
     window_->setSaveFormatDialogForTest(nullptr);
     closeActive();
@@ -874,6 +881,33 @@ void SaveFormatOptionsTest::gifCancelLeavesMode()
     closeActive();
 }
 
+void SaveFormatOptionsTest::gifWarningBeforeConversion()
+{
+    pictura::PictureView* view = newView(QStringLiteral("white"));
+    QVERIFY(view);
+    QVERIFY(view->duplicate_layer(0) >= 0);
+    bool gifDialogCalled = false;
+    QStringList warnings;
+    window_->setWarningDriverForTest([&warnings](const QString&, const QString& text) {
+        warnings.append(text);
+        return false;
+    });
+    window_->setGifDialogForTest(
+        [&gifDialogCalled](pictura::PictureView*, pictura::SaveFormatOptions&) {
+            gifDialogCalled = true;
+            return true;
+        });
+    QVERIFY(!window_->saveActiveAsWithOptions(path("blocked.gif")));
+    QVERIFY(!warnings.isEmpty());
+    QVERIFY2(!gifDialogCalled, "the warning runs before the indexed conversion prompt");
+    QCOMPARE(pictura::image_mode(*view), QStringLiteral("rgb"));
+    QCOMPARE(view->layer_count(), 2);
+    QVERIFY(!QFileInfo::exists(path("blocked.gif")));
+    window_->setWarningDriverForTest(nullptr);
+    window_->setGifDialogForTest(nullptr);
+    closeActive();
+}
+
 void SaveFormatOptionsTest::gifRowOrderWrite()
 {
     pictura::PictureView* view = newView(QStringLiteral("white"));
@@ -957,6 +991,20 @@ void SaveFormatOptionsTest::plainSaveKind()
     QVERIFY(window_->saveActive());
     QVERIFY2(QFileInfo::exists(path("plain.C")), "plain Save keeps the DCS kind");
     window_->setWarningDriverForTest(nullptr);
+    closeActive();
+}
+
+void SaveFormatOptionsTest::plainSaveLayeredTiff()
+{
+    pictura::PictureView* view = newView(QStringLiteral("white"));
+    QVERIFY(view);
+    QVERIFY(view->duplicate_layer(0) >= 0);
+    QVERIFY(view->save(path("plain-layers.tif")));
+    QVERIFY2(!pictura::savePathNeedsFormatDialog(path("plain-layers.tif"), view, false),
+             "a layered TIFF reuses its path");
+    QVERIFY(pictura::savePathNeedsFormatDialog(path("layers.eps"), view, false, false));
+    QVERIFY2(!pictura::savePathNeedsFormatDialog(path("layers.eps"), view, false, true),
+             "a remembered DCS kind reuses its .eps path");
     closeActive();
 }
 

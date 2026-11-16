@@ -11,6 +11,7 @@
 #include "frame.h"
 
 #include "api/document_bridge.h"
+#include "api/engine_bridge.h"
 #include "api/paint_bridge.h"
 
 namespace pictura {
@@ -24,10 +25,13 @@ namespace {
 bool activeSaveNeedsDialog(PicturaMainWindow* frame)
 {
     const QString path = frame->activeFilePath();
+    PictureView* view = frame->activeView();
+    const bool rememberedDcs = view && output_format(*view) == QStringLiteral("dcs");
     return !path.isEmpty()
         && (PicturaMainWindow::isPdfPath(path)
-            || savePathNeedsFormatDialog(path, frame->activeView(),
-                                         PicturaMainWindow::isNativeDocumentPath(path)));
+            || savePathNeedsFormatDialog(path, view,
+                                         PicturaMainWindow::isNativeDocumentPath(path),
+                                         rememberedDcs));
 }
 
 } // namespace
