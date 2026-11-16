@@ -141,11 +141,12 @@ constrain other specs:
 No new modules. Edition handling is a model-level flag so that a single build can
 gate Extended surfaces:
 
-- `pictura-core::Edition` (`Standard | Extended`) — proposed; gates feature
-  registration and menu visibility, and gates 3D/measurement node kinds.
+- `pictura-core::Edition` (`Standard | Extended`) — implemented; `PICTURA_EDITION`
+  selects the surface at startup (default Extended), and the tool/command
+  catalogues mark the Extended-only rows so the shell hides them in Standard.
 
-The precise wiring belongs to `01-architecture/rust-core-design.md`; this is a
-proposal, not a commitment.
+The precise wiring belongs to `01-architecture/rust-core-design.md`; the gate
+is implemented in `pictura-core` and the shell catalogues.
 
 ## Qt6 component mapping
 

@@ -76,7 +76,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 |---|---|---|---|---|---|
 | ARCH-1 | `01-architecture/build-and-packaging.md` | Spec file never authored (`ARCH-014`); dangling refs | MISSING | `TRACEABILITY.md:37` + 8 refs | #494 |
 | ARCH-2 | `01-architecture/*` | Proposed crate map diverges from the real workspace | DIVERGENT | `Cargo.toml`, `crates/` | #495 |
-| OVR-2 | `11-cross-cutting/cs6-editions-and-constraints.md` | No `Edition` (Standard/Extended) gating | MISSING | no `Edition::` in `crates/` | #650 |
+| OVR-2 | `11-cross-cutting/cs6-editions-and-constraints.md` | `Edition` (Standard/Extended) gating | SHIPPED | `pictura_core::Edition`, `PICTURA_EDITION`; Count/3D tool and command gate | #650 |
 
 ### 02-ui-ux — application frame and menus
 
@@ -292,7 +292,7 @@ Raw file open is tracked by `#400`; DNG output by `#402`.
 | XC-7 | `security-and-sandboxing.md` | Flatpak packaging + portal confinement | PARTIAL | `flatpak/io.github.KookaStudio.KookaPictura.yml`; bundle/smoke ship, portal dialogs unproven | #647 |
 | XC-8 | `testing-strategy.md` | DSSIM/PSNR/ΔE2000, property tests, fuzzing, Criterion benches | MISSING | `testkit` abs-diff only | #648 |
 | XC-9 | `update-and-versioning.md` | `--version`, About dialog with Qt/GPU info, update checker | MISSING | `main.cpp` | #649 |
-| XC-10 | `cs6-editions-and-constraints.md` | Edition gating (Standard/Extended) | MISSING | no `Edition::` | #650 |
+| XC-10 | `cs6-editions-and-constraints.md` | Edition gating (Standard/Extended) | SHIPPED | `pictura_core::Edition`; `PICTURA_EDITION` selects Standard/Extended | #650 |
 | XC-11 | `performance-targets.md` | Performance instrumentation (cache/scratch/frame/metrics) | PARTIAL | `pictura-app::metrics` shipped (`PICTURA_METRICS`, control-server `metrics`); frame-budget timing, TileCache, scratch, scheduler and cancellation do not exist yet | #651, #941–#945 |
 
 ## D. Code ahead of docs (stale specs)
