@@ -7,10 +7,22 @@ Filter Gallery previews a reduced copy of the document for speed.
 
 ### Requirement: Filter Gallery previews a reduced copy
 
-The Filter Gallery SHALL render its preview from a copy of the visible part of the document, plus a small margin, box-averaged down to at most one sample per device pixel of the preview pane. The copy is never scaled up. Each change to the stack SHALL re-filter only that copy. Preview cost therefore follows the pane's size and not the document's. While the gallery is open, neither the document nor the canvas SHALL change. OK SHALL apply the visible stack to the full-resolution layer as one "Filter Gallery" history state. Below 100% zoom the filters run at the copy's resolution. Every parameter the descriptor marks as a document-pixel distance SHALL be scaled by the copy's scale before the copy is filtered, rounded on an integer control and held to its range, so the preview's pixel distances match the commit's downsampled geometry. Every other parameter SHALL keep its value. The catalog thumbnails SHALL likewise
-scale their opening pixel-distance values by the document-to-thumbnail scale,
-rounded on an integer control and held to its range, before filtering the
-thumbnail.
+The Filter Gallery SHALL render its preview from a copy of the visible part of
+the document, box-averaged down to at most one sample per device pixel of the
+preview pane. The copy SHALL include a filter-context margin around the visible
+part and a pan margin beyond that, so a scroll within the pan margin reuses the
+copy. The copy is never scaled up. Each change to the stack or the zoom SHALL
+re-filter the copy. Preview cost therefore follows the pane's size and not the
+document's. While the gallery is open, neither the document nor the canvas SHALL
+change. OK SHALL apply the visible stack to the full-resolution layer as one
+"Filter Gallery" history state. Below 100% zoom the filters run at the copy's
+resolution. Every parameter the descriptor marks as a document-pixel distance
+SHALL be scaled by the copy's scale before the copy is filtered, rounded on an
+integer control and held to its range, so the preview's pixel distances match
+the commit's downsampled geometry. Every other parameter SHALL keep its value.
+The catalog thumbnails SHALL likewise scale their opening pixel-distance values
+by the document-to-thumbnail scale, rounded on an integer control and held to
+its range, before filtering the thumbnail.
 
 #### Scenario: A large picture previews at pane resolution
 
@@ -55,3 +67,32 @@ A reduced copy of the document SHALL map each vector-mask path through the copy'
 
 - **WHEN** a Multiply layer with a vector mask is copied at scale 1 with no filter
 - **THEN** the copy's composite equals the document's
+
+### Requirement: Panning reuses the cached preview
+
+Scrolling the Filter Gallery preview within the cached copy's pan margin SHALL
+move the already-filtered pixels without re-running the filter stack. Scrolling
+past the margin SHALL schedule a new copy and SHALL keep the existing 120 ms
+debounce, so a slow drag queues at most one filter run. A stack change or a
+zoom change SHALL discard the cached copy. The committed result SHALL NOT depend
+on the cached copy.
+
+#### Scenario: A small scroll reuses the copy [fgp_pan_reuse]
+
+- **WHEN** the preview shows a filtered copy and the user scrolls by less than the pan margin
+- **THEN** the cached document region still covers the pane and, after the debounce, the same filtered image and region remain
+
+#### Scenario: A scroll past the margin re-filters [fgp_pan_refilter]
+
+- **WHEN** the user scrolls past the cached copy's pan margin
+- **THEN** a new filtered copy covering the pane is rendered after the debounce
+
+#### Scenario: Stack and zoom changes discard the copy [fgp_pan_invalidate]
+
+- **WHEN** the stack or the zoom changes while a copy is cached
+- **THEN** the preview re-filters at the new stack or scale
+
+#### Scenario: Panning does not change the commit [fgp_pan_commit]
+
+- **WHEN** the user pans the preview and then presses OK
+- **THEN** the full-resolution layer receives the same visible stack as without panning

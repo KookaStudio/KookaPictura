@@ -75,6 +75,28 @@ bool withinAPixel(const QPointF& a, const QPointF& b)
     return std::abs(a.x() - b.x()) <= 1.0 && std::abs(a.y() - b.y()) <= 1.0;
 }
 
+// The document rect under the pane's viewport, from the scrollbars, as the
+// dialog computes it.
+QRect visibleDocumentRect(QScrollArea* area, double zoom, const QSize& doc)
+{
+    if (zoom <= 0.0 || doc.isEmpty()) {
+        return {};
+    }
+    const QSize viewport = area->viewport()->size();
+    const double left = area->horizontalScrollBar()->value() / zoom;
+    const double top = area->verticalScrollBar()->value() / zoom;
+    const int x0 = qBound(0, static_cast<int>(std::floor(left)), doc.width());
+    const int y0 = qBound(0, static_cast<int>(std::floor(top)), doc.height());
+    const int x1 = qBound(0, static_cast<int>(std::ceil(left + viewport.width() / zoom)),
+                          doc.width());
+    const int y1 = qBound(0, static_cast<int>(std::ceil(top + viewport.height() / zoom)),
+                          doc.height());
+    if (x1 <= x0 || y1 <= y0) {
+        return {};
+    }
+    return QRect(x0, y0, x1 - x0, y1 - y0);
+}
+
 } // namespace
 
 class FilterGalleryTest : public QObject {
@@ -99,6 +121,9 @@ private slots:
     void wheelZoomAnchorsAtTheCursor();
     void buttonsAndDropdownAnchorAtTheCentre();
     void sliderClickFocusesValueBox();
+    void panReusesTheCachedPreview();
+    void panPastTheMarginRefilters();
+    void zoomChangeRefiltersTheCache();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -602,6 +627,136 @@ void FilterGalleryTest::sliderClickFocusesValueBox()
     QVERIFY2(spin->hasFocus(), "clicking the slider focuses the value box");
     slider->setSliderDown(false);
 
+    dialog.reject();
+}
+
+// A small scroll stays inside the cached pan margin: the pane keeps the
+// already-filtered pixels and the debounce re-filters nothing (#452).
+void FilterGalleryTest::panReusesTheCachedPreview()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Pan cache"), 600, 600, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    pictura::FilterGalleryDialog dialog(view);
+    while (dialog.effects().size() > 1) {
+        dialog.deleteEffect();
+    }
+    dialog.selectFilter(QStringLiteral("mosaic-tiles"));
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    auto* zoom = dialog.findChild<QComboBox*>(QStringLiteral("galleryZoom"));
+    auto* area = dialog.findChild<QScrollArea*>(QStringLiteral("galleryPreview"));
+    QVERIFY(zoom != nullptr);
+    QVERIFY(area != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(!dialog.previewImage().isNull(), 3000);
+    const QRect fitRegion = dialog.previewRegion();
+
+    const int preset = zoom->findText(QStringLiteral("200%"));
+    QVERIFY(preset >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, preset));
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+    QTRY_VERIFY_WITH_TIMEOUT(dialog.previewRegion() != fitRegion, 3000);
+    const QRect cached = dialog.previewRegion();
+    const qint64 cachedKey = dialog.previewImage().cacheKey();
+
+    QScrollBar* h = area->horizontalScrollBar();
+    QScrollBar* v = area->verticalScrollBar();
+    QVERIFY(h->maximum() > 0);
+    QVERIFY(v->maximum() > 0);
+    // Less than the quarter-viewport pan margin on each side.
+    h->setValue(h->value() + 24);
+    v->setValue(v->value() + 24);
+    const QSize doc(view->document_width(), view->document_height());
+    const QRect visible = visibleDocumentRect(area, zoomFactor(zoom), doc);
+    QVERIFY(!visible.isEmpty());
+    QVERIFY2(cached.contains(visible), "the cached copy covers the panned pane");
+    // The debounce fires nothing: the same bitmap is still cached.
+    QTest::qWait(300);
+    QCOMPARE(dialog.previewRegion(), cached);
+    QCOMPARE(dialog.previewImage().cacheKey(), cachedKey);
+    dialog.reject();
+}
+
+// A scroll past the pan margin renders a new copy after the debounce.
+void FilterGalleryTest::panPastTheMarginRefilters()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Pan past"), 600, 600, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    pictura::FilterGalleryDialog dialog(view);
+    while (dialog.effects().size() > 1) {
+        dialog.deleteEffect();
+    }
+    dialog.selectFilter(QStringLiteral("mosaic-tiles"));
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    auto* zoom = dialog.findChild<QComboBox*>(QStringLiteral("galleryZoom"));
+    auto* area = dialog.findChild<QScrollArea*>(QStringLiteral("galleryPreview"));
+    QVERIFY(zoom != nullptr);
+    QVERIFY(area != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(!dialog.previewImage().isNull(), 3000);
+    const QRect fitRegion = dialog.previewRegion();
+    const int preset = zoom->findText(QStringLiteral("200%"));
+    QVERIFY(preset >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, preset));
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+    QTRY_VERIFY_WITH_TIMEOUT(dialog.previewRegion() != fitRegion, 3000);
+    const QRect cached = dialog.previewRegion();
+    const qint64 cachedKey = dialog.previewImage().cacheKey();
+
+    QScrollBar* h = area->horizontalScrollBar();
+    QVERIFY(h->maximum() > 0);
+    h->setValue(h->maximum());
+    QTRY_VERIFY_WITH_TIMEOUT(dialog.previewRegion() != cached, 3000);
+    QVERIFY(dialog.previewImage().cacheKey() != cachedKey);
+    const QSize doc(view->document_width(), view->document_height());
+    const QRect visible = visibleDocumentRect(area, zoomFactor(zoom), doc);
+    QVERIFY(!visible.isEmpty());
+    QVERIFY2(dialog.previewRegion().contains(visible),
+             "the re-filtered copy covers the panned pane");
+    dialog.reject();
+}
+
+// A zoom change discards the cached copy, even where the new region would fit
+// inside the old one.
+void FilterGalleryTest::zoomChangeRefiltersTheCache()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Zoom cache"), 600, 600, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    pictura::FilterGalleryDialog dialog(view);
+    while (dialog.effects().size() > 1) {
+        dialog.deleteEffect();
+    }
+    dialog.selectFilter(QStringLiteral("mosaic-tiles"));
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    auto* zoom = dialog.findChild<QComboBox*>(QStringLiteral("galleryZoom"));
+    auto* area = dialog.findChild<QScrollArea*>(QStringLiteral("galleryPreview"));
+    QVERIFY(zoom != nullptr);
+    QVERIFY(area != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(!dialog.previewImage().isNull(), 3000);
+    const QRect fitRegion = dialog.previewRegion();
+    const int preset = zoom->findText(QStringLiteral("200%"));
+    QVERIFY(preset >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, preset));
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+    QTRY_VERIFY_WITH_TIMEOUT(dialog.previewRegion() != fitRegion, 3000);
+    const QRect cached = dialog.previewRegion();
+
+    const int wider = zoom->findText(QStringLiteral("400%"));
+    QVERIFY(wider >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, wider));
+    QCOMPARE(zoom->currentText(), QStringLiteral("400%"));
+    QTRY_VERIFY_WITH_TIMEOUT(dialog.previewRegion() != cached, 3000);
+    const QSize doc(view->document_width(), view->document_height());
+    const QRect visible = visibleDocumentRect(area, zoomFactor(zoom), doc);
+    QVERIFY(!visible.isEmpty());
+    QVERIFY2(dialog.previewRegion().contains(visible),
+             "the re-filtered copy covers the pane at the new scale");
     dialog.reject();
 }
 
