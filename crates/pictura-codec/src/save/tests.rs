@@ -860,7 +860,7 @@ fn dcs_1_plate_files() {
         assert!(dir.join(format!("art.{ext}")).exists());
     }
     let master = std::fs::read(&path).unwrap();
-    let text = String::from_utf8_lossy(master);
+    let text = String::from_utf8_lossy(&master);
     assert!(text.contains("%%DocumentProcessColors: Cyan Magenta Yellow Black"));
     for name in ["Cyan", "Magenta", "Yellow", "Black"] {
         assert!(
