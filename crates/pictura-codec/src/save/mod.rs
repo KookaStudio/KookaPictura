@@ -513,6 +513,7 @@ fn bmp_palette(raster: &Raster, depth: u8) -> Vec<[u8; 4]> {
             dither: crate::web::Dither::None,
             amount: 0,
             transparency: false,
+            mapped_transparency: false,
             matte: [255, 255, 255],
         },
     );
@@ -633,6 +634,7 @@ fn bmp_rows(
                 dither: crate::web::Dither::None,
                 amount: 0,
                 transparency: false,
+                mapped_transparency: false,
                 matte: [255, 255, 255],
             },
         )
@@ -933,6 +935,7 @@ fn write_gif(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError
                 dither: crate::web::Dither::None,
                 amount: 0,
                 transparency: raster.alpha,
+                mapped_transparency: false,
                 matte: [255, 255, 255],
             },
         )
